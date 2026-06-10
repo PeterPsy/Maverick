@@ -78,6 +78,7 @@ function openSetupTab(setupTab: SetupTab, isMobile: boolean) {
 
 function Sidebar() {
   const [query, setQuery] = useState('');
+  const [debouncedQuery, setDebouncedQuery] = useState('');
   const [workouts, setWorkouts] = useState<Workout[]>([]);
   const [activeWorkoutId, setActiveWorkoutId] = useState('');
   const [setupTab, setSetupTab] = useState<SetupTab>('workout-settings');
@@ -87,14 +88,14 @@ function Sidebar() {
 
   const refresh = useCallback(async () => {
     try {
-      setWorkouts(await listWorkouts(query));
+      setWorkouts(await listWorkouts(debouncedQuery));
       setNotice('');
     } catch (error) {
       setNotice(error instanceof Error ? error.message : 'Unable to load workouts.');
     } finally {
       setIsInitialLoading(false);
     }
-  }, [query]);
+  }, [debouncedQuery]);
 
   useEffect(() => {
     loadWidgetContext().then((context) => {
@@ -107,6 +108,11 @@ function Sidebar() {
   useEffect(() => {
     refresh();
   }, [refresh]);
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => setDebouncedQuery(query.trim()), 180);
+    return () => window.clearTimeout(timer);
+  }, [query]);
 
   useEffect(() => {
     function handleMessage(event: MessageEvent) {

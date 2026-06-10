@@ -30,6 +30,8 @@ ACTION_ALIASES = {
     "operations.manifest": "operations.manifest",
     "status": "status",
     "health.check": "status",
+    "app.bootstrap": "app.bootstrap",
+    "bootstrap": "app.bootstrap",
     "workouts.list": "workouts.list",
     "workout.list": "workouts.list",
     "workout.get": "workout.get",
@@ -167,6 +169,8 @@ def handle_action(data_root: str, action: str, arguments: dict[str, Any] | None 
             "exercise_count": len(state["exercises"]),
             "run_count": len(state["runs"]),
         }
+    if canonical == "app.bootstrap":
+        return 200, {"ok": True, **bootstrap_app(data_root, args)}
     if canonical == "workouts.list":
         return 200, {"ok": True, "workouts": list_workouts(data_root, args)}
     if canonical == "workout.get":
@@ -183,7 +187,7 @@ def handle_action(data_root: str, action: str, arguments: dict[str, Any] | None 
         workout = get_workout(data_root, require_id(args, "workout_id", "id"))
         return 200, {"ok": True, "validation": validate_workout(workout)}
     if canonical == "workout.start":
-        return 200, {"ok": True, **start_workout(data_root, require_id(args, "workout_id", "id"))}
+        return 200, {"ok": True, **start_workout(data_root, require_workout_id(args), args)}
     if canonical == "workout.complete":
         return 201, {"ok": True, "run": complete_workout(data_root, args)}
     if canonical == "exercises.list":
@@ -250,6 +254,58 @@ def list_workouts(data_root: str, args: dict[str, Any] | None = None) -> list[di
     if query:
         workouts = [item for item in workouts if query in item.get("name", "").lower()]
     return sorted(workouts, key=lambda item: str(item.get("updated_at") or ""), reverse=True)
+
+
+def bootstrap_app(data_root: str, args: dict[str, Any] | None = None) -> dict[str, Any]:
+    state = ensure_state(data_root)
+    args = args or {}
+    summaries = [workout_summary(item) for item in sorted(state["workouts"], key=lambda item: str(item.get("updated_at") or ""), reverse=True)]
+    selected_id = normalized_text(args.get("selected_workout_id")) or state["view_state"].get("selected_workout_id") or (summaries[0]["id"] if summaries else "")
+    selected_workout = None
+    if selected_id:
+        try:
+            selected_workout = deepcopy(find_by_id(state["workouts"], selected_id, "workout"))
+        except NotFoundError:
+            selected_workout = deepcopy(state["workouts"][0]) if state["workouts"] else None
+            selected_id = selected_workout["id"] if selected_workout else ""
+    view_state = deepcopy(state["view_state"])
+    if selected_id:
+        view_state["selected_workout_id"] = selected_id
+    include_runs = bool(args.get("include_runs", False))
+    return {
+        "state_version": state_version(state),
+        "workouts": [deepcopy(item) for item in sorted(state["workouts"], key=lambda item: str(item.get("updated_at") or ""), reverse=True)],
+        "workout_summaries": summaries,
+        "selected_workout": selected_workout,
+        "exercises": [deepcopy(item) for item in sorted(state["exercises"], key=lambda item: str(item.get("updated_at") or ""), reverse=True)],
+        "tags": sorted({tag for exercise in state["exercises"] for tag in exercise.get("tags", []) if tag}),
+        "runs": runs_from_state(state, {"workout_id": selected_id, "limit": args.get("runs_limit", 20)}) if include_runs else [],
+        "view_state": view_state,
+    }
+
+
+def workout_summary(workout: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "id": workout.get("id"),
+        "name": workout.get("name") or "Untitled workout",
+        "work_block_count": count_work_blocks(workout),
+        "estimated_seconds": estimate_seconds(workout),
+        "updated_at": workout.get("updated_at"),
+        "last_started_at": workout.get("last_started_at"),
+        "last_completed_at": workout.get("last_completed_at"),
+    }
+
+
+def state_version(state: dict[str, Any]) -> str:
+    return ":".join(
+        [
+            str(state.get("schema_version") or SCHEMA_VERSION),
+            str(state.get("updated_at") or ""),
+            str(len(state.get("workouts", []))),
+            str(len(state.get("exercises", []))),
+            str(len(state.get("runs", []))),
+        ]
+    )
 
 
 def get_workout(data_root: str, workout_id: str) -> dict[str, Any]:
@@ -340,19 +396,23 @@ def delete_workout(data_root: str, workout_id: str) -> str:
     return workout_id
 
 
-def start_workout(data_root: str, workout_id: str) -> dict[str, Any]:
+def start_workout(data_root: str, workout_id: str, args: dict[str, Any] | None = None) -> dict[str, Any]:
     result: dict[str, Any] = {}
+    patch = object_arg(args or {}, "workout")
 
     def updater(state: dict[str, Any]) -> dict[str, Any]:
         nonlocal result
         migrated = migrate_state(state)
-        workout = find_by_id(migrated["workouts"], workout_id, "workout")
+        index = find_index(migrated["workouts"], workout_id, "workout")
+        existing = migrated["workouts"][index]
+        workout = normalize_workout({**existing, **patch, "id": workout_id}, now=utc_now(), existing=existing) if patch else existing
         validation = validate_workout(workout)
         if not validation["valid"]:
             raise FitnessCoachError("Workout is not valid to start.", status_code=422, code="invalid_workout")
         now = utc_now()
         workout["last_started_at"] = now
         workout["updated_at"] = now
+        migrated["workouts"][index] = workout
         migrated["view_state"]["selected_workout_id"] = workout_id
         migrated["updated_at"] = now
         result = {"workout": deepcopy(workout), "validation": validation, "started_at": now}
@@ -479,6 +539,10 @@ def delete_exercise(data_root: str, exercise_id: str) -> str:
 
 def list_runs(data_root: str, args: dict[str, Any] | None = None) -> list[dict[str, Any]]:
     state = ensure_state(data_root)
+    return runs_from_state(state, args)
+
+
+def runs_from_state(state: dict[str, Any], args: dict[str, Any] | None = None) -> list[dict[str, Any]]:
     args = args or {}
     workout_id = str(args.get("workout_id") or "").strip()
     limit = min(positive_int(args.get("limit"), default=MAX_RUNS), MAX_RUNS)
@@ -875,6 +939,11 @@ def require_id(args: dict[str, Any], *keys: str) -> str:
         if value:
             return value
     raise FitnessCoachError(f"One of {', '.join(keys)} is required.")
+
+
+def require_workout_id(args: dict[str, Any]) -> str:
+    workout = object_arg(args, "workout")
+    return require_id({**args, "workout.id": workout.get("id")}, "workout_id", "id", "workout.id")
 
 
 def object_arg(args: dict[str, Any], key: str) -> dict[str, Any]:

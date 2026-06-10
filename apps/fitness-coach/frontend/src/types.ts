@@ -91,6 +91,16 @@ export type Workout = {
   last_completed_at: string | null;
 };
 
+export type WorkoutSummary = {
+  id: string;
+  name: string;
+  work_block_count: number;
+  estimated_seconds: number;
+  updated_at: string;
+  last_started_at: string | null;
+  last_completed_at: string | null;
+};
+
 export type Exercise = {
   id: string;
   title: string;
@@ -121,6 +131,17 @@ export type ViewState = {
   selected_workout_id: string | null;
   setup_tab: SetupTab;
   sidebar_query: string;
+};
+
+export type AppBootstrapPayload = {
+  state_version: string;
+  workouts: Workout[];
+  workout_summaries: WorkoutSummary[];
+  selected_workout: Workout | null;
+  exercises: Exercise[];
+  tags: string[];
+  runs: WorkoutRunSummary[];
+  view_state: ViewState;
 };
 
 export type ValidationIssue = {

@@ -29,60 +29,46 @@ function GradientBars({
   animationDuration = 2
 }: GradientBarsProps) {
   return (
-    <>
-      <style>{`
-        @keyframes fitnessGradientBarPulse {
-          0% { transform: scaleY(var(--initial-scale)); }
-          100% { transform: scaleY(calc(var(--initial-scale) * 0.7)); }
-        }
-
-        @media (prefers-reduced-motion: reduce) {
-          .fitness-gradient-bars__bar {
-            animation: none !important;
-          }
-        }
-      `}</style>
+    <div
+      aria-hidden="true"
+      style={{
+        position: 'absolute',
+        inset: 0,
+        zIndex: 0,
+        overflow: 'hidden'
+      }}
+    >
       <div
-        aria-hidden="true"
         style={{
-          position: 'absolute',
-          inset: 0,
-          zIndex: 0,
-          overflow: 'hidden'
+          display: 'flex',
+          width: '100%',
+          height: '100%',
+          transform: 'translateZ(0)',
+          backfaceVisibility: 'hidden',
+          WebkitFontSmoothing: 'antialiased'
         }}
       >
-        <div
-          style={{
-            display: 'flex',
-            width: '100%',
+        {Array.from({ length: numBars }).map((_, index) => {
+          const height = calculateHeight(index, numBars);
+          const barStyle: CSSProperties & { '--initial-scale': number } = {
+            '--initial-scale': height / 100,
+            flex: `1 0 calc(100% / ${numBars})`,
+            maxWidth: `calc(100% / ${numBars})`,
             height: '100%',
-            transform: 'translateZ(0)',
-            backfaceVisibility: 'hidden',
-            WebkitFontSmoothing: 'antialiased'
-          }}
-        >
-          {Array.from({ length: numBars }).map((_, index) => {
-            const height = calculateHeight(index, numBars);
-            const barStyle: CSSProperties & { '--initial-scale': number } = {
-              '--initial-scale': height / 100,
-              flex: `1 0 calc(100% / ${numBars})`,
-              maxWidth: `calc(100% / ${numBars})`,
-              height: '100%',
-              background: `linear-gradient(to top, ${gradientFrom}, ${gradientTo})`,
-              transform: `scaleY(${height / 100})`,
-              transformOrigin: 'bottom',
-              transition: 'transform 0.5s ease-in-out',
-              animation: `fitnessGradientBarPulse ${animationDuration}s ease-in-out infinite alternate`,
-              animationDelay: `${index * 0.1}s`,
-              outline: '1px solid rgba(0, 0, 0, 0)',
-              boxSizing: 'border-box'
-            };
+            background: `linear-gradient(to top, ${gradientFrom}, ${gradientTo})`,
+            transform: `scaleY(${height / 100})`,
+            transformOrigin: 'bottom',
+            transition: 'transform 0.5s ease-in-out',
+            animation: `fitnessGradientBarPulse ${animationDuration}s ease-in-out infinite alternate`,
+            animationDelay: `${index * 0.1}s`,
+            outline: '1px solid rgba(0, 0, 0, 0)',
+            boxSizing: 'border-box'
+          };
 
-            return <div className="fitness-gradient-bars__bar" key={index} style={barStyle} />;
-          })}
-        </div>
+          return <div className="fitness-gradient-bars__bar" key={index} style={barStyle} />;
+        })}
       </div>
-    </>
+    </div>
   );
 }
 

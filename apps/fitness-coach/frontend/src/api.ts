@@ -1,4 +1,4 @@
-import type { Exercise, ExerciseMediaRef, StorageFile, StorageFolderRef, ViewState, Workout, WorkoutRunSummary, WorkoutValidation } from './types';
+import type { AppBootstrapPayload, Exercise, ExerciseMediaRef, StorageFile, StorageFolderRef, ViewState, Workout, WorkoutRunSummary, WorkoutValidation } from './types';
 
 export type BackendListPayload = {
   workouts?: Workout[];
@@ -31,6 +31,20 @@ export async function callBackend<T>(body: Record<string, unknown>): Promise<T> 
 export async function listWorkouts(query = '') {
   const payload = await callBackend<{ workouts: Workout[] }>({ action: 'workouts.list', query });
   return payload.workouts;
+}
+
+export async function bootstrapApp(options: { includeRuns?: boolean; selectedWorkoutId?: string | null } = {}) {
+  const payload = await callBackend<AppBootstrapPayload>({
+    action: 'app.bootstrap',
+    include_runs: options.includeRuns === true,
+    selected_workout_id: options.selectedWorkoutId || ''
+  });
+  return payload;
+}
+
+export async function getWorkout(workoutId: string) {
+  const payload = await callBackend<{ workout: Workout }>({ action: 'workout.get', workout_id: workoutId });
+  return payload.workout;
 }
 
 export async function listExercises(query = '', tag = '') {
@@ -67,8 +81,8 @@ export async function validateWorkout(workoutId: string) {
   return payload.validation;
 }
 
-export async function startWorkout(workoutId: string) {
-  const payload = await callBackend<{ workout: Workout; validation: WorkoutValidation; started_at: string }>({ action: 'workout.start', workout_id: workoutId });
+export async function startWorkout(workoutId: string, workout?: Workout) {
+  const payload = await callBackend<{ workout: Workout; validation: WorkoutValidation; started_at: string }>({ action: 'workout.start', workout_id: workoutId, workout });
   return payload;
 }
 
@@ -96,10 +110,11 @@ export async function updateViewState(viewState: Partial<ViewState>) {
   return payload.view_state;
 }
 
-export async function callStorageBackend<T>(body: Record<string, unknown>, storageAppId = currentStorageAppId()): Promise<T> {
+export async function callStorageBackend<T>(body: Record<string, unknown>, storageAppId = currentStorageAppId(), options: { signal?: AbortSignal } = {}): Promise<T> {
   const response = await fetch(`/api/apps/${encodeURIComponent(storageAppId)}/backend`, {
     method: 'POST',
     credentials: 'same-origin',
+    signal: options.signal,
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(withDefaultStorageSecretRequest(body))
   });

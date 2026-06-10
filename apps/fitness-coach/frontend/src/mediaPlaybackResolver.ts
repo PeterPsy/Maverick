@@ -3,6 +3,20 @@ import type { ExerciseMediaRef, MediaPlaybackResolution } from './types';
 
 const LOCAL_BLOB_FALLBACK_MAX_BYTES = 25 * 1024 * 1024;
 
+type CacheEntry = {
+  controller: AbortController | null;
+  promise: Promise<MediaPlaybackResolution>;
+  resolution?: MediaPlaybackResolution;
+};
+
+type WarmupEntry = {
+  controller: AbortController | null;
+  promise: Promise<unknown>;
+};
+
+const mediaPlaybackCache = new Map<string, CacheEntry>();
+const driveWarmupCache = new Map<string, WarmupEntry>();
+
 export function initialMediaResolution(): MediaPlaybackResolution {
   return { status: 'idle', url: '', mediaKind: 'none', detail: '' };
 }
@@ -14,6 +28,28 @@ export async function resolveMediaPlayback(media: ExerciseMediaRef | null, stora
   if (media.preview_kind !== 'image' && media.preview_kind !== 'video') {
     return { status: 'blocked', url: '', mediaKind: 'none', detail: 'This file is not playable in Work mode V1.' };
   }
+  const key = mediaCacheKey(media, storageAppId, 'stream');
+  const cached = mediaPlaybackCache.get(key);
+  if (cached) return cached.promise;
+  const controller = typeof AbortController === 'undefined' ? null : new AbortController();
+  const entry: CacheEntry = {
+    controller,
+    promise: resolveMediaPlaybackUncached(media, storageAppId, controller?.signal).then((resolution) => {
+      entry.resolution = resolution;
+      return resolution;
+    }).catch((error) => {
+      mediaPlaybackCache.delete(key);
+      if (error instanceof Error && error.name === 'AbortError') {
+        return { status: 'blocked', url: '', mediaKind: 'none', detail: 'Media resolution was canceled.' };
+      }
+      return { status: 'error', url: '', mediaKind: 'none', detail: error instanceof Error ? error.message : 'Storage media could not be resolved.', canRetry: true };
+    })
+  };
+  mediaPlaybackCache.set(key, entry);
+  return entry.promise;
+}
+
+async function resolveMediaPlaybackUncached(media: ExerciseMediaRef, storageAppId: string, signal?: AbortSignal): Promise<MediaPlaybackResolution> {
   if (media.kind === 'local_file') {
     if (!media.file_id) {
       return { status: 'blocked', url: '', mediaKind: 'none', detail: 'Local media needs a stable Storage file_id.' };
@@ -29,37 +65,15 @@ export async function resolveMediaPlayback(media: ExerciseMediaRef | null, stora
       detail: ''
     };
   }
-  try {
-    const payload = await callStorageBackend<{ status?: string; stream_url?: string; localization?: Record<string, unknown>; detail?: string }>(
-      {
-        action: 'file.localize',
-        stable_storage_file_id: media.stable_storage_file_id,
-        connection_id: media.connection_id,
-        drive_file_id: media.drive_file_id,
-        _app_secret_request: driveSecretRequest(media.connection_id)
-      },
-      storageAppId
-    );
-    if (payload.stream_url) {
-      return { status: 'ready', url: payload.stream_url, mediaKind: media.preview_kind, detail: '' };
-    }
-    return {
-      status: 'localizing',
-      url: driveMediaStreamUrl(media, storageAppId),
-      mediaKind: media.preview_kind,
-      detail: String(payload.localization?.status || payload.status || 'Storage is preparing the Drive media.'),
-      canRetry: Boolean(payload.localization?.can_retry),
-      canCancel: Boolean(payload.localization?.can_cancel)
-    };
-  } catch (error) {
-    return {
-      status: 'error',
-      url: driveMediaStreamUrl(media, storageAppId),
-      mediaKind: media.preview_kind,
-      detail: error instanceof Error ? error.message : 'Storage cannot prepare this Drive media for playback.',
-      canRetry: true
-    };
-  }
+  warmDriveLocalization(media, storageAppId, signal);
+  return {
+    status: 'ready',
+    url: driveMediaStreamUrl(media, storageAppId),
+    mediaKind: media.preview_kind,
+    detail: 'Storage media route is ready while Drive localization warms in the background.',
+    canRetry: true,
+    canCancel: true
+  };
 }
 
 export async function createLocalBlobFallback(media: ExerciseMediaRef, storageAppId = currentStorageAppId()): Promise<MediaPlaybackResolution> {
@@ -74,14 +88,66 @@ export async function createLocalBlobFallback(media: ExerciseMediaRef, storageAp
       detail: 'This file cannot be played with the bounded fallback. Open it in Storage or use a Storage media stream.'
     };
   }
+  const key = mediaCacheKey(media, storageAppId, 'blob');
+  const cached = mediaPlaybackCache.get(key);
+  if (cached) return cached.promise;
+  const controller = typeof AbortController === 'undefined' ? null : new AbortController();
+  const entry: CacheEntry = {
+    controller,
+    promise: createLocalBlobFallbackUncached(media, storageAppId, controller?.signal).then((resolution) => {
+      entry.resolution = resolution;
+      return resolution;
+    }).catch((error) => {
+      mediaPlaybackCache.delete(key);
+      if (error instanceof Error && error.name === 'AbortError') {
+        return { status: 'blocked', url: '', mediaKind: 'none', detail: 'Media fallback was canceled.' };
+      }
+      return { status: 'error', url: '', mediaKind: 'none', detail: error instanceof Error ? error.message : 'Storage fallback could not be loaded.', canRetry: true };
+    })
+  };
+  mediaPlaybackCache.set(key, entry);
+  return entry.promise;
+}
+
+async function createLocalBlobFallbackUncached(media: Extract<ExerciseMediaRef, { kind: 'local_file' }>, storageAppId: string, signal?: AbortSignal): Promise<MediaPlaybackResolution> {
   const payload = await callStorageBackend<{ content_base64: string; file?: { content_type?: string } }>(
     { action: 'file.content.read', workspace_relative_path: media.workspace_relative_path, max_bytes: LOCAL_BLOB_FALLBACK_MAX_BYTES },
-    storageAppId
+    storageAppId,
+    { signal }
   );
   const binary = Uint8Array.from(atob(payload.content_base64), (char) => char.charCodeAt(0));
   const blob = new Blob([binary], { type: payload.file?.content_type || media.content_type || 'application/octet-stream' });
   const url = URL.createObjectURL(blob);
   return { status: 'ready', url, mediaKind: media.preview_kind, detail: '', revoke: () => URL.revokeObjectURL(url) };
+}
+
+function warmDriveLocalization(media: Extract<ExerciseMediaRef, { kind: 'drive_file' }>, storageAppId: string, linkedSignal?: AbortSignal) {
+  const key = mediaCacheKey(media, storageAppId, 'drive-warmup');
+  const cached = driveWarmupCache.get(key);
+  if (cached) return cached.promise;
+  const controller = typeof AbortController === 'undefined' ? null : new AbortController();
+  if (linkedSignal && controller) {
+    if (linkedSignal.aborted) controller.abort();
+    else linkedSignal.addEventListener('abort', () => controller.abort(), { once: true });
+  }
+  const promise = warmDriveLocalizationUncached(media, storageAppId, controller?.signal).catch((error) => {
+    if (error instanceof Error && error.name === 'AbortError') return null;
+    return { error: error instanceof Error ? error.message : 'Storage could not warm Drive media.' };
+  });
+  driveWarmupCache.set(key, { controller, promise });
+  return promise;
+}
+
+async function warmDriveLocalizationUncached(media: Extract<ExerciseMediaRef, { kind: 'drive_file' }>, storageAppId: string, signal?: AbortSignal) {
+  const body = driveLocalizationBody(media);
+  const statusPayload = await callStorageBackend<{ status?: string; localization?: { status?: string } }>(
+    { ...body, action: 'file.localize_status' },
+    storageAppId,
+    { signal }
+  );
+  const status = String(statusPayload.localization?.status || statusPayload.status || '');
+  if (status === 'ready' || status === 'localized') return statusPayload;
+  return callStorageBackend({ ...body, action: 'file.localize' }, storageAppId, { signal });
 }
 
 export function driveMediaStreamUrl(media: Extract<ExerciseMediaRef, { kind: 'drive_file' }>, storageAppId = currentStorageAppId()) {
@@ -93,6 +159,48 @@ export function driveMediaStreamUrl(media: Extract<ExerciseMediaRef, { kind: 'dr
   if (sourceVersion) params.set('source_version', sourceVersion);
   params.set('_app_secret_request', JSON.stringify(driveSecretRequest(media.connection_id)));
   return `/api/apps/${encodeURIComponent(storageAppId)}/media?${params.toString()}`;
+}
+
+export function mediaCacheKey(media: ExerciseMediaRef, storageAppId = currentStorageAppId(), mode = 'stream') {
+  const sourceVersion = media.kind === 'local_file'
+    ? String(media.etag_or_version || media.sha256 || '').trim()
+    : String(media.source_version || media.etag_or_version || '').trim();
+  const identity = media.kind === 'local_file'
+    ? media.file_id
+    : `${media.stable_storage_file_id}:${media.connection_id}:${media.drive_file_id}`;
+  return `${mode}:${storageAppId}:${media.kind}:${identity}:${sourceVersion}`;
+}
+
+export function cancelMediaPlayback(media: ExerciseMediaRef, storageAppId = currentStorageAppId()) {
+  ['stream', 'blob', 'drive-warmup'].forEach((mode) => {
+    const key = mediaCacheKey(media, storageAppId, mode);
+    const playbackEntry = mediaPlaybackCache.get(key);
+    playbackEntry?.controller?.abort();
+    playbackEntry?.resolution?.revoke?.();
+    mediaPlaybackCache.delete(key);
+    const warmupEntry = driveWarmupCache.get(key);
+    warmupEntry?.controller?.abort();
+    driveWarmupCache.delete(key);
+  });
+}
+
+export function clearMediaPlaybackCache() {
+  mediaPlaybackCache.forEach((entry) => {
+    entry.controller?.abort();
+    entry.resolution?.revoke?.();
+  });
+  mediaPlaybackCache.clear();
+  driveWarmupCache.forEach((entry) => entry.controller?.abort());
+  driveWarmupCache.clear();
+}
+
+function driveLocalizationBody(media: Extract<ExerciseMediaRef, { kind: 'drive_file' }>) {
+  return {
+    stable_storage_file_id: media.stable_storage_file_id,
+    connection_id: media.connection_id,
+    drive_file_id: media.drive_file_id,
+    _app_secret_request: driveSecretRequest(media.connection_id)
+  };
 }
 
 export function driveSecretRequest(connectionId: string) {

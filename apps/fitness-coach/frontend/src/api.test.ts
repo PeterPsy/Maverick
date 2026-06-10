@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { callStorageBackend, openStorageForMedia, openStorageVideoPicker, storageMediaSelectionFromPickerParams, storageNavigationParamsForMedia, storageVideoPickerNavigationParamsForMedia } from './api';
+import { bootstrapApp, callStorageBackend, openStorageForMedia, openStorageVideoPicker, startWorkout, storageMediaSelectionFromPickerParams, storageNavigationParamsForMedia, storageVideoPickerNavigationParamsForMedia } from './api';
 import type { ExerciseMediaRef, StorageFolderRef } from './types';
 
 function jsonResponse(payload: unknown, ok = true) {
@@ -77,6 +77,43 @@ describe('Storage integration API', () => {
     const [, init] = fetchMock.mock.calls[0];
     const body = JSON.parse(String(init?.body));
     expect(body._app_secret_request).toEqual(secretRequest);
+  });
+
+  it('loads the frontend bootstrap in one backend action without runs on the critical path', async () => {
+    const fetchMock = vi.fn(async (_input: RequestInfo | URL, _init?: RequestInit) => jsonResponse({
+      state_version: '1:now:1:1:0',
+      workouts: [],
+      workout_summaries: [],
+      selected_workout: null,
+      exercises: [],
+      tags: [],
+      runs: [],
+      view_state: { selected_workout_id: null, setup_tab: 'workout-settings', sidebar_query: '' }
+    }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    await bootstrapApp({ includeRuns: false });
+
+    const [, init] = fetchMock.mock.calls[0];
+    expect(JSON.parse(String(init?.body))).toMatchObject({
+      action: 'app.bootstrap',
+      include_runs: false
+    });
+  });
+
+  it('sends workout.start as one atomic start request when a workout is supplied', async () => {
+    const workout = { id: 'workout_1', name: 'Draft', blocks: [] };
+    const fetchMock = vi.fn(async (_input: RequestInfo | URL, _init?: RequestInit) => jsonResponse({ workout, validation: { valid: true }, started_at: 'now' }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    await startWorkout('workout_1', workout as never);
+
+    const [, init] = fetchMock.mock.calls[0];
+    expect(JSON.parse(String(init?.body))).toMatchObject({
+      action: 'workout.start',
+      workout_id: 'workout_1',
+      workout
+    });
   });
 
   it('opens local media at the containing Storage folder', () => {

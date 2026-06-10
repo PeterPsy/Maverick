@@ -82,6 +82,16 @@ button:disabled {
   opacity: 0.48;
 }
 
+@keyframes fitnessGradientBarPulse {
+  0% {
+    transform: scaleY(var(--initial-scale));
+  }
+
+  100% {
+    transform: scaleY(calc(var(--initial-scale) * 0.7));
+  }
+}
+
 body.is-workout-block-dragging {
   cursor: grabbing;
   user-select: none;
@@ -489,6 +499,7 @@ select:focus {
 }
 
 @media (prefers-reduced-motion: reduce) {
+  .fitness-gradient-bars__bar,
   .fitness-loading-skeleton__line::after,
   .fitness-loading-skeleton__button::after,
   .fitness-loading-skeleton__counter::after,

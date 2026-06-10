@@ -98,6 +98,71 @@ class FitnessCoachServiceTest(unittest.TestCase):
             self.assertEqual(status, 200)
             self.assertEqual(deleted["deleted_id"], workout_id)
 
+    def test_bootstrap_returns_initial_view_in_one_payload(self) -> None:
+        with tempfile.TemporaryDirectory() as data_root:
+            _, exercise_payload = handle_action(
+                data_root,
+                "exercise.create",
+                {
+                    "title": "Squat",
+                    "short_description": "Drive through feet.",
+                    "long_description": "Keep chest tall and knees tracking.",
+                    "tags": ["legs", "warmup"],
+                    "primary_media": MEDIA_REF,
+                },
+            )
+            exercise = exercise_payload["exercise"]
+            block = {
+                "type": "work",
+                "exercise_id": exercise["id"],
+                "title": exercise["title"],
+                "short_description": exercise["short_description"],
+                "long_description": exercise["long_description"],
+                "tags": exercise["tags"],
+                "mode": "timer",
+                "seconds": 30,
+                "media": exercise["primary_media"],
+            }
+            _, workout_payload = handle_action(data_root, "workout.create", {"name": "Morning", "blocks": [block]})
+
+            status, payload = handle_action(data_root, "app.bootstrap", {"include_runs": True})
+
+            self.assertEqual(status, 200)
+            self.assertTrue(payload["state_version"])
+            self.assertEqual(payload["selected_workout"]["id"], workout_payload["workout"]["id"])
+            self.assertEqual(payload["workout_summaries"][0]["work_block_count"], 1)
+            self.assertEqual(payload["tags"], ["legs", "warmup"])
+            self.assertEqual(payload["runs"], [])
+            self.assertEqual(payload["view_state"]["selected_workout_id"], workout_payload["workout"]["id"])
+
+    def test_start_accepts_workout_update_atomically(self) -> None:
+        with tempfile.TemporaryDirectory() as data_root:
+            _, exercise_payload = handle_action(data_root, "exercise.create", {"title": "Squat", "long_description": "Move well.", "primary_media": MEDIA_REF})
+            exercise = exercise_payload["exercise"]
+            _, workout_payload = handle_action(data_root, "workout.create", {"name": "Draft"})
+            workout = workout_payload["workout"]
+            workout["blocks"] = [
+                {
+                    "type": "work",
+                    "exercise_id": exercise["id"],
+                    "title": exercise["title"],
+                    "short_description": exercise["short_description"],
+                    "long_description": exercise["long_description"],
+                    "tags": exercise["tags"],
+                    "mode": "timer",
+                    "seconds": 30,
+                    "media": exercise["primary_media"],
+                }
+            ]
+
+            status, payload = handle_action(data_root, "workout.start", {"workout": workout})
+
+            self.assertEqual(status, 200)
+            self.assertEqual(payload["workout"]["id"], workout["id"])
+            self.assertEqual(len(payload["workout"]["blocks"]), 1)
+            self.assertTrue(payload["validation"]["valid"])
+            self.assertEqual(payload["workout"]["last_started_at"], payload["started_at"])
+
     def test_exercise_description_derives_legacy_summary(self) -> None:
         with tempfile.TemporaryDirectory() as data_root:
             description = "Set the feet under the hips, hinge softly, then press through the floor while keeping the ribs stacked."

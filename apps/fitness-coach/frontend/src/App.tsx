@@ -23,6 +23,7 @@ import {
   X
 } from 'lucide-react';
 import {
+  bootstrapApp,
   completeWorkout,
   createExercise,
   createWorkout,
@@ -30,6 +31,7 @@ import {
   deleteExercise,
   deleteWorkout,
   duplicateWorkout,
+  getWorkout,
   listExercises,
   listRuns,
   listWorkouts,
@@ -41,9 +43,9 @@ import {
   updateViewState
 } from './api';
 import { GradientBarsBackground } from './components/ui/gradient-bars-background';
-import { createLocalBlobFallback, driveMediaStreamUrl, initialMediaResolution, resolveMediaPlayback } from './mediaPlaybackResolver';
+import { cancelMediaPlayback, clearMediaPlaybackCache, createLocalBlobFallback, driveMediaStreamUrl, initialMediaResolution, resolveMediaPlayback } from './mediaPlaybackResolver';
 import { TagsInputField } from './components/ui/tags-input';
-import type { Exercise, ExerciseMediaRef, MediaPlaybackResolution, RestBlock, RuntimeSegment, SetupTab, WorkBlock, Workout, WorkoutBlock, WorkoutRunSummary } from './types';
+import type { AppBootstrapPayload, Exercise, ExerciseMediaRef, MediaPlaybackResolution, RestBlock, RuntimeSegment, SetupTab, ViewState, WorkBlock, Workout, WorkoutBlock, WorkoutRunSummary } from './types';
 import { useWorkoutBlockReorder, type ReorderItemProps } from './useWorkoutBlockReorder';
 import { runtimeSegmentsForWorkout, segmentProgressRepeats, segmentProgressSeconds } from './workoutSegments';
 import { validateWorkoutForStart } from './workoutValidation';
@@ -64,6 +66,8 @@ type PlayerPlaybackOverlay = 'idle' | 'play' | 'pause';
 const REST_ICON_SRC = 'rest-icon.svg';
 const COUNTDOWN_SOUND_SRC = '/apps/fitness-coach/count-down-fitness-coach.mp3';
 const COUNTDOWN_SOUND_LEAD_MS = 3800;
+const BOOTSTRAP_CACHE_VERSION = 1;
+const FORBIDDEN_SESSION_STORAGE_KEYS = new Set(['stream_url', 'download_url', '_app_secret_request', 'token', 'access_token', 'refresh_token', 'local_path', 'path']);
 
 export function App() {
   const [workouts, setWorkouts] = useState<Workout[]>([]);
@@ -81,22 +85,40 @@ export function App() {
   const [libraryTargetBlockId, setLibraryTargetBlockId] = useState<string | null>(null);
   const [savedWorkoutId, setSavedWorkoutId] = useState<string | null>(null);
   const dirtyWorkoutIdsRef = useRef<Set<string>>(new Set());
+  const lastSyncedViewStateRef = useRef<Pick<ViewState, 'selected_workout_id' | 'setup_tab'> | null>(null);
 
   const selectedWorkout = useMemo(
-    () => workouts.find((workout) => workout.id === selectedWorkoutId) || workouts[0] || null,
+    () => selectedWorkoutId ? workouts.find((workout) => workout.id === selectedWorkoutId) || null : workouts[0] || null,
     [selectedWorkoutId, workouts]
   );
   const syncedSelectedWorkout = useMemo(() => syncWorkoutExerciseSnapshots(selectedWorkout, exercises), [selectedWorkout, exercises]);
   const validation = useMemo(() => validateWorkoutForStart(syncedSelectedWorkout), [syncedSelectedWorkout]);
   const tags = useMemo(() => Array.from(new Set(exercises.flatMap((exercise) => exercise.tags))).sort(), [exercises]);
 
+  const applyBootstrapPayload = useCallback((payload: AppBootstrapPayload) => {
+    const nextWorkouts = payload.workouts?.length
+      ? payload.workouts
+      : payload.selected_workout
+        ? [payload.selected_workout]
+        : [];
+    const selectedId = payload.view_state?.selected_workout_id || payload.selected_workout?.id || nextWorkouts[0]?.id || null;
+    const nextSetupTab = payload.view_state?.setup_tab === 'exercise-library' ? 'exercise-library' : 'workout-settings';
+    setWorkouts((current) => mergeDirtyWorkouts(nextWorkouts, current, dirtyWorkoutIdsRef.current));
+    setExercises(payload.exercises || []);
+    if (payload.runs?.length) {
+      setRuns(payload.runs);
+    }
+    lastSyncedViewStateRef.current = { selected_workout_id: selectedId, setup_tab: nextSetupTab };
+    setSelectedWorkoutId(selectedId);
+    setSetupTab(nextSetupTab);
+  }, []);
+
   const refresh = useCallback(async () => {
-    const [nextWorkouts, nextExercises, nextRuns] = await Promise.all([listWorkouts(), listExercises(libraryQuery, libraryTag), listRuns(selectedWorkoutId || undefined)]);
+    const [nextWorkouts, nextExercises] = await Promise.all([listWorkouts(), listExercises()]);
     setWorkouts((current) => mergeDirtyWorkouts(nextWorkouts, current, dirtyWorkoutIdsRef.current));
     setExercises(nextExercises);
-    setRuns(nextRuns);
-    setSelectedWorkoutId((current) => current || nextWorkouts[0]?.id || null);
-  }, [libraryQuery, libraryTag, selectedWorkoutId]);
+    setSelectedWorkoutId((current) => current && nextWorkouts.some((workout) => workout.id === current) ? current : nextWorkouts[0]?.id || null);
+  }, []);
 
   const markWorkoutDirty = useCallback((workout: Workout) => {
     dirtyWorkoutIdsRef.current.add(workout.id);
@@ -106,7 +128,18 @@ export function App() {
 
   useEffect(() => {
     let isCurrent = true;
-    refresh()
+    const cached = readBootstrapCache();
+    if (cached) {
+      applyBootstrapPayload(cached);
+      setIsInitialLoading(false);
+    }
+    bootstrapApp({ includeRuns: false })
+      .then((payload) => {
+        if (!isCurrent) return;
+        writeBootstrapCache(payload);
+        applyBootstrapPayload(payload);
+        setNotice('');
+      })
       .catch((error: Error) => {
         if (isCurrent) {
           setNotice(error.message);
@@ -120,7 +153,35 @@ export function App() {
     return () => {
       isCurrent = false;
     };
-  }, [refresh]);
+  }, [applyBootstrapPayload]);
+
+  useEffect(() => {
+    if (!selectedWorkoutId || isInitialLoading) return;
+    let isCurrent = true;
+    listRuns(selectedWorkoutId)
+      .then((nextRuns) => {
+        if (isCurrent) setRuns(nextRuns);
+      })
+      .catch(() => undefined);
+    return () => {
+      isCurrent = false;
+    };
+  }, [isInitialLoading, selectedWorkoutId]);
+
+  useEffect(() => {
+    if (!selectedWorkoutId || workouts.some((workout) => workout.id === selectedWorkoutId) || dirtyWorkoutIdsRef.current.has(selectedWorkoutId)) return;
+    let isCurrent = true;
+    getWorkout(selectedWorkoutId)
+      .then((workout) => {
+        if (isCurrent) setWorkouts((items) => replaceById(items, workout));
+      })
+      .catch((error: Error) => {
+        if (isCurrent) setNotice(error.message);
+      });
+    return () => {
+      isCurrent = false;
+    };
+  }, [selectedWorkoutId, workouts]);
 
   useEffect(() => {
     function handleMessage(event: MessageEvent) {
@@ -172,7 +233,11 @@ export function App() {
 
   useEffect(() => {
     if (!selectedWorkout?.id) return;
-    updateViewState({ selected_workout_id: selectedWorkout.id, setup_tab: setupTab }).catch(() => undefined);
+    const lastSynced = lastSyncedViewStateRef.current;
+    if (lastSynced?.selected_workout_id !== selectedWorkout.id || lastSynced?.setup_tab !== setupTab) {
+      lastSyncedViewStateRef.current = { selected_workout_id: selectedWorkout.id, setup_tab: setupTab };
+      updateViewState({ selected_workout_id: selectedWorkout.id, setup_tab: setupTab }).catch(() => undefined);
+    }
     window.parent?.postMessage(
       {
         type: 'maverick.app.selection-changed',
@@ -217,15 +282,15 @@ export function App() {
     const workoutToStart = syncWorkoutExerciseSnapshots(selectedWorkout, exercises);
     if (!workoutToStart || !validation.valid) return;
     setBusy('start');
+    setPlayerWorkout(workoutToStart);
     try {
-      const saved = await saveWorkout(workoutToStart);
-      dirtyWorkoutIdsRef.current.delete(saved.id);
-      setWorkouts((items) => replaceById(items, saved));
-      setSavedWorkoutId(saved.id);
-      const payload = await startWorkout(saved.id);
-      setPlayerWorkout(payload.workout);
+      const payload = await startWorkout(workoutToStart.id, workoutToStart);
+      dirtyWorkoutIdsRef.current.delete(payload.workout.id);
+      setWorkouts((items) => replaceById(items, payload.workout));
+      setSavedWorkoutId(payload.workout.id);
       setNotice('');
     } catch (error) {
+      setPlayerWorkout((current) => current?.id === workoutToStart.id ? null : current);
       setNotice(error instanceof Error ? error.message : 'Workout is not ready.');
     } finally {
       setBusy('');
@@ -342,6 +407,60 @@ export function App() {
       </section>
     </main>
   );
+}
+
+function bootstrapCacheKey() {
+  if (typeof window === 'undefined') return '';
+  const params = new URLSearchParams(window.location.search);
+  const workspaceId = params.get('workspace_id') || params.get('workspace') || 'default';
+  const appId = params.get('app_id') || 'fitness-coach';
+  return `fitness-coach:bootstrap:${workspaceId}:${appId}:${currentStorageAppId()}`;
+}
+
+function readBootstrapCache(): AppBootstrapPayload | null {
+  if (typeof window === 'undefined') return null;
+  const key = bootstrapCacheKey();
+  if (!key) return null;
+  try {
+    const raw = window.sessionStorage.getItem(key);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as { version?: number; payload?: unknown };
+    if (parsed.version !== BOOTSTRAP_CACHE_VERSION || !parsed.payload || typeof parsed.payload !== 'object') {
+      return null;
+    }
+    return parsed.payload as AppBootstrapPayload;
+  } catch {
+    return null;
+  }
+}
+
+function writeBootstrapCache(payload: AppBootstrapPayload) {
+  if (typeof window === 'undefined') return;
+  const key = bootstrapCacheKey();
+  if (!key) return;
+  try {
+    window.sessionStorage.setItem(
+      key,
+      JSON.stringify({
+        version: BOOTSTRAP_CACHE_VERSION,
+        cached_at: new Date().toISOString(),
+        payload: sanitizeBootstrapForSessionStorage(payload)
+      })
+    );
+  } catch {
+    // Cache is best-effort and must never block the app.
+  }
+}
+
+function sanitizeBootstrapForSessionStorage(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map((item) => sanitizeBootstrapForSessionStorage(item));
+  if (!value || typeof value !== 'object') return value;
+  const next: Record<string, unknown> = {};
+  Object.entries(value as Record<string, unknown>).forEach(([key, item]) => {
+    if (FORBIDDEN_SESSION_STORAGE_KEYS.has(key)) return;
+    next[key] = sanitizeBootstrapForSessionStorage(item);
+  });
+  return next;
 }
 
 function FitnessMainSkeleton() {
@@ -843,6 +962,8 @@ function WorkPlayer({ workout, onClose, onComplete }: { workout: Workout; onClos
     rootRef.current?.requestFullscreen?.().catch(() => undefined);
   }, []);
 
+  useEffect(() => () => clearMediaPlaybackCache(), []);
+
   useEffect(() => {
     const audio = new Audio(COUNTDOWN_SOUND_SRC);
     audio.preload = 'auto';
@@ -1021,11 +1142,19 @@ function WorkPlayer({ workout, onClose, onComplete }: { workout: Workout; onClos
 
   async function fallbackBlob() {
     if (!segment || segment.type !== 'work') return;
+    if (segment.media.kind === 'drive_file') {
+      cancelMediaPlayback(segment.media);
+      setResolution({
+        status: 'error',
+        url: driveMediaStreamUrl(segment.media),
+        mediaKind: segment.media.preview_kind,
+        detail: 'Storage could not play this Drive media yet. Retry after Drive localization is ready.',
+        canRetry: true
+      });
+      return;
+    }
     const next = await createLocalBlobFallback(segment.media);
-    setResolution((current) => {
-      current.revoke?.();
-      return next;
-    });
+    setResolution(next);
   }
 
   if (summary) {
@@ -1257,22 +1386,42 @@ function NextPreviewMedia({ resolution }: { resolution: MediaPlaybackResolution 
 
 function MediaThumb({ media, variant = 'small' }: { media: ExerciseMediaRef | null; variant?: 'small' | 'large' }) {
   const [previewFailed, setPreviewFailed] = useState(false);
+  const [isVisible, setIsVisible] = useState(variant === 'large');
+  const frameRef = useRef<HTMLDivElement | null>(null);
   const previewUrl = useMemo(() => mediaCoverUrl(media), [media]);
 
   useEffect(() => {
     setPreviewFailed(false);
-  }, [previewUrl]);
+    setIsVisible(variant === 'large');
+  }, [previewUrl, variant]);
+
+  useEffect(() => {
+    if (isVisible || !previewUrl) return;
+    const element = frameRef.current;
+    if (!element || typeof IntersectionObserver === 'undefined') {
+      setIsVisible(true);
+      return;
+    }
+    const observer = new IntersectionObserver((entries) => {
+      if (entries.some((entry) => entry.isIntersecting)) {
+        setIsVisible(true);
+        observer.disconnect();
+      }
+    }, { rootMargin: '160px' });
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, [isVisible, previewUrl]);
 
   const className = `media-thumb ${variant === 'large' ? 'is-large' : ''} ${media ? '' : 'is-empty'}`;
   if (previewUrl && media && !previewFailed) {
     return (
-      <div className={className}>
+      <div className={className} ref={frameRef}>
         {media.preview_kind === 'video' ? (
           <video
-            src={withVideoFrameHint(previewUrl)}
+            src={isVisible ? withVideoFrameHint(previewUrl) : undefined}
             muted
             playsInline
-            preload="metadata"
+            preload="none"
             aria-hidden="true"
             onLoadedMetadata={(event) => {
               try {
@@ -1284,7 +1433,7 @@ function MediaThumb({ media, variant = 'small' }: { media: ExerciseMediaRef | nu
             onError={() => setPreviewFailed(true)}
           />
         ) : (
-          <img src={previewUrl} alt="" onError={() => setPreviewFailed(true)} />
+          <img src={isVisible ? previewUrl : undefined} alt="" onError={() => setPreviewFailed(true)} />
         )}
       </div>
     );

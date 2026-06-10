@@ -1,37 +1,5 @@
-"use client";
-
-import {
-  TagsInputClearTrigger,
-  TagsInputContext,
-  TagsInputControl,
-  TagsInputHiddenInput,
-  TagsInputInput,
-  TagsInputItem,
-  TagsInputItemDeleteTrigger,
-  TagsInputItemInput,
-  TagsInputItemPreview,
-  TagsInputItemText,
-  TagsInputLabel,
-  TagsInputRoot,
-  type TagsInputValueChangeDetails,
-  type UseTagsInputContext
-} from '@ark-ui/react';
+import { useState } from 'react';
 import { Eraser, X } from 'lucide-react';
-
-const TagsInput = {
-  Root: TagsInputRoot,
-  Context: TagsInputContext,
-  Label: TagsInputLabel,
-  Control: TagsInputControl,
-  Item: TagsInputItem,
-  ItemPreview: TagsInputItemPreview,
-  ItemText: TagsInputItemText,
-  ItemDeleteTrigger: TagsInputItemDeleteTrigger,
-  ItemInput: TagsInputItemInput,
-  Input: TagsInputInput,
-  ClearTrigger: TagsInputClearTrigger,
-  HiddenInput: TagsInputHiddenInput
-};
 
 type BasicProps = {
   label?: string;
@@ -41,11 +9,16 @@ type BasicProps = {
   maxTags?: number;
 };
 
-function cleanTags(values: string[]) {
+function cleanTags(values: string[], maxTags = 24) {
   const next: string[] = [];
   values.forEach((value) => {
-    const tag = value.trim().toLowerCase();
-    if (tag && !next.includes(tag)) next.push(tag);
+    value
+      .split(',')
+      .map((item) => item.trim().toLowerCase())
+      .filter(Boolean)
+      .forEach((tag) => {
+        if (!next.includes(tag) && next.length < maxTags) next.push(tag);
+      });
   });
   return next;
 }
@@ -57,60 +30,70 @@ export const Basic = ({
   placeholder = 'Add tags and press enter',
   maxTags = 24
 }: BasicProps) => {
+  const [draft, setDraft] = useState('');
+  const tags = cleanTags(value, maxTags);
+
+  function commit(values: string[]) {
+    const next = cleanTags([...tags, ...values], maxTags);
+    onValueChange(next);
+    setDraft('');
+  }
+
+  function removeTag(tag: string) {
+    onValueChange(tags.filter((item) => item !== tag));
+  }
+
   return (
     <div className="maverick-tags-input-wrap">
-      <TagsInput.Root
-        className="maverick-tags-input"
-        value={value}
-        max={maxTags}
-        addOnPaste
-        blurBehavior="add"
-        sanitizeValue={(nextValue: string) => nextValue.trim().toLowerCase()}
-        onValueChange={(details: TagsInputValueChangeDetails) => onValueChange(cleanTags(details.value))}
-      >
-        <TagsInput.Context>
-          {(tagsInput: UseTagsInputContext) => (
-            <>
-              <TagsInput.Label className="maverick-tags-label">
-                {label}
-              </TagsInput.Label>
-
-              <TagsInput.Control className="maverick-tags-control">
-                {tagsInput.value.map((itemValue: string, index: number) => (
-                  <TagsInput.Item
-                    key={`${itemValue}-${index}`}
-                    index={index}
-                    value={itemValue}
-                    className="maverick-tags-item"
-                  >
-                    <TagsInput.ItemPreview className="maverick-tags-item-preview">
-                      <TagsInput.ItemText>{itemValue}</TagsInput.ItemText>
-                      <TagsInput.ItemDeleteTrigger className="maverick-tags-item-delete" aria-label={`Remove ${itemValue}`}>
-                        <X size={12} aria-hidden="true" />
-                      </TagsInput.ItemDeleteTrigger>
-                    </TagsInput.ItemPreview>
-                    <TagsInput.ItemInput className="maverick-tags-item-input" />
-                  </TagsInput.Item>
-                ))}
-
-                <TagsInput.Input
-                  placeholder={placeholder}
-                  className="maverick-tags-text-input"
-                />
-              </TagsInput.Control>
-
-              {tagsInput.value.length ? (
-                <TagsInput.ClearTrigger className="maverick-tags-clear">
-                  <Eraser size={14} aria-hidden="true" />
-                  <span>Clear all</span>
-                </TagsInput.ClearTrigger>
-              ) : null}
-            </>
-          )}
-        </TagsInput.Context>
-
-        <TagsInput.HiddenInput />
-      </TagsInput.Root>
+      <div className="maverick-tags-input">
+        <label className="maverick-tags-label" htmlFor="fitness-tags-input">
+          {label}
+        </label>
+        <div className="maverick-tags-control" onClick={() => document.getElementById('fitness-tags-input')?.focus()}>
+          {tags.map((itemValue) => (
+            <span key={itemValue} className="maverick-tags-item">
+              <span className="maverick-tags-item-preview">
+                <span>{itemValue}</span>
+                <button className="maverick-tags-item-delete" type="button" aria-label={`Remove ${itemValue}`} onClick={() => removeTag(itemValue)}>
+                  <X size={12} aria-hidden="true" />
+                </button>
+              </span>
+            </span>
+          ))}
+          <input
+            id="fitness-tags-input"
+            value={draft}
+            placeholder={tags.length >= maxTags ? '' : placeholder}
+            className="maverick-tags-text-input"
+            disabled={tags.length >= maxTags}
+            onBlur={() => {
+              if (draft.trim()) commit([draft]);
+            }}
+            onChange={(event) => setDraft(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key === 'Enter' || event.key === ',') {
+                event.preventDefault();
+                if (draft.trim()) commit([draft]);
+              }
+              if (event.key === 'Backspace' && !draft && tags.length) {
+                onValueChange(tags.slice(0, -1));
+              }
+            }}
+            onPaste={(event) => {
+              const text = event.clipboardData.getData('text');
+              if (!text.includes(',')) return;
+              event.preventDefault();
+              commit([text]);
+            }}
+          />
+        </div>
+        {tags.length ? (
+          <button className="maverick-tags-clear" type="button" onClick={() => onValueChange([])}>
+            <Eraser size={14} aria-hidden="true" />
+            <span>Clear all</span>
+          </button>
+        ) : null}
+      </div>
     </div>
   );
 };

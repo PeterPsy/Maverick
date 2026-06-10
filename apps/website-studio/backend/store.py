@@ -6,6 +6,7 @@ from base64 import b64encode
 from collections.abc import Callable
 from collections.abc import Iterator
 from contextlib import contextmanager
+from copy import deepcopy
 import difflib
 import fcntl
 import hashlib
@@ -868,7 +869,8 @@ def navigation_analyze(data_root: Path, site_id: object) -> dict[str, object]:
 
     latest_build = runtime.get("latest_build") if isinstance(runtime.get("latest_build"), dict) else {}
     latest_preview = runtime.get("latest_preview") if isinstance(runtime.get("latest_preview"), dict) else {}
-    warnings = _navigation_warnings(visual_pages, visual_routes, runtime)
+    analysis_coverage = _navigation_analysis_coverage(visual_pages, visual_routes)
+    warnings = _navigation_warnings(visual_pages, visual_routes, runtime, analysis_coverage=analysis_coverage)
     return {
         "site_id": site["id"],
         "model": "visual_navigation.v1",
@@ -883,6 +885,7 @@ def navigation_analyze(data_root: Path, site_id: object) -> dict[str, object]:
         "pages": visual_pages,
         "routes": visual_routes,
         "components": flattened_components[:120],
+        "analysis_coverage": analysis_coverage,
         "warnings": warnings,
         "status": {
             "runtime_kind": runtime.get("runtime_kind") or "",
@@ -1799,11 +1802,13 @@ def _preview_source_map(data_root: Path, preview: dict[str, object], html: objec
     if page is None:
         page = next((item for item in pages if item.get("route") == route_text), None)
     route_item = next((item for item in routes if item.get("route") == route_text), None)
-    source_files = _dedupe_strings(
+    raw_source_files = _dedupe_strings(
         list(page.get("source_files") or []) if page else []
         + (list(route_item.get("source_files") or []) if route_item else [])
         + source_files_for_runtime_route(_source_root(data_root, str(site["id"])), source_profile(_source_root(data_root, str(site["id"]))))
     )
+    include_source_inventory = _truthy(include_inventory)
+    source_files = _source_files_for_visual_context(raw_source_files, include_inventory=include_source_inventory)
     source_texts = _source_text_candidates(data_root, site["id"], source_files)
     media_paths = preview_media_paths_from_html(html)
     asset_refs = _dedupe_strings((list(page.get("asset_refs") or []) if page else []) + media_paths)
@@ -1822,7 +1827,7 @@ def _preview_source_map(data_root: Path, preview: dict[str, object], html: objec
         "route_id": route_item.get("id") if route_item else "",
         "page_id": page.get("id") if page else "",
         "source_files": source_files[:20],
-        "route_source_files": list(route_item.get("source_files") or [])[:20] if route_item else [],
+        "route_source_files": _source_files_for_visual_context(route_item.get("source_files", []) if route_item else [], include_inventory=include_source_inventory),
         "asset_refs": asset_refs[:200],
         "asset_summary": _asset_inventory_summary(assets),
         "asset_index": _compact_asset_index(assets, asset_refs, include_inventory=_truthy(include_inventory)),
@@ -2189,9 +2194,21 @@ def _unique_visual_navigation_items(items: list[dict[str, object]]) -> list[dict
     return result
 
 
+def _source_file_values(value: object) -> list[str]:
+    if not isinstance(value, list):
+        return []
+    return _dedupe_strings([str(item or "").strip() for item in value if str(item or "").strip()])
+
+
 def _visual_source_files(value: object) -> list[str]:
-    files = [str(item or "").strip() for item in value if str(item or "").strip()] if isinstance(value, list) else []
-    return [path for path in files if not _is_hidden_source_inventory_file(path)][:20]
+    return [path for path in _source_file_values(value) if not _is_hidden_source_inventory_file(path)][:20]
+
+
+def _source_files_for_visual_context(value: object, *, include_inventory: bool = False, limit: int = 20) -> list[str]:
+    files = _source_file_values(value)
+    if include_inventory:
+        return files[:limit]
+    return _visual_source_files(files)[:limit]
 
 
 def _is_hidden_source_inventory_file(path: str) -> bool:
@@ -2202,11 +2219,94 @@ def _is_hidden_source_inventory_file(path: str) -> bool:
         return True
     if lower.startswith(("backend-admin/", "admin/", "wp-admin/", ".git/", "node_modules/", "vendor/")):
         return True
-    if name in {".gitignore", ".htaccess", "readme.md", "package.json", "package-lock.json", "pnpm-lock.yaml", "yarn.lock"}:
+    package_files = {
+        ".gitignore",
+        ".htaccess",
+        ".npmrc",
+        ".nvmrc",
+        ".yarnrc",
+        "bun.lockb",
+        "composer.json",
+        "composer.lock",
+        "package.json",
+        "package-lock.json",
+        "pnpm-lock.yaml",
+        "readme.md",
+        "yarn.lock",
+    }
+    if name in package_files:
+        return True
+    config_prefixes = (
+        "astro.config",
+        "babel.config",
+        "eslint.config",
+        "esbuild.config",
+        "next.config",
+        "nuxt.config",
+        "postcss.config",
+        "prettier.config",
+        "rollup.config",
+        "stylelint.config",
+        "svelte.config",
+        "tailwind.config",
+        "vite.config",
+        "webpack.config",
+    )
+    if any(name == prefix or name.startswith(f"{prefix}.") for prefix in config_prefixes):
+        return True
+    if name in {"jsconfig.json", "tsconfig.json"} or name.startswith(("jsconfig.", "tsconfig.")):
+        return True
+    if name.startswith(("gulpfile.", "gruntfile.")):
         return True
     if name.endswith((".lock", ".log", ".env")):
         return True
     return False
+
+
+def _navigation_analysis_coverage(pages: list[dict[str, object]], routes: list[dict[str, object]]) -> dict[str, object]:
+    page_entries = [_coverage_entry(item, default_kind="page") for item in pages]
+    route_entries = [_coverage_entry(item, default_kind="route") for item in routes]
+    pages_without_report = [item for item in page_entries if not item["preview_report_id"]]
+    routes_without_report = [item for item in route_entries if not item["preview_report_id"]]
+    return {
+        "visual_page_count": len(page_entries),
+        "observed_page_count": len(page_entries) - len(pages_without_report),
+        "pages_without_report_count": len(pages_without_report),
+        "pages_without_report": pages_without_report[:50],
+        "visual_route_count": len(route_entries),
+        "observed_route_count": len(route_entries) - len(routes_without_report),
+        "routes_without_report_count": len(routes_without_report),
+        "routes_to_analyze": (pages_without_report + routes_without_report)[:50],
+        "complete": not pages_without_report and not routes_without_report,
+    }
+
+
+def _coverage_entry(item: dict[str, object], *, default_kind: str) -> dict[str, object]:
+    return {
+        "id": item.get("id") or "",
+        "kind": item.get("kind") or default_kind,
+        "route": item.get("route") or "",
+        "page_id": item.get("id") if default_kind == "page" else item.get("page_id") or "",
+        "route_id": item.get("route_id") if default_kind == "page" else item.get("id") or "",
+        "label": item.get("label") or item.get("title") or item.get("route") or "",
+        "preview_report_id": item.get("preview_report_id") or "",
+    }
+
+
+def _analysis_coverage_warnings(analysis_coverage: dict[str, object]) -> list[dict[str, object]]:
+    missing = list(analysis_coverage.get("routes_to_analyze") or [])
+    if not missing:
+        return []
+    routes = [str(item.get("route") or "").strip() for item in missing if isinstance(item, dict) and str(item.get("route") or "").strip()]
+    sample = ", ".join(routes[:5])
+    suffix = f": {sample}" if sample else ""
+    return [
+        {
+            "scope": "analysis_coverage",
+            "route": "",
+            "message": f"{len(missing)} visual route(s) are missing preview reports{suffix}",
+        }
+    ]
 
 
 def _components_from_report(source_map: dict[str, object], *, route: str, page_id: str, report_id: str) -> list[dict[str, object]]:
@@ -2235,6 +2335,8 @@ def _navigation_warnings(
     pages: list[dict[str, object]],
     routes: list[dict[str, object]],
     runtime: dict[str, object],
+    *,
+    analysis_coverage: dict[str, object] | None = None,
 ) -> list[dict[str, object]]:
     warnings: list[dict[str, object]] = []
     for item in pages + routes:
@@ -2246,6 +2348,8 @@ def _navigation_warnings(
         text = str(requirement or "").strip()
         if text:
             warnings.append({"scope": "runtime", "route": "", "message": text})
+    if analysis_coverage:
+        warnings.extend(_analysis_coverage_warnings(analysis_coverage))
     return warnings[:100]
 
 
@@ -2746,6 +2850,7 @@ def page_context(
     component_id: object = None,
     target_selector: object = None,
     target_anchor: object = None,
+    include_inventory: object = False,
 ) -> dict[str, object]:
     site = _select_context_site(data_root, site_id)
     if not site:
@@ -2803,6 +2908,7 @@ def page_context(
         component=selected_component,
         map_payload=map_payload,
         diff_payload=diff_payload,
+        include_inventory=include_inventory,
     )
 
 
@@ -2816,6 +2922,7 @@ def _context_payload(
     map_payload: dict[str, object],
     diff_payload: dict[str, object],
     component: dict[str, object] | None = None,
+    include_inventory: object = False,
 ) -> dict[str, object]:
     active_view = "component" if component else "asset" if asset else "route" if route and not page else "page" if page else "site"
     preview_route = page["route"] if page else route.get("route") if route else "/"
@@ -2825,6 +2932,19 @@ def _context_payload(
     runtime_kind = str(runtime.get("runtime_kind") or preview.get("runtime_kind") or "unavailable")
     runtime_status_value = str(runtime.get("runtime_status") or preview.get("runtime_status") or "blocked")
     missing_requirements = list(runtime.get("missing_requirements") or preview.get("missing_requirements") or [])[:50]
+    include_source_inventory = _truthy(include_inventory)
+    latest_preview_report = runtime.get("latest_preview_report") if isinstance(runtime.get("latest_preview_report"), dict) else {}
+    page_source_files = _source_files_for_visual_context(page.get("source_files", []) if page else [], include_inventory=include_source_inventory)
+    route_source_files = _source_files_for_visual_context(route.get("source_files", []) if route else [], include_inventory=include_source_inventory)
+    component_source_files = _source_files_for_visual_context(component.get("source_files", []) if component else [], include_inventory=include_source_inventory)
+    if active_view == "component":
+        source_files = component_source_files
+    elif active_view == "route":
+        source_files = route_source_files
+    elif active_view == "page":
+        source_files = page_source_files
+    else:
+        source_files = []
     return {
         "active_view": active_view,
         "site_id": site["id"],
@@ -2832,7 +2952,7 @@ def _context_payload(
         "title": site["display_name"],
         "site": site,
         "source_profile": source_profile_payload,
-        "runtime": runtime,
+        "runtime": _context_runtime(runtime, include_inventory=include_source_inventory),
         "page_id": page["id"] if page else None,
         "route_id": route["id"] if route else None,
         "asset_id": asset["id"] if asset else None,
@@ -2844,8 +2964,9 @@ def _context_payload(
         "runtime_status": runtime_status_value,
         "missing_requirements": missing_requirements,
         "preview": preview,
-        "source_files": page["source_files"] if page else list(component.get("source_files") or []) if component else [],
-        "route_source_files": route.get("source_files", []) if route else [],
+        "source_files": source_files,
+        "page_source_files": page_source_files,
+        "route_source_files": route_source_files,
         "asset_path": asset.get("path") if asset else None,
         "component": component or None,
         "target_selector": component.get("selector") if component else None,
@@ -2854,13 +2975,274 @@ def _context_payload(
         "warnings": page.get("warnings", []) if page else [],
         "route_warnings": route.get("warnings", []) if route else [],
         "asset_warnings": asset.get("warnings", []) if asset else [],
-        "routes": map_payload.get("routes", [])[:100],
-        "assets": map_payload.get("assets", [])[:200],
+        "routes": _context_routes(map_payload, include_inventory=include_source_inventory),
+        "assets": _context_assets(map_payload, page=page, asset=asset, include_inventory=include_source_inventory),
+        "visual_assets": _context_visual_assets(map_payload, preview_report=latest_preview_report),
+        "context_policy": {
+            "scope": "visual" if not include_source_inventory else "inventory",
+            "inventory_included": include_source_inventory,
+            "inventory_parameter": "include_inventory",
+        },
         "changed_files_count": len(diff_payload["files"]),
-        "changed_files": [{"path": item["path"], "status": item["status"]} for item in diff_payload["files"][:100]],
+        "changed_files": _context_changed_files(diff_payload, include_inventory=include_source_inventory),
         "current_revision_id": site.get("published_revision_id"),
         "working_revision_id": site.get("active_revision_id"),
     }
+
+
+def _context_runtime(runtime: dict[str, object], *, include_inventory: bool = False) -> dict[str, object]:
+    payload = deepcopy(runtime)
+    if include_inventory:
+        return payload
+    report = payload.get("latest_preview_report")
+    if isinstance(report, dict):
+        payload["latest_preview_report"] = _visual_preview_report_summary(report)
+    return payload
+
+
+def _visual_preview_report_summary(report: dict[str, object]) -> dict[str, object]:
+    summary: dict[str, object] = {}
+    for key in ("id", "site_id", "preview_id", "route", "runtime_kind", "runtime_status", "generated_at"):
+        if key in report:
+            summary[key] = report.get(key)
+    acceptance = report.get("acceptance")
+    if isinstance(acceptance, dict):
+        summary["acceptance"] = {
+            "passed": bool(acceptance.get("passed")),
+            "checks": list(acceptance.get("checks") or [])[:20],
+        }
+    asset_coverage = report.get("asset_coverage")
+    if isinstance(asset_coverage, dict):
+        summary["asset_coverage"] = _visual_asset_coverage_summary(asset_coverage)
+    source_map = report.get("source_map")
+    if isinstance(source_map, dict):
+        summary["source_map"] = _visual_source_map_summary(source_map)
+    components = report.get("components")
+    if isinstance(components, list):
+        summary["components"] = [_visual_component_summary(item) for item in components if isinstance(item, dict)][:80]
+    navigation = report.get("navigation")
+    if isinstance(navigation, dict):
+        nav_components = navigation.get("components")
+        summary["navigation"] = {
+            "route": navigation.get("route") or "",
+            "page_id": navigation.get("page_id") or "",
+            "components": [_visual_component_summary(item) for item in nav_components if isinstance(item, dict)][:80] if isinstance(nav_components, list) else [],
+        }
+    return summary
+
+
+def _visual_source_map_summary(source_map: dict[str, object]) -> dict[str, object]:
+    asset_refs = _dedupe_strings(list(source_map.get("asset_refs") or []))[:200] if isinstance(source_map.get("asset_refs"), list) else []
+    return {
+        "site_id": source_map.get("site_id") or "",
+        "preview_id": source_map.get("preview_id") or "",
+        "route": source_map.get("route") or "",
+        "route_id": source_map.get("route_id") or "",
+        "page_id": source_map.get("page_id") or "",
+        "source_files": _visual_source_files(source_map.get("source_files", [])),
+        "route_source_files": _visual_source_files(source_map.get("route_source_files", [])),
+        "asset_refs": asset_refs,
+        "asset_index": _visual_asset_records(source_map.get("asset_index"), referenced_paths=set(asset_refs), limit=80),
+        "selector_hints": _visual_selector_hints(source_map.get("selector_hints")),
+    }
+
+
+def _visual_asset_coverage_summary(asset_coverage: dict[str, object]) -> dict[str, object]:
+    return {
+        "status": asset_coverage.get("status") or "",
+        "preview_media_reference_count": asset_coverage.get("preview_media_reference_count") or 0,
+        "resolved_count": asset_coverage.get("resolved_count") or 0,
+        "missing_count": asset_coverage.get("missing_count") or 0,
+        "image_count": asset_coverage.get("image_count") or 0,
+        "font_count": asset_coverage.get("font_count") or 0,
+        "video_count": asset_coverage.get("video_count") or 0,
+        "resolved": _visual_asset_records(asset_coverage.get("resolved"), limit=80),
+        "missing": _visual_asset_paths(asset_coverage.get("missing"), limit=50),
+    }
+
+
+def _visual_component_summary(component: dict[str, object]) -> dict[str, object]:
+    keys = ("id", "kind", "label", "route", "page_id", "selector", "anchor", "tag", "confidence", "last_report_id", "asset_id", "asset_path")
+    summary = {key: component.get(key) for key in keys if key in component}
+    if isinstance(component.get("visibility"), dict):
+        summary["visibility"] = deepcopy(component["visibility"])
+    summary["source_files"] = _visual_source_files(component.get("source_files", []))
+    return summary
+
+
+def _visual_selector_hints(value: object) -> list[dict[str, object]]:
+    if not isinstance(value, list):
+        return []
+    hints: list[dict[str, object]] = []
+    for item in value:
+        if not isinstance(item, dict):
+            continue
+        hint = {
+            "selector": item.get("selector") or "",
+            "token": item.get("token") or "",
+            "tag": item.get("tag") or "",
+            "text": item.get("text") or "",
+            "confidence": item.get("confidence") or "",
+            "source_files": _visual_source_files(item.get("source_files", [])),
+        }
+        if item.get("asset_id"):
+            hint["asset_id"] = item.get("asset_id")
+        if item.get("asset_path") and not _is_hidden_source_inventory_file(str(item.get("asset_path") or "")):
+            hint["asset_path"] = item.get("asset_path")
+        hints.append(hint)
+        if len(hints) >= 80:
+            break
+    return hints
+
+
+def _visual_asset_paths(value: object, *, limit: int) -> list[str]:
+    if not isinstance(value, list):
+        return []
+    paths: list[str] = []
+    for item in value:
+        path = str(item or "").strip()
+        if path and not _is_hidden_source_inventory_file(path) and path not in paths:
+            paths.append(path)
+        if len(paths) >= limit:
+            break
+    return paths
+
+
+def _visual_asset_records(value: object, *, referenced_paths: set[str] | None = None, limit: int = 80) -> list[dict[str, object]]:
+    if not isinstance(value, list):
+        return []
+    compact: list[dict[str, object]] = []
+    seen: set[str] = set()
+    for item in value:
+        if not isinstance(item, dict):
+            continue
+        path = str(item.get("path") or "").strip()
+        if not path or path in seen or _is_hidden_source_inventory_file(path):
+            continue
+        if referenced_paths is not None and path not in referenced_paths and str(item.get("status") or "") != "referenced":
+            continue
+        seen.add(path)
+        compact.append(
+            {
+                "id": item.get("id") or "",
+                "path": path,
+                "requested_path": item.get("requested_path") or "",
+                "kind": item.get("kind") or "file",
+                "content_type": item.get("content_type") or "",
+                "size_bytes": item.get("size_bytes") or 0,
+                "status": item.get("status") or "",
+            }
+        )
+        if len(compact) >= limit:
+            break
+    return compact
+
+
+def _context_visual_assets(map_payload: dict[str, object], *, preview_report: dict[str, object] | None) -> list[dict[str, object]]:
+    assets_by_path = {str(item.get("path") or ""): item for item in list(map_payload.get("assets") or []) if isinstance(item, dict)}
+    compact: list[dict[str, object]] = []
+    seen: set[str] = set()
+
+    def append(record: dict[str, object]) -> None:
+        path = str(record.get("path") or "").strip()
+        if not path or path in seen or _is_hidden_source_inventory_file(path):
+            return
+        indexed = assets_by_path.get(path, {})
+        seen.add(path)
+        compact.append(
+            {
+                "id": indexed.get("id") or record.get("id") or "",
+                "path": path,
+                "requested_path": record.get("requested_path") or "",
+                "kind": record.get("kind") or indexed.get("kind") or "file",
+                "content_type": record.get("content_type") or indexed.get("content_type") or "",
+                "size_bytes": record.get("size_bytes") or indexed.get("size_bytes") or 0,
+                "status": record.get("status") or indexed.get("status") or "",
+            }
+        )
+
+    report = preview_report or {}
+    asset_coverage = report.get("asset_coverage") if isinstance(report.get("asset_coverage"), dict) else {}
+    for record in _visual_asset_records(asset_coverage.get("resolved") if isinstance(asset_coverage, dict) else None, limit=80):
+        append(record)
+
+    source_map = report.get("source_map") if isinstance(report.get("source_map"), dict) else {}
+    asset_refs = {str(item or "").strip() for item in (source_map.get("asset_refs", []) if isinstance(source_map, dict) else []) if str(item or "").strip()}
+    for record in _visual_asset_records(source_map.get("asset_index") if isinstance(source_map, dict) else None, referenced_paths=asset_refs, limit=80):
+        append(record)
+    return compact[:80]
+
+
+def _context_changed_files(diff_payload: dict[str, object], *, include_inventory: bool = False) -> list[dict[str, object]]:
+    files = list(diff_payload.get("files") or [])
+    if not include_inventory:
+        files = [item for item in files if isinstance(item, dict) and not _is_hidden_source_inventory_file(str(item.get("path") or ""))]
+    return [{"path": item["path"], "status": item["status"]} for item in files[:100] if isinstance(item, dict) and item.get("path")]
+
+
+def _context_routes(map_payload: dict[str, object], *, include_inventory: bool = False) -> list[dict[str, object]]:
+    routes = list(map_payload.get("routes") or [])
+    if include_inventory:
+        return routes[:100]
+    visual_routes: list[dict[str, object]] = []
+    seen: set[str] = set()
+    for route in routes:
+        if not isinstance(route, dict) or not _route_is_visual(route):
+            continue
+        route_text = str(route.get("route") or "/")
+        route_key = _visual_route_key(route_text)
+        if route_key in seen:
+            continue
+        seen.add(route_key)
+        visual_routes.append(
+            {
+                "id": route.get("id") or "",
+                "route": route_text,
+                "canonical_route": route_key,
+                "page_id": route.get("page_id") or "",
+                "kind": route.get("kind") or "",
+                "status": route.get("status") or "",
+                "source_files": _visual_source_files(route.get("source_files", [])),
+                "warnings": list(route.get("warnings") or [])[:50],
+            }
+        )
+    return visual_routes[:100]
+
+
+def _context_assets(
+    map_payload: dict[str, object],
+    *,
+    page: dict[str, object] | None,
+    asset: dict[str, object] | None,
+    include_inventory: bool = False,
+) -> list[dict[str, object]]:
+    assets = list(map_payload.get("assets") or [])
+    if include_inventory:
+        return assets[:200]
+    referenced_paths = {str(item or "").strip() for item in (page.get("asset_refs", []) if page else []) if str(item or "").strip()}
+    selected_asset_id = str(asset.get("id") or "") if asset else ""
+    compact: list[dict[str, object]] = []
+    seen: set[str] = set()
+    for item in assets:
+        if not isinstance(item, dict):
+            continue
+        path = str(item.get("path") or "")
+        asset_id = str(item.get("id") or "")
+        if path not in referenced_paths and asset_id != selected_asset_id:
+            continue
+        if not path or path in seen:
+            continue
+        seen.add(path)
+        compact.append(
+            {
+                "id": asset_id,
+                "path": path,
+                "kind": item.get("kind") or "file",
+                "content_type": item.get("content_type") or "",
+                "status": item.get("status") or "",
+            }
+        )
+    return compact[:50]
 
 
 def _context_preview_contract(

@@ -130,7 +130,9 @@ function WebsiteSitemapSidebarWidget() {
     const nextSites = sitePayload.items || [];
     setSites(nextSites);
     const selectableSites = nextSites.filter((item) => item.status !== 'archived');
-    const site = selectableSites.find((item) => item.id === nextSiteId);
+    const requestedSite = selectableSites.find((item) => item.id === nextSiteId);
+    const persistedSite = selectableSites.find((item) => item.is_active);
+    const site = requestedSite || persistedSite || selectableSites[0];
     if (!site?.id) {
       setActiveSiteId('');
       setNavigation(null);

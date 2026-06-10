@@ -1560,6 +1560,7 @@ class WebsiteStudioEntrypointTest(unittest.TestCase):
                 ),
                 encoding="utf-8",
             )
+            (source_root / "about.html").write_text("<!doctype html><title>About</title><main><h1>About</h1></main>", encoding="utf-8")
             (source_root / "assets").mkdir(exist_ok=True)
             (source_root / "assets" / "site.css").write_text("body{color:#123}", encoding="utf-8")
             (source_root / "assets" / "unused.png").write_bytes(b"unused")
@@ -1580,17 +1581,43 @@ class WebsiteStudioEntrypointTest(unittest.TestCase):
 
             status, preview = handle_action(data_root, {"action": "build_preview", "site_id": site_id, "route": "/"})
             self.assertEqual(status, 200)
+            (source_root / "package.json").write_text('{"scripts":{"build":"webpack"}}', encoding="utf-8")
+            (source_root / "webpack.config.js").write_text("module.exports = {};\n", encoding="utf-8")
+            with closing(sqlite3.connect(data_root / "app.sqlite")) as db, db:
+                db.execute(
+                    "UPDATE pages SET source_files_json = ? WHERE site_id = ? AND route = '/'",
+                    (json.dumps(["index.html", ".htaccess", "package.json", "webpack.config.js"]), site_id),
+                )
+            status, document = handle_action(data_root, {"action": "preview_document", "preview_id": preview["preview_id"]})
+            self.assertEqual(status, 200)
+            source_map_text = json.dumps(document["source_map"], sort_keys=True)
+            self.assertIn("index.html", document["source_map"]["source_files"])
+            self.assertNotIn(".htaccess", source_map_text)
+            self.assertNotIn("package.json", source_map_text)
+            self.assertNotIn("webpack.config.js", source_map_text)
+            status, debug_document = handle_action(data_root, {"action": "preview_document", "preview_id": preview["preview_id"], "include_inventory": True})
+            self.assertEqual(status, 200)
+            debug_source_map_text = json.dumps(debug_document["source_map"], sort_keys=True)
+            self.assertIn(".htaccess", debug_source_map_text)
+            self.assertIn("package.json", debug_source_map_text)
+            self.assertIn("webpack.config.js", debug_source_map_text)
             status, report_payload = handle_action(data_root, {"action": "preview_report", "preview_id": preview["preview_id"]})
             self.assertEqual(status, 201)
 
             status, navigation = handle_action(data_root, {"action": "navigation_analyze", "site_id": site_id})
             self.assertEqual(status, 200)
             self.assertTrue(navigation["inventory_summary"]["source_inventory_hidden"])
+            self.assertEqual(navigation["analysis_coverage"]["observed_page_count"], 1)
+            self.assertEqual(navigation["analysis_coverage"]["pages_without_report_count"], 1)
+            self.assertEqual(navigation["analysis_coverage"]["pages_without_report"][0]["route"], "/about")
+            self.assertTrue(any(item["scope"] == "analysis_coverage" for item in navigation["warnings"]))
             navigation_text = json.dumps(navigation, sort_keys=True)
             self.assertNotIn(".gitignore", navigation_text)
             self.assertNotIn(".htaccess", navigation_text)
             self.assertNotIn("README.md", navigation_text)
             self.assertNotIn("backend-admin", navigation_text)
+            self.assertNotIn("package.json", navigation_text)
+            self.assertNotIn("webpack.config.js", navigation_text)
             home = navigation["pages"][0]
             self.assertEqual(home["route"], "/")
             self.assertTrue(any(section["anchor"] == "#booking" for section in home["anchors"]))
@@ -1602,6 +1629,68 @@ class WebsiteStudioEntrypointTest(unittest.TestCase):
             self.assertNotIn("link[href]", component_selectors)
             self.assertNotIn("a[href]", component_selectors)
             self.assertNotIn("meta[href]", component_selectors)
+
+            legacy_component = {**component, "source_files": ["index.html", ".htaccess", "package.json", "webpack.config.js"]}
+            legacy_report = {
+                "id": "report_legacy_noisy",
+                "site_id": site_id,
+                "preview_id": preview["preview_id"],
+                "route": "/",
+                "runtime_kind": "php",
+                "runtime_status": "ready",
+                "generated_at": "2999-01-01T00:00:00+00:00",
+                "acceptance": {"passed": True, "checks": []},
+                "source_map": {
+                    "site_id": site_id,
+                    "preview_id": preview["preview_id"],
+                    "route": "/",
+                    "route_id": home["route_id"],
+                    "page_id": home["id"],
+                    "source_files": ["index.html", ".htaccess", "package.json", "webpack.config.js"],
+                    "route_source_files": ["index.html", ".htaccess", "package.json", "webpack.config.js"],
+                    "asset_refs": ["assets/site.css"],
+                    "asset_index": [
+                        {"id": "asset_hidden", "path": ".gitignore", "kind": "file", "status": "unlinked"},
+                        {"id": "asset_config", "path": "webpack.config.js", "kind": "file", "status": "unlinked"},
+                        {"id": "asset_css", "path": "assets/site.css", "kind": "stylesheet", "content_type": "text/css", "status": "referenced"},
+                    ],
+                    "selector_hints": [
+                        {
+                            "selector": ".cta",
+                            "token": "cta",
+                            "tag": "button",
+                            "source_files": ["index.html", "package.json", "webpack.config.js"],
+                            "confidence": "token_match",
+                        }
+                    ],
+                },
+                "asset_coverage": {
+                    "status": "passed",
+                    "resolved_count": 1,
+                    "missing_count": 0,
+                    "resolved": [
+                        {
+                            "path": "assets/site.css",
+                            "requested_path": "assets/site.css",
+                            "kind": "stylesheet",
+                            "content_type": "text/css",
+                            "size_bytes": 16,
+                            "status": "ok",
+                        }
+                    ],
+                    "missing": [],
+                },
+                "components": [legacy_component],
+                "navigation": {"route": "/", "page_id": home["id"], "components": [legacy_component]},
+            }
+            with closing(sqlite3.connect(data_root / "app.sqlite")) as db, db:
+                db.execute(
+                    """
+                    INSERT INTO preview_reports(id, site_id, preview_id, route, status, report_json, created_at)
+                    VALUES (?, ?, ?, '/', 'passed', ?, ?)
+                    """,
+                    (legacy_report["id"], site_id, preview["preview_id"], json.dumps(legacy_report, sort_keys=True), legacy_report["generated_at"]),
+                )
 
             status, component_context = handle_action(
                 data_root,
@@ -1617,6 +1706,44 @@ class WebsiteStudioEntrypointTest(unittest.TestCase):
             self.assertEqual(component_context["active_view"], "component")
             self.assertEqual(component_context["component_id"], component["id"])
             self.assertEqual(component_context["target_selector"], ".cta")
+            self.assertEqual(component_context["source_files"], component["source_files"])
+            self.assertEqual(component_context["page_source_files"], ["index.html"])
+            self.assertFalse(component_context["context_policy"]["inventory_included"])
+            component_context_text = json.dumps(component_context, sort_keys=True)
+            self.assertNotIn(".gitignore", component_context_text)
+            self.assertNotIn("README.md", component_context_text)
+            self.assertNotIn("backend-admin", component_context_text)
+            self.assertNotIn("package.json", component_context_text)
+            self.assertNotIn("webpack.config.js", component_context_text)
+            runtime_report_text = json.dumps(component_context["runtime"]["latest_preview_report"], sort_keys=True)
+            self.assertEqual(component_context["runtime"]["latest_preview_report"]["id"], "report_legacy_noisy")
+            self.assertNotIn(".gitignore", runtime_report_text)
+            self.assertNotIn("package.json", runtime_report_text)
+            self.assertNotIn("webpack.config.js", runtime_report_text)
+            visual_asset_paths = {item["path"] for item in component_context["visual_assets"]}
+            self.assertIn("assets/site.css", visual_asset_paths)
+
+            status, debug_component_context = handle_action(
+                data_root,
+                {
+                    "action": "page_context",
+                    "site_id": site_id,
+                    "route": "/",
+                    "component_id": component["id"],
+                    "target_selector": component["selector"],
+                    "include_inventory": True,
+                },
+            )
+            self.assertEqual(status, 200)
+            self.assertTrue(debug_component_context["context_policy"]["inventory_included"])
+            self.assertIn("package.json", debug_component_context["page_source_files"])
+            self.assertIn("webpack.config.js", debug_component_context["page_source_files"])
+            debug_runtime_report_text = json.dumps(debug_component_context["runtime"]["latest_preview_report"], sort_keys=True)
+            self.assertIn("package.json", debug_runtime_report_text)
+            self.assertIn("webpack.config.js", debug_runtime_report_text)
+            debug_asset_paths = {item["path"] for item in debug_component_context["assets"]}
+            self.assertIn(".gitignore", debug_asset_paths)
+            self.assertIn(".htaccess", debug_asset_paths)
 
     def test_preview_contract_reports_missing_runtime_requirements_for_build_and_php_sites(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -2208,6 +2335,7 @@ class WebsiteStudioEntrypointTest(unittest.TestCase):
         self.assertNotIn("action: 'site_status'", widget_source)
         self.assertIn("action: 'list_changes'", widget_source)
         self.assertIn("modified", widget_source)
+        self.assertIn("requestedSite || persistedSite || selectableSites[0]", widget_source)
         self.assertIn("groupNode('group:pages'", widget_source)
         self.assertIn("Sections", widget_source)
         self.assertIn("Components", widget_source)
@@ -2258,6 +2386,7 @@ class WebsiteStudioEntrypointTest(unittest.TestCase):
         self.assertIn("setPreviewLoading(false)", app_source)
         self.assertIn("PreviewLoadingState", app_source)
         self.assertIn("Preview is loading", app_source)
+        self.assertIn("requestedSite || persistedSite || availableSites[0]?.id || ''", app_source)
         self.assertIn("active_view: activeView", app_source)
         self.assertIn("context_tool: 'website_page_context'", app_source)
         self.assertIn("normalizePreviewUrl(previewState?.preview_url || '', activeTarget)", app_source)
@@ -2332,9 +2461,10 @@ class WebsiteStudioEntrypointTest(unittest.TestCase):
 
         self.assertIn("availableSites = sitePayload.items.filter((site) => site.status !== 'archived')", app_source)
         self.assertIn("const selectableSites = nextSites.filter((item) => item.status !== 'archived')", widget_source)
+        self.assertIn("requestedSite || persistedSite || availableSites[0]?.id || ''", app_source)
+        self.assertIn("requestedSite || persistedSite || selectableSites[0]", widget_source)
         self.assertNotIn("sitePayload.items[0]?.id", app_source)
-        self.assertNotIn("availableSites[0]?.id", app_source)
-        self.assertNotIn("selectableSites[0]", widget_source)
+        self.assertNotIn("nextSites[0]", widget_source)
         self.assertNotIn("|| sites[0]", widget_source)
 
     def test_frontend_resolves_storage_writer_dependency(self) -> None:

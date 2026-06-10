@@ -210,7 +210,7 @@
       "input_schema": {"type": "object", "required": ["site_id"], "properties": {"site_id": {"type": "string"}}, "additionalProperties": false}
     },
     "website_navigation_analyze": {
-      "description": "Return visual site navigation with pages, sections, anchors, component candidates, preview status, and warnings while excluding source inventory files.",
+      "description": "Return visual site navigation with pages, sections, anchors, component candidates, preview status, analysis coverage, and warnings while excluding source inventory files.",
       "input_schema": {"type": "object", "required": ["site_id"], "properties": {"site_id": {"type": "string"}}, "additionalProperties": false}
     },
     "website_search": {
@@ -433,7 +433,7 @@
       }
     },
     "website_page_context": {
-      "description": "Return bounded site/page context for a selected Website Studio page.",
+      "description": "Return bounded visual site/page/component context, sanitized runtime report summary, and rendered visual_assets; full inventory is opt-in with include_inventory=true.",
       "input_schema": {
         "type": "object",
         "properties": {
@@ -448,7 +448,8 @@
           "target_selector": {"type": "string"},
           "target_anchor": {"type": "string"},
           "selector": {"type": "string"},
-          "anchor": {"type": "string"}
+          "anchor": {"type": "string"},
+          "include_inventory": {"type": "boolean"}
         },
         "additionalProperties": false
       }

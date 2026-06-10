@@ -64,7 +64,7 @@ export function App() {
     const availableSites = sitePayload.items.filter((site) => site.status !== 'archived');
     const requestedSite = availableSites.find((site) => site.id === nextSiteId)?.id || '';
     const persistedSite = availableSites.find((site) => site.is_active)?.id || '';
-    const selectedSite = requestedSite;
+    const selectedSite = requestedSite || persistedSite || availableSites[0]?.id || '';
     setActiveSiteId(selectedSite);
     if (!selectedSite) {
       setPages([]);

@@ -358,6 +358,7 @@ def handle_action(data_root: Path, payload: dict[str, object]) -> tuple[int, dic
                 component_id=payload.get("component_id") or payload.get("section_id") or payload.get("anchor_id"),
                 target_selector=payload.get("target_selector") or payload.get("selector"),
                 target_anchor=payload.get("target_anchor") or payload.get("anchor"),
+                include_inventory=payload.get("include_inventory"),
             )
         if action == "reference_manifest":
             return 200, reference_manifest()

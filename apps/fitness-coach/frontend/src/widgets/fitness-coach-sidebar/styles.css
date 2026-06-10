@@ -191,6 +191,77 @@ input {
   padding: 0.72rem;
 }
 
+.fitness-sidebar-skeleton {
+  display: grid;
+  gap: 0.46rem;
+  pointer-events: none;
+}
+
+.fitness-sidebar-skeleton__row {
+  display: grid;
+  grid-template-columns: 1rem minmax(0, 1fr);
+  align-items: center;
+  gap: 0.54rem;
+  min-height: 2.9rem;
+  border-radius: 18px;
+  box-shadow: var(--maverick-inner-edge);
+  padding: 0.58rem 0.72rem;
+}
+
+.fitness-sidebar-skeleton__icon,
+.fitness-sidebar-skeleton__copy span {
+  position: relative;
+  display: block;
+  overflow: hidden;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.fitness-sidebar-skeleton__icon::after,
+.fitness-sidebar-skeleton__copy span::after {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.12), transparent);
+  transform: translateX(-100%);
+  animation: fitness-sidebar-skeleton-shimmer 1.45s ease-in-out infinite;
+  content: "";
+}
+
+.fitness-sidebar-skeleton__icon {
+  width: 1rem;
+  height: 1rem;
+}
+
+.fitness-sidebar-skeleton__copy {
+  display: grid;
+  gap: 0.38rem;
+  min-width: 0;
+}
+
+.fitness-sidebar-skeleton__copy span:first-child {
+  width: 72%;
+  height: 0.72rem;
+}
+
+.fitness-sidebar-skeleton__copy span:last-child {
+  width: 48%;
+  height: 0.64rem;
+}
+
+@keyframes fitness-sidebar-skeleton-shimmer {
+  100% {
+    transform: translateX(100%);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .fitness-sidebar-skeleton__icon::after,
+  .fitness-sidebar-skeleton__copy span::after {
+    animation: none;
+    transform: none;
+  }
+}
+
 @media (max-width: 920px) {
   input {
     font-size: 16px;

@@ -68,6 +68,7 @@ export function App() {
   const [setupTab, setSetupTab] = useState<SetupTab>('workout-settings');
   const [libraryQuery, setLibraryQuery] = useState('');
   const [libraryTag, setLibraryTag] = useState('');
+  const [isInitialLoading, setIsInitialLoading] = useState(true);
   const [notice, setNotice] = useState('');
   const [busy, setBusy] = useState('');
   const [playerWorkout, setPlayerWorkout] = useState<Workout | null>(null);
@@ -99,7 +100,21 @@ export function App() {
   }, []);
 
   useEffect(() => {
-    refresh().catch((error: Error) => setNotice(error.message));
+    let isCurrent = true;
+    refresh()
+      .catch((error: Error) => {
+        if (isCurrent) {
+          setNotice(error.message);
+        }
+      })
+      .finally(() => {
+        if (isCurrent) {
+          setIsInitialLoading(false);
+        }
+      });
+    return () => {
+      isCurrent = false;
+    };
   }, [refresh]);
 
   useEffect(() => {
@@ -280,7 +295,9 @@ export function App() {
           {notice ? <div className="notice">{notice}</div> : null}
 
           <div className="setup-content">
-            {setupTab === 'workout-settings' ? (
+            {isInitialLoading ? (
+              <FitnessMainSkeleton />
+            ) : setupTab === 'workout-settings' ? (
               <WorkoutEditor
                 workout={syncedSelectedWorkout}
                 exercises={exercises}
@@ -319,6 +336,43 @@ export function App() {
         </section>
       </section>
     </main>
+  );
+}
+
+function FitnessMainSkeleton() {
+  return (
+    <div className="fitness-loading-skeleton fitness-main-skeleton" role="status" aria-label="Fitness Coach is loading">
+      <header className="fitness-main-skeleton__header" aria-hidden="true">
+        <span className="fitness-loading-skeleton__line fitness-loading-skeleton__line--title" />
+        <span className="fitness-main-skeleton__badges">
+          <span className="fitness-loading-skeleton__counter" />
+          <span className="fitness-loading-skeleton__counter" />
+        </span>
+      </header>
+      <div className="fitness-main-skeleton__separator" aria-hidden="true">
+        <span className="fitness-loading-skeleton__icon" />
+      </div>
+      <div className="fitness-main-skeleton__blocks" aria-hidden="true">
+        {Array.from({ length: 3 }).map((_, index) => (
+          <article className="fitness-main-skeleton__block" key={index}>
+            <span className="fitness-loading-skeleton__media" />
+            <span className="fitness-main-skeleton__block-copy">
+              <span className="fitness-loading-skeleton__line fitness-loading-skeleton__line--block-title" />
+              <span className="fitness-loading-skeleton__line fitness-loading-skeleton__line--block-copy" />
+              <span className="fitness-main-skeleton__block-controls">
+                <span className="fitness-loading-skeleton__pill" />
+                <span className="fitness-loading-skeleton__pill" />
+                <span className="fitness-loading-skeleton__button" />
+              </span>
+            </span>
+          </article>
+        ))}
+      </div>
+      <div className="fitness-main-skeleton__actions" aria-hidden="true">
+        <span className="fitness-loading-skeleton__button" />
+        <span className="fitness-loading-skeleton__button" />
+      </div>
+    </div>
   );
 }
 

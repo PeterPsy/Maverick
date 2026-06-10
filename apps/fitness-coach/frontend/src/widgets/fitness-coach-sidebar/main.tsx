@@ -82,6 +82,7 @@ function Sidebar() {
   const [activeWorkoutId, setActiveWorkoutId] = useState('');
   const [setupTab, setSetupTab] = useState<SetupTab>('workout-settings');
   const [isMobile, setIsMobile] = useState(false);
+  const [isInitialLoading, setIsInitialLoading] = useState(true);
   const [notice, setNotice] = useState('');
 
   const refresh = useCallback(async () => {
@@ -90,6 +91,8 @@ function Sidebar() {
       setNotice('');
     } catch (error) {
       setNotice(error instanceof Error ? error.message : 'Unable to load workouts.');
+    } finally {
+      setIsInitialLoading(false);
     }
   }, [query]);
 
@@ -152,9 +155,10 @@ function Sidebar() {
         <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search workouts" />
       </label>
       <div className="fitness-sidebar-list">
-        {notice ? <div className="fitness-sidebar-empty">{notice}</div> : null}
-        {!notice && rows.length === 0 ? <div className="fitness-sidebar-empty">No workouts</div> : null}
-        {rows.map((workout) => {
+        {isInitialLoading ? <FitnessSidebarSkeleton /> : null}
+        {!isInitialLoading && notice ? <div className="fitness-sidebar-empty">{notice}</div> : null}
+        {!isInitialLoading && !notice && rows.length === 0 ? <div className="fitness-sidebar-empty">No workouts</div> : null}
+        {!isInitialLoading && rows.map((workout) => {
           const isActive = activeWorkoutId === workout.id;
           return (
             <button
@@ -172,6 +176,22 @@ function Sidebar() {
         })}
       </div>
     </main>
+  );
+}
+
+function FitnessSidebarSkeleton() {
+  return (
+    <div aria-hidden="true" className="fitness-sidebar-skeleton">
+      {Array.from({ length: 6 }).map((_, index) => (
+        <div className="fitness-sidebar-skeleton__row" key={index}>
+          <span className="fitness-sidebar-skeleton__icon" />
+          <span className="fitness-sidebar-skeleton__copy">
+            <span />
+            <span />
+          </span>
+        </div>
+      ))}
+    </div>
   );
 }
 

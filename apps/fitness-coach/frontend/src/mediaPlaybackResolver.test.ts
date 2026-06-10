@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { clearMediaPlaybackCache, createLocalBlobFallback, latestMediaPlaybackError, resolveMediaPlayback, retainMediaPlayback } from './mediaPlaybackResolver';
+import { clearMediaPlaybackCache, createLocalBlobFallback, latestMediaPlaybackError, preloadMediaPlayback, resolveMediaPlayback, retainMediaPlayback } from './mediaPlaybackResolver';
 import type { ExerciseMediaRef } from './types';
 
 function jsonResponse(payload: unknown, ok = true) {
@@ -91,6 +91,63 @@ describe('media playback resolver', () => {
     });
     expect(latestMediaPlaybackError(driveMedia, 'storage')).toBe('Google Drive grant is missing.');
     expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('keeps resolved stream routes cached after inactive media is no longer preloaded', async () => {
+    const fetchMock = vi.fn(async () => jsonResponse({
+      status: 'ready',
+      stream_url: '/api/apps/storage/media?stable_storage_file_id=file_drive'
+    }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    const first = await resolveMediaPlayback(driveMedia, 'storage');
+    await first.warmup;
+    retainMediaPlayback([], 'storage');
+    const second = await resolveMediaPlayback(driveMedia, 'storage');
+
+    expect(second.url).toBe(first.url);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('dedupes browser preload requests for the next workout media', async () => {
+    const fetchMock = vi.fn(async () => jsonResponse({
+      status: 'ready',
+      stream_url: '/api/apps/storage/media?stable_storage_file_id=file_drive'
+    }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    const [first, second] = await Promise.all([
+      preloadMediaPlayback(driveMedia, 'storage'),
+      preloadMediaPlayback(driveMedia, 'storage')
+    ]);
+
+    expect(first).toMatchObject({ status: 'ready', mediaKind: 'video' });
+    expect(second.url).toBe(first.url);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('restarts aborted Drive warmups when a cached stream route becomes active again', async () => {
+    const requests: AbortSignal[] = [];
+    const fetchMock = vi.fn((_input: RequestInfo | URL, init?: RequestInit) => {
+      const signal = init?.signal as AbortSignal | undefined;
+      if (signal) requests.push(signal);
+      return new Promise<Response>((_resolve, reject) => {
+        if (signal?.aborted) {
+          reject(abortError());
+          return;
+        }
+        signal?.addEventListener('abort', () => reject(abortError()), { once: true });
+      });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    await resolveMediaPlayback(driveMedia, 'storage');
+    retainMediaPlayback([], 'storage');
+    await resolveMediaPlayback(driveMedia, 'storage');
+
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(requests[0]?.aborted).toBe(true);
+    expect(requests[1]?.aborted).toBe(false);
   });
 
   it('aborts Drive warmups outside the retained current and next media', async () => {

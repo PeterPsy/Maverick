@@ -1312,11 +1312,28 @@ select:focus {
   background: #050605;
   object-fit: contain;
   object-position: center top;
+  opacity: 1;
+  transition: opacity 140ms ease;
 }
 
 .player-media-backdrop {
   isolation: isolate;
   color: rgba(249, 250, 249, 0.74);
+}
+
+.player-media-backdrop.is-frame-wait {
+  position: absolute;
+  inset: 0;
+}
+
+.player-media .is-awaiting-frame,
+.player-next-preview-media .is-awaiting-frame {
+  opacity: 0;
+}
+
+.player-media .is-frame-ready,
+.player-next-preview-media .is-frame-ready {
+  opacity: 1;
 }
 
 .player-media-backdrop::after {
@@ -1654,6 +1671,8 @@ select:focus {
 .player-next-preview-media video,
 .player-next-preview-media img {
   background: #050605;
+  opacity: 1;
+  transition: opacity 140ms ease;
 }
 
 .player-next-preview-media.is-loading {

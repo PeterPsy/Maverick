@@ -48,9 +48,17 @@ describe('frontend performance guardrails', () => {
     expect(sidebarSource).toContain('listWorkouts(debouncedQuery)');
   });
 
-  it('lazy-loads media thumbnails instead of eager video metadata preload', () => {
+  it('lazy-loads media thumbnails before requesting video metadata', () => {
     expect(appSource).toContain('IntersectionObserver');
-    expect(appSource).toContain('preload="none"');
-    expect(appSource).not.toContain('preload="metadata"');
+    expect(appSource).toContain("preload={isVisible ? 'metadata' : 'none'}");
+    expect(appSource).toContain('src={visiblePreviewUrl ? withVideoFrameHint(visiblePreviewUrl) : undefined}');
+  });
+
+  it('reuses cached workout-setting video preview frames across page remounts', () => {
+    const thumbCacheSource = readFileSync(new URL('./mediaThumbPreviewCache.ts', import.meta.url), 'utf8');
+    expect(appSource).toContain('readMediaThumbPreviewFrame(previewFrameKey)');
+    expect(appSource).toContain('captureMediaThumbVideoFrame(event.currentTarget, previewFrameKey)');
+    expect(thumbCacheSource).toContain("const THUMB_PREVIEW_STORAGE_KEY = 'fitness-coach:media-thumb-preview:v1';");
+    expect(thumbCacheSource).toContain('globalThis.sessionStorage');
   });
 });

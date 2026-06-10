@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import type { CSSProperties, PointerEvent as ReactPointerEvent } from 'react';
+import type { CSSProperties, PointerEvent as ReactPointerEvent, SyntheticEvent as ReactSyntheticEvent } from 'react';
 import {
   ArrowDown,
   Check,
@@ -44,7 +44,8 @@ import {
 } from './api';
 import { readBootstrapCache, writeBootstrapCache } from './bootstrapCache';
 import { GradientBarsBackground } from './components/ui/gradient-bars-background';
-import { cancelMediaPlayback, clearMediaPlaybackCache, createLocalBlobFallback, driveMediaStreamUrl, initialMediaResolution, latestMediaPlaybackError, resolveMediaPlayback, retainMediaPlayback } from './mediaPlaybackResolver';
+import { cachedMediaPlayback, cancelMediaPlayback, clearMediaPlaybackCache, createLocalBlobFallback, driveMediaStreamUrl, initialMediaResolution, latestMediaPlaybackError, mediaCacheKey, preloadMediaPlayback, resolveMediaPlayback, retainMediaPlayback } from './mediaPlaybackResolver';
+import { captureMediaThumbVideoFrame, mediaThumbPreviewFrameKey, readMediaThumbPreviewFrame } from './mediaThumbPreviewCache';
 import { TagsInputField } from './components/ui/tags-input';
 import type { AppBootstrapPayload, Exercise, ExerciseMediaRef, MediaPlaybackResolution, RestBlock, RuntimeSegment, SetupTab, StartWorkoutPayload, ViewState, WorkBlock, Workout, WorkoutBlock, WorkoutRunSummary } from './types';
 import { useWorkoutBlockReorder, type ReorderItemProps } from './useWorkoutBlockReorder';
@@ -900,7 +901,10 @@ function WorkPlayer({ workout, startPromise, onClose, onComplete }: { workout: W
   const [playbackOverlay, setPlaybackOverlay] = useState<PlayerPlaybackOverlay>('idle');
   const [audioEnabled, setAudioEnabled] = useState(false);
   const [resolution, setResolution] = useState(initialMediaResolution());
+  const [resolutionKey, setResolutionKey] = useState('');
   const [nextPreviewResolution, setNextPreviewResolution] = useState(initialMediaResolution());
+  const [nextPreviewResolutionKey, setNextPreviewResolutionKey] = useState('');
+  const [loadedMediaUrls, setLoadedMediaUrls] = useState<Set<string>>(() => new Set());
   const [summary, setSummary] = useState<WorkoutRunSummary | null>(null);
   const [startedAt] = useState(new Date().toISOString());
   const [skipped, setSkipped] = useState(0);
@@ -916,6 +920,9 @@ function WorkPlayer({ workout, startPromise, onClose, onComplete }: { workout: W
   const pointerStartRef = useRef<{ x: number; y: number } | null>(null);
   const finishInFlightRef = useRef(false);
   const segment = segments[index];
+  const nextPreviewCandidate = nextWorkSegment(segments, index);
+  const activeWorkMediaKey = segment?.type === 'work' ? mediaCacheKey(segment.media) : '';
+  const nextPreviewMediaKey = nextPreviewCandidate ? mediaCacheKey(nextPreviewCandidate.media) : '';
 
   const clearPlaybackOverlayTimer = useCallback(() => {
     if (playbackOverlayTimerRef.current === null) return;
@@ -933,6 +940,29 @@ function WorkPlayer({ workout, startPromise, onClose, onComplete }: { workout: W
       }, 700);
     }
   }, [clearPlaybackOverlayTimer]);
+
+  const markMediaLoaded = useCallback((url: string) => {
+    if (!url) return;
+    setLoadedMediaUrls((current) => {
+      if (current.has(url)) return current;
+      const next = new Set(current);
+      next.add(url);
+      return next;
+    });
+  }, []);
+
+  const currentResolution = activeWorkMediaKey && resolutionKey === activeWorkMediaKey
+    ? resolution
+    : segment?.type === 'work'
+      ? cachedMediaPlayback(segment.media) || initialMediaResolution()
+      : initialMediaResolution();
+  const nextPreviewResolved = nextPreviewMediaKey && nextPreviewResolutionKey === nextPreviewMediaKey
+    ? nextPreviewResolution
+    : nextPreviewCandidate
+      ? cachedMediaPlayback(nextPreviewCandidate.media) || initialMediaResolution()
+      : initialMediaResolution();
+  const currentMediaLoaded = currentResolution.status === 'ready' && Boolean(currentResolution.url) && loadedMediaUrls.has(currentResolution.url);
+  const nextPreviewMediaLoaded = nextPreviewResolved.status === 'ready' && Boolean(nextPreviewResolved.url) && loadedMediaUrls.has(nextPreviewResolved.url);
 
   useEffect(() => {
     rootRef.current?.requestFullscreen?.().catch(() => undefined);
@@ -970,40 +1000,55 @@ function WorkPlayer({ workout, startPromise, onClose, onComplete }: { workout: W
   useEffect(() => {
     const activeMedia: ExerciseMediaRef[] = [];
     if (segment?.type === 'work') activeMedia.push(segment.media);
-    const nextPreview = nextWorkSegment(segments, index);
-    if (nextPreview) activeMedia.push(nextPreview.media);
+    if (nextPreviewCandidate) activeMedia.push(nextPreviewCandidate.media);
     retainMediaPlayback(activeMedia);
-  }, [index, segment, segments]);
+  }, [nextPreviewCandidate, segment]);
 
   useEffect(() => {
-    setResolution(initialMediaResolution());
-    if (!segment || segment.type !== 'work') return;
+    if (!segment || segment.type !== 'work') {
+      setResolutionKey('');
+      setResolution(initialMediaResolution());
+      return;
+    }
+    const key = mediaCacheKey(segment.media);
+    setResolutionKey(key);
+    setResolution(cachedMediaPlayback(segment.media) || initialMediaResolution());
     let canceled = false;
     resolveMediaPlayback(segment.media).then((next) => {
-      if (!canceled) setResolution(next);
+      if (!canceled) {
+        setResolutionKey(key);
+        setResolution(next);
+      }
     });
     return () => {
       canceled = true;
     };
-  }, [index, retryNonce, segment, segments]);
+  }, [activeWorkMediaKey, retryNonce, segment]);
 
   useEffect(() => {
-    setNextPreviewResolution(initialMediaResolution());
-    if (!segment) return;
-    const nextPreview = nextWorkSegment(segments, index);
-    if (!nextPreview) return;
+    if (!nextPreviewCandidate) {
+      setNextPreviewResolutionKey('');
+      setNextPreviewResolution(initialMediaResolution());
+      return;
+    }
+    const key = mediaCacheKey(nextPreviewCandidate.media);
+    setNextPreviewResolutionKey(key);
+    setNextPreviewResolution(cachedMediaPlayback(nextPreviewCandidate.media) || initialMediaResolution());
     let canceled = false;
-    resolveMediaPlayback(nextPreview.media).then((next) => {
-      if (!canceled) setNextPreviewResolution(next);
+    preloadMediaPlayback(nextPreviewCandidate.media).then((next) => {
+      if (canceled) return;
+      setNextPreviewResolutionKey(key);
+      setNextPreviewResolution(next);
+      if (next.status === 'ready') markMediaLoaded(next.url);
     });
     return () => {
       canceled = true;
     };
-  }, [index, retryNonce, segment, segments]);
+  }, [markMediaLoaded, nextPreviewCandidate, nextPreviewMediaKey, retryNonce]);
 
   useEffect(() => {
     const video = videoRef.current;
-    if (!video || resolution.mediaKind !== 'video') return;
+    if (!video || currentResolution.mediaKind !== 'video' || !currentMediaLoaded) return;
     if (paused) {
       video.pause();
       return;
@@ -1015,7 +1060,7 @@ function WorkPlayer({ workout, startPromise, onClose, onComplete }: { workout: W
         showPlaybackOverlay('play');
       });
     }
-  }, [paused, resolution.mediaKind, resolution.url, showPlaybackOverlay]);
+  }, [currentMediaLoaded, currentResolution.mediaKind, currentResolution.url, paused, showPlaybackOverlay]);
 
   useEffect(() => {
     if (!segment || segment.type === 'work' && segment.mode === 'reps') {
@@ -1144,7 +1189,7 @@ function WorkPlayer({ workout, startPromise, onClose, onComplete }: { workout: W
   async function fallbackBlob() {
     if (!segment || segment.type !== 'work') return;
     if (segment.media.kind === 'drive_file') {
-      const detail = await drivePlaybackFailureDetail(segment.media, resolution);
+      const detail = await drivePlaybackFailureDetail(segment.media, currentResolution);
       cancelMediaPlayback(segment.media);
       setResolution({
         status: 'error',
@@ -1209,7 +1254,6 @@ function WorkPlayer({ workout, startPromise, onClose, onComplete }: { workout: W
   }
 
   const isReps = segment.type === 'work' && segment.mode === 'reps';
-  const nextPreviewCandidate = nextWorkSegment(segments, index);
   const shouldShowNextPreview = Boolean(nextPreviewCandidate) && (
     segment.type === 'rest'
       ? segment.showNextExercise
@@ -1229,11 +1273,11 @@ function WorkPlayer({ workout, startPromise, onClose, onComplete }: { workout: W
     '--fitness-player-progress-duration': `${progressSeconds}s`,
     animationPlayState: paused ? 'paused' : 'running'
   } as CSSProperties;
-  const mediaPlaceholderLabel = resolution.status === 'blocked'
-    ? resolution.detail
-    : resolution.status === 'error'
+  const mediaPlaceholderLabel = currentResolution.status === 'blocked'
+    ? currentResolution.detail
+    : currentResolution.status === 'error'
       ? 'Workout media could not be loaded'
-      : resolution.status === 'localizing'
+      : currentResolution.status === 'localizing'
         ? 'Storage is preparing workout media'
         : 'Loading workout media';
   return (
@@ -1253,13 +1297,58 @@ function WorkPlayer({ workout, startPromise, onClose, onComplete }: { workout: W
             animationDuration={2.4}
             backgroundColor="#050605"
           />
-        ) : resolution.status === 'ready' && resolution.mediaKind === 'video' ? (
-          <video ref={videoRef} src={resolution.url} muted autoPlay={!paused} loop playsInline onError={fallbackBlob} />
-        ) : resolution.status === 'ready' && resolution.mediaKind === 'image' ? (
-          <img src={resolution.url} alt="" onError={fallbackBlob} />
+        ) : currentResolution.status === 'ready' && currentResolution.mediaKind === 'video' ? (
+          <>
+            {!currentMediaLoaded ? (
+              <GradientBarsBackground
+                className="player-media-backdrop is-frame-wait"
+                numBars={9}
+                gradientFrom="rgba(224, 228, 230, 0.78)"
+                gradientTo="rgba(5, 6, 5, 0)"
+                animationDuration={2.2}
+                backgroundColor="#050605"
+                ariaLabel="Loading workout media"
+              />
+            ) : null}
+            <video
+              ref={videoRef}
+              className={currentMediaLoaded ? 'is-frame-ready' : 'is-awaiting-frame'}
+              src={currentResolution.url}
+              muted
+              autoPlay={!paused && currentMediaLoaded}
+              loop
+              playsInline
+              preload="auto"
+              onLoadedData={() => markMediaLoaded(currentResolution.url)}
+              onCanPlay={() => markMediaLoaded(currentResolution.url)}
+              onError={fallbackBlob}
+            />
+          </>
+        ) : currentResolution.status === 'ready' && currentResolution.mediaKind === 'image' ? (
+          <>
+            {!currentMediaLoaded ? (
+              <GradientBarsBackground
+                className="player-media-backdrop is-frame-wait"
+                numBars={9}
+                gradientFrom="rgba(224, 228, 230, 0.78)"
+                gradientTo="rgba(5, 6, 5, 0)"
+                animationDuration={2.2}
+                backgroundColor="#050605"
+                ariaLabel="Loading workout media"
+              />
+            ) : null}
+            <img
+              className={currentMediaLoaded ? 'is-frame-ready' : 'is-awaiting-frame'}
+              src={currentResolution.url}
+              alt=""
+              decoding="async"
+              onLoad={() => markMediaLoaded(currentResolution.url)}
+              onError={fallbackBlob}
+            />
+          </>
         ) : (
           <GradientBarsBackground
-            className={`player-media-backdrop is-${resolution.status}`}
+            className={`player-media-backdrop is-${currentResolution.status}`}
             numBars={9}
             gradientFrom="rgba(224, 228, 230, 0.78)"
             gradientTo="rgba(5, 6, 5, 0)"
@@ -1267,7 +1356,7 @@ function WorkPlayer({ workout, startPromise, onClose, onComplete }: { workout: W
             backgroundColor="#050605"
             ariaLabel={mediaPlaceholderLabel}
           >
-            {resolution.status === 'blocked' && resolution.detail ? <span className="player-media-backdrop-message">{resolution.detail}</span> : null}
+            {currentResolution.status === 'blocked' && currentResolution.detail ? <span className="player-media-backdrop-message">{currentResolution.detail}</span> : null}
           </GradientBarsBackground>
         )}
       </div>
@@ -1336,7 +1425,7 @@ function WorkPlayer({ workout, startPromise, onClose, onComplete }: { workout: W
         </div>
         {nextSegmentPreview ? (
           <section className="player-next-preview" aria-label="Next exercise preview">
-            <NextPreviewMedia resolution={nextPreviewResolution} />
+            <NextPreviewMedia resolution={nextPreviewResolved} isLoaded={nextPreviewMediaLoaded} onLoaded={markMediaLoaded} />
             <div className="player-next-preview-copy">
               <strong>{nextSegmentPreview.title}</strong>
               <span>{nextPreviewDescription || 'Next exercise'}</span>
@@ -1367,10 +1456,10 @@ function WorkPlayer({ workout, startPromise, onClose, onComplete }: { workout: W
           </button>
         </div>
       ) : null}
-      {resolution.status === 'error' && segment.type === 'work' ? (
+      {currentResolution.status === 'error' && segment.type === 'work' ? (
         <div className="player-error">
-          <span>{resolution.detail}</span>
-          {resolution.canRetry ? (
+          <span>{currentResolution.detail}</span>
+          {currentResolution.canRetry ? (
             <button type="button" onClick={() => setRetryNonce((value) => value + 1)}>
               <RotateCcw size={14} aria-hidden="true" />
               <span>Retry</span>
@@ -1386,18 +1475,36 @@ function RestIconImage({ className }: { className: string }) {
   return <img className={className} src={REST_ICON_SRC} alt="" aria-hidden="true" draggable={false} />;
 }
 
-function NextPreviewMedia({ resolution }: { resolution: MediaPlaybackResolution }) {
+function NextPreviewMedia({ resolution, isLoaded, onLoaded }: { resolution: MediaPlaybackResolution; isLoaded: boolean; onLoaded: (url: string) => void }) {
   if (resolution.status === 'ready' && resolution.mediaKind === 'video') {
     return (
-      <div className="player-next-preview-media">
-        <video src={resolution.url} muted autoPlay loop playsInline />
+      <div className={`player-next-preview-media ${isLoaded ? 'is-ready' : 'is-loading'}`}>
+        {!isLoaded ? <span className="player-next-preview-skeleton" /> : null}
+        <video
+          className={isLoaded ? 'is-frame-ready' : 'is-awaiting-frame'}
+          src={resolution.url}
+          muted
+          autoPlay={isLoaded}
+          loop
+          playsInline
+          preload="auto"
+          onLoadedData={() => onLoaded(resolution.url)}
+          onCanPlay={() => onLoaded(resolution.url)}
+        />
       </div>
     );
   }
   if (resolution.status === 'ready' && resolution.mediaKind === 'image') {
     return (
-      <div className="player-next-preview-media">
-        <img src={resolution.url} alt="" />
+      <div className={`player-next-preview-media ${isLoaded ? 'is-ready' : 'is-loading'}`}>
+        {!isLoaded ? <span className="player-next-preview-skeleton" /> : null}
+        <img
+          className={isLoaded ? 'is-frame-ready' : 'is-awaiting-frame'}
+          src={resolution.url}
+          alt=""
+          decoding="async"
+          onLoad={() => onLoaded(resolution.url)}
+        />
       </div>
     );
   }
@@ -1411,13 +1518,19 @@ function NextPreviewMedia({ resolution }: { resolution: MediaPlaybackResolution 
 function MediaThumb({ media, variant = 'small' }: { media: ExerciseMediaRef | null; variant?: 'small' | 'large' }) {
   const [previewFailed, setPreviewFailed] = useState(false);
   const [isVisible, setIsVisible] = useState(variant === 'large');
+  const [resolvedPreviewUrl, setResolvedPreviewUrl] = useState('');
+  const [previewFrameUrl, setPreviewFrameUrl] = useState('');
   const frameRef = useRef<HTMLDivElement | null>(null);
   const previewUrl = useMemo(() => mediaCoverUrl(media), [media]);
+  const previewFrameKey = useMemo(() => media ? mediaThumbPreviewFrameKey(media) : '', [media]);
 
   useEffect(() => {
+    const cachedPreviewFrame = previewFrameKey ? readMediaThumbPreviewFrame(previewFrameKey) : '';
     setPreviewFailed(false);
-    setIsVisible(variant === 'large');
-  }, [previewUrl, variant]);
+    setIsVisible(variant === 'large' || Boolean(cachedPreviewFrame));
+    setResolvedPreviewUrl('');
+    setPreviewFrameUrl(cachedPreviewFrame);
+  }, [previewFrameKey, previewUrl, variant]);
 
   useEffect(() => {
     if (isVisible || !previewUrl) return;
@@ -1436,16 +1549,40 @@ function MediaThumb({ media, variant = 'small' }: { media: ExerciseMediaRef | nu
     return () => observer.disconnect();
   }, [isVisible, previewUrl]);
 
+  useEffect(() => {
+    if (!isVisible || !media || !previewUrl || previewFrameUrl) return;
+    let canceled = false;
+    resolveMediaPlayback(media).then((resolution) => {
+      if (canceled) return;
+      if (resolution.status === 'ready' && resolution.url) {
+        setResolvedPreviewUrl(resolution.url);
+      }
+    }).catch(() => {
+      if (!canceled) setResolvedPreviewUrl('');
+    });
+    return () => {
+      canceled = true;
+    };
+  }, [isVisible, media, previewFrameUrl, previewUrl]);
+
+  function cacheVideoFrame(event: ReactSyntheticEvent<HTMLVideoElement>) {
+    const captured = captureMediaThumbVideoFrame(event.currentTarget, previewFrameKey);
+    if (captured) setPreviewFrameUrl(captured);
+  }
+
   const className = `media-thumb ${variant === 'large' ? 'is-large' : ''} ${media ? '' : 'is-empty'}`;
+  const visiblePreviewUrl = isVisible ? (resolvedPreviewUrl || previewUrl) : '';
   if (previewUrl && media && !previewFailed) {
     return (
       <div className={className} ref={frameRef}>
-        {media.preview_kind === 'video' ? (
+        {media.preview_kind === 'video' && previewFrameUrl ? (
+          <img src={previewFrameUrl} alt="" onError={() => { setPreviewFrameUrl(''); setPreviewFailed(true); }} />
+        ) : media.preview_kind === 'video' ? (
           <video
-            src={isVisible ? withVideoFrameHint(previewUrl) : undefined}
+            src={visiblePreviewUrl ? withVideoFrameHint(visiblePreviewUrl) : undefined}
             muted
             playsInline
-            preload="none"
+            preload={isVisible ? 'metadata' : 'none'}
             aria-hidden="true"
             onLoadedMetadata={(event) => {
               try {
@@ -1454,10 +1591,12 @@ function MediaThumb({ media, variant = 'small' }: { media: ExerciseMediaRef | nu
                 // Some Storage streams do not allow seeking during metadata load.
               }
             }}
+            onLoadedData={cacheVideoFrame}
+            onSeeked={cacheVideoFrame}
             onError={() => setPreviewFailed(true)}
           />
         ) : (
-          <img src={isVisible ? previewUrl : undefined} alt="" onError={() => setPreviewFailed(true)} />
+          <img src={visiblePreviewUrl || undefined} alt="" onError={() => setPreviewFailed(true)} />
         )}
       </div>
     );

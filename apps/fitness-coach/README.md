@@ -24,7 +24,9 @@ The frontend uses backend action `app.bootstrap` for initial app state instead o
 
 Workout start is a single atomic `workout.start` backend action. The action accepts an optional updated workout payload, normalizes and validates it, persists the latest workout state, and marks `last_started_at` in one JSON state update. The frontend opens Work mode optimistically from the locally validated workout and reconciles the returned workout metadata when the backend responds.
 
-Work mode media resolution keeps Storage as the owner. Local and Drive media use the Storage media route as the playback URL. Drive media starts playback from the route immediately while Storage `file.localize_status` / `file.localize` runs as a background warmup with runtime cache dedupe and abort support. Blob URLs are reserved for bounded local fallback and are revoked when the player cache is cleared.
+Work mode media resolution keeps Storage as the owner. Local and Drive media use the Storage media route as the playback URL. Drive media starts playback from the route immediately while Storage `file.localize_status` / `file.localize` runs as a background warmup with runtime cache dedupe and abort support. The live player keeps lightweight stream resolutions for the active session, preloads the next browser media asset from the preparation segment onward, and retains only the current plus next DOM preload. Blob URLs are reserved for bounded local fallback and are revoked when the player cache is cleared.
+
+Workout setting thumbnails lazy-load media once, capture a small video preview frame, and keep that frame in scoped `sessionStorage` by stable media id plus source version. Reopening the app page in the same browser session reuses the cached frame instead of recreating a video element and requesting metadata again.
 
 Every workout start includes a fixed 15-second Preparation segment before the first editable workout block. The segment is rendered in setup and player views, behaves like a rest segment for timing and media warmup, and is not persisted in `workout.blocks`, draggable, editable, duplicated, or deletable.
 

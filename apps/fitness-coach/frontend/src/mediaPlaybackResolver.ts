@@ -14,9 +14,17 @@ type WarmupEntry = {
   promise: Promise<MediaPlaybackResolution | null>;
 };
 
+type AssetPreloadEntry = {
+  element: HTMLImageElement | HTMLVideoElement | null;
+  promise: Promise<MediaPlaybackResolution>;
+  resolution?: MediaPlaybackResolution;
+};
+
 const mediaPlaybackCache = new Map<string, CacheEntry>();
 const driveWarmupCache = new Map<string, WarmupEntry>();
 const driveWarmupErrors = new Map<string, string>();
+const driveWarmupReady = new Set<string>();
+const mediaAssetPreloadCache = new Map<string, AssetPreloadEntry>();
 
 export function initialMediaResolution(): MediaPlaybackResolution {
   return { status: 'idle', url: '', mediaKind: 'none', detail: '' };
@@ -31,7 +39,10 @@ export async function resolveMediaPlayback(media: ExerciseMediaRef | null, stora
   }
   const key = mediaCacheKey(media, storageAppId, 'stream');
   const cached = mediaPlaybackCache.get(key);
-  if (cached) return cached.promise;
+  if (cached) {
+    refreshCachedDriveWarmup(media, storageAppId, cached);
+    return cached.promise;
+  }
   const controller = typeof AbortController === 'undefined' ? null : new AbortController();
   const entry: CacheEntry = {
     controller,
@@ -48,6 +59,103 @@ export async function resolveMediaPlayback(media: ExerciseMediaRef | null, stora
   };
   mediaPlaybackCache.set(key, entry);
   return entry.promise;
+}
+
+export function cachedMediaPlayback(media: ExerciseMediaRef | null, storageAppId = currentStorageAppId()): MediaPlaybackResolution | null {
+  if (!media) return null;
+  return mediaPlaybackCache.get(mediaCacheKey(media, storageAppId, 'stream'))?.resolution || null;
+}
+
+function refreshCachedDriveWarmup(media: ExerciseMediaRef, storageAppId: string, cached: CacheEntry) {
+  if (media.kind !== 'drive_file' || cached.resolution?.status !== 'ready') return;
+  const warmupKey = mediaCacheKey(media, storageAppId, 'drive-warmup');
+  if (driveWarmupReady.has(warmupKey)) return;
+  const warmup = warmDriveLocalization(media, storageAppId);
+  cached.resolution = { ...cached.resolution, warmup };
+  cached.promise = Promise.resolve(cached.resolution);
+}
+
+export async function preloadMediaPlayback(media: ExerciseMediaRef | null, storageAppId = currentStorageAppId()): Promise<MediaPlaybackResolution> {
+  if (!media) {
+    return { status: 'blocked', url: '', mediaKind: 'none', detail: 'This segment has no playable Storage media.' };
+  }
+  const key = mediaCacheKey(media, storageAppId, 'asset-preload');
+  const cached = mediaAssetPreloadCache.get(key);
+  if (cached) return cached.promise;
+
+  const entry: AssetPreloadEntry = {
+    element: null,
+    promise: Promise.resolve(initialMediaResolution())
+  };
+  entry.promise = resolveMediaPlayback(media, storageAppId).then(async (resolution) => {
+    if (resolution.status === 'ready' && resolution.url) {
+      await preloadResolvedMedia(resolution, entry);
+    }
+    entry.resolution = resolution;
+    return resolution;
+  }).catch((error) => {
+    mediaAssetPreloadCache.delete(key);
+    return {
+      status: 'error',
+      url: '',
+      mediaKind: 'none',
+      detail: error instanceof Error ? error.message : 'Storage media could not be preloaded.',
+      canRetry: true
+    };
+  });
+  mediaAssetPreloadCache.set(key, entry);
+  return entry.promise;
+}
+
+async function preloadResolvedMedia(resolution: MediaPlaybackResolution, entry: AssetPreloadEntry): Promise<void> {
+  if (typeof document === 'undefined') return;
+
+  if (resolution.mediaKind === 'image') {
+    await preloadImage(resolution.url, entry);
+    return;
+  }
+
+  if (resolution.mediaKind === 'video') {
+    await preloadVideo(resolution.url, entry);
+  }
+}
+
+function preloadImage(url: string, entry: AssetPreloadEntry): Promise<void> {
+  return new Promise((resolve) => {
+    const image = new Image();
+    entry.element = image;
+    const settle = () => resolve();
+    image.onload = settle;
+    image.onerror = settle;
+    image.decoding = 'async';
+    image.src = url;
+    if (image.complete) settle();
+  });
+}
+
+function preloadVideo(url: string, entry: AssetPreloadEntry): Promise<void> {
+  return new Promise((resolve) => {
+    const video = document.createElement('video');
+    entry.element = video;
+    let settled = false;
+    const settle = () => {
+      if (settled) return;
+      settled = true;
+      video.removeEventListener('loadeddata', settle);
+      video.removeEventListener('canplay', settle);
+      video.removeEventListener('error', settle);
+      resolve();
+    };
+    video.muted = true;
+    video.playsInline = true;
+    video.preload = 'auto';
+    video.addEventListener('loadeddata', settle, { once: true });
+    video.addEventListener('canplay', settle, { once: true });
+    video.addEventListener('error', settle, { once: true });
+    video.src = url;
+    video.load();
+    if (video.readyState >= 2) settle();
+  });
 }
 
 async function resolveMediaPlaybackUncached(media: ExerciseMediaRef, storageAppId: string, signal?: AbortSignal): Promise<MediaPlaybackResolution> {
@@ -134,6 +242,9 @@ function warmDriveLocalization(media: Extract<ExerciseMediaRef, { kind: 'drive_f
     else linkedSignal.addEventListener('abort', () => controller.abort(), { once: true });
   }
   const promise: Promise<MediaPlaybackResolution | null> = warmDriveLocalizationUncached(media, storageAppId, controller?.signal).then((resolution) => {
+    if (resolution?.status === 'ready') {
+      driveWarmupReady.add(key);
+    }
     if (resolution?.status === 'error') {
       driveWarmupErrors.set(key, resolution.detail);
     }
@@ -191,7 +302,7 @@ export function mediaCacheKey(media: ExerciseMediaRef, storageAppId = currentSto
 }
 
 export function cancelMediaPlayback(media: ExerciseMediaRef, storageAppId = currentStorageAppId()) {
-  ['stream', 'blob', 'drive-warmup'].forEach((mode) => {
+  ['stream', 'blob', 'drive-warmup', 'asset-preload'].forEach((mode) => {
     const key = mediaCacheKey(media, storageAppId, mode);
     const playbackEntry = mediaPlaybackCache.get(key);
     playbackEntry?.controller?.abort();
@@ -201,13 +312,22 @@ export function cancelMediaPlayback(media: ExerciseMediaRef, storageAppId = curr
     warmupEntry?.controller?.abort();
     driveWarmupCache.delete(key);
     driveWarmupErrors.delete(key);
+    driveWarmupReady.delete(key);
+    const preloadEntry = mediaAssetPreloadCache.get(key);
+    disposeAssetPreload(preloadEntry);
+    mediaAssetPreloadCache.delete(key);
   });
 }
 
 export function retainMediaPlayback(mediaList: ExerciseMediaRef[], storageAppId = currentStorageAppId()) {
-  const modes = ['stream', 'blob', 'drive-warmup'];
+  const activeStreamKeys = new Set(mediaList.map((media) => mediaCacheKey(media, storageAppId, 'stream')));
+  const modes = ['blob', 'drive-warmup', 'asset-preload'];
   const allowedKeys = new Set(mediaList.flatMap((media) => modes.map((mode) => mediaCacheKey(media, storageAppId, mode))));
   mediaPlaybackCache.forEach((entry, key) => {
+    if (key.startsWith('stream:')) {
+      if (!activeStreamKeys.has(key)) entry.controller?.abort();
+      return;
+    }
     if (allowedKeys.has(key)) return;
     entry.controller?.abort();
     entry.resolution?.revoke?.();
@@ -221,6 +341,11 @@ export function retainMediaPlayback(mediaList: ExerciseMediaRef[], storageAppId 
   driveWarmupErrors.forEach((_detail, key) => {
     if (!allowedKeys.has(key)) driveWarmupErrors.delete(key);
   });
+  mediaAssetPreloadCache.forEach((entry, key) => {
+    if (allowedKeys.has(key)) return;
+    disposeAssetPreload(entry);
+    mediaAssetPreloadCache.delete(key);
+  });
 }
 
 export function clearMediaPlaybackCache() {
@@ -232,6 +357,9 @@ export function clearMediaPlaybackCache() {
   driveWarmupCache.forEach((entry) => entry.controller?.abort());
   driveWarmupCache.clear();
   driveWarmupErrors.clear();
+  driveWarmupReady.clear();
+  mediaAssetPreloadCache.forEach((entry) => disposeAssetPreload(entry));
+  mediaAssetPreloadCache.clear();
 }
 
 export function latestMediaPlaybackError(media: ExerciseMediaRef, storageAppId = currentStorageAppId()) {
@@ -288,6 +416,19 @@ function driveLocalizationBody(media: Extract<ExerciseMediaRef, { kind: 'drive_f
     drive_file_id: media.drive_file_id,
     _app_secret_request: driveSecretRequest(media.connection_id)
   };
+}
+
+function disposeAssetPreload(entry: AssetPreloadEntry | undefined) {
+  const element = entry?.element;
+  if (!element) return;
+  if (element.tagName === 'VIDEO') {
+    const video = element as HTMLVideoElement;
+    video.pause();
+    video.removeAttribute('src');
+    video.load();
+    return;
+  }
+  element.removeAttribute('src');
 }
 
 export function driveSecretRequest(connectionId: string) {

@@ -95,7 +95,7 @@ describe('work player presentation', () => {
     expect(appSource).toContain('const [nextPreviewResolution, setNextPreviewResolution] = useState(initialMediaResolution());');
     expect(appSource).toContain('const nextPreviewCandidate = nextWorkSegment(segments, index);');
     expect(appSource).toContain("className=\"player-next-preview\"");
-    expect(appSource).toContain('<NextPreviewMedia resolution={nextPreviewResolution} />');
+    expect(appSource).toContain('<NextPreviewMedia resolution={nextPreviewResolved} isLoaded={nextPreviewMediaLoaded} onLoaded={markMediaLoaded} />');
     expect(appSource).toContain('function NextPreviewMedia');
     expect(appSource).toContain('className="player-next-preview-media is-loading"');
     expect(appSource).toContain('className="player-next-preview-skeleton"');
@@ -107,6 +107,16 @@ describe('work player presentation', () => {
     expect(styles).toMatch(/\.player-next-preview-media video,\s*\.player-next-preview-media img,\s*\.player-next-preview-skeleton\s*{[\s\S]*object-fit:\s*contain;/);
     expect(styles).toContain('.player-next-preview-skeleton::after');
     expect(styles).not.toContain('.player-rest-preview-placeholder');
+  });
+
+  it('preloads the next workout media from preparation and keeps cached media off the black frame path', () => {
+    expect(appSource).toContain('preloadMediaPlayback(nextPreviewCandidate.media)');
+    expect(appSource).toContain('cachedMediaPlayback(segment.media) || initialMediaResolution()');
+    expect(appSource).toContain('const currentMediaLoaded = currentResolution.status ===');
+    expect(appSource).toContain("preload=\"auto\"");
+    expect(appSource).toContain("className={currentMediaLoaded ? 'is-frame-ready' : 'is-awaiting-frame'}");
+    expect(styles).toContain('.player-media-backdrop.is-frame-wait');
+    expect(styles).toContain('.player-media .is-awaiting-frame');
   });
 
   it('shows the next exercise preview during the final five seconds of timed work blocks', () => {
@@ -173,7 +183,7 @@ describe('work player presentation', () => {
 
   it('replaces the resolving media text placeholder with animated gradient bars', () => {
     expect(appSource).toContain('GradientBarsBackground');
-    expect(appSource).toContain('className={`player-media-backdrop is-${resolution.status}`}');
+    expect(appSource).toContain('className={`player-media-backdrop is-${currentResolution.status}`}');
     expect(appSource).not.toContain('Resolving Storage media');
     expect(styles).toContain('.player-media-backdrop');
     expect(styles).toContain('.player-media-backdrop-message');

@@ -180,6 +180,7 @@ export type RuntimeSegment =
   | {
       type: 'rest';
       blockId: string;
+      phase?: 'preparation';
       title: string;
       short_description: string;
       long_description: string;

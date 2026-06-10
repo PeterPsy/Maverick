@@ -1,4 +1,5 @@
 import type { ExerciseMediaRef, Workout, WorkoutValidation } from './types';
+import { PREPARATION_BLOCK_SECONDS } from './workoutSegments';
 
 export function validateWorkoutForStart(workout: Workout | null): WorkoutValidation {
   const errors: WorkoutValidation['errors'] = [];
@@ -51,9 +52,15 @@ export function mediaPlaybackIssue(media: ExerciseMediaRef | null): string {
 }
 
 export function estimateWorkoutSeconds(workout: Workout): number {
-  return workout.blocks.reduce((total, block) => {
-    if (block.type === 'rest') return total + Math.max(0, block.seconds || 0);
+  const hasWork = workout.blocks.some((block) => block.type === 'work');
+  const workoutSeconds = workout.blocks.reduce((total, block, index) => {
+    if (block.type === 'rest') {
+      const hasNextWork = workout.blocks.slice(index + 1).some((candidate) => candidate.type === 'work');
+      if (block.skip_if_last && !hasNextWork) return total;
+      return total + Math.max(0, block.seconds || 0);
+    }
     if (block.mode === 'timer') return total + Math.max(0, block.seconds || 0);
     return total;
   }, 0);
+  return workoutSeconds + (hasWork ? PREPARATION_BLOCK_SECONDS : 0);
 }

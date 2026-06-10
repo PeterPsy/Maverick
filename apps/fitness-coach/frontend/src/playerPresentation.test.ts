@@ -63,7 +63,7 @@ describe('work player presentation', () => {
 
   it('shows reps player segments with the same mode label treatment as timers', () => {
     expect(appSource).toContain('const counter = isReps ? formatRepsCounter(segment.reps, segment.repsLabel) : formatClock(remaining);');
-    expect(appSource).toContain("const segmentModeLabel = segment.type === 'rest' ? 'Rest' : isReps ? 'Reps' : 'Timer';");
+    expect(appSource).toContain("const segmentModeLabel = segment.type === 'rest' ? (segment.phase === 'preparation' ? 'Preparation' : 'Rest') : isReps ? 'Reps' : 'Timer';");
     expect(appSource).toContain("className={`player-time ${isReps ? 'is-reps' : ''}`}");
     expect(appSource).toContain('{segmentModeLabel ? <span>{segmentModeLabel}</span> : null}');
     expect(appSource).not.toContain("segment.repsLabel || 'reps'");
@@ -148,6 +148,27 @@ describe('work player presentation', () => {
     expect(styles).toContain('.rest-block-icon-frame');
     expect(styles).toContain('.player-rest-overlay');
     expect(styles).toContain('.player-rest-icon');
+  });
+
+  it('renders a fixed preparation block before editable workout blocks', () => {
+    expect(appSource).toContain('function PreparationBlockEditor');
+    expect(appSource).toContain('<PreparationBlockEditor index={0} />');
+    const preparationStart = appSource.indexOf('function PreparationBlockEditor');
+    const preparationSource = appSource.slice(preparationStart, appSource.indexOf('function BlockEditor', preparationStart));
+    expect(preparationSource).toContain('className="block-editor is-rest is-preparation"');
+    expect(preparationSource).toContain('Preparation');
+    expect(preparationSource).toContain('{PREPARATION_BLOCK_SECONDS} seconds');
+    expect(preparationSource).toContain('<RestIconImage className="rest-block-icon" />');
+    expect(preparationSource).not.toContain('reorderItemProps');
+    expect(preparationSource).not.toContain('onDelete');
+    expect(preparationSource).not.toContain('onDuplicate');
+    expect(preparationSource).not.toContain('<select');
+    expect(preparationSource).not.toContain('NumberField');
+    const fixedBlockPosition = appSource.indexOf('<PreparationBlockEditor index={0} />');
+    const editableBlocksPosition = appSource.indexOf('{workout.blocks.map', fixedBlockPosition);
+    expect(editableBlocksPosition).toBeGreaterThan(fixedBlockPosition);
+    expect(styles).toContain('.block-editor.is-preparation');
+    expect(styles).toContain('.preparation-block-duration');
   });
 
   it('replaces the resolving media text placeholder with animated gradient bars', () => {

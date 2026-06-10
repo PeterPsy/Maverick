@@ -26,6 +26,8 @@ Workout start is a single atomic `workout.start` backend action. The action acce
 
 Work mode media resolution keeps Storage as the owner. Local and Drive media use the Storage media route as the playback URL. Drive media starts playback from the route immediately while Storage `file.localize_status` / `file.localize` runs as a background warmup with runtime cache dedupe and abort support. Blob URLs are reserved for bounded local fallback and are revoked when the player cache is cleared.
 
+Every workout start includes a fixed 15-second Preparation segment before the first editable workout block. The segment is rendered in setup and player views, behaves like a rest segment for timing and media warmup, and is not persisted in `workout.blocks`, draggable, editable, duplicated, or deletable.
+
 ## V1 Boundaries
 
 Implemented V1 covers manual setup mode, exercise library, workout editor, work mode player, sidebar widgets, backend state, CLI/MCP CRUD, validation, and run summaries.

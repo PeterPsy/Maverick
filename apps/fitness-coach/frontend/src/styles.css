@@ -722,6 +722,11 @@ select:focus {
   background: transparent;
 }
 
+.block-editor.is-preparation {
+  cursor: default;
+  touch-action: pan-y;
+}
+
 .rest-block-layout {
   display: flex;
   align-items: center;
@@ -875,6 +880,11 @@ select:focus {
   max-width: 100%;
 }
 
+.mode-value-row.is-preparation {
+  gap: 0.42rem;
+  color: var(--fitness-muted);
+}
+
 .mode-value-row.is-rest .block-index {
   flex: 0 0 auto;
   min-width: 1.72rem;
@@ -884,6 +894,26 @@ select:focus {
   color: #000000;
   font-weight: 400;
   box-shadow: 0 8px 18px rgba(0, 0, 0, 0.28);
+}
+
+.preparation-block-title {
+  color: var(--fitness-text);
+  font-size: 0.82rem;
+  font-weight: 650;
+  white-space: nowrap;
+}
+
+.preparation-block-duration {
+  display: inline-flex;
+  align-items: center;
+  min-height: 2.18rem;
+  border: 1px solid var(--fitness-border);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.055);
+  color: var(--fitness-muted);
+  font-size: 0.74rem;
+  padding: 0 0.62rem;
+  white-space: nowrap;
 }
 
 .mode-value-row .block-actions {

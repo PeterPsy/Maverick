@@ -49,7 +49,7 @@ import { TagsInputField } from './components/ui/tags-input';
 import type { AppBootstrapPayload, Exercise, ExerciseMediaRef, MediaPlaybackResolution, RestBlock, RuntimeSegment, SetupTab, StartWorkoutPayload, ViewState, WorkBlock, Workout, WorkoutBlock, WorkoutRunSummary } from './types';
 import { useWorkoutBlockReorder, type ReorderItemProps } from './useWorkoutBlockReorder';
 import { completeWorkoutAfterConfirmedStart } from './workoutCompletion';
-import { runtimeSegmentsForWorkout, segmentProgressRepeats, segmentProgressSeconds } from './workoutSegments';
+import { PREPARATION_BLOCK_SECONDS, runtimeSegmentsForWorkout, segmentProgressRepeats, segmentProgressSeconds } from './workoutSegments';
 import { validateWorkoutForStart } from './workoutValidation';
 
 const EMPTY_EXERCISE: Partial<Exercise> = {
@@ -567,12 +567,13 @@ function WorkoutEditor(props: {
       </div>
 
       <div className={`block-list ${blockReorder.draggingItemId ? 'is-reordering' : ''}`} ref={blockReorder.listRef}>
+        <PreparationBlockEditor index={0} />
         {workout.blocks.map((block, index) => (
           <BlockEditor
             block={block}
             exercises={props.exercises}
             key={block.id}
-            index={index}
+            index={index + 1}
             isDragging={blockReorder.draggingItemId === block.id}
             blockRef={(element) => blockReorder.setItemElement(block.id, element)}
             reorderItemProps={blockReorder.getItemProps(block.id)}
@@ -602,6 +603,23 @@ function WorkoutEditor(props: {
         </button>
       </div>
     </div>
+  );
+}
+
+function PreparationBlockEditor({ index }: { index: number }) {
+  return (
+    <article className="block-editor is-rest is-preparation" aria-label={`Preparation block, ${PREPARATION_BLOCK_SECONDS} seconds`}>
+      <div className="rest-block-layout">
+        <div className="mode-value-row is-rest is-preparation">
+          <span className="block-index">{index + 1}</span>
+          <span className="rest-block-icon-frame" aria-hidden="true">
+            <RestIconImage className="rest-block-icon" />
+          </span>
+          <span className="preparation-block-title">Preparation</span>
+          <span className="preparation-block-duration">{PREPARATION_BLOCK_SECONDS} seconds</span>
+        </div>
+      </div>
+    </article>
   );
 }
 
@@ -1199,7 +1217,7 @@ function WorkPlayer({ workout, startPromise, onClose, onComplete }: { workout: W
   );
   const nextSegmentPreview = shouldShowNextPreview ? nextPreviewCandidate : null;
   const nextPreviewDescription = nextSegmentPreview?.short_description || nextSegmentPreview?.long_description || '';
-  const segmentModeLabel = segment.type === 'rest' ? 'Rest' : isReps ? 'Reps' : 'Timer';
+  const segmentModeLabel = segment.type === 'rest' ? (segment.phase === 'preparation' ? 'Preparation' : 'Rest') : isReps ? 'Reps' : 'Timer';
   const counter = isReps ? formatRepsCounter(segment.reps, segment.repsLabel) : formatClock(remaining);
   const segmentDescription = segment.short_description || segment.long_description || '';
   const fullDescription = segment.long_description || segment.short_description || '';
@@ -1562,6 +1580,9 @@ function workoutSummary(workout: Workout) {
     },
     { seconds: 0, reps: 0 }
   );
+  if (workout.blocks.some((block) => block.type === 'work')) {
+    totals.seconds += PREPARATION_BLOCK_SECONDS;
+  }
   return {
     duration: formatWorkoutDuration(totals.seconds),
     reps: `${totals.reps} reps`

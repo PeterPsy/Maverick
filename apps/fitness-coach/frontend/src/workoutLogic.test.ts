@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { currentStorageAppId } from './api';
 import { driveMediaStreamUrl } from './mediaPlaybackResolver';
 import type { ExerciseMediaRef, RestBlock, WorkBlock, Workout } from './types';
-import { repsLabel, runtimeSegmentsForWorkout, segmentProgressRepeats, segmentProgressSeconds } from './workoutSegments';
+import { PREPARATION_BLOCK_SECONDS, repsLabel, runtimeSegmentsForWorkout, segmentProgressRepeats, segmentProgressSeconds } from './workoutSegments';
 import { validateWorkoutForStart } from './workoutValidation';
 
 const media: ExerciseMediaRef = {
@@ -65,24 +65,35 @@ describe('workout logic', () => {
   });
 
   it('validates start requirements', () => {
-    expect(validateWorkoutForStart(workout()).valid).toBe(true);
+    const validation = validateWorkoutForStart(workout());
+    expect(validation.valid).toBe(true);
+    expect(validation.estimated_seconds).toBe(45);
     const invalid = workout();
     invalid.blocks[0] = { ...(invalid.blocks[0] as WorkBlock), media: null };
-    const validation = validateWorkoutForStart(invalid);
-    expect(validation.valid).toBe(false);
-    expect(validation.errors.map((error) => error.path)).toContain('blocks[0].media');
+    const invalidValidation = validateWorkoutForStart(invalid);
+    expect(invalidValidation.valid).toBe(false);
+    expect(invalidValidation.errors.map((error) => error.path)).toContain('blocks[0].media');
   });
 
-  it('skips final rest when configured', () => {
+  it('prepends a fixed preparation segment and skips final rest when configured', () => {
     const segments = runtimeSegmentsForWorkout(workout());
-    expect(segments).toHaveLength(1);
-    expect(segments[0].type).toBe('work');
+    expect(segments).toHaveLength(2);
+    expect(segments[0]).toMatchObject({
+      type: 'rest',
+      phase: 'preparation',
+      title: 'Preparation',
+      seconds: PREPARATION_BLOCK_SECONDS,
+      showNextExercise: true
+    });
+    expect(segments[1].type).toBe('work');
   });
 
   it('uses timer seconds for timed progress and loops reps progress every minute', () => {
     const timedSegments = runtimeSegmentsForWorkout(workout());
-    expect(segmentProgressSeconds(timedSegments[0])).toBe(30);
+    expect(segmentProgressSeconds(timedSegments[0])).toBe(PREPARATION_BLOCK_SECONDS);
     expect(segmentProgressRepeats(timedSegments[0])).toBe(false);
+    expect(segmentProgressSeconds(timedSegments[1])).toBe(30);
+    expect(segmentProgressRepeats(timedSegments[1])).toBe(false);
 
     const repsWorkout = workout();
     repsWorkout.blocks[0] = {
@@ -94,11 +105,11 @@ describe('workout logic', () => {
     repsWorkout.blocks[1] = { ...(repsWorkout.blocks[1] as RestBlock), skip_if_last: false };
     const repsSegments = runtimeSegmentsForWorkout(repsWorkout);
 
-    expect(segmentProgressSeconds(repsSegments[0])).toBe(60);
-    expect(segmentProgressRepeats(repsSegments[0])).toBe(true);
-    expect(repsSegments[0].type === 'work' ? repsSegments[0].reps : null).toBe(12);
-    expect(segmentProgressSeconds(repsSegments[1])).toBe(20);
-    expect(segmentProgressRepeats(repsSegments[1])).toBe(false);
+    expect(segmentProgressSeconds(repsSegments[1])).toBe(60);
+    expect(segmentProgressRepeats(repsSegments[1])).toBe(true);
+    expect(repsSegments[1].type === 'work' ? repsSegments[1].reps : null).toBe(12);
+    expect(segmentProgressSeconds(repsSegments[2])).toBe(20);
+    expect(segmentProgressRepeats(repsSegments[2])).toBe(false);
   });
 
   it('formats numeric reps labels with a visible reps unit', () => {

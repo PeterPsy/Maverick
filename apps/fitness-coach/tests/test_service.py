@@ -65,11 +65,15 @@ class FitnessCoachServiceTest(unittest.TestCase):
             status, workout_payload = handle_action(data_root, "workout.create", {"name": "Morning", "blocks": [block]})
             self.assertEqual(status, 201)
             workout = workout_payload["workout"]
-            self.assertTrue(validate_workout(workout)["valid"])
+            validation = validate_workout(workout)
+            self.assertTrue(validation["valid"])
+            self.assertEqual(validation["estimated_seconds"], 45)
+            self.assertEqual(len(workout["blocks"]), 1)
 
             status, validation_payload = handle_action(data_root, "workout.validate", {"workout_id": workout["id"]})
             self.assertEqual(status, 200)
             self.assertTrue(validation_payload["validation"]["valid"])
+            self.assertEqual(validation_payload["validation"]["estimated_seconds"], 45)
 
             status, start_payload = handle_action(data_root, "workout.start", {"workout_id": workout["id"]})
             self.assertEqual(status, 200)
@@ -133,6 +137,7 @@ class FitnessCoachServiceTest(unittest.TestCase):
             self.assertTrue(payload["state_version"])
             self.assertEqual(payload["selected_workout"]["id"], workout_payload["workout"]["id"])
             self.assertEqual(payload["workout_summaries"][0]["work_block_count"], 1)
+            self.assertEqual(payload["workout_summaries"][0]["estimated_seconds"], 45)
             self.assertEqual(payload["tags"], ["legs", "warmup"])
             self.assertEqual(payload["runs"], [])
             self.assertEqual(payload["view_state"]["selected_workout_id"], workout_payload["workout"]["id"])
@@ -163,6 +168,7 @@ class FitnessCoachServiceTest(unittest.TestCase):
             self.assertEqual(payload["workout"]["id"], workout["id"])
             self.assertEqual(len(payload["workout"]["blocks"]), 1)
             self.assertTrue(payload["validation"]["valid"])
+            self.assertEqual(payload["validation"]["estimated_seconds"], 45)
             self.assertEqual(payload["workout"]["last_started_at"], payload["started_at"])
 
     def test_operations_manifest_exposes_bootstrap(self) -> None:

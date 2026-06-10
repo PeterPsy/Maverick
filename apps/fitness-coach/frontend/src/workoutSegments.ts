@@ -1,9 +1,25 @@
 import type { RuntimeSegment, WorkBlock, Workout } from './types';
 
+export const PREPARATION_BLOCK_ID = 'default-preparation-block';
+export const PREPARATION_BLOCK_SECONDS = 15;
 export const REPS_PROGRESS_SECONDS = 60;
 
 export function runtimeSegmentsForWorkout(workout: Workout): RuntimeSegment[] {
   const segments: RuntimeSegment[] = [];
+  const firstWork = workout.blocks.find((candidate): candidate is WorkBlock => candidate.type === 'work' && Boolean(candidate.media));
+  if (firstWork) {
+    segments.push({
+      type: 'rest',
+      phase: 'preparation',
+      blockId: PREPARATION_BLOCK_ID,
+      title: 'Preparation',
+      short_description: 'Get ready.',
+      long_description: 'Get ready for the first exercise.',
+      seconds: PREPARATION_BLOCK_SECONDS,
+      nextWorkSegmentId: firstWork.id,
+      showNextExercise: true
+    });
+  }
   workout.blocks.forEach((block, index) => {
     if (block.type === 'work') {
       if (!block.media) return;

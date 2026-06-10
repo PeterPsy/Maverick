@@ -14,6 +14,7 @@ APP_ID = "fitness-coach"
 STATE_FILE = "state.json"
 SCHEMA_VERSION = 1
 MAX_RUNS = 100
+PREPARATION_BLOCK_SECONDS = 15
 
 WORKOUT_WRITE_ACTIONS = {
     "workout.create",
@@ -909,11 +910,15 @@ def exercise_to_work_block(exercise: dict[str, Any], *, default_work_seconds: in
 
 
 def estimate_seconds(workout: dict[str, Any]) -> int:
-    total = 0
-    for block in workout.get("blocks", []):
+    total = PREPARATION_BLOCK_SECONDS if count_work_blocks(workout) else 0
+    blocks = workout.get("blocks", [])
+    for index, block in enumerate(blocks):
         if block.get("type") == "work" and block.get("mode") == "timer":
             total += positive_int(block.get("seconds"), default=0, allow_zero=True)
         if block.get("type") == "rest":
+            has_next_work = any(candidate.get("type") == "work" for candidate in blocks[index + 1 :])
+            if block.get("skip_if_last") and not has_next_work:
+                continue
             total += positive_int(block.get("seconds"), default=0, allow_zero=True)
     return total
 

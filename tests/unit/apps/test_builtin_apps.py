@@ -17,6 +17,7 @@ from core.apps.contracts import (
     write_app_contract_file,
 )
 from core.apps.errors import WorkspaceAppBindingNotFoundError
+from core.apps.service import transition_workspace_app_status
 from core.apps.store import AppCollections, AppDocumentStore
 from core.workspaces.service import create_workspace, ensure_default_workspace_record
 from core.workspaces.store import WorkspaceDocumentStore, WorkspaceCollections
@@ -115,6 +116,37 @@ class BuiltinAppBootstrapTests(unittest.TestCase):
             self.assertEqual(first["default"], ["hooked"])
             self.assertEqual(second["default"], ["hooked"])
             self.assertEqual((app_root / "install-count.txt").read_text(encoding="utf-8"), "1")
+
+    def test_disabled_builtin_binding_is_not_reenabled_on_bootstrap(self) -> None:
+        now = datetime.now(tz=UTC)
+        with TemporaryDirectory() as temp_dir:
+            repo_root = _make_repo_root(Path(temp_dir))
+            _write_contract(repo_root / "apps" / "workspace-tool", ["sandbox"])
+            app_store = _make_app_store()
+            workspace_store = _make_workspace_store()
+
+            register_and_install_builtin_apps_for_active_workspaces(
+                app_store,
+                workspace_store,
+                start_path=repo_root,
+                now=now,
+            )
+            transition_workspace_app_status(
+                app_store,
+                workspace_id="default",
+                app_id="workspace-tool",
+                target_status="disabled",
+                now=now,
+            )
+            register_and_install_builtin_apps_for_active_workspaces(
+                app_store,
+                workspace_store,
+                start_path=repo_root,
+                now=now,
+            )
+
+            binding = app_store.get_workspace_app_binding(workspace_id="default", app_id="workspace-tool")
+            self.assertEqual(binding.status, "disabled")
 
 
 def _make_repo_root(root: Path) -> Path:

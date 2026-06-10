@@ -115,8 +115,9 @@ def _current_builtin_binding_exists(
         binding.source_record_id != source.source_id
         or binding.source_kind != source.source_kind
         or binding.active_version != source.version
-        or binding.status != expected_status
     ):
+        return False
+    if binding.status not in {expected_status, "disabled"}:
         return False
     data_root = _ensure_workspace_app_data_root(
         workspace_id=workspace_id,

@@ -6,9 +6,11 @@ import type { MentionItem } from "../lib/mentions";
 import { fallbackMatchesForAppReference, rangesOverlap } from "../lib/messageReferenceMatches";
 import type { MessageMentionMatch } from "../lib/messageReferenceMatches";
 import { referenceKindLabel } from "../lib/referenceKindLabels";
-import { openAppRouteInShell } from "../lib/shellNavigation";
+import { openAppParamsInShell, type ShellRouteParams } from "../lib/shellNavigation";
 import { CopyMessageButton } from "./MessageCopyButton";
 import { MessageFooter } from "./MessageFooter";
+
+const URL_PARSE_BASE = "https://maverick.local";
 
 export function HumanMessage({
   mentionItems,
@@ -121,9 +123,36 @@ function MentionReferenceChip({ match }: { match: MessageMentionMatch }) {
 }
 
 function openEntityReference(appId: string, deepLink: string): void {
-  const prefix = `/app/${appId}/`;
-  const appPage = deepLink.startsWith(prefix) ? deepLink.slice(prefix.length) : "";
+  const params = appRouteParamsFromDeepLink(appId, deepLink);
+  if (params) {
+    openAppParamsInShell(appId, params);
+  }
+}
+
+function appRouteParamsFromDeepLink(appId: string, deepLink: string): ShellRouteParams | null {
+  let url: URL;
+  try {
+    url = new URL(deepLink, URL_PARSE_BASE);
+  } catch {
+    return null;
+  }
+  const segments = url.pathname.split("/").filter(Boolean).map(decodePathSegment);
+  const [routeKind, routeAppId, ...pageSegments] = segments;
+  if ((routeKind !== "app" && routeKind !== "apps") || routeAppId !== appId) {
+    return null;
+  }
+  const params: ShellRouteParams = Object.fromEntries(url.searchParams.entries());
+  const appPage = pageSegments.join("/");
   if (appPage) {
-    openAppRouteInShell(appId, appPage);
+    params.app_page = appPage;
+  }
+  return Object.keys(params).length ? params : null;
+}
+
+function decodePathSegment(value: string): string {
+  try {
+    return decodeURIComponent(value);
+  } catch {
+    return value;
   }
 }

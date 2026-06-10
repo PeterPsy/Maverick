@@ -5,6 +5,8 @@ import type { MentionItem } from "./mentions";
 const STORAGE_FILE_DRAG_DATA_TYPE = "application/x-maverick-storage-file";
 const STORAGE_FOLDER_DRAG_DATA_TYPE = "application/x-maverick-storage-folder";
 const STORAGE_SELECTION_DRAG_DATA_TYPE = "application/x-maverick-storage-selection";
+const STORAGE_DRIVE_FILE_DRAG_DATA_TYPE = "application/x-maverick-storage-drive-file";
+const STORAGE_DRIVE_FOLDER_DRAG_DATA_TYPE = "application/x-maverick-storage-drive-folder";
 
 type StorageRole = "uploaded" | "generated";
 type StoragePreviewKind =
@@ -44,6 +46,36 @@ type StorageSelectionDragPayload = {
   owner_app_id: string;
 };
 
+type StorageDriveFileDragPayload = {
+  connection_id: string;
+  display_path: string;
+  drive_file_id: string;
+  file_id: string;
+  name: string;
+  owner_app_id: string;
+  preview_kind?: StoragePreviewKind;
+  provider: "google_drive";
+  web_url?: string;
+};
+
+type StorageDriveBreadcrumbPayload = {
+  connection_id: string;
+  display_path: string;
+  drive_file_id: string;
+  label?: string;
+};
+
+type StorageDriveFolderDragPayload = {
+  connection_id: string;
+  display_path: string;
+  drive_breadcrumbs?: StorageDriveBreadcrumbPayload[];
+  drive_file_id: string;
+  folder_id: string;
+  name: string;
+  owner_app_id: string;
+  provider: "google_drive";
+};
+
 type StorageReferenceDataTransfer = Pick<DataTransfer, "getData" | "types">;
 type StorageReferenceTypeDataTransfer = Pick<DataTransfer, "types">;
 
@@ -52,7 +84,9 @@ export function hasStorageReferenceDragData(dataTransfer: StorageReferenceTypeDa
   return (
     types.includes(STORAGE_FILE_DRAG_DATA_TYPE) ||
     types.includes(STORAGE_FOLDER_DRAG_DATA_TYPE) ||
-    types.includes(STORAGE_SELECTION_DRAG_DATA_TYPE)
+    types.includes(STORAGE_SELECTION_DRAG_DATA_TYPE) ||
+    types.includes(STORAGE_DRIVE_FILE_DRAG_DATA_TYPE) ||
+    types.includes(STORAGE_DRIVE_FOLDER_DRAG_DATA_TYPE)
   );
 }
 
@@ -82,6 +116,14 @@ function storageReferencesFromDataTransfer(dataTransfer: StorageReferenceDataTra
   if (folder) {
     references.push(storageFolderReference(folder));
   }
+  const driveFile = readStorageDriveFileDragData(dataTransfer);
+  if (driveFile) {
+    references.push(storageDriveFileReference(driveFile));
+  }
+  const driveFolder = readStorageDriveFolderDragData(dataTransfer);
+  if (driveFolder) {
+    references.push(storageDriveFolderReference(driveFolder));
+  }
   return references;
 }
 
@@ -95,6 +137,14 @@ function readStorageFolderDragData(dataTransfer: Pick<DataTransfer, "getData">):
 
 function readStorageSelectionDragData(dataTransfer: Pick<DataTransfer, "getData">): StorageSelectionDragPayload | null {
   return readStoragePayload(dataTransfer, STORAGE_SELECTION_DRAG_DATA_TYPE, normalizeStorageSelectionDragPayload);
+}
+
+function readStorageDriveFileDragData(dataTransfer: Pick<DataTransfer, "getData">): StorageDriveFileDragPayload | null {
+  return readStoragePayload(dataTransfer, STORAGE_DRIVE_FILE_DRAG_DATA_TYPE, normalizeStorageDriveFileDragPayload);
+}
+
+function readStorageDriveFolderDragData(dataTransfer: Pick<DataTransfer, "getData">): StorageDriveFolderDragPayload | null {
+  return readStoragePayload(dataTransfer, STORAGE_DRIVE_FOLDER_DRAG_DATA_TYPE, normalizeStorageDriveFolderDragPayload);
 }
 
 function readStoragePayload<T>(
@@ -141,6 +191,40 @@ function storageFolderReference(payload: StorageFolderDragPayload): AppReference
   };
 }
 
+function storageDriveFileReference(payload: StorageDriveFileDragPayload): AppReference {
+  const previewKind = payload.preview_kind || previewKindFromFileName(payload.name);
+  return {
+    type: "entity",
+    app_id: payload.owner_app_id,
+    entity_type: "file",
+    entity_id: payload.file_id,
+    label: payload.name,
+    summary: previewKind ? `${previewKind} file in Google Drive` : "Google Drive file",
+    deep_link: `/app/${encodeURIComponent(payload.owner_app_id)}/files/${encodeURIComponent(payload.file_id)}`,
+  };
+}
+
+function storageDriveFolderReference(payload: StorageDriveFolderDragPayload): AppReference {
+  const params = new URLSearchParams({
+    provider: "google_drive",
+    connection_id: payload.connection_id,
+    drive_file_id: payload.drive_file_id,
+    display_path: payload.display_path,
+  });
+  if (payload.drive_breadcrumbs?.length) {
+    params.set("drive_breadcrumbs", JSON.stringify(payload.drive_breadcrumbs));
+  }
+  return {
+    type: "entity",
+    app_id: payload.owner_app_id,
+    entity_type: "folder",
+    entity_id: storageDriveFolderEntityId(payload),
+    label: payload.name,
+    summary: "Google Drive folder",
+    deep_link: `/app/${encodeURIComponent(payload.owner_app_id)}?${params.toString()}`,
+  };
+}
+
 function storageReferenceMentionItem(reference: AppReference): MentionItem {
   if (reference.type !== "entity") {
     return {
@@ -163,6 +247,10 @@ function storageReferenceMentionItem(reference: AppReference): MentionItem {
 function storageFolderEntityId(payload: StorageFolderDragPayload): string {
   const relativePath = encodedRelativePath(payload.relative_path);
   return relativePath ? `${payload.role}:${relativePath}/` : `${payload.role}:/`;
+}
+
+function storageDriveFolderEntityId(payload: StorageDriveFolderDragPayload): string {
+  return `drive:${encodeURIComponent(payload.connection_id)}:${encodeURIComponent(payload.drive_file_id)}`;
 }
 
 function encodedRelativePath(value: string): string {
@@ -257,6 +345,102 @@ function normalizeStorageSelectionDragPayload(payload: unknown): StorageSelectio
   };
 }
 
+function normalizeStorageDriveFileDragPayload(payload: unknown): StorageDriveFileDragPayload | null {
+  if (!payload || typeof payload !== "object") {
+    return null;
+  }
+  const record = payload as Record<string, unknown>;
+  const provider = record.provider === "google_drive" ? "google_drive" : null;
+  const ownerAppId = normalizeRequiredText(record.owner_app_id);
+  const fileId = normalizeReferenceId(record.file_id);
+  const name = normalizeRequiredText(record.name);
+  const connectionId = normalizeRequiredText(record.connection_id);
+  const driveFileId = normalizeRequiredText(record.drive_file_id);
+  const displayPath = normalizeDriveDisplayPath(record.display_path);
+  const previewKind = normalizePreviewKind(record.preview_kind);
+  const webUrl = normalizeOptionalHttpsUrl(record.web_url);
+
+  if (!provider || !ownerAppId || !fileId || !name || !connectionId || !driveFileId || !displayPath) {
+    return null;
+  }
+  return {
+    connection_id: connectionId,
+    display_path: displayPath,
+    drive_file_id: driveFileId,
+    file_id: fileId,
+    name,
+    owner_app_id: ownerAppId,
+    ...(previewKind ? { preview_kind: previewKind } : {}),
+    provider,
+    ...(webUrl ? { web_url: webUrl } : {}),
+  };
+}
+
+function normalizeStorageDriveFolderDragPayload(payload: unknown): StorageDriveFolderDragPayload | null {
+  if (!payload || typeof payload !== "object") {
+    return null;
+  }
+  const record = payload as Record<string, unknown>;
+  const provider = record.provider === "google_drive" ? "google_drive" : null;
+  const ownerAppId = normalizeRequiredText(record.owner_app_id);
+  const folderId = normalizeRequiredText(record.folder_id);
+  const name = normalizeRequiredText(record.name);
+  const connectionId = normalizeRequiredText(record.connection_id);
+  const driveFileId = normalizeRequiredText(record.drive_file_id);
+  const displayPath = normalizeDriveDisplayPath(record.display_path);
+  const driveBreadcrumbs = normalizeStorageDriveBreadcrumbPayloads(record.drive_breadcrumbs, connectionId);
+
+  if (!provider || !ownerAppId || !folderId || !name || !connectionId || !driveFileId || !displayPath || !driveBreadcrumbs) {
+    return null;
+  }
+  return {
+    connection_id: connectionId,
+    display_path: displayPath,
+    ...(driveBreadcrumbs.length ? { drive_breadcrumbs: driveBreadcrumbs } : {}),
+    drive_file_id: driveFileId,
+    folder_id: folderId,
+    name,
+    owner_app_id: ownerAppId,
+    provider,
+  };
+}
+
+function normalizeStorageDriveBreadcrumbPayloads(value: unknown, fallbackConnectionId: string): StorageDriveBreadcrumbPayload[] | null {
+  if (value === undefined) {
+    return [];
+  }
+  if (!Array.isArray(value)) {
+    return null;
+  }
+  const payloads = value.map((item) => normalizeStorageDriveBreadcrumbPayload(item, fallbackConnectionId));
+  if (payloads.some((item) => !item)) {
+    return null;
+  }
+  const byPath = new Map<string, StorageDriveBreadcrumbPayload>();
+  (payloads as StorageDriveBreadcrumbPayload[]).forEach((target) => byPath.set(target.display_path, target));
+  return [...byPath.values()];
+}
+
+function normalizeStorageDriveBreadcrumbPayload(value: unknown, fallbackConnectionId: string): StorageDriveBreadcrumbPayload | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return null;
+  }
+  const record = value as Record<string, unknown>;
+  const connectionId = normalizeRequiredText(record.connection_id) || normalizeRequiredText(record.connectionId) || fallbackConnectionId;
+  const displayPath = normalizeDriveDisplayPath(record.display_path || record.displayPath || record.path);
+  const driveFileId = normalizeRequiredText(record.drive_file_id) || normalizeRequiredText(record.driveFileId);
+  const label = normalizeRequiredText(record.label);
+  if (!connectionId || connectionId !== fallbackConnectionId || !displayPath || !driveFileId) {
+    return null;
+  }
+  return {
+    connection_id: connectionId,
+    display_path: displayPath,
+    drive_file_id: driveFileId,
+    ...(label ? { label } : {}),
+  };
+}
+
 function normalizePayloadList<T>(value: unknown, normalize: (item: unknown) => T | null): T[] | null {
   if (value === undefined) {
     return [];
@@ -340,6 +524,33 @@ function normalizeRelativePath(value: unknown): string {
     return "";
   }
   return parts.join("/");
+}
+
+function normalizeDriveDisplayPath(value: unknown): string {
+  if (typeof value !== "string") {
+    return "";
+  }
+  const parts = value.split("/").filter(Boolean);
+  if (!parts.length || parts.some((part) => part === "." || part === "..")) {
+    return "";
+  }
+  return `/${parts.join("/")}`;
+}
+
+function normalizeOptionalHttpsUrl(value: unknown): string {
+  if (typeof value !== "string") {
+    return "";
+  }
+  const trimmed = value.trim();
+  if (!trimmed) {
+    return "";
+  }
+  try {
+    const url = new URL(trimmed);
+    return url.protocol === "https:" ? url.toString() : "";
+  } catch {
+    return "";
+  }
 }
 
 function dataTransferTypes(dataTransfer: StorageReferenceTypeDataTransfer): string[] {

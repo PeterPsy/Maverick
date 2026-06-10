@@ -88,6 +88,91 @@ describe("Storage drag reference parsing", () => {
     ]);
   });
 
+  it("converts Drive drag payloads into chat mention items", () => {
+    const dataTransfer = new FakeDataTransfer();
+    const driveBreadcrumbs = [
+      {
+        connection_id: "drive_conn_1",
+        display_path: "/My Drive",
+        drive_file_id: "root",
+        label: "My Drive",
+      },
+      {
+        connection_id: "drive_conn_1",
+        display_path: "/My Drive/Reports",
+        drive_file_id: "drive_folder_1",
+        label: "Reports",
+      },
+    ];
+    const driveFolderParams = new URLSearchParams({
+      provider: "google_drive",
+      connection_id: "drive_conn_1",
+      drive_file_id: "drive_folder_1",
+      display_path: "/My Drive/Reports",
+    });
+    driveFolderParams.set("drive_breadcrumbs", JSON.stringify(driveBreadcrumbs));
+    dataTransfer.setData(
+      "application/x-maverick-storage-drive-file",
+      JSON.stringify({
+        connection_id: "drive_conn_1",
+        display_path: "/My Drive/Reports/summary.pdf",
+        drive_file_id: "drive_file_1",
+        file_id: "file_drive_1",
+        name: "summary.pdf",
+        owner_app_id: "storage",
+        preview_kind: "pdf",
+        provider: "google_drive",
+      }),
+    );
+    dataTransfer.setData(
+      "application/x-maverick-storage-drive-folder",
+      JSON.stringify({
+        connection_id: "drive_conn_1",
+        display_path: "/My Drive/Reports",
+        drive_breadcrumbs: driveBreadcrumbs,
+        drive_file_id: "drive_folder_1",
+        folder_id: "folder_drive_1",
+        name: "Reports",
+        owner_app_id: "storage",
+        provider: "google_drive",
+      }),
+    );
+
+    expect(hasStorageReferenceDragData(dataTransfer)).toBe(true);
+    expect(storageReferenceMentionItemsFromDataTransfer(dataTransfer)).toEqual([
+      {
+        id: "entity:storage:file:file_drive_1",
+        label: "summary.pdf",
+        description: "storage · file · pdf file in Google Drive",
+        kind: "entity",
+        reference: {
+          type: "entity",
+          app_id: "storage",
+          entity_type: "file",
+          entity_id: "file_drive_1",
+          label: "summary.pdf",
+          summary: "pdf file in Google Drive",
+          deep_link: "/app/storage/files/file_drive_1",
+        },
+      },
+      {
+        id: "entity:storage:folder:drive:drive_conn_1:drive_folder_1",
+        label: "Reports",
+        description: "storage · folder · Google Drive folder",
+        kind: "entity",
+        reference: {
+          type: "entity",
+          app_id: "storage",
+          entity_type: "folder",
+          entity_id: "drive:drive_conn_1:drive_folder_1",
+          label: "Reports",
+          summary: "Google Drive folder",
+          deep_link: `/app/storage?${driveFolderParams.toString()}`,
+        },
+      },
+    ]);
+  });
+
   it("rejects malformed Storage drag payloads", () => {
     const malformed = new FakeDataTransfer();
     malformed.setData(
@@ -104,5 +189,22 @@ describe("Storage drag reference parsing", () => {
 
     expect(hasStorageReferenceDragData(malformed)).toBe(true);
     expect(storageReferenceMentionItemsFromDataTransfer(malformed)).toEqual([]);
+
+    const malformedDrive = new FakeDataTransfer();
+    malformedDrive.setData(
+      "application/x-maverick-storage-drive-file",
+      JSON.stringify({
+        connection_id: "drive_conn_1",
+        display_path: "/../secret",
+        drive_file_id: "drive_file_1",
+        file_id: "file_drive_1",
+        name: "secret.pdf",
+        owner_app_id: "storage",
+        provider: "google_drive",
+      }),
+    );
+
+    expect(hasStorageReferenceDragData(malformedDrive)).toBe(true);
+    expect(storageReferenceMentionItemsFromDataTransfer(malformedDrive)).toEqual([]);
   });
 });

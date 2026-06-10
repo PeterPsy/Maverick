@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { PointerEvent as ReactPointerEvent } from 'react';
 import {
+  ArrowDown,
   ArrowLeft,
   Check,
   ChevronLeft,
@@ -427,6 +428,12 @@ function WorkoutEditor(props: {
         </div>
       </div>
 
+      <div className="workout-flow-separator" aria-hidden="true">
+        <span>
+          <ArrowDown size={16} />
+        </span>
+      </div>
+
       <div className={`block-list ${blockReorder.draggingItemId ? 'is-reordering' : ''}`} ref={blockReorder.listRef}>
         {workout.blocks.map((block, index) => (
           <BlockEditor
@@ -483,56 +490,64 @@ function BlockEditor(props: {
   const mode: WorkoutBlockMode = block.type === 'rest' ? 'rest' : block.mode;
   const exercise = block.type === 'work' && block.exercise_id ? props.exercises.find((item) => item.id === block.exercise_id) || null : null;
   const hasExercise = block.type === 'work' && Boolean(block.exercise_id);
-  const title = block.type === 'rest' ? 'Rest' : hasExercise ? exercise?.title || block.title || 'Exercise unavailable' : 'No exercise selected';
+  const title = block.type === 'work'
+    ? hasExercise
+      ? exercise?.title || block.title || 'Exercise unavailable'
+      : 'No exercise selected'
+    : '';
+  const media = block.type === 'work' ? exercise?.primary_media || block.media : null;
   const description = block.type === 'work'
     ? hasExercise
       ? exerciseDescriptionPreview(exercise || block) || 'No description'
       : 'Choose an exercise from the library.'
     : '';
+  const controls = (
+    <div className={`mode-value-row ${block.type === 'rest' ? 'is-rest' : ''}`}>
+      {block.type === 'rest' ? <span className="block-index">{props.index + 1}</span> : null}
+      <select className="block-mode-select" value={mode} onChange={(event) => props.onModeChange(event.target.value as WorkoutBlockMode)} aria-label="Block mode">
+        <option value="timer">Timer</option>
+        <option value="reps">Reps</option>
+        <option value="rest">Rest</option>
+      </select>
+      {block.type === 'work' && block.mode === 'reps' ? (
+        <NumberField label="Reps" value={block.reps || 0} onChange={(reps) => props.onChange({ reps, reps_label: null } as Partial<WorkoutBlock>)} />
+      ) : (
+        <NumberField label={block.type === 'rest' ? 'Rest seconds' : 'Seconds'} value={block.type === 'rest' ? block.seconds : block.seconds || 0} onChange={(seconds) => props.onChange({ seconds } as Partial<WorkoutBlock>)} />
+      )}
+      <div className="block-actions">
+        <button className="mini-icon" type="button" onClick={props.onDuplicate} aria-label="Duplicate block" title="Duplicate"><Copy size={14} /></button>
+        <button className="mini-icon danger" type="button" onClick={props.onDelete} aria-label="Delete block" title="Delete"><Trash2 size={14} /></button>
+      </div>
+    </div>
+  );
+
   return (
-    <article ref={props.blockRef} className={`block-editor ${block.type === 'rest' ? 'is-rest' : ''} ${props.isDragging ? 'is-dragging' : ''}`} {...props.reorderItemProps}>
-      <div className="block-fields">
-        <div className="block-exercise-row">
-          {block.type === 'rest' ? (
-            <div className="block-title-line">
-              <span className="block-index">{props.index + 1}</span>
-              <div className="block-rest-title">Rest</div>
-            </div>
-          ) : (
-            <div className="block-exercise-text">
-              <div className="block-title-line">
-                <span className="block-index">{props.index + 1}</span>
+    <article ref={props.blockRef} className={`block-editor ${block.type === 'work' ? 'is-work' : 'is-rest'} ${props.isDragging ? 'is-dragging' : ''}`} {...props.reorderItemProps}>
+      {block.type === 'work' ? (
+        <div className="block-work-layout">
+          <div className="block-media-panel">
+            <MediaThumb media={media} />
+            <span className="block-index block-index-overlay">{props.index + 1}</span>
+          </div>
+          <div className="block-work-content">
+            <div className="block-work-header">
+              <div className="block-exercise-copy">
                 <strong>{title}</strong>
+                <span>{description}</span>
               </div>
-              <span>{description}</span>
+              <div className="block-control-row">
+                <button className="secondary-action compact block-change-button" type="button" onClick={props.onOpenLibrary}>
+                  <Library size={15} aria-hidden="true" />
+                  <span>{hasExercise ? 'Change' : 'Choose'}</span>
+                </button>
+              </div>
             </div>
-          )}
-          {block.type === 'work' ? (
-            <div className="block-control-row">
-              <button className="secondary-action compact block-change-button" type="button" onClick={props.onOpenLibrary}>
-                <Library size={15} aria-hidden="true" />
-                <span>{hasExercise ? 'Change' : 'Choose'}</span>
-              </button>
-            </div>
-          ) : null}
-        </div>
-        <div className="mode-value-row">
-          <select className="block-mode-select" value={mode} onChange={(event) => props.onModeChange(event.target.value as WorkoutBlockMode)} aria-label="Block mode">
-            <option value="timer">Timer</option>
-            <option value="reps">Reps</option>
-            <option value="rest">Rest</option>
-          </select>
-          {block.type === 'work' && block.mode === 'reps' ? (
-            <NumberField label="Reps" value={block.reps || 0} onChange={(reps) => props.onChange({ reps, reps_label: null } as Partial<WorkoutBlock>)} />
-          ) : (
-            <NumberField label={block.type === 'rest' ? 'Rest seconds' : 'Seconds'} value={block.type === 'rest' ? block.seconds : block.seconds || 0} onChange={(seconds) => props.onChange({ seconds } as Partial<WorkoutBlock>)} />
-          )}
-          <div className="block-actions">
-            <button className="mini-icon" type="button" onClick={props.onDuplicate} aria-label="Duplicate block" title="Duplicate"><Copy size={14} /></button>
-            <button className="mini-icon danger" type="button" onClick={props.onDelete} aria-label="Delete block" title="Delete"><Trash2 size={14} /></button>
+            {controls}
           </div>
         </div>
-      </div>
+      ) : (
+        controls
+      )}
     </article>
   );
 }

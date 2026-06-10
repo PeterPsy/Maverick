@@ -18,6 +18,7 @@ import { readStorageFileDragData, readStorageFolderDragData, readStorageSelectio
 import { canRequestFullscreen, elementIsFullscreen, exitDocumentFullscreen, requestElementFullscreen } from './lib/browserFullscreen';
 import { sortStorageFiles, type FileSortKey } from './lib/storageFileSort';
 import { folderTargetFromMissingFileTarget, storageTargetFromParams, type StorageNavigationParams, type StorageNavigationTarget } from './lib/storageNavigationParams';
+import { storagePickerAcceptsFile, storagePickerContextFromParams, storagePickerResultForFile, type StoragePickerContext } from './lib/storagePicker';
 import { storageOAuthCallbackFromLocation, type StorageOAuthCallback } from './lib/storageOAuthRuntime';
 import { storageCustomScopedFiles, storageViewVisibleFiles, storageViewVisibleFolders } from './lib/storageSearch';
 import { storageViewFilterFromMessage } from './lib/storageViewFilterEvents';
@@ -441,6 +442,7 @@ function isFolderLongPressIgnored(target: EventTarget | null) {
 
 function App() {
   const storageAppId = useMemo(() => currentStorageAppId(), []);
+  const initialNavigationParams = useMemo<StorageNavigationParams>(() => Object.fromEntries(new URLSearchParams(window.location.search).entries()), []);
   const [files, setFiles] = useState<StorageFile[]>([]);
   const [folders, setFolders] = useState<StorageFolder[]>([]);
   const [catalogPagination, setCatalogPagination] = useState<CatalogPayload['pagination'] | null>(null);
@@ -470,6 +472,7 @@ function App() {
   const [customFileIds, setCustomFileIds] = useState<string[]>([]);
   const [customWorkspacePaths, setCustomWorkspacePaths] = useState<string[]>([]);
   const [driveTarget, setDriveTarget] = useState<DriveFolderTarget | null>(null);
+  const [pickerContext, setPickerContext] = useState<StoragePickerContext | null>(() => storagePickerContextFromParams(initialNavigationParams));
   const [previewUrl, setPreviewUrl] = useState('');
   const [previewText, setPreviewText] = useState('');
   const [previewTable, setPreviewTable] = useState<PreviewTablePayload | undefined>(undefined);
@@ -516,7 +519,7 @@ function App() {
   const catalogRefreshRequestRef = useRef(0);
   const catalogTransitionMinRequestRef = useRef<number | null>(null);
   const catalogTransitionTokenRef = useRef(0);
-  const pendingNavigationTargetRef = useRef<StorageNavigationTarget | null>(storageTargetFromParams(Object.fromEntries(new URLSearchParams(window.location.search).entries())));
+  const pendingNavigationTargetRef = useRef<StorageNavigationTarget | null>(storageTargetFromParams(initialNavigationParams));
   const previewFullscreenActive = previewFullscreenMode !== 'none';
   const isDriveView = Boolean(driveTarget);
 
@@ -1134,6 +1137,7 @@ function App() {
   }
 
   function handleNavigationParams(params: StorageNavigationParams) {
+    setPickerContext(storagePickerContextFromParams(params));
     const target = storageTargetFromParams(params);
     if (!target) {
       return;
@@ -1169,6 +1173,30 @@ function App() {
       return;
     }
     refresh(undefined, { loading: 'foreground' }).catch((err: Error) => setError(err.message));
+  }
+
+  function sendPickerSelection() {
+    if (!pickerContext || !selectedFile) {
+      return;
+    }
+    if (!storagePickerAcceptsFile(pickerContext, selectedFile)) {
+      setError('Choose a video file before returning to Fitness Coach.');
+      return;
+    }
+    const result = storagePickerResultForFile(selectedFile, driveTargetRef.current);
+    window.parent?.postMessage(
+      {
+        type: 'maverick.widget.open-app',
+        app_id: pickerContext.returnAppId,
+        params: {
+          picker_mode: pickerContext.mode,
+          storage_picker_result: JSON.stringify(result)
+        }
+      },
+      window.location.origin
+    );
+    closePreviewModal();
+    setDetailsOpen(false);
   }
 
   function clearCustomFileView() {
@@ -1465,6 +1493,7 @@ function App() {
     : 'This removes the file from workspace storage.';
   const pendingDeleteActionLabel = pendingDelete?.kind === 'folder' ? 'Delete folder' : 'Delete file';
   const activeSortLabel = fileSortOptions.find((option) => option.key === fileSortKey)?.label || 'Date';
+  const pickerSelectionAllowed = Boolean(pickerContext && selectedFile && storagePickerAcceptsFile(pickerContext, selectedFile));
 
   useEffect(() => {
     if (!sortMenuOpen) return;
@@ -2623,6 +2652,17 @@ function App() {
                 <h2 id="preview-modal-title">{selectedFile.name}</h2>
               </div>
               <div className="preview-modal-actions">
+                {pickerContext && selectedFile.preview_kind === 'video' ? (
+                  <button
+                    className="primary-action storage-picker-preview-action"
+                    disabled={!pickerSelectionAllowed}
+                    onClick={sendPickerSelection}
+                    type="button"
+                  >
+                    <Icon name="movie" />
+                    Use video
+                  </button>
+                ) : null}
                 <button className="icon-button preview-fullscreen-action" type="button" onClick={() => togglePreviewFullscreen().catch((err: Error) => setError(err.message))} aria-label={previewFullscreenLabel} aria-pressed={previewFullscreenActive} title={previewFullscreenLabel}>
                   <Icon name={previewFullscreenIcon} />
                 </button>

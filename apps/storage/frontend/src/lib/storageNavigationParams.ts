@@ -27,6 +27,14 @@ export function scalarString(value: unknown): string {
   return typeof value === 'string' && value.trim() ? value.trim() : '';
 }
 
+export function decodeParam(value: string): string {
+  try {
+    return decodeURIComponent(value);
+  } catch {
+    return value;
+  }
+}
+
 export function storageTargetFromParams(params: StorageNavigationParams): StorageNavigationTarget | null {
   const provider = scalarString(params.provider);
   if (provider === 'google_drive') {
@@ -123,14 +131,6 @@ export function folderTargetFromMissingFileTarget(target: StorageNavigationTarge
     targetType: 'folder',
     workspaceRelativePath: `storage/${role}${folderRelativePath ? `/${folderRelativePath}` : ''}`
   };
-}
-
-function decodeParam(value: string): string {
-  try {
-    return decodeURIComponent(value);
-  } catch {
-    return value;
-  }
 }
 
 function storageRoleFromValue(value: unknown): FileRole | 'all' | null {

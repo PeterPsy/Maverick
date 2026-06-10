@@ -250,6 +250,11 @@ p {
   flex: 0 0 auto;
 }
 
+.storage-picker-preview-action {
+  min-height: 2.25rem;
+  padding: 0 0.72rem;
+}
+
 .storage-sort-menu {
   position: relative;
   flex: 0 0 auto;

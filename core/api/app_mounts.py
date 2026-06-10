@@ -834,7 +834,7 @@ def _truthy(value: object) -> bool:
 
 
 def _backend_route_supports_streaming(*, method: str, route_path: str) -> bool:
-    return method.upper() in {"GET", "HEAD"} and route_path.startswith("/api/apps/") and route_path.endswith("/media")
+    return method.upper() in {"GET", "HEAD"} and route_path.startswith("/api/apps/") and route_path.endswith("/backend/media")
 
 
 def _backend_request_headers(environ: Mapping[str, Any]) -> dict[str, str]:
@@ -873,7 +873,7 @@ def backend_entrypoint_timeout_seconds(parsed: ParsedAppContract) -> int:
 
 
 def _backend_secret_request_body(*, body: dict[str, Any], method: str, route_path: str, query: dict[str, str] | None = None) -> dict[str, Any]:
-    if method.upper() in {"GET", "HEAD"} and route_path.startswith("/api/apps/") and route_path.endswith("/media"):
+    if method.upper() in {"GET", "HEAD"} and route_path.startswith("/api/apps/") and route_path.endswith("/backend/media"):
         params = query or {}
         secret_request = _app_secret_request_from_query(params)
         if secret_request is None:

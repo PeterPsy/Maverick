@@ -199,15 +199,15 @@ class PlatformHost:
                     start_response=start_response,
                     shutdown_controller=self.shutdown_controller,
                 )
-            if path.startswith("/api/apps/") and path.endswith("/media") and method in {"GET", "HEAD"}:
+            backend_media_app_id = _backend_media_app_id(path)
+            if backend_media_app_id and method in {"GET", "HEAD"}:
                 if context is None:
                     return json_response(start_response, {"error": "authentication_required"}, status="401 Unauthorized")
-                app_id = path.removeprefix("/api/apps/").removesuffix("/media").strip("/")
                 return handle_app_backend(
                     self.state,
                     environ=environ,
                     workspace_id=workspace_id,
-                    app_id=app_id,
+                    app_id=backend_media_app_id,
                     user=user,
                     start_path=self.start_path,
                     start_response=start_response,
@@ -219,3 +219,10 @@ class PlatformHost:
         except Exception:
             logger.exception("Unhandled platform host failure while serving `%s`.", path)
             return json_response(start_response, {"error": "internal_server_error"}, status="500 Internal Server Error")
+
+
+def _backend_media_app_id(path: object) -> str:
+    text = str(path or "")
+    if not text.startswith("/api/apps/") or not text.endswith("/backend/media"):
+        return ""
+    return text.removeprefix("/api/apps/").removesuffix("/backend/media").strip("/")

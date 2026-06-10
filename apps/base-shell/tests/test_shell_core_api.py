@@ -157,6 +157,49 @@ class ShellCoreApiTestCase(unittest.TestCase):
         self.assertEqual(authed_status, 200)
         self.assertEqual(authed_payload["workspace_id"], "default")
 
+    def test_app_backend_media_subroute_resolves_app_id_before_backend_segment(self) -> None:
+        repo_root = self.make_repo_root()
+        media_app_root = write_synthetic_platform_app(
+            repo_root,
+            app_id="media-backend",
+            name="Media Backend",
+            frontend=False,
+            backend=True,
+        )
+        (media_app_root / "backend" / "app_backend.py").write_text(
+            "import json, sys\n"
+            "payload = json.loads(sys.stdin.read() or '{}')\n"
+            "result = {\n"
+            "    'status_code': 200,\n"
+            "    'json': {\n"
+            "        'app_id': payload.get('app_id'),\n"
+            "        'method': payload.get('method'),\n"
+            "        'route_path': payload.get('route_path'),\n"
+            "        'query': payload.get('query') or {},\n"
+            "    },\n"
+            "}\n"
+            "json.dump(result, sys.stdout)\n",
+            encoding="utf-8",
+        )
+        state = bootstrap_platform_state(start_path=repo_root)
+        app = PlatformHost(state, start_path=state.repository_root)
+        cookie = self.login(app)
+
+        media_status, media_payload, _ = self.invoke(
+            app,
+            path="/api/apps/media-backend/backend/media",
+            method="GET",
+            query_string="preview_id=preview_1&path=assets%2Fimage.webp",
+            cookie=cookie,
+        )
+
+        self.assertEqual(media_status, 200)
+        self.assertEqual(media_payload["app_id"], "media-backend")
+        self.assertEqual(media_payload["method"], "GET")
+        self.assertEqual(media_payload["route_path"], "/api/apps/media-backend/backend/media")
+        self.assertEqual(media_payload["query"]["preview_id"], "preview_1")
+        self.assertEqual(media_payload["query"]["path"], "assets/image.webp")
+
     def test_workspace_local_backend_requires_workspace_admin(self) -> None:
         repo_root = self.make_repo_root()
         state = bootstrap_platform_state(start_path=repo_root)

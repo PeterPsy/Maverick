@@ -125,9 +125,11 @@ class FitnessCoachServiceTest(unittest.TestCase):
             }
             _, workout_payload = handle_action(data_root, "workout.create", {"name": "Morning", "blocks": [block]})
 
-            status, payload = handle_action(data_root, "app.bootstrap", {"include_runs": True})
+            status, payload = handle_action(data_root, "app.bootstrap", {"include_runs": True, "_workspace_id": "default", "_app_id": "fitness-coach"})
 
             self.assertEqual(status, 200)
+            self.assertEqual(payload["workspace_id"], "default")
+            self.assertEqual(payload["app_id"], "fitness-coach")
             self.assertTrue(payload["state_version"])
             self.assertEqual(payload["selected_workout"]["id"], workout_payload["workout"]["id"])
             self.assertEqual(payload["workout_summaries"][0]["work_block_count"], 1)
@@ -162,6 +164,13 @@ class FitnessCoachServiceTest(unittest.TestCase):
             self.assertEqual(len(payload["workout"]["blocks"]), 1)
             self.assertTrue(payload["validation"]["valid"])
             self.assertEqual(payload["workout"]["last_started_at"], payload["started_at"])
+
+    def test_operations_manifest_exposes_bootstrap(self) -> None:
+        with tempfile.TemporaryDirectory() as data_root:
+            status, payload = handle_action(data_root, "operations.manifest", {})
+
+            self.assertEqual(status, 200)
+            self.assertIn("app.bootstrap", {item["action"] for item in payload["operations"]})
 
     def test_exercise_description_derives_legacy_summary(self) -> None:
         with tempfile.TemporaryDirectory() as data_root:

@@ -226,6 +226,7 @@ def operations_manifest() -> dict[str, Any]:
         "commands": [{"surface": "cli", "name": "fitness-coach", "description": "Manage Fitness Coach workouts and exercise library records."}],
         "tools": [{"surface": "mcp", "name": tool, "operation": action} for tool, action in MCP_TOOL_ACTIONS.items()],
         "operations": [
+            {"action": "app.bootstrap", "description": "Load initial app state in one backend action.", "optional": ["include_runs", "selected_workout_id", "runs_limit"]},
             {"action": "workouts.list", "description": "List workouts."},
             {"action": "workout.get", "required_any": ["workout_id", "id"]},
             {"action": "workout.create", "optional": ["name", "workout"]},
@@ -273,6 +274,8 @@ def bootstrap_app(data_root: str, args: dict[str, Any] | None = None) -> dict[st
         view_state["selected_workout_id"] = selected_id
     include_runs = bool(args.get("include_runs", False))
     return {
+        "workspace_id": normalized_text(args.get("_workspace_id")),
+        "app_id": normalized_text(args.get("_app_id")) or APP_ID,
         "state_version": state_version(state),
         "workouts": [deepcopy(item) for item in sorted(state["workouts"], key=lambda item: str(item.get("updated_at") or ""), reverse=True)],
         "workout_summaries": summaries,

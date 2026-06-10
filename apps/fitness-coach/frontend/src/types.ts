@@ -134,6 +134,8 @@ export type ViewState = {
 };
 
 export type AppBootstrapPayload = {
+  workspace_id: string;
+  app_id: string;
   state_version: string;
   workouts: Workout[];
   workout_summaries: WorkoutSummary[];
@@ -142,6 +144,12 @@ export type AppBootstrapPayload = {
   tags: string[];
   runs: WorkoutRunSummary[];
   view_state: ViewState;
+};
+
+export type StartWorkoutPayload = {
+  workout: Workout;
+  validation: WorkoutValidation;
+  started_at: string;
 };
 
 export type ValidationIssue = {
@@ -211,4 +219,5 @@ export type MediaPlaybackResolution = {
   canRetry?: boolean;
   canCancel?: boolean;
   revoke?: () => void;
+  warmup?: Promise<MediaPlaybackResolution | null>;
 };

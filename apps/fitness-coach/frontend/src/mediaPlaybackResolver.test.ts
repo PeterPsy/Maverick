@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { clearMediaPlaybackCache, createLocalBlobFallback, resolveMediaPlayback } from './mediaPlaybackResolver';
+import { clearMediaPlaybackCache, createLocalBlobFallback, latestMediaPlaybackError, resolveMediaPlayback, retainMediaPlayback } from './mediaPlaybackResolver';
 import type { ExerciseMediaRef } from './types';
 
 function jsonResponse(payload: unknown, ok = true) {
@@ -8,6 +8,10 @@ function jsonResponse(payload: unknown, ok = true) {
     status: ok ? 200 : 500,
     json: async () => payload
   } as Response;
+}
+
+function abortError() {
+  return Object.assign(new Error('Aborted'), { name: 'AbortError' });
 }
 
 const driveMedia: Extract<ExerciseMediaRef, { kind: 'drive_file' }> = {
@@ -54,7 +58,7 @@ describe('media playback resolver', () => {
       resolveMediaPlayback(driveMedia, 'storage'),
       resolveMediaPlayback(driveMedia, 'storage')
     ]);
-    await new Promise((resolve) => setTimeout(resolve, 0));
+    await first.warmup;
 
     expect(first).toMatchObject({ status: 'ready', mediaKind: 'video' });
     expect(second.url).toBe(first.url);
@@ -64,6 +68,58 @@ describe('media playback resolver', () => {
       'file.localize_status',
       'file.localize'
     ]);
+  });
+
+  it('preserves Drive localization errors for playback fallback UI', async () => {
+    const fetchMock = vi.fn(async () => jsonResponse({
+      localization: {
+        status: 'error',
+        detail: 'Google Drive grant is missing.',
+        can_retry: true
+      }
+    }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    const resolution = await resolveMediaPlayback(driveMedia, 'storage');
+    const warmed = await resolution.warmup;
+
+    expect(resolution).toMatchObject({ status: 'ready', mediaKind: 'video' });
+    expect(warmed).toMatchObject({
+      status: 'error',
+      detail: 'Google Drive grant is missing.',
+      canRetry: true
+    });
+    expect(latestMediaPlaybackError(driveMedia, 'storage')).toBe('Google Drive grant is missing.');
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('aborts Drive warmups outside the retained current and next media', async () => {
+    const mediaA = { ...driveMedia, stable_storage_file_id: 'file_a', drive_file_id: 'drive_a', source_version: 'vA' };
+    const mediaB = { ...driveMedia, stable_storage_file_id: 'file_b', drive_file_id: 'drive_b', source_version: 'vB' };
+    const mediaC = { ...driveMedia, stable_storage_file_id: 'file_c', drive_file_id: 'drive_c', source_version: 'vC' };
+    const requests: Array<{ driveFileId: string; signal?: AbortSignal }> = [];
+    const fetchMock = vi.fn((_input: RequestInfo | URL, init?: RequestInit) => {
+      const body = JSON.parse(String(init?.body));
+      const signal = init?.signal as AbortSignal | undefined;
+      requests.push({ driveFileId: String(body.drive_file_id), signal });
+      return new Promise<Response>((_resolve, reject) => {
+        if (signal?.aborted) {
+          reject(abortError());
+          return;
+        }
+        signal?.addEventListener('abort', () => reject(abortError()), { once: true });
+      });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    await resolveMediaPlayback(mediaA, 'storage');
+    await resolveMediaPlayback(mediaB, 'storage');
+    await resolveMediaPlayback(mediaC, 'storage');
+    retainMediaPlayback([mediaB, mediaC], 'storage');
+
+    expect(requests.find((request) => request.driveFileId === 'drive_a')?.signal?.aborted).toBe(true);
+    expect(requests.find((request) => request.driveFileId === 'drive_b')?.signal?.aborted).toBe(false);
+    expect(requests.find((request) => request.driveFileId === 'drive_c')?.signal?.aborted).toBe(false);
   });
 
   it('dedupes local Blob fallback and revokes Blob URLs on cache cleanup', async () => {

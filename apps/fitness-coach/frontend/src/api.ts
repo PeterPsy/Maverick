@@ -1,4 +1,4 @@
-import type { AppBootstrapPayload, Exercise, ExerciseMediaRef, StorageFile, StorageFolderRef, ViewState, Workout, WorkoutRunSummary, WorkoutValidation } from './types';
+import type { AppBootstrapPayload, Exercise, ExerciseMediaRef, StartWorkoutPayload, StorageFile, StorageFolderRef, ViewState, Workout, WorkoutRunSummary, WorkoutValidation } from './types';
 
 export type BackendListPayload = {
   workouts?: Workout[];
@@ -82,7 +82,7 @@ export async function validateWorkout(workoutId: string) {
 }
 
 export async function startWorkout(workoutId: string, workout?: Workout) {
-  const payload = await callBackend<{ workout: Workout; validation: WorkoutValidation; started_at: string }>({ action: 'workout.start', workout_id: workoutId, workout });
+  const payload = await callBackend<StartWorkoutPayload>({ action: 'workout.start', workout_id: workoutId, workout });
   return payload;
 }
 

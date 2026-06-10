@@ -42,11 +42,13 @@ import {
   storageMediaSelectionFromPickerParams,
   updateViewState
 } from './api';
+import { readBootstrapCache, writeBootstrapCache } from './bootstrapCache';
 import { GradientBarsBackground } from './components/ui/gradient-bars-background';
-import { cancelMediaPlayback, clearMediaPlaybackCache, createLocalBlobFallback, driveMediaStreamUrl, initialMediaResolution, resolveMediaPlayback } from './mediaPlaybackResolver';
+import { cancelMediaPlayback, clearMediaPlaybackCache, createLocalBlobFallback, driveMediaStreamUrl, initialMediaResolution, latestMediaPlaybackError, resolveMediaPlayback, retainMediaPlayback } from './mediaPlaybackResolver';
 import { TagsInputField } from './components/ui/tags-input';
-import type { AppBootstrapPayload, Exercise, ExerciseMediaRef, MediaPlaybackResolution, RestBlock, RuntimeSegment, SetupTab, ViewState, WorkBlock, Workout, WorkoutBlock, WorkoutRunSummary } from './types';
+import type { AppBootstrapPayload, Exercise, ExerciseMediaRef, MediaPlaybackResolution, RestBlock, RuntimeSegment, SetupTab, StartWorkoutPayload, ViewState, WorkBlock, Workout, WorkoutBlock, WorkoutRunSummary } from './types';
 import { useWorkoutBlockReorder, type ReorderItemProps } from './useWorkoutBlockReorder';
+import { completeWorkoutAfterConfirmedStart } from './workoutCompletion';
 import { runtimeSegmentsForWorkout, segmentProgressRepeats, segmentProgressSeconds } from './workoutSegments';
 import { validateWorkoutForStart } from './workoutValidation';
 
@@ -63,12 +65,13 @@ const EMPTY_EXERCISE: Partial<Exercise> = {
 
 type WorkoutBlockMode = 'timer' | 'reps' | 'rest';
 type PlayerPlaybackOverlay = 'idle' | 'play' | 'pause';
+type PlayerSession = {
+  workout: Workout;
+  startPromise: Promise<StartWorkoutPayload>;
+};
 const REST_ICON_SRC = 'rest-icon.svg';
 const COUNTDOWN_SOUND_SRC = '/apps/fitness-coach/count-down-fitness-coach.mp3';
 const COUNTDOWN_SOUND_LEAD_MS = 3800;
-const BOOTSTRAP_CACHE_VERSION = 1;
-const FORBIDDEN_SESSION_STORAGE_KEYS = new Set(['stream_url', 'download_url', '_app_secret_request', 'token', 'access_token', 'refresh_token', 'local_path', 'path']);
-
 export function App() {
   const [workouts, setWorkouts] = useState<Workout[]>([]);
   const [exercises, setExercises] = useState<Exercise[]>([]);
@@ -80,7 +83,7 @@ export function App() {
   const [isInitialLoading, setIsInitialLoading] = useState(true);
   const [notice, setNotice] = useState('');
   const [busy, setBusy] = useState('');
-  const [playerWorkout, setPlayerWorkout] = useState<Workout | null>(null);
+  const [playerSession, setPlayerSession] = useState<PlayerSession | null>(null);
   const [exerciseDraft, setExerciseDraft] = useState<Partial<Exercise> | null>(null);
   const [libraryTargetBlockId, setLibraryTargetBlockId] = useState<string | null>(null);
   const [savedWorkoutId, setSavedWorkoutId] = useState<string | null>(null);
@@ -278,23 +281,28 @@ export function App() {
     }
   }
 
-  async function handleStart() {
+  function handleStart() {
     const workoutToStart = syncWorkoutExerciseSnapshots(selectedWorkout, exercises);
     if (!workoutToStart || !validation.valid) return;
     setBusy('start');
-    setPlayerWorkout(workoutToStart);
-    try {
-      const payload = await startWorkout(workoutToStart.id, workoutToStart);
-      dirtyWorkoutIdsRef.current.delete(payload.workout.id);
-      setWorkouts((items) => replaceById(items, payload.workout));
-      setSavedWorkoutId(payload.workout.id);
-      setNotice('');
-    } catch (error) {
-      setPlayerWorkout((current) => current?.id === workoutToStart.id ? null : current);
-      setNotice(error instanceof Error ? error.message : 'Workout is not ready.');
-    } finally {
-      setBusy('');
-    }
+    const startPromise = startWorkout(workoutToStart.id, workoutToStart)
+      .then((payload) => {
+        dirtyWorkoutIdsRef.current.delete(payload.workout.id);
+        setWorkouts((items) => replaceById(items, payload.workout));
+        setSavedWorkoutId(payload.workout.id);
+        setNotice('');
+        return payload;
+      })
+      .catch((error) => {
+        setPlayerSession((current) => current?.workout.id === workoutToStart.id ? null : current);
+        setNotice(error instanceof Error ? error.message : 'Workout is not ready.');
+        throw error;
+      })
+      .finally(() => {
+        setBusy('');
+      });
+    void startPromise.catch(() => undefined);
+    setPlayerSession({ workout: workoutToStart, startPromise });
   }
 
   async function handleDeleteWorkout(workout: Workout) {
@@ -354,8 +362,8 @@ export function App() {
     setSetupTab('workout-settings');
   }
 
-  if (playerWorkout) {
-    return <WorkPlayer workout={playerWorkout} onClose={() => setPlayerWorkout(null)} onComplete={(run) => setRuns((items) => [run, ...items].slice(0, 20))} />;
+  if (playerSession) {
+    return <WorkPlayer workout={playerSession.workout} startPromise={playerSession.startPromise} onClose={() => setPlayerSession(null)} onComplete={(run) => setRuns((items) => [run, ...items].slice(0, 20))} />;
   }
 
   return (
@@ -407,60 +415,6 @@ export function App() {
       </section>
     </main>
   );
-}
-
-function bootstrapCacheKey() {
-  if (typeof window === 'undefined') return '';
-  const params = new URLSearchParams(window.location.search);
-  const workspaceId = params.get('workspace_id') || params.get('workspace') || 'default';
-  const appId = params.get('app_id') || 'fitness-coach';
-  return `fitness-coach:bootstrap:${workspaceId}:${appId}:${currentStorageAppId()}`;
-}
-
-function readBootstrapCache(): AppBootstrapPayload | null {
-  if (typeof window === 'undefined') return null;
-  const key = bootstrapCacheKey();
-  if (!key) return null;
-  try {
-    const raw = window.sessionStorage.getItem(key);
-    if (!raw) return null;
-    const parsed = JSON.parse(raw) as { version?: number; payload?: unknown };
-    if (parsed.version !== BOOTSTRAP_CACHE_VERSION || !parsed.payload || typeof parsed.payload !== 'object') {
-      return null;
-    }
-    return parsed.payload as AppBootstrapPayload;
-  } catch {
-    return null;
-  }
-}
-
-function writeBootstrapCache(payload: AppBootstrapPayload) {
-  if (typeof window === 'undefined') return;
-  const key = bootstrapCacheKey();
-  if (!key) return;
-  try {
-    window.sessionStorage.setItem(
-      key,
-      JSON.stringify({
-        version: BOOTSTRAP_CACHE_VERSION,
-        cached_at: new Date().toISOString(),
-        payload: sanitizeBootstrapForSessionStorage(payload)
-      })
-    );
-  } catch {
-    // Cache is best-effort and must never block the app.
-  }
-}
-
-function sanitizeBootstrapForSessionStorage(value: unknown): unknown {
-  if (Array.isArray(value)) return value.map((item) => sanitizeBootstrapForSessionStorage(item));
-  if (!value || typeof value !== 'object') return value;
-  const next: Record<string, unknown> = {};
-  Object.entries(value as Record<string, unknown>).forEach(([key, item]) => {
-    if (FORBIDDEN_SESSION_STORAGE_KEYS.has(key)) return;
-    next[key] = sanitizeBootstrapForSessionStorage(item);
-  });
-  return next;
 }
 
 function FitnessMainSkeleton() {
@@ -916,9 +870,10 @@ function MediaPicker({ media, sourceFolder, onChange }: {
   );
 }
 
-function WorkPlayer({ workout, onClose, onComplete }: { workout: Workout; onClose: () => void; onComplete: (run: WorkoutRunSummary) => void }) {
+function WorkPlayer({ workout, startPromise, onClose, onComplete }: { workout: Workout; startPromise: Promise<StartWorkoutPayload>; onClose: () => void; onComplete: (run: WorkoutRunSummary) => void }) {
   const rootRef = useRef<HTMLDivElement | null>(null);
   const videoRef = useRef<HTMLVideoElement | null>(null);
+  const startPromiseRef = useRef(startPromise);
   const segments = useMemo(() => runtimeSegmentsForWorkout(workout), [workout]);
   const [index, setIndex] = useState(0);
   const [paused, setPaused] = useState(false);
@@ -932,6 +887,8 @@ function WorkPlayer({ workout, onClose, onComplete }: { workout: Workout; onClos
   const [startedAt] = useState(new Date().toISOString());
   const [skipped, setSkipped] = useState(0);
   const [retryNonce, setRetryNonce] = useState(0);
+  const [isFinishing, setIsFinishing] = useState(false);
+  const [finishError, setFinishError] = useState('');
   const timerRemainingMsRef = useRef(0);
   const timerStartedAtRef = useRef(0);
   const countdownPlayedRef = useRef(false);
@@ -939,6 +896,7 @@ function WorkPlayer({ workout, onClose, onComplete }: { workout: Workout; onClos
   const audioContextRef = useRef<AudioContext | null>(null);
   const playbackOverlayTimerRef = useRef<number | null>(null);
   const pointerStartRef = useRef<{ x: number; y: number } | null>(null);
+  const finishInFlightRef = useRef(false);
   const segment = segments[index];
 
   const clearPlaybackOverlayTimer = useCallback(() => {
@@ -961,6 +919,10 @@ function WorkPlayer({ workout, onClose, onComplete }: { workout: Workout; onClos
   useEffect(() => {
     rootRef.current?.requestFullscreen?.().catch(() => undefined);
   }, []);
+
+  useEffect(() => {
+    startPromiseRef.current = startPromise;
+  }, [startPromise]);
 
   useEffect(() => () => clearMediaPlaybackCache(), []);
 
@@ -986,6 +948,14 @@ function WorkPlayer({ workout, onClose, onComplete }: { workout: Workout; onClos
     setPlaybackOverlay(paused ? 'play' : 'idle');
     setDescriptionExpanded(false);
   }, [clearPlaybackOverlayTimer, index]);
+
+  useEffect(() => {
+    const activeMedia: ExerciseMediaRef[] = [];
+    if (segment?.type === 'work') activeMedia.push(segment.media);
+    const nextPreview = nextWorkSegment(segments, index);
+    if (nextPreview) activeMedia.push(nextPreview.media);
+    retainMediaPlayback(activeMedia);
+  }, [index, segment, segments]);
 
   useEffect(() => {
     setResolution(initialMediaResolution());
@@ -1081,17 +1051,30 @@ function WorkPlayer({ workout, onClose, onComplete }: { workout: Workout; onClos
   }, [showPlaybackOverlay]);
 
   async function finish() {
-    const elapsed = Math.max(0, Math.round((Date.now() - Date.parse(startedAt)) / 1000));
-    const run = await completeWorkout({
-      workout_id: workout.id,
-      started_at: startedAt,
-      elapsed_seconds: elapsed,
-      completed_segments: segments.length,
-      skipped_segments: skipped,
-      exercise_count: segments.filter((item) => item.type === 'work').length
-    });
-    setSummary(run);
-    onComplete(run);
+    if (finishInFlightRef.current) return;
+    finishInFlightRef.current = true;
+    setIsFinishing(true);
+    setFinishError('');
+    try {
+      const run = await completeWorkoutAfterConfirmedStart({
+        startPromise: startPromiseRef.current,
+        completeWorkout,
+        workoutId: workout.id,
+        startedAt,
+        completedSegments: segments.length,
+        skippedSegments: skipped,
+        exerciseCount: segments.filter((item) => item.type === 'work').length
+      });
+      setSummary(run);
+      onComplete(run);
+    } catch (error) {
+      setPaused(true);
+      showPlaybackOverlay('play');
+      setFinishError(error instanceof Error ? error.message : 'Unable to save workout completion.');
+    } finally {
+      finishInFlightRef.current = false;
+      setIsFinishing(false);
+    }
   }
 
   function advance(skip = false) {
@@ -1143,18 +1126,32 @@ function WorkPlayer({ workout, onClose, onComplete }: { workout: Workout; onClos
   async function fallbackBlob() {
     if (!segment || segment.type !== 'work') return;
     if (segment.media.kind === 'drive_file') {
+      const detail = await drivePlaybackFailureDetail(segment.media, resolution);
       cancelMediaPlayback(segment.media);
       setResolution({
         status: 'error',
         url: driveMediaStreamUrl(segment.media),
         mediaKind: segment.media.preview_kind,
-        detail: 'Storage could not play this Drive media yet. Retry after Drive localization is ready.',
+        detail,
         canRetry: true
       });
       return;
     }
     const next = await createLocalBlobFallback(segment.media);
     setResolution(next);
+  }
+
+  async function drivePlaybackFailureDetail(media: Extract<ExerciseMediaRef, { kind: 'drive_file' }>, currentResolution: MediaPlaybackResolution) {
+    const cachedDetail = latestMediaPlaybackError(media);
+    if (cachedDetail) return cachedDetail;
+    if (currentResolution.warmup) {
+      const warmed = await Promise.race([
+        currentResolution.warmup,
+        new Promise<null>((resolve) => window.setTimeout(() => resolve(null), 300))
+      ]);
+      if (warmed?.status === 'error' && warmed.detail) return warmed.detail;
+    }
+    return 'Storage could not play this Drive media yet. Retry after Drive localization is ready.';
   }
 
   if (summary) {
@@ -1343,6 +1340,15 @@ function WorkPlayer({ workout, onClose, onComplete }: { workout: Workout; onClos
           <span>{isReps ? 'Done' : 'Skip'}</span>
         </button>
       </div>
+      {finishError ? (
+        <div className="player-error">
+          <span>{finishError}</span>
+          <button type="button" onClick={() => void finish()} disabled={isFinishing}>
+            <RotateCcw size={14} aria-hidden="true" />
+            <span>{isFinishing ? 'Saving' : 'Retry'}</span>
+          </button>
+        </div>
+      ) : null}
       {resolution.status === 'error' && segment.type === 'work' ? (
         <div className="player-error">
           <span>{resolution.detail}</span>

@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useId, useRef, useState } from 'react';
 import { Eraser, X } from 'lucide-react';
 
 type BasicProps = {
@@ -30,6 +30,8 @@ export const Basic = ({
   placeholder = 'Add tags and press enter',
   maxTags = 24
 }: BasicProps) => {
+  const inputId = useId();
+  const inputRef = useRef<HTMLInputElement | null>(null);
   const [draft, setDraft] = useState('');
   const tags = cleanTags(value, maxTags);
 
@@ -46,10 +48,10 @@ export const Basic = ({
   return (
     <div className="maverick-tags-input-wrap">
       <div className="maverick-tags-input">
-        <label className="maverick-tags-label" htmlFor="fitness-tags-input">
+        <label className="maverick-tags-label" htmlFor={inputId}>
           {label}
         </label>
-        <div className="maverick-tags-control" onClick={() => document.getElementById('fitness-tags-input')?.focus()}>
+        <div className="maverick-tags-control" onClick={() => inputRef.current?.focus()}>
           {tags.map((itemValue) => (
             <span key={itemValue} className="maverick-tags-item">
               <span className="maverick-tags-item-preview">
@@ -61,7 +63,8 @@ export const Basic = ({
             </span>
           ))}
           <input
-            id="fitness-tags-input"
+            id={inputId}
+            ref={inputRef}
             value={draft}
             placeholder={tags.length >= maxTags ? '' : placeholder}
             className="maverick-tags-text-input"

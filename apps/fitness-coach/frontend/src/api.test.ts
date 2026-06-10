@@ -81,6 +81,8 @@ describe('Storage integration API', () => {
 
   it('loads the frontend bootstrap in one backend action without runs on the critical path', async () => {
     const fetchMock = vi.fn(async (_input: RequestInfo | URL, _init?: RequestInit) => jsonResponse({
+      workspace_id: 'default',
+      app_id: 'fitness-coach',
       state_version: '1:now:1:1:0',
       workouts: [],
       workout_summaries: [],

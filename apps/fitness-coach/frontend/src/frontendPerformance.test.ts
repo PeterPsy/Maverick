@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 
 describe('frontend performance guardrails', () => {
   const appSource = readFileSync(new URL('./App.tsx', import.meta.url), 'utf8');
+  const bootstrapCacheSource = readFileSync(new URL('./bootstrapCache.ts', import.meta.url), 'utf8');
   const sidebarSource = readFileSync(new URL('./widgets/fitness-coach-sidebar/main.tsx', import.meta.url), 'utf8');
   const packageJson = readFileSync(new URL('../../package.json', import.meta.url), 'utf8');
 
@@ -13,17 +14,31 @@ describe('frontend performance guardrails', () => {
   });
 
   it('opens the player optimistically before awaiting the atomic start response', () => {
-    const optimisticPosition = appSource.indexOf('setPlayerWorkout(workoutToStart);');
-    const startPosition = appSource.indexOf('await startWorkout(workoutToStart.id, workoutToStart);');
+    const startPosition = appSource.indexOf('const startPromise = startWorkout(workoutToStart.id, workoutToStart)');
+    const optimisticPosition = appSource.indexOf('setPlayerSession({ workout: workoutToStart, startPromise });');
+    const handledRejectionPosition = appSource.indexOf('void startPromise.catch(() => undefined);');
+    const finishGatePosition = appSource.indexOf('completeWorkoutAfterConfirmedStart({');
 
-    expect(optimisticPosition).toBeGreaterThan(0);
-    expect(startPosition).toBeGreaterThan(optimisticPosition);
+    expect(startPosition).toBeGreaterThan(0);
+    expect(handledRejectionPosition).toBeGreaterThan(startPosition);
+    expect(optimisticPosition).toBeGreaterThan(startPosition);
+    expect(finishGatePosition).toBeGreaterThan(optimisticPosition);
     expect(appSource).not.toContain('await saveWorkout(workoutToStart)');
   });
 
   it('keeps heavy tag input dependencies out of the initial bundle path', () => {
+    const tagsInputSource = readFileSync(new URL('./components/ui/tags-input.tsx', import.meta.url), 'utf8');
     expect(packageJson).not.toContain('@ark-ui/react');
-    expect(readFileSync(new URL('./components/ui/tags-input.tsx', import.meta.url), 'utf8')).not.toContain('@ark-ui/react');
+    expect(tagsInputSource).not.toContain('@ark-ui/react');
+    expect(tagsInputSource).not.toContain('id="fitness-tags-input"');
+    expect(tagsInputSource).toContain('useId');
+  });
+
+  it('uses only explicit or backend-validated workspace scopes for bootstrap cache reads', () => {
+    expect(bootstrapCacheSource).toContain('readBootstrapCacheScopeIndex');
+    expect(bootstrapCacheSource).toContain('payload.workspace_id');
+    expect(bootstrapCacheSource).toContain('if (workspaceId) return { workspaceId, appId, storageAppId };');
+    expect(bootstrapCacheSource).not.toContain("params.get('workspace_id') || params.get('workspace') || 'default'");
   });
 
   it('debounces sidebar search backend queries', () => {

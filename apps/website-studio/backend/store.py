@@ -1246,13 +1246,54 @@ def _source_tree_fingerprint(source_root: Path) -> str:
 
 
 def _latest_preview_for_route(data_root: Path, *, site_id: object, route: object) -> dict[str, object]:
+    row = _latest_route_row(data_root, table="previews", site_id=site_id, route=route)
+    return _preview_row(row) if row else {}
+
+
+def _latest_runtime_session_for_route(data_root: Path, *, site_id: object, route: object) -> dict[str, object]:
+    row = _latest_route_row(data_root, table="runtime_sessions", site_id=site_id, route=route)
+    return _runtime_session_row(row) if row else {}
+
+
+def _latest_route_row(data_root: Path, *, table: str, site_id: object, route: object):
+    if table not in {"previews", "runtime_sessions", "preview_reports"}:
+        raise ValueError(f"unsupported route lookup table `{table}`")
+    candidates = _route_lookup_candidates(route)
     ensure_schema(data_root)
     with connect(data_root) as db:
         row = db.execute(
-            "SELECT * FROM previews WHERE site_id = ? AND route = ? ORDER BY created_at DESC LIMIT 1",
-            (str(site_id), str(route or "/")),
+            f"SELECT * FROM {table} WHERE site_id = ? AND route = ? ORDER BY created_at DESC LIMIT 1",
+            (str(site_id), candidates[0]),
         ).fetchone()
-    return _preview_row(row) if row else {}
+        if row or len(candidates) == 1:
+            return row
+        placeholders = ",".join("?" for _ in candidates[1:])
+        rows = db.execute(
+            f"SELECT * FROM {table} WHERE site_id = ? AND route IN ({placeholders}) ORDER BY created_at DESC",
+            (str(site_id), *candidates[1:]),
+        ).fetchall()
+    route_key = _visual_route_key(candidates[0])
+    return next((row for row in rows if _visual_route_key(str(row["route"] or "/")) == route_key), None)
+
+
+def _route_lookup_candidates(route: object) -> list[str]:
+    raw_route = str(route or "/").strip() or "/"
+    parsed = urlparse(raw_route)
+    path = parsed.path or "/"
+    if not path.startswith("/"):
+        path = f"/{path}"
+    path = re.sub(r"/+", "/", path).rstrip("/") or "/"
+    key = _visual_route_key(path)
+    aliases = [path]
+    if key == "/":
+        aliases.extend(["/", "/index", "/index.html", "/index.htm", "/index.php"])
+    else:
+        aliases.extend([key, f"{key}.html", f"{key}.htm", f"{key}.php", f"{key}/"])
+    candidates: list[str] = []
+    for alias in aliases:
+        if alias not in candidates:
+            candidates.append(alias)
+    return candidates
 
 
 def _preview_response_from_record(
@@ -1997,12 +2038,20 @@ def _latest_preview_reports_by_route(data_root: Path, site_id: object) -> dict[s
     with connect(data_root) as db:
         rows = db.execute(
             """
-            SELECT * FROM preview_reports
-            WHERE site_id = ?
-            ORDER BY created_at DESC
-            LIMIT 100
+            SELECT report.*
+            FROM preview_reports AS report
+            JOIN (
+                SELECT route, MAX(created_at) AS latest_created_at
+                FROM preview_reports
+                WHERE site_id = ?
+                GROUP BY route
+            ) AS latest
+              ON latest.route = report.route
+             AND latest.latest_created_at = report.created_at
+            WHERE report.site_id = ?
+            ORDER BY report.created_at DESC
             """,
-            (str(site_id),),
+            (str(site_id), str(site_id)),
         ).fetchall()
     reports: dict[str, dict[str, object]] = {}
     for row in rows:
@@ -2015,8 +2064,16 @@ def _latest_preview_reports_by_route(data_root: Path, site_id: object) -> dict[s
 
 
 def _latest_preview_report_for_route(data_root: Path, site_id: object, route: object) -> dict[str, object] | None:
-    report = _preview_report_for_route(_latest_preview_reports_by_route(data_root, site_id), str(route or "/"))
-    return report or None
+    row = _latest_route_row(data_root, table="preview_reports", site_id=site_id, route=route)
+    if not row:
+        return None
+    payload = dict(row)
+    report = json.loads(payload.pop("report_json") or "{}")
+    report.setdefault("id", payload.get("id") or "")
+    report.setdefault("site_id", payload.get("site_id") or "")
+    report.setdefault("preview_id", payload.get("preview_id") or "")
+    report.setdefault("route", payload.get("route") or "/")
+    return report
 
 
 def _preview_report_for_route(reports_by_route: dict[str, dict[str, object]], route: str) -> dict[str, object]:
@@ -2877,6 +2934,9 @@ def page_context(
         selected_route = next((item for item in routes if item["id"] == clean_route_id), None)
     if selected_route is None and clean_route:
         selected_route = next((item for item in routes if item["route"] == clean_route), None)
+    if selected_route is None and clean_route:
+        clean_route_key = _visual_route_key(clean_route)
+        selected_route = next((item for item in routes if _visual_route_key(str(item.get("route") or "/")) == clean_route_key), None)
     clean_page_id = str(page_id or "").strip()
     if clean_page_id:
         selected_page = next((item for item in pages if item["id"] == clean_page_id), None)
@@ -2903,6 +2963,9 @@ def page_context(
         selected_page = next((item for item in pages if item["id"] == selected_route.get("page_id")), None)
     if selected_page is None and clean_route:
         selected_page = next((item for item in pages if item["route"] == clean_route), None)
+    if selected_page is None and clean_route:
+        clean_route_key = _visual_route_key(clean_route)
+        selected_page = next((item for item in pages if _visual_route_key(str(item.get("route") or "/")) == clean_route_key), None)
     diff_payload = diff_site(data_root, site["id"])
     return _context_payload(
         data_root,
@@ -2938,6 +3001,8 @@ def _context_payload(
     runtime_status_value = str(runtime.get("runtime_status") or preview.get("runtime_status") or "blocked")
     missing_requirements = list(runtime.get("missing_requirements") or preview.get("missing_requirements") or [])[:50]
     include_source_inventory = _truthy(include_inventory)
+    latest_preview = _latest_preview_for_route(data_root, site_id=site["id"], route=preview_route)
+    latest_runtime_session = _latest_runtime_session_for_route(data_root, site_id=site["id"], route=preview_route)
     latest_preview_report = _latest_preview_report_for_route(data_root, site["id"], preview_route)
     page_source_files = _source_files_for_visual_context(page.get("source_files", []) if page else [], include_inventory=include_source_inventory)
     route_source_files = _source_files_for_visual_context(route.get("source_files", []) if route else [], include_inventory=include_source_inventory)
@@ -2957,7 +3022,13 @@ def _context_payload(
         "title": site["display_name"],
         "site": site,
         "source_profile": source_profile_payload,
-        "runtime": _context_runtime(runtime, latest_preview_report=latest_preview_report, include_inventory=include_source_inventory),
+        "runtime": _context_runtime(
+            runtime,
+            latest_preview=latest_preview,
+            latest_runtime_session=latest_runtime_session,
+            latest_preview_report=latest_preview_report,
+            include_inventory=include_source_inventory,
+        ),
         "page_id": page["id"] if page else None,
         "route_id": route["id"] if route else None,
         "asset_id": asset["id"] if asset else None,
@@ -2998,10 +3069,14 @@ def _context_payload(
 def _context_runtime(
     runtime: dict[str, object],
     *,
+    latest_preview: dict[str, object] | None,
+    latest_runtime_session: dict[str, object] | None,
     latest_preview_report: dict[str, object] | None,
     include_inventory: bool = False,
 ) -> dict[str, object]:
     payload = deepcopy(runtime)
+    payload["latest_preview"] = deepcopy(latest_preview) if latest_preview else None
+    payload["latest_runtime_session"] = deepcopy(latest_runtime_session) if latest_runtime_session else None
     payload["latest_preview_report"] = deepcopy(latest_preview_report) if latest_preview_report else None
     if include_inventory:
         return payload
@@ -3266,8 +3341,7 @@ def _context_preview_contract(
 ) -> dict[str, object]:
     preview = _preview_contract(data_root, site, page=page, route=route)
     latest_for_route = _latest_preview_for_route(data_root, site_id=site["id"], route=route)
-    latest_preview = runtime.get("latest_preview") if isinstance(runtime.get("latest_preview"), dict) else {}
-    persisted_preview = latest_for_route or latest_preview
+    persisted_preview = latest_for_route
     if persisted_preview:
         persisted_route = str(persisted_preview.get("route") or preview.get("route") or "/")
         preview.update(

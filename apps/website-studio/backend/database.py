@@ -224,6 +224,7 @@ def ensure_schema(data_root: Path) -> None:
               created_at TEXT NOT NULL
             );
             CREATE INDEX IF NOT EXISTS idx_previews_site_created ON previews(site_id, created_at);
+            CREATE INDEX IF NOT EXISTS idx_previews_site_route_created ON previews(site_id, route, created_at);
             CREATE TABLE IF NOT EXISTS runtime_sessions (
               id TEXT PRIMARY KEY,
               site_id TEXT NOT NULL REFERENCES sites(id) ON DELETE CASCADE,
@@ -239,6 +240,7 @@ def ensure_schema(data_root: Path) -> None:
               updated_at TEXT NOT NULL
             );
             CREATE INDEX IF NOT EXISTS idx_runtime_sessions_site_created ON runtime_sessions(site_id, created_at);
+            CREATE INDEX IF NOT EXISTS idx_runtime_sessions_site_route_created ON runtime_sessions(site_id, route, created_at);
             CREATE TABLE IF NOT EXISTS preview_reports (
               id TEXT PRIMARY KEY,
               site_id TEXT NOT NULL REFERENCES sites(id) ON DELETE CASCADE,
@@ -249,6 +251,7 @@ def ensure_schema(data_root: Path) -> None:
               created_at TEXT NOT NULL
             );
             CREATE INDEX IF NOT EXISTS idx_preview_reports_site_created ON preview_reports(site_id, created_at);
+            CREATE INDEX IF NOT EXISTS idx_preview_reports_site_route_created ON preview_reports(site_id, route, created_at);
             CREATE INDEX IF NOT EXISTS idx_preview_reports_preview_created ON preview_reports(preview_id, created_at);
             CREATE TABLE IF NOT EXISTS deployments (
               id TEXT PRIMARY KEY,

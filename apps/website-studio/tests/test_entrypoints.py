@@ -2262,10 +2262,14 @@ class WebsiteStudioEntrypointTest(unittest.TestCase):
 
             status, runtime = handle_action(data_root, {"action": "runtime_status", "site_id": site_id})
             self.assertEqual(status, 200)
+            self.assertEqual(runtime["latest_preview"]["route"], "/about")
+            self.assertEqual(runtime["latest_runtime_session"]["route"], "/about")
             self.assertEqual(runtime["latest_preview_report"]["route"], "/about")
 
             status, home_context = handle_action(data_root, {"action": "page_context", "site_id": site_id, "route": "/"})
             self.assertEqual(status, 200)
+            self.assertEqual(home_context["runtime"]["latest_preview"]["route"], "/")
+            self.assertEqual(home_context["runtime"]["latest_runtime_session"]["route"], "/")
             self.assertEqual(home_context["runtime"]["latest_preview_report"]["route"], "/")
             home_visual_assets = {item["path"] for item in home_context["visual_assets"]}
             self.assertIn("assets/home.webp", home_visual_assets)
@@ -2273,8 +2277,101 @@ class WebsiteStudioEntrypointTest(unittest.TestCase):
 
             status, about_context = handle_action(data_root, {"action": "page_context", "site_id": site_id, "route": "/about"})
             self.assertEqual(status, 200)
+            self.assertEqual(about_context["runtime"]["latest_preview"]["route"], "/about")
+            self.assertEqual(about_context["runtime"]["latest_runtime_session"]["route"], "/about")
             self.assertEqual(about_context["runtime"]["latest_preview_report"]["route"], "/about")
             about_visual_assets = {item["path"] for item in about_context["visual_assets"]}
+            self.assertIn("assets/about.webp", about_visual_assets)
+            self.assertNotIn("assets/home.webp", about_visual_assets)
+
+    def test_page_context_report_lookup_is_direct_and_alias_aware(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            data_root = Path(tmp)
+            archive = BytesIO()
+            with ZipFile(archive, "w") as zip_file:
+                zip_file.writestr("index.html", '<title>Home</title><main><img src="assets/home.webp"></main>')
+                zip_file.writestr("about.html", '<title>About</title><main><img src="assets/about.webp"></main>')
+                zip_file.writestr("assets/home.webp", b"home")
+                zip_file.writestr("assets/about.webp", b"about")
+            encoded = base64.b64encode(archive.getvalue()).decode("ascii")
+            status, imported = handle_action(data_root, {"action": "import_zip", "display_name": "Report Window", "archive_base64": encoded})
+            self.assertEqual(status, 201)
+            site_id = imported["site"]["id"]
+
+            status, home_preview = handle_action(data_root, {"action": "build_preview", "site_id": site_id, "route": "/"})
+            self.assertEqual(status, 200)
+            status, home_report = handle_action(data_root, {"action": "preview_report", "preview_id": home_preview["preview_id"]})
+            self.assertEqual(status, 201)
+            self.assertEqual(home_report["report"]["route"], "/")
+
+            status, about_preview = handle_action(data_root, {"action": "build_preview", "site_id": site_id, "route": "/about"})
+            self.assertEqual(status, 200)
+            with closing(sqlite3.connect(data_root / "app.sqlite")) as db, db:
+                for index in range(101):
+                    created_at = f"2099-01-01T00:{index // 60:02d}:{index % 60:02d}+00:00"
+                    report = {
+                        "id": f"report_noise_{index:03d}",
+                        "site_id": site_id,
+                        "preview_id": about_preview["preview_id"],
+                        "route": "/about.php",
+                        "runtime_kind": "static_export",
+                        "runtime_status": "ready",
+                        "generated_at": created_at,
+                        "source_map": {
+                            "route": "/about.php",
+                            "asset_refs": ["assets/about.webp"],
+                            "asset_index": [
+                                {
+                                    "path": "assets/about.webp",
+                                    "kind": "image",
+                                    "content_type": "image/webp",
+                                    "status": "referenced",
+                                }
+                            ],
+                        },
+                        "asset_coverage": {
+                            "resolved": [
+                                {
+                                    "path": "assets/about.webp",
+                                    "requested_path": "assets/about.webp",
+                                    "kind": "image",
+                                    "content_type": "image/webp",
+                                    "status": "referenced",
+                                }
+                            ]
+                        },
+                    }
+                    db.execute(
+                        """
+                        INSERT INTO preview_reports(id, site_id, preview_id, route, status, report_json, created_at)
+                        VALUES (?, ?, ?, ?, 'passed', ?, ?)
+                        """,
+                        (report["id"], site_id, about_preview["preview_id"], report["route"], json.dumps(report, sort_keys=True), created_at),
+                    )
+
+            status, home_context = handle_action(data_root, {"action": "page_context", "site_id": site_id, "route": "/"})
+            self.assertEqual(status, 200)
+            self.assertEqual(home_context["runtime"]["latest_preview"]["route"], "/")
+            self.assertEqual(home_context["runtime"]["latest_runtime_session"]["route"], "/")
+            self.assertEqual(home_context["runtime"]["latest_preview_report"]["route"], "/")
+            home_visual_assets = {item["path"] for item in home_context["visual_assets"]}
+            self.assertIn("assets/home.webp", home_visual_assets)
+            self.assertNotIn("assets/about.webp", home_visual_assets)
+
+            status, navigation = handle_action(data_root, {"action": "navigation_analyze", "site_id": site_id})
+            self.assertEqual(status, 200)
+            self.assertTrue(navigation["analysis_coverage"]["complete"])
+            navigation_pages = {item["route"]: item for item in navigation["pages"]}
+            self.assertEqual(navigation_pages["/"]["preview_report_id"], home_report["report"]["id"])
+            self.assertEqual(navigation_pages["/about"]["preview_report_id"], "report_noise_100")
+
+            status, about_alias_context = handle_action(data_root, {"action": "page_context", "site_id": site_id, "route": "/about.html"})
+            self.assertEqual(status, 200)
+            self.assertEqual(about_alias_context["route"], "/about")
+            self.assertEqual(about_alias_context["runtime"]["latest_preview"]["route"], "/about")
+            self.assertEqual(about_alias_context["runtime"]["latest_runtime_session"]["route"], "/about")
+            self.assertEqual(about_alias_context["runtime"]["latest_preview_report"]["route"], "/about.php")
+            about_visual_assets = {item["path"] for item in about_alias_context["visual_assets"]}
             self.assertIn("assets/about.webp", about_visual_assets)
             self.assertNotIn("assets/home.webp", about_visual_assets)
 

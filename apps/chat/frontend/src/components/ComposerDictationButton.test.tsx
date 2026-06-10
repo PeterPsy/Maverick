@@ -16,6 +16,7 @@ vi.mock("../api/client", () => ({
 }));
 
 class MockMediaRecorder {
+  static instances: MockMediaRecorder[] = [];
   static stopCalls = 0;
   static isTypeSupported = vi.fn(() => true);
 
@@ -27,11 +28,16 @@ class MockMediaRecorder {
 
   constructor() {
     this.state = "inactive";
+    MockMediaRecorder.instances.push(this);
   }
 
   start() {
     this.state = "recording";
-    this.ondataavailable?.({ data: new Blob(["audio"], { type: "audio/webm" }) } as BlobEvent);
+    this.emit("audio");
+  }
+
+  emit(data: string) {
+    this.ondataavailable?.({ data: new Blob([data], { type: "audio/webm" }) } as BlobEvent);
   }
 
   stop() {
@@ -52,6 +58,7 @@ describe("ComposerDictationButton", () => {
   let originalIsSecureContext: boolean | undefined;
 
   beforeEach(() => {
+    MockMediaRecorder.instances = [];
     MockMediaRecorder.stopCalls = 0;
     originalMediaRecorder = globalThis.MediaRecorder;
     originalGetUserMedia = navigator.mediaDevices?.getUserMedia;
@@ -120,6 +127,49 @@ describe("ComposerDictationButton", () => {
     });
 
     expect(MockMediaRecorder.stopCalls).toBe(1);
-    expect(transcribeSpeechBlob).toHaveBeenCalledWith("speech", expect.any(Blob), { language: undefined, profile: "fast" });
+    expect(transcribeSpeechBlob).toHaveBeenCalledWith(
+      "speech",
+      expect.any(Blob),
+      expect.objectContaining({ chunkIndex: 0, language: undefined, profile: "fast", sessionId: expect.any(String) }),
+    );
+  });
+
+  it("streams microphone chunks through one transcription session", async () => {
+    const onError = vi.fn();
+    const onTranscript = vi.fn();
+    vi.mocked(transcribeSpeechBlob)
+      .mockResolvedValueOnce({ chunk_text: "first", language: "en", language_probability: 0.9, text: "first" })
+      .mockResolvedValueOnce({ chunk_text: "second", language: "en", language_probability: 0.9, text: "first second" });
+
+    await act(async () => {
+      root.render(
+        <ComposerDictationButton
+          disabled={false}
+          onError={onError}
+          onTranscript={onTranscript}
+          providerAppId="speech"
+          providerAvailable
+          supportedContentTypes={["audio/webm"]}
+        />,
+      );
+    });
+
+    const button = container.querySelector("button");
+    await act(async () => {
+      button?.click();
+      await Promise.resolve();
+    });
+    await act(async () => {
+      MockMediaRecorder.instances[0]?.emit("more audio");
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(transcribeSpeechBlob).toHaveBeenCalledTimes(2);
+    const firstOptions = (vi.mocked(transcribeSpeechBlob).mock.calls[0]?.[2] || {}) as { sessionId?: string };
+    const secondOptions = (vi.mocked(transcribeSpeechBlob).mock.calls[1]?.[2] || {}) as { chunkIndex?: number; profile?: string; sessionId?: string };
+    expect(secondOptions).toMatchObject({ chunkIndex: 1, profile: "fast", sessionId: firstOptions.sessionId });
+    expect(onTranscript).toHaveBeenCalledWith("first", expect.objectContaining({ chunk_text: "first" }));
+    expect(onTranscript).toHaveBeenCalledWith("second", expect.objectContaining({ chunk_text: "second" }));
   });
 });

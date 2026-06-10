@@ -98,6 +98,7 @@ export type SpeechCapabilitiesPayload = {
       max_duration_seconds?: number;
       max_inline_duration_seconds?: number;
       streaming_supported?: boolean;
+      chunked_dictation_supported?: boolean;
       language_detection?: string;
       language_hint_supported?: boolean;
       profiles?: string[];
@@ -127,6 +128,13 @@ export type SpeechTranscribePayload = {
   profile?: string;
   beam_size?: number;
   worker?: Record<string, unknown>;
+  metrics?: Record<string, unknown>;
+  commands?: Array<{ type?: string; text?: string }>;
+  session_id?: string;
+  chunk_index?: number;
+  chunk_text?: string;
+  partial?: boolean;
+  final?: boolean;
   retention?: string;
   size_bytes?: number;
 };
@@ -134,6 +142,9 @@ export type SpeechTranscribePayload = {
 export type SpeechTranscribeOptions = {
   language?: string;
   profile?: string;
+  sessionId?: string;
+  chunkIndex?: number;
+  final?: boolean;
 };
 
 export type ChatThread = {

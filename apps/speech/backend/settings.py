@@ -5,6 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from engines import (
+    faster_whisper_initial_prompt,
     faster_whisper_model_configured,
     synthesis_engine_statuses,
     transcription_engine_statuses,
@@ -82,6 +83,7 @@ def public_settings(settings: dict) -> dict:
         "transcription_engine": settings.get("transcription_engine", "auto"),
         "transcription_profile": settings.get("transcription_profile", "balanced"),
         "faster_whisper_model_configured": faster_whisper_model_configured(settings),
+        "transcription_prompt_configured": bool(faster_whisper_initial_prompt()),
         "whisper_cpp_model_configured": whisper_cpp_model_configured(),
     }
 

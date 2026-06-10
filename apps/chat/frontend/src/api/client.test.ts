@@ -3,6 +3,7 @@ import {
   ApiError,
   deleteProject,
   getSpeechCapabilities,
+  prewarmSpeechWorker,
   selectedDependencyProviderAppId,
   selectedSharedDependencyProviderAppId,
   synthesizeSpeech,
@@ -141,7 +142,7 @@ describe("speech provider client calls", () => {
     vi.unstubAllGlobals();
   });
 
-  it("calls the selected provider backend for capabilities, synthesis, and transcription", async () => {
+  it("calls the selected provider backend for capabilities, prewarm, synthesis, and transcription", async () => {
     const fetchMock = vi.fn(async (path: string, init?: RequestInit) => {
       const body = JSON.parse(String(init?.body || "{}"));
       if (body.action === "capabilities") {
@@ -162,6 +163,7 @@ describe("speech provider client calls", () => {
     await expect(getSpeechCapabilities("speech")).resolves.toMatchObject({
       interfaces: { "speech.synthesis": { available: true } },
     });
+    await expect(prewarmSpeechWorker("speech")).resolves.toMatchObject({});
     await expect(synthesizeSpeech("speech", "Hello")).resolves.toMatchObject({
       audio_base64: "UklGRg==",
     });
@@ -169,9 +171,15 @@ describe("speech provider client calls", () => {
       text: "Hello transcript",
     });
 
-    expect(fetchMock.mock.calls.map((call) => call[0])).toEqual(["/api/apps/speech/backend", "/api/apps/speech/backend", "/api/apps/speech/backend"]);
-    expect(JSON.parse(String(fetchMock.mock.calls[1]?.[1]?.body || "{}"))).toEqual({ action: "synthesize", text: "Hello" });
-    expect(JSON.parse(String(fetchMock.mock.calls[2]?.[1]?.body || "{}"))).toEqual({
+    expect(fetchMock.mock.calls.map((call) => call[0])).toEqual([
+      "/api/apps/speech/backend",
+      "/api/apps/speech/backend",
+      "/api/apps/speech/backend",
+      "/api/apps/speech/backend",
+    ]);
+    expect(JSON.parse(String(fetchMock.mock.calls[1]?.[1]?.body || "{}"))).toEqual({ action: "prewarm_worker" });
+    expect(JSON.parse(String(fetchMock.mock.calls[2]?.[1]?.body || "{}"))).toEqual({ action: "synthesize", text: "Hello" });
+    expect(JSON.parse(String(fetchMock.mock.calls[3]?.[1]?.body || "{}"))).toEqual({
       action: "transcribe_audio",
       audio_base64: "UklGRg==",
       content_type: "audio/wav",
@@ -194,13 +202,13 @@ describe("speech provider client calls", () => {
     vi.stubGlobal("fetch", fetchMock);
     const audio = new Blob(["audio"], { type: "audio/webm" });
 
-    await expect(transcribeSpeechBlob("speech", audio, { language: "it", profile: "fast" })).resolves.toMatchObject({
+    await expect(transcribeSpeechBlob("speech", audio, { chunkIndex: 2, final: true, language: "it", profile: "fast", sessionId: "chat-session" })).resolves.toMatchObject({
       text: "Hello transcript",
     });
 
     expect(fetchMock).toHaveBeenCalledTimes(1);
     const [path, init] = fetchMock.mock.calls[0] as unknown as [string, RequestInit];
-    expect(path).toBe("/api/apps/speech/backend?action=transcribe_audio&language=it&profile=fast");
+    expect(path).toBe("/api/apps/speech/backend?action=transcribe_audio&language=it&profile=fast&session_id=chat-session&chunk_index=2&final=true");
     expect(init.method).toBe("POST");
     expect(init.headers).toMatchObject({ Accept: "application/json", "Content-Type": "audio/webm" });
     expect(init.body).toBe(audio);

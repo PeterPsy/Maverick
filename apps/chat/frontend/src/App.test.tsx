@@ -15,6 +15,7 @@ import {
   listApps,
   listProviders,
   listSkills,
+  prewarmSpeechWorker,
   previewAgentPrompt,
 } from "./api/client";
 import type { AgentTypeSummary, AppDependenciesPayload, ChatThread } from "./api/client";
@@ -51,6 +52,7 @@ vi.mock("./api/client", () => ({
   listSkills: vi.fn(),
   markThreadRead: vi.fn(),
   orderChatThreads: vi.fn((threads: unknown[]) => threads),
+  prewarmSpeechWorker: vi.fn(),
   previewAgentPrompt: vi.fn(),
   selectProvider: vi.fn(),
   selectedDependencyProviderAppId: (payload: AppDependenciesPayload, alias: string) =>
@@ -184,6 +186,7 @@ beforeEach(() => {
   vi.mocked(listAgentCatalog).mockResolvedValue({ agent_types: [socialVideoAgent] });
   vi.mocked(getAgentDefinition).mockResolvedValue({ exists: true, agent_definition: socialVideoAgent });
   vi.mocked(previewAgentPrompt).mockResolvedValue({ rendered: "Agent prompt" });
+  vi.mocked(prewarmSpeechWorker).mockResolvedValue({});
 });
 
 afterEach(() => {
@@ -269,6 +272,14 @@ describe("App agent catalog dependency refresh", () => {
     capabilities.resolve({ interfaces: {} });
     await act(async () => {
       await capabilities.promise;
+    });
+  });
+
+  it("prewarms the selected speech transcription provider when capabilities are available", async () => {
+    await renderApp();
+
+    await waitForAssertion(() => {
+      expect(prewarmSpeechWorker).toHaveBeenCalledWith("speech");
     });
   });
 

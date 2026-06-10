@@ -4,10 +4,14 @@ from __future__ import annotations
 
 import base64
 from datetime import UTC, datetime
+import json
+import os
 from pathlib import Path
+import re
 import shutil
 import subprocess
 import tempfile
+import time
 import uuid
 import wave
 
@@ -48,12 +52,27 @@ CONTENT_TYPE_EXTENSIONS = {
     "video/mp4": ".mp4",
     "video/webm": ".webm",
 }
+STT_SESSION_MAX_AGE_SECONDS = 60 * 60
+STT_SESSION_ID_PATTERN = re.compile(r"^[a-zA-Z0-9][a-zA-Z0-9_.:-]{0,79}$")
+DICTATION_COMMANDS = {
+    "new line": {"type": "insert_text", "text": "\n"},
+    "newline": {"type": "insert_text", "text": "\n"},
+    "nuova riga": {"type": "insert_text", "text": "\n"},
+    "a capo": {"type": "insert_text", "text": "\n"},
+    "new paragraph": {"type": "insert_text", "text": "\n\n"},
+    "nuovo paragrafo": {"type": "insert_text", "text": "\n\n"},
+    "delete last sentence": {"type": "delete_last_sentence"},
+    "cancel last sentence": {"type": "delete_last_sentence"},
+    "cancella ultima frase": {"type": "delete_last_sentence"},
+    "cancella l ultima frase": {"type": "delete_last_sentence"},
+}
 
 
 def transcribe_audio_payload(*, data_root: Path, body: dict) -> dict:
     content_type = normalized_transcription_content_type(body.get("content_type"), operation="transcribe_audio")
     language = normalized_language(body.get("language"))
     profile = normalized_transcription_profile(body.get("profile"), operation="transcribe_audio")
+    session = normalized_transcription_session(body)
     body_file_path = str(body.get("_body_file_path") or "")
     if body_file_path:
         return transcribe_inline_body_file(
@@ -63,6 +82,7 @@ def transcribe_audio_payload(*, data_root: Path, body: dict) -> dict:
             size_bytes=int(body.get("_body_file_size_bytes") or 0),
             language=language,
             profile=profile,
+            session=session,
         )
     audio = decoded_audio(body.get("audio_base64"))
     return transcribe_bytes(
@@ -72,6 +92,7 @@ def transcribe_audio_payload(*, data_root: Path, body: dict) -> dict:
         language=language,
         profile=profile,
         source={"kind": "inline"},
+        session=session,
     )
 
 
@@ -83,6 +104,7 @@ def transcribe_inline_body_file(
     size_bytes: int,
     language: str,
     profile: str,
+    session: dict | None = None,
 ) -> dict:
     if not audio_path.exists() or not audio_path.is_file():
         raise SpeechValidationError("inline audio upload is unavailable.", operation="transcribe_audio")
@@ -99,6 +121,7 @@ def transcribe_inline_body_file(
         profile=profile,
         operation="transcribe_audio",
         source={"kind": "inline", "transport": "binary"},
+        session=session,
     )
 
 
@@ -139,7 +162,7 @@ def transcribe_file_payload(
     )
 
 
-def transcribe_bytes(*, data_root: Path, audio: bytes, content_type: str, language: str, profile: str, source: dict) -> dict:
+def transcribe_bytes(*, data_root: Path, audio: bytes, content_type: str, language: str, profile: str, source: dict, session: dict | None = None) -> dict:
     extension = CONTENT_TYPE_EXTENSIONS[content_type]
     with tempfile.TemporaryDirectory(prefix="maverick-speech-stt-") as temp_dir:
         audio_path = Path(temp_dir) / f"input{extension}"
@@ -153,6 +176,7 @@ def transcribe_bytes(*, data_root: Path, audio: bytes, content_type: str, langua
             profile=profile,
             operation="transcribe_audio",
             source=source,
+            session=session,
         )
 
 
@@ -166,6 +190,7 @@ def transcribe_path(
     operation: str,
     source: dict,
     profile: str = "",
+    session: dict | None = None,
 ) -> dict:
     preflight_duration_seconds = probe_audio_duration_seconds(audio_path, content_type=content_type)
     validate_audio_duration(preflight_duration_seconds, operation=operation)
@@ -173,11 +198,24 @@ def transcribe_path(
     if profile:
         settings = {**settings, "transcription_profile": profile}
     settings["_data_root"] = str(data_root)
+    transcription_started = time.monotonic()
     result = transcribe_audio_file(audio_path, settings=settings, language=language)
-    cleaned_text = cleaned_transcript(str(result.get("text") or ""))
+    transcription_seconds = time.monotonic() - transcription_started
+    post_processed = post_process_transcript(str(result.get("text") or ""))
+    cleaned_text = str(post_processed.get("text") or "")
+    commands = [item for item in post_processed.get("commands", []) if isinstance(item, dict)]
     duration_seconds = float(result.get("duration_seconds") or preflight_duration_seconds or 0.0)
     validate_audio_duration(duration_seconds, operation=operation)
-    segments = [segment for segment in result.get("segments", []) if str(segment.get("text") or "").strip()]
+    segments = normalized_segments(result.get("segments", []))
+    metrics = transcription_metrics(result=result, transcription_seconds=transcription_seconds, duration_seconds=duration_seconds)
+    session_payload = apply_transcription_session(
+        data_root,
+        session=session,
+        chunk_text=cleaned_text,
+        commands=commands,
+        segments=segments,
+    )
+    public_text = str(session_payload.get("text") if session_payload else cleaned_text)
     job_id = f"stt_{uuid.uuid4().hex}"
     created_at = datetime.now(tz=UTC).isoformat()
     append_job(
@@ -192,10 +230,13 @@ def transcribe_path(
             "content_type": content_type,
             "size_bytes": size_bytes,
             "duration_seconds": duration_seconds,
-            "transcript_chars": len(cleaned_text),
+            "transcript_chars": len(public_text),
+            "chunk_transcript_chars": len(cleaned_text),
             "profile": str(result.get("profile") or ""),
             "beam_size": int(result.get("beam_size") or 0),
             "worker": result.get("worker") if isinstance(result.get("worker"), dict) else {},
+            "metrics": metrics,
+            "session": public_session_metadata(session_payload),
             "source": source,
             "retention": "metadata_only",
         },
@@ -203,7 +244,9 @@ def transcribe_path(
     return {
         "job_id": job_id,
         "created_at": created_at,
-        "text": cleaned_text,
+        "text": public_text,
+        "chunk_text": cleaned_text,
+        "commands": commands,
         "segments": segments,
         "language": str(result.get("language") or language or ""),
         "language_probability": float(result.get("language_probability") or 0.0),
@@ -213,9 +256,52 @@ def transcribe_path(
         "profile": str(result.get("profile") or ""),
         "beam_size": int(result.get("beam_size") or 0),
         "worker": result.get("worker") if isinstance(result.get("worker"), dict) else {},
+        "metrics": metrics,
+        **session_payload,
         "content_type": content_type,
         "size_bytes": size_bytes,
         "retention": "metadata_only",
+    }
+
+
+def normalized_segments(value: object) -> list[dict]:
+    segments: list[dict] = []
+    if not isinstance(value, list):
+        return segments
+    for segment in value:
+        if not isinstance(segment, dict):
+            continue
+        text = cleaned_transcript(str(segment.get("text") or ""))
+        if not text.strip():
+            continue
+        segments.append(
+            {
+                "start": float(segment.get("start") or 0.0),
+                "end": float(segment.get("end") or 0.0),
+                "text": text,
+            }
+        )
+    return segments
+
+
+def transcription_metrics(*, result: dict, transcription_seconds: float, duration_seconds: float) -> dict:
+    worker = result.get("worker") if isinstance(result.get("worker"), dict) else {}
+    model_load_seconds = float(worker.get("model_load_seconds") or worker.get("startup_model_load_seconds") or 0.0)
+    realtime_factor = transcription_seconds / duration_seconds if duration_seconds > 0 else 0.0
+    return {
+        "transcription_seconds": round(max(0.0, transcription_seconds), 6),
+        "audio_duration_seconds": round(max(0.0, duration_seconds), 6),
+        "realtime_factor": round(max(0.0, realtime_factor), 6),
+        "cold_start": bool(worker.get("cold_start")),
+        "model_load_seconds": round(max(0.0, model_load_seconds), 6),
+    }
+
+
+def public_session_metadata(session_payload: dict) -> dict:
+    return {
+        key: session_payload[key]
+        for key in ("session_id", "chunk_index", "partial", "final")
+        if key in session_payload
     }
 
 
@@ -344,12 +430,196 @@ def normalized_transcription_profile(value: object, *, operation: str) -> str:
     return profile
 
 
+def normalized_transcription_session(body: dict) -> dict | None:
+    session_id = str(body.get("session_id") or body.get("dictation_session_id") or "").strip()
+    if not session_id:
+        return None
+    if not STT_SESSION_ID_PATTERN.match(session_id):
+        raise SpeechValidationError("session_id must be a short dictation session identifier.", operation="transcribe_audio")
+    try:
+        chunk_index = int(body.get("chunk_index") or 0)
+    except (TypeError, ValueError) as error:
+        raise SpeechValidationError("chunk_index must be an integer.", operation="transcribe_audio") from error
+    if chunk_index < 0:
+        raise SpeechValidationError("chunk_index must not be negative.", operation="transcribe_audio")
+    return {
+        "session_id": session_id,
+        "chunk_index": chunk_index,
+        "final": truthy(body.get("final", body.get("is_final", False))),
+    }
+
+
+def truthy(value: object) -> bool:
+    if isinstance(value, bool):
+        return value
+    return str(value or "").strip().lower() in {"1", "true", "yes", "on", "final"}
+
+
 def cleaned_transcript(text: str) -> str:
-    transcript = " ".join(text.replace("\r\n", "\n").replace("\r", "\n").split()).strip()
+    return str(post_process_transcript(text).get("text") or "")
+
+
+def post_process_transcript(text: str) -> dict:
+    transcript = normalized_transcript_text(text)
     normalized = transcript.lower().strip(" .!?")
     if normalized in HALLUCINATION_TRANSCRIPTS:
+        return {"text": "", "commands": []}
+    command = dictation_command(transcript)
+    if command:
+        return {"text": str(command.get("text") or ""), "commands": [command]}
+    transcript = remove_adjacent_repeated_words(clean_punctuation_spacing(transcript))
+    return {"text": transcript, "commands": []}
+
+
+def normalized_transcript_text(text: str) -> str:
+    return " ".join(text.replace("\r\n", "\n").replace("\r", "\n").split()).strip()
+
+
+def dictation_command(text: str) -> dict:
+    key = re.sub(r"['’]", " ", text.lower())
+    key = re.sub(r"[^a-zàèéìòù0-9 ]+", " ", key)
+    key = " ".join(key.split())
+    command = DICTATION_COMMANDS.get(key)
+    return dict(command) if command else {}
+
+
+def clean_punctuation_spacing(text: str) -> str:
+    cleaned = re.sub(r"\s+([,.;:!?])", r"\1", text)
+    cleaned = re.sub(r"([,;:!?])(?=\S)", r"\1 ", cleaned)
+    cleaned = re.sub(r"\s{2,}", " ", cleaned)
+    return cleaned.strip()
+
+
+def remove_adjacent_repeated_words(text: str) -> str:
+    words = text.split()
+    if len(words) < 2:
+        return text
+    result: list[str] = []
+    previous_normalized = ""
+    repeat_count = 0
+    for word in words:
+        normalized = word.strip(".,;:!?").lower()
+        if normalized and normalized == previous_normalized:
+            repeat_count += 1
+            if len(normalized) > 2 or repeat_count > 1:
+                trailing_punctuation = re.search(r"([,.;:!?]+)$", word)
+                if trailing_punctuation and result and not result[-1].endswith(tuple(",.;:!?")):
+                    result[-1] = f"{result[-1]}{trailing_punctuation.group(1)}"
+                continue
+        else:
+            previous_normalized = normalized
+            repeat_count = 0
+        result.append(word)
+    return " ".join(result).strip()
+
+
+def apply_transcription_session(
+    data_root: Path,
+    *,
+    session: dict | None,
+    chunk_text: str,
+    commands: list[dict],
+    segments: list[dict],
+) -> dict:
+    if not session:
+        return {}
+    cleanup_transcription_sessions(data_root)
+    session_id = str(session["session_id"])
+    chunk_index = int(session["chunk_index"])
+    final = bool(session["final"])
+    state = read_transcription_session(data_root, session_id)
+    text = str(state.get("text") or "")
+    if any(command.get("type") == "delete_last_sentence" for command in commands):
+        text = delete_last_sentence(text)
+    elif chunk_text:
+        text = append_dictation_text(text, chunk_text)
+    chunks = state.get("chunks") if isinstance(state.get("chunks"), list) else []
+    chunks.append({"chunk_index": chunk_index, "text_chars": len(chunk_text), "segments": len(segments)})
+    state = {"schema_version": "1", "session_id": session_id, "text": text, "chunks": chunks[-200:]}
+    if final:
+        remove_transcription_session(data_root, session_id)
+    else:
+        write_transcription_session(data_root, session_id, state)
+    return {
+        "session_id": session_id,
+        "chunk_index": chunk_index,
+        "partial": not final,
+        "final": final,
+        "text": text,
+        "chunk_text": chunk_text,
+    }
+
+
+def append_dictation_text(existing: str, insertion: str) -> str:
+    if not insertion:
+        return existing
+    if not existing:
+        return insertion
+    if insertion.startswith("\n") or existing.endswith(("\n", " ", "\t")):
+        return f"{existing}{insertion}"
+    if insertion[:1] in {".", ",", ";", ":", "!", "?"}:
+        return f"{existing}{insertion}"
+    return f"{existing} {insertion}"
+
+
+def delete_last_sentence(text: str) -> str:
+    stripped = text.rstrip()
+    if not stripped:
         return ""
-    return transcript
+    search_end = len(stripped) - 1
+    if stripped[search_end] in ".!?":
+        search_end -= 1
+    for index in range(search_end, -1, -1):
+        if stripped[index] in ".!?\n":
+            return stripped[: index + 1].rstrip()
+    return ""
+
+
+def transcription_session_path(data_root: Path, session_id: str) -> Path:
+    return data_root / "run" / "stt-sessions" / f"{session_id}.json"
+
+
+def read_transcription_session(data_root: Path, session_id: str) -> dict:
+    path = transcription_session_path(data_root, session_id)
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except (FileNotFoundError, json.JSONDecodeError):
+        return {"schema_version": "1", "session_id": session_id, "text": "", "chunks": []}
+    return payload if isinstance(payload, dict) else {"schema_version": "1", "session_id": session_id, "text": "", "chunks": []}
+
+
+def write_transcription_session(data_root: Path, session_id: str, payload: dict) -> None:
+    path = transcription_session_path(data_root, session_id)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    temp_path = path.with_name(f".{path.name}.{os.getpid()}.tmp")
+    try:
+        temp_path.write_text(json.dumps(payload, ensure_ascii=False, sort_keys=True), encoding="utf-8")
+        os.replace(temp_path, path)
+    finally:
+        try:
+            temp_path.unlink()
+        except FileNotFoundError:
+            pass
+
+
+def remove_transcription_session(data_root: Path, session_id: str) -> None:
+    try:
+        transcription_session_path(data_root, session_id).unlink()
+    except FileNotFoundError:
+        pass
+
+
+def cleanup_transcription_sessions(data_root: Path) -> None:
+    session_dir = data_root / "run" / "stt-sessions"
+    if not session_dir.exists():
+        return
+    now = time.time()
+    for path in session_dir.glob("*.json"):
+        try:
+            if now - path.stat().st_mtime > STT_SESSION_MAX_AGE_SECONDS:
+                path.unlink()
+        except FileNotFoundError:
+            continue
 
 
 def resolve_workspace_audio_path(

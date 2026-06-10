@@ -44,6 +44,11 @@ type UseComposerEditorParams = {
   value: string;
 };
 
+type DictationCommand = {
+  text?: string;
+  type?: string;
+};
+
 export function useComposerEditor({
   caretIndex,
   clearDismissedMention,
@@ -115,20 +120,50 @@ export function useComposerEditor({
     });
   }
 
-  function insertDictationTranscript(text: string) {
-    const transcript = text.trim();
+  function insertDictationTranscript(text: string, result?: { commands?: DictationCommand[] }) {
+    const commands = result?.commands || [];
+    const commandHandled = applyDictationCommands(commands);
+    const transcript = normalizedDictationInsertion(text || insertionTextFromCommands(commands));
     if (!transcript) {
+      if (commandHandled) {
+        return;
+      }
       setDictationError("No speech detected.");
       return;
     }
     const editor = editorRef.current;
     if (!editor) {
-      const prefix = value && !/\s$/.test(value) ? " " : "";
+      const prefix = value && !/\s$/.test(value) && !transcript.startsWith("\n") ? " " : "";
       onChange(`${value}${prefix}${transcript}`);
       return;
     }
-    const suffix = value && caretIndex < value.length && !/\s$/.test(transcript) ? " " : "";
+    const suffix = value && caretIndex < value.length && !/\s$/.test(transcript) && !transcript.endsWith("\n") ? " " : "";
     replaceComposerSelectionWithText(editor, `${transcript}${suffix}`);
+  }
+
+  function applyDictationCommands(commands: DictationCommand[]): boolean {
+    if (!commands.some((command) => command.type === "delete_last_sentence")) {
+      return false;
+    }
+    const editor = editorRef.current;
+    const currentValue = editor ? composerText(editor) : value;
+    const selection = editor ? composerSelectionOffsets(editor) : { start: currentValue.length, end: currentValue.length };
+    const before = deleteLastSentence(currentValue.slice(0, selection.start));
+    const nextValue = `${before}${currentValue.slice(selection.end)}`;
+    pendingCaretIndexRef.current = before.length;
+    onChange(nextValue);
+    setCaretIndex(before.length);
+    clearDismissedMention();
+    requestAnimationFrame(() => {
+      const nextEditor = editorRef.current;
+      if (!nextEditor) {
+        return;
+      }
+      nextEditor.focus();
+      setComposerCaret(nextEditor, before.length);
+      scrollComposerCaretIntoView(nextEditor);
+    });
+    return true;
   }
 
   function onComposerKeyDown(event: KeyboardEvent<HTMLDivElement>) {
@@ -228,4 +263,33 @@ export function useComposerEditor({
     syncCaret,
     updateComposerFromEditor,
   };
+}
+
+function insertionTextFromCommands(commands: DictationCommand[]): string {
+  const insertCommand = commands.find((command) => command.type === "insert_text" && typeof command.text === "string");
+  return insertCommand?.text || "";
+}
+
+function normalizedDictationInsertion(text: string): string {
+  if (text === "\n" || text === "\n\n") {
+    return text;
+  }
+  return text.trim();
+}
+
+function deleteLastSentence(text: string): string {
+  const stripped = text.replace(/\s+$/g, "");
+  if (!stripped) {
+    return "";
+  }
+  let searchIndex = stripped.length - 1;
+  if (/[.!?]/.test(stripped[searchIndex] || "")) {
+    searchIndex -= 1;
+  }
+  for (let index = searchIndex; index >= 0; index -= 1) {
+    if (/[.!?\n]/.test(stripped[index] || "")) {
+      return stripped.slice(0, index + 1).replace(/\s+$/g, "");
+    }
+  }
+  return "";
 }

@@ -1,4 +1,4 @@
-import { useCallback, useState } from "react";
+import { useCallback, useRef, useState } from "react";
 import {
   AppDependenciesPayload,
   AgentTypeSummary,
@@ -6,6 +6,7 @@ import {
   getSpeechCapabilities,
   listAgentCatalog,
   listProviders,
+  prewarmSpeechWorker,
   ProviderItem,
   selectedDependencyProviderAppId,
   selectedSharedDependencyProviderAppId,
@@ -37,6 +38,7 @@ export function useChatDependencies() {
   const [transcriptionContentTypes, setTranscriptionContentTypes] = useState<string[]>([]);
   const [agentOptions, setAgentOptions] = useState<AgentTypeSummary[]>([]);
   const [selectedAgentTypeId, setSelectedAgentTypeId] = useState("");
+  const prewarmedTranscriptionProviderRef = useRef("");
 
   const clearAgentOptions = useCallback(() => {
     clearAgentRuntimeConfigCache();
@@ -116,6 +118,7 @@ export function useChatDependencies() {
     setTranscriptionMaxAudioBytes(0);
     setTranscriptionMaxDurationSeconds(0);
     setTranscriptionContentTypes([]);
+    prewarmedTranscriptionProviderRef.current = "";
   }, []);
 
   const loadTranscriptionProviderFromDependencies = useCallback(
@@ -132,8 +135,9 @@ export function useChatDependencies() {
           clearTranscriptionProvider();
           return;
         }
+        const providerAvailable = Boolean(transcription.available && transcription.provider_available !== false);
         setTranscriptionProviderAppId(providerAppId);
-        setTranscriptionProviderAvailable(Boolean(transcription.available && transcription.provider_available !== false));
+        setTranscriptionProviderAvailable(providerAvailable);
         setTranscriptionMaxAudioBytes(
           typeof transcription.max_inline_audio_bytes === "number" && transcription.max_inline_audio_bytes > 0
             ? transcription.max_inline_audio_bytes
@@ -149,6 +153,12 @@ export function useChatDependencies() {
               : 0,
         );
         setTranscriptionContentTypes(Array.isArray(transcription.content_types) ? transcription.content_types.filter((item) => typeof item === "string") : []);
+        if (providerAvailable && prewarmedTranscriptionProviderRef.current !== providerAppId) {
+          prewarmedTranscriptionProviderRef.current = providerAppId;
+          void prewarmSpeechWorker(providerAppId).catch(() => {
+            prewarmedTranscriptionProviderRef.current = "";
+          });
+        }
       } catch {
         clearTranscriptionProvider();
       }

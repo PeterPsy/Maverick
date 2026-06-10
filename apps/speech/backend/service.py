@@ -198,6 +198,7 @@ def capabilities_payload(data_root: Path) -> dict:
                 "max_duration_seconds": MAX_TRANSCRIPTION_SECONDS,
                 "max_inline_duration_seconds": MAX_INLINE_TRANSCRIPTION_SECONDS,
                 "streaming_supported": False,
+                "chunked_dictation_supported": True,
                 "language_detection": "auto",
                 "language_hint_supported": True,
                 "profiles": ["fast", "balanced", "accurate"],

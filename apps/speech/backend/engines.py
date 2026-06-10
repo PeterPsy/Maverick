@@ -30,6 +30,8 @@ from models import (
     DEFAULT_INLINE_TRANSCRIPTION_PROFILE,
     DEFAULT_TRANSCRIPTION_PROFILE,
     TRANSCRIPTION_PROFILE_BEAM_SIZES,
+    TRANSCRIPTION_PROFILE_COMPUTE_TYPE_DEFAULTS,
+    TRANSCRIPTION_PROFILE_DEVICE_DEFAULTS,
     TRANSCRIPTION_PROFILE_MODELS,
     TTS_CACHE_HASH_MAX_BYTES,
 )
@@ -39,6 +41,7 @@ WHISPER_CPP_BINARY_CANDIDATES = ("whisper-cli", "main")
 FASTER_WHISPER_TIMEOUT_SECONDS = 240
 FASTER_WHISPER_QUEUE_TIMEOUT_SECONDS = 5
 FASTER_WHISPER_WORKER_START_TIMEOUT_SECONDS = 20
+FASTER_WHISPER_INITIAL_PROMPT_MAX_CHARS = 2000
 PIPER_TTS_TIMEOUT_SECONDS = 60
 PIPER_WORKER_START_TIMEOUT_SECONDS = 20
 SYNTHESIS_DISCOVERY_CACHE_SECONDS = 10
@@ -388,9 +391,14 @@ def faster_whisper_model_ref(settings: dict | None = None) -> str:
     if configured:
         return configured
     global_configured = os.environ.get("MAVERICK_SPEECH_FASTER_WHISPER_MODEL", "").strip()
-    if global_configured:
+    if global_configured and (profile == DEFAULT_TRANSCRIPTION_PROFILE or faster_whisper_global_model_applies_to_all_profiles()):
         return global_configured
     return transcription_profile_model(settings)
+
+
+def faster_whisper_global_model_applies_to_all_profiles() -> bool:
+    value = os.environ.get("MAVERICK_SPEECH_FASTER_WHISPER_GLOBAL_MODEL_ALL_PROFILES", "").strip().lower()
+    return value in {"1", "true", "yes", "on"}
 
 
 def transcription_profile(settings: dict | None = None) -> str:
@@ -412,12 +420,36 @@ def faster_whisper_beam_size(settings: dict | None = None) -> int:
     return TRANSCRIPTION_PROFILE_BEAM_SIZES[transcription_profile(settings)]
 
 
-def faster_whisper_device() -> str:
-    return os.environ.get("MAVERICK_SPEECH_FASTER_WHISPER_DEVICE", DEFAULT_FASTER_WHISPER_DEVICE).strip() or DEFAULT_FASTER_WHISPER_DEVICE
+def faster_whisper_device(settings: dict | None = None) -> str:
+    configured = os.environ.get("MAVERICK_SPEECH_FASTER_WHISPER_DEVICE", "").strip()
+    if configured:
+        return configured
+    return TRANSCRIPTION_PROFILE_DEVICE_DEFAULTS.get(transcription_profile(settings), DEFAULT_FASTER_WHISPER_DEVICE)
 
 
-def faster_whisper_compute_type() -> str:
-    return os.environ.get("MAVERICK_SPEECH_FASTER_WHISPER_COMPUTE_TYPE", DEFAULT_FASTER_WHISPER_COMPUTE_TYPE).strip() or DEFAULT_FASTER_WHISPER_COMPUTE_TYPE
+def faster_whisper_compute_type(settings: dict | None = None) -> str:
+    configured = os.environ.get("MAVERICK_SPEECH_FASTER_WHISPER_COMPUTE_TYPE", "").strip()
+    if configured:
+        return configured
+    return TRANSCRIPTION_PROFILE_COMPUTE_TYPE_DEFAULTS.get(transcription_profile(settings), DEFAULT_FASTER_WHISPER_COMPUTE_TYPE)
+
+
+def faster_whisper_initial_prompt() -> str:
+    prompt = os.environ.get("MAVERICK_SPEECH_TRANSCRIPTION_PROMPT", "").strip()
+    glossary = os.environ.get("MAVERICK_SPEECH_TRANSCRIPTION_GLOSSARY", "").strip()
+    glossary_file = os.environ.get("MAVERICK_SPEECH_TRANSCRIPTION_GLOSSARY_FILE", "").strip()
+    if glossary_file:
+        try:
+            glossary_from_file = Path(glossary_file).expanduser().read_text(encoding="utf-8").strip()
+        except OSError:
+            glossary_from_file = ""
+        glossary = "\n".join(item for item in (glossary, glossary_from_file) if item)
+    parts = []
+    if prompt:
+        parts.append(prompt)
+    if glossary:
+        parts.append(f"Prefer these workspace terms, names, apps, and commands: {glossary}")
+    return "\n".join(parts).strip()[:FASTER_WHISPER_INITIAL_PROMPT_MAX_CHARS]
 
 
 def faster_whisper_model_label(settings: dict | None = None) -> str:
@@ -431,7 +463,9 @@ def faster_whisper_model_source(settings: dict | None = None) -> str:
     profile = transcription_profile(settings)
     if os.environ.get(f"MAVERICK_SPEECH_FASTER_WHISPER_{profile.upper()}_MODEL", "").strip():
         return "profile_env"
-    if os.environ.get("MAVERICK_SPEECH_FASTER_WHISPER_MODEL", "").strip():
+    if os.environ.get("MAVERICK_SPEECH_FASTER_WHISPER_MODEL", "").strip() and (
+        profile == DEFAULT_TRANSCRIPTION_PROFILE or faster_whisper_global_model_applies_to_all_profiles()
+    ):
         return "global_env"
     return "profile_default"
 
@@ -504,6 +538,9 @@ def transcription_engine_statuses(settings: dict) -> list[dict]:
             "model_source": faster_whisper_model_source(settings),
             "profile": transcription_profile(settings),
             "beam_size": faster_whisper_beam_size(settings),
+            "device": faster_whisper_device(settings),
+            "compute_type": faster_whisper_compute_type(settings),
+            "initial_prompt_configured": bool(faster_whisper_initial_prompt()),
             "local_files_only": True,
             "persistent_worker": persistent_faster_whisper_worker_enabled(),
             "worker_mode": faster_whisper_worker_mode(),
@@ -830,11 +867,12 @@ def _transcribe_with_faster_whisper(audio_path: Path, *, settings: dict, languag
     config = {
         "model": faster_whisper_model_ref(settings),
         "model_label": faster_whisper_model_label(settings),
-        "device": faster_whisper_device(),
-        "compute_type": faster_whisper_compute_type(),
+        "device": faster_whisper_device(settings),
+        "compute_type": faster_whisper_compute_type(settings),
         "profile": transcription_profile(settings),
         "beam_size": faster_whisper_beam_size(settings),
         "data_root": str(settings.get("_data_root") or ""),
+        "initial_prompt": faster_whisper_initial_prompt(),
     }
     payload = _run_faster_whisper_worker_job(str(audio_path), config=config, language=language)
     if not payload.get("ok"):
@@ -904,7 +942,14 @@ def strict_persistent_faster_whisper_worker_enabled() -> bool:
 def _run_external_faster_whisper_worker_job(audio_path: str, *, config: dict, language: str) -> dict:
     paths = _external_faster_whisper_worker_paths(config)
     _ensure_external_faster_whisper_worker(config, socket_path=paths["socket"], pid_path=paths["pid"], lock_path=paths["lock"])
-    return _send_external_faster_whisper_job(paths["socket"], {"audio_path": audio_path, "language": language})
+    return _send_external_faster_whisper_job(
+        paths["socket"],
+        {
+            "audio_path": audio_path,
+            "language": language,
+            "initial_prompt": str(config.get("initial_prompt") or ""),
+        },
+    )
 
 
 def _external_faster_whisper_worker_paths(config: dict) -> dict[str, Path]:
@@ -1088,11 +1133,12 @@ def _faster_whisper_runtime_config(data_root: Path, settings: dict | None = None
     return {
         "model": faster_whisper_model_ref(settings),
         "model_label": faster_whisper_model_label(settings),
-        "device": faster_whisper_device(),
-        "compute_type": faster_whisper_compute_type(),
+        "device": faster_whisper_device(settings),
+        "compute_type": faster_whisper_compute_type(settings),
         "profile": transcription_profile(settings),
         "beam_size": faster_whisper_beam_size(settings),
         "data_root": str(data_root),
+        "initial_prompt": faster_whisper_initial_prompt(),
     }
 
 
@@ -1367,6 +1413,7 @@ def _run_faster_whisper_with_model(model: object, audio_path: Path, *, config: d
         segments_iter, info = model.transcribe(
             str(audio_path),
             language=language or None,
+            initial_prompt=str(config.get("initial_prompt") or "") or None,
             vad_filter=True,
             beam_size=int(config.get("beam_size") or 1),
             word_timestamps=False,

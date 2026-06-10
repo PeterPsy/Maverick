@@ -59,6 +59,16 @@ TRANSCRIPTION_PROFILE_BEAM_SIZES = {
     "balanced": 5,
     "accurate": 5,
 }
+TRANSCRIPTION_PROFILE_DEVICE_DEFAULTS = {
+    "fast": "cpu",
+    "balanced": "auto",
+    "accurate": "auto",
+}
+TRANSCRIPTION_PROFILE_COMPUTE_TYPE_DEFAULTS = {
+    "fast": "int8",
+    "balanced": "default",
+    "accurate": "default",
+}
 DEFAULT_FASTER_WHISPER_MODEL = TRANSCRIPTION_PROFILE_MODELS[DEFAULT_TRANSCRIPTION_PROFILE]
 DEFAULT_FASTER_WHISPER_DEVICE = "auto"
 DEFAULT_FASTER_WHISPER_COMPUTE_TYPE = "default"

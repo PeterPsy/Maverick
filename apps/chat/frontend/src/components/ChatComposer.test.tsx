@@ -567,7 +567,11 @@ describe("ChatComposer reference search", () => {
       await Promise.resolve();
     });
     await waitForComposerAssertion(() => {
-      expect(transcribeSpeechBlob).toHaveBeenCalledWith("speech", expect.any(Blob), { language: undefined, profile: "fast" });
+      expect(transcribeSpeechBlob).toHaveBeenCalledWith(
+        "speech",
+        expect.any(Blob),
+        expect.objectContaining({ chunkIndex: 0, language: undefined, profile: "fast", sessionId: expect.any(String) }),
+      );
       expect(getValue()).toBe("Hello transcript");
     });
 
@@ -614,8 +618,18 @@ describe("ChatComposer reference search", () => {
     });
 
     await waitForComposerAssertion(() => {
-      expect(transcribeSpeechBlob).toHaveBeenNthCalledWith(1, "speech", expect.any(Blob), { language: undefined, profile: "fast" });
-      expect(transcribeSpeechBlob).toHaveBeenNthCalledWith(2, "speech", expect.any(Blob), { language: "it", profile: "fast" });
+      expect(transcribeSpeechBlob).toHaveBeenNthCalledWith(
+        1,
+        "speech",
+        expect.any(Blob),
+        expect.objectContaining({ chunkIndex: 0, language: undefined, profile: "fast", sessionId: expect.any(String) }),
+      );
+      expect(transcribeSpeechBlob).toHaveBeenNthCalledWith(
+        2,
+        "speech",
+        expect.any(Blob),
+        expect.objectContaining({ chunkIndex: 0, language: "it", profile: "fast", sessionId: expect.any(String) }),
+      );
     });
 
     await act(async () => {
@@ -629,7 +643,12 @@ describe("ChatComposer reference search", () => {
     });
 
     await waitForComposerAssertion(() => {
-      expect(transcribeSpeechBlob).toHaveBeenNthCalledWith(3, "speech", expect.any(Blob), { language: undefined, profile: "fast" });
+      expect(transcribeSpeechBlob).toHaveBeenNthCalledWith(
+        3,
+        "speech",
+        expect.any(Blob),
+        expect.objectContaining({ chunkIndex: 0, language: undefined, profile: "fast", sessionId: expect.any(String) }),
+      );
     });
   });
 

@@ -17,6 +17,14 @@ export function synthesizeSpeech(providerAppId: string, text: string): Promise<S
   });
 }
 
+export function prewarmSpeechWorker(providerAppId: string): Promise<unknown> {
+  return requestJson<unknown>(`/api/apps/${encodeURIComponent(providerAppId)}/backend`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ action: "prewarm_worker" }),
+  });
+}
+
 export function transcribeSpeech(
   providerAppId: string,
   audioBase64: string,
@@ -30,6 +38,15 @@ export function transcribeSpeech(
   }
   if (options.profile) {
     body.profile = options.profile;
+  }
+  if (options.sessionId) {
+    body.session_id = options.sessionId;
+  }
+  if (typeof options.chunkIndex === "number") {
+    body.chunk_index = String(options.chunkIndex);
+  }
+  if (typeof options.final === "boolean") {
+    body.final = options.final ? "true" : "false";
   }
   return requestJson<SpeechTranscribePayload>(`/api/apps/${encodeURIComponent(providerAppId)}/backend`, {
     method: "POST",
@@ -50,6 +67,15 @@ export function transcribeSpeechBlob(
   }
   if (options.profile) {
     params.set("profile", options.profile);
+  }
+  if (options.sessionId) {
+    params.set("session_id", options.sessionId);
+  }
+  if (typeof options.chunkIndex === "number") {
+    params.set("chunk_index", String(options.chunkIndex));
+  }
+  if (typeof options.final === "boolean") {
+    params.set("final", options.final ? "true" : "false");
   }
   return requestJson<SpeechTranscribePayload>(`/api/apps/${encodeURIComponent(providerAppId)}/backend?${params.toString()}`, {
     method: "POST",

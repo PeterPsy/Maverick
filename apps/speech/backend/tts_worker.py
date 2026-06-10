@@ -13,7 +13,7 @@ import sys
 import time
 import wave
 
-DEFAULT_IDLE_TIMEOUT_SECONDS = 15 * 60
+DEFAULT_IDLE_TIMEOUT_SECONDS = 6 * 60 * 60
 
 
 def main() -> None:
@@ -128,6 +128,7 @@ def _load_piper_voice(config: dict) -> object:
 def _synthesize_wav(voice: object, text: str) -> bytes:
     buffer = io.BytesIO()
     with wave.open(buffer, "wb") as wav_file:
+        _prepare_piper_wav_file(voice, wav_file)
         voice.synthesize(text, wav_file)
     return buffer.getvalue()
 
@@ -137,6 +138,7 @@ def _synthesize_wav_file(voice: object, text: str, output_path: Path) -> int:
     temp_path = output_path.with_name(f".{output_path.name}.{os.getpid()}.tmp")
     try:
         with wave.open(str(temp_path), "wb") as wav_file:
+            _prepare_piper_wav_file(voice, wav_file)
             voice.synthesize(text, wav_file)
         os.replace(temp_path, output_path)
     finally:
@@ -145,6 +147,51 @@ def _synthesize_wav_file(voice: object, text: str, output_path: Path) -> int:
         except FileNotFoundError:
             pass
     return output_path.stat().st_size
+
+
+def _prepare_piper_wav_file(voice: object, wav_file: wave.Wave_write) -> None:
+    wav_file.setnchannels(_piper_voice_channels(voice))
+    wav_file.setsampwidth(_piper_voice_sample_width(voice))
+    wav_file.setframerate(_piper_voice_sample_rate(voice))
+
+
+def _piper_voice_channels(voice: object) -> int:
+    value = _piper_voice_config_value(voice, "num_channels", "channels")
+    try:
+        channels = int(value)
+    except (TypeError, ValueError):
+        channels = 1
+    return max(1, channels)
+
+
+def _piper_voice_sample_width(voice: object) -> int:
+    value = _piper_voice_config_value(voice, "sample_width", "sample_width_bytes")
+    try:
+        sample_width = int(value)
+    except (TypeError, ValueError):
+        sample_width = 2
+    return max(1, sample_width)
+
+
+def _piper_voice_sample_rate(voice: object) -> int:
+    value = _piper_voice_config_value(voice, "sample_rate")
+    try:
+        sample_rate = int(value)
+    except (TypeError, ValueError):
+        sample_rate = 22050
+    return max(8000, sample_rate)
+
+
+def _piper_voice_config_value(voice: object, *names: str) -> object:
+    for owner in (voice, getattr(voice, "config", None)):
+        if owner is None:
+            continue
+        for name in names:
+            if isinstance(owner, dict) and name in owner:
+                return owner[name]
+            if hasattr(owner, name):
+                return getattr(owner, name)
+    return None
 
 
 def _read_request(connection: socket.socket) -> dict:

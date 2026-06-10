@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import base64
 from concurrent.futures import ThreadPoolExecutor
+import io
 import json
 import os
 from pathlib import Path
@@ -13,6 +14,7 @@ from tempfile import TemporaryDirectory
 import threading
 from types import SimpleNamespace
 import unittest
+import wave
 from unittest.mock import patch
 
 from core.apps.contracts import parse_app_contract_file
@@ -26,6 +28,7 @@ import engines
 import app_backend
 import backend_worker
 import stt_worker
+import tts_worker
 from errors import SpeechProviderUnavailableError, SpeechTranscriptionError, SpeechValidationError
 from engines import LocalEngine, faster_whisper_model_ref, faster_whisper_model_source, tts_engine_cache_fingerprint
 from models import (
@@ -336,19 +339,33 @@ class SpeechAppTests(unittest.TestCase):
 
     def test_faster_whisper_model_can_be_overridden_per_profile(self) -> None:
         old_global = os.environ.get("MAVERICK_SPEECH_FASTER_WHISPER_MODEL")
+        old_global_all = os.environ.get("MAVERICK_SPEECH_FASTER_WHISPER_GLOBAL_MODEL_ALL_PROFILES")
+        old_device = os.environ.get("MAVERICK_SPEECH_FASTER_WHISPER_DEVICE")
+        old_compute = os.environ.get("MAVERICK_SPEECH_FASTER_WHISPER_COMPUTE_TYPE")
         old_fast = os.environ.get("MAVERICK_SPEECH_FASTER_WHISPER_FAST_MODEL")
         old_balanced = os.environ.get("MAVERICK_SPEECH_FASTER_WHISPER_BALANCED_MODEL")
         os.environ["MAVERICK_SPEECH_FASTER_WHISPER_MODEL"] = "/models/global"
+        os.environ.pop("MAVERICK_SPEECH_FASTER_WHISPER_GLOBAL_MODEL_ALL_PROFILES", None)
+        os.environ.pop("MAVERICK_SPEECH_FASTER_WHISPER_DEVICE", None)
+        os.environ.pop("MAVERICK_SPEECH_FASTER_WHISPER_COMPUTE_TYPE", None)
         os.environ["MAVERICK_SPEECH_FASTER_WHISPER_FAST_MODEL"] = "/models/fast"
         os.environ["MAVERICK_SPEECH_FASTER_WHISPER_BALANCED_MODEL"] = "/models/balanced"
         try:
             self.assertEqual(faster_whisper_model_ref({"transcription_profile": "fast"}), "/models/fast")
             self.assertEqual(faster_whisper_model_source({"transcription_profile": "fast"}), "profile_env")
             self.assertEqual(faster_whisper_model_ref({"transcription_profile": "balanced"}), "/models/balanced")
+            self.assertEqual(faster_whisper_model_ref({"transcription_profile": "accurate"}), "medium")
+            self.assertEqual(faster_whisper_model_source({"transcription_profile": "accurate"}), "profile_default")
+            os.environ["MAVERICK_SPEECH_FASTER_WHISPER_GLOBAL_MODEL_ALL_PROFILES"] = "1"
             self.assertEqual(faster_whisper_model_ref({"transcription_profile": "accurate"}), "/models/global")
             self.assertEqual(faster_whisper_model_source({"transcription_profile": "accurate"}), "global_env")
+            self.assertEqual(engines.faster_whisper_device({"transcription_profile": "fast"}), "cpu")
+            self.assertEqual(engines.faster_whisper_compute_type({"transcription_profile": "fast"}), "int8")
         finally:
             _restore_env("MAVERICK_SPEECH_FASTER_WHISPER_MODEL", old_global)
+            _restore_env("MAVERICK_SPEECH_FASTER_WHISPER_GLOBAL_MODEL_ALL_PROFILES", old_global_all)
+            _restore_env("MAVERICK_SPEECH_FASTER_WHISPER_DEVICE", old_device)
+            _restore_env("MAVERICK_SPEECH_FASTER_WHISPER_COMPUTE_TYPE", old_compute)
             _restore_env("MAVERICK_SPEECH_FASTER_WHISPER_FAST_MODEL", old_fast)
             _restore_env("MAVERICK_SPEECH_FASTER_WHISPER_BALANCED_MODEL", old_balanced)
 
@@ -928,6 +945,20 @@ class SpeechAppTests(unittest.TestCase):
             self.assertEqual(load_counter.read_text(encoding="utf-8"), "1")
             self.assertFalse(piper_invocations.exists())
 
+    def test_piper_worker_prepares_wav_channels_before_synthesis(self) -> None:
+        class BarePiperVoice:
+            config = {"sample_rate": 16000}
+
+            def synthesize(self, text, wav_file):
+                wav_file.writeframes(b"\0\0" * 4)
+
+        audio = tts_worker._synthesize_wav(BarePiperVoice(), "hello")
+
+        with wave.open(io.BytesIO(audio), "rb") as wav_file:
+            self.assertEqual(wav_file.getnchannels(), 1)
+            self.assertEqual(wav_file.getsampwidth(), 2)
+            self.assertEqual(wav_file.getframerate(), 16000)
+
     def test_piper_cache_fingerprint_hashes_small_model_content(self) -> None:
         with TemporaryDirectory() as temp_dir:
             root = Path(temp_dir)
@@ -1093,6 +1124,75 @@ class SpeechAppTests(unittest.TestCase):
             self.assertEqual(read_jobs(root / "data")["jobs"][0]["profile"], "fast")
             self.assertEqual((root / "data" / "settings.json").read_text(encoding="utf-8").count("balanced"), 1)
 
+    def test_transcribe_audio_chunks_accumulate_in_temporary_session_with_metrics(self) -> None:
+        audio = b"RIFF" + b"\0" * 512
+        fake_results = [
+            {
+                "engine": "faster-whisper",
+                "model": "base",
+                "language": "it",
+                "language_probability": 0.95,
+                "duration_seconds": 1.0,
+                "segments": [{"start": 0.0, "end": 1.0, "text": " ciao ciao "}],
+                "text": " ciao ciao ",
+                "profile": "fast",
+                "beam_size": 1,
+                "worker": {"cold_start": True, "model_load_seconds": 0.25},
+            },
+            {
+                "engine": "faster-whisper",
+                "model": "base",
+                "language": "it",
+                "language_probability": 0.95,
+                "duration_seconds": 1.0,
+                "segments": [{"start": 0.0, "end": 1.0, "text": " mondo "}],
+                "text": " mondo ",
+                "profile": "fast",
+                "beam_size": 1,
+                "worker": {"cold_start": False, "model_load_seconds": 0.0},
+            },
+        ]
+        with TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            with patch("transcription.transcribe_audio_file", side_effect=fake_results):
+                first_status, first = handle_action(
+                    root / "data",
+                    root / "storage" / "generated",
+                    {
+                        "action": "transcribe_audio",
+                        "content_type": "audio/wav",
+                        "audio_base64": base64.b64encode(audio).decode("ascii"),
+                        "session_id": "chat-session",
+                        "chunk_index": 0,
+                    },
+                )
+                second_status, second = handle_action(
+                    root / "data",
+                    root / "storage" / "generated",
+                    {
+                        "action": "transcribe_audio",
+                        "content_type": "audio/wav",
+                        "audio_base64": base64.b64encode(audio).decode("ascii"),
+                        "session_id": "chat-session",
+                        "chunk_index": 1,
+                        "final": True,
+                    },
+                )
+
+            self.assertEqual(first_status, 200)
+            self.assertEqual(second_status, 200)
+            self.assertEqual(first["chunk_text"], "ciao")
+            self.assertTrue(first["partial"])
+            self.assertEqual(second["text"], "ciao mondo")
+            self.assertEqual(second["chunk_index"], 1)
+            self.assertTrue(second["final"])
+            self.assertGreaterEqual(second["metrics"]["transcription_seconds"], 0.0)
+            self.assertEqual(first["metrics"]["model_load_seconds"], 0.25)
+            self.assertFalse((root / "data" / "run" / "stt-sessions" / "chat-session.json").exists())
+            jobs_json = (root / "data" / "jobs.json").read_text(encoding="utf-8")
+            self.assertNotIn("ciao mondo", jobs_json)
+            self.assertIn('"realtime_factor"', jobs_json)
+
     def test_transcribe_audio_binary_upload_uses_spooled_body_file(self) -> None:
         audio = b"not-a-real-webm" * 20
         fake_result = {
@@ -1139,7 +1239,7 @@ class SpeechAppTests(unittest.TestCase):
     def test_app_backend_maps_binary_body_file_to_transcription_body(self) -> None:
         body = app_backend.body_from_payload(
             {
-                "query": {"action": "transcribe_audio", "language": "it", "profile": "fast"},
+                "query": {"action": "transcribe_audio", "language": "it", "profile": "fast", "session_id": "chat-session", "chunk_index": "2", "final": "true"},
                 "body_file": {"path": "/tmp/audio.webm", "content_type": "audio/webm", "size_bytes": 123},
             }
         )
@@ -1148,6 +1248,9 @@ class SpeechAppTests(unittest.TestCase):
         self.assertEqual(body["content_type"], "audio/webm")
         self.assertEqual(body["language"], "it")
         self.assertEqual(body["profile"], "fast")
+        self.assertEqual(body["session_id"], "chat-session")
+        self.assertEqual(body["chunk_index"], "2")
+        self.assertEqual(body["final"], "true")
         self.assertEqual(body["_body_file_path"], "/tmp/audio.webm")
         self.assertEqual(body["_body_file_size_bytes"], 123)
 
@@ -1237,6 +1340,8 @@ class SpeechAppTests(unittest.TestCase):
         self.assertEqual(cleaned_transcript("Thanks for watching."), "")
         self.assertEqual(cleaned_transcript("you"), "you")
         self.assertEqual(cleaned_transcript("hi"), "hi")
+        self.assertEqual(cleaned_transcript("hello hello , world"), "hello, world")
+        self.assertEqual(cleaned_transcript("nuova riga"), "\n")
 
     def test_transcribe_file_resolves_only_workspace_storage_paths(self) -> None:
         fake_result = {

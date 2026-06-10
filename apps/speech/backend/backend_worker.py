@@ -14,7 +14,7 @@ import time
 from errors import SpeechProviderUnavailableError, SpeechTranscriptionError, SpeechValidationError, validation_error_payload
 from service import app_events_for_action, handle_action
 
-DEFAULT_IDLE_TIMEOUT_SECONDS = 15 * 60
+DEFAULT_IDLE_TIMEOUT_SECONDS = 6 * 60 * 60
 
 
 def main() -> None:
@@ -140,7 +140,7 @@ def body_from_payload(payload: dict) -> dict:
     body.setdefault("content_type", str(body_file.get("content_type") or "application/octet-stream"))
     body["_body_file_path"] = str(body_file.get("path") or "")
     body["_body_file_size_bytes"] = int(body_file.get("size_bytes") or 0)
-    for key in ("language", "profile"):
+    for key in ("language", "profile", "session_id", "chunk_index", "final", "is_final"):
         if query.get(key):
             body[key] = str(query[key])
     return body

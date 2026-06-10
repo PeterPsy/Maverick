@@ -12,7 +12,7 @@ import time
 
 from engines import _load_faster_whisper_model, _run_faster_whisper_with_model
 
-DEFAULT_IDLE_TIMEOUT_SECONDS = 15 * 60
+DEFAULT_IDLE_TIMEOUT_SECONDS = 6 * 60 * 60
 
 
 def main() -> None:
@@ -73,10 +73,12 @@ def serve(*, socket_path: Path, pid_path: Path, config: dict, idle_timeout_secon
                     continue
                 last_activity = time.monotonic()
                 try:
+                    request_config = dict(config)
+                    request_config["initial_prompt"] = str(request.get("initial_prompt") or "")
                     result = _run_faster_whisper_with_model(
                         model,
                         Path(str(request.get("audio_path") or "")),
-                        config=config,
+                        config=request_config,
                         language=str(request.get("language") or ""),
                     )
                     result["worker"] = {

@@ -102,10 +102,17 @@ def _load_local_speech_env() -> None:
 
 
 def _running_from_app_entrypoint() -> bool:
+    app_root = Path(__file__).resolve().parents[1]
     try:
-        return Path.cwd().resolve() == Path(__file__).resolve().parents[1]
+        if Path.cwd().resolve() == app_root:
+            return True
     except OSError:
         return False
+    try:
+        argv0 = Path(sys.argv[0]).resolve()
+    except (OSError, RuntimeError):
+        return False
+    return argv0 == app_root or app_root in argv0.parents
 
 
 def _apply_speech_env_file(env_path: Path) -> None:

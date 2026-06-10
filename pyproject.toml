@@ -44,3 +44,6 @@ include-package-data = true
 [tool.setuptools.packages.find]
 include = ["core*"]
 namespaces = true
+
+[tool.setuptools.package-data]
+"core.egress" = ["policy_manifest.json"]

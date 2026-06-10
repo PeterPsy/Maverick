@@ -4,12 +4,18 @@ from __future__ import annotations
 
 from dataclasses import asdict
 from datetime import UTC, datetime
+import ipaddress
 import os
 from pathlib import Path
 from typing import Any
-from urllib.parse import urlsplit, urlunsplit
+from urllib.parse import quote, urlsplit, urlunsplit
 
-from core.egress import evaluate_browser_egress_url, resolve_browser_egress_url_addresses
+from core.apps.contract_common import APP_ID_PATTERN
+from core.egress import (
+    DEFAULT_BROWSER_EGRESS_POLICY,
+    evaluate_browser_egress_url,
+    resolve_browser_egress_url_addresses,
+)
 
 from broker_client import broker_health, call_broker_action
 from errors import BrowserBrokerUnavailableError, BrowserPolicyError, BrowserValidationError
@@ -66,7 +72,7 @@ FORBIDDEN_ARTIFACT_FIELDS = frozenset(
     }
 )
 P0_ACTION_FIELDS = {
-    "session.create": frozenset({"action", "mode"}),
+    "session.create": frozenset({"action", "mode", "viewport_width", "viewport_height", "mobile"}),
     "session.close": frozenset({"action", "session_id"}),
     "navigate": frozenset({"action", "session_id", "url", "mode"}),
     "snapshot": frozenset({"action", "session_id"}),
@@ -81,6 +87,9 @@ P0_ACTION_FIELDS = {
 }
 ACCEPTANCE_URL_ENV = "MAVERICK_BROWSER_ACCEPTANCE_URL"
 DEFAULT_ACCEPTANCE_URL = "https://example.com/"
+DEV_SMOKE_PORT_ENV = "MAVERICK_BROWSER_DEV_SMOKE_PORT"
+DEFAULT_DEV_SMOKE_PORT = 8000
+DEFAULT_MOBILE_VIEWPORT = {"viewport_width": 390, "viewport_height": 844, "mobile": True}
 
 
 def app_events_for_action(action: str) -> list[dict[str, str]]:
@@ -262,6 +271,12 @@ def operations_manifest() -> dict[str, Any]:
             },
         },
         "mcp_tools": sorted(MCP_TOOL_ACTIONS),
+        "admin_dev_targets": admin_dev_target_urls(),
+        "smoke": {
+            "acceptance": "acceptance.smoke runs the public/read-only P0 broker path.",
+            "dev": "dev.smoke builds an allowlisted hostmachine URL from app_id/path and runs maverick_dev_inspector.",
+            "mobile_viewport": DEFAULT_MOBILE_VIEWPORT,
+        },
         "disabled": [
             "browser_evaluate",
             "browser_run_code",
@@ -286,27 +301,122 @@ def acceptance_smoke_payload(
     """Run the P0 broker acceptance path through the same controller surface agents use."""
 
     target_url = str(body.get("url") or os.environ.get(ACCEPTANCE_URL_ENV) or DEFAULT_ACCEPTANCE_URL).strip()
+    mode = str(body.get("mode") or "read_only").strip()
+    return _smoke_payload(
+        data_root,
+        body,
+        target_url=target_url,
+        mode=mode,
+        smoke_action="acceptance.smoke",
+        failure_error="acceptance_smoke_failed",
+        failure_detail="Browser P0 acceptance smoke failed.",
+        close_failure_detail="Browser P0 acceptance smoke could not close the session.",
+        workspace_id=workspace_id,
+        app_id=app_id,
+        effective_mode=effective_mode,
+        platform_role=platform_role,
+        workspace_role=workspace_role,
+    )
+
+
+def dev_smoke_payload(
+    data_root: Path,
+    body: dict[str, Any],
+    *,
+    workspace_id: str | None = None,
+    app_id: str = "browser",
+    effective_mode: str | None = None,
+    platform_role: str | None = None,
+    workspace_role: str | None = None,
+) -> tuple[int, dict[str, Any]]:
+    """Run an admin Maverick local-dev smoke from app_id/path/port inputs."""
+
+    if "mode" in body and str(body.get("mode") or "").strip() != "maverick_dev_inspector":
+        raise BrowserValidationError("dev.smoke always uses mode maverick_dev_inspector.", field="mode")
+    target = dev_smoke_target(body)
+    viewport = smoke_viewport_options(body)
+    if not is_admin_authority(platform_role=platform_role, workspace_role=workspace_role):
+        payload: dict[str, Any] = {
+            "status": "failed",
+            "smoke": "dev.smoke",
+            "target_url": redact_url(target["url"]),
+            "target": target,
+            "error": "policy_denied",
+            "detail": "dev.smoke requires admin authority because it uses maverick_dev_inspector.",
+            "policy": {
+                "allowed": False,
+                "reason": "blocked_admin_dev_target_not_enabled",
+                "guidance": {
+                    "message": "Use mode=maverick_dev_inspector from an admin context for allowlisted hostmachine targets.",
+                    "admin_dev_targets": admin_dev_target_urls(),
+                },
+            },
+        }
+        if viewport:
+            payload["viewport"] = viewport
+        return 403, payload
+    return _smoke_payload(
+        data_root,
+        body,
+        target_url=target["url"],
+        mode="maverick_dev_inspector",
+        smoke_action="dev.smoke",
+        failure_error="dev_smoke_failed",
+        failure_detail="Browser Maverick dev smoke failed.",
+        close_failure_detail="Browser Maverick dev smoke could not close the session.",
+        target=target,
+        workspace_id=workspace_id,
+        app_id=app_id,
+        effective_mode=effective_mode,
+        platform_role=platform_role,
+        workspace_role=workspace_role,
+    )
+
+
+def _smoke_payload(
+    data_root: Path,
+    body: dict[str, Any],
+    *,
+    target_url: str,
+    mode: str,
+    smoke_action: str,
+    failure_error: str,
+    failure_detail: str,
+    close_failure_detail: str,
+    target: dict[str, Any] | None = None,
+    workspace_id: str | None,
+    app_id: str,
+    effective_mode: str | None,
+    platform_role: str | None,
+    workspace_role: str | None,
+) -> tuple[int, dict[str, Any]]:
     if not target_url:
         raise BrowserValidationError("url is required.", field="url")
-    mode = str(body.get("mode") or "read_only").strip()
     if mode not in {"read_only", "maverick_dev_inspector"}:
         raise BrowserValidationError("mode must be read_only or maverick_dev_inspector.", field="mode")
+    viewport = smoke_viewport_options(body)
     admin_dev_targets_enabled = is_admin_authority(platform_role=platform_role, workspace_role=workspace_role)
     active_health = broker_health(connect=True)
     if active_health.get("status") != "ready" or active_health.get("connected") is not True:
-        return 503, {
+        payload: dict[str, Any] = {
             "status": "failed",
+            "smoke": smoke_action,
             "error": "broker_unavailable",
             "detail": "Browser broker active health check requires the broker token and a reachable Playwright run-server.",
             "broker": active_health,
         }
+        if target is not None:
+            payload["target"] = target
+        if viewport:
+            payload["viewport"] = viewport
+        return 503, payload
 
     steps: list[dict[str, Any]] = []
     session_id = ""
     try:
         create_status, create_result = _smoke_step(
             data_root,
-            {"action": "session.create", "mode": mode},
+            {"action": "session.create", "mode": mode, **viewport},
             steps,
             workspace_id=workspace_id,
             app_id=app_id,
@@ -315,7 +425,17 @@ def acceptance_smoke_payload(
             workspace_role=workspace_role,
         )
         if create_status >= 400:
-            return create_status, _smoke_failed_payload(target_url, active_health, steps, create_result)
+            return create_status, _smoke_failed_payload(
+                target_url,
+                active_health,
+                steps,
+                create_result,
+                smoke_action=smoke_action,
+                failure_error=failure_error,
+                failure_detail=failure_detail,
+                target=target,
+                viewport=viewport,
+            )
         session_id = str(create_result.get("session_id") or "")
         if not session_id:
             return 502, _smoke_failed_payload(
@@ -323,6 +443,11 @@ def acceptance_smoke_payload(
                 active_health,
                 steps,
                 {"error": "invalid_broker_response", "detail": "Browser broker did not return a session_id."},
+                smoke_action=smoke_action,
+                failure_error=failure_error,
+                failure_detail=failure_detail,
+                target=target,
+                viewport=viewport,
             )
 
         for action_body in (
@@ -344,7 +469,17 @@ def acceptance_smoke_payload(
                 workspace_role=workspace_role,
             )
             if step_status >= 400:
-                return step_status, _smoke_failed_payload(target_url, active_health, steps, step_result)
+                return step_status, _smoke_failed_payload(
+                    target_url,
+                    active_health,
+                    steps,
+                    step_result,
+                    smoke_action=smoke_action,
+                    failure_error=failure_error,
+                    failure_detail=failure_detail,
+                    target=target,
+                    viewport=viewport,
+                )
     finally:
         if session_id:
             _smoke_step(
@@ -363,10 +498,16 @@ def acceptance_smoke_payload(
             target_url,
             active_health,
             steps,
-            {"error": "session_close_failed", "detail": "Browser P0 acceptance smoke could not close the session."},
+            {"error": "session_close_failed", "detail": close_failure_detail},
+            smoke_action=smoke_action,
+            failure_error=failure_error,
+            failure_detail=failure_detail,
+            target=target,
+            viewport=viewport,
         )
-    return 200, {
+    payload = {
         "status": "ok",
+        "smoke": smoke_action,
         "target_url": redact_url(target_url),
         "broker": active_health,
         "checks": {
@@ -381,6 +522,94 @@ def acceptance_smoke_payload(
         },
         "steps": steps,
     }
+    if target is not None:
+        payload["target"] = target
+    if viewport:
+        payload["viewport"] = viewport
+    return 200, payload
+
+
+def dev_smoke_target(body: dict[str, Any]) -> dict[str, Any]:
+    app_id = require_string(body, "app_id")
+    if not APP_ID_PATTERN.fullmatch(app_id):
+        raise BrowserValidationError("app_id must be a lowercase kebab-case app id.", field="app_id")
+    default_port = DEFAULT_DEV_SMOKE_PORT
+    env_port = os.environ.get(DEV_SMOKE_PORT_ENV)
+    if env_port:
+        if env_port.strip().isdigit():
+            default_port = int(env_port.strip())
+        else:
+            raise BrowserValidationError(f"{DEV_SMOKE_PORT_ENV} must be an integer.", field="port")
+    port = int_argument(
+        body,
+        "port",
+        default=default_port,
+        minimum=1,
+        maximum=65535,
+    )
+    allowed_ports = admin_dev_target_ports()
+    if port not in allowed_ports:
+        raise BrowserValidationError(
+            f"port must be an allowlisted admin dev target port: {', '.join(str(item) for item in allowed_ports)}.",
+            field="port",
+        )
+    raw_path = body.get("path", "")
+    if raw_path is None:
+        raw_path = ""
+    if not isinstance(raw_path, str):
+        raise BrowserValidationError("path must be a string.", field="path")
+    page_path = raw_path.strip().lstrip("/")
+    if "://" in page_path or "?" in page_path or "#" in page_path:
+        raise BrowserValidationError("path must be a path segment without scheme, query, or fragment.", field="path")
+    quoted_app_id = quote(app_id, safe="-_.~")
+    target_path = f"/app/{quoted_app_id}"
+    if page_path:
+        target_path = f"{target_path}/{quote(page_path, safe='/-_.~')}"
+    return {
+        "app_id": app_id,
+        "path": page_path,
+        "port": port,
+        "url": f"http://hostmachine:{port}{target_path}",
+    }
+
+
+def smoke_viewport_options(body: dict[str, Any]) -> dict[str, Any]:
+    options = viewport_options(body)
+    if options.get("mobile") is True:
+        options = {**DEFAULT_MOBILE_VIEWPORT, **options}
+    return options
+
+
+def viewport_options(body: dict[str, Any]) -> dict[str, Any]:
+    options: dict[str, Any] = {}
+    if "mobile" in body:
+        validate_optional_bool(body, "mobile")
+        options["mobile"] = body["mobile"]
+    if "viewport_width" in body:
+        options["viewport_width"] = int_argument(body, "viewport_width", minimum=320, maximum=3840)
+    if "viewport_height" in body:
+        options["viewport_height"] = int_argument(body, "viewport_height", minimum=320, maximum=2160)
+    return options
+
+
+def int_argument(
+    body: dict[str, Any],
+    field: str,
+    *,
+    default: int | None = None,
+    minimum: int,
+    maximum: int,
+) -> int:
+    value = body.get(field, default)
+    if type(value) is int:
+        number = value
+    elif isinstance(value, str) and value.strip().isdigit():
+        number = int(value.strip())
+    else:
+        raise BrowserValidationError(f"{field} must be an integer between {minimum} and {maximum}.", field=field)
+    if number < minimum or number > maximum:
+        raise BrowserValidationError(f"{field} must be an integer between {minimum} and {maximum}.", field=field)
+    return number
 
 
 def _smoke_step(
@@ -412,6 +641,13 @@ def _smoke_step_summary(action: str, status_code: int, result: dict[str, Any]) -
     for key in ("session_id", "url", "title", "mime_type", "encoding", "error", "detail"):
         if isinstance(result.get(key), str):
             summary[key] = result[key]
+    for key in ("viewport_width", "viewport_height"):
+        if type(result.get(key)) is int:
+            summary[key] = result[key]
+    if isinstance(result.get("mobile"), bool):
+        summary["mobile"] = result["mobile"]
+    if isinstance(result.get("policy"), dict):
+        summary["policy"] = result["policy"]
     if isinstance(result.get("snapshot"), str):
         summary["snapshot_length"] = len(result["snapshot"])
     if isinstance(result.get("data"), str):
@@ -430,15 +666,29 @@ def _smoke_failed_payload(
     broker: dict[str, Any],
     steps: list[dict[str, Any]],
     result: dict[str, Any],
+    *,
+    smoke_action: str,
+    failure_error: str,
+    failure_detail: str,
+    target: dict[str, Any] | None = None,
+    viewport: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
-    return {
+    payload: dict[str, Any] = {
         "status": "failed",
+        "smoke": smoke_action,
         "target_url": redact_url(target_url),
         "broker": broker,
-        "error": result.get("error", "acceptance_smoke_failed"),
-        "detail": result.get("detail", "Browser P0 acceptance smoke failed."),
+        "error": result.get("error", failure_error),
+        "detail": result.get("detail", failure_detail),
         "steps": steps,
     }
+    if target is not None:
+        payload["target"] = target
+    if viewport:
+        payload["viewport"] = viewport
+    if isinstance(result.get("policy"), dict):
+        payload["policy"] = result["policy"]
+    return payload
 
 
 def _step_ok(steps: list[dict[str, Any]], action: str) -> bool:
@@ -518,6 +768,7 @@ def validate_p0_broker_action(action: str, body: dict[str, Any]) -> None:
         mode = str(body.get("mode") or "read_only")
         if mode not in {"read_only", "maverick_dev_inspector"}:
             raise BrowserValidationError("mode must be read_only or maverick_dev_inspector.", field="mode")
+        viewport_options(body)
     if action == "navigate" and "mode" in body:
         validate_optional_mode(body)
     if action in SESSION_ACTIONS:
@@ -581,7 +832,76 @@ def preflight_payload(body: dict[str, Any], *, admin_dev_targets_enabled: bool =
     payload["url"] = payload["redacted_url"]
     if payload.get("normalized_url"):
         payload["normalized_url"] = redact_url(str(payload["normalized_url"]))
+    guidance = policy_guidance(decision, url)
+    if guidance:
+        payload["guidance"] = guidance
     return payload
+
+
+def policy_guidance(decision: Any, original_url: str) -> dict[str, Any] | None:
+    if decision.reason == "blocked_restricted_ip" and _is_loopback_denial(decision):
+        allowed_ports = admin_dev_target_ports()
+        guidance: dict[str, Any] = {
+            "message": (
+                "Browser blocks direct loopback/private IP targets. For Maverick local development, use an exact "
+                "allowlisted hostmachine target with mode=maverick_dev_inspector from an admin context."
+            ),
+            "supported_host": "hostmachine",
+            "allowed_ports": allowed_ports,
+            "mode": "maverick_dev_inspector",
+            "requires_admin": True,
+            "admin_dev_targets": admin_dev_target_urls(),
+        }
+        if decision.scheme == "http" and decision.port in allowed_ports:
+            guidance["suggested_url"] = suggested_hostmachine_url(original_url, decision.port)
+        return guidance
+    if decision.reason == "blocked_restricted_host" and decision.host == "hostmachine":
+        return {
+            "message": (
+                "hostmachine is restricted unless the exact scheme, host, and port are listed as an admin dev "
+                "target and the request uses mode=maverick_dev_inspector from an admin context."
+            ),
+            "supported_host": "hostmachine",
+            "allowed_ports": admin_dev_target_ports(),
+            "mode": "maverick_dev_inspector",
+            "requires_admin": True,
+            "admin_dev_targets": admin_dev_target_urls(),
+        }
+    return None
+
+
+def _is_loopback_denial(decision: Any) -> bool:
+    for value in (decision.blocked_address, decision.host):
+        if not value:
+            continue
+        try:
+            if ipaddress.ip_address(str(value)).is_loopback:
+                return True
+        except ValueError:
+            continue
+    return False
+
+
+def suggested_hostmachine_url(original_url: str, port: int) -> str:
+    try:
+        parsed = urlsplit(original_url)
+    except ValueError:
+        return f"http://hostmachine:{port}/"
+    return urlunsplit(("http", f"hostmachine:{port}", parsed.path or "/", "", ""))
+
+
+def admin_dev_target_urls() -> list[str]:
+    return [f"{target.scheme}://{target.host}:{target.port}" for target in DEFAULT_BROWSER_EGRESS_POLICY.admin_dev_targets]
+
+
+def admin_dev_target_ports() -> list[int]:
+    return sorted(
+        {
+            target.port
+            for target in DEFAULT_BROWSER_EGRESS_POLICY.admin_dev_targets
+            if target.scheme == "http" and target.host == "hostmachine"
+        }
+    )
 
 
 def require_authorized_session(
@@ -686,6 +1006,13 @@ def state_updates_for_action(
                 "tabs": [{"url": "about:blank", "active": True}],
             }
         )
+        for field in ("viewport_width", "viewport_height"):
+            value = payload.get(field, body.get(field))
+            if type(value) is int:
+                updates[field] = value
+        mobile = payload.get("mobile", body.get("mobile"))
+        if isinstance(mobile, bool):
+            updates["mobile"] = mobile
     elif action in {"navigate", "snapshot", "screenshot", "wait_for", "click", "type", "press_key"}:
         if isinstance(payload.get("url"), str):
             updates["url"] = redact_url(payload["url"])

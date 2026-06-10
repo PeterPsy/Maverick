@@ -5,7 +5,14 @@
       "input_schema": {
         "type": "object",
         "properties": {
-          "mode": {"type": "string", "enum": ["read_only", "maverick_dev_inspector"], "default": "read_only"}
+          "mode": {"type": "string", "enum": ["read_only", "maverick_dev_inspector"], "default": "read_only"},
+          "viewport_width": {"type": "integer", "minimum": 320, "maximum": 3840},
+          "viewport_height": {"type": "integer", "minimum": 320, "maximum": 2160},
+          "mobile": {
+            "type": "boolean",
+            "default": false,
+            "description": "Use mobile browser context defaults when viewport dimensions are omitted."
+          }
         },
         "additionalProperties": false
       }

@@ -5,6 +5,8 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Literal
 
+from core.egress.manifest import browser_egress_policy_manifest
+
 
 DecisionReason = Literal[
     "allowed_public_http",
@@ -38,11 +40,37 @@ class EgressTarget:
 class BrowserEgressPolicy:
     """Fail-closed browser egress policy for sidecar-controlled browser work."""
 
-    allowed_schemes: tuple[str, ...] = ("http", "https")
+    allowed_schemes: tuple[str, ...] = field(
+        default_factory=lambda: tuple(_manifest_sequence("allowed_schemes"))
+    )
     admin_dev_targets: tuple[EgressTarget, ...] = field(
-        default_factory=lambda: (EgressTarget(scheme="http", host="hostmachine", port=8000),)
+        default_factory=lambda: tuple(_manifest_admin_dev_targets())
     )
     require_dns_resolution_for_hostnames: bool = True
+
+
+def _manifest_sequence(key: str) -> list[str]:
+    values = browser_egress_policy_manifest().get(key)
+    if not isinstance(values, list) or not all(isinstance(item, str) and item for item in values):
+        raise ValueError(f"Browser egress policy manifest {key} must be a non-empty string list.")
+    return values
+
+
+def _manifest_admin_dev_targets() -> list[EgressTarget]:
+    values = browser_egress_policy_manifest().get("admin_dev_targets")
+    if not isinstance(values, list) or not values:
+        raise ValueError("Browser egress policy manifest admin_dev_targets must be a non-empty list.")
+    targets: list[EgressTarget] = []
+    for value in values:
+        if not isinstance(value, dict):
+            raise ValueError("Browser egress policy manifest admin_dev_targets entries must be objects.")
+        scheme = value.get("scheme")
+        host = value.get("host")
+        port = value.get("port")
+        if not isinstance(scheme, str) or not isinstance(host, str) or type(port) is not int:
+            raise ValueError("Browser egress policy manifest admin_dev_targets entries require scheme, host, and port.")
+        targets.append(EgressTarget(scheme=scheme, host=host, port=port).normalized())
+    return targets
 
 
 DEFAULT_BROWSER_EGRESS_POLICY = BrowserEgressPolicy()

@@ -16,7 +16,8 @@ extension.
 - MCP: declared P0 Browser Lab tools for sessions, navigation, snapshots,
   screenshots, console logs, network logs, tabs, waits, and Maverick dev
   inspector actions.
-- CLI: `browser` command for agent/operator status and policy preflight.
+- CLI: `browser` command for agent/operator status, policy preflight,
+  acceptance smoke, and Maverick local-dev smoke.
 - Skill: bundled `browser-ops` guidance for full-access agents using the
   governed Browser CLI/MCP surfaces.
 - Hooks: install, migrate, and health check hooks create and validate the app
@@ -70,6 +71,10 @@ policy review instead of a descriptor-only change.
 The app contract intentionally declares no app secret permissions and no broad
 network permission. Browser navigation is governed by the core browser egress
 policy, including DNS/redirect checks and explicit admin dev target exceptions.
+The static policy data for allowed schemes, restricted hosts/ranges, metadata
+hosts, embedded IPv4 extraction, and admin dev targets lives in
+`core/egress/policy_manifest.json`; both the Python core policy and the
+Playwright broker consume that manifest to avoid drift.
 The contract also intentionally declares `presentation.frontend_role: "none"`
 and `entrypoints.frontend: null`, so Browser is discoverable as an agent-facing
 capability but is not launchable from the workspace app rail.
@@ -93,6 +98,9 @@ Use the CLI for status, audit, preflight, and smoke checks. Use MCP for browser
 sessions: create a read-only session, navigate, collect snapshot/screenshot/logs
 as needed, then close the session. Use `maverick_dev_inspector` and the
 interactive tools only for admin-approved Maverick development UI targets.
+For local Maverick app URLs, do not use `127.0.0.1` directly. Use the exact
+allowlisted `hostmachine:<port>` target with `mode=maverick_dev_inspector` from
+an admin context.
 
 ## P0 Playwright Broker
 
@@ -146,6 +154,8 @@ broker token from `MAVERICK_BROWSER_BROKER_TOKEN` or the local token file.
 Browser sessions are created with isolated non-persistent contexts,
 `acceptDownloads: false`, no storage state, no user data directory, no file
 upload support, and no automatic artifact persistence.
+Session creation accepts bounded `viewport_width`, `viewport_height`, and
+`mobile` fields. A mobile smoke without explicit dimensions uses `390x844`.
 The controller records session metadata only after successful broker actions,
 requires a known session before tab/snapshot/screenshot/log/wait/interactive
 actions, derives trusted policy context from the platform caller, and audits
@@ -179,6 +189,21 @@ This creates an isolated session, navigates to
 snapshot, screenshot, console messages, network requests, and tabs, then closes
 the session. The smoke output summarizes the screenshot size instead of
 persisting or printing the base64 artifact.
+
+For local Maverick app development, use the dedicated dev smoke so agents do
+not invent loopback URLs:
+
+```bash
+maverick app browser cli run browser --json --action dev.smoke --app-id fitness-coach --port 8014 --mobile true
+```
+
+`dev.smoke` builds `http://hostmachine:<port>/app/<app_id>/<path>`, forces
+`mode=maverick_dev_inspector`, requires admin authority, and only accepts
+ports declared as admin dev targets. The built-in allowlist includes
+`hostmachine:8000` and `hostmachine:8014`. If preflight sees
+`blocked_restricted_ip` for `127.0.0.1`, use the suggested
+`hostmachine:<allowlisted-port>` URL from the policy guidance instead of
+opening loopback broadly.
 
 Intentional P0 omissions:
 

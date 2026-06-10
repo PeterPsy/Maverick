@@ -39,18 +39,27 @@ and end-to-end smoke checks:
 maverick app browser cli run browser --json --action status
 maverick app browser cli run browser --json --action policy.preflight --url https://example.com/
 maverick app browser cli run browser --json --action acceptance.smoke
+maverick app browser cli run browser --json --action dev.smoke --app-id fitness-coach --port 8014 --mobile true
 ```
 
 Use `policy.preflight` before attempting navigation to a sensitive, unusual, or
 operator-supplied URL. The Browser service and broker still enforce policy at
 runtime; preflight is for early feedback, not for bypass.
 
+For Maverick local development, do not navigate to `127.0.0.1` directly. If
+preflight returns `blocked_restricted_ip` for loopback, use the supported path:
+`hostmachine:<allowlisted-port>` with `mode=maverick_dev_inspector` from an
+admin context. The default admin dev targets are `hostmachine:8000` and
+`hostmachine:8014`; any other local port must be added as an exact admin dev
+target before use.
+
 ## MCP Session Flow
 
 For page inspection, prefer MCP tools in this order:
 
 1. `browser_session_create` with `mode: "read_only"` unless the user explicitly
-   needs Maverick development UI interaction.
+   needs Maverick development UI interaction. Add `mobile: true` or bounded
+   `viewport_width`/`viewport_height` when the task requires mobile layout.
 2. `browser_navigate` with the returned `session_id` and target URL.
 3. `browser_snapshot` to get the accessibility tree and stable refs.
 4. `browser_take_screenshot` only when visual evidence is useful.

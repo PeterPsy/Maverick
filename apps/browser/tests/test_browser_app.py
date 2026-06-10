@@ -22,7 +22,14 @@ APP_ROOT = Path(__file__).resolve().parents[1]
 BACKEND_ROOT = APP_ROOT / "backend"
 sys.path.insert(0, str(BACKEND_ROOT))
 
-from service import acceptance_smoke_payload, handle_action, mcp_result_for_tool, sync_state_after_broker_action
+from errors import BrowserValidationError
+from service import (
+    acceptance_smoke_payload,
+    dev_smoke_payload,
+    handle_action,
+    mcp_result_for_tool,
+    sync_state_after_broker_action,
+)
 from store import load_state, save_state
 
 
@@ -88,7 +95,13 @@ class BrowserAppTests(unittest.TestCase):
         self.assertNotIn("browser_run_code", descriptor["tools"])
         for tool in descriptor["tools"].values():
             self.assertIs(tool["input_schema"].get("additionalProperties"), False)
-        self.assertIn("acceptance.smoke", cli_descriptor["commands"]["browser"]["argument_schema"]["properties"]["action"]["enum"])
+        actions = cli_descriptor["commands"]["browser"]["argument_schema"]["properties"]["action"]["enum"]
+        self.assertIn("acceptance.smoke", actions)
+        self.assertIn("dev.smoke", actions)
+        session_create_properties = descriptor["tools"]["browser_session_create"]["input_schema"]["properties"]
+        self.assertIn("viewport_width", session_create_properties)
+        self.assertIn("viewport_height", session_create_properties)
+        self.assertIn("mobile", session_create_properties)
 
     def test_mcp_rejects_prohibited_or_unknown_tool_names(self) -> None:
         with TemporaryDirectory() as temp_dir:
@@ -162,6 +175,16 @@ class BrowserAppTests(unittest.TestCase):
                 "browser_take_screenshot",
                 {"session_id": "session-1", "full_page": "yes"},
                 "full_page",
+            ),
+            (
+                "browser_session_create",
+                {"mode": "read_only", "viewport_width": 10},
+                "viewport_width",
+            ),
+            (
+                "browser_session_create",
+                {"mode": "read_only", "mobile": "yes"},
+                "mobile",
             ),
             (
                 "browser_wait_for",
@@ -243,6 +266,24 @@ class BrowserAppTests(unittest.TestCase):
                 },
                 workspace_role="admin",
             )
+            dev_8014_status, dev_8014 = handle_action(
+                data_root,
+                {
+                    "action": "policy.preflight",
+                    "url": "http://hostmachine:8014/app/fitness-coach",
+                    "mode": "maverick_dev_inspector",
+                },
+                workspace_role="admin",
+            )
+            loopback_status, loopback = handle_action(
+                data_root,
+                {
+                    "action": "policy.preflight",
+                    "url": "http://127.0.0.1:8014/app/fitness-coach?token=secret",
+                    "mode": "maverick_dev_inspector",
+                },
+                workspace_role="admin",
+            )
 
         self.assertEqual(denied_status, 200)
         self.assertFalse(denied["policy"]["allowed"])
@@ -253,6 +294,15 @@ class BrowserAppTests(unittest.TestCase):
         self.assertEqual(dev_status, 200)
         self.assertTrue(dev["policy"]["allowed"])
         self.assertEqual(dev["policy"]["reason"], "allowed_admin_dev_target")
+        self.assertEqual(dev_8014_status, 200)
+        self.assertTrue(dev_8014["policy"]["allowed"])
+        self.assertEqual(dev_8014["policy"]["reason"], "allowed_admin_dev_target")
+        self.assertEqual(loopback_status, 200)
+        self.assertFalse(loopback["policy"]["allowed"])
+        self.assertEqual(loopback["policy"]["reason"], "blocked_restricted_ip")
+        self.assertEqual(loopback["policy"]["guidance"]["mode"], "maverick_dev_inspector")
+        self.assertEqual(loopback["policy"]["guidance"]["allowed_ports"], [8000, 8014])
+        self.assertEqual(loopback["policy"]["guidance"]["suggested_url"], "http://hostmachine:8014/app/fitness-coach")
 
     def test_policy_preflight_rejects_caller_supplied_dns_results(self) -> None:
         with TemporaryDirectory() as temp_dir:
@@ -381,6 +431,96 @@ class BrowserAppTests(unittest.TestCase):
         self.assertEqual(screenshot_step["screenshot_bytes"], len("aW1hZ2U="))
         self.assertNotIn("data", screenshot_step)
 
+    def test_dev_smoke_builds_allowlisted_mobile_maverick_app_target(self) -> None:
+        action_responses = {
+            "session.create": {
+                "session_id": "stub-session",
+                "isolated": True,
+                "persistent_profile": False,
+                "viewport_width": 390,
+                "viewport_height": 844,
+                "mobile": True,
+            },
+            "navigate": {
+                "session_id": "stub-session",
+                "url": "http://hostmachine:8014/app/fitness-coach",
+                "title": "Fitness",
+            },
+            "snapshot": {"session_id": "stub-session", "snapshot": "body text"},
+            "screenshot": {
+                "session_id": "stub-session",
+                "mime_type": "image/png",
+                "encoding": "base64",
+                "data": "aW1hZ2U=",
+                "persisted": False,
+            },
+            "console.messages": {"session_id": "stub-session", "messages": []},
+            "network.requests": {"session_id": "stub-session", "requests": []},
+            "tabs": {
+                "sessions": [
+                    {
+                        "session_id": "stub-session",
+                        "tabs": [{"url": "http://hostmachine:8014/app/fitness-coach", "active": True}],
+                    }
+                ]
+            },
+            "session.close": {"session_id": "stub-session", "closed": True},
+        }
+        with broker_stub(action_responses) as broker:
+            with TemporaryDirectory() as temp_dir:
+                data_root = Path(temp_dir)
+                with patch.dict(
+                    "os.environ",
+                    {"MAVERICK_BROWSER_BROKER_URL": broker.url, "MAVERICK_BROWSER_BROKER_TOKEN": "test-token"},
+                ):
+                    status_code, result = dev_smoke_payload(
+                        data_root,
+                        {"action": "dev.smoke", "app_id": "fitness-coach", "port": 8014, "mobile": True},
+                        workspace_role="admin",
+                    )
+
+        self.assertEqual(status_code, 200)
+        self.assertEqual(result["status"], "ok")
+        self.assertEqual(result["smoke"], "dev.smoke")
+        self.assertEqual(result["target"]["url"], "http://hostmachine:8014/app/fitness-coach")
+        self.assertEqual(result["viewport"], {"viewport_width": 390, "viewport_height": 844, "mobile": True})
+        self.assertEqual(broker.actions[0]["payload"]["mode"], "maverick_dev_inspector")
+        self.assertEqual(broker.actions[0]["payload"]["viewport_width"], 390)
+        self.assertEqual(broker.actions[0]["payload"]["viewport_height"], 844)
+        self.assertIs(broker.actions[0]["payload"]["mobile"], True)
+        self.assertEqual(broker.actions[1]["payload"]["url"], "http://hostmachine:8014/app/fitness-coach")
+        self.assertEqual(broker.actions[1]["payload"]["policy_context"], {"allow_admin_dev_targets": True})
+
+    def test_dev_smoke_rejects_ports_outside_admin_dev_target_allowlist(self) -> None:
+        with TemporaryDirectory() as temp_dir:
+            data_root = Path(temp_dir)
+            with self.assertRaises(BrowserValidationError) as raised:
+                dev_smoke_payload(data_root, {"action": "dev.smoke", "app_id": "fitness-coach", "port": 9000})
+
+        self.assertEqual(raised.exception.field, "port")
+
+    def test_dev_smoke_rejects_non_canonical_app_id(self) -> None:
+        cases = ("..", "fitness_coach", "FitnessCoach", "fitness/coach")
+        with TemporaryDirectory() as temp_dir:
+            data_root = Path(temp_dir)
+            for app_id in cases:
+                with self.subTest(app_id=app_id):
+                    with self.assertRaises(BrowserValidationError) as raised:
+                        dev_smoke_payload(data_root, {"action": "dev.smoke", "app_id": app_id, "port": 8014})
+                    self.assertEqual(raised.exception.field, "app_id")
+
+    def test_dev_smoke_requires_admin_before_broker_health(self) -> None:
+        with TemporaryDirectory() as temp_dir:
+            data_root = Path(temp_dir)
+            status_code, result = dev_smoke_payload(
+                data_root,
+                {"action": "dev.smoke", "app_id": "fitness-coach", "port": 8014},
+            )
+
+        self.assertEqual(status_code, 403)
+        self.assertEqual(result["error"], "policy_denied")
+        self.assertEqual(result["policy"]["reason"], "blocked_admin_dev_target_not_enabled")
+
     def test_session_create_rejects_persistent_profile_options(self) -> None:
         with TemporaryDirectory() as temp_dir:
             data_root = Path(temp_dir)
@@ -427,6 +567,38 @@ class BrowserAppTests(unittest.TestCase):
         self.assertEqual(status_payload["sessions"][0]["session_id"], "stub-session")
         self.assertEqual(state["audit"][-1]["action"], "session.create")
         self.assertEqual(state["audit"][-1]["status"], "ok")
+
+    def test_session_create_accepts_viewport_and_mobile_options(self) -> None:
+        broker_response = {
+            "session_id": "mobile-session",
+            "isolated": True,
+            "persistent_profile": False,
+            "viewport_width": 390,
+            "viewport_height": 844,
+            "mobile": True,
+        }
+        with broker_stub(broker_response) as broker:
+            with TemporaryDirectory() as temp_dir:
+                data_root = Path(temp_dir)
+                with patch.dict(
+                    "os.environ",
+                    {"MAVERICK_BROWSER_BROKER_URL": broker.url, "MAVERICK_BROWSER_BROKER_TOKEN": "test-token"},
+                ):
+                    status_code, result = mcp_result_for_tool(
+                        data_root,
+                        "browser_session_create",
+                        {"mode": "read_only", "viewport_width": 390, "viewport_height": 844, "mobile": True},
+                    )
+                state = load_state(str(data_root))
+
+        self.assertEqual(status_code, 201)
+        self.assertEqual(result["session_id"], "mobile-session")
+        self.assertEqual(broker.actions[-1]["payload"]["viewport_width"], 390)
+        self.assertEqual(broker.actions[-1]["payload"]["viewport_height"], 844)
+        self.assertIs(broker.actions[-1]["payload"]["mobile"], True)
+        self.assertEqual(state["sessions"]["mobile-session"]["viewport_width"], 390)
+        self.assertEqual(state["sessions"]["mobile-session"]["viewport_height"], 844)
+        self.assertIs(state["sessions"]["mobile-session"]["mobile"], True)
 
     def test_session_create_reads_runtime_token_file_when_env_token_is_not_available(self) -> None:
         with broker_stub({"session_id": "stub-session", "isolated": True, "persistent_profile": False}) as broker:

@@ -12,6 +12,7 @@ const require = createRequire(import.meta.url);
 const appPackage = require("../package.json");
 const pinnedPlaywrightVersion = appPackage.dependencies?.playwright || "unknown";
 const defaultBrokerTokenFile = fileURLToPath(new URL("../../../runtime/browser/playwright-broker-token", import.meta.url));
+const policyManifest = loadPolicyManifest();
 
 const brokerHost = process.env.MAVERICK_BROWSER_BROKER_HOST || "127.0.0.1";
 const brokerPort = Number.parseInt(process.env.MAVERICK_BROWSER_BROKER_PORT || "9323", 10);
@@ -24,18 +25,22 @@ const maxLogRecords = clampInt(process.env.MAVERICK_BROWSER_MAX_LOG_RECORDS, 20,
 const proxyBindHost = process.env.MAVERICK_BROWSER_PROXY_BIND_HOST || "127.0.0.1";
 const proxyPort = Number.parseInt(process.env.MAVERICK_BROWSER_PROXY_PORT || "9324", 10);
 const proxyAdvertisedServer = process.env.MAVERICK_BROWSER_PROXY_SERVER || `http://127.0.0.1:${proxyPort}`;
-const restrictedHosts = new Set([
-  "docker.for.mac.localhost",
-  "docker.for.win.localhost",
-  "gateway.docker.internal",
-  "host.docker.internal",
-  "hostmachine",
-  "ip6-localhost",
-  "ip6-loopback",
-  "localhost",
-  "kubernetes.docker.internal",
-]);
-const metadataHosts = new Set(["metadata", "metadata.google.internal"]);
+const allowedSchemes = new Set(policyManifest.allowed_schemes.map((scheme) => String(scheme).toLowerCase()));
+const adminDevTargets = new Set(
+  policyManifest.admin_dev_targets.map((target) =>
+    adminDevTargetKey(target.scheme, normalizeHost(target.host), Number.parseInt(String(target.port), 10)),
+  ),
+);
+const restrictedHosts = new Set(policyManifest.restricted_hosts.map((host) => normalizeHost(host)));
+const metadataHosts = new Set(policyManifest.metadata_hosts.map((host) => normalizeHost(host)));
+const restrictedRanges = policyManifest.restricted_networks.map(parseCidr);
+const restrictedIpv4Ranges = restrictedRanges.filter((range) => range.version === 4);
+const restrictedIpv6Ranges = restrictedRanges.filter((range) => range.version === 6);
+const embeddedIpv4Extractors = policyManifest.embedded_ipv4_extractors.map((extractor) => ({
+  kind: String(extractor.kind || ""),
+  range: parseCidr(extractor.prefix),
+  shift: Number.parseInt(String(extractor.shift), 10),
+}));
 
 if (process.argv.includes("--self-test-policy")) {
   await runPolicySelfTest();
@@ -171,6 +176,7 @@ async function createSession(payload) {
   if (policyContext.allow_admin_dev_targets && !callerCanAccessAdminDevTargets(payload)) {
     throw brokerError(403, "session_forbidden", "Admin dev Browser sessions require admin authority.");
   }
+  const viewport = viewportFromPayload(payload);
   const proxyPassword = randomUUID();
   proxyPolicies.set(proxyPassword, policyContext);
   let context;
@@ -179,7 +185,9 @@ async function createSession(payload) {
       acceptDownloads: false,
       bypassCSP: false,
       ignoreHTTPSErrors: false,
+      isMobile: viewport.mobile,
       javaScriptEnabled: true,
+      hasTouch: viewport.mobile,
       permissions: [],
       proxy: {
         server: proxyAdvertisedServer,
@@ -188,8 +196,8 @@ async function createSession(payload) {
       },
       serviceWorkers: "block",
       viewport: {
-        width: clampInt(payload.viewport_width, 320, 3840, 1440),
-        height: clampInt(payload.viewport_height, 320, 2160, 900),
+        width: viewport.width,
+        height: viewport.height,
       },
     });
   } catch (error) {
@@ -203,6 +211,7 @@ async function createSession(payload) {
     pages: new Set(),
     activePage: null,
     mode: payload.mode === "maverick_dev_inspector" ? "maverick_dev_inspector" : "read_only",
+    viewport,
     policyContext,
     proxyPassword,
     lastPolicyBlock: null,
@@ -225,6 +234,9 @@ async function createSession(payload) {
     login_state_persisted: false,
     accept_downloads: false,
     file_upload: false,
+    viewport_width: viewport.width,
+    viewport_height: viewport.height,
+    mobile: viewport.mobile,
   };
 }
 
@@ -431,7 +443,7 @@ async function evaluateBrokerEgressUrl(rawUrl, policyContext = {}) {
     return policyDecision(false, "blocked_missing_host", rawUrl);
   }
   const scheme = url.protocol.replace(":", "").toLowerCase();
-  if (!["http", "https"].includes(scheme)) {
+  if (!allowedSchemes.has(scheme)) {
     return policyDecision(false, "blocked_disallowed_scheme", rawUrl, { scheme });
   }
   const host = normalizeHost(url.hostname);
@@ -639,6 +651,43 @@ async function assertDevInspectorActionAllowed(session, payload) {
   }
 }
 
+function loadPolicyManifest() {
+  const manifestUrl = new URL("../../../core/egress/policy_manifest.json", import.meta.url);
+  const manifest = JSON.parse(readFileSync(manifestUrl, "utf8"));
+  const requiredArrays = [
+    "allowed_schemes",
+    "admin_dev_targets",
+    "restricted_hosts",
+    "metadata_hosts",
+    "restricted_networks",
+    "embedded_ipv4_extractors",
+  ];
+  for (const key of requiredArrays) {
+    if (!Array.isArray(manifest[key]) || manifest[key].length === 0) {
+      throw new Error(`Browser egress policy manifest ${key} must be a non-empty array.`);
+    }
+  }
+  if (manifest.schema_version !== "1") {
+    throw new Error("Unsupported Browser egress policy manifest schema version.");
+  }
+  return manifest;
+}
+
+function parseCidr(cidr) {
+  const [networkValue, prefixValue] = String(cidr || "").split("/");
+  const network = normalizeHost(networkValue);
+  const version = net.isIP(network);
+  const prefix = Number.parseInt(String(prefixValue), 10);
+  if (!version || !Number.isFinite(prefix)) {
+    throw new Error(`Invalid Browser egress policy CIDR: ${cidr}`);
+  }
+  const maxPrefix = version === 4 ? 32 : 128;
+  if (prefix < 0 || prefix > maxPrefix) {
+    throw new Error(`Invalid Browser egress policy CIDR prefix: ${cidr}`);
+  }
+  return { network, prefix, version };
+}
+
 async function resolveHostAddresses(host) {
   try {
     const records = await Promise.race([
@@ -664,7 +713,11 @@ function defaultPort(scheme) {
 }
 
 function isAdminDevTarget(scheme, host, port) {
-  return scheme === "http" && host === "hostmachine" && port === 8000;
+  return adminDevTargets.has(adminDevTargetKey(scheme, host, port));
+}
+
+function adminDevTargetKey(scheme, host, port) {
+  return `${String(scheme).toLowerCase()}://${normalizeHost(host)}:${Number.parseInt(String(port), 10)}`;
 }
 
 function parseIpAddress(value) {
@@ -695,24 +748,7 @@ function restrictedIpv4(address) {
   if (value === null) {
     return true;
   }
-  const ranges = [
-    ["0.0.0.0", 8],
-    ["10.0.0.0", 8],
-    ["100.64.0.0", 10],
-    ["100.100.100.200", 32],
-    ["127.0.0.0", 8],
-    ["169.254.0.0", 16],
-    ["172.16.0.0", 12],
-    ["192.0.0.0", 24],
-    ["192.0.2.0", 24],
-    ["192.168.0.0", 16],
-    ["198.18.0.0", 15],
-    ["198.51.100.0", 24],
-    ["203.0.113.0", 24],
-    ["224.0.0.0", 4],
-    ["240.0.0.0", 4],
-  ];
-  return ranges.some(([network, prefix]) => ipv4InRange(value, ipv4ToInt(network), prefix));
+  return restrictedIpv4Ranges.some(({ network, prefix }) => ipv4InRange(value, ipv4ToInt(network), prefix));
 }
 
 function restrictedIpv6(address) {
@@ -724,34 +760,17 @@ function restrictedIpv6(address) {
   if (embedded) {
     return true;
   }
-  const ranges = [
-    ["::", 128],
-    ["::1", 128],
-    ["64:ff9b:1::", 48],
-    ["100::", 64],
-    ["2001::", 32],
-    ["2001:2::", 48],
-    ["2001:10::", 28],
-    ["2001:db8::", 32],
-    ["fc00::", 7],
-    ["fd00:ec2::254", 128],
-    ["fe80::", 10],
-    ["ff00::", 8],
-  ];
-  return ranges.some(([network, prefix]) => ipv6InRange(value, ipv6ToBigInt(network), prefix));
+  return restrictedIpv6Ranges.some(({ network, prefix }) => ipv6InRange(value, ipv6ToBigInt(network), prefix));
 }
 
 function embeddedRestrictedIpv4(value) {
-  const mappedPrefix = value >> 32n;
-  if (mappedPrefix === 0xffffn && restrictedIpv4(intToIpv4(Number(value & 0xffffffffn)))) {
-    return true;
-  }
-  if (ipv6InRange(value, ipv6ToBigInt("2002::"), 16)) {
-    const embedded = Number((value >> 80n) & 0xffffffffn);
-    return restrictedIpv4(intToIpv4(embedded));
-  }
-  if (ipv6InRange(value, ipv6ToBigInt("64:ff9b::"), 96)) {
-    return restrictedIpv4(intToIpv4(Number(value & 0xffffffffn)));
+  for (const extractor of embeddedIpv4Extractors) {
+    if (ipv6InRange(value, ipv6ToBigInt(extractor.range.network), extractor.range.prefix)) {
+      const embedded = Number((value >> BigInt(extractor.shift)) & 0xffffffffn);
+      if (restrictedIpv4(intToIpv4(embedded))) {
+        return true;
+      }
+    }
   }
   return false;
 }
@@ -885,6 +904,15 @@ function allowedWaitUntil(value) {
 
 function timeoutFromPayload(payload) {
   return clampInt(payload.timeout_ms ?? payload.timeoutMs, 0, 30000, actionTimeoutMs);
+}
+
+function viewportFromPayload(payload) {
+  const mobile = payload?.mobile === true;
+  return {
+    width: clampInt(payload.viewport_width ?? payload.viewportWidth, 320, 3840, mobile ? 390 : 1440),
+    height: clampInt(payload.viewport_height ?? payload.viewportHeight, 320, 2160, mobile ? 844 : 900),
+    mobile,
+  };
 }
 
 function tail(records, limit) {
@@ -1175,8 +1203,15 @@ async function runPolicySelfTest() {
     ["http://metadata.google.internal/computeMetadata/v1/", {}, false, "blocked_metadata_host"],
     ["http://host.docker.internal/", {}, false, "blocked_restricted_host"],
     ["http://hostmachine:8000/apps/base-shell/", {}, false, "blocked_admin_dev_target_not_enabled"],
+    ["http://hostmachine:8014/app/fitness-coach", {}, false, "blocked_admin_dev_target_not_enabled"],
     [
       "http://hostmachine:8000/apps/base-shell/",
+      { allow_admin_dev_targets: true },
+      true,
+      "allowed_admin_dev_target",
+    ],
+    [
+      "http://hostmachine:8014/app/fitness-coach",
       { allow_admin_dev_targets: true },
       true,
       "allowed_admin_dev_target",
@@ -1200,6 +1235,12 @@ async function runPolicySelfTest() {
   });
   if (adminTarget.address !== "127.0.0.1") {
     throw new Error(`Policy self-test failed for admin proxy target: ${adminTarget.address}`);
+  }
+  const adminTarget8014 = await resolveAllowedConnection(new URL("http://hostmachine:8014/app/fitness-coach"), {
+    allow_admin_dev_targets: true,
+  });
+  if (adminTarget8014.address !== "127.0.0.1" || adminTarget8014.port !== 8014) {
+    throw new Error(`Policy self-test failed for admin proxy target 8014: ${adminTarget8014.address}`);
   }
   try {
     await resolveAllowedConnection(new URL("http://127.0.0.1:8000/"), {});

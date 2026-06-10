@@ -1,7 +1,7 @@
 {
   "commands": {
     "browser": {
-      "description": "Inspect Browser Lab status, operation manifest, audit records, run URL policy preflight, or execute the P0 acceptance smoke.",
+      "description": "Inspect Browser Lab status, operation manifest, audit records, run URL policy preflight, execute the P0 acceptance smoke, or run an admin local-dev smoke.",
       "argument_schema": {
         "type": "object",
         "properties": {
@@ -12,7 +12,8 @@
               "status",
               "policy.preflight",
               "audit.list",
-              "acceptance.smoke"
+              "acceptance.smoke",
+              "dev.smoke"
             ],
             "default": "operations.manifest"
           },
@@ -20,10 +21,40 @@
             "type": "string",
             "description": "Policy preflight URL or acceptance smoke target URL. Defaults to MAVERICK_BROWSER_ACCEPTANCE_URL or https://example.com/ for acceptance.smoke."
           },
+          "app_id": {
+            "type": "string",
+            "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$",
+            "description": "Local app id for dev.smoke; used to build /app/<app_id>/<path> on hostmachine."
+          },
+          "path": {
+            "type": "string",
+            "description": "Optional app page path for dev.smoke, without scheme, query, or fragment."
+          },
+          "port": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 65535,
+            "description": "Allowlisted hostmachine admin dev target port for dev.smoke. Defaults to MAVERICK_BROWSER_DEV_SMOKE_PORT or 8000."
+          },
           "mode": {
             "type": "string",
             "enum": ["read_only", "maverick_dev_inspector"],
             "default": "read_only"
+          },
+          "viewport_width": {
+            "type": "integer",
+            "minimum": 320,
+            "maximum": 3840
+          },
+          "viewport_height": {
+            "type": "integer",
+            "minimum": 320,
+            "maximum": 2160
+          },
+          "mobile": {
+            "type": "boolean",
+            "default": false,
+            "description": "Use mobile browser context defaults for smoke/session creation when viewport dimensions are omitted."
           }
         },
         "additionalProperties": false

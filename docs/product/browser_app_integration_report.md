@@ -108,8 +108,9 @@ P0 allowed Maverick dev inspector capabilities:
 - all Browser Lab read-only capabilities
 - click, type, and key press only when the target URL is an admin-enabled
   Maverick dev allowlist entry
-- initial dev allowlist begins with the local hosted Maverick shell at
-  `http://hostmachine:8000`; additional ports or hostnames must be explicit
+- initial dev allowlist includes the local hosted Maverick shell at
+  `http://hostmachine:8000` and the current local app dev preview target at
+  `http://hostmachine:8014`; additional ports or hostnames must be explicit
   policy entries, not implicit private-network access
 
 P0 exclusions:
@@ -725,8 +726,9 @@ Scope:
 - Which artifacts are retained by default, and what retention policy applies to
   screenshots, traces, videos, downloaded files, and network logs?
 - What is the minimum safe read-only egress policy for public web inspection?
-- Which additional Maverick dev hosts or ports, beyond the initial
-  `http://hostmachine:8000` entry, should an admin be able to enable?
+- Which additional Maverick dev hosts or ports, beyond the built-in
+  `http://hostmachine:8000` and `http://hostmachine:8014` entries, should an
+  admin be able to enable?
 - What pairing, revocation, and audit model should Chrome Companion use?
 
 ## Decision Summary

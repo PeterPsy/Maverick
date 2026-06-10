@@ -49,6 +49,39 @@ def get_connection(data_root: Path, connection_id: str) -> dict[str, Any]:
     raise ValueError(f"Drive connection `{connection_id}` was not found.")
 
 
+def resolve_connected_connection(data_root: Path, connection_id: str) -> dict[str, Any]:
+    """Return a connected replacement for a stale Drive connection when safe."""
+    connection = get_connection(data_root, connection_id)
+    if connection.get("status") == "connected":
+        return connection
+    replacement = connected_replacement_for_connection(data_root, connection)
+    return replacement or connection
+
+
+def connected_replacement_for_connection(data_root: Path, connection: dict[str, Any]) -> dict[str, Any] | None:
+    """Find the newest connected Drive connection for the same Google account."""
+    normalized = normalize_connection(connection)
+    subject = str((normalized.get("external_refs") or {}).get("google_subject") or "").strip()
+    email_key = str(normalized.get("account_email") or "").strip().casefold()
+    if not subject and not email_key:
+        return None
+    candidates: list[dict[str, Any]] = []
+    for item in read_state(data_root).get("connections", []):
+        candidate = normalize_connection(item)
+        if candidate["id"] == normalized["id"] or candidate.get("status") != "connected":
+            continue
+        external_refs = candidate.get("external_refs") if isinstance(candidate.get("external_refs"), dict) else {}
+        candidate_subject = str(external_refs.get("google_subject") or "").strip()
+        candidate_email_key = str(candidate.get("account_email") or "").strip().casefold()
+        if subject and candidate_subject == subject:
+            candidates.append(candidate)
+        elif email_key and candidate_email_key == email_key:
+            candidates.append(candidate)
+    if not candidates:
+        return None
+    return sorted(candidates, key=_connection_recency_key, reverse=True)[0]
+
+
 def replace_connection(data_root: Path, connection: dict[str, Any]) -> dict[str, Any]:
     connection = normalize_connection(connection)
 
@@ -177,6 +210,10 @@ def normalize_sync_state(payload: object) -> dict[str, Any]:
         "status": status,
         "error": str(value.get("error") or ""),
     }
+
+
+def _connection_recency_key(connection: dict[str, Any]) -> str:
+    return str(connection.get("connected_at") or connection.get("updated_at") or connection.get("created_at") or "")
 
 
 def _redaction_safe_detail(value: dict[str, Any]) -> dict[str, Any]:

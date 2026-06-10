@@ -9,7 +9,7 @@ import tempfile
 from typing import Any, BinaryIO
 
 from errors import StorageValidationError
-from drive_connection_store import append_audit, get_connection, now_timestamp, sync_state_for_connection, update_connection_sync_state
+from drive_connection_store import append_audit, get_connection, now_timestamp, resolve_connected_connection, sync_state_for_connection, update_connection_sync_state
 from drive_oauth import (
     GOOGLE_DRIVE_CLIENT_ID_SECRET,
     GOOGLE_DRIVE_CLIENT_SECRET_SECRET,
@@ -208,6 +208,7 @@ def secret_lookup_for_drive_action(
                 connection_id = str(record.get("connection_id") or "").strip()
     if not connection_id:
         return {"requires_secrets": False}
+    connection_id = _effective_drive_connection_id(data_root, connection_id)
     return {
         "requires_secrets": True,
         "resource_type": "drive_connection",
@@ -362,7 +363,7 @@ def handle_action(
         return 200, _sync_drive_changes(
             data_root=data_root,
             provider=provider,
-            connection_id=str(body.get("connection_id") or ""),
+            connection_id=provider.connection_id,
             limit=_optional_positive_int(body, "limit", maximum=2000),
         )
     if action == "drive_read":
@@ -464,12 +465,13 @@ def handle_action(
         if record.get("provider") == GOOGLE_DRIVE_PROVIDER:
             connection_id, drive_file_id = _drive_locator_from_body(data_root, uploaded_root, generated_root, {**body, "stable_storage_file_id": record.get("file_id") or record.get("id")})
             provider = _google_drive_provider(data_root, {**body, "connection_id": connection_id}, transport=drive_transport)
+            file_record = record if _drive_record_matches_locator(record, connection_id, drive_file_id) else None
             result = resolve_drive_local_path_payload(
                 data_root=data_root,
                 provider=provider,
                 connection_id=connection_id,
                 drive_file_id=drive_file_id,
-                file_record=record,
+                file_record=file_record,
                 app_id=str(body.get("_app_id") or "storage"),
                 localize=_bool_value(body.get("localize", True)),
                 max_bytes=_optional_positive_int(body, "max_bytes", maximum=DRIVE_LOCALIZE_MAX_BYTES),
@@ -1084,18 +1086,28 @@ def _google_drive_provider(data_root: Path, body: dict[str, Any], *, transport=N
     if not connection_id:
         raise StorageValidationError("connection_id is required.", operation=str(body.get("action") or "drive"))
     try:
-        connection = get_connection(data_root, connection_id)
+        connection = resolve_connected_connection(data_root, connection_id)
     except ValueError as error:
         raise StorageValidationError(str(error), operation=str(body.get("action") or "drive")) from error
     app_secrets = body.get("_app_secrets") if isinstance(body.get("_app_secrets"), dict) else {}
     return GoogleDriveProvider(connection=connection, app_secrets=app_secrets, transport=transport, cache_root=data_root / "drive_temp_cache")
 
 
+def _effective_drive_connection_id(data_root: Path, connection_id: str) -> str:
+    connection_id = str(connection_id or "").strip()
+    if not connection_id:
+        return ""
+    try:
+        return str(resolve_connected_connection(data_root, connection_id).get("id") or connection_id).strip()
+    except ValueError:
+        return connection_id
+
+
 def _drive_locator_from_body(data_root: Path, uploaded_root: Path, generated_root: Path, body: dict[str, Any]) -> tuple[str, str]:
     connection_id = str(body.get("connection_id") or "").strip()
     drive_file_id = str(body.get("drive_file_id") or "").strip()
     if connection_id and drive_file_id:
-        return connection_id, drive_file_id
+        return _effective_drive_connection_id(data_root, connection_id), drive_file_id
     stable_id = str(body.get("stable_storage_file_id") or body.get("file_id") or body.get("id") or body.get("entity_id") or "").strip()
     if not stable_id:
         raise StorageValidationError(
@@ -1113,7 +1125,7 @@ def _drive_locator_from_body(data_root: Path, uploaded_root: Path, generated_roo
         raise StorageValidationError("Google Drive Storage reference is missing its remote locator.", operation=str(body.get("action") or "drive"))
     if connection_id and connection_id != resolved_connection_id:
         raise StorageValidationError("connection_id does not match the stable Storage file reference.", operation=str(body.get("action") or "drive"))
-    return resolved_connection_id, resolved_drive_file_id
+    return _effective_drive_connection_id(data_root, resolved_connection_id), resolved_drive_file_id
 
 
 def _body_has_explicit_drive_locator(body: dict[str, Any]) -> bool:
@@ -1156,6 +1168,15 @@ def _drive_cached_file_record_from_body(
     if str(record.get("drive_file_id") or remote_locator.get("drive_file_id") or "").strip() != drive_file_id:
         return None
     return record
+
+
+def _drive_record_matches_locator(record: dict[str, Any], connection_id: str, drive_file_id: str) -> bool:
+    remote_locator = record.get("remote_locator") if isinstance(record.get("remote_locator"), dict) else {}
+    return (
+        record.get("provider") == GOOGLE_DRIVE_PROVIDER
+        and str(record.get("connection_id") or "").strip() == connection_id
+        and str(record.get("drive_file_id") or remote_locator.get("drive_file_id") or "").strip() == drive_file_id
+    )
 
 
 def _persist_drive_files(data_root: Path, result: dict[str, Any]) -> list[dict[str, Any]]:
@@ -1274,8 +1295,17 @@ def _media_stream_payload(
         provider = None
         app_secrets = body.get("_app_secrets") if isinstance(body.get("_app_secrets"), dict) else {}
         if app_secrets:
-            connection_id = str(record.get("connection_id") or "").strip()
+            connection_id, drive_file_id = _drive_locator_from_body(
+                data_root,
+                uploaded_root,
+                generated_root,
+                {**body, "stable_storage_file_id": _storage_file_id(record)},
+            )
             provider = _google_drive_provider(data_root, {**body, "connection_id": connection_id}, transport=drive_transport)
+            if str(record.get("connection_id") or "").strip() != connection_id:
+                record = provider.metadata(drive_file_id=drive_file_id)
+                persisted = upsert_remote_file_records(data_root=data_root, records=[record])
+                record = persisted[0] if persisted else record
         request_headers = body.get("_request_headers") if isinstance(body.get("_request_headers"), dict) else {}
         return drive_media_stream_response(
             data_root=data_root,
@@ -1426,6 +1456,7 @@ def _reconcile_payload(
             remote_locator = record.get("remote_locator") if isinstance(record.get("remote_locator"), dict) else {}
             drive_file_id = str(record.get("drive_file_id") or remote_locator.get("drive_file_id") or drive_file_id).strip()
     if connection_id and drive_file_id:
+        connection_id = _effective_drive_connection_id(data_root, connection_id)
         provider = _google_drive_provider(data_root, {**body, "connection_id": connection_id}, transport=drive_transport)
         file_record = provider.metadata(drive_file_id=drive_file_id)
         persisted = upsert_remote_file_records(data_root=data_root, records=[file_record])

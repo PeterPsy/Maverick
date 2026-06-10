@@ -1924,6 +1924,163 @@ class GoogleDriveProviderTest(unittest.TestCase):
         self.assertEqual(reconciled["file"]["etag_or_version"], "2")
         self.assertEqual(persisted["name"], "New.txt")
 
+    def test_secret_lookup_remaps_disconnected_drive_connection_to_active_same_account(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            data_root = root / "data" / "storage"
+            uploaded_root = root / "storage" / "uploaded"
+            generated_root = root / "storage" / "generated"
+            old_file_id = stable_storage_file_id("drive_conn_old", "file-1")
+            replace_connection(
+                data_root,
+                {
+                    **CONNECTION,
+                    "id": "drive_conn_old",
+                    "status": "disconnected",
+                    "account_email": "ana@example.com",
+                    "external_refs": {"google_subject": "google-subject"},
+                    "created_at": "2026-05-28T00:00:00+00:00",
+                    "updated_at": "2026-06-03T00:00:00+00:00",
+                },
+            )
+            replace_connection(
+                data_root,
+                {
+                    **CONNECTION,
+                    "id": "drive_conn_new",
+                    "account_email": "ana@example.com",
+                    "external_refs": {"google_subject": "google-subject"},
+                    "created_at": "2026-06-10T00:00:00+00:00",
+                    "updated_at": "2026-06-10T00:00:00+00:00",
+                    "connected_at": "2026-06-10T00:00:00+00:00",
+                },
+            )
+            upsert_remote_file_records(
+                data_root=data_root,
+                records=[
+                    {
+                        "id": old_file_id,
+                        "file_id": old_file_id,
+                        "provider": "google_drive",
+                        "connection_id": "drive_conn_old",
+                        "drive_file_id": "file-1",
+                        "remote_locator": {"drive_file_id": "file-1"},
+                        "status": "active",
+                        "role": "",
+                        "relative_path": "",
+                        "workspace_relative_path": "",
+                        "display_path": "/My Drive/Old.txt",
+                        "name": "Old.txt",
+                        "content_type": "text/plain",
+                        "preview_kind": "text",
+                        "etag_or_version": "1",
+                    }
+                ],
+            )
+
+            lookup = secret_lookup_for_drive_action(
+                data_root,
+                uploaded_root,
+                generated_root,
+                {"action": "file.localize_status", "stable_storage_file_id": old_file_id},
+            )
+
+        self.assertTrue(lookup["requires_secrets"])
+        self.assertEqual(lookup["resource_id"], "drive_conn_new")
+        self.assertEqual(lookup["secret_requests"][1]["resource_id"], "drive_conn_new")
+
+    def test_file_reconcile_remaps_disconnected_drive_connection_to_active_same_account(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            data_root = root / "data" / "storage"
+            old_file_id = stable_storage_file_id("drive_conn_old", "file-1")
+            new_file_id = stable_storage_file_id("drive_conn_new", "file-1")
+            replace_connection(
+                data_root,
+                {
+                    **CONNECTION,
+                    "id": "drive_conn_old",
+                    "status": "disconnected",
+                    "account_email": "ana@example.com",
+                    "external_refs": {"google_subject": "google-subject"},
+                    "created_at": "2026-05-28T00:00:00+00:00",
+                    "updated_at": "2026-06-03T00:00:00+00:00",
+                },
+            )
+            replace_connection(
+                data_root,
+                {
+                    **CONNECTION,
+                    "id": "drive_conn_new",
+                    "account_email": "ana@example.com",
+                    "external_refs": {"google_subject": "google-subject"},
+                    "created_at": "2026-06-10T00:00:00+00:00",
+                    "updated_at": "2026-06-10T00:00:00+00:00",
+                    "connected_at": "2026-06-10T00:00:00+00:00",
+                },
+            )
+            upsert_remote_file_records(
+                data_root=data_root,
+                records=[
+                    {
+                        "id": old_file_id,
+                        "file_id": old_file_id,
+                        "provider": "google_drive",
+                        "connection_id": "drive_conn_old",
+                        "drive_file_id": "file-1",
+                        "remote_locator": {"drive_file_id": "file-1"},
+                        "status": "active",
+                        "role": "",
+                        "relative_path": "",
+                        "workspace_relative_path": "",
+                        "display_path": "/My Drive/Old.txt",
+                        "name": "Old.txt",
+                        "extension": ".txt",
+                        "size_bytes": 3,
+                        "modified_at": "2026-05-28T11:00:00Z",
+                        "content_type": "text/plain",
+                        "preview_kind": "text",
+                        "sha256": "",
+                        "etag_or_version": "1",
+                        "capabilities": {"can_read": True, "can_preview": True},
+                    }
+                ],
+            )
+            transport = FakeDriveTransport(
+                {
+                    ("GET", "/drive/v3/files/file-1"): {
+                        "id": "file-1",
+                        "name": "New.txt",
+                        "mimeType": "text/plain",
+                        "parents": ["root"],
+                        "size": "7",
+                        "modifiedTime": "2026-06-10T11:00:00Z",
+                        "version": "2",
+                        "capabilities": {"canDownload": True},
+                    }
+                }
+            )
+
+            status, reconciled = handle_action(
+                data_root,
+                root / "storage" / "uploaded",
+                root / "storage" / "generated",
+                {
+                    "action": "file.reconcile",
+                    "stable_storage_file_id": old_file_id,
+                    "_app_secrets": SECRETS,
+                },
+                drive_transport=transport,
+            )
+            by_id = {item["id"]: item for item in load_inventory(data_root)["files"]}
+
+        self.assertEqual(status, 200)
+        self.assertEqual(reconciled["connection_id"], "drive_conn_new")
+        self.assertEqual(reconciled["file"]["id"], new_file_id)
+        self.assertEqual(reconciled["file"]["connection_id"], "drive_conn_new")
+        self.assertIn(old_file_id, by_id)
+        self.assertIn(new_file_id, by_id)
+
     def test_drive_write_without_capability_fails_closed_before_upload(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             root = Path(temp_dir)

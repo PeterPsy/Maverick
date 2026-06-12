@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import type { CSSProperties, PointerEvent as ReactPointerEvent, SyntheticEvent as ReactSyntheticEvent } from 'react';
+import type { CSSProperties, PointerEvent as ReactPointerEvent, Ref, SyntheticEvent as ReactSyntheticEvent } from 'react';
 import {
   ArrowDown,
   Check,
@@ -44,7 +44,7 @@ import {
 } from './api';
 import { readBootstrapCache, writeBootstrapCache } from './bootstrapCache';
 import { GradientBarsBackground } from './components/ui/gradient-bars-background';
-import { cachedMediaPlayback, cancelMediaPlayback, clearMediaPlaybackCache, createLocalBlobFallback, driveMediaStreamUrl, initialMediaResolution, latestMediaPlaybackError, mediaCacheKey, preloadMediaPlayback, resolveMediaPlayback, retainMediaPlayback } from './mediaPlaybackResolver';
+import { cachedMediaPlayback, cancelMediaPlayback, clearMediaPlaybackCache, createLocalBlobFallback, driveMediaStreamUrl, initialMediaResolution, latestMediaPlaybackError, mediaCacheKey, resolveMediaPlayback, retainMediaPlayback } from './mediaPlaybackResolver';
 import { captureMediaThumbVideoFrame, mediaThumbPreviewFrameKey, readMediaThumbPreviewFrame } from './mediaThumbPreviewCache';
 import { TagsInputField } from './components/ui/tags-input';
 import type { AppBootstrapPayload, Exercise, ExerciseMediaRef, MediaPlaybackResolution, RestBlock, RuntimeSegment, SetupTab, StartWorkoutPayload, ViewState, WorkBlock, Workout, WorkoutBlock, WorkoutRunSummary } from './types';
@@ -951,6 +951,19 @@ function WorkPlayer({ workout, startPromise, onClose, onComplete }: { workout: W
     });
   }, []);
 
+  const markVideoFrameLoaded = useCallback((video: HTMLVideoElement, url: string) => {
+    if (!url) return;
+    const requestFrame = (video as HTMLVideoElement & { requestVideoFrameCallback?: (callback: () => void) => number }).requestVideoFrameCallback;
+    if (typeof requestFrame === 'function') {
+      requestFrame.call(video, () => markMediaLoaded(url));
+      window.setTimeout(() => {
+        if (video.readyState >= 2) markMediaLoaded(url);
+      }, 120);
+      return;
+    }
+    if (video.readyState >= 2) markMediaLoaded(url);
+  }, [markMediaLoaded]);
+
   const currentResolution = activeWorkMediaKey && resolutionKey === activeWorkMediaKey
     ? resolution
     : segment?.type === 'work'
@@ -1035,16 +1048,15 @@ function WorkPlayer({ workout, startPromise, onClose, onComplete }: { workout: W
     setNextPreviewResolutionKey(key);
     setNextPreviewResolution(cachedMediaPlayback(nextPreviewCandidate.media) || initialMediaResolution());
     let canceled = false;
-    preloadMediaPlayback(nextPreviewCandidate.media).then((next) => {
+    resolveMediaPlayback(nextPreviewCandidate.media).then((next) => {
       if (canceled) return;
       setNextPreviewResolutionKey(key);
       setNextPreviewResolution(next);
-      if (next.status === 'ready') markMediaLoaded(next.url);
     });
     return () => {
       canceled = true;
     };
-  }, [markMediaLoaded, nextPreviewCandidate, nextPreviewMediaKey, retryNonce]);
+  }, [nextPreviewCandidate, nextPreviewMediaKey, retryNonce]);
 
   useEffect(() => {
     const video = videoRef.current;
@@ -1280,6 +1292,14 @@ function WorkPlayer({ workout, startPromise, onClose, onComplete }: { workout: W
       : currentResolution.status === 'localizing'
         ? 'Storage is preparing workout media'
         : 'Loading workout media';
+  const hasCurrentMediaLayer = segment.type === 'work'
+    && currentResolution.status === 'ready'
+    && Boolean(currentResolution.url)
+    && (currentResolution.mediaKind === 'video' || currentResolution.mediaKind === 'image');
+  const hasNextPreloadLayer = nextPreviewResolved.status === 'ready'
+    && Boolean(nextPreviewResolved.url)
+    && (nextPreviewResolved.mediaKind === 'video' || nextPreviewResolved.mediaKind === 'image')
+    && nextPreviewResolved.url !== currentResolution.url;
   return (
     <main
       className="work-player"
@@ -1297,56 +1317,7 @@ function WorkPlayer({ workout, startPromise, onClose, onComplete }: { workout: W
             animationDuration={2.4}
             backgroundColor="#050605"
           />
-        ) : currentResolution.status === 'ready' && currentResolution.mediaKind === 'video' ? (
-          <>
-            {!currentMediaLoaded ? (
-              <GradientBarsBackground
-                className="player-media-backdrop is-frame-wait"
-                numBars={9}
-                gradientFrom="rgba(224, 228, 230, 0.78)"
-                gradientTo="rgba(5, 6, 5, 0)"
-                animationDuration={2.2}
-                backgroundColor="#050605"
-                ariaLabel="Loading workout media"
-              />
-            ) : null}
-            <video
-              ref={videoRef}
-              className={currentMediaLoaded ? 'is-frame-ready' : 'is-awaiting-frame'}
-              src={currentResolution.url}
-              muted
-              autoPlay={!paused && currentMediaLoaded}
-              loop
-              playsInline
-              preload="auto"
-              onLoadedData={() => markMediaLoaded(currentResolution.url)}
-              onCanPlay={() => markMediaLoaded(currentResolution.url)}
-              onError={fallbackBlob}
-            />
-          </>
-        ) : currentResolution.status === 'ready' && currentResolution.mediaKind === 'image' ? (
-          <>
-            {!currentMediaLoaded ? (
-              <GradientBarsBackground
-                className="player-media-backdrop is-frame-wait"
-                numBars={9}
-                gradientFrom="rgba(224, 228, 230, 0.78)"
-                gradientTo="rgba(5, 6, 5, 0)"
-                animationDuration={2.2}
-                backgroundColor="#050605"
-                ariaLabel="Loading workout media"
-              />
-            ) : null}
-            <img
-              className={currentMediaLoaded ? 'is-frame-ready' : 'is-awaiting-frame'}
-              src={currentResolution.url}
-              alt=""
-              decoding="async"
-              onLoad={() => markMediaLoaded(currentResolution.url)}
-              onError={fallbackBlob}
-            />
-          </>
-        ) : (
+        ) : !hasCurrentMediaLayer ? (
           <GradientBarsBackground
             className={`player-media-backdrop is-${currentResolution.status}`}
             numBars={9}
@@ -1358,7 +1329,42 @@ function WorkPlayer({ workout, startPromise, onClose, onComplete }: { workout: W
           >
             {currentResolution.status === 'blocked' && currentResolution.detail ? <span className="player-media-backdrop-message">{currentResolution.detail}</span> : null}
           </GradientBarsBackground>
-        )}
+        ) : null}
+        {hasCurrentMediaLayer && !currentMediaLoaded ? (
+          <GradientBarsBackground
+            className="player-media-backdrop is-frame-wait"
+            numBars={9}
+            gradientFrom="rgba(224, 228, 230, 0.78)"
+            gradientTo="rgba(5, 6, 5, 0)"
+            animationDuration={2.2}
+            backgroundColor="#050605"
+            ariaLabel="Loading workout media"
+          />
+        ) : null}
+        {hasCurrentMediaLayer ? (
+          <PlayerMediaLayer
+            key={currentResolution.url}
+            resolution={currentResolution}
+            role="current"
+            isLoaded={currentMediaLoaded}
+            paused={paused}
+            videoRef={videoRef}
+            onLoaded={markMediaLoaded}
+            onVideoFrameLoaded={markVideoFrameLoaded}
+            onError={fallbackBlob}
+          />
+        ) : null}
+        {hasNextPreloadLayer ? (
+          <PlayerMediaLayer
+            key={nextPreviewResolved.url}
+            resolution={nextPreviewResolved}
+            role="preload"
+            isLoaded={nextPreviewMediaLoaded}
+            paused
+            onLoaded={markMediaLoaded}
+            onVideoFrameLoaded={markVideoFrameLoaded}
+          />
+        ) : null}
       </div>
       <div className="player-scrim" />
       {segment.type === 'rest' ? (
@@ -1473,6 +1479,62 @@ function WorkPlayer({ workout, startPromise, onClose, onComplete }: { workout: W
 
 function RestIconImage({ className }: { className: string }) {
   return <img className={className} src={REST_ICON_SRC} alt="" aria-hidden="true" draggable={false} />;
+}
+
+function PlayerMediaLayer({
+  resolution,
+  role,
+  isLoaded,
+  paused,
+  videoRef,
+  onLoaded,
+  onVideoFrameLoaded,
+  onError
+}: {
+  resolution: MediaPlaybackResolution;
+  role: 'current' | 'preload';
+  isLoaded: boolean;
+  paused: boolean;
+  videoRef?: Ref<HTMLVideoElement>;
+  onLoaded: (url: string) => void;
+  onVideoFrameLoaded: (video: HTMLVideoElement, url: string) => void;
+  onError?: () => void | Promise<void>;
+}) {
+  const className = role === 'preload' ? 'is-preload-layer' : isLoaded ? 'is-frame-ready' : 'is-awaiting-frame';
+  const handleError = () => {
+    if (onError) void onError();
+  };
+  if (resolution.mediaKind === 'video') {
+    return (
+      <video
+        ref={role === 'current' ? videoRef : undefined}
+        className={className}
+        data-player-media-role={role}
+        src={resolution.url}
+        muted
+        autoPlay={role === 'current' && !paused && isLoaded}
+        loop
+        playsInline
+        preload="auto"
+        aria-hidden={role === 'preload' ? 'true' : undefined}
+        onLoadedData={(event) => onVideoFrameLoaded(event.currentTarget, resolution.url)}
+        onCanPlay={(event) => onVideoFrameLoaded(event.currentTarget, resolution.url)}
+        onError={handleError}
+      />
+    );
+  }
+  return (
+    <img
+      className={className}
+      data-player-media-role={role}
+      src={resolution.url}
+      alt=""
+      decoding="async"
+      aria-hidden={role === 'preload' ? 'true' : undefined}
+      onLoad={() => onLoaded(resolution.url)}
+      onError={handleError}
+    />
+  );
 }
 
 function NextPreviewMedia({ resolution, isLoaded, onLoaded }: { resolution: MediaPlaybackResolution; isLoaded: boolean; onLoaded: (url: string) => void }) {

@@ -110,13 +110,21 @@ describe('work player presentation', () => {
   });
 
   it('preloads the next workout media from preparation and keeps cached media off the black frame path', () => {
-    expect(appSource).toContain('preloadMediaPlayback(nextPreviewCandidate.media)');
+    expect(appSource).toContain('resolveMediaPlayback(nextPreviewCandidate.media)');
+    expect(appSource).toContain('const hasNextPreloadLayer = nextPreviewResolved.status ===');
+    expect(appSource).toContain('function PlayerMediaLayer');
+    expect(appSource).toContain('role="preload"');
+    expect(appSource).toContain('data-player-media-role={role}');
+    expect(appSource).toContain('key={nextPreviewResolved.url}');
+    expect(appSource).toContain('key={currentResolution.url}');
+    expect(appSource).toContain('requestVideoFrameCallback');
     expect(appSource).toContain('cachedMediaPlayback(segment.media) || initialMediaResolution()');
     expect(appSource).toContain('const currentMediaLoaded = currentResolution.status ===');
     expect(appSource).toContain("preload=\"auto\"");
-    expect(appSource).toContain("className={currentMediaLoaded ? 'is-frame-ready' : 'is-awaiting-frame'}");
+    expect(appSource).toContain("const className = role === 'preload' ? 'is-preload-layer' : isLoaded ? 'is-frame-ready' : 'is-awaiting-frame';");
     expect(styles).toContain('.player-media-backdrop.is-frame-wait');
     expect(styles).toContain('.player-media .is-awaiting-frame');
+    expect(styles).toContain('.player-media .is-preload-layer');
   });
 
   it('shows the next exercise preview during the final five seconds of timed work blocks', () => {

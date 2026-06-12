@@ -1336,6 +1336,11 @@ select:focus {
   opacity: 1;
 }
 
+.player-media .is-preload-layer {
+  opacity: 0;
+  pointer-events: none;
+}
+
 .player-media-backdrop::after {
   content: "";
   position: absolute;

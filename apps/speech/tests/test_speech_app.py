@@ -1416,19 +1416,20 @@ class SpeechAppTests(unittest.TestCase):
             handle_action(Path("data"), Path("generated"), {"action": "transcribe_audio", "content_type": "audio/wav", "audio_base64": "not base64"})
 
     def test_transcribe_audio_inline_payload_uses_json_safe_size_limit(self) -> None:
-        audio = b"x" * (MAX_INLINE_TRANSCRIPTION_AUDIO_BYTES + 1)
-        with self.assertRaises(SpeechValidationError) as context:
-            handle_action(
-                Path("data"),
-                Path("generated"),
-                {
-                    "action": "transcribe_audio",
-                    "content_type": "audio/wav",
-                    "audio_base64": base64.b64encode(audio).decode("ascii"),
-                },
-            )
+        audio = b"x" * 257
+        with patch("transcription.MAX_INLINE_TRANSCRIPTION_AUDIO_BYTES", 256):
+            with self.assertRaises(SpeechValidationError) as context:
+                handle_action(
+                    Path("data"),
+                    Path("generated"),
+                    {
+                        "action": "transcribe_audio",
+                        "content_type": "audio/wav",
+                        "audio_base64": base64.b64encode(audio).decode("ascii"),
+                    },
+                )
 
-        self.assertEqual(context.exception.allowed_values["max_audio_bytes"], [str(MAX_INLINE_TRANSCRIPTION_AUDIO_BYTES)])
+        self.assertEqual(context.exception.allowed_values["max_audio_bytes"], ["256"])
 
     def test_cleaned_transcript_filters_common_hallucinations_without_dropping_short_words(self) -> None:
         self.assertEqual(cleaned_transcript("Thanks for watching."), "")

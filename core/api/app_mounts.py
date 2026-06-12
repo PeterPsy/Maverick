@@ -53,7 +53,7 @@ from core.identity.models import UserRecord
 logger = logging.getLogger(__name__)
 
 APP_BACKEND_BINARY_BODY_LIMITS = {
-    "speech": 700_000,
+    "speech": 20_000_000,
 }
 
 FILE_RESPONSE_CHUNK_BYTES = 1024 * 1024

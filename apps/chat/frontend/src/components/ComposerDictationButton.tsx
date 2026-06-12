@@ -1,8 +1,8 @@
 import { useEffect, useRef, useState } from "react";
 import { ApiError, transcribeSpeechBlob, type SpeechTranscribePayload } from "../api/client";
 
-const DEFAULT_MAX_DICTATION_MS = 120000;
-const DEFAULT_MAX_DICTATION_AUDIO_BYTES = 700_000;
+const DEFAULT_MAX_DICTATION_MS = 180000;
+const DEFAULT_MAX_DICTATION_AUDIO_BYTES = 20_000_000;
 const DICTATION_CHUNK_MS = 1500;
 const DICTATION_TRANSCRIPTION_PROFILE = "fast";
 const ADAPTIVE_LANGUAGE_PROBABILITY = 0.8;

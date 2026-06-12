@@ -82,14 +82,13 @@ class AppMountsTestCase(unittest.TestCase):
     def test_speech_binary_backend_body_uses_inline_audio_limit_before_spooling(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
-            raw = b"x" * 700_001
 
             with self.assertRaises(HttpRequestError) as raised:
                 _read_backend_body(
                     {
                         "CONTENT_TYPE": "audio/webm",
-                        "CONTENT_LENGTH": str(len(raw)),
-                        "wsgi.input": BytesIO(raw),
+                        "CONTENT_LENGTH": str(20_000_001),
+                        "wsgi.input": BytesIO(b""),
                     },
                     data_root=str(root),
                     app_id="speech",
@@ -97,6 +96,27 @@ class AppMountsTestCase(unittest.TestCase):
 
             self.assertEqual(raised.exception.error, "request_body_too_large")
             self.assertFalse((root / "run" / "http-body").exists())
+
+    def test_speech_binary_backend_body_allows_recordings_over_previous_700kb_limit(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            raw = b"x" * 700_001
+
+            body, body_file = _read_backend_body(
+                {
+                    "CONTENT_TYPE": "audio/webm",
+                    "CONTENT_LENGTH": str(len(raw)),
+                    "wsgi.input": BytesIO(raw),
+                },
+                data_root=str(root),
+                app_id="speech",
+            )
+
+            self.assertEqual(body, {})
+            self.assertIsNotNone(body_file)
+            assert body_file is not None
+            self.assertEqual(body_file["size_bytes"], len(raw))
+            self.assertEqual(Path(str(body_file["path"])).read_bytes(), raw)
 
     def test_app_file_response_serves_single_byte_range(self) -> None:
         with tempfile.TemporaryDirectory() as directory:

@@ -217,6 +217,42 @@ describe("ComposerDictationButton", () => {
     expect(onTranscript).toHaveBeenCalledWith("one shot", expect.objectContaining({ text: "one shot" }));
   });
 
+  it("allows one-shot recordings larger than the old 700 KB cap", async () => {
+    const onError = vi.fn();
+    const onTranscript = vi.fn();
+    vi.mocked(transcribeSpeechBlob).mockResolvedValue({ language: "en", language_probability: 0.9, text: "longer recording" });
+
+    await act(async () => {
+      root.render(
+        <ComposerDictationButton
+          disabled={false}
+          onError={onError}
+          onTranscript={onTranscript}
+          providerAppId="speech"
+          providerAvailable
+          supportedContentTypes={["audio/webm"]}
+        />,
+      );
+    });
+
+    const button = container.querySelector("button");
+    await act(async () => {
+      button?.click();
+      await Promise.resolve();
+    });
+    await act(async () => {
+      MockMediaRecorder.instances[0]?.emit("x".repeat(700_001));
+      button?.click();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(transcribeSpeechBlob).toHaveBeenCalledTimes(1);
+    expect((vi.mocked(transcribeSpeechBlob).mock.calls[0]?.[1] as Blob).size).toBeGreaterThan(700_000);
+    expect(onError).not.toHaveBeenCalledWith(expect.stringContaining("700 KB"));
+    expect(onTranscript).toHaveBeenCalledWith("longer recording", expect.objectContaining({ text: "longer recording" }));
+  });
+
   it("keeps a chunk transcription error instead of replacing it with no speech", async () => {
     const onError = vi.fn();
     const onTranscript = vi.fn();

@@ -1,0 +1,153 @@
+:root {
+  color-scheme: dark;
+  --maverick-bg: rgba(7, 7, 8, 1);
+  --maverick-text: #ececec;
+  --maverick-text-muted: rgba(236, 236, 236, 0.64);
+  --maverick-text-soft: rgba(236, 236, 236, 0.42);
+  --maverick-border: rgba(255, 255, 255, 0.08);
+  --maverick-border-strong: rgba(255, 255, 255, 0.14);
+  --maverick-surface: rgba(255, 255, 255, 0.055);
+  --maverick-surface-hover: rgba(255, 255, 255, 0.105);
+  --maverick-surface-active: rgba(255, 255, 255, 0.14);
+  --maverick-accent: #ffffff;
+  --maverick-accent-soft: rgba(255, 255, 255, 0.18);
+  --maverick-glass-surface: rgba(12, 12, 14, 0.58);
+  --maverick-inner-edge: inset 0 0 0 1px rgba(255, 255, 255, 0.075), inset 0 1px 0 rgba(255, 255, 255, 0.14);
+  --maverick-glass-edge: inset 0 0 0 1px rgba(255, 255, 255, 0.052), inset 0 1px 0 rgba(255, 255, 255, 0.09);
+  --crm-sidebar-icon-color: rgba(236, 236, 236, 0.72);
+  --crm-sidebar-cell-radius: 22px;
+  --crm-sidebar-control-radius: 18px;
+  --crm-sidebar-glass-highlight:
+    linear-gradient(135deg, rgba(255, 255, 255, 0.08), transparent 36%),
+    linear-gradient(315deg, rgba(255, 255, 255, 0.035), transparent 42%);
+  font-family: "Avenir Next", "Sohne", "Segoe UI", Inter, ui-sans-serif, system-ui, sans-serif;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#crm-sidebar-root {
+  width: 100%;
+  height: 100%;
+  min-height: 100%;
+  margin: 0;
+  overflow: hidden;
+}
+
+body {
+  background: transparent;
+  color: var(--maverick-text);
+}
+
+button {
+  border: 0;
+  color: inherit;
+  font: inherit;
+}
+
+button {
+  cursor: pointer;
+}
+
+.crm-sidebar-widget {
+  --crm-sidebar-scroll-under-bottom: 7.15rem;
+  --crm-sidebar-scroll-under-top: 3.12rem;
+  position: relative;
+  display: block;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.crm-sidebar-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.72rem;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+  padding: var(--crm-sidebar-scroll-under-top) 0 var(--crm-sidebar-scroll-under-bottom);
+  scrollbar-width: none;
+}
+
+.crm-sidebar-list::-webkit-scrollbar {
+  display: none;
+  width: 0;
+  height: 0;
+}
+
+.crm-sidebar-widget nav {
+  display: flex;
+  flex-direction: column;
+  gap: 0.46rem;
+  min-height: 0;
+}
+
+.crm-sidebar-row {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  width: 100%;
+  min-height: 3rem;
+  padding: 0.58rem 0.7rem;
+  border: 1px solid transparent;
+  border-radius: var(--crm-sidebar-cell-radius);
+  background: transparent;
+  box-shadow: var(--maverick-inner-edge);
+  text-align: left;
+  transition:
+    background 150ms ease,
+    border-color 150ms ease,
+    transform 150ms ease;
+}
+
+.crm-sidebar-row svg {
+  display: grid;
+  place-items: center;
+  flex: 0 0 auto;
+  width: 2rem;
+  height: 2rem;
+  border: 1px solid transparent;
+  border-radius: 15px;
+  background: var(--maverick-surface);
+  color: var(--crm-sidebar-icon-color);
+  box-shadow: var(--maverick-inner-edge);
+  padding: 0.46rem;
+  stroke: currentColor;
+}
+
+.crm-sidebar-row span {
+  min-width: 0;
+  overflow: hidden;
+  font-weight: 400;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.crm-sidebar-row:hover,
+.crm-sidebar-row:focus-visible {
+  border-color: var(--maverick-border);
+  background: var(--maverick-surface-hover);
+  outline: none;
+}
+
+.crm-sidebar-row.is-active svg {
+  border-color: var(--maverick-accent);
+}
+
+.crm-sidebar-row:active {
+  transform: scale(0.985);
+}
+
+.crm-sidebar-widget.is-shell-mobile {
+  --crm-sidebar-scroll-under-bottom: 5.1rem;
+  --crm-sidebar-scroll-under-top: 5.86rem;
+}

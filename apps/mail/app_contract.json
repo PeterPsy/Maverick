@@ -1,0 +1,293 @@
+{
+  "app_id": "mail",
+  "contract_version": "1.0",
+  "name": "Mail",
+  "version": "0.2.0",
+  "description": "Maverick Mail app with inbox, thread, draft, CLI, MCP, and reference surfaces backed by app-owned SQLite storage.",
+  "publisher": "workspace",
+  "minimum_core_version": "0.1.0",
+  "provides": [
+    {
+      "interface": "mail.workspace",
+      "version": "1",
+      "description": "Mail threads, messages, drafts, and references for workspace agents and apps.",
+      "surfaces": [
+        "backend",
+        "cli",
+        "mcp",
+        "reference",
+        "view",
+        "widget"
+      ]
+    }
+  ],
+  "requires": [],
+  "distribution": {
+    "mode": "source_available",
+    "source_access": "forkable"
+  },
+  "visibility": {
+    "platform_roles": null
+  },
+  "presentation": {
+    "frontend_role": "workspace"
+  },
+  "permissions": {
+    "secrets": {
+      "read": [
+        "gmail-oauth-client-id",
+        "gmail-oauth-client-secret",
+        "gmail-refresh-token",
+        "mailbox-password"
+      ],
+      "write": [
+        "gmail-refresh-token"
+      ]
+    },
+    "network": {
+      "outbound": [
+        "accounts.google.com",
+        "oauth2.googleapis.com",
+        "gmail.googleapis.com",
+        "mail.privateemail.com"
+      ]
+    },
+    "runtime": {
+      "create_sessions": false,
+      "cleanup_sessions": false
+    },
+    "host": {
+      "telemetry": false
+    }
+  },
+  "capabilities": {
+    "mcp_tools": [
+      "mail_reference_manifest",
+      "mail_reference_search",
+      "mail_reference_resolve",
+      "mail_reference_summarize",
+      "mail_view_filter",
+      "mail_set_view_filter",
+      "mail_set_custom_view",
+      "mail_clear_custom_view",
+      "mail_list_threads",
+      "mail_get_thread",
+      "mail_search_messages",
+      "mail_create_draft",
+      "mail_update_draft",
+      "mail_send_draft",
+      "mail_send",
+      "mail_modify_labels",
+      "mail_mark_read",
+      "mail_get_attachment",
+      "mail_sync"
+    ],
+    "cli_commands": [
+      "mail"
+    ],
+    "skills": [
+      "mail-ops"
+    ],
+    "views": [
+      "mail"
+    ],
+    "data_events": [
+      {
+        "resource": "threads",
+        "description": "Thread or message cache changed."
+      },
+      {
+        "resource": "drafts",
+        "description": "Mail draft state changed."
+      },
+      {
+        "resource": "connections",
+        "description": "Mail provider connection state changed."
+      },
+      {
+        "resource": "view-state",
+        "description": "Persisted app view state changed."
+      }
+    ],
+    "view_surfaces": [
+      {
+        "view_id": "mail",
+        "display_name": "Mail",
+        "entity_types": [
+          "mail_connection",
+          "email_thread",
+          "email_message",
+          "mail_attachment",
+          "mail_draft"
+        ],
+        "state_actions": [
+          {
+            "action": "view_filter",
+            "standard": true,
+            "description": "Read the current persisted view filter."
+          },
+          {
+            "action": "set_view_filter",
+            "standard": true,
+            "description": "Persist a shared search/filter view state."
+          },
+          {
+            "action": "set_custom_view",
+            "standard": true,
+            "description": "Persist an explicit custom view selection."
+          },
+          {
+            "action": "clear_custom_view",
+            "standard": true,
+            "description": "Return the view to the standard search/filter mode."
+          }
+        ],
+        "supports_custom_view": true,
+        "supports_filter_refinement": true
+      }
+    ],
+    "reference_entities": [
+      {
+        "entity_type": "mail_connection",
+        "display_name": "Mail Connection",
+        "searchable": true,
+        "resolvable": true,
+        "summarizable": true,
+        "deep_link_supported": true
+      },
+      {
+        "entity_type": "email_thread",
+        "display_name": "Email Thread",
+        "searchable": true,
+        "resolvable": true,
+        "summarizable": true,
+        "deep_link_supported": true
+      },
+      {
+        "entity_type": "email_message",
+        "display_name": "Email Message",
+        "searchable": true,
+        "resolvable": true,
+        "summarizable": true,
+        "deep_link_supported": true
+      },
+      {
+        "entity_type": "mail_attachment",
+        "display_name": "Mail Attachment",
+        "searchable": false,
+        "resolvable": true,
+        "summarizable": true,
+        "deep_link_supported": true
+      },
+      {
+        "entity_type": "mail_draft",
+        "display_name": "Mail Draft",
+        "searchable": true,
+        "resolvable": true,
+        "summarizable": true,
+        "deep_link_supported": true
+      }
+    ]
+  },
+  "entrypoints": {
+    "mcp": "mcp/server.py",
+    "cli": "cli/app_cli.py",
+    "backend": "backend/app_backend.py",
+    "frontend": "frontend/dist",
+    "skills_root": "skills",
+    "hooks": {
+      "install": "hooks/install.py",
+      "migrate": "hooks/migrate.py",
+      "health_check": "hooks/health_check.py"
+    }
+  },
+  "storage": {
+    "storage_kind": "sqlite",
+    "data_schema_version": "7",
+    "primary_paths": [
+      "data/mail/mail.sqlite"
+    ],
+    "indices": {
+      "kind": "embedded"
+    },
+    "supports_export": false,
+    "supports_import": false,
+    "supports_migrations": true
+  },
+  "compatibility": {
+    "workspace_modes": [
+      "sandbox"
+    ]
+  },
+  "hook_timeouts": {
+    "install_seconds": 60,
+    "upgrade_seconds": 120,
+    "migrate_seconds": 300,
+    "export_seconds": 120,
+    "import_seconds": 120,
+    "validate_after_import_seconds": 60,
+    "repair_after_import_seconds": 180,
+    "health_check_seconds": 30
+  },
+  "lifecycle": {
+    "install": true,
+    "upgrade": false,
+    "uninstall": false,
+    "migrate": true,
+    "export": false,
+    "import": false,
+    "validate_after_import": false,
+    "repair_after_import": false,
+    "health_check": true
+  },
+  "health_contract": {
+    "mode": "hook",
+    "degraded_on_failure": true
+  },
+  "failure_semantics": {
+    "install_failure": "block_activation",
+    "migrate_failure": "preserve_data_mark_unhealthy",
+    "import_failure": "preserve_payload_mark_failed"
+  },
+  "rollback_support": {
+    "bundle": false,
+    "data": false,
+    "repair_only": false
+  },
+  "widgets": [
+    {
+      "widget_id": "mail-sidebar",
+      "host": "base-shell",
+      "content_kinds": [
+        "shell.sidebar.primary"
+      ],
+      "frontend": {
+        "kind": "iframe",
+        "mount": "frontend/dist/widgets/mail-sidebar",
+        "spa_fallback": true
+      },
+      "actions": {
+        "backend": true,
+        "mcp": false,
+        "cli": false
+      }
+    },
+    {
+      "widget_id": "mail-sidebar-footer",
+      "host": "base-shell",
+      "content_kinds": [
+        "shell.sidebar.footer"
+      ],
+      "frontend": {
+        "kind": "iframe",
+        "mount": "frontend/dist/widgets/mail-sidebar-footer",
+        "spa_fallback": true
+      },
+      "actions": {
+        "backend": true,
+        "mcp": false,
+        "cli": false
+      }
+    }
+  ]
+}

@@ -1,0 +1,328 @@
+{
+  "app_id": "website-studio",
+  "contract_version": "1.0",
+  "name": "Website Studio",
+  "version": "0.4.1",
+  "description": "Import, index, edit, preview, approve, and maintain workspace website projects inside Maverick.",
+  "publisher": "workspace",
+  "minimum_core_version": "0.1.0",
+  "provides": [],
+  "requires": [
+    {
+      "alias": "storage-writer",
+      "interface": "file.content.write",
+      "version": "^1",
+      "required": true,
+      "cardinality": "one",
+      "description": "Storage provider used to persist user-uploaded ZIP artifacts through official workspace file surfaces."
+    }
+  ],
+  "distribution": {
+    "mode": "source_available",
+    "source_access": "forkable"
+  },
+  "visibility": {
+    "platform_roles": null
+  },
+  "presentation": {
+    "frontend_role": "workspace"
+  },
+  "permissions": {
+    "secrets": {
+      "read": [
+        "github-token"
+      ],
+      "write": []
+    },
+    "network": {
+      "outbound": [
+        "github.com",
+        "api.github.com",
+        "registry.npmjs.org"
+      ]
+    },
+    "runtime": {
+      "create_sessions": false,
+      "cleanup_sessions": false
+    },
+    "host": {
+      "telemetry": false
+    }
+  },
+  "capabilities": {
+    "mcp_tools": [
+      "website_manifest",
+      "website_sites_list",
+      "website_bootstrap",
+      "website_site_status",
+      "website_site_create",
+      "website_site_archive",
+      "website_site_restore",
+      "website_site_rename",
+      "website_site_duplicate",
+      "website_site_set_active",
+      "website_git_connections_list",
+      "website_git_connection_prepare",
+      "website_git_connection_activate",
+      "website_environments_list",
+      "website_environment_configure",
+      "website_publish_targets_list",
+      "website_publish_target_configure",
+      "website_import_git",
+      "website_import_zip",
+      "website_sync_source",
+      "website_sitemap",
+      "website_navigation_analyze",
+      "website_search",
+      "website_read_file",
+      "website_write_file",
+      "website_apply_patch",
+      "website_diff",
+      "website_list_changes",
+      "website_build_validate",
+      "website_builds_list",
+      "website_maintenance_prune",
+      "website_build_preview",
+      "website_preview_document",
+      "website_preview_report",
+      "website_runtime_status",
+      "website_publish_request",
+      "website_approval_record",
+      "website_approvals_list",
+      "website_publish",
+      "website_rollback",
+      "website_active_context",
+      "website_page_context",
+      "website_studio_reference_manifest",
+      "website_studio_reference_search",
+      "website_studio_reference_resolve",
+      "website_studio_reference_summarize",
+      "website_reference_manifest",
+      "website_reference_search",
+      "website_reference_resolve",
+      "website_reference_summarize",
+      "website_studio_view_filter",
+      "website_studio_set_view_filter",
+      "website_studio_set_custom_view",
+      "website_studio_clear_custom_view"
+    ],
+    "cli_commands": [
+      "website-studio"
+    ],
+    "skills": [
+      "website-ops"
+    ],
+    "views": [
+      "main"
+    ],
+    "data_events": [
+      {
+        "resource": "records",
+        "description": "Primary app records changed."
+      },
+      {
+        "resource": "view-state",
+        "description": "Persisted app view state changed."
+      }
+    ],
+    "view_surfaces": [
+      {
+        "view_id": "main",
+        "display_name": "Website Studio",
+        "entity_types": [
+          "site",
+          "page",
+          "route",
+          "component",
+          "asset",
+          "revision",
+          "publish_request"
+        ],
+        "state_actions": [
+          {
+            "action": "view_filter",
+            "standard": true,
+            "description": "Read the current persisted view filter."
+          },
+          {
+            "action": "set_view_filter",
+            "standard": true,
+            "description": "Persist a shared search/filter view state."
+          },
+          {
+            "action": "set_custom_view",
+            "standard": true,
+            "description": "Persist an explicit custom view selection."
+          },
+          {
+            "action": "clear_custom_view",
+            "standard": true,
+            "description": "Return the view to the standard search/filter mode."
+          }
+        ],
+        "supports_custom_view": true,
+        "supports_filter_refinement": true
+      }
+    ],
+    "reference_entities": [
+      {
+        "entity_type": "site",
+        "display_name": "Website Site",
+        "searchable": true,
+        "resolvable": true,
+        "summarizable": true,
+        "deep_link_supported": true
+      },
+      {
+        "entity_type": "page",
+        "display_name": "Website Page",
+        "searchable": true,
+        "resolvable": true,
+        "summarizable": true,
+        "deep_link_supported": true
+      },
+      {
+        "entity_type": "route",
+        "display_name": "Website Route",
+        "searchable": true,
+        "resolvable": true,
+        "summarizable": true,
+        "deep_link_supported": true
+      },
+      {
+        "entity_type": "component",
+        "display_name": "Website Component",
+        "searchable": true,
+        "resolvable": true,
+        "summarizable": true,
+        "deep_link_supported": true
+      },
+      {
+        "entity_type": "asset",
+        "display_name": "Website Asset",
+        "searchable": true,
+        "resolvable": true,
+        "summarizable": true,
+        "deep_link_supported": true
+      },
+      {
+        "entity_type": "revision",
+        "display_name": "Website Revision",
+        "searchable": false,
+        "resolvable": true,
+        "summarizable": true,
+        "deep_link_supported": true
+      },
+      {
+        "entity_type": "publish_request",
+        "display_name": "Publish Request",
+        "searchable": true,
+        "resolvable": true,
+        "summarizable": true,
+        "deep_link_supported": true
+      }
+    ]
+  },
+  "entrypoints": {
+    "mcp": "mcp/server.py",
+    "cli": "cli/app_cli.py",
+    "backend": "backend/app_backend.py",
+    "frontend": "frontend/dist",
+    "skills_root": "skills",
+    "hooks": {
+      "install": "hooks/install.py",
+      "migrate": "hooks/migrate.py",
+      "health_check": "hooks/health_check.py"
+    }
+  },
+  "storage": {
+    "storage_kind": "sqlite",
+    "data_schema_version": "3",
+    "primary_paths": [
+      "data/website-studio/app.sqlite",
+      "data/website-studio/sites"
+    ],
+    "indices": {
+      "kind": "embedded"
+    },
+    "supports_export": false,
+    "supports_import": false,
+    "supports_migrations": true
+  },
+  "compatibility": {
+    "workspace_modes": [
+      "sandbox"
+    ]
+  },
+  "hook_timeouts": {
+    "install_seconds": 60,
+    "upgrade_seconds": 120,
+    "migrate_seconds": 300,
+    "export_seconds": 120,
+    "import_seconds": 120,
+    "validate_after_import_seconds": 60,
+    "repair_after_import_seconds": 180,
+    "health_check_seconds": 30
+  },
+  "lifecycle": {
+    "install": true,
+    "upgrade": false,
+    "uninstall": false,
+    "migrate": true,
+    "export": false,
+    "import": false,
+    "validate_after_import": false,
+    "repair_after_import": false,
+    "health_check": true
+  },
+  "health_contract": {
+    "mode": "hook",
+    "degraded_on_failure": true
+  },
+  "failure_semantics": {
+    "install_failure": "block_activation",
+    "migrate_failure": "preserve_data_mark_unhealthy",
+    "import_failure": "preserve_payload_mark_failed"
+  },
+  "rollback_support": {
+    "bundle": false,
+    "data": true,
+    "repair_only": true
+  },
+  "widgets": [
+    {
+      "widget_id": "website-studio-sitemap-sidebar",
+      "host": "base-shell",
+      "content_kinds": [
+        "shell.sidebar.primary"
+      ],
+      "frontend": {
+        "kind": "iframe",
+        "mount": "frontend/dist/widgets/website-studio-sitemap-sidebar",
+        "spa_fallback": true
+      },
+      "actions": {
+        "backend": true,
+        "mcp": false,
+        "cli": false
+      }
+    },
+    {
+      "widget_id": "website-studio-sidebar-footer",
+      "host": "base-shell",
+      "content_kinds": [
+        "shell.sidebar.footer"
+      ],
+      "frontend": {
+        "kind": "iframe",
+        "mount": "frontend/dist/widgets/website-studio-sidebar-footer",
+        "spa_fallback": true
+      },
+      "actions": {
+        "backend": true,
+        "mcp": false,
+        "cli": false
+      }
+    }
+  ]
+}

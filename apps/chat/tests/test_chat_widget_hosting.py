@@ -48,7 +48,8 @@ class ChatWidgetHostingTests(unittest.TestCase):
         self.assertNotIn("bs-chat-sidebar-footer", sidebar_source)
         self.assertNotIn("New chat</span>", sidebar_source)
         self.assertIn("bs-chat-sidebar-footer__new-chat", footer_source)
-        self.assertIn("New chat</span>", footer_source)
+        self.assertIn('const PRIMARY_ACTION_LABEL = "New chat";', footer_source)
+        self.assertIn("<span>{primaryActionLabel}</span>", footer_source)
         self.assertIn("maverick.widget.open-app", footer_source)
         self.assertIn("new_chat_request_id", footer_source)
 

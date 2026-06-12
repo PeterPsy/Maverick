@@ -1,0 +1,424 @@
+{
+  "tools": {
+    "mail_reference_manifest": {
+      "description": "Describe Mail reference entity types.",
+      "input_schema": {
+        "type": "object",
+        "properties": {},
+        "additionalProperties": false
+      },
+      "output_schema": { "type": "object" }
+    },
+    "mail_reference_search": {
+      "description": "Search Mail references for threads, messages, connections, and drafts.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "query": { "type": "string" },
+          "limit": { "type": "integer", "minimum": 1, "maximum": 50 }
+        },
+        "additionalProperties": false
+      },
+      "output_schema": { "type": "object" }
+    },
+    "mail_reference_resolve": {
+      "description": "Resolve one Mail reference entity by type and id.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "entity_type": {
+            "type": "string",
+                "enum": ["mail_connection", "email_thread", "email_message", "mail_attachment", "mail_draft"]
+          },
+          "entity_id": { "type": "string" }
+        },
+        "required": ["entity_type", "entity_id"],
+        "additionalProperties": false
+      },
+      "output_schema": { "type": "object" }
+    },
+    "mail_reference_summarize": {
+      "description": "Return a bounded, privacy-conscious summary for one Mail reference.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "entity_type": {
+            "type": "string",
+                "enum": ["mail_connection", "email_thread", "email_message", "mail_attachment", "mail_draft"]
+          },
+          "entity_id": { "type": "string" },
+          "max_chars": { "type": "integer", "minimum": 200, "maximum": 4000 }
+        },
+        "required": ["entity_type", "entity_id"],
+        "additionalProperties": false
+      },
+      "output_schema": { "type": "object" }
+    },
+    "mail_view_filter": {
+      "description": "Read the shared Mail view filter state.",
+      "input_schema": {
+        "type": "object",
+        "properties": {},
+        "additionalProperties": false
+      },
+      "output_schema": { "type": "object" }
+    },
+    "mail_set_view_filter": {
+      "description": "Set Mail search and mailbox filter state.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "query": { "type": "string" },
+          "mailbox": { "type": "string" },
+          "preserve_custom": { "type": "boolean", "default": false }
+        },
+        "additionalProperties": false
+      },
+      "output_schema": { "type": "object" }
+    },
+    "mail_set_custom_view": {
+      "description": "Set a custom Mail view from explicit Mail references.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "title": { "type": "string" },
+          "refs": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "entity_type": { "type": "string" },
+                "entity_id": { "type": "string" }
+              },
+              "required": ["entity_type", "entity_id"],
+              "additionalProperties": false
+            }
+          }
+        },
+        "additionalProperties": false
+      },
+      "output_schema": { "type": "object" }
+    },
+    "mail_clear_custom_view": {
+      "description": "Return Mail to the default search/filter view.",
+      "input_schema": {
+        "type": "object",
+        "properties": {},
+        "additionalProperties": false
+      },
+      "output_schema": { "type": "object" }
+    },
+    "mail_list_threads": {
+      "description": "List bounded mail threads by mailbox, label, query, unread state, or connection.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "connection_id": { "type": "string" },
+          "mailbox": { "type": "string" },
+          "label": { "type": "string" },
+          "query": { "type": "string" },
+          "unread": { "type": "boolean" },
+          "max_threads": { "type": "integer", "minimum": 1, "maximum": 2000 }
+        },
+        "additionalProperties": false
+      },
+      "output_schema": { "type": "object" },
+      "secret_selectors": [
+        {
+          "required_secrets": ["gmail-oauth-client-id", "gmail-oauth-client-secret"],
+          "resource_lookup": { "kind": "mail_connection_from_arguments" }
+        },
+        {
+          "required_secrets": ["gmail-refresh-token"],
+          "resource_type": "mail_connection",
+          "resource_lookup": { "kind": "mail_connection_from_arguments" }
+        }
+      ]
+    },
+    "mail_get_thread": {
+      "description": "Read one mail thread with bounded message bodies.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "thread_id": { "type": "string" },
+          "max_body_chars": { "type": "integer", "minimum": 200, "maximum": 50000 },
+          "max_body_html_chars": { "type": "integer", "minimum": 200, "maximum": 250000 }
+        },
+        "required": ["thread_id"],
+        "additionalProperties": false
+      },
+      "output_schema": { "type": "object" },
+      "secret_selectors": [
+        {
+          "required_secrets": ["gmail-oauth-client-id", "gmail-oauth-client-secret"],
+          "resource_lookup": { "kind": "mail_connection_from_arguments" }
+        },
+        {
+          "required_secrets": ["gmail-refresh-token"],
+          "resource_type": "mail_connection",
+          "resource_lookup": { "kind": "mail_connection_from_arguments" }
+        }
+      ]
+    },
+    "mail_search_messages": {
+      "description": "Search mail messages and subjects with bounded results.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "query": { "type": "string" },
+          "max_messages": { "type": "integer", "minimum": 1, "maximum": 100 }
+        },
+        "required": ["query"],
+        "additionalProperties": false
+      },
+      "output_schema": { "type": "object" }
+    },
+    "mail_create_draft": {
+      "description": "Create a local mail draft. This does not send email.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "connection_id": { "type": "string" },
+          "thread_id": { "type": "string" },
+          "to": { "type": "array", "items": { "type": "object" } },
+          "cc": { "type": "array", "items": { "type": "object" } },
+          "bcc": { "type": "array", "items": { "type": "object" } },
+          "reply_to": { "type": "array", "items": { "type": "object" } },
+          "subject": { "type": "string" },
+          "body_text": { "type": "string" },
+          "body_html": { "type": "string" }
+        },
+        "required": ["subject", "body_text"],
+        "anyOf": [
+          { "required": ["to"] },
+          { "required": ["cc"] },
+          { "required": ["bcc"] },
+          { "required": ["thread_id"] }
+        ],
+        "additionalProperties": false
+      },
+      "output_schema": { "type": "object" }
+    },
+    "mail_update_draft": {
+      "description": "Update an existing draft before sending.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "draft_id": { "type": "string" },
+          "to": { "type": "array", "items": { "type": "object" } },
+          "cc": { "type": "array", "items": { "type": "object" } },
+          "bcc": { "type": "array", "items": { "type": "object" } },
+          "reply_to": { "type": "array", "items": { "type": "object" } },
+          "subject": { "type": "string" },
+          "body_text": { "type": "string" },
+          "body_html": { "type": "string" }
+        },
+        "required": ["draft_id"],
+        "additionalProperties": false
+      },
+      "output_schema": { "type": "object" }
+    },
+    "mail_send_draft": {
+      "description": "Preview or send a draft. Real sending requires confirm=true.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "draft_id": { "type": "string" },
+          "confirm": { "type": "boolean", "default": false }
+        },
+        "required": ["draft_id"],
+        "additionalProperties": false
+      },
+      "output_schema": { "type": "object" },
+      "secret_selectors": [
+        {
+          "required_secrets": ["gmail-oauth-client-id", "gmail-oauth-client-secret"],
+          "resource_lookup": { "kind": "mail_connection_from_arguments" },
+          "when": { "confirm": true }
+        },
+        {
+          "required_secrets": ["gmail-refresh-token"],
+          "resource_type": "mail_connection",
+          "resource_lookup": { "kind": "mail_connection_from_arguments" },
+          "when": { "confirm": true }
+        },
+        {
+          "required_secrets": ["mailbox-password"],
+          "resource_type": "mail_connection",
+          "resource_lookup": { "kind": "mail_connection_from_arguments" },
+          "when": { "confirm": true }
+        }
+      ]
+    },
+    "mail_send": {
+      "description": "Create and optionally send one message. Defaults to dry-run unless confirm=true.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "connection_id": { "type": "string" },
+          "thread_id": { "type": "string" },
+          "to": { "type": "array", "items": { "type": "object" } },
+          "cc": { "type": "array", "items": { "type": "object" } },
+          "bcc": { "type": "array", "items": { "type": "object" } },
+          "reply_to": { "type": "array", "items": { "type": "object" } },
+          "subject": { "type": "string" },
+          "body_text": { "type": "string" },
+          "body_html": { "type": "string" },
+          "confirm": { "type": "boolean", "default": false }
+        },
+        "required": ["subject", "body_text"],
+        "anyOf": [
+          { "required": ["to"] },
+          { "required": ["cc"] },
+          { "required": ["bcc"] },
+          { "required": ["thread_id"] }
+        ],
+        "additionalProperties": false
+      },
+      "output_schema": { "type": "object" },
+      "secret_selectors": [
+        {
+          "required_secrets": ["gmail-oauth-client-id", "gmail-oauth-client-secret"],
+          "resource_lookup": { "kind": "mail_connection_from_arguments" },
+          "when": { "confirm": true }
+        },
+        {
+          "required_secrets": ["gmail-refresh-token"],
+          "resource_type": "mail_connection",
+          "resource_lookup": { "kind": "mail_connection_from_arguments" },
+          "when": { "confirm": true }
+        },
+        {
+          "required_secrets": ["mailbox-password"],
+          "resource_type": "mail_connection",
+          "resource_lookup": { "kind": "mail_connection_from_arguments" },
+          "when": { "confirm": true }
+        }
+      ]
+    },
+    "mail_modify_labels": {
+      "description": "Add or remove labels on a thread.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "thread_id": { "type": "string" },
+          "add": { "type": "array", "items": { "type": "string" } },
+          "remove": { "type": "array", "items": { "type": "string" } }
+        },
+        "required": ["thread_id"],
+        "additionalProperties": false
+      },
+      "output_schema": { "type": "object" },
+      "secret_selectors": [
+        {
+          "required_secrets": ["gmail-oauth-client-id", "gmail-oauth-client-secret"],
+          "resource_lookup": { "kind": "mail_connection_from_arguments" }
+        },
+        {
+          "required_secrets": ["gmail-refresh-token"],
+          "resource_type": "mail_connection",
+          "resource_lookup": { "kind": "mail_connection_from_arguments" }
+        },
+        {
+          "required_secrets": ["mailbox-password"],
+          "resource_type": "mail_connection",
+          "resource_lookup": { "kind": "mail_connection_from_arguments" }
+        }
+      ]
+    },
+    "mail_mark_read": {
+      "description": "Mark a thread read or unread.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "thread_id": { "type": "string" },
+          "read": { "type": "boolean", "default": true }
+        },
+        "required": ["thread_id"],
+        "additionalProperties": false
+      },
+      "output_schema": { "type": "object" },
+      "secret_selectors": [
+        {
+          "required_secrets": ["gmail-oauth-client-id", "gmail-oauth-client-secret"],
+          "resource_lookup": { "kind": "mail_connection_from_arguments" }
+        },
+        {
+          "required_secrets": ["gmail-refresh-token"],
+          "resource_type": "mail_connection",
+          "resource_lookup": { "kind": "mail_connection_from_arguments" }
+        },
+        {
+          "required_secrets": ["mailbox-password"],
+          "resource_type": "mail_connection",
+          "resource_lookup": { "kind": "mail_connection_from_arguments" }
+        }
+      ]
+    },
+    "mail_get_attachment": {
+      "description": "Resolve attachment metadata by default. Fetch bounded bytes only when metadata_only=false and max_bytes is set.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "attachment_id": { "type": "string" },
+          "metadata_only": { "type": "boolean", "default": true },
+          "max_bytes": { "type": "integer", "minimum": 1, "maximum": 10000000 },
+          "save_to_storage": { "type": "boolean", "default": false }
+        },
+        "required": ["attachment_id"],
+        "additionalProperties": false
+      },
+      "output_schema": { "type": "object" },
+      "secret_selectors": [
+        {
+          "required_secrets": ["gmail-oauth-client-id", "gmail-oauth-client-secret"],
+          "resource_lookup": { "kind": "mail_connection_from_arguments" },
+          "when": { "metadata_only": false }
+        },
+        {
+          "required_secrets": ["gmail-refresh-token"],
+          "resource_type": "mail_connection",
+          "resource_lookup": { "kind": "mail_connection_from_arguments" },
+          "when": { "metadata_only": false }
+        },
+        {
+          "required_secrets": ["mailbox-password"],
+          "resource_type": "mail_connection",
+          "resource_lookup": { "kind": "mail_connection_from_arguments" },
+          "when": { "metadata_only": false }
+        }
+      ]
+    },
+    "mail_sync": {
+      "description": "Run manual sync for one connection.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "connection_id": { "type": "string" },
+          "query": { "type": "string" },
+          "max_threads": { "type": "integer", "minimum": 1, "maximum": 2000 },
+          "page_token": { "type": "string" },
+          "continue_cursor": { "type": "boolean", "default": false }
+        },
+        "additionalProperties": false
+      },
+      "output_schema": { "type": "object" },
+      "secret_selectors": [
+        {
+          "required_secrets": ["gmail-oauth-client-id", "gmail-oauth-client-secret"],
+          "resource_lookup": { "kind": "mail_connection_from_arguments" }
+        },
+        {
+          "required_secrets": ["gmail-refresh-token"],
+          "resource_type": "mail_connection",
+          "resource_lookup": { "kind": "mail_connection_from_arguments" }
+        },
+        {
+          "required_secrets": ["mailbox-password"],
+          "resource_type": "mail_connection",
+          "resource_lookup": { "kind": "mail_connection_from_arguments" }
+        }
+      ]
+    }
+  }
+}

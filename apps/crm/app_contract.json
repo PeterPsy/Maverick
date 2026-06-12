@@ -1,0 +1,363 @@
+{
+  "app_id": "crm",
+  "contract_version": "1.0",
+  "name": "CRM",
+  "version": "0.4.2",
+  "description": "Workspace CRM for accounts, contacts, deals, activities, tasks, typed custom fields, import/export, and agent-friendly CRM actions.",
+  "publisher": "workspace",
+  "minimum_core_version": "0.1.0",
+  "provides": [
+    {
+      "interface": "crm.records",
+      "version": "1",
+      "description": "Workspace-scoped CRM records and references.",
+      "surfaces": [
+        "backend",
+        "cli",
+        "mcp",
+        "reference",
+        "view",
+        "widget"
+      ]
+    }
+  ],
+  "requires": [
+    {
+      "alias": "mail",
+      "interface": "mail.workspace",
+      "version": "^1",
+      "required": false,
+      "cardinality": "one",
+      "description": "Optional workspace Mail provider used by agents to discover and link email threads, messages, drafts, and attachments to CRM records."
+    },
+    {
+      "alias": "calendar",
+      "interface": "calendar.events",
+      "version": "^1",
+      "required": false,
+      "cardinality": "one",
+      "description": "Optional workspace Calendar provider used by agents to schedule calls and link calendar events to CRM records."
+    },
+    {
+      "alias": "files",
+      "interface": "file.catalog",
+      "version": "^1",
+      "required": false,
+      "cardinality": "one",
+      "description": "Optional workspace Storage catalog provider used by agents to link uploaded, generated, or Drive-backed files to CRM records."
+    },
+    {
+      "alias": "file-preview",
+      "interface": "file.preview",
+      "version": "^1",
+      "required": false,
+      "cardinality": "one",
+      "description": "Optional workspace Storage preview provider used to inspect linked CRM file references through Storage-owned preview surfaces."
+    },
+    {
+      "alias": "file-write",
+      "interface": "file.content.write",
+      "version": "^1",
+      "required": false,
+      "cardinality": "one",
+      "description": "Optional workspace Storage write provider used by agents to save CRM briefs, attachments, and generated outputs before linking them back to CRM records."
+    }
+  ],
+  "distribution": {
+    "mode": "source_available",
+    "source_access": "forkable"
+  },
+  "visibility": {
+    "platform_roles": null
+  },
+  "presentation": {
+    "frontend_role": "workspace"
+  },
+  "permissions": {
+    "secrets": {
+      "read": [],
+      "write": []
+    },
+    "network": {
+      "outbound": []
+    },
+    "runtime": {
+      "create_sessions": false,
+      "cleanup_sessions": false
+    },
+    "host": {
+      "telemetry": false
+    }
+  },
+  "capabilities": {
+    "mcp_tools": [
+      "crm_search",
+      "crm_get_record",
+      "crm_create_lead",
+      "crm_website_intake",
+      "crm_update_lead",
+      "crm_convert_lead",
+      "crm_create_contact",
+      "crm_update_contact",
+      "crm_create_account",
+      "crm_update_account",
+      "crm_create_deal",
+      "crm_update_deal",
+      "crm_move_deal",
+      "crm_create_pipeline",
+      "crm_update_pipeline",
+      "crm_create_pipeline_stage",
+      "crm_update_pipeline_stage",
+      "crm_log_activity",
+      "crm_create_task",
+      "crm_update_task",
+      "crm_create_note",
+      "crm_update_note",
+      "crm_archive_record",
+      "crm_unarchive_record",
+      "crm_delete_record",
+      "crm_tag_record",
+      "crm_untag_record",
+      "crm_bulk_update",
+      "crm_merge_records",
+      "crm_timeline",
+      "crm_audit_log",
+      "crm_sales_reports",
+      "crm_filter_records",
+      "crm_find_duplicates",
+      "crm_schema",
+      "crm_list_custom_fields",
+      "crm_set_custom_fields",
+      "crm_record_enrichment",
+      "crm_intelligent_next_actions",
+      "crm_propose_workflows",
+      "crm_list_workflow_proposals",
+      "crm_approve_workflow_proposal",
+      "crm_dismiss_workflow_proposal",
+      "crm_reject_workflow_proposal",
+      "crm_apply_workflow_proposal",
+      "crm_link_external_ref",
+      "crm_unlink_external_ref",
+      "crm_list_external_refs",
+      "crm_external_timeline",
+      "crm_list_next_actions",
+      "crm_summarize_account",
+      "crm_account_brief",
+      "crm_export",
+      "crm_import_preview",
+      "crm_import_commit",
+      "crm_health",
+      "crm_view_filter",
+      "crm_set_view_filter",
+      "crm_set_custom_view",
+      "crm_clear_custom_view",
+      "crm_reference_manifest",
+      "crm_reference_search",
+      "crm_reference_resolve",
+      "crm_reference_summarize"
+    ],
+    "cli_commands": [
+      "crm"
+    ],
+    "skills": [
+      "crm-ops"
+    ],
+    "views": [
+      "crm"
+    ],
+    "data_events": [
+      {
+        "resource": "records",
+        "description": "CRM records changed through backend, CLI, or MCP."
+      },
+      {
+        "resource": "view-state",
+        "description": "CRM filters or custom view state changed."
+      }
+    ],
+    "view_surfaces": [
+      {
+        "view_id": "crm",
+        "display_name": "CRM",
+        "entity_types": [
+          "lead",
+          "account",
+          "contact",
+          "deal",
+          "activity",
+          "task",
+          "note"
+        ],
+        "state_actions": [
+          {
+            "action": "view_filter",
+            "standard": true,
+            "description": "Read CRM view state."
+          },
+          {
+            "action": "set_view_filter",
+            "standard": true,
+            "description": "Set CRM search and entity filter state."
+          },
+          {
+            "action": "set_custom_view",
+            "standard": true,
+            "description": "Show a curated CRM record set."
+          },
+          {
+            "action": "clear_custom_view",
+            "standard": true,
+            "description": "Return CRM to normal search mode."
+          }
+        ],
+        "supports_custom_view": true,
+        "supports_filter_refinement": true
+      }
+    ],
+    "reference_entities": [
+      {
+        "entity_type": "lead",
+        "display_name": "Lead",
+        "searchable": true,
+        "resolvable": true,
+        "summarizable": true,
+        "deep_link_supported": true
+      },
+      {
+        "entity_type": "account",
+        "display_name": "Account",
+        "searchable": true,
+        "resolvable": true,
+        "summarizable": true,
+        "deep_link_supported": true
+      },
+      {
+        "entity_type": "contact",
+        "display_name": "Contact",
+        "searchable": true,
+        "resolvable": true,
+        "summarizable": true,
+        "deep_link_supported": true
+      },
+      {
+        "entity_type": "deal",
+        "display_name": "Deal",
+        "searchable": true,
+        "resolvable": true,
+        "summarizable": true,
+        "deep_link_supported": true
+      },
+      {
+        "entity_type": "activity",
+        "display_name": "Activity",
+        "searchable": true,
+        "resolvable": true,
+        "summarizable": true,
+        "deep_link_supported": true
+      },
+      {
+        "entity_type": "task",
+        "display_name": "Task",
+        "searchable": true,
+        "resolvable": true,
+        "summarizable": true,
+        "deep_link_supported": true
+      },
+      {
+        "entity_type": "note",
+        "display_name": "Note",
+        "searchable": true,
+        "resolvable": true,
+        "summarizable": true,
+        "deep_link_supported": true
+      }
+    ]
+  },
+  "entrypoints": {
+    "mcp": "mcp/server.py",
+    "cli": "cli/app_cli.py",
+    "backend": "backend/app_backend.py",
+    "frontend": "frontend/dist",
+    "skills_root": "skills",
+    "hooks": {
+      "install": "hooks/install.py",
+      "migrate": "hooks/migrate.py",
+      "export": "hooks/export.py",
+      "import": "hooks/import.py",
+      "health_check": "hooks/health_check.py"
+    }
+  },
+  "storage": {
+    "storage_kind": "sqlite",
+    "data_schema_version": "6",
+    "primary_paths": [
+      "data/crm/crm.sqlite",
+      "data/crm/view_state.json"
+    ],
+    "indices": {
+      "kind": "embedded"
+    },
+    "supports_export": true,
+    "supports_import": true,
+    "supports_migrations": true
+  },
+  "compatibility": {
+    "workspace_modes": [
+      "sandbox"
+    ]
+  },
+  "hook_timeouts": {
+    "install_seconds": 60,
+    "upgrade_seconds": 120,
+    "migrate_seconds": 300,
+    "export_seconds": 120,
+    "import_seconds": 120,
+    "validate_after_import_seconds": 60,
+    "repair_after_import_seconds": 180,
+    "health_check_seconds": 30
+  },
+  "lifecycle": {
+    "install": true,
+    "upgrade": false,
+    "uninstall": false,
+    "migrate": true,
+    "export": true,
+    "import": true,
+    "validate_after_import": false,
+    "repair_after_import": false,
+    "health_check": true
+  },
+  "health_contract": {
+    "mode": "hook",
+    "degraded_on_failure": true
+  },
+  "failure_semantics": {
+    "install_failure": "block_activation",
+    "migrate_failure": "preserve_data_mark_unhealthy",
+    "import_failure": "preserve_payload_mark_failed"
+  },
+  "rollback_support": {
+    "bundle": false,
+    "data": false,
+    "repair_only": false
+  },
+  "widgets": [
+    {
+      "widget_id": "crm-sidebar",
+      "host": "base-shell",
+      "content_kinds": [
+        "shell.sidebar.primary"
+      ],
+      "frontend": {
+        "kind": "iframe",
+        "mount": "frontend/dist/widgets/crm-sidebar",
+        "spa_fallback": true
+      },
+      "actions": {
+        "backend": true,
+        "mcp": false,
+        "cli": false
+      }
+    }
+  ]
+}

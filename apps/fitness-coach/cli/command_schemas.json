@@ -1,0 +1,64 @@
+{
+  "commands": {
+    "fitness-coach": {
+      "description": "Run Fitness Coach operations. Omit action for the operations manifest.",
+      "argument_schema": {
+        "type": "object",
+        "properties": {
+          "action": {
+            "type": "string",
+            "description": "Fitness Coach action.",
+            "enum": [
+              "operations.manifest",
+              "status",
+              "workouts.list",
+              "workout.get",
+              "workout.create",
+              "workout.update",
+              "workout.duplicate",
+              "workout.delete",
+              "workout.validate",
+              "exercises.list",
+              "exercise.get",
+              "exercise.create",
+              "exercise.update",
+              "exercise.delete",
+              "runs.list",
+              "references.manifest",
+              "view_filter",
+              "set_view_filter",
+              "set_custom_view",
+              "clear_custom_view"
+            ],
+            "default": "operations.manifest"
+          },
+          "subcommand": { "type": "string" },
+          "payload_json": { "type": "string" },
+          "query": { "type": "string" },
+          "tag": { "type": "string" },
+          "id": { "type": "string" },
+          "workout_id": { "type": "string" },
+          "exercise_id": { "type": "string" },
+          "name": { "type": "string" },
+          "title": { "type": "string" },
+          "short_description": { "type": "string" },
+          "long_description": { "type": "string" },
+          "tags": { "type": "array", "items": { "type": "string" } },
+          "blocks": { "type": "array", "items": { "type": "object" } },
+          "workout": { "type": "object" },
+          "exercise": { "type": "object" },
+          "primary_media": { "type": ["object", "null"] },
+          "media": { "type": "array", "items": { "type": "object" } },
+          "limit": { "type": "integer", "minimum": 1, "maximum": 100 }
+          ,
+          "setup_tab": { "type": "string", "enum": ["workout-settings", "exercise-library"] },
+          "selected_workout_id": { "type": ["string", "null"] },
+          "workout_ids": { "type": "array", "items": { "type": "string" } },
+          "exercise_ids": { "type": "array", "items": { "type": "string" } }
+        },
+        "additionalProperties": true
+      },
+      "required_secrets": []
+    }
+  }
+}

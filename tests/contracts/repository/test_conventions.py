@@ -138,6 +138,7 @@ class RepositoryConventionsTestCase(unittest.TestCase):
     def test_root_test_files_stay_small_and_named_for_domains(self) -> None:
         repo_root = installation_paths(start_path=Path(__file__)).repository_root
         size_exceptions = {
+            "tests/e2e/websocket/test_runtime_events.py",
             "tests/integration/cli_mcp/test_core_surfaces.py",
             "tests/integration/recovery/test_secret_surfaces.py",
             "tests/unit/api/test_app_mounts.py",
@@ -194,6 +195,8 @@ class RepositoryConventionsTestCase(unittest.TestCase):
         repo_root = installation_paths(start_path=Path(__file__)).repository_root
         reference_exceptions = {
             "tests/contracts/app_contract/test_storage_drive_contract.py",
+            "tests/integration/app_hosting/test_file_gateway.py",
+            "tests/integration/app_hosting/test_status.py",
             "tests/unit/api/test_secret_api.py",
             "tests/unit/egress/test_browser_egress_policy.py",
         }

@@ -1,0 +1,529 @@
+{
+  "commands": {
+    "crm": {
+      "description": "Run CRM operations. Omit action for the operations manifest.",
+      "argument_schema": {
+        "type": "object",
+        "properties": {
+          "action": {
+            "type": "string",
+            "default": "operations.manifest",
+            "enum": [
+              "operations.manifest",
+              "crm.manifest",
+              "health",
+              "crm.health",
+              "bootstrap",
+              "crm.bootstrap",
+              "search",
+              "crm.search",
+              "get_record",
+              "crm.get_record",
+              "create_lead",
+              "crm.create_lead",
+              "website_intake",
+              "crm.website_intake",
+              "crm.ingest_website_intake",
+              "update_lead",
+              "crm.update_lead",
+              "convert_lead",
+              "crm.convert_lead",
+              "create_account",
+              "crm.create_account",
+              "update_account",
+              "crm.update_account",
+              "create_contact",
+              "crm.create_contact",
+              "update_contact",
+              "crm.update_contact",
+              "create_deal",
+              "crm.create_deal",
+              "update_deal",
+              "crm.update_deal",
+              "move_deal",
+              "crm.move_deal",
+              "create_pipeline",
+              "crm.create_pipeline",
+              "update_pipeline",
+              "crm.update_pipeline",
+              "create_pipeline_stage",
+              "crm.create_pipeline_stage",
+              "update_pipeline_stage",
+              "crm.update_pipeline_stage",
+              "log_activity",
+              "crm.log_activity",
+              "create_task",
+              "crm.create_task",
+              "update_task",
+              "crm.update_task",
+              "create_note",
+              "crm.create_note",
+              "update_note",
+              "crm.update_note",
+              "archive_record",
+              "crm.archive_record",
+              "unarchive_record",
+              "crm.unarchive_record",
+              "delete_record",
+              "crm.delete_record",
+              "tag_record",
+              "crm.tag_record",
+              "untag_record",
+              "crm.untag_record",
+              "bulk_update",
+              "crm.bulk_update",
+              "merge_records",
+              "crm.merge_records",
+              "crm_merge_records",
+              "timeline",
+              "crm.timeline",
+              "audit_log",
+              "crm.audit_log",
+              "crm_audit_log",
+              "sales_reports",
+              "crm.sales_reports",
+              "crm_sales_reports",
+              "filter_records",
+              "crm.filter_records",
+              "find_duplicates",
+              "crm.find_duplicates",
+              "list_saved_views",
+              "crm.list_saved_views",
+              "save_view",
+              "crm.save_view",
+              "delete_saved_view",
+              "crm.delete_saved_view",
+              "apply_saved_view",
+              "crm.apply_saved_view",
+              "schema",
+              "crm.schema",
+              "config",
+              "crm.config",
+              "list_custom_fields",
+              "crm.list_custom_fields",
+              "define_custom_field",
+              "crm.define_custom_field",
+              "archive_custom_field",
+              "crm.archive_custom_field",
+              "set_custom_fields",
+              "crm.set_custom_fields",
+              "list_automation_rules",
+              "crm.list_automation_rules",
+              "create_automation_rule",
+              "crm.create_automation_rule",
+              "update_automation_rule",
+              "crm.update_automation_rule",
+              "record_enrichment",
+              "crm.record_enrichment",
+              "intelligent_next_actions",
+              "crm.intelligent_next_actions",
+              "propose_workflows",
+              "crm.propose_workflows",
+              "run_automation_rules",
+              "crm.run_automation_rules",
+              "list_workflow_proposals",
+              "crm.list_workflow_proposals",
+              "approve_workflow_proposal",
+              "crm.approve_workflow_proposal",
+              "dismiss_workflow_proposal",
+              "crm.dismiss_workflow_proposal",
+              "reject_workflow_proposal",
+              "crm.reject_workflow_proposal",
+              "apply_workflow_proposal",
+              "crm.apply_workflow_proposal",
+              "link_external_ref",
+              "crm.link_external_ref",
+              "crm_link_external_ref",
+              "unlink_external_ref",
+              "crm.unlink_external_ref",
+              "crm_unlink_external_ref",
+              "list_external_refs",
+              "crm.list_external_refs",
+              "crm_list_external_refs",
+              "external_timeline",
+              "crm.external_timeline",
+              "crm_external_timeline",
+              "list_next_actions",
+              "crm.list_next_actions",
+              "summarize_account",
+              "crm.summarize_account",
+              "account_brief",
+              "crm.account_brief",
+              "import_preview",
+              "crm.import_preview",
+              "import_commit",
+              "crm.import_commit",
+              "export",
+              "crm.export",
+              "references.manifest",
+              "references.search",
+              "references.resolve",
+              "references.summarize",
+              "view_filter",
+              "crm.view_filter",
+              "set_view_filter",
+              "crm.set_view_filter",
+              "set_custom_view",
+              "crm.set_custom_view",
+              "clear_custom_view",
+              "crm.clear_custom_view"
+            ]
+          },
+          "subcommand": {
+            "type": "string"
+          },
+          "payload_json": {
+            "type": "string"
+          },
+          "query": {
+            "type": "string"
+          },
+          "entity_type": {
+            "type": "string",
+            "enum": ["all", "lead", "account", "contact", "deal", "activity", "task", "note"]
+          },
+          "id": {
+            "type": "string"
+          },
+          "entity_id": {
+            "type": "string"
+          },
+          "target_id": {
+            "type": "string"
+          },
+          "source_id": {
+            "type": "string"
+          },
+          "source_ids": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "field_overrides": {
+            "type": "object"
+          },
+          "event_type": {
+            "type": "string"
+          },
+          "date_from": {
+            "type": "string"
+          },
+          "date_to": {
+            "type": "string"
+          },
+          "crm_entity_type": {
+            "type": "string",
+            "enum": ["lead", "account", "contact", "deal", "activity", "task", "note"]
+          },
+          "crm_entity_id": {
+            "type": "string"
+          },
+          "source_app_id": {
+            "type": "string"
+          },
+          "source_entity_type": {
+            "type": "string"
+          },
+          "source_entity_id": {
+            "type": "string"
+          },
+          "link_type": {
+            "type": "string"
+          },
+          "tag": {
+            "type": "string"
+          },
+          "color": {
+            "type": "string"
+          },
+          "account_id": {
+            "type": "string"
+          },
+          "lead_id": {
+            "type": "string"
+          },
+          "account_name": {
+            "type": "string"
+          },
+          "deal_name": {
+            "type": "string"
+          },
+          "create_deal": {
+            "type": "boolean"
+          },
+          "pipeline_id": {
+            "type": "string"
+          },
+          "stage_id": {
+            "type": "string"
+          },
+          "contact_id": {
+            "type": "string"
+          },
+          "deal_id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "domain": {
+            "type": "string"
+          },
+          "industry": {
+            "type": "string"
+          },
+          "company": {
+            "type": "string"
+          },
+          "source": {
+            "type": "string"
+          },
+          "first_name": {
+            "type": "string"
+          },
+          "last_name": {
+            "type": "string"
+          },
+          "display_name": {
+            "type": "string"
+          },
+          "email": {
+            "type": "string"
+          },
+          "phone": {
+            "type": "string"
+          },
+          "role": {
+            "type": "string"
+          },
+          "subject": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          },
+          "body": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
+          },
+          "priority": {
+            "type": "string"
+          },
+          "due_at": {
+            "type": "string"
+          },
+          "activity_type": {
+            "type": "string"
+          },
+          "owner_id": {
+            "type": "string"
+          },
+          "value": {
+            "type": "number"
+          },
+          "currency": {
+            "type": "string"
+          },
+          "probability": {
+            "type": "number"
+          },
+          "close_date": {
+            "type": "string"
+          },
+          "summary": {
+            "type": "string"
+          },
+          "metadata": {
+            "type": "object"
+          },
+          "filters": {
+            "type": "object"
+          },
+          "changes": {
+            "type": "object"
+          },
+          "column_mapping": {
+            "type": "object"
+          },
+          "mapping": {
+            "type": "object"
+          },
+          "operation": {
+            "type": "string"
+          },
+          "ids": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "refs": {
+            "type": "array",
+            "items": {
+              "type": "object"
+            }
+          },
+          "field_key": {
+            "type": "string"
+          },
+          "key": {
+            "type": "string"
+          },
+          "label": {
+            "type": "string"
+          },
+          "field_type": {
+            "type": "string",
+            "enum": ["text", "number", "date", "boolean", "select", "multi_select", "url", "email"]
+          },
+          "required": {
+            "type": "boolean"
+          },
+          "options": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "default_value": {},
+          "custom_fields": {
+            "type": "object"
+          },
+          "values": {
+            "type": "object"
+          },
+          "trigger_event": {
+            "type": "string"
+          },
+          "conditions": {
+            "type": "object"
+          },
+          "action": {
+            "type": "object"
+          },
+          "approval_required": {
+            "type": "boolean"
+          },
+          "create_proposal": {
+            "type": "boolean"
+          },
+          "approve": {
+            "type": "boolean"
+          },
+          "resolution": {
+            "type": "string",
+            "enum": ["dismissed", "rejected"]
+          },
+          "reason": {
+            "type": "string"
+          },
+          "export": {
+            "type": "object"
+          },
+          "payload": {
+            "type": "object"
+          },
+          "schema_version": {
+            "type": "string"
+          },
+          "exported_at": {
+            "type": "string"
+          },
+          "occurred_at": {
+            "type": "string"
+          },
+          "rows": {
+            "type": "array",
+            "items": {
+              "type": "object"
+            }
+          },
+          "leads": {
+            "type": "array",
+            "items": {
+              "type": "object"
+            }
+          },
+          "accounts": {
+            "type": "array",
+            "items": {
+              "type": "object"
+            }
+          },
+          "contacts": {
+            "type": "array",
+            "items": {
+              "type": "object"
+            }
+          },
+          "deals": {
+            "type": "array",
+            "items": {
+              "type": "object"
+            }
+          },
+          "activities": {
+            "type": "array",
+            "items": {
+              "type": "object"
+            }
+          },
+          "tasks": {
+            "type": "array",
+            "items": {
+              "type": "object"
+            }
+          },
+          "notes": {
+            "type": "array",
+            "items": {
+              "type": "object"
+            }
+          },
+          "custom_field_definitions": {
+            "type": "array",
+            "items": {
+              "type": "object"
+            }
+          },
+          "custom_field_values": {
+            "type": "array",
+            "items": {
+              "type": "object"
+            }
+          },
+          "automation_rules": {
+            "type": "array",
+            "items": {
+              "type": "object"
+            }
+          },
+          "workflow_proposals": {
+            "type": "array",
+            "items": {
+              "type": "object"
+            }
+          },
+          "external_refs": {
+            "type": "array",
+            "items": {
+              "type": "object"
+            }
+          },
+          "csv": {
+            "type": "string"
+          },
+          "limit": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 200
+          }
+        },
+        "additionalProperties": false
+      }
+    }
+  }
+}

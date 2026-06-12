@@ -1,0 +1,171 @@
+{
+  "commands": {
+    "mail": {
+      "description": "Operate the Mail app: list threads, inspect messages, create/send drafts, sync, and check health.",
+      "argument_schema": {
+        "type": "object",
+        "properties": {
+          "action": {
+            "type": "string",
+            "description": "Mail action such as connections.start_oauth, connections.complete_oauth, connections.prepare_imap_smtp, connections.test_imap_smtp, connections.activate_imap_smtp, connections.disconnect, threads.list, threads.get, drafts.create, drafts.send, messages.search, labels.modify, attachments.get, folders.list, or health.check."
+          },
+          "connection_id": { "type": "string" },
+          "thread_id": { "type": "string" },
+          "message_id": { "type": "string" },
+          "attachment_id": { "type": "string" },
+          "draft_id": { "type": "string" },
+          "query": { "type": "string" },
+          "mailbox": { "type": "string" },
+          "label": { "type": "string" },
+          "provider": { "type": "string" },
+          "email_address": { "type": "string" },
+          "username": { "type": "string" },
+          "display_name": { "type": "string" },
+          "imap_host": { "type": "string" },
+          "imap_port": { "type": "integer", "minimum": 1, "maximum": 65535 },
+          "imap_security": { "type": "string", "enum": ["ssl", "starttls", "none"] },
+          "smtp_host": { "type": "string" },
+          "smtp_port": { "type": "integer", "minimum": 1, "maximum": 65535 },
+          "smtp_security": { "type": "string", "enum": ["ssl", "starttls", "none"] },
+          "redirect_uri": { "type": "string" },
+          "state": { "type": "string" },
+          "code": { "type": "string" },
+          "page_token": { "type": "string" },
+          "continue_cursor": { "type": "boolean", "default": false },
+          "subject": { "type": "string" },
+          "body_text": { "type": "string" },
+          "to": {
+            "type": "array",
+            "items": { "type": "object" }
+          },
+          "cc": {
+            "type": "array",
+            "items": { "type": "object" }
+          },
+          "bcc": {
+            "type": "array",
+            "items": { "type": "object" }
+          },
+          "reply_to": {
+            "type": "array",
+            "items": { "type": "object" }
+          },
+          "confirm": { "type": "boolean", "default": false },
+          "max_threads": { "type": "integer", "minimum": 1, "maximum": 2000 },
+          "max_messages": { "type": "integer", "minimum": 1, "maximum": 100 },
+          "max_body_chars": { "type": "integer", "minimum": 200, "maximum": 50000 },
+          "max_body_html_chars": { "type": "integer", "minimum": 200, "maximum": 250000 },
+          "body_html": { "type": "string" },
+          "metadata_only": { "type": "boolean", "default": true },
+          "max_bytes": { "type": "integer", "minimum": 1, "maximum": 10000000 },
+          "save_to_storage": { "type": "boolean", "default": false }
+        },
+        "additionalProperties": true
+      },
+      "secret_resource_inventory": true,
+      "required_secrets": [],
+      "secret_selectors": [
+        {
+          "required_secrets": ["gmail-oauth-client-id"],
+          "when": { "action": "connections.start_oauth" }
+        },
+        {
+          "required_secrets": ["gmail-oauth-client-id", "gmail-oauth-client-secret"],
+          "when": { "action": "connections.complete_oauth" }
+        },
+        {
+          "required_secrets": ["gmail-oauth-client-id", "gmail-oauth-client-secret"],
+          "resource_lookup": { "kind": "mail_connection_from_arguments" },
+          "when": {
+            "action": [
+              "threads.list",
+              "mail_list_threads",
+              "threads.get",
+              "mail_get_thread",
+              "threads.sync",
+              "mail_sync",
+              "drafts.send",
+              "mail_send_draft",
+              "messages.send",
+              "mail_send",
+              "labels.modify",
+              "mail_modify_labels",
+              "messages.mark_read",
+              "mail_mark_read"
+            ]
+          }
+        },
+        {
+          "required_secrets": ["gmail-refresh-token"],
+          "resource_type": "mail_connection",
+          "resource_lookup": { "kind": "mail_connection_from_arguments" },
+          "when": {
+            "action": [
+              "threads.list",
+              "mail_list_threads",
+              "threads.get",
+              "mail_get_thread",
+              "threads.sync",
+              "mail_sync",
+              "drafts.send",
+              "mail_send_draft",
+              "messages.send",
+              "mail_send",
+              "labels.modify",
+              "mail_modify_labels",
+              "messages.mark_read",
+              "mail_mark_read"
+            ]
+          }
+        },
+        {
+          "required_secrets": ["mailbox-password"],
+          "resource_type": "mail_connection",
+          "resource_lookup": { "kind": "mail_connection_from_arguments" },
+          "when": {
+            "action": [
+              "connections.test_imap_smtp",
+              "connections.activate_imap_smtp",
+              "threads.sync",
+              "mail_sync",
+              "drafts.send",
+              "mail_send_draft",
+              "messages.send",
+              "mail_send",
+              "labels.modify",
+              "mail_modify_labels",
+              "messages.mark_read",
+              "mail_mark_read"
+            ]
+          }
+        },
+        {
+          "required_secrets": ["gmail-oauth-client-id", "gmail-oauth-client-secret"],
+          "resource_lookup": { "kind": "mail_connection_from_arguments" },
+          "when": {
+            "action": ["attachments.get", "mail_get_attachment"],
+            "metadata_only": false
+          }
+        },
+        {
+          "required_secrets": ["mailbox-password"],
+          "resource_type": "mail_connection",
+          "resource_lookup": { "kind": "mail_connection_from_arguments" },
+          "when": {
+            "action": ["attachments.get", "mail_get_attachment"],
+            "metadata_only": false
+          }
+        },
+        {
+          "required_secrets": ["gmail-refresh-token"],
+          "resource_type": "mail_connection",
+          "resource_lookup": { "kind": "mail_connection_from_arguments" },
+          "when": {
+            "action": ["attachments.get", "mail_get_attachment"],
+            "metadata_only": false
+          }
+        }
+      ]
+    }
+  }
+}

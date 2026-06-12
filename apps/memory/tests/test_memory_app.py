@@ -187,12 +187,11 @@ class MemoryAppTestCase(unittest.TestCase):
     def test_real_reference_surface_contracts_match_app_entity_discovery(self) -> None:
         app_roots = [
             ("storage", REPO_ROOT / "apps" / "storage"),
-            ("crm", REPO_ROOT / "workspaces" / "default" / "apps" / "crm"),
+            ("crm", REPO_ROOT / "apps" / "crm"),
         ]
-        checked = 0
+        checked: set[str] = set()
         for app_id, app_root in app_roots:
-            if not app_root.exists():
-                continue
+            self.assertTrue(app_root.exists(), f"{app_id} app source missing at {app_root}")
             parsed = parse_app_contract_file(app_root)
             tool_schemas = json.loads((app_root / "mcp" / "tool_schemas.json").read_text(encoding="utf-8"))
             declared_tools = tool_schemas.get("tools") if isinstance(tool_schemas.get("tools"), dict) else {}
@@ -203,8 +202,8 @@ class MemoryAppTestCase(unittest.TestCase):
             }
             self.assertTrue(expected.issubset(set(parsed.contract.capabilities.mcp_tools)))
             self.assertTrue(expected.issubset(set(declared_tools)))
-            checked += 1
-        self.assertGreaterEqual(checked, 1)
+            checked.add(app_id)
+        self.assertEqual(checked, {"storage", "crm"})
 
     def test_cli_and_mcp_descriptors_cover_declared_agent_surfaces(self) -> None:
         parsed = parse_app_contract_file(MEMORY_ROOT)

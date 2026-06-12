@@ -1,0 +1,81 @@
+.import-panel button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.42rem;
+  min-height: 2.35rem;
+  border-radius: 999px;
+  padding: 0 0.95rem;
+  font-size: 0.82rem;
+  font-weight: 400;
+}
+
+.import-panel form {
+  display: grid;
+  gap: 0.8rem;
+  padding: 1rem;
+}
+
+.import-panel label {
+  display: grid;
+  gap: 0.4rem;
+  color: var(--maverick-text-muted);
+  font-size: 0.82rem;
+}
+
+.import-panel select,
+.import-panel textarea {
+  width: 100%;
+  border: 1px solid var(--maverick-border);
+  border-radius: var(--maverick-control-radius);
+  background: rgba(255, 255, 255, 0.045);
+  box-shadow: var(--maverick-inner-edge);
+  padding: 0.65rem;
+  outline: none;
+}
+
+.import-panel select:focus-visible,
+.import-panel textarea:focus-visible {
+  border-color: var(--maverick-accent);
+  box-shadow: 0 0 0 3px var(--maverick-accent-soft);
+}
+
+.import-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.import-actions button[name="commit"] {
+  background: var(--maverick-accent);
+  color: var(--maverick-text-on-accent);
+}
+
+.import-actions button[name="preview"] {
+  border: 1px solid var(--maverick-border);
+  background: var(--maverick-surface);
+}
+
+.import-preview {
+  display: grid;
+  gap: 0.45rem;
+  margin: 0 1rem 1rem;
+  padding: 0.75rem;
+  border: 1px solid var(--maverick-border);
+  border-radius: var(--maverick-control-radius);
+  background: var(--maverick-surface);
+  box-shadow: var(--maverick-inner-edge);
+}
+
+.import-preview span {
+  color: var(--maverick-text-muted);
+  font-size: 0.82rem;
+}
+
+.import-preview pre {
+  max-height: 12rem;
+  margin: 0;
+  overflow: auto;
+  color: var(--maverick-text-muted);
+  font-size: 0.78rem;
+}

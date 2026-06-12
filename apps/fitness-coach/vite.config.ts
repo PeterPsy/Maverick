@@ -1,0 +1,19 @@
+import { defineConfig } from 'vite';
+import react from '@vitejs/plugin-react';
+
+export default defineConfig({
+  plugins: [react()],
+  base: '/apps/fitness-coach/',
+  root: 'frontend',
+  build: {
+    outDir: 'dist',
+    emptyOutDir: true,
+    rollupOptions: {
+      input: {
+        app: 'frontend/index.html',
+        'widgets/fitness-coach-sidebar/index': 'frontend/widgets/fitness-coach-sidebar/index.html',
+        'widgets/fitness-coach-sidebar-footer/index': 'frontend/widgets/fitness-coach-sidebar-footer/index.html'
+      }
+    }
+  }
+});

@@ -1,0 +1,565 @@
+{
+  "tools": {
+    "website_manifest": {
+      "description": "Return Website Studio health, schema, and implementation phase information.",
+      "input_schema": {"type": "object", "properties": {}, "additionalProperties": false}
+    },
+    "website_sites_list": {
+      "description": "List Website Studio site records in the workspace.",
+      "input_schema": {"type": "object", "properties": {}, "additionalProperties": false}
+    },
+    "website_bootstrap": {
+      "description": "Return lightweight first-paint Website Studio state: sites, selected site, routes-only sitemap, and current preview reference.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "site_id": {"type": "string"},
+          "route": {"type": "string"}
+        },
+        "additionalProperties": false
+      }
+    },
+    "website_site_status": {
+      "description": "Return counts, revision ids, and working diff status for one site.",
+      "input_schema": {"type": "object", "required": ["site_id"], "properties": {"site_id": {"type": "string"}}, "additionalProperties": false}
+    },
+    "website_site_create": {
+      "description": "Create a new manual Website Studio site with starter static source.",
+      "input_schema": {
+        "type": "object",
+        "required": ["display_name"],
+        "properties": {
+          "display_name": {"type": "string"},
+          "slug": {"type": "string"},
+          "primary_domain": {"type": "string"},
+          "source_provider": {"type": "string", "enum": ["manual", "zip", "git"]}
+        },
+        "additionalProperties": false
+      }
+    },
+    "website_site_archive": {
+      "description": "Archive one Website Studio site without deleting its source or history.",
+      "input_schema": {"type": "object", "required": ["site_id"], "properties": {"site_id": {"type": "string"}}, "additionalProperties": false}
+    },
+    "website_site_restore": {
+      "description": "Restore one archived Website Studio site to draft status.",
+      "input_schema": {"type": "object", "required": ["site_id"], "properties": {"site_id": {"type": "string"}}, "additionalProperties": false}
+    },
+    "website_site_rename": {
+      "description": "Rename a Website Studio site and optionally update slug or primary domain.",
+      "input_schema": {
+        "type": "object",
+        "required": ["site_id", "display_name"],
+        "properties": {
+          "site_id": {"type": "string"},
+          "display_name": {"type": "string"},
+          "slug": {"type": "string"},
+          "primary_domain": {"type": "string"}
+        },
+        "additionalProperties": false
+      }
+    },
+    "website_site_duplicate": {
+      "description": "Duplicate one Website Studio site's current source tree into a new draft site.",
+      "input_schema": {
+        "type": "object",
+        "required": ["site_id"],
+        "properties": {
+          "site_id": {"type": "string"},
+          "display_name": {"type": "string"},
+          "slug": {"type": "string"}
+        },
+        "additionalProperties": false
+      }
+    },
+    "website_site_set_active": {
+      "description": "Select the active Website Studio site for workspace navigation and contextual agent surfaces.",
+      "input_schema": {"type": "object", "required": ["site_id"], "properties": {"site_id": {"type": "string"}}, "additionalProperties": false}
+    },
+    "website_git_connections_list": {
+      "description": "List redaction-safe GitHub repository connections prepared for Website Studio.",
+      "input_schema": {
+        "type": "object",
+        "properties": {"site_id": {"type": "string"}},
+        "additionalProperties": false
+      }
+    },
+    "website_git_connection_prepare": {
+      "description": "Prepare a GitHub repository connection and return Vault/Core Secrets grant requirements without receiving raw secret values.",
+      "input_schema": {
+        "type": "object",
+        "required": ["repository_url"],
+        "properties": {
+          "site_id": {"type": "string"},
+          "display_name": {"type": "string"},
+          "repository_url": {"type": "string"},
+          "base_branch": {"type": "string"},
+          "branch": {"type": "string"},
+          "auth_mode": {"type": "string", "enum": ["fine_grained_token"], "default": "fine_grained_token"},
+          "secret_logical_name": {"type": "string"}
+        },
+        "additionalProperties": false
+      }
+    },
+    "website_git_connection_activate": {
+      "description": "Mark a prepared GitHub connection as backed by a Vault/Core Secrets grant without receiving raw token values.",
+      "input_schema": {
+        "type": "object",
+        "required": ["connection_id", "grant_id", "confirm_no_raw_secret"],
+        "properties": {
+          "connection_id": {"type": "string"},
+          "grant_id": {"type": "string"},
+          "confirm_no_raw_secret": {"type": "boolean", "const": true}
+        },
+        "additionalProperties": false
+      }
+    },
+    "website_environments_list": {
+      "description": "List configured preview/staging/production environments for one Website Studio site.",
+      "input_schema": {
+        "type": "object",
+        "required": ["site_id"],
+        "properties": {"site_id": {"type": "string"}},
+        "additionalProperties": false
+      }
+    },
+    "website_environment_configure": {
+      "description": "Create or update a site environment and approval requirement.",
+      "input_schema": {
+        "type": "object",
+        "required": ["site_id", "kind"],
+        "properties": {
+          "site_id": {"type": "string"},
+          "environment_id": {"type": "string"},
+          "name": {"type": "string"},
+          "kind": {"type": "string", "enum": ["preview", "staging", "production", "custom"]},
+          "base_url": {"type": "string"},
+          "requires_approval": {"type": "boolean"}
+        },
+        "additionalProperties": false
+      }
+    },
+    "website_publish_targets_list": {
+      "description": "List configured Website Studio publish targets for one site.",
+      "input_schema": {
+        "type": "object",
+        "required": ["site_id"],
+        "properties": {"site_id": {"type": "string"}},
+        "additionalProperties": false
+      }
+    },
+    "website_publish_target_configure": {
+      "description": "Configure a managed static or Git pull-request publish target for one site environment.",
+      "input_schema": {
+        "type": "object",
+        "required": ["site_id"],
+        "properties": {
+          "site_id": {"type": "string"},
+          "environment_id": {"type": "string"},
+          "kind": {"type": "string", "enum": ["managed_static", "git_pull_request"], "default": "managed_static"},
+          "status": {"type": "string", "enum": ["active", "disabled"], "default": "active"},
+          "config": {"type": "object"}
+        },
+        "additionalProperties": false
+      }
+    },
+    "website_import_git": {
+      "description": "Import a public GitHub HTTPS repository or app-local Git repository into a new or existing site source tree.",
+      "input_schema": {
+        "type": "object",
+        "required": ["repository_url"],
+        "properties": {
+          "site_id": {"type": "string"},
+          "display_name": {"type": "string"},
+          "repository_url": {"type": "string"},
+          "branch": {"type": "string"}
+        },
+        "additionalProperties": false
+      },
+      "secret_selectors": [
+        {
+          "required_secrets": ["github-token"],
+          "resource_lookup": { "kind": "website_git_connection_from_arguments" }
+        }
+      ]
+    },
+    "website_import_zip": {
+      "description": "Safely import a base64 ZIP into a new or existing site source tree.",
+      "input_schema": {
+        "type": "object",
+        "required": ["archive_base64"],
+        "properties": {
+          "site_id": {"type": "string"},
+          "display_name": {"type": "string"},
+          "archive_base64": {"type": "string"},
+          "source_artifact_ref": {"type": "object"}
+        },
+        "additionalProperties": false
+      }
+    },
+    "website_sync_source": {
+      "description": "Sync a Git-backed site from its retained source reference. Blocks when unpublished local changes exist unless confirm=true is supplied after review.",
+      "input_schema": {
+        "type": "object",
+        "required": ["site_id"],
+        "properties": {
+          "site_id": {"type": "string"},
+          "branch": {"type": "string"},
+          "confirm": {"type": "boolean"}
+        },
+        "additionalProperties": false
+      },
+      "secret_selectors": [
+        {
+          "required_secrets": ["github-token"],
+          "resource_lookup": { "kind": "website_git_connection_from_arguments" }
+        }
+      ]
+    },
+    "website_sitemap": {
+      "description": "Return the indexed static HTML sitemap for one site. Use mode=routes-only for first-paint route/page selection without asset inventory.",
+      "input_schema": {
+        "type": "object",
+        "required": ["site_id"],
+        "properties": {
+          "site_id": {"type": "string"},
+          "mode": {"type": "string", "enum": ["full", "routes-only", "routes"]}
+        },
+        "additionalProperties": false
+      }
+    },
+    "website_navigation_analyze": {
+      "description": "Return visual site navigation with pages, sections, anchors, component candidates, preview status, analysis coverage, and warnings while excluding source inventory files.",
+      "input_schema": {"type": "object", "required": ["site_id"], "properties": {"site_id": {"type": "string"}}, "additionalProperties": false}
+    },
+    "website_search": {
+      "description": "Search sites and indexed pages.",
+      "input_schema": {
+        "type": "object",
+        "properties": {"query": {"type": "string"}, "site_id": {"type": "string"}},
+        "additionalProperties": false
+      }
+    },
+    "website_read_file": {
+      "description": "Read one UTF-8 text file from a selected site's source tree.",
+      "input_schema": {
+        "type": "object",
+        "required": ["site_id", "path"],
+        "properties": {"site_id": {"type": "string"}, "path": {"type": "string"}},
+        "additionalProperties": false
+      }
+    },
+    "website_write_file": {
+      "description": "Write one UTF-8 text file in a selected site's source tree, guarded by an expected hash. Use expected_hash=new for new files.",
+      "input_schema": {
+        "type": "object",
+        "required": ["site_id", "path", "content", "expected_hash"],
+        "properties": {
+          "site_id": {"type": "string"},
+          "path": {"type": "string"},
+          "content": {"type": "string"},
+          "expected_hash": {"type": "string"}
+        },
+        "additionalProperties": false
+      }
+    },
+    "website_apply_patch": {
+      "description": "Replace the first matching text segment in one site file, guarded by an expected hash.",
+      "input_schema": {
+        "type": "object",
+        "required": ["site_id", "path", "old_text", "new_text", "expected_hash"],
+        "properties": {
+          "site_id": {"type": "string"},
+          "path": {"type": "string"},
+          "old_text": {"type": "string"},
+          "new_text": {"type": "string"},
+          "expected_hash": {"type": "string"}
+        },
+        "additionalProperties": false
+      }
+    },
+    "website_diff": {
+      "description": "Return a unified diff between the active revision snapshot and the working source tree.",
+      "input_schema": {"type": "object", "required": ["site_id"], "properties": {"site_id": {"type": "string"}}, "additionalProperties": false}
+    },
+    "website_list_changes": {
+      "description": "List bounded working diff entries, changesets, publish requests, revisions, builds, sync runs, and deployments for one site.",
+      "input_schema": {
+        "type": "object",
+        "required": ["site_id"],
+        "properties": {
+          "site_id": {"type": "string"},
+          "status": {"type": "string"},
+          "limit": {"type": "integer", "minimum": 1, "maximum": 100},
+          "offset": {"type": "integer", "minimum": 0},
+          "include_logs": {"type": "boolean"},
+          "diff_limit": {"type": "integer", "minimum": 1, "maximum": 250}
+        },
+        "additionalProperties": false
+      }
+    },
+    "website_build_validate": {
+      "description": "Record a deterministic build validation, preparing bounded static/PHP/Node preview artifacts and rendered route records when supported.",
+      "input_schema": {
+        "type": "object",
+        "required": ["site_id"],
+        "properties": {"site_id": {"type": "string"}},
+        "additionalProperties": false
+      }
+    },
+    "website_builds_list": {
+      "description": "List bounded recorded build validation attempts for one site.",
+      "input_schema": {
+        "type": "object",
+        "required": ["site_id"],
+        "properties": {
+          "site_id": {"type": "string"},
+          "limit": {"type": "integer", "minimum": 1, "maximum": 100},
+          "offset": {"type": "integer", "minimum": 0},
+          "include_logs": {"type": "boolean"}
+        },
+        "additionalProperties": false
+      }
+    },
+    "website_maintenance_prune": {
+      "description": "Prune old Website Studio build, preview, runtime session records, and unreferenced build artifacts according to a bounded retention policy.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "site_id": {"type": "string"},
+          "keep_builds": {"type": "integer", "minimum": 1, "maximum": 500},
+          "keep_previews_per_route": {"type": "integer", "minimum": 1, "maximum": 50},
+          "keep_runtime_sessions": {"type": "integer", "minimum": 1, "maximum": 500},
+          "dry_run": {"type": "boolean"}
+        },
+        "additionalProperties": false
+      }
+    },
+    "website_build_preview": {
+      "description": "Return the preview contract for one indexed route, including preview HTML, isolated preview_url, runtime status, warnings, and missing runtime requirements.",
+      "input_schema": {
+        "type": "object",
+        "required": ["site_id"],
+        "properties": {"site_id": {"type": "string"}, "route": {"type": "string"}},
+        "additionalProperties": false
+      }
+    },
+    "website_preview_document": {
+      "description": "Return one prepared Website Studio preview document by preview id for the isolated preview runtime frontend.",
+      "input_schema": {
+        "type": "object",
+        "required": ["preview_id"],
+        "properties": {"preview_id": {"type": "string"}, "include_inventory": {"type": "boolean"}},
+        "additionalProperties": false
+      }
+    },
+    "website_preview_report": {
+      "description": "Create a bounded preview observability report with source mapping, local asset coverage, acceptance checks, and browser probe contract.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "site_id": {"type": "string"},
+          "preview_id": {"type": "string"},
+          "route": {"type": "string"},
+          "baseline_report_id": {"type": "string"},
+          "include_inventory": {"type": "boolean"}
+        },
+        "anyOf": [{"required": ["site_id"]}, {"required": ["preview_id"]}],
+        "additionalProperties": false
+      }
+    },
+    "website_runtime_status": {
+      "description": "Return bounded runtime health, latest build, latest preview, and missing requirements for one Website Studio site.",
+      "input_schema": {
+        "type": "object",
+        "required": ["site_id"],
+        "properties": {"site_id": {"type": "string"}},
+        "additionalProperties": false
+      }
+    },
+    "website_publish_request": {
+      "description": "Create a guarded publish request for a site's current working diff.",
+      "input_schema": {
+        "type": "object",
+        "required": ["site_id"],
+        "properties": {"site_id": {"type": "string"}, "requested_by": {"type": "string"}},
+        "additionalProperties": false
+      }
+    },
+    "website_approval_record": {
+      "description": "Record an explicit approval event for a pending publish request or rollback target.",
+      "input_schema": {
+        "type": "object",
+        "required": ["site_id", "approval_action", "target_id", "approved_by", "confirm"],
+        "properties": {
+          "site_id": {"type": "string"},
+          "approval_action": {"type": "string", "enum": ["publish", "rollback"]},
+          "target_id": {"type": "string"},
+          "approved_by": {"type": "string"},
+          "approval_note": {"type": "string"},
+          "confirm": {"type": "boolean", "const": true}
+        },
+        "additionalProperties": false
+      }
+    },
+    "website_approvals_list": {
+      "description": "List Website Studio approval events, optionally scoped to one site.",
+      "input_schema": {
+        "type": "object",
+        "properties": {"site_id": {"type": "string"}},
+        "additionalProperties": false
+      }
+    },
+    "website_publish": {
+      "description": "Publish an approved working diff into an immutable Website Studio revision and deployment record.",
+      "input_schema": {
+        "type": "object",
+        "required": ["site_id", "publish_request_id", "approval_id"],
+        "properties": {
+          "site_id": {"type": "string"},
+          "publish_request_id": {"type": "string"},
+          "approval_id": {"type": "string"}
+        },
+        "additionalProperties": false
+      },
+      "secret_selectors": [
+        {
+          "required_secrets": ["github-token"],
+          "resource_lookup": { "kind": "website_git_publish_from_arguments" }
+        }
+      ]
+    },
+    "website_rollback": {
+      "description": "Restore a selected revision into the working tree after explicit approval.",
+      "input_schema": {
+        "type": "object",
+        "required": ["site_id", "revision_id", "approval_id", "confirm"],
+        "properties": {
+          "site_id": {"type": "string"},
+          "revision_id": {"type": "string"},
+          "approval_id": {"type": "string"},
+          "confirm": {"type": "boolean", "const": true}
+        },
+        "additionalProperties": false
+      }
+    },
+    "website_active_context": {
+      "description": "Return bounded site/page context for the active Website Studio view.",
+      "input_schema": {
+        "type": "object",
+        "properties": {"site_id": {"type": "string"}, "page_id": {"type": "string"}},
+        "additionalProperties": false
+      }
+    },
+    "website_page_context": {
+      "description": "Return bounded visual site/page/component context, sanitized runtime report summary, and rendered visual_assets; full inventory is opt-in with include_inventory=true.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "site_id": {"type": "string"},
+          "page_id": {"type": "string"},
+          "route_id": {"type": "string"},
+          "route": {"type": "string"},
+          "asset_id": {"type": "string"},
+          "component_id": {"type": "string"},
+          "section_id": {"type": "string"},
+          "anchor_id": {"type": "string"},
+          "target_selector": {"type": "string"},
+          "target_anchor": {"type": "string"},
+          "selector": {"type": "string"},
+          "anchor": {"type": "string"},
+          "include_inventory": {"type": "boolean"}
+        },
+        "additionalProperties": false
+      }
+    },
+    "website_reference_manifest": {
+      "description": "Return Website Studio reference entity metadata.",
+      "input_schema": {"type": "object", "properties": {}, "additionalProperties": false}
+    },
+    "website_reference_search": {
+      "description": "Search Website Studio reference entities.",
+      "input_schema": {
+        "type": "object",
+        "properties": {"query": {"type": "string"}, "site_id": {"type": "string"}},
+        "additionalProperties": false
+      }
+    },
+    "website_reference_resolve": {
+      "description": "Resolve one Website Studio reference entity.",
+      "input_schema": {
+        "type": "object",
+        "properties": {"entity_type": {"type": "string"}, "id": {"type": "string"}, "entity_id": {"type": "string"}},
+        "required": ["entity_type"],
+        "anyOf": [{"required": ["id"]}, {"required": ["entity_id"]}],
+        "additionalProperties": false
+      }
+    },
+    "website_reference_summarize": {
+      "description": "Summarize one Website Studio reference entity.",
+      "input_schema": {
+        "type": "object",
+        "properties": {"entity_type": {"type": "string"}, "id": {"type": "string"}, "entity_id": {"type": "string"}},
+        "required": ["entity_type"],
+        "anyOf": [{"required": ["id"]}, {"required": ["entity_id"]}],
+        "additionalProperties": false
+      }
+    },
+    "website_studio_reference_manifest": {
+      "description": "Return Website Studio reference entity metadata.",
+      "input_schema": {"type": "object", "properties": {}, "additionalProperties": false}
+    },
+    "website_studio_reference_search": {
+      "description": "Search Website Studio reference entities.",
+      "input_schema": {
+        "type": "object",
+        "properties": {"query": {"type": "string"}, "site_id": {"type": "string"}},
+        "additionalProperties": false
+      }
+    },
+    "website_studio_reference_resolve": {
+      "description": "Resolve one Website Studio reference entity.",
+      "input_schema": {
+        "type": "object",
+        "properties": {"entity_type": {"type": "string"}, "id": {"type": "string"}, "entity_id": {"type": "string"}},
+        "required": ["entity_type"],
+        "anyOf": [{"required": ["id"]}, {"required": ["entity_id"]}],
+        "additionalProperties": false
+      }
+    },
+    "website_studio_reference_summarize": {
+      "description": "Summarize one Website Studio reference entity.",
+      "input_schema": {
+        "type": "object",
+        "properties": {"entity_type": {"type": "string"}, "id": {"type": "string"}, "entity_id": {"type": "string"}},
+        "required": ["entity_type"],
+        "anyOf": [{"required": ["id"]}, {"required": ["entity_id"]}],
+        "additionalProperties": false
+      }
+    },
+    "website_studio_view_filter": {
+      "description": "Read persisted Website Studio view filter state.",
+      "input_schema": {"type": "object", "properties": {}, "additionalProperties": false}
+    },
+    "website_studio_set_view_filter": {
+      "description": "Persist Website Studio search/filter view state.",
+      "input_schema": {
+        "type": "object",
+        "properties": {"query": {"type": "string"}, "site_id": {"type": "string"}, "preserve_custom": {"type": "boolean"}},
+        "additionalProperties": false
+      }
+    },
+    "website_studio_set_custom_view": {
+      "description": "Persist an explicit custom Website Studio view selection.",
+      "input_schema": {
+        "type": "object",
+        "properties": {"title": {"type": "string"}, "refs": {"type": "array", "items": {"type": "object"}}},
+        "additionalProperties": false
+      }
+    },
+    "website_studio_clear_custom_view": {
+      "description": "Clear the custom Website Studio view state.",
+      "input_schema": {"type": "object", "properties": {}, "additionalProperties": false}
+    }
+  }
+}

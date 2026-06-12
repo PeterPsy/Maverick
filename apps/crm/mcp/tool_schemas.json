@@ -1,0 +1,1014 @@
+{
+  "tools": {
+    "crm_search": {
+      "description": "Search CRM records.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "query": { "type": "string" },
+          "entity_type": { "type": "string" },
+          "limit": { "type": "integer", "minimum": 1, "maximum": 200 }
+        },
+        "additionalProperties": false
+      },
+      "output_schema": { "type": "object" }
+    },
+    "crm_get_record": {
+      "description": "Read one CRM record by entity type and id.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "entity_type": { "type": "string" },
+          "id": { "type": "string" }
+        },
+        "required": ["entity_type", "id"],
+        "additionalProperties": false
+      },
+      "output_schema": { "type": "object" }
+    },
+    "crm_create_lead": {
+      "description": "Create one CRM lead.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "first_name": { "type": "string" },
+          "last_name": { "type": "string" },
+          "display_name": { "type": "string" },
+          "email": { "type": "string" },
+          "phone": { "type": "string" },
+          "company": { "type": "string" },
+          "domain": { "type": "string" },
+          "source": { "type": "string" },
+          "status": { "type": "string" },
+          "owner_id": { "type": "string" },
+          "summary": { "type": "string" },
+          "metadata": { "type": "object" }
+        },
+        "additionalProperties": false
+      },
+      "output_schema": { "type": "object" }
+    },
+    "crm_website_intake": {
+      "description": "Ingest one public website form submission into CRM, then send CRM-owned Mail notifications through the selected Mail provider.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "submission_id": { "type": "string" },
+          "received_at": { "type": "string" },
+          "source": { "type": "string" },
+          "contact": { "type": "object" },
+          "request": { "type": "object" },
+          "answers": { "type": "object" },
+          "source_context": { "type": "object" },
+          "server_meta": { "type": "object" },
+          "notification": { "type": "object" },
+          "send_notifications": { "type": "boolean" },
+          "retry_failed_email": { "type": "boolean" },
+          "mail_provider_app_id": { "type": "string" }
+        },
+        "required": ["submission_id", "contact", "request"],
+        "additionalProperties": false
+      },
+      "output_schema": { "type": "object" }
+    },
+    "crm_update_lead": {
+      "description": "Update one CRM lead.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "string" },
+          "first_name": { "type": "string" },
+          "last_name": { "type": "string" },
+          "display_name": { "type": "string" },
+          "email": { "type": "string" },
+          "phone": { "type": "string" },
+          "company": { "type": "string" },
+          "domain": { "type": "string" },
+          "source": { "type": "string" },
+          "status": { "type": "string" },
+          "owner_id": { "type": "string" },
+          "summary": { "type": "string" },
+          "metadata": { "type": "object" }
+        },
+        "required": ["id"],
+        "additionalProperties": false
+      },
+      "output_schema": { "type": "object" }
+    },
+    "crm_convert_lead": {
+      "description": "Convert a lead into account, contact, and optionally a deal.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "string" },
+          "lead_id": { "type": "string" },
+          "account_id": { "type": "string" },
+          "contact_id": { "type": "string" },
+          "account_name": { "type": "string" },
+          "deal_name": { "type": "string" },
+          "create_deal": { "type": "boolean" },
+          "stage_id": { "type": "string" },
+          "value": { "type": "number" },
+          "currency": { "type": "string" },
+          "close_date": { "type": "string" },
+          "owner_id": { "type": "string" }
+        },
+        "additionalProperties": false
+      },
+      "output_schema": { "type": "object" }
+    },
+    "crm_create_contact": {
+      "description": "Create one CRM contact.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "account_id": { "type": "string" },
+          "first_name": { "type": "string" },
+          "last_name": { "type": "string" },
+          "display_name": { "type": "string" },
+          "email": { "type": "string" },
+          "phone": { "type": "string" },
+          "role": { "type": "string" },
+          "summary": { "type": "string" },
+          "metadata": { "type": "object" }
+        },
+        "additionalProperties": false
+      },
+      "output_schema": { "type": "object" }
+    },
+    "crm_update_contact": {
+      "description": "Update one CRM contact.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "string" },
+          "account_id": { "type": "string" },
+          "first_name": { "type": "string" },
+          "last_name": { "type": "string" },
+          "display_name": { "type": "string" },
+          "email": { "type": "string" },
+          "phone": { "type": "string" },
+          "role": { "type": "string" },
+          "summary": { "type": "string" },
+          "metadata": { "type": "object" }
+        },
+        "required": ["id"],
+        "additionalProperties": false
+      },
+      "output_schema": { "type": "object" }
+    },
+    "crm_create_account": {
+      "description": "Create one CRM account.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "name": { "type": "string" },
+          "domain": { "type": "string" },
+          "industry": { "type": "string" },
+          "status": { "type": "string" },
+          "summary": { "type": "string" },
+          "metadata": { "type": "object" }
+        },
+        "required": ["name"],
+        "additionalProperties": false
+      },
+      "output_schema": { "type": "object" }
+    },
+    "crm_update_account": {
+      "description": "Update one CRM account.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "string" },
+          "name": { "type": "string" },
+          "domain": { "type": "string" },
+          "industry": { "type": "string" },
+          "status": { "type": "string" },
+          "summary": { "type": "string" },
+          "metadata": { "type": "object" }
+        },
+        "required": ["id"],
+        "additionalProperties": false
+      },
+      "output_schema": { "type": "object" }
+    },
+    "crm_create_deal": {
+      "description": "Create one CRM deal.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "account_id": { "type": "string" },
+          "contact_id": { "type": "string" },
+          "name": { "type": "string" },
+          "stage_id": { "type": "string" },
+          "value": { "type": "number" },
+          "currency": { "type": "string" },
+          "probability": { "type": "number" },
+          "close_date": { "type": "string" },
+          "summary": { "type": "string" },
+          "metadata": { "type": "object" }
+        },
+        "required": ["name"],
+        "additionalProperties": false
+      },
+      "output_schema": { "type": "object" }
+    },
+    "crm_update_deal": {
+      "description": "Update one CRM deal.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "string" },
+          "account_id": { "type": "string" },
+          "contact_id": { "type": "string" },
+          "name": { "type": "string" },
+          "stage_id": { "type": "string" },
+          "value": { "type": "number" },
+          "currency": { "type": "string" },
+          "probability": { "type": "number" },
+          "close_date": { "type": "string" },
+          "summary": { "type": "string" },
+          "metadata": { "type": "object" }
+        },
+        "required": ["id"],
+        "additionalProperties": false
+      },
+      "output_schema": { "type": "object" }
+    },
+    "crm_move_deal": {
+      "description": "Move a CRM deal to another pipeline stage.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "string" },
+          "stage_id": { "type": "string" }
+        },
+        "required": ["id", "stage_id"],
+        "additionalProperties": false
+      },
+      "output_schema": { "type": "object" }
+    },
+    "crm_create_pipeline": {
+      "description": "Create a CRM sales pipeline.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "string" },
+          "name": { "type": "string" },
+          "is_default": { "type": "boolean" }
+        },
+        "required": ["name"],
+        "additionalProperties": false
+      },
+      "output_schema": { "type": "object" }
+    },
+    "crm_update_pipeline": {
+      "description": "Update a CRM sales pipeline.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "string" },
+          "name": { "type": "string" },
+          "is_default": { "type": "boolean" }
+        },
+        "required": ["id", "name"],
+        "additionalProperties": false
+      },
+      "output_schema": { "type": "object" }
+    },
+    "crm_create_pipeline_stage": {
+      "description": "Create a CRM pipeline stage.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "string" },
+          "pipeline_id": { "type": "string" },
+          "name": { "type": "string" },
+          "position": { "type": "number" },
+          "probability": { "type": "number" }
+        },
+        "required": ["name"],
+        "additionalProperties": false
+      },
+      "output_schema": { "type": "object" }
+    },
+    "crm_update_pipeline_stage": {
+      "description": "Update a CRM pipeline stage.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "string" },
+          "pipeline_id": { "type": "string" },
+          "name": { "type": "string" },
+          "position": { "type": "number" },
+          "probability": { "type": "number" }
+        },
+        "required": ["id", "name"],
+        "additionalProperties": false
+      },
+      "output_schema": { "type": "object" }
+    },
+    "crm_log_activity": {
+      "description": "Log one CRM activity.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "activity_type": { "type": "string" },
+          "subject": { "type": "string" },
+          "body": { "type": "string" },
+          "account_id": { "type": "string" },
+          "contact_id": { "type": "string" },
+          "deal_id": { "type": "string" },
+          "occurred_at": { "type": "string" },
+          "due_at": { "type": "string" },
+          "completed_at": { "type": "string" },
+          "metadata": { "type": "object" }
+        },
+        "required": ["subject"],
+        "additionalProperties": false
+      },
+      "output_schema": { "type": "object" }
+    },
+    "crm_create_task": {
+      "description": "Create one CRM task or next action.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "string" },
+          "title": { "type": "string" },
+          "status": { "type": "string" },
+          "priority": { "type": "string" },
+          "due_at": { "type": "string" },
+          "account_id": { "type": "string" },
+          "contact_id": { "type": "string" },
+          "deal_id": { "type": "string" },
+          "owner_id": { "type": "string" },
+          "body": { "type": "string" },
+          "metadata": { "type": "object" }
+        },
+        "required": ["title"],
+        "additionalProperties": false
+      },
+      "output_schema": { "type": "object" }
+    },
+    "crm_update_task": {
+      "description": "Update one CRM task.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "string" },
+          "title": { "type": "string" },
+          "status": { "type": "string" },
+          "priority": { "type": "string" },
+          "due_at": { "type": "string" },
+          "account_id": { "type": "string" },
+          "contact_id": { "type": "string" },
+          "deal_id": { "type": "string" },
+          "owner_id": { "type": "string" },
+          "body": { "type": "string" },
+          "metadata": { "type": "object" }
+        },
+        "required": ["id"],
+        "additionalProperties": false
+      },
+      "output_schema": { "type": "object" }
+    },
+    "crm_create_note": {
+      "description": "Create one CRM note linked to an account, contact, or deal.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "string" },
+          "body": { "type": "string" },
+          "account_id": { "type": "string" },
+          "contact_id": { "type": "string" },
+          "deal_id": { "type": "string" },
+          "owner_id": { "type": "string" },
+          "metadata": { "type": "object" }
+        },
+        "required": ["body"],
+        "additionalProperties": false
+      },
+      "output_schema": { "type": "object" }
+    },
+    "crm_update_note": {
+      "description": "Update one CRM note.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "string" },
+          "body": { "type": "string" },
+          "account_id": { "type": "string" },
+          "contact_id": { "type": "string" },
+          "deal_id": { "type": "string" },
+          "owner_id": { "type": "string" },
+          "metadata": { "type": "object" }
+        },
+        "required": ["id"],
+        "additionalProperties": false
+      },
+      "output_schema": { "type": "object" }
+    },
+    "crm_archive_record": {
+      "description": "Archive one CRM record and hide it from active lists and search.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "entity_type": { "type": "string", "enum": ["lead", "account", "contact", "deal", "activity", "task", "note"] },
+          "id": { "type": "string" },
+          "entity_id": { "type": "string" }
+        },
+        "required": ["entity_type"],
+        "additionalProperties": false
+      },
+      "output_schema": { "type": "object" }
+    },
+    "crm_unarchive_record": {
+      "description": "Restore one archived CRM record to active lists and search.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "entity_type": { "type": "string", "enum": ["lead", "account", "contact", "deal", "activity", "task", "note"] },
+          "id": { "type": "string" },
+          "entity_id": { "type": "string" }
+        },
+        "required": ["entity_type"],
+        "additionalProperties": false
+      },
+      "output_schema": { "type": "object" }
+    },
+    "crm_delete_record": {
+      "description": "Soft-delete one CRM record.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "entity_type": { "type": "string", "enum": ["lead", "account", "contact", "deal", "activity", "task", "note"] },
+          "id": { "type": "string" },
+          "entity_id": { "type": "string" }
+        },
+        "required": ["entity_type"],
+        "additionalProperties": false
+      },
+      "output_schema": { "type": "object" }
+    },
+    "crm_tag_record": {
+      "description": "Attach a tag to one CRM record.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "entity_type": { "type": "string", "enum": ["lead", "account", "contact", "deal", "activity", "task", "note"] },
+          "id": { "type": "string" },
+          "entity_id": { "type": "string" },
+          "tag": { "type": "string" },
+          "name": { "type": "string" },
+          "color": { "type": "string" }
+        },
+        "required": ["entity_type"],
+        "additionalProperties": false
+      },
+      "output_schema": { "type": "object" }
+    },
+    "crm_untag_record": {
+      "description": "Remove a tag from one CRM record.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "entity_type": { "type": "string", "enum": ["lead", "account", "contact", "deal", "activity", "task", "note"] },
+          "id": { "type": "string" },
+          "entity_id": { "type": "string" },
+          "tag": { "type": "string" },
+          "name": { "type": "string" }
+        },
+        "required": ["entity_type"],
+        "additionalProperties": false
+      },
+      "output_schema": { "type": "object" }
+    },
+    "crm_bulk_update": {
+      "description": "Apply one archive, delete, tag, or field update operation to multiple CRM records.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "entity_type": { "type": "string", "enum": ["lead", "account", "contact", "deal", "activity", "task", "note"] },
+          "ids": { "type": "array", "items": { "type": "string" } },
+          "operation": { "type": "string", "enum": ["archive", "delete", "tag", "update"] },
+          "tag": { "type": "string" },
+          "color": { "type": "string" },
+          "changes": { "type": "object" }
+        },
+        "required": ["entity_type", "ids"],
+        "additionalProperties": false
+      },
+      "output_schema": { "type": "object" }
+    },
+    "crm_merge_records": {
+      "description": "Merge duplicate lead, account, or contact records into a target record while preserving links and CRM context.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "entity_type": { "type": "string", "enum": ["lead", "account", "contact"] },
+          "target_id": { "type": "string" },
+          "source_id": { "type": "string" },
+          "source_ids": { "type": "array", "items": { "type": "string" } },
+          "field_overrides": { "type": "object" }
+        },
+        "required": ["entity_type", "target_id"],
+        "additionalProperties": false
+      },
+      "output_schema": { "type": "object" }
+    },
+    "crm_timeline": {
+      "description": "Return activity, task, note, and event timeline items for an account, contact, or deal.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "entity_type": { "type": "string", "enum": ["lead", "account", "contact", "deal"] },
+          "id": { "type": "string" },
+          "entity_id": { "type": "string" }
+        },
+        "required": ["entity_type"],
+        "additionalProperties": false
+      },
+      "output_schema": { "type": "object" }
+    },
+    "crm_audit_log": {
+      "description": "List CRM audit events with filters for entity, action, and date range.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "entity_type": { "type": "string" },
+          "entity_id": { "type": "string" },
+          "id": { "type": "string" },
+          "event_type": { "type": "string" },
+          "action": { "type": "string" },
+          "date_from": { "type": "string" },
+          "date_to": { "type": "string" },
+          "limit": { "type": "integer", "minimum": 1, "maximum": 200 }
+        },
+        "additionalProperties": false
+      },
+      "output_schema": { "type": "object" }
+    },
+    "crm_sales_reports": {
+      "description": "Return native sales reports: pipeline value, weighted forecast, deal aging, lead conversion, overdue tasks, and activities by owner.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "limit": { "type": "integer", "minimum": 1, "maximum": 200 }
+        },
+        "additionalProperties": false
+      },
+      "output_schema": { "type": "object" }
+    },
+    "crm_filter_records": {
+      "description": "List CRM records with saved-view-compatible query and structured filters.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "entity_type": { "type": "string", "enum": ["all", "lead", "account", "contact", "deal", "activity", "task", "note"] },
+          "query": { "type": "string" },
+          "filters": { "type": "object" },
+          "limit": { "type": "integer", "minimum": 1, "maximum": 200 }
+        },
+        "additionalProperties": false
+      },
+      "output_schema": { "type": "object" }
+    },
+    "crm_find_duplicates": {
+      "description": "Find duplicate accounts, contacts, and leads by email or domain.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "limit": { "type": "integer", "minimum": 1, "maximum": 200 }
+        },
+        "additionalProperties": false
+      },
+      "output_schema": { "type": "object" }
+    },
+    "crm_schema": {
+      "description": "Return CRM schema/config discovery including standard fields, typed custom fields, pipelines, and automation rules.",
+      "input_schema": { "type": "object", "properties": {}, "additionalProperties": false },
+      "output_schema": { "type": "object" }
+    },
+    "crm_list_custom_fields": {
+      "description": "List active typed CRM custom field definitions.",
+      "input_schema": {
+        "type": "object",
+        "properties": { "entity_type": { "type": "string", "enum": ["all", "lead", "account", "contact", "deal", "activity", "task", "note"] } },
+        "additionalProperties": false
+      },
+      "output_schema": { "type": "object" }
+    },
+    "crm_set_custom_fields": {
+      "description": "Set typed custom field values on one CRM record.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "entity_type": { "type": "string", "enum": ["lead", "account", "contact", "deal", "activity", "task", "note"] },
+          "id": { "type": "string" },
+          "entity_id": { "type": "string" },
+          "custom_fields": { "type": "object" },
+          "values": { "type": "object" }
+        },
+        "required": ["entity_type"],
+        "additionalProperties": false
+      },
+      "output_schema": { "type": "object" }
+    },
+    "crm_record_enrichment": {
+      "description": "Generate deterministic CRM enrichment suggestions and optionally create an approval proposal.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "entity_type": { "type": "string", "enum": ["lead", "account", "contact", "deal", "activity", "task", "note"] },
+          "id": { "type": "string" },
+          "entity_id": { "type": "string" },
+          "create_proposal": { "type": "boolean" }
+        },
+        "required": ["entity_type"],
+        "additionalProperties": false
+      },
+      "output_schema": { "type": "object" }
+    },
+    "crm_intelligent_next_actions": {
+      "description": "Return scored, deterministic CRM next actions with reasons.",
+      "input_schema": {
+        "type": "object",
+        "properties": { "limit": { "type": "integer", "minimum": 1, "maximum": 200 } },
+        "additionalProperties": false
+      },
+      "output_schema": { "type": "object" }
+    },
+    "crm_propose_workflows": {
+      "description": "Create pending workflow proposals from deterministic CRM next-action recommendations and active automation rules.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "limit": { "type": "integer", "minimum": 1, "maximum": 200 },
+          "include_automation": { "type": "boolean" }
+        },
+        "additionalProperties": false
+      },
+      "output_schema": { "type": "object" }
+    },
+    "crm_list_workflow_proposals": {
+      "description": "List CRM workflow proposals by status.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "status": { "type": "string" },
+          "limit": { "type": "integer", "minimum": 1, "maximum": 200 }
+        },
+        "additionalProperties": false
+      },
+      "output_schema": { "type": "object" }
+    },
+    "crm_approve_workflow_proposal": {
+      "description": "Approve a pending CRM workflow proposal.",
+      "input_schema": {
+        "type": "object",
+        "properties": { "id": { "type": "string" } },
+        "required": ["id"],
+        "additionalProperties": false
+      },
+      "output_schema": { "type": "object" }
+    },
+    "crm_dismiss_workflow_proposal": {
+      "description": "Dismiss or reject a pending or approved CRM workflow proposal without applying it.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "string" },
+          "status": { "type": "string", "enum": ["dismissed", "rejected"] },
+          "resolution": { "type": "string", "enum": ["dismissed", "rejected"] },
+          "reason": { "type": "string" }
+        },
+        "required": ["id"],
+        "additionalProperties": false
+      },
+      "output_schema": { "type": "object" }
+    },
+    "crm_reject_workflow_proposal": {
+      "description": "Reject a pending or approved CRM workflow proposal without applying it.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "string" },
+          "reason": { "type": "string" }
+        },
+        "required": ["id"],
+        "additionalProperties": false
+      },
+      "output_schema": { "type": "object" }
+    },
+    "crm_apply_workflow_proposal": {
+      "description": "Apply an approved CRM workflow proposal.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "string" },
+          "approve": { "type": "boolean" }
+        },
+        "required": ["id"],
+        "additionalProperties": false
+      },
+      "output_schema": { "type": "object" }
+    },
+    "crm_link_external_ref": {
+      "description": "Link a CRM record to an external app reference snapshot without reading the external app data store.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "string" },
+          "crm_entity_type": { "type": "string", "enum": ["lead", "account", "contact", "deal", "activity", "task", "note"] },
+          "crm_entity_id": { "type": "string" },
+          "entity_type": { "type": "string", "enum": ["lead", "account", "contact", "deal", "activity", "task", "note"] },
+          "entity_id": { "type": "string" },
+          "source_app_id": { "type": "string" },
+          "source_entity_type": { "type": "string" },
+          "source_entity_id": { "type": "string" },
+          "link_type": { "type": "string" },
+          "provider_alias": { "type": "string", "enum": ["mail", "calendar", "files", "agent"] },
+          "source_interface": { "type": "string" },
+          "title": { "type": "string" },
+          "summary": { "type": "string" },
+          "occurred_at": { "type": "string" },
+          "metadata": { "type": "object" }
+        },
+        "required": ["crm_entity_type", "crm_entity_id", "source_app_id", "source_entity_type", "source_entity_id"],
+        "additionalProperties": false
+      },
+      "output_schema": { "type": "object" }
+    },
+    "crm_unlink_external_ref": {
+      "description": "Soft-unlink one external reference from CRM.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "string" },
+          "crm_entity_type": { "type": "string", "enum": ["lead", "account", "contact", "deal", "activity", "task", "note"] },
+          "crm_entity_id": { "type": "string" },
+          "entity_type": { "type": "string", "enum": ["lead", "account", "contact", "deal", "activity", "task", "note"] },
+          "entity_id": { "type": "string" },
+          "source_app_id": { "type": "string" },
+          "source_entity_type": { "type": "string" },
+          "source_entity_id": { "type": "string" },
+          "link_type": { "type": "string" }
+        },
+        "additionalProperties": false
+      },
+      "output_schema": { "type": "object" }
+    },
+    "crm_list_external_refs": {
+      "description": "List external reference snapshots linked to CRM records.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "crm_entity_type": { "type": "string", "enum": ["lead", "account", "contact", "deal", "activity", "task", "note"] },
+          "crm_entity_id": { "type": "string" },
+          "entity_type": { "type": "string", "enum": ["lead", "account", "contact", "deal", "activity", "task", "note"] },
+          "id": { "type": "string" },
+          "entity_id": { "type": "string" },
+          "source_app_id": { "type": "string" },
+          "source_entity_type": { "type": "string" },
+          "source_entity_id": { "type": "string" },
+          "link_type": { "type": "string" },
+          "limit": { "type": "integer", "minimum": 1, "maximum": 200 }
+        },
+        "additionalProperties": false
+      },
+      "output_schema": { "type": "object" }
+    },
+    "crm_external_timeline": {
+      "description": "Return only external reference timeline items for a CRM record.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "entity_type": { "type": "string", "enum": ["lead", "account", "contact", "deal"] },
+          "id": { "type": "string" },
+          "entity_id": { "type": "string" }
+        },
+        "required": ["entity_type"],
+        "additionalProperties": false
+      },
+      "output_schema": { "type": "object" }
+    },
+    "crm_list_next_actions": {
+      "description": "List open CRM tasks and follow-ups.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "query": { "type": "string" },
+          "limit": { "type": "integer", "minimum": 1, "maximum": 200 }
+        },
+        "additionalProperties": false
+      },
+      "output_schema": { "type": "object" }
+    },
+    "crm_summarize_account": {
+      "description": "Summarize an account with related contacts, deals, and activities.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "account_id": { "type": "string" }
+        },
+        "required": ["account_id"],
+        "additionalProperties": false
+      },
+      "output_schema": { "type": "object" }
+    },
+    "crm_account_brief": {
+      "description": "Generate a deterministic account brief from CRM data.",
+      "input_schema": {
+        "type": "object",
+        "properties": { "account_id": { "type": "string" } },
+        "required": ["account_id"],
+        "additionalProperties": false
+      },
+      "output_schema": { "type": "object" }
+    },
+    "crm_export": {
+      "description": "Export the complete CRM dataset for backup or migration.",
+      "input_schema": { "type": "object", "properties": {}, "additionalProperties": false },
+      "output_schema": { "type": "object" }
+    },
+    "crm_import_preview": {
+      "description": "Preview a small JSON or CSV CRM import.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "entity_type": { "type": "string", "enum": ["lead", "account", "contact", "deal", "activity", "task", "note"] },
+          "rows": { "type": "array", "items": { "type": "object" } },
+          "csv": { "type": "string" },
+          "column_mapping": { "type": "object" },
+          "mapping": { "type": "object" },
+          "export": { "type": "object" },
+          "payload": { "type": "object" },
+          "schema_version": { "type": "string" },
+          "exported_at": { "type": "string" },
+          "leads": { "type": "array", "items": { "type": "object" } },
+          "accounts": { "type": "array", "items": { "type": "object" } },
+          "contacts": { "type": "array", "items": { "type": "object" } },
+          "deals": { "type": "array", "items": { "type": "object" } },
+          "activities": { "type": "array", "items": { "type": "object" } },
+          "tasks": { "type": "array", "items": { "type": "object" } },
+          "notes": { "type": "array", "items": { "type": "object" } },
+          "custom_field_definitions": { "type": "array", "items": { "type": "object" } },
+          "custom_field_values": { "type": "array", "items": { "type": "object" } },
+          "automation_rules": { "type": "array", "items": { "type": "object" } },
+          "workflow_proposals": { "type": "array", "items": { "type": "object" } },
+          "external_refs": { "type": "array", "items": { "type": "object" } }
+        },
+        "additionalProperties": false
+      },
+      "output_schema": { "type": "object" }
+    },
+    "crm_import_commit": {
+      "description": "Commit a small JSON or CSV CRM import.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "entity_type": { "type": "string", "enum": ["lead", "account", "contact", "deal", "activity", "task", "note"] },
+          "rows": { "type": "array", "items": { "type": "object" } },
+          "csv": { "type": "string" },
+          "column_mapping": { "type": "object" },
+          "mapping": { "type": "object" },
+          "export": { "type": "object" },
+          "payload": { "type": "object" },
+          "schema_version": { "type": "string" },
+          "exported_at": { "type": "string" },
+          "leads": { "type": "array", "items": { "type": "object" } },
+          "accounts": { "type": "array", "items": { "type": "object" } },
+          "contacts": { "type": "array", "items": { "type": "object" } },
+          "deals": { "type": "array", "items": { "type": "object" } },
+          "activities": { "type": "array", "items": { "type": "object" } },
+          "tasks": { "type": "array", "items": { "type": "object" } },
+          "notes": { "type": "array", "items": { "type": "object" } },
+          "custom_field_definitions": { "type": "array", "items": { "type": "object" } },
+          "custom_field_values": { "type": "array", "items": { "type": "object" } },
+          "automation_rules": { "type": "array", "items": { "type": "object" } },
+          "workflow_proposals": { "type": "array", "items": { "type": "object" } },
+          "external_refs": { "type": "array", "items": { "type": "object" } }
+        },
+        "additionalProperties": false
+      },
+      "output_schema": { "type": "object" }
+    },
+    "crm_health": {
+      "description": "Check CRM data health.",
+      "input_schema": { "type": "object", "properties": {}, "additionalProperties": false },
+      "output_schema": { "type": "object" }
+    },
+    "crm_view_filter": {
+      "description": "Read the current CRM view state.",
+      "input_schema": { "type": "object", "properties": {}, "additionalProperties": false },
+      "output_schema": {
+        "type": "object",
+        "properties": {
+          "state": { "type": "object" }
+        }
+      }
+    },
+    "crm_set_view_filter": {
+      "description": "Set CRM search query and entity filter view state.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "query": { "type": "string" },
+          "entity_type": { "type": "string", "enum": ["all", "lead", "account", "contact", "deal", "activity", "task", "note"] }
+        },
+        "additionalProperties": false
+      },
+      "output_schema": {
+        "type": "object",
+        "properties": {
+          "state": { "type": "object" }
+        }
+      }
+    },
+    "crm_set_custom_view": {
+      "description": "Set CRM to a curated custom view using CRM record references.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "title": { "type": "string" },
+          "refs": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "entity_type": { "type": "string", "enum": ["lead", "account", "contact", "deal", "activity", "task", "note"] },
+                "id": { "type": "string" }
+              },
+              "required": ["entity_type", "id"],
+              "additionalProperties": false
+            },
+            "maxItems": 500
+          }
+        },
+        "required": ["title", "refs"],
+        "additionalProperties": false
+      },
+      "output_schema": {
+        "type": "object",
+        "properties": {
+          "state": { "type": "object" }
+        }
+      }
+    },
+    "crm_clear_custom_view": {
+      "description": "Return CRM to normal search mode.",
+      "input_schema": { "type": "object", "properties": {}, "additionalProperties": false },
+      "output_schema": {
+        "type": "object",
+        "properties": {
+          "state": { "type": "object" }
+        }
+      }
+    },
+    "crm_reference_manifest": {
+      "description": "Describe CRM reference entity support.",
+      "input_schema": { "type": "object", "properties": {}, "additionalProperties": false },
+      "output_schema": { "type": "object" }
+    },
+    "crm_reference_search": {
+      "description": "Search CRM references.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "query": { "type": "string" },
+          "entity_type": { "type": "string" },
+          "limit": { "type": "integer", "minimum": 1, "maximum": 200 }
+        },
+        "additionalProperties": false
+      },
+      "output_schema": { "type": "object" }
+    },
+    "crm_reference_resolve": {
+      "description": "Resolve one CRM reference.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "entity_type": { "type": "string" },
+          "entity_id": { "type": "string" }
+        },
+        "required": ["entity_id"],
+        "additionalProperties": false
+      },
+      "output_schema": { "type": "object" }
+    },
+    "crm_reference_summarize": {
+      "description": "Summarize one CRM reference.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "entity_type": { "type": "string" },
+          "entity_id": { "type": "string" }
+        },
+        "required": ["entity_id"],
+        "additionalProperties": false
+      },
+      "output_schema": { "type": "object" }
+    }
+  }
+}

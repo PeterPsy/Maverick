@@ -26,6 +26,24 @@ type UseChatAppControllerParams = {
   threadId: string | null;
 };
 
+function isThreadAvailabilityBusy(availability: string) {
+  return availability === "busy" || availability === "queued" || availability === "active";
+}
+
+function isRuntimeTurnBusy(turn: RuntimeTurn | null) {
+  return turn?.status === "queued" || turn?.status === "active";
+}
+
+export function isActiveRuntimeTurnBusyForThread(activeTurn: RuntimeTurn | null, activeThread: ChatThread | null) {
+  if (!isRuntimeTurnBusy(activeTurn)) {
+    return false;
+  }
+  if (!activeThread) {
+    return true;
+  }
+  return isThreadAvailabilityBusy(activeThread.availability);
+}
+
 export function useChatAppController({
   enablePageCapture,
   externalFileDrop,
@@ -82,7 +100,7 @@ export function useChatAppController({
   const [composerError, setComposerError] = useState<string | null>(null);
   const [activeAppContext, setActiveAppContext] = useState<ActiveAppContext | null>(null);
   const hasExternalRuntimeThreads = Array.isArray(runtimeThreads);
-  const canStopTurn = activeTurn?.status === "queued" || activeTurn?.status === "active";
+  const canStopTurn = isActiveRuntimeTurnBusyForThread(activeTurn, activeThread);
   const isRuntimeBusy = canStopTurn;
 
   const { handleChatRootPointerDown } = useChatReadReceipts({

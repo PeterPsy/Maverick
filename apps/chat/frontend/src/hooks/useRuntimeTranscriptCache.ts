@@ -32,6 +32,17 @@ function isThreadAvailabilityBusy(availability: string) {
   return availability === "busy" || availability === "queued" || availability === "active";
 }
 
+export function isRuntimeTurnBusy(turn: Pick<RuntimeTurn, "status"> | null | undefined) {
+  return turn?.status === "queued" || turn?.status === "active";
+}
+
+export function selectCachedActiveTurnForThread(thread: ChatThread | null, cachedTranscript: RuntimeTranscriptCacheEntry | null) {
+  if (!thread || !cachedTranscript?.activeTurn || !isThreadAvailabilityBusy(thread.availability) || !isRuntimeTurnBusy(cachedTranscript.activeTurn)) {
+    return null;
+  }
+  return cachedTranscript.activeTurn;
+}
+
 export function useRuntimeTranscriptCache({
   activeSession,
   activeThread,
@@ -91,10 +102,7 @@ export function useRuntimeTranscriptCache({
   }
 
   function cachedActiveTurnForThread(thread: ChatThread | null, cachedTranscript: RuntimeTranscriptCacheEntry | null) {
-    if (!thread || !cachedTranscript?.activeTurn || !isThreadAvailabilityBusy(thread.availability)) {
-      return null;
-    }
-    return cachedTranscript.activeTurn;
+    return selectCachedActiveTurnForThread(thread, cachedTranscript);
   }
 
   function setActiveRuntimeSessionId(runtimeSessionId: string | null) {

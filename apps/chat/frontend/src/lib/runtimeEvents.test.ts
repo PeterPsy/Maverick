@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import type { RuntimeEvent, RuntimeWebSocketFrame } from "../api/client";
+import type { RuntimeEvent, RuntimeTurn, RuntimeWebSocketFrame } from "../api/client";
 import {
   ApiError,
   isRuntimeSessionUnavailableError,
@@ -18,6 +18,20 @@ function event(event_id: string, created_at: string): RuntimeEvent {
     event_type: "runtime.output.delta",
     payload: {},
     created_at,
+  };
+}
+
+function turn(status: string, overrides: Partial<RuntimeTurn> = {}): RuntimeTurn {
+  return {
+    turn_id: "turn-1",
+    session_id: "session-1",
+    workspace_id: "default",
+    status,
+    input_text: "user request",
+    failure_reason: null,
+    created_at: "2026-04-19T10:00:00Z",
+    updated_at: "2026-04-19T10:00:02Z",
+    ...overrides,
   };
 }
 
@@ -89,6 +103,25 @@ describe("runtime websocket helpers", () => {
     ]);
   });
 
+  it("hydrates terminal turn status from bounded WebSocket turn metadata", () => {
+    const hydrated = hydrateMissingTurnAnchors(
+      [
+        { ...event("queued", "2026-04-19T10:00:00Z"), event_type: "runtime.turn.queued", payload: { input_text: "work" } },
+        { ...event("started", "2026-04-19T10:00:01Z"), event_type: "runtime.turn.started" },
+        { ...event("delta", "2026-04-19T10:00:02Z"), event_type: "runtime.output.delta", payload: { text: "done" } },
+      ],
+      [turn("completed", { input_text: "work", updated_at: "2026-04-19T10:00:03Z" })],
+    );
+
+    expect(hydrated.at(-1)).toMatchObject({
+      event_id: "synthetic-turn-status:turn-1",
+      event_type: "runtime.turn.completed",
+      payload: { status: "completed", synthetic_turn_status: true },
+    });
+    expect(firstPersistedRuntimeEventId(hydrated)).toBe("queued");
+    expect(inferActiveRuntimeTurn(hydrated, "session-1")).toBeNull();
+  });
+
   it("infers an active turn from persisted runtime events after refresh", () => {
     const activeTurn = inferActiveRuntimeTurn(
       [
@@ -106,6 +139,19 @@ describe("runtime websocket helpers", () => {
       [
         { ...event("queued", "2026-04-19T10:00:00Z"), event_type: "runtime.turn.queued", payload: { input_text: "work" } },
         { ...event("completed", "2026-04-19T10:00:02Z"), event_type: "runtime.turn.completed" },
+      ],
+      "session-1",
+    );
+
+    expect(activeTurn).toBeNull();
+  });
+
+  it("treats timed-out runtime events as terminal for UI busy state", () => {
+    const activeTurn = inferActiveRuntimeTurn(
+      [
+        { ...event("queued", "2026-04-19T10:00:00Z"), event_type: "runtime.turn.queued", payload: { input_text: "work" } },
+        { ...event("started", "2026-04-19T10:00:01Z"), event_type: "runtime.turn.started" },
+        { ...event("timed-out", "2026-04-19T10:00:02Z"), event_type: "runtime.turn.timed-out", payload: { error: "watchdog timeout" } },
       ],
       "session-1",
     );

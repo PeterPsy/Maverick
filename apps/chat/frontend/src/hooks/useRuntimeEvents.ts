@@ -48,6 +48,9 @@ function terminalStatus(eventType: string): RuntimeTurn["status"] | null {
   if (eventType === "runtime.turn.cancelled") {
     return "cancelled";
   }
+  if (eventType === "runtime.turn.timed-out") {
+    return "timed-out";
+  }
   return null;
 }
 

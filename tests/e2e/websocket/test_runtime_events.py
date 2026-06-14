@@ -11,9 +11,10 @@ from uuid import uuid4
 from core.api.app_events import APP_EVENTS_WS_PATH, AppEventBus, stream_app_events
 from core.api.platform_host import PlatformHost
 from core.api.platform_state import bootstrap_platform_state
-from core.api.runtime_thread_websocket import stream_runtime_thread_events
+from core.api.runtime_thread_websocket import runtime_thread_snapshot_frame, stream_runtime_thread_events
 from core.api.runtime_websocket import WEBSOCKET_UNAUTHORIZED, initial_runtime_event_page, stream_runtime_session_events
 from core.runtime.runtime_events import RuntimeEventRecord
+from core.runtime.runtime_thread import RuntimeThreadRecord
 from core.runtime.runtime_turns import RuntimeTurnRecord
 from core.runtime.service import create_runtime_session, record_runtime_event, transition_runtime_session
 from core.runtime.store import RuntimeEventPage
@@ -548,6 +549,60 @@ class RuntimeWebSocketTestCase(unittest.IsolatedAsyncioTestCase):
         frames = [json.loads(item["text"]) for item in sent if item.get("type") == "websocket.send"]
         self.assertEqual(frames[0]["type"], "runtime.thread.snapshot")
         self.assertEqual([thread["runtime_session_id"] for thread in frames[0]["threads"]], [session.session_id])
+
+    async def test_runtime_thread_websocket_snapshot_reconciles_stale_thread_availability(self) -> None:
+        state = bootstrap_platform_state(start_path=self.make_repo_root())
+        session = create_runtime_session(
+            state.runtime_store,
+            session_id=str(uuid4()),
+            workspace_id="default",
+            agent_id="test-agent",
+            requested_mode=None,
+            governance=state.workspace_store.get_governance("default"),
+            platform_allows_full_access=True,
+            start_path=state.repository_root,
+        )
+        started_at = datetime(2026, 4, 19, 10, 0, tzinfo=UTC)
+        completed_at = started_at + timedelta(seconds=2)
+        state.runtime_store.save_turn(
+            RuntimeTurnRecord(
+                turn_id="turn-completed",
+                session_id=session.session_id,
+                workspace_id="default",
+                status="completed",
+                input_text="done",
+                created_at=started_at,
+                updated_at=completed_at,
+                started_at=started_at + timedelta(milliseconds=100),
+                completed_at=completed_at,
+                failure_reason=None,
+            )
+        )
+        state.runtime_store.save_thread(
+            RuntimeThreadRecord(
+                thread_id="thread-stale",
+                workspace_id="default",
+                runtime_session_id=session.session_id,
+                title="Stale thread",
+                agent_label="test-agent",
+                agent_type_id="",
+                agent_role_id="",
+                source_app_id="test-agent",
+                system_prompt="",
+                project_id=None,
+                archived=False,
+                availability="active",
+                created_at=started_at,
+                updated_at=started_at,
+            )
+        )
+
+        frame = runtime_thread_snapshot_frame(state, workspace_id="default", viewer_user_id=None)
+
+        thread = next(item for item in frame["threads"] if item["runtime_session_id"] == session.session_id)
+        self.assertEqual(thread["availability"], "free")
+        self.assertEqual(thread["last_completed_turn_id"], "turn-completed")
+        self.assertEqual(state.runtime_store.get_thread("thread-stale").availability, "free")
 
     async def test_runtime_thread_websocket_pushes_live_thread_changes(self) -> None:
         state = bootstrap_platform_state(start_path=self.make_repo_root())

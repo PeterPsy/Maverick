@@ -36,6 +36,7 @@ from preview_runtime import (
     internal_routes_from_html,
     prepare_runtime_build,
     runtime_capability_status,
+    runtime_process_policy,
 )
 from safety import MAX_SOURCE_TREE_FILES, validate_source_tree_for_phase1
 
@@ -65,6 +66,43 @@ class FakeGitHubTransport:
         if method == "POST" and url.endswith("/pulls"):
             return 201, {"number": 42, "html_url": "https://github.com/example-org/site-web/pull/42"}
         return 500, {"message": f"unexpected fake GitHub request {method} {url}"}
+
+
+class ExistingBranchGitHubTransport(FakeGitHubTransport):
+    def __call__(self, method: str, url: str, request: dict[str, object]) -> tuple[int, object]:
+        self.calls.append((method, url, request))
+        if method == "GET" and "/git/ref/heads/main" in url:
+            return 200, {"object": {"sha": "base-sha"}}
+        if method == "GET" and "/git/commits/base-sha" in url:
+            return 200, {"tree": {"sha": "base-tree-sha"}}
+        if method == "POST" and url.endswith("/git/blobs"):
+            return 201, {"sha": f"blob-{len([call for call in self.calls if call[1].endswith('/git/blobs')])}"}
+        if method == "POST" and url.endswith("/git/trees"):
+            return 201, {"sha": "tree-sha"}
+        if method == "POST" and url.endswith("/git/commits"):
+            return 201, {"sha": "commit-sha"}
+        if method == "GET" and "/git/ref/heads/maverick%2F" in url:
+            return 200, {"object": {"sha": "previous-branch-sha"}}
+        if method == "PATCH" and "/git/ref/heads/maverick%2F" in url:
+            body = request.get("json") if isinstance(request.get("json"), dict) else {}
+            if body.get("force") is not False:
+                return 500, {"message": "branch update must not force push"}
+            return 200, {"object": {"sha": body.get("sha")}}
+        if method == "GET" and "/pulls?" in url:
+            return 200, []
+        if method == "POST" and url.endswith("/pulls"):
+            return 201, {"number": 43, "html_url": "https://github.com/example-org/site-web/pull/43"}
+        return 500, {"message": f"unexpected fake GitHub request {method} {url}"}
+
+
+class ConflictingBranchGitHubTransport(ExistingBranchGitHubTransport):
+    def __call__(self, method: str, url: str, request: dict[str, object]) -> tuple[int, object]:
+        if method == "PATCH" and "/git/ref/heads/maverick%2F" in url:
+            self.calls.append((method, url, request))
+            body = request.get("json") if isinstance(request.get("json"), dict) else {}
+            self.seen_patch_body = dict(body)
+            return 422, {"message": "Update is not a fast-forward"}
+        return super().__call__(method, url, request)
 
 
 def _write_with_expected_hash_worker(data_root: str, site_id: str, expected_hash: str, queue) -> None:
@@ -125,6 +163,10 @@ class WebsiteStudioEntrypointTest(unittest.TestCase):
             self.assertEqual(manifest["maintenance_policy"]["keep_builds"], 10)
             self.assertTrue(manifest["maintenance_policy"]["dry_run_first"])
             self.assertIn("deployment artifacts", manifest["maintenance_policy"]["protected_records"])
+            self.assertEqual(manifest["runtime_process_policy"], runtime_process_policy())
+            self.assertTrue(manifest["runtime_process_policy"]["process_group_cleanup"])
+            self.assertIn("NPM_CONFIG_IGNORE_SCRIPTS", manifest["runtime_process_policy"]["safe_environment"])
+            self.assertGreaterEqual(manifest["runtime_process_policy"]["resource_limits"]["build_command"]["memory_bytes"], 1024 * 1024 * 1024)
 
     def test_site_edit_diff_and_publish_block(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -3501,6 +3543,115 @@ class WebsiteStudioEntrypointTest(unittest.TestCase):
             self.assertNotIn("test-github-token", json.dumps(published))
             auth_headers = [call[2]["headers"]["Authorization"] for call in transport.calls]
             self.assertTrue(all(header == "Bearer test-github-token" for header in auth_headers))
+
+    def test_phase2_github_publish_updates_existing_branch_without_force(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            data_root = Path(tmp)
+            status, prepared = handle_action(data_root, {"action": "git_connection_prepare", "repository_url": "example-org/site-web"})
+            self.assertEqual(status, 201)
+            site_id = prepared["site"]["id"]
+            status, _activated = handle_action(
+                data_root,
+                {
+                    "action": "git_connection_activate",
+                    "connection_id": prepared["connection"]["id"],
+                    "grant_id": "grant:default:website-studio:github-token:test",
+                    "confirm_no_raw_secret": True,
+                },
+            )
+            self.assertEqual(status, 200)
+            _edit_index(data_root, site_id, marker="Existing branch")
+            status, request_payload = handle_action(data_root, {"action": "publish_request", "site_id": site_id})
+            self.assertEqual(status, 201)
+            request_id = request_payload["publish_request"]["id"]
+            status, approval_payload = handle_action(
+                data_root,
+                {
+                    "action": "approval_record",
+                    "site_id": site_id,
+                    "approval_action": "publish",
+                    "target_id": request_id,
+                    "approved_by": "user:owner",
+                    "_app_actor": _approval_actor(),
+                    "confirm": True,
+                },
+            )
+            self.assertEqual(status, 201)
+
+            transport = ExistingBranchGitHubTransport()
+            status, published = handle_action(
+                data_root,
+                {
+                    "action": "publish",
+                    "site_id": site_id,
+                    "publish_request_id": request_id,
+                    "approval_id": approval_payload["approval"]["id"],
+                    "_app_secrets": {"github-token": "test-github-token"},
+                    "_github_transport": transport,
+                },
+            )
+
+            self.assertEqual(status, 200)
+            self.assertEqual(published["deployment"]["source_ref"]["pull_request_number"], 43)
+            patch_calls = [call for call in transport.calls if call[0] == "PATCH"]
+            self.assertEqual(len(patch_calls), 1)
+            patch_body = patch_calls[0][2]["json"]
+            self.assertEqual(patch_body["sha"], "commit-sha")
+            self.assertIs(patch_body["force"], False)
+
+    def test_phase2_github_publish_blocks_existing_branch_conflict_without_force(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            data_root = Path(tmp)
+            status, prepared = handle_action(data_root, {"action": "git_connection_prepare", "repository_url": "example-org/site-web"})
+            self.assertEqual(status, 201)
+            site_id = prepared["site"]["id"]
+            status, _activated = handle_action(
+                data_root,
+                {
+                    "action": "git_connection_activate",
+                    "connection_id": prepared["connection"]["id"],
+                    "grant_id": "grant:default:website-studio:github-token:test",
+                    "confirm_no_raw_secret": True,
+                },
+            )
+            self.assertEqual(status, 200)
+            _edit_index(data_root, site_id, marker="Branch conflict")
+            status, request_payload = handle_action(data_root, {"action": "publish_request", "site_id": site_id})
+            self.assertEqual(status, 201)
+            request_id = request_payload["publish_request"]["id"]
+            status, approval_payload = handle_action(
+                data_root,
+                {
+                    "action": "approval_record",
+                    "site_id": site_id,
+                    "approval_action": "publish",
+                    "target_id": request_id,
+                    "approved_by": "user:owner",
+                    "_app_actor": _approval_actor(),
+                    "confirm": True,
+                },
+            )
+            self.assertEqual(status, 201)
+
+            transport = ConflictingBranchGitHubTransport()
+            status, blocked = handle_action(
+                data_root,
+                {
+                    "action": "publish",
+                    "site_id": site_id,
+                    "publish_request_id": request_id,
+                    "approval_id": approval_payload["approval"]["id"],
+                    "_app_secrets": {"github-token": "test-github-token"},
+                    "_github_transport": transport,
+                },
+            )
+
+            self.assertEqual(status, 403)
+            self.assertTrue(blocked["blocked"])
+            self.assertEqual(blocked["status"], "blocked_github_branch_conflict")
+            self.assertIn("without force", blocked["detail"])
+            self.assertIs(transport.seen_patch_body["force"], False)
+            self.assertFalse(any(call[0] == "POST" and call[1].endswith("/pulls") for call in transport.calls))
 
     def test_phase2_github_publish_missing_secret_blocks_before_approval_is_consumed(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

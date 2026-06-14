@@ -66,6 +66,7 @@ from store import (
     _publish_target_for_environment,
     _should_publish_to_github,
 )
+from preview_runtime import runtime_process_policy
 
 
 MUTATING_ACTIONS = {
@@ -111,6 +112,7 @@ def handle_action(data_root: Path, payload: dict[str, object]) -> tuple[int, dic
                 "phase_3a_runtime_status": "ready",
                 "platform_hosting_status": "pending_generic_surface",
                 "maintenance_policy": maintenance_policy_defaults(),
+                "runtime_process_policy": runtime_process_policy(),
             }
         if action == "sites_list":
             return 200, {"items": list_sites(data_root)}

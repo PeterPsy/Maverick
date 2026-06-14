@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass
 import hashlib
 from html.parser import HTMLParser
@@ -30,6 +31,14 @@ COMMAND_TIMEOUT_SECONDS = 60
 PHP_STARTUP_TIMEOUT_SECONDS = 5
 PHP_REQUEST_TIMEOUT_SECONDS = 8
 PHP_SERVER_TTL_SECONDS = 180
+BUILD_CPU_LIMIT_SECONDS = 240
+COMMAND_CPU_LIMIT_SECONDS = 90
+PHP_CPU_LIMIT_SECONDS = 90
+BUILD_MEMORY_LIMIT_BYTES = 1536 * 1024 * 1024
+COMMAND_MEMORY_LIMIT_BYTES = 1024 * 1024 * 1024
+PHP_MEMORY_LIMIT_BYTES = 512 * 1024 * 1024
+MAX_RUNTIME_OPEN_FILES = 256
+MAX_RUNTIME_PROCESSES = 64
 MAX_RENDER_BYTES = 2 * 1024 * 1024
 MAX_RENDERED_ROUTES = 40
 ALLOWED_WORKSPACE_BUILD_BINARIES = {
@@ -50,6 +59,67 @@ PHP_SERVICES_RUNTIME_WARNING = "database, SMTP, analytics, payment, and third-pa
 GLOBAL_RUNTIME_WARNINGS = frozenset({HTACCESS_RUNTIME_WARNING, PHP_SERVICES_RUNTIME_WARNING})
 
 
+def runtime_process_policy() -> dict[str, object]:
+    """Return the bounded subprocess policy used by Phase 3A previews."""
+    return {
+        "schema": "website-studio.runtime-process-policy.v1",
+        "process_group_cleanup": os.name == "posix",
+        "posix_resource_limits_best_effort": _resource_limits_available(),
+        "safe_environment": [
+            "CI",
+            "HOME",
+            "LANG",
+            "LC_ALL",
+            "NO_COLOR",
+            "NPM_CONFIG_AUDIT",
+            "NPM_CONFIG_FUND",
+            "NPM_CONFIG_IGNORE_SCRIPTS",
+            "NPM_CONFIG_UPDATE_NOTIFIER",
+            "PATH",
+            "TMPDIR",
+            "WEBSITE_STUDIO_RUNTIME_POLICY",
+        ],
+        "timeouts_seconds": {
+            "npm_install": BUILD_TIMEOUT_SECONDS,
+            "build_command": COMMAND_TIMEOUT_SECONDS,
+            "php_preview_startup": PHP_STARTUP_TIMEOUT_SECONDS,
+            "php_preview_request": PHP_REQUEST_TIMEOUT_SECONDS,
+            "php_preview_ttl": PHP_SERVER_TTL_SECONDS,
+        },
+        "resource_limits": {
+            "npm_install": {
+                "cpu_seconds": BUILD_CPU_LIMIT_SECONDS,
+                "memory_bytes": BUILD_MEMORY_LIMIT_BYTES,
+                "open_files": MAX_RUNTIME_OPEN_FILES,
+                "processes": MAX_RUNTIME_PROCESSES,
+            },
+            "build_command": {
+                "cpu_seconds": COMMAND_CPU_LIMIT_SECONDS,
+                "memory_bytes": COMMAND_MEMORY_LIMIT_BYTES,
+                "open_files": MAX_RUNTIME_OPEN_FILES,
+                "processes": MAX_RUNTIME_PROCESSES,
+            },
+            "php_preview_server": {
+                "cpu_seconds": PHP_CPU_LIMIT_SECONDS,
+                "memory_bytes": PHP_MEMORY_LIMIT_BYTES,
+                "open_files": MAX_RUNTIME_OPEN_FILES,
+                "processes": MAX_RUNTIME_PROCESSES,
+            },
+        },
+        "known_platform_gap": "OS-level sandboxing/network namespaces remain a generic platform hosting concern outside Website Studio Phase 1-3A.",
+    }
+
+
+def _resource_limits_available() -> bool:
+    if os.name != "posix":
+        return False
+    try:
+        import resource  # noqa: PLC0415
+    except ImportError:
+        return False
+    return True
+
+
 @dataclass(frozen=True)
 class BuildPlan:
     package_manager: str
@@ -68,6 +138,7 @@ class PhpPreviewServer:
     docroot: Path
     router: Path | None
     last_used: float
+    process_group_id: int | None = None
 
 
 _PHP_PREVIEW_SERVERS: dict[str, PhpPreviewServer] = {}
@@ -458,7 +529,9 @@ def _start_php_preview_server(key: str, runtime_root: Path, docroot: Path, route
         stderr=subprocess.DEVNULL,
         text=True,
         env=env,
+        preexec_fn=_runtime_preexec(PHP_CPU_LIMIT_SECONDS, PHP_MEMORY_LIMIT_BYTES),
     )
+    process_group_id = _runtime_process_group_id(process.pid)
     try:
         _wait_for_php(port)
     except Exception:
@@ -472,6 +545,7 @@ def _start_php_preview_server(key: str, runtime_root: Path, docroot: Path, route
                 docroot=docroot,
                 router=router,
                 last_used=time.time(),
+                process_group_id=process_group_id,
             )
         )
         raise
@@ -484,6 +558,7 @@ def _start_php_preview_server(key: str, runtime_root: Path, docroot: Path, route
         docroot=docroot,
         router=router,
         last_used=time.time(),
+        process_group_id=process_group_id,
     )
 
 
@@ -503,6 +578,82 @@ def _php_process_alive(process: subprocess.Popen | None, *, pid: int | None = No
     except OSError:
         return False
     return True
+
+
+def _runtime_preexec(cpu_seconds: int, memory_bytes: int) -> Callable[[], None] | None:
+    if os.name != "posix":
+        return None
+
+    def prepare_child() -> None:
+        os.setsid()
+        _apply_posix_resource_limits(cpu_seconds=cpu_seconds, memory_bytes=memory_bytes)
+
+    return prepare_child
+
+
+def _runtime_process_group_id(pid: int) -> int | None:
+    return pid if os.name == "posix" else None
+
+
+def _apply_posix_resource_limits(*, cpu_seconds: int, memory_bytes: int) -> None:
+    try:
+        import resource  # noqa: PLC0415
+    except ImportError:
+        return
+    _set_posix_soft_limit(resource, resource.RLIMIT_CPU, cpu_seconds)
+    if hasattr(resource, "RLIMIT_AS"):
+        _set_posix_soft_limit(resource, resource.RLIMIT_AS, memory_bytes)
+    _set_posix_soft_limit(resource, resource.RLIMIT_NOFILE, MAX_RUNTIME_OPEN_FILES)
+    if hasattr(resource, "RLIMIT_NPROC"):
+        _set_posix_soft_limit(resource, resource.RLIMIT_NPROC, MAX_RUNTIME_PROCESSES)
+
+
+def _set_posix_soft_limit(resource_module: object, limit: int, desired: int) -> None:
+    try:
+        soft, hard = resource_module.getrlimit(limit)
+        infinity = resource_module.RLIM_INFINITY
+        target = desired if hard == infinity else min(desired, hard)
+        if soft == infinity or soft > target:
+            resource_module.setrlimit(limit, (target, hard))
+    except (OSError, ValueError):
+        return
+
+
+def _terminate_process(process: subprocess.Popen, *, process_group_id: int | None, grace_seconds: float = 2) -> tuple[str, str]:
+    if process.poll() is not None:
+        return "", ""
+    pid = getattr(process, "pid", None)
+    if not pid:
+        process.terminate()
+        try:
+            stdout, stderr = process.communicate(timeout=grace_seconds)
+        except subprocess.TimeoutExpired:
+            process.kill()
+            stdout, stderr = process.communicate()
+        return stdout or "", stderr or ""
+    _signal_runtime_process(pid, signal.SIGTERM, process_group_id=process_group_id)
+    try:
+        stdout, stderr = process.communicate(timeout=grace_seconds)
+    except subprocess.TimeoutExpired:
+        _signal_runtime_process(pid, signal.SIGKILL, process_group_id=process_group_id)
+        stdout, stderr = process.communicate()
+    return stdout or "", stderr or ""
+
+
+def _signal_runtime_process(pid: int, signum: int, *, process_group_id: int | None = None) -> None:
+    try:
+        if os.name == "posix" and process_group_id:
+            os.killpg(process_group_id, signum)
+        else:
+            os.kill(pid, signum)
+    except ProcessLookupError:
+        return
+    except OSError:
+        if os.name == "posix" and process_group_id:
+            try:
+                os.kill(pid, signum)
+            except OSError:
+                return
 
 
 def _cleanup_php_preview_servers_locked() -> None:
@@ -529,19 +680,9 @@ def _evict_php_preview_server(key: str) -> None:
 def _terminate_php_preview_server(server: PhpPreviewServer) -> None:
     _delete_php_preview_server_registry(server.key)
     if server.process is not None:
-        if server.process.poll() is not None:
-            return
-        server.process.terminate()
-        try:
-            server.process.communicate(timeout=2)
-        except subprocess.TimeoutExpired:
-            server.process.kill()
-            server.process.communicate()
+        _terminate_process(server.process, process_group_id=server.process_group_id)
         return
-    try:
-        os.kill(server.pid, signal.SIGTERM)
-    except OSError:
-        return
+    _signal_runtime_process(server.pid, signal.SIGTERM, process_group_id=server.process_group_id)
 
 
 def _shutdown_php_preview_servers() -> None:
@@ -573,6 +714,7 @@ def _store_php_preview_server_registry(server: PhpPreviewServer) -> None:
         "router": str(server.router) if server.router is not None else "",
         "last_used": server.last_used,
         "expires_at": server.last_used + PHP_SERVER_TTL_SECONDS,
+        "process_group_id": server.process_group_id or 0,
     }
     try:
         path = _php_preview_registry_path(server.key)
@@ -595,6 +737,7 @@ def _load_php_preview_server_registry(key: str, runtime_root: Path, docroot: Pat
     try:
         pid = int(payload.get("pid") or 0)
         port = int(payload.get("port") or 0)
+        process_group_id = int(payload.get("process_group_id") or 0)
         expires_at = float(payload.get("expires_at") or 0)
     except (TypeError, ValueError):
         return None
@@ -617,6 +760,7 @@ def _load_php_preview_server_registry(key: str, runtime_root: Path, docroot: Pat
         docroot=docroot,
         router=router,
         last_used=float(payload.get("last_used") or time.time()),
+        process_group_id=process_group_id or None,
     )
 
 
@@ -635,9 +779,11 @@ def _cleanup_php_preview_server_registry(*, now: float) -> None:
         try:
             expires_at = float(payload.get("expires_at") or 0)
             pid = int(payload.get("pid") or 0)
+            process_group_id = int(payload.get("process_group_id") or 0)
         except (TypeError, ValueError):
             expires_at = 0
             pid = 0
+            process_group_id = 0
         if expires_at >= now and _php_process_alive(None, pid=pid):
             continue
         key = str(payload.get("key") or path.stem)
@@ -650,6 +796,7 @@ def _cleanup_php_preview_server_registry(*, now: float) -> None:
             docroot=Path(str(payload.get("docroot") or ".")),
             router=Path(str(payload.get("router"))) if payload.get("router") else None,
             last_used=float(payload.get("last_used") or 0),
+            process_group_id=process_group_id or None,
         )
         _terminate_php_preview_server(server)
 
@@ -675,20 +822,50 @@ def _runtime_page_path_for_route(route: str) -> str:
     return clean
 
 
+def _run_bounded_subprocess(
+    command: list[str],
+    *,
+    cwd: Path,
+    timeout_seconds: int,
+    cpu_seconds: int,
+    memory_bytes: int,
+    label: str,
+) -> subprocess.CompletedProcess[str]:
+    process = subprocess.Popen(
+        command,
+        cwd=cwd,
+        env=_safe_env(),
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+        preexec_fn=_runtime_preexec(cpu_seconds, memory_bytes),
+    )
+    process_group_id = _runtime_process_group_id(process.pid)
+    try:
+        stdout, stderr = process.communicate(timeout=timeout_seconds)
+    except subprocess.TimeoutExpired as error:
+        stdout, stderr = _terminate_process(process, process_group_id=process_group_id)
+        log = _bounded_log((stdout or "") + "\n" + (stderr or ""))
+        message = f"{label} timed out after {timeout_seconds} seconds"
+        if log:
+            message += ":\n" + log
+        raise ValueError(message) from error
+    return subprocess.CompletedProcess(command, process.returncode, stdout or "", stderr or "")
+
+
 def _run_npm_install(source_root: Path) -> str:
     if not (source_root / "package-lock.json").exists():
         raise ValueError("npm package-lock.json is required for dependency installation")
     npm = shutil.which("npm")
     if not npm:
         raise ValueError("npm executable is not available")
-    result = subprocess.run(
+    result = _run_bounded_subprocess(
         [npm, "ci", "--ignore-scripts", "--no-audit", "--no-fund"],
         cwd=source_root,
-        env=_safe_env(),
-        capture_output=True,
-        text=True,
-        timeout=BUILD_TIMEOUT_SECONDS,
-        check=False,
+        timeout_seconds=BUILD_TIMEOUT_SECONDS,
+        cpu_seconds=BUILD_CPU_LIMIT_SECONDS,
+        memory_bytes=BUILD_MEMORY_LIMIT_BYTES,
+        label="npm ci",
     )
     if result.returncode != 0:
         raise ValueError("npm ci failed:\n" + _bounded_log(result.stdout + "\n" + result.stderr))
@@ -702,14 +879,13 @@ def _run_allowlisted_command(source_root: Path, command: list[str]) -> str:
         _run_safe_rm(source_root, command[1:])
         return "$ " + " ".join(command) + "\nremoved generated file"
     executable = _resolve_workspace_binary(source_root, command[0])
-    result = subprocess.run(
+    result = _run_bounded_subprocess(
         [str(executable), *command[1:]],
         cwd=source_root,
-        env=_safe_env(),
-        capture_output=True,
-        text=True,
-        timeout=COMMAND_TIMEOUT_SECONDS,
-        check=False,
+        timeout_seconds=COMMAND_TIMEOUT_SECONDS,
+        cpu_seconds=COMMAND_CPU_LIMIT_SECONDS,
+        memory_bytes=COMMAND_MEMORY_LIMIT_BYTES,
+        label=f"build command `{command[0]}`",
     )
     log = "$ " + " ".join(command) + "\n" + result.stdout + "\n" + result.stderr
     if result.returncode != 0:
@@ -876,6 +1052,11 @@ def _safe_env() -> dict[str, str]:
         "TMPDIR": os.environ.get("TMPDIR", ""),
         "CI": "true",
         "NO_COLOR": "1",
+        "NPM_CONFIG_IGNORE_SCRIPTS": "true",
+        "NPM_CONFIG_AUDIT": "false",
+        "NPM_CONFIG_FUND": "false",
+        "NPM_CONFIG_UPDATE_NOTIFIER": "false",
+        "WEBSITE_STUDIO_RUNTIME_POLICY": "bounded-subprocess-v1",
     }
     return {key: value for key, value in allowed.items() if value}
 

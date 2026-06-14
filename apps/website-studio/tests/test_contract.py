@@ -24,6 +24,12 @@ class GeneratedAppContractTest(unittest.TestCase):
         requirements = contract.get("requires", [])
         self.assertIn("file.content.write", {item.get("interface") for item in requirements})
 
+    def test_contract_publisher_matches_source_available_platform_app(self) -> None:
+        contract = json.loads((APP_ROOT / "app_contract.json").read_text(encoding="utf-8"))
+        self.assertEqual(contract.get("publisher"), "maverick")
+        self.assertEqual(contract.get("distribution", {}).get("mode"), "source_available")
+        self.assertEqual(contract.get("distribution", {}).get("source_access"), "forkable")
+
     def test_contract_declares_github_token_secret_logical_name(self) -> None:
         contract = json.loads((APP_ROOT / "app_contract.json").read_text(encoding="utf-8"))
         secret_reads = set(contract.get("permissions", {}).get("secrets", {}).get("read", []))

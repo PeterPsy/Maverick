@@ -4,7 +4,7 @@
   "name": "Website Studio",
   "version": "0.4.1",
   "description": "Import, index, edit, preview, approve, and maintain workspace website projects inside Maverick.",
-  "publisher": "workspace",
+  "publisher": "maverick",
   "minimum_core_version": "0.1.0",
   "provides": [],
   "requires": [

@@ -97,11 +97,6 @@ class NotFoundError(FitnessCoachError):
         super().__init__(message, status_code=404, code="not_found")
 
 
-class ConflictError(FitnessCoachError):
-    def __init__(self, message: str) -> None:
-        super().__init__(message, status_code=409, code="conflict")
-
-
 def error_payload(error: FitnessCoachError) -> dict[str, object]:
     return {"ok": False, "error": error.code, "detail": error.message}
 
@@ -525,14 +520,6 @@ def delete_exercise(data_root: str, exercise_id: str) -> str:
     def updater(state: dict[str, Any]) -> dict[str, Any]:
         migrated = migrate_state(state)
         index = find_index(migrated["exercises"], exercise_id, "exercise")
-        used = [
-            workout["name"]
-            for workout in migrated["workouts"]
-            for block in workout.get("blocks", [])
-            if block.get("type") == "work" and block.get("exercise_id") == exercise_id
-        ]
-        if used:
-            raise ConflictError(f"Exercise is used by workout snapshots: {', '.join(sorted(set(used)))}.")
         migrated["exercises"].pop(index)
         migrated["updated_at"] = utc_now()
         return migrated

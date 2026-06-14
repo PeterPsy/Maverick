@@ -8,6 +8,7 @@ describe('exercise media picker UI', () => {
     expect(source).toContain('Select video');
     expect(source).toContain('Change video');
     expect(source).toContain('openStorageVideoPicker(media, sourceFolder)');
+    expect(source).not.toContain('<span>Clear</span>');
     expect(source).not.toContain('Load Storage');
     expect(source).not.toContain('Drive ref');
     expect(source).not.toContain('Filter Storage media');

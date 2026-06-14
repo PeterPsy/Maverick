@@ -174,7 +174,7 @@
       "output_schema": { "type": "object" }
     },
     "fitness_coach_delete_exercise": {
-      "description": "Delete one unused exercise by id. Agents should confirm ambiguous deletes before calling this tool.",
+      "description": "Delete one exercise library record by id. Existing workout snapshots keep their saved exercise copy. Agents should confirm ambiguous deletes before calling this tool.",
       "input_schema": {
         "type": "object",
         "properties": {

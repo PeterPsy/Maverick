@@ -102,6 +102,46 @@ class FitnessCoachServiceTest(unittest.TestCase):
             self.assertEqual(status, 200)
             self.assertEqual(deleted["deleted_id"], workout_id)
 
+    def test_delete_exercise_keeps_existing_workout_snapshot(self) -> None:
+        with tempfile.TemporaryDirectory() as data_root:
+            _, exercise_payload = handle_action(
+                data_root,
+                "exercise.create",
+                {
+                    "title": "Squat",
+                    "short_description": "Drive through feet.",
+                    "long_description": "Keep chest tall and knees tracking.",
+                    "tags": ["legs"],
+                    "primary_media": MEDIA_REF,
+                },
+            )
+            exercise = exercise_payload["exercise"]
+            block = {
+                "type": "work",
+                "exercise_id": exercise["id"],
+                "exercise_snapshot_updated_at": exercise["updated_at"],
+                "title": exercise["title"],
+                "short_description": exercise["short_description"],
+                "long_description": exercise["long_description"],
+                "tags": exercise["tags"],
+                "mode": "timer",
+                "seconds": 30,
+                "media": exercise["primary_media"],
+            }
+            _, workout_payload = handle_action(data_root, "workout.create", {"name": "Morning", "blocks": [block]})
+
+            status, deleted = handle_action(data_root, "exercise.delete", {"exercise_id": exercise["id"]})
+
+            self.assertEqual(status, 200)
+            self.assertEqual(deleted["deleted_id"], exercise["id"])
+            _, list_payload = handle_action(data_root, "exercises.list", {})
+            self.assertEqual(list_payload["exercises"], [])
+            _, workout_read = handle_action(data_root, "workout.get", {"workout_id": workout_payload["workout"]["id"]})
+            saved_block = workout_read["workout"]["blocks"][0]
+            self.assertEqual(saved_block["exercise_id"], exercise["id"])
+            self.assertEqual(saved_block["title"], "Squat")
+            self.assertTrue(validate_workout(workout_read["workout"])["valid"])
+
     def test_bootstrap_returns_initial_view_in_one_payload(self) -> None:
         with tempfile.TemporaryDirectory() as data_root:
             _, exercise_payload = handle_action(

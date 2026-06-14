@@ -336,13 +336,16 @@ export function App() {
   }
 
   async function handleDeleteExercise(exercise: Exercise) {
-    if (!window.confirm(`Delete exercise "${exercise.title}"?`)) return;
+    setBusy('delete-exercise');
     try {
       await deleteExercise(exercise.id);
       setExercises((items) => items.filter((item) => item.id !== exercise.id));
       setExerciseDraft(null);
+      setNotice('Exercise deleted');
     } catch (error) {
       setNotice(error instanceof Error ? error.message : 'Unable to delete exercise.');
+    } finally {
+      setBusy('');
     }
   }
 
@@ -774,7 +777,7 @@ function ExerciseLibrary(props: {
                 <Pencil size={15} aria-hidden="true" />
                 <span>Edit</span>
               </button>
-              <button className="icon-button danger" type="button" onClick={() => props.onDelete(exercise)} aria-label="Delete exercise" title="Delete"><Trash2 size={15} /></button>
+              <button className="icon-button danger" type="button" onClick={() => props.onDelete(exercise)} disabled={props.busy === 'delete-exercise'} aria-label="Delete exercise" title="Delete"><Trash2 size={15} /></button>
             </div>
           </article>
         ))}
@@ -878,12 +881,6 @@ function MediaPicker({ media, sourceFolder, onChange }: {
           <Library size={15} aria-hidden="true" />
           <span>{storageButtonLabel}</span>
         </button>
-        {media ? (
-          <button type="button" onClick={() => onChange(null)}>
-            <X size={15} aria-hidden="true" />
-            <span>Clear</span>
-          </button>
-        ) : null}
       </div>
     </div>
   );

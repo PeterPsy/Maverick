@@ -97,11 +97,11 @@ export function searchChatThreads({
     })
     .filter((item): item is ChatThreadSearchResult => Boolean(item))
     .sort((left, right) => {
-      if (left.lastMessageAt !== right.lastMessageAt) {
-        return right.lastMessageAt - left.lastMessageAt;
-      }
       if (left.score !== right.score) {
         return right.score - left.score;
+      }
+      if (left.lastMessageAt !== right.lastMessageAt) {
+        return right.lastMessageAt - left.lastMessageAt;
       }
       return left.thread.thread_id.localeCompare(right.thread.thread_id);
     });

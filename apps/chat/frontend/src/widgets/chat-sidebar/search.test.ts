@@ -46,10 +46,10 @@ function event(overrides: Partial<RuntimeEvent>): RuntimeEvent {
 }
 
 describe("chat sidebar search ranking", () => {
-  it("matches transcript text and orders matches by latest message timestamp", () => {
+  it("matches transcript text and orders stronger matches before newer weaker matches", () => {
     const olderExactTitle = thread({
       thread_id: "older-title",
-      title: "Budget",
+      title: "Budget forecast",
       last_user_message_at: "2026-05-21T10:00:00Z",
       runtime_session_id: "session-older",
     });
@@ -70,8 +70,34 @@ describe("chat sidebar search ranking", () => {
       },
     });
 
-    expect(results.map((item) => item.thread.thread_id)).toEqual(["newer-transcript", "older-title"]);
-    expect(results[0].lastMessageAt).toBeGreaterThan(results[1].lastMessageAt);
+    expect(results.map((item) => item.thread.thread_id)).toEqual(["older-title", "newer-transcript"]);
+    expect(results[0].score).toBeGreaterThan(results[1].score);
+    expect(results[1].lastMessageAt).toBeGreaterThan(results[0].lastMessageAt);
+  });
+
+  it("orders equally strong matches by latest message timestamp", () => {
+    const olderTitle = thread({
+      thread_id: "older-title",
+      title: "Budget forecast",
+      last_user_message_at: "2026-05-21T10:00:00Z",
+      runtime_session_id: "session-older",
+    });
+    const newerTitle = thread({
+      thread_id: "newer-title",
+      title: "Budget forecast",
+      last_completed_response_at: "2026-05-22T10:00:00Z",
+      runtime_session_id: "session-newer",
+    });
+
+    const results = searchChatThreads({
+      projectNames: new Map(),
+      query: "budget forecast",
+      threads: [olderTitle, newerTitle],
+      transcriptTextByThreadId: {},
+    });
+
+    expect(results.map((item) => item.thread.thread_id)).toEqual(["newer-title", "older-title"]);
+    expect(results[0].score).toBe(results[1].score);
   });
 
   it("matches project names without showing project move controls in the virtual results section", () => {

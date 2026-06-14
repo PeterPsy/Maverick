@@ -30,35 +30,20 @@ export type { PendingProjectDeletion } from "./chatSidebarStateUtils";
 import { buildSections } from "./sections";
 import {
   buildSearchSections,
-  threadSearchCacheKey,
-  transcriptSearchTextFromEvents,
   type TranscriptSearchTextByThreadId,
 } from "./search";
+import {
+  indexTranscriptSearchText,
+  threadsNeedingTranscriptIndex,
+  transcriptSearchSnapshot,
+  type TranscriptSearchCacheEntry,
+} from "./transcriptSearchIndex";
 import { useSidebarProjectActions } from "./useSidebarProjectActions";
 import { useThreadTouchSelection } from "./useThreadTouchSelection";
 
 const CHAT_APP_ID = "chat";
-const TRANSCRIPT_SEARCH_EVENT_LIMIT = 5000;
-
-type TranscriptSearchCacheEntry = {
-  cacheKey: string;
-  text: string;
-};
-
-function isAbortError(error: unknown): boolean {
-  return error instanceof DOMException && error.name === "AbortError";
-}
-
-function transcriptSearchSnapshot(threads: ChatThread[], cache: Map<string, TranscriptSearchCacheEntry>): TranscriptSearchTextByThreadId {
-  const snapshot: TranscriptSearchTextByThreadId = {};
-  for (const thread of threads) {
-    const cached = cache.get(thread.thread_id);
-    if (cached && cached.cacheKey === threadSearchCacheKey(thread)) {
-      snapshot[thread.thread_id] = cached.text;
-    }
-  }
-  return snapshot;
-}
+const TRANSCRIPT_SEARCH_EVENT_LIMIT = 500;
+const TRANSCRIPT_SEARCH_MAX_CONCURRENT = 4;
 
 export function useChatSidebarState() {
   const [projects, setProjects] = useState<ChatProject[]>([]);
@@ -81,7 +66,9 @@ export function useChatSidebarState() {
   const readReceiptInFlightRef = useRef<Set<string>>(new Set());
   const transcriptSearchCacheRef = useRef<Map<string, TranscriptSearchCacheEntry>>(new Map());
   const lastPersistedSearchQueryRef = useRef("");
-  const hasLoadedViewFilterRef = useRef(false);
+  const [hasLoadedViewFilter, setHasLoadedViewFilter] = useState(false);
+  const localSearchRevisionRef = useRef(0);
+  const persistedSearchRevisionRef = useRef(0);
   const selectionChannelRef = useRef<ChatSidebarSelectionChannel | null>(null);
   const selectedThreadIdsRef = useRef(selectedThreadIds);
   const threadsRef = useRef(threads);
@@ -148,15 +135,25 @@ export function useChatSidebarState() {
   }
 
   async function refreshViewFilter() {
+    const requestSearchRevision = localSearchRevisionRef.current;
     try {
       const payload = await getChatViewFilter();
       const nextQuery = payload.state?.view_filter?.query || "";
       lastPersistedSearchQueryRef.current = nextQuery;
-      hasLoadedViewFilterRef.current = true;
-      setSearchQuery(nextQuery);
+      setHasLoadedViewFilter(true);
+      setSearchQuery((currentQuery) =>
+        localSearchRevisionRef.current === requestSearchRevision && localSearchRevisionRef.current === persistedSearchRevisionRef.current
+          ? nextQuery
+          : currentQuery,
+      );
     } catch (loadError) {
       setError(loadError instanceof Error ? loadError.message : "Unable to load chat search.");
     }
+  }
+
+  function updateSearchQuery(nextQuery: string) {
+    localSearchRevisionRef.current += 1;
+    setSearchQuery(nextQuery);
   }
 
   useEffect(() => {
@@ -196,23 +193,27 @@ export function useChatSidebarState() {
   }, []);
 
   useEffect(() => {
-    if (!hasLoadedViewFilterRef.current) {
+    if (!hasLoadedViewFilter) {
       return;
     }
     const nextQuery = searchQuery.trim();
     if (nextQuery === lastPersistedSearchQueryRef.current) {
       return;
     }
+    const searchRevision = localSearchRevisionRef.current;
     const timeout = window.setTimeout(() => {
       setChatViewFilter(nextQuery)
         .then(() => {
           lastPersistedSearchQueryRef.current = nextQuery;
+          if (localSearchRevisionRef.current === searchRevision) {
+            persistedSearchRevisionRef.current = searchRevision;
+          }
           setError(null);
         })
         .catch((saveError: Error) => setError(saveError.message));
     }, 250);
     return () => window.clearTimeout(timeout);
-  }, [searchQuery]);
+  }, [hasLoadedViewFilter, searchQuery]);
 
   useEffect(() => {
     if (!searchTerm) {
@@ -224,13 +225,7 @@ export function useChatSidebarState() {
     const controller = new AbortController();
     let disposed = false;
     const timeout = window.setTimeout(() => {
-      const threadsToIndex = threads.filter((thread) => {
-        if (!thread.runtime_session_id) {
-          return false;
-        }
-        const cached = transcriptSearchCacheRef.current.get(thread.thread_id);
-        return !cached || cached.cacheKey !== threadSearchCacheKey(thread);
-      });
+      const threadsToIndex = threadsNeedingTranscriptIndex(threads, transcriptSearchCacheRef.current);
 
       if (!threadsToIndex.length) {
         setTranscriptSearchTextByThreadId(transcriptSearchSnapshot(threads, transcriptSearchCacheRef.current));
@@ -239,29 +234,22 @@ export function useChatSidebarState() {
       }
 
       setIsTranscriptSearchLoading(true);
-      Promise.all(
-        threadsToIndex.map(async (thread) => {
-          const cacheKey = threadSearchCacheKey(thread);
-          try {
-            const payload = await listRuntimeSessionEvents(thread.runtime_session_id, {
-              limit: TRANSCRIPT_SEARCH_EVENT_LIMIT,
-              signal: controller.signal,
-            });
-            if (!disposed) {
-              transcriptSearchCacheRef.current.set(thread.thread_id, {
-                cacheKey,
-                text: transcriptSearchTextFromEvents(payload.items || []),
-              });
-            }
-          } catch (loadError) {
-            if (!isAbortError(loadError) && !disposed) {
-              transcriptSearchCacheRef.current.set(thread.thread_id, { cacheKey, text: "" });
-            }
+      indexTranscriptSearchText({
+        allThreads: threads,
+        cache: transcriptSearchCacheRef.current,
+        eventLimit: TRANSCRIPT_SEARCH_EVENT_LIMIT,
+        loadEvents: listRuntimeSessionEvents,
+        maxConcurrent: TRANSCRIPT_SEARCH_MAX_CONCURRENT,
+        onProgress: (snapshot) => {
+          if (!disposed) {
+            setTranscriptSearchTextByThreadId(snapshot);
           }
-        }),
-      ).then(() => {
+        },
+        signal: controller.signal,
+        threadsToIndex,
+      }).then((snapshot) => {
         if (!disposed) {
-          setTranscriptSearchTextByThreadId(transcriptSearchSnapshot(threads, transcriptSearchCacheRef.current));
+          setTranscriptSearchTextByThreadId(snapshot);
           setIsTranscriptSearchLoading(false);
         }
       });
@@ -542,7 +530,7 @@ export function useChatSidebarState() {
     setEditingProjectName: projectActions.setEditingProjectName,
     setExpandedThreadTitle,
     searchQuery,
-    setSearchQuery,
+    setSearchQuery: updateSearchQuery,
     startProjectEdit: projectActions.startProjectEdit,
     toggleSection,
     toggleThreadEdit,

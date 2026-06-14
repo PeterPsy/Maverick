@@ -515,11 +515,13 @@ def _handle_session_events(state: PlatformState, context: RequestSession, sessio
     if session.workspace_id != context.workspace_id:
         return json_response(start_response, {"error": "runtime_session_not_found"}, status="404 Not Found")
     _reconciled_session(state, session, start_path=start_path)
-    events = state.runtime_store.list_events(session_id)
     query = parse_qs(query_string, keep_blank_values=False)
     limit = _bounded_positive_int(query.get("limit", [None])[0], maximum=5000)
-    if limit is not None:
-        events = events[-limit:]
+    events = (
+        state.runtime_store.list_recent_events(session_id, limit=limit)
+        if limit is not None
+        else state.runtime_store.list_events(session_id)
+    )
     return json_response(
         start_response,
         {"items": [_event_payload(event) for event in events]},

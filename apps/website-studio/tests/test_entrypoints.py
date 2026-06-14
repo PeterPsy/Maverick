@@ -120,6 +120,11 @@ class WebsiteStudioEntrypointTest(unittest.TestCase):
             self.assertEqual(manifest["phase"], "phase_3")
             self.assertEqual(manifest["phase_status"], "phase_3_app_orchestration_ready_platform_hosting_missing")
             self.assertEqual(manifest["platform_hosting_status"], "pending_generic_surface")
+            self.assertIn("phase_3a_runtime_preview", manifest["implemented_phases"])
+            self.assertEqual(manifest["phase_3a_runtime_status"], "ready")
+            self.assertEqual(manifest["maintenance_policy"]["keep_builds"], 10)
+            self.assertTrue(manifest["maintenance_policy"]["dry_run_first"])
+            self.assertIn("deployment artifacts", manifest["maintenance_policy"]["protected_records"])
 
     def test_site_edit_diff_and_publish_block(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -2351,9 +2356,9 @@ class WebsiteStudioEntrypointTest(unittest.TestCase):
                       id, site_id, status, runtime_kind, preview_url, artifact_ref_json, source_profile_json,
                       route_count, asset_count, warnings_json, missing_requirements_json, logs_summary, created_at, updated_at
                     )
-                    VALUES ('build_ready', ?, 'passed', 'php', '', '{}', ?, 1, 0, '[]', '[]', '', '2026-01-01T00:00:00+00:00', '2026-01-01T00:00:00+00:00')
+                    VALUES ('build_ready', ?, 'passed', 'php', '', ?, ?, 1, 0, '[]', '[]', '', '2026-01-01T00:00:00+00:00', '2026-01-01T00:00:00+00:00')
                     """,
-                    (site_id, json.dumps(stale_profile)),
+                    (site_id, json.dumps({"source_version": "src_test"}), json.dumps(stale_profile)),
                 )
 
             with patch(
@@ -2372,6 +2377,49 @@ class WebsiteStudioEntrypointTest(unittest.TestCase):
             self.assertEqual(site_status_payload["source_profile"]["runtime_preview_status"], "ready")
             self.assertEqual(site_status_payload["site"]["source_profile"]["runtime_preview_status"], "ready")
             self.assertEqual(site_status_payload["runtime_status"], "ready")
+
+    def test_listing_payloads_normalize_stale_source_profile_status(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            data_root = Path(tmp)
+            status, created = handle_action(data_root, {"action": "site_create", "display_name": "Runtime Lists"})
+            self.assertEqual(status, 201)
+            site_id = created["site"]["id"]
+            stale_profile = {"preview_runtime_kind": "php", "runtime_preview_status": "blocked", "missing_requirements": []}
+            with closing(sqlite3.connect(data_root / "app.sqlite")) as db, db:
+                db.execute(
+                    "UPDATE sites SET source_profile_json = ?, source_version = 'src_test' WHERE id = ?",
+                    (json.dumps(stale_profile), site_id),
+                )
+                db.execute(
+                    """
+                    INSERT INTO builds(
+                      id, site_id, status, runtime_kind, preview_url, artifact_ref_json, source_profile_json,
+                      route_count, asset_count, warnings_json, missing_requirements_json, logs_summary, created_at, updated_at
+                    )
+                    VALUES ('build_ready', ?, 'passed', 'php', '', ?, ?, 1, 0, '[]', '[]', '', '2026-01-01T00:00:00+00:00', '2026-01-01T00:00:00+00:00')
+                    """,
+                    (site_id, json.dumps({"source_version": "src_test"}), json.dumps(stale_profile)),
+                )
+
+            status, sites = handle_action(data_root, {"action": "sites_list"})
+            self.assertEqual(status, 200)
+            status, builds = handle_action(data_root, {"action": "builds_list", "site_id": site_id})
+            self.assertEqual(status, 200)
+            status, changes = handle_action(data_root, {"action": "list_changes", "site_id": site_id})
+            self.assertEqual(status, 200)
+
+            self.assertEqual(sites["items"][0]["source_profile"]["runtime_preview_status"], "ready")
+            self.assertTrue(sites["items"][0]["source_profile"]["runtime_preview_supported"])
+            self.assertEqual(builds["items"][0]["source_profile"]["runtime_preview_status"], "ready")
+            self.assertEqual(changes["builds"][0]["source_profile"]["runtime_preview_status"], "ready")
+            self.assertEqual(changes["builds"][0]["source_profile"]["missing_requirements"], [])
+
+            with closing(sqlite3.connect(data_root / "app.sqlite")) as db, db:
+                db.execute("UPDATE sites SET source_version = 'src_after_build' WHERE id = ?", (site_id,))
+            status, sites_after_source_change = handle_action(data_root, {"action": "sites_list"})
+
+            self.assertEqual(status, 200)
+            self.assertEqual(sites_after_source_change["items"][0]["source_profile"]["runtime_preview_status"], "blocked")
 
     def test_active_context_includes_route_assets_and_change_state(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

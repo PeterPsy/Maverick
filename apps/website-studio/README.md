@@ -13,6 +13,8 @@ This implementation covers Phases 1, 2, Website Studio's app-side Phase 3 publis
 - Workspace data root: `workspaces/<workspace_id>/data/website-studio`
 - Primary data: `data/website-studio/app.sqlite` and `data/website-studio/sites`
 
+Website Studio currently runs as a platform app source. `maverick apps list --json` is the right workspace binding check for that posture. `maverick core cli run core.app-sdk.status --app-id website-studio --json` reports workspace-local project registration state and may show `source_exists=false` for this app even when the platform source is installed and enabled.
+
 ## Implemented Surfaces
 
 - Frontend workspace app mounted from `frontend/dist`
@@ -51,7 +53,7 @@ GitHub-backed sites with an activated grant receive a redaction-safe `github_pul
 
 `website_list_changes` exposes bounded change state for agents: working diff summaries, changesets, publish requests, approval events, build validation records, deployments, and revision metadata for a selected site. It accepts `limit`, `offset`, `include_logs`, and `diff_limit`, returns pagination metadata for each history section, and compacts long logs unless full logs are explicitly requested. `website_builds_list` follows the same pagination and compact-log behavior. These actions are read-only and do not push, deploy externally, or write back to third-party systems.
 
-`website_maintenance_prune` applies app-owned retention to operational history. It supports dry-run and scoped execution, keeps the newest build records/artifacts, newest preview records per route, and newest runtime health sessions according to bounded policy defaults, and returns deleted counts plus deleted paths. It never deletes source trees, revisions, deployment artifacts, publish requests, approvals, or site records.
+`website_maintenance_prune` applies app-owned retention to operational history. It supports dry-run and scoped execution, keeps the newest build records/artifacts, newest preview records per route, and newest runtime health sessions according to bounded policy defaults, and returns deleted counts plus deleted paths. The default policy keeps 10 builds, 3 previews per route, and 20 runtime sessions; operators should run dry-run during routine workspace maintenance and prune only after reviewing the reported counts. It never deletes source trees, revisions, deployment artifacts, publish requests, approvals, or site records.
 
 ## Frontend Layout
 

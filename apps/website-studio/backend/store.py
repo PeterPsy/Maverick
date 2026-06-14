@@ -85,6 +85,7 @@ COMPACT_LOG_CHARS = 1200
 DEFAULT_RETAIN_BUILDS = 10
 DEFAULT_RETAIN_PREVIEWS_PER_ROUTE = 3
 DEFAULT_RETAIN_RUNTIME_SESSIONS = 20
+DEFAULT_RETENTION_REVIEW_CADENCE = "run dry-run during routine workspace maintenance and prune after reviewing counts"
 MAX_SOURCE_MAP_ASSET_INDEX = 120
 PREVIEW_RUNTIME_VERSION = "preview-browser-stream-v4"
 FILE_GATEWAY_SCHEMA = "maverick.app.file_gateway.v1"
@@ -101,7 +102,9 @@ def list_sites(data_root: Path) -> list[dict[str, object]]:
     active_site_id = get_active_site_id(data_root)
     with connect(data_root) as db:
         rows = db.execute("SELECT * FROM sites ORDER BY updated_at DESC").fetchall()
-    return [_site_row(row, active_site_id=active_site_id) for row in rows]
+    sites = [_site_row(row, active_site_id=active_site_id) for row in rows]
+    latest_builds = _latest_builds_by_site(data_root, [str(site["id"]) for site in sites])
+    return [_site_with_latest_runtime_profile(site, latest_builds.get(str(site["id"]))) for site in sites]
 
 
 def create_site(
@@ -1733,13 +1736,36 @@ def maintenance_prune(
     return {
         "status": "dry_run" if is_dry_run else "pruned",
         "dry_run": is_dry_run,
-        "policy": {
-            "keep_builds": clean_keep_builds,
-            "keep_previews_per_route": clean_keep_previews,
-            "keep_runtime_sessions": clean_keep_sessions,
-        },
+        "policy": maintenance_policy_defaults(
+            keep_builds=clean_keep_builds,
+            keep_previews_per_route=clean_keep_previews,
+            keep_runtime_sessions=clean_keep_sessions,
+        ),
         "totals": totals,
         "sites": summaries,
+    }
+
+
+def maintenance_policy_defaults(
+    *,
+    keep_builds: int = DEFAULT_RETAIN_BUILDS,
+    keep_previews_per_route: int = DEFAULT_RETAIN_PREVIEWS_PER_ROUTE,
+    keep_runtime_sessions: int = DEFAULT_RETAIN_RUNTIME_SESSIONS,
+) -> dict[str, object]:
+    return {
+        "keep_builds": keep_builds,
+        "keep_previews_per_route": keep_previews_per_route,
+        "keep_runtime_sessions": keep_runtime_sessions,
+        "cadence": DEFAULT_RETENTION_REVIEW_CADENCE,
+        "dry_run_first": True,
+        "protected_records": [
+            "source trees",
+            "site records",
+            "revision snapshots",
+            "deployment artifacts",
+            "publish requests",
+            "approval events",
+        ],
     }
 
 
@@ -4387,6 +4413,53 @@ def _site_row(row, *, active_site_id: str = "") -> dict[str, object]:
     return payload
 
 
+def _latest_builds_by_site(data_root: Path, site_ids: list[str]) -> dict[str, dict[str, object]]:
+    clean_ids = [site_id for site_id in site_ids if site_id]
+    if not clean_ids:
+        return {}
+    placeholders = ",".join("?" for _ in clean_ids)
+    ensure_schema(data_root)
+    with connect(data_root) as db:
+        rows = db.execute(
+            f"""
+            SELECT builds.*
+            FROM builds
+            INNER JOIN (
+                SELECT site_id, MAX(created_at) AS latest_created_at
+                FROM builds
+                WHERE site_id IN ({placeholders})
+                GROUP BY site_id
+            ) latest
+              ON builds.site_id = latest.site_id
+             AND builds.created_at = latest.latest_created_at
+            ORDER BY builds.site_id ASC, builds.created_at DESC, builds.id DESC
+            """,
+            tuple(clean_ids),
+        ).fetchall()
+    latest: dict[str, dict[str, object]] = {}
+    for row in rows:
+        site_id = str(row["site_id"])
+        if site_id not in latest:
+            latest[site_id] = _build_row(row, include_logs=False)
+    return latest
+
+
+def _site_with_latest_runtime_profile(site: dict[str, object], latest_build: dict[str, object] | None) -> dict[str, object]:
+    if not latest_build or not _build_matches_site_source(site, latest_build):
+        return site
+    profile = site.get("source_profile") if isinstance(site.get("source_profile"), dict) else {}
+    site_payload = dict(site)
+    site_payload["source_profile"] = _normalized_profile_for_build(latest_build, dict(profile))
+    return site_payload
+
+
+def _build_matches_site_source(site: dict[str, object], build: dict[str, object]) -> bool:
+    site_source_version = str(site.get("source_version") or "").strip()
+    artifact_ref = build.get("artifact_ref") if isinstance(build.get("artifact_ref"), dict) else {}
+    build_source_version = str(artifact_ref.get("source_version") or "").strip()
+    return bool(site_source_version and build_source_version and site_source_version == build_source_version)
+
+
 def _cached_source_profile(
     data_root: Path,
     site: dict[str, object],
@@ -4459,11 +4532,30 @@ def _build_row(row, *, include_logs: bool = True) -> dict[str, object]:
     payload["artifact_ref"] = json.loads(payload.pop("artifact_ref_json", "{}") or "{}")
     payload["warnings"] = _dedupe_strings(json.loads(payload.pop("warnings_json") or "[]"))[:100]
     payload["missing_requirements"] = _dedupe_strings(json.loads(payload.pop("missing_requirements_json", "[]") or "[]"))[:50]
+    payload["source_profile"] = _normalized_profile_for_build(payload, payload["source_profile"])
     compact_log, truncated, original_chars = _compact_log(str(payload.get("logs_summary") or ""), include_logs=include_logs)
     payload["logs_summary"] = compact_log
     payload["logs_summary_truncated"] = truncated
     payload["logs_summary_chars"] = original_chars
     return payload
+
+
+def _normalized_profile_for_build(build: dict[str, object], profile: dict[str, object]) -> dict[str, object]:
+    runtime_kind = str(build.get("runtime_kind") or profile.get("preview_runtime_kind") or "unavailable")
+    missing_requirements = build.get("missing_requirements") if isinstance(build.get("missing_requirements"), list) else []
+    build_status = str(build.get("status") or "").strip()
+    if build_status == "passed" and not missing_requirements:
+        runtime_status = "ready"
+    elif build_status in {"blocked", "failed"}:
+        runtime_status = build_status
+    else:
+        runtime_status = str(profile.get("runtime_preview_status") or build_status or "blocked")
+    return _source_profile_with_runtime_status(
+        profile,
+        runtime_kind=runtime_kind,
+        runtime_status=runtime_status,
+        missing_requirements=missing_requirements,
+    )
 
 
 def _preview_row(row) -> dict[str, object]:

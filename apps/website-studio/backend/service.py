@@ -32,6 +32,7 @@ from store import (
     list_publish_targets,
     list_sites,
     load_view_state,
+    maintenance_policy_defaults,
     maintenance_prune,
     navigation_analyze,
     page_context,
@@ -106,7 +107,10 @@ def handle_action(data_root: Path, payload: dict[str, object]) -> tuple[int, dic
                 **health_payload(data_root),
                 "phase": "phase_3",
                 "phase_status": "phase_3_app_orchestration_ready_platform_hosting_missing",
+                "implemented_phases": ["phase_1", "phase_2", "phase_3_app_orchestration", "phase_3a_runtime_preview"],
+                "phase_3a_runtime_status": "ready",
                 "platform_hosting_status": "pending_generic_surface",
+                "maintenance_policy": maintenance_policy_defaults(),
             }
         if action == "sites_list":
             return 200, {"items": list_sites(data_root)}

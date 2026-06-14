@@ -505,7 +505,8 @@ select:focus {
   .fitness-loading-skeleton__counter::after,
   .fitness-loading-skeleton__icon::after,
   .fitness-loading-skeleton__media::after,
-  .fitness-loading-skeleton__pill::after {
+  .fitness-loading-skeleton__pill::after,
+  .media-thumb-skeleton::after {
     animation: none;
     transform: none;
   }
@@ -778,7 +779,13 @@ select:focus {
   position: relative;
   display: grid;
   min-height: 7.4rem;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
   overflow: hidden;
+  padding: 0;
+  text-align: inherit;
 }
 
 .block-media-panel .media-thumb {
@@ -787,6 +794,11 @@ select:focus {
   height: 100%;
   min-height: 7.4rem;
   border-radius: 8px;
+}
+
+.block-exercise-player-trigger:disabled {
+  cursor: default;
+  opacity: 1;
 }
 
 .block-index.block-index-overlay {
@@ -834,6 +846,12 @@ select:focus {
   display: grid;
   gap: 0.18rem;
   min-width: 0;
+}
+
+.block-exercise-player-trigger:focus-visible,
+.exercise-preview-button:focus-visible {
+  outline: 2px solid var(--fitness-accent);
+  outline-offset: 3px;
 }
 
 .block-index {
@@ -1001,6 +1019,19 @@ select:focus {
   padding: 0.62rem;
 }
 
+.exercise-preview-button {
+  position: relative;
+  display: grid;
+  width: 5.4rem;
+  min-width: 5.4rem;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  padding: 0;
+  text-align: left;
+}
+
 .exercise-row .media-thumb {
   width: 5.4rem;
   min-width: 5.4rem;
@@ -1135,13 +1166,44 @@ select:focus {
   background: rgba(255, 255, 255, 0.07);
 }
 
+.media-thumb.is-media-ready {
+  background: transparent;
+}
+
 .media-thumb video,
 .media-thumb img {
   position: absolute;
   inset: 0;
+  z-index: 2;
   width: 100%;
   height: 100%;
-  object-fit: cover;
+  background: transparent;
+  object-fit: contain;
+  opacity: 1;
+  transition: opacity 140ms ease;
+}
+
+.media-thumb.is-preview-loading video,
+.media-thumb.is-preview-loading img {
+  opacity: 0;
+}
+
+.media-thumb-skeleton {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  overflow: hidden;
+  border-radius: inherit;
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.media-thumb-skeleton::after {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.14), transparent);
+  transform: translateX(-100%);
+  animation: fitness-loading-skeleton-shimmer 1.45s ease-in-out infinite;
+  content: "";
 }
 
 .media-thumb.is-empty {
@@ -1300,6 +1362,14 @@ select:focus {
 }
 
 .player-media {
+  cursor: pointer;
+}
+
+.exercise-player .player-media {
+  cursor: default;
+}
+
+.exercise-player.is-video .player-media {
   cursor: pointer;
 }
 
@@ -1481,6 +1551,10 @@ select:focus {
 
 .player-header.is-expanded {
   padding-bottom: 1.6rem;
+}
+
+.exercise-player-header .player-top {
+  margin-top: 0;
 }
 
 .player-progress {
@@ -1905,12 +1979,17 @@ select:focus {
     grid-template-columns: 5rem minmax(0, 1fr);
     grid-template-areas:
       "media details"
-      "actions actions";
+      "actions";
     align-items: center;
   }
 
-  .exercise-row .media-thumb {
+  .exercise-preview-button {
     grid-area: media;
+    width: 5rem;
+    min-width: 5rem;
+  }
+
+  .exercise-row .media-thumb {
     width: 5rem;
     min-width: 5rem;
     height: 6.4rem;

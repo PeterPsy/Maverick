@@ -85,6 +85,7 @@ export function App() {
   const [notice, setNotice] = useState('');
   const [busy, setBusy] = useState('');
   const [playerSession, setPlayerSession] = useState<PlayerSession | null>(null);
+  const [exercisePlayer, setExercisePlayer] = useState<Exercise | null>(null);
   const [exerciseDraft, setExerciseDraft] = useState<Partial<Exercise> | null>(null);
   const [libraryTargetBlockId, setLibraryTargetBlockId] = useState<string | null>(null);
   const [savedWorkoutId, setSavedWorkoutId] = useState<string | null>(null);
@@ -286,6 +287,7 @@ export function App() {
     const workoutToStart = syncWorkoutExerciseSnapshots(selectedWorkout, exercises);
     if (!workoutToStart || !validation.valid) return;
     setBusy('start');
+    setExercisePlayer(null);
     const startPromise = startWorkout(workoutToStart.id, workoutToStart)
       .then((payload) => {
         dirtyWorkoutIdsRef.current.delete(payload.workout.id);
@@ -370,6 +372,10 @@ export function App() {
     return <WorkPlayer workout={playerSession.workout} startPromise={playerSession.startPromise} onClose={() => setPlayerSession(null)} onComplete={(run) => setRuns((items) => [run, ...items].slice(0, 20))} />;
   }
 
+  if (exercisePlayer) {
+    return <ExercisePlayer exercise={exercisePlayer} onClose={() => setExercisePlayer(null)} />;
+  }
+
   return (
     <main className="fitness-app">
       <section className="fitness-main">
@@ -396,6 +402,7 @@ export function App() {
                   setLibraryTargetBlockId(blockId);
                   setSetupTab('exercise-library');
                 }}
+                onOpenExercisePlayer={setExercisePlayer}
               />
             ) : (
               <ExerciseLibrary
@@ -411,6 +418,7 @@ export function App() {
                 onSave={handleSaveExercise}
                 onDelete={handleDeleteExercise}
                 onAddToWorkout={handleAddExerciseToWorkout}
+                onOpenPlayer={setExercisePlayer}
                 selectionMode={libraryTargetBlockId ? 'replace' : 'add'}
               />
             )}
@@ -471,6 +479,7 @@ function WorkoutEditor(props: {
   onDelete: (workout: Workout) => void;
   onDuplicate: (workout: Workout) => void;
   onOpenLibraryForBlock: (blockId: string) => void;
+  onOpenExercisePlayer: (exercise: Exercise) => void;
 }) {
   const { workout } = props;
   const [editingTitleId, setEditingTitleId] = useState<string | null>(null);
@@ -584,6 +593,7 @@ function WorkoutEditor(props: {
             onChange={(patch) => updateBlock(block.id, patch)}
             onModeChange={(mode) => replaceBlock(block.id, blockWithMode(block, mode, workout))}
             onOpenLibrary={() => props.onOpenLibraryForBlock(block.id)}
+            onOpenPlayer={props.onOpenExercisePlayer}
             onDuplicate={() => update({ blocks: insertAfter(workout.blocks, block.id, { ...block, id: crypto.randomUUID() } as WorkoutBlock) })}
             onDelete={() => update({ blocks: workout.blocks.filter((candidate) => candidate.id !== block.id) })}
           />
@@ -637,6 +647,7 @@ function BlockEditor(props: {
   onChange: (patch: Partial<WorkoutBlock>) => void;
   onModeChange: (mode: WorkoutBlockMode) => void;
   onOpenLibrary: () => void;
+  onOpenPlayer: (exercise: Exercise) => void;
   onDuplicate: () => void;
   onDelete: () => void;
 }) {
@@ -655,6 +666,7 @@ function BlockEditor(props: {
       ? exerciseDescriptionPreview(exercise || block) || 'No description'
       : 'Choose an exercise from the library.'
     : '';
+  const playerExercise = block.type === 'work' ? exerciseForPlayerFromBlock(block, exercise) : null;
   const controls = (
     <div className={`mode-value-row ${block.type === 'rest' ? 'is-rest' : ''}`}>
       {block.type === 'rest' ? (
@@ -686,10 +698,16 @@ function BlockEditor(props: {
     <article ref={props.blockRef} className={`block-editor ${block.type === 'work' ? 'is-work' : 'is-rest'} ${props.isDragging ? 'is-dragging' : ''}`} {...props.reorderItemProps}>
       {block.type === 'work' ? (
         <div className="block-work-layout">
-          <div className="block-media-panel">
+          <button
+            className="block-media-panel block-exercise-player-trigger"
+            type="button"
+            onClick={() => playerExercise ? props.onOpenPlayer(playerExercise) : undefined}
+            disabled={!playerExercise}
+            aria-label={playerExercise ? `Open ${title} player` : 'No playable exercise'}
+          >
             <MediaThumb media={media} />
             <span className="block-index block-index-overlay">{props.index + 1}</span>
-          </div>
+          </button>
           <div className="block-work-content">
             <div className="block-work-header">
               <div className="block-exercise-copy">
@@ -728,6 +746,7 @@ function ExerciseLibrary(props: {
   onSave: (exercise: Partial<Exercise>) => void;
   onDelete: (exercise: Exercise) => void;
   onAddToWorkout: (exercise: Exercise) => void;
+  onOpenPlayer: (exercise: Exercise) => void;
   selectionMode: 'add' | 'replace';
 }) {
   const filtered = props.exercises.filter((exercise) => {
@@ -762,7 +781,9 @@ function ExerciseLibrary(props: {
       <div className="exercise-grid">
         {visibleExercises.map((exercise) => (
           <article key={exercise.id} className="exercise-row">
-            <MediaThumb media={exercise.primary_media} />
+            <button className="exercise-preview-button" type="button" onClick={() => props.onOpenPlayer(exercise)} aria-label={`Open ${exercise.title || 'exercise'} player`}>
+              <MediaThumb media={exercise.primary_media} />
+            </button>
             <div className="exercise-main">
               <strong>{exercise.title}</strong>
               <span>{exerciseDescriptionPreview(exercise) || 'No description'}</span>
@@ -883,6 +904,239 @@ function MediaPicker({ media, sourceFolder, onChange }: {
         </button>
       </div>
     </div>
+  );
+}
+
+function ExercisePlayer({ exercise, onClose }: { exercise: Exercise; onClose: () => void }) {
+  const videoRef = useRef<HTMLVideoElement | null>(null);
+  const [paused, setPaused] = useState(false);
+  const [descriptionExpanded, setDescriptionExpanded] = useState(false);
+  const [playbackOverlay, setPlaybackOverlay] = useState<PlayerPlaybackOverlay>('idle');
+  const [resolution, setResolution] = useState(initialMediaResolution());
+  const [resolutionKey, setResolutionKey] = useState('');
+  const [loadedMediaUrls, setLoadedMediaUrls] = useState<Set<string>>(() => new Set());
+  const [retryNonce, setRetryNonce] = useState(0);
+  const playbackOverlayTimerRef = useRef<number | null>(null);
+  const media = exercise.primary_media || exercise.media[0] || null;
+  const mediaKey = media ? mediaCacheKey(media) : '';
+  const currentResolution = mediaKey && resolutionKey === mediaKey ? resolution : media ? cachedMediaPlayback(media) || initialMediaResolution() : initialMediaResolution();
+  const currentMediaLoaded = currentResolution.status === 'ready' && Boolean(currentResolution.url) && loadedMediaUrls.has(currentResolution.url);
+  const hasCurrentMediaLayer = currentResolution.status === 'ready'
+    && Boolean(currentResolution.url)
+    && (currentResolution.mediaKind === 'video' || currentResolution.mediaKind === 'image');
+  const isPlayableVideo = hasCurrentMediaLayer && currentResolution.mediaKind === 'video';
+  const fullDescription = exercise.long_description || exercise.short_description || '';
+  const visibleDescription = descriptionExpanded && fullDescription ? fullDescription : exercise.short_description || exercise.long_description || '';
+  const mediaPlaceholderLabel = currentResolution.status === 'blocked'
+    ? currentResolution.detail
+    : currentResolution.status === 'error'
+      ? 'Exercise media could not be loaded'
+      : currentResolution.status === 'localizing'
+        ? 'Storage is preparing exercise media'
+        : media
+          ? 'Loading exercise media'
+          : 'This exercise has no playable media';
+
+  const clearPlaybackOverlayTimer = useCallback(() => {
+    if (playbackOverlayTimerRef.current === null) return;
+    window.clearTimeout(playbackOverlayTimerRef.current);
+    playbackOverlayTimerRef.current = null;
+  }, []);
+
+  const showPlaybackOverlay = useCallback((mode: PlayerPlaybackOverlay) => {
+    clearPlaybackOverlayTimer();
+    setPlaybackOverlay(mode);
+    if (mode === 'pause') {
+      playbackOverlayTimerRef.current = window.setTimeout(() => {
+        setPlaybackOverlay('idle');
+        playbackOverlayTimerRef.current = null;
+      }, 700);
+    }
+  }, [clearPlaybackOverlayTimer]);
+
+  const markMediaLoaded = useCallback((url: string) => {
+    if (!url) return;
+    setLoadedMediaUrls((current) => {
+      if (current.has(url)) return current;
+      const next = new Set(current);
+      next.add(url);
+      return next;
+    });
+  }, []);
+
+  const markVideoFrameLoaded = useCallback((video: HTMLVideoElement, url: string) => {
+    if (!url) return;
+    const requestFrame = (video as HTMLVideoElement & { requestVideoFrameCallback?: (callback: () => void) => number }).requestVideoFrameCallback;
+    if (typeof requestFrame === 'function') {
+      requestFrame.call(video, () => markMediaLoaded(url));
+      window.setTimeout(() => {
+        if (video.readyState >= 2) markMediaLoaded(url);
+      }, 120);
+      return;
+    }
+    if (video.readyState >= 2) markMediaLoaded(url);
+  }, [markMediaLoaded]);
+
+  useEffect(() => () => clearMediaPlaybackCache(), []);
+
+  useEffect(() => clearPlaybackOverlayTimer, [clearPlaybackOverlayTimer]);
+
+  useEffect(() => {
+    if (media) retainMediaPlayback([media]);
+  }, [media]);
+
+  useEffect(() => {
+    setLoadedMediaUrls(new Set());
+    setDescriptionExpanded(false);
+    setPaused(false);
+    setPlaybackOverlay('idle');
+  }, [mediaKey]);
+
+  useEffect(() => {
+    if (!media) {
+      setResolutionKey('');
+      setResolution({ status: 'blocked', url: '', mediaKind: 'none', detail: 'This exercise has no playable Storage media.' });
+      return;
+    }
+    const key = mediaCacheKey(media);
+    setResolutionKey(key);
+    setResolution(cachedMediaPlayback(media) || initialMediaResolution());
+    let canceled = false;
+    resolveMediaPlayback(media).then((next) => {
+      if (!canceled) {
+        setResolutionKey(key);
+        setResolution(next);
+      }
+    });
+    return () => {
+      canceled = true;
+    };
+  }, [media, mediaKey, retryNonce]);
+
+  useEffect(() => {
+    const video = videoRef.current;
+    if (!video || currentResolution.status !== 'ready' || currentResolution.mediaKind !== 'video' || !currentResolution.url) return;
+    if (video.readyState >= 2) {
+      markMediaLoaded(currentResolution.url);
+    } else {
+      video.load();
+    }
+    if (paused) {
+      video.pause();
+      return;
+    }
+    const playPromise = video.play();
+    if (playPromise && typeof playPromise.catch === 'function') {
+      playPromise.catch((error: Error) => {
+        if (error.name === 'AbortError') return;
+        setPaused(true);
+        showPlaybackOverlay('play');
+      });
+    }
+  }, [currentMediaLoaded, currentResolution.mediaKind, currentResolution.status, currentResolution.url, markMediaLoaded, paused, showPlaybackOverlay]);
+
+  function togglePlayback() {
+    if (!isPlayableVideo) return;
+    setPaused((current) => {
+      const next = !current;
+      showPlaybackOverlay(next ? 'play' : 'pause');
+      return next;
+    });
+  }
+
+  async function fallbackMedia() {
+    if (!media) return;
+    setResolution(await playerFallbackResolution(media, currentResolution));
+  }
+
+  return (
+    <main className={`work-player exercise-player ${isPlayableVideo ? 'is-video' : ''}`}>
+      <div className="player-media" onClick={togglePlayback}>
+        {!hasCurrentMediaLayer ? (
+          <GradientBarsBackground
+            className={`player-media-backdrop is-${currentResolution.status}`}
+            numBars={9}
+            gradientFrom="rgba(224, 228, 230, 0.78)"
+            gradientTo="rgba(5, 6, 5, 0)"
+            animationDuration={2.2}
+            backgroundColor="#050605"
+            ariaLabel={mediaPlaceholderLabel}
+          >
+            {(currentResolution.status === 'blocked' || currentResolution.status === 'error') && currentResolution.detail ? <span className="player-media-backdrop-message">{currentResolution.detail}</span> : null}
+          </GradientBarsBackground>
+        ) : null}
+        {hasCurrentMediaLayer && !currentMediaLoaded ? (
+          <GradientBarsBackground
+            className="player-media-backdrop is-frame-wait"
+            numBars={9}
+            gradientFrom="rgba(224, 228, 230, 0.78)"
+            gradientTo="rgba(5, 6, 5, 0)"
+            animationDuration={2.2}
+            backgroundColor="#050605"
+            ariaLabel="Loading exercise media"
+          />
+        ) : null}
+        {hasCurrentMediaLayer ? (
+          <PlayerMediaLayer
+            key={currentResolution.url}
+            resolution={currentResolution}
+            role="current"
+            isLoaded={currentMediaLoaded}
+            paused={paused}
+            videoRef={videoRef}
+            onLoaded={markMediaLoaded}
+            onVideoFrameLoaded={markVideoFrameLoaded}
+            onError={fallbackMedia}
+          />
+        ) : null}
+      </div>
+      <div className="player-scrim" />
+      {isPlayableVideo ? (
+        <button
+          className={`player-playback-control is-${playbackOverlay === 'idle' ? 'idle' : `showing-${playbackOverlay}`}`}
+          type="button"
+          onClick={togglePlayback}
+          aria-label={paused ? 'Resume exercise' : 'Pause exercise'}
+          title={paused ? 'Resume' : 'Pause'}
+          tabIndex={playbackOverlay === 'idle' ? -1 : 0}
+        >
+          <Play className="player-playback-icon player-playback-icon-play" size={64} aria-hidden="true" />
+          <Pause className="player-playback-icon player-playback-icon-pause" size={64} aria-hidden="true" />
+        </button>
+      ) : null}
+      <div className={`player-header exercise-player-header ${descriptionExpanded ? 'is-expanded' : ''}`}>
+        <div className="player-top">
+          <div className="player-heading">
+            <strong>{exercise.title || 'Untitled exercise'}</strong>
+            {fullDescription ? (
+              <button
+                className={`player-description ${descriptionExpanded ? 'is-open' : ''}`}
+                type="button"
+                onClick={() => setDescriptionExpanded((value) => !value)}
+                aria-expanded={descriptionExpanded}
+                aria-label={descriptionExpanded ? 'Collapse description' : 'Expand description'}
+              >
+                <span>{visibleDescription}</span>
+              </button>
+            ) : null}
+          </div>
+          <div className="player-control-stack">
+            <button className="player-icon player-close" type="button" onClick={onClose} aria-label="Close player"><X size={20} /></button>
+          </div>
+        </div>
+      </div>
+      {currentResolution.status === 'error' && media ? (
+        <div className="player-error">
+          <span>{currentResolution.detail}</span>
+          {currentResolution.canRetry ? (
+            <button type="button" onClick={() => setRetryNonce((value) => value + 1)}>
+              <RotateCcw size={14} aria-hidden="true" />
+              <span>Retry</span>
+            </button>
+          ) : null}
+        </div>
+      ) : null}
+    </main>
   );
 }
 
@@ -1057,19 +1311,25 @@ function WorkPlayer({ workout, startPromise, onClose, onComplete }: { workout: W
 
   useEffect(() => {
     const video = videoRef.current;
-    if (!video || currentResolution.mediaKind !== 'video' || !currentMediaLoaded) return;
+    if (!video || currentResolution.status !== 'ready' || currentResolution.mediaKind !== 'video' || !currentResolution.url) return;
+    if (video.readyState >= 2) {
+      markMediaLoaded(currentResolution.url);
+    } else {
+      video.load();
+    }
     if (paused) {
       video.pause();
       return;
     }
     const playPromise = video.play();
     if (playPromise && typeof playPromise.catch === 'function') {
-      playPromise.catch(() => {
+      playPromise.catch((error: Error) => {
+        if (error.name === 'AbortError') return;
         setPaused(true);
         showPlaybackOverlay('play');
       });
     }
-  }, [currentMediaLoaded, currentResolution.mediaKind, currentResolution.url, paused, showPlaybackOverlay]);
+  }, [currentMediaLoaded, currentResolution.mediaKind, currentResolution.status, currentResolution.url, markMediaLoaded, paused, showPlaybackOverlay]);
 
   useEffect(() => {
     if (!segment || segment.type === 'work' && segment.mode === 'reps') {
@@ -1197,33 +1457,7 @@ function WorkPlayer({ workout, startPromise, onClose, onComplete }: { workout: W
 
   async function fallbackBlob() {
     if (!segment || segment.type !== 'work') return;
-    if (segment.media.kind === 'drive_file') {
-      const detail = await drivePlaybackFailureDetail(segment.media, currentResolution);
-      cancelMediaPlayback(segment.media);
-      setResolution({
-        status: 'error',
-        url: driveMediaStreamUrl(segment.media),
-        mediaKind: segment.media.preview_kind,
-        detail,
-        canRetry: true
-      });
-      return;
-    }
-    const next = await createLocalBlobFallback(segment.media);
-    setResolution(next);
-  }
-
-  async function drivePlaybackFailureDetail(media: Extract<ExerciseMediaRef, { kind: 'drive_file' }>, currentResolution: MediaPlaybackResolution) {
-    const cachedDetail = latestMediaPlaybackError(media);
-    if (cachedDetail) return cachedDetail;
-    if (currentResolution.warmup) {
-      const warmed = await Promise.race([
-        currentResolution.warmup,
-        new Promise<null>((resolve) => window.setTimeout(() => resolve(null), 300))
-      ]);
-      if (warmed?.status === 'error' && warmed.detail) return warmed.detail;
-    }
-    return 'Storage could not play this Drive media yet. Retry after Drive localization is ready.';
+    setResolution(await playerFallbackResolution(segment.media, currentResolution));
   }
 
   if (summary) {
@@ -1509,7 +1743,7 @@ function PlayerMediaLayer({
         data-player-media-role={role}
         src={resolution.url}
         muted
-        autoPlay={role === 'current' && !paused && isLoaded}
+        autoPlay={role === 'current' && !paused}
         loop
         playsInline
         preload="auto"
@@ -1574,11 +1808,40 @@ function NextPreviewMedia({ resolution, isLoaded, onLoaded }: { resolution: Medi
   );
 }
 
+async function playerFallbackResolution(media: ExerciseMediaRef, currentResolution: MediaPlaybackResolution): Promise<MediaPlaybackResolution> {
+  if (media.kind === 'drive_file') {
+    const detail = await drivePlaybackFailureDetail(media, currentResolution);
+    cancelMediaPlayback(media);
+    return {
+      status: 'error',
+      url: driveMediaStreamUrl(media),
+      mediaKind: media.preview_kind,
+      detail,
+      canRetry: true
+    };
+  }
+  return createLocalBlobFallback(media);
+}
+
+async function drivePlaybackFailureDetail(media: Extract<ExerciseMediaRef, { kind: 'drive_file' }>, currentResolution: MediaPlaybackResolution) {
+  const cachedDetail = latestMediaPlaybackError(media);
+  if (cachedDetail) return cachedDetail;
+  if (currentResolution.warmup) {
+    const warmed = await Promise.race([
+      currentResolution.warmup,
+      new Promise<null>((resolve) => window.setTimeout(() => resolve(null), 300))
+    ]);
+    if (warmed?.status === 'error' && warmed.detail) return warmed.detail;
+  }
+  return 'Storage could not play this Drive media yet. Retry after Drive localization is ready.';
+}
+
 function MediaThumb({ media, variant = 'small' }: { media: ExerciseMediaRef | null; variant?: 'small' | 'large' }) {
   const [previewFailed, setPreviewFailed] = useState(false);
   const [isVisible, setIsVisible] = useState(variant === 'large');
   const [resolvedPreviewUrl, setResolvedPreviewUrl] = useState('');
   const [previewFrameUrl, setPreviewFrameUrl] = useState('');
+  const [previewLoaded, setPreviewLoaded] = useState(false);
   const frameRef = useRef<HTMLDivElement | null>(null);
   const previewUrl = useMemo(() => mediaCoverUrl(media), [media]);
   const previewFrameKey = useMemo(() => media ? mediaThumbPreviewFrameKey(media) : '', [media]);
@@ -1586,6 +1849,7 @@ function MediaThumb({ media, variant = 'small' }: { media: ExerciseMediaRef | nu
   useEffect(() => {
     const cachedPreviewFrame = previewFrameKey ? readMediaThumbPreviewFrame(previewFrameKey) : '';
     setPreviewFailed(false);
+    setPreviewLoaded(false);
     setIsVisible(variant === 'large' || Boolean(cachedPreviewFrame));
     setResolvedPreviewUrl('');
     setPreviewFrameUrl(cachedPreviewFrame);
@@ -1627,16 +1891,20 @@ function MediaThumb({ media, variant = 'small' }: { media: ExerciseMediaRef | nu
   function cacheVideoFrame(event: ReactSyntheticEvent<HTMLVideoElement>) {
     const captured = captureMediaThumbVideoFrame(event.currentTarget, previewFrameKey);
     if (captured) setPreviewFrameUrl(captured);
+    setPreviewLoaded(true);
   }
 
-  const className = `media-thumb ${variant === 'large' ? 'is-large' : ''} ${media ? '' : 'is-empty'}`;
+  const hasPreviewMedia = Boolean(previewUrl && media && !previewFailed);
+  const className = `media-thumb ${variant === 'large' ? 'is-large' : ''} ${media ? '' : 'is-empty'} ${hasPreviewMedia ? previewLoaded ? 'is-media-ready' : 'is-preview-loading' : ''}`;
   const visiblePreviewUrl = isVisible ? (resolvedPreviewUrl || previewUrl) : '';
   if (previewUrl && media && !previewFailed) {
+    const previewMedia = media;
     return (
       <div className={className} ref={frameRef}>
-        {media.preview_kind === 'video' && previewFrameUrl ? (
-          <img src={previewFrameUrl} alt="" onError={() => { setPreviewFrameUrl(''); setPreviewFailed(true); }} />
-        ) : media.preview_kind === 'video' ? (
+        {!previewLoaded ? <span className="media-thumb-skeleton" aria-hidden="true" /> : null}
+        {previewMedia.preview_kind === 'video' && previewFrameUrl ? (
+          <img src={previewFrameUrl} alt="" onLoad={() => setPreviewLoaded(true)} onError={() => { setPreviewFrameUrl(''); setPreviewFailed(true); }} />
+        ) : previewMedia.preview_kind === 'video' ? (
           <video
             src={visiblePreviewUrl ? withVideoFrameHint(visiblePreviewUrl) : undefined}
             muted
@@ -1652,10 +1920,10 @@ function MediaThumb({ media, variant = 'small' }: { media: ExerciseMediaRef | nu
             }}
             onLoadedData={cacheVideoFrame}
             onSeeked={cacheVideoFrame}
-            onError={() => setPreviewFailed(true)}
+            onError={() => { setPreviewLoaded(false); setPreviewFailed(true); }}
           />
         ) : (
-          <img src={visiblePreviewUrl || undefined} alt="" onError={() => setPreviewFailed(true)} />
+          <img src={visiblePreviewUrl || undefined} alt="" onLoad={() => setPreviewLoaded(true)} onError={() => { setPreviewLoaded(false); setPreviewFailed(true); }} />
         )}
       </div>
     );
@@ -1876,6 +2144,24 @@ function workBlockFromExercise(exercise: Exercise, workout: Workout, existing?: 
     reps_label: null,
     media: exercise.primary_media,
     notes: existing?.type === 'work' ? existing.notes : null
+  };
+}
+
+function exerciseForPlayerFromBlock(block: WorkBlock, exercise: Exercise | null): Exercise | null {
+  if (exercise?.primary_media || exercise?.media.length) return exercise;
+  if (!block.media) return null;
+  return {
+    id: block.exercise_id || block.id,
+    title: block.title || 'Untitled exercise',
+    short_description: block.short_description || shortDescriptionFrom(block.long_description || ''),
+    long_description: block.long_description || block.short_description || '',
+    tags: block.tags,
+    primary_media: block.media,
+    media: [block.media],
+    source_folder: null,
+    source_display_path: block.media.display_path || null,
+    created_at: block.exercise_snapshot_updated_at || '',
+    updated_at: block.exercise_snapshot_updated_at || ''
   };
 }
 

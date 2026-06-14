@@ -28,6 +28,41 @@ describe('work player presentation', () => {
     expect(styles).toContain('@keyframes player-playback-control-pop');
   });
 
+  it('opens the exercise player from workout and library previews without extra play badges', () => {
+    expect(appSource).toContain('const [exercisePlayer, setExercisePlayer] = useState<Exercise | null>(null);');
+    expect(appSource).toContain('return <ExercisePlayer exercise={exercisePlayer} onClose={() => setExercisePlayer(null)} />;');
+    expect(appSource).toContain('onOpenExercisePlayer={setExercisePlayer}');
+    expect(appSource).toContain('onOpenPlayer={setExercisePlayer}');
+    expect(appSource).toContain('function ExercisePlayer');
+    const exercisePlayerStart = appSource.indexOf('function ExercisePlayer');
+    const workPlayerStart = appSource.indexOf('function WorkPlayer', exercisePlayerStart);
+    const exercisePlayerSource = appSource.slice(exercisePlayerStart, workPlayerStart);
+    expect(exercisePlayerSource).not.toContain('requestFullscreen');
+    expect(appSource).toContain('function exerciseForPlayerFromBlock');
+    expect(appSource).toContain('className="exercise-preview-button"');
+    expect(appSource).toContain('className="block-media-panel block-exercise-player-trigger"');
+    expect(appSource).not.toContain('className="block-exercise-copy block-exercise-title-button"');
+    expect(appSource).not.toContain('exercise-player-trigger-icon');
+    expect(appSource).toContain('playerFallbackResolution(media, currentResolution)');
+    expect(appSource).toContain('playerFallbackResolution(segment.media, currentResolution)');
+    expect(styles).toContain('.exercise-player-header .player-top');
+    expect(styles).toContain('.exercise-preview-button');
+    expect(styles).toContain('.block-exercise-player-trigger:disabled');
+    expect(styles).not.toContain('.exercise-player-trigger-icon');
+  });
+
+  it('shows skeleton-backed media previews and contains loaded media without a background', () => {
+    expect(appSource).toContain('const [previewLoaded, setPreviewLoaded] = useState(false);');
+    expect(appSource).toContain('className="media-thumb-skeleton"');
+    expect(appSource).toContain("previewLoaded ? 'is-media-ready' : 'is-preview-loading'");
+    expect(appSource).toContain('onLoad={() => setPreviewLoaded(true)}');
+    expect(styles).toMatch(/\.media-thumb\.is-media-ready\s*{[\s\S]*background:\s*transparent;/);
+    expect(styles).toMatch(/\.media-thumb video,\s*\.media-thumb img\s*{[\s\S]*object-fit:\s*contain;/);
+    expect(styles).toContain('.media-thumb.is-preview-loading video');
+    expect(styles).toContain('.media-thumb-skeleton::after');
+    expect(styles).not.toMatch(/\.media-thumb video,\s*\.media-thumb img\s*{[\s\S]*object-fit:\s*cover;/);
+  });
+
   it('places exercise title and close action above centered bottom timing controls', () => {
     expect(appSource).toContain('className="player-heading"');
     expect(appSource).toContain('{segment.title}');
@@ -80,7 +115,8 @@ describe('work player presentation', () => {
     expect(appSource).toContain("className={`player-icon player-audio ${audioEnabled ? 'is-on' : 'is-off'}`}");
     expect(appSource).toContain('aria-pressed={audioEnabled}');
     expect(appSource).toContain('onClick={toggleAudio}');
-    const controlsStart = appSource.indexOf('className="player-control-stack"');
+    const workPlayerStart = appSource.indexOf('function WorkPlayer');
+    const controlsStart = appSource.indexOf('className="player-control-stack"', workPlayerStart);
     const audioPosition = appSource.indexOf('player-audio', controlsStart);
     const closePosition = appSource.indexOf('player-close', controlsStart);
     expect(audioPosition).toBeGreaterThan(controlsStart);
@@ -120,6 +156,11 @@ describe('work player presentation', () => {
     expect(appSource).toContain('requestVideoFrameCallback');
     expect(appSource).toContain('cachedMediaPlayback(segment.media) || initialMediaResolution()');
     expect(appSource).toContain('const currentMediaLoaded = currentResolution.status ===');
+    expect(appSource).toContain("currentResolution.status !== 'ready'");
+    expect(appSource).toContain('video.readyState >= 2');
+    expect(appSource).toContain('video.load();');
+    expect(appSource).toContain("autoPlay={role === 'current' && !paused}");
+    expect(appSource).not.toContain("if (!video || currentResolution.mediaKind !== 'video' || !currentMediaLoaded) return;");
     expect(appSource).toContain("preload=\"auto\"");
     expect(appSource).toContain("const className = role === 'preload' ? 'is-preload-layer' : isLoaded ? 'is-frame-ready' : 'is-awaiting-frame';");
     expect(styles).toContain('.player-media-backdrop.is-frame-wait');

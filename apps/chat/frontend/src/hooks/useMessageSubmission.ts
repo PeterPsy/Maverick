@@ -125,7 +125,7 @@ export function useMessageSubmission({
             source_app_id: agentRuntimeConfig?.source_app_id || "chat",
             system_prompt: systemPrompt,
             skill_ids: agentRuntimeConfig?.skill_ids || [],
-            title: agentRuntimeConfig?.title || "New chat",
+            title: "New chat",
           },
         });
         setDraftChat(null);

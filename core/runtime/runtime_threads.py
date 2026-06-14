@@ -112,6 +112,10 @@ def create_runtime_thread(
     source_app_id: str = "",
     system_prompt: str = "",
     project_id: str | None = None,
+    title_pending: bool = False,
+    title_source: str = "",
+    title_generation_input_hash: str = "",
+    title_generation_failure: str | None = None,
     now: datetime | None = None,
 ) -> RuntimeThreadRecord:
     normalized_session_id = runtime_session_id.strip()
@@ -132,6 +136,10 @@ def create_runtime_thread(
                 patch["last_completed_turn_id"] = latest_completed_turn_id
         if title.strip():
             patch["title"] = title.strip()[:80]
+            patch["title_pending"] = bool(title_pending)
+            patch["title_source"] = _thread_title_source(title.strip(), title_source=title_source, title_pending=title_pending)
+            patch["title_generation_input_hash"] = title_generation_input_hash.strip()
+            patch["title_generation_failure"] = title_generation_failure
         if agent_label.strip():
             patch["agent_label"] = agent_label.strip()[:120]
         if agent_type_id.strip():
@@ -166,6 +174,10 @@ def create_runtime_thread(
         last_user_message_at=runtime_thread_last_user_message_at_for_session(store, runtime_session_id=normalized_session_id),
         last_completed_response_at=latest_completed_response[1] if latest_completed_response is not None else None,
         last_completed_turn_id=latest_completed_response[0] if latest_completed_response is not None else None,
+        title_pending=bool(title_pending),
+        title_source=_thread_title_source(title.strip() or "New chat", title_source=title_source, title_pending=title_pending),
+        title_generation_input_hash=title_generation_input_hash.strip(),
+        title_generation_failure=title_generation_failure,
     )
     return store.save_thread(thread)
 
@@ -174,6 +186,30 @@ def _default_thread_title(session: RuntimeSessionRecord) -> str:
     if session.agent_id.strip():
         return session.agent_id.strip()
     return DEFAULT_THREAD_TITLE
+
+
+def _thread_title_source(title: str, *, title_source: str, title_pending: bool) -> str:
+    normalized = _normalized_generated_title_source(title_source)
+    if normalized:
+        return normalized
+    if title_pending:
+        return "pending"
+    if title.strip() == DEFAULT_THREAD_TITLE:
+        return "placeholder"
+    return "manual"
+
+
+def _normalized_generated_title_source(value: str) -> str:
+    normalized = str(value or "").strip()
+    if normalized in {"placeholder", "pending", "ai", "deterministic", "manual"}:
+        return normalized
+    return ""
+
+
+def _thread_title_allows_first_message_generation(thread: RuntimeThreadRecord) -> bool:
+    if thread.title.strip() == DEFAULT_THREAD_TITLE:
+        return True
+    return _normalized_generated_title_source(thread.title_source) == "placeholder"
 
 
 def find_runtime_thread_by_session(
@@ -207,6 +243,10 @@ def update_runtime_thread(
         title = str(updates.get("title") or "").strip()
         if title:
             patch["title"] = title[:80]
+            patch["title_pending"] = False
+            patch["title_source"] = "manual"
+            patch["title_generation_input_hash"] = ""
+            patch["title_generation_failure"] = None
     for key, limit in {
         "runtime_session_id": 0,
         "agent_label": 120,
@@ -273,10 +313,11 @@ def _reconcile_runtime_thread_with_facts(
         if thread.last_completed_response_at is None or thread.last_completed_response_at < expected_completed_at:
             patch["last_completed_response_at"] = expected_completed_at
             patch["last_completed_turn_id"] = expected_completed_turn_id
-    if thread.title.strip() == DEFAULT_THREAD_TITLE:
+    if not thread.title_pending and _thread_title_allows_first_message_generation(thread):
         expected_title = runtime_thread_title_for_user_message(store, thread.runtime_session_id)
         if expected_title != DEFAULT_THREAD_TITLE and expected_title != thread.title:
             patch["title"] = expected_title
+            patch["title_source"] = "deterministic"
     if not patch:
         return thread
     patch["updated_at"] = now or utcnow()
@@ -344,6 +385,7 @@ def mark_runtime_thread_user_message(
     input_text: object = "",
     attachments: Iterable[Mapping[str, object]] | None = None,
     app_references: Iterable[Mapping[str, object]] | None = None,
+    title_generation_input_hash: str = "",
     now: datetime | None = None,
 ) -> RuntimeThreadRecord | None:
     thread = find_runtime_thread_by_session(store, workspace_id=workspace_id, runtime_session_id=runtime_session_id)
@@ -355,17 +397,63 @@ def mark_runtime_thread_user_message(
         "last_user_message_at": timestamp,
         "updated_at": timestamp,
     }
-    if thread.title.strip() == DEFAULT_THREAD_TITLE:
-        title = runtime_thread_title_for_user_message(
-            store,
-            runtime_session_id,
-            input_text=input_text,
-            attachments=attachments,
-            app_references=app_references,
-        )
-        if title != DEFAULT_THREAD_TITLE and title != thread.title:
-            patch["title"] = title
+    if thread.title_pending:
+        pass
+    elif _thread_title_allows_first_message_generation(thread):
+        pending_hash = title_generation_input_hash.strip()
+        if pending_hash:
+            patch["title"] = DEFAULT_THREAD_TITLE
+            patch["title_pending"] = True
+            patch["title_source"] = "pending"
+            patch["title_generation_input_hash"] = pending_hash
+            patch["title_generation_failure"] = None
+        else:
+            title = runtime_thread_title_for_user_message(
+                store,
+                runtime_session_id,
+                input_text=input_text,
+                attachments=attachments,
+                app_references=app_references,
+            )
+            if title != DEFAULT_THREAD_TITLE and title != thread.title:
+                patch["title"] = title
+                patch["title_source"] = "deterministic"
     return store.save_thread(replace(thread, **patch))
+
+
+def complete_runtime_thread_title_generation(
+    store: RuntimeStore,
+    *,
+    workspace_id: str,
+    runtime_session_id: str,
+    title_generation_input_hash: str,
+    title: str,
+    title_source: str,
+    failure: str | None = None,
+    now: datetime | None = None,
+) -> RuntimeThreadRecord | None:
+    thread = find_runtime_thread_by_session(store, workspace_id=workspace_id, runtime_session_id=runtime_session_id)
+    if thread is None:
+        return None
+    if not thread.title_pending:
+        return None
+    expected_hash = title_generation_input_hash.strip()
+    if thread.title_generation_input_hash and thread.title_generation_input_hash != expected_hash:
+        return None
+    clean_title = str(title or "").strip()
+    if not clean_title:
+        clean_title = DEFAULT_THREAD_TITLE
+    timestamp = now or utcnow()
+    return store.save_thread(
+        replace(
+            thread,
+            title=clean_title[:80],
+            title_pending=False,
+            title_source=_normalized_generated_title_source(title_source),
+            title_generation_failure=failure,
+            updated_at=timestamp,
+        )
+    )
 
 
 def mark_runtime_thread_response_completed(

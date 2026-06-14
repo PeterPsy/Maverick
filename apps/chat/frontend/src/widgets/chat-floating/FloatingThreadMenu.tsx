@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import type { ChatThread } from "../../api/client";
 import { BusyChatGlow } from "../BusyChatGlow";
-import { isThreadBusy, isThreadUnread } from "../chat-sidebar/sections";
+import { isThreadBusy, isThreadTitlePending, isThreadUnread } from "../chat-sidebar/sections";
 import type { FloatingChatWindow } from "./floatingState";
 
 export function FloatingThreadMenu({
@@ -68,6 +68,9 @@ export function FloatingThreadMenu({
   }
 
   function startRenameThread(thread: ChatThread) {
+    if (isThreadTitlePending(thread)) {
+      return;
+    }
     setEditingThreadId(thread.thread_id);
     setEditingThreadTitle(thread.title || "New chat");
   }
@@ -84,6 +87,8 @@ export function FloatingThreadMenu({
     setEditingThreadTitle("");
   }
 
+  const isActiveTitlePending = isThreadTitlePending(activeThread);
+
   return (
     <div className="chat-floating-thread-menu" ref={threadMenuRef}>
       <button
@@ -96,7 +101,11 @@ export function FloatingThreadMenu({
         type="button"
       >
         {isActiveThreadBusy ? <BusyChatGlow /> : null}
-        <span className="chat-floating-thread-menu__trigger-title">{activeThread?.title || "New chat"}</span>
+        {isActiveTitlePending ? (
+          <span aria-label="Generating chat title" className="chat-floating-thread-menu__title-skeleton" role="status" />
+        ) : (
+          <span className="chat-floating-thread-menu__trigger-title">{activeThread?.title || "New chat"}</span>
+        )}
         <span aria-hidden="true" className="material-symbols-rounded chat-floating-thread-menu__chevron">
           expand_more
         </span>
@@ -107,6 +116,8 @@ export function FloatingThreadMenu({
             const isBusy = isThreadBusy(thread);
             const isUnread = isThreadUnread(thread);
             const isEditing = editingThreadId === thread.thread_id;
+            const isTitlePending = isThreadTitlePending(thread);
+            const threadLabel = isTitlePending ? "chat" : thread.title || "chat";
             return (
               <div
                 className={`chat-floating-thread-menu__item ${windowItem.threadId === thread.thread_id ? "is-active" : ""} ${isBusy ? "is-busy" : ""} ${
@@ -138,14 +149,19 @@ export function FloatingThreadMenu({
                 ) : (
                   <button className="chat-floating-thread-menu__item-select" onClick={() => selectThread(thread.thread_id)} type="button">
                     <span className="chat-floating-thread-menu__item-copy">
-                      <span className="chat-floating-thread-menu__item-title">{thread.title || "New chat"}</span>
+                      {isTitlePending ? (
+                        <span aria-label="Generating chat title" className="chat-floating-thread-menu__item-title-skeleton" role="status" />
+                      ) : (
+                        <span className="chat-floating-thread-menu__item-title">{thread.title || "New chat"}</span>
+                      )}
                     </span>
                   </button>
                 )}
                 <div className="chat-floating-thread-menu__item-actions">
                   <button
-                    aria-label={`Rename ${thread.title || "chat"}`}
+                    aria-label={`Rename ${threadLabel}`}
                     className="chat-floating-thread-menu__icon-action"
+                    disabled={isTitlePending}
                     onClick={(event) => {
                       event.stopPropagation();
                       startRenameThread(thread);
@@ -157,7 +173,7 @@ export function FloatingThreadMenu({
                     </span>
                   </button>
                   <button
-                    aria-label={`Delete ${thread.title || "chat"}`}
+                    aria-label={`Delete ${threadLabel}`}
                     className="chat-floating-thread-menu__icon-action is-danger"
                     onClick={(event) => {
                       event.stopPropagation();

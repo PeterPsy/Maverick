@@ -701,6 +701,17 @@ button {
   white-space: nowrap;
 }
 
+.bs-chat-list__title-skeleton {
+  display: block;
+  width: min(10rem, 82%);
+  height: 0.72rem;
+  border-radius: 999px;
+  background:
+    linear-gradient(90deg, rgba(255, 255, 255, 0.07), rgba(255, 255, 255, 0.18), rgba(255, 255, 255, 0.07));
+  background-size: 220% 100%;
+  animation: bs-chat-title-skeleton 1.15s ease-in-out infinite;
+}
+
 .bs-chat-list__title-input-frame {
   --chat-sidebar-title-edit-scale: 0.76;
   display: block;
@@ -708,6 +719,16 @@ button {
   height: 1.65rem;
   min-width: 0;
   overflow: hidden;
+}
+
+@keyframes bs-chat-title-skeleton {
+  0% {
+    background-position: 110% 0;
+  }
+
+  100% {
+    background-position: -110% 0;
+  }
 }
 
 .bs-chat-list__title-input {

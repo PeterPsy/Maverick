@@ -1,7 +1,7 @@
 import type { PointerEvent as ReactPointerEvent } from "react";
 import type { ChatProject, ChatThread } from "../../api/client";
 import { BusyChatGlow } from "../BusyChatGlow";
-import { isThreadBusy, isThreadUnread } from "./sections";
+import { isThreadBusy, isThreadTitlePending, isThreadUnread } from "./sections";
 import { ThreadInlineActions } from "./ThreadInlineActions";
 
 export function ThreadRow({
@@ -46,6 +46,8 @@ export function ThreadRow({
   const isBusy = isThreadBusy(thread);
   const isUnread = isThreadUnread(thread);
   const isExpanded = expandedThreadId === thread.thread_id;
+  const isTitlePending = isThreadTitlePending(thread);
+  const threadLabel = isTitlePending ? "chat" : thread.title || "chat";
 
   return (
     <div
@@ -58,7 +60,7 @@ export function ThreadRow({
         {isExpanded ? (
           <span className="bs-chat-list__title-input-frame">
             <input
-              aria-label={`Edit title ${thread.title}`}
+              aria-label={`Edit title ${threadLabel}`}
               autoFocus
               className="bs-chat-list__title-input"
               onChange={(event) => onSetExpandedThreadTitle(event.target.value)}
@@ -81,9 +83,13 @@ export function ThreadRow({
           >
             <div className="bs-chat-list__row">
               <div className="bs-chat-list__copy">
-                <p className="bs-chat-list__title" title={thread.title}>
-                  {thread.title}
-                </p>
+                {isTitlePending ? (
+                  <span aria-label="Generating chat title" className="bs-chat-list__title-skeleton" role="status" />
+                ) : (
+                  <p className="bs-chat-list__title" title={thread.title}>
+                    {thread.title}
+                  </p>
+                )}
               </div>
             </div>
           </button>
@@ -91,7 +97,7 @@ export function ThreadRow({
       </div>
       <div className="bs-chat-list__actions">
         <button
-          aria-label={`${isSelected ? "Deselect" : "Select"} ${thread.title}`}
+          aria-label={`${isSelected ? "Deselect" : "Select"} ${threadLabel}`}
           aria-pressed={isSelected}
           className="bs-chat-list__selection-toggle"
           onClick={() => onToggleThreadSelection(thread)}
@@ -102,7 +108,7 @@ export function ThreadRow({
         </button>
         {sectionProjectId !== thread.project_id ? (
           <button
-            aria-label={`Move ${thread.title} to ${sectionTitle}`}
+            aria-label={`Move ${threadLabel} to ${sectionTitle}`}
             className="bs-instance-menu__trigger"
             onClick={() => void onMoveThread(thread, sectionProjectId)}
             type="button"
@@ -114,9 +120,11 @@ export function ThreadRow({
         ) : (
           <button
             aria-expanded={isExpanded}
-            aria-label={`Edit ${thread.title}`}
+            aria-label={`Edit ${threadLabel}`}
             className="bs-instance-menu__trigger"
+            disabled={isTitlePending}
             onClick={() => onToggleThreadEdit(thread)}
+            title={isTitlePending ? "Title generation pending" : "Edit chat"}
             type="button"
           >
             <span aria-hidden="true" className="material-symbols-rounded">

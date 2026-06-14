@@ -4,6 +4,10 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from datetime import datetime
+from typing import Literal
+
+
+RuntimeThreadTitleSource = Literal["", "placeholder", "pending", "ai", "deterministic", "manual"]
 
 
 @dataclass(frozen=True)
@@ -28,3 +32,7 @@ class RuntimeThreadRecord:
     last_completed_response_at: datetime | None = None
     last_completed_turn_id: str | None = None
     completed_response_read_at_by_user_id: dict[str, datetime] = field(default_factory=dict)
+    title_pending: bool = False
+    title_source: RuntimeThreadTitleSource = ""
+    title_generation_input_hash: str = ""
+    title_generation_failure: str | None = None

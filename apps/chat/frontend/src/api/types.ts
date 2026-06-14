@@ -154,6 +154,9 @@ export type ChatThread = {
   thread_id: string;
   runtime_session_id: string;
   title: string;
+  title_pending?: boolean;
+  title_source?: string;
+  title_generation_failure?: string | null;
   agent_label: string;
   agent_type_id: string;
   agent_role_id: string;

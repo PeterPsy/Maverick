@@ -29,7 +29,7 @@ from core.runtime.runtime_threads import (
     thread_payload,
     update_runtime_thread,
 )
-from core.runtime.thread_titles import runtime_thread_title_for_session
+from core.runtime.thread_titles import DEFAULT_THREAD_TITLE, runtime_thread_title_for_session
 from core.runtime.service import (
     create_runtime_session,
     reconcile_runtime_session_policy,
@@ -180,12 +180,15 @@ def _create_session(state: PlatformState, context: RequestSession, body: dict, *
         observability_store=state.observability_store,
         start_path=start_path,
     )
+    requested_title = str(body.get("title") or "").strip()
+    thread_title = requested_title or _thread_title_for_session(state, session)
     thread = create_runtime_thread(
         state.runtime_store,
         workspace_id=context.workspace_id,
         thread_id=session.session_id,
         runtime_session_id=session.session_id,
-        title=str(body.get("title") or "").strip() or _thread_title_for_session(state, session),
+        title=thread_title,
+        title_source="placeholder" if not requested_title or requested_title == DEFAULT_THREAD_TITLE else "manual",
         agent_label=session.agent_id,
         agent_type_id=str(body.get("agent_type_id") or "").strip(),
         agent_role_id=str(body.get("agent_role_id") or "").strip(),

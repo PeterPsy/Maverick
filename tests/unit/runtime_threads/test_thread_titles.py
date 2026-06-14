@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
+from types import SimpleNamespace
 import unittest
 
 from core.runtime.runtime_threads import (
@@ -13,8 +14,18 @@ from core.runtime.runtime_threads import (
 )
 from core.runtime.service import create_runtime_session, queue_runtime_turn, record_runtime_event
 from core.runtime.store import RuntimeCollections, RuntimeDocumentStore
+from core.runtime.thread_catalog_events import mark_thread_user_message_queued
+from core.runtime.thread_title_jobs import fallback_thread_title, run_runtime_thread_title_generation, thread_title_input_hash
 from core.runtime.thread_titles import DEFAULT_THREAD_TITLE, derive_thread_title, runtime_thread_title_for_session
 from tests.support.collections import FakeCollection
+
+
+class CapturingThreadEventBus:
+    def __init__(self) -> None:
+        self.events: list[dict[str, object]] = []
+
+    def publish(self, *, workspace_id: str, event: dict[str, object]) -> None:
+        self.events.append({"workspace_id": workspace_id, **event})
 
 
 class RuntimeThreadTitleTest(unittest.TestCase):
@@ -173,6 +184,205 @@ class RuntimeThreadTitleTest(unittest.TestCase):
         self.assertIsNotNone(renamed)
         assert renamed is not None
         self.assertEqual(renamed.title, "Titolo manuale")
+
+    def test_first_user_message_marks_default_thread_title_pending_when_hash_is_provided(self) -> None:
+        store = self.make_store()
+        now = datetime(2026, 4, 19, 10, 0, tzinfo=UTC)
+        create_runtime_session(store, session_id="session-a", workspace_id="acme", agent_id="chat", now=now)
+        create_runtime_thread(
+            store,
+            workspace_id="acme",
+            thread_id="thread-a",
+            runtime_session_id="session-a",
+            title=DEFAULT_THREAD_TITLE,
+            now=now,
+        )
+        message = "analizza il budget vendite mensili del cliente Rossi"
+        queue_runtime_turn(store, turn_id="turn-a", session_id="session-a", input_text=message, now=now + timedelta(seconds=1))
+
+        updated = mark_runtime_thread_user_message(
+            store,
+            workspace_id="acme",
+            runtime_session_id="session-a",
+            input_text=message,
+            title_generation_input_hash=thread_title_input_hash(message),
+            now=now + timedelta(seconds=1),
+        )
+
+        self.assertIsNotNone(updated)
+        assert updated is not None
+        self.assertEqual(updated.title, DEFAULT_THREAD_TITLE)
+        self.assertTrue(updated.title_pending)
+        self.assertEqual(updated.title_source, "pending")
+
+    def test_thread_catalog_event_creates_missing_pending_thread_when_hash_is_provided(self) -> None:
+        store = self.make_store()
+        event_bus = CapturingThreadEventBus()
+        now = datetime(2026, 4, 19, 10, 0, tzinfo=UTC)
+        message = "analizza il budget vendite mensili del cliente Rossi"
+        input_hash = thread_title_input_hash(message)
+        session = create_runtime_session(store, session_id="session-a", workspace_id="acme", agent_id="chat", now=now)
+        turn = queue_runtime_turn(store, turn_id="turn-a", session_id=session.session_id, input_text=message, now=now + timedelta(seconds=1))
+        state = SimpleNamespace(runtime_store=store, runtime_thread_event_bus=event_bus)
+
+        updated = mark_thread_user_message_queued(
+            state,
+            workspace_id="acme",
+            runtime_session_id=session.session_id,
+            input_text=message,
+            title_generation_input_hash=input_hash,
+            now=turn.created_at,
+        )
+
+        self.assertIsNotNone(updated)
+        assert updated is not None
+        self.assertEqual(updated.title, DEFAULT_THREAD_TITLE)
+        self.assertTrue(updated.title_pending)
+        self.assertEqual(updated.title_source, "pending")
+        self.assertEqual(updated.title_generation_input_hash, input_hash)
+        self.assertTrue(event_bus.events[-1]["thread"]["title_pending"])
+
+    def test_first_user_message_marks_placeholder_agent_title_pending_when_hash_is_provided(self) -> None:
+        store = self.make_store()
+        now = datetime(2026, 4, 19, 10, 0, tzinfo=UTC)
+        message = "analizza il budget vendite mensili del cliente Rossi"
+        create_runtime_session(store, session_id="session-a", workspace_id="acme", agent_id="chat", now=now)
+        create_runtime_thread(
+            store,
+            workspace_id="acme",
+            thread_id="thread-a",
+            runtime_session_id="session-a",
+            title="Backend Systems Engineer",
+            title_source="placeholder",
+            now=now,
+        )
+        queue_runtime_turn(store, turn_id="turn-a", session_id="session-a", input_text=message, now=now + timedelta(seconds=1))
+
+        updated = mark_runtime_thread_user_message(
+            store,
+            workspace_id="acme",
+            runtime_session_id="session-a",
+            input_text=message,
+            title_generation_input_hash=thread_title_input_hash(message),
+            now=now + timedelta(seconds=1),
+        )
+
+        self.assertIsNotNone(updated)
+        assert updated is not None
+        self.assertEqual(updated.title, DEFAULT_THREAD_TITLE)
+        self.assertTrue(updated.title_pending)
+        self.assertEqual(updated.title_source, "pending")
+
+    def test_ai_title_job_completes_pending_thread_title(self) -> None:
+        store = self.make_store()
+        now = datetime(2026, 4, 19, 10, 0, tzinfo=UTC)
+        message = "analizza il budget vendite mensili del cliente Rossi"
+        input_hash = thread_title_input_hash(message)
+        create_runtime_session(store, session_id="session-a", workspace_id="acme", agent_id="chat", now=now)
+        create_runtime_thread(
+            store,
+            workspace_id="acme",
+            thread_id="thread-a",
+            runtime_session_id="session-a",
+            title=DEFAULT_THREAD_TITLE,
+            title_pending=True,
+            title_source="pending",
+            title_generation_input_hash=input_hash,
+            now=now,
+        )
+        state = SimpleNamespace(runtime_store=store, runtime_thread_event_bus=None)
+
+        updated = run_runtime_thread_title_generation(
+            state=state,
+            workspace_id="acme",
+            runtime_session_id="session-a",
+            title_generation_input_hash=input_hash,
+            input_text=message,
+            title_generator=lambda **_: "Analisi Budget Vendite Mensili",
+        )
+
+        self.assertIsNotNone(updated)
+        assert updated is not None
+        self.assertEqual(updated.title, "Analisi Budget Vendite Mensili")
+        self.assertFalse(updated.title_pending)
+        self.assertEqual(updated.title_source, "ai")
+        self.assertIsNone(updated.title_generation_failure)
+
+    def test_ai_title_job_falls_back_to_deterministic_title_when_model_title_is_invalid(self) -> None:
+        store = self.make_store()
+        now = datetime(2026, 4, 19, 10, 0, tzinfo=UTC)
+        message = "analizza il budget vendite mensili del cliente Rossi"
+        input_hash = thread_title_input_hash(message)
+        create_runtime_session(store, session_id="session-a", workspace_id="acme", agent_id="chat", now=now)
+        create_runtime_thread(
+            store,
+            workspace_id="acme",
+            thread_id="thread-a",
+            runtime_session_id="session-a",
+            title=DEFAULT_THREAD_TITLE,
+            title_pending=True,
+            title_source="pending",
+            title_generation_input_hash=input_hash,
+            now=now,
+        )
+        state = SimpleNamespace(runtime_store=store, runtime_thread_event_bus=None)
+
+        updated = run_runtime_thread_title_generation(
+            state=state,
+            workspace_id="acme",
+            runtime_session_id="session-a",
+            title_generation_input_hash=input_hash,
+            input_text=message,
+            title_generator=lambda **_: "Budget",
+        )
+
+        self.assertIsNotNone(updated)
+        assert updated is not None
+        self.assertFalse(updated.title_pending)
+        self.assertEqual(updated.title_source, "deterministic")
+        self.assertEqual(updated.title, fallback_thread_title(message))
+        self.assertTrue(updated.title_generation_failure)
+
+    def test_ai_title_job_does_not_overwrite_manual_rename(self) -> None:
+        store = self.make_store()
+        now = datetime(2026, 4, 19, 10, 0, tzinfo=UTC)
+        message = "analizza il budget vendite mensili del cliente Rossi"
+        input_hash = thread_title_input_hash(message)
+        create_runtime_session(store, session_id="session-a", workspace_id="acme", agent_id="chat", now=now)
+        create_runtime_thread(
+            store,
+            workspace_id="acme",
+            thread_id="thread-a",
+            runtime_session_id="session-a",
+            title=DEFAULT_THREAD_TITLE,
+            title_pending=True,
+            title_source="pending",
+            title_generation_input_hash=input_hash,
+            now=now,
+        )
+        update_runtime_thread(
+            store,
+            thread_id="thread-a",
+            workspace_id="acme",
+            updates={"title": "Titolo scelto manualmente"},
+            now=now + timedelta(seconds=1),
+        )
+        state = SimpleNamespace(runtime_store=store, runtime_thread_event_bus=None)
+
+        updated = run_runtime_thread_title_generation(
+            state=state,
+            workspace_id="acme",
+            runtime_session_id="session-a",
+            title_generation_input_hash=input_hash,
+            input_text=message,
+            title_generator=lambda **_: "Analisi Budget Vendite Mensili",
+        )
+
+        self.assertIsNone(updated)
+        thread = store.get_thread("thread-a")
+        self.assertEqual(thread.title, "Titolo scelto manualmente")
+        self.assertFalse(thread.title_pending)
+        self.assertEqual(thread.title_source, "manual")
 
     def test_later_user_message_preserves_existing_non_default_thread_title(self) -> None:
         store = self.make_store()

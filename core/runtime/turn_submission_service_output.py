@@ -16,6 +16,7 @@ from core.runtime.runtime_session import RuntimeSessionRecord
 from core.runtime.runtime_turns import RuntimeTurnRecord
 from core.runtime.service import queue_runtime_turn, record_runtime_event
 from core.runtime.thread_catalog_events import mark_thread_user_message_queued, set_thread_availability
+from core.runtime.thread_title_jobs import schedule_runtime_thread_title_generation, thread_title_input_hash
 from core.runtime.workspace_api_token import register_workspace_api_token
 from core.skills.catalog import DEFAULT_SKILL_CATALOG_APP_ID
 from core.skills.service import list_available_workspace_skills, resolve_runtime_skills
@@ -58,14 +59,27 @@ def _queue_turn_with_event(
         payload=payload,
         event_bus=state.runtime_event_bus,
     )
-    mark_thread_user_message_queued(
+    title_input_hash = thread_title_input_hash(
+        input_text,
+        attachments=attachments,
+        app_references=app_references,
+    )
+    thread = mark_thread_user_message_queued(
         state,
         workspace_id=session.workspace_id,
         runtime_session_id=session.session_id,
         input_text=input_text,
         attachments=attachments,
         app_references=app_references,
+        title_generation_input_hash=title_input_hash,
         now=turn.created_at,
+    )
+    schedule_runtime_thread_title_generation(
+        state,
+        thread=thread,
+        input_text=input_text,
+        attachments=attachments,
+        app_references=app_references,
     )
     return turn, [event]
 

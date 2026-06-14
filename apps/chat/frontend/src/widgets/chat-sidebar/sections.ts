@@ -60,6 +60,10 @@ export function isThreadBusy(thread: ChatThread): boolean {
   return thread.availability === "busy" || thread.availability === "queued" || thread.availability === "active";
 }
 
+export function isThreadTitlePending(thread: ChatThread | null | undefined): boolean {
+  return Boolean(thread?.title_pending);
+}
+
 export function isThreadUnread(thread: ChatThread): boolean {
   return Boolean(thread.has_unread_completed_response) && !isThreadBusy(thread);
 }

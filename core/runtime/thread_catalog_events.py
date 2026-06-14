@@ -16,7 +16,7 @@ from core.runtime.runtime_threads import (
     update_runtime_thread_availability,
 )
 from core.runtime.errors import RuntimeSessionNotFoundError
-from core.runtime.thread_titles import runtime_thread_title_for_session
+from core.runtime.thread_titles import DEFAULT_THREAD_TITLE, runtime_thread_title_for_session
 
 if TYPE_CHECKING:
     from core.api.platform_state import PlatformState
@@ -58,6 +58,7 @@ def mark_thread_user_message_queued(
     input_text: object = "",
     attachments: list[dict[str, object]] | None = None,
     app_references: list[dict[str, object]] | None = None,
+    title_generation_input_hash: str = "",
     now: datetime | None = None,
 ) -> RuntimeThreadRecord | None:
     _ensure_thread_for_runtime_session(
@@ -67,6 +68,7 @@ def mark_thread_user_message_queued(
         input_text=input_text,
         attachments=attachments,
         app_references=app_references,
+        title_generation_input_hash=title_generation_input_hash,
         now=now,
     )
     thread = mark_runtime_thread_user_message(
@@ -76,6 +78,7 @@ def mark_thread_user_message_queued(
         input_text=input_text,
         attachments=attachments,
         app_references=app_references,
+        title_generation_input_hash=title_generation_input_hash,
         now=now,
     )
     publish_runtime_thread_catalog_change(
@@ -158,6 +161,7 @@ def _ensure_thread_for_runtime_session(
     input_text: object = "",
     attachments: list[dict[str, object]] | None = None,
     app_references: list[dict[str, object]] | None = None,
+    title_generation_input_hash: str = "",
     now: datetime | None = None,
 ) -> RuntimeThreadRecord | None:
     existing = find_runtime_thread_by_session(
@@ -173,18 +177,24 @@ def _ensure_thread_for_runtime_session(
         return None
     if session.workspace_id != workspace_id:
         return None
+    pending_hash = title_generation_input_hash.strip()
     return create_runtime_thread(
         state.runtime_store,
         workspace_id=workspace_id,
         thread_id=session.session_id,
         runtime_session_id=session.session_id,
-        title=_thread_title_for_session(
+        title=DEFAULT_THREAD_TITLE
+        if pending_hash
+        else _thread_title_for_session(
             state,
             session,
             input_text=input_text,
             attachments=attachments,
             app_references=app_references,
         ),
+        title_pending=bool(pending_hash),
+        title_source="pending" if pending_hash else "placeholder",
+        title_generation_input_hash=pending_hash,
         agent_label=session.agent_id,
         agent_type_id=getattr(session, "agent_type_id", ""),
         agent_role_id=getattr(session, "agent_role_id", ""),

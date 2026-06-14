@@ -23,7 +23,15 @@ def main() -> None:
         emit_json(backend_response(400, {"error": error.error, "detail": error.detail}))
         return
     response = backend_response(200, result)
-    if action in {"create_project", "import_from_storage", "export_to_storage", "set_view_filter", "set_custom_view", "clear_custom_view"}:
+    if action in {
+        "create_project",
+        "import_from_storage",
+        "export_to_storage",
+        "record_storage_export_result",
+        "set_view_filter",
+        "set_custom_view",
+        "clear_custom_view",
+    }:
         response["app_events"] = [
             {
                 "type": "maverick.app.data-changed",

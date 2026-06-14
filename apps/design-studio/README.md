@@ -40,10 +40,14 @@ storage/generated/<file>
 Exports are written under:
 
 ```text
-storage/generated/design-studio/<project-id>/
+storage/generated/design-studio/<project-id>/<export-id>/
 ```
 
-The app never accepts host absolute paths in sandbox mode.
+The app never accepts host absolute paths in sandbox mode. Export writes are
+issued through Design Studio's `storage-write` dependency backend request so the
+Storage app owns the generated file write path and inventory update. Design
+Studio records the export as pending first, then marks it exported or failed from
+the Storage callback result.
 
 ## SDK Flow
 

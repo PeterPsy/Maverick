@@ -14,6 +14,7 @@ from store import OPENDESIGN_COMMIT, OPENDESIGN_VERSION, ensure_state, update_st
 
 
 PROJECT_ID_PATTERN = re.compile(r"^design_[a-f0-9]{12}$")
+EXPORT_ID_PATTERN = re.compile(r"^export_[a-f0-9]{12}$")
 STORAGE_PATH_PATTERN = re.compile(r"^storage/(uploaded|generated)/(.+)$")
 MAX_IMPORT_BYTES = 10 * 1024 * 1024
 
@@ -121,23 +122,18 @@ def import_from_storage(payload: dict[str, Any], arguments: dict[str, Any]) -> d
 
 
 def export_to_storage(payload: dict[str, Any], arguments: dict[str, Any]) -> dict[str, Any]:
-    """Export project metadata into workspace generated Storage."""
+    """Request governed Storage writes for project metadata and notes."""
     project_id = _project_id(arguments.get("project_id"))
     data_root = payload["data_root"]
     state = ensure_state(data_root)
     project = _require_project(state, project_id)
-    generated_root = Path(str(payload.get("generated_storage_root") or "")).resolve()
-    if not generated_root.exists():
-        generated_root.mkdir(parents=True, exist_ok=True)
-    export_root = (generated_root / "design-studio" / project_id).resolve()
-    if generated_root != export_root and generated_root not in export_root.parents:
-        raise DesignStudioError("storage_path_invalid", "Export path escapes generated Storage.")
-    export_root.mkdir(parents=True, exist_ok=True)
+    export_id = f"export_{uuid4().hex[:12]}"
     exported_at = utc_now()
     manifest = {
         "app_id": "design-studio",
         "opendesign_version": OPENDESIGN_VERSION,
         "opendesign_commit": OPENDESIGN_COMMIT,
+        "export_id": export_id,
         "project_id": project_id,
         "project_name": project["name"],
         "source_files": project.get("source_files", []),
@@ -146,28 +142,88 @@ def export_to_storage(payload: dict[str, Any], arguments: dict[str, Any]) -> dic
         "created_at": exported_at,
     }
     notes = _export_notes(project, manifest)
-    manifest_path = export_root / "manifest.json"
-    notes_path = export_root / "notes.md"
-    manifest_path.write_text(_json_text(manifest), encoding="utf-8")
-    notes_path.write_text(notes, encoding="utf-8")
+    manifest_workspace_path = f"storage/generated/design-studio/{project_id}/{export_id}/manifest.json"
+    notes_workspace_path = f"storage/generated/design-studio/{project_id}/{export_id}/notes.md"
+    expected_paths = [manifest_workspace_path, notes_workspace_path]
     export_record = {
-        "workspace_relative_paths": [
-            f"storage/generated/design-studio/{project_id}/manifest.json",
-            f"storage/generated/design-studio/{project_id}/notes.md",
-        ],
+        "export_id": export_id,
+        "status": "pending",
+        "workspace_relative_paths": expected_paths,
+        "completed_workspace_relative_paths": [],
         "exported_at": exported_at,
+        "completed_at": "",
+        "error": "",
     }
 
     def apply_export(next_state: dict[str, Any]) -> dict[str, Any]:
         next_project = _require_project(next_state, project_id)
         next_project["exports"].append(export_record)
-        next_project["status"] = "exported"
+        next_project["status"] = "exporting"
         next_project["updated_at"] = exported_at
         next_state["view_state"]["selected_project_id"] = project_id
         return next_state
 
     next_state = update_state(data_root, apply_export)
-    return {"export": export_record, "project": _require_project(next_state, project_id), "state": _public_state(next_state)}
+    return {
+        "export": export_record,
+        "project": _require_project(next_state, project_id),
+        "state": _public_state(next_state),
+        "dependency_backend_requests": [
+            _storage_write_request(
+                project_id=project_id,
+                export_id=export_id,
+                workspace_relative_path=manifest_workspace_path,
+                content=_json_text(manifest),
+                artifact="manifest",
+            ),
+            _storage_write_request(
+                project_id=project_id,
+                export_id=export_id,
+                workspace_relative_path=notes_workspace_path,
+                content=notes,
+                artifact="notes",
+            ),
+        ],
+    }
+
+
+def record_storage_export_result(payload: dict[str, Any], arguments: dict[str, Any]) -> dict[str, Any]:
+    """Record the result of one Storage dependency-backend export write."""
+    project_id = _project_id(arguments.get("project_id"))
+    export_id = _export_id(arguments.get("export_id"))
+    workspace_relative_path = _storage_path(arguments.get("workspace_relative_path"))
+    dependency_status = str(arguments.get("dependency_backend_status") or "").strip()
+    dependency_result = arguments.get("dependency_backend_result") if isinstance(arguments.get("dependency_backend_result"), dict) else {}
+    error = str(arguments.get("error") or "").strip()
+    written_path = _storage_write_result_path(dependency_result) or workspace_relative_path
+    if written_path != workspace_relative_path:
+        raise DesignStudioError("storage_export_mismatch", "Storage wrote a different path than the export requested.")
+
+    def apply_result(state: dict[str, Any]) -> dict[str, Any]:
+        project = _require_project(state, project_id)
+        export = _require_export(project, export_id)
+        if dependency_status != "completed":
+            export["status"] = "failed"
+            export["error"] = error or "Storage export write failed."
+            project["status"] = "export_failed"
+            project["updated_at"] = utc_now()
+            return state
+        completed = export.setdefault("completed_workspace_relative_paths", [])
+        if workspace_relative_path not in completed:
+            completed.append(workspace_relative_path)
+        expected = set(export.get("workspace_relative_paths", []))
+        if expected and expected.issubset(set(completed)) and export.get("status") != "failed":
+            export["status"] = "exported"
+            export["completed_at"] = utc_now()
+            export["error"] = ""
+            project["status"] = "exported"
+        project["updated_at"] = utc_now()
+        state["view_state"]["selected_project_id"] = project_id
+        return state
+
+    state = update_state(payload["data_root"], apply_result)
+    project = _require_project(state, project_id)
+    return {"export": _require_export(project, export_id), "project": project, "state": _public_state(state)}
 
 
 def set_view_filter(payload: dict[str, Any], arguments: dict[str, Any]) -> dict[str, Any]:
@@ -225,6 +281,8 @@ def dispatch(action: str, payload: dict[str, Any], arguments: dict[str, Any]) ->
         return import_from_storage(payload, arguments)
     if action == "export_to_storage":
         return export_to_storage(payload, arguments)
+    if action == "record_storage_export_result":
+        return record_storage_export_result(payload, arguments)
     if action == "set_view_filter":
         return set_view_filter(payload, arguments)
     if action == "view_filter":
@@ -260,11 +318,25 @@ def _require_project(state: dict[str, Any], project_id: str) -> dict[str, Any]:
     return project
 
 
+def _require_export(project: dict[str, Any], export_id: str) -> dict[str, Any]:
+    for item in project.get("exports", []):
+        if item.get("export_id") == export_id:
+            return item
+    raise DesignStudioError("export_not_found", f"Design export `{export_id}` was not found.")
+
+
 def _project_id(value: object) -> str:
     project_id = str(value or "").strip()
     if not PROJECT_ID_PATTERN.fullmatch(project_id):
         raise DesignStudioError("project_id_invalid", "A valid design project id is required.")
     return project_id
+
+
+def _export_id(value: object) -> str:
+    export_id = str(value or "").strip()
+    if not EXPORT_ID_PATTERN.fullmatch(export_id):
+        raise DesignStudioError("export_id_invalid", "A valid export id is required.")
+    return export_id
 
 
 def _storage_path(value: object) -> str:
@@ -300,12 +372,48 @@ def _export_notes(project: dict[str, Any], manifest: dict[str, Any]) -> str:
     return (
         f"# {project['name']}\n\n"
         f"Project id: `{project['id']}`\n\n"
+        f"Export id: `{manifest['export_id']}`\n\n"
         f"Status: `{project.get('status', 'draft')}`\n\n"
         f"OpenDesign: `{manifest['opendesign_version']}` "
         f"({manifest['opendesign_commit']})\n\n"
         f"## Prompt\n\n{project.get('prompt') or 'No prompt recorded.'}\n\n"
         f"## Source Files\n\n{source_lines}\n"
     )
+
+
+def _storage_write_request(
+    *,
+    project_id: str,
+    export_id: str,
+    workspace_relative_path: str,
+    content: str,
+    artifact: str,
+) -> dict[str, Any]:
+    return {
+        "request_id": f"{export_id}-{artifact}",
+        "dependency_alias": "storage-write",
+        "body": {
+            "action": "file.content.write",
+            "workspace_relative_path": workspace_relative_path,
+            "mode": "create",
+            "content": content,
+        },
+        "callback": {
+            "action": "record_storage_export_result",
+            "payload": {
+                "project_id": project_id,
+                "export_id": export_id,
+                "workspace_relative_path": workspace_relative_path,
+                "artifact": artifact,
+            },
+        },
+    }
+
+
+def _storage_write_result_path(result: dict[str, Any]) -> str:
+    payload = result.get("json") if isinstance(result.get("json"), dict) else result
+    file_payload = payload.get("file") if isinstance(payload.get("file"), dict) else {}
+    return str(file_payload.get("workspace_relative_path") or "").strip()
 
 
 def _json_text(payload: dict[str, Any]) -> str:

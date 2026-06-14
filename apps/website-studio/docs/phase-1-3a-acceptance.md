@@ -22,9 +22,12 @@ This document is the versioned acceptance reference for the Website Studio scope
 - Writes and patches require optimistic concurrency through `expected_hash`; concurrent stale writes are rejected.
 - Static preview documents use app-approved file gateway capabilities for local assets and run in a nested opaque-origin sandbox iframe.
 - Phase 3A Node builds require `package-lock.json`, run `npm ci --ignore-scripts --no-audit --no-fund`, resolve build binaries from site-local `node_modules/.bin`, and execute only allowlisted build commands.
+- Phase 3A Node runtime artifacts detect common static build docroots such as `dist`, `build`, `out`, and `public` instead of requiring generated `index.html` at the repository root.
 - Phase 3A subprocesses run with a constrained environment, timeout enforcement, process-group cleanup on POSIX, and best-effort POSIX CPU, memory, open-file, and process limits.
+- Phase 3A subprocesses receive an app-local ephemeral `HOME` and `TMPDIR` outside the served runtime docroot; they do not inherit the operator's home directory.
 - PHP preview binds only to `127.0.0.1`, uses a short TTL registry, and fails closed when the host does not provide `php`.
 - Maintenance pruning can delete only operational preview/build/runtime records and artifacts; it never deletes source trees, revisions, deployment artifacts, publish requests, approvals, or site records.
+- `website_manifest` exposes `acceptance_verification` with the required automated smoke scenarios, optional external smoke scenarios, app-owned runtime controls, and known platform gaps.
 
 ## Explicit Non-Goals Through 3A
 
@@ -42,8 +45,23 @@ The acceptance suite is anchored by:
 
 ```bash
 python3 -m unittest discover -s apps/website-studio/tests -p 'test_*.py'
+python3 -m unittest apps/website-studio/tests/test_phase_acceptance_smoke.py -v
 maverick core cli run core.app-sdk.validate --app-root apps/website-studio --json
 maverick app website-studio mcp call website_manifest --json
 maverick app website-studio frontend build --json
 npm --prefix apps/website-studio run test:visual
 ```
+
+Optional external smoke checks are deliberately gated because they have side effects. The Storage smoke writes a uniquely named generated ZIP artifact in the active workspace; this scope does not expose a Storage delete MCP tool for automatic cleanup.
+
+```bash
+WEBSITE_STUDIO_LIVE_GITHUB_REPO=owner/repo \
+WEBSITE_STUDIO_LIVE_GITHUB_TOKEN=<sandbox-token> \
+WEBSITE_STUDIO_LIVE_GITHUB_CONFIRM=create_pr \
+python3 -m unittest apps/website-studio/tests/test_phase_acceptance_smoke.py -v
+
+WEBSITE_STUDIO_STORAGE_CLI_SMOKE=1 \
+python3 -m unittest apps/website-studio/tests/test_phase_acceptance_smoke.py -v
+```
+
+Use only sandbox GitHub repositories and fake credentials for these optional checks.

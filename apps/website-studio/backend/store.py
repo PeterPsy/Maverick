@@ -21,7 +21,7 @@ from urllib.parse import parse_qs, urlencode, urlparse
 from uuid import uuid4
 
 from database import REFERENCE_ENTITIES, connect, ensure_schema, now_timestamp
-from github_publish import GitHubPublishConflict, _github_error_detail, _redact_secret_text, publish_to_github_pull_request
+from github_publish import GitHubPublishConflict, _redact_secret_text, publish_to_github_pull_request
 from maintenance import prune_site_operational_history
 from safety import (
     asset_references_from_html,

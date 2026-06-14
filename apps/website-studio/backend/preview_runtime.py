@@ -35,10 +35,10 @@ BUILD_CPU_LIMIT_SECONDS = 240
 COMMAND_CPU_LIMIT_SECONDS = 90
 PHP_CPU_LIMIT_SECONDS = 90
 BUILD_MEMORY_LIMIT_BYTES = 1536 * 1024 * 1024
-COMMAND_MEMORY_LIMIT_BYTES = 1024 * 1024 * 1024
+COMMAND_MEMORY_LIMIT_BYTES = 1536 * 1024 * 1024
 PHP_MEMORY_LIMIT_BYTES = 512 * 1024 * 1024
 MAX_RUNTIME_OPEN_FILES = 256
-MAX_RUNTIME_PROCESSES = 64
+MAX_RUNTIME_PROCESSES = 512
 MAX_RENDER_BYTES = 2 * 1024 * 1024
 MAX_RENDERED_ROUTES = 40
 ALLOWED_WORKSPACE_BUILD_BINARIES = {
@@ -79,6 +79,11 @@ def runtime_process_policy() -> dict[str, object]:
             "TMPDIR",
             "WEBSITE_STUDIO_RUNTIME_POLICY",
         ],
+        "isolated_environment": {
+            "home": "app-local ephemeral HOME outside the served runtime docroot",
+            "tmpdir": "app-local ephemeral TMPDIR outside the served runtime docroot",
+            "inherits_operator_home": False,
+        },
         "timeouts_seconds": {
             "npm_install": BUILD_TIMEOUT_SECONDS,
             "build_command": COMMAND_TIMEOUT_SECONDS,
@@ -231,7 +236,7 @@ def prepare_runtime_build(
                 "kind": "runtime_preview_artifact",
                 "build_id": build_id,
                 "runtime_root": artifact_root.relative_to(data_root).as_posix(),
-                "docroot": str(source_profile.get("php_docroot") or ""),
+                "docroot": _runtime_artifact_docroot(artifact_root, runtime_kind, source_profile),
                 "runtime_kind": runtime_kind,
                 "platform_surface": "website_studio_preview_runtime",
                 "isolation": "opaque_origin_iframe",
@@ -414,7 +419,11 @@ def _render_node_build_preview(
     runtime_root = _artifact_runtime_root(data_root, artifact_ref)
     if runtime_root is None:
         return _blocked_runtime("node_build", ["runtime build artifact is required before preview"], source_root, source_profile)
-    html_path = _static_route_path(runtime_root, route)
+    html_path = None
+    for root in _node_static_roots(runtime_root, artifact_ref):
+        html_path = _static_route_path(root, route)
+        if html_path is not None:
+            break
     if html_path is None:
         return _blocked_runtime("node_build", [f"built artifact does not contain route `{route or '/'}`"], source_root, source_profile)
     html = html_path.read_text(encoding="utf-8")
@@ -430,6 +439,42 @@ def _render_node_build_preview(
         "missing_requirements": [],
         "http_status": 200,
     }
+
+
+def _runtime_artifact_docroot(artifact_root: Path, runtime_kind: str, source_profile: dict[str, object]) -> str:
+    if runtime_kind == "php":
+        return str(source_profile.get("php_docroot") or "")
+    if runtime_kind == "node_build":
+        return _detect_node_static_docroot(artifact_root)
+    return ""
+
+
+def _detect_node_static_docroot(artifact_root: Path) -> str:
+    if (artifact_root / "index.html").is_file():
+        return ""
+    for candidate in ("dist", "build", "out", "public"):
+        root = artifact_root / candidate
+        if (root / "index.html").is_file():
+            return candidate
+    return ""
+
+
+def _node_static_roots(runtime_root: Path, artifact_ref: dict[str, object]) -> list[Path]:
+    roots: list[Path] = []
+    docroot_rel = str(artifact_ref.get("docroot") or "").strip()
+    if docroot_rel and docroot_rel != ".":
+        try:
+            docroot = (runtime_root / safe_relative_path(docroot_rel)).resolve()
+        except ValueError:
+            docroot = runtime_root
+        if docroot == runtime_root or runtime_root in docroot.parents:
+            roots.append(docroot)
+    roots.append(runtime_root)
+    for candidate in ("dist", "build", "out", "public"):
+        path = (runtime_root / candidate).resolve()
+        if path != runtime_root and runtime_root in path.parents and path not in roots:
+            roots.append(path)
+    return roots
 
 
 def _php_ready_without_body(rendered: dict[str, object]) -> bool:
@@ -520,7 +565,7 @@ def _start_php_preview_server(key: str, runtime_root: Path, docroot: Path, route
     command = [shutil.which("php") or "php", "-d", "variables_order=GPCS", "-S", f"127.0.0.1:{port}", "-t", str(docroot)]
     if router is not None:
         command.append(str(router))
-    env = _safe_env()
+    env = _safe_env(runtime_root)
     env["WEBSITE_STUDIO_PREVIEW"] = "1"
     process = subprocess.Popen(
         command,
@@ -834,7 +879,7 @@ def _run_bounded_subprocess(
     process = subprocess.Popen(
         command,
         cwd=cwd,
-        env=_safe_env(),
+        env=_safe_env(cwd),
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
         text=True,
@@ -1043,13 +1088,18 @@ def _wait_for_php(port: int) -> None:
     raise TimeoutError("PHP preview server did not start")
 
 
-def _safe_env() -> dict[str, str]:
+def _safe_env(cwd: Path) -> dict[str, str]:
+    env_root = _runtime_env_root(cwd)
+    home = env_root / "home"
+    tmpdir = env_root / "tmp"
+    home.mkdir(parents=True, exist_ok=True)
+    tmpdir.mkdir(parents=True, exist_ok=True)
     allowed = {
-        "HOME": os.environ.get("HOME", ""),
+        "HOME": str(home),
         "PATH": os.environ.get("PATH", ""),
         "LANG": os.environ.get("LANG", "C.UTF-8"),
         "LC_ALL": os.environ.get("LC_ALL", "C.UTF-8"),
-        "TMPDIR": os.environ.get("TMPDIR", ""),
+        "TMPDIR": str(tmpdir),
         "CI": "true",
         "NO_COLOR": "1",
         "NPM_CONFIG_IGNORE_SCRIPTS": "true",
@@ -1059,6 +1109,12 @@ def _safe_env() -> dict[str, str]:
         "WEBSITE_STUDIO_RUNTIME_POLICY": "bounded-subprocess-v1",
     }
     return {key: value for key, value in allowed.items() if value}
+
+
+def _runtime_env_root(cwd: Path) -> Path:
+    resolved = cwd.resolve()
+    digest = hashlib.sha256(str(resolved).encode("utf-8")).hexdigest()[:12]
+    return resolved.parent / ".website-studio-runtime-env" / digest
 
 
 def _bounded_log(value: str) -> str:

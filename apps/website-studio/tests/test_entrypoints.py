@@ -25,12 +25,14 @@ sys.path.insert(0, str(APP_ROOT))
 sys.path.insert(0, str(APP_ROOT / "backend"))
 
 from backend.service import app_events_for_action, handle_action, resolve_secret_resource
-from backend.store import _git_import_source_ref, _github_error_detail, _redact_secret_text, _replace_preview_media_urls_with_gateway, _site_mutation_lock, rebuild_index
+from backend.store import _git_import_source_ref, _redact_secret_text, _replace_preview_media_urls_with_gateway, _site_mutation_lock, rebuild_index
+from github_publish import _github_error_detail
 from preview_runtime import (
     PhpPreviewServer,
     _bounded_log,
     _php_preview_server,
     _resolve_workspace_binary,
+    _safe_env,
     _shutdown_php_preview_servers,
     build_plan_for_source,
     internal_routes_from_html,
@@ -166,7 +168,12 @@ class WebsiteStudioEntrypointTest(unittest.TestCase):
             self.assertEqual(manifest["runtime_process_policy"], runtime_process_policy())
             self.assertTrue(manifest["runtime_process_policy"]["process_group_cleanup"])
             self.assertIn("NPM_CONFIG_IGNORE_SCRIPTS", manifest["runtime_process_policy"]["safe_environment"])
+            self.assertFalse(manifest["runtime_process_policy"]["isolated_environment"]["inherits_operator_home"])
             self.assertGreaterEqual(manifest["runtime_process_policy"]["resource_limits"]["build_command"]["memory_bytes"], 1024 * 1024 * 1024)
+            self.assertGreaterEqual(manifest["runtime_process_policy"]["resource_limits"]["build_command"]["processes"], 512)
+            self.assertEqual(manifest["acceptance_verification"]["status"], "implemented_with_guarded_platform_gaps")
+            self.assertFalse(manifest["acceptance_verification"]["runtime_security_boundary"]["production_sandbox"])
+            self.assertIn("os_level_sandboxing", manifest["acceptance_verification"]["runtime_security_boundary"]["platform_gaps"])
 
     def test_site_edit_diff_and_publish_block(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -3899,6 +3906,20 @@ class WebsiteStudioEntrypointTest(unittest.TestCase):
         self.assertNotIn("/home/ubuntu", summary)
         self.assertNotIn("token=abc", summary)
         self.assertNotIn("ghp_123456789012345678901234", summary)
+
+    def test_phase3a_safe_env_uses_app_local_home_and_tmpdir(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            cwd = Path(tmp) / "source"
+            cwd.mkdir()
+            env = _safe_env(cwd)
+
+            self.assertNotEqual(env.get("HOME"), os.environ.get("HOME"))
+            self.assertTrue(str(env["HOME"]).startswith(str(cwd.parent)))
+            self.assertTrue(str(env["TMPDIR"]).startswith(str(cwd.parent)))
+            self.assertTrue(Path(env["HOME"]).is_dir())
+            self.assertTrue(Path(env["TMPDIR"]).is_dir())
+            self.assertEqual(env["NPM_CONFIG_IGNORE_SCRIPTS"], "true")
+            self.assertNotIn("MAVERICK_SECRET_STORE_KEY", env)
 
     def test_phase3a_list_changes_redacts_historical_build_logs_on_read(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

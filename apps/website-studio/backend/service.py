@@ -5,6 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from database import health_payload
+from phase_acceptance import phase_1_3a_acceptance_verification
 from store import (
     active_context,
     activate_git_connection,
@@ -113,6 +114,7 @@ def handle_action(data_root: Path, payload: dict[str, object]) -> tuple[int, dic
                 "platform_hosting_status": "pending_generic_surface",
                 "maintenance_policy": maintenance_policy_defaults(),
                 "runtime_process_policy": runtime_process_policy(),
+                "acceptance_verification": phase_1_3a_acceptance_verification(),
             }
         if action == "sites_list":
             return 200, {"items": list_sites(data_root)}

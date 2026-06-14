@@ -3,8 +3,11 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
+import signal
+import subprocess
 from types import SimpleNamespace
 import unittest
+from unittest.mock import patch
 
 from core.runtime.runtime_threads import (
     create_runtime_thread,
@@ -15,7 +18,13 @@ from core.runtime.runtime_threads import (
 from core.runtime.service import create_runtime_session, queue_runtime_turn, record_runtime_event
 from core.runtime.store import RuntimeCollections, RuntimeDocumentStore
 from core.runtime.thread_catalog_events import mark_thread_user_message_queued
-from core.runtime.thread_title_jobs import fallback_thread_title, run_runtime_thread_title_generation, thread_title_input_hash
+from core.runtime.thread_title_jobs import (
+    ThreadTitleGenerationError,
+    _run_codex_title_command,
+    fallback_thread_title,
+    run_runtime_thread_title_generation,
+    thread_title_input_hash,
+)
 from core.runtime.thread_titles import DEFAULT_THREAD_TITLE, derive_thread_title, runtime_thread_title_for_session
 from tests.support.collections import FakeCollection
 
@@ -383,6 +392,47 @@ class RuntimeThreadTitleTest(unittest.TestCase):
         self.assertEqual(thread.title, "Titolo scelto manualmente")
         self.assertFalse(thread.title_pending)
         self.assertEqual(thread.title_source, "manual")
+
+    def test_ai_title_command_timeout_terminates_process_group(self) -> None:
+        class TimeoutProcess:
+            pid = 1234
+            args = ["codex"]
+            returncode = None
+
+            def __init__(self) -> None:
+                self.input_text = ""
+                self.wait_timeout = None
+
+            def communicate(self, *, input: str | None = None, timeout: int | None = None) -> tuple[str, str]:
+                self.input_text = input or ""
+                raise subprocess.TimeoutExpired(self.args, timeout)
+
+            def poll(self) -> int | None:
+                return self.returncode
+
+            def wait(self, *, timeout: float | None = None) -> int:
+                self.wait_timeout = timeout
+                self.returncode = -signal.SIGTERM
+                return self.returncode
+
+            def terminate(self) -> None:
+                self.returncode = -signal.SIGTERM
+
+            def kill(self) -> None:
+                self.returncode = -signal.SIGKILL
+
+        process = TimeoutProcess()
+
+        with patch("core.runtime.thread_title_jobs.subprocess.Popen", return_value=process) as popen, patch(
+            "core.runtime.thread_title_jobs.os.killpg"
+        ) as killpg:
+            with self.assertRaises(ThreadTitleGenerationError):
+                _run_codex_title_command(["codex", "exec"], prompt="title prompt", timeout_seconds=3)
+
+        self.assertEqual(process.input_text, "title prompt")
+        self.assertEqual(process.wait_timeout, 1.0)
+        self.assertTrue(popen.call_args.kwargs["start_new_session"])
+        killpg.assert_called_once_with(1234, signal.SIGTERM)
 
     def test_later_user_message_preserves_existing_non_default_thread_title(self) -> None:
         store = self.make_store()

@@ -7,6 +7,7 @@ import hashlib
 import json
 import os
 import re
+import signal
 import subprocess
 import tempfile
 from pathlib import Path
@@ -26,6 +27,7 @@ if TYPE_CHECKING:
 MIN_AI_THREAD_TITLE_WORDS = 4
 MAX_AI_THREAD_TITLE_WORDS = 8
 _DEFAULT_TITLE_TIMEOUT_SECONDS = 20
+_TITLE_PROCESS_SHUTDOWN_SECONDS = 1.0
 _TITLE_TOKEN = re.compile(r"[^\W_]+(?:[.+][^\W_]+)*", re.UNICODE)
 
 ThreadTitleGenerator = Callable[..., str]
@@ -162,17 +164,7 @@ def generate_ai_thread_title(
         output_path = temp_root / "title.json"
         schema_path.write_text(json.dumps(_title_output_schema(), separators=(",", ":")), encoding="utf-8")
         command.extend(["--output-schema", str(schema_path), "-o", str(output_path), "-"])
-        try:
-            result = subprocess.run(
-                command,
-                input=prompt,
-                capture_output=True,
-                text=True,
-                timeout=timeout_seconds,
-                check=False,
-            )
-        except (OSError, subprocess.SubprocessError) as error:
-            raise ThreadTitleGenerationError(str(error)) from error
+        result = _run_codex_title_command(command, prompt=prompt, timeout_seconds=timeout_seconds)
         if result.returncode != 0:
             detail = (result.stderr or result.stdout or "Codex title generation failed.").strip()
             raise ThreadTitleGenerationError(detail[:240])
@@ -183,6 +175,63 @@ def generate_ai_thread_title(
     if not title:
         raise ThreadTitleGenerationError("Codex title generation returned an empty title.")
     return title
+
+
+def _run_codex_title_command(
+    command: list[str],
+    *,
+    prompt: str,
+    timeout_seconds: int,
+) -> subprocess.CompletedProcess[str]:
+    try:
+        process = subprocess.Popen(
+            command,
+            stdin=subprocess.PIPE,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            start_new_session=True,
+        )
+    except OSError as error:
+        raise ThreadTitleGenerationError(str(error)) from error
+    try:
+        stdout, stderr = process.communicate(input=prompt, timeout=timeout_seconds)
+    except subprocess.TimeoutExpired as error:
+        _terminate_title_process_group(process)
+        raise ThreadTitleGenerationError(f"Codex title generation timed out after {timeout_seconds} seconds.") from error
+    except subprocess.SubprocessError as error:
+        _terminate_title_process_group(process)
+        raise ThreadTitleGenerationError(str(error)) from error
+    return subprocess.CompletedProcess(command, process.returncode or 0, stdout or "", stderr or "")
+
+
+def _terminate_title_process_group(process: subprocess.Popen[str]) -> None:
+    if process.poll() is not None:
+        return
+    _signal_title_process_group(process, signal.SIGTERM)
+    try:
+        process.wait(timeout=_TITLE_PROCESS_SHUTDOWN_SECONDS)
+        return
+    except subprocess.TimeoutExpired:
+        pass
+    _signal_title_process_group(process, signal.SIGKILL)
+    try:
+        process.wait(timeout=_TITLE_PROCESS_SHUTDOWN_SECONDS)
+    except subprocess.TimeoutExpired:
+        return
+
+
+def _signal_title_process_group(process: subprocess.Popen[str], signum: int) -> None:
+    try:
+        os.killpg(process.pid, signum)
+    except Exception:
+        try:
+            if signum == signal.SIGTERM:
+                process.terminate()
+            else:
+                process.kill()
+        except Exception:
+            return
 
 
 def normalize_ai_thread_title(value: object) -> str:

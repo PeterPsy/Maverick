@@ -91,5 +91,5 @@ if status_code < 400:
     result.setdefault("app_id", payload.app_id)
     result.setdefault("workspace_id", payload.workspace_id)
     result.setdefault("tool_name", tool_name)
-    result["app_events"] = app_events_for_action(str(arguments.get("action") or "sites_list"))
+    result["app_events"] = app_events_for_action(str(arguments.get("action") or "sites_list"), arguments)
 emit_json(result)

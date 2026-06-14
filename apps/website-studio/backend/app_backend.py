@@ -86,7 +86,7 @@ if isinstance(file_response, dict):
 else:
     response = backend_response(status_code, result)
 if status_code < 400:
-    response["app_events"] = app_events_for_action(action)
+    response["app_events"] = app_events_for_action(action, body)
 if method in {"GET", "HEAD"}:
     sys.stdout.write(json.dumps(response, ensure_ascii=True) + "\n")
 else:

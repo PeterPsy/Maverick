@@ -112,6 +112,15 @@ class WebsiteStudioEntrypointTest(unittest.TestCase):
     def tearDown(self) -> None:
         _shutdown_php_preview_servers()
 
+    def test_manifest_clarifies_phase3_hosting_boundary(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            status, manifest = handle_action(Path(tmp), {"action": "manifest"})
+
+            self.assertEqual(status, 200)
+            self.assertEqual(manifest["phase"], "phase_3")
+            self.assertEqual(manifest["phase_status"], "phase_3_app_orchestration_ready_platform_hosting_missing")
+            self.assertEqual(manifest["platform_hosting_status"], "pending_generic_surface")
+
     def test_site_edit_diff_and_publish_block(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             data_root = Path(tmp)
@@ -843,7 +852,7 @@ class WebsiteStudioEntrypointTest(unittest.TestCase):
             self.assertEqual(status, 201)
             site_id = created["site"]["id"]
             long_log = "line\n" + ("x" * 3000)
-            with sqlite3.connect(data_root / "app.sqlite") as db:
+            with closing(sqlite3.connect(data_root / "app.sqlite")) as db, db:
                 for index in range(3):
                     db.execute(
                         """
@@ -893,7 +902,7 @@ class WebsiteStudioEntrypointTest(unittest.TestCase):
             status, created = handle_action(data_root, {"action": "site_create", "display_name": "Acme"})
             self.assertEqual(status, 201)
             site_id = created["site"]["id"]
-            with sqlite3.connect(data_root / "app.sqlite") as db:
+            with closing(sqlite3.connect(data_root / "app.sqlite")) as db, db:
                 for index in range(5):
                     build_id = f"build_{index}"
                     created_at = f"2026-06-08T10:00:0{index}+00:00"
@@ -970,7 +979,7 @@ class WebsiteStudioEntrypointTest(unittest.TestCase):
             self.assertEqual(pruned["totals"]["builds"], 3)
             self.assertFalse((data_root / "sites" / site_id / "builds" / "build_0").exists())
             self.assertTrue((data_root / "sites" / site_id / "builds" / "build_4").exists())
-            with sqlite3.connect(data_root / "app.sqlite") as db:
+            with closing(sqlite3.connect(data_root / "app.sqlite")) as db:
                 build_count = db.execute("SELECT COUNT(*) FROM builds WHERE site_id = ?", (site_id,)).fetchone()[0]
                 preview_count = db.execute("SELECT COUNT(*) FROM previews WHERE site_id = ?", (site_id,)).fetchone()[0]
                 session_count = db.execute("SELECT COUNT(*) FROM runtime_sessions WHERE site_id = ?", (site_id,)).fetchone()[0]
@@ -2324,6 +2333,46 @@ class WebsiteStudioEntrypointTest(unittest.TestCase):
             self.assertEqual(context["runtime"]["latest_runtime_session"]["health"]["preview_url"], context["preview_url"])
             self.assertEqual(context["preview"]["runtime_status"], "ready")
 
+    def test_runtime_status_normalizes_stale_source_profile_status(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            data_root = Path(tmp)
+            status, created = handle_action(data_root, {"action": "site_create", "display_name": "Runtime Status"})
+            self.assertEqual(status, 201)
+            site_id = created["site"]["id"]
+            stale_profile = {"preview_runtime_kind": "php", "runtime_preview_status": "blocked", "missing_requirements": []}
+            with closing(sqlite3.connect(data_root / "app.sqlite")) as db, db:
+                db.execute(
+                    "UPDATE sites SET source_profile_json = ?, source_version = 'src_test' WHERE id = ?",
+                    (json.dumps(stale_profile), site_id),
+                )
+                db.execute(
+                    """
+                    INSERT INTO builds(
+                      id, site_id, status, runtime_kind, preview_url, artifact_ref_json, source_profile_json,
+                      route_count, asset_count, warnings_json, missing_requirements_json, logs_summary, created_at, updated_at
+                    )
+                    VALUES ('build_ready', ?, 'passed', 'php', '', '{}', ?, 1, 0, '[]', '[]', '', '2026-01-01T00:00:00+00:00', '2026-01-01T00:00:00+00:00')
+                    """,
+                    (site_id, json.dumps(stale_profile)),
+                )
+
+            with patch(
+                "store.runtime_capability_status",
+                return_value={"runtime_kind": "php", "runtime_status": "ready", "missing_requirements": []},
+            ):
+                status, runtime = handle_action(data_root, {"action": "runtime_status", "site_id": site_id})
+                self.assertEqual(status, 200)
+                status, site_status_payload = handle_action(data_root, {"action": "site_status", "site_id": site_id})
+
+            self.assertEqual(status, 200)
+            self.assertEqual(runtime["runtime_status"], "ready")
+            self.assertEqual(runtime["source_profile"]["runtime_preview_status"], "ready")
+            self.assertEqual(runtime["latest_build"]["source_profile"]["runtime_preview_status"], "ready")
+            self.assertTrue(runtime["source_profile"]["runtime_preview_supported"])
+            self.assertEqual(site_status_payload["source_profile"]["runtime_preview_status"], "ready")
+            self.assertEqual(site_status_payload["site"]["source_profile"]["runtime_preview_status"], "ready")
+            self.assertEqual(site_status_payload["runtime_status"], "ready")
+
     def test_active_context_includes_route_assets_and_change_state(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             data_root = Path(tmp)
@@ -2767,6 +2816,14 @@ class WebsiteStudioEntrypointTest(unittest.TestCase):
 
     def test_build_preview_does_not_emit_data_changed_event(self) -> None:
         self.assertEqual(app_events_for_action("build_preview"), [])
+
+    def test_maintenance_prune_dry_run_does_not_emit_data_changed_event(self) -> None:
+        self.assertEqual(app_events_for_action("maintenance_prune", {"dry_run": True}), [])
+        self.assertEqual(app_events_for_action("maintenance_prune", {"dry_run": "true"}), [])
+        self.assertEqual(
+            app_events_for_action("maintenance_prune", {"dry_run": False}),
+            [{"type": "maverick.app.data-changed", "owner_app_id": "website-studio", "resource": "records"}],
+        )
 
     def test_frontend_new_site_screen_is_conversation_guide(self) -> None:
         app_source = (APP_ROOT / "frontend" / "src" / "App.tsx").read_text(encoding="utf-8")

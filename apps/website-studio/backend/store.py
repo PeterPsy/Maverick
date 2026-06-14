@@ -25,6 +25,7 @@ from urllib.request import Request, urlopen
 from uuid import uuid4
 
 from database import REFERENCE_ENTITIES, connect, ensure_schema, now_timestamp
+from maintenance import prune_site_operational_history
 from safety import (
     asset_references_from_html,
     classify_source_tree,
@@ -153,19 +154,22 @@ def site_status(data_root: Path, site_id: object) -> dict[str, object]:
     diff_payload = diff_site(data_root, site["id"])
     profile = _cached_source_profile(data_root, site)
     runtime = runtime_status(data_root, site["id"])
+    runtime_profile = runtime.get("source_profile") if isinstance(runtime.get("source_profile"), dict) else profile
+    site_payload = dict(site)
+    site_payload["source_profile"] = runtime_profile
     return {
-        "site": site,
+        "site": site_payload,
         "page_count": counts["page_count"],
         "route_count": counts["route_count"],
         "asset_count": counts["asset_count"],
         "changed_files_count": len(diff_payload["files"]),
         "active_revision_id": site.get("active_revision_id"),
         "published_revision_id": site.get("published_revision_id"),
-        "source_profile": profile,
+        "source_profile": runtime_profile,
         "runtime": runtime,
-        "runtime_kind": runtime.get("runtime_kind") or profile.get("preview_runtime_kind") or "unavailable",
-        "runtime_status": runtime.get("runtime_status") or profile.get("runtime_preview_status") or "blocked",
-        "missing_requirements": runtime.get("missing_requirements") or [],
+        "runtime_kind": runtime.get("runtime_kind") or runtime_profile.get("preview_runtime_kind") or "unavailable",
+        "runtime_status": runtime.get("runtime_status") or runtime_profile.get("runtime_preview_status") or "blocked",
+        "missing_requirements": runtime.get("missing_requirements") or runtime_profile.get("missing_requirements") or [],
         "latest_build_id": (runtime.get("latest_build") or {}).get("id") if isinstance(runtime.get("latest_build"), dict) else "",
         "latest_preview_id": (runtime.get("latest_preview") or {}).get("id") if isinstance(runtime.get("latest_preview"), dict) else "",
         "is_active": bool(site.get("is_active")),
@@ -1715,7 +1719,7 @@ def maintenance_prune(
     summaries: list[dict[str, object]] = []
     totals = {"builds": 0, "previews": 0, "runtime_sessions": 0, "artifact_dirs": 0}
     for site in sites:
-        summary = _prune_site_operational_history(
+        summary = prune_site_operational_history(
             data_root,
             str(site["id"]),
             keep_builds=clean_keep_builds,
@@ -1765,12 +1769,28 @@ def runtime_status(data_root: Path, site_id: object) -> dict[str, object]:
         runtime_status_value = str(latest_build.get("status"))
     if latest_build and latest_build.get("status") == "passed" and not capability.get("missing_requirements"):
         runtime_status_value = "ready"
+    missing_requirements = capability.get("missing_requirements") or []
+    runtime_kind = str(capability.get("runtime_kind") or profile.get("preview_runtime_kind") or "unavailable")
+    profile = _source_profile_with_runtime_status(
+        profile,
+        runtime_kind=runtime_kind,
+        runtime_status=runtime_status_value,
+        missing_requirements=missing_requirements,
+    )
+    if latest_build and isinstance(latest_build.get("source_profile"), dict):
+        latest_build_status = "ready" if latest_build.get("status") == "passed" and not latest_build.get("missing_requirements") else str(latest_build.get("status") or runtime_status_value)
+        latest_build["source_profile"] = _source_profile_with_runtime_status(
+            latest_build["source_profile"],
+            runtime_kind=str(latest_build.get("runtime_kind") or runtime_kind),
+            runtime_status=latest_build_status,
+            missing_requirements=latest_build.get("missing_requirements") or [],
+        )
     return {
         "site_id": site["id"],
         "source_profile": profile,
-        "runtime_kind": capability.get("runtime_kind") or profile.get("preview_runtime_kind") or "unavailable",
+        "runtime_kind": runtime_kind,
         "runtime_status": runtime_status_value,
-        "missing_requirements": capability.get("missing_requirements") or [],
+        "missing_requirements": missing_requirements,
         "latest_build": latest_build,
         "latest_preview": _preview_row(preview_row) if preview_row else None,
         "latest_runtime_session": _runtime_session_row(session_row) if session_row else None,
@@ -3859,111 +3879,6 @@ def _preview_runtime_url(preview_id: str, route: str) -> str:
     return f"/apps/website-studio/preview-runtime/?{urlencode({'preview_id': preview_id, 'route': route or '/', 'runtime_version': PREVIEW_RUNTIME_VERSION})}"
 
 
-def _prune_site_operational_history(
-    data_root: Path,
-    site_id: str,
-    *,
-    keep_builds: int,
-    keep_previews_per_route: int,
-    keep_runtime_sessions: int,
-    dry_run: bool,
-) -> dict[str, object]:
-    ensure_schema(data_root)
-    with connect(data_root) as db:
-        build_rows = db.execute("SELECT id FROM builds WHERE site_id = ? ORDER BY created_at DESC", (site_id,)).fetchall()
-        preview_rows = db.execute(
-            "SELECT id, route, runtime_kind, build_id FROM previews WHERE site_id = ? ORDER BY created_at DESC",
-            (site_id,),
-        ).fetchall()
-        session_rows = db.execute(
-            "SELECT id, preview_id FROM runtime_sessions WHERE site_id = ? ORDER BY created_at DESC",
-            (site_id,),
-        ).fetchall()
-        publish_build_rows = db.execute(
-            "SELECT DISTINCT build_id FROM publish_requests WHERE site_id = ? AND build_id != ''",
-            (site_id,),
-        ).fetchall()
-    keep_build_ids = {str(row["id"]) for row in build_rows[:keep_builds]}
-    keep_build_ids.update(str(row["build_id"]) for row in publish_build_rows if str(row["build_id"] or "").strip())
-
-    keep_preview_ids: set[str] = set()
-    preview_counts: dict[tuple[str, str], int] = {}
-    preview_build_ids: set[str] = set()
-    for row in preview_rows:
-        key = (str(row["route"] or "/"), str(row["runtime_kind"] or ""))
-        count = preview_counts.get(key, 0)
-        preview_id = str(row["id"])
-        build_id = str(row["build_id"] or "").strip()
-        if count < keep_previews_per_route:
-            keep_preview_ids.add(preview_id)
-            preview_counts[key] = count + 1
-            if build_id:
-                preview_build_ids.add(build_id)
-    keep_build_ids.update(preview_build_ids)
-
-    keep_session_ids = {str(row["id"]) for row in session_rows[:keep_runtime_sessions]}
-    keep_session_ids.update(str(row["id"]) for row in session_rows if str(row["preview_id"] or "") in keep_preview_ids)
-
-    stale_preview_ids = [str(row["id"]) for row in preview_rows if str(row["id"]) not in keep_preview_ids]
-    stale_session_ids = [str(row["id"]) for row in session_rows if str(row["id"]) not in keep_session_ids]
-    stale_build_ids = [str(row["id"]) for row in build_rows if str(row["id"]) not in keep_build_ids]
-    artifact_dirs = [_build_artifact_dir(data_root, site_id, build_id) for build_id in stale_build_ids]
-    removable_artifact_dirs = [path for path in artifact_dirs if path.exists()]
-
-    if not dry_run:
-        with connect(data_root) as db:
-            _delete_by_ids(db, "runtime_sessions", stale_session_ids)
-            _delete_by_ids(db, "previews", stale_preview_ids)
-            _delete_by_ids(db, "builds", stale_build_ids)
-        for artifact_dir in removable_artifact_dirs:
-            if _is_site_build_artifact_dir(data_root, site_id, artifact_dir):
-                shutil.rmtree(artifact_dir)
-        if stale_build_ids or stale_preview_ids or stale_session_ids:
-            _audit(
-                data_root,
-                site_id,
-                "maintenance.pruned",
-                "Pruned Website Studio operational history",
-                {
-                    "builds": len(stale_build_ids),
-                    "previews": len(stale_preview_ids),
-                    "runtime_sessions": len(stale_session_ids),
-                    "artifact_dirs": len(removable_artifact_dirs),
-                },
-            )
-
-    return {
-        "site_id": site_id,
-        "kept_builds": len(build_rows) - len(stale_build_ids),
-        "kept_previews": len(preview_rows) - len(stale_preview_ids),
-        "kept_runtime_sessions": len(session_rows) - len(stale_session_ids),
-        "pruned_builds": len(stale_build_ids),
-        "pruned_previews": len(stale_preview_ids),
-        "pruned_runtime_sessions": len(stale_session_ids),
-        "pruned_artifact_dirs": len(removable_artifact_dirs),
-        "protected_build_ids": sorted(keep_build_ids),
-    }
-
-
-def _build_artifact_dir(data_root: Path, site_id: str, build_id: str) -> Path:
-    if not build_id or "/" in build_id or "\\" in build_id or build_id in {".", ".."}:
-        raise ValueError(f"Invalid build_id `{build_id}`")
-    return data_root / "sites" / site_id / "builds" / build_id
-
-
-def _is_site_build_artifact_dir(data_root: Path, site_id: str, path: Path) -> bool:
-    try:
-        path.resolve().relative_to((data_root / "sites" / site_id / "builds").resolve())
-    except ValueError:
-        return False
-    return path.name not in {"", ".", ".."}
-
-
-def _delete_by_ids(db, table: str, ids: list[str]) -> None:
-    for item_id in ids:
-        db.execute(f"DELETE FROM {table} WHERE id = ?", (item_id,))
-
-
 def _paged_rows(db, query: str, params: tuple[object, ...], *, limit: int, offset: int) -> dict[str, object]:
     rows = db.execute(f"{query} LIMIT ? OFFSET ?", (*params, limit + 1, offset)).fetchall()
     page_rows = rows[:limit]
@@ -4573,6 +4488,27 @@ def _runtime_session_row(row) -> dict[str, object]:
         payload["preview_url"] = _preview_runtime_url(preview_id, str(payload.get("route") or "/"))
         if isinstance(payload.get("health"), dict):
             payload["health"]["preview_url"] = payload["preview_url"]
+    return payload
+
+
+def _source_profile_with_runtime_status(
+    profile: dict[str, object],
+    *,
+    runtime_kind: str,
+    runtime_status: str,
+    missing_requirements: object,
+) -> dict[str, object]:
+    payload = dict(profile)
+    clean_missing = _dedupe_strings(
+        [str(item) for item in missing_requirements if str(item).strip()]
+        if isinstance(missing_requirements, list)
+        else []
+    )[:50]
+    payload["preview_runtime_kind"] = runtime_kind or str(payload.get("preview_runtime_kind") or "unavailable")
+    payload["runtime_preview_status"] = runtime_status or str(payload.get("runtime_preview_status") or "blocked")
+    payload["missing_requirements"] = clean_missing
+    if payload["runtime_preview_status"] in {"ready", "static_fallback"}:
+        payload["runtime_preview_supported"] = True
     return payload
 
 

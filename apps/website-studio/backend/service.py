@@ -100,7 +100,14 @@ def handle_action(data_root: Path, payload: dict[str, object]) -> tuple[int, dic
     action = str(payload.get("action") or "sites_list")
     try:
         if action in {"status", "manifest"}:
-            return 200, {"app_id": "website-studio", "status": "ready", **health_payload(data_root), "phase": "phase_3"}
+            return 200, {
+                "app_id": "website-studio",
+                "status": "ready",
+                **health_payload(data_root),
+                "phase": "phase_3",
+                "phase_status": "phase_3_app_orchestration_ready_platform_hosting_missing",
+                "platform_hosting_status": "pending_generic_surface",
+            }
         if action == "sites_list":
             return 200, {"items": list_sites(data_root)}
         if action == "bootstrap":
@@ -478,8 +485,10 @@ def _selector_logical_names(payload: dict[str, object]) -> set[str]:
     return {str(name).strip().lower() for name in selector.get("logical_names", []) if str(name).strip()}
 
 
-def app_events_for_action(action: str) -> list[dict[str, str]]:
+def app_events_for_action(action: str, payload: dict[str, object] | None = None) -> list[dict[str, str]]:
     if action not in MUTATING_ACTIONS:
+        return []
+    if action == "maintenance_prune" and _event_truthy((payload or {}).get("dry_run")):
         return []
     resources = []
     if action not in {"clear_custom_view", "set_custom_view", "set_view_filter", "site_set_active"}:
@@ -487,3 +496,9 @@ def app_events_for_action(action: str) -> list[dict[str, str]]:
     if action in {"clear_custom_view", "set_custom_view", "set_view_filter", "site_set_active", "site_create", "site_archive", "import_zip", "import_git", "git_connection_prepare"}:
         resources.append("view-state")
     return [{"type": "maverick.app.data-changed", "owner_app_id": "website-studio", "resource": resource} for resource in resources]
+
+
+def _event_truthy(value: object) -> bool:
+    if isinstance(value, bool):
+        return value
+    return str(value or "").strip().lower() in {"1", "true", "yes", "on"}

@@ -10,9 +10,7 @@ from typing import TYPE_CHECKING, Any, Awaitable, Callable
 
 from core.api.http import json_default
 from core.api.session_api import resolve_request_session
-from core.runtime.runtime_session import RuntimeSessionRecord
 from core.runtime.runtime_threads import ensure_runtime_threads_for_sessions, thread_payload, thread_recency_key
-from core.runtime.thread_titles import runtime_thread_title_for_session
 from core.shared.entrypoints import EntrypointShutdownController
 
 if TYPE_CHECKING:
@@ -108,7 +106,6 @@ def _ordered_runtime_threads(state: PlatformState, *, workspace_id: str):
         state.runtime_store,
         workspace_id=workspace_id,
         sessions=sessions,
-        title_for_session=lambda session: _thread_title_for_session(state, session),
     )
     return sorted(threads, key=thread_recency_key, reverse=True)
 
@@ -123,11 +120,6 @@ def _event_thread_id(event: dict[str, Any]) -> str:
         if isinstance(thread_id, str):
             return thread_id
     return ""
-
-
-def _thread_title_for_session(state: PlatformState, session: RuntimeSessionRecord) -> str:
-    return runtime_thread_title_for_session(state.runtime_store, session)
-
 
 async def stream_runtime_thread_events(
     *,

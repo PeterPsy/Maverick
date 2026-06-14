@@ -65,8 +65,6 @@ def schedule_runtime_thread_title_generation(
     """Start a best-effort background title-generation job for one pending thread."""
     if thread is None or not thread.title_pending:
         return
-    if getattr(state, "runtime_thread_event_bus", None) is None:
-        return
     input_hash = thread.title_generation_input_hash or thread_title_input_hash(
         input_text,
         attachments=attachments,

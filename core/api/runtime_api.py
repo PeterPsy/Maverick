@@ -29,7 +29,9 @@ from core.runtime.runtime_threads import (
     thread_payload,
     update_runtime_thread,
 )
-from core.runtime.thread_titles import DEFAULT_THREAD_TITLE, runtime_thread_title_for_session
+from core.runtime.thread_catalog_events import mark_thread_user_message_queued, set_thread_availability
+from core.runtime.thread_title_jobs import schedule_runtime_thread_title_generation, thread_title_input_hash
+from core.runtime.thread_titles import DEFAULT_THREAD_TITLE
 from core.runtime.service import (
     create_runtime_session,
     reconcile_runtime_session_policy,
@@ -46,7 +48,6 @@ from core.runtime.turn_submission import (
     submit_runtime_turn,
     submit_runtime_turn_async,
 )
-from core.runtime.thread_catalog_events import set_thread_availability
 from core.skills.runtime_catalog import runtime_skill_catalog_app_id_for_request
 
 
@@ -80,7 +81,6 @@ def _threads_payload(state: PlatformState, *, workspace_id: str, viewer_user_id:
         state.runtime_store,
         workspace_id=workspace_id,
         sessions=sessions,
-        title_for_session=lambda session: _thread_title_for_session(state, session),
     )
     return {"threads": [thread_payload(thread, viewer_user_id=viewer_user_id) for thread in threads]}
 
@@ -106,10 +106,6 @@ def _publish_thread_change(
     if deleted_runtime_session_ids is not None:
         payload["deleted_runtime_session_ids"] = deleted_runtime_session_ids
     state.runtime_thread_event_bus.publish(workspace_id=workspace_id, event=payload)
-
-
-def _thread_title_for_session(state: PlatformState, session: RuntimeSessionRecord) -> str:
-    return runtime_thread_title_for_session(state.runtime_store, session)
 
 
 def _list_session_payloads(state: PlatformState, *, workspace_id: str, start_path) -> list[dict[str, object]]:
@@ -181,7 +177,7 @@ def _create_session(state: PlatformState, context: RequestSession, body: dict, *
         start_path=start_path,
     )
     requested_title = str(body.get("title") or "").strip()
-    thread_title = requested_title or _thread_title_for_session(state, session)
+    thread_title = requested_title or DEFAULT_THREAD_TITLE
     thread = create_runtime_thread(
         state.runtime_store,
         workspace_id=context.workspace_id,
@@ -244,12 +240,20 @@ def _handle_thread_collection(state: PlatformState, context: RequestSession, met
         existing = state.runtime_store.get_thread(session.session_id)
     except RuntimeThreadNotFoundError:
         existing = None
+    requested_title = str(body.get("title") or "").strip()
+    title_source = ""
+    if requested_title and existing is None:
+        title_source = "placeholder" if requested_title == DEFAULT_THREAD_TITLE else "manual"
+    elif existing is None:
+        requested_title = DEFAULT_THREAD_TITLE
+        title_source = "placeholder"
     thread = create_runtime_thread(
         state.runtime_store,
         workspace_id=context.workspace_id,
         thread_id=session.session_id,
         runtime_session_id=session.session_id,
-        title=str(body.get("title") or "").strip() or _thread_title_for_session(state, session),
+        title=requested_title,
+        title_source=title_source,
         agent_label=str(body.get("agent_label") or "").strip() or session.agent_id,
         agent_type_id=str(body.get("agent_type_id") or "").strip(),
         agent_role_id=str(body.get("agent_role_id") or "").strip(),
@@ -311,7 +315,8 @@ def _handle_thread_item(
             workspace_id=context.workspace_id,
             thread_id=session.session_id,
             runtime_session_id=session.session_id,
-            title=_thread_title_for_session(state, session),
+            title=DEFAULT_THREAD_TITLE,
+            title_source="placeholder",
             agent_label=session.agent_id,
             source_app_id=session.source_app_id or session.agent_id,
             system_prompt=session.system_prompt or "",
@@ -404,7 +409,8 @@ def _handle_thread_read(
             workspace_id=context.workspace_id,
             thread_id=session.session_id,
             runtime_session_id=session.session_id,
-            title=_thread_title_for_session(state, session),
+            title=DEFAULT_THREAD_TITLE,
+            title_source="placeholder",
             agent_label=session.agent_id,
             source_app_id=session.source_app_id or session.agent_id,
             system_prompt=session.system_prompt or "",
@@ -443,7 +449,6 @@ def _handle_thread_clear(
         state.runtime_store,
         workspace_id=context.workspace_id,
         sessions=state.runtime_store.list_sessions(context.workspace_id),
-        title_for_session=lambda session: _thread_title_for_session(state, session),
     )
     for thread in threads:
         forbidden_reason = _thread_cleanup_forbidden_reason(
@@ -571,8 +576,30 @@ def _submit_runtime_turn_response(
         start_path=start_path,
     )
     async_requested = bool(body.get("async"))
+    title_generation_input_hash = thread_title_input_hash(
+        input_text,
+        attachments=attachment_items,
+        app_references=app_reference_items,
+    )
 
     def notify_source_app_queued(queued_turn: RuntimeTurnRecord, _events: list[RuntimeEventRecord]) -> None:
+        thread = mark_thread_user_message_queued(
+            state,
+            workspace_id=session.workspace_id,
+            runtime_session_id=session.session_id,
+            input_text=input_text,
+            attachments=attachment_items,
+            app_references=app_reference_items,
+            title_generation_input_hash=title_generation_input_hash,
+            now=queued_turn.created_at,
+        )
+        schedule_runtime_thread_title_generation(
+            state,
+            thread=thread,
+            input_text=input_text,
+            attachments=attachment_items,
+            app_references=app_reference_items,
+        )
         dispatch_source_app_runtime_event(
             state,
             session=session,

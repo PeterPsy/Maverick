@@ -3,11 +3,8 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
-import signal
-import subprocess
 from types import SimpleNamespace
 import unittest
-from unittest.mock import patch
 
 from core.runtime.runtime_threads import (
     create_runtime_thread,
@@ -15,14 +12,10 @@ from core.runtime.runtime_threads import (
     reconcile_runtime_thread_availability,
     update_runtime_thread,
 )
-from core.runtime.service import create_runtime_session, queue_runtime_turn, record_runtime_event
+from core.runtime.service import create_runtime_session, queue_runtime_turn
 from core.runtime.store import RuntimeCollections, RuntimeDocumentStore
 from core.runtime.thread_catalog_events import mark_thread_user_message_queued
 from core.runtime.thread_title_jobs import (
-    ThreadTitleGenerationError,
-    _run_codex_title_command,
-    fallback_thread_title,
-    run_runtime_thread_title_generation,
     thread_title_input_hash,
 )
 from core.runtime.thread_titles import DEFAULT_THREAD_TITLE, derive_thread_title, runtime_thread_title_for_session
@@ -136,7 +129,7 @@ class RuntimeThreadTitleTest(unittest.TestCase):
 
         self.assertEqual(runtime_thread_title_for_session(store, session), "Test Frontend Chat Falliscono")
 
-    def test_first_user_message_updates_only_default_thread_title(self) -> None:
+    def test_first_user_message_without_ai_hash_keeps_placeholder_title(self) -> None:
         store = self.make_store()
         now = datetime(2026, 4, 19, 10, 0, tzinfo=UTC)
         create_runtime_session(store, session_id="session-a", workspace_id="acme", agent_id="chat", now=now)
@@ -166,7 +159,9 @@ class RuntimeThreadTitleTest(unittest.TestCase):
 
         self.assertIsNotNone(updated)
         assert updated is not None
-        self.assertEqual(updated.title, "Mail Follow Up Cliente Rossi")
+        self.assertEqual(updated.title, DEFAULT_THREAD_TITLE)
+        self.assertEqual(updated.title_source, "placeholder")
+        self.assertFalse(updated.title_pending)
 
         update_runtime_thread(
             store,
@@ -251,6 +246,100 @@ class RuntimeThreadTitleTest(unittest.TestCase):
         self.assertEqual(updated.title_generation_input_hash, input_hash)
         self.assertTrue(event_bus.events[-1]["thread"]["title_pending"])
 
+    def test_thread_metadata_upsert_preserves_pending_ai_title_generation(self) -> None:
+        store = self.make_store()
+        now = datetime(2026, 4, 19, 10, 0, tzinfo=UTC)
+        message = "analizza il budget vendite mensili del cliente Rossi"
+        input_hash = thread_title_input_hash(message)
+        create_runtime_session(store, session_id="session-a", workspace_id="acme", agent_id="chat", now=now)
+        create_runtime_thread(
+            store,
+            workspace_id="acme",
+            thread_id="thread-a",
+            runtime_session_id="session-a",
+            title=DEFAULT_THREAD_TITLE,
+            now=now,
+        )
+        queue_runtime_turn(store, turn_id="turn-a", session_id="session-a", input_text=message, now=now + timedelta(seconds=1))
+        updated = mark_runtime_thread_user_message(
+            store,
+            workspace_id="acme",
+            runtime_session_id="session-a",
+            input_text=message,
+            title_generation_input_hash=input_hash,
+            now=now + timedelta(seconds=1),
+        )
+
+        self.assertIsNotNone(updated)
+        assert updated is not None
+        self.assertTrue(updated.title_pending)
+        upserted = create_runtime_thread(
+            store,
+            workspace_id="acme",
+            thread_id="thread-a",
+            runtime_session_id="session-a",
+            title=DEFAULT_THREAD_TITLE,
+            agent_label="chat",
+            project_id="project-1",
+            now=now + timedelta(seconds=2),
+        )
+
+        self.assertEqual(upserted.title, DEFAULT_THREAD_TITLE)
+        self.assertTrue(upserted.title_pending)
+        self.assertEqual(upserted.title_source, "pending")
+        self.assertEqual(upserted.title_generation_input_hash, input_hash)
+        self.assertEqual(upserted.project_id, "project-1")
+
+        placeholder_upserted = create_runtime_thread(
+            store,
+            workspace_id="acme",
+            thread_id="thread-a",
+            runtime_session_id="session-a",
+            title=DEFAULT_THREAD_TITLE,
+            title_source="placeholder",
+            project_id="project-2",
+            now=now + timedelta(seconds=3),
+        )
+
+        self.assertEqual(placeholder_upserted.title, DEFAULT_THREAD_TITLE)
+        self.assertTrue(placeholder_upserted.title_pending)
+        self.assertEqual(placeholder_upserted.title_source, "pending")
+        self.assertEqual(placeholder_upserted.title_generation_input_hash, input_hash)
+        self.assertEqual(placeholder_upserted.project_id, "project-2")
+
+    def test_thread_metadata_upsert_preserves_ai_title_metadata(self) -> None:
+        store = self.make_store()
+        now = datetime(2026, 4, 19, 10, 0, tzinfo=UTC)
+        input_hash = thread_title_input_hash("analizza il budget vendite mensili del cliente Rossi")
+        create_runtime_session(store, session_id="session-a", workspace_id="acme", agent_id="chat", now=now)
+        create_runtime_thread(
+            store,
+            workspace_id="acme",
+            thread_id="thread-a",
+            runtime_session_id="session-a",
+            title="Analisi Budget Vendite Mensili",
+            title_source="ai",
+            title_generation_input_hash=input_hash,
+            now=now,
+        )
+
+        upserted = create_runtime_thread(
+            store,
+            workspace_id="acme",
+            thread_id="thread-a",
+            runtime_session_id="session-a",
+            title="Analisi Budget Vendite Mensili",
+            agent_label="chat",
+            project_id="project-1",
+            now=now + timedelta(seconds=1),
+        )
+
+        self.assertEqual(upserted.title, "Analisi Budget Vendite Mensili")
+        self.assertFalse(upserted.title_pending)
+        self.assertEqual(upserted.title_source, "ai")
+        self.assertEqual(upserted.title_generation_input_hash, input_hash)
+        self.assertEqual(upserted.project_id, "project-1")
+
     def test_first_user_message_marks_placeholder_agent_title_pending_when_hash_is_provided(self) -> None:
         store = self.make_store()
         now = datetime(2026, 4, 19, 10, 0, tzinfo=UTC)
@@ -282,254 +371,82 @@ class RuntimeThreadTitleTest(unittest.TestCase):
         self.assertTrue(updated.title_pending)
         self.assertEqual(updated.title_source, "pending")
 
-    def test_ai_title_job_completes_pending_thread_title(self) -> None:
+    def test_reconcile_keeps_default_title_until_ai_generation_is_pending(self) -> None:
         store = self.make_store()
         now = datetime(2026, 4, 19, 10, 0, tzinfo=UTC)
-        message = "analizza il budget vendite mensili del cliente Rossi"
+        message = "questo è un test per testare che il naming della chat con ai funzioni davvero"
         input_hash = thread_title_input_hash(message)
-        create_runtime_session(store, session_id="session-a", workspace_id="acme", agent_id="chat", now=now)
-        create_runtime_thread(
-            store,
-            workspace_id="acme",
-            thread_id="thread-a",
-            runtime_session_id="session-a",
-            title=DEFAULT_THREAD_TITLE,
-            title_pending=True,
-            title_source="pending",
-            title_generation_input_hash=input_hash,
-            now=now,
-        )
-        state = SimpleNamespace(runtime_store=store, runtime_thread_event_bus=None)
-
-        updated = run_runtime_thread_title_generation(
-            state=state,
-            workspace_id="acme",
-            runtime_session_id="session-a",
-            title_generation_input_hash=input_hash,
-            input_text=message,
-            title_generator=lambda **_: "Analisi Budget Vendite Mensili",
-        )
-
-        self.assertIsNotNone(updated)
-        assert updated is not None
-        self.assertEqual(updated.title, "Analisi Budget Vendite Mensili")
-        self.assertFalse(updated.title_pending)
-        self.assertEqual(updated.title_source, "ai")
-        self.assertIsNone(updated.title_generation_failure)
-
-    def test_ai_title_job_falls_back_to_deterministic_title_when_model_title_is_invalid(self) -> None:
-        store = self.make_store()
-        now = datetime(2026, 4, 19, 10, 0, tzinfo=UTC)
-        message = "analizza il budget vendite mensili del cliente Rossi"
-        input_hash = thread_title_input_hash(message)
-        create_runtime_session(store, session_id="session-a", workspace_id="acme", agent_id="chat", now=now)
-        create_runtime_thread(
-            store,
-            workspace_id="acme",
-            thread_id="thread-a",
-            runtime_session_id="session-a",
-            title=DEFAULT_THREAD_TITLE,
-            title_pending=True,
-            title_source="pending",
-            title_generation_input_hash=input_hash,
-            now=now,
-        )
-        state = SimpleNamespace(runtime_store=store, runtime_thread_event_bus=None)
-
-        updated = run_runtime_thread_title_generation(
-            state=state,
-            workspace_id="acme",
-            runtime_session_id="session-a",
-            title_generation_input_hash=input_hash,
-            input_text=message,
-            title_generator=lambda **_: "Budget",
-        )
-
-        self.assertIsNotNone(updated)
-        assert updated is not None
-        self.assertFalse(updated.title_pending)
-        self.assertEqual(updated.title_source, "deterministic")
-        self.assertEqual(updated.title, fallback_thread_title(message))
-        self.assertTrue(updated.title_generation_failure)
-
-    def test_ai_title_job_does_not_overwrite_manual_rename(self) -> None:
-        store = self.make_store()
-        now = datetime(2026, 4, 19, 10, 0, tzinfo=UTC)
-        message = "analizza il budget vendite mensili del cliente Rossi"
-        input_hash = thread_title_input_hash(message)
-        create_runtime_session(store, session_id="session-a", workspace_id="acme", agent_id="chat", now=now)
-        create_runtime_thread(
-            store,
-            workspace_id="acme",
-            thread_id="thread-a",
-            runtime_session_id="session-a",
-            title=DEFAULT_THREAD_TITLE,
-            title_pending=True,
-            title_source="pending",
-            title_generation_input_hash=input_hash,
-            now=now,
-        )
-        update_runtime_thread(
-            store,
-            thread_id="thread-a",
-            workspace_id="acme",
-            updates={"title": "Titolo scelto manualmente"},
-            now=now + timedelta(seconds=1),
-        )
-        state = SimpleNamespace(runtime_store=store, runtime_thread_event_bus=None)
-
-        updated = run_runtime_thread_title_generation(
-            state=state,
-            workspace_id="acme",
-            runtime_session_id="session-a",
-            title_generation_input_hash=input_hash,
-            input_text=message,
-            title_generator=lambda **_: "Analisi Budget Vendite Mensili",
-        )
-
-        self.assertIsNone(updated)
-        thread = store.get_thread("thread-a")
-        self.assertEqual(thread.title, "Titolo scelto manualmente")
-        self.assertFalse(thread.title_pending)
-        self.assertEqual(thread.title_source, "manual")
-
-    def test_ai_title_command_timeout_terminates_process_group(self) -> None:
-        class TimeoutProcess:
-            pid = 1234
-            args = ["codex"]
-            returncode = None
-
-            def __init__(self) -> None:
-                self.input_text = ""
-                self.wait_timeout = None
-
-            def communicate(self, *, input: str | None = None, timeout: int | None = None) -> tuple[str, str]:
-                self.input_text = input or ""
-                raise subprocess.TimeoutExpired(self.args, timeout)
-
-            def poll(self) -> int | None:
-                return self.returncode
-
-            def wait(self, *, timeout: float | None = None) -> int:
-                self.wait_timeout = timeout
-                self.returncode = -signal.SIGTERM
-                return self.returncode
-
-            def terminate(self) -> None:
-                self.returncode = -signal.SIGTERM
-
-            def kill(self) -> None:
-                self.returncode = -signal.SIGKILL
-
-        process = TimeoutProcess()
-
-        with patch("core.runtime.thread_title_jobs.subprocess.Popen", return_value=process) as popen, patch(
-            "core.runtime.thread_title_jobs.os.killpg"
-        ) as killpg:
-            with self.assertRaises(ThreadTitleGenerationError):
-                _run_codex_title_command(["codex", "exec"], prompt="title prompt", timeout_seconds=3)
-
-        self.assertEqual(process.input_text, "title prompt")
-        self.assertEqual(process.wait_timeout, 1.0)
-        self.assertTrue(popen.call_args.kwargs["start_new_session"])
-        killpg.assert_called_once_with(1234, signal.SIGTERM)
-
-    def test_later_user_message_preserves_existing_non_default_thread_title(self) -> None:
-        store = self.make_store()
-        now = datetime(2026, 4, 19, 10, 0, tzinfo=UTC)
-        first_prompt = (
-            "è stato implementato un sistema per nomenclatura chat coerente con il primo messaggio. "
-            "ma non funziona molto bene. mette le prime parole praticamente togliendo punteggiatura al massimo. "
-            "invece dovrebbe mettere una frase di 4 o 5 parole che facciano capire di cosa si parla baste sul primo messaggio. "
-            "fai una attenta analisi e fai un report per poter migliorare la cosa"
-        )
-        create_runtime_session(store, session_id="session-a", workspace_id="acme", agent_id="chat", now=now)
-        create_runtime_thread(
-            store,
-            workspace_id="acme",
-            thread_id="thread-a",
-            runtime_session_id="session-a",
-            title="Stato Implementato Sistema Nomenclatura",
-            now=now,
-        )
-        queue_runtime_turn(store, turn_id="turn-a", session_id="session-a", input_text=first_prompt, now=now + timedelta(seconds=1))
-        queue_runtime_turn(
-            store,
-            turn_id="turn-b",
-            session_id="session-a",
-            input_text="continua da dove eri rimasto",
-            now=now + timedelta(seconds=2),
-        )
-
-        updated = mark_runtime_thread_user_message(
-            store,
-            workspace_id="acme",
-            runtime_session_id="session-a",
-            input_text="continua da dove eri rimasto",
-            now=now + timedelta(seconds=2),
-        )
-
-        self.assertIsNotNone(updated)
-        assert updated is not None
-        self.assertEqual(updated.title, "Stato Implementato Sistema Nomenclatura")
-
-    def test_reconcile_preserves_existing_non_default_title(self) -> None:
-        store = self.make_store()
-        now = datetime(2026, 4, 19, 10, 0, tzinfo=UTC)
         create_runtime_session(store, session_id="session-a", workspace_id="acme", agent_id="chat", now=now)
         thread = create_runtime_thread(
             store,
             workspace_id="acme",
             thread_id="thread-a",
             runtime_session_id="session-a",
-            title="Titolo manuale",
+            title=DEFAULT_THREAD_TITLE,
             now=now,
         )
-        queue_runtime_turn(
+        queue_runtime_turn(store, turn_id="turn-a", session_id="session-a", input_text=message, now=now + timedelta(seconds=1))
+        reconciled = reconcile_runtime_thread_availability(
             store,
-            turn_id="turn-a",
-            session_id="session-a",
-            input_text="è stato implementato un sistema per nomenclatura chat coerente con il primo messaggio",
-            now=now + timedelta(seconds=1),
+            workspace_id="acme",
+            thread=thread,
+            now=now + timedelta(seconds=2),
+        )
+        self.assertEqual(reconciled.title, DEFAULT_THREAD_TITLE)
+        self.assertFalse(reconciled.title_pending)
+        self.assertEqual(reconciled.title_source, "placeholder")
+        self.assertEqual(reconciled.title_generation_input_hash, "")
+
+        updated = mark_runtime_thread_user_message(
+            store,
+            workspace_id="acme",
+            runtime_session_id="session-a",
+            input_text=message,
+            title_generation_input_hash=input_hash,
+            now=now + timedelta(seconds=3),
         )
 
-        reconciled = reconcile_runtime_thread_availability(store, workspace_id="acme", thread=thread, now=now + timedelta(seconds=2))
+        self.assertIsNotNone(updated)
+        assert updated is not None
+        self.assertEqual(updated.title, DEFAULT_THREAD_TITLE)
+        self.assertTrue(updated.title_pending)
+        self.assertEqual(updated.title_source, "pending")
+        self.assertEqual(updated.title_generation_input_hash, input_hash)
 
-        self.assertEqual(reconciled.title, "Titolo manuale")
-
-    def test_non_meaningful_first_message_keeps_default_title(self) -> None:
+    def test_first_user_message_can_recover_from_existing_early_deterministic_title(self) -> None:
         store = self.make_store()
         now = datetime(2026, 4, 19, 10, 0, tzinfo=UTC)
+        message = "questo è un test per testare che il naming della chat con ai funzioni davvero"
+        input_hash = thread_title_input_hash(message)
         create_runtime_session(store, session_id="session-a", workspace_id="acme", agent_id="chat", now=now)
         create_runtime_thread(
             store,
             workspace_id="acme",
             thread_id="thread-a",
             runtime_session_id="session-a",
-            title=DEFAULT_THREAD_TITLE,
+            title="Test Naming Chat Ai",
+            title_source="deterministic",
             now=now,
         )
-        queue_runtime_turn(
-            store,
-            turn_id="turn-a",
-            session_id="session-a",
-            input_text="ciao",
-            now=now + timedelta(seconds=1),
-        )
+        queue_runtime_turn(store, turn_id="turn-a", session_id="session-a", input_text=message, now=now + timedelta(seconds=1))
 
         updated = mark_runtime_thread_user_message(
             store,
             workspace_id="acme",
             runtime_session_id="session-a",
-            input_text="ciao",
+            input_text=message,
+            title_generation_input_hash=input_hash,
             now=now + timedelta(seconds=1),
         )
 
         self.assertIsNotNone(updated)
         assert updated is not None
         self.assertEqual(updated.title, DEFAULT_THREAD_TITLE)
+        self.assertTrue(updated.title_pending)
+        self.assertEqual(updated.title_source, "pending")
+        self.assertEqual(updated.title_generation_input_hash, input_hash)
 
-    def test_late_backfill_prefers_first_meaningful_turn(self) -> None:
+    def test_later_user_message_does_not_reopen_deterministic_title_generation(self) -> None:
         store = self.make_store()
         now = datetime(2026, 4, 19, 10, 0, tzinfo=UTC)
         create_runtime_session(store, session_id="session-a", workspace_id="acme", agent_id="chat", now=now)
@@ -538,161 +455,35 @@ class RuntimeThreadTitleTest(unittest.TestCase):
             workspace_id="acme",
             thread_id="thread-a",
             runtime_session_id="session-a",
-            title=DEFAULT_THREAD_TITLE,
+            title="Fix Test Naming Title Chat",
+            title_source="deterministic",
             now=now,
         )
         queue_runtime_turn(
             store,
             turn_id="turn-a",
             session_id="session-a",
-            input_text="Analizza il report vendite",
+            input_text="questo è un test per testare che il naming della chat con ai funzioni davvero",
             now=now + timedelta(seconds=1),
         )
-        queue_runtime_turn(
-            store,
-            turn_id="turn-b",
-            session_id="session-a",
-            input_text="nuovo argomento contabile",
-            now=now + timedelta(seconds=2),
-        )
+        second_message = "niente il nome è ancora deterministico"
+        queue_runtime_turn(store, turn_id="turn-b", session_id="session-a", input_text=second_message, now=now + timedelta(seconds=2))
 
         updated = mark_runtime_thread_user_message(
             store,
             workspace_id="acme",
             runtime_session_id="session-a",
-            input_text="nuovo argomento contabile",
+            input_text=second_message,
+            title_generation_input_hash=thread_title_input_hash(second_message),
             now=now + timedelta(seconds=2),
         )
 
         self.assertIsNotNone(updated)
         assert updated is not None
-        self.assertEqual(updated.title, "Analisi Report Vendite")
-
-    def test_reconcile_backfills_default_thread_title_from_stored_turn(self) -> None:
-        store = self.make_store()
-        now = datetime(2026, 4, 19, 10, 0, tzinfo=UTC)
-        create_runtime_session(store, session_id="session-a", workspace_id="acme", agent_id="chat", now=now)
-        thread = create_runtime_thread(
-            store,
-            workspace_id="acme",
-            thread_id="thread-a",
-            runtime_session_id="session-a",
-            title=DEFAULT_THREAD_TITLE,
-            now=now,
-        )
-        queue_runtime_turn(
-            store,
-            turn_id="turn-a",
-            session_id="session-a",
-            input_text="questo è un test per la verifica della nomenclatura contestuale della chat in titolo",
-            now=now + timedelta(seconds=1),
-        )
-
-        reconciled = reconcile_runtime_thread_availability(
-            store,
-            workspace_id="acme",
-            thread=thread,
-            now=now + timedelta(seconds=2),
-        )
-
-        self.assertEqual(reconciled.title, "Verifica Test Nomenclatura Contestuale Chat")
-
-    def test_reconcile_backfills_title_from_queued_event_references(self) -> None:
-        store = self.make_store()
-        now = datetime(2026, 4, 19, 10, 0, tzinfo=UTC)
-        create_runtime_session(store, session_id="session-a", workspace_id="acme", agent_id="chat", now=now)
-        thread = create_runtime_thread(
-            store,
-            workspace_id="acme",
-            thread_id="thread-a",
-            runtime_session_id="session-a",
-            title=DEFAULT_THREAD_TITLE,
-            now=now,
-        )
-        queue_runtime_turn(
-            store,
-            turn_id="turn-a",
-            session_id="session-a",
-            input_text="analizza questo",
-            now=now + timedelta(seconds=1),
-        )
-        record_runtime_event(
-            store,
-            event_id="event-a",
-            session_id="session-a",
-            turn_id="turn-a",
-            plane="turn",
-            event_type="runtime.turn.queued",
-            payload={
-                "input_text": "analizza questo",
-                "app_references": [
-                    {
-                        "type": "entity",
-                        "app_id": "storage",
-                        "entity_type": "file",
-                        "entity_id": "file_1",
-                        "label": "Budget 2026",
-                    }
-                ],
-            },
-            now=now + timedelta(seconds=1),
-        )
-
-        reconciled = reconcile_runtime_thread_availability(
-            store,
-            workspace_id="acme",
-            thread=thread,
-            now=now + timedelta(seconds=2),
-        )
-
-        self.assertEqual(reconciled.title, "Analisi Budget 2026")
-
-    def test_reconcile_uses_first_turn_when_older_queued_event_is_missing(self) -> None:
-        store = self.make_store()
-        now = datetime(2026, 4, 19, 10, 0, tzinfo=UTC)
-        create_runtime_session(store, session_id="session-a", workspace_id="acme", agent_id="chat", now=now)
-        thread = create_runtime_thread(
-            store,
-            workspace_id="acme",
-            thread_id="thread-a",
-            runtime_session_id="session-a",
-            title=DEFAULT_THREAD_TITLE,
-            now=now,
-        )
-        queue_runtime_turn(
-            store,
-            turn_id="turn-a",
-            session_id="session-a",
-            input_text="test nomenclatura contestuale chat",
-            now=now + timedelta(seconds=1),
-        )
-        queue_runtime_turn(
-            store,
-            turn_id="turn-b",
-            session_id="session-a",
-            input_text="ok fixa allora perché era stato implementato questo",
-            now=now + timedelta(seconds=2),
-        )
-        record_runtime_event(
-            store,
-            event_id="event-b",
-            session_id="session-a",
-            turn_id="turn-b",
-            plane="turn",
-            event_type="runtime.turn.queued",
-            payload={"input_text": "ok fixa allora perché era stato implementato questo"},
-            now=now + timedelta(seconds=2),
-        )
-
-        reconciled = reconcile_runtime_thread_availability(
-            store,
-            workspace_id="acme",
-            thread=thread,
-            now=now + timedelta(seconds=3),
-        )
-
-        self.assertEqual(reconciled.title, "Test Nomenclatura Contestuale Chat")
-
+        self.assertEqual(updated.title, "Fix Test Naming Title Chat")
+        self.assertFalse(updated.title_pending)
+        self.assertEqual(updated.title_source, "deterministic")
+        self.assertEqual(updated.title_generation_input_hash, "")
 
 if __name__ == "__main__":
     unittest.main()

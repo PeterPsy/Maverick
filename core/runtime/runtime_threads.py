@@ -12,10 +12,7 @@ from core.runtime.runtime_session import RuntimeSessionRecord
 from core.runtime.runtime_thread import RuntimeThreadRecord
 from core.runtime.runtime_turns import RuntimeTurnRecord
 from core.runtime.store import RuntimeStore
-from core.runtime.thread_titles import (
-    DEFAULT_THREAD_TITLE,
-    runtime_thread_title_for_user_message,
-)
+from core.runtime.thread_titles import DEFAULT_THREAD_TITLE
 
 
 RuntimeCleanupCallback = Callable[[str, str], dict[str, object]]
@@ -76,7 +73,6 @@ def ensure_runtime_threads_for_sessions(
     *,
     workspace_id: str,
     sessions: list[RuntimeSessionRecord],
-    title_for_session: Callable[[RuntimeSessionRecord], str] | None = None,
 ) -> list[RuntimeThreadRecord]:
     """Ensure every runtime session in a workspace has exactly one thread."""
     threads = store.list_threads(workspace_id)
@@ -89,7 +85,7 @@ def ensure_runtime_threads_for_sessions(
             workspace_id=workspace_id,
             thread_id=session.session_id,
             runtime_session_id=session.session_id,
-            title=title_for_session(session) if title_for_session else _default_thread_title(session),
+            title=DEFAULT_THREAD_TITLE,
             agent_label=session.agent_id,
             source_app_id=session.source_app_id or session.agent_id,
             system_prompt=session.system_prompt or "",
@@ -125,6 +121,8 @@ def create_runtime_thread(
     existing = find_runtime_thread_by_session(store, workspace_id=workspace_id, runtime_session_id=normalized_session_id)
     if existing is not None:
         patch: dict[str, object] = {"updated_at": timestamp}
+        normalized_title_source = _normalized_generated_title_source(title_source)
+        normalized_title_hash = title_generation_input_hash.strip()
         latest_user_message_at = runtime_thread_last_user_message_at_for_session(store, runtime_session_id=normalized_session_id)
         latest_completed_response = runtime_thread_last_completed_response_for_session(store, runtime_session_id=normalized_session_id)
         if latest_user_message_at is not None and (existing.last_user_message_at is None or existing.last_user_message_at < latest_user_message_at):
@@ -134,11 +132,16 @@ def create_runtime_thread(
             if existing.last_completed_response_at is None or existing.last_completed_response_at < latest_completed_at:
                 patch["last_completed_response_at"] = latest_completed_at
                 patch["last_completed_turn_id"] = latest_completed_turn_id
-        if title.strip():
+        if title.strip() and (
+            title_pending
+            or normalized_title_hash
+            or normalized_title_source in {"pending", "ai", "deterministic"}
+            or (normalized_title_source == "manual" and not existing.title_pending)
+        ):
             patch["title"] = title.strip()[:80]
             patch["title_pending"] = bool(title_pending)
-            patch["title_source"] = _thread_title_source(title.strip(), title_source=title_source, title_pending=title_pending)
-            patch["title_generation_input_hash"] = title_generation_input_hash.strip()
+            patch["title_source"] = _thread_title_source(title.strip(), title_source=normalized_title_source, title_pending=title_pending)
+            patch["title_generation_input_hash"] = normalized_title_hash
             patch["title_generation_failure"] = title_generation_failure
         if agent_label.strip():
             patch["agent_label"] = agent_label.strip()[:120]
@@ -182,12 +185,6 @@ def create_runtime_thread(
     return store.save_thread(thread)
 
 
-def _default_thread_title(session: RuntimeSessionRecord) -> str:
-    if session.agent_id.strip():
-        return session.agent_id.strip()
-    return DEFAULT_THREAD_TITLE
-
-
 def _thread_title_source(title: str, *, title_source: str, title_pending: bool) -> str:
     normalized = _normalized_generated_title_source(title_source)
     if normalized:
@@ -210,6 +207,21 @@ def _thread_title_allows_first_message_generation(thread: RuntimeThreadRecord) -
     if thread.title.strip() == DEFAULT_THREAD_TITLE:
         return True
     return _normalized_generated_title_source(thread.title_source) == "placeholder"
+
+
+def _thread_title_allows_initial_ai_generation(
+    store: RuntimeStore,
+    thread: RuntimeThreadRecord,
+    *,
+    runtime_session_id: str,
+) -> bool:
+    if _thread_title_allows_first_message_generation(thread):
+        return True
+    if _normalized_generated_title_source(thread.title_source) != "deterministic":
+        return False
+    if thread.title_generation_input_hash or thread.title_generation_failure:
+        return False
+    return len(store.list_turns(runtime_session_id)) <= 1
 
 
 def find_runtime_thread_by_session(
@@ -313,11 +325,6 @@ def _reconcile_runtime_thread_with_facts(
         if thread.last_completed_response_at is None or thread.last_completed_response_at < expected_completed_at:
             patch["last_completed_response_at"] = expected_completed_at
             patch["last_completed_turn_id"] = expected_completed_turn_id
-    if not thread.title_pending and _thread_title_allows_first_message_generation(thread):
-        expected_title = runtime_thread_title_for_user_message(store, thread.runtime_session_id)
-        if expected_title != DEFAULT_THREAD_TITLE and expected_title != thread.title:
-            patch["title"] = expected_title
-            patch["title_source"] = "deterministic"
     if not patch:
         return thread
     patch["updated_at"] = now or utcnow()
@@ -399,7 +406,7 @@ def mark_runtime_thread_user_message(
     }
     if thread.title_pending:
         pass
-    elif _thread_title_allows_first_message_generation(thread):
+    elif _thread_title_allows_initial_ai_generation(store, thread, runtime_session_id=runtime_session_id):
         pending_hash = title_generation_input_hash.strip()
         if pending_hash:
             patch["title"] = DEFAULT_THREAD_TITLE
@@ -407,17 +414,6 @@ def mark_runtime_thread_user_message(
             patch["title_source"] = "pending"
             patch["title_generation_input_hash"] = pending_hash
             patch["title_generation_failure"] = None
-        else:
-            title = runtime_thread_title_for_user_message(
-                store,
-                runtime_session_id,
-                input_text=input_text,
-                attachments=attachments,
-                app_references=app_references,
-            )
-            if title != DEFAULT_THREAD_TITLE and title != thread.title:
-                patch["title"] = title
-                patch["title_source"] = "deterministic"
     return store.save_thread(replace(thread, **patch))
 
 

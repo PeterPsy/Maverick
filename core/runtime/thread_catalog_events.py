@@ -16,7 +16,7 @@ from core.runtime.runtime_threads import (
     update_runtime_thread_availability,
 )
 from core.runtime.errors import RuntimeSessionNotFoundError
-from core.runtime.thread_titles import DEFAULT_THREAD_TITLE, runtime_thread_title_for_session
+from core.runtime.thread_titles import DEFAULT_THREAD_TITLE
 
 if TYPE_CHECKING:
     from core.api.platform_state import PlatformState
@@ -37,7 +37,6 @@ def publish_runtime_thread_catalog_change(
         state.runtime_store,
         workspace_id=workspace_id,
         sessions=state.runtime_store.list_sessions(workspace_id),
-        title_for_session=lambda session: _thread_title_for_session(state, session),
     )
     payload = {
         "action": action,
@@ -183,15 +182,7 @@ def _ensure_thread_for_runtime_session(
         workspace_id=workspace_id,
         thread_id=session.session_id,
         runtime_session_id=session.session_id,
-        title=DEFAULT_THREAD_TITLE
-        if pending_hash
-        else _thread_title_for_session(
-            state,
-            session,
-            input_text=input_text,
-            attachments=attachments,
-            app_references=app_references,
-        ),
+        title=DEFAULT_THREAD_TITLE,
         title_pending=bool(pending_hash),
         title_source="pending" if pending_hash else "placeholder",
         title_generation_input_hash=pending_hash,
@@ -201,21 +192,4 @@ def _ensure_thread_for_runtime_session(
         source_app_id=session.source_app_id or session.agent_id,
         system_prompt=session.system_prompt or "",
         now=now or session.started_at or session.updated_at,
-    )
-
-
-def _thread_title_for_session(
-    state: PlatformState,
-    session,
-    *,
-    input_text: object = "",
-    attachments: list[dict[str, object]] | None = None,
-    app_references: list[dict[str, object]] | None = None,
-) -> str:
-    return runtime_thread_title_for_session(
-        state.runtime_store,
-        session,
-        input_text=input_text,
-        attachments=attachments,
-        app_references=app_references,
     )

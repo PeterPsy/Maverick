@@ -421,6 +421,40 @@ class StorageAppTestCase(unittest.TestCase):
             self.assertIn("storage/generated/Empty", {item["workspace_relative_path"] for item in catalog["json"]["folders"]})
             self.assertEqual(search["json"]["results"][0]["workspace_relative_path"], "storage/generated/second.md")
 
+    def test_backend_reference_search_ranks_exact_storage_file_matches_before_recency(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            uploaded_root = root / "storage" / "uploaded"
+            generated_root = root / "storage" / "generated"
+            exact_parent = generated_root / "Client Docs"
+            exact_parent.mkdir(parents=True)
+            uploaded_root.mkdir(parents=True)
+            exact = exact_parent / "contract.pdf"
+            noisy = generated_root / "zz-contract.pdf"
+            exact.write_bytes(b"%PDF exact")
+            noisy.write_bytes(b"%PDF noisy")
+            os.utime(exact, (1_700_000_000, 1_700_000_000))
+            os.utime(noisy, (1_800_000_000, 1_800_000_000))
+
+            by_name = self.run_backend(
+                data_root=root / "data" / "storage",
+                uploaded_root=uploaded_root,
+                generated_root=generated_root,
+                body={"action": "references.search", "query": "contract.pdf", "limit": 1},
+            )
+            by_path = self.run_backend(
+                data_root=root / "data" / "storage",
+                uploaded_root=uploaded_root,
+                generated_root=generated_root,
+                body={"action": "references.search", "query": "storage/generated/Client Docs/contract.pdf", "limit": 1},
+            )
+
+            self.assertEqual(by_name["status_code"], 200)
+            self.assertEqual(by_path["status_code"], 200)
+            self.assertEqual(by_name["json"]["results"][0]["workspace_relative_path"], "storage/generated/Client Docs/contract.pdf")
+            self.assertEqual(by_path["json"]["results"][0]["workspace_relative_path"], "storage/generated/Client Docs/contract.pdf")
+            self.assertIn("storage/generated/Client Docs/contract.pdf", by_name["json"]["results"][0]["summary"])
+
     def test_backend_reference_search_resolves_storage_folders(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp)

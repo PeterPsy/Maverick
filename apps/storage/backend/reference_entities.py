@@ -52,27 +52,32 @@ def reference_search_payload(
     generated_root: Path,
     body: dict[str, Any],
 ) -> dict[str, Any]:
-    query = str(body.get("query") or "").casefold()
+    query = str(body.get("query") or "")
     entity_type = str(body.get("entity_type") or "file").strip() or "file"
     limit = _optional_positive_int(body, "limit", maximum=50) or 10
     if entity_type == "folder":
-        folders = [
-            _folder_reference(record)
-            for record in _folder_records(data_root=data_root, uploaded_root=uploaded_root, generated_root=generated_root)
-            if _folder_matches_query(record, query)
-        ]
-        return {"results": folders[:limit]}
+        folders = _rank_folder_records(
+            [
+                record
+                for record in _folder_records(data_root=data_root, uploaded_root=uploaded_root, generated_root=generated_root)
+                if _folder_matches_query(record, query)
+            ],
+            query=query,
+        )
+        return {"results": [_folder_reference(item) for item in folders[:limit]]}
     if entity_type != "file":
         return {"results": []}
+    catalog_limit = None if query.strip() else limit
     catalog = catalog_files_payload(
         data_root=data_root,
         uploaded_root=uploaded_root,
         generated_root=generated_root,
-        query=query,
+        query="",
         offset=0,
-        limit=limit,
+        limit=catalog_limit,
     )
-    return {"results": [_file_reference(item) for item in catalog["files"]]}
+    files = _rank_file_records(catalog["files"], query=query)
+    return {"results": [_file_reference(item) for item in files[:limit]]}
 
 
 def reference_resolve_payload(
@@ -136,15 +141,109 @@ def reference_summarize_payload(
     }
 
 
+def _rank_file_records(records: list[dict[str, Any]], *, query: str) -> list[dict[str, Any]]:
+    normalized_query = _normalize_search_text(query)
+    if not normalized_query:
+        return records
+    scored: list[tuple[int, float, str, dict[str, Any]]] = []
+    for record in records:
+        score = _file_record_score(record, normalized_query)
+        if score > 0:
+            scored.append((score, _modified_desc_sort_value(record), str(record.get("name") or "").casefold(), record))
+    scored.sort(key=lambda item: (-item[0], item[1], item[2]))
+    return [record for _score, _modified, _name, record in scored]
+
+
+def _rank_folder_records(records: list[dict[str, Any]], *, query: str) -> list[dict[str, Any]]:
+    normalized_query = _normalize_search_text(query)
+    if not normalized_query:
+        return records
+    scored: list[tuple[int, float, str, dict[str, Any]]] = []
+    for record in records:
+        score = _folder_record_score(record, normalized_query)
+        if score > 0:
+            scored.append((score, _modified_desc_sort_value(record), str(record.get("name") or "").casefold(), record))
+    scored.sort(key=lambda item: (-item[0], item[1], item[2]))
+    return [record for _score, _modified, _name, record in scored]
+
+
+def _file_record_score(record: dict[str, Any], normalized_query: str) -> int:
+    texts = [
+        _normalize_search_text(record.get("name")),
+        _normalize_search_text(record.get("workspace_relative_path")),
+        _normalize_search_text(record.get("display_path")),
+        _normalize_search_text(record.get("content_type")),
+        _normalize_search_text(record.get("preview_kind")),
+    ]
+    return _reference_match_score(texts, normalized_query, primary_indexes={0, 1, 2})
+
+
+def _folder_record_score(record: dict[str, Any], normalized_query: str) -> int:
+    texts = [
+        _normalize_search_text(record.get("name")),
+        _normalize_search_text(record.get("workspace_relative_path")),
+        _normalize_search_text(record.get("role")),
+        "folder storage",
+    ]
+    return _reference_match_score(texts, normalized_query, primary_indexes={0, 1})
+
+
+def _reference_match_score(texts: list[str], normalized_query: str, *, primary_indexes: set[int]) -> int:
+    if not normalized_query:
+        return 0
+    score = 0
+    for index, text in enumerate(texts):
+        if not text:
+            continue
+        is_primary = index in primary_indexes
+        if text == normalized_query:
+            score += 2000 if is_primary else 400
+        elif text.startswith(normalized_query):
+            score += 1200 if is_primary else 220
+        elif normalized_query in text:
+            score += 800 if is_primary else 160
+    tokens = normalized_query.split()
+    if not tokens or not all(any(token in text for text in texts) for token in tokens):
+        return score
+    for token in tokens:
+        for index, text in enumerate(texts):
+            if token not in text:
+                continue
+            score += 80 if index in primary_indexes else 20
+    return score
+
+
+def _normalize_search_text(value: object) -> str:
+    return re.sub(r"[\s._/\\-]+", " ", str(value if value is not None else "").casefold()).strip()
+
+
+def _modified_desc_sort_value(record: dict[str, Any]) -> float:
+    raw_value = str(record.get("modified_at") or "")
+    if not raw_value:
+        return 0.0
+    try:
+        return -datetime.fromisoformat(raw_value.replace("Z", "+00:00")).timestamp()
+    except ValueError:
+        return 0.0
+
+
+def _record_display_path(record: dict[str, Any]) -> str:
+    return str(record.get("workspace_relative_path") or record.get("display_path") or "")
+
+
 def _file_reference(record: dict[str, Any]) -> dict[str, Any]:
     app_page = f"files/{quote(str(record['id']), safe='')}"
+    display_path = _record_display_path(record)
+    summary = f"{record['preview_kind']} file, {record['size_bytes']} bytes"
+    if display_path:
+        summary = f"{summary} at {display_path}"
     return {
         "app_id": "storage",
         "entity_type": "file",
         "entity_id": record["id"],
         "title": record["name"],
-        "subtitle": record["workspace_relative_path"],
-        "summary": f"{record['preview_kind']} file, {record['size_bytes']} bytes",
+        "subtitle": display_path,
+        "summary": summary,
         "confidence": 1.0,
         "app_page": app_page,
         "deep_link": f"/app/storage/{app_page}",
@@ -156,13 +255,16 @@ def _folder_reference(record: dict[str, Any]) -> dict[str, Any]:
     app_page = _folder_app_page(record)
     relative_path = str(record.get("relative_path") or "")
     summary_prefix = "Storage root folder" if not relative_path else "Storage folder"
+    summary = f"{summary_prefix} in {record['role']}"
+    if record.get("workspace_relative_path"):
+        summary = f"{summary} at {record['workspace_relative_path']}"
     return {
         "app_id": "storage",
         "entity_type": "folder",
         "entity_id": _folder_entity_id(record),
         "title": record["name"],
         "subtitle": record["workspace_relative_path"],
-        "summary": f"{summary_prefix} in {record['role']}",
+        "summary": summary,
         "confidence": 1.0,
         "app_page": app_page,
         "deep_link": f"/app/storage/{app_page}",
@@ -215,11 +317,10 @@ def _folder_records(*, data_root: Path, uploaded_root: Path, generated_root: Pat
 
 
 def _folder_matches_query(record: dict[str, Any], query: str) -> bool:
-    normalized_query = " ".join(str(query or "").casefold().split())
+    normalized_query = _normalize_search_text(query)
     if not normalized_query:
         return True
-    haystack = f"{record['name']} {record['workspace_relative_path']} {record['role']} folder storage".casefold()
-    return normalized_query in haystack
+    return _folder_record_score(record, normalized_query) > 0
 
 
 def _parse_folder_reference(value: str) -> tuple[str, str] | None:

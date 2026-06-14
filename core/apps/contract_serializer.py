@@ -177,6 +177,60 @@ def app_contract_payload(parsed: ParsedAppContract) -> dict[str, Any]:
         }
         for widget in parsed.contract.widgets
     ]
+    if parsed.contract.services.http_sidecars:
+        payload["services"] = {
+            "http_sidecars": [
+                {
+                    "id": sidecar.service_id,
+                    "runtime": sidecar.runtime,
+                    **({"package_manager": sidecar.package_manager} if sidecar.package_manager is not None else {}),
+                    "working_directory": sidecar.working_directory,
+                    "command": sidecar.command,
+                    "env": sidecar.env,
+                    "bind": {
+                        "host": sidecar.bind.host,
+                        "port": sidecar.bind.port,
+                    },
+                    "health": {
+                        "path": sidecar.health.path,
+                        "timeout_ms": sidecar.health.timeout_ms,
+                    },
+                    **({"proxy": _http_sidecar_proxy_payload(sidecar.proxy)} if sidecar.proxy is not None else {}),
+                    **(
+                        {
+                            "logs": {
+                                "stdout": sidecar.logs.stdout,
+                                "stderr": sidecar.logs.stderr,
+                            }
+                        }
+                        if sidecar.logs is not None
+                        else {}
+                    ),
+                }
+                for sidecar in parsed.contract.services.http_sidecars
+            ],
+        }
+    return payload
+
+
+def _http_sidecar_proxy_payload(proxy) -> dict[str, object]:
+    return {
+        "mount": proxy.mount,
+        "streaming": proxy.streaming,
+        "sse": proxy.sse,
+        "websocket": proxy.websocket,
+        "route_policy": {
+            "pass_through": [_http_sidecar_route_rule_payload(rule) for rule in proxy.route_policy.pass_through],
+            "handled_by_core": [_http_sidecar_route_rule_payload(rule) for rule in proxy.route_policy.handled_by_core],
+            "blocked": [_http_sidecar_route_rule_payload(rule) for rule in proxy.route_policy.blocked],
+        },
+    }
+
+
+def _http_sidecar_route_rule_payload(rule) -> dict[str, object]:
+    payload: dict[str, object] = {"path_prefix": rule.path_prefix}
+    if rule.method is not None:
+        payload = {"method": rule.method, **payload}
     return payload
 
 

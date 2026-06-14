@@ -26,11 +26,19 @@ from core.apps.models import (
     AppRollbackSupport,
     AppRuntimePermissionDeclaration,
     AppSecretPermissionDeclaration,
+    AppServicesDeclaration,
     AppStorageDeclaration,
     AppStorageIndices,
     AppViewStateActionDeclaration,
     AppViewSurfaceDeclaration,
     AppVisibilityDeclaration,
+    HttpSidecarBindSpec,
+    HttpSidecarHealthSpec,
+    HttpSidecarLogSpec,
+    HttpSidecarProxySpec,
+    HttpSidecarRoutePolicy,
+    HttpSidecarRouteRule,
+    HttpSidecarSpec,
     ParsedAppContract,
     WidgetActionDeclaration,
     WidgetDeclaration,
@@ -300,6 +308,81 @@ def build_widget_declaration(
         actions=actions or build_widget_actions(),
     )
 
+
+def build_http_sidecar_route_rule(*, path_prefix: str, method: str | None = None) -> HttpSidecarRouteRule:
+    """Build one HTTP sidecar route-policy rule."""
+    return HttpSidecarRouteRule(method=method, path_prefix=path_prefix)
+
+
+def build_http_sidecar_route_policy(
+    *,
+    pass_through: list[HttpSidecarRouteRule] | None = None,
+    handled_by_core: list[HttpSidecarRouteRule] | None = None,
+    blocked: list[HttpSidecarRouteRule] | None = None,
+) -> HttpSidecarRoutePolicy:
+    """Build one HTTP sidecar route policy."""
+    return HttpSidecarRoutePolicy(
+        pass_through=pass_through or [],
+        handled_by_core=handled_by_core or [],
+        blocked=blocked or [],
+    )
+
+
+def build_http_sidecar_spec(
+    *,
+    service_id: str,
+    runtime: str = "generic",
+    command: list[str],
+    working_directory: str = ".",
+    package_manager: str | None = None,
+    env: dict[str, str] | None = None,
+    bind: HttpSidecarBindSpec | None = None,
+    health: HttpSidecarHealthSpec | None = None,
+    proxy: HttpSidecarProxySpec | None = None,
+    logs: HttpSidecarLogSpec | None = None,
+) -> HttpSidecarSpec:
+    """Build one app-owned HTTP sidecar declaration."""
+    return HttpSidecarSpec(
+        service_id=service_id,
+        runtime=runtime,
+        package_manager=package_manager,
+        working_directory=working_directory,
+        command=command,
+        env=env or {},
+        bind=bind or HttpSidecarBindSpec(host="127.0.0.1", port="auto"),
+        health=health or HttpSidecarHealthSpec(path="/health", timeout_ms=30000),
+        proxy=proxy,
+        logs=logs,
+    )
+
+
+def build_http_sidecar_proxy(
+    *,
+    mount: str,
+    route_policy: HttpSidecarRoutePolicy,
+    streaming: bool = False,
+    sse: bool = False,
+    websocket: bool = False,
+) -> HttpSidecarProxySpec:
+    """Build one governed HTTP sidecar proxy declaration."""
+    return HttpSidecarProxySpec(
+        mount=mount,
+        streaming=streaming,
+        sse=sse,
+        websocket=websocket,
+        route_policy=route_policy,
+    )
+
+
+def build_http_sidecar_logs(*, stdout: str, stderr: str) -> HttpSidecarLogSpec:
+    """Build one workspace log declaration for sidecar output."""
+    return HttpSidecarLogSpec(stdout=stdout, stderr=stderr)
+
+
+def build_app_services(*, http_sidecars: list[HttpSidecarSpec] | None = None) -> AppServicesDeclaration:
+    """Build app-owned long-running service declarations."""
+    return AppServicesDeclaration(http_sidecars=http_sidecars or [])
+
 def build_provided_interface_declaration(
     *,
     interface: str,
@@ -352,6 +435,7 @@ def build_app_contract(
     health_contract: AppHealthContract | None = None,
     rollback_support: AppRollbackSupport | None = None,
     widgets: list[WidgetDeclaration] | None = None,
+    services: AppServicesDeclaration | None = None,
 ) -> AppContractDescriptor:
     """Build an executable app contract descriptor."""
     resolved_entrypoints = entrypoints or build_app_entrypoints()
@@ -375,6 +459,7 @@ def build_app_contract(
         health_contract=health_contract or build_app_health_contract(),
         rollback_support=rollback_support or build_app_rollback_support(),
         widgets=widgets or [],
+        services=services or build_app_services(),
     )
 
 def build_parsed_app_contract(

@@ -21,6 +21,7 @@ from core.apps.contract_parser_metadata import (
     parse_visibility_section,
 )
 from core.apps.contract_parser_permissions import parse_permissions_section
+from core.apps.contract_parser_services import parse_services_section
 from core.apps.contract_parser_storage import parse_storage_section
 from core.apps.contract_validation import (
     _expect_app_id,
@@ -58,6 +59,7 @@ ROOT_FIELDS = {
     "failure_semantics",
     "rollback_support",
     "widgets",
+    "services",
 }
 
 
@@ -119,6 +121,12 @@ def parse_app_contract_file(source_root: Path) -> ParsedAppContract:
                 _expect_mapping(root.get("rollback_support", {}), label="rollback_support")
             ),
             widgets=widgets,
+            services=parse_services_section(
+                source_root,
+                _expect_mapping(root.get("services", {}), label="services"),
+                app_id=app_id,
+                supported_workspace_modes=supported_workspace_modes,
+            ),
         ),
     )
 

@@ -1,0 +1,326 @@
+{
+  "app_id": "design-studio",
+  "contract_version": "1.0",
+  "name": "Design Studio",
+  "version": "0.1.0",
+  "description": "Generate, inspect, and export UI design artifacts using OpenDesign inside Maverick.",
+  "publisher": "maverick",
+  "minimum_core_version": "0.1.0",
+  "provides": [
+    {
+      "interface": "design.studio",
+      "version": "1",
+      "description": "Governed design projects, Storage imports and exports, and OpenDesign sidecar status.",
+      "surfaces": [
+        "backend",
+        "cli",
+        "mcp",
+        "view",
+        "reference"
+      ]
+    }
+  ],
+  "requires": [
+    {
+      "alias": "storage-catalog",
+      "interface": "file.catalog",
+      "version": "^1",
+      "required": true,
+      "cardinality": "one",
+      "description": "Browse workspace Storage files as design sources."
+    },
+    {
+      "alias": "storage-read",
+      "interface": "file.content.read",
+      "version": "^1",
+      "required": true,
+      "cardinality": "one",
+      "description": "Read selected Storage files for controlled imports."
+    },
+    {
+      "alias": "storage-write",
+      "interface": "file.content.write",
+      "version": "^1",
+      "required": true,
+      "cardinality": "one",
+      "description": "Write exported design artifacts under storage/generated/design-studio."
+    },
+    {
+      "alias": "storage-preview",
+      "interface": "file.preview",
+      "version": "^1",
+      "required": false,
+      "cardinality": "one",
+      "description": "Render previews for imported and exported design assets."
+    }
+  ],
+  "distribution": {
+    "mode": "source_available",
+    "source_access": "forkable"
+  },
+  "visibility": {
+    "platform_roles": null
+  },
+  "presentation": {
+    "frontend_role": "workspace"
+  },
+  "permissions": {
+    "secrets": {
+      "read": [],
+      "write": []
+    },
+    "network": {
+      "outbound": []
+    },
+    "runtime": {
+      "create_sessions": false,
+      "cleanup_sessions": false
+    },
+    "host": {
+      "telemetry": false
+    }
+  },
+  "capabilities": {
+    "mcp_tools": [
+      "design_studio_state",
+      "design_studio_get_project",
+      "design_studio_import_from_storage",
+      "design_studio_export_to_storage",
+      "design_studio_view_filter",
+      "design_studio_set_view_filter",
+      "design_studio_set_custom_view",
+      "design_studio_clear_custom_view"
+    ],
+    "cli_commands": [
+      "design-studio"
+    ],
+    "skills": [
+      "design-studio-ops"
+    ],
+    "views": [
+      "main"
+    ],
+    "data_events": [
+      {
+        "resource": "state",
+        "description": "Design Studio projects, imports, exports, or view state changed."
+      },
+      {
+        "resource": "view-state",
+        "description": "Design Studio filters or curated project selection changed."
+      }
+    ],
+    "view_surfaces": [
+      {
+        "view_id": "main",
+        "display_name": "Design Studio",
+        "entity_types": [
+          "design_project"
+        ],
+        "state_actions": [
+          {
+            "action": "view_filter",
+            "standard": true,
+            "description": "Read the current Design Studio view filter."
+          },
+          {
+            "action": "set_view_filter",
+            "standard": true,
+            "description": "Set the current Design Studio search filter."
+          },
+          {
+            "action": "set_custom_view",
+            "standard": true,
+            "description": "Show a curated Design Studio project selection."
+          },
+          {
+            "action": "clear_custom_view",
+            "standard": true,
+            "description": "Return Design Studio to the default project list."
+          },
+          {
+            "action": "import_from_storage",
+            "standard": false,
+            "description": "Import a Storage file into a design project."
+          },
+          {
+            "action": "export_to_storage",
+            "standard": false,
+            "description": "Export project metadata and notes to Storage."
+          }
+        ],
+        "supports_custom_view": false,
+        "supports_filter_refinement": true
+      }
+    ],
+    "reference_entities": [
+      {
+        "entity_type": "design_project",
+        "display_name": "Design project",
+        "searchable": true,
+        "resolvable": true,
+        "summarizable": true,
+        "deep_link_supported": true
+      }
+    ]
+  },
+  "entrypoints": {
+    "hooks": {
+      "install": "hooks/install.py",
+      "migrate": "hooks/migrate.py",
+      "health_check": "hooks/health_check.py"
+    },
+    "backend": "backend/app_backend.py",
+    "frontend": "frontend/dist",
+    "mcp": "mcp/server.py",
+    "cli": "cli/app_cli.py",
+    "skills_root": "skills"
+  },
+  "storage": {
+    "storage_kind": "json+files",
+    "data_schema_version": "1",
+    "primary_paths": [
+      "data/design-studio/state.json",
+      "data/design-studio/opendesign",
+      "data/design-studio/imports",
+      "data/design-studio/exports"
+    ],
+    "indices": null,
+    "supports_export": true,
+    "supports_import": true,
+    "supports_migrations": true
+  },
+  "compatibility": {
+    "workspace_modes": [
+      "sandbox"
+    ]
+  },
+  "hook_timeouts": {
+    "backend_seconds": 60,
+    "install_seconds": 60,
+    "upgrade_seconds": 120,
+    "migrate_seconds": 300,
+    "export_seconds": 120,
+    "import_seconds": 120,
+    "validate_after_import_seconds": 60,
+    "repair_after_import_seconds": 180,
+    "health_check_seconds": 30
+  },
+  "lifecycle": {
+    "install": true,
+    "upgrade": true,
+    "uninstall": false,
+    "migrate": true,
+    "export": false,
+    "import": false,
+    "validate_after_import": false,
+    "repair_after_import": false,
+    "health_check": true
+  },
+  "health_contract": {
+    "mode": "hook",
+    "degraded_on_failure": true
+  },
+  "failure_semantics": {
+    "install_failure": "block_activation",
+    "migrate_failure": "preserve_data_mark_unhealthy",
+    "import_failure": "preserve_payload_mark_failed"
+  },
+  "rollback_support": {
+    "bundle": false,
+    "data": false,
+    "repair_only": false
+  },
+  "widgets": [],
+  "services": {
+    "http_sidecars": [
+      {
+        "id": "opendesign",
+        "runtime": "python",
+        "working_directory": "service",
+        "command": [
+          "python3",
+          "opendesign_stub.py"
+        ],
+        "env": {
+          "OD_BIND_HOST": "127.0.0.1",
+          "OD_PORT": "${service.port}",
+          "OD_DATA_DIR": "${app.data_dir}/opendesign",
+          "OD_MEDIA_CONFIG_DIR": "${app.data_dir}/opendesign/media-config",
+          "OD_API_TOKEN": "${service_secret:od_api_token}"
+        },
+        "bind": {
+          "host": "127.0.0.1",
+          "port": "auto"
+        },
+        "health": {
+          "path": "/api/ready",
+          "timeout_ms": 30000
+        },
+        "proxy": {
+          "mount": "/opendesign",
+          "streaming": false,
+          "sse": false,
+          "websocket": false,
+          "route_policy": {
+            "pass_through": [
+              {
+                "method": "GET",
+                "path_prefix": "/"
+              },
+              {
+                "method": "GET",
+                "path_prefix": "/api/health"
+              },
+              {
+                "method": "GET",
+                "path_prefix": "/api/ready"
+              },
+              {
+                "method": "GET",
+                "path_prefix": "/api/version"
+              },
+              {
+                "method": "GET",
+                "path_prefix": "/api/projects"
+              },
+              {
+                "method": "POST",
+                "path_prefix": "/api/projects"
+              }
+            ],
+            "handled_by_core": [
+              {
+                "path_prefix": "/api/provider"
+              },
+              {
+                "path_prefix": "/api/media/config"
+              },
+              {
+                "path_prefix": "/api/import/storage"
+              },
+              {
+                "path_prefix": "/api/export/storage"
+              }
+            ],
+            "blocked": [
+              {
+                "path_prefix": "/api/import/folder"
+              },
+              {
+                "path_prefix": "/api/terminal"
+              },
+              {
+                "path_prefix": "/api/terminals"
+              }
+            ]
+          }
+        },
+        "logs": {
+          "stdout": "logs/apps/design-studio/sidecar.log",
+          "stderr": "logs/apps/design-studio/sidecar.log"
+        }
+      }
+    ]
+  }
+}

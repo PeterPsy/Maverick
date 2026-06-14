@@ -31,12 +31,20 @@ from core.apps.models import (
     AppRollbackSupport,
     AppRuntimePermissionDeclaration,
     AppSecretPermissionDeclaration,
+    AppServicesDeclaration,
     AppSourceRecord,
     AppStorageDeclaration,
     AppStorageIndices,
     AppViewStateActionDeclaration,
     AppViewSurfaceDeclaration,
     AppVisibilityDeclaration,
+    HttpSidecarBindSpec,
+    HttpSidecarHealthSpec,
+    HttpSidecarLogSpec,
+    HttpSidecarProxySpec,
+    HttpSidecarRoutePolicy,
+    HttpSidecarRouteRule,
+    HttpSidecarSpec,
     WidgetActionDeclaration,
     WidgetDeclaration,
     WidgetFrontendDeclaration,
@@ -226,6 +234,7 @@ class AppDocumentStore:
                 )
                 for widget in payload.get("widgets", [])
             ],
+            services=_app_services(payload.get("services", {})),
         )
 
     def _app_source_record(self, document: dict[str, Any]) -> AppSourceRecord:
@@ -371,3 +380,52 @@ class AppDocumentStore:
 def _known_dataclass_values(model: type[Any], payload: dict[str, Any]) -> dict[str, Any]:
     allowed = {field.name for field in fields(model)}
     return {key: value for key, value in payload.items() if key in allowed}
+
+
+def _app_services(payload: Any) -> AppServicesDeclaration:
+    if not isinstance(payload, dict):
+        return AppServicesDeclaration(http_sidecars=[])
+    return AppServicesDeclaration(
+        http_sidecars=[
+            HttpSidecarSpec(
+                service_id=str(sidecar.get("id") or sidecar.get("service_id")),
+                runtime=sidecar["runtime"],
+                package_manager=sidecar.get("package_manager"),
+                working_directory=sidecar["working_directory"],
+                command=list(sidecar["command"]),
+                env={str(key): str(value) for key, value in sidecar.get("env", {}).items()},
+                bind=HttpSidecarBindSpec(**sidecar["bind"]),
+                health=HttpSidecarHealthSpec(**sidecar["health"]),
+                proxy=_app_sidecar_proxy(sidecar.get("proxy")),
+                logs=(HttpSidecarLogSpec(**sidecar["logs"]) if sidecar.get("logs") is not None else None),
+            )
+            for sidecar in payload.get("http_sidecars", [])
+        ]
+    )
+
+
+def _app_sidecar_proxy(payload: Any) -> HttpSidecarProxySpec | None:
+    if not isinstance(payload, dict):
+        return None
+    route_policy = payload["route_policy"]
+    return HttpSidecarProxySpec(
+        mount=payload["mount"],
+        streaming=payload["streaming"],
+        sse=payload["sse"],
+        websocket=payload["websocket"],
+        route_policy=HttpSidecarRoutePolicy(
+            pass_through=_app_sidecar_route_rules(route_policy.get("pass_through", [])),
+            handled_by_core=_app_sidecar_route_rules(route_policy.get("handled_by_core", [])),
+            blocked=_app_sidecar_route_rules(route_policy.get("blocked", [])),
+        ),
+    )
+
+
+def _app_sidecar_route_rules(payload: Any) -> list[HttpSidecarRouteRule]:
+    if not isinstance(payload, list):
+        return []
+    return [
+        HttpSidecarRouteRule(method=rule.get("method"), path_prefix=rule["path_prefix"])
+        for rule in payload
+        if isinstance(rule, dict)
+    ]

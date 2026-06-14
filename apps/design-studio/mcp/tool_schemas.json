@@ -1,0 +1,139 @@
+{
+  "tools": {
+    "design_studio_state": {
+      "description": "Return Design Studio state, sidecar proxy URLs, and OpenDesign integration metadata.",
+      "input_schema": {
+        "type": "object",
+        "additionalProperties": false
+      },
+      "output_schema": {
+        "type": "object"
+      },
+      "required_secrets": [],
+      "secret_selectors": []
+    },
+    "design_studio_get_project": {
+      "description": "Return one Design Studio project by id.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "project_id": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "project_id"
+        ],
+        "additionalProperties": false
+      },
+      "output_schema": {
+        "type": "object"
+      },
+      "required_secrets": [],
+      "secret_selectors": []
+    },
+    "design_studio_import_from_storage": {
+      "description": "Import one bounded Storage file into a Design Studio project.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "project_id": {
+            "type": "string"
+          },
+          "workspace_relative_path": {
+            "type": "string",
+            "pattern": "^storage/(uploaded|generated)/.+$"
+          }
+        },
+        "required": [
+          "project_id",
+          "workspace_relative_path"
+        ],
+        "additionalProperties": false
+      },
+      "output_schema": {
+        "type": "object"
+      },
+      "required_secrets": [],
+      "secret_selectors": []
+    },
+    "design_studio_export_to_storage": {
+      "description": "Export Design Studio project metadata and notes under storage/generated/design-studio.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "project_id": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "project_id"
+        ],
+        "additionalProperties": false
+      },
+      "output_schema": {
+        "type": "object"
+      },
+      "required_secrets": [],
+      "secret_selectors": []
+    },
+    "design_studio_view_filter": {
+      "description": "Read the current Design Studio view filter.",
+      "input_schema": {
+        "type": "object",
+        "additionalProperties": false
+      },
+      "output_schema": {
+        "type": "object"
+      },
+      "required_secrets": [],
+      "secret_selectors": []
+    },
+    "design_studio_set_view_filter": {
+      "description": "Set the current Design Studio search filter.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "query": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
+      },
+      "output_schema": {
+        "type": "object"
+      },
+      "required_secrets": [],
+      "secret_selectors": []
+    },
+    "design_studio_set_custom_view": {
+      "description": "Show a curated Design Studio project selection.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "project_id": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
+      },
+      "output_schema": {
+        "type": "object"
+      },
+      "required_secrets": [],
+      "secret_selectors": []
+    },
+    "design_studio_clear_custom_view": {
+      "description": "Clear Design Studio filters and curated selection.",
+      "input_schema": {
+        "type": "object",
+        "additionalProperties": false
+      },
+      "output_schema": {
+        "type": "object"
+      },
+      "required_secrets": [],
+      "secret_selectors": []
+    }
+  }
+}

@@ -22,6 +22,8 @@ StorageKind = Literal["sqlite", "sqlite+files", "duckdb", "json", "jsonl", "mixe
 StorageIndexKind = Literal["embedded", "file_based"]
 WidgetFrontendKind = Literal["iframe"]
 AppRequiredInterfaceCardinality = Literal["one", "many"]
+HttpSidecarRuntime = Literal["python", "node", "generic"]
+HttpSidecarPort = int | Literal["auto"]
 
 
 @dataclass(frozen=True)
@@ -269,6 +271,81 @@ class WidgetDeclaration:
 
 
 @dataclass(frozen=True)
+class HttpSidecarRouteRule:
+    """Describe one method/path route rule for an app-owned HTTP sidecar."""
+
+    method: str | None
+    path_prefix: str
+
+
+@dataclass(frozen=True)
+class HttpSidecarRoutePolicy:
+    """Describe which sidecar routes are proxied, intercepted, or blocked."""
+
+    pass_through: list[HttpSidecarRouteRule]
+    handled_by_core: list[HttpSidecarRouteRule]
+    blocked: list[HttpSidecarRouteRule]
+
+
+@dataclass(frozen=True)
+class HttpSidecarBindSpec:
+    """Describe the loopback bind target for one app-owned HTTP sidecar."""
+
+    host: str
+    port: HttpSidecarPort
+
+
+@dataclass(frozen=True)
+class HttpSidecarHealthSpec:
+    """Describe how the core checks sidecar readiness."""
+
+    path: str
+    timeout_ms: int
+
+
+@dataclass(frozen=True)
+class HttpSidecarProxySpec:
+    """Describe the governed frontend proxy for one app-owned HTTP sidecar."""
+
+    mount: str
+    streaming: bool
+    sse: bool
+    websocket: bool
+    route_policy: HttpSidecarRoutePolicy
+
+
+@dataclass(frozen=True)
+class HttpSidecarLogSpec:
+    """Describe workspace-log paths for sidecar process output."""
+
+    stdout: str
+    stderr: str
+
+
+@dataclass(frozen=True)
+class HttpSidecarSpec:
+    """Describe one app-owned local HTTP sidecar process."""
+
+    service_id: str
+    runtime: HttpSidecarRuntime
+    command: list[str]
+    working_directory: str
+    package_manager: str | None
+    env: dict[str, str]
+    bind: HttpSidecarBindSpec
+    health: HttpSidecarHealthSpec
+    proxy: HttpSidecarProxySpec | None
+    logs: HttpSidecarLogSpec | None
+
+
+@dataclass(frozen=True)
+class AppServicesDeclaration:
+    """Describe app-owned long-running services managed by the core."""
+
+    http_sidecars: list[HttpSidecarSpec]
+
+
+@dataclass(frozen=True)
 class AppProvidedInterfaceDeclaration:
     """Describe one generic app interface provided by this app."""
 
@@ -310,6 +387,7 @@ class AppContractDescriptor:
     health_contract: AppHealthContract
     rollback_support: AppRollbackSupport
     widgets: list[WidgetDeclaration]
+    services: AppServicesDeclaration
 
 
 @dataclass(frozen=True)

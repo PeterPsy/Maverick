@@ -39,6 +39,10 @@ def status_line(status_code: int) -> str:
         413: "Payload Too Large",
         416: "Range Not Satisfiable",
         500: "Internal Server Error",
+        501: "Not Implemented",
+        502: "Bad Gateway",
+        503: "Service Unavailable",
+        504: "Gateway Timeout",
     }
     return f"{status_code} {reasons.get(status_code, 'OK')}"
 

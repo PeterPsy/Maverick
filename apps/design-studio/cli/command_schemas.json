@@ -1,0 +1,46 @@
+{
+  "commands": {
+    "design-studio": {
+      "description": "Inspect Design Studio state or run a Design Studio action.",
+      "argument_schema": {
+        "type": "object",
+        "properties": {
+          "action": {
+            "type": "string",
+            "enum": [
+              "state",
+              "list_projects",
+              "get_project",
+              "create_project",
+              "import_from_storage",
+              "export_to_storage",
+              "view_filter",
+              "set_view_filter",
+              "set_custom_view",
+              "clear_custom_view"
+            ]
+          },
+          "project_id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "prompt": {
+            "type": "string"
+          },
+          "workspace_relative_path": {
+            "type": "string",
+            "pattern": "^storage/(uploaded|generated)/.+$"
+          },
+          "query": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
+      },
+      "required_secrets": [],
+      "secret_selectors": []
+    }
+  }
+}

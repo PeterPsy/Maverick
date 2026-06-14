@@ -862,6 +862,26 @@ For the first deployment model, the simplest canonical shape is:
 
 The exact production routing layer may be implemented behind `nginx`, but the mount model should remain canonical at the platform level.
 
+## App-Owned HTTP Sidecars
+
+Some source-available apps need to run an app-owned local HTTP process while still staying behind the Maverick host boundary.
+
+The contract may declare those processes under `services.http_sidecars`. This section is strict contract metadata, not an escape hatch to arbitrary host services. A sidecar declaration names the runtime, working directory, command, environment substitutions, loopback bind target, readiness check, workspace log files, and an optional governed proxy.
+
+Sandbox-compatible sidecars must bind only to loopback. Apps that expose sidecar routes to a mounted frontend must provide a `proxy.route_policy`; routes are denied by default unless explicitly declared as:
+
+- `pass_through` for bounded HTTP forwarding to the sidecar
+- `handled_by_core` for routes the app protocol needs but the Maverick host must own, such as provider proxying or Storage import/export
+- `blocked` for upstream features that are intentionally unavailable in sandbox mode
+
+The core owns process lifecycle, technical token injection, app data-root substitution, route-policy enforcement, auth, workspace membership, app visibility, and error translation. The sidecar owns only its app protocol behind the loopback boundary. A frontend must call a sidecar through the generic core route:
+
+```text
+/api/apps/<mount_app_id>/sidecars/<sidecar_id>/<sidecar_path>
+```
+
+The proxy must not expose terminal access, host-folder import, wildcard passthrough, arbitrary network binding, or undeclared websocket/streaming semantics for sandbox apps. If an app needs those features, the contract must mark them outside sandbox compatibility or route them through a future generic core policy surface.
+
 ## Human Surface Versus Agent Surface
 
 The same app may need to serve both humans and agents.

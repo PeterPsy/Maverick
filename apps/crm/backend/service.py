@@ -80,6 +80,8 @@ from store import (
     utc_now,
 )
 
+__all__ = ["app_events_for_action", "handle_action"]
+
 
 def handle_action(data_root: str | Path, action: str, payload: dict[str, Any]) -> tuple[int, dict[str, Any]]:
     initialize(data_root)

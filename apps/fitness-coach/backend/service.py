@@ -5,7 +5,7 @@ from __future__ import annotations
 from copy import deepcopy
 from datetime import datetime, timezone
 import re
-from typing import Any, Callable
+from typing import Any
 from uuid import uuid4
 
 from core.app_sdk.storage import read_json_state, update_json_state, write_json_state

@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+import asyncio
+import json
 import http.client
 import logging
 import os
@@ -12,7 +14,7 @@ import socket
 import subprocess
 from threading import Lock
 import time
-from typing import Any
+from typing import Any, AsyncIterator, Iterable, Iterator
 from urllib.error import HTTPError, URLError
 from urllib.parse import quote
 from urllib.request import Request, urlopen
@@ -43,7 +45,11 @@ _HOP_BY_HOP_HEADERS = {
     "upgrade",
 }
 _DEFAULT_PROXY_TIMEOUT_SECONDS = 60
+_PROXY_CHUNK_SIZE = 64 * 1024
+_REQUEST_BODY_METHODS = {"POST", "PUT", "PATCH", "DELETE"}
 _SIDECAR_MANAGER = None
+AsgiReceive = Any
+AsgiSend = Any
 
 
 @dataclass
@@ -56,6 +62,48 @@ class RunningSidecar:
     token: str
     stdout_file: Any | None = None
     stderr_file: Any | None = None
+
+
+@dataclass(frozen=True)
+class SidecarProxyTarget:
+    """Validated sidecar proxy request after policy and authorization checks."""
+
+    source_root: Path
+    data_root: str
+    sidecar: HttpSidecarSpec
+    proxy_path: str
+
+
+@dataclass(frozen=True)
+class SidecarProxyError:
+    """Small shared error shape for WSGI and ASGI sidecar responses."""
+
+    payload: dict[str, Any]
+    status: str
+
+
+class StreamingSidecarResponse:
+    """Iterator that streams an open http.client response and closes it."""
+
+    def __init__(self, connection: http.client.HTTPConnection, response: http.client.HTTPResponse, *, method: str) -> None:
+        self._connection = connection
+        self._response = response
+        self._method = method
+
+    def __iter__(self) -> Iterator[bytes]:
+        try:
+            if self._method == "HEAD":
+                return
+            while True:
+                chunk = self._response.read(_PROXY_CHUNK_SIZE)
+                if not chunk:
+                    return
+                yield chunk
+        finally:
+            self.close()
+
+    def close(self) -> None:
+        self._connection.close()
 
 
 class HttpSidecarManager:
@@ -186,83 +234,37 @@ def handle_app_sidecar_proxy(
     start_path: Path,
     start_response: StartResponse,
     shutdown_controller: EntrypointShutdownController | None = None,
-) -> list[bytes]:
+) -> Iterable[bytes]:
     """Proxy one request to a declared app-owned HTTP sidecar."""
-    if user is None:
-        return json_response(start_response, {"error": "authentication_required"}, status="401 Unauthorized")
     method = str(environ.get("REQUEST_METHOD") or "GET").upper()
-    try:
-        binding, source_root, parsed = resolve_app_surface(
-            state,
-            workspace_id=workspace_id,
-            app_id=app_id,
-            start_path=start_path,
-        )
-    except WorkspaceAppBindingNotFoundError:
-        return json_response(start_response, {"error": "app_not_installed"}, status="404 Not Found")
-    except AppHostingError:
-        return json_response(start_response, {"error": "app_unavailable"}, status="404 Not Found")
-    try:
-        require_workspace_membership(state.workspace_store, user=user, workspace_id=workspace_id)
-    except AuthorizationError:
-        return json_response(start_response, {"error": "workspace_not_available"}, status="403 Forbidden")
-    if binding.source_kind == "workspace_local_project":
-        try:
-            require_workspace_admin(
-                state.workspace_store,
-                user=user,
-                workspace_id=workspace_id,
-                reason="workspace_local_sidecar_forbidden",
-            )
-        except AuthorizationError as error:
-            return json_response(start_response, {"error": error.reason}, status="403 Forbidden")
-    if not can_mount_app_visibility(
-        state.workspace_store,
-        user=user,
+    target, error = _resolve_sidecar_proxy_target(
+        state,
         workspace_id=workspace_id,
-        platform_roles=parsed.contract.visibility.platform_roles,
-        workspace_roles=parsed.contract.visibility.workspace_roles,
-        capabilities=parsed.contract.visibility.capabilities,
-    ):
-        return json_response(start_response, {"error": "app_forbidden"}, status="403 Forbidden")
-    sidecar = _find_sidecar(parsed.contract.services.http_sidecars, sidecar_id)
-    if sidecar is None or sidecar.proxy is None:
-        return json_response(start_response, {"error": "sidecar_not_found"}, status="404 Not Found")
-    proxy_path = _proxy_path(subpath)
-    route_mode = _route_mode(sidecar, method=method, path=proxy_path)
-    if route_mode == "blocked":
-        return json_response(
-            start_response,
-            {"error": "sidecar_route_blocked", "sidecar_id": sidecar.service_id},
-            status="403 Forbidden",
-        )
-    if route_mode == "handled_by_core":
-        return json_response(
-            start_response,
-            {"error": "sidecar_route_handled_by_core", "sidecar_id": sidecar.service_id},
-            status="501 Not Implemented",
-        )
-    if route_mode != "pass_through":
-        return json_response(
-            start_response,
-            {"error": "sidecar_route_not_allowed", "sidecar_id": sidecar.service_id},
-            status="404 Not Found",
-        )
+        app_id=app_id,
+        sidecar_id=sidecar_id,
+        subpath=subpath,
+        user=user,
+        method=method,
+        start_path=start_path,
+    )
+    if error is not None:
+        return json_response(start_response, error.payload, status=error.status)
+    assert target is not None
     try:
         body = read_request_body_bytes(environ)
         running = _sidecar_manager().ensure_running(
             workspace_id=workspace_id,
             app_id=app_id,
-            source_root=source_root,
-            data_root=binding.data_root,
-            sidecar=sidecar,
+            source_root=target.source_root,
+            data_root=target.data_root,
+            sidecar=target.sidecar,
             start_path=start_path,
             shutdown_controller=shutdown_controller,
         )
         return _proxy_to_running_sidecar(
             running,
             method=method,
-            path=proxy_path,
+            path=target.proxy_path,
             query_string=str(environ.get("QUERY_STRING") or ""),
             environ=environ,
             body=body,
@@ -276,11 +278,155 @@ def handle_app_sidecar_proxy(
         return json_response(start_response, {"error": "sidecar_proxy_failed"}, status="502 Bad Gateway")
 
 
+async def handle_app_sidecar_proxy_asgi(
+    state: PlatformState,
+    *,
+    scope: dict[str, Any],
+    receive: AsgiReceive,
+    send: AsgiSend,
+    workspace_id: str,
+    app_id: str,
+    sidecar_id: str,
+    subpath: str,
+    user: UserRecord | None,
+    start_path: Path,
+    shutdown_controller: EntrypointShutdownController | None = None,
+) -> None:
+    """Proxy one ASGI request to a declared sidecar without pre-buffering the body."""
+    method = str(scope.get("method") or "GET").upper()
+    target, error = _resolve_sidecar_proxy_target(
+        state,
+        workspace_id=workspace_id,
+        app_id=app_id,
+        sidecar_id=sidecar_id,
+        subpath=subpath,
+        user=user,
+        method=method,
+        start_path=start_path,
+    )
+    if error is not None:
+        await _send_asgi_json(send, error.payload, status=error.status)
+        return
+    assert target is not None
+    try:
+        running = await asyncio.to_thread(
+            _sidecar_manager().ensure_running,
+            workspace_id=workspace_id,
+            app_id=app_id,
+            source_root=target.source_root,
+            data_root=target.data_root,
+            sidecar=target.sidecar,
+            start_path=start_path,
+            shutdown_controller=shutdown_controller,
+        )
+        await _proxy_asgi_to_running_sidecar(
+            running,
+            method=method,
+            path=target.proxy_path,
+            query_string=bytes(scope.get("query_string") or b"").decode("latin1"),
+            scope=scope,
+            sidecar=target.sidecar,
+            receive=receive,
+            send=send,
+        )
+    except AppHostingError as error:
+        logger.warning("App `%s` sidecar `%s` unavailable: %s", app_id, sidecar_id, error)
+        await _send_asgi_json(send, {"error": "sidecar_unavailable", "detail": str(error)}, status="503 Service Unavailable")
+    except Exception:
+        logger.exception("App `%s` sidecar `%s` ASGI proxy failed.", app_id, sidecar_id)
+        await _send_asgi_json(send, {"error": "sidecar_proxy_failed"}, status="502 Bad Gateway")
+
+
+def parse_app_sidecar_proxy_route(path: object) -> tuple[str, str, str] | None:
+    """Parse the generic app sidecar proxy route."""
+    text = str(path or "")
+    if not text.startswith("/api/apps/"):
+        return None
+    remainder = text.removeprefix("/api/apps/")
+    app_id, separator, rest = remainder.partition("/sidecars/")
+    if not separator or not app_id or "/" in app_id or not rest:
+        return None
+    sidecar_id, _separator, subpath = rest.partition("/")
+    if not sidecar_id or "/" in sidecar_id:
+        return None
+    return app_id, sidecar_id, subpath
+
+
 def _sidecar_manager() -> HttpSidecarManager:
     global _SIDECAR_MANAGER
     if _SIDECAR_MANAGER is None:
         _SIDECAR_MANAGER = HttpSidecarManager()
     return _SIDECAR_MANAGER
+
+
+def _resolve_sidecar_proxy_target(
+    state: PlatformState,
+    *,
+    workspace_id: str,
+    app_id: str,
+    sidecar_id: str,
+    subpath: str,
+    user: UserRecord | None,
+    method: str,
+    start_path: Path,
+) -> tuple[SidecarProxyTarget | None, SidecarProxyError | None]:
+    if user is None:
+        return None, SidecarProxyError({"error": "authentication_required"}, "401 Unauthorized")
+    try:
+        binding, source_root, parsed = resolve_app_surface(
+            state,
+            workspace_id=workspace_id,
+            app_id=app_id,
+            start_path=start_path,
+        )
+    except WorkspaceAppBindingNotFoundError:
+        return None, SidecarProxyError({"error": "app_not_installed"}, "404 Not Found")
+    except AppHostingError:
+        return None, SidecarProxyError({"error": "app_unavailable"}, "404 Not Found")
+    try:
+        require_workspace_membership(state.workspace_store, user=user, workspace_id=workspace_id)
+    except AuthorizationError:
+        return None, SidecarProxyError({"error": "workspace_not_available"}, "403 Forbidden")
+    if binding.source_kind == "workspace_local_project":
+        try:
+            require_workspace_admin(
+                state.workspace_store,
+                user=user,
+                workspace_id=workspace_id,
+                reason="workspace_local_sidecar_forbidden",
+            )
+        except AuthorizationError as error:
+            return None, SidecarProxyError({"error": error.reason}, "403 Forbidden")
+    if not can_mount_app_visibility(
+        state.workspace_store,
+        user=user,
+        workspace_id=workspace_id,
+        platform_roles=parsed.contract.visibility.platform_roles,
+        workspace_roles=parsed.contract.visibility.workspace_roles,
+        capabilities=parsed.contract.visibility.capabilities,
+    ):
+        return None, SidecarProxyError({"error": "app_forbidden"}, "403 Forbidden")
+    sidecar = _find_sidecar(parsed.contract.services.http_sidecars, sidecar_id)
+    if sidecar is None or sidecar.proxy is None:
+        return None, SidecarProxyError({"error": "sidecar_not_found"}, "404 Not Found")
+    proxy_path = _proxy_path(subpath)
+    route_mode = _route_mode(sidecar, method=method, path=proxy_path)
+    if route_mode == "blocked":
+        return None, SidecarProxyError(
+            {"error": "sidecar_route_blocked", "sidecar_id": sidecar.service_id},
+            "403 Forbidden",
+        )
+    if route_mode == "handled_by_core":
+        return None, SidecarProxyError(
+            {"error": "sidecar_route_handled_by_core", "sidecar_id": sidecar.service_id},
+            "501 Not Implemented",
+        )
+    if route_mode != "pass_through":
+        return None, SidecarProxyError(
+            {"error": "sidecar_route_not_allowed", "sidecar_id": sidecar.service_id},
+            "404 Not Found",
+        )
+    return SidecarProxyTarget(source_root=source_root, data_root=binding.data_root, sidecar=sidecar, proxy_path=proxy_path), None
 
 
 def _find_sidecar(sidecars: list[HttpSidecarSpec], sidecar_id: str) -> HttpSidecarSpec | None:
@@ -327,7 +473,7 @@ def _proxy_to_running_sidecar(
     environ: dict,
     body: bytes,
     start_response: StartResponse,
-) -> list[bytes]:
+) -> Iterable[bytes]:
     upstream_path = f"{path}?{query_string}" if query_string else path
     connection = http.client.HTTPConnection(running.host, running.port, timeout=_DEFAULT_PROXY_TIMEOUT_SECONDS)
     headers = _forward_request_headers(environ)
@@ -337,16 +483,202 @@ def _proxy_to_running_sidecar(
     try:
         connection.request(method, upstream_path, body=body if body else None, headers=headers)
         response = connection.getresponse()
-        response_body = response.read()
     except OSError as error:
-        raise AppHostingError("HTTP sidecar is not reachable.") from error
-    finally:
         connection.close()
-    response_headers = _forward_response_headers(response.getheaders(), body_length=len(response_body))
+        raise AppHostingError("HTTP sidecar is not reachable.") from error
+    response_headers = _forward_response_headers(response.getheaders())
     start_response(f"{response.status} {response.reason or status_line(response.status).split(' ', 1)[1]}", response_headers)
-    if method == "HEAD":
-        return []
-    return [response_body]
+    return StreamingSidecarResponse(connection, response, method=method)
+
+
+async def _proxy_asgi_to_running_sidecar(
+    running: RunningSidecar,
+    *,
+    method: str,
+    path: str,
+    query_string: str,
+    scope: dict[str, Any],
+    sidecar: HttpSidecarSpec,
+    receive: AsgiReceive,
+    send: AsgiSend,
+) -> None:
+    upstream_path = f"{path}?{query_string}" if query_string else path
+    reader, writer = await asyncio.wait_for(
+        asyncio.open_connection(running.host, running.port),
+        timeout=_DEFAULT_PROXY_TIMEOUT_SECONDS,
+    )
+    response_started = False
+    try:
+        request_headers = _forward_asgi_request_headers(scope)
+        stream_request_as_chunked = method in _REQUEST_BODY_METHODS and not _asgi_header_present(scope, "content-length")
+        request_headers["Host"] = f"{running.host}:{running.port}"
+        request_headers["Authorization"] = f"Bearer {running.token}"
+        request_headers["Connection"] = "close"
+        if stream_request_as_chunked:
+            request_headers["Transfer-Encoding"] = "chunked"
+        header_lines = [f"{method} {upstream_path} HTTP/1.1"]
+        header_lines.extend(f"{name}: {value}" for name, value in request_headers.items())
+        header_lines.append("")
+        header_lines.append("")
+        writer.write("\r\n".join(header_lines).encode("latin1"))
+        await writer.drain()
+        await _stream_asgi_request_body(receive, writer, chunked=stream_request_as_chunked)
+        response_status, _response_reason, response_headers = await _read_asgi_upstream_response_head(reader)
+        _ensure_asgi_response_allowed_by_contract(sidecar, response_headers)
+        await send(
+            {
+                "type": "http.response.start",
+                "status": response_status,
+                "headers": [
+                    (name.lower().encode("latin1"), value.encode("latin1"))
+                    for name, value in _forward_asgi_response_headers(response_headers)
+                ],
+            }
+        )
+        response_started = True
+        if method != "HEAD":
+            async for chunk in _stream_asgi_upstream_response_body(reader, response_headers):
+                await send({"type": "http.response.body", "body": chunk, "more_body": True})
+    except OSError as error:
+        if not response_started:
+            raise AppHostingError("HTTP sidecar is not reachable.") from error
+        logger.warning("HTTP sidecar stream ended with a socket error.", exc_info=True)
+    except Exception:
+        if not response_started:
+            raise
+        logger.warning("HTTP sidecar stream ended with an upstream protocol error.", exc_info=True)
+    finally:
+        writer.close()
+        try:
+            await writer.wait_closed()
+        except OSError:
+            pass
+    await send({"type": "http.response.body", "body": b"", "more_body": False})
+
+
+async def _stream_asgi_request_body(receive: AsgiReceive, writer: asyncio.StreamWriter, *, chunked: bool) -> None:
+    while True:
+        message = await receive()
+        if message.get("type") != "http.request":
+            if chunked:
+                writer.write(b"0\r\n\r\n")
+                await writer.drain()
+            return
+        chunk = bytes(message.get("body") or b"")
+        if chunk:
+            if chunked:
+                writer.write(f"{len(chunk):x}\r\n".encode("ascii"))
+                writer.write(chunk)
+                writer.write(b"\r\n")
+            else:
+                writer.write(chunk)
+            await writer.drain()
+        if not message.get("more_body", False):
+            if chunked:
+                writer.write(b"0\r\n\r\n")
+                await writer.drain()
+            return
+
+
+async def _read_asgi_upstream_response_head(reader: asyncio.StreamReader) -> tuple[int, str, list[tuple[str, str]]]:
+    status_line_bytes = await asyncio.wait_for(reader.readline(), timeout=_DEFAULT_PROXY_TIMEOUT_SECONDS)
+    if not status_line_bytes:
+        raise AppHostingError("HTTP sidecar closed before sending a response.")
+    try:
+        status_parts = status_line_bytes.decode("latin1").rstrip("\r\n").split(" ", 2)
+        status_code = int(status_parts[1])
+        reason = status_parts[2] if len(status_parts) > 2 else ""
+    except (UnicodeDecodeError, ValueError, IndexError) as error:
+        raise AppHostingError("HTTP sidecar returned an invalid HTTP response.") from error
+    headers: list[tuple[str, str]] = []
+    while True:
+        line = await asyncio.wait_for(reader.readline(), timeout=_DEFAULT_PROXY_TIMEOUT_SECONDS)
+        if line in {b"\r\n", b"\n", b""}:
+            break
+        try:
+            name, value = line.decode("latin1").rstrip("\r\n").split(":", 1)
+        except ValueError as error:
+            raise AppHostingError("HTTP sidecar returned an invalid HTTP header.") from error
+        headers.append((name.strip(), value.strip()))
+    return status_code, reason, headers
+
+
+async def _stream_asgi_upstream_response_body(
+    reader: asyncio.StreamReader,
+    headers: list[tuple[str, str]],
+) -> AsyncIterator[bytes]:
+    lowered = {name.lower(): value for name, value in headers}
+    transfer_encoding = lowered.get("transfer-encoding", "").lower()
+    content_length = lowered.get("content-length")
+    if "chunked" in transfer_encoding:
+        async for chunk in _stream_chunked_asgi_body(reader):
+            yield chunk
+        return
+    if content_length is not None:
+        try:
+            remaining = int(content_length)
+        except ValueError as error:
+            raise AppHostingError("HTTP sidecar returned an invalid Content-Length header.") from error
+        while remaining > 0:
+            chunk = await asyncio.wait_for(
+                reader.read(min(_PROXY_CHUNK_SIZE, remaining)),
+                timeout=_DEFAULT_PROXY_TIMEOUT_SECONDS,
+            )
+            if not chunk:
+                return
+            remaining -= len(chunk)
+            yield chunk
+        return
+    while True:
+        chunk = await asyncio.wait_for(reader.read(_PROXY_CHUNK_SIZE), timeout=_DEFAULT_PROXY_TIMEOUT_SECONDS)
+        if not chunk:
+            return
+        yield chunk
+
+
+async def _stream_chunked_asgi_body(reader: asyncio.StreamReader) -> AsyncIterator[bytes]:
+    while True:
+        size_line = await asyncio.wait_for(reader.readline(), timeout=_DEFAULT_PROXY_TIMEOUT_SECONDS)
+        if not size_line:
+            return
+        size_text = size_line.decode("latin1").strip().split(";", 1)[0]
+        try:
+            size = int(size_text, 16)
+        except ValueError as error:
+            raise AppHostingError("HTTP sidecar returned an invalid chunked response.") from error
+        if size == 0:
+            await _discard_chunked_trailers(reader)
+            return
+        remaining = size
+        while remaining > 0:
+            chunk = await asyncio.wait_for(
+                reader.read(min(_PROXY_CHUNK_SIZE, remaining)),
+                timeout=_DEFAULT_PROXY_TIMEOUT_SECONDS,
+            )
+            if not chunk:
+                return
+            remaining -= len(chunk)
+            yield chunk
+        await asyncio.wait_for(reader.readexactly(2), timeout=_DEFAULT_PROXY_TIMEOUT_SECONDS)
+
+
+async def _discard_chunked_trailers(reader: asyncio.StreamReader) -> None:
+    while True:
+        line = await asyncio.wait_for(reader.readline(), timeout=_DEFAULT_PROXY_TIMEOUT_SECONDS)
+        if line in {b"\r\n", b"\n", b""}:
+            return
+
+
+def _ensure_asgi_response_allowed_by_contract(sidecar: HttpSidecarSpec, headers: list[tuple[str, str]]) -> None:
+    if sidecar.proxy is None:
+        return
+    content_type = ""
+    for name, value in headers:
+        if name.lower() == "content-type":
+            content_type = value.split(";", 1)[0].strip().lower()
+            break
+    if content_type == "text/event-stream" and not sidecar.proxy.sse:
+        raise AppHostingError("HTTP sidecar returned SSE without declaring `proxy.sse` support.")
 
 
 def _forward_request_headers(environ: dict) -> dict[str, str]:
@@ -363,15 +695,56 @@ def _forward_request_headers(environ: dict) -> dict[str, str]:
     return headers
 
 
-def _forward_response_headers(headers: list[tuple[str, str]], *, body_length: int) -> list[tuple[str, str]]:
+def _forward_response_headers(headers: list[tuple[str, str]]) -> list[tuple[str, str]]:
     forwarded: list[tuple[str, str]] = []
     for name, value in headers:
         lowered = name.lower()
-        if lowered in _HOP_BY_HOP_HEADERS or lowered == "content-length":
+        if lowered in _HOP_BY_HOP_HEADERS or lowered == "authorization":
             continue
         forwarded.append((name, value))
-    forwarded.append(("Content-Length", str(body_length)))
     return forwarded
+
+
+def _forward_asgi_request_headers(scope: dict[str, Any]) -> dict[str, str]:
+    headers: dict[str, str] = {}
+    for raw_name, raw_value in scope.get("headers", []):
+        name = raw_name.decode("latin1").replace("_", "-").title()
+        lowered = name.lower()
+        if lowered in _HOP_BY_HOP_HEADERS or lowered in {"host", "cookie", "authorization"}:
+            continue
+        headers[name] = raw_value.decode("latin1")
+    return headers
+
+
+def _asgi_header_present(scope: dict[str, Any], header_name: str) -> bool:
+    expected = header_name.lower().encode("latin1")
+    return any(raw_name.lower() == expected for raw_name, _raw_value in scope.get("headers", []))
+
+
+def _forward_asgi_response_headers(headers: list[tuple[str, str]]) -> list[tuple[str, str]]:
+    forwarded: list[tuple[str, str]] = []
+    for name, value in headers:
+        lowered = name.lower()
+        if lowered in _HOP_BY_HOP_HEADERS or lowered == "authorization":
+            continue
+        forwarded.append((name, value))
+    return forwarded
+
+
+async def _send_asgi_json(send: AsgiSend, payload: dict[str, Any], *, status: str) -> None:
+    body = json.dumps(payload, indent=2).encode("utf-8")
+    status_code = int(status.split(" ", 1)[0])
+    await send(
+        {
+            "type": "http.response.start",
+            "status": status_code,
+            "headers": [
+                (b"content-type", b"application/json; charset=utf-8"),
+                (b"content-length", str(len(body)).encode("ascii")),
+            ],
+        }
+    )
+    await send({"type": "http.response.body", "body": body, "more_body": False})
 
 
 def _allocate_loopback_port(host: str) -> int:

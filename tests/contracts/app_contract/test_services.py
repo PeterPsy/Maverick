@@ -61,20 +61,20 @@ class AppContractServiceTests(unittest.TestCase):
         with TemporaryDirectory() as temp_dir:
             app_root = self._write_sidecar_app(Path(temp_dir))
             payload = json.loads((app_root / "app_contract.json").read_text(encoding="utf-8"))
-            payload["services"]["http_sidecars"][0]["logs"]["stdout"] = "data/design-studio/sidecar.log"
+            payload["services"]["http_sidecars"][0]["logs"]["stdout"] = "data/sidecar-demo/sidecar.log"
             (app_root / "app_contract.json").write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
 
-            with self.assertRaisesRegex(AppContractValidationError, "logs/apps/design-studio"):
+            with self.assertRaisesRegex(AppContractValidationError, "logs/apps/sidecar-demo"):
                 parse_app_contract_file(app_root)
 
     def _write_sidecar_app(self, root: Path) -> Path:
-        app_root = root / "apps" / "design-studio"
+        app_root = root / "apps" / "sidecar-demo"
         (app_root / "service").mkdir(parents=True)
         parsed = build_parsed_app_contract(
-            app_id="design-studio",
-            name="Design Studio",
+            app_id="sidecar-demo",
+            name="Sidecar Demo",
             version="0.1.0",
-            description="OpenDesign sidecar test app.",
+            description="HTTP sidecar test app.",
             publisher="maverick",
             contract=build_app_contract(
                 services=build_app_services(
@@ -109,8 +109,8 @@ class AppContractServiceTests(unittest.TestCase):
                                 ),
                             ),
                             logs=build_http_sidecar_logs(
-                                stdout="logs/apps/design-studio/sidecar.log",
-                                stderr="logs/apps/design-studio/sidecar.log",
+                                stdout="logs/apps/sidecar-demo/sidecar.log",
+                                stderr="logs/apps/sidecar-demo/sidecar.log",
                             ),
                         )
                     ]

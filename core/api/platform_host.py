@@ -29,7 +29,7 @@ from core.api.runtime_cli_api import handle_runtime_cli_api
 from core.api.session_api import handle_session_api, resolve_request_session
 from core.api.secret_api import handle_secret_api
 from core.api.settings_api import handle_settings_api
-from core.api.sidecar_proxy import handle_app_sidecar_proxy
+from core.api.sidecar_proxy import handle_app_sidecar_proxy, parse_app_sidecar_proxy_route
 from core.api.widget_api import handle_widget_api
 from core.api.workspace_files_api import handle_workspace_files_api
 from core.api.workspace_api import handle_workspace_api
@@ -187,7 +187,7 @@ class PlatformHost:
                     start_path=self.start_path,
                     start_response=start_response,
                 )
-            sidecar_route = _app_sidecar_proxy_route(path)
+            sidecar_route = parse_app_sidecar_proxy_route(path)
             if sidecar_route is not None:
                 app_id, sidecar_id, subpath = sidecar_route
                 if context is None:
@@ -262,20 +262,6 @@ def _backend_media_app_id(path: object) -> str:
     if text.endswith("/media"):
         return _valid_backend_media_app_id(text.removeprefix("/api/apps/").removesuffix("/media"))
     return ""
-
-
-def _app_sidecar_proxy_route(path: object) -> tuple[str, str, str] | None:
-    text = str(path or "")
-    if not text.startswith("/api/apps/"):
-        return None
-    remainder = text.removeprefix("/api/apps/")
-    app_id, separator, rest = remainder.partition("/sidecars/")
-    if not separator or not app_id or "/" in app_id or not rest:
-        return None
-    sidecar_id, _separator, subpath = rest.partition("/")
-    if not sidecar_id or "/" in sidecar_id:
-        return None
-    return app_id, sidecar_id, subpath
 
 
 def _backend_file_gateway_route(path: object) -> tuple[str, str] | None:

@@ -27,6 +27,9 @@ class DesignStudioAppTests(unittest.TestCase):
         sidecar = parsed.contract.services.http_sidecars[0]
         self.assertEqual(sidecar.service_id, "opendesign")
         self.assertEqual(sidecar.bind.host, "127.0.0.1")
+        self.assertTrue(sidecar.proxy.streaming)
+        self.assertTrue(sidecar.proxy.sse)
+        self.assertFalse(sidecar.proxy.websocket)
         self.assertEqual(sidecar.proxy.route_policy.blocked[0].path_prefix, "/api/import/folder")
 
     def test_backend_creates_imports_and_exports_project(self) -> None:

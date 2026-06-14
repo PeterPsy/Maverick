@@ -6,6 +6,7 @@ import asyncio
 from concurrent.futures import ThreadPoolExecutor
 from functools import partial
 from io import BytesIO
+import json
 import os
 from typing import Any, Awaitable, Callable, Iterable, Iterator
 
@@ -18,6 +19,8 @@ from core.api.platform_state import PlatformState, bootstrap_platform_state
 from core.api.runtime_thread_websocket import RUNTIME_THREADS_WS_PATH, stream_runtime_thread_events
 from core.api.runtime_websocket import RUNTIME_SESSION_WS_PREFIX, stream_runtime_session_events
 from core.api.session_api import resolve_request_session
+from core.api.sidecar_proxy import handle_app_sidecar_proxy_asgi, parse_app_sidecar_proxy_route
+from core.api.http import HttpRequestError, enforce_same_origin_for_unsafe_request
 from core.shared.entrypoints import EntrypointShutdownController
 
 
@@ -116,6 +119,10 @@ class PlatformAsgiHost:
         if scope.get("path") == "/health":
             await _send_direct_json_response(send, b'{\n  "status": "ok",\n  "service": "maverick-core"\n}')
             return
+        sidecar_route = parse_app_sidecar_proxy_route(scope.get("path"))
+        if sidecar_route is not None:
+            await self._handle_sidecar_http(scope, receive, send, sidecar_route)
+            return
         try:
             body = await _read_asgi_body(receive)
         except ValueError:
@@ -175,6 +182,48 @@ class PlatformAsgiHost:
             else:
                 await asyncio.to_thread(_close_wsgi_iterable, response_iterable)
         await send({"type": "http.response.body", "body": b"", "more_body": False})
+
+    async def _handle_sidecar_http(
+        self,
+        scope: dict[str, Any],
+        receive: AsgiReceive,
+        send: AsgiSend,
+        sidecar_route: tuple[str, str, str],
+    ) -> None:
+        environ = _wsgi_environ(scope, b"")
+        try:
+            enforce_same_origin_for_unsafe_request(environ)
+        except HttpRequestError as error:
+            response_body = json_error_body(error.error)
+            await send(
+                {
+                    "type": "http.response.start",
+                    "status": int(error.status.split(" ", 1)[0]),
+                    "headers": [
+                        (b"content-type", b"application/json; charset=utf-8"),
+                        (b"content-length", str(len(response_body)).encode("ascii")),
+                    ],
+                }
+            )
+            await send({"type": "http.response.body", "body": response_body, "more_body": False})
+            return
+        context = resolve_request_session(self.state, environ)
+        workspace_id = context.workspace_id if context is not None else self.http_host.workspace_id
+        user = context.user if context is not None else None
+        app_id, sidecar_id, subpath = sidecar_route
+        await handle_app_sidecar_proxy_asgi(
+            self.state,
+            scope=scope,
+            receive=receive,
+            send=send,
+            workspace_id=workspace_id,
+            app_id=app_id,
+            sidecar_id=sidecar_id,
+            subpath=subpath,
+            user=user,
+            start_path=self.state.repository_root,
+            shutdown_controller=self.shutdown_controller,
+        )
 
 
 class LazyAsgiApplication:
@@ -316,6 +365,10 @@ def _close_wsgi_iterable(iterator: Iterable[bytes]) -> None:
     close = getattr(iterator, "close", None)
     if callable(close):
         close()
+
+
+def json_error_body(error: str) -> bytes:
+    return json.dumps({"error": error}, indent=2).encode("utf-8")
 
 
 def create_asgi_application() -> PlatformAsgiHost:

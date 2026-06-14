@@ -259,8 +259,8 @@
         },
         "proxy": {
           "mount": "/opendesign",
-          "streaming": false,
-          "sse": false,
+          "streaming": true,
+          "sse": true,
           "websocket": false,
           "route_policy": {
             "pass_through": [

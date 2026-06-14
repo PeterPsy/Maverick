@@ -9,7 +9,7 @@ import tempfile
 from typing import Any, BinaryIO
 
 from errors import StorageValidationError
-from drive_connection_store import append_audit, get_connection, now_timestamp, resolve_connected_connection, sync_state_for_connection, update_connection_sync_state
+from drive_connection_store import append_audit, now_timestamp, resolve_connected_connection, sync_state_for_connection, update_connection_sync_state
 from drive_oauth import (
     GOOGLE_DRIVE_CLIENT_ID_SECRET,
     GOOGLE_DRIVE_CLIENT_SECRET_SECRET,

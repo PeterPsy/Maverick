@@ -64,6 +64,8 @@ The contract declares frontend, backend, CLI, MCP, lifecycle hooks, a bundled sk
 
 The sidecar is sandbox-compatible because it binds to loopback, receives a generated technical token, writes runtime data under the app data root, writes logs under `logs/apps/design-studio/`, and exposes only routes allowed by `route_policy`.
 
+The core sidecar proxy uses the ASGI streaming path for Design Studio routes. Request bodies are forwarded to the sidecar as chunks instead of through the JSON app-backend body limit, responses are streamed back to the browser, and SSE responses are preserved without exposing the generated `OD_API_TOKEN` to the client.
+
 The app intentionally does not declare provider secrets yet. Provider keys stay outside the sidecar until Maverick's provider proxy route handlers are implemented.
 
 ## Verification
@@ -80,6 +82,5 @@ maverick app design-studio cli list --json
 Current intentional omissions:
 
 - the full OpenDesign daemon is not vendored yet
-- the core proxy path is bounded HTTP, not full ASGI streaming/SSE
 - provider proxy routes are declared as `handled_by_core` but not implemented as provider adapters yet
 - full-access terminal, Local CLI, and host-folder import are not part of the sandbox MVP

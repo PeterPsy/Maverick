@@ -38,6 +38,34 @@ export async function listChatProjects(): Promise<ChatProjectsPayload> {
   return { projects: payload.projects || [], preferences: payload.preferences };
 }
 
+export type ChatViewFilterPayload = {
+  state?: {
+    view_filter?: {
+      mode?: string;
+      query?: string;
+      entity_type?: string;
+      title?: string;
+      updated_at?: string;
+    };
+  };
+};
+
+export function getChatViewFilter(): Promise<ChatViewFilterPayload> {
+  return requestJson<ChatViewFilterPayload>("/api/apps/chat/backend", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ action: "view_filter" }),
+  });
+}
+
+export function setChatViewFilter(query: string): Promise<ChatViewFilterPayload> {
+  return requestJson<ChatViewFilterPayload>("/api/apps/chat/backend", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ action: "set_view_filter", query, entity_type: "thread" }),
+  });
+}
+
 async function withChatProjects<T extends { threads: ChatThread[] }>(payload: T): Promise<T & { projects: ChatProject[]; preferences?: Record<string, unknown> }> {
   const projectsPayload = await listChatProjects();
   return { ...payload, threads: orderChatThreads(payload.threads || []), ...projectsPayload };

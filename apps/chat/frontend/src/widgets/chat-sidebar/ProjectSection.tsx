@@ -144,7 +144,7 @@ export function ProjectSection({
               </span>
             </button>
           ) : null}
-          {section.projectId === null ? (
+          {section.canCreateProject ? (
             <button
               aria-label="New project"
               className="bs-chat-folder__action-button"
@@ -212,6 +212,7 @@ export function ProjectSection({
                 onToggleThreadEdit={onToggleThreadEdit}
                 onToggleThreadSelection={onToggleThreadSelection}
                 onTrackThreadTouchStart={onTrackThreadTouchStart}
+                canMoveThread={section.canMoveThreads}
                 projects={projects}
                 sectionProjectId={section.projectId}
                 sectionTitle={section.title}
@@ -219,7 +220,7 @@ export function ProjectSection({
               />
             ))
           ) : (
-            <p className="bs-chat-folder__empty">No chats in this project.</p>
+            <p className="bs-chat-folder__empty">{section.emptyLabel}</p>
           )}
         </div>
       ) : null}

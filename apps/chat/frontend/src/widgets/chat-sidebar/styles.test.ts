@@ -18,6 +18,20 @@ describe("chat sidebar scroll clearance", () => {
   });
 });
 
+describe("chat sidebar search", () => {
+  it("uses the compact glass search frame copied from the Skills sidebar pattern", () => {
+    const styles = readStyle("styles.css");
+
+    expect(styles).toContain("--chat-sidebar-search-height: 2.65rem;");
+    expect(styles).toContain(".bs-chat-sidebar-search-frame");
+    expect(styles).toContain("grid-template-columns: auto minmax(0, 1fr);");
+    expect(styles).toContain("border-radius: 22px;");
+    expect(styles).toContain("backdrop-filter: blur(26px);");
+    expect(styles).toContain(".bs-chat-sidebar-search-frame:focus-within");
+    expect(styles).toContain("padding: calc(var(--chat-sidebar-scroll-under-top) + var(--chat-sidebar-search-height) + 0.72rem) 0 var(--chat-sidebar-scroll-under-bottom);");
+  });
+});
+
 describe("chat sidebar unread response state", () => {
   it("renders a white border for completed unread responses", () => {
     const styles = readStyle("styles.css");

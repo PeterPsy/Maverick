@@ -19,6 +19,7 @@ export function ThreadRow({
   onToggleThreadEdit,
   onToggleThreadSelection,
   onTrackThreadTouchStart,
+  canMoveThread,
   projects,
   sectionProjectId,
   sectionTitle,
@@ -38,6 +39,7 @@ export function ThreadRow({
   onToggleThreadEdit: (thread: ChatThread) => void;
   onToggleThreadSelection: (thread: ChatThread) => void;
   onTrackThreadTouchStart: (event: ReactPointerEvent<HTMLButtonElement>, thread: ChatThread) => void;
+  canMoveThread: boolean;
   projects: ChatProject[];
   sectionProjectId: string | null;
   sectionTitle: string;
@@ -106,7 +108,7 @@ export function ThreadRow({
         >
           <span aria-hidden="true" className="bs-chat-list__selection-ring" />
         </button>
-        {sectionProjectId !== thread.project_id ? (
+        {canMoveThread && sectionProjectId !== thread.project_id ? (
           <button
             aria-label={`Move ${threadLabel} to ${sectionTitle}`}
             className="bs-instance-menu__trigger"

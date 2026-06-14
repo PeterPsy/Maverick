@@ -6,6 +6,9 @@ export type FolderSection = {
   title: string;
   items: ChatThread[];
   canManage: boolean;
+  canCreateProject: boolean;
+  canMoveThreads: boolean;
+  emptyLabel: string;
 };
 
 export function buildSections(projects: ChatProject[], threads: ChatThread[]): FolderSection[] {
@@ -17,6 +20,9 @@ export function buildSections(projects: ChatProject[], threads: ChatThread[]): F
       projectId: project.project_id,
       title: project.name,
       canManage: true,
+      canCreateProject: false,
+      canMoveThreads: true,
+      emptyLabel: "No chats in this project.",
       items: [],
     }));
   const sectionsByProjectId = new Map(projectSections.map((section) => [section.projectId, section]));
@@ -35,6 +41,9 @@ export function buildSections(projects: ChatProject[], threads: ChatThread[]): F
         projectId: thread.project_id,
         title: "Project",
         canManage: false,
+        canCreateProject: false,
+        canMoveThreads: true,
+        emptyLabel: "No chats in this project.",
         items: [],
       };
       sectionsByProjectId.set(thread.project_id, section);
@@ -50,6 +59,9 @@ export function buildSections(projects: ChatProject[], threads: ChatThread[]): F
       projectId: null,
       title: "No project",
       canManage: false,
+      canCreateProject: true,
+      canMoveThreads: true,
+      emptyLabel: "No chats in this project.",
       items: unassigned,
     });
   }

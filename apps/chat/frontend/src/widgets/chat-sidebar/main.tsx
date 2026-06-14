@@ -11,6 +11,19 @@ function ChatSidebarWidget() {
     <main className={`bs-widget-root ${sidebar.isShellMobileLayout ? "is-shell-mobile" : ""} ${sidebar.hasThreadSelection ? "has-thread-selection" : ""}`}>
       {sidebar.error ? <p className="bs-chat-folder__empty">{sidebar.error}</p> : null}
 
+      <div className="bs-chat-sidebar-search-frame">
+        <span aria-hidden="true" className="material-symbols-rounded">
+          search
+        </span>
+        <input
+          aria-label="Search chats"
+          className="bs-chat-sidebar-search"
+          onChange={(event) => sidebar.setSearchQuery(event.target.value)}
+          placeholder="Search chats"
+          value={sidebar.searchQuery}
+        />
+      </div>
+
       <div className="bs-chat-list">
         {sidebar.isInitialLoading ? (
           <ChatSidebarSkeleton />

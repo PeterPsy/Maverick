@@ -61,6 +61,7 @@ describe("ThreadRow", () => {
           onToggleThreadEdit={vi.fn()}
           onToggleThreadSelection={vi.fn()}
           onTrackThreadTouchStart={vi.fn()}
+          canMoveThread
           projects={[]}
           sectionProjectId={null}
           sectionTitle="No project"

@@ -3,6 +3,7 @@ import {
   ApiError,
   deleteProject,
   getSpeechCapabilities,
+  listRuntimeSessionEvents,
   prewarmSpeechWorker,
   selectedDependencyProviderAppId,
   selectedSharedDependencyProviderAppId,
@@ -134,6 +135,27 @@ describe("deleteProject", () => {
       projects: [],
       preferences: { view: "all" },
     });
+  });
+});
+
+describe("runtime event client calls", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("loads bounded runtime events for sidebar transcript search", async () => {
+    const fetchMock = vi.fn(async () => jsonResponse({ items: [{ event_id: "event-1" }] }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(listRuntimeSessionEvents("session/1", { limit: 25 })).resolves.toEqual({ items: [{ event_id: "event-1" }] });
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/api/runtime/sessions/session%2F1/events?limit=25",
+      expect.objectContaining({
+        credentials: "same-origin",
+        headers: expect.objectContaining({ Accept: "application/json" }),
+      }),
+    );
   });
 });
 

@@ -76,9 +76,16 @@ button {
   font: inherit;
 }
 
+input {
+  border: 0;
+  color: inherit;
+  font: inherit;
+}
+
 .bs-widget-root {
   --chat-sidebar-scroll-under-bottom: 6.8rem;
   --chat-sidebar-scroll-under-top: calc(3rem + 0.75rem);
+  --chat-sidebar-search-height: 2.65rem;
   position: relative;
   display: block;
   width: 100%;
@@ -100,6 +107,58 @@ button {
 
 .bs-widget-root.is-shell-mobile.has-thread-selection {
   --chat-sidebar-scroll-under-bottom: 6.9rem;
+}
+
+.bs-chat-sidebar-search-frame {
+  position: absolute;
+  top: var(--chat-sidebar-scroll-under-top);
+  left: 0;
+  right: 0;
+  z-index: 3;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: 0.48rem;
+  height: var(--chat-sidebar-search-height);
+  min-height: var(--chat-sidebar-search-height);
+  padding: 0 0.72rem;
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  border-radius: 22px;
+  background: var(--chat-sidebar-glass-surface);
+  box-shadow: var(--chat-sidebar-inner-edge);
+  backdrop-filter: blur(26px);
+  -webkit-backdrop-filter: blur(26px);
+}
+
+.bs-chat-sidebar-search-frame .material-symbols-rounded {
+  width: 1.08rem;
+  height: 1.08rem;
+  color: var(--maverick-text-muted);
+  font-size: 1.08rem;
+  flex: none;
+}
+
+.bs-chat-sidebar-search {
+  width: 100%;
+  min-width: 0;
+  outline: none;
+  background: transparent;
+  color: var(--maverick-text);
+}
+
+.bs-chat-sidebar-search::placeholder {
+  color: var(--maverick-text-soft);
+}
+
+.bs-chat-sidebar-search-frame:focus-within {
+  border-color: var(--maverick-accent);
+  box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.18);
+}
+
+@media (max-width: 979px) {
+  input {
+    font-size: 16px;
+  }
 }
 
 .bs-sidebar__nav-button {
@@ -167,7 +226,7 @@ button {
   overflow-y: auto;
   overscroll-behavior: contain;
   -webkit-overflow-scrolling: touch;
-  padding: var(--chat-sidebar-scroll-under-top) 0 var(--chat-sidebar-scroll-under-bottom);
+  padding: calc(var(--chat-sidebar-scroll-under-top) + var(--chat-sidebar-search-height) + 0.72rem) 0 var(--chat-sidebar-scroll-under-bottom);
   scrollbar-width: none;
 }
 

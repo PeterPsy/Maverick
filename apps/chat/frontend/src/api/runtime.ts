@@ -108,6 +108,20 @@ export function runtimeThreadWebSocketUrl(): string {
   return `${protocol}//${window.location.host}/ws/runtime/threads`;
 }
 
+export function listRuntimeSessionEvents(
+  sessionId: string,
+  options: { limit?: number; signal?: AbortSignal } = {},
+): Promise<{ items: RuntimeEvent[] }> {
+  const query = new URLSearchParams();
+  if (options.limit && Number.isFinite(options.limit)) {
+    query.set("limit", String(Math.max(1, Math.floor(options.limit))));
+  }
+  const suffix = query.toString() ? `?${query.toString()}` : "";
+  return requestJson<{ items: RuntimeEvent[] }>(`/api/runtime/sessions/${encodeURIComponent(sessionId)}/events${suffix}`, {
+    signal: options.signal,
+  });
+}
+
 export function sendRuntimeTurn(
   sessionId: string,
   inputText: string,

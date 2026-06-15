@@ -75,7 +75,14 @@ The sidecar is sandbox-compatible because it binds to loopback, receives a gener
 
 The core sidecar proxy uses the ASGI streaming path for Design Studio routes. Request bodies are forwarded to the sidecar as chunks instead of through the JSON app-backend body limit, responses are streamed back to the browser, and SSE responses are preserved without exposing the generated `OD_API_TOKEN` to the client.
 
-The app intentionally does not declare provider secrets yet. Provider keys stay outside the sidecar until Maverick's provider proxy route handlers are implemented.
+Routes declared as `handled_by_core` are now routed to the Design Studio backend with the `sidecar_core_handler` surface instead of reaching the OpenDesign sidecar. The implemented sandbox handlers cover:
+
+- `GET /api/media/config`, returning sanitized Maverick-managed provider config without keys
+- `POST /api/import/storage`, importing through the selected `storage-read` dependency backend
+- `POST /api/export/storage`, exporting through the selected `storage-write` dependency backend
+- `/api/provider/*`, failing closed with `provider_proxy_not_configured` until real provider adapters are mapped
+
+The app intentionally does not declare provider secrets yet. Provider keys stay outside the sidecar and are not written into `OD_MEDIA_CONFIG_DIR`; the current provider route handler proves the governed interception path and secret non-persistence, but it does not call external model providers yet.
 
 ## Verification
 
@@ -91,5 +98,5 @@ maverick app design-studio cli list --json
 Current intentional omissions:
 
 - the full OpenDesign daemon is not vendored yet
-- provider proxy routes are declared as `handled_by_core` but not implemented as provider adapters yet
+- provider proxy routes are intercepted by core/app handlers, but real provider adapters are not implemented yet
 - full-access terminal, Local CLI, and host-folder import are not part of the sandbox MVP

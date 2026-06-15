@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
 import asyncio
+from dataclasses import dataclass
 import json
 import http.client
 import logging
@@ -22,8 +22,13 @@ from urllib.request import Request, urlopen
 from core.api.app_registry import resolve_app_surface
 from core.api.http import StartResponse, json_response, read_request_body_bytes, status_line
 from core.api.platform_state import PlatformState
+from core.api.sidecar_core_routes import (
+    SidecarCoreRouteContext,
+    handle_core_sidecar_route,
+    handle_core_sidecar_route_asgi,
+)
 from core.apps.errors import AppHostingError, WorkspaceAppBindingNotFoundError
-from core.apps.models import HttpSidecarRouteRule, HttpSidecarSpec
+from core.apps.models import HttpSidecarRouteRule, HttpSidecarSpec, ParsedAppContract
 from core.authorization.errors import AuthorizationError
 from core.authorization.service import can_mount_app_visibility, require_workspace_admin, require_workspace_membership
 from core.identity.models import UserRecord
@@ -70,8 +75,10 @@ class SidecarProxyTarget:
 
     source_root: Path
     data_root: str
+    parsed: ParsedAppContract
     sidecar: HttpSidecarSpec
     proxy_path: str
+    route_mode: str
 
 
 @dataclass(frozen=True)
@@ -251,6 +258,19 @@ def handle_app_sidecar_proxy(
         return json_response(start_response, error.payload, status=error.status)
     assert target is not None
     try:
+        if target.route_mode == "handled_by_core":
+            return handle_core_sidecar_route(
+                state,
+                environ=environ,
+                workspace_id=workspace_id,
+                app_id=app_id,
+                user=user,
+                context=_core_route_context(target),
+                start_path=start_path,
+                start_response=start_response,
+                shutdown_controller=shutdown_controller,
+                logger=logger,
+            )
         body = read_request_body_bytes(environ)
         running = _sidecar_manager().ensure_running(
             workspace_id=workspace_id,
@@ -309,6 +329,21 @@ async def handle_app_sidecar_proxy_asgi(
         return
     assert target is not None
     try:
+        if target.route_mode == "handled_by_core":
+            await handle_core_sidecar_route_asgi(
+                state,
+                scope=scope,
+                receive=receive,
+                send=send,
+                workspace_id=workspace_id,
+                app_id=app_id,
+                user=user,
+                context=_core_route_context(target),
+                start_path=start_path,
+                shutdown_controller=shutdown_controller,
+                logger=logger,
+            )
+            return
         running = await asyncio.to_thread(
             _sidecar_manager().ensure_running,
             workspace_id=workspace_id,
@@ -417,16 +452,27 @@ def _resolve_sidecar_proxy_target(
             "403 Forbidden",
         )
     if route_mode == "handled_by_core":
-        return None, SidecarProxyError(
-            {"error": "sidecar_route_handled_by_core", "sidecar_id": sidecar.service_id},
-            "501 Not Implemented",
-        )
+        return SidecarProxyTarget(
+            source_root=source_root,
+            data_root=binding.data_root,
+            parsed=parsed,
+            sidecar=sidecar,
+            proxy_path=proxy_path,
+            route_mode=route_mode,
+        ), None
     if route_mode != "pass_through":
         return None, SidecarProxyError(
             {"error": "sidecar_route_not_allowed", "sidecar_id": sidecar.service_id},
             "404 Not Found",
         )
-    return SidecarProxyTarget(source_root=source_root, data_root=binding.data_root, sidecar=sidecar, proxy_path=proxy_path), None
+    return SidecarProxyTarget(
+        source_root=source_root,
+        data_root=binding.data_root,
+        parsed=parsed,
+        sidecar=sidecar,
+        proxy_path=proxy_path,
+        route_mode=route_mode,
+    ), None
 
 
 def _find_sidecar(sidecars: list[HttpSidecarSpec], sidecar_id: str) -> HttpSidecarSpec | None:
@@ -462,6 +508,16 @@ def _route_rule_matches(rule: HttpSidecarRouteRule, *, method: str, path: str) -
 def _proxy_path(subpath: str) -> str:
     clean = quote(str(subpath or "").lstrip("/"), safe="/:@-._~!$&'()*+,;=")
     return f"/{clean}" if clean else "/"
+
+
+def _core_route_context(target: SidecarProxyTarget) -> SidecarCoreRouteContext:
+    return SidecarCoreRouteContext(
+        source_root=target.source_root,
+        data_root=target.data_root,
+        parsed=target.parsed,
+        sidecar=target.sidecar,
+        proxy_path=target.proxy_path,
+    )
 
 
 def _proxy_to_running_sidecar(

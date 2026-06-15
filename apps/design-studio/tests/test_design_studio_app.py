@@ -305,6 +305,124 @@ class DesignStudioAppTests(unittest.TestCase):
             self.assertEqual(final_export["status"], "exported")
             self.assertEqual(final_export["completed_workspace_relative_paths"], export_record["workspace_relative_paths"])
 
+    def test_sidecar_core_routes_handle_provider_and_storage_without_passing_to_sidecar(self) -> None:
+        with TemporaryDirectory() as temp_dir:
+            with self._test_platform_env():
+                repo_root = self._temporary_repo_root(Path(temp_dir))
+                state = bootstrap_platform_state(start_path=repo_root)
+                with self._repo_pythonpath():
+                    self._install_platform_app(state, repo_root, "storage")
+                    self._install_platform_app(state, repo_root, "design-studio")
+                save_app_dependency_selection(
+                    state.app_store,
+                    workspace_id="default",
+                    consumer_app_id="design-studio",
+                    alias="storage-read",
+                    provider_app_ids=["storage"],
+                    workspace_store=state.workspace_store,
+                    start_path=repo_root,
+                )
+                save_app_dependency_selection(
+                    state.app_store,
+                    workspace_id="default",
+                    consumer_app_id="design-studio",
+                    alias="storage-write",
+                    provider_app_ids=["storage"],
+                    workspace_store=state.workspace_store,
+                    start_path=repo_root,
+                )
+                shutdown = EntrypointShutdownController()
+                self.addCleanup(shutdown.begin_shutdown)
+                app = PlatformHost(state, start_path=repo_root, shutdown_controller=shutdown)
+                cookie = self._login(app)
+
+            with self._repo_pythonpath():
+                uploaded_root = repo_root / "workspaces" / "default" / "storage" / "uploaded"
+                uploaded_root.mkdir(parents=True, exist_ok=True)
+                (uploaded_root / "brief.md").write_text("# Brief\n\nCreate a dashboard.\n", encoding="utf-8")
+                created_status, created_body, _headers = self._invoke_backend(
+                    app,
+                    cookie=cookie,
+                    body={
+                        "action": "create_project",
+                        "arguments": {"name": "Dashboard", "prompt": "Operational metrics"},
+                    },
+                )
+                self.assertEqual(created_status, 200)
+                project_id = json.loads(created_body.decode("utf-8"))["project"]["id"]
+
+                media_status, media_body, _media_headers = self._invoke(
+                    app,
+                    path="/api/apps/design-studio/sidecars/opendesign/api/media/config",
+                    cookie=cookie,
+                )
+                provider_status, provider_body, _provider_headers = self._invoke(
+                    app,
+                    path="/api/apps/design-studio/sidecars/opendesign/api/provider/chat",
+                    method="POST",
+                    body={"apiKey": "sk-design-studio-test", "prompt": "dashboard"},
+                    cookie=cookie,
+                )
+                import_status, import_body, _import_headers = self._invoke(
+                    app,
+                    path="/api/apps/design-studio/sidecars/opendesign/api/import/storage",
+                    method="POST",
+                    body={
+                        "project_id": project_id,
+                        "workspace_relative_path": "storage/uploaded/brief.md",
+                    },
+                    cookie=cookie,
+                )
+                export_status, export_body, _export_headers = self._invoke(
+                    app,
+                    path="/api/apps/design-studio/sidecars/opendesign/api/export/storage",
+                    method="POST",
+                    body={"project_id": project_id},
+                    cookie=cookie,
+                )
+                state_status, state_body, _state_headers = self._invoke_backend(
+                    app,
+                    cookie=cookie,
+                    body={"action": "state"},
+                )
+
+            media_payload = json.loads(media_body.decode("utf-8"))
+            provider_payload = json.loads(provider_body.decode("utf-8"))
+            import_payload = json.loads(import_body.decode("utf-8"))
+            export_payload = json.loads(export_body.decode("utf-8"))
+            state_payload = json.loads(state_body.decode("utf-8"))
+            media_config_root = repo_root / "workspaces" / "default" / "data" / "design-studio" / "opendesign" / "media-config"
+            media_config_text = "\n".join(path.read_text(encoding="utf-8") for path in media_config_root.glob("*") if path.is_file())
+            export_record = export_payload["export"]
+            export_id = export_record["export_id"]
+            export_root = repo_root / "workspaces" / "default" / "storage" / "generated" / "design-studio" / project_id / export_id
+            final_project = state_payload["state"]["projects"][0]
+            final_import = final_project["imports"][0]
+            final_export = final_project["exports"][0]
+
+            self.assertEqual(media_status, 200)
+            self.assertFalse(media_payload["sidecar_reached"])
+            self.assertFalse(media_payload["secrets_persisted"])
+            self.assertEqual(provider_status, 503)
+            self.assertEqual(provider_payload["error"], "provider_proxy_not_configured")
+            self.assertFalse(provider_payload["sidecar_reached"])
+            self.assertNotIn("sk-design-studio-test", media_config_text)
+            self.assertEqual(import_status, 200)
+            self.assertEqual(
+                [item["status"] for item in import_payload["dependency_backend_request_results"]],
+                ["completed"],
+            )
+            self.assertEqual(export_status, 200)
+            self.assertTrue((export_root / "manifest.json").is_file())
+            self.assertTrue((export_root / "notes.md").is_file())
+            self.assertEqual(
+                [item["status"] for item in export_payload["dependency_backend_request_results"]],
+                ["completed", "completed"],
+            )
+            self.assertEqual(state_status, 200)
+            self.assertEqual(final_import["status"], "imported")
+            self.assertEqual(final_export["status"], "exported")
+
     def _run_entrypoint(self, entrypoint: Path, payload: dict) -> dict:
         process = subprocess.run(
             [sys.executable, str(entrypoint)],

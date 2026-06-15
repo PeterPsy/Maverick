@@ -13,14 +13,20 @@ from service import DesignStudioError, dispatch
 
 def main() -> None:
     payload = read_entrypoint_payload()
+    sidecar_core_handler = payload.raw.get("surface") == "sidecar_core_handler"
     action = str(payload.body.get("action") or "state")
+    if sidecar_core_handler:
+        action = "sidecar_core_route"
     arguments = payload.body.get("arguments", payload.body)
     if not isinstance(arguments, dict):
         arguments = {}
     try:
         result = dispatch(action, payload.raw, arguments)
     except DesignStudioError as error:
-        emit_json(backend_response(400, {"error": error.error, "detail": error.detail}))
+        emit_json(backend_response(error.status_code, {"error": error.error, "detail": error.detail}))
+        return
+    if sidecar_core_handler and "status_code" in result and ("json" in result or "body" in result):
+        emit_json(result)
         return
     response = backend_response(200, result)
     if action in {

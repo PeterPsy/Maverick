@@ -25,10 +25,11 @@ MAX_IMPORT_BYTES = 10 * 1024 * 1024
 class DesignStudioError(ValueError):
     """Raised when a Design Studio request is invalid."""
 
-    def __init__(self, error: str, detail: str) -> None:
+    def __init__(self, error: str, detail: str, *, status_code: int = 400) -> None:
         super().__init__(detail)
         self.error = error
         self.detail = detail
+        self.status_code = status_code
 
 
 def status_payload(payload: dict[str, Any]) -> dict[str, Any]:
@@ -419,6 +420,76 @@ def clear_custom_view(payload: dict[str, Any]) -> dict[str, Any]:
     return {"view_state": state.get("view_state", {}), "state": _public_state(state)}
 
 
+def handle_sidecar_core_route(payload: dict[str, Any], arguments: dict[str, Any]) -> dict[str, Any]:
+    """Handle OpenDesign routes that Maverick intercepts before the sidecar."""
+    route_path = _route_path(payload.get("route_path"))
+    method = str(payload.get("method") or "GET").upper()
+    if _route_matches(route_path, "/api/media/config"):
+        return _handle_media_config_route(payload, arguments, method=method)
+    if _route_matches(route_path, "/api/import/storage"):
+        return _handle_storage_import_route(payload, arguments, method=method)
+    if _route_matches(route_path, "/api/export/storage"):
+        return _handle_storage_export_route(payload, arguments, method=method)
+    if _route_matches(route_path, "/api/provider"):
+        return _handle_provider_proxy_route(payload, arguments, method=method)
+    raise DesignStudioError(
+        "sidecar_core_route_not_found",
+        f"Design Studio does not implement handled sidecar route `{route_path}`.",
+        status_code=404,
+    )
+
+
+def _handle_media_config_route(payload: dict[str, Any], arguments: dict[str, Any], *, method: str) -> dict[str, Any]:
+    if method not in {"GET", "HEAD"}:
+        raise DesignStudioError(
+            "media_config_managed_by_maverick",
+            "Provider media configuration is managed by Maverick and cannot be written through OpenDesign in sandbox mode.",
+            status_code=403,
+        )
+    ensure_state(payload["data_root"])
+    return {
+        "status_code": 200,
+        "json": {
+            "mode": "maverick-proxy",
+            "providers": [],
+            "default_provider": "",
+            "secrets_persisted": False,
+            "sidecar_reached": False,
+            "message": "Provider credentials are managed by Maverick/Vault.",
+        },
+    }
+
+
+def _handle_storage_import_route(payload: dict[str, Any], arguments: dict[str, Any], *, method: str) -> dict[str, Any]:
+    if method != "POST":
+        raise DesignStudioError("method_not_allowed", "Storage import routes require POST.", status_code=405)
+    body = _sidecar_core_body(arguments)
+    return import_from_storage(payload, body)
+
+
+def _handle_storage_export_route(payload: dict[str, Any], arguments: dict[str, Any], *, method: str) -> dict[str, Any]:
+    if method != "POST":
+        raise DesignStudioError("method_not_allowed", "Storage export routes require POST.", status_code=405)
+    body = _sidecar_core_body(arguments)
+    return export_to_storage(payload, body)
+
+
+def _handle_provider_proxy_route(payload: dict[str, Any], arguments: dict[str, Any], *, method: str) -> dict[str, Any]:
+    if method not in {"POST", "PUT"}:
+        raise DesignStudioError("method_not_allowed", "Provider proxy routes require POST or PUT.", status_code=405)
+    _assert_provider_key_not_persisted(payload, arguments)
+    return {
+        "status_code": 503,
+        "json": {
+            "error": "provider_proxy_not_configured",
+            "detail": "Design Studio provider proxy is active, but no provider adapter is configured for this route yet.",
+            "mode": "maverick-proxy",
+            "secrets_persisted": False,
+            "sidecar_reached": False,
+        },
+    }
+
+
 def dispatch(action: str, payload: dict[str, Any], arguments: dict[str, Any]) -> dict[str, Any]:
     """Dispatch one Design Studio action."""
     if action in {"state", "status"}:
@@ -445,6 +516,8 @@ def dispatch(action: str, payload: dict[str, Any], arguments: dict[str, Any]) ->
         return set_custom_view(payload, arguments)
     if action == "clear_custom_view":
         return clear_custom_view(payload)
+    if action == "sidecar_core_route":
+        return handle_sidecar_core_route(payload, arguments)
     raise DesignStudioError("unsupported_action", f"Unsupported Design Studio action `{action}`.")
 
 
@@ -521,8 +594,54 @@ def _storage_path(value: object) -> str:
     return path
 
 
+def _route_path(value: object) -> str:
+    path = str(value or "").strip()
+    if not path.startswith("/"):
+        path = f"/{path}"
+    if "\x00" in path or ".." in Path(path).parts:
+        raise DesignStudioError("sidecar_route_invalid", "Invalid handled sidecar route path.", status_code=400)
+    return path
+
+
+def _route_matches(route_path: str, prefix: str) -> bool:
+    clean_prefix = prefix.rstrip("/") or "/"
+    return route_path == clean_prefix or route_path.startswith(f"{clean_prefix}/")
+
+
+def _sidecar_core_body(arguments: dict[str, Any]) -> dict[str, Any]:
+    body = arguments.get("body") if isinstance(arguments.get("body"), dict) else arguments
+    return body if isinstance(body, dict) else {}
+
+
+def _assert_provider_key_not_persisted(payload: dict[str, Any], arguments: dict[str, Any]) -> None:
+    body = _sidecar_core_body(arguments)
+    suspicious = _contains_secret_like_value(body)
+    media_config_dir = safe_app_data_path(payload["data_root"], Path("opendesign") / "media-config")
+    media_config_dir.mkdir(parents=True, exist_ok=True)
+    if suspicious:
+        marker = media_config_dir / "README.txt"
+        if not marker.exists():
+            marker.write_text(
+                "Provider credentials are intentionally managed by Maverick/Vault and are not persisted here.\n",
+                encoding="utf-8",
+            )
+
+
+def _contains_secret_like_value(value: Any) -> bool:
+    if isinstance(value, dict):
+        for key, item in value.items():
+            lowered = str(key).lower()
+            if lowered in {"apikey", "api_key", "api-key", "authorization", "token", "secret"} and str(item).strip():
+                return True
+            if _contains_secret_like_value(item):
+                return True
+    if isinstance(value, list):
+        return any(_contains_secret_like_value(item) for item in value)
+    return False
+
+
 def _should_request_storage_read(payload: dict[str, Any]) -> bool:
-    return payload.get("surface") == "backend" and isinstance(payload.get("app_dependencies"), dict)
+    return payload.get("surface") in {"backend", "sidecar_core_handler"} and isinstance(payload.get("app_dependencies"), dict)
 
 
 def _append_source_file(project: dict[str, Any], workspace_relative_path: str) -> None:

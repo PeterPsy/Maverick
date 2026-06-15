@@ -134,6 +134,7 @@ def unchanged_result(
 def compacted_header(
     *,
     selection: RuleSelection,
+    scope: str,
     original_bytes: int,
     redacted_bytes: int,
     compacted_bytes: int,
@@ -145,7 +146,7 @@ def compacted_header(
     summary = " ".join(f"{key}={value}" for key, value in sorted(facts.items()) if value not in (None, "", 0))
     lines = [
         "[tool output compacted]",
-        f"scope: {COMPACTION_SCOPE}",
+        f"scope: {scope}",
         f"rule: {selection.rule_id}",
         f"original_bytes: {original_bytes}",
         f"redacted_bytes: {redacted_bytes}",
@@ -170,6 +171,7 @@ def build_compacted_text(
     digest: str,
 ) -> tuple[str, int, float]:
     """Build compacted text whose header byte counts match final metadata."""
+    scope = str(compaction_input.metadata.get("compaction_scope") or COMPACTION_SCOPE)
     stable_text = truncate_middle_bytes(reduced_text, target_max_compacted_bytes)
     stable_bytes = byte_len(stable_text)
     stable_ratio = savings_ratio(original_bytes, stable_bytes)
@@ -179,6 +181,7 @@ def build_compacted_text(
         candidate = (
             compacted_header(
                 selection=selection,
+                scope=scope,
                 original_bytes=original_bytes,
                 redacted_bytes=redacted_bytes,
                 compacted_bytes=stable_bytes,

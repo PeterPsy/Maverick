@@ -692,6 +692,27 @@ class ProvidersTestCase(unittest.TestCase):
         self.assertEqual(response_exit_code('{"status_code": 400, "error": "unsupported"}'), 1)  # type: ignore[operator]
         self.assertEqual(response_exit_code('{"status_code": 200}'), 0)  # type: ignore[operator]
 
+    def test_workspace_maverick_wrapper_requests_provider_compact_by_default(self) -> None:
+        namespace: dict[str, object] = {"__name__": "wrapper_test"}
+        exec(_workspace_maverick_wrapper_source(), namespace)
+        captured_payloads: list[dict[str, object]] = []
+
+        class RequestStub:
+            def __init__(self, _url: str, *, data: bytes, headers: dict[str, str], method: str) -> None:
+                captured_payloads.append(json.loads(data.decode("utf-8")))
+
+        namespace["runtime_auth_headers"] = lambda: {"Content-Type": "application/json", "Authorization": "Bearer token"}
+        namespace["print_response"] = lambda _request, text_field=None: 0
+
+        with patch.object(namespace["urllib"].request, "Request", RequestStub):  # type: ignore[index, union-attr]
+            with patch.dict(os.environ, {}, clear=True):
+                self.assertEqual(namespace["call_cli"](["apps", "list", "--json"]), 0)  # type: ignore[operator]
+            with patch.dict(os.environ, {"MAVERICK_RUNTIME_CLI_OUTPUT_PROFILE": "full"}, clear=True):
+                self.assertEqual(namespace["call_cli"](["apps", "list", "--json"]), 0)  # type: ignore[operator]
+
+        self.assertEqual(captured_payloads[0]["output_profile"], "provider_compact")
+        self.assertEqual(captured_payloads[1]["output_profile"], "full")
+
     def test_codex_runtime_home_ignores_unreadable_source_config(self) -> None:
         runtime_store = self.make_runtime_store()
         repo_root = self.make_repo_root()

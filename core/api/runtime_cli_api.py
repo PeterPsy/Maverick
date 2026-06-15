@@ -11,6 +11,11 @@ from core.authorization.errors import AuthorizationError
 from core.cli.models import CliInvocationContext
 from core.identity.errors import UserNotFoundError
 from core.runtime.errors import RuntimeSessionNotFoundError
+from core.runtime.output_compaction.cli_result import (
+    RUNTIME_CLI_OUTPUT_PROFILE_PROVIDER_COMPACT,
+    compact_runtime_cli_result,
+    runtime_cli_output_profile,
+)
 from core.runtime.workspace_api_token import RuntimeApiTokenClaims, validate_workspace_api_token_lifecycle
 from core.workspaces.errors import WorkspaceMembershipError
 
@@ -38,6 +43,9 @@ def handle_runtime_cli_api(
     raw_argv = body.get("argv")
     if not isinstance(raw_argv, list) or not all(isinstance(token, str) for token in raw_argv):
         return json_response(start_response, {"error": "invalid_argv"}, status="400 Bad Request")
+    output_profile, profile_error = runtime_cli_output_profile(body)
+    if output_profile is None:
+        return json_response(start_response, {"error": profile_error or "invalid_output_profile"}, status="400 Bad Request")
 
     try:
         session = state.runtime_store.get_session(str(claims["runtime_session_id"]))
@@ -71,6 +79,12 @@ def handle_runtime_cli_api(
             repository_root=start_path,
             trusted_context=trusted_context,
         )
+        if output_profile == RUNTIME_CLI_OUTPUT_PROFILE_PROVIDER_COMPACT:
+            result = compact_runtime_cli_result(
+                result,
+                argv=trusted_argv,
+                runtime_session_id=session.session_id,
+            )
         result_status_code = result.get("status_code")
         response_status = status_line(result_status_code) if isinstance(result_status_code, int) and result_status_code >= 400 else "200 OK"
         return json_response(

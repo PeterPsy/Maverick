@@ -82,9 +82,14 @@ def call_cli(argv):
     headers = runtime_auth_headers()
     if headers is None:
         return 1
+    output_profile = os.environ.get("MAVERICK_RUNTIME_CLI_OUTPUT_PROFILE", "provider_compact").strip() or "provider_compact"
     request = urllib.request.Request(
         base_url + "/api/runtime/cli",
-        data=json.dumps({"argv": argv, "effective_mode": os.environ.get("MAVERICK_EFFECTIVE_MODE", "sandbox")}).encode("utf-8"),
+        data=json.dumps({
+            "argv": argv,
+            "effective_mode": os.environ.get("MAVERICK_EFFECTIVE_MODE", "sandbox"),
+            "output_profile": output_profile,
+        }).encode("utf-8"),
         headers=headers,
         method="POST",
     )

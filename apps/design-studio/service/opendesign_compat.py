@@ -16,6 +16,7 @@ from urllib.parse import urlparse
 
 OPENDESIGN_VERSION = "0.10.1"
 OPENDESIGN_COMMIT = "eb245799adf07e7727ad5f970485d809bad5780e"
+LOOPBACK_HOSTS = {"127.0.0.1", "localhost", "::1"}
 
 
 class OpenDesignCompatibilityHandler(BaseHTTPRequestHandler):
@@ -70,6 +71,8 @@ class OpenDesignCompatibilityHandler(BaseHTTPRequestHandler):
 def ensure_runtime_dirs() -> Path:
     data_dir = Path(os.environ.get("OD_DATA_DIR") or ".opendesign").resolve()
     media_config_dir = Path(os.environ.get("OD_MEDIA_CONFIG_DIR") or data_dir / "media-config").resolve()
+    if data_dir != media_config_dir and data_dir not in media_config_dir.parents:
+        raise SystemExit("OD_MEDIA_CONFIG_DIR must stay below OD_DATA_DIR in sandbox mode.")
     for relative in ("db", "projects", "temp"):
         (data_dir / relative).mkdir(parents=True, exist_ok=True)
     media_config_dir.mkdir(parents=True, exist_ok=True)
@@ -131,6 +134,8 @@ def _index_html() -> str:
 
 def main() -> None:
     host = os.environ.get("OD_BIND_HOST") or "127.0.0.1"
+    if host not in LOOPBACK_HOSTS:
+        raise SystemExit(f"OpenDesign compatibility fallback must bind to loopback, got {host!r}.")
     port = int(os.environ.get("OD_PORT") or "0")
     ensure_runtime_dirs()
     ThreadingHTTPServer((host, port), OpenDesignCompatibilityHandler).serve_forever()

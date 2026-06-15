@@ -8,11 +8,13 @@ import json
 from pathlib import Path
 import shutil
 import subprocess
+from typing import Callable
 
 
 SERVICE_ROOT = Path(__file__).resolve().parent
 APP_ROOT = SERVICE_ROOT.parent
 MANIFEST_PATH = SERVICE_ROOT / "opendesign_bundle.json"
+GENERATED_COPY_NAMES = {"node_modules", ".next", "dist", "__pycache__", ".turbo"}
 
 
 def main() -> None:
@@ -41,6 +43,7 @@ def main() -> None:
     _write_bundle_metadata(output, manifest)
     if not args.skip_build:
         _run_build(output)
+    _validate_output(output, manifest, built=not args.skip_build)
     print(json.dumps({"ok": True, "output": str(output), "built": not args.skip_build}, indent=2))
 
 
@@ -57,6 +60,15 @@ def _assert_inside_app(path: Path) -> None:
 def _validate_source(source: Path, manifest: dict) -> None:
     if not (source / "package.json").is_file():
         raise SystemExit(f"OpenDesign source does not look valid: {source}")
+    package_json = json.loads((source / "package.json").read_text(encoding="utf-8"))
+    expected_version = manifest["upstream"]["version"]
+    if str(package_json.get("version") or "") != expected_version:
+        raise SystemExit(f"OpenDesign package version is {package_json.get('version')!r}, expected {expected_version!r}.")
+    expected_package_manager = manifest["bundle"]["package_manager"]
+    if str(package_json.get("packageManager") or "") != expected_package_manager:
+        raise SystemExit(
+            f"OpenDesign package manager is {package_json.get('packageManager')!r}, expected {expected_package_manager!r}."
+        )
     expected = manifest["upstream"]["commit"]
     actual = _git_commit(source)
     if actual and actual != expected:
@@ -89,7 +101,7 @@ def _copy_curated_paths(source: Path, output: Path, manifest: dict) -> None:
             raise SystemExit(f"Manifest include path is missing from upstream checkout: {relative_text}")
         if src.is_dir():
             dst.parent.mkdir(parents=True, exist_ok=True)
-            shutil.copytree(src, dst, ignore=_ignore_for_copy)
+            shutil.copytree(src, dst, ignore=_ignore_for_copy(source, excluded))
         else:
             dst.parent.mkdir(parents=True, exist_ok=True)
             shutil.copy2(src, dst)
@@ -99,9 +111,20 @@ def _is_excluded(relative: Path, excluded: set[Path]) -> bool:
     return any(relative == item or item in relative.parents for item in excluded)
 
 
-def _ignore_for_copy(_directory: str, names: list[str]) -> set[str]:
-    ignored = {"node_modules", ".next/cache", "dist", "__pycache__", ".turbo"}
-    return {name for name in names if name in ignored}
+def _ignore_for_copy(source_root: Path, excluded: set[Path]) -> Callable[[str, list[str]], set[str]]:
+    def ignore(directory: str, names: list[str]) -> set[str]:
+        ignored: set[str] = set()
+        try:
+            directory_relative = Path(directory).resolve().relative_to(source_root)
+        except ValueError:
+            directory_relative = Path()
+        for name in names:
+            candidate = directory_relative / name
+            if name in GENERATED_COPY_NAMES or _is_excluded(candidate, excluded):
+                ignored.add(name)
+        return ignored
+
+    return ignore
 
 
 def _write_bundle_metadata(output: Path, manifest: dict) -> None:
@@ -123,8 +146,33 @@ def _run_build(output: Path) -> None:
     if corepack is None:
         raise SystemExit("corepack is required to install pnpm and build the OpenDesign bundle.")
     subprocess.run([corepack, "pnpm", "install", "--frozen-lockfile"], cwd=output, check=True)
-    subprocess.run([corepack, "pnpm", "--filter", "@open-design/web", "run", "build"], cwd=output, check=True)
-    subprocess.run([corepack, "pnpm", "--filter", "@open-design/daemon", "run", "build"], cwd=output, check=True)
+    subprocess.run(
+        [corepack, "pnpm", "-r", "--workspace-concurrency=4", "--if-present", "run", "build"],
+        cwd=output,
+        check=True,
+    )
+
+
+def _validate_output(output: Path, manifest: dict, *, built: bool) -> None:
+    for relative_text in manifest["exclude_paths"]:
+        if (output / relative_text).exists():
+            raise SystemExit(f"Excluded OpenDesign path was copied into the bundle: {relative_text}")
+    required_paths = ["package.json", "pnpm-lock.yaml", "apps/daemon/package.json", "apps/web/package.json"]
+    if built:
+        required_paths.extend(
+            [
+                manifest["bundle"]["built_entrypoint"],
+                manifest["bundle"]["web_static_dir"],
+            ]
+        )
+        required_paths.extend(
+            f"{relative}/dist"
+            for relative in manifest["include_paths"]
+            if str(relative).startswith("packages/")
+        )
+    missing = [relative for relative in required_paths if not (output / relative).exists()]
+    if missing:
+        raise SystemExit(f"OpenDesign bundle is missing required paths: {', '.join(missing)}")
 
 
 if __name__ == "__main__":

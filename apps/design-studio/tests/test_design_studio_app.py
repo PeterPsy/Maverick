@@ -41,6 +41,7 @@ class DesignStudioAppTests(unittest.TestCase):
         self.assertEqual(sidecar.service_id, "opendesign")
         self.assertEqual(sidecar.package_manager, "corepack/pnpm")
         self.assertEqual(sidecar.command, ["python3", "opendesign_launcher.py"])
+        self.assertEqual(sidecar.env.get("MAVERICK_OPENDESIGN_ALLOW_FALLBACK"), "0")
         self.assertEqual(sidecar.bind.host, "127.0.0.1")
         self.assertTrue(sidecar.proxy.streaming)
         self.assertTrue(sidecar.proxy.sse)
@@ -119,6 +120,39 @@ class DesignStudioAppTests(unittest.TestCase):
             status_text = status_path.read_text(encoding="utf-8")
             self.assertIn("compatibility-fallback", status_text)
             self.assertNotIn(token, status_text)
+            self.assertNotIn(str(root), status_text)
+
+    def test_opendesign_launcher_fails_closed_without_bundle_by_default(self) -> None:
+        with TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            data_dir = root / "opendesign"
+            env = {
+                **os.environ,
+                "PYTHONPATH": str(REPO_ROOT),
+                "OD_BIND_HOST": "127.0.0.1",
+                "OD_PORT": str(self._free_port()),
+                "OD_DATA_DIR": str(data_dir),
+                "OD_MEDIA_CONFIG_DIR": str(data_dir / "media-config"),
+                "OD_API_TOKEN": "launcher-test-token",
+                "OD_SANDBOX_MODE": "1",
+                "MAVERICK_OPENDESIGN_BUNDLE_DIR": str(root / "missing-open-design"),
+                "MAVERICK_OPENDESIGN_ALLOW_EXTERNAL_BUNDLE": "1",
+                "MAVERICK_OPENDESIGN_ALLOW_FALLBACK": "0",
+            }
+
+            process = subprocess.run(
+                [sys.executable, str(APP_ROOT / "service" / "opendesign_launcher.py")],
+                cwd=str(APP_ROOT / "service"),
+                env=env,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,
+                check=False,
+            )
+
+            self.assertNotEqual(process.returncode, 0)
+            self.assertIn("Curated OpenDesign daemon unavailable", process.stderr)
+            self.assertFalse((data_dir / "launcher-status.json").exists())
 
     def test_backend_creates_imports_and_requests_storage_export_writes(self) -> None:
         with TemporaryDirectory() as temp_dir:

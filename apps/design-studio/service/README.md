@@ -20,11 +20,14 @@ python3 apps/design-studio/service/package_opendesign.py \
 ```
 
 The packaging manifest is `opendesign_bundle.json`. It copies only the daemon,
-web static app source, required workspace packages, and bundled design assets.
-Desktop, packaged Electron, deploy, e2e, broad plugin marketplace, and tool
-trees are excluded from the Maverick sandbox bundle.
+web static app source, required workspace packages, and bundled design assets,
+then runs the recursive pnpm build so the daemon and its workspace package
+dependencies have runtime `dist/` outputs. Runtime sidecar startup does not
+build OpenDesign on demand. Desktop, packaged Electron, deploy, e2e, broad
+plugin marketplace, and tool trees are excluded from the Maverick sandbox
+bundle.
 
-If the bundle is absent or not installed/built, the launcher runs
-`opendesign_compat.py` only when `MAVERICK_OPENDESIGN_ALLOW_FALLBACK=1`. That
-fallback is for diagnostics and tests; it is not the production OpenDesign
-daemon.
+If the bundle is absent or not installed/built, the declared Maverick runtime
+fails closed. The launcher runs `opendesign_compat.py` only when
+`MAVERICK_OPENDESIGN_ALLOW_FALLBACK=1` is set manually for diagnostics or
+focused tests; it is not the production OpenDesign daemon.

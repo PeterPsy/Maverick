@@ -251,7 +251,7 @@
           "OD_API_TOKEN": "${service_secret:od_api_token}",
           "OD_SANDBOX_MODE": "1",
           "MAVERICK_OPENDESIGN_BUNDLE_DIR": "${app.source_dir}/service/vendor/open-design",
-          "MAVERICK_OPENDESIGN_ALLOW_FALLBACK": "1"
+          "MAVERICK_OPENDESIGN_ALLOW_FALLBACK": "0"
         },
         "bind": {
           "host": "127.0.0.1",

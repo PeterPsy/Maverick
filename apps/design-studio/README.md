@@ -15,11 +15,23 @@ It owns:
 
 The app contract is shaped for upstream `nexu-io/open-design` tag `open-design-v0.10.1`, commit `eb245799adf07e7727ad5f970485d809bad5780e`.
 
-Design Studio now starts `service/opendesign_launcher.py` as the declared sidecar command. The launcher looks for a curated OpenDesign bundle under `service/vendor/open-design/`, validates the sandbox runtime environment, writes only redaction-safe launcher status under `data/design-studio/opendesign/launcher-status.json`, and then starts the OpenDesign daemon through its built `apps/daemon/dist/cli.js`.
+Design Studio starts `service/opendesign_launcher.py` as the declared sidecar command. The launcher looks for a curated OpenDesign bundle under `service/vendor/open-design/`, validates the sandbox runtime environment, writes only redaction-safe launcher status under `data/design-studio/opendesign/launcher-status.json`, and then starts the OpenDesign daemon through its built `apps/daemon/dist/cli.js`. A successful launch records `mode: curated-dist`.
 
-The packaging recipe is declared in `service/opendesign_bundle.json` and implemented by `service/package_opendesign.py`. It copies only the pinned daemon/web/runtime packages and bundled design assets needed for the sandbox sidecar, then runs the recursive pnpm build so OpenDesign workspace packages have runtime `dist/` output; desktop, Electron-packaged, deploy, e2e, marketplace, and host-tool trees stay out of the Maverick bundle. Runtime sidecar startup does not build OpenDesign on demand.
+The packaging recipe is declared in `service/opendesign_bundle.json` and implemented by `service/package_opendesign.py`. It copies only the pinned daemon/web/runtime packages and bundled design assets needed for the sandbox sidecar, narrows the generated pnpm workspace to the curated app/package set, then runs install and recursive pnpm build so OpenDesign workspace packages have runtime `dist/` output. Desktop, Electron-packaged, deploy, e2e, broad marketplace, and host-tool trees stay out of the Maverick bundle. Runtime sidecar startup does not build OpenDesign on demand.
 
-Fresh checkouts may not include the materialized Node bundle. The declared app runtime sets `MAVERICK_OPENDESIGN_ALLOW_FALLBACK=0`, so the sidecar fails closed instead of pretending the real daemon is available. Developers may set `MAVERICK_OPENDESIGN_ALLOW_FALLBACK=1` only for diagnostics and focused tests. That fallback is no longer the declared primary sidecar and should not be treated as the production OpenDesign daemon.
+The source-control policy is generated-artifact mode: commit `service/opendesign_bundle.json`, `service/package_opendesign.py`, docs, and smoke tests; do not commit `service/vendor/open-design/` or any `node_modules`. The currently materialized local bundle was built from `nexu-io/open-design` tag `open-design-v0.10.1`, commit `eb245799adf07e7727ad5f970485d809bad5780e`, and contains `apps/daemon/dist/cli.js`, `apps/web/out`, and `packages/*/dist`.
+
+Fresh checkouts will not include the materialized Node bundle. Run packaging before declaring Phase 3 complete:
+
+```bash
+git clone --depth 1 --branch open-design-v0.10.1 https://github.com/nexu-io/open-design.git /tmp/maverick-open-design-src
+python3 apps/design-studio/service/package_opendesign.py \
+  --source /tmp/maverick-open-design-src \
+  --force
+python3 apps/design-studio/service/smoke_opendesign_sidecar.py
+```
+
+The launcher fails closed when the bundle is absent or not built. There is no runtime compatibility fallback.
 
 The upstream tag was inspected during implementation. A full shallow checkout at the pinned commit includes web, daemon, desktop, deploy, Helm/chart, design-system, skill, and plugin trees. The daemon also depends on host-adjacent packages such as `node-pty`. Vendoring the full repository directly would mix sandbox-safe surfaces with full-access surfaces the Maverick contract must keep blocked. The curated bundle keeps the upstream pin while narrowing what is copied and what the proxy exposes.
 
@@ -95,6 +107,7 @@ Useful checks:
 
 ```bash
 python3 -m unittest apps/design-studio/tests/test_design_studio_app.py
+python3 apps/design-studio/service/smoke_opendesign_sidecar.py
 maverick app design-studio frontend build --json
 maverick app design-studio mcp list --json
 maverick app design-studio cli list --json
@@ -102,6 +115,6 @@ maverick app design-studio cli list --json
 
 Current intentional omissions:
 
-- the curated OpenDesign bundle is materialized from the pinned upstream checkout by `service/package_opendesign.py`; dependency installs stay out of source control
+- the curated OpenDesign bundle is materialized from the pinned upstream checkout by `service/package_opendesign.py`; the generated bundle and dependency installs stay out of source control
 - provider proxy routes are intercepted by core/app handlers, but real provider adapters are not implemented yet
 - full-access terminal, Local CLI, and host-folder import are not part of the sandbox MVP

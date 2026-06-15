@@ -250,8 +250,7 @@
           "OD_MEDIA_CONFIG_DIR": "${app.data_dir}/opendesign/media-config",
           "OD_API_TOKEN": "${service_secret:od_api_token}",
           "OD_SANDBOX_MODE": "1",
-          "MAVERICK_OPENDESIGN_BUNDLE_DIR": "${app.source_dir}/service/vendor/open-design",
-          "MAVERICK_OPENDESIGN_ALLOW_FALLBACK": "0"
+          "MAVERICK_OPENDESIGN_BUNDLE_DIR": "${app.source_dir}/service/vendor/open-design"
         },
         "bind": {
           "host": "127.0.0.1",

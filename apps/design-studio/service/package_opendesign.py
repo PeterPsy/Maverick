@@ -40,6 +40,7 @@ def main() -> None:
         shutil.rmtree(output)
     output.mkdir(parents=True, exist_ok=True)
     _copy_curated_paths(source, output, manifest)
+    _adapt_curated_workspace(output)
     _write_bundle_metadata(output, manifest)
     if not args.skip_build:
         _run_build(output)
@@ -141,11 +142,56 @@ def _write_bundle_metadata(output: Path, manifest: dict) -> None:
     )
 
 
+def _adapt_curated_workspace(output: Path) -> None:
+    package_json_path = output / "package.json"
+    package_json = json.loads(package_json_path.read_text(encoding="utf-8"))
+    scripts = package_json.get("scripts")
+    if isinstance(scripts, dict):
+        scripts.pop("postinstall", None)
+    dev_dependencies = package_json.get("devDependencies")
+    if isinstance(dev_dependencies, dict):
+        for name in list(dev_dependencies):
+            if name.startswith("@open-design/tools-"):
+                dev_dependencies.pop(name, None)
+    package_json_path.write_text(json.dumps(package_json, indent=2, ensure_ascii=True) + "\n", encoding="utf-8")
+    (output / "pnpm-workspace.yaml").write_text(
+        "\n".join(
+            [
+                "packages:",
+                "  - apps/daemon",
+                "  - apps/web",
+                "  - packages/*",
+                "",
+                "overrides:",
+                "  brace-expansion: 5.0.6",
+                "  devalue: 5.8.1",
+                "  fast-uri: 3.1.2",
+                "  hono: 4.12.19",
+                "  ip-address: 10.2.0",
+                "  postcss: 8.5.15",
+                "  protobufjs: 8.4.0",
+                "  qs: 6.15.2",
+                "  tmp: 0.2.7",
+                "  yaml: 2.9.0",
+                "",
+                "onlyBuiltDependencies:",
+                "  - better-sqlite3",
+                "  - core-js",
+                "  - esbuild",
+                "  - protobufjs",
+                "  - sharp",
+                "",
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+
 def _run_build(output: Path) -> None:
     corepack = shutil.which("corepack")
     if corepack is None:
         raise SystemExit("corepack is required to install pnpm and build the OpenDesign bundle.")
-    subprocess.run([corepack, "pnpm", "install", "--frozen-lockfile"], cwd=output, check=True)
+    subprocess.run([corepack, "pnpm", "install", "--no-frozen-lockfile"], cwd=output, check=True)
     subprocess.run(
         [corepack, "pnpm", "-r", "--workspace-concurrency=4", "--if-present", "run", "build"],
         cwd=output,
@@ -155,6 +201,8 @@ def _run_build(output: Path) -> None:
 
 def _validate_output(output: Path, manifest: dict, *, built: bool) -> None:
     for relative_text in manifest["exclude_paths"]:
+        if Path(relative_text).name in GENERATED_COPY_NAMES:
+            continue
         if (output / relative_text).exists():
             raise SystemExit(f"Excluded OpenDesign path was copied into the bundle: {relative_text}")
     required_paths = ["package.json", "pnpm-lock.yaml", "apps/daemon/package.json", "apps/web/package.json"]

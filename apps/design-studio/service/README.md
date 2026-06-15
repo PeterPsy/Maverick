@@ -1,7 +1,7 @@
 # Design Studio OpenDesign Sidecar
 
 Design Studio starts `opendesign_launcher.py` as the declared Maverick sidecar.
-The launcher prefers a curated OpenDesign bundle at:
+The launcher requires a curated OpenDesign bundle at:
 
 ```text
 service/vendor/open-design/
@@ -21,13 +21,22 @@ python3 apps/design-studio/service/package_opendesign.py \
 
 The packaging manifest is `opendesign_bundle.json`. It copies only the daemon,
 web static app source, required workspace packages, and bundled design assets,
-then runs the recursive pnpm build so the daemon and its workspace package
-dependencies have runtime `dist/` outputs. Runtime sidecar startup does not
-build OpenDesign on demand. Desktop, packaged Electron, deploy, e2e, broad
-plugin marketplace, and tool trees are excluded from the Maverick sandbox
-bundle.
+then narrows the generated pnpm workspace and runs install/build so the daemon
+and its workspace package dependencies have runtime `dist/` outputs. Runtime
+sidecar startup does not build OpenDesign on demand. Desktop, packaged Electron,
+deploy, e2e, broad plugin marketplace, and tool trees are excluded from the
+Maverick sandbox bundle.
 
-If the bundle is absent or not installed/built, the declared Maverick runtime
-fails closed. The launcher runs `opendesign_compat.py` only when
-`MAVERICK_OPENDESIGN_ALLOW_FALLBACK=1` is set manually for diagnostics or
-focused tests; it is not the production OpenDesign daemon.
+The bundle is a generated artifact. Keep `service/vendor/open-design/` out of
+source control, including `node_modules`; commit only the manifest, packager,
+docs, and smoke script. A Phase 3 verification must run:
+
+```bash
+python3 apps/design-studio/service/smoke_opendesign_sidecar.py
+```
+
+That smoke fails when the bundle is absent, when required build outputs are
+missing, when host-only OpenDesign trees were included, or when the Maverick
+proxy cannot reach the real sidecar. If the bundle is absent or not
+installed/built, the declared Maverick runtime fails closed. There is no runtime
+compatibility fallback.

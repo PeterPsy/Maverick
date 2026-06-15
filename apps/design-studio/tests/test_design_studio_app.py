@@ -11,11 +11,8 @@ import shutil
 import socket
 import subprocess
 import sys
-import time
 from tempfile import TemporaryDirectory
 import unittest
-from urllib.error import URLError
-from urllib.request import Request, urlopen
 
 from core.api.platform_host import PlatformHost
 from core.api.platform_state import bootstrap_platform_state
@@ -41,7 +38,7 @@ class DesignStudioAppTests(unittest.TestCase):
         self.assertEqual(sidecar.service_id, "opendesign")
         self.assertEqual(sidecar.package_manager, "corepack/pnpm")
         self.assertEqual(sidecar.command, ["python3", "opendesign_launcher.py"])
-        self.assertEqual(sidecar.env.get("MAVERICK_OPENDESIGN_ALLOW_FALLBACK"), "0")
+        self.assertNotIn("MAVERICK_OPENDESIGN_ALLOW_FALLBACK", sidecar.env)
         self.assertEqual(sidecar.bind.host, "127.0.0.1")
         self.assertTrue(sidecar.proxy.streaming)
         self.assertTrue(sidecar.proxy.sse)
@@ -78,51 +75,7 @@ class DesignStudioAppTests(unittest.TestCase):
             [rule.path_prefix for rule in sidecar.proxy.route_policy.handled_by_core],
         )
 
-    def test_opendesign_launcher_uses_fallback_only_when_bundle_is_missing(self) -> None:
-        with TemporaryDirectory() as temp_dir:
-            root = Path(temp_dir)
-            data_dir = root / "opendesign"
-            port = self._free_port()
-            token = "launcher-test-token"
-            env = {
-                **os.environ,
-                "PYTHONPATH": str(REPO_ROOT),
-                "OD_BIND_HOST": "127.0.0.1",
-                "OD_PORT": str(port),
-                "OD_DATA_DIR": str(data_dir),
-                "OD_MEDIA_CONFIG_DIR": str(data_dir / "media-config"),
-                "OD_API_TOKEN": token,
-                "OD_SANDBOX_MODE": "1",
-                "MAVERICK_OPENDESIGN_BUNDLE_DIR": str(root / "missing-open-design"),
-                "MAVERICK_OPENDESIGN_ALLOW_EXTERNAL_BUNDLE": "1",
-                "MAVERICK_OPENDESIGN_ALLOW_FALLBACK": "1",
-            }
-            process = subprocess.Popen(
-                [sys.executable, str(APP_ROOT / "service" / "opendesign_launcher.py")],
-                cwd=str(APP_ROOT / "service"),
-                env=env,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
-                text=True,
-            )
-            self.addCleanup(self._stop_process, process)
-            payload = self._wait_for_json(
-                f"http://127.0.0.1:{port}/api/version",
-                headers={"Authorization": f"Bearer {token}"},
-                process=process,
-            )
-
-            self.assertEqual(payload["mode"], "maverick-compatibility-fallback")
-            self.assertFalse(payload["bundle_configured"])
-            self.assertTrue(payload["technical_token_seen"])
-            status_path = data_dir / "launcher-status.json"
-            self.assertTrue(status_path.is_file())
-            status_text = status_path.read_text(encoding="utf-8")
-            self.assertIn("compatibility-fallback", status_text)
-            self.assertNotIn(token, status_text)
-            self.assertNotIn(str(root), status_text)
-
-    def test_opendesign_launcher_fails_closed_without_bundle_by_default(self) -> None:
+    def test_opendesign_launcher_fails_closed_without_bundle_even_if_fallback_is_requested(self) -> None:
         with TemporaryDirectory() as temp_dir:
             root = Path(temp_dir)
             data_dir = root / "opendesign"
@@ -137,7 +90,7 @@ class DesignStudioAppTests(unittest.TestCase):
                 "OD_SANDBOX_MODE": "1",
                 "MAVERICK_OPENDESIGN_BUNDLE_DIR": str(root / "missing-open-design"),
                 "MAVERICK_OPENDESIGN_ALLOW_EXTERNAL_BUNDLE": "1",
-                "MAVERICK_OPENDESIGN_ALLOW_FALLBACK": "0",
+                "MAVERICK_OPENDESIGN_ALLOW_FALLBACK": "1",
             }
 
             process = subprocess.run(
@@ -569,37 +522,6 @@ class DesignStudioAppTests(unittest.TestCase):
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
             sock.bind(("127.0.0.1", 0))
             return int(sock.getsockname()[1])
-
-    def _wait_for_json(
-        self,
-        url: str,
-        *,
-        headers: dict[str, str],
-        process: subprocess.Popen[str],
-    ) -> dict:
-        last_error = ""
-        for _attempt in range(50):
-            if process.poll() is not None:
-                stdout, stderr = process.communicate(timeout=1)
-                self.fail(f"OpenDesign launcher exited early: stdout={stdout!r} stderr={stderr!r}")
-            try:
-                with urlopen(Request(url, headers=headers), timeout=0.2) as response:
-                    return json.loads(response.read().decode("utf-8"))
-            except (OSError, URLError) as error:
-                last_error = str(error)
-                time.sleep(0.1)
-        self.fail(f"OpenDesign launcher did not become ready: {last_error}")
-
-    def _stop_process(self, process: subprocess.Popen[str]) -> None:
-        if process.poll() is not None:
-            process.communicate(timeout=1)
-            return
-        process.terminate()
-        try:
-            process.communicate(timeout=5)
-        except subprocess.TimeoutExpired:
-            process.kill()
-            process.communicate(timeout=5)
 
     def _temporary_repo_root(self, root: Path) -> Path:
         repo_root = root / "maverick"

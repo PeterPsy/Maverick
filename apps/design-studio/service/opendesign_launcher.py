@@ -6,8 +6,6 @@ from dataclasses import dataclass
 import json
 import os
 from pathlib import Path
-import sys
-from typing import NoReturn
 
 
 OPENDESIGN_VERSION = "0.10.1"
@@ -41,8 +39,6 @@ def main() -> None:
     bundle_dir = _bundle_dir()
     plan = _resolve_launch_plan(bundle_dir)
     _write_launcher_status(data_dir, plan, bundle_dir)
-    if plan.mode == "compatibility-fallback":
-        _run_compatibility_fallback()
     _exec(plan, _daemon_env(data_dir=data_dir, media_config_dir=media_config_dir))
 
 
@@ -60,21 +56,15 @@ def _bundle_dir() -> Path:
 
 def _resolve_launch_plan(bundle_dir: Path) -> LaunchPlan:
     if not bundle_dir.exists():
-        return _fallback_plan("curated bundle directory is missing")
+        raise SystemExit("Curated OpenDesign daemon unavailable: curated bundle directory is missing.")
     package_json = bundle_dir / "package.json"
     daemon_package = bundle_dir / "apps" / "daemon" / "package.json"
     if not package_json.is_file() or not daemon_package.is_file():
-        return _fallback_plan("bundle is missing OpenDesign package manifests")
+        raise SystemExit("Curated OpenDesign daemon unavailable: bundle is missing OpenDesign package manifests.")
     cli = bundle_dir / "apps" / "daemon" / "dist" / "cli.js"
     if cli.is_file() and _has_node_modules(bundle_dir):
         return LaunchPlan("curated-dist", ["node", str(cli), "--no-open"], bundle_dir, "using built daemon dist")
-    return _fallback_plan("curated bundle exists but is not installed and built")
-
-
-def _fallback_plan(detail: str) -> LaunchPlan:
-    if os.environ.get("MAVERICK_OPENDESIGN_ALLOW_FALLBACK") != "1":
-        raise SystemExit(f"Curated OpenDesign daemon unavailable: {detail}.")
-    return LaunchPlan("compatibility-fallback", [sys.executable, "opendesign_compat.py"], SERVICE_ROOT, detail)
+    raise SystemExit("Curated OpenDesign daemon unavailable: curated bundle exists but is not installed and built.")
 
 
 def _has_node_modules(bundle_dir: Path) -> bool:
@@ -118,7 +108,7 @@ def _write_launcher_status(data_dir: Path, plan: LaunchPlan, bundle_dir: Path) -
         "opendesign_version": OPENDESIGN_VERSION,
         "opendesign_commit": OPENDESIGN_COMMIT,
         "bundle": _bundle_status(bundle_dir),
-        "bundle_configured": plan.mode != "compatibility-fallback",
+        "bundle_configured": True,
         "mode": plan.mode,
         "detail": plan.detail,
         "manifest": _read_manifest_summary(),
@@ -148,14 +138,7 @@ def _read_manifest_summary() -> dict[str, object]:
     }
 
 
-def _run_compatibility_fallback() -> NoReturn:
-    from opendesign_compat import main as compat_main
-
-    compat_main()
-    raise SystemExit(0)
-
-
-def _exec(plan: LaunchPlan, env: dict[str, str]) -> NoReturn:
+def _exec(plan: LaunchPlan, env: dict[str, str]) -> None:
     os.chdir(plan.cwd)
     os.execvpe(plan.command[0], plan.command, env)
 

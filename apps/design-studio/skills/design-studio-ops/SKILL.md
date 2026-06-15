@@ -22,4 +22,4 @@ Sandbox policy:
 - Do not request `/api/import/folder`, terminal, or pty routes in sandbox mode.
 - Provider credentials must remain in Maverick/Vault-owned flows; do not persist provider keys in OpenDesign media config.
 
-The app uses a governed OpenDesign launcher pinned to upstream OpenDesign `0.10.1` metadata. `service/opendesign_compat.py` is only a manual diagnostics/test fallback when `MAVERICK_OPENDESIGN_ALLOW_FALLBACK=1`; the declared runtime fails closed without a materialized curated bundle.
+The app uses a governed OpenDesign launcher pinned to upstream OpenDesign `0.10.1` metadata. The declared runtime fails closed without a materialized curated bundle; there is no runtime compatibility fallback.

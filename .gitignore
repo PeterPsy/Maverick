@@ -45,6 +45,7 @@ provider-homes/
 node_modules/
 dist/
 build/
+apps/design-studio/service/vendor/open-design/
 !apps/*/frontend/dist/
 !apps/*/frontend/dist/**
 

@@ -33,6 +33,8 @@ The metadata includes:
 
 The persisted digest is computed from redacted text. Maverick does not persist a default hash of the unredacted raw output.
 
+If a reducer or compactor step fails unexpectedly, the event is still recorded with a redacted pass-through payload, sanitized `raw`, `pass_through_reason: compactor_failed`, and a non-sensitive `compaction_error` class name. If redaction itself fails for a large payload, Maverick records a bounded redaction-failure placeholder instead of persisting unredacted tool output.
+
 ## Operations
 
 Set `MAVERICK_RUNTIME_OUTPUT_COMPACTION=0` to disable Phase 1 compaction in an emergency.

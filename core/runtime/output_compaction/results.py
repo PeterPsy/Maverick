@@ -13,7 +13,7 @@ from core.runtime.output_compaction.models import (
     ToolOutputCompactionPolicy,
     ToolOutputCompactionResult,
 )
-from core.runtime.output_compaction.text import byte_len
+from core.runtime.output_compaction.text import byte_len, truncate_middle_bytes
 
 
 REDACTION_FAILURE_PLACEHOLDER = "[tool output omitted: redaction_failed]"
@@ -106,6 +106,8 @@ def unchanged_result(
     *,
     raw: Mapping[str, Any] | None,
     policy: ToolOutputCompactionPolicy,
+    redacted: bool = False,
+    fields: tuple[str, ...] = (),
 ) -> ToolOutputCompactionResult:
     """Build a no-op result for tool calls without output text."""
     return ToolOutputCompactionResult(
@@ -123,9 +125,9 @@ def unchanged_result(
         savings_ratio=0.0,
         required_savings_ratio=policy.success_min_savings_ratio,
         target_max_compacted_bytes=policy.target_max_compacted_bytes,
-        redacted=False,
+        redacted=redacted,
         redacted_sha256="",
-        fields=(),
+        fields=fields,
     )
 
 
@@ -154,6 +156,48 @@ def compacted_header(
     if summary:
         lines.append(f"summary: {summary}")
     return "\n".join(lines)
+
+
+def build_compacted_text(
+    *,
+    selection: RuleSelection,
+    compaction_input: ToolOutputCompactionInput,
+    reduced_text: str,
+    facts: Mapping[str, Any],
+    original_bytes: int,
+    redacted_bytes: int,
+    target_max_compacted_bytes: int,
+    digest: str,
+) -> tuple[str, int, float]:
+    """Build compacted text whose header byte counts match final metadata."""
+    stable_text = truncate_middle_bytes(reduced_text, target_max_compacted_bytes)
+    stable_bytes = byte_len(stable_text)
+    stable_ratio = savings_ratio(original_bytes, stable_bytes)
+    header_facts = {**dict(facts), **exit_code_fact(compaction_input)}
+
+    for _attempt in range(8):
+        candidate = (
+            compacted_header(
+                selection=selection,
+                original_bytes=original_bytes,
+                redacted_bytes=redacted_bytes,
+                compacted_bytes=stable_bytes,
+                savings_ratio_value=stable_ratio,
+                digest=digest,
+                facts=header_facts,
+            )
+            + "\n\n"
+            + reduced_text
+        )
+        candidate = truncate_middle_bytes(candidate, target_max_compacted_bytes)
+        candidate_bytes = byte_len(candidate)
+        candidate_ratio = savings_ratio(original_bytes, candidate_bytes)
+        if candidate_bytes == stable_bytes and f"{candidate_ratio:.6f}" == f"{stable_ratio:.6f}":
+            return candidate, candidate_bytes, candidate_ratio
+        stable_text = candidate
+        stable_bytes = candidate_bytes
+        stable_ratio = candidate_ratio
+    return stable_text, stable_bytes, stable_ratio
 
 
 def is_failure(compaction_input: ToolOutputCompactionInput) -> bool:

@@ -8,6 +8,7 @@ from dataclasses import replace
 from core.runtime.execution_events import RuntimeExecutionEvent
 from core.runtime.output_compaction.classifier import classify_tool_output
 from core.runtime.output_compaction.event_payloads import OUTPUT_FIELDS, apply_result, input_from_event, result_is_noop
+from core.runtime.output_compaction.fallbacks import compactor_error_result
 from core.runtime.output_compaction.models import (
     ToolOutputCompactionContext,
     ToolOutputCompactionInput,
@@ -18,16 +19,14 @@ from core.runtime.output_compaction.raw_payload import collect_raw_text_fields, 
 from core.runtime.output_compaction.redaction import redact_text
 from core.runtime.output_compaction.reducers import reduce_tool_output
 from core.runtime.output_compaction.results import (
-    compacted_header,
-    exit_code_fact,
+    build_compacted_text,
     is_failure,
     pass_through_result,
     redacted_digest,
     redaction_failure_result,
-    savings_ratio,
     unchanged_result,
 )
-from core.runtime.output_compaction.text import byte_len, truncate_middle_bytes
+from core.runtime.output_compaction.text import byte_len
 
 
 def compact_tool_call_event(
@@ -44,9 +43,12 @@ def compact_tool_call_event(
     payload = dict(event.payload)
     try:
         compaction_input = input_from_event(event, payload=payload, context=context)
-        result = compact_tool_output(compaction_input, policy=active_policy)
     except Exception:
         return event
+    try:
+        result = compact_tool_output(compaction_input, policy=active_policy)
+    except Exception as error:
+        result = compactor_error_result(compaction_input, policy=active_policy, error=error)
     if result_is_noop(result, payload):
         return event
     apply_result(payload, result)
@@ -68,7 +70,12 @@ def compact_tool_output(
     raw_omitted_fields = sanitized_raw_result.omitted_fields if sanitized_raw_result is not None else ()
 
     if original_bytes == 0 and not raw_omitted_fields:
-        return unchanged_result(compaction_input, raw=sanitized_raw, policy=policy)
+        return unchanged_result(
+            compaction_input,
+            raw=sanitized_raw,
+            policy=policy,
+            redacted=bool(sanitized_raw_result and sanitized_raw_result.redacted),
+        )
 
     try:
         redacted_fields = {key: redact_text(value) for key, value in string_fields.items()}
@@ -130,31 +137,16 @@ def compact_tool_output(
             compaction_error=error.__class__.__name__,
         )
 
-    compacted_text = compacted_header(
+    compacted_text, compacted_bytes, actual_savings_ratio = build_compacted_text(
         selection=selection,
+        compaction_input=compaction_input,
+        reduced_text=reduced.text,
+        facts=reduced.facts,
         original_bytes=original_bytes,
         redacted_bytes=redacted_bytes,
-        compacted_bytes=byte_len(reduced.text),
-        savings_ratio_value=0.0,
+        target_max_compacted_bytes=target_max_compacted_bytes,
         digest=digest,
-        facts={**dict(reduced.facts), **exit_code_fact(compaction_input)},
     )
-    compacted_text = f"{compacted_text}\n\n{reduced.text}".strip()
-    compacted_text = truncate_middle_bytes(compacted_text, target_max_compacted_bytes)
-    compacted_bytes = byte_len(compacted_text)
-    actual_savings_ratio = savings_ratio(original_bytes, compacted_bytes)
-    compacted_text = compacted_header(
-        selection=selection,
-        original_bytes=original_bytes,
-        redacted_bytes=redacted_bytes,
-        compacted_bytes=compacted_bytes,
-        savings_ratio_value=actual_savings_ratio,
-        digest=digest,
-        facts={**dict(reduced.facts), **exit_code_fact(compaction_input)},
-    ) + "\n\n" + reduced.text
-    compacted_text = truncate_middle_bytes(compacted_text, target_max_compacted_bytes)
-    compacted_bytes = byte_len(compacted_text)
-    actual_savings_ratio = savings_ratio(original_bytes, compacted_bytes)
 
     if actual_savings_ratio < required_savings_ratio:
         return pass_through_result(

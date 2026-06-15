@@ -285,16 +285,27 @@ class RuntimeOutputCompactionServiceTest(unittest.TestCase):
         self.assertIs(compacted, event)
         self.assertNotIn("output_compaction", compacted.payload)
 
-    def test_unexpected_compactor_error_does_not_interrupt_event_recording(self) -> None:
+    def test_unexpected_compactor_error_records_redacted_fallback(self) -> None:
+        output = "Authorization: Bearer secret-token\n" + ("long output\n" * 2000)
         event = RuntimeExecutionEvent(
             event_type="runtime.tool_call.completed",
-            payload={"name": "command", "output": "long output"},
+            payload={
+                "name": "command",
+                "output": output,
+                "raw": {"item": {"type": "commandExecution", "aggregatedOutput": output}},
+            },
         )
 
         with patch("core.runtime.output_compaction.service.compact_tool_output", side_effect=RuntimeError("boom")):
-            compacted = compact_tool_call_event(event)
+            compacted = compact_tool_call_event(event, policy=ToolOutputCompactionPolicy(min_original_bytes=1000))
 
-        self.assertIs(compacted, event)
+        self.assertIsNot(compacted, event)
+        payload = compacted.payload
+        self.assertEqual(payload["output_compaction"]["pass_through_reason"], "compactor_failed")
+        self.assertEqual(payload["output_compaction"]["compaction_error"], "RuntimeError")
+        self.assertIn("Authorization: Bearer <redacted>", payload["output"])
+        self.assertNotIn("secret-token", str(payload))
+        self.assertNotIn("aggregatedOutput", payload["raw"]["item"])
 
     def test_short_chat_render_json_remains_available_for_existing_consumers(self) -> None:
         output = '{"status_code": 200, "chat_render": {"kind": "checklist.design", "payload": {"id": "check_1"}}}'
@@ -307,6 +318,51 @@ class RuntimeOutputCompactionServiceTest(unittest.TestCase):
 
         self.assertEqual(compacted.payload["output"], output)
         self.assertFalse(compacted.payload["output_compaction"]["applied"])
+
+    def test_raw_only_redaction_is_reflected_in_metadata(self) -> None:
+        event = RuntimeExecutionEvent(
+            event_type="runtime.tool_call.completed",
+            payload={
+                "name": "command",
+                "raw": {"item": {"type": "commandExecution", "metadata": {"api_key": "secret-key"}}},
+            },
+        )
+
+        compacted = compact_tool_call_event(event)
+
+        payload = compacted.payload
+        self.assertEqual(payload["raw"]["item"]["metadata"]["api_key"], "<redacted>")
+        self.assertEqual(payload["output_compaction"]["pass_through_reason"], "no_text_fields")
+        self.assertTrue(payload["output_compaction"]["redacted"])
+
+    def test_compacted_header_byte_count_matches_metadata(self) -> None:
+        output = (
+            "FAILED tests/test_widget.py::test_renders_total - AssertionError\n"
+            "Traceback (most recent call last):\n"
+            "AssertionError: expected 2\n"
+            "short test summary info\n"
+        ) + ("noise\n" * 20_000)
+        event = RuntimeExecutionEvent(
+            event_type="runtime.tool_call.failed",
+            payload={"name": "command", "status": "failed", "command": "pytest", "exit_code": 1, "output": output},
+        )
+
+        compacted = compact_tool_call_event(
+            event,
+            policy=ToolOutputCompactionPolicy(min_original_bytes=1000, failure_target_max_compacted_bytes=4000),
+        )
+
+        payload = compacted.payload
+        metadata = payload["output_compaction"]
+        header = payload["output"].split("\n\n", 1)[0]
+        header_values = {
+            key: value
+            for line in header.splitlines()
+            if ": " in line
+            for key, value in [line.split(": ", 1)]
+        }
+        self.assertEqual(int(header_values["compacted_bytes"]), metadata["compacted_bytes"])
+        self.assertEqual(float(header_values["savings_ratio"]), metadata["savings_ratio"])
 
 
 if __name__ == "__main__":

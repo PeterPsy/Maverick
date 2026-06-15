@@ -27,7 +27,7 @@ Important implications:
 
 - local evaluation expects the Codex CLI to be available when testing Codex-backed runtime paths
 - Maverick-managed Codex agents use the workspace-selected Codex model and reasoning effort; the provider adapter discovers visible model options from `codex debug models` and writes the selected `model` and `model_reasoning_effort` into each runtime-scoped `CODEX_HOME/config.toml` instead of inheriting operator-home values
-- Maverick-managed Codex agents install a managed `PostToolUse` hook for `Bash` so large shell outputs can be compacted before Codex continues from the tool result
+- Maverick-managed Codex agents install a Maverick-owned `PostToolUse` hook for `Bash` so large shell outputs can be compacted before Codex continues from the tool result when Codex accepts and runs that hook under its hook-trust policy
 - non-default workspaces are intended to remain sandbox-first
 - provider adapters may need helper binaries such as `rg`
 - network access for providers is not equivalent to unconstrained filesystem access
@@ -55,6 +55,6 @@ Provider setup is required only for end-to-end agent execution paths that depend
 
 Large tool-call event payloads are compacted in the runtime recorder before persistence and live event fanout. This Phase 1 behavior protects storage, websocket delivery, runtime replay, UI rendering, and downstream app consumers, but it does not guarantee provider-token reduction for generic shell/tool output.
 
-Runtime-token CLI responses can request provider-oriented compaction for controlled Maverick CLI calls, and Maverick-managed Codex sessions use a managed `PostToolUse` hook to replace large `Bash` tool results before those results enter Codex provider history.
+Runtime-token CLI responses can request provider-oriented compaction for controlled Maverick CLI calls, and Maverick-managed Codex sessions install a Maverick-owned `PostToolUse` hook to replace large `Bash` tool results before those results enter Codex provider history when the hook is trusted or delivered through a Codex-supported managed configuration path.
 
 See `docs/reference/runtime_output_compaction.md` for the event contract, provider hook contract, operational flag, and Phase 1/2/3 status.

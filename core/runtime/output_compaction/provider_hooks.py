@@ -148,19 +148,38 @@ def _extract_codex_shell_payload(payload: Mapping[str, Any]) -> _ExtractedCodexS
     hook_event_name = _optional_string(payload.get("hook_event_name") or payload.get("hookEventName")) or CODEX_POST_TOOL_USE_EVENT
     tool_name = _optional_string(payload.get("tool_name") or payload.get("toolName")) or "Bash"
     tool_use_id = _optional_string(payload.get("tool_use_id") or payload.get("toolUseId"))
-    tool_input = _mapping(payload.get("tool_input") or payload.get("toolInput"))
-    tool_response = payload.get("tool_response") if "tool_response" in payload else payload.get("toolResponse")
+    tool_input = payload.get("tool_input") if "tool_input" in payload else payload.get("toolInput")
+    tool_response = _extract_tool_response(payload)
     response = _response_text_fields(tool_response)
     return _ExtractedCodexShellPayload(
         hook_event_name=hook_event_name,
         tool_name=tool_name,
         tool_use_id=tool_use_id,
-        command=_optional_string(tool_input.get("command")),
+        command=_command_from_tool_input(tool_input),
         output=response["output"],
         stdout=response["stdout"],
         stderr=response["stderr"],
         exit_code=response["exit_code"],
     )
+
+
+def _extract_tool_response(payload: Mapping[str, Any]) -> Any:
+    for key in ("tool_response", "toolResponse", "tool_result", "toolResult", "result", "response"):
+        if key in payload:
+            return payload.get(key)
+    return None
+
+
+def _command_from_tool_input(value: Any) -> str | None:
+    if isinstance(value, str):
+        return _optional_string(value)
+    if not isinstance(value, Mapping):
+        return None
+    for key in ("command", "cmd", "input"):
+        command = _optional_string(value.get(key))
+        if command:
+            return command
+    return None
 
 
 def _response_text_fields(value: Any) -> dict[str, Any]:
@@ -244,9 +263,19 @@ def _should_replace_provider_result(result: ToolOutputCompactionResult, extracte
 
 
 def _replacement_text(result: ToolOutputCompactionResult) -> str:
+    if result.applied and isinstance(result.output, str) and result.output:
+        return result.output
+    if not result.applied:
+        return _replacement_field_parts(result)
     if isinstance(result.output, str) and result.output:
         return result.output
+    return _replacement_field_parts(result)
+
+
+def _replacement_field_parts(result: ToolOutputCompactionResult) -> str:
     parts: list[str] = []
+    if result.output:
+        parts.append(result.output)
     if result.stdout:
         parts.append(f"stdout:\n{result.stdout}")
     if result.stderr:
@@ -286,10 +315,6 @@ def _provider_hook_metadata(result: ToolOutputCompactionResult, *, tool_name: st
 
 def _normalized_tool_name(value: str | None) -> str:
     return str(value or "").strip().lower()
-
-
-def _mapping(value: Any) -> Mapping[str, Any]:
-    return value if isinstance(value, Mapping) else {}
 
 
 def _argv_from_command(command: str | None) -> tuple[str, ...]:

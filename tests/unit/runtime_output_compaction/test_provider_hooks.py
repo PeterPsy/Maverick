@@ -65,6 +65,56 @@ class ProviderHookCompactionTest(unittest.TestCase):
 
         self.assertFalse(response["emit"])
 
+    def test_codex_post_tool_use_redacts_short_payload_without_dropping_fields(self) -> None:
+        response = build_codex_post_tool_use_response(
+            {
+                "hook_event_name": "PostToolUse",
+                "tool_name": "Bash",
+                "tool_input": {"command": "curl https://example.invalid"},
+                "tool_response": {
+                    "output": "request summary",
+                    "stdout": "Authorization: Bearer secret-token\nok\n",
+                    "stderr": "API_TOKEN=secret-value\n",
+                    "exit_code": 0,
+                },
+            },
+            runtime_session_id="sess-1",
+            policy=ToolOutputCompactionPolicy(min_original_bytes=1000),
+        )
+
+        self.assertTrue(response["emit"])
+        reason = response["response"]["reason"]
+        self.assertIn("request summary", reason)
+        self.assertIn("stdout:\nAuthorization: Bearer <redacted>", reason)
+        self.assertIn("stderr:\nAPI_TOKEN=<redacted>", reason)
+        self.assertNotIn("secret-token", reason)
+        self.assertNotIn("secret-value", reason)
+        self.assertEqual(response["output_compaction"]["pass_through_reason"], "below_min_original_bytes")
+
+    def test_codex_post_tool_use_accepts_alias_payload_shapes(self) -> None:
+        huge_output = "FAILED test_alias\nTraceback\n" + ("diagnostic line\n" * 2000)
+
+        response = build_codex_post_tool_use_response(
+            {
+                "hookEventName": "PostToolUse",
+                "toolName": "Bash",
+                "toolUseId": "tool-alias",
+                "toolInput": "pytest tests/test_alias.py",
+                "toolResult": {"content": [{"type": "text", "text": huge_output}], "exitCode": 1},
+            },
+            runtime_session_id="sess-1",
+            policy=ToolOutputCompactionPolicy(
+                min_original_bytes=1000,
+                failure_min_savings_ratio=0.20,
+                failure_target_max_compacted_bytes=4000,
+            ),
+        )
+
+        self.assertTrue(response["emit"])
+        self.assertIn("[tool output compacted]", response["response"]["reason"])
+        self.assertIn("test_alias", response["response"]["reason"])
+        self.assertEqual(response["output_compaction"]["provider_hook"], "codex.PostToolUse")
+
     def test_codex_post_tool_use_fails_open_with_redacted_text_when_compactor_raises(self) -> None:
         huge_stdout = "Authorization: Bearer secret-token\n" + ("large output line\n" * 2000)
 
@@ -122,6 +172,26 @@ class ProviderHookCompactionTest(unittest.TestCase):
                 }
             )
         self.assertIsNone(disabled_response)
+
+    def test_runtime_local_hook_script_fallback_accepts_response_aliases(self) -> None:
+        namespace: dict[str, object] = {"__name__": "hook_test"}
+        exec(_codex_post_tool_use_hook_source(), namespace)
+        fallback_response = namespace["fallback_response"]
+        huge_output = "Cookie: session=secret\n" + ("diagnostic line\n" * 2000)
+
+        response = fallback_response(  # type: ignore[operator]
+            {
+                "hookEventName": "PostToolUse",
+                "toolName": "Bash",
+                "toolResult": {"content": [{"type": "text", "text": huge_output}], "exitCode": 1},
+            }
+        )
+
+        self.assertIsNotNone(response)
+        assert isinstance(response, dict)
+        self.assertEqual(response["decision"], "block")
+        self.assertIn("scope: provider_history_tool_result", response["reason"])
+        self.assertNotIn("session=secret", response["reason"])
 
 
 if __name__ == "__main__":

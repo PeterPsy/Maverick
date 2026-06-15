@@ -115,7 +115,7 @@ def compaction_disabled():
 
 
 def extract_response_text(payload):
-    response = payload.get("tool_response") if "tool_response" in payload else payload.get("toolResponse")
+    response = first_present(payload, ("tool_response", "toolResponse", "tool_result", "toolResult", "result", "response"))
     if isinstance(response, str):
         return response
     if isinstance(response, dict):
@@ -136,6 +136,13 @@ def extract_response_text(payload):
     if isinstance(response, list):
         return joined_text_fragments(response)
     return ""
+
+
+def first_present(value, keys):
+    for key in keys:
+        if key in value:
+            return value.get(key)
+    return None
 
 
 def first_text(value, keys):

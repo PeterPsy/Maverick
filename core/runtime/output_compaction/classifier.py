@@ -17,8 +17,10 @@ def classify_tool_output(
 ) -> RuleSelection:
     """Select the highest-priority matching phase-1 rule."""
     command = " ".join(part for part in (compaction_input.command or "", " ".join(compaction_input.argv)) if part).strip()
-    active_rules = tuple(rules or builtin_rules())
-    fallback = active_rules[-1]
+    active_rules = tuple(rule for rule in (rules or builtin_rules()) if rule.enabled)
+    fallback = CompactionRule(rule_id="generic/fallback", family="generic", priority=0, reducer="generic_fallback")
+    if active_rules:
+        fallback = active_rules[-1]
     for rule in active_rules:
         if rule.rule_id == "generic/fallback":
             fallback = rule

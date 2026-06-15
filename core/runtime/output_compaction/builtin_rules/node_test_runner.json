@@ -1,0 +1,20 @@
+{
+  "id": "tests/node_runner",
+  "family": "test_runner",
+  "priority": 80,
+  "reducer": "node_test_runner",
+  "match": {
+    "command_regex_any": [
+      "(^|\\s)(npm|pnpm|yarn)\\s+test(\\s|$)",
+      "(^|\\s)(vitest|jest)(\\s|$)",
+      "(^|\\s)playwright\\s+test(\\s|$)"
+    ],
+    "text_regex_any": [
+      "Test Files",
+      "FAIL",
+      "Error:",
+      "\\.spec\\.",
+      "\\.test\\."
+    ]
+  }
+}

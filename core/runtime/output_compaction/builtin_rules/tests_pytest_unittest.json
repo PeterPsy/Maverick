@@ -1,0 +1,18 @@
+{
+  "id": "tests/pytest_unittest",
+  "family": "test_runner",
+  "priority": 90,
+  "reducer": "pytest_unittest",
+  "match": {
+    "command_regex_any": [
+      "(^|\\s)(pytest|python\\s+-m\\s+pytest)(\\s|$)",
+      "(^|\\s)(python\\s+-m\\s+unittest|unittest)(\\s|$)"
+    ],
+    "text_regex_any": [
+      "short test summary info",
+      "Traceback",
+      "FAILED",
+      "ERROR"
+    ]
+  }
+}

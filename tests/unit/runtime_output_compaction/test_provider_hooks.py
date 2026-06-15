@@ -137,6 +137,10 @@ class ProviderHookCompactionTest(unittest.TestCase):
         self.assertEqual(response["response"]["decision"], "block")
         self.assertIn("Authorization: Bearer <redacted>", response["response"]["reason"])
         self.assertNotIn("secret-token", response["response"]["reason"])
+        self.assertLessEqual(
+            len(response["response"]["reason"].encode("utf-8")),
+            response["output_compaction"]["target_max_compacted_bytes"],
+        )
         self.assertEqual(response["output_compaction"]["pass_through_reason"], "compactor_failed")
         self.assertEqual(response["output_compaction"]["compaction_error"], "RuntimeError")
 
@@ -192,6 +196,41 @@ class ProviderHookCompactionTest(unittest.TestCase):
         self.assertEqual(response["decision"], "block")
         self.assertIn("scope: provider_history_tool_result", response["reason"])
         self.assertNotIn("session=secret", response["reason"])
+
+    def test_runtime_local_hook_script_fallback_redacts_core_sensitive_patterns(self) -> None:
+        namespace: dict[str, object] = {"__name__": "hook_test"}
+        exec(_codex_post_tool_use_hook_source(), namespace)
+        fallback_response = namespace["fallback_response"]
+        huge_output = "\n".join(
+            [
+                "DATABASE_URL=https://user:pass@example.test/db",
+                "GET https://example.test/path?Access_Token=SecretToken&ok=1",
+                "openai sk-secretOpenAIStyleKey1234567890",
+                "github ghp_secretGithubToken1234567890",
+                "-----BEGIN PRIVATE KEY-----",
+                "private-key-material",
+                "-----END PRIVATE KEY-----",
+                *("diagnostic line" for _index in range(2000)),
+            ]
+        )
+
+        response = fallback_response(  # type: ignore[operator]
+            {
+                "hook_event_name": "PostToolUse",
+                "tool_name": "Bash",
+                "tool_response": {"stdout": huge_output, "exit_code": 1},
+            }
+        )
+
+        self.assertIsNotNone(response)
+        assert isinstance(response, dict)
+        reason = response["reason"]
+        self.assertNotIn("user:pass", reason)
+        self.assertNotIn("SecretToken", reason)
+        self.assertNotIn("secretOpenAIStyleKey", reason)
+        self.assertNotIn("secretGithubToken", reason)
+        self.assertNotIn("private-key-material", reason)
+        self.assertIn("<redacted", reason)
 
 
 if __name__ == "__main__":

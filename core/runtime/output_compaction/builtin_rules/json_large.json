@@ -1,0 +1,14 @@
+{
+  "id": "data/json_large",
+  "family": "structured_data",
+  "priority": 60,
+  "reducer": "json_large",
+  "match": {
+    "command_regex_any": [
+      "(^|\\s)(curl|maverick|python)(\\s|$)"
+    ],
+    "text_regex_any": [
+      "^\\s*[\\[{]"
+    ]
+  }
+}

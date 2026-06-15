@@ -1,0 +1,16 @@
+{
+  "id": "vcs/git_status",
+  "family": "version_control",
+  "priority": 70,
+  "reducer": "git_status",
+  "match": {
+    "command_regex_any": [
+      "(^|\\s)git\\s+status(\\s|$)"
+    ],
+    "text_regex_any": [
+      "On branch ",
+      "Changes not staged",
+      "Untracked files"
+    ]
+  }
+}

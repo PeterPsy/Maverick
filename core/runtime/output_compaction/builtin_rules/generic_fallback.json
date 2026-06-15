@@ -1,0 +1,7 @@
+{
+  "id": "generic/fallback",
+  "family": "generic",
+  "priority": 0,
+  "reducer": "generic_fallback",
+  "match": {}
+}

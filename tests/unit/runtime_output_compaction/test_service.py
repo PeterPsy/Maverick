@@ -303,6 +303,8 @@ class RuntimeOutputCompactionServiceTest(unittest.TestCase):
         payload = compacted.payload
         self.assertEqual(payload["output_compaction"]["pass_through_reason"], "compactor_failed")
         self.assertEqual(payload["output_compaction"]["compaction_error"], "RuntimeError")
+        self.assertIn("compactor_failed", payload["output"])
+        self.assertLessEqual(len(payload["output"].encode("utf-8")), payload["output_compaction"]["target_max_compacted_bytes"])
         self.assertIn("Authorization: Bearer <redacted>", payload["output"])
         self.assertNotIn("secret-token", str(payload))
         self.assertNotIn("aggregatedOutput", payload["raw"]["item"])

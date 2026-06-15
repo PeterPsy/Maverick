@@ -30,7 +30,7 @@ import urllib.request
 API_PATH = "/api/runtime/provider-hooks/codex/post-tool-use"
 MIN_FALLBACK_BYTES = 16000
 MAX_FALLBACK_BYTES = 12000
-SENSITIVE_QUERY_KEYS = "token|access_token|refresh_token|api_key|key|secret|password|code"
+SENSITIVE_QUERY_KEYS = "token|access_token|refresh_token|api_key|apikey|key|secret|password|passwd|code"
 
 
 def main():
@@ -178,18 +178,26 @@ def joined_text_fragments(value):
 
 def redact_text(text):
     replacements = (
+        (r"-----BEGIN [A-Z ]*PRIVATE KEY-----.*?-----END [A-Z ]*PRIVATE KEY-----", "<redacted-private-key>", re.IGNORECASE | re.DOTALL),
         (r"(?i)(Authorization:\s*Bearer\s+)[^\s]+", r"\1<redacted>"),
         (r"(?i)(Authorization:\s*Basic\s+)[^\s]+", r"\1<redacted>"),
         (r"(?im)^(Cookie|Set-Cookie):.*$", r"\1: <redacted>"),
-        (r"(?im)^([A-Z0-9_]*(?:TOKEN|SECRET|PASSWORD|API_KEY|KEY)[A-Z0-9_]*\s*=\s*).+$", r"\1<redacted>"),
-        (r"([?&](?:" + SENSITIVE_QUERY_KEYS + r")=)[^&\s]+", r"\1<redacted>"),
+        (r"(?im)^([A-Z0-9_]*(?:TOKEN|SECRET|PASSWORD|PASSWD|API_KEY|PRIVATE_KEY|ACCESS_KEY|AUTH|KEY)[A-Z0-9_]*\s*=\s*)[^\s#]+", r"\1<redacted>"),
+        (r"(?i)([?&](?:" + SENSITIVE_QUERY_KEYS + r")=)[^&#\s]+", r"\1<redacted>"),
         (r"\beyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\b", "<redacted-jwt>"),
-        (r"-----BEGIN [A-Z ]*PRIVATE KEY-----.*?-----END [A-Z ]*PRIVATE KEY-----", "<redacted-private-key>"),
+        (r"(?i)([a-z][a-z0-9+.-]*://)([^/\s:@]+):([^@\s/]+)@", r"\1<redacted>@"),
+        (r"\b(?:sk|pk|rk|ghp|github_pat)_[A-Za-z0-9_=-]{16,}\b", "<redacted-key>"),
+        (r"\bsk-[A-Za-z0-9_-]{16,}\b", "<redacted-key>"),
     )
     redacted = text
-    for pattern, replacement in replacements:
+    for item in replacements:
+        if len(item) == 3:
+            pattern, replacement, flags = item
+        else:
+            pattern, replacement = item
+            flags = 0
         try:
-            redacted = re.sub(pattern, replacement, redacted, flags=re.DOTALL if "PRIVATE KEY" in pattern else 0)
+            redacted = re.sub(pattern, replacement, redacted, flags=flags)
         except re.error:
             continue
     return redacted

@@ -1,6 +1,9 @@
 import type { ChatMessage, ChatProject, ChatThread, RuntimeEvent } from "../../api/client";
 import { eventsToMessages } from "../../lib/transcript";
 import type { FolderSection } from "./sections";
+import { threadLastMessageTimestamp } from "./threadTimestamps";
+
+export { threadLastMessageTimestamp } from "./threadTimestamps";
 
 const SEARCH_RESULTS_SECTION_ID = "search-results";
 
@@ -121,15 +124,6 @@ export function threadSearchCacheKey(thread: ChatThread): string {
   ].join(":");
 }
 
-export function threadLastMessageTimestamp(thread: ChatThread): number {
-  return Math.max(
-    timestampValue(thread.last_user_message_at),
-    timestampValue(thread.last_completed_response_at),
-    timestampValue(thread.updated_at),
-    timestampValue(thread.created_at),
-  );
-}
-
 function projectNameById(projects: ChatProject[]): Map<string, string> {
   return new Map(projects.map((project) => [project.project_id, project.name]));
 }
@@ -198,12 +192,4 @@ function normalizedSearchText(value: string): string {
     .toLowerCase()
     .replace(/[^\p{L}\p{N}]+/gu, " ")
     .trim();
-}
-
-function timestampValue(value: string | null | undefined): number {
-  if (!value) {
-    return 0;
-  }
-  const parsed = Date.parse(value);
-  return Number.isFinite(parsed) ? parsed : 0;
 }

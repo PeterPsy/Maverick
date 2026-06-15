@@ -26,6 +26,8 @@ export function ProjectSection({
   onSaveProjectEdit,
   onSelectThreadClick,
   onSelectThreadPointer,
+  onTrackThreadTouchCancel,
+  onTrackThreadTouchMove,
   onSetEditingProjectName,
   onSetExpandedThreadTitle,
   onStartProjectEdit,
@@ -58,6 +60,8 @@ export function ProjectSection({
   onSaveProjectEdit: () => Promise<void>;
   onSelectThreadClick: (thread: ChatThread) => void;
   onSelectThreadPointer: (event: ReactPointerEvent<HTMLButtonElement>, thread: ChatThread) => void;
+  onTrackThreadTouchCancel: (event: ReactPointerEvent<HTMLButtonElement>, thread: ChatThread) => void;
+  onTrackThreadTouchMove: (event: ReactPointerEvent<HTMLButtonElement>, thread: ChatThread) => void;
   onSetEditingProjectName: (name: string) => void;
   onSetExpandedThreadTitle: (title: string) => void;
   onStartProjectEdit: (project: ChatProject) => void;
@@ -208,6 +212,8 @@ export function ProjectSection({
                 onRenameThread={onRenameThread}
                 onSelectThreadClick={onSelectThreadClick}
                 onSelectThreadPointer={onSelectThreadPointer}
+                onTrackThreadTouchCancel={onTrackThreadTouchCancel}
+                onTrackThreadTouchMove={onTrackThreadTouchMove}
                 onSetExpandedThreadTitle={onSetExpandedThreadTitle}
                 onToggleThreadEdit={onToggleThreadEdit}
                 onToggleThreadSelection={onToggleThreadSelection}

@@ -56,11 +56,16 @@ describe("chat sidebar multi-select affordance", () => {
   it("keeps the circular selection control hidden until row interaction or selection", () => {
     const styles = readStyle("styles.css");
 
+    expect(styles).toContain(".bs-chat-list__trailing");
+    expect(styles).toContain(".bs-chat-list__timestamp");
     expect(styles).toContain(".bs-chat-list__selection-toggle");
     expect(styles).toContain(".bs-chat-list__selection-ring");
     expect(styles).toContain(".bs-chat-list__item.is-selected .bs-chat-list__selection-toggle");
     expect(styles).toContain(".bs-chat-list__item:hover .bs-chat-list__selection-toggle");
+    expect(styles).toContain(".bs-chat-list__item:hover .bs-chat-list__timestamp");
     expect(styles).toContain(".bs-widget-root.has-thread-selection");
+    expect(styles).toContain(".bs-widget-root.is-shell-mobile.has-thread-actions-revealed .bs-chat-list__item .bs-instance-menu__trigger");
+    expect(styles).toContain(".bs-widget-root.is-shell-mobile.has-thread-actions-revealed .bs-chat-list__item .bs-chat-list__timestamp");
     expect(styles).toContain("--chat-sidebar-scroll-under-bottom: 9.8rem;");
   });
 });

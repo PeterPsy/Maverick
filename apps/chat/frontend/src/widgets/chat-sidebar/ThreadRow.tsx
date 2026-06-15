@@ -3,6 +3,7 @@ import type { ChatProject, ChatThread } from "../../api/client";
 import { BusyChatGlow } from "../BusyChatGlow";
 import { isThreadBusy, isThreadTitlePending, isThreadUnread } from "./sections";
 import { ThreadInlineActions } from "./ThreadInlineActions";
+import { formatThreadLastMessageTimestamp, threadLastMessageIso } from "./threadTimestamps";
 
 export function ThreadRow({
   activeThreadId,
@@ -15,6 +16,8 @@ export function ThreadRow({
   onRenameThread,
   onSelectThreadClick,
   onSelectThreadPointer,
+  onTrackThreadTouchCancel,
+  onTrackThreadTouchMove,
   onSetExpandedThreadTitle,
   onToggleThreadEdit,
   onToggleThreadSelection,
@@ -35,6 +38,8 @@ export function ThreadRow({
   onRenameThread: (threadId: string, title: string, projectId: string | null) => Promise<void>;
   onSelectThreadClick: (thread: ChatThread) => void;
   onSelectThreadPointer: (event: ReactPointerEvent<HTMLButtonElement>, thread: ChatThread) => void;
+  onTrackThreadTouchCancel: (event: ReactPointerEvent<HTMLButtonElement>, thread: ChatThread) => void;
+  onTrackThreadTouchMove: (event: ReactPointerEvent<HTMLButtonElement>, thread: ChatThread) => void;
   onSetExpandedThreadTitle: (title: string) => void;
   onToggleThreadEdit: (thread: ChatThread) => void;
   onToggleThreadSelection: (thread: ChatThread) => void;
@@ -50,6 +55,8 @@ export function ThreadRow({
   const isExpanded = expandedThreadId === thread.thread_id;
   const isTitlePending = isThreadTitlePending(thread);
   const threadLabel = isTitlePending ? "chat" : thread.title || "chat";
+  const lastMessageTimestamp = formatThreadLastMessageTimestamp(thread);
+  const lastMessageIso = threadLastMessageIso(thread);
 
   return (
     <div
@@ -79,7 +86,9 @@ export function ThreadRow({
           <button
             className="bs-chat-list__select-button"
             onClick={() => onSelectThreadClick(thread)}
+            onPointerCancel={(event) => onTrackThreadTouchCancel(event, thread)}
             onPointerDown={(event) => onTrackThreadTouchStart(event, thread)}
+            onPointerMove={(event) => onTrackThreadTouchMove(event, thread)}
             onPointerUp={(event) => onSelectThreadPointer(event, thread)}
             type="button"
           >
@@ -97,43 +106,50 @@ export function ThreadRow({
           </button>
         )}
       </div>
-      <div className="bs-chat-list__actions">
-        <button
-          aria-label={`${isSelected ? "Deselect" : "Select"} ${threadLabel}`}
-          aria-pressed={isSelected}
-          className="bs-chat-list__selection-toggle"
-          onClick={() => onToggleThreadSelection(thread)}
-          title={isSelected ? "Deselect chat" : "Select chat"}
-          type="button"
-        >
-          <span aria-hidden="true" className="bs-chat-list__selection-ring" />
-        </button>
-        {canMoveThread && sectionProjectId !== thread.project_id ? (
+      <div className="bs-chat-list__trailing">
+        {lastMessageTimestamp ? (
+          <time className="bs-chat-list__timestamp" dateTime={lastMessageIso} title={`Last message ${lastMessageTimestamp}`}>
+            {lastMessageTimestamp}
+          </time>
+        ) : null}
+        <div className="bs-chat-list__actions">
           <button
-            aria-label={`Move ${threadLabel} to ${sectionTitle}`}
-            className="bs-instance-menu__trigger"
-            onClick={() => void onMoveThread(thread, sectionProjectId)}
+            aria-label={`${isSelected ? "Deselect" : "Select"} ${threadLabel}`}
+            aria-pressed={isSelected}
+            className="bs-chat-list__selection-toggle"
+            onClick={() => onToggleThreadSelection(thread)}
+            title={isSelected ? "Deselect chat" : "Select chat"}
             type="button"
           >
-            <span aria-hidden="true" className="material-symbols-rounded">
-              drive_file_move
-            </span>
+            <span aria-hidden="true" className="bs-chat-list__selection-ring" />
           </button>
-        ) : (
-          <button
-            aria-expanded={isExpanded}
-            aria-label={`Edit ${threadLabel}`}
-            className="bs-instance-menu__trigger"
-            disabled={isTitlePending}
-            onClick={() => onToggleThreadEdit(thread)}
-            title={isTitlePending ? "Title generation pending" : "Edit chat"}
-            type="button"
-          >
-            <span aria-hidden="true" className="material-symbols-rounded">
-              more_horiz
-            </span>
-          </button>
-        )}
+          {canMoveThread && sectionProjectId !== thread.project_id ? (
+            <button
+              aria-label={`Move ${threadLabel} to ${sectionTitle}`}
+              className="bs-instance-menu__trigger"
+              onClick={() => void onMoveThread(thread, sectionProjectId)}
+              type="button"
+            >
+              <span aria-hidden="true" className="material-symbols-rounded">
+                drive_file_move
+              </span>
+            </button>
+          ) : (
+            <button
+              aria-expanded={isExpanded}
+              aria-label={`Edit ${threadLabel}`}
+              className="bs-instance-menu__trigger"
+              disabled={isTitlePending}
+              onClick={() => onToggleThreadEdit(thread)}
+              title={isTitlePending ? "Title generation pending" : "Edit chat"}
+              type="button"
+            >
+              <span aria-hidden="true" className="material-symbols-rounded">
+                more_horiz
+              </span>
+            </button>
+          )}
+        </div>
       </div>
       {isExpanded ? (
         <ThreadInlineActions

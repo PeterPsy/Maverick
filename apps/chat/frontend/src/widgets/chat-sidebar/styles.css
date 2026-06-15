@@ -719,6 +719,38 @@ input {
   flex: none;
 }
 
+.bs-chat-list__trailing {
+  display: grid;
+  align-items: center;
+  justify-items: end;
+  width: 4.9rem;
+  min-width: 4.9rem;
+  min-height: 28px;
+}
+
+.bs-chat-list__timestamp,
+.bs-chat-list__actions {
+  grid-area: 1 / 1;
+  justify-self: end;
+}
+
+.bs-chat-list__timestamp {
+  display: block;
+  max-width: 100%;
+  overflow: hidden;
+  color: var(--maverick-text-soft);
+  font-size: 0.62rem;
+  font-weight: 400;
+  letter-spacing: 0;
+  line-height: 1;
+  opacity: 1;
+  pointer-events: none;
+  text-align: right;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  transition: opacity 140ms ease;
+}
+
 .bs-chat-list__copy {
   display: grid;
   justify-items: start;
@@ -1018,16 +1050,22 @@ input {
 .bs-chat-list__item:hover .bs-chat-list__selection-toggle,
 .bs-chat-list__item:focus-within .bs-instance-menu__trigger,
 .bs-chat-list__item:focus-within .bs-chat-list__selection-toggle,
-.bs-chat-list__item.is-active .bs-instance-menu__trigger,
-.bs-chat-list__item.is-active .bs-chat-list__selection-toggle,
 .bs-chat-folder:hover .bs-folder-menu__trigger,
 .bs-chat-folder:focus-within .bs-folder-menu__trigger {
   opacity: 1;
   pointer-events: auto;
 }
 
-.bs-widget-root.is-shell-mobile .bs-chat-list__item .bs-instance-menu__trigger,
-.bs-widget-root.is-shell-mobile .bs-chat-list__item .bs-chat-list__selection-toggle,
+.bs-chat-list__item:hover .bs-chat-list__timestamp,
+.bs-chat-list__item:focus-within .bs-chat-list__timestamp,
+.bs-chat-list__item.is-selected .bs-chat-list__timestamp,
+.bs-chat-list__item.is-expanded .bs-chat-list__timestamp,
+.bs-widget-root.is-shell-mobile.has-thread-actions-revealed .bs-chat-list__item .bs-chat-list__timestamp {
+  opacity: 0;
+}
+
+.bs-widget-root.is-shell-mobile.has-thread-actions-revealed .bs-chat-list__item .bs-instance-menu__trigger,
+.bs-widget-root.is-shell-mobile.has-thread-actions-revealed .bs-chat-list__item .bs-chat-list__selection-toggle,
 .bs-widget-root.is-shell-mobile .bs-chat-folder .bs-folder-menu__trigger {
   opacity: 1;
   pointer-events: auto;

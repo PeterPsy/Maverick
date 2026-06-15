@@ -455,7 +455,14 @@ export function useChatSidebarState() {
     }
   }
 
-  const { selectThreadFromClick, selectThreadFromPointer, trackThreadTouchStart } = useThreadTouchSelection({
+  const {
+    areThreadActionsRevealed,
+    cancelThreadTouch,
+    selectThreadFromClick,
+    selectThreadFromPointer,
+    trackThreadTouchMove,
+    trackThreadTouchStart,
+  } = useThreadTouchSelection({
     isShellMobileLayout,
     selectThread,
   });
@@ -501,8 +508,10 @@ export function useChatSidebarState() {
   return {
     activeThreadId,
     addProject: projectActions.addProject,
+    areThreadActionsRevealed,
     cancelProjectDeletion: projectActions.cancelProjectDeletion,
     cancelProjectEdit: projectActions.cancelProjectEdit,
+    cancelThreadTouch,
     closeExpandedThread,
     collapsedSections,
     confirmProjectDeletion: projectActions.confirmProjectDeletion,
@@ -535,6 +544,7 @@ export function useChatSidebarState() {
     toggleSection,
     toggleThreadEdit,
     toggleThreadSelection,
+    trackThreadTouchMove,
     trackThreadTouchStart,
   };
 }

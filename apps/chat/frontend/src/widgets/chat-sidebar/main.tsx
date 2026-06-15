@@ -8,7 +8,11 @@ function ChatSidebarWidget() {
   const sidebar = useChatSidebarState();
 
   return (
-    <main className={`bs-widget-root ${sidebar.isShellMobileLayout ? "is-shell-mobile" : ""} ${sidebar.hasThreadSelection ? "has-thread-selection" : ""}`}>
+    <main
+      className={`bs-widget-root ${sidebar.isShellMobileLayout ? "is-shell-mobile" : ""} ${
+        sidebar.hasThreadSelection ? "has-thread-selection" : ""
+      } ${sidebar.areThreadActionsRevealed ? "has-thread-actions-revealed" : ""}`}
+    >
       {sidebar.error ? <p className="bs-chat-folder__empty">{sidebar.error}</p> : null}
 
       <div className="bs-chat-sidebar-search-frame">
@@ -51,6 +55,8 @@ function ChatSidebarWidget() {
               onSaveProjectEdit={sidebar.saveProjectEdit}
               onSelectThreadClick={sidebar.selectThreadFromClick}
               onSelectThreadPointer={sidebar.selectThreadFromPointer}
+              onTrackThreadTouchCancel={sidebar.cancelThreadTouch}
+              onTrackThreadTouchMove={sidebar.trackThreadTouchMove}
               onSetEditingProjectName={sidebar.setEditingProjectName}
               onSetExpandedThreadTitle={sidebar.setExpandedThreadTitle}
               onStartProjectEdit={sidebar.startProjectEdit}

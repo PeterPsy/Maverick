@@ -7,6 +7,7 @@ import type { Root } from "react-dom/client";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { ChatThread } from "../../api/client";
 import { ThreadRow } from "./ThreadRow";
+import { formatThreadLastMessageTimestamp } from "./threadTimestamps";
 
 function thread(overrides: Partial<ChatThread> = {}): ChatThread {
   return {
@@ -57,6 +58,8 @@ describe("ThreadRow", () => {
           onRenameThread={vi.fn()}
           onSelectThreadClick={vi.fn()}
           onSelectThreadPointer={vi.fn()}
+          onTrackThreadTouchCancel={vi.fn()}
+          onTrackThreadTouchMove={vi.fn()}
           onSetExpandedThreadTitle={vi.fn()}
           onToggleThreadEdit={vi.fn()}
           onToggleThreadSelection={vi.fn()}
@@ -84,5 +87,22 @@ describe("ThreadRow", () => {
 
     expect(container?.querySelector(".bs-chat-list__title-skeleton")).toBeNull();
     expect(container?.textContent).toContain("Analisi Budget Vendite Mensili");
+  });
+
+  it("renders the latest chat message time without seconds", async () => {
+    const item = thread({
+      created_at: "2026-05-21T08:00:00Z",
+      updated_at: "2026-05-21T09:00:00Z",
+      last_user_message_at: "2026-05-21T10:03:04Z",
+      last_completed_response_at: "2026-05-21T11:04:05Z",
+    });
+
+    await renderThreadRow(item);
+
+    const timestamp = container?.querySelector<HTMLTimeElement>(".bs-chat-list__timestamp");
+    expect(formatThreadLastMessageTimestamp(item, { timeZone: "UTC" })).toBe("21 mag 11:04");
+    expect(timestamp?.dateTime).toBe("2026-05-21T11:04:05Z");
+    expect(timestamp?.textContent).toMatch(/^\d{2} \S+ \d{2}:\d{2}$/);
+    expect(timestamp?.textContent).not.toMatch(/\d{2}:\d{2}:\d{2}/);
   });
 });

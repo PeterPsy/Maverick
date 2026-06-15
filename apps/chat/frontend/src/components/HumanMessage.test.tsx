@@ -5,6 +5,7 @@ import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, describe, expect, it } from "vitest";
 import type { ChatMessage } from "../api/client";
+import type { MentionItem } from "../lib/mentions";
 import { HumanMessage } from "./HumanMessage";
 
 let container: HTMLDivElement | null = null;
@@ -18,6 +19,73 @@ afterEach(() => {
 });
 
 describe("HumanMessage", () => {
+  it("prefers entity reference markers over shorter app mention tokens", async () => {
+    container = document.createElement("div");
+    document.body.appendChild(container);
+    root = createRoot(container);
+    const checklistApp: MentionItem = {
+      id: "checklist",
+      label: "Checklist",
+      description: "Checklist app",
+      kind: "app",
+      reference: {
+        type: "app",
+        app_id: "checklist",
+        label: "Checklist",
+      },
+    };
+    const message: ChatMessage = {
+      id: "msg_1",
+      role: "human",
+      content: "Test @Checklist drag-to-chat citations [ref:checklist/checklist/check_520a6e7a8b83]",
+      createdAt: "2026-06-15T18:58:12Z",
+      appReferences: [
+        {
+          type: "entity",
+          app_id: "checklist",
+          entity_type: "checklist",
+          entity_id: "check_520a6e7a8b83",
+          label: "Checklist drag-to-chat citations",
+          summary: "4/4 checked",
+          deep_link: "/app/checklist/checklists/check_520a6e7a8b83",
+        },
+      ],
+    };
+
+    await act(async () => {
+      root?.render(<HumanMessage mentionItems={[checklistApp]} message={message} onCopyMessage={async () => undefined} />);
+    });
+
+    const chip = container.querySelector(".chatapp-message-reference-chip.is-entity");
+    expect(chip).toBeInstanceOf(HTMLElement);
+    expect(chip?.textContent).toContain("Checklist drag-to-chat citations");
+    expect(container.querySelector(".chatapp-message-reference-chip.is-app")).toBeNull();
+    expect(container.textContent).not.toContain("[ref:");
+    expect(container.textContent?.match(/Checklist drag-to-chat citations/g)).toHaveLength(1);
+  });
+
+  it("hides entity reference markers even when app references are missing", async () => {
+    container = document.createElement("div");
+    document.body.appendChild(container);
+    root = createRoot(container);
+    const message: ChatMessage = {
+      id: "msg_1",
+      role: "human",
+      content: "Review @Old launch [ref:checklist/checklist/check_123]",
+      createdAt: "2026-06-15T18:58:12Z",
+      appReferences: [],
+    };
+
+    await act(async () => {
+      root?.render(<HumanMessage mentionItems={[]} message={message} onCopyMessage={async () => undefined} />);
+    });
+
+    const chip = container.querySelector(".chatapp-message-reference-chip.is-entity");
+    expect(chip).toBeInstanceOf(HTMLElement);
+    expect(chip?.textContent).toContain("Old launch");
+    expect(container.textContent).not.toContain("[ref:");
+  });
+
   it("routes Storage Drive folder reference chips through shell params", async () => {
     const messages: Array<{ message: unknown; targetOrigin: string }> = [];
     const originalParent = window.parent;

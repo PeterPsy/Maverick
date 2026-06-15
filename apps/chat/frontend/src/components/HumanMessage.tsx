@@ -1,7 +1,7 @@
 import type { ReactNode } from "react";
 import type { AppReference, ChatMessage } from "../api/client";
 import { formatFileSize } from "../lib/attachments";
-import { findMentionTokens } from "../lib/mentions";
+import { findEntityReferenceMarkers, findMentionTokens } from "../lib/mentions";
 import type { MentionItem } from "../lib/mentions";
 import { fallbackMatchesForAppReference, rangesOverlap } from "../lib/messageReferenceMatches";
 import type { MessageMentionMatch } from "../lib/messageReferenceMatches";
@@ -57,22 +57,26 @@ export function HumanMessage({
 }
 
 function renderHumanMessageContent(content: string, appReferences: AppReference[], mentionItems: MentionItem[]) {
-  const tokenMatches = findMentionTokens(content, mentionItems).map((token) => ({
-    kind: token.item.kind,
-    id: token.item.id,
-    label: token.item.label,
-    appId: token.item.reference?.type === "entity" ? token.item.reference.app_id : undefined,
-    deepLink: token.item.reference?.type === "entity" ? token.item.reference.deep_link : undefined,
-    entityType: token.item.reference?.type === "entity" ? token.item.reference.entity_type : undefined,
-    exists: token.item.reference?.type === "entity" ? token.item.reference.exists : undefined,
-    summary: token.item.reference?.type === "entity" ? token.item.reference.summary : undefined,
-    start: token.start,
-    end: token.end,
-  }));
-  const fallbackAppMatches = appReferences
-    .flatMap((reference) => fallbackMatchesForAppReference(content, reference))
-    .filter((match) => !tokenMatches.some((token) => rangesOverlap(token, match)));
-  const matches = [...tokenMatches, ...fallbackAppMatches]
+  const appReferenceMatches = appReferences.flatMap((reference) => fallbackMatchesForAppReference(content, reference));
+  const markerMatches = fallbackMatchesForEntityReferenceMarkers(content).filter(
+    (match) => !appReferenceMatches.some((referenceMatch) => rangesOverlap(referenceMatch, match)),
+  );
+  const referenceMatches = [...appReferenceMatches, ...markerMatches];
+  const tokenMatches = findMentionTokens(content, mentionItems)
+    .map((token) => ({
+      kind: token.item.kind,
+      id: token.item.id,
+      label: token.item.label,
+      appId: token.item.reference?.type === "entity" ? token.item.reference.app_id : undefined,
+      deepLink: token.item.reference?.type === "entity" ? token.item.reference.deep_link : undefined,
+      entityType: token.item.reference?.type === "entity" ? token.item.reference.entity_type : undefined,
+      exists: token.item.reference?.type === "entity" ? token.item.reference.exists : undefined,
+      summary: token.item.reference?.type === "entity" ? token.item.reference.summary : undefined,
+      start: token.start,
+      end: token.end,
+    }))
+    .filter((match) => !referenceMatches.some((referenceMatch) => rangesOverlap(referenceMatch, match)));
+  const matches = [...referenceMatches, ...tokenMatches]
     .sort((left, right) => left.start - right.start)
     .filter((match, index, sorted) => index === 0 || match.start >= sorted[index - 1].end);
   if (!matches.length) {
@@ -91,6 +95,18 @@ function renderHumanMessageContent(content: string, appReferences: AppReference[
     segments.push(content.slice(cursor));
   }
   return segments;
+}
+
+function fallbackMatchesForEntityReferenceMarkers(content: string): MessageMentionMatch[] {
+  return findEntityReferenceMarkers(content).map((marker) => ({
+    kind: "entity",
+    id: `entity:${marker.appId}:${marker.entityType}:${marker.entityId}`,
+    appId: marker.appId,
+    entityType: marker.entityType,
+    label: marker.label || marker.entityId,
+    start: marker.mentionStart ?? marker.markerStart,
+    end: marker.markerEnd,
+  }));
 }
 
 function MentionReferenceChip({ match }: { match: MessageMentionMatch }) {

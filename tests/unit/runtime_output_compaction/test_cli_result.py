@@ -69,6 +69,50 @@ class RuntimeCliResultCompactionTest(unittest.TestCase):
         self.assertEqual(metadata["pass_through_reason"], "sensitive_key_redacted")
         self.assertEqual(metadata["fields"], ["data.api_key"])
 
+    def test_redacts_sensitive_keyed_non_string_values_in_provider_compact_profile(self) -> None:
+        cases = (
+            (
+                "numeric scalar",
+                {"api_key": 1234567890, "name": "kept"},
+                "api_key",
+                "data.api_key",
+                ("1234567890",),
+            ),
+            (
+                "nested object",
+                {"token": {"id": 987654321, "value": "nested-secret"}, "name": "kept"},
+                "token",
+                "data.token",
+                ("987654321", "nested-secret"),
+            ),
+            (
+                "nested list",
+                {"token": [246813579, "list-secret"], "name": "kept"},
+                "token",
+                "data.token",
+                ("246813579", "list-secret"),
+            ),
+        )
+
+        for name, data, sensitive_key, field_path, raw_fragments in cases:
+            with self.subTest(name=name):
+                compacted = compact_runtime_cli_result(
+                    {"status_code": 200, "data": data},
+                    argv=["app", "example", "mcp", "call", "keyed"],
+                    runtime_session_id="sess-1",
+                    policy=ToolOutputCompactionPolicy(min_original_bytes=1000),
+                )
+
+                self.assertEqual(compacted["data"][sensitive_key], "<redacted>")
+                self.assertEqual(compacted["data"]["name"], "kept")
+                for raw_fragment in raw_fragments:
+                    self.assertNotIn(raw_fragment, str(compacted))
+                metadata = compacted["output_compaction"]
+                self.assertFalse(metadata["applied"])
+                self.assertTrue(metadata["redacted"])
+                self.assertEqual(metadata["pass_through_reason"], "sensitive_key_redacted")
+                self.assertEqual(metadata["fields"], [field_path])
+
     def test_compactor_error_returns_redacted_field_instead_of_raw_output(self) -> None:
         huge_output = "Authorization: Bearer secret-token\n" + ("large output line\n" * 10_000)
 

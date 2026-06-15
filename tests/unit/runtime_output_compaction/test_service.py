@@ -244,6 +244,33 @@ class RuntimeOutputCompactionServiceTest(unittest.TestCase):
         self.assertEqual(facts["untracked_count"], 800)
         self.assertEqual(facts["conflicted_count"], 800)
 
+    def test_failed_git_status_without_status_signal_uses_generic_fallback(self) -> None:
+        output = "fatal: not a git repository (or any of the parent directories): .git\n" + ("noise line\n" * 8000)
+        event = RuntimeExecutionEvent(
+            event_type="runtime.tool_call.failed",
+            payload={
+                "name": "command",
+                "status": "failed",
+                "command": "git status --short",
+                "exit_code": 128,
+                "output": output,
+            },
+        )
+
+        compacted = compact_tool_call_event(
+            event,
+            policy=ToolOutputCompactionPolicy(
+                min_original_bytes=1000,
+                failure_target_max_compacted_bytes=4000,
+            ),
+        )
+
+        payload = compacted.payload
+        self.assertTrue(payload["output_compaction"]["applied"])
+        self.assertEqual(payload["output_compaction"]["rule_id"], "generic/fallback")
+        self.assertIn("fatal: not a git repository", payload["output"])
+        self.assertNotIn("git status summary", payload["output"])
+
     def test_large_json_output_uses_json_rule(self) -> None:
         output = json.dumps(
             {

@@ -19,6 +19,7 @@ def classify_tool_output(
     command = " ".join(part for part in (compaction_input.command or "", " ".join(compaction_input.argv)) if part).strip()
     active_rules = tuple(rule for rule in (rules or builtin_rules()) if rule.enabled)
     fallback = CompactionRule(rule_id="generic/fallback", family="generic", priority=0, reducer="generic_fallback")
+    failed = _is_failure(compaction_input)
     if active_rules:
         fallback = active_rules[-1]
     for rule in active_rules:
@@ -26,6 +27,8 @@ def classify_tool_output(
             fallback = rule
             continue
         if _command_matches(rule, command=command):
+            if _failed_without_family_signal(rule, failed=failed, text=redacted_text):
+                continue
             if rule.reducer == "json_large" and not _looks_like_json(redacted_text):
                 continue
             return RuleSelection(rule_id=rule.rule_id, family=rule.family)
@@ -48,6 +51,17 @@ def _command_matches(rule: CompactionRule, *, command: str) -> bool:
 def _text_matches(rule: CompactionRule, *, text: str) -> bool:
     text_patterns = rule.compiled_text_patterns()
     return bool(text_patterns) and any(pattern.search(text) for pattern in text_patterns)
+
+
+def _failed_without_family_signal(rule: CompactionRule, *, failed: bool, text: str) -> bool:
+    if not failed or not rule.compiled_text_patterns():
+        return False
+    return not _text_matches(rule, text=text)
+
+
+def _is_failure(compaction_input: ToolOutputCompactionInput) -> bool:
+    status = str(compaction_input.metadata.get("status") or "").strip().lower()
+    return status == "failed" or (isinstance(compaction_input.exit_code, int) and compaction_input.exit_code != 0)
 
 
 def _looks_like_json(value: str) -> bool:

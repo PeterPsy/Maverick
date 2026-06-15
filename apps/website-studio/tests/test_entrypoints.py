@@ -2878,7 +2878,10 @@ class WebsiteStudioEntrypointTest(unittest.TestCase):
         self.assertIn('sandbox="allow-scripts allow-forms"', runtime_source)
         self.assertNotIn("allow-popups", runtime_source)
         self.assertNotIn("allow-same-origin", runtime_source)
-        self.assertIn("frame.src = currentDocumentUrl", runtime_source)
+        self.assertIn("const frameCache = new Map()", runtime_source)
+        self.assertIn("const frameCacheLimit = 8", runtime_source)
+        self.assertIn("activateCachedPreviewFrame", runtime_source)
+        self.assertIn("entry.frame.src = entry.documentUrl", runtime_source)
 
     def test_connection_onboarding_is_owned_by_website_ops_skill(self) -> None:
         app_source = (APP_ROOT / "frontend" / "src" / "App.tsx").read_text(encoding="utf-8")

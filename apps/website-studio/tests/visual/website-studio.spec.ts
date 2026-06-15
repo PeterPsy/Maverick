@@ -314,6 +314,10 @@ test.describe('Website Studio preview runtime', () => {
     const previewFrame = page.frameLocator('#preview');
     await expect(previewFrame.locator('[data-testid="route"]')).toContainText('/');
     await expect(previewFrame.locator('[data-testid="logo"]')).toHaveAttribute('src', /gw_logo_a/);
+    await previewFrame.locator('body').evaluate(() => {
+      (window as unknown as { __websiteStudioRouteMarker?: string }).__websiteStudioRouteMarker = 'home-stayed-mounted';
+      document.body.setAttribute('data-route-marker', 'home-stayed-mounted');
+    });
 
     await page.evaluate(() => {
       window.postMessage(
@@ -332,6 +336,26 @@ test.describe('Website Studio preview runtime', () => {
     await expect(previewFrame.locator('[data-testid="logo"]')).toHaveAttribute('src', /gw_logo_a/);
     expect(documentRequests).toBe(2);
     expect(gatewayRequests.some((path) => path.endsWith('gw_logo_b'))).toBe(false);
+
+    await page.evaluate(() => {
+      window.postMessage(
+        {
+          type: 'website-studio.preview.navigate',
+          owner_app_id: 'website-studio',
+          preview_id: 'preview_hot_a',
+          route: '/',
+          preview_url: '/apps/website-studio/preview-runtime/?preview_id=preview_hot_a&route=%2F'
+        },
+        window.location.origin
+      );
+    });
+
+    await expect(previewFrame.locator('[data-testid="route"]')).toContainText('/');
+    await expect(previewFrame.locator('body')).toHaveAttribute('data-route-marker', 'home-stayed-mounted');
+    await expect.poll(async () => previewFrame.locator('body').evaluate(() => {
+      return (window as unknown as { __websiteStudioRouteMarker?: string }).__websiteStudioRouteMarker || '';
+    }), { timeout: 1_000 }).toBe('home-stayed-mounted');
+    expect(documentRequests).toBe(2);
   });
 
   test('mounts the document before slow lazy media finishes loading', async ({ page }) => {

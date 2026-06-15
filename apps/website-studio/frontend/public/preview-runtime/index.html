@@ -32,10 +32,13 @@
       const localPrefixes = /^(?:assets|images|img|fonts|dist|css|js|media|frontend-website\/assets|frontend-website\/dist)\//i;
       const assetAttrs = ['src', 'href', 'data-src', 'data-bg', 'data-background', 'data-poster', 'poster'];
       const srcsetAttrs = ['srcset', 'data-srcset'];
-      const frame = document.getElementById('preview');
-      let currentDocumentUrl = '';
+      const root = document.getElementById('root');
+      const initialFrame = document.getElementById('preview');
+      const frameCacheLimit = 8;
+      let activeFrame = initialFrame;
       let loadRunId = 0;
       const documentCache = new Map();
+      const frameCache = new Map();
       const assetGatewayCache = new Map();
       const previewReports = [];
       window.__WEBSITE_STUDIO_PREVIEW_REPORT__ = null;
@@ -54,6 +57,10 @@
           postTargetToMountedDocument();
           return;
         }
+        if (activateCachedPreviewFrame(currentPreviewId)) {
+          postTargetToMountedDocument();
+          return;
+        }
         loadPreviewDocument().catch(() => {
           mountHtml('<!doctype html><html><body style="margin:0;background:#080808;color:#ececec;font:14px system-ui;display:grid;place-content:center;min-height:100vh;">Preview unavailable</body></html>');
         });
@@ -61,7 +68,7 @@
 
       window.addEventListener('message', (event) => {
         const data = event.data || {};
-        if (!data || data.type !== 'website-studio.preview.report' || event.source !== frame.contentWindow) return;
+        if (!data || data.type !== 'website-studio.preview.report' || !isPreviewFrameWindow(event.source)) return;
         const envelope = {
           preview_id: data.preview_id || currentPreviewId,
           received_at: new Date().toISOString(),
@@ -112,19 +119,84 @@
 
       function postTargetToMountedDocument() {
         try {
-          frame.contentWindow?.postMessage({ type: 'website-studio.preview.target', target: previewTarget }, '*');
+          activeFrame?.contentWindow?.postMessage({ type: 'website-studio.preview.target', target: previewTarget }, '*');
         } catch {}
       }
 
-      function revokeMountedUrls() {
-        if (currentDocumentUrl) {
-          URL.revokeObjectURL(currentDocumentUrl);
-          currentDocumentUrl = '';
+      function isPreviewFrameWindow(source) {
+        for (const entry of frameCache.values()) {
+          if (source === entry.frame.contentWindow) return true;
+        }
+        return false;
+      }
+
+      function revokeFrameUrl(entry) {
+        if (!entry?.documentUrl) return;
+        URL.revokeObjectURL(entry.documentUrl);
+        entry.documentUrl = '';
+      }
+
+      function ensureFrameEntry(previewId) {
+        const cleanPreviewId = String(previewId || '').trim() || 'preview';
+        const cached = frameCache.get(cleanPreviewId);
+        if (cached) {
+          cached.lastUsed = Date.now();
+          return cached;
+        }
+        const reusableInitialFrame = initialFrame && frameCache.size === 0;
+        const frame = reusableInitialFrame ? initialFrame : document.createElement('iframe');
+        frame.title = 'Website runtime document';
+        frame.setAttribute('sandbox', 'allow-scripts allow-forms');
+        frame.dataset.previewId = cleanPreviewId;
+        frame.style.display = 'none';
+        if (!reusableInitialFrame) root.appendChild(frame);
+        const entry = { previewId: cleanPreviewId, frame, documentUrl: '', lastUsed: Date.now() };
+        frameCache.set(cleanPreviewId, entry);
+        pruneFrameCache();
+        return entry;
+      }
+
+      function activateFrameEntry(entry) {
+        if (!entry) return false;
+        for (const item of frameCache.values()) {
+          item.frame.style.display = item === entry ? 'block' : 'none';
+          item.frame.toggleAttribute('aria-hidden', item !== entry);
+          if (item === entry) item.frame.id = 'preview';
+          else item.frame.removeAttribute('id');
+        }
+        activeFrame = entry.frame;
+        currentMountedPreviewId = entry.previewId;
+        entry.lastUsed = Date.now();
+        return true;
+      }
+
+      function activateCachedPreviewFrame(previewId) {
+        const entry = frameCache.get(String(previewId || '').trim());
+        if (!entry?.documentUrl) return false;
+        return activateFrameEntry(entry);
+      }
+
+      function pruneFrameCache() {
+        while (frameCache.size > frameCacheLimit) {
+          let oldestKey = '';
+          let oldestEntry = null;
+          for (const [key, entry] of frameCache.entries()) {
+            if (entry.frame === activeFrame) continue;
+            if (!oldestEntry || entry.lastUsed < oldestEntry.lastUsed) {
+              oldestKey = key;
+              oldestEntry = entry;
+            }
+          }
+          if (!oldestKey || !oldestEntry) return;
+          frameCache.delete(oldestKey);
+          revokeFrameUrl(oldestEntry);
+          oldestEntry.frame.remove();
         }
       }
 
       function mountHtml(html, sourceMap = {}) {
-        revokeMountedUrls();
+        const entry = ensureFrameEntry(currentPreviewId);
+        revokeFrameUrl(entry);
         const origin = window.location.origin;
         const mediaSource = `${origin}${mediaPath}`;
         const fileGatewaySource = `${origin}${fileGatewayPrefix}`;
@@ -140,9 +212,10 @@
           .replaceAll('__WEBSITE_STUDIO_PREVIEW_MEDIA_SOURCE__', mediaSource)
           .replaceAll('__WEBSITE_STUDIO_PREVIEW_FILE_GATEWAY_SOURCE__', fileGatewaySource)
           .replaceAll('__WEBSITE_STUDIO_PREVIEW_BACKEND_SOURCE__', fileGatewaySource), targetSourceMap);
-        currentDocumentUrl = URL.createObjectURL(new Blob([documentHtml], { type: 'text/html;charset=utf-8' }));
-        frame.removeAttribute('srcdoc');
-        frame.src = currentDocumentUrl;
+        entry.documentUrl = URL.createObjectURL(new Blob([documentHtml], { type: 'text/html;charset=utf-8' }));
+        entry.frame.removeAttribute('srcdoc');
+        activateFrameEntry(entry);
+        entry.frame.src = entry.documentUrl;
       }
 
       function normalizePreviewDocument(html, sourceMap = {}) {
@@ -889,10 +962,13 @@
       async function loadPreviewDocument() {
         const previewId = currentPreviewId;
         if (!previewId) throw new Error('preview_id is required');
+        if (activateCachedPreviewFrame(previewId)) {
+          postTargetToMountedDocument();
+          return;
+        }
         const runId = ++loadRunId;
         const cached = documentCache.get(previewId);
         if (cached) {
-          currentMountedPreviewId = previewId;
           mountHtml(cached.html || '', cached.source_map || {});
           return;
         }

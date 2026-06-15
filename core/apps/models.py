@@ -24,6 +24,7 @@ WidgetFrontendKind = Literal["iframe"]
 AppRequiredInterfaceCardinality = Literal["one", "many"]
 HttpSidecarRuntime = Literal["python", "node", "generic"]
 HttpSidecarPort = int | Literal["auto"]
+AppProviderCredentialSource = Literal["none", "core-vault"]
 
 
 @dataclass(frozen=True)
@@ -164,6 +165,15 @@ class AppHostPermissionDeclaration:
 
 
 @dataclass(frozen=True)
+class AppProviderPermissionDeclaration:
+    """Describe core-governed provider access one app may request."""
+
+    model_proxy: bool
+    credential_source: AppProviderCredentialSource
+    deliver_secrets_to_app: bool
+
+
+@dataclass(frozen=True)
 class AppPermissionsDeclaration:
     """Describe platform-governed operational permissions requested by one app."""
 
@@ -171,6 +181,7 @@ class AppPermissionsDeclaration:
     network: AppNetworkPermissionDeclaration
     runtime: AppRuntimePermissionDeclaration
     host: AppHostPermissionDeclaration
+    providers: AppProviderPermissionDeclaration
 
 
 @dataclass(frozen=True)

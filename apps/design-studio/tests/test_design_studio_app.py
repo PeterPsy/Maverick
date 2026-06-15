@@ -19,6 +19,7 @@ from core.api.platform_state import bootstrap_platform_state
 from core.apps.dependencies import save_app_dependency_selection
 from core.apps.service import install_store_app, register_app_source_from_contract
 from core.apps.contracts import parse_app_contract_file
+from core.providers.service import configure_workspace_provider
 from core.shared.entrypoints import EntrypointShutdownController
 
 
@@ -34,6 +35,10 @@ class DesignStudioAppTests(unittest.TestCase):
         self.assertEqual(parsed.contract.compatibility.supported_workspace_modes, ["sandbox"])
         self.assertEqual(parsed.contract.entrypoints.backend, "backend/app_backend.py")
         self.assertEqual(parsed.contract.capabilities.skills, ["design-studio-ops"])
+        self.assertEqual(parsed.contract.permissions.secrets.read, [])
+        self.assertTrue(parsed.contract.permissions.providers.model_proxy)
+        self.assertEqual(parsed.contract.permissions.providers.credential_source, "core-vault")
+        self.assertFalse(parsed.contract.permissions.providers.deliver_secrets_to_app)
         sidecar = parsed.contract.services.http_sidecars[0]
         self.assertEqual(sidecar.service_id, "opendesign")
         self.assertEqual(sidecar.package_manager, "corepack/pnpm")
@@ -376,6 +381,12 @@ class DesignStudioAppTests(unittest.TestCase):
             with self._test_platform_env():
                 repo_root = self._temporary_repo_root(Path(temp_dir))
                 state = bootstrap_platform_state(start_path=repo_root)
+                configure_workspace_provider(
+                    state.provider_store,
+                    workspace_id="default",
+                    provider_id="codex",
+                    codex_command="/bin/echo",
+                )
                 with self._repo_pythonpath():
                     self._install_platform_app(state, repo_root, "storage")
                     self._install_platform_app(state, repo_root, "design-studio")
@@ -424,6 +435,17 @@ class DesignStudioAppTests(unittest.TestCase):
                 )
                 provider_status, provider_body, _provider_headers = self._invoke(
                     app,
+                    path="/api/apps/design-studio/sidecars/opendesign/api/provider/models",
+                    method="POST",
+                    body={
+                        "protocol": "openai",
+                        "baseUrl": "https://api.openai.com/v1",
+                        "apiKey": "provider-fixture-token",
+                    },
+                    cookie=cookie,
+                )
+                direct_provider_status, direct_provider_body, _direct_provider_headers = self._invoke(
+                    app,
                     path="/api/apps/design-studio/sidecars/opendesign/api/provider/chat",
                     method="POST",
                     body={"apiKey": "provider-fixture-token", "prompt": "dashboard"},
@@ -464,6 +486,7 @@ class DesignStudioAppTests(unittest.TestCase):
 
             media_payload = json.loads(media_body.decode("utf-8"))
             provider_payload = json.loads(provider_body.decode("utf-8"))
+            direct_provider_payload = json.loads(direct_provider_body.decode("utf-8"))
             import_payload = json.loads(import_body.decode("utf-8"))
             export_payload = json.loads(export_body.decode("utf-8"))
             projects_payload = json.loads(projects_body.decode("utf-8"))
@@ -481,9 +504,23 @@ class DesignStudioAppTests(unittest.TestCase):
             self.assertEqual(media_status, 200)
             self.assertFalse(media_payload["sidecar_reached"])
             self.assertFalse(media_payload["secrets_persisted"])
-            self.assertEqual(provider_status, 503)
-            self.assertEqual(provider_payload["error"], "provider_proxy_not_configured")
+            self.assertEqual(provider_status, 200)
+            self.assertTrue(provider_payload["ok"])
+            self.assertEqual(provider_payload["kind"], "success")
+            self.assertTrue(provider_payload["models"])
+            self.assertEqual(provider_payload["provider"]["provider_id"], "codex")
             self.assertFalse(provider_payload["sidecar_reached"])
+            self.assertFalse(provider_payload["secrets_persisted"])
+            self.assertNotIn("provider-fixture-token", provider_body.decode("utf-8"))
+            self.assertEqual(direct_provider_status, 200)
+            self.assertFalse(direct_provider_payload["ok"])
+            self.assertEqual(direct_provider_payload["kind"], "unsupported_protocol")
+            self.assertEqual(direct_provider_payload["status"], 404)
+            self.assertFalse(direct_provider_payload["sidecar_reached"])
+            self.assertFalse(direct_provider_payload["secrets_persisted"])
+            self.assertNotIn("provider-fixture-token", direct_provider_body.decode("utf-8"))
+            self.assertNotIn("provider-fixture-token", media_body.decode("utf-8"))
+            self.assertNotIn("provider-fixture-token", state_body.decode("utf-8"))
             self.assertNotIn("provider-fixture-token", media_config_text)
             self.assertEqual(import_status, 200)
             self.assertEqual(
@@ -504,6 +541,56 @@ class DesignStudioAppTests(unittest.TestCase):
             self.assertEqual(state_status, 200)
             self.assertEqual(final_import["status"], "imported")
             self.assertEqual(final_export["status"], "exported")
+
+    def test_provider_proxy_maps_missing_provider_to_opendesign_payload(self) -> None:
+        with TemporaryDirectory() as temp_dir:
+            with self._test_platform_env():
+                repo_root = self._temporary_repo_root(Path(temp_dir))
+                state = bootstrap_platform_state(start_path=repo_root)
+                with self._repo_pythonpath():
+                    self._install_platform_app(state, repo_root, "design-studio")
+                shutdown = EntrypointShutdownController()
+                self.addCleanup(shutdown.begin_shutdown)
+                app = PlatformHost(state, start_path=repo_root, shutdown_controller=shutdown)
+                cookie = self._login(app)
+
+            with self._repo_pythonpath():
+                status, body, _headers = self._invoke(
+                    app,
+                    path="/api/apps/design-studio/sidecars/opendesign/api/provider/models",
+                    method="POST",
+                    body={
+                        "protocol": "openai",
+                        "baseUrl": "https://api.openai.com/v1",
+                        "apiKey": "provider-fixture-token",
+                    },
+                    cookie=cookie,
+                )
+
+            payload = json.loads(body.decode("utf-8"))
+            media_config_root = (
+                repo_root
+                / "workspaces"
+                / "default"
+                / "data"
+                / "design-studio"
+                / "opendesign"
+                / "media-config"
+            )
+            media_config_text = "\n".join(
+                path.read_text(encoding="utf-8")
+                for path in media_config_root.glob("*")
+                if path.is_file()
+            )
+
+            self.assertEqual(status, 200)
+            self.assertFalse(payload["ok"])
+            self.assertEqual(payload["kind"], "upstream_unavailable")
+            self.assertEqual(payload["status"], 503)
+            self.assertFalse(payload["sidecar_reached"])
+            self.assertFalse(payload["secrets_persisted"])
+            self.assertNotIn("provider-fixture-token", body.decode("utf-8"))
+            self.assertNotIn("provider-fixture-token", media_config_text)
 
     def _run_entrypoint(self, entrypoint: Path, payload: dict) -> dict:
         process = subprocess.run(

@@ -159,6 +159,17 @@ def app_contract_payload(parsed: ParsedAppContract) -> dict[str, Any]:
             "repair_only": parsed.contract.rollback_support.repair_only,
         },
     }
+    provider_permissions = parsed.contract.permissions.providers
+    if (
+        provider_permissions.model_proxy
+        or provider_permissions.credential_source != "none"
+        or provider_permissions.deliver_secrets_to_app
+    ):
+        payload["permissions"]["providers"] = {
+            "model_proxy": provider_permissions.model_proxy,
+            "credential_source": provider_permissions.credential_source,
+            "deliver_secrets_to_app": provider_permissions.deliver_secrets_to_app,
+        }
     payload["widgets"] = [
         {
             "widget_id": widget.widget_id,

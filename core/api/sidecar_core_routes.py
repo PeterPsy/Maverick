@@ -21,11 +21,13 @@ from core.api.http import (
     text_response,
 )
 from core.api.platform_state import PlatformState
+from core.api.provider_api import provider_model_settings_payload, provider_payload
 from core.apps.dependencies import resolve_app_dependencies
 from core.apps.errors import AppHostingError
 from core.apps.models import HttpSidecarSpec, ParsedAppContract
 from core.apps.runtime_requests import apply_app_runtime_requests
 from core.identity.models import UserRecord
+from core.providers.service import resolve_workspace_provider_status
 from core.shared.entrypoints import EntrypointShutdownController, run_json_entrypoint
 from core.workspaces.paths import workspace_paths
 
@@ -193,6 +195,11 @@ def _invoke_core_sidecar_route(
                 user=user,
                 start_path=start_path,
             ),
+            "provider_proxy": _provider_proxy_payload(
+                state,
+                workspace_id=workspace_id,
+                enabled=context.parsed.contract.permissions.providers.model_proxy,
+            ),
             "runtime_session_id": "",
             "turn_id": "",
             "app_secrets": {},
@@ -314,6 +321,53 @@ def _app_dependencies_payload(
     except Exception:
         _LOGGER.exception("App `%s` dependency resolution failed in workspace `%s`.", app_id, workspace_id)
         return {"workspace_id": workspace_id, "consumer_app_id": app_id, "status": "blocked", "dependencies": []}
+
+
+def _provider_proxy_payload(
+    state: PlatformState,
+    *,
+    workspace_id: str,
+    enabled: bool,
+) -> dict[str, object]:
+    if not enabled:
+        return {
+            "enabled": False,
+            "workspace_id": workspace_id,
+            "credential_source": "none",
+            "deliver_secrets_to_app": False,
+        }
+    try:
+        status = resolve_workspace_provider_status(state.provider_store, workspace_id=workspace_id)
+    except Exception:
+        _LOGGER.exception("Provider proxy status resolution failed in workspace `%s`.", workspace_id)
+        return {
+            "enabled": True,
+            "workspace_id": workspace_id,
+            "configured": False,
+            "active_provider": None,
+            "model_settings": None,
+            "blocked_reason": "provider_unavailable",
+            "blocked_detail": "Provider status could not be resolved.",
+            "credential_source": "core-vault",
+            "deliver_secrets_to_app": False,
+        }
+    active_provider = None if status.active_provider is None else provider_payload(status.active_provider)
+    model_settings = (
+        None
+        if status.active_provider is None
+        else provider_model_settings_payload(status.active_provider, status.selection)
+    )
+    return {
+        "enabled": True,
+        "workspace_id": workspace_id,
+        "configured": status.configured,
+        "active_provider": active_provider,
+        "model_settings": model_settings,
+        "blocked_reason": status.blocked_reason,
+        "blocked_detail": status.blocked_detail,
+        "credential_source": "core-vault",
+        "deliver_secrets_to_app": False,
+    }
 
 
 def _core_sidecar_request_headers_from_wsgi(environ: dict) -> dict[str, str]:

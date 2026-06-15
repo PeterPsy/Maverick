@@ -8,6 +8,7 @@ import json
 from pathlib import Path
 import re
 import shutil
+from time import monotonic
 from typing import Any
 from uuid import uuid4
 
@@ -21,6 +22,7 @@ IMPORT_ID_PATTERN = re.compile(r"^import_[a-f0-9]{12}$")
 EXPORT_ID_PATTERN = re.compile(r"^export_[a-f0-9]{12}$")
 STORAGE_PATH_PATTERN = re.compile(r"^storage/(uploaded|generated)/(.+)$")
 MAX_IMPORT_BYTES = 10 * 1024 * 1024
+PROVIDER_MODEL_PROTOCOLS = {"anthropic", "openai", "azure", "google", "ollama", "senseaudio", "aihubmix"}
 
 
 class DesignStudioError(ValueError):
@@ -436,7 +438,7 @@ def handle_sidecar_core_route(payload: dict[str, Any], arguments: dict[str, Any]
     if _route_matches(route_path, "/api/export/storage"):
         return _handle_storage_export_route(payload, arguments, method=method)
     if _route_matches(route_path, "/api/provider"):
-        return _handle_provider_proxy_route(payload, arguments, method=method)
+        return _handle_provider_proxy_route(payload, arguments, method=method, route_path=route_path)
     raise DesignStudioError(
         "sidecar_core_route_not_found",
         f"Design Studio does not implement handled sidecar route `{route_path}`.",
@@ -452,12 +454,16 @@ def _handle_media_config_route(payload: dict[str, Any], arguments: dict[str, Any
             status_code=403,
         )
     ensure_state(payload["data_root"])
+    provider_proxy = payload.get("provider_proxy") if isinstance(payload.get("provider_proxy"), dict) else {}
+    active_provider = provider_proxy.get("active_provider") if isinstance(provider_proxy.get("active_provider"), dict) else None
+    providers = [_public_provider_summary(active_provider)] if active_provider else []
     return {
         "status_code": 200,
         "json": {
             "mode": "maverick-proxy",
-            "providers": [],
-            "default_provider": "",
+            "providers": providers,
+            "default_provider": providers[0]["provider_id"] if providers else "",
+            "credential_source": str(provider_proxy.get("credential_source") or "core-vault"),
             "secrets_persisted": False,
             "sidecar_reached": False,
             "message": "Provider credentials are managed by Maverick/Vault.",
@@ -499,20 +505,144 @@ def _handle_storage_export_route(payload: dict[str, Any], arguments: dict[str, A
     return export_to_storage(payload, body)
 
 
-def _handle_provider_proxy_route(payload: dict[str, Any], arguments: dict[str, Any], *, method: str) -> dict[str, Any]:
-    if method not in {"POST", "PUT"}:
-        raise DesignStudioError("method_not_allowed", "Provider proxy routes require POST or PUT.", status_code=405)
+def _handle_provider_proxy_route(
+    payload: dict[str, Any],
+    arguments: dict[str, Any],
+    *,
+    method: str,
+    route_path: str,
+) -> dict[str, Any]:
+    if method != "POST":
+        raise DesignStudioError("method_not_allowed", "Provider proxy routes require POST.", status_code=405)
     _assert_provider_key_not_persisted(payload, arguments)
+    if route_path not in {"/api/provider/models", "/api/provider/models/"}:
+        return _provider_models_error_response(
+            "unsupported_protocol",
+            "Design Studio sandbox mode supports only OpenDesign provider model discovery.",
+            status=404,
+        )
+    return _handle_provider_models_route(payload, _sidecar_core_body(arguments))
+
+
+def _handle_provider_models_route(payload: dict[str, Any], body: dict[str, Any]) -> dict[str, Any]:
+    started_at = monotonic()
+    protocol = str(body.get("protocol") or "").strip().lower()
+    if protocol not in PROVIDER_MODEL_PROTOCOLS:
+        return {
+            "status_code": 400,
+            "json": {
+                "error": {
+                    "code": "BAD_REQUEST",
+                    "message": "protocol must be one of anthropic|openai|azure|google|ollama|senseaudio|aihubmix",
+                },
+                "sidecar_reached": False,
+                "secrets_persisted": False,
+            },
+        }
+    if protocol == "azure":
+        return _provider_models_error_response(
+            "unsupported_protocol",
+            "Azure OpenAI deployment discovery is not supported by the Maverick provider proxy.",
+            status=200,
+            latency_ms=_elapsed_ms(started_at),
+        )
+    provider_proxy = payload.get("provider_proxy") if isinstance(payload.get("provider_proxy"), dict) else {}
+    if not bool(provider_proxy.get("enabled")):
+        return _provider_models_error_response(
+            "upstream_unavailable",
+            "Design Studio is not permitted to use the Maverick provider proxy.",
+            status=503,
+            latency_ms=_elapsed_ms(started_at),
+        )
+    if not bool(provider_proxy.get("configured")) or not isinstance(provider_proxy.get("active_provider"), dict):
+        detail = str(provider_proxy.get("blocked_detail") or provider_proxy.get("blocked_reason") or "").strip()
+        return _provider_models_error_response(
+            "upstream_unavailable",
+            detail or "Maverick workspace provider is not configured.",
+            status=503,
+            latency_ms=_elapsed_ms(started_at),
+        )
+    models = _provider_proxy_models(provider_proxy)
+    active_provider = provider_proxy["active_provider"]
+    if not models:
+        return _provider_models_error_response(
+            "no_models",
+            "Maverick provider returned no usable text-generation models.",
+            status=200,
+            latency_ms=_elapsed_ms(started_at),
+            provider=active_provider,
+        )
     return {
-        "status_code": 503,
+        "status_code": 200,
         "json": {
-            "error": "provider_proxy_not_configured",
-            "detail": "Design Studio provider proxy is active, but no provider adapter is configured for this route yet.",
+            "ok": True,
+            "kind": "success",
+            "latencyMs": _elapsed_ms(started_at),
+            "status": 200,
+            "models": models,
+            "provider": _public_provider_summary(active_provider),
             "mode": "maverick-proxy",
+            "credential_source": str(provider_proxy.get("credential_source") or "core-vault"),
             "secrets_persisted": False,
             "sidecar_reached": False,
         },
     }
+
+
+def _provider_models_error_response(
+    kind: str,
+    detail: str,
+    *,
+    status: int,
+    latency_ms: int = 0,
+    provider: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    payload: dict[str, Any] = {
+        "ok": False,
+        "kind": kind,
+        "latencyMs": latency_ms,
+        "status": status,
+        "detail": detail[:240],
+        "mode": "maverick-proxy",
+        "credential_source": "core-vault",
+        "secrets_persisted": False,
+        "sidecar_reached": False,
+    }
+    if provider:
+        payload["provider"] = _public_provider_summary(provider)
+    return {"status_code": 200, "json": payload}
+
+
+def _provider_proxy_models(provider_proxy: dict[str, Any]) -> list[dict[str, str]]:
+    model_settings = provider_proxy.get("model_settings") if isinstance(provider_proxy.get("model_settings"), dict) else {}
+    raw_models = model_settings.get("available_models") if isinstance(model_settings, dict) else []
+    models: list[dict[str, str]] = []
+    seen: set[str] = set()
+    if isinstance(raw_models, list):
+        for item in raw_models:
+            if not isinstance(item, dict):
+                continue
+            model_id = str(item.get("model_id") or item.get("id") or "").strip()
+            if not model_id or model_id in seen:
+                continue
+            seen.add(model_id)
+            models.append({"id": model_id, "label": str(item.get("label") or model_id).strip() or model_id})
+    selected_model = str(model_settings.get("selected_model_id") or "").strip() if isinstance(model_settings, dict) else ""
+    if selected_model and selected_model not in seen:
+        models.append({"id": selected_model, "label": selected_model})
+    return sorted(models, key=lambda item: item["id"])
+
+
+def _public_provider_summary(provider: dict[str, Any]) -> dict[str, str]:
+    return {
+        "provider_id": str(provider.get("provider_id") or ""),
+        "label": str(provider.get("label") or ""),
+        "kind": str(provider.get("kind") or ""),
+    }
+
+
+def _elapsed_ms(started_at: float) -> int:
+    return max(0, int((monotonic() - started_at) * 1000))
 
 
 def dispatch(action: str, payload: dict[str, Any], arguments: dict[str, Any]) -> dict[str, Any]:

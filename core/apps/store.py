@@ -25,6 +25,7 @@ from core.apps.models import (
     AppNetworkPermissionDeclaration,
     AppPermissionsDeclaration,
     AppPresentationDeclaration,
+    AppProviderPermissionDeclaration,
     AppProvidedInterfaceDeclaration,
     AppReferenceEntityDeclaration,
     AppRequiredInterfaceDeclaration,
@@ -204,6 +205,16 @@ class AppDocumentStore:
                 ),
                 host=AppHostPermissionDeclaration(
                     **payload.get("permissions", {}).get("host", {"telemetry": False})
+                ),
+                providers=AppProviderPermissionDeclaration(
+                    **payload.get("permissions", {}).get(
+                        "providers",
+                        {
+                            "model_proxy": False,
+                            "credential_source": "none",
+                            "deliver_secrets_to_app": False,
+                        },
+                    )
                 ),
             ),
             compatibility=AppCompatibilityDescriptor(**payload["compatibility"]),

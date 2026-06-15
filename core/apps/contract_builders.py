@@ -20,6 +20,8 @@ from core.apps.models import (
     AppNetworkPermissionDeclaration,
     AppPermissionsDeclaration,
     AppPresentationDeclaration,
+    AppProviderCredentialSource,
+    AppProviderPermissionDeclaration,
     AppProvidedInterfaceDeclaration,
     AppReferenceEntityDeclaration,
     AppRequiredInterfaceDeclaration,
@@ -181,6 +183,9 @@ def build_app_permissions(
     runtime_create_sessions: bool = False,
     runtime_cleanup_sessions: bool = False,
     host_telemetry: bool = False,
+    provider_model_proxy: bool = False,
+    provider_credential_source: AppProviderCredentialSource = "none",
+    provider_deliver_secrets_to_app: bool = False,
 ) -> AppPermissionsDeclaration:
     """Build one operational permissions declaration."""
     return AppPermissionsDeclaration(
@@ -191,6 +196,11 @@ def build_app_permissions(
             cleanup_sessions=runtime_cleanup_sessions,
         ),
         host=AppHostPermissionDeclaration(telemetry=host_telemetry),
+        providers=AppProviderPermissionDeclaration(
+            model_proxy=provider_model_proxy,
+            credential_source=provider_credential_source,
+            deliver_secrets_to_app=provider_deliver_secrets_to_app,
+        ),
     )
 
 def build_app_lifecycle(

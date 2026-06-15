@@ -35,7 +35,41 @@ class AppContractServiceTests(unittest.TestCase):
             self.assertEqual(loaded.contract.services.http_sidecars[0].service_id, "opendesign")
             self.assertEqual(loaded.contract.services.http_sidecars[0].bind.port, "auto")
             self.assertEqual(loaded.contract.services.http_sidecars[0].proxy.route_policy.blocked[0].path_prefix, "/api/import/folder")
+            self.assertFalse(loaded.contract.permissions.providers.model_proxy)
+            self.assertEqual(loaded.contract.permissions.providers.credential_source, "none")
+            self.assertFalse(loaded.contract.permissions.providers.deliver_secrets_to_app)
             self.assertEqual(json.loads((app_root / "app_contract.json").read_text(encoding="utf-8")), payload)
+
+    def test_parse_contract_accepts_provider_model_proxy_permission(self) -> None:
+        with TemporaryDirectory() as temp_dir:
+            app_root = self._write_sidecar_app(Path(temp_dir))
+            payload = json.loads((app_root / "app_contract.json").read_text(encoding="utf-8"))
+            payload["permissions"]["providers"] = {
+                "model_proxy": True,
+                "credential_source": "core-vault",
+                "deliver_secrets_to_app": False,
+            }
+            (app_root / "app_contract.json").write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
+
+            loaded = parse_app_contract_file(app_root)
+
+            self.assertTrue(loaded.contract.permissions.providers.model_proxy)
+            self.assertEqual(loaded.contract.permissions.providers.credential_source, "core-vault")
+            self.assertFalse(loaded.contract.permissions.providers.deliver_secrets_to_app)
+
+    def test_parse_contract_rejects_unknown_provider_credential_source(self) -> None:
+        with TemporaryDirectory() as temp_dir:
+            app_root = self._write_sidecar_app(Path(temp_dir))
+            payload = json.loads((app_root / "app_contract.json").read_text(encoding="utf-8"))
+            payload["permissions"]["providers"] = {
+                "model_proxy": True,
+                "credential_source": "direct-env",
+                "deliver_secrets_to_app": True,
+            }
+            (app_root / "app_contract.json").write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
+
+            with self.assertRaisesRegex(AppContractValidationError, "credential_source"):
+                parse_app_contract_file(app_root)
 
     def test_parse_contract_rejects_exposed_sidecar_without_route_policy(self) -> None:
         with TemporaryDirectory() as temp_dir:

@@ -97,9 +97,9 @@ Routes declared as `handled_by_core` are routed to the Design Studio backend wit
 - `GET /api/media/config`, returning sanitized Maverick-managed provider config without keys
 - `POST /api/import/storage`, importing through the selected `storage-read` dependency backend
 - `POST /api/export/storage`, exporting through the selected `storage-write` dependency backend
-- `/api/provider/*`, failing closed with `provider_proxy_not_configured` until real provider adapters are mapped
+- `POST /api/provider/models`, mapping OpenDesign provider model discovery to the active Maverick workspace provider without forwarding provider routes to the sidecar
 
-The app intentionally does not declare provider secrets yet. Provider keys stay outside the sidecar and are not written into `OD_MEDIA_CONFIG_DIR`; the current provider route handler proves the governed interception path and secret non-persistence, but it does not call external model providers yet.
+The contract declares `permissions.providers.model_proxy: true` with `credential_source: core-vault` and `deliver_secrets_to_app: false`. It does not declare app-scoped provider secret reads. Provider keys stay in Maverick/Vault-owned flows, are not delivered to the browser, Design Studio backend, or OpenDesign sidecar, and are not written into `OD_MEDIA_CONFIG_DIR`. Provider errors are returned in OpenDesign's provider-model response shape (`ok`, `kind`, `latencyMs`, `status`, `detail`) so the bundled UI can handle unavailable provider state without learning raw credentials.
 
 ## Verification
 
@@ -116,5 +116,5 @@ maverick app design-studio cli list --json
 Current intentional omissions:
 
 - the curated OpenDesign bundle is materialized from the pinned upstream checkout by `service/package_opendesign.py`; the generated bundle and dependency installs stay out of source control
-- provider proxy routes are intercepted by core/app handlers, but real provider adapters are not implemented yet
+- provider proxying is limited to OpenDesign model discovery through Maverick's active workspace provider; generation/chat provider routes remain unavailable in sandbox mode
 - full-access terminal, Local CLI, and host-folder import are not part of the sandbox MVP

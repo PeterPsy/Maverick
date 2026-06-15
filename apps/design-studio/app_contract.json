@@ -78,6 +78,11 @@
     },
     "host": {
       "telemetry": false
+    },
+    "providers": {
+      "model_proxy": true,
+      "credential_source": "core-vault",
+      "deliver_secrets_to_app": false
     }
   },
   "capabilities": {

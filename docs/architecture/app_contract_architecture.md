@@ -983,9 +983,16 @@ Example shape:
   },
   "host": {
     "telemetry": false
+  },
+  "providers": {
+    "model_proxy": false,
+    "credential_source": "none",
+    "deliver_secrets_to_app": false
   }
 }
 ```
+
+`permissions.providers` is for core-governed workspace model provider access, not app-owned secret delivery. `model_proxy: true` allows the core to provide redaction-safe provider status and model metadata to a governed app route such as an HTTP sidecar `handled_by_core` provider endpoint. `credential_source: "core-vault"` declares that raw provider credentials remain under Maverick/Vault control. `deliver_secrets_to_app: false` is the sandbox default and means provider keys must not be included in browser payloads, app backend `app_secrets`, sidecar environment, media config files, or sidecar-forwarded requests. Apps that need provider access through a sidecar must route the provider path through `handled_by_core` unless and until a stricter future policy explicitly supports direct provider secret delivery.
 
 ## Lifecycle Declaration
 

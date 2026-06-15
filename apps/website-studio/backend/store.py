@@ -82,7 +82,7 @@ DEFAULT_RETAIN_PREVIEWS_PER_ROUTE = 3
 DEFAULT_RETAIN_RUNTIME_SESSIONS = 20
 DEFAULT_RETENTION_REVIEW_CADENCE = "run dry-run during routine workspace maintenance and prune after reviewing counts"
 MAX_SOURCE_MAP_ASSET_INDEX = 120
-PREVIEW_RUNTIME_VERSION = "preview-browser-stream-v4"
+PREVIEW_RUNTIME_VERSION = "preview-browser-stream-v5"
 FILE_GATEWAY_SCHEMA = "maverick.app.file_gateway.v1"
 PREVIEW_FILE_GATEWAY_TTL = timedelta(minutes=30)
 PREVIEW_MEDIA_RESPONSE_HEADERS = {

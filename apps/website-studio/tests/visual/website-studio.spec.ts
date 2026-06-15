@@ -1,7 +1,7 @@
 import { expect, test, type Page } from '@playwright/test';
 
 type Box = { x: number; y: number; width: number; height: number };
-type MockState = { backendActions: string[]; changedFilesCount: number };
+type MockState = { backendActions: string[]; changedFilesCount: number; previewRuntimeRequests: number };
 type MockOptions = { delayedAction?: string; delayMs?: number; emptySites?: boolean; withoutLatestPreview?: boolean };
 type MockPreview = {
   id: string;
@@ -45,10 +45,9 @@ test.describe('Website Studio visual smoke', () => {
 
   test('shows a shell-style preview loading state while preview data resolves', async ({ page }, testInfo) => {
     await page.setViewportSize({ width: 1180, height: 820 });
-    await installWebsiteStudioMocks(page, { delayedAction: 'build_preview', delayMs: 650, withoutLatestPreview: true });
+    await installWebsiteStudioMocks(page, { delayedAction: 'build_preview', delayMs: 1_600, withoutLatestPreview: true });
 
     await page.goto('/');
-    await openSite(page);
 
     const loading = page.locator('.preview-loading-state');
     await expect(loading).toBeVisible();
@@ -83,7 +82,7 @@ test.describe('Website Studio visual smoke', () => {
 
       await expect(canvas).toBeVisible();
       await expect(iframe).toBeVisible();
-      await expect(iframe).toHaveAttribute('src', /client_version=website-studio-preview-frame-v7/);
+      await expect(iframe).toHaveAttribute('data-preview-url', /client_version=website-studio-preview-frame-v8/);
       await expect(page.locator('.preview-status')).toHaveCount(0);
       await expect(page.locator('.site-status-panel')).toHaveCount(0);
       await expect(infoPanel).toHaveCount(0);
@@ -134,6 +133,11 @@ test.describe('Website Studio visual smoke', () => {
     await expect(iframe).toBeVisible();
     await expect(page.locator('.preview-status')).toHaveCount(0);
     await expect(page.locator('.site-status-panel')).toHaveCount(0);
+    const initialRuntimeRequests = mockState.previewRuntimeRequests;
+    const initialBuildPreviewCount = mockState.backendActions.filter((action) => action === 'build_preview').length;
+    const initialFrameHandle = await iframe.elementHandle();
+    expect(initialFrameHandle).not.toBeNull();
+    await initialFrameHandle!.evaluate((node) => node.setAttribute('data-warm-frame-marker', 'initial'));
 
     await expect(async () => {
       await emitShellMessage(page, {
@@ -141,8 +145,13 @@ test.describe('Website Studio visual smoke', () => {
         params: { site_id: SITE_ID, app_page: 'routes/route_about' }
       });
       await expect(iframe).toHaveAttribute('data-route-id', 'route_about', { timeout: 750 });
-      await expect(iframe).toHaveAttribute('src', /route=%2Fabout/, { timeout: 750 });
+      await expect(iframe).toHaveAttribute('data-preview-url', /route=%2Fabout/, { timeout: 750 });
     }).toPass({ timeout: 6_000 });
+    await expect.poll(() => mockState.previewRuntimeRequests, { timeout: 750 }).toBe(initialRuntimeRequests);
+    await expect(iframe).toHaveAttribute('data-warm-frame-marker', 'initial');
+    const frameAfterRoute = await (await iframe.elementHandle())?.contentFrame();
+    expect(frameAfterRoute).not.toBeNull();
+    await expect(frameAfterRoute!.locator('[data-testid="runtime-preview"]')).toContainText('About Giuntitrail');
 
     await expect(async () => {
       await emitShellMessage(page, {
@@ -151,8 +160,10 @@ test.describe('Website Studio visual smoke', () => {
       });
       await expect(iframe).toHaveAttribute('data-component-id', 'component_cta', { timeout: 750 });
       await expect(iframe).toHaveAttribute('data-target-selector', '.cta', { timeout: 750 });
-      await expect(iframe).toHaveAttribute('src', /target_selector=\.cta/, { timeout: 750 });
+      await expect(iframe).toHaveAttribute('data-preview-url', /target_selector=\.cta/, { timeout: 750 });
     }).toPass({ timeout: 6_000 });
+    expect(mockState.previewRuntimeRequests).toBe(initialRuntimeRequests);
+    expect(mockState.backendActions.filter((action) => action === 'build_preview').length).toBe(initialBuildPreviewCount + 1);
 
     await emitShellMessage(page, {
       type: 'maverick.app.navigate',
@@ -250,6 +261,79 @@ test.describe('Website Studio visual smoke', () => {
 });
 
 test.describe('Website Studio preview runtime', () => {
+  test('hot navigation reuses gateway URLs for shared assets', async ({ page }) => {
+    await page.setViewportSize({ width: 1280, height: 860 });
+    let documentRequests = 0;
+    const gatewayRequests: string[] = [];
+
+    await page.route('**/api/apps/website-studio/backend', async (route) => {
+      const body = JSON.parse(route.request().postData() || '{}') as { action?: string; preview_id?: string };
+      expect(body.action).toBe('preview_document');
+      documentRequests += 1;
+      const previewId = body.preview_id || 'preview_hot_a';
+      const routePath = previewId.endsWith('_b') ? '/about' : '/';
+      const suffix = previewId.endsWith('_b') ? 'b' : 'a';
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          preview: { id: previewId, status: 'ready' },
+          html: `<!doctype html>
+            <html>
+              <body style="margin:0">
+                <main data-testid="runtime-preview">
+                  <span data-testid="route">${routePath}</span>
+                  <img data-testid="logo" src="assets/logo.svg" alt="">
+                </main>
+              </body>
+            </html>`,
+          source_map: {
+            preview_id: previewId,
+            route: routePath,
+            asset_refs: ['assets/logo.svg'],
+            asset_gateway: {
+              'assets/logo.svg': `/api/apps/website-studio/backend/file/gw_logo_${suffix}`
+            }
+          }
+        })
+      });
+    });
+
+    await page.route('**/api/apps/website-studio/backend/file/gw_logo_*', async (route) => {
+      gatewayRequests.push(new URL(route.request().url()).pathname);
+      await route.fulfill({
+        status: 200,
+        contentType: 'image/svg+xml',
+        headers: { 'Cache-Control': 'public, max-age=3600' },
+        body: '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24"><rect width="24" height="24" fill="#1d7f64"/></svg>'
+      });
+    });
+
+    await page.goto('/apps/website-studio/preview-runtime/index.html?preview_id=preview_hot_a&route=%2F');
+
+    const previewFrame = page.frameLocator('#preview');
+    await expect(previewFrame.locator('[data-testid="route"]')).toContainText('/');
+    await expect(previewFrame.locator('[data-testid="logo"]')).toHaveAttribute('src', /gw_logo_a/);
+
+    await page.evaluate(() => {
+      window.postMessage(
+        {
+          type: 'website-studio.preview.navigate',
+          owner_app_id: 'website-studio',
+          preview_id: 'preview_hot_b',
+          route: '/about',
+          preview_url: '/apps/website-studio/preview-runtime/?preview_id=preview_hot_b&route=%2Fabout'
+        },
+        window.location.origin
+      );
+    });
+
+    await expect(previewFrame.locator('[data-testid="route"]')).toContainText('/about');
+    await expect(previewFrame.locator('[data-testid="logo"]')).toHaveAttribute('src', /gw_logo_a/);
+    expect(documentRequests).toBe(2);
+    expect(gatewayRequests.some((path) => path.endsWith('gw_logo_b'))).toBe(false);
+  });
+
   test('mounts the document before slow lazy media finishes loading', async ({ page }) => {
     await page.setViewportSize({ width: 1280, height: 860 });
     const previewId = 'preview_slow_assets';
@@ -427,7 +511,7 @@ test.describe('Website Studio preview runtime', () => {
 });
 
 async function installWebsiteStudioMocks(page: Page, options: MockOptions = {}): Promise<MockState> {
-  const state: MockState = { backendActions: [], changedFilesCount: 0 };
+  const state: MockState = { backendActions: [], changedFilesCount: 0, previewRuntimeRequests: 0 };
 
   await page.route('**/api/apps/website-studio/backend', async (route) => {
     const body = JSON.parse(route.request().postData() || '{}') as Record<string, unknown> & { action?: string };
@@ -445,6 +529,7 @@ async function installWebsiteStudioMocks(page: Page, options: MockOptions = {}):
   });
 
   await page.route('**/apps/website-studio/preview-runtime/**', async (route) => {
+    state.previewRuntimeRequests += 1;
     const requested = new URL(route.request().url());
     const routePath = requested.searchParams.get('route') || '/';
     const heading = routePath === '/about' ? 'About Giuntitrail' : 'Giuntitrail';
@@ -473,13 +558,25 @@ async function installWebsiteStudioMocks(page: Page, options: MockOptions = {}):
               p { margin: 0; max-width: 42rem; line-height: 1.55; }
             </style>
           </head>
-          <body>
-            <main data-testid="runtime-preview">
-              <h1>${heading}</h1>
-              <p>Runtime preview ready for ${routePath}.</p>
-            </main>
-          </body>
-        </html>`
+              <body>
+                <main data-testid="runtime-preview">
+                  <h1>${heading}</h1>
+                  <p>Runtime preview ready for ${routePath}.</p>
+                </main>
+                <script>
+                  const renderRoute = (routePath) => {
+                    const cleanRoute = routePath || '/';
+                    document.querySelector('h1').textContent = cleanRoute === '/about' ? 'About Giuntitrail' : 'Giuntitrail';
+                    document.querySelector('p').textContent = 'Runtime preview ready for ' + cleanRoute + '.';
+                  };
+                  window.addEventListener('message', (event) => {
+                    const data = event.data || {};
+                    if (data.type !== 'website-studio.preview.navigate') return;
+                    renderRoute(data.route || '/');
+                  });
+                </script>
+              </body>
+            </html>`
     });
   });
 

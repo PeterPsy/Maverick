@@ -23,13 +23,9 @@
     </div>
     <script>
       const params = new URLSearchParams(window.location.search);
-      const previewId = params.get('preview_id') || '';
-      const previewTarget = {
-        id: params.get('target_id') || '',
-        kind: params.get('target_kind') || '',
-        selector: params.get('target_selector') || '',
-        anchor: params.get('target_anchor') || ''
-      };
+      let currentPreviewId = params.get('preview_id') || '';
+      let currentMountedPreviewId = '';
+      let previewTarget = previewTargetFromParams(params);
       const mediaPath = '/api/apps/website-studio/backend/media';
       const fileGatewayPrefix = '/api/apps/website-studio/backend/file/';
       const assetExtensions = /\.(?:png|jpe?g|gif|webp|avif|svg|ico|woff2?|ttf|otf|css|js|mjs|mp3|m4v|mov|mp4|ogg|oga|ogv|webm|pdf)(?:[?#].*)?$/i;
@@ -38,15 +34,36 @@
       const srcsetAttrs = ['srcset', 'data-srcset'];
       const frame = document.getElementById('preview');
       let currentDocumentUrl = '';
+      let loadRunId = 0;
+      const documentCache = new Map();
+      const assetGatewayCache = new Map();
       const previewReports = [];
       window.__WEBSITE_STUDIO_PREVIEW_REPORT__ = null;
       window.__WEBSITE_STUDIO_PREVIEW_REPORTS__ = previewReports;
 
       window.addEventListener('message', (event) => {
         const data = event.data || {};
+        if (event.origin !== window.location.origin || !data || data.type !== 'website-studio.preview.navigate') return;
+        if (data.owner_app_id && data.owner_app_id !== 'website-studio') return;
+        const nextPreviewId = String(data.preview_id || '').trim();
+        if (!nextPreviewId) return;
+        currentPreviewId = nextPreviewId;
+        previewTarget = normalizePreviewTarget(data.target || {});
+        replaceRuntimeLocation(data.preview_url || '');
+        if (currentMountedPreviewId === currentPreviewId) {
+          postTargetToMountedDocument();
+          return;
+        }
+        loadPreviewDocument().catch(() => {
+          mountHtml('<!doctype html><html><body style="margin:0;background:#080808;color:#ececec;font:14px system-ui;display:grid;place-content:center;min-height:100vh;">Preview unavailable</body></html>');
+        });
+      });
+
+      window.addEventListener('message', (event) => {
+        const data = event.data || {};
         if (!data || data.type !== 'website-studio.preview.report' || event.source !== frame.contentWindow) return;
         const envelope = {
-          preview_id: data.preview_id || previewId,
+          preview_id: data.preview_id || currentPreviewId,
           received_at: new Date().toISOString(),
           report: data.report || {}
         };
@@ -63,6 +80,41 @@
           }, window.location.origin);
         } catch {}
       });
+
+      function previewTargetFromParams(searchParams) {
+        return normalizePreviewTarget({
+          id: searchParams.get('target_id') || '',
+          kind: searchParams.get('target_kind') || '',
+          selector: searchParams.get('target_selector') || '',
+          anchor: searchParams.get('target_anchor') || ''
+        });
+      }
+
+      function normalizePreviewTarget(value) {
+        const target = value && typeof value === 'object' ? value : {};
+        return {
+          id: String(target.id || '').slice(0, 180),
+          kind: String(target.kind || '').slice(0, 40),
+          selector: String(target.selector || '').slice(0, 500),
+          anchor: String(target.anchor || '').slice(0, 180)
+        };
+      }
+
+      function replaceRuntimeLocation(rawUrl) {
+        if (!rawUrl) return;
+        try {
+          const url = new URL(String(rawUrl), window.location.origin);
+          if (url.origin !== window.location.origin) return;
+          if (url.pathname !== '/apps/website-studio/preview-runtime/' && url.pathname !== '/apps/website-studio/preview-runtime') return;
+          window.history.replaceState(null, '', `${url.pathname}${url.search}${url.hash}`);
+        } catch {}
+      }
+
+      function postTargetToMountedDocument() {
+        try {
+          frame.contentWindow?.postMessage({ type: 'website-studio.preview.target', target: previewTarget }, '*');
+        } catch {}
+      }
 
       function revokeMountedUrls() {
         if (currentDocumentUrl) {
@@ -179,7 +231,7 @@
         const gateway = gatewayUrlForPath(clean, sourceMap);
         if (gateway) return gateway + hash;
         const url = new URL(mediaPath, window.location.origin);
-        url.searchParams.set('preview_id', previewId);
+        url.searchParams.set('preview_id', currentPreviewId);
         url.searchParams.set('path', clean);
         if (assetQuery) url.searchParams.set('asset_query', assetQuery);
         return url.toString() + hash;
@@ -336,7 +388,6 @@
       }
 
       function injectPreviewTarget(document, sourceMap) {
-        if (!sourceMap?.target_selector && !sourceMap?.target_anchor) return;
         const head = document.head || document.documentElement.insertBefore(document.createElement('head'), document.body || null);
         const style = document.createElement('style');
         style.setAttribute('data-website-studio-target-style', '');
@@ -345,7 +396,21 @@
         script.setAttribute('data-website-studio-target-probe', '');
         script.textContent = `
 (() => {
-  const target = ${JSON.stringify(previewTarget).replace(/</g, '\\u003c')};
+  let target = ${JSON.stringify(previewTarget).replace(/</g, '\\u003c')};
+  const normalizeTarget = (value) => {
+    const next = value && typeof value === 'object' ? value : {};
+    return {
+      id: String(next.id || '').slice(0, 180),
+      kind: String(next.kind || '').slice(0, 40),
+      selector: String(next.selector || '').slice(0, 500),
+      anchor: String(next.anchor || '').slice(0, 180)
+    };
+  };
+  const clear = () => {
+    for (const node of Array.from(document.querySelectorAll('[data-website-studio-target="active"]'))) {
+      try { node.removeAttribute('data-website-studio-target'); } catch {}
+    }
+  };
   const findTarget = () => {
     if (target.selector) {
       try {
@@ -363,6 +428,7 @@
     return null;
   };
   const mark = () => {
+    clear();
     const node = findTarget();
     window.__WEBSITE_STUDIO_TARGET__ = { ...target, found: Boolean(node) };
     if (!node) return;
@@ -374,6 +440,14 @@
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', () => requestAnimationFrame(mark), { once: true });
   else requestAnimationFrame(mark);
   window.setTimeout(mark, 600);
+  window.addEventListener('message', (event) => {
+    if (event.source !== parent) return;
+    const data = event.data || {};
+    if (!data || data.type !== 'website-studio.preview.target') return;
+    target = normalizeTarget(data.target || {});
+    requestAnimationFrame(mark);
+    window.setTimeout(mark, 250);
+  });
 })();
         `.trim();
         head.appendChild(style);
@@ -385,7 +459,8 @@
         const mapScript = document.createElement('script');
         mapScript.id = 'website-studio-source-map';
         mapScript.type = 'application/json';
-        mapScript.textContent = JSON.stringify({ preview_id: previewId, ...(sourceMap || {}) }).replace(/</g, '\\u003c');
+        const mountedPreviewId = currentPreviewId;
+        mapScript.textContent = JSON.stringify({ preview_id: mountedPreviewId, ...(sourceMap || {}) }).replace(/</g, '\\u003c');
 
         const probe = document.createElement('script');
         probe.setAttribute('data-website-studio-preview-probe', '');
@@ -410,7 +485,7 @@
     try { return JSON.parse(document.getElementById('website-studio-source-map')?.textContent || '{}'); }
     catch { return {}; }
   })();
-  const previewId = sourceMap.preview_id || '${previewId.replace(/\\/g, '\\\\').replace(/'/g, "\\'")}';
+  const previewId = sourceMap.preview_id || '${currentPreviewId.replace(/\\/g, '\\\\').replace(/'/g, "\\'")}';
   const target = {
     id: sourceMap.target_id || '',
     kind: sourceMap.target_kind || '',
@@ -556,7 +631,7 @@
         const broker = document.createElement('script');
         broker.setAttribute('data-website-studio-asset-broker', '');
         const brokerConfig = {
-          preview_id: previewId,
+          preview_id: currentPreviewId,
           runtime_origin: window.location.origin,
           asset_refs: Array.isArray(sourceMap?.asset_refs) ? sourceMap.asset_refs.slice(0, 240) : [],
           asset_gateway: sourceMap?.asset_gateway && typeof sourceMap.asset_gateway === 'object' ? sourceMap.asset_gateway : {}
@@ -777,8 +852,50 @@
         head.insertBefore(broker, head.firstChild);
       }
 
-      async function load() {
+      function boundedSet(map, key, value, limit) {
+        if (map.has(key)) map.delete(key);
+        map.set(key, value);
+        while (map.size > limit) {
+          const first = map.keys().next().value;
+          if (first === undefined) break;
+          map.delete(first);
+        }
+      }
+
+      function validFileGatewayUrl(value) {
+        try {
+          const url = new URL(String(value || ''), window.location.origin);
+          return url.origin === window.location.origin && url.pathname.startsWith(fileGatewayPrefix);
+        } catch {
+          return false;
+        }
+      }
+
+      function mergeCachedAssetGateway(sourceMap) {
+        const next = { ...(sourceMap || {}) };
+        const incoming = next.asset_gateway && typeof next.asset_gateway === 'object' ? next.asset_gateway : {};
+        const merged = { ...incoming };
+        for (const [path, gateway] of Object.entries(incoming)) {
+          if (!validFileGatewayUrl(gateway)) continue;
+          if (!assetGatewayCache.has(path)) boundedSet(assetGatewayCache, path, gateway, 800);
+        }
+        for (const [path, gateway] of assetGatewayCache.entries()) {
+          merged[path] = gateway;
+        }
+        next.asset_gateway = merged;
+        return next;
+      }
+
+      async function loadPreviewDocument() {
+        const previewId = currentPreviewId;
         if (!previewId) throw new Error('preview_id is required');
+        const runId = ++loadRunId;
+        const cached = documentCache.get(previewId);
+        if (cached) {
+          currentMountedPreviewId = previewId;
+          mountHtml(cached.html || '', cached.source_map || {});
+          return;
+        }
         const response = await fetch('/api/apps/website-studio/backend', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -786,10 +903,17 @@
         });
         const payload = await response.json().catch(() => ({}));
         if (!response.ok) throw new Error(String(payload.detail || payload.error || 'preview request failed'));
-        mountHtml(payload.html || '', payload.source_map || {});
+        if (runId !== loadRunId || previewId !== currentPreviewId) return;
+        const cachedPayload = {
+          html: payload.html || '',
+          source_map: mergeCachedAssetGateway(payload.source_map || {})
+        };
+        boundedSet(documentCache, previewId, cachedPayload, 24);
+        currentMountedPreviewId = previewId;
+        mountHtml(cachedPayload.html, cachedPayload.source_map);
       }
 
-      load().catch(() => {
+      loadPreviewDocument().catch(() => {
         mountHtml('<!doctype html><html><body style="margin:0;background:#080808;color:#ececec;font:14px system-ui;display:grid;place-content:center;min-height:100vh;">Preview unavailable</body></html>');
       });
     </script>

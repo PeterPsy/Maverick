@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
 from copy import deepcopy
+from dataclasses import dataclass
 import shlex
 from typing import Any
 
@@ -13,7 +14,8 @@ from core.runtime.output_compaction.models import (
     ToolOutputCompactionPolicy,
     ToolOutputCompactionResult,
 )
-from core.runtime.output_compaction.results import savings_ratio
+from core.runtime.output_compaction.redaction import REDACTED, is_sensitive_key, redact_text
+from core.runtime.output_compaction.results import redacted_digest, savings_ratio
 from core.runtime.output_compaction.service import compact_tool_output
 from core.runtime.output_compaction.text import byte_len
 
@@ -31,6 +33,14 @@ RUNTIME_CLI_OUTPUT_PROFILES = frozenset(
 RUNTIME_CLI_RESPONSE_COMPACTION_SCOPE = "runtime_cli_response"
 RUNTIME_CLI_RESPONSE_COMPACTION_VERSION = 1
 RUNTIME_CLI_METADATA_KEYS = {"output_compaction", "runtime_cli_output_compaction"}
+
+
+@dataclass(frozen=True)
+class _CliTextCandidate:
+    path: JsonPath
+    value: str
+    direct_replacement: str | None = None
+    pass_through_reason: str = ""
 
 
 def runtime_cli_output_profile(body: Mapping[str, Any]) -> tuple[str | None, str | None]:
@@ -69,32 +79,41 @@ def compact_runtime_cli_result(
     runtime_session_id: str,
     policy: ToolOutputCompactionPolicy | None = None,
 ) -> dict[str, Any]:
-    """Compact large textual fields in a runtime CLI JSON response."""
+    """Compact large text and redact sensitive text in a runtime CLI JSON response."""
     active_policy = provider_compact_policy(policy)
     compacted = deepcopy(dict(result))
     if not active_policy.enabled:
         return compacted
 
-    candidates = _collect_large_text_fields(compacted, min_bytes=active_policy.min_original_bytes)
+    candidates = _collect_provider_compact_text_fields(compacted, min_bytes=active_policy.min_original_bytes)
     if not candidates:
         return compacted
 
     field_results: list[tuple[str, ToolOutputCompactionResult]] = []
-    for path, value in candidates:
-        field_path = _format_path(path)
+    for candidate in candidates:
+        field_path = _format_path(candidate.path)
         compaction_input = _compaction_input_for_cli_field(
             result=result,
             argv=argv,
             runtime_session_id=runtime_session_id,
             field_path=field_path,
-            value=value,
+            value=candidate.value,
         )
-        try:
-            field_result = compact_tool_output(compaction_input, policy=active_policy)
-        except Exception as error:
-            field_result = compactor_error_result(compaction_input, policy=active_policy, error=error)
+        if candidate.direct_replacement is not None:
+            field_result = _direct_redaction_result(
+                compaction_input,
+                original_value=candidate.value,
+                replacement=candidate.direct_replacement,
+                policy=active_policy,
+                pass_through_reason=candidate.pass_through_reason,
+            )
+        else:
+            try:
+                field_result = compact_tool_output(compaction_input, policy=active_policy)
+            except Exception as error:
+                field_result = compactor_error_result(compaction_input, policy=active_policy, error=error)
         replacement = field_result.output if field_result.output is not None else ""
-        _set_path(compacted, path, replacement)
+        _set_path(compacted, candidate.path, replacement)
         field_results.append((field_path, field_result))
 
     if not field_results:
@@ -105,23 +124,50 @@ def compact_runtime_cli_result(
     return compacted
 
 
-def _collect_large_text_fields(value: Any, *, min_bytes: int) -> list[tuple[JsonPath, str]]:
-    candidates: list[tuple[JsonPath, str]] = []
+def _collect_provider_compact_text_fields(value: Any, *, min_bytes: int) -> list[_CliTextCandidate]:
+    candidates: list[_CliTextCandidate] = []
 
-    def visit(item: Any, path: JsonPath) -> None:
+    def visit(item: Any, path: JsonPath, *, key_is_sensitive: bool = False) -> None:
         if isinstance(item, Mapping):
             for key, child in item.items():
                 key_text = str(key)
                 if key_text in RUNTIME_CLI_METADATA_KEYS:
                     continue
-                visit(child, (*path, key_text))
+                visit(child, (*path, key_text), key_is_sensitive=key_is_sensitive or is_sensitive_key(key_text))
             return
         if isinstance(item, list):
             for index, child in enumerate(item):
-                visit(child, (*path, index))
+                visit(child, (*path, index), key_is_sensitive=key_is_sensitive)
             return
-        if isinstance(item, str) and byte_len(item) >= min_bytes:
-            candidates.append((path, item))
+        if not isinstance(item, str):
+            return
+        if key_is_sensitive:
+            candidates.append(
+                _CliTextCandidate(
+                    path=path,
+                    value=item,
+                    direct_replacement=REDACTED,
+                    pass_through_reason="sensitive_key_redacted",
+                )
+            )
+            return
+        if byte_len(item) >= min_bytes:
+            candidates.append(_CliTextCandidate(path=path, value=item))
+            return
+        try:
+            redacted_value = redact_text(item)
+        except Exception:
+            candidates.append(_CliTextCandidate(path=path, value=item))
+            return
+        if redacted_value != item:
+            candidates.append(
+                _CliTextCandidate(
+                    path=path,
+                    value=item,
+                    direct_replacement=redacted_value,
+                    pass_through_reason="below_min_original_bytes",
+                )
+            )
 
     visit(value, ())
     return candidates
@@ -160,6 +206,42 @@ def _compaction_input_for_cli_field(
             "field_path": field_path,
             "compaction_scope": RUNTIME_CLI_RESPONSE_COMPACTION_SCOPE,
         },
+    )
+
+
+def _direct_redaction_result(
+    compaction_input: ToolOutputCompactionInput,
+    *,
+    original_value: str,
+    replacement: str,
+    policy: ToolOutputCompactionPolicy,
+    pass_through_reason: str,
+) -> ToolOutputCompactionResult:
+    """Return metadata for a provider-compact field that only needed redaction."""
+    original_bytes = byte_len(original_value)
+    redacted_bytes = byte_len(replacement)
+    failed = isinstance(compaction_input.exit_code, int) and compaction_input.exit_code != 0
+    required_savings_ratio = policy.failure_min_savings_ratio if failed else policy.success_min_savings_ratio
+    target_max_compacted_bytes = policy.failure_target_max_compacted_bytes if failed else policy.target_max_compacted_bytes
+    return ToolOutputCompactionResult(
+        output=replacement,
+        stdout=None,
+        stderr=None,
+        raw=None,
+        applied=False,
+        pass_through_reason=pass_through_reason,
+        rule_id=None,
+        family=None,
+        original_bytes=original_bytes,
+        redacted_bytes=redacted_bytes,
+        compacted_bytes=redacted_bytes,
+        savings_ratio=savings_ratio(original_bytes, redacted_bytes),
+        required_savings_ratio=required_savings_ratio,
+        target_max_compacted_bytes=target_max_compacted_bytes,
+        redacted=True,
+        redacted_sha256=redacted_digest(replacement),
+        fields=("output",),
+        facts={},
     )
 
 

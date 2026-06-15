@@ -36,6 +36,39 @@ class RuntimeCliResultCompactionTest(unittest.TestCase):
         self.assertEqual(compacted["runtime_cli_output_compaction"]["scope"], "runtime_cli_response")
         self.assertEqual(compacted["runtime_cli_output_compaction"]["fields"], ["data[0].content"])
 
+    def test_redacts_short_sensitive_text_in_provider_compact_profile(self) -> None:
+        compacted = compact_runtime_cli_result(
+            {"status_code": 200, "content": "Authorization: Bearer short-secret\nok"},
+            argv=["app", "example", "mcp", "call", "short"],
+            runtime_session_id="sess-1",
+            policy=ToolOutputCompactionPolicy(min_original_bytes=1000),
+        )
+
+        self.assertEqual(compacted["content"], "Authorization: Bearer <redacted>\nok")
+        self.assertNotIn("short-secret", str(compacted))
+        metadata = compacted["output_compaction"]
+        self.assertFalse(metadata["applied"])
+        self.assertTrue(metadata["redacted"])
+        self.assertEqual(metadata["pass_through_reason"], "below_min_original_bytes")
+        self.assertEqual(metadata["fields"], ["content"])
+
+    def test_redacts_sensitive_keyed_text_in_provider_compact_profile(self) -> None:
+        compacted = compact_runtime_cli_result(
+            {"status_code": 200, "data": {"api_key": "short-secret", "name": "kept"}},
+            argv=["app", "example", "mcp", "call", "keyed"],
+            runtime_session_id="sess-1",
+            policy=ToolOutputCompactionPolicy(min_original_bytes=1000),
+        )
+
+        self.assertEqual(compacted["data"]["api_key"], "<redacted>")
+        self.assertEqual(compacted["data"]["name"], "kept")
+        self.assertNotIn("short-secret", str(compacted))
+        metadata = compacted["output_compaction"]
+        self.assertFalse(metadata["applied"])
+        self.assertTrue(metadata["redacted"])
+        self.assertEqual(metadata["pass_through_reason"], "sensitive_key_redacted")
+        self.assertEqual(metadata["fields"], ["data.api_key"])
+
     def test_compactor_error_returns_redacted_field_instead_of_raw_output(self) -> None:
         huge_output = "Authorization: Bearer secret-token\n" + ("large output line\n" * 10_000)
 

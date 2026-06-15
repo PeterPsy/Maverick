@@ -3,13 +3,18 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime
-import json
 import os
 from pathlib import Path
 import shutil
 from typing import TYPE_CHECKING
 
 from core.providers.models import ProviderCapabilitySet, ProviderDefinition, ProviderModelOption, ProviderReasoningOption
+from core.providers.provider_codex_config_policy import (
+    is_managed_codex_hook_section,
+    is_managed_shell_environment_section,
+    managed_codex_hook_lines,
+    managed_shell_environment_policy_lines,
+)
 
 if TYPE_CHECKING:
     from core.runtime.execution import RuntimeExecutionResult
@@ -23,6 +28,7 @@ CODEX_DEFAULT_REASONING_EFFORT = "high"
 CODEX_MANAGED_TOP_LEVEL_CONFIG_KEYS = {"model", "model_reasoning_effort"}
 CODEX_MANAGED_RUNTIME_FEATURES = {
     "apps": False,
+    "hooks": True,
     "plugins": False,
     "skill_mcp_dependency_install": False,
 }
@@ -150,6 +156,8 @@ class CodexRuntimeConfigMixin:
     def _is_disabled_runtime_config_section(self, section: str, *, workspace_root: Path, execution_mode: str) -> bool:
         if self._is_managed_shell_environment_section(section):
             return True
+        if self._is_managed_codex_hook_section(section):
+            return True
         if section in {"[mcp_servers]", "[plugins]", "[features]"}:
             return True
         if section.startswith(("[mcp_servers.", "[plugins.", "[features.")):
@@ -180,8 +188,12 @@ class CodexRuntimeConfigMixin:
 
 
     def _is_managed_shell_environment_section(self, section: str) -> bool:
-        table = section.strip().lstrip("[").rstrip("]").strip()
-        return table == "shell_environment_policy" or table.startswith("shell_environment_policy.")
+        return is_managed_shell_environment_section(section)
+
+
+
+    def _is_managed_codex_hook_section(self, section: str) -> bool:
+        return is_managed_codex_hook_section(section)
 
 
 
@@ -194,39 +206,18 @@ class CodexRuntimeConfigMixin:
         execution_mode: str,
         shell_path: str | None = None,
     ) -> list[str]:
-        path_value = str(shell_path or "").strip()
-        if not path_value:
-            path_value = os.pathsep.join(
-                self._dedupe_path_entries(
-                    [
-                        str(runtime_bin),
-                        *str(os.environ.get("PATH") or "").split(os.pathsep),
-                    ]
-                )
-            )
-        api_base = str(os.environ.get("MAVERICK_API_BASE") or "http://127.0.0.1:8014").rstrip("/")
-        return [
-            "[shell_environment_policy.set]",
-            f"PATH = {_toml_string(path_value)}",
-            f"MAVERICK_RUNTIME_BIN = {_toml_string(str(runtime_bin))}",
-            f"MAVERICK_RUNTIME_ROOT = {_toml_string(str(runtime_root))}",
-            f"MAVERICK_WORKSPACE_ROOT = {_toml_string(str(workspace_root))}",
-            f"MAVERICK_EFFECTIVE_MODE = {_toml_string(execution_mode)}",
-            f"MAVERICK_API_BASE = {_toml_string(api_base)}",
-        ]
+        return managed_shell_environment_policy_lines(
+            workspace_root=workspace_root,
+            runtime_root=runtime_root,
+            runtime_bin=runtime_bin,
+            shell_path=shell_path,
+            execution_mode=execution_mode,
+        )
 
 
 
-    def _dedupe_path_entries(self, entries: list[str]) -> list[str]:
-        unique: list[str] = []
-        seen: set[str] = set()
-        for entry in entries:
-            normalized = str(entry or "").strip()
-            if not normalized or normalized in seen:
-                continue
-            seen.add(normalized)
-            unique.append(normalized)
-        return unique
+    def _managed_codex_hook_lines(self, *, runtime_bin: Path) -> list[str]:
+        return managed_codex_hook_lines(runtime_bin=runtime_bin)
 
 
 
@@ -284,7 +275,3 @@ class CodexRuntimeConfigMixin:
             seen.add(entry)
             unique.append(entry)
         return os.pathsep.join(unique)
-
-
-def _toml_string(value: str) -> str:
-    return json.dumps(value, ensure_ascii=True)

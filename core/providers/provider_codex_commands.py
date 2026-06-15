@@ -244,6 +244,7 @@ class CodexCommandMixin:
             env["PATH"] = os.pathsep.join(merged_path)
 
         env["CODEX_HOME"] = str(runtime_home)
+        env["HOME"] = str(runtime_home)
         env["MAVERICK_WORKSPACE_ROOT"] = str(workspace_root)
         env["MAVERICK_WORKSPACE_ID"] = session.workspace_id
         env["MAVERICK_RUNTIME_ROOT"] = str(runtime_root)
@@ -261,6 +262,5 @@ class CodexCommandMixin:
             env["TMPDIR"] = str(runtime_root)
             env["TMP"] = str(runtime_root)
             env["TEMP"] = str(runtime_root)
-            env["HOME"] = str(runtime_home)
             env.pop("PYTHONPATH", None)
         return env

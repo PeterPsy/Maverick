@@ -15,6 +15,7 @@ from core.providers.errors import ProviderCredentialBindingError, ProviderSelect
 from core.providers.models import ProviderCapabilitySet, ProviderDefinition, RuntimeBackendLaunchSpec
 from core.providers.provider_credentials import bind_provider_credential, disable_provider_binding
 from core.providers.provider_codex import CodexProviderAdapter, refresh_workspace_maverick_wrappers
+from core.providers.provider_codex_hooks import CODEX_POST_TOOL_USE_HOOK_NAME
 from core.providers.provider_codex_wrappers import _workspace_maverick_wrapper_source
 from core.providers.provider_registry import ProviderRegistry
 from core.providers.provider_selection import ProviderSelectionService
@@ -380,15 +381,28 @@ class ProvidersTestCase(unittest.TestCase):
         self.assertTrue(os.access(runtime_bin / "maverick", os.X_OK))
         self.assertIn("/api/runtime/cli", (runtime_bin / "maverick").read_text(encoding="utf-8"))
         self.assertNotIn("timeout=30", (runtime_bin / "maverick").read_text(encoding="utf-8"))
+        hook_script = runtime_bin / CODEX_POST_TOOL_USE_HOOK_NAME
+        self.assertTrue(hook_script.is_file())
+        self.assertTrue(os.access(hook_script, os.X_OK))
+        self.assertIn("/api/runtime/provider-hooks/codex/post-tool-use", hook_script.read_text(encoding="utf-8"))
         self.assertTrue((runtime_bin / "workspace_sandbox.py").is_file())
         self.assertEqual(launch_spec.env_overrides["PATH"].split(os.pathsep)[0], str(runtime_bin))
         self.assertEqual(launch_spec.env_overrides["MAVERICK_RUNTIME_BIN"], str(runtime_bin))
         runtime_config = (Path(launch_spec.env_overrides["CODEX_HOME"]) / "config.toml").read_text(encoding="utf-8")
+        self.assertIn("[shell_environment_policy]", runtime_config)
+        self.assertIn('inherit = "all"', runtime_config)
+        self.assertIn("ignore_default_excludes = true", runtime_config)
+        self.assertIn('"MAVERICK_RUNTIME_API_TOKEN"', runtime_config)
+        self.assertNotIn(launch_spec.env_overrides["MAVERICK_RUNTIME_API_TOKEN"], runtime_config)
         self.assertIn("[shell_environment_policy.set]", runtime_config)
         self.assertIn(f'PATH = "{launch_spec.env_overrides["PATH"]}"', runtime_config)
         self.assertIn(f"MAVERICK_RUNTIME_BIN = \"{runtime_bin}\"", runtime_config)
         self.assertIn(f"MAVERICK_RUNTIME_ROOT = \"{runtime_bin.parent}\"", runtime_config)
         self.assertIn(f"MAVERICK_WORKSPACE_ROOT = \"{repo_root / 'workspaces' / 'acme'}\"", runtime_config)
+        self.assertIn("[[hooks.PostToolUse]]", runtime_config)
+        self.assertIn('matcher = "^Bash$"', runtime_config)
+        self.assertIn(str(hook_script), runtime_config)
+        self.assertIn("hooks = true", runtime_config)
         repository_root = Path(__file__).resolve().parents[3]
         self.assertNotIn("PYTHONPATH", launch_spec.env_overrides)
         self.assertNotIn(str(repository_root / "core"), launch_spec.command)
@@ -567,6 +581,8 @@ class ProvidersTestCase(unittest.TestCase):
         self.assertEqual(spec.command[0], str(standalone))
         self.assertEqual(runtime_rg.read_text(encoding="utf-8"), "rg-binary\n")
         self.assertTrue(os.access(runtime_rg, os.X_OK))
+        self.assertEqual(spec.env_overrides["HOME"], spec.env_overrides["CODEX_HOME"])
+        self.assertTrue((runtime_bin / CODEX_POST_TOOL_USE_HOOK_NAME).is_file())
 
     def test_codex_runtime_home_is_prepared_from_configured_source_home(self) -> None:
         runtime_store = self.make_runtime_store()
@@ -599,6 +615,13 @@ class ProvidersTestCase(unittest.TestCase):
                     "apps = true",
                     "plugins = true",
                     "skill_mcp_dependency_install = true",
+                    "",
+                    "[[hooks.PostToolUse]]",
+                    'matcher = ".*"',
+                    "",
+                    "[[hooks.PostToolUse.hooks]]",
+                    'type = "command"',
+                    'command = "/tmp/operator-hook"',
                     "",
                     "[profiles.default]",
                     'model = "gpt-5.4"',
@@ -652,8 +675,12 @@ class ProvidersTestCase(unittest.TestCase):
         self.assertIn(f'[projects."{repo_root / "workspaces" / "default"}"]', runtime_config)
         self.assertIn("[features]", runtime_config)
         self.assertIn("apps = false", runtime_config)
+        self.assertIn("hooks = true", runtime_config)
         self.assertIn("plugins = false", runtime_config)
         self.assertIn("skill_mcp_dependency_install = false", runtime_config)
+        self.assertIn("[[hooks.PostToolUse]]", runtime_config)
+        self.assertIn(CODEX_POST_TOOL_USE_HOOK_NAME, runtime_config)
+        self.assertNotIn("/tmp/operator-hook", runtime_config)
         self.assertFalse((runtime_home / "plugins").exists())
         self.assertFalse((runtime_home / "cache" / "codex_apps_tools").exists())
         self.assertFalse((runtime_home / ".tmp" / "plugins").exists())

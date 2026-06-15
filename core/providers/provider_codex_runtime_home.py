@@ -9,6 +9,7 @@ import shutil
 from typing import TYPE_CHECKING
 
 from core.providers.models import ProviderCapabilitySet, ProviderDefinition, ProviderModelOption, ProviderReasoningOption
+from core.providers.provider_codex_hooks import CODEX_POST_TOOL_USE_HOOK_NAME, write_codex_post_tool_use_hook
 from core.providers.provider_codex_wrappers import _write_workspace_maverick_wrapper
 from core.runtime.runtime_session import RuntimeSessionRecord
 
@@ -182,6 +183,7 @@ class CodexRuntimeHomeMixin:
         runtime_bin = Path(session.runtime_root) / "bin"
         runtime_bin.mkdir(parents=True, exist_ok=True)
         _write_workspace_maverick_wrapper(runtime_bin / "maverick")
+        write_codex_post_tool_use_hook(runtime_bin / CODEX_POST_TOOL_USE_HOOK_NAME)
         sandbox_launcher = runtime_bin / "workspace_sandbox.py"
         shutil.copy2(Path(__file__).resolve().parents[1] / "runtime" / "workspace_sandbox.py", sandbox_launcher)
         sandbox_launcher.chmod(0o755)
@@ -284,6 +286,9 @@ class CodexRuntimeHomeMixin:
                 execution_mode=execution_mode,
             )
         )
+        if output_lines and output_lines[-1].strip():
+            output_lines.append("")
+        output_lines.extend(self._managed_codex_hook_lines(runtime_bin=runtime_bin))
         if output_lines and output_lines[-1].strip():
             output_lines.append("")
         output_lines.extend(self._managed_runtime_feature_lines())

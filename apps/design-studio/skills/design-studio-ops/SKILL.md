@@ -11,8 +11,8 @@ Common operations:
 
 - Inspect app state with MCP tool `design_studio_state` or CLI command `design-studio --action state`.
 - Create a design project through the mounted frontend or backend action `create_project`.
-- Import only workspace Storage files using `workspace_relative_path` values under `storage/uploaded/` or `storage/generated/`.
-- Export project metadata and notes to `storage/generated/design-studio/<project-id>/`.
+- Import only workspace Storage files using `workspace_relative_path` values under `storage/uploaded/` or `storage/generated/`; hosted imports are read through the `storage-read` dependency backend.
+- Export project metadata and notes to `storage/generated/design-studio/<project-id>/` through the `storage-write` dependency backend.
 - Verify the OpenDesign sidecar through the app state `sidecar.ready_url` or `sidecar.version_url`.
 
 Sandbox policy:

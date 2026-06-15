@@ -26,6 +26,7 @@ def main() -> None:
     if action in {
         "create_project",
         "import_from_storage",
+        "record_storage_import_result",
         "export_to_storage",
         "record_storage_export_result",
         "set_view_filter",

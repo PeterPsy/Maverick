@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from base64 import b64decode
+import binascii
 from pathlib import Path
 import re
 import shutil
@@ -14,6 +16,7 @@ from store import OPENDESIGN_COMMIT, OPENDESIGN_VERSION, ensure_state, update_st
 
 
 PROJECT_ID_PATTERN = re.compile(r"^design_[a-f0-9]{12}$")
+IMPORT_ID_PATTERN = re.compile(r"^import_[a-f0-9]{12}$")
 EXPORT_ID_PATTERN = re.compile(r"^export_[a-f0-9]{12}$")
 STORAGE_PATH_PATTERN = re.compile(r"^storage/(uploaded|generated)/(.+)$")
 MAX_IMPORT_BYTES = 10 * 1024 * 1024
@@ -93,25 +96,90 @@ def import_from_storage(payload: dict[str, Any], arguments: dict[str, Any]) -> d
     data_root = payload["data_root"]
     project_id = _project_id(arguments.get("project_id"))
     workspace_relative_path = _storage_path(arguments.get("workspace_relative_path"))
+    if _should_request_storage_read(payload):
+        return _request_storage_import(
+            data_root=data_root,
+            project_id=project_id,
+            workspace_relative_path=workspace_relative_path,
+        )
+    return _import_from_local_storage(
+        payload,
+        data_root=data_root,
+        project_id=project_id,
+        workspace_relative_path=workspace_relative_path,
+    )
+
+
+def _request_storage_import(*, data_root: str, project_id: str, workspace_relative_path: str) -> dict[str, Any]:
+    import_id = f"import_{uuid4().hex[:12]}"
+    requested_at = utc_now()
+    import_record = {
+        "import_id": import_id,
+        "status": "pending",
+        "workspace_relative_path": workspace_relative_path,
+        "name": Path(workspace_relative_path).name,
+        "size_bytes": 0,
+        "app_data_path": "",
+        "requested_at": requested_at,
+        "imported_at": "",
+        "error": "",
+    }
+
+    def apply_pending_import(state: dict[str, Any]) -> dict[str, Any]:
+        project = _require_project(state, project_id)
+        project["imports"].append(import_record)
+        project["status"] = "importing"
+        project["updated_at"] = requested_at
+        state["view_state"]["selected_project_id"] = project_id
+        return state
+
+    state = update_state(data_root, apply_pending_import)
+    return {
+        "import": import_record,
+        "project": _require_project(state, project_id),
+        "state": _public_state(state),
+        "dependency_backend_requests": [
+            _storage_read_request(
+                project_id=project_id,
+                import_id=import_id,
+                workspace_relative_path=workspace_relative_path,
+            )
+        ],
+    }
+
+
+def _import_from_local_storage(
+    payload: dict[str, Any],
+    *,
+    data_root: str,
+    project_id: str,
+    workspace_relative_path: str,
+) -> dict[str, Any]:
+    """Import via mounted local Storage roots for direct CLI/MCP/test entrypoints."""
     source_path = _resolve_storage_file(payload, workspace_relative_path)
     if source_path.stat().st_size > MAX_IMPORT_BYTES:
         raise DesignStudioError("storage_file_too_large", "Design Studio imports are limited to 10 MiB in the sandbox MVP.")
-    project_import_dir = safe_app_data_path(data_root, Path("imports") / project_id)
+    import_id = f"import_{uuid4().hex[:12]}"
+    project_import_dir = safe_app_data_path(data_root, Path("imports") / project_id / import_id)
     project_import_dir.mkdir(parents=True, exist_ok=True)
     target_path = (project_import_dir / source_path.name).resolve()
     shutil.copyfile(source_path, target_path)
     imported = {
+        "import_id": import_id,
+        "status": "imported",
         "workspace_relative_path": workspace_relative_path,
         "name": source_path.name,
         "size_bytes": source_path.stat().st_size,
         "app_data_path": str(target_path.relative_to(Path(data_root).resolve())),
+        "requested_at": utc_now(),
         "imported_at": utc_now(),
+        "error": "",
     }
 
     def apply_import(state: dict[str, Any]) -> dict[str, Any]:
         project = _require_project(state, project_id)
         project["imports"].append(imported)
-        project["source_files"].append(workspace_relative_path)
+        _append_source_file(project, workspace_relative_path)
         project["status"] = "imported"
         project["updated_at"] = utc_now()
         state["view_state"]["selected_project_id"] = project_id
@@ -119,6 +187,90 @@ def import_from_storage(payload: dict[str, Any], arguments: dict[str, Any]) -> d
 
     state = update_state(data_root, apply_import)
     return {"import": imported, "project": _require_project(state, project_id), "state": _public_state(state)}
+
+
+def record_storage_import_result(payload: dict[str, Any], arguments: dict[str, Any]) -> dict[str, Any]:
+    """Record and materialize the result of one Storage dependency-backend import read."""
+    project_id = _project_id(arguments.get("project_id"))
+    import_id = _import_id(arguments.get("import_id"))
+    workspace_relative_path = _storage_path(arguments.get("workspace_relative_path"))
+    dependency_status = str(arguments.get("dependency_backend_status") or "").strip()
+    dependency_result = (
+        arguments.get("dependency_backend_result")
+        if isinstance(arguments.get("dependency_backend_result"), dict)
+        else {}
+    )
+    error = str(arguments.get("error") or "").strip()
+    if dependency_status != "completed":
+        return _mark_storage_import_failed(
+            data_root=payload["data_root"],
+            project_id=project_id,
+            import_id=import_id,
+            error=error or "Storage import read failed.",
+        )
+
+    try:
+        decoded = _storage_read_result_bytes(dependency_result)
+        if len(decoded) > MAX_IMPORT_BYTES:
+            return _mark_storage_import_failed(
+                data_root=payload["data_root"],
+                project_id=project_id,
+                import_id=import_id,
+                error="Design Studio imports are limited to 10 MiB in the sandbox MVP.",
+            )
+        file_payload = _storage_read_result_file(dependency_result)
+        returned_workspace_path = str(
+            file_payload.get("workspace_relative_path") or workspace_relative_path
+        ).strip()
+        if returned_workspace_path != workspace_relative_path:
+            raise DesignStudioError(
+                "storage_import_mismatch",
+                "Storage read returned a different path than the import requested.",
+            )
+        file_name = _storage_file_name(workspace_relative_path, file_payload)
+    except DesignStudioError as error:
+        return _mark_storage_import_failed(
+            data_root=payload["data_root"],
+            project_id=project_id,
+            import_id=import_id,
+            error=error.detail,
+        )
+    project_import_dir = safe_app_data_path(payload["data_root"], Path("imports") / project_id / import_id)
+    project_import_dir.mkdir(parents=True, exist_ok=True)
+    target_path = (project_import_dir / file_name).resolve()
+    if project_import_dir.resolve() != target_path.parent.resolve():
+        raise DesignStudioError("storage_import_invalid_name", "Storage returned an invalid file name.")
+    target_path.write_bytes(decoded)
+    imported_at = utc_now()
+    imported = {
+        "import_id": import_id,
+        "status": "imported",
+        "workspace_relative_path": workspace_relative_path,
+        "name": file_name,
+        "size_bytes": len(decoded),
+        "app_data_path": str(target_path.relative_to(Path(payload["data_root"]).resolve())),
+        "requested_at": "",
+        "imported_at": imported_at,
+        "error": "",
+    }
+
+    def apply_result(state: dict[str, Any]) -> dict[str, Any]:
+        project = _require_project(state, project_id)
+        existing = _find_import(project, import_id)
+        if existing is None:
+            project["imports"].append(imported)
+        else:
+            imported["requested_at"] = str(existing.get("requested_at") or "")
+            existing.update(imported)
+        _append_source_file(project, workspace_relative_path)
+        project["status"] = "imported"
+        project["updated_at"] = imported_at
+        state["view_state"]["selected_project_id"] = project_id
+        return state
+
+    state = update_state(payload["data_root"], apply_result)
+    project = _require_project(state, project_id)
+    return {"import": _require_import(project, import_id), "project": project, "state": _public_state(state)}
 
 
 def export_to_storage(payload: dict[str, Any], arguments: dict[str, Any]) -> dict[str, Any]:
@@ -279,6 +431,8 @@ def dispatch(action: str, payload: dict[str, Any], arguments: dict[str, Any]) ->
         return create_project(payload, arguments)
     if action == "import_from_storage":
         return import_from_storage(payload, arguments)
+    if action == "record_storage_import_result":
+        return record_storage_import_result(payload, arguments)
     if action == "export_to_storage":
         return export_to_storage(payload, arguments)
     if action == "record_storage_export_result":
@@ -318,6 +472,20 @@ def _require_project(state: dict[str, Any], project_id: str) -> dict[str, Any]:
     return project
 
 
+def _find_import(project: dict[str, Any], import_id: str) -> dict[str, Any] | None:
+    for item in project.get("imports", []):
+        if item.get("import_id") == import_id:
+            return item
+    return None
+
+
+def _require_import(project: dict[str, Any], import_id: str) -> dict[str, Any]:
+    item = _find_import(project, import_id)
+    if item is None:
+        raise DesignStudioError("import_not_found", f"Design import `{import_id}` was not found.")
+    return item
+
+
 def _require_export(project: dict[str, Any], export_id: str) -> dict[str, Any]:
     for item in project.get("exports", []):
         if item.get("export_id") == export_id:
@@ -339,11 +507,55 @@ def _export_id(value: object) -> str:
     return export_id
 
 
+def _import_id(value: object) -> str:
+    import_id = str(value or "").strip()
+    if not IMPORT_ID_PATTERN.fullmatch(import_id):
+        raise DesignStudioError("import_id_invalid", "A valid import id is required.")
+    return import_id
+
+
 def _storage_path(value: object) -> str:
     path = str(value or "").strip()
     if not STORAGE_PATH_PATTERN.fullmatch(path) or ".." in Path(path).parts:
         raise DesignStudioError("storage_path_invalid", "Use a workspace-relative Storage path under storage/uploaded or storage/generated.")
     return path
+
+
+def _should_request_storage_read(payload: dict[str, Any]) -> bool:
+    return payload.get("surface") == "backend" and isinstance(payload.get("app_dependencies"), dict)
+
+
+def _append_source_file(project: dict[str, Any], workspace_relative_path: str) -> None:
+    source_files = project.setdefault("source_files", [])
+    if workspace_relative_path not in source_files:
+        source_files.append(workspace_relative_path)
+
+
+def _mark_storage_import_failed(
+    *,
+    data_root: str,
+    project_id: str,
+    import_id: str,
+    error: str,
+) -> dict[str, Any]:
+    failed_at = utc_now()
+
+    def apply_failure(state: dict[str, Any]) -> dict[str, Any]:
+        project = _require_project(state, project_id)
+        item = _find_import(project, import_id)
+        if item is not None:
+            item["status"] = "failed"
+            item["error"] = error
+            item["imported_at"] = ""
+        project["status"] = "import_failed"
+        project["updated_at"] = failed_at
+        state["view_state"]["selected_project_id"] = project_id
+        return state
+
+    state = update_state(data_root, apply_failure)
+    project = _require_project(state, project_id)
+    item = _find_import(project, import_id)
+    return {"import": item or {}, "project": project, "state": _public_state(state)}
 
 
 def _resolve_storage_file(payload: dict[str, Any], workspace_relative_path: str) -> Path:
@@ -359,6 +571,33 @@ def _resolve_storage_file(payload: dict[str, Any], workspace_relative_path: str)
     if not path.is_file():
         raise DesignStudioError("storage_file_not_found", f"Storage file `{workspace_relative_path}` was not found.")
     return path
+
+
+def _storage_read_result_file(result: dict[str, Any]) -> dict[str, Any]:
+    payload = result.get("json") if isinstance(result.get("json"), dict) else result
+    file_payload = payload.get("file") if isinstance(payload.get("file"), dict) else {}
+    return file_payload
+
+
+def _storage_read_result_bytes(result: dict[str, Any]) -> bytes:
+    payload = result.get("json") if isinstance(result.get("json"), dict) else result
+    raw = str(payload.get("content_base64") or "")
+    if not raw:
+        raise DesignStudioError("storage_import_empty", "Storage did not return file content.")
+    try:
+        return b64decode(raw, validate=True)
+    except (ValueError, binascii.Error) as error:
+        raise DesignStudioError(
+            "storage_import_invalid_content",
+            "Storage returned invalid base64 content.",
+        ) from error
+
+
+def _storage_file_name(workspace_relative_path: str, file_payload: dict[str, Any]) -> str:
+    name = str(file_payload.get("name") or Path(workspace_relative_path).name).strip()
+    if not name or name in {".", ".."} or "/" in name or "\\" in name or "\x00" in name:
+        raise DesignStudioError("storage_import_invalid_name", "Storage returned an invalid file name.")
+    return name
 
 
 def _clean_text(value: object, *, fallback: str) -> str:
@@ -405,6 +644,31 @@ def _storage_write_request(
                 "export_id": export_id,
                 "workspace_relative_path": workspace_relative_path,
                 "artifact": artifact,
+            },
+        },
+    }
+
+
+def _storage_read_request(
+    *,
+    project_id: str,
+    import_id: str,
+    workspace_relative_path: str,
+) -> dict[str, Any]:
+    return {
+        "request_id": import_id,
+        "dependency_alias": "storage-read",
+        "body": {
+            "action": "file.content.read",
+            "workspace_relative_path": workspace_relative_path,
+            "max_bytes": MAX_IMPORT_BYTES,
+        },
+        "callback": {
+            "action": "record_storage_import_result",
+            "payload": {
+                "project_id": project_id,
+                "import_id": import_id,
+                "workspace_relative_path": workspace_relative_path,
             },
         },
     }

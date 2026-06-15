@@ -104,7 +104,9 @@ class DesignStudioAppTests(unittest.TestCase):
             )
 
             self.assertEqual(imported["status_code"], 200)
-            self.assertTrue((data_root / "imports" / project_id / "brief.md").is_file())
+            import_record = imported["json"]["import"]
+            self.assertEqual(import_record["status"], "imported")
+            self.assertTrue((data_root / import_record["app_data_path"]).is_file())
             self.assertEqual(exported["status_code"], 200)
             export_record = exported["json"]["export"]
             export_id = export_record["export_id"]
@@ -197,7 +199,7 @@ class DesignStudioAppTests(unittest.TestCase):
             self.assertEqual(cli["state"]["schema_version"], "1")
             self.assertEqual(mcp["state"]["schema_version"], "1")
 
-    def test_hosted_backend_export_writes_through_storage_dependency(self) -> None:
+    def test_hosted_backend_imports_and_exports_through_storage_dependencies(self) -> None:
         with TemporaryDirectory() as temp_dir:
             with self._test_platform_env():
                 repo_root = self._temporary_repo_root(Path(temp_dir))
@@ -205,6 +207,15 @@ class DesignStudioAppTests(unittest.TestCase):
                 with self._repo_pythonpath():
                     self._install_platform_app(state, repo_root, "storage")
                     self._install_platform_app(state, repo_root, "design-studio")
+                save_app_dependency_selection(
+                    state.app_store,
+                    workspace_id="default",
+                    consumer_app_id="design-studio",
+                    alias="storage-read",
+                    provider_app_ids=["storage"],
+                    workspace_store=state.workspace_store,
+                    start_path=repo_root,
+                )
                 save_app_dependency_selection(
                     state.app_store,
                     workspace_id="default",
@@ -220,6 +231,9 @@ class DesignStudioAppTests(unittest.TestCase):
                 cookie = self._login(app)
 
             with self._repo_pythonpath():
+                uploaded_root = repo_root / "workspaces" / "default" / "storage" / "uploaded"
+                uploaded_root.mkdir(parents=True, exist_ok=True)
+                (uploaded_root / "brief.md").write_text("# Brief\n\nCreate a dashboard.\n", encoding="utf-8")
                 created_status, created_body, _headers = self._invoke_backend(
                     app,
                     cookie=cookie,
@@ -230,6 +244,24 @@ class DesignStudioAppTests(unittest.TestCase):
                 )
                 self.assertEqual(created_status, 200)
                 project_id = json.loads(created_body.decode("utf-8"))["project"]["id"]
+                import_status, import_body, _import_headers = self._invoke_backend(
+                    app,
+                    cookie=cookie,
+                    body={
+                        "action": "import_from_storage",
+                        "arguments": {
+                            "project_id": project_id,
+                            "workspace_relative_path": "storage/uploaded/brief.md",
+                        },
+                    },
+                )
+                import_payload = json.loads(import_body.decode("utf-8"))
+                self.assertEqual(import_status, 200)
+                self.assertEqual(
+                    [item["status"] for item in import_payload["dependency_backend_request_results"]],
+                    ["completed"],
+                )
+
                 export_status, export_body, _export_headers = self._invoke_backend(
                     app,
                     cookie=cookie,
@@ -256,8 +288,20 @@ class DesignStudioAppTests(unittest.TestCase):
                     body={"action": "state"},
                 )
             state_payload = json.loads(state_body.decode("utf-8"))
+            final_import = state_payload["state"]["projects"][0]["imports"][0]
             final_export = state_payload["state"]["projects"][0]["exports"][0]
             self.assertEqual(state_status, 200)
+            self.assertEqual(final_import["status"], "imported")
+            self.assertEqual(final_import["workspace_relative_path"], "storage/uploaded/brief.md")
+            imported_app_path = (
+                repo_root
+                / "workspaces"
+                / "default"
+                / "data"
+                / "design-studio"
+                / final_import["app_data_path"]
+            )
+            self.assertTrue(imported_app_path.is_file())
             self.assertEqual(final_export["status"], "exported")
             self.assertEqual(final_export["completed_workspace_relative_paths"], export_record["workspace_relative_paths"])
 

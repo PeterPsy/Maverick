@@ -43,11 +43,16 @@ Exports are written under:
 storage/generated/design-studio/<project-id>/<export-id>/
 ```
 
-The app never accepts host absolute paths in sandbox mode. Export writes are
-issued through Design Studio's `storage-write` dependency backend request so the
-Storage app owns the generated file write path and inventory update. Design
-Studio records the export as pending first, then marks it exported or failed from
-the Storage callback result.
+The app never accepts host absolute paths in sandbox mode. Hosted imports are
+issued through the `storage-read` dependency backend request, then materialized
+under `data/design-studio/imports/` only after Storage returns bounded file
+content. Export writes are issued through Design Studio's `storage-write`
+dependency backend request so the Storage app owns the generated file write path
+and inventory update. Design Studio records imports and exports as pending first,
+then marks them imported/exported or failed from the Storage callback result.
+Direct local CLI/MCP test entrypoints may use the mounted workspace Storage roots
+as a development fallback, but hosted backend calls use the declared Storage
+dependencies.
 
 ## SDK Flow
 

@@ -417,6 +417,48 @@ textarea:focus {
   overflow-wrap: anywhere;
 }
 
+.design-studio-history {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.design-studio-history-list {
+  min-height: 52px;
+  display: grid;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.design-studio-history-row {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 4px 10px;
+  border: 1px solid var(--design-studio-border);
+  border-radius: 16px;
+  padding: 9px 10px;
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.design-studio-history-row span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.design-studio-history-row code {
+  grid-column: 1 / -1;
+  color: var(--design-studio-muted);
+  overflow-wrap: anywhere;
+  font-size: 0.78rem;
+}
+
+.design-studio-history-empty {
+  color: var(--design-studio-soft);
+}
+
 .design-studio-section.sidecar {
   min-height: 330px;
   display: grid;
@@ -476,6 +518,10 @@ textarea:focus {
   .design-studio-status,
   .design-studio-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .design-studio-history {
+    grid-template-columns: 1fr;
   }
 
   .design-studio-workspace {

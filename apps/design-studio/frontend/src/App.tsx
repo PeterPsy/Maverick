@@ -194,6 +194,29 @@ export function App() {
               </div>
             </div>
 
+            <div className="design-studio-history">
+              <HistoryPanel
+                title="Imports"
+                empty="No imports"
+                items={(selectedProject?.imports || []).map((item) => ({
+                  id: item.import_id,
+                  label: item.name || item.workspace_relative_path,
+                  status: item.status,
+                  detail: item.error || item.workspace_relative_path,
+                }))}
+              />
+              <HistoryPanel
+                title="Exports"
+                empty="No exports"
+                items={(selectedProject?.exports || []).map((item) => ({
+                  id: item.export_id,
+                  label: item.export_id,
+                  status: item.status,
+                  detail: item.error || item.completed_workspace_relative_paths[0] || item.workspace_relative_paths[0] || "",
+                }))}
+              />
+            </div>
+
             <div className="design-studio-section sidecar">
               <div className="design-studio-sidecar-head">
                 <h3>OpenDesign Surface</h3>
@@ -225,6 +248,32 @@ function Metric({ label, value }: { label: string; value: string | number }) {
     <div className="design-studio-metric">
       <small>{label}</small>
       <strong>{value}</strong>
+    </div>
+  );
+}
+
+function HistoryPanel({
+  title,
+  empty,
+  items,
+}: {
+  title: string;
+  empty: string;
+  items: Array<{ id: string; label: string; status: string; detail: string }>;
+}) {
+  return (
+    <div className="design-studio-section">
+      <h3>{title}</h3>
+      <div className="design-studio-history-list">
+        {items.map((item) => (
+          <div className="design-studio-history-row" key={item.id}>
+            <span>{item.label}</span>
+            <small>{item.status}</small>
+            <code>{item.detail}</code>
+          </div>
+        ))}
+        {!items.length ? <span className="design-studio-history-empty">{empty}</span> : null}
+      </div>
     </div>
   );
 }

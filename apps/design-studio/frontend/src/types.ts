@@ -5,15 +5,24 @@ export type DesignProject = {
   status: string;
   source_files: string[];
   imports: Array<{
+    import_id: string;
+    status: string;
     workspace_relative_path: string;
     name: string;
     size_bytes: number;
     app_data_path: string;
+    requested_at: string;
     imported_at: string;
+    error: string;
   }>;
   exports: Array<{
+    export_id: string;
+    status: string;
     workspace_relative_paths: string[];
+    completed_workspace_relative_paths: string[];
     exported_at: string;
+    completed_at: string;
+    error: string;
   }>;
   created_at: string;
   updated_at: string;

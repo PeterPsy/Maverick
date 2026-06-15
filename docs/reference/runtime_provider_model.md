@@ -11,6 +11,7 @@ Maverick owns:
 - execution policy
 - workspace context
 - streaming and persistence of runtime events
+- compaction of large persisted `runtime.tool_call.*` event payloads
 
 The provider adapter owns:
 
@@ -48,3 +49,9 @@ Use the local host and core verification even without provider setup when evalua
 - CLI and MCP discovery
 
 Provider setup is required only for end-to-end agent execution paths that depend on Codex.
+
+## Runtime Event Payload Compaction
+
+Large tool-call event payloads are compacted in the runtime recorder before persistence and live event fanout. This Phase 1 behavior protects storage, websocket delivery, runtime replay, UI rendering, and downstream app consumers, but it does not guarantee provider-token reduction for generic shell/tool output.
+
+See `docs/reference/runtime_output_compaction.md` for the event contract, operational flag, and Phase 1/2/3 roadmap.

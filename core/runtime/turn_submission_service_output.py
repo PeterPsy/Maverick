@@ -11,6 +11,7 @@ from uuid import uuid4
 from core.providers.service import build_runtime_backend_launch_spec
 from core.providers.service import prepare_runtime_skills
 from core.runtime.execution_events import RuntimeExecutionEvent
+from core.runtime.output_compaction import ToolOutputCompactionContext, compact_tool_call_event
 from core.runtime.runtime_events import RuntimeEventRecord
 from core.runtime.runtime_session import RuntimeSessionRecord
 from core.runtime.runtime_turns import RuntimeTurnRecord
@@ -168,6 +169,14 @@ class _RuntimeTurnOutputRecorder:
             text = event.payload.get("text")
             if isinstance(text, str) and text:
                 self._streamed_text_parts.append(text)
+        elif event.event_type.startswith("runtime.tool_call."):
+            event = compact_tool_call_event(
+                event,
+                context=ToolOutputCompactionContext(
+                    session_id=self.session_id,
+                    turn_id=self.turn_id,
+                ),
+            )
         return _record_execution_event(self.state, session_id=self.session_id, turn_id=self.turn_id, event=event)
 
     def final_text(self, output_text: str) -> str:

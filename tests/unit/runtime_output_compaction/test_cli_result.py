@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import unittest
+from unittest.mock import patch
 
 from core.runtime.output_compaction.cli_result import compact_runtime_cli_result, runtime_cli_output_profile
 from core.runtime.output_compaction.models import ToolOutputCompactionPolicy
@@ -34,6 +35,26 @@ class RuntimeCliResultCompactionTest(unittest.TestCase):
         self.assertNotIn("secret-token", compacted["data"][0]["content"])
         self.assertEqual(compacted["runtime_cli_output_compaction"]["scope"], "runtime_cli_response")
         self.assertEqual(compacted["runtime_cli_output_compaction"]["fields"], ["data[0].content"])
+
+    def test_compactor_error_returns_redacted_field_instead_of_raw_output(self) -> None:
+        huge_output = "Authorization: Bearer secret-token\n" + ("large output line\n" * 10_000)
+
+        with patch(
+            "core.runtime.output_compaction.cli_result.compact_tool_output",
+            side_effect=RuntimeError("boom"),
+        ):
+            compacted = compact_runtime_cli_result(
+                {"status_code": 200, "content": huge_output},
+                argv=["core", "cli", "run", "large"],
+                runtime_session_id="sess-1",
+                policy=ToolOutputCompactionPolicy(min_original_bytes=1000),
+            )
+
+        self.assertNotEqual(compacted["content"], huge_output)
+        self.assertIn("Authorization: Bearer <redacted>", compacted["content"])
+        self.assertNotIn("secret-token", compacted["content"])
+        self.assertEqual(compacted["output_compaction"]["pass_through_reason"], "compactor_failed")
+        self.assertEqual(compacted["output_compaction"]["compaction_error"], "RuntimeError")
 
 
 if __name__ == "__main__":

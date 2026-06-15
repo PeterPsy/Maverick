@@ -7,6 +7,7 @@ from copy import deepcopy
 import shlex
 from typing import Any
 
+from core.runtime.output_compaction.fallbacks import compactor_error_result
 from core.runtime.output_compaction.models import (
     ToolOutputCompactionInput,
     ToolOutputCompactionPolicy,
@@ -90,8 +91,8 @@ def compact_runtime_cli_result(
         )
         try:
             field_result = compact_tool_output(compaction_input, policy=active_policy)
-        except Exception:
-            continue
+        except Exception as error:
+            field_result = compactor_error_result(compaction_input, policy=active_policy, error=error)
         replacement = field_result.output if field_result.output is not None else ""
         _set_path(compacted, path, replacement)
         field_results.append((field_path, field_result))
@@ -200,22 +201,33 @@ def _runtime_cli_metadata(field_results: Sequence[tuple[str, ToolOutputCompactio
         )
         if result.facts:
             metadata["facts"] = dict(result.facts)
+        if result.redaction_failed:
+            metadata["redaction_failed"] = True
+        if result.compaction_error:
+            metadata["compaction_error"] = result.compaction_error
     else:
-        metadata["field_results"] = [
-            {
-                "field": path,
-                "applied": result.applied,
-                "rule_id": result.rule_id,
-                "family": result.family,
-                "original_bytes": result.original_bytes,
-                "redacted_bytes": result.redacted_bytes,
-                "compacted_bytes": result.compacted_bytes,
-                "savings_ratio": round(result.savings_ratio, 6),
-                "pass_through_reason": result.pass_through_reason,
-                "digest": result.redacted_sha256,
-            }
-            for path, result in field_results
-        ]
+        metadata["field_results"] = [_runtime_cli_field_metadata(path, result) for path, result in field_results]
+    return metadata
+
+
+def _runtime_cli_field_metadata(field: str, result: ToolOutputCompactionResult) -> dict[str, Any]:
+    """Return non-sensitive compaction metadata for one CLI response field."""
+    metadata: dict[str, Any] = {
+        "field": field,
+        "applied": result.applied,
+        "rule_id": result.rule_id,
+        "family": result.family,
+        "original_bytes": result.original_bytes,
+        "redacted_bytes": result.redacted_bytes,
+        "compacted_bytes": result.compacted_bytes,
+        "savings_ratio": round(result.savings_ratio, 6),
+        "pass_through_reason": result.pass_through_reason,
+        "digest": result.redacted_sha256,
+    }
+    if result.redaction_failed:
+        metadata["redaction_failed"] = True
+    if result.compaction_error:
+        metadata["compaction_error"] = result.compaction_error
     return metadata
 
 

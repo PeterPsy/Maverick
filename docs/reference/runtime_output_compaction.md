@@ -50,6 +50,8 @@ Allowed values are `full` and `provider_compact`. Missing `output_profile` means
 
 When `provider_compact` is requested, the API runs the CLI normally, preserves `status_code` and HTTP status behavior, and compacts large textual JSON fields before returning the response. Metadata is added under top-level `output_compaction` with `scope: runtime_cli_response`. The runtime-local `maverick` shim requests `provider_compact` by default because its stdout is normally destined for provider context; agents can set `MAVERICK_RUNTIME_CLI_OUTPUT_PROFILE=full` when they need the exact full JSON payload.
 
+If the CLI response compactor fails unexpectedly for a large field, the API returns that field as redacted pass-through text and records `pass_through_reason: compactor_failed` plus a non-sensitive `compaction_error` class name in the compaction metadata.
+
 This phase reduces provider tokens only for controlled Maverick CLI calls routed through `/api/runtime/cli`. It still does not compact arbitrary shell command output before the provider consumes it.
 
 ## Operations

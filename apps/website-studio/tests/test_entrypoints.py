@@ -1557,6 +1557,7 @@ class WebsiteStudioEntrypointTest(unittest.TestCase):
             self.assertEqual(css_media["file_response"]["content_type"], "text/css; charset=utf-8")
             self.assertEqual(css_media["file_response"]["headers"]["Access-Control-Allow-Origin"], "*")
             self.assertEqual(css_media["file_response"]["headers"]["Cross-Origin-Resource-Policy"], "cross-origin")
+            self.assertEqual(css_media["file_response"]["cache_control"], "private, max-age=1800")
             self.assertIn("path=assets%2Fbg.webp", css_path.read_text(encoding="utf-8"))
 
             video_bytes = b"0" * (3 * 1024 * 1024)
@@ -1569,6 +1570,7 @@ class WebsiteStudioEntrypointTest(unittest.TestCase):
             self.assertEqual(status, 200)
             self.assertEqual(video_media["file_response"]["path"], str(video_target.resolve()))
             self.assertEqual(video_media["file_response"]["content_type"], "video/mp4")
+            self.assertEqual(video_media["file_response"]["cache_control"], "private, max-age=1800")
 
             entrypoint_payload = {
                 "data_root": str(data_root),
@@ -1629,6 +1631,53 @@ class WebsiteStudioEntrypointTest(unittest.TestCase):
             self.assertIn("assets/photo.webp", nested_document["source_map"]["asset_refs"])
             self.assertNotIn('href="../assets/site.css"', nested_document["html"])
             self.assertNotIn('data-src="../assets/photo.webp"', nested_document["html"])
+
+    def test_preview_documents_reuse_file_gateway_urls_for_shared_assets(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            data_root = Path(tmp)
+            archive = BytesIO()
+            with ZipFile(archive, "w") as zip_file:
+                zip_file.writestr(
+                    "index.html",
+                    '<!doctype html><html><body><main><h1>Home</h1><img src="assets/logo.webp" alt=""></main></body></html>',
+                )
+                zip_file.writestr(
+                    "about.html",
+                    '<!doctype html><html><body><main><h1>About</h1><img src="assets/logo.webp" alt=""></main></body></html>',
+                )
+                zip_file.writestr("assets/logo.webp", b"logo")
+            encoded = base64.b64encode(archive.getvalue()).decode("ascii")
+
+            status, imported = handle_action(data_root, {"action": "import_zip", "display_name": "Shared Assets", "archive_base64": encoded})
+            self.assertEqual(status, 201)
+            site_id = imported["site"]["id"]
+
+            status, home_preview = handle_action(data_root, {"action": "build_preview", "site_id": site_id, "route": "/"})
+            self.assertEqual(status, 200)
+            status, about_preview = handle_action(data_root, {"action": "build_preview", "site_id": site_id, "route": "/about"})
+            self.assertEqual(status, 200)
+            self.assertNotEqual(home_preview["preview_id"], about_preview["preview_id"])
+
+            status, home_document = handle_action(data_root, {"action": "preview_document", "preview_id": home_preview["preview_id"]})
+            self.assertEqual(status, 200)
+            status, about_document = handle_action(data_root, {"action": "preview_document", "preview_id": about_preview["preview_id"]})
+            self.assertEqual(status, 200)
+
+            home_gateway = home_document["source_map"]["asset_gateway"]["assets/logo.webp"]
+            about_gateway = about_document["source_map"]["asset_gateway"]["assets/logo.webp"]
+            self.assertEqual(home_gateway, about_gateway)
+            self.assertIn(home_gateway, about_document["html"])
+
+            logo_manifests = []
+            for path in (data_root / "run" / "file-gateway").glob("gw_*.json"):
+                manifest = json.loads(path.read_text(encoding="utf-8"))
+                if manifest.get("asset_path") == "assets/logo.webp":
+                    logo_manifests.append(manifest)
+            self.assertEqual(len(logo_manifests), 1)
+            self.assertEqual(logo_manifests[0]["file_response"]["cache_control"], "private, max-age=1800")
+            reuse_index = json.loads((data_root / "run" / "file-gateway" / "reuse-index.json").read_text(encoding="utf-8"))
+            self.assertEqual(reuse_index["schema"], "website-studio.file_gateway_reuse_index.v1")
+            self.assertTrue(reuse_index["entries"])
 
     def test_preview_media_gateway_replacement_records_html_only_aliases(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

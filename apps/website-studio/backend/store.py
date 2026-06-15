@@ -84,7 +84,10 @@ DEFAULT_RETENTION_REVIEW_CADENCE = "run dry-run during routine workspace mainten
 MAX_SOURCE_MAP_ASSET_INDEX = 120
 PREVIEW_RUNTIME_VERSION = "preview-browser-stream-v5"
 FILE_GATEWAY_SCHEMA = "maverick.app.file_gateway.v1"
+FILE_GATEWAY_REUSE_INDEX_SCHEMA = "website-studio.file_gateway_reuse_index.v1"
 PREVIEW_FILE_GATEWAY_TTL = timedelta(minutes=30)
+PREVIEW_FILE_GATEWAY_REUSE_MIN_TTL = timedelta(minutes=5)
+PREVIEW_FILE_GATEWAY_CACHE_CONTROL = f"private, max-age={int(PREVIEW_FILE_GATEWAY_TTL.total_seconds())}"
 PREVIEW_MEDIA_RESPONSE_HEADERS = {
     "Access-Control-Allow-Origin": "*",
     "Accept-Ranges": "bytes",
@@ -2040,7 +2043,7 @@ def preview_media(data_root: Path, preview_id: object, path: object) -> dict[str
             "file_name": target.name,
             "etag": etag,
             "download": False,
-            "cache_control": "private, max-age=60",
+            "cache_control": PREVIEW_FILE_GATEWAY_CACHE_CONTROL,
             "headers": PREVIEW_MEDIA_RESPONSE_HEADERS,
         },
     }
@@ -2104,7 +2107,12 @@ def _preview_file_gateway_url(
         gateway = gateway_urls[clean_asset_path]
         _record_preview_file_gateway_aliases(gateway_urls, gateway, aliases)
         return gateway
-    token = _write_preview_file_gateway_manifest(
+    token = _reusable_preview_file_gateway_token(
+        data_root,
+        app_id="website-studio",
+        file_response=file_response,
+        asset_path=clean_asset_path,
+    ) or _write_preview_file_gateway_manifest(
         data_root,
         app_id="website-studio",
         file_response=file_response,
@@ -2156,7 +2164,222 @@ def _write_preview_file_gateway_manifest(
         "file_response": file_response,
     }
     (manifest_root / f"{token}.json").write_text(json.dumps(manifest, sort_keys=True), encoding="utf-8")
+    try:
+        resolved_path = str(Path(raw_path).resolve())
+    except OSError:
+        resolved_path = ""
+    if resolved_path:
+        _write_preview_file_gateway_reuse_index_entry(
+            manifest_root,
+            token=token,
+            app_id=app_id,
+            file_response=file_response,
+            asset_path=asset_path,
+            resolved_path=resolved_path,
+            expires_at=manifest["expires_at"],
+        )
     return token
+
+
+def _reusable_preview_file_gateway_token(
+    data_root: Path,
+    *,
+    app_id: str,
+    file_response: dict[str, object],
+    asset_path: str,
+) -> str:
+    raw_path = str(file_response.get("path") or "").strip()
+    if not raw_path:
+        return ""
+    manifest_root = data_root / "run" / "file-gateway"
+    try:
+        resolved_path = str(Path(raw_path).resolve())
+    except OSError:
+        return ""
+    reuse_key = _preview_file_gateway_reuse_key(
+        app_id=app_id,
+        file_response=file_response,
+        asset_path=asset_path,
+        resolved_path=resolved_path,
+    )
+    now = datetime.now(tz=UTC)
+    indexed_token = _read_preview_file_gateway_reuse_index(manifest_root, now=now).get(reuse_key, "")
+    if indexed_token:
+        manifest = _read_preview_file_gateway_manifest(manifest_root, indexed_token)
+        if _preview_file_gateway_manifest_matches(
+            manifest,
+            app_id=app_id,
+            file_response=file_response,
+            asset_path=asset_path,
+            resolved_path=resolved_path,
+            now=now,
+        ):
+            return indexed_token
+    try:
+        candidates = sorted(manifest_root.glob("gw_*.json"), key=lambda path: path.stat().st_mtime_ns, reverse=True)
+    except OSError:
+        return ""
+    for path in candidates[:1000]:
+        token = path.stem
+        manifest = _read_preview_file_gateway_manifest(manifest_root, token)
+        if not _preview_file_gateway_manifest_matches(
+            manifest,
+            app_id=app_id,
+            file_response=file_response,
+            asset_path=asset_path,
+            resolved_path=resolved_path,
+            now=now,
+        ):
+            continue
+        expires_at = _parse_gateway_timestamp(manifest.get("expires_at") if isinstance(manifest, dict) else None)
+        if expires_at is not None:
+            _write_preview_file_gateway_reuse_index_entry(
+                manifest_root,
+                token=token,
+                app_id=app_id,
+                file_response=file_response,
+                asset_path=asset_path,
+                resolved_path=resolved_path,
+                expires_at=expires_at.isoformat(),
+            )
+        return token
+    return ""
+
+
+def _read_preview_file_gateway_manifest(manifest_root: Path, token: str) -> dict[str, object]:
+    try:
+        payload = json.loads((manifest_root / f"{token}.json").read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return {}
+    return payload if isinstance(payload, dict) else {}
+
+
+def _read_preview_file_gateway_reuse_index(manifest_root: Path, *, now: datetime) -> dict[str, str]:
+    return {key: entry["token"] for key, entry in _read_preview_file_gateway_reuse_index_entries(manifest_root, now=now).items()}
+
+
+def _read_preview_file_gateway_reuse_index_entries(manifest_root: Path, *, now: datetime) -> dict[str, dict[str, str]]:
+    try:
+        payload = json.loads(_preview_file_gateway_reuse_index_path(manifest_root).read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return {}
+    if not isinstance(payload, dict) or payload.get("schema") != FILE_GATEWAY_REUSE_INDEX_SCHEMA:
+        return {}
+    entries = payload.get("entries")
+    if not isinstance(entries, dict):
+        return {}
+    result: dict[str, dict[str, str]] = {}
+    for key, entry in entries.items():
+        if not isinstance(entry, dict):
+            continue
+        token = str(entry.get("token") or "")
+        expires_at = _parse_gateway_timestamp(entry.get("expires_at"))
+        if not token or expires_at is None or expires_at <= now + PREVIEW_FILE_GATEWAY_REUSE_MIN_TTL:
+            continue
+        result[str(key)] = {"token": token, "expires_at": expires_at.isoformat()}
+    return result
+
+
+def _write_preview_file_gateway_reuse_index_entry(
+    manifest_root: Path,
+    *,
+    token: str,
+    app_id: str,
+    file_response: dict[str, object],
+    asset_path: str,
+    resolved_path: str,
+    expires_at: object,
+) -> None:
+    now = datetime.now(tz=UTC)
+    reuse_key = _preview_file_gateway_reuse_key(
+        app_id=app_id,
+        file_response=file_response,
+        asset_path=asset_path,
+        resolved_path=resolved_path,
+    )
+    entries = _read_preview_file_gateway_reuse_index_entries(manifest_root, now=now)
+    entries[reuse_key] = {"token": token, "expires_at": str(expires_at or "")}
+    payload = {"schema": FILE_GATEWAY_REUSE_INDEX_SCHEMA, "updated_at": now.isoformat(), "entries": entries}
+    try:
+        path = _preview_file_gateway_reuse_index_path(manifest_root)
+        temp_path = path.with_suffix(".json.tmp")
+        temp_path.write_text(json.dumps(payload, sort_keys=True), encoding="utf-8")
+        temp_path.replace(path)
+    except OSError:
+        return
+
+
+def _preview_file_gateway_reuse_index_path(manifest_root: Path) -> Path:
+    return manifest_root / "reuse-index.json"
+
+
+def _preview_file_gateway_reuse_key(
+    *,
+    app_id: str,
+    file_response: dict[str, object],
+    asset_path: str,
+    resolved_path: str,
+) -> str:
+    payload = {
+        "schema": FILE_GATEWAY_REUSE_INDEX_SCHEMA,
+        "app_id": app_id,
+        "asset_path": asset_path,
+        "resolved_path": resolved_path,
+        "content_type": str(file_response.get("content_type") or ""),
+        "etag": str(file_response.get("etag") or ""),
+        "cache_control": str(file_response.get("cache_control") or ""),
+    }
+    return hashlib.sha256(json.dumps(payload, sort_keys=True, separators=(",", ":")).encode("utf-8")).hexdigest()
+
+
+def _preview_file_gateway_manifest_matches(
+    manifest: object,
+    *,
+    app_id: str,
+    file_response: dict[str, object],
+    asset_path: str,
+    resolved_path: str,
+    now: datetime,
+) -> bool:
+    if not isinstance(manifest, dict):
+        return False
+    if str(manifest.get("schema") or "") != FILE_GATEWAY_SCHEMA:
+        return False
+    if str(manifest.get("app_id") or "") != app_id:
+        return False
+    if str(manifest.get("access") or "") != "public_capability":
+        return False
+    expires_at = _parse_gateway_timestamp(manifest.get("expires_at"))
+    if expires_at is None or expires_at <= now + PREVIEW_FILE_GATEWAY_REUSE_MIN_TTL:
+        return False
+    manifest_response = manifest.get("file_response")
+    if not isinstance(manifest_response, dict):
+        return False
+    try:
+        manifest_path = str(Path(str(manifest_response.get("path") or "")).resolve())
+        allowed_paths = {str(Path(str(path)).resolve()) for path in manifest.get("allowed_paths") or []}
+    except (OSError, TypeError, ValueError):
+        return False
+    if manifest_path != resolved_path or resolved_path not in allowed_paths:
+        return False
+    comparable_fields = ("content_type", "etag", "cache_control")
+    if any(str(manifest_response.get(field) or "") != str(file_response.get(field) or "") for field in comparable_fields):
+        return False
+    manifest_asset_path = str(manifest.get("asset_path") or "").strip()
+    return not manifest_asset_path or manifest_asset_path == asset_path
+
+
+def _parse_gateway_timestamp(value: object) -> datetime | None:
+    text = str(value or "").strip()
+    if not text:
+        return None
+    try:
+        parsed = datetime.fromisoformat(text)
+    except ValueError:
+        return None
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=UTC)
+    return parsed.astimezone(UTC)
 
 
 def _preview_document_payload(data_root: Path, preview: dict[str, object], html: str, *, include_inventory: object = False) -> dict[str, object]:

@@ -4,6 +4,11 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from core.runtime.output_compaction.redaction import (
+    KNOWN_UNDERSCORE_TOKEN_PREFIX_PATTERN,
+    SENSITIVE_QUERY_KEY_PATTERN,
+)
+
 
 CODEX_POST_TOOL_USE_HOOK_NAME = "maverick_codex_post_tool_use_hook.py"
 
@@ -17,7 +22,7 @@ def write_codex_post_tool_use_hook(path: Path) -> None:
 
 def _codex_post_tool_use_hook_source() -> str:
     """Return a standalone hook bridge that can run without importing Maverick."""
-    return r'''#!/usr/bin/env python3
+    source = r'''#!/usr/bin/env python3
 import hashlib
 import json
 import os
@@ -30,7 +35,8 @@ import urllib.request
 API_PATH = "/api/runtime/provider-hooks/codex/post-tool-use"
 MIN_FALLBACK_BYTES = 16000
 MAX_FALLBACK_BYTES = 12000
-SENSITIVE_QUERY_KEYS = "token|access_token|refresh_token|api_key|apikey|key|secret|password|passwd|code"
+SENSITIVE_QUERY_KEYS = "__MAVERICK_SENSITIVE_QUERY_KEYS__"
+KNOWN_UNDERSCORE_TOKEN_PREFIXES = "__MAVERICK_KNOWN_UNDERSCORE_TOKEN_PREFIXES__"
 
 
 def main():
@@ -182,11 +188,12 @@ def redact_text(text):
         (r"(?i)(Authorization:\s*Bearer\s+)[^\s]+", r"\1<redacted>"),
         (r"(?i)(Authorization:\s*Basic\s+)[^\s]+", r"\1<redacted>"),
         (r"(?im)^(Cookie|Set-Cookie):.*$", r"\1: <redacted>"),
+        (r"(?im)^([A-Z0-9_-]*(?:TOKEN|SECRET|PASSWORD|PASSWD|API[-_]?KEY|PRIVATE[-_]?KEY|ACCESS[-_]?KEY)[A-Z0-9_-]*\s*:\s*)[^\r\n]+", r"\1<redacted>"),
         (r"(?im)^([A-Z0-9_]*(?:TOKEN|SECRET|PASSWORD|PASSWD|API_KEY|PRIVATE_KEY|ACCESS_KEY|AUTH|KEY)[A-Z0-9_]*\s*=\s*)[^\s#]+", r"\1<redacted>"),
         (r"(?i)([?&](?:" + SENSITIVE_QUERY_KEYS + r")=)[^&#\s]+", r"\1<redacted>"),
         (r"\beyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\b", "<redacted-jwt>"),
         (r"(?i)([a-z][a-z0-9+.-]*://)([^/\s:@]+):([^@\s/]+)@", r"\1<redacted>@"),
-        (r"\b(?:sk|pk|rk|ghp|github_pat)_[A-Za-z0-9_=-]{16,}\b", "<redacted-key>"),
+        (r"\b(?:" + KNOWN_UNDERSCORE_TOKEN_PREFIXES + r")_[A-Za-z0-9_=-]{16,}\b", "<redacted-key>"),
         (r"\bsk-[A-Za-z0-9_-]{16,}\b", "<redacted-key>"),
     )
     redacted = text
@@ -226,3 +233,7 @@ def byte_len(value):
 if __name__ == "__main__":
     raise SystemExit(main())
 '''
+    return (
+        source.replace("__MAVERICK_SENSITIVE_QUERY_KEYS__", SENSITIVE_QUERY_KEY_PATTERN)
+        .replace("__MAVERICK_KNOWN_UNDERSCORE_TOKEN_PREFIXES__", KNOWN_UNDERSCORE_TOKEN_PREFIX_PATTERN)
+    )

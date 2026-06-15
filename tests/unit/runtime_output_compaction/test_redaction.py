@@ -11,12 +11,18 @@ class RuntimeOutputRedactionTest(unittest.TestCase):
         raw = "\n".join(
             [
                 "Authorization: Bearer secret-bearer-value",
+                "X-API-Key: freeform-header-secret",
                 "Cookie: session=abc; csrf=def",
-                "GET https://example.test/path?access_token=secret-token&ok=1",
+                (
+                    "GET https://example.test/path?Access_Token=secret-token"
+                    "&client_secret=client-secret-value&auth_token=auth-token-value"
+                    "&access_key=access-key-value&X-Amz-Signature=aws-signature&ok=1"
+                ),
                 "APP_API_KEY=secret-api-key",
                 "DATABASE_URL=https://user:pass@example.test/db",
                 "jwt eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMjM0NTYifQ.signatureValue",
                 "sk-secretOpenAIStyleKey123456",
+                "github ghs_secretGitHubActionsToken1234567890",
                 "-----BEGIN PRIVATE KEY-----\nabc123\n-----END PRIVATE KEY-----",
             ]
         )
@@ -24,12 +30,18 @@ class RuntimeOutputRedactionTest(unittest.TestCase):
         redacted = redact_text(raw)
 
         self.assertNotIn("secret-bearer-value", redacted)
+        self.assertNotIn("freeform-header-secret", redacted)
         self.assertNotIn("session=abc", redacted)
         self.assertNotIn("secret-token", redacted)
+        self.assertNotIn("client-secret-value", redacted)
+        self.assertNotIn("auth-token-value", redacted)
+        self.assertNotIn("access-key-value", redacted)
+        self.assertNotIn("aws-signature", redacted)
         self.assertNotIn("secret-api-key", redacted)
         self.assertNotIn("user:pass", redacted)
         self.assertNotIn("eyJhbGci", redacted)
         self.assertNotIn("secretOpenAIStyleKey", redacted)
+        self.assertNotIn("secretGitHubActionsToken", redacted)
         self.assertNotIn("abc123", redacted)
         self.assertIn("<redacted>", redacted)
 

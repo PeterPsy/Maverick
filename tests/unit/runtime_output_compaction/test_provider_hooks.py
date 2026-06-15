@@ -203,10 +203,16 @@ class ProviderHookCompactionTest(unittest.TestCase):
         fallback_response = namespace["fallback_response"]
         huge_output = "\n".join(
             [
+                "X-API-Key: freeform-header-secret",
                 "DATABASE_URL=https://user:pass@example.test/db",
-                "GET https://example.test/path?Access_Token=SecretToken&ok=1",
+                (
+                    "GET https://example.test/path?Access_Token=SecretToken"
+                    "&client_secret=ClientSecret&auth_token=AuthToken"
+                    "&access_key=AccessKey&X-Amz-Signature=AwsSignature&ok=1"
+                ),
                 "openai sk-secretOpenAIStyleKey1234567890",
                 "github ghp_secretGithubToken1234567890",
+                "github-actions ghs_secretGitHubActionsToken1234567890",
                 "-----BEGIN PRIVATE KEY-----",
                 "private-key-material",
                 "-----END PRIVATE KEY-----",
@@ -225,10 +231,16 @@ class ProviderHookCompactionTest(unittest.TestCase):
         self.assertIsNotNone(response)
         assert isinstance(response, dict)
         reason = response["reason"]
+        self.assertNotIn("freeform-header-secret", reason)
         self.assertNotIn("user:pass", reason)
         self.assertNotIn("SecretToken", reason)
+        self.assertNotIn("ClientSecret", reason)
+        self.assertNotIn("AuthToken", reason)
+        self.assertNotIn("AccessKey", reason)
+        self.assertNotIn("AwsSignature", reason)
         self.assertNotIn("secretOpenAIStyleKey", reason)
         self.assertNotIn("secretGithubToken", reason)
+        self.assertNotIn("secretGitHubActionsToken", reason)
         self.assertNotIn("private-key-material", reason)
         self.assertIn("<redacted", reason)
 

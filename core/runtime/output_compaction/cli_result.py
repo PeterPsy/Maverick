@@ -266,6 +266,7 @@ def _runtime_cli_metadata(field_results: Sequence[tuple[str, ToolOutputCompactio
     fields = [path for path, _result in field_results]
     applied = any(result.applied for _path, result in field_results)
     redacted = any(result.redacted for _path, result in field_results)
+    bounded_pass_through = any(result.bounded_pass_through for _path, result in field_results)
     pass_through_reasons = sorted({result.pass_through_reason for _path, result in field_results if result.pass_through_reason})
     metadata: dict[str, Any] = {
         "version": RUNTIME_CLI_RESPONSE_COMPACTION_VERSION,
@@ -283,6 +284,8 @@ def _runtime_cli_metadata(field_results: Sequence[tuple[str, ToolOutputCompactio
     }
     if pass_through_reasons:
         metadata["pass_through_reasons"] = pass_through_reasons
+    if bounded_pass_through:
+        metadata["bounded_pass_through"] = True
     if len(field_results) == 1:
         result = field_results[0][1]
         metadata.update(
@@ -301,6 +304,8 @@ def _runtime_cli_metadata(field_results: Sequence[tuple[str, ToolOutputCompactio
             metadata["redaction_failed"] = True
         if result.compaction_error:
             metadata["compaction_error"] = result.compaction_error
+        if result.bounded_pass_through:
+            metadata["bounded_pass_through"] = True
     else:
         metadata["field_results"] = [_runtime_cli_field_metadata(path, result) for path, result in field_results]
     return metadata
@@ -324,6 +329,8 @@ def _runtime_cli_field_metadata(field: str, result: ToolOutputCompactionResult) 
         metadata["redaction_failed"] = True
     if result.compaction_error:
         metadata["compaction_error"] = result.compaction_error
+    if result.bounded_pass_through:
+        metadata["bounded_pass_through"] = True
     return metadata
 
 

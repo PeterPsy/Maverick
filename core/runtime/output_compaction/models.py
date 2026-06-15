@@ -102,3 +102,4 @@ class ToolOutputCompactionResult:
     stderr_omitted: bool = False
     redaction_failed: bool = False
     compaction_error: str = ""
+    bounded_pass_through: bool = False

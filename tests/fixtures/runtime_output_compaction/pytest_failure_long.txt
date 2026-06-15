@@ -1,0 +1,7 @@
+FAILED tests/test_widget.py::test_renders_total - AssertionError: expected 2
+Traceback (most recent call last):
+  File "tests/test_widget.py", line 42, in test_renders_total
+AssertionError: expected 2
+short test summary info
+FAILED tests/test_widget.py::test_renders_total
+1 failed, 7 passed in 3.21s

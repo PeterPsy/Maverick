@@ -25,23 +25,29 @@ def classify_tool_output(
         if rule.rule_id == "generic/fallback":
             fallback = rule
             continue
-        if _matches(rule, command=command, text=redacted_text):
+        if _command_matches(rule, command=command):
+            if rule.reducer == "json_large" and not _looks_like_json(redacted_text):
+                continue
+            return RuleSelection(rule_id=rule.rule_id, family=rule.family)
+    for rule in active_rules:
+        if rule.rule_id == "generic/fallback":
+            fallback = rule
+            continue
+        if _text_matches(rule, text=redacted_text):
             if rule.reducer == "json_large" and not _looks_like_json(redacted_text):
                 continue
             return RuleSelection(rule_id=rule.rule_id, family=rule.family)
     return RuleSelection(rule_id=fallback.rule_id, family=fallback.family)
 
 
-def _matches(rule: CompactionRule, *, command: str, text: str) -> bool:
+def _command_matches(rule: CompactionRule, *, command: str) -> bool:
     command_patterns = rule.compiled_command_patterns()
+    return bool(command_patterns) and any(pattern.search(command) for pattern in command_patterns)
+
+
+def _text_matches(rule: CompactionRule, *, text: str) -> bool:
     text_patterns = rule.compiled_text_patterns()
-    command_match = bool(command_patterns) and any(pattern.search(command) for pattern in command_patterns)
-    text_match = bool(text_patterns) and any(pattern.search(text) for pattern in text_patterns)
-    if command_patterns and not command_match:
-        return False
-    if text_patterns and not text_match:
-        return False
-    return command_match or text_match
+    return bool(text_patterns) and any(pattern.search(text) for pattern in text_patterns)
 
 
 def _looks_like_json(value: str) -> bool:

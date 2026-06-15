@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from pathlib import Path
 from unittest.mock import patch
 import unittest
 
@@ -10,6 +11,13 @@ from core.runtime.output_compaction.models import ToolOutputCompactionInput, Too
 from core.runtime.output_compaction.rules import CompactionRule
 from core.runtime.output_compaction.classifier import classify_tool_output
 from core.runtime.output_compaction.service import compact_tool_call_event
+
+
+FIXTURES_ROOT = Path(__file__).resolve().parents[2] / "fixtures" / "runtime_output_compaction"
+
+
+def fixture_text(name: str) -> str:
+    return (FIXTURES_ROOT / name).read_text(encoding="utf-8")
 
 
 class RuntimeOutputCompactionServiceTest(unittest.TestCase):
@@ -31,10 +39,53 @@ class RuntimeOutputCompactionServiceTest(unittest.TestCase):
 
         payload = compacted.payload
         self.assertEqual(payload["output"], "Authorization: Bearer <redacted>\nok")
+        self.assertEqual(payload["command"], "curl https://example.test?token=<redacted>")
         self.assertFalse(payload["output_compaction"]["applied"])
         self.assertEqual(payload["output_compaction"]["pass_through_reason"], "below_min_original_bytes")
         self.assertNotIn("secret-token", str(payload))
+        self.assertNotIn("secret", payload["command"])
         self.assertEqual(payload["output_compaction"]["digest_kind"], "redacted_sha256")
+
+    def test_command_and_summary_are_redacted_when_output_is_bounded_pass_through(self) -> None:
+        secret_command = "curl 'https://example.test?token=secret-query' -H 'Authorization: Bearer secret-header'"
+        output = "line\n" * 12_000
+        event = RuntimeExecutionEvent(
+            event_type="runtime.tool_call.completed",
+            payload={
+                "name": "command",
+                "status": "completed",
+                "command": secret_command,
+                "summary": secret_command,
+                "exit_code": 0,
+                "output": output,
+            },
+        )
+
+        compacted = compact_tool_call_event(
+            event,
+            policy=ToolOutputCompactionPolicy(
+                min_original_bytes=1000,
+                success_min_savings_ratio=0.999,
+                target_max_compacted_bytes=4000,
+            ),
+        )
+
+        payload = compacted.payload
+        metadata = payload["output_compaction"]
+        self.assertFalse(metadata["applied"])
+        self.assertEqual(metadata["pass_through_reason"], "insufficient_savings_success")
+        self.assertTrue(metadata["bounded_pass_through"])
+        self.assertLessEqual(len(payload["output"].encode("utf-8")), metadata["target_max_compacted_bytes"])
+        self.assertIn("[tool output bounded]", payload["output"])
+        self.assertIn("command", metadata["fields"])
+        self.assertIn("summary", metadata["fields"])
+        self.assertNotIn("secret-query", str(payload))
+        self.assertNotIn("secret-header", str(payload))
+        self.assertEqual(
+            payload["command"],
+            "curl 'https://example.test?token=<redacted>' -H 'Authorization: Bearer <redacted>'",
+        )
+        self.assertEqual(payload["summary"], payload["command"])
 
     def test_pytest_failure_long_output_compacts_and_preserves_diagnostics(self) -> None:
         diagnostic = "\n".join(
@@ -106,6 +157,9 @@ class RuntimeOutputCompactionServiceTest(unittest.TestCase):
         metadata = compacted.payload["output_compaction"]
         self.assertFalse(metadata["applied"])
         self.assertEqual(metadata["pass_through_reason"], "insufficient_savings_success")
+        self.assertTrue(metadata["bounded_pass_through"])
+        self.assertLessEqual(len(compacted.payload["output"].encode("utf-8")), metadata["target_max_compacted_bytes"])
+        self.assertIn("[tool output bounded]", compacted.payload["output"])
         self.assertEqual(metadata["required_savings_ratio"], 0.999)
 
     def test_node_test_runner_failure_uses_node_rule_and_preserves_file_line(self) -> None:
@@ -155,6 +209,40 @@ class RuntimeOutputCompactionServiceTest(unittest.TestCase):
         self.assertIn("On branch feature/output-compaction", payload["output"])
         self.assertIn("modified: 1200", payload["output"])
         self.assertIn("untracked: 400", payload["output"])
+
+    def test_git_status_short_porcelain_fixture_uses_git_status_rule(self) -> None:
+        output = "\n".join(fixture_text("git_status_large.txt").strip().splitlines() * 800)
+        event = RuntimeExecutionEvent(
+            event_type="runtime.tool_call.completed",
+            payload={
+                "name": "command",
+                "status": "completed",
+                "command": "git status --short --branch",
+                "exit_code": 0,
+                "output": output,
+            },
+        )
+
+        compacted = compact_tool_call_event(
+            event,
+            policy=ToolOutputCompactionPolicy(
+                min_original_bytes=1000,
+                success_min_savings_ratio=0.5,
+                target_max_compacted_bytes=4000,
+            ),
+        )
+
+        payload = compacted.payload
+        facts = payload["output_compaction"]["facts"]
+        self.assertTrue(payload["output_compaction"]["applied"])
+        self.assertEqual(payload["output_compaction"]["rule_id"], "vcs/git_status")
+        self.assertIn("## feature/output-compaction...origin/design [ahead 2]", payload["output"])
+        self.assertEqual(facts["modified_count"], 1600)
+        self.assertEqual(facts["added_count"], 800)
+        self.assertEqual(facts["deleted_count"], 800)
+        self.assertEqual(facts["renamed_count"], 800)
+        self.assertEqual(facts["untracked_count"], 800)
+        self.assertEqual(facts["conflicted_count"], 800)
 
     def test_large_json_output_uses_json_rule(self) -> None:
         output = json.dumps(

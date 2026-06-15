@@ -1,0 +1,4 @@
+ FAIL  src/widget.test.ts > renders total
+Error: expected 2 to equal 3
+  at src/widget.test.ts:17:12
+Test Files  1 failed | 4 passed

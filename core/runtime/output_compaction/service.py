@@ -7,7 +7,13 @@ from dataclasses import replace
 
 from core.runtime.execution_events import RuntimeExecutionEvent
 from core.runtime.output_compaction.classifier import classify_tool_output
-from core.runtime.output_compaction.event_payloads import OUTPUT_FIELDS, apply_result, input_from_event, result_is_noop
+from core.runtime.output_compaction.event_payloads import (
+    OUTPUT_FIELDS,
+    apply_result,
+    input_from_event,
+    redact_descriptive_payload_fields,
+    result_is_noop,
+)
 from core.runtime.output_compaction.fallbacks import compactor_error_result
 from core.runtime.output_compaction.models import (
     ToolOutputCompactionContext,
@@ -41,15 +47,24 @@ def compact_tool_call_event(
         return event
     context = context or ToolOutputCompactionContext()
     payload = dict(event.payload)
+    redacted_descriptor_fields = redact_descriptive_payload_fields(payload)
     try:
         compaction_input = input_from_event(event, payload=payload, context=context)
     except Exception:
+        if redacted_descriptor_fields:
+            return replace(event, payload=payload)
         return event
     try:
         result = compact_tool_output(compaction_input, policy=active_policy)
     except Exception as error:
         result = compactor_error_result(compaction_input, policy=active_policy, error=error)
-    if result_is_noop(result, payload):
+    if redacted_descriptor_fields:
+        result = replace(
+            result,
+            fields=tuple(dict.fromkeys([*result.fields, *redacted_descriptor_fields])),
+            redacted=True,
+        )
+    if result_is_noop(result, payload) and not redacted_descriptor_fields:
         return event
     apply_result(payload, result)
     return replace(event, payload=payload)
@@ -102,6 +117,7 @@ def compact_tool_output(
             compaction_input,
             raw=sanitized_raw,
             redacted_fields=redacted_fields,
+            redacted_raw_fields=redacted_raw_fields,
             applied=False,
             pass_through_reason="below_min_original_bytes",
             rule_id=None,
@@ -123,6 +139,7 @@ def compact_tool_output(
             compaction_input,
             raw=sanitized_raw,
             redacted_fields=redacted_fields,
+            redacted_raw_fields=redacted_raw_fields,
             applied=False,
             pass_through_reason="reducer_failed",
             rule_id=selection.rule_id,
@@ -153,6 +170,7 @@ def compact_tool_output(
             compaction_input,
             raw=sanitized_raw,
             redacted_fields=redacted_fields,
+            redacted_raw_fields=redacted_raw_fields,
             applied=False,
             pass_through_reason="insufficient_savings_failure" if failed else "insufficient_savings_success",
             rule_id=selection.rule_id,

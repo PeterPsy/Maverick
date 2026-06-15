@@ -10,6 +10,7 @@ from unittest.mock import patch
 
 from core.api.platform_state import bootstrap_platform_state
 from core.api.runtime_websocket import runtime_event_frame
+from core.providers.codex_app_server_runtime_notifications import _structured_content_from_completed_item
 from core.runtime.execution_events import RuntimeExecutionEvent, parse_provider_json_event
 from core.runtime.service import create_runtime_session
 from core.runtime.turn_submission_service_output import _RuntimeTurnOutputRecorder
@@ -106,6 +107,69 @@ class RuntimeOutputCompactionIntegrationTest(unittest.TestCase):
         self.assertEqual(recorded.payload["text"], output)
         self.assertNotIn("output_compaction", recorded.payload)
         self.assertEqual(recorder.final_text(output + "world"), "world")
+
+    def test_chat_render_structured_event_survives_long_tool_output_compaction(self) -> None:
+        chat_render = {
+            "kind": "dynamic.view.instance",
+            "payload": {"id": "view_long", "title": "Long output view"},
+        }
+        cli_output = json.dumps(
+            {
+                "status_code": 200,
+                "chat_render": chat_render,
+                "items": [{"id": index, "name": f"item-{index}"} for index in range(3000)],
+            }
+        )
+        item = {
+            "id": "cmd-chat-render-long",
+            "type": "commandExecution",
+            "command": "maverick app dynamic-views mcp call render",
+            "exitCode": 0,
+            "aggregatedOutput": cli_output,
+        }
+        structured = _structured_content_from_completed_item(provider_type="item.completed", item=item)
+        self.assertEqual(structured, chat_render)
+        execution_event = parse_provider_json_event(json.dumps({"type": "item.completed", "item": item}))
+        self.assertIsNotNone(execution_event)
+
+        repo_root = self.make_repo_root()
+        with patch.dict(
+            os.environ,
+            {
+                "MAVERICK_ALLOW_INSECURE_TEST_DEFAULTS": "1",
+                "MAVERICK_ADMIN_USERNAME": "admin",
+                "MAVERICK_ADMIN_PASSWORD": "maverick",
+            },
+        ):
+            state = bootstrap_platform_state(start_path=repo_root, install_builtin_apps=False)
+        session = create_runtime_session(
+            state.runtime_store,
+            session_id="sess-chat-render-compact",
+            workspace_id="default",
+            agent_id="test-agent",
+            start_path=repo_root,
+            now=datetime(2026, 6, 15, tzinfo=UTC),
+        )
+        recorder = _RuntimeTurnOutputRecorder(state, session_id=session.session_id, turn_id="turn-chat-render")
+
+        recorded_tool = recorder.record(execution_event)
+        recorded_structured = recorder.record(
+            RuntimeExecutionEvent(
+                event_type="runtime.output.structured",
+                payload={
+                    "structured_content": structured,
+                    "provider_event_type": "item.completed",
+                    "tool_call_id": item["id"],
+                },
+            )
+        )
+
+        self.assertTrue(recorded_tool.payload["output_compaction"]["applied"])
+        self.assertEqual(recorded_tool.payload["output_compaction"]["rule_id"], "data/json_large")
+        self.assertNotIn("aggregatedOutput", recorded_tool.payload["raw"]["item"])
+        self.assertNotIn("output_compaction", recorded_structured.payload)
+        self.assertEqual(recorded_structured.payload["structured_content"]["kind"], "dynamic.view.instance")
+        self.assertEqual(recorded_structured.payload["structured_content"]["payload"]["id"], "view_long")
 
 
 if __name__ == "__main__":

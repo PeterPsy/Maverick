@@ -118,7 +118,7 @@ def _reduce_git_status(value: str, *, target_bytes: int) -> ReducerOutput:
     for line in lines:
         stripped = line.strip()
         lower = stripped.lower()
-        if stripped.startswith("On branch") or "ahead of" in lower or "behind" in lower:
+        if stripped.startswith("## ") or stripped.startswith("On branch") or "ahead of" in lower or "behind" in lower:
             preserved.append(stripped)
             continue
         if lower.endswith(":"):
@@ -196,6 +196,13 @@ def _git_status_label(stripped: str, section: str) -> str:
     lower = stripped.lower()
     if not stripped:
         return ""
+    if stripped.startswith("?? "):
+        return "untracked"
+    if stripped.startswith("!! "):
+        return ""
+    porcelain_label = _git_porcelain_status_label(stripped)
+    if porcelain_label:
+        return porcelain_label
     if lower.startswith(("modified:", "\tmodified:", "m ")):
         return "modified"
     if lower.startswith(("new file:", "\tnew file:", "a ")):
@@ -208,6 +215,28 @@ def _git_status_label(stripped: str, section: str) -> str:
         return "untracked"
     if "conflict" in section or lower.startswith(("both modified:", "unmerged:")):
         return "conflicted"
+    return ""
+
+
+def _git_porcelain_status_label(stripped: str) -> str:
+    if len(stripped) < 3 or stripped[2] != " ":
+        return ""
+    codes = stripped[:2]
+    valid_codes = set(" MADRCUT?!")
+    if any(code not in valid_codes for code in codes):
+        return ""
+    if "U" in codes or codes in {"AA", "DD"}:
+        return "conflicted"
+    if "R" in codes:
+        return "renamed"
+    if "C" in codes:
+        return "copied"
+    if "A" in codes:
+        return "added"
+    if "D" in codes:
+        return "deleted"
+    if "M" in codes or "T" in codes:
+        return "modified"
     return ""
 
 

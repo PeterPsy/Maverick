@@ -1,0 +1,8 @@
+{
+  "status": "ok",
+  "message": "indexed",
+  "items": [
+    {"id": 1, "name": "item-1", "detail": "sample"},
+    {"id": 2, "name": "item-2", "detail": "sample"}
+  ]
+}

@@ -16,7 +16,7 @@ Phase 1 deliberately does not compact `runtime.output.delta`, because those delt
 
 ## Event Contract
 
-For long tool-call output, Maverick redacts free-form text, applies a rule-based reducer, sanitizes duplicative provider `raw` fields such as `raw.item.aggregatedOutput`, and stores metadata under `payload.output_compaction`.
+For long tool-call output, Maverick redacts free-form text, applies a rule-based reducer, sanitizes duplicative provider `raw` fields such as `raw.item.aggregatedOutput`, and stores metadata under `payload.output_compaction`. Tool-call descriptor fields that are persisted outside the output body, including `command`, `summary`, `cwd`, `query`, and string `argv` entries, are redacted before normalization so secrets do not remain in compacted event metadata or websocket frames.
 
 The metadata includes:
 
@@ -35,9 +35,9 @@ The persisted digest is computed from redacted text. Maverick does not persist a
 
 If a reducer or compactor step fails unexpectedly, the event is still recorded with a redacted pass-through payload, sanitized `raw`, `pass_through_reason: compactor_failed`, and a non-sensitive `compaction_error` class name. If redaction itself fails for a large payload, Maverick records a bounded redaction-failure placeholder instead of persisting unredacted tool output.
 
-Compactor-error fallback is also size-bounded. If the redacted fallback would exceed the active target budget, Maverick writes a canonical bounded field with a `compactor_failed` marker, empties omitted `stdout`/`stderr` strings, and records omission markers in metadata.
+Redacted pass-through paths are also size-bounded when they would exceed the active target budget. This includes reducer failures, below-threshold outputs that are still larger than the UI/provider budget, and outputs whose semantic reducer did not meet the required savings ratio. Maverick keeps `applied: false` and the original `pass_through_reason`, writes a canonical `[tool output bounded]` field, empties omitted `stdout`/`stderr` strings, and records `bounded_pass_through: true` plus omission markers in metadata. Compactor-error fallback uses the same budget discipline with a `compactor_failed` marker.
 
-Built-in match rules are declarative JSON files under `core/runtime/output_compaction/builtin_rules/`. The loader rejects unknown top-level or `match` fields, disables a single rule with diagnostics when one of its regexes is invalid, and never executes code from rule data. Reducers remain Maverick-owned Python functions selected by the validated rule id/reducer name.
+Built-in match rules are declarative JSON files under `core/runtime/output_compaction/builtin_rules/`. A rule can match by command or by output text, which keeps command-family reducers effective for real outputs such as `git status --short --branch` and `git status --porcelain` that do not contain the long-form status headings. The loader rejects unknown top-level or `match` fields, disables a single rule with diagnostics when one of its regexes is invalid, and never executes code from rule data. Reducers remain Maverick-owned Python functions selected by the validated rule id/reducer name.
 
 ## Runtime CLI Profile
 

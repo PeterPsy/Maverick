@@ -1,0 +1,6 @@
+FAIL: test_renders_total (tests.test_widget.WidgetTest.test_renders_total)
+Traceback (most recent call last):
+  File "tests/test_widget.py", line 42, in test_renders_total
+AssertionError: 3 != 2
+
+FAILED (failures=1)

@@ -1,0 +1,10 @@
+{
+  "type": "item.completed",
+  "item": {
+    "id": "cmd-fixture",
+    "type": "commandExecution",
+    "command": "python -m pytest tests/test_widget.py",
+    "exitCode": 1,
+    "aggregatedOutput": "FAILED tests/test_widget.py::test_renders_total\\nTraceback (most recent call last):\\nAssertionError: expected 2"
+  }
+}

@@ -45,6 +45,16 @@ class RuntimeOutputRedactionTest(unittest.TestCase):
         self.assertNotIn("abc123", redacted)
         self.assertIn("<redacted>", redacted)
 
+    def test_redact_text_preserves_shell_quotes_around_sensitive_command_parts(self) -> None:
+        raw = "curl 'https://example.test/path?token=secret-query' -H 'Authorization: Bearer secret-header'"
+
+        redacted = redact_text(raw)
+
+        self.assertEqual(
+            redacted,
+            "curl 'https://example.test/path?token=<redacted>' -H 'Authorization: Bearer <redacted>'",
+        )
+
     def test_sanitize_raw_payload_removes_large_provider_text_and_redacts_sensitive_keys(self) -> None:
         raw = {
             "type": "item.completed",

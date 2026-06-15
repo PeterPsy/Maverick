@@ -308,6 +308,8 @@ def _provider_hook_metadata(result: ToolOutputCompactionResult, *, tool_name: st
         metadata["redaction_failed"] = True
     if result.compaction_error:
         metadata["compaction_error"] = result.compaction_error
+    if result.bounded_pass_through:
+        metadata["bounded_pass_through"] = True
     if result.facts:
         metadata["facts"] = dict(result.facts)
     return metadata

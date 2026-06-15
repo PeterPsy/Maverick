@@ -12,9 +12,12 @@ from core.runtime.output_compaction.models import (
     ToolOutputCompactionInput,
     ToolOutputCompactionResult,
 )
+from core.runtime.output_compaction.redaction import redact_text
 
 
 OUTPUT_FIELDS = ("output", "stdout", "stderr")
+DESCRIPTIVE_TEXT_FIELDS = ("command", "summary", "cwd", "query")
+DESCRIPTIVE_TEXT_SEQUENCE_FIELDS = ("argv",)
 COMPACTION_VERSION = 1
 COMPACTION_SCOPE = "runtime_event_payload"
 
@@ -60,6 +63,38 @@ def apply_result(payload: dict[str, Any], result: ToolOutputCompactionResult) ->
     payload["output_compaction"] = result_metadata(result)
 
 
+def redact_descriptive_payload_fields(payload: dict[str, Any]) -> tuple[str, ...]:
+    """Redact short descriptive tool-call fields that are persisted outside output."""
+    changed: list[str] = []
+    for key in DESCRIPTIVE_TEXT_FIELDS:
+        value = payload.get(key)
+        if not isinstance(value, str):
+            continue
+        redacted = redact_text(value)
+        if redacted != value:
+            payload[key] = redacted
+            changed.append(key)
+
+    for key in DESCRIPTIVE_TEXT_SEQUENCE_FIELDS:
+        value = payload.get(key)
+        if not isinstance(value, list):
+            continue
+        redacted_items: list[Any] = []
+        sequence_changed = False
+        for item in value:
+            if not isinstance(item, str):
+                redacted_items.append(item)
+                continue
+            redacted = redact_text(item)
+            if redacted != item:
+                sequence_changed = True
+            redacted_items.append(redacted)
+        if sequence_changed:
+            payload[key] = redacted_items
+            changed.append(key)
+    return tuple(changed)
+
+
 def result_is_noop(result: ToolOutputCompactionResult, payload: Mapping[str, Any]) -> bool:
     """Return true when compaction did not change an event payload."""
     return (
@@ -99,6 +134,8 @@ def result_metadata(result: ToolOutputCompactionResult) -> dict[str, Any]:
         metadata["redaction_failed"] = True
     if result.compaction_error:
         metadata["compaction_error"] = result.compaction_error
+    if result.bounded_pass_through:
+        metadata["bounded_pass_through"] = True
     if result.facts:
         metadata["facts"] = dict(result.facts)
     return metadata

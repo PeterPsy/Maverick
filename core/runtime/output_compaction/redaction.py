@@ -34,13 +34,13 @@ _PRIVATE_KEY_PATTERN = re.compile(
     r"-----BEGIN [A-Z ]*PRIVATE KEY-----.*?-----END [A-Z ]*PRIVATE KEY-----",
     re.IGNORECASE | re.DOTALL,
 )
-_AUTHORIZATION_PATTERN = re.compile(r"(?i)(authorization\s*:\s*)(bearer|basic)\s+[^;\s\r\n]+")
+_AUTHORIZATION_PATTERN = re.compile(r"(?i)(authorization\s*:\s*)(bearer|basic)\s+[^;\"'\s\r\n]+")
 _COOKIE_LINE_PATTERN = re.compile(r"(?im)^(set-cookie|cookie)\s*:\s*.+$")
 _SENSITIVE_HEADER_PATTERN = re.compile(
     r"(?im)^([A-Z0-9_-]*(?:TOKEN|SECRET|PASSWORD|PASSWD|API[-_]?KEY|PRIVATE[-_]?KEY|ACCESS[-_]?KEY)"
     r"[A-Z0-9_-]*\s*:\s*)[^\r\n]+"
 )
-_QUERY_SECRET_PATTERN = re.compile(r"(?i)([?&](?:" + SENSITIVE_QUERY_KEY_PATTERN + r")=)([^&#\s]+)")
+_QUERY_SECRET_PATTERN = re.compile(r"(?i)([?&](?:" + SENSITIVE_QUERY_KEY_PATTERN + r")=)([^&#\"'\s]+)")
 _ENV_SECRET_PATTERN = re.compile(
     r"(?im)^([A-Z0-9_]*(?:TOKEN|PASSWORD|PASSWD|API_KEY|SECRET|PRIVATE_KEY|ACCESS_KEY|AUTH)[A-Z0-9_]*\s*=\s*)[^\s#]+"
 )

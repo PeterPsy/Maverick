@@ -10,7 +10,10 @@
     "text_regex_any": [
       "On branch ",
       "Changes not staged",
-      "Untracked files"
+      "Untracked files",
+      "^##\\s+",
+      "^\\?\\?\\s+\\S+",
+      "^[ MADRCUT?!]{1,2}\\s+\\S+"
     ]
   }
 }

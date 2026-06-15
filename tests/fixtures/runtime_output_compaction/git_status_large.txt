@@ -1,0 +1,8 @@
+## feature/output-compaction...origin/design [ahead 2]
+ M core/runtime/output_compaction/service.py
+M  core/runtime/output_compaction/results.py
+A  tests/fixtures/runtime_output_compaction/git_status_large.txt
+ D old_runtime_compactor.py
+R  old_name.py -> new_name.py
+UU conflicted_file.py
+?? scratch_output.txt

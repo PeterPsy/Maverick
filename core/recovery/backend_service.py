@@ -13,6 +13,13 @@ from urllib.error import URLError
 from urllib.request import urlopen
 
 
+_SYSTEMCTL_AUTH_FAILURE_MARKERS = (
+    "interactive authentication required",
+    "access denied",
+    "authentication is required",
+)
+
+
 @dataclass(frozen=True)
 class BackendServiceRestartResult:
     """Structured outcome for one backend host restart attempt."""
@@ -63,7 +70,7 @@ def restart_backend_service(
     method = "systemctl"
     if restart.returncode != 0:
         detail = (restart.stderr or restart.stdout or "").strip() or "systemctl restart failed."
-        if "Interactive authentication required" not in detail or previous_pid is None or restart_policy != "always":
+        if not _is_systemctl_auth_failure(detail) or previous_pid is None or restart_policy != "always":
             after = _service_status(service_name=service_name, process_runner=process_runner)
             return BackendServiceRestartResult(
                 service_name=service_name,
@@ -137,6 +144,12 @@ def restart_backend_service(
         sub_state=latest.get("SubState", ""),
         healthy=_health_ok(health_url),
     )
+
+
+def _is_systemctl_auth_failure(detail: str) -> bool:
+    """Return true when systemctl failed because the caller cannot authorize restart."""
+    normalized = detail.casefold()
+    return any(marker in normalized for marker in _SYSTEMCTL_AUTH_FAILURE_MARKERS)
 
 
 def _service_status(

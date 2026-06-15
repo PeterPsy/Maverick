@@ -138,6 +138,14 @@ button {
   transition: background 150ms ease, border-color 150ms ease, transform 150ms ease;
 }
 
+.checklist-sidebar-row[draggable="true"] {
+  cursor: grab;
+}
+
+.checklist-sidebar-row[draggable="true"]:active {
+  cursor: grabbing;
+}
+
 .checklist-sidebar-row:hover,
 .checklist-sidebar-row.is-active {
   border-color: var(--maverick-border-strong);

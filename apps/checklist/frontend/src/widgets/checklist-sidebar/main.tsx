@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import type { DragEvent } from 'react';
 import { createRoot } from 'react-dom/client';
 import { CheckSquare, Search } from 'lucide-react';
 import { listChecklists, readViewFilter, setViewFilter } from '../../api';
@@ -8,6 +9,7 @@ import {
   checklistIdFromWidgetContext,
   type ActiveChecklistSelectionMessage
 } from '../../lib/activeChecklistSelection';
+import { checklistDragPayloadFromItem, writeChecklistDragData } from '../../lib/checklistDragDrop';
 import type { ChecklistItem } from '../../types';
 import '../../styles/sidebar-widget.css';
 
@@ -186,6 +188,10 @@ function ChecklistSidebarWidget() {
     openChecklistInShell(item.id);
   }
 
+  function handleChecklistDragStart(event: DragEvent<HTMLElement>, item: ChecklistItem) {
+    writeChecklistDragData(event.dataTransfer, checklistDragPayloadFromItem(item));
+  }
+
   return (
     <main className={`checklist-sidebar-widget ${isShellMobileLayout ? 'is-shell-mobile' : ''}`}>
       <div className="checklist-sidebar-search-frame">
@@ -212,7 +218,9 @@ function ChecklistSidebarWidget() {
             return (
               <button
                 className={`checklist-sidebar-row ${item.id === selectedChecklistId ? 'is-active' : ''}`}
+                draggable
                 key={item.id}
+                onDragStart={(event) => handleChecklistDragStart(event, item)}
                 onClick={() => selectChecklist(item)}
                 type="button"
               >

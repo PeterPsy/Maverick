@@ -1209,6 +1209,39 @@ describe("ChatComposer reference search", () => {
     });
   });
 
+  it("inserts dragged Checklist items as reference mentions", async () => {
+    const onReferenceAdd = vi.fn();
+    const { getValue } = await renderComposer({ onReferenceAdd });
+    const dataTransfer = new FakeDataTransfer();
+    dataTransfer.setData(
+      "application/x-maverick-checklist",
+      JSON.stringify({
+        checked_count: 3,
+        checklist_id: "check_drag123",
+        deep_link: "/app/checklist/checklists/check_drag123",
+        mode: "agent_plan",
+        owner_app_id: "checklist",
+        status: "active",
+        summary: "Move checklist references into floating chat.",
+        task_count: 5,
+        title: "Checklist drag references",
+      }),
+    );
+
+    await dropOnEditor(dataTransfer);
+
+    expect(getValue()).toBe("@Checklist drag references [ref:checklist/checklist/check_drag123] ");
+    expect(onReferenceAdd).toHaveBeenCalledWith({
+      type: "entity",
+      app_id: "checklist",
+      entity_type: "checklist",
+      entity_id: "check_drag123",
+      label: "Checklist drag references",
+      summary: "Move checklist references into floating chat.",
+      deep_link: "/app/checklist/checklists/check_drag123",
+    });
+  });
+
   it("does not render a file drop overlay inside the composer", async () => {
     const { element } = await renderComposer();
     const dataTransfer = new FakeDataTransfer();

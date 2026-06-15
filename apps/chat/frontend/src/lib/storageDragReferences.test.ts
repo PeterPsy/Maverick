@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { hasStorageReferenceDragData, storageReferenceMentionItemsFromDataTransfer } from "./storageDragReferences";
+import {
+  appReferenceMentionItemsFromDataTransfer,
+  hasAppReferenceDragData,
+  hasStorageReferenceDragData,
+  storageReferenceMentionItemsFromDataTransfer,
+} from "./storageDragReferences";
 
 class FakeDataTransfer {
   types: string[] = [];
@@ -173,6 +178,44 @@ describe("Storage drag reference parsing", () => {
     ]);
   });
 
+  it("converts Checklist drag payloads into chat mention items", () => {
+    const dataTransfer = new FakeDataTransfer();
+    dataTransfer.setData(
+      "application/x-maverick-checklist",
+      JSON.stringify({
+        checked_count: 2,
+        checklist_id: "check_123",
+        deep_link: "/app/checklist/checklists/check_123",
+        mode: "agent_plan",
+        owner_app_id: "checklist",
+        status: "in-progress",
+        summary: "Implement drag-to-chat checklist citations.",
+        task_count: 4,
+        title: "Checklist drag-to-chat citations",
+      }),
+    );
+
+    expect(hasAppReferenceDragData(dataTransfer)).toBe(true);
+    expect(hasStorageReferenceDragData(dataTransfer)).toBe(false);
+    expect(appReferenceMentionItemsFromDataTransfer(dataTransfer)).toEqual([
+      {
+        id: "entity:checklist:checklist:check_123",
+        label: "Checklist drag-to-chat citations",
+        description: "checklist · checklist · Implement drag-to-chat checklist citations.",
+        kind: "entity",
+        reference: {
+          type: "entity",
+          app_id: "checklist",
+          entity_type: "checklist",
+          entity_id: "check_123",
+          label: "Checklist drag-to-chat citations",
+          summary: "Implement drag-to-chat checklist citations.",
+          deep_link: "/app/checklist/checklists/check_123",
+        },
+      },
+    ]);
+  });
+
   it("rejects malformed Storage drag payloads", () => {
     const malformed = new FakeDataTransfer();
     malformed.setData(
@@ -206,5 +249,21 @@ describe("Storage drag reference parsing", () => {
 
     expect(hasStorageReferenceDragData(malformedDrive)).toBe(true);
     expect(storageReferenceMentionItemsFromDataTransfer(malformedDrive)).toEqual([]);
+
+    const malformedChecklist = new FakeDataTransfer();
+    malformedChecklist.setData(
+      "application/x-maverick-checklist",
+      JSON.stringify({
+        checked_count: 2,
+        checklist_id: "check_123",
+        deep_link: "/app/checklist/checklists/other",
+        owner_app_id: "checklist",
+        task_count: 4,
+        title: "Checklist",
+      }),
+    );
+
+    expect(hasAppReferenceDragData(malformedChecklist)).toBe(true);
+    expect(appReferenceMentionItemsFromDataTransfer(malformedChecklist)).toEqual([]);
   });
 });

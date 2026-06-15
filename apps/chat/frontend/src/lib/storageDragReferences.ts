@@ -7,6 +7,7 @@ const STORAGE_FOLDER_DRAG_DATA_TYPE = "application/x-maverick-storage-folder";
 const STORAGE_SELECTION_DRAG_DATA_TYPE = "application/x-maverick-storage-selection";
 const STORAGE_DRIVE_FILE_DRAG_DATA_TYPE = "application/x-maverick-storage-drive-file";
 const STORAGE_DRIVE_FOLDER_DRAG_DATA_TYPE = "application/x-maverick-storage-drive-folder";
+const CHECKLIST_DRAG_DATA_TYPE = "application/x-maverick-checklist";
 
 type StorageRole = "uploaded" | "generated";
 type StoragePreviewKind =
@@ -76,8 +77,24 @@ type StorageDriveFolderDragPayload = {
   provider: "google_drive";
 };
 
+type ChecklistDragPayload = {
+  checked_count: number;
+  checklist_id: string;
+  deep_link: string;
+  mode: string;
+  owner_app_id: string;
+  status: string;
+  summary: string;
+  task_count: number;
+  title: string;
+};
+
 type StorageReferenceDataTransfer = Pick<DataTransfer, "getData" | "types">;
 type StorageReferenceTypeDataTransfer = Pick<DataTransfer, "types">;
+
+export function hasAppReferenceDragData(dataTransfer: StorageReferenceTypeDataTransfer): boolean {
+  return hasStorageReferenceDragData(dataTransfer) || hasChecklistReferenceDragData(dataTransfer);
+}
 
 export function hasStorageReferenceDragData(dataTransfer: StorageReferenceTypeDataTransfer): boolean {
   const types = dataTransferTypes(dataTransfer);
@@ -90,11 +107,23 @@ export function hasStorageReferenceDragData(dataTransfer: StorageReferenceTypeDa
   );
 }
 
+export function appReferenceMentionItemsFromDataTransfer(dataTransfer: StorageReferenceDataTransfer): MentionItem[] {
+  const references = [
+    ...storageReferencesFromDataTransfer(dataTransfer),
+    ...checklistReferencesFromDataTransfer(dataTransfer),
+  ];
+  return uniqueMentionItems(references);
+}
+
 export function storageReferenceMentionItemsFromDataTransfer(dataTransfer: StorageReferenceDataTransfer): MentionItem[] {
   const references = storageReferencesFromDataTransfer(dataTransfer);
+  return uniqueMentionItems(references);
+}
+
+function uniqueMentionItems(references: AppReference[]): MentionItem[] {
   const byKey = new Map<string, MentionItem>();
   for (const reference of references) {
-    byKey.set(referenceKey(reference), storageReferenceMentionItem(reference));
+    byKey.set(referenceKey(reference), appReferenceMentionItem(reference));
   }
   return [...byKey.values()];
 }
@@ -127,6 +156,11 @@ function storageReferencesFromDataTransfer(dataTransfer: StorageReferenceDataTra
   return references;
 }
 
+function checklistReferencesFromDataTransfer(dataTransfer: StorageReferenceDataTransfer): AppReference[] {
+  const checklist = readChecklistDragData(dataTransfer);
+  return checklist ? [checklistReference(checklist)] : [];
+}
+
 function readStorageFileDragData(dataTransfer: Pick<DataTransfer, "getData">): StorageFileDragPayload | null {
   return readStoragePayload(dataTransfer, STORAGE_FILE_DRAG_DATA_TYPE, normalizeStorageFileDragPayload);
 }
@@ -145,6 +179,10 @@ function readStorageDriveFileDragData(dataTransfer: Pick<DataTransfer, "getData"
 
 function readStorageDriveFolderDragData(dataTransfer: Pick<DataTransfer, "getData">): StorageDriveFolderDragPayload | null {
   return readStoragePayload(dataTransfer, STORAGE_DRIVE_FOLDER_DRAG_DATA_TYPE, normalizeStorageDriveFolderDragPayload);
+}
+
+function readChecklistDragData(dataTransfer: Pick<DataTransfer, "getData">): ChecklistDragPayload | null {
+  return readStoragePayload(dataTransfer, CHECKLIST_DRAG_DATA_TYPE, normalizeChecklistDragPayload);
 }
 
 function readStoragePayload<T>(
@@ -225,7 +263,19 @@ function storageDriveFolderReference(payload: StorageDriveFolderDragPayload): Ap
   };
 }
 
-function storageReferenceMentionItem(reference: AppReference): MentionItem {
+function checklistReference(payload: ChecklistDragPayload): AppReference {
+  return {
+    type: "entity",
+    app_id: payload.owner_app_id,
+    entity_type: "checklist",
+    entity_id: payload.checklist_id,
+    label: payload.title,
+    summary: payload.summary || `${payload.checked_count}/${payload.task_count} checked`,
+    deep_link: payload.deep_link,
+  };
+}
+
+function appReferenceMentionItem(reference: AppReference): MentionItem {
   if (reference.type !== "entity") {
     return {
       id: reference.app_id,
@@ -242,6 +292,10 @@ function storageReferenceMentionItem(reference: AppReference): MentionItem {
     kind: "entity",
     reference,
   };
+}
+
+function hasChecklistReferenceDragData(dataTransfer: StorageReferenceTypeDataTransfer): boolean {
+  return dataTransferTypes(dataTransfer).includes(CHECKLIST_DRAG_DATA_TYPE);
 }
 
 function storageFolderEntityId(payload: StorageFolderDragPayload): string {
@@ -405,6 +459,37 @@ function normalizeStorageDriveFolderDragPayload(payload: unknown): StorageDriveF
   };
 }
 
+function normalizeChecklistDragPayload(payload: unknown): ChecklistDragPayload | null {
+  if (!payload || typeof payload !== "object") {
+    return null;
+  }
+  const record = payload as Record<string, unknown>;
+  const ownerAppId = normalizeRequiredText(record.owner_app_id);
+  const checklistId = normalizeReferenceId(record.checklist_id);
+  const title = normalizeRequiredText(record.title);
+  const summary = normalizeRequiredText(record.summary);
+  const mode = normalizeRequiredText(record.mode);
+  const status = normalizeRequiredText(record.status);
+  const taskCount = normalizeNonNegativeInteger(record.task_count);
+  const checkedCount = normalizeNonNegativeInteger(record.checked_count);
+  const deepLink = normalizeChecklistDeepLink(record.deep_link, ownerAppId, checklistId);
+
+  if (!ownerAppId || !checklistId || !title || !deepLink || taskCount === null || checkedCount === null) {
+    return null;
+  }
+  return {
+    checked_count: Math.min(checkedCount, taskCount),
+    checklist_id: checklistId,
+    deep_link: deepLink,
+    mode,
+    owner_app_id: ownerAppId,
+    status,
+    summary,
+    task_count: taskCount,
+    title,
+  };
+}
+
 function normalizeStorageDriveBreadcrumbPayloads(value: unknown, fallbackConnectionId: string): StorageDriveBreadcrumbPayload[] | null {
   if (value === undefined) {
     return [];
@@ -513,6 +598,21 @@ function normalizeRequiredText(value: unknown): string {
 function normalizeReferenceId(value: unknown): string {
   const id = normalizeRequiredText(value);
   return id && !/\s/.test(id) ? id : "";
+}
+
+function normalizeNonNegativeInteger(value: unknown): number | null {
+  if (typeof value !== "number" || !Number.isInteger(value) || value < 0) {
+    return null;
+  }
+  return value;
+}
+
+function normalizeChecklistDeepLink(value: unknown, ownerAppId: string, checklistId: string): string {
+  if (typeof value !== "string" || !ownerAppId || !checklistId) {
+    return "";
+  }
+  const expected = `/app/${encodeURIComponent(ownerAppId)}/checklists/${encodeURIComponent(checklistId)}`;
+  return value.trim() === expected ? expected : "";
 }
 
 function normalizeRelativePath(value: unknown): string {

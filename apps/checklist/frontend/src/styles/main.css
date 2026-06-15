@@ -244,6 +244,14 @@ select option {
   padding: 0.95rem;
 }
 
+.checklist-plan-card[draggable="true"] {
+  cursor: grab;
+}
+
+.checklist-plan-card[draggable="true"]:active {
+  cursor: grabbing;
+}
+
 .checklist-plan-card__header {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;

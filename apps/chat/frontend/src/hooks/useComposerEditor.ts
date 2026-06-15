@@ -19,7 +19,7 @@ import {
   setComposerCaret,
 } from "../lib/composerDom";
 import type { MentionItem, MentionToken } from "../lib/mentions";
-import { hasStorageReferenceDragData, storageReferenceMentionItemsFromDataTransfer } from "../lib/storageDragReferences";
+import { appReferenceMentionItemsFromDataTransfer, hasAppReferenceDragData } from "../lib/storageDragReferences";
 
 type UseComposerEditorParams = {
   caretIndex: number;
@@ -212,7 +212,7 @@ export function useComposerEditor({
     if (disabled) {
       return;
     }
-    if (hasStorageReferenceDragData(event.dataTransfer)) {
+    if (hasAppReferenceDragData(event.dataTransfer)) {
       event.preventDefault();
       event.stopPropagation();
       event.dataTransfer.dropEffect = "copy";
@@ -224,10 +224,10 @@ export function useComposerEditor({
     if (disabled) {
       return;
     }
-    if (hasStorageReferenceDragData(event.dataTransfer)) {
+    if (hasAppReferenceDragData(event.dataTransfer)) {
       event.preventDefault();
       event.stopPropagation();
-      const droppedItems = storageReferenceMentionItemsFromDataTransfer(event.dataTransfer);
+      const droppedItems = appReferenceMentionItemsFromDataTransfer(event.dataTransfer);
       insertAppMentions(droppedItems);
       return;
     }

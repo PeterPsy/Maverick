@@ -4,7 +4,7 @@ import { App } from "../../App";
 import type { ChatThread } from "../../api/client";
 import type { ExternalFileDrop, ExternalMentionDrop } from "../../lib/externalInputs";
 import { filesFromDataTransfer, hasFileDropData } from "../../lib/fileDropAttachments";
-import { hasStorageReferenceDragData, storageReferenceMentionItemsFromDataTransfer } from "../../lib/storageDragReferences";
+import { appReferenceMentionItemsFromDataTransfer, hasAppReferenceDragData } from "../../lib/storageDragReferences";
 import { isThreadBusy, isThreadUnread } from "../chat-sidebar/sections";
 import { FloatingLauncher } from "./FloatingLauncher";
 import { FloatingThreadMenu } from "./FloatingThreadMenu";
@@ -65,7 +65,7 @@ export function FloatingChatFrame({
   }
 
   function handleFloatingDragOver(event: DragEvent<HTMLElement>) {
-    if (!hasStorageReferenceDragData(event.dataTransfer) && !hasFileDropData(event.dataTransfer)) {
+    if (!hasAppReferenceDragData(event.dataTransfer) && !hasFileDropData(event.dataTransfer)) {
       return;
     }
     event.preventDefault();
@@ -74,7 +74,7 @@ export function FloatingChatFrame({
   }
 
   function handleFloatingDrop(event: DragEvent<HTMLElement>) {
-    if (!hasStorageReferenceDragData(event.dataTransfer)) {
+    if (!hasAppReferenceDragData(event.dataTransfer)) {
       const files = filesFromDataTransfer(event.dataTransfer);
       if (!files.length) {
         return;
@@ -90,7 +90,7 @@ export function FloatingChatFrame({
     }
     event.preventDefault();
     event.stopPropagation();
-    const items = storageReferenceMentionItemsFromDataTransfer(event.dataTransfer);
+    const items = appReferenceMentionItemsFromDataTransfer(event.dataTransfer);
     if (!items.length) {
       return;
     }

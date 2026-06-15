@@ -1,4 +1,6 @@
 import { CheckCircle2, Circle, CircleAlert, CircleDotDashed, CircleX, ExternalLink } from 'lucide-react';
+import type { DragEvent } from 'react';
+import { checklistDragPayloadFromItem, writeChecklistDragData } from '../lib/checklistDragDrop';
 import type { AgentSubtask, AgentTask, ChecklistItem } from '../types';
 
 interface ChecklistPlansGridProps {
@@ -38,8 +40,12 @@ function ChecklistPlanCard({
   const isCompleted = item.status === 'completed' || (item.task_count > 0 && item.checked_count >= item.task_count);
   const displayStatus = isCompleted ? 'completed' : item.status;
 
+  function handleDragStart(event: DragEvent<HTMLElement>) {
+    writeChecklistDragData(event.dataTransfer, checklistDragPayloadFromItem(item));
+  }
+
   return (
-    <article className="checklist-plan-card">
+    <article className="checklist-plan-card" draggable onDragStart={handleDragStart}>
       <header className="checklist-plan-card__header">
         <div className="checklist-plan-card__title-group">
           <p className="checklist-kicker">{item.mode.replace('_', ' ')}</p>

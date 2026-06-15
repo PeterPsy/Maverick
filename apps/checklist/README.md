@@ -21,6 +21,7 @@ The app exposes the Maverick product contract:
 - app-owned JSON state under `data/checklist/state.json`
 - reference entity: `checklist`
 - view surface: `main` with standard board state actions
+- the Agent Plans board and sidebar rows can be dragged into Chat's floating/full composer to cite a checklist through the same app-reference marker used by `@` mentions
 
 Agents can now discover three CLI surfaces:
 

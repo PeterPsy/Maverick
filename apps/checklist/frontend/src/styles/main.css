@@ -242,6 +242,7 @@ select option {
   background: var(--maverick-glass-highlight), var(--maverick-glass-surface);
   box-shadow: var(--maverick-glass-edge);
   padding: 0.95rem;
+  transition: border-color 150ms ease, filter 150ms ease, opacity 150ms ease;
 }
 
 .checklist-plan-card[draggable="true"] {
@@ -250,6 +251,12 @@ select option {
 
 .checklist-plan-card[draggable="true"]:active {
   cursor: grabbing;
+}
+
+.checklist-plan-card.is-dragging {
+  border-color: var(--maverick-border);
+  filter: saturate(0.28) brightness(0.68);
+  opacity: 0.48;
 }
 
 .checklist-plan-card__header {

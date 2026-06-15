@@ -135,7 +135,7 @@ button {
   box-shadow: var(--maverick-inner-edge);
   padding: 0 0.7rem;
   text-align: left;
-  transition: background 150ms ease, border-color 150ms ease, transform 150ms ease;
+  transition: background 150ms ease, border-color 150ms ease, filter 150ms ease, opacity 150ms ease, transform 150ms ease;
 }
 
 .checklist-sidebar-row[draggable="true"] {
@@ -144,6 +144,11 @@ button {
 
 .checklist-sidebar-row[draggable="true"]:active {
   cursor: grabbing;
+}
+
+.checklist-sidebar-row.is-dragging {
+  filter: saturate(0.28) brightness(0.68);
+  opacity: 0.48;
 }
 
 .checklist-sidebar-row:hover,

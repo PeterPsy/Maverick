@@ -1,4 +1,5 @@
 import { CheckCircle2, Circle, CircleAlert, CircleDotDashed, CircleX, ExternalLink } from 'lucide-react';
+import { useState } from 'react';
 import type { DragEvent } from 'react';
 import { checklistDragPayloadFromItem, writeChecklistDragData } from '../lib/checklistDragDrop';
 import type { AgentSubtask, AgentTask, ChecklistItem } from '../types';
@@ -37,15 +38,22 @@ function ChecklistPlanCard({
   item: ChecklistItem;
   onOpenChecklist: (item: ChecklistItem) => void;
 }) {
+  const [isDragging, setIsDragging] = useState(false);
   const isCompleted = item.status === 'completed' || (item.task_count > 0 && item.checked_count >= item.task_count);
   const displayStatus = isCompleted ? 'completed' : item.status;
 
   function handleDragStart(event: DragEvent<HTMLElement>) {
+    setIsDragging(true);
     writeChecklistDragData(event.dataTransfer, checklistDragPayloadFromItem(item));
   }
 
   return (
-    <article className="checklist-plan-card" draggable onDragStart={handleDragStart}>
+    <article
+      className={`checklist-plan-card ${isDragging ? 'is-dragging' : ''}`}
+      draggable
+      onDragEnd={() => setIsDragging(false)}
+      onDragStart={handleDragStart}
+    >
       <header className="checklist-plan-card__header">
         <div className="checklist-plan-card__title-group">
           <p className="checklist-kicker">{item.mode.replace('_', ' ')}</p>

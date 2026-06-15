@@ -80,6 +80,7 @@ function ChecklistSidebarWidget() {
   const [items, setItems] = useState<ChecklistItem[]>([]);
   const [query, setQuery] = useState('');
   const [selectedChecklistId, setSelectedChecklistId] = useState('');
+  const [draggingChecklistId, setDraggingChecklistId] = useState('');
   const [isInitialLoading, setIsInitialLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const isShellMobileLayout = useShellMobileLayout();
@@ -189,6 +190,7 @@ function ChecklistSidebarWidget() {
   }
 
   function handleChecklistDragStart(event: DragEvent<HTMLElement>, item: ChecklistItem) {
+    setDraggingChecklistId(item.id);
     writeChecklistDragData(event.dataTransfer, checklistDragPayloadFromItem(item));
   }
 
@@ -217,9 +219,12 @@ function ChecklistSidebarWidget() {
 
             return (
               <button
-                className={`checklist-sidebar-row ${item.id === selectedChecklistId ? 'is-active' : ''}`}
+                className={`checklist-sidebar-row ${item.id === selectedChecklistId ? 'is-active' : ''} ${
+                  item.id === draggingChecklistId ? 'is-dragging' : ''
+                }`}
                 draggable
                 key={item.id}
+                onDragEnd={() => setDraggingChecklistId('')}
                 onDragStart={(event) => handleChecklistDragStart(event, item)}
                 onClick={() => selectChecklist(item)}
                 type="button"

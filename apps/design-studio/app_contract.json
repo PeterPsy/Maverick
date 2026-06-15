@@ -237,17 +237,21 @@
       {
         "id": "opendesign",
         "runtime": "python",
+        "package_manager": "corepack/pnpm",
         "working_directory": "service",
         "command": [
           "python3",
-          "opendesign_stub.py"
+          "opendesign_launcher.py"
         ],
         "env": {
           "OD_BIND_HOST": "127.0.0.1",
           "OD_PORT": "${service.port}",
           "OD_DATA_DIR": "${app.data_dir}/opendesign",
           "OD_MEDIA_CONFIG_DIR": "${app.data_dir}/opendesign/media-config",
-          "OD_API_TOKEN": "${service_secret:od_api_token}"
+          "OD_API_TOKEN": "${service_secret:od_api_token}",
+          "OD_SANDBOX_MODE": "1",
+          "MAVERICK_OPENDESIGN_BUNDLE_DIR": "${app.source_dir}/service/vendor/open-design",
+          "MAVERICK_OPENDESIGN_ALLOW_FALLBACK": "1"
         },
         "bind": {
           "host": "127.0.0.1",
@@ -266,7 +270,19 @@
             "pass_through": [
               {
                 "method": "GET",
-                "path_prefix": "/"
+                "path_prefix": "/index.html"
+              },
+              {
+                "method": "GET",
+                "path_prefix": "/_next"
+              },
+              {
+                "method": "GET",
+                "path_prefix": "/assets"
+              },
+              {
+                "method": "GET",
+                "path_prefix": "/favicon.ico"
               },
               {
                 "method": "GET",
@@ -282,11 +298,7 @@
               },
               {
                 "method": "GET",
-                "path_prefix": "/api/projects"
-              },
-              {
-                "method": "POST",
-                "path_prefix": "/api/projects"
+                "path_prefix": "/api/media/models"
               }
             ],
             "handled_by_core": [
@@ -295,6 +307,9 @@
               },
               {
                 "path_prefix": "/api/media/config"
+              },
+              {
+                "path_prefix": "/api/projects"
               },
               {
                 "path_prefix": "/api/import/storage"
@@ -308,10 +323,43 @@
                 "path_prefix": "/api/import/folder"
               },
               {
-                "path_prefix": "/api/terminal"
+                "path_prefix": "/api/dialog/open-folder"
               },
               {
-                "path_prefix": "/api/terminals"
+                "path_prefix": "/api/system/open-external"
+              },
+              {
+                "path_prefix": "/api/runs"
+              },
+              {
+                "path_prefix": "/api/chat"
+              },
+              {
+                "path_prefix": "/api/agents"
+              },
+              {
+                "path_prefix": "/api/mcp"
+              },
+              {
+                "path_prefix": "/api/plugins/upload-folder"
+              },
+              {
+                "path_prefix": "/api/app-config"
+              },
+              {
+                "path_prefix": "/api/orbit"
+              },
+              {
+                "path_prefix": "/api/research"
+              },
+              {
+                "path_prefix": "/api/deploy"
+              },
+              {
+                "path_prefix": "/api/live-artifacts"
+              },
+              {
+                "path_prefix": "/api/tools/live-artifacts"
               }
             ]
           }

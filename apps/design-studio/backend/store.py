@@ -13,6 +13,7 @@ STATE_FILE = "state.json"
 SCHEMA_VERSION = "1"
 OPENDESIGN_VERSION = "0.10.1"
 OPENDESIGN_COMMIT = "eb245799adf07e7727ad5f970485d809bad5780e"
+OPENDESIGN_MODE = "curated-open-design-daemon"
 
 
 def utc_now() -> str:
@@ -27,7 +28,7 @@ def default_state() -> dict[str, Any]:
         "opendesign": {
             "version": OPENDESIGN_VERSION,
             "commit": OPENDESIGN_COMMIT,
-            "mode": "governed-sidecar-stub",
+            "mode": OPENDESIGN_MODE,
             "provider_mode": "maverick-proxy",
         },
         "projects": [],
@@ -36,8 +37,39 @@ def default_state() -> dict[str, Any]:
             "selected_project_id": "",
         },
         "route_policy": {
-            "blocked": ["/api/import/folder", "/api/terminal", "/api/terminals"],
-            "handled_by_core": ["/api/provider", "/api/media/config", "/api/import/storage", "/api/export/storage"],
+            "pass_through": [
+                "/index.html",
+                "/_next",
+                "/assets",
+                "/favicon.ico",
+                "/api/health",
+                "/api/ready",
+                "/api/version",
+                "/api/media/models",
+            ],
+            "blocked": [
+                "/api/import/folder",
+                "/api/dialog/open-folder",
+                "/api/system/open-external",
+                "/api/runs",
+                "/api/chat",
+                "/api/agents",
+                "/api/mcp",
+                "/api/plugins/upload-folder",
+                "/api/app-config",
+                "/api/orbit",
+                "/api/research",
+                "/api/deploy",
+                "/api/live-artifacts",
+                "/api/tools/live-artifacts",
+            ],
+            "handled_by_core": [
+                "/api/provider",
+                "/api/media/config",
+                "/api/projects",
+                "/api/import/storage",
+                "/api/export/storage",
+            ],
         },
         "updated_at": utc_now(),
     }
@@ -55,10 +87,10 @@ def ensure_state(data_root: str | Path) -> dict[str, Any]:
 def read_state(data_root: str | Path) -> dict[str, Any]:
     """Read current Design Studio state."""
     state = read_json_state(data_root, STATE_FILE, default_state())
-    if state.get("schema_version") != SCHEMA_VERSION:
-        state = migrate_state_payload(state)
-        write_json_state(data_root, STATE_FILE, state)
-    return state
+    migrated = migrate_state_payload(state)
+    if migrated != state:
+        write_json_state(data_root, STATE_FILE, migrated)
+    return migrated
 
 
 def update_state(data_root: str | Path, updater: Callable[[dict[str, Any]], dict[str, Any] | None]) -> dict[str, Any]:
@@ -74,9 +106,12 @@ def update_state(data_root: str | Path, updater: Callable[[dict[str, Any]], dict
 
 def migrate_state_payload(payload: dict[str, Any]) -> dict[str, Any]:
     """Migrate a state payload to the current schema."""
-    state = default_state()
+    defaults = default_state()
+    state = defaults.copy()
     state.update({key: value for key, value in payload.items() if key in state})
     state["schema_version"] = SCHEMA_VERSION
+    state["opendesign"] = defaults["opendesign"]
+    state["route_policy"] = defaults["route_policy"]
     if not isinstance(state.get("projects"), list):
         state["projects"] = []
     if not isinstance(state.get("view_state"), dict):

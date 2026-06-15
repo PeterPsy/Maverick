@@ -14,6 +14,7 @@ Common operations:
 - Import only workspace Storage files using `workspace_relative_path` values under `storage/uploaded/` or `storage/generated/`; hosted imports are read through the `storage-read` dependency backend.
 - Export project metadata and notes to `storage/generated/design-studio/<project-id>/` through the `storage-write` dependency backend.
 - Verify the OpenDesign sidecar through the app state `sidecar.ready_url` or `sidecar.version_url`.
+- Treat `service/opendesign_launcher.py` as the sidecar entrypoint. It starts a curated OpenDesign bundle from `service/vendor/open-design/` when that bundle has been materialized.
 
 Sandbox policy:
 
@@ -21,4 +22,4 @@ Sandbox policy:
 - Do not request `/api/import/folder`, terminal, or pty routes in sandbox mode.
 - Provider credentials must remain in Maverick/Vault-owned flows; do not persist provider keys in OpenDesign media config.
 
-The initial app ships with a governed OpenDesign-compatible sidecar stub pinned to upstream OpenDesign `0.10.1` metadata. Replacing it with the real daemon must keep the same route policy and Storage/Vault boundaries.
+The app uses a governed OpenDesign launcher pinned to upstream OpenDesign `0.10.1` metadata. `service/opendesign_compat.py` is only a fallback for diagnostics or fresh checkouts without a materialized bundle; real daemon work should use the curated bundle produced from `service/opendesign_bundle.json`.

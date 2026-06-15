@@ -1,0 +1,163 @@
+{
+  "schema_version": "1",
+  "upstream": {
+    "repository": "https://github.com/nexu-io/open-design.git",
+    "tag": "open-design-v0.10.1",
+    "commit": "eb245799adf07e7727ad5f970485d809bad5780e",
+    "version": "0.10.1"
+  },
+  "bundle": {
+    "default_relative_path": "vendor/open-design",
+    "node": "~24",
+    "package_manager": "pnpm@10.33.2",
+    "daemon_package": "@open-design/daemon",
+    "built_entrypoint": "apps/daemon/dist/cli.js",
+    "source_start_command": [
+      "pnpm",
+      "--filter",
+      "@open-design/daemon",
+      "run",
+      "daemon"
+    ],
+    "web_static_dir": "apps/web/out"
+  },
+  "include_paths": [
+    "package.json",
+    "pnpm-lock.yaml",
+    "pnpm-workspace.yaml",
+    "apps/daemon",
+    "apps/web",
+    "packages/agui-adapter",
+    "packages/components",
+    "packages/contracts",
+    "packages/diagnostics",
+    "packages/host",
+    "packages/platform",
+    "packages/plugin-runtime",
+    "packages/registry-protocol",
+    "packages/sidecar",
+    "packages/sidecar-proto",
+    "assets",
+    "craft",
+    "design-systems",
+    "design-templates",
+    "plugins/registry",
+    "prompt-templates",
+    "skills"
+  ],
+  "exclude_paths": [
+    "apps/desktop",
+    "apps/landing-page",
+    "apps/packaged",
+    "apps/telemetry-worker",
+    "charts",
+    "deploy",
+    "e2e",
+    "node_modules",
+    "plugins/marketplaces",
+    "tools"
+  ],
+  "sandbox": {
+    "env": {
+      "OD_SANDBOX_MODE": "1",
+      "OD_BIND_HOST": "127.0.0.1",
+      "OD_DATA_DIR": "${app.data_dir}/opendesign",
+      "OD_MEDIA_CONFIG_DIR": "${app.data_dir}/opendesign/media-config"
+    },
+    "pass_through": [
+      {
+        "method": "GET",
+        "path_prefix": "/index.html"
+      },
+      {
+        "method": "GET",
+        "path_prefix": "/_next"
+      },
+      {
+        "method": "GET",
+        "path_prefix": "/assets"
+      },
+      {
+        "method": "GET",
+        "path_prefix": "/favicon.ico"
+      },
+      {
+        "method": "GET",
+        "path_prefix": "/api/health"
+      },
+      {
+        "method": "GET",
+        "path_prefix": "/api/ready"
+      },
+      {
+        "method": "GET",
+        "path_prefix": "/api/version"
+      },
+      {
+        "method": "GET",
+        "path_prefix": "/api/media/models"
+      }
+    ],
+    "handled_by_core": [
+      {
+        "path_prefix": "/api/provider"
+      },
+      {
+        "path_prefix": "/api/media/config"
+      },
+      {
+        "path_prefix": "/api/projects"
+      },
+      {
+        "path_prefix": "/api/import/storage"
+      },
+      {
+        "path_prefix": "/api/export/storage"
+      }
+    ],
+    "blocked": [
+      {
+        "path_prefix": "/api/import/folder"
+      },
+      {
+        "path_prefix": "/api/dialog/open-folder"
+      },
+      {
+        "path_prefix": "/api/system/open-external"
+      },
+      {
+        "path_prefix": "/api/runs"
+      },
+      {
+        "path_prefix": "/api/chat"
+      },
+      {
+        "path_prefix": "/api/agents"
+      },
+      {
+        "path_prefix": "/api/mcp"
+      },
+      {
+        "path_prefix": "/api/plugins/upload-folder"
+      },
+      {
+        "path_prefix": "/api/app-config"
+      },
+      {
+        "path_prefix": "/api/orbit"
+      },
+      {
+        "path_prefix": "/api/research"
+      },
+      {
+        "path_prefix": "/api/deploy"
+      },
+      {
+        "path_prefix": "/api/live-artifacts"
+      },
+      {
+        "path_prefix": "/api/tools/live-artifacts"
+      }
+    ]
+  }
+}

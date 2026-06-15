@@ -15,9 +15,13 @@ It owns:
 
 The app contract is shaped for upstream `nexu-io/open-design` tag `open-design-v0.10.1`, commit `eb245799adf07e7727ad5f970485d809bad5780e`.
 
-This first Maverick implementation ships a small OpenDesign-compatible sidecar stub at `service/opendesign_stub.py`. It proves the Maverick sidecar lifecycle, loopback binding, technical token injection, route policy, and frontend proxy path without vendoring the full upstream repository into this change.
+Design Studio now starts `service/opendesign_launcher.py` as the declared sidecar command. The launcher looks for a curated OpenDesign bundle under `service/vendor/open-design/`, validates the sandbox runtime environment, writes only redaction-safe launcher status under `data/design-studio/opendesign/launcher-status.json`, and then starts the OpenDesign daemon through its built `apps/daemon/dist/cli.js` or through the curated source bundle's pnpm daemon script.
 
-The upstream tag was inspected during implementation. A shallow checkout at the pinned commit is about 268 MB and includes web, daemon, desktop, deploy, Helm/chart, design-system, skill, and plugin trees. The daemon also depends on host-adjacent packages such as `node-pty`. Vendoring it directly into this app would therefore mix sandbox-safe surfaces with full-access surfaces the Maverick contract must keep blocked. The production replacement should be a curated sidecar bundle generated from that pinned upstream tag, with only the sandbox-compatible web/daemon routes exposed through the `route_policy` already declared here.
+The packaging recipe is declared in `service/opendesign_bundle.json` and implemented by `service/package_opendesign.py`. It copies only the pinned daemon/web/runtime packages and bundled design assets needed for the sandbox sidecar; desktop, Electron-packaged, deploy, e2e, marketplace, and host-tool trees stay out of the Maverick bundle.
+
+Fresh checkouts may not include the materialized Node bundle. In that case the launcher can run `service/opendesign_compat.py` when `MAVERICK_OPENDESIGN_ALLOW_FALLBACK=1`, which keeps tests and diagnostics usable. That fallback is no longer the declared primary sidecar and should not be treated as the production OpenDesign daemon.
+
+The upstream tag was inspected during implementation. A full shallow checkout at the pinned commit includes web, daemon, desktop, deploy, Helm/chart, design-system, skill, and plugin trees. The daemon also depends on host-adjacent packages such as `node-pty`. Vendoring the full repository directly would mix sandbox-safe surfaces with full-access surfaces the Maverick contract must keep blocked. The curated bundle keeps the upstream pin while narrowing what is copied and what the proxy exposes.
 
 The production daemon replacement must preserve these boundaries:
 
@@ -25,6 +29,7 @@ The production daemon replacement must preserve these boundaries:
 - use `OD_DATA_DIR` below the app data root
 - use `OD_MEDIA_CONFIG_DIR` below the app data root
 - receive only the technical `OD_API_TOKEN`
+- run with `OD_SANDBOX_MODE=1`
 - keep provider keys in Maverick/Vault-owned flows
 - keep host folder import, terminal, and pty routes blocked in sandbox mode
 
@@ -71,11 +76,11 @@ The app is installed into workspaces through the generic built-in app source reg
 
 The contract declares frontend, backend, CLI, MCP, lifecycle hooks, a bundled skill, referenceable `design_project` entities, standard view-state actions, Storage dependencies, and one app-owned HTTP sidecar.
 
-The sidecar is sandbox-compatible because it binds to loopback, receives a generated technical token, writes runtime data under the app data root, writes logs under `logs/apps/design-studio/`, and exposes only routes allowed by `route_policy`.
+The sidecar is sandbox-compatible because it binds to loopback, receives a generated technical token, writes runtime data under the app data root, writes logs under `logs/apps/design-studio/`, runs OpenDesign in sandbox mode, and exposes only routes allowed by `route_policy`.
 
 The core sidecar proxy uses the ASGI streaming path for Design Studio routes. Request bodies are forwarded to the sidecar as chunks instead of through the JSON app-backend body limit, responses are streamed back to the browser, and SSE responses are preserved without exposing the generated `OD_API_TOKEN` to the client.
 
-Routes declared as `handled_by_core` are now routed to the Design Studio backend with the `sidecar_core_handler` surface instead of reaching the OpenDesign sidecar. The implemented sandbox handlers cover:
+Routes declared as `handled_by_core` are routed to the Design Studio backend with the `sidecar_core_handler` surface instead of reaching the OpenDesign sidecar. The implemented sandbox handlers cover:
 
 - `GET /api/media/config`, returning sanitized Maverick-managed provider config without keys
 - `POST /api/import/storage`, importing through the selected `storage-read` dependency backend
@@ -97,6 +102,6 @@ maverick app design-studio cli list --json
 
 Current intentional omissions:
 
-- the full OpenDesign daemon is not vendored yet
+- the curated OpenDesign bundle source/build output is generated by `service/package_opendesign.py` and is not committed as `node_modules`
 - provider proxy routes are intercepted by core/app handlers, but real provider adapters are not implemented yet
 - full-access terminal, Local CLI, and host-folder import are not part of the sandbox MVP

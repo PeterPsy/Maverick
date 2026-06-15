@@ -36,6 +36,7 @@ export type DesignStudioState = {
     selected_project_id: string;
   };
   route_policy: {
+    pass_through: string[];
     blocked: string[];
     handled_by_core: string[];
   };
@@ -54,5 +55,11 @@ export type DesignStudioStatus = {
     version: string;
     commit: string;
     mode: string;
+    bundle: Record<string, string>;
+    runtime: {
+      bundle_configured: boolean;
+      mode: string;
+      detail: string;
+    };
   };
 };

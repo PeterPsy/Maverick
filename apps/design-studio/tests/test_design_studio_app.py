@@ -8,10 +8,14 @@ import json
 import os
 from pathlib import Path
 import shutil
+import socket
 import subprocess
 import sys
+import time
 from tempfile import TemporaryDirectory
 import unittest
+from urllib.error import URLError
+from urllib.request import Request, urlopen
 
 from core.api.platform_host import PlatformHost
 from core.api.platform_state import bootstrap_platform_state
@@ -35,11 +39,86 @@ class DesignStudioAppTests(unittest.TestCase):
         self.assertEqual(parsed.contract.capabilities.skills, ["design-studio-ops"])
         sidecar = parsed.contract.services.http_sidecars[0]
         self.assertEqual(sidecar.service_id, "opendesign")
+        self.assertEqual(sidecar.package_manager, "corepack/pnpm")
+        self.assertEqual(sidecar.command, ["python3", "opendesign_launcher.py"])
         self.assertEqual(sidecar.bind.host, "127.0.0.1")
         self.assertTrue(sidecar.proxy.streaming)
         self.assertTrue(sidecar.proxy.sse)
         self.assertFalse(sidecar.proxy.websocket)
-        self.assertEqual(sidecar.proxy.route_policy.blocked[0].path_prefix, "/api/import/folder")
+        pass_through = [rule.path_prefix for rule in sidecar.proxy.route_policy.pass_through]
+        blocked = [rule.path_prefix for rule in sidecar.proxy.route_policy.blocked]
+        handled_by_core = [rule.path_prefix for rule in sidecar.proxy.route_policy.handled_by_core]
+        self.assertIn("/index.html", pass_through)
+        self.assertNotIn("/", pass_through)
+        self.assertIn("/api/dialog/open-folder", blocked)
+        self.assertIn("/api/media/config", handled_by_core)
+        self.assertIn("/api/projects", handled_by_core)
+
+    def test_opendesign_bundle_manifest_matches_contract_policy(self) -> None:
+        parsed = parse_app_contract_file(APP_ROOT)
+        sidecar = parsed.contract.services.http_sidecars[0]
+        manifest = json.loads((APP_ROOT / "service" / "opendesign_bundle.json").read_text(encoding="utf-8"))
+
+        self.assertEqual(manifest["upstream"]["commit"], "eb245799adf07e7727ad5f970485d809bad5780e")
+        self.assertEqual(manifest["bundle"]["daemon_package"], "@open-design/daemon")
+        self.assertIn("apps/daemon", manifest["include_paths"])
+        self.assertIn("apps/web", manifest["include_paths"])
+        self.assertIn("apps/desktop", manifest["exclude_paths"])
+        self.assertEqual(
+            [rule["path_prefix"] for rule in manifest["sandbox"]["pass_through"]],
+            [rule.path_prefix for rule in sidecar.proxy.route_policy.pass_through],
+        )
+        self.assertEqual(
+            [rule["path_prefix"] for rule in manifest["sandbox"]["blocked"]],
+            [rule.path_prefix for rule in sidecar.proxy.route_policy.blocked],
+        )
+        self.assertEqual(
+            [rule["path_prefix"] for rule in manifest["sandbox"]["handled_by_core"]],
+            [rule.path_prefix for rule in sidecar.proxy.route_policy.handled_by_core],
+        )
+
+    def test_opendesign_launcher_uses_fallback_only_when_bundle_is_missing(self) -> None:
+        with TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            data_dir = root / "opendesign"
+            port = self._free_port()
+            token = "launcher-test-token"
+            env = {
+                **os.environ,
+                "PYTHONPATH": str(REPO_ROOT),
+                "OD_BIND_HOST": "127.0.0.1",
+                "OD_PORT": str(port),
+                "OD_DATA_DIR": str(data_dir),
+                "OD_MEDIA_CONFIG_DIR": str(data_dir / "media-config"),
+                "OD_API_TOKEN": token,
+                "OD_SANDBOX_MODE": "1",
+                "MAVERICK_OPENDESIGN_BUNDLE_DIR": str(root / "missing-open-design"),
+                "MAVERICK_OPENDESIGN_ALLOW_EXTERNAL_BUNDLE": "1",
+                "MAVERICK_OPENDESIGN_ALLOW_FALLBACK": "1",
+            }
+            process = subprocess.Popen(
+                [sys.executable, str(APP_ROOT / "service" / "opendesign_launcher.py")],
+                cwd=str(APP_ROOT / "service"),
+                env=env,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,
+            )
+            self.addCleanup(self._stop_process, process)
+            payload = self._wait_for_json(
+                f"http://127.0.0.1:{port}/api/version",
+                headers={"Authorization": f"Bearer {token}"},
+                process=process,
+            )
+
+            self.assertEqual(payload["mode"], "maverick-compatibility-fallback")
+            self.assertFalse(payload["bundle_configured"])
+            self.assertTrue(payload["technical_token_seen"])
+            status_path = data_dir / "launcher-status.json"
+            self.assertTrue(status_path.is_file())
+            status_text = status_path.read_text(encoding="utf-8")
+            self.assertIn("compatibility-fallback", status_text)
+            self.assertNotIn(token, status_text)
 
     def test_backend_creates_imports_and_requests_storage_export_writes(self) -> None:
         with TemporaryDirectory() as temp_dir:
@@ -360,7 +439,7 @@ class DesignStudioAppTests(unittest.TestCase):
                     app,
                     path="/api/apps/design-studio/sidecars/opendesign/api/provider/chat",
                     method="POST",
-                    body={"apiKey": "sk-design-studio-test", "prompt": "dashboard"},
+                    body={"apiKey": "provider-fixture-token", "prompt": "dashboard"},
                     cookie=cookie,
                 )
                 import_status, import_body, _import_headers = self._invoke(
@@ -380,6 +459,16 @@ class DesignStudioAppTests(unittest.TestCase):
                     body={"project_id": project_id},
                     cookie=cookie,
                 )
+                projects_status, projects_body, _projects_headers = self._invoke(
+                    app,
+                    path="/api/apps/design-studio/sidecars/opendesign/api/projects",
+                    cookie=cookie,
+                )
+                terminal_status, terminal_body, _terminal_headers = self._invoke(
+                    app,
+                    path=f"/api/apps/design-studio/sidecars/opendesign/api/projects/{project_id}/terminals",
+                    cookie=cookie,
+                )
                 state_status, state_body, _state_headers = self._invoke_backend(
                     app,
                     cookie=cookie,
@@ -390,6 +479,8 @@ class DesignStudioAppTests(unittest.TestCase):
             provider_payload = json.loads(provider_body.decode("utf-8"))
             import_payload = json.loads(import_body.decode("utf-8"))
             export_payload = json.loads(export_body.decode("utf-8"))
+            projects_payload = json.loads(projects_body.decode("utf-8"))
+            terminal_payload = json.loads(terminal_body.decode("utf-8"))
             state_payload = json.loads(state_body.decode("utf-8"))
             media_config_root = repo_root / "workspaces" / "default" / "data" / "design-studio" / "opendesign" / "media-config"
             media_config_text = "\n".join(path.read_text(encoding="utf-8") for path in media_config_root.glob("*") if path.is_file())
@@ -406,7 +497,7 @@ class DesignStudioAppTests(unittest.TestCase):
             self.assertEqual(provider_status, 503)
             self.assertEqual(provider_payload["error"], "provider_proxy_not_configured")
             self.assertFalse(provider_payload["sidecar_reached"])
-            self.assertNotIn("sk-design-studio-test", media_config_text)
+            self.assertNotIn("provider-fixture-token", media_config_text)
             self.assertEqual(import_status, 200)
             self.assertEqual(
                 [item["status"] for item in import_payload["dependency_backend_request_results"]],
@@ -419,6 +510,10 @@ class DesignStudioAppTests(unittest.TestCase):
                 [item["status"] for item in export_payload["dependency_backend_request_results"]],
                 ["completed", "completed"],
             )
+            self.assertEqual(projects_status, 200)
+            self.assertEqual(projects_payload["projects"][0]["id"], project_id)
+            self.assertEqual(terminal_status, 404)
+            self.assertEqual(terminal_payload["error"], "opendesign_project_route_not_available")
             self.assertEqual(state_status, 200)
             self.assertEqual(final_import["status"], "imported")
             self.assertEqual(final_export["status"], "exported")
@@ -435,6 +530,42 @@ class DesignStudioAppTests(unittest.TestCase):
             check=True,
         )
         return json.loads(process.stdout or "{}")
+
+    def _free_port(self) -> int:
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
+            sock.bind(("127.0.0.1", 0))
+            return int(sock.getsockname()[1])
+
+    def _wait_for_json(
+        self,
+        url: str,
+        *,
+        headers: dict[str, str],
+        process: subprocess.Popen[str],
+    ) -> dict:
+        last_error = ""
+        for _attempt in range(50):
+            if process.poll() is not None:
+                stdout, stderr = process.communicate(timeout=1)
+                self.fail(f"OpenDesign launcher exited early: stdout={stdout!r} stderr={stderr!r}")
+            try:
+                with urlopen(Request(url, headers=headers), timeout=0.2) as response:
+                    return json.loads(response.read().decode("utf-8"))
+            except (OSError, URLError) as error:
+                last_error = str(error)
+                time.sleep(0.1)
+        self.fail(f"OpenDesign launcher did not become ready: {last_error}")
+
+    def _stop_process(self, process: subprocess.Popen[str]) -> None:
+        if process.poll() is not None:
+            process.communicate(timeout=1)
+            return
+        process.terminate()
+        try:
+            process.communicate(timeout=5)
+        except subprocess.TimeoutExpired:
+            process.kill()
+            process.communicate(timeout=5)
 
     def _temporary_repo_root(self, root: Path) -> Path:
         repo_root = root / "maverick"

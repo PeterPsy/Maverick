@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from base64 import b64decode
 import binascii
+import json
 from pathlib import Path
 import re
 import shutil
@@ -12,7 +13,7 @@ from uuid import uuid4
 
 from core.app_sdk.storage import safe_app_data_path
 
-from store import OPENDESIGN_COMMIT, OPENDESIGN_VERSION, ensure_state, update_state, utc_now
+from store import OPENDESIGN_COMMIT, OPENDESIGN_MODE, OPENDESIGN_VERSION, ensure_state, update_state, utc_now
 
 
 PROJECT_ID_PATTERN = re.compile(r"^design_[a-f0-9]{12}$")
@@ -40,14 +41,16 @@ def status_payload(payload: dict[str, Any]) -> dict[str, Any]:
         "state": _public_state(state),
         "sidecar": {
             "id": "opendesign",
-            "proxy_url": f"/api/apps/{app_id}/sidecars/opendesign/",
+            "proxy_url": f"/api/apps/{app_id}/sidecars/opendesign/index.html",
             "ready_url": f"/api/apps/{app_id}/sidecars/opendesign/api/ready",
             "version_url": f"/api/apps/{app_id}/sidecars/opendesign/api/version",
         },
         "opendesign": {
             "version": OPENDESIGN_VERSION,
             "commit": OPENDESIGN_COMMIT,
-            "mode": "governed-sidecar-stub",
+            "mode": OPENDESIGN_MODE,
+            "bundle": _opendesign_bundle_summary(),
+            "runtime": _opendesign_runtime_status(payload["data_root"]),
         },
     }
 
@@ -426,6 +429,8 @@ def handle_sidecar_core_route(payload: dict[str, Any], arguments: dict[str, Any]
     method = str(payload.get("method") or "GET").upper()
     if _route_matches(route_path, "/api/media/config"):
         return _handle_media_config_route(payload, arguments, method=method)
+    if _route_matches(route_path, "/api/projects"):
+        return _handle_projects_route(payload, arguments, method=method, route_path=route_path)
     if _route_matches(route_path, "/api/import/storage"):
         return _handle_storage_import_route(payload, arguments, method=method)
     if _route_matches(route_path, "/api/export/storage"):
@@ -458,6 +463,26 @@ def _handle_media_config_route(payload: dict[str, Any], arguments: dict[str, Any
             "message": "Provider credentials are managed by Maverick/Vault.",
         },
     }
+
+
+def _handle_projects_route(
+    payload: dict[str, Any],
+    arguments: dict[str, Any],
+    *,
+    method: str,
+    route_path: str,
+) -> dict[str, Any]:
+    if route_path not in {"/api/projects", "/api/projects/"}:
+        raise DesignStudioError(
+            "opendesign_project_route_not_available",
+            "This OpenDesign project subroute is not exposed in Maverick sandbox mode.",
+            status_code=404,
+        )
+    if method == "GET":
+        return {"status_code": 200, "json": list_projects(payload)}
+    if method == "POST":
+        return {"status_code": 201, "json": create_project(payload, _sidecar_core_body(arguments))}
+    raise DesignStudioError("method_not_allowed", "Project routes require GET or POST.", status_code=405)
 
 
 def _handle_storage_import_route(payload: dict[str, Any], arguments: dict[str, Any], *, method: str) -> dict[str, Any]:
@@ -528,6 +553,37 @@ def _public_state(state: dict[str, Any]) -> dict[str, Any]:
         "view_state": state.get("view_state", {}),
         "route_policy": state.get("route_policy", {}),
         "updated_at": state.get("updated_at", ""),
+    }
+
+
+def _opendesign_bundle_summary() -> dict[str, Any]:
+    manifest_path = Path(__file__).resolve().parents[1] / "service" / "opendesign_bundle.json"
+    try:
+        payload = json.loads(manifest_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return {}
+    upstream = payload.get("upstream") if isinstance(payload.get("upstream"), dict) else {}
+    bundle = payload.get("bundle") if isinstance(payload.get("bundle"), dict) else {}
+    return {
+        "repository": upstream.get("repository", ""),
+        "tag": upstream.get("tag", ""),
+        "commit": upstream.get("commit", ""),
+        "default_relative_path": bundle.get("default_relative_path", ""),
+        "node": bundle.get("node", ""),
+        "package_manager": bundle.get("package_manager", ""),
+    }
+
+
+def _opendesign_runtime_status(data_root: str) -> dict[str, Any]:
+    status_path = Path(data_root) / "opendesign" / "launcher-status.json"
+    try:
+        payload = json.loads(status_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return {"bundle_configured": False, "mode": "not-started", "detail": ""}
+    return {
+        "bundle_configured": bool(payload.get("bundle_configured")),
+        "mode": str(payload.get("mode") or "unknown"),
+        "detail": str(payload.get("detail") or ""),
     }
 
 

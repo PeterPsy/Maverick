@@ -93,7 +93,24 @@ class RuntimeOutputRedactionTest(unittest.TestCase):
 
         result = sanitize_raw_payload(raw, omit_text_threshold_bytes=20)
 
-        self.assertEqual(result.raw, {"items": [{"type": "kept"}], "has_omitted_provider_payload": True, "omitted_provider_payload_fields": ("raw.items[0].text",)})
+        self.assertEqual(
+            result.raw,
+            {
+                "items": [{"type": "kept"}],
+                "has_omitted_provider_payload": True,
+                "omitted_provider_payload_fields": ("raw.items[0].text",),
+            },
+        )
+
+    def test_sanitize_raw_payload_is_idempotent_for_own_omission_markers(self) -> None:
+        raw = {"items": [{"text": "x" * 200}, {"type": "kept"}]}
+
+        first = sanitize_raw_payload(raw, omit_text_threshold_bytes=20)
+        second = sanitize_raw_payload(first.raw, omit_text_threshold_bytes=20)
+
+        self.assertEqual(second.raw, first.raw)
+        self.assertFalse(second.redacted)
+        self.assertEqual(second.omitted_fields, ())
 
     def test_collect_raw_text_fields_finds_nested_aggregated_output(self) -> None:
         raw = {"item": {"aggregatedOutput": "x" * 1200, "type": "commandExecution"}}

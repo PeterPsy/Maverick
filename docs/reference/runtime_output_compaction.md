@@ -12,7 +12,7 @@ Phase 1 reduces storage, websocket, replay, UI, and downstream event payload siz
 | 2 | Controlled Maverick CLI through `/api/runtime/cli` with `output_profile` in the JSON body | Yes | Yes, only for that controlled CLI surface | Implemented |
 | 3 | Maverick-owned Codex `PostToolUse` hook before supported shell tool results enter provider history | Yes, when the hook runs | Only when Codex accepts and runs the trusted hook | Integrated; hard provider-token guarantee requires a trusted-hook end-to-end proof |
 
-Phase 1 deliberately does not compact `runtime.output.delta`, because those deltas are used to reconstruct assistant text through `final_text()` and `complete_text()`. The turn output recorder performs compaction before normal turn persistence, and `record_runtime_event()` repeats the same idempotent guard for direct future callers that persist `runtime.tool_call.*` events. The persistence guard does not trust self-reported `output_compaction` metadata by itself; it only skips reprocessing when the payload is already bounded, redaction-clean, and free of collected provider `raw` text fields.
+Phase 1 deliberately does not compact `runtime.output.delta`, because those deltas are used to reconstruct assistant text through `final_text()` and `complete_text()`. The turn output recorder performs compaction before normal turn persistence, and `record_runtime_event()` repeats the same idempotent guard for direct future callers that persist `runtime.tool_call.*` events. The persistence guard does not trust self-reported `output_compaction` metadata by itself; it only skips reprocessing when the payload is already bounded, redaction-clean, and its provider `raw` payload already matches the configured raw sanitization policy.
 
 ## Event Contract
 

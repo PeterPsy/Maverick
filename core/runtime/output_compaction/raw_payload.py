@@ -89,7 +89,7 @@ def sanitize_raw_payload(
                     continue
                 sanitized[key_text] = sanitized_value
             return sanitized
-        if isinstance(value, list):
+        if isinstance(value, (list, tuple)):
             result = []
             for index, item in enumerate(value[:max_list_items]):
                 sanitized_item = sanitize(item, f"{path}[{index}]", depth + 1)
@@ -98,7 +98,7 @@ def sanitize_raw_payload(
             if len(value) > max_list_items:
                 omitted_fields.append(f"{path}[{max_list_items}:]")
                 result.append(f"[omitted {len(value) - max_list_items} list items]")
-            return result
+            return tuple(result) if isinstance(value, tuple) else result
         if isinstance(value, str):
             key_name = _path_key(path)
             if key_name in RAW_TEXT_KEYS and byte_len(value) > omit_text_threshold_bytes:

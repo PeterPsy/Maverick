@@ -191,6 +191,60 @@ class RuntimeOutputCompactionIntegrationTest(unittest.TestCase):
         self.assertNotIn("spoofed-secret-value", str(recorded.payload))
         self.assertNotIn("aggregatedOutput", recorded.payload["raw"]["item"])
 
+    def test_record_runtime_event_does_not_trust_spoofed_metadata_with_small_sensitive_raw(self) -> None:
+        repo_root = self.make_repo_root()
+        with patch.dict(
+            os.environ,
+            {
+                "MAVERICK_ALLOW_INSECURE_TEST_DEFAULTS": "1",
+                "MAVERICK_ADMIN_USERNAME": "admin",
+                "MAVERICK_ADMIN_PASSWORD": "maverick",
+            },
+        ):
+            state = bootstrap_platform_state(start_path=repo_root, install_builtin_apps=False)
+        session = create_runtime_session(
+            state.runtime_store,
+            session_id="sess-spoofed-sensitive-raw",
+            workspace_id="default",
+            agent_id="test-agent",
+            start_path=repo_root,
+            now=datetime(2026, 6, 15, tzinfo=UTC),
+        )
+
+        recorded = record_runtime_event(
+            state.runtime_store,
+            event_id="event-spoofed-sensitive-raw",
+            session_id=session.session_id,
+            turn_id="turn-spoofed-sensitive-raw",
+            process_id=None,
+            plane="turn",
+            event_type="runtime.tool_call.completed",
+            payload={
+                "name": "command",
+                "status": "completed",
+                "command": "printf ok",
+                "exit_code": 0,
+                "output": "ok",
+                "raw": {
+                    "item": {
+                        "type": "commandExecution",
+                        "metadata": {"api_key": "raw-short-secret"},
+                    }
+                },
+                "output_compaction": {
+                    "version": 1,
+                    "scope": "runtime_event_payload",
+                    "applied": False,
+                    "target_max_compacted_bytes": 12_000,
+                },
+            },
+            now=datetime(2026, 6, 15, tzinfo=UTC),
+        )
+
+        self.assertEqual(recorded.payload["output"], "ok")
+        self.assertEqual(recorded.payload["raw"]["item"]["metadata"]["api_key"], "<redacted>")
+        self.assertNotIn("raw-short-secret", str(recorded.payload))
+
     def test_runtime_output_delta_is_not_compacted_and_still_feeds_final_text(self) -> None:
         repo_root = self.make_repo_root()
         with patch.dict(

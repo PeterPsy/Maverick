@@ -92,8 +92,13 @@ def _already_trusted_compacted_payload(
         if byte_len(value) > max_allowed_bytes or redact_text(value) != value:
             return False
     raw = payload.get("raw")
-    if isinstance(raw, Mapping) and collect_raw_text_fields(raw):
-        return False
+    if isinstance(raw, Mapping):
+        if collect_raw_text_fields(raw):
+            return False
+        if policy.sanitize_raw_payload:
+            sanitized_raw = sanitize_raw_payload(raw)
+            if sanitized_raw.redacted or sanitized_raw.omitted_fields or sanitized_raw.raw != raw:
+                return False
     for key in DESCRIPTIVE_TEXT_FIELDS:
         value = payload.get(key)
         if isinstance(value, str) and redact_text(value) != value:

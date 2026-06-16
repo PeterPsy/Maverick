@@ -12,7 +12,7 @@ from core.api.app_events import APP_EVENTS_WS_PATH, AppEventBus, stream_app_even
 from core.api.platform_host import PlatformHost
 from core.api.platform_state import bootstrap_platform_state
 from core.api.runtime_thread_websocket import runtime_thread_snapshot_frame, stream_runtime_thread_events
-from core.api.runtime_websocket import WEBSOCKET_UNAUTHORIZED, initial_runtime_event_page, stream_runtime_session_events
+from core.api.runtime_websocket import WEBSOCKET_NOT_FOUND, WEBSOCKET_UNAUTHORIZED, initial_runtime_event_page, stream_runtime_session_events
 from core.runtime.runtime_events import RuntimeEventRecord
 from core.runtime.runtime_thread import RuntimeThreadRecord
 from core.runtime.runtime_turns import RuntimeTurnRecord
@@ -140,6 +140,34 @@ class RuntimeWebSocketTestCase(unittest.IsolatedAsyncioTestCase):
             send=send,
         )
         return sent
+
+    def insert_corrupt_session(self, state, *, session_id: str = "corrupt-session") -> None:
+        now = datetime(2026, 6, 16, 12, 0, tzinfo=UTC)
+        repo_root = state.repository_root
+        state.runtime_store.collections.sessions.update_one(
+            {"session_id": session_id},
+            {
+                "$set": {
+                    "workspace_id": "default",
+                    "agent_id": "chat",
+                    "status": "running",
+                    "requested_mode": None,
+                    "effective_mode": "sandbox",
+                    "workspace_root": str(repo_root / "workspaces" / "default"),
+                    "workdir": str(repo_root / "workspaces" / "default"),
+                    "runtime_root": str(
+                        repo_root / "workspaces" / "default" / "runtime" / "sessions" / session_id
+                    ),
+                    "started_at": now,
+                    "updated_at": now,
+                    "ended_at": None,
+                    "last_progress_at": now,
+                    "session_kind": "chat_root",
+                    "thread_visibility": "not-hidden",
+                }
+            },
+            upsert=True,
+        )
 
     async def test_runtime_websocket_streams_ordered_persisted_events(self) -> None:
         state = bootstrap_platform_state(start_path=self.make_repo_root())
@@ -408,6 +436,15 @@ class RuntimeWebSocketTestCase(unittest.IsolatedAsyncioTestCase):
         )
 
         self.assertEqual(sent, [{"type": "websocket.close", "code": WEBSOCKET_UNAUTHORIZED}])
+
+    async def test_runtime_websocket_closes_for_invalid_session_visibility(self) -> None:
+        state = bootstrap_platform_state(start_path=self.make_repo_root())
+        cookie = self.login_cookie(state)
+        self.insert_corrupt_session(state)
+
+        sent = await self.collect_websocket_messages(state, session_id="corrupt-session", cookie=cookie)
+
+        self.assertEqual(sent, [{"type": "websocket.close", "code": WEBSOCKET_NOT_FOUND}])
 
     async def test_runtime_websocket_sends_transport_heartbeat_without_runtime_event(self) -> None:
         state = bootstrap_platform_state(start_path=self.make_repo_root())

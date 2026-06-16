@@ -226,7 +226,7 @@ async def stream_runtime_session_events(
         return
     try:
         session = state.runtime_store.get_session(session_id)
-    except RuntimeSessionNotFoundError:
+    except (RuntimeSessionNotFoundError, ValueError):
         await send({"type": "websocket.close", "code": WEBSOCKET_NOT_FOUND})
         return
     if session.workspace_id != context.workspace_id:

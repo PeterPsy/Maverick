@@ -557,7 +557,7 @@ def _handle_thread_clear(
 def _handle_session_item(state: PlatformState, context: RequestSession, session_id: str, start_response: StartResponse, *, start_path):
     try:
         session = state.runtime_store.get_session(session_id)
-    except RuntimeSessionNotFoundError:
+    except (RuntimeSessionNotFoundError, ValueError):
         return json_response(start_response, {"error": "runtime_session_not_found"}, status="404 Not Found")
     if session.workspace_id != context.workspace_id:
         return json_response(start_response, {"error": "runtime_session_not_found"}, status="404 Not Found")
@@ -580,7 +580,7 @@ def _bounded_positive_int(value: str | None, *, maximum: int) -> int | None:
 def _handle_session_events(state: PlatformState, context: RequestSession, session_id: str, start_response: StartResponse, *, start_path, query_string: str = ""):
     try:
         session = state.runtime_store.get_session(session_id)
-    except RuntimeSessionNotFoundError:
+    except (RuntimeSessionNotFoundError, ValueError):
         return json_response(start_response, {"error": "runtime_session_not_found"}, status="404 Not Found")
     if session.workspace_id != context.workspace_id:
         return json_response(start_response, {"error": "runtime_session_not_found"}, status="404 Not Found")
@@ -601,7 +601,7 @@ def _handle_session_events(state: PlatformState, context: RequestSession, sessio
 def _handle_session_turns(state: PlatformState, context: RequestSession, session_id: str, method: str, body: dict, start_response: StartResponse, *, start_path):
     try:
         session = state.runtime_store.get_session(session_id)
-    except RuntimeSessionNotFoundError:
+    except (RuntimeSessionNotFoundError, ValueError):
         return json_response(start_response, {"error": "runtime_session_not_found"}, status="404 Not Found")
     if session.workspace_id != context.workspace_id:
         return json_response(start_response, {"error": "runtime_session_not_found"}, status="404 Not Found")
@@ -735,7 +735,7 @@ def _handle_session_cleanup(
         return json_response(start_response, {"error": "method_not_allowed"}, status="405 Method Not Allowed")
     try:
         session = state.runtime_store.get_session(session_id)
-    except RuntimeSessionNotFoundError:
+    except (RuntimeSessionNotFoundError, ValueError):
         return json_response(start_response, {"error": "runtime_session_not_found"}, status="404 Not Found")
     if session.workspace_id != context.workspace_id:
         return json_response(start_response, {"error": "runtime_session_not_found"}, status="404 Not Found")

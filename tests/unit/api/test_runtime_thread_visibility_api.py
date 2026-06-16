@@ -13,6 +13,34 @@ from tests.unit.api.app_reference_test_support import AppReferenceApiTestSupport
 
 
 class RuntimeThreadVisibilityApiTestCase(AppReferenceApiTestSupport, unittest.TestCase):
+    def _insert_corrupt_session(self, state, repo_root, *, session_id: str = "corrupt-session") -> datetime:
+        now = datetime(2026, 6, 16, 12, 0, tzinfo=UTC)
+        state.runtime_store.collections.sessions.update_one(
+            {"session_id": session_id},
+            {
+                "$set": {
+                    "workspace_id": "default",
+                    "agent_id": "chat",
+                    "status": "running",
+                    "requested_mode": None,
+                    "effective_mode": "sandbox",
+                    "workspace_root": str(repo_root / "workspaces" / "default"),
+                    "workdir": str(repo_root / "workspaces" / "default"),
+                    "runtime_root": str(
+                        repo_root / "workspaces" / "default" / "runtime" / "sessions" / session_id
+                    ),
+                    "started_at": now,
+                    "updated_at": now,
+                    "ended_at": None,
+                    "last_progress_at": now,
+                    "session_kind": "chat_root",
+                    "thread_visibility": "not-hidden",
+                }
+            },
+            upsert=True,
+        )
+        return now
+
     def test_hidden_runtime_session_cannot_be_opened_as_chat_thread(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             repo_root = self._repo_root(temp_dir)
@@ -108,31 +136,7 @@ class RuntimeThreadVisibilityApiTestCase(AppReferenceApiTestSupport, unittest.Te
                 source_app_id="chat",
                 start_path=repo_root,
             )
-            now = datetime(2026, 6, 16, 12, 0, tzinfo=UTC)
-            state.runtime_store.collections.sessions.update_one(
-                {"session_id": "corrupt-session"},
-                {
-                    "$set": {
-                        "workspace_id": "default",
-                        "agent_id": "chat",
-                        "status": "running",
-                        "requested_mode": None,
-                        "effective_mode": "sandbox",
-                        "workspace_root": str(repo_root / "workspaces" / "default"),
-                        "workdir": str(repo_root / "workspaces" / "default"),
-                        "runtime_root": str(
-                            repo_root / "workspaces" / "default" / "runtime" / "sessions" / "corrupt-session"
-                        ),
-                        "started_at": now,
-                        "updated_at": now,
-                        "ended_at": None,
-                        "last_progress_at": now,
-                        "session_kind": "chat_root",
-                        "thread_visibility": "not-hidden",
-                    }
-                },
-                upsert=True,
-            )
+            now = self._insert_corrupt_session(state, repo_root)
             state.runtime_store.save_thread(
                 RuntimeThreadRecord(
                     thread_id="stale-corrupt",
@@ -172,6 +176,54 @@ class RuntimeThreadVisibilityApiTestCase(AppReferenceApiTestSupport, unittest.Te
         self.assertEqual(create_payload["thread_visibility"], "invalid")
         self.assertEqual(list_status, 200)
         self.assertEqual([thread["runtime_session_id"] for thread in list_payload["threads"]], ["visible-session"])
+
+    def test_invalid_runtime_session_visibility_is_controlled_for_raw_session_api(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            repo_root = self._repo_root(temp_dir)
+            with patch.dict(
+                "os.environ",
+                {
+                    "MAVERICK_ALLOW_INSECURE_TEST_DEFAULTS": "1",
+                    "MAVERICK_ADMIN_USERNAME": "admin",
+                    "MAVERICK_ADMIN_PASSWORD": "maverick",
+                },
+            ):
+                state = bootstrap_platform_state(start_path=repo_root)
+            self._insert_corrupt_session(state, repo_root)
+            app = PlatformHost(state, start_path=repo_root)
+            cookie = self._login(app)
+
+            session_status, session_payload, _headers = self._invoke(
+                app,
+                path="/api/runtime/sessions/corrupt-session",
+                cookie=cookie,
+            )
+            events_status, events_payload, _headers = self._invoke(
+                app,
+                path="/api/runtime/sessions/corrupt-session/events",
+                cookie=cookie,
+            )
+            turns_status, turns_payload, _headers = self._invoke(
+                app,
+                path="/api/runtime/sessions/corrupt-session/turns",
+                cookie=cookie,
+            )
+            post_turn_status, post_turn_payload, _headers = self._invoke(
+                app,
+                path="/api/runtime/sessions/corrupt-session/turns",
+                method="POST",
+                body={"input_text": "hello"},
+                cookie=cookie,
+            )
+
+        self.assertEqual(session_status, 404)
+        self.assertEqual(session_payload["error"], "runtime_session_not_found")
+        self.assertEqual(events_status, 404)
+        self.assertEqual(events_payload["error"], "runtime_session_not_found")
+        self.assertEqual(turns_status, 404)
+        self.assertEqual(turns_payload["error"], "runtime_session_not_found")
+        self.assertEqual(post_turn_status, 404)
+        self.assertEqual(post_turn_payload["error"], "runtime_session_not_found")
 
 
 if __name__ == "__main__":

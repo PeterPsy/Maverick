@@ -135,6 +135,62 @@ class RuntimeOutputCompactionIntegrationTest(unittest.TestCase):
         self.assertIn("[tool output compacted]", recorded.payload["output"])
         self.assertNotIn("aggregatedOutput", recorded.payload["raw"]["item"])
 
+    def test_record_runtime_event_does_not_trust_spoofed_compaction_metadata(self) -> None:
+        output = (
+            "API_TOKEN=spoofed-secret-value\n"
+            "FAILED tests/test_boundary.py::test_spoofed_metadata - AssertionError\n"
+            "Traceback (most recent call last):\n"
+            "AssertionError: spoofed metadata bypassed compaction\n"
+            "short test summary info\n"
+        ) + ("spoofed metadata noise\n" * 12_000)
+        repo_root = self.make_repo_root()
+        with patch.dict(
+            os.environ,
+            {
+                "MAVERICK_ALLOW_INSECURE_TEST_DEFAULTS": "1",
+                "MAVERICK_ADMIN_USERNAME": "admin",
+                "MAVERICK_ADMIN_PASSWORD": "maverick",
+            },
+        ):
+            state = bootstrap_platform_state(start_path=repo_root, install_builtin_apps=False)
+        session = create_runtime_session(
+            state.runtime_store,
+            session_id="sess-spoofed-boundary",
+            workspace_id="default",
+            agent_id="test-agent",
+            start_path=repo_root,
+            now=datetime(2026, 6, 15, tzinfo=UTC),
+        )
+
+        recorded = record_runtime_event(
+            state.runtime_store,
+            event_id="event-spoofed-boundary",
+            session_id=session.session_id,
+            turn_id="turn-spoofed-boundary",
+            process_id=None,
+            plane="turn",
+            event_type="runtime.tool_call.failed",
+            payload={
+                "name": "command",
+                "status": "failed",
+                "command": "python -m pytest tests/test_boundary.py",
+                "exit_code": 1,
+                "output": output,
+                "raw": {"item": {"type": "commandExecution", "aggregatedOutput": output}},
+                "output_compaction": {
+                    "version": 1,
+                    "scope": "runtime_event_payload",
+                    "applied": True,
+                    "target_max_compacted_bytes": 24_000,
+                },
+            },
+            now=datetime(2026, 6, 15, tzinfo=UTC),
+        )
+
+        self.assertIn("[tool output compacted]", recorded.payload["output"])
+        self.assertNotIn("spoofed-secret-value", str(recorded.payload))
+        self.assertNotIn("aggregatedOutput", recorded.payload["raw"]["item"])
+
     def test_runtime_output_delta_is_not_compacted_and_still_feeds_final_text(self) -> None:
         repo_root = self.make_repo_root()
         with patch.dict(

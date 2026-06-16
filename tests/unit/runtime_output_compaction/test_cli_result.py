@@ -185,6 +185,71 @@ class RuntimeCliResultCompactionTest(unittest.TestCase):
         self.assertEqual(compacted["preview_text"], preview)
         self.assertNotIn("output_compaction", compacted)
 
+    def test_provider_compact_redacts_preserved_document_bodies_without_truncating(self) -> None:
+        cases = (
+            (
+                "developer context",
+                "content",
+                {
+                    "status_code": 200,
+                    "doc_id": "core_architecture",
+                    "title": "Core Architecture",
+                    "source_path": "docs/architecture/core_architecture.md",
+                    "content": "Intro\nAPI_TOKEN=doc-secret-value\n" + ("developer paragraph\n" * 5000) + "FINAL-MARKER",
+                },
+                ["core", "cli", "run", "developer-context.read", "--doc-id", "core_architecture", "--json"],
+            ),
+            (
+                "storage text",
+                "text",
+                {
+                    "status_code": 200,
+                    "file": {
+                        "role": "generated",
+                        "workspace_relative_path": "storage/generated/guides/storage-guide.md",
+                    },
+                    "text": "Intro\nAPI_TOKEN=storage-secret-value\n" + ("storage paragraph\n" * 5000) + "FINAL-MARKER",
+                    "text_char_count": 95_000,
+                    "offset": 0,
+                    "range_end": 95_000,
+                    "has_more": False,
+                    "next_offset": None,
+                    "complete": True,
+                },
+                ["app", "storage", "mcp", "call", "storage_read_text", "--json"],
+            ),
+            (
+                "storage preview",
+                "preview_text",
+                {
+                    "status_code": 200,
+                    "file": {
+                        "role": "generated",
+                        "workspace_relative_path": "storage/generated/brief.md",
+                    },
+                    "preview_text": "Intro\nAPI_TOKEN=preview-secret-value\n" + ("preview paragraph\n" * 3000) + "FINAL-MARKER",
+                    "preview_truncated": True,
+                },
+                ["app", "storage", "mcp", "call", "storage_preview_text", "--json"],
+            ),
+        )
+
+        for name, field_name, result, argv in cases:
+            with self.subTest(name=name):
+                compacted = compact_runtime_cli_result(
+                    result,
+                    argv=argv,
+                    runtime_session_id="sess-1",
+                    policy=ToolOutputCompactionPolicy(min_original_bytes=1000),
+                )
+
+                self.assertIn("API_TOKEN=<redacted>", compacted[field_name])
+                self.assertIn("FINAL-MARKER", compacted[field_name])
+                self.assertNotIn("[tool output compacted]", compacted[field_name])
+                self.assertNotIn("secret-value", compacted[field_name])
+                self.assertEqual(compacted["output_compaction"]["fields"], [field_name])
+                self.assertEqual(compacted["output_compaction"]["pass_through_reason"], "document_body_redacted")
+
     def test_compactor_error_returns_redacted_field_instead_of_raw_output(self) -> None:
         huge_output = "Authorization: Bearer secret-token\n" + ("large output line\n" * 10_000)
 

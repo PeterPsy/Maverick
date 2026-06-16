@@ -155,6 +155,21 @@ def _collect_provider_compact_fields(value: Any, *, min_bytes: int, argv: Sequen
         if not isinstance(item, str):
             return
         if _preserve_document_body_field(value, path, argv=argv):
+            try:
+                redacted_value = redact_text(item)
+            except Exception:
+                candidates.append(_CliFieldCandidate(path=path, value=item))
+                return
+            if redacted_value != item:
+                candidates.append(
+                    _CliFieldCandidate(
+                        path=path,
+                        value=item,
+                        direct_replacement=redacted_value,
+                        pass_through_reason="document_body_redacted",
+                        original_bytes=byte_len(item),
+                    )
+                )
             return
         if byte_len(item) >= min_bytes:
             candidates.append(_CliFieldCandidate(path=path, value=item))

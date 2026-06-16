@@ -9,6 +9,8 @@ from core.runtime.execution_events import RuntimeExecutionEvent
 from core.runtime.output_compaction.classifier import classify_tool_output
 from core.runtime.output_compaction.event_payloads import (
     COMPACTION_SCOPE,
+    DESCRIPTIVE_TEXT_FIELDS,
+    DESCRIPTIVE_TEXT_SEQUENCE_FIELDS,
     OUTPUT_FIELDS,
     apply_result,
     input_from_event,
@@ -47,7 +49,7 @@ def compact_tool_call_event(
     if not active_policy.enabled or not event.event_type.startswith("runtime.tool_call."):
         return event
     existing_metadata = event.payload.get("output_compaction")
-    if isinstance(existing_metadata, Mapping) and existing_metadata.get("scope") == COMPACTION_SCOPE:
+    if _already_trusted_compacted_payload(event.payload, existing_metadata, policy=active_policy):
         return event
     context = context or ToolOutputCompactionContext()
     payload = dict(event.payload)
@@ -72,6 +74,38 @@ def compact_tool_call_event(
         return event
     apply_result(payload, result)
     return replace(event, payload=payload)
+
+
+def _already_trusted_compacted_payload(
+    payload: Mapping[str, object],
+    metadata: object,
+    *,
+    policy: ToolOutputCompactionPolicy,
+) -> bool:
+    if not isinstance(metadata, Mapping) or metadata.get("scope") != COMPACTION_SCOPE:
+        return False
+    max_allowed_bytes = max(policy.target_max_compacted_bytes, policy.failure_target_max_compacted_bytes)
+    for key in OUTPUT_FIELDS:
+        value = payload.get(key)
+        if not isinstance(value, str):
+            continue
+        if byte_len(value) > max_allowed_bytes or redact_text(value) != value:
+            return False
+    raw = payload.get("raw")
+    if isinstance(raw, Mapping) and collect_raw_text_fields(raw):
+        return False
+    for key in DESCRIPTIVE_TEXT_FIELDS:
+        value = payload.get(key)
+        if isinstance(value, str) and redact_text(value) != value:
+            return False
+    for key in DESCRIPTIVE_TEXT_SEQUENCE_FIELDS:
+        value = payload.get(key)
+        if not isinstance(value, list):
+            continue
+        for item in value:
+            if isinstance(item, str) and redact_text(item) != item:
+                return False
+    return True
 
 
 def compact_tool_output(

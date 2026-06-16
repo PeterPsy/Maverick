@@ -15,6 +15,7 @@ from core.api.persistence_cleanup_worker import run_pending_cleanup_plans
 from core.apps.store import AppDocumentStore
 from core.identity.service import bootstrap_default_admin
 from core.identity.store import IdentityDocumentStore
+from core.inter_agent.store import InterAgentDocumentStore, build_inter_agent_document_store
 from core.observability.store import ObservabilityDocumentStore, ObservabilityCollections
 from core.providers.provider_codex import refresh_workspace_maverick_wrappers
 from core.recovery.backend_restart import recover_interrupted_runtime_turns_after_backend_restart
@@ -45,6 +46,7 @@ class PlatformState:
     app_store: AppDocumentStore
     provider_store: ProviderDocumentStore
     runtime_store: RuntimeDocumentStore
+    inter_agent_store: InterAgentDocumentStore
     runtime_event_bus: RuntimeEventBus
     runtime_thread_event_bus: RuntimeThreadEventBus
     app_event_bus: AppEventBus
@@ -91,6 +93,7 @@ def bootstrap_platform_state(
             api_tokens=control_collections.runtime_api_tokens,
         )
     )
+    inter_agent_store = build_inter_agent_document_store(start_path=repository_root)
     runtime_event_bus = RuntimeEventBus()
     runtime_thread_event_bus = RuntimeThreadEventBus()
     app_event_bus = AppEventBus()
@@ -136,6 +139,7 @@ def bootstrap_platform_state(
         app_store=app_store,
         provider_store=provider_store,
         runtime_store=runtime_store,
+        inter_agent_store=inter_agent_store,
         runtime_event_bus=runtime_event_bus,
         runtime_thread_event_bus=runtime_thread_event_bus,
         app_event_bus=app_event_bus,

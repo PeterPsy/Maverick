@@ -312,6 +312,29 @@ This includes:
 
 This is a core product capability, not an app concern.
 
+The first concrete inter-agent domain lives under `core/inter_agent/`. It owns
+schema-level run, participant, edge, approval, budget policy, budget ledger, and
+normalized event contracts before any executor or child runtime session is
+introduced. Its local JSON persistence is intentionally separate from
+`RuntimeCollections`: records are workspace-scoped under
+`workspaces/<workspace_id>/runtime/inter_agent/`, and replayable graph events are
+partitioned per run under `runtime/inter_agent/runs/<run_id>/events.json`.
+
+`inter_agent` events are a projection for graph mode and audit, not replacements
+for runtime turn or process events. They carry per-run sequence numbers,
+idempotency keys, correlation ids, and one of `summary`, `detail`, or `debug`
+visibility. Server-side replay must treat those visibility planes as an
+authorization ceiling: `summary` sees only summary events, `detail` sees summary
+and detail, and `debug` sees all three planes. Event retention is also per
+visibility plane so debug history can be shorter than user-facing summaries.
+
+F1-level inter-agent services must not spawn provider sessions, create hidden
+runtime sessions, invoke an LLM, or expose HTTP/CLI/MCP executor operations. They
+may validate `InterAgentRunSpec` and `ParticipantSpec`, persist schema records,
+reserve and release budget atomically, expire approvals fail-closed, and append
+bounded replay events. Runtime integration and operational spawn/send/wait
+surfaces remain a later runtime phase.
+
 ### 6. AI provider management
 
 The core owns the abstraction layer for model providers and model backends.

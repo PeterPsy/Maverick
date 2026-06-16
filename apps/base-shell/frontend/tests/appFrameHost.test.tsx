@@ -10,6 +10,11 @@ type AppFrameParams = Record<string, string | boolean | null>;
 type PostedMessage = {
   app_id?: string;
   params?: Record<string, string | boolean>;
+  theme?: {
+    color_scheme: "dark" | "light";
+    effective: "dark" | "light";
+    mode: "dark" | "light" | "system";
+  };
   type?: string;
 };
 
@@ -41,6 +46,11 @@ function app(app_id: string, name = app_id): AppRegistryItem {
 
 const chat = app("chat", "Chat");
 const agents = app("agents", "Agents");
+const defaultTheme = {
+  color_scheme: "dark" as const,
+  effective: "dark" as const,
+  mode: "dark" as const,
+};
 
 describe("AppFrameHost app frame readiness", () => {
   let container: HTMLDivElement;
@@ -127,6 +137,7 @@ describe("AppFrameHost app frame readiness", () => {
       {
         app_id: "agents",
         params: { thread_id: "thread-1", include_archived: true },
+        theme: defaultTheme,
         type: "maverick.app.navigate",
       },
     ]);
@@ -137,11 +148,13 @@ describe("AppFrameHost app frame readiness", () => {
       {
         app_id: "agents",
         params: { thread_id: "thread-1", include_archived: true },
+        theme: defaultTheme,
         type: "maverick.app.navigate",
       },
       {
         app_id: "agents",
         params: { thread_id: "thread-1", include_archived: true },
+        theme: defaultTheme,
         type: "maverick.app.navigate",
       },
     ]);

@@ -158,7 +158,7 @@ describe("Sidebar desktop layout contract", () => {
     expect(layoutStyles).toContain(".bs-mobile-pinned-apps__button.is-active .bs-mobile-pinned-apps__logo.bs-app-logo");
     expect(layoutStyles).toContain(".bs-mobile-pinned-apps__button.is-active .bs-mobile-pinned-apps__name");
     expect(layoutStyles).toContain("background: transparent;");
-    expect(layoutStyles).toContain("border-color: rgba(255, 255, 255, 0.88);");
+    expect(layoutStyles).toContain("border-color: rgba(var(--maverick-contrast-rgb), 0.88);");
     expect(mobileAppGridRule).toContain("padding-top: calc(var(--bs-mobile-shell-content-top-offset) + 2rem);");
   });
 

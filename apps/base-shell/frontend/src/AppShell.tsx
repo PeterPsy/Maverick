@@ -32,6 +32,8 @@ import {
 } from "./navigation";
 import { clampFloatingChatWidth, clampSidebarDetailsWidth, readShellSession, resolveInitialSidebarOpen, writeShellSession } from "./session";
 import type { FloatingChatMode, SidebarMode } from "./session";
+import { applyShellThemeToDocument, createShellThemeState, readSystemColorScheme } from "./theme";
+import type { ShellEffectiveTheme, ShellThemeMode } from "./theme";
 import { getInitialMobileLayout, useMobileLayout } from "./hooks/useMobileLayout";
 import { useSidebarRailMetrics } from "./hooks/useSidebarRailMetrics";
 import { FloatingChatHost } from "./components/FloatingChatHost";
@@ -68,6 +70,8 @@ export function AppShell() {
   const [floatingChatWidthPx, setFloatingChatWidthPx] = useState(() => clampFloatingChatWidth(initialSession.floatingChatWidthPx));
   const [floatingChatThreadId, setFloatingChatThreadId] = useState<string | null>(initialSession.floatingChatThreadId);
   const [floatingChatNavigationScope, setFloatingChatNavigationScope] = useState<string | null>(initialSession.floatingChatNavigationScope);
+  const [themeMode, setThemeMode] = useState<ShellThemeMode>(initialSession.themeMode);
+  const [systemColorScheme, setSystemColorScheme] = useState<ShellEffectiveTheme>(() => readSystemColorScheme());
   const [isSidebarOpen, setIsSidebarOpen] = useState(() =>
     resolveInitialSidebarOpen(initialSession, {
       isInitialChatLaunch,
@@ -103,6 +107,7 @@ export function AppShell() {
   const hasSettingsShortcut = shellVisibleApps(apps).some((app) => app.app_id === SETTINGS_APP_ID);
   const shellRailItemCount = isLoading && railApps.length === 0 ? 4 : railApps.length + (hasSettingsShortcut ? 1 : 0);
   const shellSidebarMetrics = useSidebarRailMetrics(shellRailItemCount, isMobileLayout);
+  const shellTheme = useMemo(() => createShellThemeState(themeMode, systemColorScheme), [systemColorScheme, themeMode]);
   const shellStyle = useMemo(() => {
     const style: CSSProperties & {
       "--bs-floating-chat-fixed-space"?: string;
@@ -249,6 +254,21 @@ export function AppShell() {
   }, []);
 
   useEffect(() => {
+    applyShellThemeToDocument(shellTheme);
+  }, [shellTheme]);
+
+  useEffect(() => {
+    if (typeof window.matchMedia !== "function") {
+      return undefined;
+    }
+    const mediaQuery = window.matchMedia("(prefers-color-scheme: light)");
+    const updateSystemColorScheme = () => setSystemColorScheme(mediaQuery.matches ? "light" : "dark");
+    updateSystemColorScheme();
+    mediaQuery.addEventListener("change", updateSystemColorScheme);
+    return () => mediaQuery.removeEventListener("change", updateSystemColorScheme);
+  }, []);
+
+  useEffect(() => {
     pinnedAppIdsRef.current = pinnedAppIds;
   }, [pinnedAppIds]);
 
@@ -355,6 +375,7 @@ export function AppShell() {
       isSidebarOpen: isSidebarPinned ? true : isSidebarOpen,
       sidebarDetailsWidthPx,
       sidebarMode,
+      themeMode,
     });
   }, [
     activeApp?.app_id,
@@ -367,6 +388,7 @@ export function AppShell() {
     isSidebarPinned,
     sidebarDetailsWidthPx,
     sidebarMode,
+    themeMode,
   ]);
 
   useEffect(() => {
@@ -606,6 +628,7 @@ export function AppShell() {
           isLoading={isLoading}
           isMobileLayout={isMobileLayout}
           onOpenApp={openApp}
+          shellTheme={shellTheme}
         />
       </div>
       <Sidebar
@@ -630,6 +653,9 @@ export function AppShell() {
         pinnedAppIds={pinnedAppIds}
         railMetrics={shellSidebarMetrics}
         sidebarDetailsWidthPx={sidebarDetailsWidthPx}
+        shellTheme={shellTheme}
+        themeMode={themeMode}
+        onThemeModeChange={setThemeMode}
         onSidebarDetailsWidthChange={setSidebarDetailsWidthPx}
         onSidebarResizeActiveChange={setIsSidebarResizing}
         user={session.user}
@@ -651,6 +677,7 @@ export function AppShell() {
         onOpenDock={openFloatingChatDock}
         onResizeActiveChange={setIsFloatingChatResizing}
         onWidthChange={setFloatingChatWidthPx}
+        shellTheme={shellTheme}
         threadId={floatingChatThreadId}
         user={session.user}
         widthPx={floatingChatWidthPx}

@@ -1,17 +1,39 @@
-:root {
+:root,
+:root[data-maverick-theme="dark"],
+:root[data-theme="dark"] {
   color-scheme: dark;
+  --maverick-color-scheme: dark;
+  --maverick-contrast-rgb: 255, 255, 255;
   --maverick-text: #ececec;
   --maverick-text-muted: rgba(236, 236, 236, 0.64);
   --maverick-accent: #ffffff;
   --maverick-text-on-accent: #0a0a0b;
   --maverick-danger: #ffb3bf;
   --chat-sidebar-cell-radius: 22px;
-  --chat-sidebar-composer-border: rgba(255, 255, 255, 0.05);
+  --chat-sidebar-composer-border: rgba(var(--maverick-contrast-rgb), 0.05);
   --chat-sidebar-composer-surface: rgba(12, 12, 14, 0.58);
-  --chat-sidebar-soft-surface-hover: rgba(255, 255, 255, 0.105);
+  --chat-sidebar-soft-surface-hover: rgba(var(--maverick-contrast-rgb), 0.105);
   --chat-sidebar-danger-border: rgba(255, 179, 191, 0.28);
   --chat-sidebar-danger-surface: rgba(255, 179, 191, 0.12);
-  --chat-sidebar-inner-edge: inset 0 0 0 1px rgba(255, 255, 255, 0.075), inset 0 1px 0 rgba(255, 255, 255, 0.14);
+  --chat-sidebar-inner-edge: inset 0 0 0 1px rgba(var(--maverick-contrast-rgb), 0.075), inset 0 1px 0 rgba(var(--maverick-contrast-rgb), 0.14);
+}
+
+:root[data-maverick-theme="light"],
+:root[data-theme="light"] {
+  color-scheme: light;
+  --maverick-color-scheme: light;
+  --maverick-contrast-rgb: 15, 23, 42;
+  --maverick-text: #111827;
+  --maverick-text-muted: rgba(17, 24, 39, 0.66);
+  --maverick-accent: #111827;
+  --maverick-text-on-accent: #ffffff;
+  --maverick-danger: #be123c;
+  --chat-sidebar-composer-border: rgba(var(--maverick-contrast-rgb), 0.1);
+  --chat-sidebar-composer-surface: rgba(255, 255, 255, 0.72);
+  --chat-sidebar-soft-surface-hover: rgba(var(--maverick-contrast-rgb), 0.085);
+  --chat-sidebar-danger-border: rgba(190, 18, 60, 0.28);
+  --chat-sidebar-danger-surface: rgba(190, 18, 60, 0.1);
+  --chat-sidebar-inner-edge: inset 0 0 0 1px rgba(var(--maverick-contrast-rgb), 0.1), inset 0 1px 0 rgba(255, 255, 255, 0.92);
 }
 
 * {
@@ -172,7 +194,7 @@ button {
 
 .bs-chat-sidebar-footer__confirm-button:hover:not(:disabled),
 .bs-chat-sidebar-footer__confirm-button:focus-visible {
-  border-color: rgba(255, 255, 255, 0.16);
+  border-color: rgba(var(--maverick-contrast-rgb), 0.16);
   background: var(--chat-sidebar-soft-surface-hover);
   outline: none;
 }

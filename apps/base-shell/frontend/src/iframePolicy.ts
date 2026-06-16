@@ -1,3 +1,6 @@
+import type { ShellThemeState } from "./theme";
+import { shellThemeMessage } from "./theme";
+
 export const MAVERICK_IFRAME_SANDBOX = "allow-downloads allow-forms allow-popups allow-popups-to-escape-sandbox allow-same-origin allow-scripts";
 
 export function postToMaverickFrame(frame: HTMLIFrameElement | null | undefined, message: unknown) {
@@ -28,4 +31,8 @@ export function postMaverickFrameVisibility(
     type: "maverick.app.visibility-changed",
     ...payload,
   });
+}
+
+export function postMaverickShellTheme(frame: HTMLIFrameElement | null | undefined, theme: ShellThemeState) {
+  postToMaverickFrame(frame, shellThemeMessage(theme));
 }

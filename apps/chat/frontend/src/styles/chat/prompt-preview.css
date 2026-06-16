@@ -5,9 +5,9 @@
 }
 
 .chatapp-prompt-preview__section {
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(var(--maverick-contrast-rgb), 0.08);
   border-radius: 16px;
-  background: rgba(255, 255, 255, 0.025);
+  background: rgba(var(--maverick-contrast-rgb), 0.025);
   overflow: hidden;
 }
 

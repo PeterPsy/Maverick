@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
 import type { ChatThread } from "../../api/client";
 import { useRuntimeThreads } from "../../hooks/useRuntimeThreads";
+import { applyInitialMaverickTheme, listenForMaverickThemeMessages } from "../../lib/shellTheme";
 import {
   CHAT_SIDEBAR_SELECTION_CANCEL_DELETE,
   CHAT_SIDEBAR_SELECTION_CONFIRM_DELETE,
@@ -13,6 +14,9 @@ import {
   type ChatSidebarSelectionChannel,
 } from "../chatSidebarSelectionChannel";
 import "./styles.css";
+
+applyInitialMaverickTheme();
+listenForMaverickThemeMessages();
 
 const DEFAULT_APP_ID = "chat";
 const PRIMARY_ACTION_LABEL = "New chat";

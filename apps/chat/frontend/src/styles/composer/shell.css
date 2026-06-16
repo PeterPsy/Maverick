@@ -16,7 +16,7 @@
   justify-content: center;
   width: 32px;
   height: 32px;
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(var(--maverick-contrast-rgb), 0.08);
   border-radius: 999px;
   background: #262626;
   color: var(--maverick-text-muted);
@@ -51,7 +51,7 @@
   position: relative;
   width: 100%;
   padding: 0;
-  border: 1px solid rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(var(--maverick-contrast-rgb), 0.05);
   border-radius: var(--chatapp-glass-radius);
   background: var(--chatapp-glass-surface);
   box-shadow: var(--chatapp-composer-shadow);
@@ -120,7 +120,7 @@
   border-radius: 0;
   background: transparent;
   box-shadow: none;
-  color: rgba(255, 255, 255, 0.9);
+  color: rgba(var(--maverick-contrast-rgb), 0.9);
   font-size: 0.95rem;
   line-height: 1.55;
   resize: none;
@@ -134,5 +134,5 @@
 }
 
 .chatapp-composer__editor.is-empty::before {
-  color: rgba(255, 255, 255, 0.22);
+  color: rgba(var(--maverick-contrast-rgb), 0.22);
 }

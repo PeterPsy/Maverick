@@ -11,7 +11,7 @@
 
 .bs-workspace-app-surface {
   position: relative;
-  background: #111;
+  background: var(--maverick-bg-strong);
 }
 
 .bs-workspace-app-frame {
@@ -65,7 +65,7 @@
   align-items: center;
   max-width: min(28rem, calc(100vw - 3rem));
   gap: 0.6rem;
-  color: rgba(255, 255, 255, 0.72);
+  color: var(--maverick-text-muted);
   font-size: 0.9rem;
   line-height: 1;
 }
@@ -78,7 +78,7 @@
   position: relative;
   display: inline-block;
   flex: 0 0 auto;
-  color: #fff;
+  color: var(--maverick-text);
 }
 
 .bs-shell-pending-indicator--sm .bs-shell-pending-indicator__icon {
@@ -105,11 +105,11 @@
   color: transparent;
   background: linear-gradient(
     90deg,
-    rgba(255, 255, 255, 0.5) 0%,
-    rgba(255, 255, 255, 0.72) 34%,
-    #fff 50%,
-    rgba(255, 255, 255, 0.72) 66%,
-    rgba(255, 255, 255, 0.5) 100%
+    rgba(var(--maverick-contrast-rgb), 0.5) 0%,
+    rgba(var(--maverick-contrast-rgb), 0.72) 34%,
+    var(--maverick-text) 50%,
+    rgba(var(--maverick-contrast-rgb), 0.72) 66%,
+    rgba(var(--maverick-contrast-rgb), 0.5) 100%
   );
   background-position: 130% 50%;
   background-size: 230% 100%;
@@ -170,7 +170,7 @@
   }
 
   .bs-shell-pending-indicator__label {
-    color: rgba(255, 255, 255, 0.72);
+    color: var(--maverick-text-muted);
     background: none;
     animation: none;
   }
@@ -225,18 +225,18 @@
   gap: 0.82rem;
   min-height: 8rem;
   padding: 0.82rem;
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(var(--maverick-contrast-rgb), 0.1);
   border-radius: 22px;
-  background: rgba(255, 255, 255, 0.065);
+  background: rgba(var(--maverick-contrast-rgb), 0.065);
   box-shadow:
-    inset 0 0 0 1px rgba(255, 255, 255, 0.075),
-    inset 0 1px 0 rgba(255, 255, 255, 0.14);
+    inset 0 0 0 1px rgba(var(--maverick-contrast-rgb), 0.075),
+    inset 0 1px 0 rgba(var(--maverick-contrast-rgb), 0.14);
   text-align: left;
 }
 
 .bs-app-card:hover {
-  border-color: rgba(255, 255, 255, 0.14);
-  background: rgba(255, 255, 255, 0.105);
+  border-color: rgba(var(--maverick-contrast-rgb), 0.14);
+  background: rgba(var(--maverick-contrast-rgb), 0.105);
 }
 
 .bs-app-card__open {
@@ -293,17 +293,17 @@
   width: 3rem;
   height: 3rem;
   border-radius: 18px;
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(var(--maverick-contrast-rgb), 0.1);
   background:
-    linear-gradient(135deg, rgba(255, 255, 255, 0.08), transparent 36%),
-    linear-gradient(315deg, rgba(255, 255, 255, 0.035), transparent 42%),
-    rgba(12, 12, 14, 0.58);
+    linear-gradient(135deg, rgba(var(--maverick-contrast-rgb), 0.08), transparent 36%),
+    linear-gradient(315deg, rgba(var(--maverick-contrast-rgb), 0.035), transparent 42%),
+    var(--maverick-glass-surface);
   box-shadow:
-    inset 0 0 0 1px rgba(255, 255, 255, 0.075),
-    inset 0 1px 0 rgba(255, 255, 255, 0.14),
-    0 10px 24px rgba(0, 0, 0, 0.22);
+    inset 0 0 0 1px rgba(var(--maverick-contrast-rgb), 0.075),
+    inset 0 1px 0 rgba(var(--maverick-contrast-rgb), 0.14),
+    0 10px 24px var(--maverick-shadow-soft);
   backdrop-filter: blur(26px);
-  color: #fff;
+  color: var(--maverick-text);
   font-size: 0.78rem;
   font-weight: 800;
 }

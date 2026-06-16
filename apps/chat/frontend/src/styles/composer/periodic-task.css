@@ -73,9 +73,9 @@
   gap: 0.22rem;
   margin: 0 auto 0.55rem;
   padding: 0.18rem;
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(var(--maverick-contrast-rgb), 0.08);
   border-radius: 999px;
-  background: rgba(255, 255, 255, 0.04);
+  background: rgba(var(--maverick-contrast-rgb), 0.04);
 }
 
 .chatapp-periodic-view-switch__button {

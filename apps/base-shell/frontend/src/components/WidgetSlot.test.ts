@@ -14,3 +14,13 @@ describe("WidgetSlot compact resize", () => {
     expect(source).toContain("setCompactSlotHeight(nextCompactHeight)");
   });
 });
+
+describe("WidgetSlot shell theme bridge", () => {
+  it("sends shell theme through both widget context and theme messages", () => {
+    const source = readFileSync(resolve(currentDir, "WidgetSlot.tsx"), "utf8");
+
+    expect(source).toContain("postMaverickShellTheme");
+    expect(source).toContain("shell_theme: shellTheme");
+    expect(source).toContain("urlWithShellThemeSearchParams");
+  });
+});

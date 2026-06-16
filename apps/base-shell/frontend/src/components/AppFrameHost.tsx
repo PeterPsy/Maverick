@@ -1,7 +1,9 @@
 import { useEffect, useRef, useState } from "react";
 import { AppDependenciesPayload, AppRegistryItem, getAppDependencies } from "../api";
-import { MAVERICK_IFRAME_SANDBOX, postMaverickFrameVisibility, postToMaverickFrame } from "../iframePolicy";
+import { MAVERICK_IFRAME_SANDBOX, postMaverickFrameVisibility, postMaverickShellTheme, postToMaverickFrame } from "../iframePolicy";
 import { syncAppFrameShellLayout } from "../lib/appFrameShellLayout";
+import type { ShellThemeState } from "../theme";
+import { DEFAULT_SHELL_THEME_STATE, shellThemeSignature, urlWithShellThemeSearchParams } from "../theme";
 import { ShellPendingIndicator } from "./ShellPendingIndicator";
 
 type AppFrameParams = Record<string, string | boolean | null>;
@@ -37,12 +39,14 @@ export function AppFrameHost({
   activeWorkspaceId,
   isMobileLayout,
   onOpenApp,
+  shellTheme = DEFAULT_SHELL_THEME_STATE,
 }: {
   activeApp: AppRegistryItem;
   activeAppParams: AppFrameParams;
   activeWorkspaceId: string;
   isMobileLayout: boolean;
   onOpenApp: (appId: string, params?: AppFrameParams) => void;
+  shellTheme?: ShellThemeState;
 }) {
   const activeMountKey = `${activeWorkspaceId}:${activeApp.app_id}`;
   const [mountedApps, setMountedApps] = useState<Array<{ app: AppRegistryItem; mountKey: string }>>([
@@ -64,8 +68,10 @@ export function AppFrameHost({
   });
   const latestDependenciesRef = useRef<AppDependenciesPayload | null>(null);
   const dependencyCacheRef = useRef<DependencyCache>(dependencyCache);
+  const frameBootstrapThemesRef = useRef<Record<string, ShellThemeState>>({});
   const readyDeliveredNavigationSignaturesRef = useRef<Record<string, string>>({});
   const paramsSignature = JSON.stringify(activeAppParams);
+  const themeSignature = shellThemeSignature(shellTheme);
   const hasDeclaredDependencies = activeApp.requires.length > 0;
   const activeDependencyCacheKey = dependencyCacheKey(activeWorkspaceId, activeApp.app_id);
   const activeFrameRevision = frameRevisions[activeMountKey] || 0;
@@ -176,6 +182,11 @@ export function AppFrameHost({
         delete readyDeliveredNavigationSignaturesRef.current[frameKey];
       }
     });
+    Object.keys(frameBootstrapThemesRef.current).forEach((frameKey) => {
+      if (!mountedFrameKeys.has(frameKey)) {
+        delete frameBootstrapThemesRef.current[frameKey];
+      }
+    });
     Object.keys(readyFallbackTimersRef.current).forEach((frameKey) => {
       if (!mountedFrameKeys.has(frameKey)) {
         clearReadyFallbackTimer(frameKey);
@@ -185,9 +196,14 @@ export function AppFrameHost({
 
   useEffect(() => {
     latestNavigationRef.current = { appId: activeApp.app_id, params: activeAppParams };
-    postNavigation(frameRefs.current[activeApp.app_id], activeApp.app_id, activeAppParams);
+    postMaverickShellTheme(frameRefs.current[activeApp.app_id], shellTheme);
+    postNavigation(frameRefs.current[activeApp.app_id], activeApp.app_id, activeAppParams, shellTheme);
     postDependencies(frameRefs.current[activeApp.app_id], activeApp.app_id, latestDependenciesRef.current);
   }, [activeApp.app_id, paramsSignature]);
+
+  useEffect(() => {
+    mountedApps.forEach(({ app }) => postMaverickShellTheme(frameRefs.current[app.app_id], shellTheme));
+  }, [mountedApps, themeSignature]);
 
   useEffect(() => {
     mountedApps.forEach(({ app, mountKey }) => {
@@ -318,7 +334,8 @@ export function AppFrameHost({
         if (latestNavigation.appId === payload.app_id && frameKey) {
           const navigationSignature = appNavigationSignature(payload.app_id, latestNavigation.params);
           if (readyDeliveredNavigationSignaturesRef.current[frameKey] !== navigationSignature) {
-            if (postNavigation(frame, payload.app_id, latestNavigation.params)) {
+            postMaverickShellTheme(frame, shellTheme);
+            if (postNavigation(frame, payload.app_id, latestNavigation.params, shellTheme)) {
               readyDeliveredNavigationSignaturesRef.current[frameKey] = navigationSignature;
             }
           }
@@ -379,12 +396,13 @@ export function AppFrameHost({
               key={frameKey}
               onLoad={(event) => {
                 syncAppFrameShellLayout(event.currentTarget, isMobileLayout);
+                postMaverickShellTheme(event.currentTarget, shellTheme);
                 postMaverickFrameVisibility(event.currentTarget, {
                   app_id: app.app_id,
                   visible: isDisplayed,
                 });
                 if (app.app_id === activeApp.app_id) {
-                  postNavigation(event.currentTarget, app.app_id, activeAppParams);
+                  postNavigation(event.currentTarget, app.app_id, activeAppParams, shellTheme);
                 }
                 if (!readyFrames[frameKey]) {
                   scheduleFrameReadyFallback(frameKey);
@@ -394,7 +412,7 @@ export function AppFrameHost({
                 frameRefs.current[app.app_id] = frame;
               }}
               sandbox={MAVERICK_IFRAME_SANDBOX}
-              src={appFrameSrc(app.frontend_mount, revision)}
+              src={appFrameSrc(app.frontend_mount, revision, bootstrapThemeForFrame(frameBootstrapThemesRef.current, frameKey, shellTheme))}
               title={`${app.name} viewport`}
             />
           );
@@ -430,7 +448,12 @@ function filterFrameRecord(current: Record<string, boolean>, mountedFrameKeys: S
   return Object.keys(next).length === Object.keys(current).length ? current : next;
 }
 
-function postNavigation(frame: HTMLIFrameElement | null | undefined, appId: string, params: AppFrameParams): boolean {
+function postNavigation(
+  frame: HTMLIFrameElement | null | undefined,
+  appId: string,
+  params: AppFrameParams,
+  shellTheme: ShellThemeState,
+): boolean {
   if (!frame?.contentWindow) {
     return false;
   }
@@ -440,6 +463,7 @@ function postNavigation(frame: HTMLIFrameElement | null | undefined, appId: stri
       type: "maverick.app.navigate",
       app_id: appId,
       params: normalizeParams(params),
+      theme: shellTheme,
     },
   );
   return true;
@@ -473,11 +497,22 @@ function normalizeParams(params: AppFrameParams): Record<string, string | boolea
   ) as Record<string, string | boolean>;
 }
 
-function appFrameSrc(frontendMount: string, revision: number): string {
+function appFrameSrc(frontendMount: string, revision: number, shellTheme: ShellThemeState): string {
+  const themedUrl = urlWithShellThemeSearchParams(frontendMount, shellTheme);
+  const themedMount = `${themedUrl.pathname}${themedUrl.search}${themedUrl.hash}`;
   if (revision <= 0) {
-    return frontendMount;
+    return themedMount;
   }
-  return mountUrlWithParam(frontendMount, "_maverick_refresh", String(revision));
+  return mountUrlWithParam(themedMount, "_maverick_refresh", String(revision));
+}
+
+function bootstrapThemeForFrame(
+  themesByFrameKey: Record<string, ShellThemeState>,
+  frameKey: string,
+  shellTheme: ShellThemeState,
+): ShellThemeState {
+  themesByFrameKey[frameKey] = themesByFrameKey[frameKey] || shellTheme;
+  return themesByFrameKey[frameKey];
 }
 
 function mountUrlWithParam(frontendMount: string, name: string, value: string): string {

@@ -1,7 +1,9 @@
 import { type PointerEvent as ReactPointerEvent, useEffect, useRef, useState } from "react";
 import { createWidgetContext, listWidgets, WidgetRegistryItem } from "../api";
-import { MAVERICK_IFRAME_SANDBOX, postMaverickFrameVisibility, postToMaverickFrame } from "../iframePolicy";
+import { MAVERICK_IFRAME_SANDBOX, postMaverickFrameVisibility, postMaverickShellTheme, postToMaverickFrame } from "../iframePolicy";
 import { widgetSelectionChangedMessage } from "../lib/widgetSelectionMessages";
+import type { ShellThemeState } from "../theme";
+import { DEFAULT_SHELL_THEME_STATE, shellThemeSignature, urlWithShellThemeSearchParams } from "../theme";
 import { ShellPendingIndicator } from "./ShellPendingIndicator";
 
 export type PrimaryActionPreferredSurface = "app" | "sidebar";
@@ -72,6 +74,7 @@ export function WidgetSlot({
   preferredOwnerAppId,
   primaryActionRequestId = 0,
   size = "fill",
+  shellTheme = DEFAULT_SHELL_THEME_STATE,
 }: {
   activeAppId?: string | null;
   activeWorkspaceId: string;
@@ -95,6 +98,7 @@ export function WidgetSlot({
   preferredOwnerAppId?: string | null;
   primaryActionRequestId?: number;
   size?: "compact" | "fill" | "overlay";
+  shellTheme?: ShellThemeState;
 }) {
   const [widget, setWidget] = useState<WidgetRegistryItem | null>(null);
   const [contextToken, setContextToken] = useState<string | null>(null);
@@ -112,9 +116,16 @@ export function WidgetSlot({
   const captureNavigationScopeRef = useRef("");
   const captureVideoRef = useRef<HTMLVideoElement | null>(null);
   const lastPrimaryActionRequestRef = useRef(primaryActionRequestId);
+  const shellThemeRef = useRef(shellTheme);
+  const widgetFrameBootstrapThemesRef = useRef<Record<string, ShellThemeState>>({});
   const widgetFrameRef = useRef<HTMLIFrameElement | null>(null);
   const contentSignature = JSON.stringify({ activeWorkspaceId, content });
+  const themeSignature = shellThemeSignature(shellTheme);
   const supportsPrimaryActionSlot = contentKind === "shell.sidebar.footer";
+
+  useEffect(() => {
+    shellThemeRef.current = shellTheme;
+  }, [shellTheme]);
 
   useEffect(() => {
     let cancelled = false;
@@ -149,7 +160,12 @@ export function WidgetSlot({
           owner_app_id: selected.owner_app_id,
           widget_id: selected.widget_id,
           message_id: `${activeWorkspaceId}:${hostAppId}:${contentKind}`,
-          content: { kind: contentKind, workspace_id: activeWorkspaceId, payload: content },
+          content: themedWidgetContextContent({
+            activeWorkspaceId,
+            content,
+            contentKind,
+            shellTheme: shellThemeRef.current,
+          }),
         });
         if (!cancelled) {
           setWidget(selected);
@@ -181,11 +197,19 @@ export function WidgetSlot({
       return;
     }
     postWidgetVisibility();
+    postMaverickShellTheme(widgetFrameRef.current, shellTheme);
     postToMaverickFrame(
       widgetFrameRef.current,
       {
         type: "maverick.widget.context-changed",
-        context: { content: { kind: contentKind, workspace_id: activeWorkspaceId, payload: content } },
+        context: {
+          content: themedWidgetContextContent({
+            activeWorkspaceId,
+            content,
+            contentKind,
+            shellTheme,
+          }),
+        },
         owner_app_id: widget.owner_app_id,
         widget_id: widget.widget_id,
       },
@@ -216,7 +240,11 @@ export function WidgetSlot({
 
   useEffect(() => {
     postWidgetContextChanged();
-  }, [activeWorkspaceId, contentKind, contentSignature, widget?.owner_app_id, widget?.widget_id]);
+  }, [activeWorkspaceId, contentKind, contentSignature, themeSignature, widget?.owner_app_id, widget?.widget_id]);
+
+  useEffect(() => {
+    postMaverickShellTheme(widgetFrameRef.current, shellTheme);
+  }, [themeSignature, widget?.owner_app_id, widget?.widget_id]);
 
   useEffect(() => {
     postWidgetVisibility();
@@ -536,8 +564,9 @@ export function WidgetSlot({
     return error ? <p className="bs-widget-slot__fallback">{error}</p> : null;
   }
 
-  const src = widgetFrameSrc(widget.frontend_mount, contextToken, frameRevision);
   const widgetFrameKey = `${activeWorkspaceId}:${widget.owner_app_id}:${widget.widget_id}:${contextToken}:${frameRevision}`;
+  const bootstrapTheme = bootstrapThemeForFrame(widgetFrameBootstrapThemesRef.current, widgetFrameKey, shellTheme);
+  const src = widgetFrameSrc(widget.frontend_mount, contextToken, frameRevision, bootstrapTheme);
   const isWidgetFrameLoading = supportsShellPending && loadedFrameKey !== widgetFrameKey;
   const isCollapsedOverlay = size === "overlay" && overlaySize.width === COLLAPSED_OVERLAY_SIZE && overlaySize.height === COLLAPSED_OVERLAY_SIZE;
   const widgetAllowPolicy = widget.owner_app_id === "chat" ? "fullscreen; microphone" : "fullscreen";
@@ -556,6 +585,7 @@ export function WidgetSlot({
           key={widgetFrameKey}
           onLoad={() => {
             setLoadedFrameKey(widgetFrameKey);
+            postMaverickShellTheme(widgetFrameRef.current, shellTheme);
             postWidgetContextChanged();
           }}
           ref={widgetFrameRef}
@@ -719,13 +749,41 @@ export function selectPreferredWidget(
   return widgets.find((item) => item.owner_app_id === preferredOwnerAppId) || null;
 }
 
-function widgetFrameSrc(frontendMount: string, contextToken: string, revision: number): string {
-  const url = new URL(frontendMount, window.location.origin);
+function widgetFrameSrc(frontendMount: string, contextToken: string, revision: number, shellTheme: ShellThemeState): string {
+  const url = urlWithShellThemeSearchParams(frontendMount, shellTheme);
   if (revision > 0) {
     url.searchParams.set("_maverick_refresh", String(revision));
   }
   url.hash = `context=${encodeURIComponent(contextToken)}`;
   return `${url.pathname}${url.search}${url.hash}`;
+}
+
+function themedWidgetContextContent({
+  activeWorkspaceId,
+  content,
+  contentKind,
+  shellTheme,
+}: {
+  activeWorkspaceId: string;
+  content: Record<string, unknown>;
+  contentKind: string;
+  shellTheme: ShellThemeState;
+}) {
+  return {
+    kind: contentKind,
+    workspace_id: activeWorkspaceId,
+    payload: content,
+    shell_theme: shellTheme,
+  };
+}
+
+function bootstrapThemeForFrame(
+  themesByFrameKey: Record<string, ShellThemeState>,
+  frameKey: string,
+  shellTheme: ShellThemeState,
+): ShellThemeState {
+  themesByFrameKey[frameKey] = themesByFrameKey[frameKey] || shellTheme;
+  return themesByFrameKey[frameKey];
 }
 
 function rectFromPoints(startX: number, startY: number, endX: number, endY: number): CaptureRect {

@@ -27,7 +27,7 @@ describe("floating chat unread indicator", () => {
     expect(styles.indexOf(".chat-floating-thread-menu__trigger.is-unread:not(.is-busy)")).toBeGreaterThan(
       styles.indexOf(".chat-floating-widget-launcher:hover"),
     );
-    expect(styles).toContain("border-color: #fff;");
+    expect(styles).toContain("border-color: var(--maverick-accent);");
   });
 
   it("marks floating chats read only from explicit floating selections", () => {

@@ -53,7 +53,7 @@
   gap: 0.65rem;
   padding-block: 0.55rem;
   border: 0;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  border-bottom: 1px solid rgba(var(--maverick-contrast-rgb), 0.06);
   border-radius: 0;
   background: transparent;
 }
@@ -135,7 +135,7 @@
   width: 2rem;
   height: 2rem;
   padding: 0;
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(var(--maverick-contrast-rgb), 0.08);
   border-radius: 999px;
   background: transparent;
   color: var(--maverick-text-soft);
@@ -149,8 +149,8 @@
 
 .chatapp-chat-panel__icon-action:hover:not(:disabled) {
   color: var(--maverick-text);
-  border-color: rgba(255, 255, 255, 0.14);
-  background: rgba(255, 255, 255, 0.04);
+  border-color: rgba(var(--maverick-contrast-rgb), 0.14);
+  background: rgba(var(--maverick-contrast-rgb), 0.04);
 }
 
 .chatapp-chat-panel__icon-action:active:not(:disabled) {
@@ -246,7 +246,7 @@
 
 .chatapp-empty-chat-stage__copy h1 {
   margin: 0;
-  color: rgba(255, 255, 255, 0.92);
+  color: rgba(var(--maverick-contrast-rgb), 0.92);
   font-size: clamp(1.92rem, 4vw, 2.32rem);
   font-weight: 500;
   letter-spacing: 0;
@@ -257,13 +257,13 @@
   display: block;
   width: min(100%, 19rem);
   height: 1px;
-  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.2), transparent);
+  background: linear-gradient(90deg, transparent, rgba(var(--maverick-contrast-rgb), 0.2), transparent);
   animation: chatapp-empty-rule-in 720ms 160ms ease-out both;
 }
 
 .chatapp-empty-chat-stage__copy p {
   margin: 0;
-  color: rgba(255, 255, 255, 0.4);
+  color: rgba(var(--maverick-contrast-rgb), 0.4);
   font-size: 0.9rem;
   line-height: 1.45;
 }
@@ -365,7 +365,7 @@
 .chatapp-chat-history-cap {
   margin: 0 0 0.9rem;
   padding: 0.65rem 0.8rem;
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(var(--maverick-contrast-rgb), 0.08);
   border-radius: var(--chatapp-control-radius);
   background: var(--chatapp-soft-surface);
   color: var(--maverick-text-muted);
@@ -384,7 +384,7 @@
   width: 2.65rem;
   height: 2.65rem;
   padding: 0;
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(var(--maverick-contrast-rgb), 0.08);
   border-radius: var(--chatapp-control-radius);
   background: var(--chatapp-glass-surface);
   box-shadow:
@@ -403,8 +403,8 @@
 
 .chatapp-chat-scroll-jump:hover {
   background: var(--chatapp-soft-surface-hover);
-  border-color: rgba(255, 255, 255, 0.14);
-  color: #fff;
+  border-color: rgba(var(--maverick-contrast-rgb), 0.14);
+  color: var(--maverick-text);
   transform: translateY(-1px);
 }
 

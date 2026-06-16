@@ -1,8 +1,12 @@
 import { createRoot } from "react-dom/client";
+import { applyInitialMaverickTheme, listenForMaverickThemeMessages } from "../../lib/shellTheme";
 import { ChatSidebarSkeleton } from "./ChatSidebarSkeleton";
 import { ProjectSection } from "./ProjectSection";
 import "./styles.css";
 import { useChatSidebarState } from "./useChatSidebarState";
+
+applyInitialMaverickTheme();
+listenForMaverickThemeMessages();
 
 function ChatSidebarWidget() {
   const sidebar = useChatSidebarState();

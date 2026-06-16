@@ -1,4 +1,5 @@
-const SESSION_KEY = "maverick:base-shell:session";
+import { DEFAULT_SHELL_THEME_MODE, SHELL_SESSION_STORAGE_KEY, normalizeShellThemeMode } from "./theme";
+import type { ShellThemeMode } from "./theme";
 
 export type SidebarMode = "rail" | "fixed";
 export type FloatingChatMode = "overlay" | "fixed-right";
@@ -12,6 +13,7 @@ export type ShellSession = {
   isSidebarOpen: boolean;
   sidebarDetailsWidthPx: number;
   sidebarMode: SidebarMode;
+  themeMode: ShellThemeMode;
 };
 
 export const DEFAULT_SIDEBAR_DETAILS_WIDTH_PX = 320;
@@ -30,6 +32,7 @@ const DEFAULT_SESSION: ShellSession = {
   isSidebarOpen: false,
   sidebarDetailsWidthPx: DEFAULT_SIDEBAR_DETAILS_WIDTH_PX,
   sidebarMode: "rail",
+  themeMode: DEFAULT_SHELL_THEME_MODE,
 };
 
 function canUseStorage(): boolean {
@@ -41,7 +44,7 @@ export function readShellSession(): ShellSession {
     return DEFAULT_SESSION;
   }
   try {
-    const parsed = JSON.parse(window.localStorage.getItem(SESSION_KEY) || "{}") as Partial<ShellSession>;
+    const parsed = JSON.parse(window.localStorage.getItem(SHELL_SESSION_STORAGE_KEY) || "{}") as Partial<ShellSession>;
     return {
       activeAppId: typeof parsed.activeAppId === "string" && parsed.activeAppId.trim() ? parsed.activeAppId.trim() : DEFAULT_SESSION.activeAppId,
       floatingChatMode: normalizeFloatingChatMode(parsed.floatingChatMode),
@@ -55,6 +58,7 @@ export function readShellSession(): ShellSession {
       isSidebarOpen: typeof parsed.isSidebarOpen === "boolean" ? parsed.isSidebarOpen : DEFAULT_SESSION.isSidebarOpen,
       sidebarDetailsWidthPx: normalizeSidebarDetailsWidth(parsed.sidebarDetailsWidthPx),
       sidebarMode: normalizeSidebarMode(parsed.sidebarMode),
+      themeMode: normalizeShellThemeMode(parsed.themeMode),
     };
   } catch {
     return DEFAULT_SESSION;
@@ -65,7 +69,7 @@ export function writeShellSession(session: ShellSession): void {
   if (!canUseStorage()) {
     return;
   }
-  window.localStorage.setItem(SESSION_KEY, JSON.stringify(session));
+  window.localStorage.setItem(SHELL_SESSION_STORAGE_KEY, JSON.stringify(session));
 }
 
 export function resolveInitialSidebarOpen(

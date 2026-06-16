@@ -36,7 +36,7 @@
 .chatapp-agent-block__body code {
   padding: 0.08rem 0.28rem;
   border-radius: 6px;
-  background: rgba(255, 255, 255, 0.08);
+  background: rgba(var(--maverick-contrast-rgb), 0.08);
   color: #ffe2ed;
   font-size: 0.9em;
 }
@@ -45,7 +45,7 @@
   max-width: 100%;
   overflow-x: auto;
   padding: 0.9rem 1rem;
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(var(--maverick-contrast-rgb), 0.08);
   border-radius: 16px;
   background: #181818;
 }
@@ -74,10 +74,10 @@
 .chatapp-agent-block__body th,
 .chatapp-agent-block__body td {
   padding: 0.45rem 0.6rem;
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(var(--maverick-contrast-rgb), 0.08);
   text-align: left;
 }
 
 .chatapp-agent-block__body th {
-  background: rgba(255, 255, 255, 0.06);
+  background: rgba(var(--maverick-contrast-rgb), 0.06);
 }

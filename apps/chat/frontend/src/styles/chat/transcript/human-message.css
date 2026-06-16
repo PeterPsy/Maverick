@@ -5,9 +5,9 @@
   max-width: 100%;
   padding: 0.75rem 0.95rem;
   border-radius: var(--chatapp-cell-radius);
-  background: rgba(255, 255, 255, 0.8);
+  background: var(--maverick-accent);
   box-shadow: var(--chatapp-inner-edge);
-  color: #0a0a0b;
+  color: var(--maverick-text-on-accent);
 }
 
 .chatapp-message-copy-row {
@@ -64,7 +64,7 @@ button.chatapp-message-reference-chip {
 }
 
 .chatapp-message-reference-chip__kind {
-  color: rgba(255, 255, 255, 0.7);
+  color: rgba(var(--maverick-contrast-rgb), 0.7);
   font-size: 0.64rem;
   font-weight: 400;
   letter-spacing: 0;
@@ -85,7 +85,7 @@ button.chatapp-message-reference-chip {
 }
 
 .chatapp-human-message__editorial-summary {
-  color: rgba(255, 255, 255, 0.72);
+  color: rgba(var(--maverick-contrast-rgb), 0.72);
   font-size: 0.72rem;
   font-weight: 400;
   letter-spacing: 0.06em;
@@ -105,7 +105,7 @@ button.chatapp-message-reference-chip {
   max-width: 100%;
   padding: 0.42rem 0.6rem;
   border-radius: 999px;
-  background: rgba(255, 255, 255, 0.08);
+  background: rgba(var(--maverick-contrast-rgb), 0.08);
   color: inherit;
   font-size: 0.84rem;
 }

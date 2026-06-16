@@ -22,6 +22,7 @@ function shellSession(overrides: Partial<ShellSession> = {}): ShellSession {
     isSidebarOpen: false,
     sidebarDetailsWidthPx: DEFAULT_SIDEBAR_DETAILS_WIDTH_PX,
     sidebarMode: "rail",
+    themeMode: "dark",
     ...overrides,
   };
 }
@@ -43,6 +44,7 @@ describe("base-shell session", () => {
       isSidebarOpen: false,
       sidebarDetailsWidthPx: DEFAULT_SIDEBAR_DETAILS_WIDTH_PX,
       sidebarMode: "rail",
+      themeMode: "dark",
     });
   });
 
@@ -59,6 +61,7 @@ describe("base-shell session", () => {
             isSidebarOpen: false,
             sidebarDetailsWidthPx: 420.4,
             sidebarMode: "fixed",
+            themeMode: "light",
           }),
         ),
         setItem: vi.fn(),
@@ -74,6 +77,7 @@ describe("base-shell session", () => {
       isSidebarOpen: false,
       sidebarDetailsWidthPx: 420,
       sidebarMode: "fixed",
+      themeMode: "light",
     });
   });
 
@@ -111,6 +115,7 @@ describe("base-shell session", () => {
         isSidebarOpen: false,
         sidebarDetailsWidthPx: DEFAULT_SIDEBAR_DETAILS_WIDTH_PX,
         sidebarMode: "rail",
+        themeMode: "dark",
       }),
     );
   });

@@ -1,4 +1,5 @@
 import { AppRegistryItem } from "../api";
+import type { ShellThemeState } from "../theme";
 import { AppFrameHost } from "./AppFrameHost";
 import { AppsPanel } from "./AppsPanel";
 
@@ -11,6 +12,7 @@ export function WorkspaceView({
   isLoading,
   isMobileLayout,
   onOpenApp,
+  shellTheme,
 }: {
   activeApp: AppRegistryItem | null;
   activeAppParams: Record<string, string | boolean | null>;
@@ -20,6 +22,7 @@ export function WorkspaceView({
   isLoading: boolean;
   isMobileLayout: boolean;
   onOpenApp: (appId: string, params?: Record<string, string | boolean | null>) => void;
+  shellTheme: ShellThemeState;
 }) {
   if (!activeApp) {
     return (
@@ -38,6 +41,7 @@ export function WorkspaceView({
       activeWorkspaceId={activeWorkspaceId}
       isMobileLayout={isMobileLayout}
       onOpenApp={onOpenApp}
+      shellTheme={shellTheme}
     />
   );
 }

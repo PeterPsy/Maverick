@@ -37,7 +37,7 @@
 
 .chatapp-agent-step__tool-entry + .chatapp-agent-step__tool-entry {
   padding-top: 0.55rem;
-  border-top: 1px solid rgba(255, 255, 255, 0.06);
+  border-top: 1px solid rgba(var(--maverick-contrast-rgb), 0.06);
 }
 
 .chatapp-agent-step__command-row {
@@ -51,7 +51,7 @@
   display: block;
   overflow-x: auto;
   padding: 0.72rem 0.82rem;
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(var(--maverick-contrast-rgb), 0.08);
   border-radius: var(--chatapp-control-radius);
   background: var(--chatapp-glass-surface);
   color: #f3f4f6;
@@ -65,7 +65,7 @@
   overflow: auto;
   margin: 0;
   padding: 0.72rem 0.82rem;
-  border: 1px solid rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(var(--maverick-contrast-rgb), 0.06);
   border-radius: var(--chatapp-control-radius);
   background: var(--chatapp-glass-surface);
   max-height: 18rem;
@@ -83,7 +83,7 @@
   width: 2rem;
   height: 2rem;
   padding: 0;
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(var(--maverick-contrast-rgb), 0.08);
   border-radius: 999px;
   background: var(--chatapp-soft-surface);
   color: var(--maverick-text-muted);
@@ -97,7 +97,7 @@
 
 .chatapp-agent-step__output-toggle:hover {
   color: var(--maverick-text);
-  border-color: rgba(255, 255, 255, 0.14);
+  border-color: rgba(var(--maverick-contrast-rgb), 0.14);
   background: var(--chatapp-soft-surface-hover);
 }
 
@@ -128,34 +128,34 @@
 .chatapp-agent-step {
   width: min(100%, 54rem);
   padding: 0.72rem 0.82rem;
-  border: 1px solid rgba(255, 255, 255, 0.045);
+  border: 1px solid rgba(var(--maverick-contrast-rgb), 0.045);
   border-radius: var(--chatapp-cell-radius);
   background: var(--chatapp-soft-surface);
-  color: rgba(255, 255, 255, 0.62);
+  color: rgba(var(--maverick-contrast-rgb), 0.62);
   backdrop-filter: blur(26px);
 }
 
 .chatapp-agent-step--thought .chatapp-agent-step__body {
-  color: rgba(255, 255, 255, 0.58);
+  color: rgba(var(--maverick-contrast-rgb), 0.58);
 }
 
 .chatapp-agent-step__command,
 .chatapp-agent-step__output {
-  border-color: rgba(255, 255, 255, 0.065);
+  border-color: rgba(var(--maverick-contrast-rgb), 0.065);
   border-radius: 0.85rem;
   background: rgba(0, 0, 0, 0.26);
 }
 
 .chatapp-agent-step__output-toggle {
-  border-color: rgba(255, 255, 255, 0.07);
-  background: rgba(255, 255, 255, 0.035);
-  color: rgba(255, 255, 255, 0.62);
+  border-color: rgba(var(--maverick-contrast-rgb), 0.07);
+  background: rgba(var(--maverick-contrast-rgb), 0.035);
+  color: rgba(var(--maverick-contrast-rgb), 0.62);
 }
 
 .chatapp-agent-step__output-toggle:hover {
-  border-color: rgba(255, 255, 255, 0.14);
-  background: rgba(255, 255, 255, 0.07);
-  color: #fff;
+  border-color: rgba(var(--maverick-contrast-rgb), 0.14);
+  background: rgba(var(--maverick-contrast-rgb), 0.07);
+  color: var(--maverick-text);
 }
 
 .chatapp-diff-list {
@@ -165,7 +165,7 @@
 
 .chatapp-diff-card {
   overflow: hidden;
-  border: 1px solid rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(var(--maverick-contrast-rgb), 0.06);
   border-radius: 14px;
   background: #191919;
 }
@@ -176,8 +176,8 @@
   gap: 0.55rem;
   min-width: 0;
   padding: 0.65rem 0.8rem;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
-  background: rgba(255, 255, 255, 0.03);
+  border-bottom: 1px solid rgba(var(--maverick-contrast-rgb), 0.06);
+  background: rgba(var(--maverick-contrast-rgb), 0.03);
 }
 
 .chatapp-diff-card__icon {

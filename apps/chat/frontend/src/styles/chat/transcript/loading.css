@@ -54,7 +54,7 @@
   height: 0.68rem;
   overflow: hidden;
   border-radius: 999px;
-  background: rgba(255, 255, 255, 0.09);
+  background: rgba(var(--maverick-contrast-rgb), 0.09);
 }
 
 .chatapp-transcript-skeleton__bubble--human .chatapp-transcript-skeleton__line {
@@ -65,7 +65,7 @@
   content: "";
   position: absolute;
   inset: 0;
-  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.12), transparent);
+  background: linear-gradient(90deg, transparent, rgba(var(--maverick-contrast-rgb), 0.12), transparent);
   transform: translateX(-100%);
   animation: chatapp-skeleton-shimmer 1.45s ease-in-out infinite;
 }
@@ -103,7 +103,7 @@
   border: 0;
   border-radius: 0;
   background: transparent;
-  color: rgba(255, 255, 255, 0.66);
+  color: rgba(var(--maverick-contrast-rgb), 0.66);
   backdrop-filter: none;
 }
 
@@ -114,7 +114,7 @@
   align-self: center;
   min-height: 1.8rem;
   margin: 0.15rem auto 0.4rem;
-  color: rgba(255, 255, 255, 0.62);
+  color: rgba(var(--maverick-contrast-rgb), 0.62);
   font-size: 0.78rem;
   line-height: 1.2;
 }

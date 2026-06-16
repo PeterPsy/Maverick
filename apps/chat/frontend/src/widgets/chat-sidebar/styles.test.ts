@@ -33,11 +33,11 @@ describe("chat sidebar search", () => {
 });
 
 describe("chat sidebar unread response state", () => {
-  it("renders a white border for completed unread responses", () => {
+  it("renders a theme-aware accent border for completed unread responses", () => {
     const styles = readStyle("styles.css");
 
     expect(styles).toContain(".bs-chat-list__item.is-unread:not(.is-busy)");
-    expect(styles).toContain("border-color: #fff;");
+    expect(styles).toContain("border-color: var(--maverick-accent);");
     expect(styles.indexOf(".bs-chat-list__item.is-unread:not(.is-busy)")).toBeGreaterThan(styles.indexOf(".bs-chat-list__item.is-expanded"));
   });
 });

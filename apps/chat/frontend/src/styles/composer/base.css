@@ -49,7 +49,7 @@
   border-radius: var(--chatapp-glass-radius);
   border: 1px solid rgba(255, 184, 77, 0.24);
   background:
-    linear-gradient(180deg, rgba(255, 184, 77, 0.12), rgba(255, 255, 255, 0.03)),
+    linear-gradient(180deg, rgba(255, 184, 77, 0.12), rgba(var(--maverick-contrast-rgb), 0.03)),
     var(--chatapp-glass-surface);
   box-shadow: var(--chatapp-composer-shadow);
   backdrop-filter: blur(26px) saturate(1.25);
@@ -151,7 +151,7 @@
   border: 1px solid transparent;
   border-radius: 999px;
   background: transparent;
-  color: rgba(255, 255, 255, 0.94);
+  color: rgba(var(--maverick-contrast-rgb), 0.94);
   cursor: pointer;
   transition:
     color 140ms ease,
@@ -161,7 +161,7 @@
 }
 
 .chatapp-composer__icon-action:hover:not(:disabled) {
-  background: rgba(255, 255, 255, 0.06);
+  background: rgba(var(--maverick-contrast-rgb), 0.06);
 }
 
 .chatapp-composer__icon-action:disabled {
@@ -170,8 +170,8 @@
 }
 
 .chatapp-composer__icon-action.is-stop {
-  color: rgba(255, 255, 255, 0.72);
-  background: rgba(255, 255, 255, 0.055);
+  color: rgba(var(--maverick-contrast-rgb), 0.72);
+  background: rgba(var(--maverick-contrast-rgb), 0.055);
 }
 
 .chatapp-composer__icon-action .material-symbols-rounded {

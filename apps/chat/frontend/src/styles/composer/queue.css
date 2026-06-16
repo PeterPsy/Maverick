@@ -5,11 +5,11 @@
   padding: 0.85rem 1rem;
   border: 1px solid var(--chatapp-soft-border);
   border-radius: var(--chatapp-cell-radius);
-  background: rgba(255, 255, 255, 0.8);
+  background: var(--maverick-accent);
   box-shadow:
     var(--chatapp-inner-edge),
     0 14px 44px rgba(0, 0, 0, 0.2);
-  color: #0a0a0b;
+  color: var(--maverick-text-on-accent);
 }
 
 .chatapp-composer-queue__eyebrow {
@@ -22,20 +22,20 @@
 }
 
 .chatapp-composer-queue__eyebrow strong {
-  color: rgba(10, 10, 11, 0.64);
+  color: color-mix(in srgb, var(--maverick-text-on-accent) 64%, transparent);
   font-size: 0.82rem;
   letter-spacing: 0;
   text-transform: uppercase;
 }
 
 .chatapp-composer-queue__eyebrow span {
-  color: rgba(10, 10, 11, 0.52);
+  color: color-mix(in srgb, var(--maverick-text-on-accent) 52%, transparent);
   font-size: 0.8rem;
 }
 
 .chatapp-composer-queue__preview {
   width: 100%;
-  color: #0a0a0b;
+  color: var(--maverick-text-on-accent);
   font-size: 0.92rem;
   line-height: 1.5;
   white-space: pre-wrap;

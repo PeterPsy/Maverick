@@ -34,7 +34,7 @@
 .chatapp-bubble__time {
   font-size: 0.72rem;
   line-height: 1;
-  color: rgba(255, 255, 255, 0.48);
+  color: rgba(var(--maverick-contrast-rgb), 0.48);
   white-space: nowrap;
 }
 

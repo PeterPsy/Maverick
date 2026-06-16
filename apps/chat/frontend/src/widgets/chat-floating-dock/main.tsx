@@ -5,6 +5,7 @@ import "../chat-floating/styles.css";
 import { deleteThread, markThreadRead, updateThread } from "../../api/client";
 import type { ChatThread } from "../../api/client";
 import { useRuntimeThreads } from "../../hooks/useRuntimeThreads";
+import { applyInitialMaverickTheme, listenForMaverickThemeMessages } from "../../lib/shellTheme";
 import { isThreadUnread } from "../chat-sidebar/sections";
 import {
   DEFAULT_FLOATING_DOCK_NAVIGATION_SCOPE,
@@ -16,6 +17,9 @@ import { FloatingChatFrame } from "../chat-floating/FloatingChatFrame";
 import { createWindow, persistWindows, readPersistedWindows, reconcileWindowsWithThreads, widgetStateStorageKey } from "../chat-floating/floatingState";
 import type { FloatingChatWindow } from "../chat-floating/floatingState";
 import { debugThreadSync, loadFloatingDockContext, postDockClose } from "../chat-floating/floatingWidgetRuntime";
+
+applyInitialMaverickTheme();
+listenForMaverickThemeMessages();
 
 function ChatFloatingDockMount() {
   const dock = useFloatingDockWindow();

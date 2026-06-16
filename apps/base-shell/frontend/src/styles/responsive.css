@@ -105,9 +105,17 @@
     z-index: 4;
   }
 
-  .bs-sidebar__desktop-logo,
-  .bs-sidebar__control-cluster {
+  .bs-sidebar__desktop-logo {
     display: none;
+  }
+
+  .bs-sidebar__shell-controls {
+    justify-content: center;
+  }
+
+  .bs-sidebar__control-cluster {
+    display: flex;
+    justify-content: center;
   }
 
   .bs-widget-slot__frame {

@@ -2,18 +2,16 @@
   --bs-sidebar-glass-radius: 34px;
   --bs-sidebar-control-radius: 18px;
   --bs-sidebar-cell-radius: 22px;
-  --bs-sidebar-soft-surface-hover: rgba(255, 255, 255, 0.105);
-  --bs-sidebar-soft-surface-active: rgba(255, 255, 255, 0.14);
-  --bs-sidebar-inner-edge: inset 0 0 0 1px rgba(255, 255, 255, 0.075), inset 0 1px 0 rgba(255, 255, 255, 0.14);
-  --bs-sidebar-glass-edge: inset 0 0 0 1px rgba(255, 255, 255, 0.052), inset 0 1px 0 rgba(255, 255, 255, 0.09);
-  --bs-sidebar-composer-border: rgba(255, 255, 255, 0.05);
-  --bs-sidebar-composer-surface: rgba(12, 12, 14, 0.58);
-  --bs-sidebar-composer-highlight:
-    linear-gradient(135deg, rgba(255, 255, 255, 0.08), transparent 36%),
-    linear-gradient(315deg, rgba(255, 255, 255, 0.035), transparent 42%);
+  --bs-sidebar-soft-surface-hover: var(--maverick-surface-hover);
+  --bs-sidebar-soft-surface-active: var(--maverick-surface-active);
+  --bs-sidebar-inner-edge: var(--maverick-inner-edge);
+  --bs-sidebar-glass-edge: var(--maverick-glass-edge);
+  --bs-sidebar-composer-border: var(--maverick-border);
+  --bs-sidebar-composer-surface: var(--maverick-glass-surface);
+  --bs-sidebar-composer-highlight: var(--maverick-glass-highlight);
   --bs-sidebar-composer-shadow:
     var(--bs-sidebar-glass-edge),
-    0 24px 80px rgba(0, 0, 0, 0.36);
+    0 24px 80px var(--maverick-shadow-panel);
   position: fixed;
   top: 0;
   left: var(--bs-sidebar-desktop-rail-left, 1rem);
@@ -209,7 +207,7 @@
   padding: 0;
   border-radius: min(1.125rem, calc(var(--bs-sidebar-icon-size, 2.4rem) * 0.375));
   background: transparent;
-  color: #111;
+  color: var(--maverick-text-on-accent);
   transition:
     background 140ms ease,
     color 140ms ease,
@@ -229,7 +227,7 @@
 .bs-sidebar__rail-button.is-drop-target .bs-app-logo--rail {
   box-shadow:
     var(--bs-sidebar-inner-edge),
-    0 0 0 2px rgba(255, 255, 255, 0.34),
+    0 0 0 2px rgba(var(--maverick-contrast-rgb), 0.34),
     0 10px 24px rgba(0, 0, 0, 0.22);
 }
 
@@ -248,7 +246,7 @@
 .bs-workspace-switcher__skeleton-button {
   position: relative;
   overflow: hidden;
-  background: rgba(255, 255, 255, 0.08);
+  background: rgba(var(--maverick-contrast-rgb), 0.08);
 }
 
 .bs-sidebar__rail-skeleton-logo::after,
@@ -258,7 +256,7 @@
   content: "";
   position: absolute;
   inset: 0;
-  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.13), transparent);
+  background: linear-gradient(90deg, transparent, rgba(var(--maverick-contrast-rgb), 0.13), transparent);
   transform: translateX(-100%);
   animation: bs-sidebar-skeleton-shimmer 1.35s ease-in-out infinite;
 }
@@ -272,8 +270,8 @@
   position: absolute;
   inset: 32%;
   border-radius: 0.5rem;
-  background: rgba(255, 255, 255, 0.11);
-  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.055);
+  background: rgba(var(--maverick-contrast-rgb), 0.11);
+  box-shadow: inset 0 0 0 1px rgba(var(--maverick-contrast-rgb), 0.055);
 }
 
 @keyframes bs-sidebar-skeleton-shimmer {
@@ -690,7 +688,7 @@
   padding: 0.82rem 0.72rem;
   border: 1px solid var(--bs-sidebar-composer-border);
   border-radius: var(--bs-sidebar-cell-radius);
-  background: rgba(255, 255, 255, 0.045);
+  background: rgba(var(--maverick-contrast-rgb), 0.045);
   box-shadow: var(--bs-sidebar-inner-edge);
   color: var(--maverick-text-muted);
   font-size: 0.72rem;
@@ -769,6 +767,17 @@
 }
 
 .bs-sidebar__mode-switcher {
+  display: flex;
+  flex: none;
+  gap: 0.18rem;
+  padding: 0.18rem;
+  border: 1px solid var(--bs-sidebar-composer-border);
+  border-radius: var(--bs-sidebar-cell-radius);
+  background: var(--bs-sidebar-composer-surface);
+  box-shadow: var(--bs-sidebar-inner-edge);
+}
+
+.bs-sidebar__theme-switcher {
   display: flex;
   flex: none;
   gap: 0.18rem;
@@ -969,14 +978,14 @@
   margin-left: 0.82rem;
   overflow: hidden;
   border-radius: 999px;
-  background: rgba(255, 255, 255, 0.09);
+  background: rgba(var(--maverick-contrast-rgb), 0.09);
 }
 
 .bs-workspace-switcher__skeleton-line::after {
   content: "";
   position: absolute;
   inset: 0;
-  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.13), transparent);
+  background: linear-gradient(90deg, transparent, rgba(var(--maverick-contrast-rgb), 0.13), transparent);
   transform: translateX(-100%);
   animation: bs-sidebar-skeleton-shimmer 1.35s ease-in-out infinite;
 }

@@ -4,7 +4,7 @@
   align-items: start;
   gap: 0.6rem;
   padding: 0.18rem 0.75rem;
-  border-top: 1px solid rgba(255, 255, 255, 0.03);
+  border-top: 1px solid rgba(var(--maverick-contrast-rgb), 0.03);
   font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
   font-size: 0.8rem;
   line-height: 1.55;
@@ -48,7 +48,7 @@
 
 .chatapp-diff-line.is-header,
 .chatapp-diff-line.is-meta {
-  background: rgba(255, 255, 255, 0.03);
+  background: rgba(var(--maverick-contrast-rgb), 0.03);
 }
 
 .chatapp-diff-line.is-header .chatapp-diff-line__marker,
@@ -77,7 +77,7 @@
   display: inline-flex;
   align-items: center;
   gap: 0.6rem;
-  color: rgba(255, 255, 255, 0.66);
+  color: rgba(var(--maverick-contrast-rgb), 0.66);
   font-size: 0.9rem;
 }
 
@@ -86,7 +86,7 @@
   font-weight: 400;
   letter-spacing: 0.01em;
   color: transparent;
-  background: linear-gradient(90deg, rgba(255, 255, 255, 0.48) 0%, rgba(255, 255, 255, 0.68) 34%, #ffffff 50%, rgba(255, 255, 255, 0.68) 66%, rgba(255, 255, 255, 0.48) 100%);
+  background: linear-gradient(90deg, rgba(var(--maverick-contrast-rgb), 0.48) 0%, rgba(var(--maverick-contrast-rgb), 0.68) 34%, var(--maverick-text) 50%, rgba(var(--maverick-contrast-rgb), 0.68) 66%, rgba(var(--maverick-contrast-rgb), 0.48) 100%);
   background-size: 230% 100%;
   background-position: 130% 50%;
   background-clip: text;
@@ -95,19 +95,19 @@
 }
 
 .chatapp-pending-turn__icon {
-  color: #ffffff;
+  color: var(--maverick-text);
 }
 
 @media (prefers-reduced-motion: reduce) {
   .chatapp-pending-turn__label {
-    color: rgba(255, 255, 255, 0.66);
+    color: rgba(var(--maverick-contrast-rgb), 0.66);
     background: none;
     animation: none;
   }
 }
 
 .chatapp-diff-card {
-  border-color: rgba(255, 255, 255, 0.065);
+  border-color: rgba(var(--maverick-contrast-rgb), 0.065);
   border-radius: var(--chatapp-cell-radius);
   background: var(--chatapp-soft-surface);
   box-shadow:
@@ -117,23 +117,23 @@
 }
 
 .chatapp-diff-card__header {
-  border-bottom-color: rgba(255, 255, 255, 0.055);
-  background: rgba(255, 255, 255, 0.035);
+  border-bottom-color: rgba(var(--maverick-contrast-rgb), 0.055);
+  background: rgba(var(--maverick-contrast-rgb), 0.035);
 }
 
 .chatapp-diff-line {
-  border-top-color: rgba(255, 255, 255, 0.025);
+  border-top-color: rgba(var(--maverick-contrast-rgb), 0.025);
 }
 
 .chatapp-diff-line.is-header,
 .chatapp-diff-line.is-meta {
-  background: rgba(255, 255, 255, 0.035);
+  background: rgba(var(--maverick-contrast-rgb), 0.035);
 }
 
 .chatapp-diff-line.is-hunk {
-  background: rgba(255, 255, 255, 0.055);
+  background: rgba(var(--maverick-contrast-rgb), 0.055);
 }
 
 .chatapp-diff-line.is-hunk .chatapp-diff-line__content {
-  color: rgba(255, 255, 255, 0.78);
+  color: rgba(var(--maverick-contrast-rgb), 0.78);
 }

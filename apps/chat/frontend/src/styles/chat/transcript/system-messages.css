@@ -32,7 +32,7 @@
   max-width: 100%;
   font-size: 0.94rem;
   font-weight: 400;
-  color: #ffffff;
+  color: var(--maverick-text);
   overflow-wrap: anywhere;
   word-break: break-word;
 }
@@ -52,7 +52,7 @@
   color: rgba(238, 243, 255, 0.86);
   padding: 0.18rem 0.5rem;
   border-radius: 999px;
-  background: rgba(255, 255, 255, 0.12);
+  background: rgba(var(--maverick-contrast-rgb), 0.12);
   overflow-wrap: anywhere;
 }
 

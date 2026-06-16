@@ -2,6 +2,7 @@ import { useMemo, useRef, useState } from "react";
 import type { CSSProperties, KeyboardEvent as ReactKeyboardEvent, PointerEvent as ReactPointerEvent } from "react";
 import type { AppRegistryItem } from "../api";
 import { clampFloatingChatWidth, type FloatingChatMode } from "../session";
+import type { ShellThemeState } from "../theme";
 import { WidgetSlot } from "./WidgetSlot";
 
 type FloatingChatPlacement = "overlay" | "fixed-right" | "mobile-fullscreen";
@@ -22,6 +23,7 @@ export function FloatingChatHost({
   onOpenDock,
   onResizeActiveChange,
   onWidthChange,
+  shellTheme,
   threadId,
   user,
   widthPx,
@@ -47,6 +49,7 @@ export function FloatingChatHost({
   }) => void;
   onResizeActiveChange?: (active: boolean) => void;
   onWidthChange: (widthPx: number) => void;
+  shellTheme: ShellThemeState;
   threadId: string | null;
   user: { username?: string | null } | null;
   widthPx: number;
@@ -186,6 +189,7 @@ export function FloatingChatHost({
           onOpenApp={onOpenApp}
           onOpenDock={onOpenDock}
           preferredOwnerAppId="chat"
+          shellTheme={shellTheme}
           size={widgetSize}
         />
       </div>

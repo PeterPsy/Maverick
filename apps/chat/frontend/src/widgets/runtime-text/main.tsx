@@ -4,8 +4,12 @@ import type { PendingMessage } from "../../lib/messageState";
 import type { RuntimeEvent, RuntimeSession, RuntimeTurn } from "../../api/client";
 import { getWidgetContext } from "../../api/client";
 import { useRuntimeEvents } from "../../hooks/useRuntimeEvents";
+import { applyInitialMaverickTheme, listenForMaverickThemeMessages } from "../../lib/shellTheme";
 import { eventsToMessages } from "../../lib/transcript";
 import "./styles.css";
+
+applyInitialMaverickTheme();
+listenForMaverickThemeMessages();
 
 const CONTENT_KIND = "chat.runtime.text.preview";
 const MAX_VISIBLE_MESSAGES = 12;

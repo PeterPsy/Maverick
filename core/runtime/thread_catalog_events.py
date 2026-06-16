@@ -175,6 +175,8 @@ def _ensure_thread_for_runtime_session(
         session = state.runtime_store.get_session(runtime_session_id)
     except RuntimeSessionNotFoundError:
         return None
+    except ValueError:
+        return None
     if session.workspace_id != workspace_id:
         return None
     if not runtime_session_allows_user_thread(session):

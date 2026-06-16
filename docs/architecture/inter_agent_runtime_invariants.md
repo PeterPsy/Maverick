@@ -18,7 +18,9 @@ It is intentionally limited to names, visibility, legacy compatibility, and init
 5. Legacy runtime session records that omit either field are interpreted as `session_kind="chat_root"` and `thread_visibility="user"`.
 6. Only `thread_visibility="user"` sessions may produce `RuntimeThreadRecord` records or appear in Chat thread catalogs.
 7. `thread_visibility="hidden"` sessions may have runtime turns, runtime events, runtime processes, provider state, and runtime roots, but they must not create, update, or appear as user-visible runtime threads.
-8. `handoff` is schema/event-only until F7. It is not executable MVP behavior unless a later ADR explicitly promotes it.
+8. `session_kind="inter_agent_participant"` requires `thread_visibility="hidden"`; omitted visibility on an explicit participant is normalized to hidden, while explicit `user` visibility is invalid.
+9. Invalid persisted visibility values fail closed: they are rejected on direct session hydration and must not make an existing thread appear in user-facing thread catalogs.
+10. `handoff` is schema/event-only until F7. It is not executable MVP behavior unless a later ADR explicitly promotes it.
 
 ## Initial Policy Defaults
 
@@ -56,6 +58,12 @@ The new invariant is:
 - thread catalogs and `WS /ws/runtime/threads` expose only user-visible runtime threads
 
 This keeps the primary Chat transcript as one visible conversation while allowing future participant sessions to execute without appearing as standalone chats.
+
+## Child Session Helper Boundary
+
+The internal `create_child_runtime_session` helper is not the public multi-agent spawn API.
+
+It may reuse only the parent session's resolved workspace boundary, workdir, execution mode, and runtime-session parent linkage. Prompt materialization, skill ids, skill catalog, source app, owner, creator, and operation grants must be explicit inputs produced by core policy, an authorized app snapshot, or a later `ParticipantSpec` materialization step. The helper defaults those authority-bearing fields to empty values and must not clone them from the parent session.
 
 ## Inventory For F2
 

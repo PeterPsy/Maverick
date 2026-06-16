@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Literal
@@ -96,10 +97,44 @@ def coerce_runtime_thread_visibility(value: object | None) -> RuntimeThreadVisib
     raise ValueError(f"Unsupported runtime thread visibility `{normalized}`.")
 
 
+def normalize_runtime_session_visibility(
+    session_kind: object | None,
+    thread_visibility: object | None,
+) -> tuple[RuntimeSessionKind, RuntimeThreadVisibility]:
+    """Return a valid session kind and thread visibility pair.
+
+    Legacy records may omit both fields and remain user-visible chat roots. Once
+    a record is explicitly an inter-agent participant, the only safe visibility
+    is hidden.
+    """
+    kind = coerce_runtime_session_kind(session_kind)
+    if kind == "inter_agent_participant" and (thread_visibility is None or thread_visibility == ""):
+        return kind, "hidden"
+    visibility = coerce_runtime_thread_visibility(thread_visibility)
+    if kind == "inter_agent_participant" and visibility != "hidden":
+        raise ValueError("inter_agent_participant runtime sessions must use hidden thread visibility.")
+    return kind, visibility
+
+
+def runtime_session_from_document(document: Mapping[str, object]) -> RuntimeSessionRecord:
+    """Hydrate and validate one runtime session document."""
+    payload = dict(document)
+    session_kind, thread_visibility = normalize_runtime_session_visibility(
+        payload.get("session_kind"),
+        payload.get("thread_visibility"),
+    )
+    payload["session_kind"] = session_kind
+    payload["thread_visibility"] = thread_visibility
+    return RuntimeSessionRecord(**payload)
+
+
 def runtime_session_allows_user_thread(session: RuntimeSessionRecord) -> bool:
     """Return whether this runtime session may be represented by a user-visible thread."""
     try:
-        visibility = coerce_runtime_thread_visibility(getattr(session, "thread_visibility", "user"))
+        _kind, visibility = normalize_runtime_session_visibility(
+            getattr(session, "session_kind", None),
+            getattr(session, "thread_visibility", None),
+        )
     except ValueError:
-        visibility = "user"
+        return False
     return visibility == "user"

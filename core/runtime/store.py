@@ -17,7 +17,7 @@ from core.runtime.models import RuntimeLocation
 from core.runtime.paths import workspace_runtime_root
 from core.runtime.runtime_events import RuntimeEventRecord
 from core.runtime.runtime_process import RuntimeProcessRecord
-from core.runtime.runtime_session import RuntimeApiTokenRecord, RuntimeSessionRecord
+from core.runtime.runtime_session import RuntimeApiTokenRecord, RuntimeSessionRecord, runtime_session_from_document
 from core.runtime.runtime_state import RuntimeStateRecord
 from core.runtime.runtime_thread import RuntimeThreadRecord
 from core.runtime.runtime_turns import RuntimeTurnRecord
@@ -190,13 +190,13 @@ class RuntimeDocumentStore:
         document = self.collections.sessions.find_one({"session_id": session_id})
         if document is None:
             raise RuntimeSessionNotFoundError(f"Runtime session `{session_id}` was not found.")
-        return RuntimeSessionRecord(**document)
+        return runtime_session_from_document(document)
 
     def list_sessions(self, workspace_id: str) -> list[RuntimeSessionRecord]:
-        return [RuntimeSessionRecord(**document) for document in self.collections.sessions.find({"workspace_id": workspace_id})]
+        return _valid_runtime_sessions(self.collections.sessions.find({"workspace_id": workspace_id}))
 
     def list_all_sessions(self) -> list[RuntimeSessionRecord]:
-        return [RuntimeSessionRecord(**document) for document in self.collections.sessions.find({})]
+        return _valid_runtime_sessions(self.collections.sessions.find({}))
 
     def delete_session_records(self, session_id: str) -> dict[str, int]:
         session_document = self.collections.sessions.find_one({"session_id": session_id}) or {}
@@ -446,3 +446,13 @@ def _workspace_id_from_documents(documents: list[dict[str, Any]]) -> str | None:
         if isinstance(workspace_id, str) and workspace_id:
             return workspace_id
     return None
+
+
+def _valid_runtime_sessions(documents: Any) -> list[RuntimeSessionRecord]:
+    sessions: list[RuntimeSessionRecord] = []
+    for document in documents:
+        try:
+            sessions.append(runtime_session_from_document(document))
+        except ValueError:
+            continue
+    return sessions

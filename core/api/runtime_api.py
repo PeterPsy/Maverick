@@ -124,13 +124,22 @@ def _resolved_provider_id(state: PlatformState, session: RuntimeSessionRecord) -
     return provider.provider_id
 
 
-def _hidden_runtime_session_response(start_response: StartResponse, session: RuntimeSessionRecord) -> list[bytes]:
+def _hidden_runtime_session_response(
+    start_response: StartResponse,
+    session: RuntimeSessionRecord | None = None,
+    *,
+    runtime_session_id: str = "",
+    thread_visibility: str = "hidden",
+) -> list[bytes]:
+    if session is not None:
+        runtime_session_id = session.session_id
+        thread_visibility = session.thread_visibility
     return json_response(
         start_response,
         {
             "error": "runtime_session_hidden",
-            "runtime_session_id": session.session_id,
-            "thread_visibility": session.thread_visibility,
+            "runtime_session_id": runtime_session_id,
+            "thread_visibility": thread_visibility,
         },
         status="409 Conflict",
     )
@@ -144,6 +153,8 @@ def _thread_references_hidden_session(state: PlatformState, thread) -> bool:
         session = state.runtime_store.get_session(runtime_session_id)
     except RuntimeSessionNotFoundError:
         return False
+    except ValueError:
+        return True
     return not runtime_session_allows_user_thread(session)
 
 
@@ -256,6 +267,8 @@ def _handle_thread_collection(state: PlatformState, context: RequestSession, met
         session = state.runtime_store.get_session(runtime_session_id)
     except RuntimeSessionNotFoundError:
         return json_response(start_response, {"error": "runtime_session_not_found"}, status="404 Not Found")
+    except ValueError:
+        return _hidden_runtime_session_response(start_response, runtime_session_id=runtime_session_id, thread_visibility="invalid")
     if session.workspace_id != context.workspace_id:
         return json_response(start_response, {"error": "runtime_session_not_found"}, status="404 Not Found")
     if not runtime_session_allows_user_thread(session):
@@ -305,6 +318,8 @@ def _thread_cleanup_forbidden_reason(state: PlatformState, context: RequestSessi
         session = state.runtime_store.get_session(runtime_session_id)
     except RuntimeSessionNotFoundError:
         return None
+    except ValueError:
+        return "runtime_thread_not_found"
     if session.workspace_id != context.workspace_id:
         return "runtime_thread_not_found"
     try:
@@ -335,6 +350,8 @@ def _handle_thread_item(
         try:
             session = state.runtime_store.get_session(thread_id)
         except RuntimeSessionNotFoundError:
+            return json_response(start_response, {"error": "runtime_thread_not_found"}, status="404 Not Found")
+        except ValueError:
             return json_response(start_response, {"error": "runtime_thread_not_found"}, status="404 Not Found")
         if session.workspace_id != context.workspace_id:
             return json_response(start_response, {"error": "runtime_thread_not_found"}, status="404 Not Found")
@@ -376,6 +393,8 @@ def _handle_thread_item(
                 session = state.runtime_store.get_session(runtime_session_id)
             except RuntimeSessionNotFoundError:
                 return json_response(start_response, {"error": "runtime_thread_not_found"}, status="404 Not Found")
+            except ValueError:
+                return _hidden_runtime_session_response(start_response, runtime_session_id=runtime_session_id, thread_visibility="invalid")
             return _hidden_runtime_session_response(start_response, session)
         if updated is None:
             return json_response(start_response, {"error": "runtime_thread_not_found"}, status="404 Not Found")
@@ -441,6 +460,8 @@ def _handle_thread_read(
         try:
             session = state.runtime_store.get_session(thread_id)
         except RuntimeSessionNotFoundError:
+            return json_response(start_response, {"error": "runtime_thread_not_found"}, status="404 Not Found")
+        except ValueError:
             return json_response(start_response, {"error": "runtime_thread_not_found"}, status="404 Not Found")
         if session.workspace_id != context.workspace_id:
             return json_response(start_response, {"error": "runtime_thread_not_found"}, status="404 Not Found")

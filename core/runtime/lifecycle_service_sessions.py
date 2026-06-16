@@ -14,8 +14,7 @@ from core.runtime.runtime_session import (
     RuntimeSessionRecord,
     RuntimeSessionKind,
     RuntimeThreadVisibility,
-    coerce_runtime_session_kind,
-    coerce_runtime_thread_visibility,
+    normalize_runtime_session_visibility,
 )
 from core.runtime.runtime_state import RuntimeStateRecord
 from core.runtime.store import RuntimeStore
@@ -62,6 +61,10 @@ def create_runtime_session(
 ) -> RuntimeSessionRecord:
     """Create one runtime session and its initial runtime state."""
     timestamp = now or utcnow()
+    normalized_session_kind, normalized_thread_visibility = normalize_runtime_session_visibility(
+        session_kind,
+        thread_visibility,
+    )
     routing = build_runtime_routing(
         session_id=session_id,
         workspace_id=workspace_id,
@@ -85,15 +88,15 @@ def create_runtime_session(
         updated_at=timestamp,
         ended_at=None,
         last_progress_at=None,
-        session_kind=coerce_runtime_session_kind(session_kind),
-        thread_visibility=coerce_runtime_thread_visibility(thread_visibility),
-        system_prompt=system_prompt.strip() if isinstance(system_prompt, str) and system_prompt.strip() else None,
-        skill_ids=[str(skill_id).strip() for skill_id in (skill_ids or []) if str(skill_id).strip()],
-        skill_catalog_app_id=skill_catalog_app_id.strip() if isinstance(skill_catalog_app_id, str) and skill_catalog_app_id.strip() else None,
-        source_app_id=source_app_id.strip() if isinstance(source_app_id, str) and source_app_id.strip() else None,
-        owner_user_id=owner_user_id.strip() if isinstance(owner_user_id, str) and owner_user_id.strip() else None,
-        created_by_user_id=created_by_user_id.strip() if isinstance(created_by_user_id, str) and created_by_user_id.strip() else None,
-        creator_runtime_session_id=creator_runtime_session_id.strip() if isinstance(creator_runtime_session_id, str) and creator_runtime_session_id.strip() else None,
+        session_kind=normalized_session_kind,
+        thread_visibility=normalized_thread_visibility,
+        system_prompt=_optional_text(system_prompt),
+        skill_ids=_skill_id_list(skill_ids),
+        skill_catalog_app_id=_optional_text(skill_catalog_app_id),
+        source_app_id=_optional_text(source_app_id),
+        owner_user_id=_optional_text(owner_user_id),
+        created_by_user_id=_optional_text(created_by_user_id),
+        creator_runtime_session_id=_optional_text(creator_runtime_session_id),
         grants=_platform_runtime_grants(grants),
     )
     state = RuntimeStateRecord(
@@ -193,9 +196,16 @@ def create_child_runtime_session(
     parent_session_id: str,
     child_session_id: str,
     child_agent_id: str,
+    system_prompt: str | None = None,
+    skill_ids: list[str] | None = None,
+    skill_catalog_app_id: str | None = None,
+    source_app_id: str | None = None,
+    owner_user_id: str | None = None,
+    created_by_user_id: str | None = None,
+    grants: list[RuntimeSessionGrantRecord | dict[str, str | None]] | None = None,
     now: datetime | None = None,
 ) -> RuntimeSessionRecord:
-    """Create one runtime child session that reuses the parent's resolved boundary only."""
+    """Create one runtime child session using only explicit materialized authority."""
     parent = store.get_session(parent_session_id)
     timestamp = now or utcnow()
     runtime_root = Path(parent.runtime_root).parent / child_session_id
@@ -216,14 +226,14 @@ def create_child_runtime_session(
         last_progress_at=None,
         session_kind="inter_agent_participant",
         thread_visibility="hidden",
-        system_prompt=parent.system_prompt,
-        skill_ids=list(parent.skill_ids),
-        skill_catalog_app_id=parent.skill_catalog_app_id,
-        source_app_id=parent.source_app_id,
-        owner_user_id=parent.owner_user_id,
-        created_by_user_id=parent.owner_user_id,
+        system_prompt=_optional_text(system_prompt),
+        skill_ids=_skill_id_list(skill_ids),
+        skill_catalog_app_id=_optional_text(skill_catalog_app_id),
+        source_app_id=_optional_text(source_app_id),
+        owner_user_id=_optional_text(owner_user_id),
+        created_by_user_id=_optional_text(created_by_user_id),
         creator_runtime_session_id=parent.session_id,
-        grants=list(parent.grants),
+        grants=_platform_runtime_grants(grants),
     )
     state = RuntimeStateRecord(
         session_id=child_session_id,
@@ -239,3 +249,14 @@ def create_child_runtime_session(
     )
     store.save_state(state)
     return store.save_session(session)
+
+
+def _optional_text(value: str | None) -> str | None:
+    if not isinstance(value, str):
+        return None
+    normalized = value.strip()
+    return normalized or None
+
+
+def _skill_id_list(skill_ids: list[str] | None) -> list[str]:
+    return [str(skill_id).strip() for skill_id in (skill_ids or []) if str(skill_id).strip()]

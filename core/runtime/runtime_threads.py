@@ -364,11 +364,19 @@ def _user_visible_runtime_threads(
         if not runtime_session_allows_user_thread(session)
     }
     if not hidden_session_ids:
-        return threads
+        return [
+            thread
+            for thread in threads
+            if not thread.runtime_session_id or not _runtime_session_is_hidden(store, runtime_session_id=thread.runtime_session_id)
+        ]
     return [
         thread
         for thread in threads
-        if not thread.runtime_session_id or thread.runtime_session_id not in hidden_session_ids
+        if not thread.runtime_session_id
+        or (
+            thread.runtime_session_id not in hidden_session_ids
+            and not _runtime_session_is_hidden(store, runtime_session_id=thread.runtime_session_id)
+        )
     ]
 
 
@@ -377,6 +385,8 @@ def _runtime_session_is_hidden(store: RuntimeStore, *, runtime_session_id: str) 
         session = store.get_session(runtime_session_id)
     except RuntimeSessionNotFoundError:
         return False
+    except ValueError:
+        return True
     return not runtime_session_allows_user_thread(session)
 
 

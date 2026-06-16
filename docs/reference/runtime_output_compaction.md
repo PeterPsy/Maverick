@@ -1,6 +1,6 @@
 # Runtime Output Compaction
 
-Date: 2026-06-15
+Date: 2026-06-16
 
 Maverick compacts large `runtime.tool_call.*` payloads before the events are persisted, published to the runtime event bus, replayed through runtime history, or consumed by downstream app hooks. Runtime-token CLI calls can also request a provider-oriented compact response for large textual JSON fields. Maverick-managed Codex sessions additionally install a provider hook that can replace large shell tool results before Codex continues from the tool output when Codex actually runs the trusted hook.
 
@@ -8,11 +8,11 @@ Phase 1 reduces storage, websocket, replay, UI, and downstream event payload siz
 
 | Phase | Pipeline point | Reduces storage/UI/event bus | Reduces provider tokens | Status |
 | --- | --- | --- | --- | --- |
-| 1 | `_RuntimeTurnOutputRecorder.record()` before `record_runtime_event` | Yes | Not guaranteed | Implemented |
+| 1 | `_RuntimeTurnOutputRecorder.record()` and the `record_runtime_event()` persistence guard | Yes | Not guaranteed | Implemented |
 | 2 | Controlled Maverick CLI through `/api/runtime/cli` with `output_profile` in the JSON body | Yes | Yes, only for that controlled CLI surface | Implemented |
 | 3 | Maverick-owned Codex `PostToolUse` hook before supported shell tool results enter provider history | Yes, when the hook runs | Only when Codex accepts and runs the trusted hook | Integrated; hard provider-token guarantee requires a trusted-hook end-to-end proof |
 
-Phase 1 deliberately does not compact `runtime.output.delta`, because those deltas are used to reconstruct assistant text through `final_text()` and `complete_text()`.
+Phase 1 deliberately does not compact `runtime.output.delta`, because those deltas are used to reconstruct assistant text through `final_text()` and `complete_text()`. The turn output recorder performs compaction before normal turn persistence, and `record_runtime_event()` repeats the same idempotent guard for direct future callers that persist `runtime.tool_call.*` events.
 
 ## Event Contract
 
@@ -52,7 +52,9 @@ Built-in match rules are declarative JSON files under `core/runtime/output_compa
 
 Allowed values are `full` and `provider_compact`. Missing `output_profile` means `full`, preserving complete responses for external scripts and operator clients. `provider_compact` is accepted only on the runtime-token-authenticated CLI API; authority still comes from the token-bound runtime session, not from `effective_mode`, `workspace_id`, or other client-supplied body fields.
 
-When `provider_compact` is requested, the API runs the CLI normally, preserves `status_code` and HTTP status behavior, and compacts large textual JSON fields before returning the response. It also redacts recognizable sensitive text and any value under a sensitive structured key, including non-string scalars, objects, and lists, even when the field is below the compaction size threshold, because the runtime-local shim normally sends this stdout into provider context. Metadata is added under top-level `output_compaction` with `scope: runtime_cli_response`. The runtime-local `maverick` shim requests `provider_compact` by default; agents can set `MAVERICK_RUNTIME_CLI_OUTPUT_PROFILE=full` when they need the exact full JSON payload.
+When `provider_compact` is requested, the API runs the CLI normally, preserves `status_code` and HTTP status behavior, and compacts large textual JSON fields before returning the response. It also redacts recognizable sensitive text and any value under a sensitive structured key, including non-string scalars, objects, and lists, even when the field is below the compaction size threshold, because the runtime-local shim normally sends this stdout into provider context. The same redaction and compaction policy is applied to `SystemExit` and unexpected exception `detail` fields raised while invoking the CLI. Metadata is added under top-level `output_compaction` with `scope: runtime_cli_response`. The runtime-local `maverick` shim requests `provider_compact` by default; agents can set `MAVERICK_RUNTIME_CLI_OUTPUT_PROFILE=full` when they need the exact full JSON payload.
+
+`provider_compact` deliberately preserves explicit document-body fields for read surfaces where truncation would corrupt the requested source material. Current preserved top-level fields are developer-context `content`, Storage `file.text.read` `text`, and Storage preview or handoff `preview_text` when the response shape identifies Storage file metadata. Other large text fields remain eligible for compaction.
 
 If the CLI response compactor fails unexpectedly for a large field, the API returns that field as redacted pass-through text and records `pass_through_reason: compactor_failed` plus a non-sensitive `compaction_error` class name in the compaction metadata.
 
@@ -70,9 +72,9 @@ When Codex runs the hook, it posts the `PostToolUse` JSON payload to `/api/runti
 
 Provider-hook compaction metadata uses `scope: provider_history_tool_result`. It reuses the same redaction and reducer pipeline as runtime event compaction, but with a provider-history policy: no original artifact is stored, raw provider payload sanitization is not needed, and size targets are lower because the text is about to enter model context.
 
-If the core compactor raises unexpectedly, the API still returns a bounded redacted hook response with `pass_through_reason: compactor_failed`. If the hook bridge cannot reach the API, the standalone runtime-local script falls back to bounded generic redaction and truncation with `pass_through_reason: hook_bridge_unavailable`. The standalone fallback mirrors the core text-redaction coverage for common headers, key-like sensitive headers such as `X-API-Key`, cookies, query secrets with varied casing, signed-URL secret parameters, `.env`-style secrets, URL credentials, JWTs, private keys, and common provider/GitHub token prefixes. If `MAVERICK_RUNTIME_OUTPUT_COMPACTION=0`, both the API compactor and the standalone fallback stay disabled.
+If the core compactor raises unexpectedly, the API still returns a bounded redacted hook response with `pass_through_reason: compactor_failed`. If the hook bridge cannot reach the API, the standalone runtime-local script falls back to bounded generic redaction and truncation with `pass_through_reason: hook_bridge_unavailable`. The standalone fallback mirrors the core text-redaction coverage for common headers, key-like sensitive headers such as `X-API-Key`, cookies, query secrets with varied casing, signed-URL secret parameters, `.env`-style secrets, inline key assignments in exception text, URL credentials, JWTs, private keys, common provider/GitHub token prefixes, and the provider-hook E2E canary pattern. If `MAVERICK_RUNTIME_OUTPUT_COMPACTION=0`, both the API compactor and the standalone fallback stay disabled.
 
-Current automated tests cover the Maverick-owned hook configuration, Codex trust-state rendering, runtime-token API, response format, fallback redaction, diagnostics, and replacement payload. They do not constitute a real Codex app-server trusted-hook proof. This phase does not claim provider-token reduction outside the currently hooked Codex shell surface, or for Codex sessions where the hook is installed but not run by Codex. It does not cover unhooked Codex tool mechanisms, web search, provider-internal tool calls, or future non-Codex providers until those providers expose and pass an equivalent pre-history proof point.
+Current automated tests cover the Maverick-owned hook configuration, Codex trust-state rendering and hash identity, runtime-token API, response format, fallback redaction, diagnostics, replacement payload, E2E canary redaction, and a simulated runtime-local hook bridge that emits backend replacement output with `bridge_status: "returned_emit"`. They do not constitute a real Codex app-server trusted-hook proof. This phase does not claim provider-token reduction outside the currently hooked Codex shell surface, or for Codex sessions where the hook is installed but not run by Codex. It does not cover unhooked Codex tool mechanisms, web search, provider-internal tool calls, or future non-Codex providers until those providers expose and pass an equivalent pre-history proof point.
 
 ## Provider Hook Diagnostics
 

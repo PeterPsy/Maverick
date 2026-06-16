@@ -15,6 +15,9 @@ SENSITIVE_QUERY_KEY_PATTERN = (
     "x-amz-credential|x-goog-signature|x-goog-credential"
 )
 KNOWN_UNDERSCORE_TOKEN_PREFIX_PATTERN = "sk|pk|rk|ghp|gho|ghu|ghs|ghr|github_pat"
+E2E_CANARY_SECRET_PATTERN = (
+    r"\b(?:hook|maverick|provider|redaction)[-_]e2e[-_](?:secret|token)(?:[-_][A-Za-z0-9_.=+/@-]+)?\b"
+)
 
 SENSITIVE_KEY_PARTS = (
     "authorization",
@@ -42,16 +45,13 @@ _SENSITIVE_HEADER_PATTERN = re.compile(
 )
 _QUERY_SECRET_PATTERN = re.compile(r"(?i)([?&](?:" + SENSITIVE_QUERY_KEY_PATTERN + r")=)([^&#\"'\s]+)")
 _ENV_SECRET_PATTERN = re.compile(
-    r"(?im)^([A-Z0-9_]*(?:TOKEN|PASSWORD|PASSWD|API_KEY|SECRET|PRIVATE_KEY|ACCESS_KEY|AUTH)[A-Z0-9_]*\s*=\s*)[^\s#]+"
+    r"(?i)(?<![?&])\b([A-Z0-9_]*(?:TOKEN|PASSWORD|PASSWD|API_KEY|SECRET|PRIVATE_KEY|ACCESS_KEY|AUTH)[A-Z0-9_]*\s*=\s*)[^&#\"'\s]+"
 )
 _JWT_PATTERN = re.compile(r"\beyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\b")
 _URL_CREDENTIAL_PATTERN = re.compile(r"([a-z][a-z0-9+.-]*://)([^/\s:@]+):([^@\s/]+)@", re.IGNORECASE)
 _KNOWN_API_KEY_PATTERN = re.compile(r"\b(?:" + KNOWN_UNDERSCORE_TOKEN_PREFIX_PATTERN + r")_[A-Za-z0-9_=-]{16,}\b")
 _OPENAI_STYLE_KEY_PATTERN = re.compile(r"\bsk-[A-Za-z0-9_-]{16,}\b")
-_E2E_CANARY_SECRET_PATTERN = re.compile(
-    r"\b(?:hook|maverick|provider|redaction)[-_]e2e[-_](?:secret|token)(?:[-_][A-Za-z0-9_.=+/@-]+)?\b",
-    re.IGNORECASE,
-)
+_E2E_CANARY_SECRET_PATTERN = re.compile(E2E_CANARY_SECRET_PATTERN, re.IGNORECASE)
 
 
 def is_sensitive_key(key: object) -> bool:

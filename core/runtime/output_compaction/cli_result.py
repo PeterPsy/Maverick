@@ -87,7 +87,7 @@ def compact_runtime_cli_result(
     if not active_policy.enabled:
         return compacted
 
-    candidates = _collect_provider_compact_fields(compacted, min_bytes=active_policy.min_original_bytes)
+    candidates = _collect_provider_compact_fields(compacted, min_bytes=active_policy.min_original_bytes, argv=argv)
     if not candidates:
         return compacted
 
@@ -126,7 +126,7 @@ def compact_runtime_cli_result(
     return compacted
 
 
-def _collect_provider_compact_fields(value: Any, *, min_bytes: int) -> list[_CliFieldCandidate]:
+def _collect_provider_compact_fields(value: Any, *, min_bytes: int, argv: Sequence[str] = ()) -> list[_CliFieldCandidate]:
     candidates: list[_CliFieldCandidate] = []
 
     def visit(item: Any, path: JsonPath, *, key_is_sensitive: bool = False) -> None:
@@ -154,6 +154,8 @@ def _collect_provider_compact_fields(value: Any, *, min_bytes: int) -> list[_Cli
             return
         if not isinstance(item, str):
             return
+        if _preserve_document_body_field(value, path, argv=argv):
+            return
         if byte_len(item) >= min_bytes:
             candidates.append(_CliFieldCandidate(path=path, value=item))
             return
@@ -175,6 +177,55 @@ def _collect_provider_compact_fields(value: Any, *, min_bytes: int) -> list[_Cli
 
     visit(value, ())
     return candidates
+
+
+def _preserve_document_body_field(root: Any, path: JsonPath, *, argv: Sequence[str]) -> bool:
+    """Return true for explicit document-body fields that provider-compact must not truncate."""
+    if len(path) != 1 or not isinstance(path[0], str) or not isinstance(root, Mapping):
+        return False
+    field_name = path[0]
+    if field_name == "content":
+        return _is_developer_context_read_result(root, argv=argv)
+    if field_name == "text":
+        return _is_storage_text_read_result(root)
+    if field_name == "preview_text":
+        return _is_storage_preview_text_result(root)
+    return False
+
+
+def _is_developer_context_read_result(root: Mapping[str, Any], *, argv: Sequence[str]) -> bool:
+    if "developer-context.read" not in set(str(item) for item in argv):
+        return False
+    return (
+        isinstance(root.get("doc_id"), str)
+        and isinstance(root.get("title"), str)
+        and isinstance(root.get("source_path"), str)
+        and isinstance(root.get("content"), str)
+    )
+
+
+def _is_storage_text_read_result(root: Mapping[str, Any]) -> bool:
+    return (
+        _has_storage_file_metadata(root)
+        and isinstance(root.get("text"), str)
+        and isinstance(root.get("text_char_count"), int)
+        and isinstance(root.get("offset"), int)
+        and isinstance(root.get("range_end"), int)
+        and isinstance(root.get("has_more"), bool)
+    )
+
+
+def _is_storage_preview_text_result(root: Mapping[str, Any]) -> bool:
+    return _has_storage_file_metadata(root) and isinstance(root.get("preview_text"), str)
+
+
+def _has_storage_file_metadata(root: Mapping[str, Any]) -> bool:
+    file_record = root.get("file")
+    if not isinstance(file_record, Mapping):
+        return False
+    workspace_relative_path = str(file_record.get("workspace_relative_path") or "")
+    role = str(file_record.get("role") or "")
+    return workspace_relative_path.startswith("storage/") or role in {"uploaded", "generated"}
 
 
 def _field_original_bytes(value: Any) -> int:

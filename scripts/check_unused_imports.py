@@ -13,6 +13,7 @@ import sys
 
 
 DEFAULT_ROOTS = ("core", "tests", "apps", "scripts")
+SKIP_DIR_NAMES = {"__pycache__", ".venv", "node_modules", "vendor"}
 
 
 class UsageCollector(ast.NodeVisitor):
@@ -107,7 +108,7 @@ def python_files(paths: list[str]) -> list[Path]:
             files.extend(
                 item
                 for item in path.rglob("*.py")
-                if "__pycache__" not in item.parts and ".venv" not in item.parts
+                if SKIP_DIR_NAMES.isdisjoint(item.parts)
                 and not item.name.endswith("_helpers.py")
             )
     return sorted(set(files))

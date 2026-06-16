@@ -8,6 +8,7 @@ from dataclasses import replace
 from core.runtime.execution_events import RuntimeExecutionEvent
 from core.runtime.output_compaction.classifier import classify_tool_output
 from core.runtime.output_compaction.event_payloads import (
+    COMPACTION_SCOPE,
     OUTPUT_FIELDS,
     apply_result,
     input_from_event,
@@ -44,6 +45,9 @@ def compact_tool_call_event(
     """Compact persisted runtime.tool_call payloads before storage and live fanout."""
     active_policy = policy or ToolOutputCompactionPolicy.from_environment()
     if not active_policy.enabled or not event.event_type.startswith("runtime.tool_call."):
+        return event
+    existing_metadata = event.payload.get("output_compaction")
+    if isinstance(existing_metadata, Mapping) and existing_metadata.get("scope") == COMPACTION_SCOPE:
         return event
     context = context or ToolOutputCompactionContext()
     payload = dict(event.payload)

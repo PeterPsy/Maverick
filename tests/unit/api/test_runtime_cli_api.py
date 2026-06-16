@@ -86,6 +86,59 @@ class RuntimeCliApiTest(unittest.TestCase):
         self.assertEqual(payload["error"], "unsupported")
         self.assertIn("[tool output compacted]", payload["detail"])
 
+    def test_runtime_cli_provider_compact_redacts_system_exit_detail(self) -> None:
+        state = self._state()
+        detail = "CLI failed with API_TOKEN=secret-value\n"
+
+        with self._trusted_runtime():
+            with patch("core.api.runtime_cli_api.run_cli_json", side_effect=SystemExit(detail)):
+                status, payload = self._invoke_runtime_cli(
+                    state,
+                    {"argv": ["core", "cli", "run", "missing"], "output_profile": "provider_compact"},
+                )
+
+        self.assertEqual(status, "400 Bad Request")
+        self.assertEqual(payload["status_code"], 400)
+        self.assertEqual(payload["error"], "cli_command_failed")
+        self.assertIn("API_TOKEN=<redacted>", payload["detail"])
+        self.assertNotIn("secret-value", payload["detail"])
+        self.assertEqual(payload["output_compaction"]["fields"], ["detail"])
+        self.assertEqual(payload["output_compaction"]["scope"], "runtime_cli_response")
+
+    def test_runtime_cli_provider_compact_compacts_unexpected_exception_detail(self) -> None:
+        state = self._state()
+        detail = "Traceback\nAuthorization: Bearer secret-token\n" + ("failure detail\n" * 20_000)
+
+        with self._trusted_runtime():
+            with patch("core.api.runtime_cli_api.run_cli_json", side_effect=RuntimeError(detail)):
+                status, payload = self._invoke_runtime_cli(
+                    state,
+                    {"argv": ["core", "cli", "run", "broken"], "output_profile": "provider_compact"},
+                )
+
+        self.assertEqual(status, "400 Bad Request")
+        self.assertEqual(payload["status_code"], 400)
+        self.assertEqual(payload["error"], "cli_command_failed")
+        self.assertIn("[tool output compacted]", payload["detail"])
+        self.assertNotIn("secret-token", payload["detail"])
+        self.assertEqual(payload["output_compaction"]["fields"], ["detail"])
+
+    def test_runtime_cli_full_profile_leaves_exception_detail_full(self) -> None:
+        state = self._state()
+        detail = "full detail " * 2000
+
+        with self._trusted_runtime():
+            with patch("core.api.runtime_cli_api.run_cli_json", side_effect=RuntimeError(detail)):
+                status, payload = self._invoke_runtime_cli(
+                    state,
+                    {"argv": ["core", "cli", "run", "broken"], "output_profile": "full"},
+                )
+
+        self.assertEqual(status, "400 Bad Request")
+        self.assertEqual(payload["status_code"], 400)
+        self.assertEqual(payload["detail"], detail)
+        self.assertNotIn("output_compaction", payload)
+
     def test_runtime_cli_uses_payload_error_status_for_http_response(self) -> None:
         state = self._state()
 

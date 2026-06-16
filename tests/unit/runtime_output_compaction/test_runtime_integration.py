@@ -12,7 +12,7 @@ from core.api.platform_state import bootstrap_platform_state
 from core.api.runtime_websocket import runtime_event_frame
 from core.providers.codex_app_server_runtime_notifications import _structured_content_from_completed_item
 from core.runtime.execution_events import RuntimeExecutionEvent, parse_provider_json_event
-from core.runtime.service import create_runtime_session
+from core.runtime.service import create_runtime_session, record_runtime_event
 from core.runtime.turn_submission_service_output import _RuntimeTurnOutputRecorder
 
 
@@ -85,6 +85,55 @@ class RuntimeOutputCompactionIntegrationTest(unittest.TestCase):
         self.assertTrue(frame["event"]["payload"]["output_compaction"]["applied"])
         self.assertNotIn("aggregatedOutput", frame["event"]["payload"]["raw"]["item"])
         self.assertIn("raw.item.aggregatedOutput", frame["event"]["payload"]["raw"]["omitted_provider_payload_fields"])
+
+    def test_record_runtime_event_compacts_tool_payload_at_persistence_boundary(self) -> None:
+        output = (
+            "FAILED tests/test_boundary.py::test_direct_record - AssertionError\n"
+            "Traceback (most recent call last):\n"
+            "AssertionError: boundary compaction failed\n"
+            "short test summary info\n"
+        ) + ("persistence noise\n" * 12_000)
+        repo_root = self.make_repo_root()
+        with patch.dict(
+            os.environ,
+            {
+                "MAVERICK_ALLOW_INSECURE_TEST_DEFAULTS": "1",
+                "MAVERICK_ADMIN_USERNAME": "admin",
+                "MAVERICK_ADMIN_PASSWORD": "maverick",
+            },
+        ):
+            state = bootstrap_platform_state(start_path=repo_root, install_builtin_apps=False)
+        session = create_runtime_session(
+            state.runtime_store,
+            session_id="sess-boundary",
+            workspace_id="default",
+            agent_id="test-agent",
+            start_path=repo_root,
+            now=datetime(2026, 6, 15, tzinfo=UTC),
+        )
+
+        recorded = record_runtime_event(
+            state.runtime_store,
+            event_id="event-boundary",
+            session_id=session.session_id,
+            turn_id="turn-boundary",
+            process_id=None,
+            plane="turn",
+            event_type="runtime.tool_call.failed",
+            payload={
+                "name": "command",
+                "status": "failed",
+                "command": "python -m pytest tests/test_boundary.py",
+                "exit_code": 1,
+                "output": output,
+                "raw": {"item": {"type": "commandExecution", "aggregatedOutput": output}},
+            },
+            now=datetime(2026, 6, 15, tzinfo=UTC),
+        )
+
+        self.assertTrue(recorded.payload["output_compaction"]["applied"])
+        self.assertIn("[tool output compacted]", recorded.payload["output"])
+        self.assertNotIn("aggregatedOutput", recorded.payload["raw"]["item"])
 
     def test_runtime_output_delta_is_not_compacted_and_still_feeds_final_text(self) -> None:
         repo_root = self.make_repo_root()

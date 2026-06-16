@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from io import StringIO
 import json
 import tempfile
 import unittest
@@ -196,6 +197,76 @@ class ProviderHookCompactionTest(unittest.TestCase):
         self.assertEqual(response["output_compaction"]["pass_through_reason"], "compactor_failed")
         self.assertEqual(response["output_compaction"]["compaction_error"], "RuntimeError")
 
+    def test_runtime_local_hook_script_bridge_emits_backend_replacement_and_returned_emit_diagnostic(self) -> None:
+        namespace: dict[str, object] = {"__name__": "hook_test"}
+        exec(_codex_post_tool_use_hook_source(), namespace)
+        payload = {
+            "hook_event_name": "PostToolUse",
+            "tool_name": "Bash",
+            "tool_input": {"command": "printf canary"},
+            "tool_response": {
+                "stdout": ("hook-e2e-secret diagnostic line\n" * 2000),
+                "exit_code": 0,
+            },
+        }
+
+        class FakeResponse:
+            def __init__(self, body: bytes) -> None:
+                self._body = body
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, _exc_type, _exc, _traceback) -> None:
+                return None
+
+            def read(self) -> bytes:
+                return self._body
+
+        def fake_urlopen(request, timeout=20):
+            self.assertEqual(timeout, 20)
+            decoded_payload = json.loads(request.data.decode("utf-8"))
+            backend_response = build_codex_post_tool_use_response(
+                decoded_payload,
+                runtime_session_id="sess-1",
+                policy=ToolOutputCompactionPolicy(
+                    min_original_bytes=1000,
+                    success_min_savings_ratio=0.20,
+                    target_max_compacted_bytes=4000,
+                ),
+            )
+            return FakeResponse(json.dumps(backend_response).encode("utf-8"))
+
+        stdout = StringIO()
+        with tempfile.TemporaryDirectory() as temp_dir:
+            with patch.dict(
+                namespace["os"].environ,  # type: ignore[index, union-attr]
+                {
+                    "MAVERICK_RUNTIME_ROOT": temp_dir,
+                    "MAVERICK_RUNTIME_API_TOKEN": "runtime-token",
+                    "MAVERICK_API_BASE": "http://127.0.0.1:8014",
+                },
+            ):
+                with patch.object(namespace["urllib"].request, "urlopen", fake_urlopen):  # type: ignore[index, union-attr]
+                    with patch.object(namespace["sys"], "stdin", StringIO(json.dumps(payload))):  # type: ignore[index, union-attr]
+                        with patch.object(namespace["sys"], "stdout", stdout):  # type: ignore[index, union-attr]
+                            self.assertEqual(namespace["main"](), 0)  # type: ignore[operator]
+
+            log_path = namespace["os"].path.join(temp_dir, "logs", "provider-hook-events.jsonl")  # type: ignore[index, union-attr]
+            with open(log_path, encoding="utf-8") as handle:
+                lines = handle.read().splitlines()
+
+        emitted = json.loads(stdout.getvalue())
+        reason = emitted["reason"]
+        self.assertEqual(emitted["decision"], "block")
+        self.assertIn("[tool output compacted]", reason)
+        self.assertIn("scope: provider_history_tool_result", reason)
+        self.assertNotIn("hook-e2e-secret", reason)
+        self.assertGreaterEqual(len(lines), 2)
+        final_event = json.loads(lines[-1])
+        self.assertEqual(final_event["bridge_status"], "returned_emit")
+        self.assertEqual(final_event["fallback_status"], "not_run")
+
     def test_runtime_local_hook_script_fallback_writes_redaction_safe_diagnostics(self) -> None:
         namespace: dict[str, object] = {"__name__": "hook_test"}
         exec(_codex_post_tool_use_hook_source(), namespace)
@@ -324,6 +395,7 @@ class ProviderHookCompactionTest(unittest.TestCase):
                 "-----BEGIN PRIVATE KEY-----",
                 "private-key-material",
                 "-----END PRIVATE KEY-----",
+                "hook-e2e-secret-standalone",
                 *("diagnostic line" for _index in range(2000)),
             ]
         )
@@ -352,6 +424,7 @@ class ProviderHookCompactionTest(unittest.TestCase):
         self.assertNotIn("secretGithubToken", reason)
         self.assertNotIn("secretGitHubActionsToken", reason)
         self.assertNotIn("private-key-material", reason)
+        self.assertNotIn("hook-e2e-secret-standalone", reason)
         self.assertIn("<redacted", reason)
 
 

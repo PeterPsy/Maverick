@@ -94,9 +94,21 @@ def handle_runtime_cli_api(
         )
     except SystemExit as error:
         detail = str(error) or "CLI command failed."
-        return json_response(start_response, {"error": "cli_command_failed", "detail": detail}, status="400 Bad Request")
+        return _runtime_cli_error_response(
+            start_response,
+            detail=detail,
+            output_profile=output_profile,
+            argv=trusted_argv,
+            runtime_session_id=session.session_id,
+        )
     except Exception as error:
-        return json_response(start_response, {"error": "cli_command_failed", "detail": str(error)}, status="400 Bad Request")
+        return _runtime_cli_error_response(
+            start_response,
+            detail=str(error),
+            output_profile=output_profile,
+            argv=trusted_argv,
+            runtime_session_id=session.session_id,
+        )
 
 
 def _runtime_claims(state: PlatformState, environ: dict) -> tuple[RuntimeApiTokenClaims | None, str | None]:
@@ -124,3 +136,21 @@ def _runtime_actor_authority(state: PlatformState, user_id: str | None, workspac
         raise AuthorizationError("runtime_session_owner_not_authorized")
     workspace_role = membership.role if membership.status == "active" else "admin"
     return user.platform_role, user_id, workspace_role
+
+
+def _runtime_cli_error_response(
+    start_response: StartResponse,
+    *,
+    detail: str,
+    output_profile: str,
+    argv: list[str],
+    runtime_session_id: str,
+) -> list[bytes]:
+    result = {"status_code": 400, "error": "cli_command_failed", "detail": detail}
+    if output_profile == RUNTIME_CLI_OUTPUT_PROFILE_PROVIDER_COMPACT:
+        result = compact_runtime_cli_result(
+            result,
+            argv=argv,
+            runtime_session_id=runtime_session_id,
+        )
+    return json_response(start_response, result, status="400 Bad Request")

@@ -19,6 +19,7 @@ class RuntimeOutputRedactionTest(unittest.TestCase):
                     "&access_key=access-key-value&X-Amz-Signature=aws-signature&ok=1"
                 ),
                 "APP_API_KEY=secret-api-key",
+                "runtime error detail API_TOKEN=inline-secret-token",
                 "DATABASE_URL=https://user:pass@example.test/db",
                 "jwt eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMjM0NTYifQ.signatureValue",
                 "sk-secretOpenAIStyleKey123456",
@@ -38,6 +39,7 @@ class RuntimeOutputRedactionTest(unittest.TestCase):
         self.assertNotIn("access-key-value", redacted)
         self.assertNotIn("aws-signature", redacted)
         self.assertNotIn("secret-api-key", redacted)
+        self.assertNotIn("inline-secret-token", redacted)
         self.assertNotIn("user:pass", redacted)
         self.assertNotIn("eyJhbGci", redacted)
         self.assertNotIn("secretOpenAIStyleKey", redacted)

@@ -113,6 +113,78 @@ class RuntimeCliResultCompactionTest(unittest.TestCase):
                 self.assertEqual(metadata["pass_through_reason"], "sensitive_key_redacted")
                 self.assertEqual(metadata["fields"], [field_path])
 
+    def test_provider_compact_preserves_developer_context_document_body(self) -> None:
+        document = "# Architecture\n\n" + ("document paragraph with exact context\n" * 5000)
+        compacted = compact_runtime_cli_result(
+            {
+                "status_code": 200,
+                "doc_id": "core_architecture",
+                "title": "Core Architecture",
+                "source_path": "docs/architecture/core_architecture.md",
+                "content": document,
+            },
+            argv=["core", "cli", "run", "developer-context.read", "--doc-id", "core_architecture", "--json"],
+            runtime_session_id="sess-1",
+            policy=ToolOutputCompactionPolicy(min_original_bytes=1000),
+        )
+
+        self.assertEqual(compacted["content"], document)
+        self.assertNotIn("output_compaction", compacted)
+
+    def test_provider_compact_preserves_storage_text_document_body(self) -> None:
+        document = "# Storage Guide\n\n" + ("storage document line\n" * 5000)
+        compacted = compact_runtime_cli_result(
+            {
+                "status_code": 200,
+                "file": {
+                    "role": "generated",
+                    "workspace_relative_path": "storage/generated/guides/storage-guide.md",
+                },
+                "text": document,
+                "text_char_count": len(document),
+                "offset": 0,
+                "range_end": len(document),
+                "has_more": False,
+                "next_offset": None,
+                "complete": True,
+            },
+            argv=[
+                "app",
+                "storage",
+                "mcp",
+                "call",
+                "storage_read_text",
+                "--json",
+                "--workspace_relative_path",
+                "storage/generated/guides/storage-guide.md",
+            ],
+            runtime_session_id="sess-1",
+            policy=ToolOutputCompactionPolicy(min_original_bytes=1000),
+        )
+
+        self.assertEqual(compacted["text"], document)
+        self.assertNotIn("output_compaction", compacted)
+
+    def test_provider_compact_preserves_storage_preview_text_for_handoffs(self) -> None:
+        preview = "Memory-ready preview\n" + ("preview line\n" * 3000)
+        compacted = compact_runtime_cli_result(
+            {
+                "status_code": 200,
+                "file": {
+                    "role": "generated",
+                    "workspace_relative_path": "storage/generated/brief.md",
+                },
+                "preview_text": preview,
+                "preview_truncated": True,
+            },
+            argv=["app", "storage", "mcp", "call", "storage_preview_text", "--json"],
+            runtime_session_id="sess-1",
+            policy=ToolOutputCompactionPolicy(min_original_bytes=1000),
+        )
+
+        self.assertEqual(compacted["preview_text"], preview)
+        self.assertNotIn("output_compaction", compacted)
+
     def test_compactor_error_returns_redacted_field_instead_of_raw_output(self) -> None:
         huge_output = "Authorization: Bearer secret-token\n" + ("large output line\n" * 10_000)
 

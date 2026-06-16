@@ -5,6 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from core.runtime.output_compaction.redaction import (
+    E2E_CANARY_SECRET_PATTERN,
     KNOWN_UNDERSCORE_TOKEN_PREFIX_PATTERN,
     SENSITIVE_QUERY_KEY_PATTERN,
 )
@@ -32,14 +33,13 @@ import sys
 import urllib.error
 import urllib.request
 
-
 API_PATH = "/api/runtime/provider-hooks/codex/post-tool-use"
 DIAGNOSTIC_LOG_RELATIVE_PATH = os.path.join("logs", "provider-hook-events.jsonl")
 MIN_FALLBACK_BYTES = 16000
 MAX_FALLBACK_BYTES = 12000
 SENSITIVE_QUERY_KEYS = "__MAVERICK_SENSITIVE_QUERY_KEYS__"
 KNOWN_UNDERSCORE_TOKEN_PREFIXES = "__MAVERICK_KNOWN_UNDERSCORE_TOKEN_PREFIXES__"
-
+E2E_CANARY_SECRET_PATTERN = r"__MAVERICK_E2E_CANARY_SECRET_PATTERN__"
 
 def main():
     raw = sys.stdin.read()
@@ -61,12 +61,10 @@ def main():
         else:
             write_hook_diagnostic(payload, bridge_status=bridge_status, fallback_status="not_run")
         return 0
-
     fallback = fallback_response(payload, bridge_status=bridge_status)
     if fallback is not None:
         print(json.dumps(fallback, separators=(",", ":")))
     return 0
-
 
 def call_maverick(payload):
     token = os.environ.get("MAVERICK_RUNTIME_API_TOKEN", "").strip()
@@ -94,12 +92,10 @@ def call_maverick(payload):
         return decoded, "returned_emit"
     return decoded, "returned_no_emit"
 
-
 def fallback_response(payload, bridge_status="unavailable"):
     response, fallback_status = fallback_response_with_status(payload)
     write_hook_diagnostic(payload, bridge_status=bridge_status, fallback_status=fallback_status)
     return response
-
 
 def fallback_response_with_status(payload):
     if compaction_disabled():
@@ -132,7 +128,6 @@ def fallback_response_with_status(payload):
     )
     return {"decision": "block", "continue": False, "reason": header + "\n\n" + compacted}, "emitted"
 
-
 def write_hook_diagnostic(payload, bridge_status, fallback_status):
     event = build_hook_diagnostic(
         payload if isinstance(payload, dict) else {},
@@ -152,7 +147,6 @@ def write_hook_diagnostic(payload, bridge_status, fallback_status):
             pass
     print(line, file=sys.stderr)
 
-
 def build_hook_diagnostic(payload, bridge_status, fallback_status):
     return {
         "timestamp": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
@@ -167,11 +161,9 @@ def build_hook_diagnostic(payload, bridge_status, fallback_status):
         "fallback_status": diagnostic_string(fallback_status),
     }
 
-
 def diagnostic_payload_keys(payload):
     keys = [diagnostic_string(key) for key in payload.keys()]
     return sorted(key for key in keys if key)[:64]
-
 
 def diagnostic_extracted_text_bytes(payload):
     try:
@@ -179,18 +171,15 @@ def diagnostic_extracted_text_bytes(payload):
     except Exception:
         return 0
 
-
 def diagnostic_string(value):
     if not isinstance(value, str):
         return ""
     collapsed = re.sub(r"[\x00-\x1f\x7f]+", " ", value).strip()
     return collapsed[:100]
 
-
 def compaction_disabled():
     value = os.environ.get("MAVERICK_RUNTIME_OUTPUT_COMPACTION", "1").strip().lower()
     return value in {"0", "false", "no", "off", "disabled"}
-
 
 def extract_response_text(payload):
     response = first_present(payload, ("tool_response", "toolResponse", "tool_result", "toolResult", "result", "response"))
@@ -215,13 +204,11 @@ def extract_response_text(payload):
         return joined_text_fragments(response)
     return ""
 
-
 def first_present(value, keys):
     for key in keys:
         if key in value:
             return value.get(key)
     return None
-
 
 def first_text(value, keys):
     for key in keys:
@@ -229,7 +216,6 @@ def first_text(value, keys):
         if isinstance(item, str):
             return item
     return ""
-
 
 def joined_text_fragments(value):
     fragments = []
@@ -261,12 +247,13 @@ def redact_text(text):
         (r"(?i)(Authorization:\s*Basic\s+)[^\s]+", r"\1<redacted>"),
         (r"(?im)^(Cookie|Set-Cookie):.*$", r"\1: <redacted>"),
         (r"(?im)^([A-Z0-9_-]*(?:TOKEN|SECRET|PASSWORD|PASSWD|API[-_]?KEY|PRIVATE[-_]?KEY|ACCESS[-_]?KEY)[A-Z0-9_-]*\s*:\s*)[^\r\n]+", r"\1<redacted>"),
-        (r"(?im)^([A-Z0-9_]*(?:TOKEN|SECRET|PASSWORD|PASSWD|API_KEY|PRIVATE_KEY|ACCESS_KEY|AUTH|KEY)[A-Z0-9_]*\s*=\s*)[^\s#]+", r"\1<redacted>"),
+        (r"(?i)(?<![?&])\b([A-Z0-9_]*(?:TOKEN|SECRET|PASSWORD|PASSWD|API_KEY|PRIVATE_KEY|ACCESS_KEY|AUTH|KEY)[A-Z0-9_]*\s*=\s*)[^&#\"'\s]+", r"\1<redacted>"),
         (r"(?i)([?&](?:" + SENSITIVE_QUERY_KEYS + r")=)[^&#\s]+", r"\1<redacted>"),
         (r"\beyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\b", "<redacted-jwt>"),
         (r"(?i)([a-z][a-z0-9+.-]*://)([^/\s:@]+):([^@\s/]+)@", r"\1<redacted>@"),
         (r"\b(?:" + KNOWN_UNDERSCORE_TOKEN_PREFIXES + r")_[A-Za-z0-9_=-]{16,}\b", "<redacted-key>"),
         (r"\bsk-[A-Za-z0-9_-]{16,}\b", "<redacted-key>"),
+        (E2E_CANARY_SECRET_PATTERN, "<redacted>", re.IGNORECASE),
     )
     redacted = text
     for item in replacements:
@@ -308,4 +295,5 @@ if __name__ == "__main__":
     return (
         source.replace("__MAVERICK_SENSITIVE_QUERY_KEYS__", SENSITIVE_QUERY_KEY_PATTERN)
         .replace("__MAVERICK_KNOWN_UNDERSCORE_TOKEN_PREFIXES__", KNOWN_UNDERSCORE_TOKEN_PREFIX_PATTERN)
+        .replace("__MAVERICK_E2E_CANARY_SECRET_PATTERN__", E2E_CANARY_SECRET_PATTERN)
     )

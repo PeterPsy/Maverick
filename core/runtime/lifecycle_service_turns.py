@@ -6,6 +6,8 @@ from dataclasses import replace
 from datetime import datetime
 from typing import TYPE_CHECKING
 
+from core.runtime.execution_events import RuntimeExecutionEvent
+from core.runtime.output_compaction import ToolOutputCompactionContext, compact_tool_call_event
 from core.runtime.runtime_events import RuntimeEventPlane, RuntimeEventRecord
 from core.runtime.runtime_process import RuntimeProcessRecord, RuntimeProcessStatus
 from core.runtime.store import RuntimeStore
@@ -30,6 +32,13 @@ def record_runtime_event(
     """Persist one structured runtime-domain event."""
     timestamp = now or utcnow()
     session = store.get_session(session_id)
+    payload = _compacted_runtime_event_payload(
+        event_type=event_type,
+        plane=plane,
+        payload=payload,
+        session_id=session_id,
+        turn_id=turn_id,
+    )
     event = RuntimeEventRecord(
         event_id=event_id,
         workspace_id=session.workspace_id,
@@ -45,6 +54,23 @@ def record_runtime_event(
     if event_bus is not None:
         event_bus.publish(saved)
     return saved
+
+
+def _compacted_runtime_event_payload(
+    *,
+    event_type: str,
+    plane: RuntimeEventPlane,
+    payload: dict,
+    session_id: str,
+    turn_id: str | None,
+) -> dict:
+    if not event_type.startswith("runtime.tool_call."):
+        return payload
+    event = compact_tool_call_event(
+        RuntimeExecutionEvent(event_type=event_type, payload=payload, plane=plane),
+        context=ToolOutputCompactionContext(session_id=session_id, turn_id=turn_id),
+    )
+    return event.payload
 
 
 

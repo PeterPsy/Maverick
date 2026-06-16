@@ -46,14 +46,14 @@ export function themeFromMessage(message: unknown): MaverickShellTheme | null {
     return null;
   }
   const payload = message as { context?: unknown; theme?: unknown; type?: string };
-  if (payload.type === "maverick.shell.theme-changed") {
+  if (payload.type === "maverick.shell.theme-changed" || payload.type === "maverick.app.navigate") {
     return normalizeMaverickTheme(payload.theme);
   }
-  if (payload.theme) {
-    return normalizeMaverickTheme(payload.theme);
+  if (payload.type === "maverick.widget.context-changed") {
+    const contextTheme = themeFromWidgetContext(payload.context);
+    return contextTheme ? normalizeMaverickTheme(contextTheme) : null;
   }
-  const contextTheme = themeFromWidgetContext(payload.context);
-  return contextTheme ? normalizeMaverickTheme(contextTheme) : null;
+  return null;
 }
 
 export function themeFromLocation(locationRef: Location = window.location): MaverickShellTheme {

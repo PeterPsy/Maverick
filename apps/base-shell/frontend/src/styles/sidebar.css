@@ -425,13 +425,13 @@
 .bs-sidebar__details::before {
   top: 0;
   height: var(--bs-sidebar-top-fade-height);
-  background: linear-gradient(to bottom, rgba(12, 12, 14, 0.96), rgba(12, 12, 14, 0.82) 52%, rgba(12, 12, 14, 0));
+  background: var(--maverick-scroll-fade-top);
 }
 
 .bs-sidebar__details::after {
   bottom: 0;
   height: var(--bs-sidebar-bottom-fade-height);
-  background: linear-gradient(to top, rgba(12, 12, 14, 0.96), rgba(12, 12, 14, 0.82) 52%, rgba(12, 12, 14, 0));
+  background: var(--maverick-scroll-fade-bottom);
 }
 
 .bs-sidebar.is-closed .bs-sidebar__details {

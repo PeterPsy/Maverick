@@ -16,6 +16,17 @@ describe("chat shell theme bridge", () => {
     });
   });
 
+  it("accepts navigation theme payloads", () => {
+    expect(themeFromMessage({
+      type: "maverick.app.navigate",
+      theme: { color_scheme: "light", effective: "light", mode: "light" },
+    })).toEqual({
+      color_scheme: "light",
+      effective: "light",
+      mode: "light",
+    });
+  });
+
   it("accepts widget context theme payloads", () => {
     expect(themeFromMessage({
       type: "maverick.widget.context-changed",
@@ -25,6 +36,17 @@ describe("chat shell theme bridge", () => {
       effective: "light",
       mode: "light",
     });
+  });
+
+  it("ignores theme payloads on unrelated same-origin messages", () => {
+    expect(themeFromMessage({
+      type: "maverick.chat.active-thread-changed",
+      theme: { color_scheme: "light", effective: "light", mode: "light" },
+    })).toBeNull();
+    expect(themeFromMessage({
+      type: "maverick.app.data-changed",
+      context: { content: { shell_theme: { color_scheme: "light", effective: "light", mode: "light" } } },
+    })).toBeNull();
   });
 
   it("ignores unsupported theme values", () => {

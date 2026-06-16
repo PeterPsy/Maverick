@@ -44,7 +44,7 @@
   overflow: auto;
   padding: 0.8rem 0.9rem;
   border-radius: 14px;
-  background: rgba(0, 0, 0, 0.22);
+  background: var(--maverick-control-inset-surface);
 }
 
 .chatapp-heavy-message__preview code {

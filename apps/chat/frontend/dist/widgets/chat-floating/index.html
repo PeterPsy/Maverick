@@ -3,20 +3,34 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <script>
+      (function () {
+        var search = new URLSearchParams(window.location.search);
+        var hash = new URLSearchParams(window.location.hash.charAt(0) === "#" ? window.location.hash.slice(1) : window.location.hash);
+        var effective = search.get("maverick_theme") || hash.get("maverick_theme");
+        if (effective !== "dark" && effective !== "light") {
+          var scheme = search.get("maverick_color_scheme") || hash.get("maverick_color_scheme");
+          effective = scheme === "light" ? "light" : "dark";
+        }
+        document.documentElement.dataset.maverickTheme = effective;
+        document.documentElement.dataset.theme = effective;
+        document.documentElement.style.colorScheme = effective;
+      })();
+    </script>
     <title>Chat Floating Widget</title>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@24,500,0,0" rel="stylesheet" />
-    <script type="module" crossorigin src="/apps/chat/assets/widgets/chat-floating/index-CSUSJr7f.js"></script>
-    <link rel="modulepreload" crossorigin href="/apps/chat/assets/shellTheme-B9EhVmJi.js">
+    <script type="module" crossorigin src="/apps/chat/assets/widgets/chat-floating/index-CoYFerQz.js"></script>
+    <link rel="modulepreload" crossorigin href="/apps/chat/assets/shellTheme-D8ayW-FK.js">
     <link rel="modulepreload" crossorigin href="/apps/chat/assets/transcript-QmBYaKi3.js">
-    <link rel="modulepreload" crossorigin href="/apps/chat/assets/useRuntimeEvents-Ck1O509M.js">
-    <link rel="modulepreload" crossorigin href="/apps/chat/assets/useRuntimeThreads-DBpIZOJ1.js">
-    <link rel="modulepreload" crossorigin href="/apps/chat/assets/main-CDNAP1yG.js">
-    <link rel="modulepreload" crossorigin href="/apps/chat/assets/BusyChatGlow-BWiJRcHi.js">
-    <link rel="modulepreload" crossorigin href="/apps/chat/assets/floatingWidgetRuntime-BdWjRYDY.js">
-    <link rel="stylesheet" crossorigin href="/apps/chat/assets/main-Cqi17y1v.css">
-    <link rel="stylesheet" crossorigin href="/apps/chat/assets/floatingWidgetRuntime-ClBeVhsC.css">
+    <link rel="modulepreload" crossorigin href="/apps/chat/assets/useRuntimeEvents-B6O7WlEn.js">
+    <link rel="modulepreload" crossorigin href="/apps/chat/assets/useRuntimeThreads-BtXQiVfz.js">
+    <link rel="modulepreload" crossorigin href="/apps/chat/assets/main-DTh13p2e.js">
+    <link rel="modulepreload" crossorigin href="/apps/chat/assets/BusyChatGlow-DqM5Ylu9.js">
+    <link rel="modulepreload" crossorigin href="/apps/chat/assets/floatingWidgetRuntime-axwTJZxk.js">
+    <link rel="stylesheet" crossorigin href="/apps/chat/assets/main-Z_udCLlz.css">
+    <link rel="stylesheet" crossorigin href="/apps/chat/assets/floatingWidgetRuntime-CsFUNc-1.css">
   </head>
   <body>
     <div id="root"></div>

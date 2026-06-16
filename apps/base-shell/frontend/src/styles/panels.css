@@ -181,7 +181,7 @@
   align-content: start;
   gap: 1rem;
   padding: 2rem 1rem 1rem;
-  background: linear-gradient(180deg, rgba(18, 18, 18, 0.92), rgba(18, 18, 18, 0.98)), var(--maverick-bg);
+  background: var(--maverick-panel-gradient);
 }
 
 .bs-shell.is-mobile-layout .bs-app-grid-panel,
@@ -202,7 +202,7 @@
 .bs-app-grid-panel__description,
 .bs-empty-panel__description {
   margin: 0;
-  color: rgba(214, 223, 235, 0.76);
+  color: var(--maverick-text-muted);
   font-size: 0.82rem;
   line-height: 1.45;
 }

@@ -3,10 +3,24 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <script>
+      (function () {
+        var search = new URLSearchParams(window.location.search);
+        var hash = new URLSearchParams(window.location.hash.charAt(0) === "#" ? window.location.hash.slice(1) : window.location.hash);
+        var effective = search.get("maverick_theme") || hash.get("maverick_theme");
+        if (effective !== "dark" && effective !== "light") {
+          var scheme = search.get("maverick_color_scheme") || hash.get("maverick_color_scheme");
+          effective = scheme === "light" ? "light" : "dark";
+        }
+        document.documentElement.dataset.maverickTheme = effective;
+        document.documentElement.dataset.theme = effective;
+        document.documentElement.style.colorScheme = effective;
+      })();
+    </script>
     <title>Chat Sidebar Footer</title>
-    <script type="module" crossorigin src="/apps/chat/assets/widgets/chat-sidebar-footer/index-DvOnmRX5.js"></script>
-    <link rel="modulepreload" crossorigin href="/apps/chat/assets/shellTheme-B9EhVmJi.js">
-    <link rel="modulepreload" crossorigin href="/apps/chat/assets/useRuntimeThreads-DBpIZOJ1.js">
+    <script type="module" crossorigin src="/apps/chat/assets/widgets/chat-sidebar-footer/index-DdTRIlb0.js"></script>
+    <link rel="modulepreload" crossorigin href="/apps/chat/assets/shellTheme-D8ayW-FK.js">
+    <link rel="modulepreload" crossorigin href="/apps/chat/assets/useRuntimeThreads-BtXQiVfz.js">
     <link rel="modulepreload" crossorigin href="/apps/chat/assets/chatSidebarSelectionChannel-WHMWQ5QI.js">
     <link rel="stylesheet" crossorigin href="/apps/chat/assets/index-DyYaaoXL.css">
   </head>

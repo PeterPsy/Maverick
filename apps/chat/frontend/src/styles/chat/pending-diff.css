@@ -112,7 +112,7 @@
   background: var(--chatapp-soft-surface);
   box-shadow:
     var(--chatapp-inner-edge),
-    0 16px 48px rgba(0, 0, 0, 0.22);
+    var(--maverick-panel-card-shadow);
   backdrop-filter: blur(26px);
 }
 

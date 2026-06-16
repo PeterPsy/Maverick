@@ -3,6 +3,20 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <script>
+      (function () {
+        var search = new URLSearchParams(window.location.search);
+        var hash = new URLSearchParams(window.location.hash.charAt(0) === "#" ? window.location.hash.slice(1) : window.location.hash);
+        var effective = search.get("maverick_theme") || hash.get("maverick_theme");
+        if (effective !== "dark" && effective !== "light") {
+          var scheme = search.get("maverick_color_scheme") || hash.get("maverick_color_scheme");
+          effective = scheme === "light" ? "light" : "dark";
+        }
+        document.documentElement.dataset.maverickTheme = effective;
+        document.documentElement.dataset.theme = effective;
+        document.documentElement.style.colorScheme = effective;
+      })();
+    </script>
     <title>Runtime Text Preview</title>
   </head>
   <body>

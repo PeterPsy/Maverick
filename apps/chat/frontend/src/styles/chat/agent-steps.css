@@ -143,7 +143,7 @@
 .chatapp-agent-step__output {
   border-color: rgba(var(--maverick-contrast-rgb), 0.065);
   border-radius: 0.85rem;
-  background: rgba(0, 0, 0, 0.26);
+  background: var(--maverick-control-inset-surface-strong);
 }
 
 .chatapp-agent-step__output-toggle {

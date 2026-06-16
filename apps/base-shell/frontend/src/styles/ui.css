@@ -120,7 +120,7 @@
 .bs-ui-dialog__backdrop {
   position: absolute;
   inset: 0;
-  background: rgba(0, 0, 0, 0.62);
+  background: var(--maverick-dialog-scrim);
   backdrop-filter: blur(10px);
 }
 
@@ -135,8 +135,8 @@
   padding: 1rem;
   border: 1px solid var(--maverick-border-strong);
   border-radius: 24px;
-  background: rgba(22, 22, 23, 0.96);
-  box-shadow: 0 30px 90px rgba(0, 0, 0, 0.45);
+  background: var(--maverick-dialog-surface);
+  box-shadow: var(--maverick-dialog-shadow);
 }
 
 .bs-ui-dialog__header {

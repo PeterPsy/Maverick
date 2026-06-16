@@ -144,7 +144,7 @@ describe("Sidebar desktop layout contract", () => {
     expect(layoutStyles).toContain("--bs-mobile-shell-header-height: 2.75rem;");
     expect(layoutStyles).toContain("var(--bs-mobile-shell-status-bar-height) +");
     expect(statusBarRule).toContain("height: var(--bs-mobile-shell-status-bar-height);");
-    expect(statusBarRule).toContain("linear-gradient(180deg, rgba(7, 7, 8, 0.42), rgba(7, 7, 8, 0.18) 42%, transparent 78%);");
+    expect(statusBarRule).toContain("background: var(--maverick-mobile-safe-area-fade);");
     expect(headerRule).toContain("top: var(--bs-mobile-shell-status-bar-height);");
     expect(headerRule).toContain("z-index: 46;");
     expect(headerRule).toContain("border: 0;");

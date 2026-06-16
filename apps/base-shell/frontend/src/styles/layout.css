@@ -34,7 +34,7 @@
   right: 0;
   z-index: 37;
   height: var(--bs-mobile-shell-status-bar-height);
-  background: linear-gradient(180deg, rgba(7, 7, 8, 0.42), rgba(7, 7, 8, 0.18) 42%, transparent 78%);
+  background: var(--maverick-mobile-safe-area-fade);
   content: "";
   pointer-events: none;
 }
@@ -718,7 +718,7 @@
   inset: 0;
   z-index: 90;
   cursor: crosshair;
-  background: rgba(0, 0, 0, 0.18);
+  background: var(--maverick-capture-scrim);
   pointer-events: auto;
   touch-action: none;
   user-select: none;
@@ -734,9 +734,9 @@
   z-index: 2;
   border: 1px solid rgba(var(--maverick-contrast-rgb), 0.1);
   border-radius: 14px;
-  background: rgba(20, 20, 20, 0.9);
+  background: var(--maverick-capture-control-surface);
   color: var(--maverick-text);
-  box-shadow: 0 16px 36px rgba(0, 0, 0, 0.28);
+  box-shadow: var(--maverick-capture-control-shadow);
 }
 
 .bs-capture-overlay__hint {

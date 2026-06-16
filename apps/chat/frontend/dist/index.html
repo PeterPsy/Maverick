@@ -3,18 +3,32 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <script>
+      (function () {
+        var search = new URLSearchParams(window.location.search);
+        var hash = new URLSearchParams(window.location.hash.charAt(0) === "#" ? window.location.hash.slice(1) : window.location.hash);
+        var effective = search.get("maverick_theme") || hash.get("maverick_theme");
+        if (effective !== "dark" && effective !== "light") {
+          var scheme = search.get("maverick_color_scheme") || hash.get("maverick_color_scheme");
+          effective = scheme === "light" ? "light" : "dark";
+        }
+        document.documentElement.dataset.maverickTheme = effective;
+        document.documentElement.dataset.theme = effective;
+        document.documentElement.style.colorScheme = effective;
+      })();
+    </script>
     <link
       rel="stylesheet"
       href="https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:FILL@0..1&opsz=20..48&wght@400..700&display=swap"
     />
     <title>Maverick Chat</title>
-    <script type="module" crossorigin src="/apps/chat/assets/app-BrdW1W9s.js"></script>
-    <link rel="modulepreload" crossorigin href="/apps/chat/assets/shellTheme-B9EhVmJi.js">
+    <script type="module" crossorigin src="/apps/chat/assets/app-B4y6BrhU.js"></script>
+    <link rel="modulepreload" crossorigin href="/apps/chat/assets/shellTheme-D8ayW-FK.js">
     <link rel="modulepreload" crossorigin href="/apps/chat/assets/transcript-QmBYaKi3.js">
-    <link rel="modulepreload" crossorigin href="/apps/chat/assets/useRuntimeEvents-Ck1O509M.js">
-    <link rel="modulepreload" crossorigin href="/apps/chat/assets/useRuntimeThreads-DBpIZOJ1.js">
-    <link rel="modulepreload" crossorigin href="/apps/chat/assets/main-CDNAP1yG.js">
-    <link rel="stylesheet" crossorigin href="/apps/chat/assets/main-Cqi17y1v.css">
+    <link rel="modulepreload" crossorigin href="/apps/chat/assets/useRuntimeEvents-B6O7WlEn.js">
+    <link rel="modulepreload" crossorigin href="/apps/chat/assets/useRuntimeThreads-BtXQiVfz.js">
+    <link rel="modulepreload" crossorigin href="/apps/chat/assets/main-DTh13p2e.js">
+    <link rel="stylesheet" crossorigin href="/apps/chat/assets/main-Z_udCLlz.css">
   </head>
   <body>
     <div id="root"></div>

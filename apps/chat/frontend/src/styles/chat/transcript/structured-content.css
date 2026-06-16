@@ -65,7 +65,7 @@
   background: var(--maverick-accent);
   box-shadow:
     var(--chatapp-inner-edge),
-    0 14px 44px rgba(0, 0, 0, 0.2);
+    var(--maverick-card-shadow);
   color: var(--maverick-text-on-accent);
 }
 
@@ -155,7 +155,7 @@
 .chatapp-heavy-message__preview {
   border-color: rgba(var(--maverick-contrast-rgb), 0.07);
   border-radius: 0.9rem;
-  background: rgba(0, 0, 0, 0.28);
+  background: var(--maverick-code-block-surface);
   box-shadow: inset 0 1px 0 rgba(var(--maverick-contrast-rgb), 0.035);
 }
 
@@ -251,7 +251,7 @@
   border-color: rgba(var(--maverick-contrast-rgb), 0.055);
   border-radius: var(--chatapp-cell-radius);
   background: var(--chatapp-soft-surface);
-  box-shadow: 0 18px 58px rgba(0, 0, 0, 0.24);
+  box-shadow: var(--maverick-lifted-card-shadow);
   backdrop-filter: blur(22px);
 }
 
@@ -267,7 +267,7 @@
   padding: 0.85rem;
   border: 1px solid rgba(var(--maverick-contrast-rgb), 0.07);
   border-radius: 0.85rem;
-  background: rgba(0, 0, 0, 0.25);
+  background: var(--maverick-code-block-surface-strong);
   color: rgba(var(--maverick-contrast-rgb), 0.78);
   white-space: pre-wrap;
 }
@@ -278,5 +278,5 @@
   border-color: rgba(var(--maverick-contrast-rgb), 0.055);
   border-radius: var(--chatapp-cell-radius);
   background: var(--chatapp-soft-surface);
-  box-shadow: 0 18px 58px rgba(0, 0, 0, 0.22);
+  box-shadow: var(--maverick-lifted-card-shadow-soft);
 }

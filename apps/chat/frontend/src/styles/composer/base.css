@@ -82,7 +82,7 @@
 }
 
 .chatapp-periodic-task-panel .chat-ui-input {
-  background: rgba(18, 18, 18, 0.3);
+  background: var(--maverick-control-overlay-surface);
 }
 
 .chatapp-periodic-task-panel .chat-ui-field__label {

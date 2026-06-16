@@ -91,8 +91,8 @@
   overflow-y: auto;
   border: 1px solid rgba(var(--maverick-contrast-rgb), 0.1);
   border-radius: 0.75rem;
-  background: rgba(0, 0, 0, 0.92);
-  box-shadow: 0 18px 48px rgba(0, 0, 0, 0.34);
+  background: var(--maverick-popover-surface);
+  box-shadow: var(--maverick-popover-shadow);
   backdrop-filter: blur(20px);
 }
 

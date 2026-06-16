@@ -9,6 +9,27 @@
     <meta name="mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-title" content="Maverick" />
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <script>
+      (function () {
+        var mode = "dark";
+        try {
+          var raw = window.localStorage && window.localStorage.getItem("maverick:base-shell:session");
+          var parsed = raw ? JSON.parse(raw) : {};
+          if (parsed.themeMode === "dark" || parsed.themeMode === "light" || parsed.themeMode === "system") {
+            mode = parsed.themeMode;
+          }
+        } catch (error) {
+          mode = "dark";
+        }
+        var effective = mode;
+        if (mode === "system") {
+          effective = window.matchMedia && window.matchMedia("(prefers-color-scheme: light)").matches ? "light" : "dark";
+        }
+        document.documentElement.dataset.maverickTheme = effective;
+        document.documentElement.dataset.theme = effective;
+        document.documentElement.style.colorScheme = effective;
+      })();
+    </script>
     <link rel="manifest" href="/manifest.webmanifest"  />
     <link rel="icon" href="/favicon.ico" sizes="any"  />
     <link rel="icon" type="image/png" sizes="512x512" href="/apps/base-shell/pwa-logo.png" />
@@ -18,8 +39,8 @@
       href="https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:FILL@0..1&opsz=20..48&wght@400..700&display=swap"
     />
     <title>Maverick</title>
-    <script type="module" crossorigin src="/apps/base-shell/assets/index-DxJZWcup.js"></script>
-    <link rel="stylesheet" crossorigin href="/apps/base-shell/assets/index-Di5E8I2B.css">
+    <script type="module" crossorigin src="/apps/base-shell/assets/index-DRHh4I0M.js"></script>
+    <link rel="stylesheet" crossorigin href="/apps/base-shell/assets/index-fDrT4sA-.css">
   </head>
   <body>
     <div id="root"></div>

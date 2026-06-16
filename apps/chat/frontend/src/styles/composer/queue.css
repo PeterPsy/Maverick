@@ -8,7 +8,7 @@
   background: var(--maverick-accent);
   box-shadow:
     var(--chatapp-inner-edge),
-    0 14px 44px rgba(0, 0, 0, 0.2);
+    var(--maverick-card-shadow);
   color: var(--maverick-text-on-accent);
 }
 

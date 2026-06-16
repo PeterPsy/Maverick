@@ -54,7 +54,7 @@
   overflow: auto;
   padding: 0.85rem;
   border-radius: 12px;
-  background: rgba(0, 0, 0, 0.22);
+  background: var(--maverick-control-inset-surface);
   color: var(--maverick-text);
   font-size: 0.8rem;
   line-height: 1.55;
@@ -75,7 +75,7 @@
   align-items: flex-start;
   padding: 0.85rem;
   border-radius: 12px;
-  background: rgba(0, 0, 0, 0.18);
+  background: var(--maverick-control-inset-surface-muted);
 }
 
 .chatapp-prompt-preview__skill-copy {

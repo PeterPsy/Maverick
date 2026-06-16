@@ -89,6 +89,34 @@ For built-in apps these values may be equal, but the architecture must not rely 
 
 Apps own the structure and meaning of `<app_page>`. The platform must not hardcode every app's internal route tree. An app that exposes deep links should translate its own page segments, such as `threads/<thread_id>` or `runtime-sessions/<runtime_session_id>`, into its internal state after receiving `maverick.app.navigate`.
 
+## Shell Theme Protocol
+
+The root shell owns the user's shell theme preference, and mounted app iframes remain responsible for rendering their own dark and light tokens.
+
+For every mounted app iframe and shell-hosted widget iframe, the shell must include these URL parameters on the iframe document URL before the frontend bundle executes:
+
+- `maverick_theme`: the effective visual theme, `dark` or `light`
+- `maverick_theme_mode`: the user's preference, `dark`, `light`, or `system`
+- `maverick_color_scheme`: the CSS color scheme to apply, `dark` or `light`
+
+App and widget frontends that support shell theming should run a tiny pre-paint bootstrap in their HTML entrypoint. That bootstrap reads the URL parameters, sets `data-maverick-theme`, `data-theme`, and `colorScheme` on the document root, and then lets the normal frontend code attach listeners. This prevents persisted or shell-provided light mode from flashing through the default dark CSS before module execution.
+
+The shell also posts live theme updates without remounting iframe documents:
+
+```json
+{
+  "type": "maverick.shell.theme-changed",
+  "theme": {
+    "mode": "system",
+    "effective": "light",
+    "color_scheme": "light"
+  }
+}
+```
+
+Mounted apps may also receive the same `theme` object on `maverick.app.navigate`. Widgets may receive it in `context.content.shell_theme` on `maverick.widget.context-changed`.
+Apps and widgets must ignore `theme` fields on unrelated same-origin messages so app-owned UI state messages cannot accidentally change document theme.
+
 ## App Distribution Sources
 
 Maverick supports two canonical app source locations:

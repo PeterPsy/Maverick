@@ -9,6 +9,27 @@
     <meta name="mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-title" content="Maverick" />
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <script>
+      (function () {
+        var mode = "dark";
+        try {
+          var raw = window.localStorage && window.localStorage.getItem("maverick:base-shell:session");
+          var parsed = raw ? JSON.parse(raw) : {};
+          if (parsed.themeMode === "dark" || parsed.themeMode === "light" || parsed.themeMode === "system") {
+            mode = parsed.themeMode;
+          }
+        } catch (error) {
+          mode = "dark";
+        }
+        var effective = mode;
+        if (mode === "system") {
+          effective = window.matchMedia && window.matchMedia("(prefers-color-scheme: light)").matches ? "light" : "dark";
+        }
+        document.documentElement.dataset.maverickTheme = effective;
+        document.documentElement.dataset.theme = effective;
+        document.documentElement.style.colorScheme = effective;
+      })();
+    </script>
     <link rel="manifest" href="/manifest.webmanifest" vite-ignore />
     <link rel="icon" href="/favicon.ico" sizes="any" vite-ignore />
     <link rel="icon" type="image/png" sizes="512x512" href="/pwa-logo.png" />

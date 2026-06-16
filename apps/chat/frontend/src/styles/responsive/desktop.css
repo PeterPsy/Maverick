@@ -54,9 +54,9 @@
     width: min(19rem, calc(100vw - 1.8rem));
     height: calc(100vh - 1.8rem);
     border-color: rgba(var(--maverick-contrast-rgb), 0.08);
-    background: rgba(18, 18, 18, 0.82);
+    background: var(--maverick-overlay-panel-surface);
     backdrop-filter: blur(16px);
-    box-shadow: 0 20px 48px rgba(0, 0, 0, 0.34);
+    box-shadow: var(--maverick-overlay-panel-shadow);
   }
 
   .chatapp-shell.is-swarm-view .chatapp-chat-panel {

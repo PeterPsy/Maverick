@@ -5,6 +5,7 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { AppRegistryItem } from "../src/api";
 import { AppFrameHost } from "../src/components/AppFrameHost";
+import type { ShellThemeState } from "../src/theme";
 
 type AppFrameParams = Record<string, string | boolean | null>;
 type PostedMessage = {
@@ -50,7 +51,12 @@ const defaultTheme = {
   color_scheme: "dark" as const,
   effective: "dark" as const,
   mode: "dark" as const,
-};
+} satisfies ShellThemeState;
+const lightTheme = {
+  color_scheme: "light" as const,
+  effective: "light" as const,
+  mode: "light" as const,
+} satisfies ShellThemeState;
 
 describe("AppFrameHost app frame readiness", () => {
   let container: HTMLDivElement;
@@ -163,9 +169,28 @@ describe("AppFrameHost app frame readiness", () => {
 
     expect(navigateMessages(postMessageSpy)).toHaveLength(2);
   });
+
+  it("posts live shell theme changes without remounting the app frame", async () => {
+    await renderHost(root, chat);
+    const frame = frameByTitle(container, "Chat viewport");
+    const initialSrc = frame.getAttribute("src");
+    const postMessageSpy = vi.spyOn(frame.contentWindow!, "postMessage");
+
+    await renderHost(root, chat, {}, lightTheme);
+    const nextFrame = frameByTitle(container, "Chat viewport");
+
+    expect(nextFrame).toBe(frame);
+    expect(nextFrame.getAttribute("src")).toBe(initialSrc);
+    expect(themeMessages(postMessageSpy)).toEqual([
+      {
+        theme: lightTheme,
+        type: "maverick.shell.theme-changed",
+      },
+    ]);
+  });
 });
 
-async function renderHost(root: Root, activeApp: AppRegistryItem, activeAppParams: AppFrameParams = {}) {
+async function renderHost(root: Root, activeApp: AppRegistryItem, activeAppParams: AppFrameParams = {}, shellTheme: ShellThemeState = defaultTheme) {
   await act(async () => {
     root.render(
       <AppFrameHost
@@ -174,6 +199,7 @@ async function renderHost(root: Root, activeApp: AppRegistryItem, activeAppParam
         activeWorkspaceId="default"
         isMobileLayout={true}
         onOpenApp={vi.fn()}
+        shellTheme={shellTheme}
       />,
     );
     await Promise.resolve();
@@ -209,6 +235,17 @@ function navigateMessages(postMessageSpy: { mock: { calls: unknown[][] } }): Pos
         return false;
       }
       return (message as PostedMessage).type === "maverick.app.navigate";
+    });
+}
+
+function themeMessages(postMessageSpy: { mock: { calls: unknown[][] } }): PostedMessage[] {
+  return postMessageSpy.mock.calls
+    .map(([message]) => message)
+    .filter((message): message is PostedMessage => {
+      if (!message || typeof message !== "object" || Array.isArray(message)) {
+        return false;
+      }
+      return (message as PostedMessage).type === "maverick.shell.theme-changed";
     });
 }
 

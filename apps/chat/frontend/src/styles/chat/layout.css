@@ -389,7 +389,7 @@
   background: var(--chatapp-glass-surface);
   box-shadow:
     var(--chatapp-inner-edge),
-    0 10px 26px rgba(0, 0, 0, 0.28);
+    var(--maverick-floating-control-shadow);
   backdrop-filter: blur(26px) saturate(1.25);
   color: var(--maverick-text);
   cursor: pointer;

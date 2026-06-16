@@ -6,6 +6,7 @@ from pathlib import Path
 import sys
 import tempfile
 import unittest
+from unittest.mock import patch
 from urllib.parse import parse_qs, urlparse
 
 
@@ -181,7 +182,7 @@ class CalendarGoogleSyncTest(unittest.TestCase):
         self.assertEqual(persisted["sync_state"][0]["sync_mode"], "full_history")
         self.assertEqual(persisted["sync_state"][0]["sync_token"], "full-history-token")
 
-    def test_sync_event_limit_persists_calendar_discovery_and_structured_error(self) -> None:
+    def test_sync_allows_more_than_one_thousand_events(self) -> None:
         fixed_now = datetime(2026, 5, 28, 12, 0, tzinfo=UTC)
 
         def transport(method: str, url: str, request: dict[str, object]) -> tuple[int, dict[str, object]]:
@@ -206,7 +207,7 @@ class CalendarGoogleSyncTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temp_dir:
             data_root = Path(temp_dir) / "data"
             _write_state(data_root)
-            status_code, rejected = _handle_action(
+            status_code, synced = _handle_action(
                 data_root,
                 {"action": "calendar_sync", "connection_id": "cal_conn_work"},
                 app_secrets=_app_secrets(),
@@ -215,17 +216,62 @@ class CalendarGoogleSyncTest(unittest.TestCase):
             )
             persisted = json.loads((data_root / "state.json").read_text(encoding="utf-8"))
 
+        self.assertEqual(status_code, 200)
+        self.assertTrue(synced["synced"])
+        self.assertEqual(synced["created"], 1001)
+        self.assertEqual(len(persisted["events"]), 1001)
+        self.assertEqual(persisted["calendars"][0]["provider_calendar_id"], "primary")
+
+    def test_sync_event_limit_persists_calendar_discovery_and_structured_error(self) -> None:
+        fixed_now = datetime(2026, 5, 28, 12, 0, tzinfo=UTC)
+
+        def transport(method: str, url: str, request: dict[str, object]) -> tuple[int, dict[str, object]]:
+            if url == "https://oauth2.googleapis.com/token":
+                return 200, {"access_token": "access-token"}
+            if url.startswith("https://www.googleapis.com/calendar/v3/users/me/calendarList"):
+                return 200, {"items": [{"id": "primary", "summary": "Work", "timeZone": "UTC", "selected": True}]}
+            if url.startswith("https://www.googleapis.com/calendar/v3/calendars/primary/events"):
+                return 200, {
+                    "items": [
+                        {
+                            "id": f"google-event-{index}",
+                            "summary": f"Overflow {index}",
+                            "start": {"dateTime": "2026-06-01T09:00:00Z"},
+                            "end": {"dateTime": "2026-06-01T10:00:00Z"},
+                        }
+                        for index in range(6)
+                    ]
+                }
+            raise AssertionError(f"Unexpected request: {method} {url}")
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            data_root = Path(temp_dir) / "data"
+            _write_state(data_root)
+            actions = _import_calendar_actions()
+            try:
+                with patch("google_sync.MAX_EVENTS", 5):
+                    status_code, rejected = actions.handle_action(
+                        data_root,
+                        {"action": "calendar_sync", "connection_id": "cal_conn_work"},
+                        app_secrets=_app_secrets(),
+                        oauth_transport=transport,
+                        oauth_now=fixed_now,
+                    )
+            finally:
+                _cleanup_calendar_backend_modules()
+            persisted = json.loads((data_root / "state.json").read_text(encoding="utf-8"))
+
         self.assertEqual(status_code, 400)
         self.assertEqual(rejected["error"], "calendar_sync_event_limit")
         self.assertEqual(rejected["current_event_count"], 0)
-        self.assertEqual(rejected["remote_candidate_count"], 1001)
-        self.assertEqual(rejected["candidate_event_count"], 1001)
-        self.assertEqual(rejected["max_events"], 1000)
+        self.assertEqual(rejected["remote_candidate_count"], 6)
+        self.assertEqual(rejected["candidate_event_count"], 6)
+        self.assertEqual(rejected["max_events"], 5)
         self.assertEqual(persisted["events"], [])
         self.assertEqual(persisted["calendars"][0]["provider_calendar_id"], "primary")
         self.assertEqual(persisted["sync_state"][0]["status"], "error")
         self.assertEqual(persisted["sync_state"][0]["error_code"], "calendar_sync_event_limit")
-        self.assertEqual(persisted["sync_state"][0]["candidate_event_count"], 1001)
+        self.assertEqual(persisted["sync_state"][0]["candidate_event_count"], 6)
 
     def test_incremental_sync_deletes_cancelled_remote_event(self) -> None:
         fixed_now = datetime(2026, 5, 28, 12, 0, tzinfo=UTC)

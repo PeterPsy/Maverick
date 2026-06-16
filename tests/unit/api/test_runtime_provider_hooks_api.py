@@ -55,6 +55,25 @@ class RuntimeProviderHooksApiTest(unittest.TestCase):
         self.assertEqual(status, "401 Unauthorized")
         self.assertEqual(payload["error"], "runtime_session_not_active")
 
+    def test_codex_post_tool_use_hook_rejects_invalid_runtime_session_record(self) -> None:
+        def raise_invalid_session(_session_id: str):
+            raise ValueError("Unsupported runtime thread visibility `not-hidden`.")
+
+        state = self._state(get_session=raise_invalid_session)
+
+        with self._trusted_runtime():
+            status, payload = self._invoke_hook_api(
+                state,
+                {
+                    "hook_event_name": "PostToolUse",
+                    "tool_name": "Bash",
+                    "tool_response": {"stdout": "ok\n", "exit_code": 0},
+                },
+            )
+
+        self.assertEqual(status, "401 Unauthorized")
+        self.assertEqual(payload["error"], "runtime_session_not_found")
+
     def test_unknown_runtime_provider_hook_route_is_not_handled(self) -> None:
         response = handle_runtime_provider_hooks_api(
             self._state(),
@@ -64,15 +83,17 @@ class RuntimeProviderHooksApiTest(unittest.TestCase):
 
         self.assertIsNone(response)
 
-    def _state(self, *, status: str = "running") -> SimpleNamespace:
+    def _state(self, *, status: str = "running", get_session=None) -> SimpleNamespace:
+        if get_session is None:
+            get_session = lambda _session_id: SimpleNamespace(
+                effective_mode="sandbox",
+                session_id="sess-1",
+                status=status,
+                workspace_id="default",
+            )
         return SimpleNamespace(
             runtime_store=SimpleNamespace(
-                get_session=lambda _session_id: SimpleNamespace(
-                    effective_mode="sandbox",
-                    session_id="sess-1",
-                    status=status,
-                    workspace_id="default",
-                )
+                get_session=get_session
             )
         )
 

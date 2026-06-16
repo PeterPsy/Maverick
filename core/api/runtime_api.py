@@ -777,6 +777,9 @@ def _handle_turn_interrupt(state: PlatformState, context: RequestSession, turn_i
         return json_response(start_response, {"error": "runtime_turn_not_found"}, status="404 Not Found")
     try:
         session = state.runtime_store.get_session(turn.session_id)
+    except (RuntimeSessionNotFoundError, ValueError):
+        return json_response(start_response, {"error": "runtime_turn_not_found"}, status="404 Not Found")
+    try:
         require_runtime_session_operation(
             workspace_store=state.workspace_store,
             user=context.user,

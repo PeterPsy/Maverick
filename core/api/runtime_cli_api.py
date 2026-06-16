@@ -49,7 +49,7 @@ def handle_runtime_cli_api(
 
     try:
         session = state.runtime_store.get_session(str(claims["runtime_session_id"]))
-    except RuntimeSessionNotFoundError:
+    except (RuntimeSessionNotFoundError, ValueError):
         return json_response(start_response, {"error": "runtime_session_not_found"}, status="401 Unauthorized")
     if session.workspace_id != str(claims["workspace_id"]) or session.status in {"stopped", "failed"}:
         return json_response(start_response, {"error": "runtime_session_not_active"}, status="401 Unauthorized")

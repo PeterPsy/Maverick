@@ -8,7 +8,7 @@ from unittest.mock import patch
 from core.api.platform_host import PlatformHost
 from core.api.platform_state import bootstrap_platform_state
 from core.runtime.runtime_thread import RuntimeThreadRecord
-from core.runtime.service import create_runtime_session
+from core.runtime.service import create_runtime_session, queue_runtime_turn
 from tests.unit.api.app_reference_test_support import AppReferenceApiTestSupport
 
 
@@ -16,7 +16,7 @@ class RuntimeThreadVisibilityApiTestCase(AppReferenceApiTestSupport, unittest.Te
     def _insert_corrupt_session(self, state, repo_root, *, session_id: str = "corrupt-session") -> datetime:
         now = datetime(2026, 6, 16, 12, 0, tzinfo=UTC)
         state.runtime_store.collections.sessions.update_one(
-            {"session_id": session_id},
+            {"workspace_id": "default", "session_id": session_id},
             {
                 "$set": {
                     "workspace_id": "default",
@@ -40,6 +40,12 @@ class RuntimeThreadVisibilityApiTestCase(AppReferenceApiTestSupport, unittest.Te
             upsert=True,
         )
         return now
+
+    def _corrupt_session_visibility(self, state, *, session_id: str = "corrupt-session") -> None:
+        state.runtime_store.collections.sessions.update_one(
+            {"workspace_id": "default", "session_id": session_id},
+            {"$set": {"thread_visibility": "not-hidden"}},
+        )
 
     def test_hidden_runtime_session_cannot_be_opened_as_chat_thread(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -224,6 +230,47 @@ class RuntimeThreadVisibilityApiTestCase(AppReferenceApiTestSupport, unittest.Te
         self.assertEqual(turns_payload["error"], "runtime_session_not_found")
         self.assertEqual(post_turn_status, 404)
         self.assertEqual(post_turn_payload["error"], "runtime_session_not_found")
+
+    def test_interrupt_turn_with_invalid_runtime_session_visibility_is_controlled(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            repo_root = self._repo_root(temp_dir)
+            with patch.dict(
+                "os.environ",
+                {
+                    "MAVERICK_ALLOW_INSECURE_TEST_DEFAULTS": "1",
+                    "MAVERICK_ADMIN_USERNAME": "admin",
+                    "MAVERICK_ADMIN_PASSWORD": "maverick",
+                },
+            ):
+                state = bootstrap_platform_state(start_path=repo_root)
+            create_runtime_session(
+                state.runtime_store,
+                session_id="corrupt-session",
+                workspace_id="default",
+                agent_id="chat",
+                source_app_id="chat",
+                start_path=repo_root,
+            )
+            queue_runtime_turn(
+                state.runtime_store,
+                turn_id="turn-corrupt",
+                session_id="corrupt-session",
+                input_text="hello",
+            )
+            self._corrupt_session_visibility(state)
+            app = PlatformHost(state, start_path=repo_root)
+            cookie = self._login(app)
+
+            interrupt_status, interrupt_payload, _headers = self._invoke(
+                app,
+                path="/api/runtime/turns/turn-corrupt/interrupt",
+                method="POST",
+                body={},
+                cookie=cookie,
+            )
+
+        self.assertEqual(interrupt_status, 404)
+        self.assertEqual(interrupt_payload["error"], "runtime_turn_not_found")
 
 
 if __name__ == "__main__":

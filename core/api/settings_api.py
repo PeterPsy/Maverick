@@ -138,7 +138,7 @@ def _record_workspace_health(state: PlatformState, context: RequestSession, body
         session_id = str(body.get("session_id") or "")
         try:
             session = state.runtime_store.get_session(session_id)
-        except RuntimeSessionNotFoundError:
+        except (RuntimeSessionNotFoundError, ValueError):
             return {"error": "runtime_session_not_found"}
         return {"result": asdict(record_runtime_health(state.recovery_store, session=session))}
     provider_id = str(body.get("provider_id") or "")
@@ -289,6 +289,9 @@ def handle_settings_api(state: PlatformState, environ: dict, start_response: Sta
         session_id = str(body.get("session_id") or "")
         try:
             session = state.runtime_store.get_session(session_id)
+        except (RuntimeSessionNotFoundError, ValueError):
+            return json_response(start_response, {"error": "runtime_session_not_found"}, status="404 Not Found")
+        try:
             if session.workspace_id != context.workspace_id:
                 return json_response(start_response, {"error": "runtime_session_not_found"}, status="404 Not Found")
             require_runtime_session_operation(
@@ -304,8 +307,6 @@ def handle_settings_api(state: PlatformState, environ: dict, start_response: Sta
                 reason=str(body.get("reason") or "operator requested restart"),
                 observability_store=state.observability_store,
             )
-        except RuntimeSessionNotFoundError:
-            return json_response(start_response, {"error": "runtime_session_not_found"}, status="404 Not Found")
         except AuthorizationError as error:
             return json_response(start_response, {"error": error.reason}, status="403 Forbidden")
         return json_response(start_response, {"intent": asdict(intent), "session": asdict(session)})

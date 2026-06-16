@@ -30,7 +30,7 @@ def cleanup_runtime_session(
     """Fully remove one runtime session, app cleanup metadata, and runtime files."""
     try:
         session = state.runtime_store.get_session(session_id)
-    except RuntimeSessionNotFoundError:
+    except (RuntimeSessionNotFoundError, ValueError):
         return {
             "session_id": session_id,
             "found": False,

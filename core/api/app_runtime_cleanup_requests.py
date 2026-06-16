@@ -184,7 +184,7 @@ def _runtime_cleanup_session_ids_for_request(
     if session_id:
         try:
             session = state.runtime_store.get_session(session_id)
-        except RuntimeSessionNotFoundError:
+        except (RuntimeSessionNotFoundError, ValueError):
             return [session_id]
         if session.workspace_id != workspace_id:
             raise AppHostingError(f"App `{app_id}` cannot clean runtime session outside workspace `{workspace_id}`.")
@@ -228,7 +228,7 @@ def _authorize_runtime_session_cleanup(
 ) -> None:
     try:
         session = state.runtime_store.get_session(session_id)
-    except RuntimeSessionNotFoundError:
+    except (RuntimeSessionNotFoundError, ValueError):
         return
     if session.workspace_id != workspace_id:
         raise AppHostingError(f"App `{app_id}` cannot clean runtime session outside workspace `{workspace_id}`.")

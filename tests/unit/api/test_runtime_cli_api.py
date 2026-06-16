@@ -153,16 +153,32 @@ class RuntimeCliApiTest(unittest.TestCase):
         self.assertEqual(payload["status_code"], 400)
         self.assertEqual(payload["error"], "unsupported")
 
-    def _state(self) -> SimpleNamespace:
+    def test_runtime_cli_rejects_invalid_runtime_session_record(self) -> None:
+        def raise_invalid_session(_session_id: str):
+            raise ValueError("Unsupported runtime thread visibility `not-hidden`.")
+
+        state = self._state(get_session=raise_invalid_session)
+
+        with self._trusted_runtime():
+            with patch("core.api.runtime_cli_api.run_cli_json") as run_cli:
+                status, payload = self._invoke_runtime_cli(state, {"argv": ["core", "cli", "run", "docs"]})
+
+        self.assertEqual(status, "401 Unauthorized")
+        self.assertEqual(payload["error"], "runtime_session_not_found")
+        run_cli.assert_not_called()
+
+    def _state(self, *, get_session=None) -> SimpleNamespace:
+        if get_session is None:
+            get_session = lambda _session_id: SimpleNamespace(
+                effective_mode="sandbox",
+                owner_user_id="user:admin",
+                session_id="sess-1",
+                status="running",
+                workspace_id="default",
+            )
         return SimpleNamespace(
             runtime_store=SimpleNamespace(
-                get_session=lambda _session_id: SimpleNamespace(
-                    effective_mode="sandbox",
-                    owner_user_id="user:admin",
-                    session_id="sess-1",
-                    status="running",
-                    workspace_id="default",
-                )
+                get_session=get_session
             )
         )
 

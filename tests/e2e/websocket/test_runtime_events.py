@@ -145,7 +145,7 @@ class RuntimeWebSocketTestCase(unittest.IsolatedAsyncioTestCase):
         now = datetime(2026, 6, 16, 12, 0, tzinfo=UTC)
         repo_root = state.repository_root
         state.runtime_store.collections.sessions.update_one(
-            {"session_id": session_id},
+            {"workspace_id": "default", "session_id": session_id},
             {
                 "$set": {
                     "workspace_id": "default",

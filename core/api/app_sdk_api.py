@@ -137,7 +137,7 @@ def _resolve_sdk_identity(state: PlatformState, environ: dict) -> tuple[str, Req
         return None
     try:
         session = state.runtime_store.get_session(str(claims["runtime_session_id"]))
-    except RuntimeSessionNotFoundError:
+    except (RuntimeSessionNotFoundError, ValueError):
         return None
     if session.workspace_id != str(claims["workspace_id"]) or session.status in {"stopped", "failed"}:
         return None

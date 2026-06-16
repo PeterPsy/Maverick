@@ -25,7 +25,14 @@ CODEX_DISABLED_RUNTIME_FEATURES = ("apps", "plugins")
 CODEX_SYSTEM_SKILLS_ROOT = ".system"
 CODEX_DEFAULT_MODEL = "gpt-5.5"
 CODEX_DEFAULT_REASONING_EFFORT = "high"
-CODEX_MANAGED_TOP_LEVEL_CONFIG_KEYS = {"model", "model_reasoning_effort"}
+CODEX_MANAGED_TOP_LEVEL_CONFIG_KEYS = {
+    "model",
+    "model_reasoning_effort",
+    "experimental_use_unified_exec_tool",
+}
+CODEX_MANAGED_TOP_LEVEL_RUNTIME_CONFIG = {
+    "experimental_use_unified_exec_tool": False,
+}
 CODEX_MANAGED_RUNTIME_FEATURES = {
     "apps": False,
     "hooks": True,
@@ -216,8 +223,8 @@ class CodexRuntimeConfigMixin:
 
 
 
-    def _managed_codex_hook_lines(self, *, runtime_bin: Path) -> list[str]:
-        return managed_codex_hook_lines(runtime_bin=runtime_bin)
+    def _managed_codex_hook_lines(self, *, runtime_bin: Path, config_path: Path | None = None) -> list[str]:
+        return managed_codex_hook_lines(runtime_bin=runtime_bin, config_path=config_path)
 
 
 
@@ -226,6 +233,11 @@ class CodexRuntimeConfigMixin:
         for name, enabled in CODEX_MANAGED_RUNTIME_FEATURES.items():
             lines.append(f"{name} = {str(enabled).lower()}")
         return lines
+
+
+
+    def _managed_top_level_runtime_config_lines(self) -> list[str]:
+        return [f"{name} = {str(enabled).lower()}" for name, enabled in CODEX_MANAGED_TOP_LEVEL_RUNTIME_CONFIG.items()]
 
 
 

@@ -23,6 +23,7 @@ def write_codex_post_tool_use_hook(path: Path) -> None:
 def _codex_post_tool_use_hook_source() -> str:
     """Return a standalone hook bridge that can run without importing Maverick."""
     source = r'''#!/usr/bin/env python3
+from datetime import datetime, timezone
 import hashlib
 import json
 import os
@@ -33,6 +34,7 @@ import urllib.request
 
 
 API_PATH = "/api/runtime/provider-hooks/codex/post-tool-use"
+DIAGNOSTIC_LOG_RELATIVE_PATH = os.path.join("logs", "provider-hook-events.jsonl")
 MIN_FALLBACK_BYTES = 16000
 MAX_FALLBACK_BYTES = 12000
 SENSITIVE_QUERY_KEYS = "__MAVERICK_SENSITIVE_QUERY_KEYS__"
@@ -44,17 +46,23 @@ def main():
     try:
         payload = json.loads(raw or "{}")
     except json.JSONDecodeError:
+        write_hook_diagnostic({}, bridge_status="called", fallback_status="invalid_payload")
         return 0
     if not isinstance(payload, dict):
+        write_hook_diagnostic({}, bridge_status="called", fallback_status="invalid_payload")
         return 0
 
-    response = call_maverick(payload)
+    write_hook_diagnostic(payload, bridge_status="called", fallback_status="not_run")
+    response, bridge_status = call_maverick(payload)
     if isinstance(response, dict):
         if response.get("emit") and isinstance(response.get("response"), dict):
+            write_hook_diagnostic(payload, bridge_status=bridge_status, fallback_status="not_run")
             print(json.dumps(response["response"], separators=(",", ":")))
+        else:
+            write_hook_diagnostic(payload, bridge_status=bridge_status, fallback_status="not_run")
         return 0
 
-    fallback = fallback_response(payload)
+    fallback = fallback_response(payload, bridge_status=bridge_status)
     if fallback is not None:
         print(json.dumps(fallback, separators=(",", ":")))
     return 0
@@ -63,8 +71,8 @@ def main():
 def call_maverick(payload):
     token = os.environ.get("MAVERICK_RUNTIME_API_TOKEN", "").strip()
     if not token:
-        return None
-    base_url = os.environ.get("MAVERICK_API_BASE", "http://127.0.0.1:8014").rstrip("/")
+        return None, "unavailable"
+    base_url = (os.environ.get("MAVERICK_API_BASE", "").strip() or "http://127.0.0.1:8014").rstrip("/")
     request = urllib.request.Request(
         base_url + API_PATH,
         data=json.dumps(payload).encode("utf-8"),
@@ -75,29 +83,39 @@ def call_maverick(payload):
         with urllib.request.urlopen(request, timeout=20) as response:
             body = response.read().decode("utf-8")
     except (OSError, urllib.error.HTTPError, urllib.error.URLError, TimeoutError):
-        return None
+        return None, "unavailable"
     try:
         decoded = json.loads(body)
     except json.JSONDecodeError:
-        return None
-    return decoded if isinstance(decoded, dict) else None
+        return None, "unavailable"
+    if not isinstance(decoded, dict):
+        return None, "unavailable"
+    if decoded.get("emit") and isinstance(decoded.get("response"), dict):
+        return decoded, "returned_emit"
+    return decoded, "returned_no_emit"
 
 
-def fallback_response(payload):
+def fallback_response(payload, bridge_status="unavailable"):
+    response, fallback_status = fallback_response_with_status(payload)
+    write_hook_diagnostic(payload, bridge_status=bridge_status, fallback_status=fallback_status)
+    return response
+
+
+def fallback_response_with_status(payload):
     if compaction_disabled():
-        return None
+        return None, "disabled"
     if str(payload.get("hook_event_name") or payload.get("hookEventName") or "") != "PostToolUse":
-        return None
+        return None, "not_post_tool_use"
     tool_name = str(payload.get("tool_name") or payload.get("toolName") or "")
-    if tool_name.lower() not in {"bash", "shell", "shell_command", "local_shell"}:
-        return None
+    if tool_name.lower() not in {"bash", "shell", "shell_command", "local_shell", "exec_command"}:
+        return None, "unsupported_tool"
     text = extract_response_text(payload)
     if not text:
-        return None
+        return None, "no_text"
     original_bytes = byte_len(text)
     redacted = redact_text(text)
     if original_bytes < MIN_FALLBACK_BYTES and redacted == text:
-        return None
+        return None, "below_threshold"
     compacted = bounded_middle(redacted, MAX_FALLBACK_BYTES)
     digest = hashlib.sha256(redacted.encode("utf-8", errors="replace")).hexdigest()
     header = "\n".join(
@@ -112,7 +130,61 @@ def fallback_response(payload):
             "redacted_sha256: " + digest,
         ]
     )
-    return {"decision": "block", "continue": False, "reason": header + "\n\n" + compacted}
+    return {"decision": "block", "continue": False, "reason": header + "\n\n" + compacted}, "emitted"
+
+
+def write_hook_diagnostic(payload, bridge_status, fallback_status):
+    event = build_hook_diagnostic(
+        payload if isinstance(payload, dict) else {},
+        bridge_status=bridge_status,
+        fallback_status=fallback_status,
+    )
+    line = json.dumps(event, separators=(",", ":"), sort_keys=True)
+    runtime_root = os.environ.get("MAVERICK_RUNTIME_ROOT", "").strip()
+    if runtime_root:
+        try:
+            log_path = os.path.join(runtime_root, DIAGNOSTIC_LOG_RELATIVE_PATH)
+            os.makedirs(os.path.dirname(log_path), exist_ok=True)
+            with open(log_path, "a", encoding="utf-8") as handle:
+                handle.write(line + "\n")
+            return
+        except OSError:
+            pass
+    print(line, file=sys.stderr)
+
+
+def build_hook_diagnostic(payload, bridge_status, fallback_status):
+    return {
+        "timestamp": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
+        "hook_event_name": diagnostic_string(payload.get("hook_event_name") or payload.get("hookEventName")),
+        "tool_name": diagnostic_string(payload.get("tool_name") or payload.get("toolName")),
+        "has_token": bool(os.environ.get("MAVERICK_RUNTIME_API_TOKEN", "").strip()),
+        "api_base_present": bool(os.environ.get("MAVERICK_API_BASE", "").strip()),
+        "compaction_disabled": compaction_disabled(),
+        "payload_shape": {"top_level_keys": diagnostic_payload_keys(payload)},
+        "extracted_text_bytes": diagnostic_extracted_text_bytes(payload),
+        "bridge_status": diagnostic_string(bridge_status),
+        "fallback_status": diagnostic_string(fallback_status),
+    }
+
+
+def diagnostic_payload_keys(payload):
+    keys = [diagnostic_string(key) for key in payload.keys()]
+    return sorted(key for key in keys if key)[:64]
+
+
+def diagnostic_extracted_text_bytes(payload):
+    try:
+        return byte_len(extract_response_text(payload))
+    except Exception:
+        return 0
+
+
+def diagnostic_string(value):
+    if not isinstance(value, str):
+        return ""
+    collapsed = re.sub(r"[\x00-\x1f\x7f]+", " ", value).strip()
+    return collapsed[:100]
 
 
 def compaction_disabled():

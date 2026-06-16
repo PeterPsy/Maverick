@@ -19,7 +19,7 @@ from core.runtime.output_compaction.service import compact_tool_output
 PROVIDER_HISTORY_TOOL_RESULT_SCOPE = "provider_history_tool_result"
 PROVIDER_HISTORY_COMPACTION_VERSION = 1
 CODEX_POST_TOOL_USE_EVENT = "PostToolUse"
-SUPPORTED_CODEX_SHELL_TOOLS = frozenset({"bash", "shell", "shell_command", "local_shell"})
+SUPPORTED_CODEX_SHELL_TOOLS = frozenset({"bash", "shell", "shell_command", "local_shell", "exec_command"})
 
 
 def provider_history_compact_policy(base_policy: ToolOutputCompactionPolicy | None = None) -> ToolOutputCompactionPolicy:

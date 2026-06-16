@@ -48,6 +48,10 @@ _JWT_PATTERN = re.compile(r"\beyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z
 _URL_CREDENTIAL_PATTERN = re.compile(r"([a-z][a-z0-9+.-]*://)([^/\s:@]+):([^@\s/]+)@", re.IGNORECASE)
 _KNOWN_API_KEY_PATTERN = re.compile(r"\b(?:" + KNOWN_UNDERSCORE_TOKEN_PREFIX_PATTERN + r")_[A-Za-z0-9_=-]{16,}\b")
 _OPENAI_STYLE_KEY_PATTERN = re.compile(r"\bsk-[A-Za-z0-9_-]{16,}\b")
+_E2E_CANARY_SECRET_PATTERN = re.compile(
+    r"\b(?:hook|maverick|provider|redaction)[-_]e2e[-_](?:secret|token)(?:[-_][A-Za-z0-9_.=+/@-]+)?\b",
+    re.IGNORECASE,
+)
 
 
 def is_sensitive_key(key: object) -> bool:
@@ -70,6 +74,7 @@ def redact_text(value: str) -> str:
         (_URL_CREDENTIAL_PATTERN, rf"\1{REDACTED}@"),
         (_KNOWN_API_KEY_PATTERN, REDACTED),
         (_OPENAI_STYLE_KEY_PATTERN, REDACTED),
+        (_E2E_CANARY_SECRET_PATTERN, REDACTED),
     )
     for pattern, replacement in substitutions:
         try:

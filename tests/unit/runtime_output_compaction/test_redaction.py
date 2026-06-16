@@ -55,6 +55,15 @@ class RuntimeOutputRedactionTest(unittest.TestCase):
             "curl 'https://example.test/path?token=<redacted>' -H 'Authorization: Bearer <redacted>'",
         )
 
+    def test_redact_text_covers_e2e_canary_secrets(self) -> None:
+        raw = "line 1 hook-e2e-secret\nline 2 provider_e2e_token-extra\n"
+
+        redacted = redact_text(raw)
+
+        self.assertNotIn("hook-e2e-secret", redacted)
+        self.assertNotIn("provider_e2e_token-extra", redacted)
+        self.assertEqual(redacted.count("<redacted>"), 2)
+
     def test_sanitize_raw_payload_removes_large_provider_text_and_redacts_sensitive_keys(self) -> None:
         raw = {
             "type": "item.completed",

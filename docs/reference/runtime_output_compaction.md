@@ -4,13 +4,13 @@ Date: 2026-06-15
 
 Maverick compacts large `runtime.tool_call.*` payloads before the events are persisted, published to the runtime event bus, replayed through runtime history, or consumed by downstream app hooks. Runtime-token CLI calls can also request a provider-oriented compact response for large textual JSON fields. Maverick-managed Codex sessions additionally install a provider hook that can replace large shell tool results before Codex continues from the tool output when Codex actually runs the trusted hook.
 
-Phase 1 reduces storage, websocket, replay, UI, and downstream event payload size. It does not guarantee provider-token reduction for generic shell commands because the provider may already have consumed the raw tool result before Maverick receives the runtime event. Phase 2 reduces provider context for controlled Maverick CLI calls. Phase 3 reduces provider context for Maverick-managed Codex `Bash` tool results when Codex runs the Maverick-owned `PostToolUse` hook.
+Phase 1 reduces storage, websocket, replay, UI, and downstream event payload size. It does not guarantee provider-token reduction for generic shell commands because the provider may already have consumed the raw tool result before Maverick receives the runtime event. Phase 2 reduces provider context for controlled Maverick CLI calls. Phase 3 reduces provider context for Maverick-managed Codex `Bash` shell tool results when Codex runs the Maverick-owned `PostToolUse` hook.
 
 | Phase | Pipeline point | Reduces storage/UI/event bus | Reduces provider tokens | Status |
 | --- | --- | --- | --- | --- |
 | 1 | `_RuntimeTurnOutputRecorder.record()` before `record_runtime_event` | Yes | Not guaranteed | Implemented |
 | 2 | Controlled Maverick CLI through `/api/runtime/cli` with `output_profile` in the JSON body | Yes | Yes, only for that controlled CLI surface | Implemented |
-| 3 | Maverick-owned Codex `PostToolUse` hook before `Bash` tool results enter provider history | Yes, when the hook runs | Only when Codex accepts and runs the trusted hook | Integrated; hard provider-token guarantee requires a trusted-hook end-to-end proof |
+| 3 | Maverick-owned Codex `PostToolUse` hook before supported shell tool results enter provider history | Yes, when the hook runs | Only when Codex accepts and runs the trusted hook | Integrated; hard provider-token guarantee requires a trusted-hook end-to-end proof |
 
 Phase 1 deliberately does not compact `runtime.output.delta`, because those deltas are used to reconstruct assistant text through `final_text()` and `complete_text()`.
 
@@ -60,17 +60,42 @@ This phase reduces provider tokens only for controlled Maverick CLI calls routed
 
 ## Provider Hook Profile
 
-Maverick-managed Codex runtime homes install `runtime/sessions/<runtime_session_id>/bin/maverick_codex_post_tool_use_hook.py` and write a Maverick-owned `[[hooks.PostToolUse]]` entry into the session-scoped `CODEX_HOME/config.toml` with `matcher = "^Bash$"`. Inherited operator-home `hooks.*` sections are removed so runtime sessions use the Maverick-owned hook configuration.
+Maverick-managed Codex runtime homes install `runtime/sessions/<runtime_session_id>/bin/maverick_codex_post_tool_use_hook.py` and write a Maverick-owned `[[hooks.PostToolUse]]` entry into the session-scoped `CODEX_HOME/config.toml` with a conservative shell-only matcher for `Bash`, `shell`, `shell_command`, `local_shell`, and `exec_command`. The same config writes a matching `hooks.state."<config-path>:post_tool_use:0:0".trusted_hash` entry for the generated command identity so Codex can treat the session-local hook as trusted. Inherited operator-home `hooks.*` sections are removed so runtime sessions use the Maverick-owned hook configuration.
 
-Codex still owns hook trust enforcement. A session-scoped hook loaded as ordinary Codex config may require Codex hook review or an equivalent trusted/managed configuration before it runs. Deployments that need a hard phase-3 provider-token guarantee must deliver the same hook through a Codex-supported managed requirements layer or another supported trust path and verify an actual trusted-hook run against Codex. Without that proof, Maverick can install the hook, expose the runtime-token API, and test the bridge behavior, but Codex may skip the handler under its own hook trust policy.
+Maverick also writes `experimental_use_unified_exec_tool = false` into the session `config.toml` and removes inherited values for that key from the operator home and profiles. Codex 0.130 surfaces rich shell calls as `exec_command` through its newer `unified_exec` mechanism, but Codex documents `PostToolUse` coverage for that path as incomplete. Until Codex exposes a trusted pre-history hook point for `unified_exec`, Maverick-managed runtime sessions force the simpler `Bash` tool path so `PostToolUse` can run before shell output enters provider history.
 
-When Codex runs the hook, it posts the `PostToolUse` JSON payload to `/api/runtime/provider-hooks/codex/post-tool-use` with the session runtime token. The API validates token lifecycle, workspace, session id, and execution mode before compacting. When the payload should be replaced, the API returns Codex hook JSON with `decision: "block"`, `continue: false`, and `reason` set to the compacted/redacted text. Codex records that feedback in place of the original `Bash` result and continues the model from the replacement message.
+Codex still owns hook trust enforcement. Maverick generates the trusted hash using Codex's normalized command-hook identity shape for the installed hook. If a future Codex release changes that identity or refuses user-config hook state for runtime-local homes, the provider-hook diagnostics file will remain absent and Codex hook listing should be used to inspect the trust status.
+
+When Codex runs the hook, it posts the `PostToolUse` JSON payload to `/api/runtime/provider-hooks/codex/post-tool-use` with the session runtime token. The API validates token lifecycle, workspace, session id, and execution mode before compacting. When the payload should be replaced, the API returns Codex hook JSON with `decision: "block"`, `continue: false`, and `reason` set to the compacted/redacted text. Codex records that feedback in place of the original shell result and continues the model from the replacement message.
 
 Provider-hook compaction metadata uses `scope: provider_history_tool_result`. It reuses the same redaction and reducer pipeline as runtime event compaction, but with a provider-history policy: no original artifact is stored, raw provider payload sanitization is not needed, and size targets are lower because the text is about to enter model context.
 
 If the core compactor raises unexpectedly, the API still returns a bounded redacted hook response with `pass_through_reason: compactor_failed`. If the hook bridge cannot reach the API, the standalone runtime-local script falls back to bounded generic redaction and truncation with `pass_through_reason: hook_bridge_unavailable`. The standalone fallback mirrors the core text-redaction coverage for common headers, key-like sensitive headers such as `X-API-Key`, cookies, query secrets with varied casing, signed-URL secret parameters, `.env`-style secrets, URL credentials, JWTs, private keys, and common provider/GitHub token prefixes. If `MAVERICK_RUNTIME_OUTPUT_COMPACTION=0`, both the API compactor and the standalone fallback stay disabled.
 
-Current automated tests cover the Maverick-owned hook configuration, runtime-token API, response format, fallback redaction, and replacement payload. They do not constitute a real Codex app-server trusted-hook proof. This phase does not claim provider-token reduction outside the currently hooked Codex `Bash` surface, or for Codex sessions where the hook is installed but not trusted/run by Codex. It does not cover unhooked Codex tool mechanisms, web search, provider-internal tool calls, or future non-Codex providers until those providers expose and pass an equivalent pre-history proof point.
+Current automated tests cover the Maverick-owned hook configuration, Codex trust-state rendering, runtime-token API, response format, fallback redaction, diagnostics, and replacement payload. They do not constitute a real Codex app-server trusted-hook proof. This phase does not claim provider-token reduction outside the currently hooked Codex shell surface, or for Codex sessions where the hook is installed but not run by Codex. It does not cover unhooked Codex tool mechanisms, web search, provider-internal tool calls, or future non-Codex providers until those providers expose and pass an equivalent pre-history proof point.
+
+## Provider Hook Diagnostics
+
+The runtime-local hook writes redaction-safe JSONL diagnostics to:
+
+```text
+workspaces/<workspace_id>/runtime/sessions/<runtime_session_id>/logs/provider-hook-events.jsonl
+```
+
+From inside the workspace root, the same file is under `runtime/sessions/<runtime_session_id>/logs/provider-hook-events.jsonl`. A typical check is:
+
+```bash
+tail -n 20 runtime/sessions/<runtime_session_id>/logs/provider-hook-events.jsonl
+```
+
+Each line contains only safe fields: timestamp, hook event name, tool name, whether the runtime token was present, whether `MAVERICK_API_BASE` was explicitly set, whether compaction was disabled, top-level payload keys, extracted text byte count, bridge status, and fallback status. It must not contain `tool_response`, stdout, stderr, full commands, bearer tokens, or raw output.
+
+Interpret the file as follows:
+
+- Hook not invoked: the file is absent, or no new line appears for the test window. Check `CODEX_HOME/config.toml`, the `PostToolUse` matcher, the generated `hooks.state` trusted hash, whether `experimental_use_unified_exec_tool` is still disabled, and Codex hook trust/review behavior.
+- Hook invoked but bridge unreachable: a heartbeat line appears with `bridge_status: "called"`, followed by a final line with `bridge_status: "unavailable"`. `fallback_status: "emitted"` means the standalone fallback returned a compacted replacement without a backend POST; other fallback statuses explain why no fallback replacement was emitted.
+- Hook invoked and API returned no emit: the final line has `bridge_status: "returned_no_emit"`. The POST reached `/api/runtime/provider-hooks/codex/post-tool-use`, but the API decided the provider-visible result should remain unchanged, usually because the payload had no supported shell text, was below threshold without redaction, or compaction was disabled.
+- Hook invoked and replacement emitted: the final line has `bridge_status: "returned_emit"`. The POST reached the backend and the API returned a Codex hook response with compacted/redacted replacement text. The provider-visible tool result should contain `[tool output compacted]` and `scope: provider_history_tool_result`.
 
 ## Operations
 

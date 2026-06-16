@@ -272,6 +272,7 @@ class CodexRuntimeHomeMixin:
         output_lines = [f'model = "{selected_model}"']
         if selected_reasoning:
             output_lines.append(f'model_reasoning_effort = "{selected_reasoning}"')
+        output_lines.extend(self._managed_top_level_runtime_config_lines())
         if sanitized_lines:
             output_lines.append("")
             output_lines.extend(sanitized_lines)
@@ -288,7 +289,7 @@ class CodexRuntimeHomeMixin:
         )
         if output_lines and output_lines[-1].strip():
             output_lines.append("")
-        output_lines.extend(self._managed_codex_hook_lines(runtime_bin=runtime_bin))
+        output_lines.extend(self._managed_codex_hook_lines(runtime_bin=runtime_bin, config_path=destination))
         if output_lines and output_lines[-1].strip():
             output_lines.append("")
         output_lines.extend(self._managed_runtime_feature_lines())

@@ -12,7 +12,7 @@ from core.providers.service import resolve_runtime_backend_for_session
 from core.runtime.app_references import input_text_with_app_references
 from core.runtime.attachments import input_text_with_attachment_links
 from core.runtime.execution import execute_runtime_turn
-from core.runtime.process_control import terminate_runtime_processes
+from core.runtime.process_control import terminate_codex_app_server_processes_for_session, terminate_runtime_processes
 from core.runtime.runtime_events import RuntimeEventRecord
 from core.runtime.runtime_session import RuntimeSessionRecord
 from core.runtime.runtime_turns import RuntimeTurnRecord
@@ -224,7 +224,11 @@ def release_idle_runtime_processes(
             state.provider_store,
             session=state.runtime_store.get_session(session_id),
         )
-        runtime_adapter.close_runtime(session_id)
+        closed = runtime_adapter.close_runtime(session_id)
+        if isinstance(closed, int):
+            terminated += closed
+    if provider_id == "codex":
+        terminated += terminate_codex_app_server_processes_for_session(session_id)
     if terminated:
         record_runtime_event(
             state.runtime_store,

@@ -9,7 +9,11 @@ import queue
 from typing import Any
 
 from core.observability.service import append_platform_log
-from core.runtime.execution_events import RuntimeExecutionEvent, parse_provider_json_event
+from core.runtime.execution_events import (
+    RuntimeExecutionEvent,
+    is_non_chat_facing_provider_event,
+    parse_provider_json_event,
+)
 
 
 def _emit_structured_output(
@@ -109,6 +113,8 @@ def _item_id(item: dict[str, Any]) -> str:
 
 
 def _handle_generic_notification(runtime: _CodexAppServerRuntime, *, method: str, params: dict[str, Any]) -> None:
+    if is_non_chat_facing_provider_event(method):
+        return
     provider_type = method.replace("/", ".")
     event = parse_provider_json_event(json.dumps({"type": provider_type, "item": params}))
     if event is not None:
@@ -119,6 +125,8 @@ def _handle_generic_notification(runtime: _CodexAppServerRuntime, *, method: str
 
 
 def _put_completion(runtime: _CodexAppServerRuntime, value: dict[str, Any]) -> None:
+    with runtime.event_lock:
+        runtime.current_completion_received = True
     try:
         runtime.completion_queue.put_nowait(value)
     except queue.Full:

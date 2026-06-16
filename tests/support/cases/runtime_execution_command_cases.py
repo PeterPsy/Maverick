@@ -182,16 +182,46 @@ class RuntimeExecutionCommandTest(unittest.TestCase):
         self.addCleanup(temp_dir.cleanup)
         session = _session("sandbox", root=temp_dir.name, session_id="session-process-exit")
 
-        with self.assertRaisesRegex(RuntimeError, "exited before turn completion"):
-            execute_runtime_turn(
-                session=session,
-                provider=build_codex_definition(),
-                input_text="hello",
-                launch_spec=_launch_spec(session),
-                runtime_adapter=_codex_adapter(),
-                command_runner=FakeCodexDiesBeforeCompletionProcess,
-                timeout_seconds=2,
-            )
+        result = execute_runtime_turn(
+            session=session,
+            provider=build_codex_definition(),
+            input_text="hello",
+            launch_spec=_launch_spec(session),
+            runtime_adapter=_codex_adapter(),
+            command_runner=FakeCodexDiesBeforeCompletionProcess,
+            timeout_seconds=2,
+        )
+
+        self.assertEqual(result.exit_code, 1)
+        self.assertIn("Codex app-server stream ended before turn completion", result.output_text)
+
+    def test_codex_command_output_delta_notifications_are_filtered(self) -> None:
+        temp_dir = tempfile.TemporaryDirectory()
+        self.addCleanup(temp_dir.cleanup)
+        session = _session("sandbox", root=temp_dir.name, session_id="session-command-output-delta")
+        emitted = []
+
+        result = execute_runtime_turn(
+            session=session,
+            provider=build_codex_definition(),
+            input_text="hello",
+            launch_spec=_launch_spec(session),
+            runtime_adapter=_codex_adapter(),
+            event_sink=emitted.append,
+            command_runner=FakeCodexCommandOutputDeltaProcess,
+            timeout_seconds=2,
+        )
+
+        self.assertEqual(result.exit_code, 0)
+        self.assertEqual(result.output_text, "done")
+        self.assertEqual(
+            [event.event_type for event in emitted],
+            ["runtime.tool_call.started", "runtime.tool_call.completed", "runtime.output.delta"],
+        )
+        self.assertNotIn(
+            "item/commandExecution/outputDelta",
+            [event.payload.get("provider_event_type") for event in emitted],
+        )
 
     def test_codex_unknown_search_notification_is_emitted_as_generic_tool_event(self) -> None:
         temp_dir = tempfile.TemporaryDirectory()
@@ -604,6 +634,67 @@ class FakeCodexDiesBeforeCompletionProcess(FakeCodexProcess):
     def __init__(self, *args, **kwargs) -> None:
         super().__init__(*args, **kwargs)
         self.stdin = FakeCodexDiesBeforeCompletionStdin(self.stdout, self)
+
+
+class FakeCodexCommandOutputDeltaStdin(FakeStdin):
+    def write(self, raw: str) -> None:
+        payload = json.loads(raw)
+        method = payload["method"]
+        request_id = payload["id"]
+        if method == "initialize":
+            self.stdout.put({"jsonrpc": "2.0", "id": request_id, "result": {}})
+        elif method == "thread/start":
+            self.stdout.put({"jsonrpc": "2.0", "id": request_id, "result": {"thread": {"id": "thread-command-delta"}}})
+        elif method == "turn/start":
+            self.stdout.put({"jsonrpc": "2.0", "id": request_id, "result": {"turn": {"id": "turn-command-delta"}}})
+            self.stdout.put(
+                {
+                    "jsonrpc": "2.0",
+                    "method": "item/started",
+                    "params": {
+                        "item": {
+                            "id": "cmd-delta",
+                            "type": "commandExecution",
+                            "command": "python -c 'print(\"x\")'",
+                        }
+                    },
+                }
+            )
+            self.stdout.put(
+                {
+                    "jsonrpc": "2.0",
+                    "method": "item/commandExecution/outputDelta",
+                    "params": {
+                        "threadId": "thread-command-delta",
+                        "turnId": "turn-command-delta",
+                        "itemId": "cmd-delta",
+                        "delta": "x\n" * 10_000,
+                    },
+                }
+            )
+            self.stdout.put(
+                {
+                    "jsonrpc": "2.0",
+                    "method": "item/completed",
+                    "params": {
+                        "item": {
+                            "id": "cmd-delta",
+                            "type": "commandExecution",
+                            "command": "python -c 'print(\"x\")'",
+                            "exitCode": 0,
+                            "aggregatedOutput": "x\n",
+                        }
+                    },
+                }
+            )
+            self.stdout.put({"jsonrpc": "2.0", "method": "item/agentMessage/delta", "params": {"delta": "done"}})
+            self.stdout.put({"jsonrpc": "2.0", "method": "turn/completed", "params": {"turn": {"status": "completed"}}})
+
+
+class FakeCodexCommandOutputDeltaProcess(FakeCodexProcess):
+    def __init__(self, *args, **kwargs) -> None:
+        super().__init__(*args, **kwargs)
+        self.stdin = FakeCodexCommandOutputDeltaStdin(self.stdout)
 
 
 class FakeCodexSearchStdin(FakeStdin):

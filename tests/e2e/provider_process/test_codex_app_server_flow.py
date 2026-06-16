@@ -13,6 +13,7 @@ _SELECTED = {
     'test_codex_retryable_app_server_error_does_not_end_turn',
     'test_codex_terminal_app_server_error_is_returned_to_runtime',
     'test_codex_process_exit_before_turn_completed_unblocks_execution',
+    'test_codex_command_output_delta_notifications_are_filtered',
 }
 
 

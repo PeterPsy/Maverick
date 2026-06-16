@@ -274,11 +274,11 @@ class CodexLaunchMixin:
 
 
 
-    def close_runtime(self, session_id: str) -> None:
+    def close_runtime(self, session_id: str) -> int:
         """Close any persistent Codex app-server runtime for one session."""
         from core.providers.codex_app_server import close_codex_app_server_runtime
 
-        close_codex_app_server_runtime(session_id)
+        return close_codex_app_server_runtime(session_id)
 
 
 

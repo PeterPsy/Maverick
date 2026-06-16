@@ -41,15 +41,97 @@ def terminate_runtime_processes(session_id: str, *, timeout_seconds: float = 1.5
         if process.poll() is not None:
             unregister_runtime_process(session_id, process)
             continue
-        _terminate_process_tree(process)
-        deadline = time.monotonic() + timeout_seconds
-        while process.poll() is None and time.monotonic() < deadline:
-            time.sleep(0.05)
-        if process.poll() is None:
-            _kill_process_tree(process)
-        terminated += 1
+        if terminate_runtime_process(process, timeout_seconds=timeout_seconds):
+            terminated += 1
         unregister_runtime_process(session_id, process)
     return terminated
+
+
+def terminate_runtime_process(process: subprocess.Popen, *, timeout_seconds: float = 1.5) -> bool:
+    """Terminate one provider subprocess and its process group."""
+    if process.poll() is not None:
+        return False
+    _terminate_process_tree(process)
+    deadline = time.monotonic() + timeout_seconds
+    while process.poll() is None and time.monotonic() < deadline:
+        time.sleep(0.05)
+    if process.poll() is None:
+        _kill_process_tree(process)
+    return True
+
+
+def terminate_codex_app_server_processes_for_session(session_id: str, *, timeout_seconds: float = 1.5) -> int:
+    """Best-effort fallback for Codex app-server processes lost from the in-memory registry."""
+    proc_root = "/proc"
+    if not os.path.isdir(proc_root):
+        return 0
+    terminated = 0
+    for name in os.listdir(proc_root):
+        if not name.isdigit():
+            continue
+        pid = int(name)
+        try:
+            if not _proc_matches_codex_app_server_session(pid, session_id):
+                continue
+            if _terminate_process_group_pid(pid, timeout_seconds=timeout_seconds):
+                terminated += 1
+        except ProcessLookupError:
+            continue
+        except Exception:
+            continue
+    return terminated
+
+
+def _proc_matches_codex_app_server_session(pid: int, session_id: str) -> bool:
+    base = f"/proc/{pid}"
+    with open(f"{base}/environ", "rb") as handle:
+        environ = handle.read().split(b"\0")
+    if f"MAVERICK_RUNTIME_SESSION_ID={session_id}".encode() not in environ:
+        return False
+    with open(f"{base}/cmdline", "rb") as handle:
+        cmdline = handle.read().decode("utf-8", errors="ignore").replace("\0", " ")
+    return "codex" in cmdline and "app-server" in cmdline and "--listen" in cmdline
+
+
+def _terminate_process_group_pid(pid: int, *, timeout_seconds: float) -> bool:
+    if not _pid_exists(pid):
+        return False
+    try:
+        os.killpg(pid, signal.SIGTERM)
+    except Exception:
+        os.kill(pid, signal.SIGTERM)
+    deadline = time.monotonic() + timeout_seconds
+    while _pid_exists(pid) and time.monotonic() < deadline:
+        if _try_reap_pid(pid):
+            return True
+        time.sleep(0.05)
+    if _pid_exists(pid):
+        try:
+            os.killpg(pid, signal.SIGKILL)
+        except Exception:
+            os.kill(pid, signal.SIGKILL)
+    _try_reap_pid(pid)
+    return True
+
+
+def _pid_exists(pid: int) -> bool:
+    try:
+        os.kill(pid, 0)
+    except ProcessLookupError:
+        return False
+    except PermissionError:
+        return True
+    return True
+
+
+def _try_reap_pid(pid: int) -> bool:
+    try:
+        waited, _status = os.waitpid(pid, os.WNOHANG)
+    except ChildProcessError:
+        return not _pid_exists(pid)
+    except ProcessLookupError:
+        return True
+    return waited == pid
 
 
 def _terminate_process_tree(process: subprocess.Popen) -> None:

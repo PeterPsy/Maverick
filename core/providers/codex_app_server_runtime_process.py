@@ -11,7 +11,7 @@ from typing import Callable
 
 from core.providers.models import RuntimeBackendLaunchSpec
 from core.runtime.execution_events import RuntimeExecutionEventSink
-from core.runtime.process_control import unregister_runtime_process
+from core.runtime.process_control import terminate_runtime_process, unregister_runtime_process
 from core.runtime.runtime_session import RuntimeSessionRecord
 
 
@@ -45,6 +45,7 @@ class _CodexAppServerRuntime:
     pending_agent_json_chunks: dict[str, list[str]] = field(default_factory=dict)
     emitted_structured_keys: set[str] = field(default_factory=set)
     current_error_text: str | None = None
+    current_completion_received: bool = False
     completion_queue: queue.Queue = field(default_factory=lambda: queue.Queue(maxsize=1))
     reader_thread: threading.Thread | None = None
 
@@ -75,6 +76,7 @@ def execute_codex_app_server_turn(
         runtime.pending_agent_json_chunks = {}
         runtime.emitted_structured_keys = set()
         runtime.current_error_text = None
+        runtime.current_completion_received = False
         runtime.completion_queue = queue.Queue(maxsize=1)
 
     _debug_log(
@@ -164,6 +166,7 @@ def execute_codex_app_server_turn(
             runtime.pending_agent_json_chunks = {}
             runtime.emitted_structured_keys = set()
             runtime.current_error_text = None
+            runtime.current_completion_received = False
 
     status = str(completion.get("status") or "completed").strip().lower() if isinstance(completion, dict) else "completed"
     output = "".join(chunks).strip()
@@ -213,9 +216,12 @@ def interrupt_codex_app_server_turn(session_id: str) -> bool:
 
 
 
-def close_codex_app_server_runtime(session_id: str) -> None:
-    """Forget a live Codex app-server runtime after process termination."""
+def close_codex_app_server_runtime(session_id: str) -> int:
+    """Terminate and forget a live Codex app-server runtime."""
     with _RUNTIMES_LOCK:
         runtime = _RUNTIMES.pop(session_id, None)
-    if runtime is not None:
-        unregister_runtime_process(session_id, runtime.process)
+    if runtime is None:
+        return 0
+    terminated = int(terminate_runtime_process(runtime.process))
+    unregister_runtime_process(session_id, runtime.process)
+    return terminated

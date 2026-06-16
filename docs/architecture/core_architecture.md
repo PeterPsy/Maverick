@@ -1233,6 +1233,8 @@ Interactive runtime turns must not have a fixed wall-clock timeout.
 
 An agent may work for minutes or hours inside one turn. The core may keep short protocol handshakes bounded, and users may explicitly stop a turn, but the runtime must not interrupt active provider work solely because a static turn-duration timer expired.
 
+If the provider transport itself terminates while a turn is active, that is a terminal transport failure rather than a long-running healthy turn. For Codex app-server, a closed stdout reader or reader-loop exception must fail and unblock the active turn instead of leaving the worker waiting forever for `turn/completed`.
+
 Provider adapters may emit provider-specific raw output, but the runtime domain must normalize it before persistence.
 
 For Codex, the local provider runs a persistent `codex app-server --listen stdio://` process and maps app-server JSON events into generic runtime events such as:
@@ -1264,6 +1266,8 @@ Tool-like provider notifications without an explicit lifecycle state are point-i
 Provider lifecycle and telemetry notifications that do not represent user-visible work should be filtered before persistence and transport. Examples include account rate-limit refreshes, token-usage updates, and generic thread status changes.
 
 The Codex adapter must not use stateless `codex exec` for interactive chat or agent sessions.
+
+When a Codex turn is interrupted or a session becomes idle, cleanup must terminate the live app-server process, not only forget its in-memory handle. The primary process registry should be used first, and cleanup may fall back to the runtime session environment marker for Codex app-server processes that survived after the app-server client registry went out of sync.
 
 Before launching the Codex process, the adapter must prepare a runtime-scoped `CODEX_HOME`.
 

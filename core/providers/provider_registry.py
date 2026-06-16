@@ -56,7 +56,7 @@ class RuntimeBackendAdapter(Protocol):
     ) -> "RuntimeExecutionResult":
         ...
 
-    def close_runtime(self, session_id: str) -> None:
+    def close_runtime(self, session_id: str) -> int | None:
         ...
 
     def interrupt_turn(self, session_id: str) -> bool:

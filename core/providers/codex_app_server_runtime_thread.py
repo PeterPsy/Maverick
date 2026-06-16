@@ -151,8 +151,11 @@ def _send_request(runtime: _CodexAppServerRuntime, method: str, params: dict[str
 
 
 def _reader_loop(runtime: _CodexAppServerRuntime) -> None:
+    exit_reason = "stdout_closed"
+    exit_error: str | None = None
     try:
         if runtime.process.stdout is None:
+            exit_reason = "stdout_unavailable"
             return
         for line in runtime.process.stdout:
             payload = _decode_json_line(line)
@@ -166,11 +169,43 @@ def _reader_loop(runtime: _CodexAppServerRuntime) -> None:
                 continue
             if "method" in payload:
                 _handle_notification(runtime, payload)
+    except Exception as error:
+        exit_reason = "reader_exception"
+        exit_error = f"{type(error).__name__}: {error}"
     finally:
+        _handle_reader_loop_exit(runtime, reason=exit_reason, error=exit_error)
         with _RUNTIMES_LOCK:
             if _RUNTIMES.get(runtime.session_id) is runtime:
                 _RUNTIMES.pop(runtime.session_id, None)
         unregister_runtime_process(runtime.session_id, runtime.process)
+
+
+def _handle_reader_loop_exit(runtime: _CodexAppServerRuntime, *, reason: str, error: str | None) -> None:
+    message = "Codex app-server stream ended before turn completion."
+    with runtime.event_lock:
+        had_active_turn = runtime.current_event_sink is not None
+        completion_received = runtime.current_completion_received
+        completion_pending = runtime.completion_queue.full()
+        failed_before_completion = had_active_turn and not completion_received
+        if failed_before_completion and not runtime.current_error_text:
+            runtime.current_error_text = message if error is None else f"{message} {error}"
+    _debug_log(
+        runtime,
+        "Codex app-server debug: reader loop exited",
+        {
+            "phase": "reader_loop_exited",
+            "reason": reason,
+            "error": error,
+            "had_active_turn": had_active_turn,
+            "completion_received": completion_received,
+            "completion_pending": completion_pending,
+            "provider_turn_id": runtime.current_provider_turn_id,
+            "process_pid": runtime.process.pid,
+            "process_returncode": runtime.process.poll(),
+        },
+    )
+    if failed_before_completion:
+        _put_completion(runtime, {"status": "failed"})
 
 
 

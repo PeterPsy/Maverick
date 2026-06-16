@@ -48,15 +48,15 @@ class InterAgentService:
         validated = validate_run_spec(spec)
         idempotency_key = _clean_optional(validated.idempotency_key)
         spec_fingerprint = _run_spec_fingerprint(validated)
-        run_id = _clean_optional(validated.run_id) or _new_id("iarun")
-        participant_ids = _materialized_participant_ids(validated.participants)
+        run_id = _materialized_run_id(validated, idempotency_key=idempotency_key)
+        participant_ids = _materialized_participant_ids(validated.participants, run_id=run_id)
         orchestrator_participant_id = (
             _clean_optional(validated.orchestrator_participant_id)
             or _first_root_orchestrator_id(validated.participants, participant_ids)
         )
-        budget_policy_id = _new_id("iabp")
-        budget_ledger_id = _new_id("iabl")
-        retention_policy_id = _new_id("iarp")
+        budget_policy_id = _stable_id("iabp", run_id, "budget_policy")
+        budget_ledger_id = _stable_id("iabl", run_id, "budget_ledger")
+        retention_policy_id = _stable_id("iarp", run_id, "retention_policy")
         budget_policy = budget_policy_from_spec(
             validated.budget,
             budget_policy_id=budget_policy_id,
@@ -393,7 +393,15 @@ def _edge_records_from_specs(
 ) -> list[InterAgentEdgeRecord]:
     return [
         InterAgentEdgeRecord(
-            edge_id=_new_id("iaedge"),
+            edge_id=_stable_id(
+                "iaedge",
+                run.run_id,
+                index,
+                spec.source_id,
+                spec.target_id,
+                spec.kind,
+                spec.label.strip(),
+            ),
             workspace_id=run.workspace_id,
             run_id=run.run_id,
             source_id=spec.source_id,
@@ -403,12 +411,25 @@ def _edge_records_from_specs(
             status="created",
             created_at=created_at,
         )
-        for spec in specs
+        for index, spec in enumerate(specs)
     ]
 
 
-def _materialized_participant_ids(specs: list[ParticipantSpec]) -> dict[int, str]:
-    return {index: _clean_optional(spec.participant_id) or _new_id("iap") for index, spec in enumerate(specs)}
+def _materialized_run_id(spec: InterAgentRunSpec, *, idempotency_key: str | None) -> str:
+    explicit_run_id = _clean_optional(spec.run_id)
+    if explicit_run_id:
+        return explicit_run_id
+    if idempotency_key:
+        return _stable_id("iarun", spec.workspace_id, idempotency_key)
+    return _new_id("iarun")
+
+
+def _materialized_participant_ids(specs: list[ParticipantSpec], *, run_id: str) -> dict[int, str]:
+    return {
+        index: _clean_optional(spec.participant_id)
+        or _stable_id("iap", run_id, index, spec.kind, spec.execution_mode, spec.label)
+        for index, spec in enumerate(specs)
+    }
 
 
 def _agent_snapshot_document(spec: ParticipantSpec) -> dict[str, Any] | None:
@@ -478,6 +499,11 @@ def _first_root_orchestrator_id(specs: list[ParticipantSpec], participant_ids: d
 
 def _new_id(prefix: str) -> str:
     return f"{prefix}_{uuid.uuid4().hex}"
+
+
+def _stable_id(prefix: str, *parts: object) -> str:
+    encoded = json.dumps(_canonical_fingerprint_value(list(parts)), sort_keys=True, separators=(",", ":"))
+    return f"{prefix}_{hashlib.sha256(encoded.encode('utf-8')).hexdigest()[:32]}"
 
 
 def _clean_optional(value: str | None) -> str | None:

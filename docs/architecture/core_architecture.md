@@ -349,6 +349,16 @@ compare their canonical payload envelopes. Budget reservation release is
 idempotent and releases the full reservation envelope for F1 accounting because
 there is no separate consumption ledger yet.
 
+`create_run` materialization must be retry-repairable on the JSON store. The
+run record is the visible root and should be written only after the dependent
+policy, ledger, retention, participant, edge, and initial event records have
+been materialized. Generated ids inside an idempotent create bundle must be
+stable for the validated spec so a retry can complete the same bundle, dedupe
+initial events, and repair missing records without resetting an existing budget
+ledger. This is the F1 recovery boundary; a durable event idempotency index
+beyond event retention is intentionally deferred until a later runtime/API phase
+requires that guarantee.
+
 Agents materialization is recoverable at F1. When a participant includes a
 materialized Agents snapshot, the participant record stores both the stable
 digest and a core-owned copy of the snapshot payload so replay and startup

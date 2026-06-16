@@ -255,23 +255,69 @@ class InterAgentDocumentStore:
                 existing = self.find_run_by_idempotency_key(workspace_id, run.idempotency_key)
                 if existing is not None:
                     _ensure_spec_fingerprint_matches(existing, run)
+                    if existing.run_id == run.run_id:
+                        self._repair_run_create_bundle(bundle)
                     return existing
             existing_run = self.collections.runs.find_one({"workspace_id": workspace_id, "run_id": run.run_id})
             if existing_run is not None:
                 raise InterAgentIdempotencyConflictError(
                     f"Inter-agent run `{run.run_id}` already exists in workspace `{workspace_id}`."
                 )
-            self.save_budget_policy(bundle.budget_policy)
-            self.save_budget_ledger(bundle.budget_ledger)
-            self.save_retention_policy(bundle.retention_policy)
+            # The run record is the visible root. Write it last so a failed
+            # bundle materialization leaves only orphaned child records that a
+            # deterministic retry can repair or supersede.
+            self._materialize_run_create_bundle(bundle)
             self.save_run(run)
-            for participant in bundle.participants:
-                self.save_participant(participant)
-            for edge in bundle.edges:
-                self.save_edge(edge)
-            for event in bundle.initial_events:
-                self.append_event(event, retention_policy=bundle.retention_policy)
             return run
+
+    def _materialize_run_create_bundle(self, bundle: InterAgentRunCreateBundle) -> None:
+        self.save_budget_policy(bundle.budget_policy)
+        self.save_budget_ledger(bundle.budget_ledger)
+        self.save_retention_policy(bundle.retention_policy)
+        for participant in bundle.participants:
+            self.save_participant(participant)
+        for edge in bundle.edges:
+            self.save_edge(edge)
+        for event in bundle.initial_events:
+            self.append_event(event, retention_policy=bundle.retention_policy)
+
+    def _repair_run_create_bundle(self, bundle: InterAgentRunCreateBundle) -> None:
+        workspace_id = bundle.run.workspace_id
+        self._save_budget_policy_if_missing(bundle.budget_policy)
+        self._save_budget_ledger_if_missing(bundle.budget_ledger)
+        self._save_retention_policy_if_missing(bundle.retention_policy)
+        for participant in bundle.participants:
+            if self.collections.participants.find_one(
+                {
+                    "workspace_id": workspace_id,
+                    "run_id": participant.run_id,
+                    "participant_id": participant.participant_id,
+                }
+            ) is None:
+                self.save_participant(participant)
+        for edge in bundle.edges:
+            if self.collections.edges.find_one({"workspace_id": workspace_id, "edge_id": edge.edge_id}) is None:
+                self.save_edge(edge)
+        for event in bundle.initial_events:
+            self.append_event(event, retention_policy=bundle.retention_policy)
+
+    def _save_budget_policy_if_missing(self, record: BudgetPolicyRecord) -> None:
+        if self.collections.budget_policies.find_one(
+            {"workspace_id": record.workspace_id, "budget_policy_id": record.budget_policy_id}
+        ) is None:
+            self.save_budget_policy(record)
+
+    def _save_budget_ledger_if_missing(self, record: BudgetLedgerRecord) -> None:
+        if self.collections.budget_ledgers.find_one(
+            {"workspace_id": record.workspace_id, "budget_ledger_id": record.budget_ledger_id}
+        ) is None:
+            self.save_budget_ledger(record)
+
+    def _save_retention_policy_if_missing(self, record: EventRetentionPolicyRecord) -> None:
+        if self.collections.retention_policies.find_one(
+            {"workspace_id": record.workspace_id, "retention_policy_id": record.retention_policy_id}
+        ) is None:
+            self.save_retention_policy(record)
 
     def save_run(self, record: InterAgentRunRecord) -> InterAgentRunRecord:
         self.collections.runs.update_one(

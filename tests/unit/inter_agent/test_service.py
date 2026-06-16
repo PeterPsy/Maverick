@@ -150,6 +150,63 @@ class InterAgentServiceTest(unittest.TestCase):
         self.assertEqual(len(runs), 1)
         self.assertEqual(len(store.list_participants(runs[0].run_id, workspace_id="default")), 2)
 
+    def test_create_run_retry_repairs_partial_bundle_without_visible_run(self) -> None:
+        repo_root = make_temp_repo_root(self)
+        store = build_inter_agent_document_store(start_path=repo_root)
+        service = InterAgentService(store)
+        original_save_run = store.save_run
+
+        def fail_save_run(record):
+            raise RuntimeError("injected save_run failure")
+
+        store.save_run = fail_save_run  # type: ignore[method-assign]
+        try:
+            with self.assertRaisesRegex(RuntimeError, "injected save_run failure"):
+                service.create_run(_run_spec(idempotency_key="partial-create"))
+        finally:
+            store.save_run = original_save_run  # type: ignore[method-assign]
+
+        self.assertEqual(store.list_runs("default"), [])
+
+        run = service.create_run(_run_spec(idempotency_key="partial-create"))
+        events_root = repo_root / "workspaces" / "default" / "runtime" / "inter_agent" / "runs"
+        run_dirs = sorted(path.name for path in events_root.iterdir() if path.is_dir())
+        events = store.list_event_page(run.run_id, workspace_id="default", visibility_plane="debug", limit=20).events
+
+        self.assertEqual(run_dirs, [run.run_id])
+        self.assertEqual(
+            [participant.participant_id for participant in store.list_participants(run.run_id, workspace_id="default")],
+            ["orchestrator", "researcher"],
+        )
+        self.assertEqual([event.sequence for event in events], [1, 2, 3, 4])
+
+    def test_create_run_retry_repairs_missing_records_without_resetting_ledger(self) -> None:
+        repo_root = make_temp_repo_root(self)
+        store = build_inter_agent_document_store(start_path=repo_root)
+        service = InterAgentService(store)
+        run = service.create_run(_run_spec(idempotency_key="repair-existing"))
+        service.reserve_budget(
+            run,
+            reservation_id="spawn-researcher",
+            participant_slots=1,
+            running_participants=1,
+            turns=1,
+            estimated_cost=Decimal("0.25"),
+        )
+        store.collections.participants.delete_one(
+            {"workspace_id": "default", "run_id": run.run_id, "participant_id": "researcher"}
+        )
+
+        same_run = service.create_run(_run_spec(idempotency_key="repair-existing"))
+        ledger = store.get_budget_ledger(run.budget_ledger_id, workspace_id="default")
+        participants = store.list_participants(run.run_id, workspace_id="default")
+
+        self.assertEqual(same_run.run_id, run.run_id)
+        self.assertEqual([participant.participant_id for participant in participants], ["orchestrator", "researcher"])
+        self.assertEqual(ledger.reserved_participants, 1)
+        self.assertEqual(ledger.turns_used, 1)
+        self.assertEqual(ledger.estimated_cost_used, Decimal("0.25"))
+
     def test_agent_snapshot_is_copied_into_participant_record(self) -> None:
         repo_root = make_temp_repo_root(self)
         store = build_inter_agent_document_store(start_path=repo_root)

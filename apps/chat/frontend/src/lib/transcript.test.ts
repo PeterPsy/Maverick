@@ -334,6 +334,37 @@ describe("runtime event transcript projection", () => {
     expect(messages).toEqual([]);
   });
 
+  it("filters provider hook lifecycle noise from the chat transcript", () => {
+    const messages = eventsToMessages([
+      event({
+        event_id: "hook-delta-1",
+        event_type: "runtime.output.delta",
+        payload: { text: "hook started\n" },
+        created_at: "2026-04-19T00:00:01.000Z",
+      }),
+      event({
+        event_id: "hook-step-1",
+        event_type: "runtime.step.updated",
+        payload: { label: "hook completed" },
+        created_at: "2026-04-19T00:00:02.000Z",
+      }),
+      event({
+        event_id: "agent-delta-1",
+        event_type: "runtime.output.delta",
+        payload: { text: "Checking files.\n" },
+        created_at: "2026-04-19T00:00:03.000Z",
+      }),
+      event({
+        event_id: "hook-delta-2",
+        event_type: "runtime.output.delta",
+        payload: { text: "hook completed\n" },
+        created_at: "2026-04-19T00:00:04.000Z",
+      }),
+    ]);
+
+    expect(messages).toMatchObject([{ role: "agent", content: "Checking files.\n" }]);
+  });
+
   it("filters skills changed runtime updates from tool-used metadata", () => {
     const messages = eventsToMessages([
       event({

@@ -43,6 +43,8 @@ export function isNoisyRuntimeLabel(label: string): boolean {
     normalized === "turn completed" ||
     normalized === "turn diff updated" ||
     normalized === "turn plan updated" ||
+    normalized === "hook started" ||
+    normalized === "hook completed" ||
     normalized === "skills changed" ||
     normalized === "item started" ||
     normalized === "item completed" ||

@@ -287,6 +287,31 @@ describe("runtime websocket helpers", () => {
     expect(latestRuntimeStepLabel([rateLimits, tokenUsage, threadStatus])).toBe("");
   });
 
+  it("filters provider hook lifecycle labels from live runtime labels", () => {
+    const visible = {
+      ...event("visible", "2026-04-19T10:00:00Z"),
+      event_type: "runtime.step.updated",
+      payload: { label: "Reading workspace" },
+    };
+    const hookStarted = {
+      ...event("hook-started", "2026-04-19T10:00:01Z"),
+      event_type: "runtime.step.updated",
+      payload: { label: "hook started" },
+    };
+    const hookCompleted = {
+      ...event("hook-completed", "2026-04-19T10:00:02Z"),
+      event_type: "runtime.step.updated",
+      payload: { label: "hook.completed" },
+    };
+
+    expect(isNoisyRuntimeLabel("hook started")).toBe(true);
+    expect(isNoisyRuntimeLabel("hook.completed")).toBe(true);
+    expect(runtimeStepLabel(hookStarted)).toBeNull();
+    expect(runtimeStepLabel(hookCompleted)).toBeNull();
+    expect(latestRuntimeStepLabel([visible, hookStarted, hookCompleted])).toBe("Reading workspace");
+    expect(latestRuntimeStepLabel([hookStarted, hookCompleted])).toBe("");
+  });
+
   it("filters command execution telemetry from live runtime labels", () => {
     const outputDelta = {
       ...event("output-delta", "2026-04-19T10:00:00Z"),

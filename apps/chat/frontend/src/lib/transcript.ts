@@ -1,7 +1,7 @@
 import type { AppReference, ChatMessage, RuntimeEvent, RuntimeStepMessage, StructuredContent, ToolCallMessage } from "../api/client";
 import type { ChatMessageAttachment } from "../api/client";
 import { structuredContentFromAgentLinks } from "./linkPreviews";
-import { isNonChatFacingProviderEvent, runtimeStepLabel } from "./runtimeStepLabels";
+import { isNoisyRuntimeLabel, isNonChatFacingProviderEvent, runtimeStepLabel } from "./runtimeStepLabels";
 
 const transcriptProjectionCache = new WeakMap<RuntimeEvent[], ChatMessage[]>();
 const transcriptProjectionCacheByLastEvent = new Map<string, ChatMessage[]>();
@@ -13,12 +13,22 @@ export function clearTranscriptProjectionCache(): void {
 
 function textPayload(event: RuntimeEvent): string {
   const value = event.payload.text;
-  return typeof value === "string" ? value.trim() : "";
+  return typeof value === "string" ? removeNoisyRuntimeTextLines(value).trim() : "";
 }
 
 function deltaTextPayload(event: RuntimeEvent): string {
   const value = event.payload.text;
-  return typeof value === "string" ? value : "";
+  return typeof value === "string" ? removeNoisyRuntimeTextLines(value) : "";
+}
+
+function removeNoisyRuntimeTextLines(value: string): string {
+  return value
+    .split(/\r?\n/)
+    .filter((line) => {
+      const trimmed = line.trim();
+      return !trimmed || !isNoisyRuntimeLabel(trimmed);
+    })
+    .join("\n");
 }
 
 function structuredPayload(value: unknown): StructuredContent | null {

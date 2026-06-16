@@ -27,6 +27,12 @@ class RuntimeOutputCompactionIntegrationTest(unittest.TestCase):
         (repo_root / "AGENTS.md").write_text("", encoding="utf-8")
         return repo_root
 
+    def test_provider_hook_lifecycle_noise_is_not_chat_facing_output(self) -> None:
+        self.assertIsNone(parse_provider_json_event("hook started"))
+        self.assertIsNone(parse_provider_json_event("hook completed"))
+        self.assertIsNone(parse_provider_json_event('{"type": "hook.started"}'))
+        self.assertIsNone(parse_provider_json_event('{"type": "hook.completed"}'))
+
     def test_provider_command_execution_is_compacted_before_persistence_and_live_frame(self) -> None:
         output = (
             "FAILED tests/test_runtime.py::test_tool_output - AssertionError\n"

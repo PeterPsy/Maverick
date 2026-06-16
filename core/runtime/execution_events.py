@@ -46,6 +46,8 @@ def is_internal_provider_noise(raw_value: str) -> bool:
             "turn completed",
             "turn diff updated",
             "turn plan updated",
+            "hook started",
+            "hook completed",
             "item started",
             "item completed",
         }

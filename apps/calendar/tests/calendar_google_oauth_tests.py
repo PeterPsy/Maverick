@@ -122,6 +122,172 @@ class CalendarGoogleOAuthTest(unittest.TestCase):
         self.assertEqual(calls[0][0], "POST")
         self.assertEqual(calls[1][0], "GET")
 
+    def test_complete_oauth_reuses_existing_google_account_connection(self) -> None:
+        fixed_now = datetime(2026, 5, 28, 12, 0, tzinfo=UTC)
+
+        def transport(method: str, url: str, request: dict[str, object]) -> tuple[int, dict[str, object]]:
+            if url == "https://oauth2.googleapis.com/token":
+                return 200, {
+                    "access_token": "access-token",
+                    "refresh_token": TEST_OFFLINE_GRANT,
+                    "scope": f"{GOOGLE_EVENTS_SCOPE} {GOOGLE_CALENDAR_LIST_SCOPE} openid email",
+                    "token_type": "Bearer",
+                }
+            if url == "https://www.googleapis.com/oauth2/v2/userinfo":
+                return 200, {"email": "ana@example.com", "name": "Ana Example", "id": "google-subject"}
+            raise AssertionError(f"Unexpected OAuth request: {method} {url}")
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            data_root = Path(temp_dir) / "data"
+            data_root.mkdir(parents=True)
+            (data_root / "state.json").write_text(
+                json.dumps(
+                    {
+                        "schema_version": "3",
+                        "events": [],
+                        "connections": [
+                            {
+                                "id": "cal_conn_existing",
+                                "provider": "google",
+                                "account_id": "ana@example.com",
+                                "account_label": "Ana Work",
+                                "status": "disabled",
+                                "created_at": "2026-05-01T12:00:00Z",
+                                "updated_at": "2026-05-02T12:00:00Z",
+                                "external_refs": {
+                                    "google_subject": "google-subject",
+                                    "disconnected_at": "2026-05-02T12:00:00Z",
+                                },
+                            }
+                        ],
+                    }
+                ),
+                encoding="utf-8",
+            )
+            _status, started = _handle_action(
+                data_root,
+                {"action": "calendar_connections.start_oauth"},
+                app_id="calendar",
+                app_secrets={"google-oauth-client-id": "client-id"},
+                oauth_now=fixed_now,
+            )
+            status_code, completed = _handle_action(
+                data_root,
+                {"action": "calendar_connections.complete_oauth", "code": "oauth-code", "state": started["state"]},
+                app_id="calendar",
+                app_secrets={
+                    "google-oauth-client-id": TEST_CLIENT_ID,
+                    "google-oauth-client-secret": TEST_CLIENT_SECRET,
+                },
+                allow_platform_secret_writes=True,
+                oauth_transport=transport,
+                oauth_now=fixed_now + timedelta(seconds=30),
+            )
+            persisted = json.loads((data_root / "state.json").read_text(encoding="utf-8"))
+
+        self.assertEqual(status_code, 200)
+        connection = completed["connection"]
+        self.assertEqual(connection["id"], "cal_conn_existing")
+        self.assertEqual(connection["status"], "connected")
+        self.assertEqual(connection["account_id"], "ana@example.com")
+        self.assertEqual(connection["account_label"], "Ana Example")
+        self.assertEqual(completed["platform_secret_writes"][0]["resource_id"], "cal_conn_existing")
+        self.assertEqual([item["id"] for item in persisted["connections"]], ["cal_conn_existing"])
+        self.assertEqual(persisted["connections"][0]["created_at"], "2026-05-01T12:00:00Z")
+        self.assertEqual(persisted["connections"][0]["external_refs"]["google_subject"], "google-subject")
+        self.assertNotIn("disconnected_at", persisted["connections"][0]["external_refs"])
+        self.assertNotIn("oauth_state_hash", persisted["connections"][0]["external_refs"])
+
+    def test_complete_oauth_prefers_same_account_connection_with_local_state(self) -> None:
+        fixed_now = datetime(2026, 6, 16, 21, 30, tzinfo=UTC)
+
+        def transport(method: str, url: str, request: dict[str, object]) -> tuple[int, dict[str, object]]:
+            if url == "https://oauth2.googleapis.com/token":
+                return 200, {
+                    "access_token": "access-token",
+                    "refresh_token": TEST_OFFLINE_GRANT,
+                    "scope": f"{GOOGLE_EVENTS_SCOPE} {GOOGLE_CALENDAR_LIST_SCOPE} openid email",
+                    "token_type": "Bearer",
+                }
+            if url == "https://www.googleapis.com/oauth2/v2/userinfo":
+                return 200, {"email": "trail@example.com", "name": "Trail", "id": "trail-subject"}
+            raise AssertionError(f"Unexpected OAuth request: {method} {url}")
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            data_root = Path(temp_dir) / "data"
+            data_root.mkdir(parents=True)
+            (data_root / "state.json").write_text(
+                json.dumps(
+                    {
+                        "schema_version": "3",
+                        "events": [
+                            {
+                                "id": "evt_google_old_1",
+                                "title": "Existing remote event",
+                                "startTime": "2026-06-24T09:00:00Z",
+                                "endTime": "2026-06-24T10:00:00Z",
+                                "timezone": "UTC",
+                                "color": "blue",
+                                "source": "google_calendar",
+                                "external_refs": {
+                                    "provider": "google",
+                                    "calendar_connection_id": "cal_conn_old",
+                                    "provider_calendar_id": "trail@example.com",
+                                    "provider_event_id": "google-event-1",
+                                },
+                            }
+                        ],
+                        "connections": [
+                            {
+                                "id": "cal_conn_old",
+                                "provider": "google",
+                                "account_id": "trail@example.com",
+                                "account_label": "Trail",
+                                "status": "connected",
+                                "updated_at": "2026-05-28T16:04:49Z",
+                                "external_refs": {"google_subject": "trail-subject"},
+                            },
+                            {
+                                "id": "cal_conn_newer_empty",
+                                "provider": "google",
+                                "account_id": "trail@example.com",
+                                "account_label": "Trail",
+                                "status": "connected",
+                                "updated_at": "2026-06-16T21:30:53Z",
+                                "external_refs": {"google_subject": "trail-subject"},
+                            },
+                        ],
+                    }
+                ),
+                encoding="utf-8",
+            )
+            _status, started = _handle_action(
+                data_root,
+                {"action": "calendar_connections.start_oauth"},
+                app_id="calendar",
+                app_secrets={"google-oauth-client-id": "client-id"},
+                oauth_now=fixed_now,
+            )
+            status_code, completed = _handle_action(
+                data_root,
+                {"action": "calendar_connections.complete_oauth", "code": "oauth-code", "state": started["state"]},
+                app_id="calendar",
+                app_secrets={
+                    "google-oauth-client-id": TEST_CLIENT_ID,
+                    "google-oauth-client-secret": TEST_CLIENT_SECRET,
+                },
+                allow_platform_secret_writes=True,
+                oauth_transport=transport,
+                oauth_now=fixed_now + timedelta(seconds=30),
+            )
+            persisted = json.loads((data_root / "state.json").read_text(encoding="utf-8"))
+
+        self.assertEqual(status_code, 200)
+        self.assertEqual(completed["connection"]["id"], "cal_conn_old")
+        self.assertEqual(completed["platform_secret_writes"][0]["resource_id"], "cal_conn_old")
+        self.assertIn("cal_conn_newer_empty", [item["id"] for item in persisted["connections"]])
+        self.assertNotIn("pending", [item["status"] for item in persisted["connections"]])
+
     def test_complete_oauth_rejects_tokens_missing_calendar_list_scope(self) -> None:
         fixed_now = datetime(2026, 5, 28, 12, 0, tzinfo=UTC)
 

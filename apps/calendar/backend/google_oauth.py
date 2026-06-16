@@ -167,7 +167,8 @@ def complete_oauth(
         detail="Google OAuth client secret is unavailable through Core Secrets.",
     )
     current_time = (now or datetime.now(UTC)).astimezone(UTC)
-    state_record = _pending_connection_for_state(read_state(data_root), state_value, now=current_time)
+    state = read_state(data_root)
+    state_record = _pending_connection_for_state(state, state_value, now=current_time)
     redirect_uri = _completion_redirect_uri(body, app_id=app_id, state_record=state_record)
     http = transport or default_transport
     token_payload = _exchange_code(
@@ -187,20 +188,34 @@ def complete_oauth(
         )
     profile = _fetch_profile(http, token_payload.get("access_token"))
     account_id, account_label = _account_identity(body, profile, state_record)
+    reconnect_target = _reconnect_target_connection(
+        state,
+        state_record=state_record,
+        profile=profile,
+        account_id=account_id,
+    )
+    base_record = reconnect_target or state_record
     updated_at = format_time(current_time)
     connection = normalize_connection(
         {
-            **state_record,
+            **base_record,
             "provider": GOOGLE_PROVIDER,
             "account_id": account_id,
             "account_label": account_label,
             "status": "connected",
             "scopes": scopes,
             "updated_at": updated_at,
-            "external_refs": _connected_external_refs(state_record, profile),
+            "external_refs": _connected_external_refs(base_record, profile),
         }
     )
-    update_state(data_root, lambda current: _replace_connection(current, connection))
+    update_state(
+        data_root,
+        lambda current: _replace_completed_connection(
+            current,
+            state_record=state_record,
+            connection=connection,
+        ),
+    )
     result: dict[str, Any] = {
         "action": "calendar_connections.complete_oauth",
         "provider": GOOGLE_PROVIDER,
@@ -456,6 +471,75 @@ def _connection_by_id(state: dict[str, Any], connection_id: str) -> dict[str, An
     raise CalendarOAuthError("calendar_connection_not_found", f"Calendar connection `{connection_id}` was not found.", status_code=404)
 
 
+def _reconnect_target_connection(
+    state: dict[str, Any],
+    *,
+    state_record: dict[str, Any],
+    profile: dict[str, Any],
+    account_id: str,
+) -> dict[str, Any] | None:
+    subject = str(profile.get("id") or profile.get("sub") or "").strip()
+    account_keys = {
+        value.casefold()
+        for value in [
+            account_id,
+            str(profile.get("email") or ""),
+        ]
+        if value.strip()
+    }
+    if not subject and not account_keys:
+        return None
+    pending_id = _connection_record_id(state_record)
+    candidates: list[dict[str, Any]] = []
+    for item in state.get("connections", []):
+        if not isinstance(item, dict):
+            continue
+        connection = normalize_connection(item)
+        if (
+            connection["id"] == pending_id
+            or connection["provider"] != GOOGLE_PROVIDER
+            or connection["status"] == "pending"
+        ):
+            continue
+        if _matches_google_account(connection, subject=subject, account_keys=account_keys):
+            candidates.append(connection)
+    if not candidates:
+        return None
+    return sorted(candidates, key=lambda item: _reconnect_sort_key(state, item), reverse=True)[0]
+
+
+def _matches_google_account(connection: dict[str, Any], *, subject: str, account_keys: set[str]) -> bool:
+    external_refs = connection.get("external_refs") if isinstance(connection.get("external_refs"), dict) else {}
+    existing_subject = str(external_refs.get("google_subject") or "").strip()
+    if subject and existing_subject == subject:
+        return True
+    existing_account = str(connection.get("account_id") or "").strip().casefold()
+    return bool(existing_account and existing_account in account_keys)
+
+
+def _reconnect_sort_key(state: dict[str, Any], connection: dict[str, Any]) -> tuple[int, int, str]:
+    status_rank = {"connected": 2, "error": 1, "disabled": 0}.get(str(connection.get("status") or ""), 0)
+    recency = str(connection.get("updated_at") or connection.get("created_at") or "")
+    return (_connection_usage_count(state, connection["id"]), status_rank, recency)
+
+
+def _connection_usage_count(state: dict[str, Any], connection_id: str) -> int:
+    count = 0
+    for event in state.get("events", []):
+        if not isinstance(event, dict):
+            continue
+        refs = event.get("external_refs") if isinstance(event.get("external_refs"), dict) else {}
+        if str(refs.get("calendar_connection_id") or "").strip() == connection_id:
+            count += 1
+    for calendar in state.get("calendars", []):
+        if isinstance(calendar, dict) and str(calendar.get("connection_id") or "").strip() == connection_id:
+            count += 1
+    for cursor in state.get("sync_state", []):
+        if isinstance(cursor, dict) and str(cursor.get("connection_id") or "").strip() == connection_id:
+            count += 1
+    return count
+
+
 def _replace_connection(state: dict[str, Any], connection: dict[str, Any]) -> dict[str, Any]:
     connection_id = str(connection.get("id") or "").strip()
     remaining = [
@@ -465,6 +549,28 @@ def _replace_connection(state: dict[str, Any], connection: dict[str, Any]) -> di
     ]
     state["connections"] = [*remaining, normalize_connection(connection)]
     return state
+
+
+def _replace_completed_connection(
+    state: dict[str, Any],
+    *,
+    state_record: dict[str, Any],
+    connection: dict[str, Any],
+) -> dict[str, Any]:
+    completed_id = _connection_record_id(connection)
+    pending_id = _connection_record_id(state_record)
+    replaced_ids = {completed_id, pending_id}
+    state["connections"] = [
+        item
+        for item in state.get("connections", [])
+        if isinstance(item, dict) and _connection_record_id(item) not in replaced_ids
+    ]
+    state["connections"].append(normalize_connection(connection))
+    return state
+
+
+def _connection_record_id(connection: dict[str, Any]) -> str:
+    return str(connection.get("id") or connection.get("connection_id") or connection.get("connectionId") or "").strip()
 
 
 def _prune_expired_pending_connections(data_root) -> dict[str, Any]:
@@ -499,7 +605,7 @@ def _connected_external_refs(state_record: dict[str, Any], profile: dict[str, An
     result = {
         key: value
         for key, value in external_refs.items()
-        if key not in {"oauth_state_hash", "oauth_state_expires_at", "oauth_redirect_uri"}
+        if key not in {"oauth_state_hash", "oauth_state_expires_at", "oauth_redirect_uri", "disconnected_at"}
     }
     subject = str(profile.get("id") or profile.get("sub") or "").strip()
     if subject:

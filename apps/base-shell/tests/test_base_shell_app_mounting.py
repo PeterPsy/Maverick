@@ -35,7 +35,10 @@ class BaseShellAppMountingTests(unittest.TestCase):
         self.assertIn("maverick.app.ready", host_source)
         self.assertIn("postMessage", host_source)
         self.assertIn("syncAppFrameShellLayout", host_source)
-        self.assertIn("src={appFrameSrc(app.frontend_mount, revision)}", host_source)
+        self.assertIn(
+            "src={appFrameSrc(app.frontend_mount, revision, bootstrapThemeForFrame(frameBootstrapThemesRef.current, frameKey, shellTheme))}",
+            host_source,
+        )
         self.assertIn("currentShellAppRoute", (REPO_ROOT / "apps/base-shell/frontend/src/AppShell.tsx").read_text())
         self.assertIn("pushShellAppRoute", (REPO_ROOT / "apps/base-shell/frontend/src/AppShell.tsx").read_text())
         self.assertIn("replaceShellAppRoute", (REPO_ROOT / "apps/base-shell/frontend/src/AppShell.tsx").read_text())

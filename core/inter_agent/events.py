@@ -125,6 +125,7 @@ class InterAgentEventRecord:
     idempotency_key: str | None
     payload: dict[str, Any] = field(default_factory=dict)
     created_at: datetime | None = None
+    idempotency_fingerprint: str | None = None
 
 
 @dataclass(frozen=True)

@@ -218,6 +218,7 @@ class InterAgentRunRecord:
     ended_at: datetime | None
     recovery_generation: int
     idempotency_key: str | None = None
+    spec_fingerprint: str | None = None
 
 
 @dataclass(frozen=True)
@@ -231,6 +232,7 @@ class InterAgentParticipantRecord:
     execution_mode: InterAgentParticipantExecutionMode
     agent_type_id: str | None
     agent_snapshot_digest: str | None
+    agent_snapshot: dict[str, Any] | None
     prompt_snapshot_ref: str | None
     label: str
     runtime_session_id: str | None
@@ -316,6 +318,7 @@ class BudgetReservation:
     estimated_cost: Decimal
     status: BudgetReservationStatus
     created_at: datetime
+    fingerprint: str | None = None
     released_at: datetime | None = None
 
 
@@ -505,6 +508,7 @@ def budget_reservation_to_document(reservation: BudgetReservation) -> dict[str, 
         "estimated_cost": reservation.estimated_cost,
         "status": reservation.status,
         "created_at": reservation.created_at,
+        "fingerprint": reservation.fingerprint,
         "released_at": reservation.released_at,
     }
 
@@ -522,6 +526,7 @@ def budget_reservation_from_document(document: dict[str, Any]) -> BudgetReservat
         estimated_cost=_to_decimal(document.get("estimated_cost") or 0),
         status=str(document.get("status") or "reserved"),  # type: ignore[arg-type]
         created_at=document["created_at"],
+        fingerprint=document.get("fingerprint"),
         released_at=document.get("released_at"),
     )
 

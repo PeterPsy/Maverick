@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
-from dataclasses import replace
+from dataclasses import asdict, replace
 from datetime import UTC, datetime
 from decimal import Decimal
+import hashlib
+import json
 from typing import Any
 import uuid
 
@@ -26,7 +28,7 @@ from core.inter_agent.models import (
     empty_budget_ledger,
     validate_run_spec,
 )
-from core.inter_agent.store import InterAgentStore
+from core.inter_agent.store import InterAgentRunCreateBundle, InterAgentStore
 
 
 DEFAULT_SUMMARY_EVENT_LIMIT = 1000
@@ -45,10 +47,7 @@ class InterAgentService:
         requested_at = now or datetime.now(tz=UTC)
         validated = validate_run_spec(spec)
         idempotency_key = _clean_optional(validated.idempotency_key)
-        if idempotency_key:
-            existing = self.store.find_run_by_idempotency_key(validated.workspace_id, idempotency_key)
-            if existing is not None:
-                return existing
+        spec_fingerprint = _run_spec_fingerprint(validated)
         run_id = _clean_optional(validated.run_id) or _new_id("iarun")
         participant_ids = _materialized_participant_ids(validated.participants)
         orchestrator_participant_id = (
@@ -88,58 +87,71 @@ class InterAgentService:
             ended_at=None,
             recovery_generation=0,
             idempotency_key=idempotency_key,
+            spec_fingerprint=spec_fingerprint,
         )
-        self.store.save_budget_policy(budget_policy)
-        self.store.save_budget_ledger(
-            empty_budget_ledger(
-                budget_ledger_id=budget_ledger_id,
-                workspace_id=validated.workspace_id,
-                run_id=run_id,
-                updated_at=requested_at,
-            )
+        budget_ledger = empty_budget_ledger(
+            budget_ledger_id=budget_ledger_id,
+            workspace_id=validated.workspace_id,
+            run_id=run_id,
+            updated_at=requested_at,
         )
-        self.store.save_retention_policy(retention_policy)
-        self.store.save_run(run)
-        self.record_event(
-            run,
-            event_type="inter_agent.run.started",
-            participant_id=orchestrator_participant_id,
-            visibility_plane="summary",
-            idempotency_key=f"{run.run_id}:run.started",
-            correlation_id=run.run_id,
-            payload={"mode": run.mode, "status": run.status},
-            now=requested_at,
-        )
-        self.record_event(
-            run,
-            event_type="inter_agent.mode.selected",
-            participant_id=orchestrator_participant_id,
-            visibility_plane="summary",
-            idempotency_key=f"{run.run_id}:mode.selected",
-            correlation_id=run.run_id,
-            payload={"mode": run.mode},
-            now=requested_at,
-        )
-        for participant in _participant_records_from_specs(
+        participants = _participant_records_from_specs(
             validated.participants,
             participant_ids=participant_ids,
             run=run,
             created_at=requested_at,
-        ):
-            self.store.save_participant(participant)
-            self.record_event(
+        )
+        edges = _edge_records_from_specs(validated.edges, run=run, created_at=requested_at)
+        initial_events = [
+            _event_record(
                 run,
-                event_type="inter_agent.participant.added",
-                participant_id=participant.participant_id,
-                visibility_plane="detail",
-                idempotency_key=f"{run.run_id}:participant.added:{participant.participant_id}",
+                event_type="inter_agent.run.started",
+                participant_id=orchestrator_participant_id,
+                visibility_plane="summary",
+                idempotency_key=f"{run.run_id}:run.started",
                 correlation_id=run.run_id,
-                payload={"participant_id": participant.participant_id, "kind": participant.kind, "label": participant.label},
-                now=requested_at,
+                payload={"mode": run.mode, "status": run.status},
+                created_at=requested_at,
+            ),
+            _event_record(
+                run,
+                event_type="inter_agent.mode.selected",
+                participant_id=orchestrator_participant_id,
+                visibility_plane="summary",
+                idempotency_key=f"{run.run_id}:mode.selected",
+                correlation_id=run.run_id,
+                payload={"mode": run.mode},
+                created_at=requested_at,
+            ),
+        ]
+        for participant in participants:
+            initial_events.append(
+                _event_record(
+                    run,
+                    event_type="inter_agent.participant.added",
+                    participant_id=participant.participant_id,
+                    visibility_plane="detail",
+                    idempotency_key=f"{run.run_id}:participant.added:{participant.participant_id}",
+                    correlation_id=run.run_id,
+                    payload={
+                        "participant_id": participant.participant_id,
+                        "kind": participant.kind,
+                        "label": participant.label,
+                    },
+                    created_at=requested_at,
+                )
             )
-        for edge in _edge_records_from_specs(validated.edges, run=run, created_at=requested_at):
-            self.store.save_edge(edge)
-        return run
+        return self.store.create_run(
+            InterAgentRunCreateBundle(
+                run=run,
+                budget_policy=budget_policy,
+                budget_ledger=budget_ledger,
+                retention_policy=retention_policy,
+                participants=participants,
+                edges=edges,
+                initial_events=initial_events,
+            )
+        )
 
     def record_event(
         self,
@@ -158,23 +170,18 @@ class InterAgentService:
     ) -> InterAgentEventRecord:
         """Append one normalized event with per-run sequence assignment."""
         created_at = now or datetime.now(tz=UTC)
-        retention_policy = self.store.get_retention_policy(run.retention_policy_id)
-        event = InterAgentEventRecord(
-            event_id=_new_id("iaevt"),
-            workspace_id=run.workspace_id,
-            run_id=run.run_id,
-            thread_id=run.thread_id,
-            root_runtime_session_id=run.root_runtime_session_id,
-            participant_id=_clean_optional(participant_id),
-            runtime_session_id=_clean_optional(runtime_session_id),
-            runtime_turn_id=_clean_optional(runtime_turn_id),
-            runtime_event_id=_clean_optional(runtime_event_id),
+        retention_policy = self.store.get_retention_policy(run.retention_policy_id, workspace_id=run.workspace_id)
+        event = _event_record(
+            run,
             event_type=event_type,
             visibility_plane=visibility_plane,
-            sequence=0,
+            participant_id=participant_id,
+            runtime_session_id=runtime_session_id,
+            runtime_turn_id=runtime_turn_id,
+            runtime_event_id=runtime_event_id,
             correlation_id=_clean_optional(correlation_id) or _clean_optional(idempotency_key) or run.run_id,
             idempotency_key=_clean_optional(idempotency_key),
-            payload=dict(payload or {}),
+            payload=payload,
             created_at=created_at,
         )
         return self.store.append_event(event, retention_policy=retention_policy)
@@ -259,7 +266,7 @@ class InterAgentService:
         """Fail closed for pending approvals whose timeout has passed."""
         checked_at = now or datetime.now(tz=UTC)
         expired: list[ApprovalRequestRecord] = []
-        for approval in self.store.list_approvals(run.run_id):
+        for approval in self.store.list_approvals(run.run_id, workspace_id=run.workspace_id):
             if approval.status != "pending" or approval.expires_at > checked_at:
                 continue
             updated = replace(
@@ -300,6 +307,40 @@ def default_event_retention_policy(
     )
 
 
+def _event_record(
+    run: InterAgentRunRecord,
+    *,
+    event_type: InterAgentEventType,
+    visibility_plane: InterAgentVisibilityPlane,
+    participant_id: str | None = None,
+    payload: dict[str, Any] | None = None,
+    runtime_session_id: str | None = None,
+    runtime_turn_id: str | None = None,
+    runtime_event_id: str | None = None,
+    correlation_id: str | None = None,
+    idempotency_key: str | None = None,
+    created_at: datetime,
+) -> InterAgentEventRecord:
+    return InterAgentEventRecord(
+        event_id=_new_id("iaevt"),
+        workspace_id=run.workspace_id,
+        run_id=run.run_id,
+        thread_id=run.thread_id,
+        root_runtime_session_id=run.root_runtime_session_id,
+        participant_id=_clean_optional(participant_id),
+        runtime_session_id=_clean_optional(runtime_session_id),
+        runtime_turn_id=_clean_optional(runtime_turn_id),
+        runtime_event_id=_clean_optional(runtime_event_id),
+        event_type=event_type,
+        visibility_plane=visibility_plane,
+        sequence=0,
+        correlation_id=_clean_optional(correlation_id) or _clean_optional(idempotency_key) or run.run_id,
+        idempotency_key=_clean_optional(idempotency_key),
+        payload=dict(payload or {}),
+        created_at=created_at,
+    )
+
+
 def _participant_records_from_specs(
     specs: list[ParticipantSpec],
     *,
@@ -310,6 +351,7 @@ def _participant_records_from_specs(
     records: list[InterAgentParticipantRecord] = []
     for index, spec in enumerate(specs):
         snapshot_digest = spec.agent_snapshot.digest() if spec.agent_snapshot is not None else None
+        snapshot_document = _agent_snapshot_document(spec)
         skill_ids = list(spec.skill_ids)
         provider_id = spec.provider_id
         agent_type_id = spec.agent_type_id
@@ -326,6 +368,7 @@ def _participant_records_from_specs(
                 execution_mode=spec.execution_mode,
                 agent_type_id=agent_type_id,
                 agent_snapshot_digest=snapshot_digest,
+                agent_snapshot=snapshot_document,
                 prompt_snapshot_ref=spec.prompt_snapshot_ref,
                 label=spec.label,
                 runtime_session_id=None,
@@ -366,6 +409,64 @@ def _edge_records_from_specs(
 
 def _materialized_participant_ids(specs: list[ParticipantSpec]) -> dict[int, str]:
     return {index: _clean_optional(spec.participant_id) or _new_id("iap") for index, spec in enumerate(specs)}
+
+
+def _agent_snapshot_document(spec: ParticipantSpec) -> dict[str, Any] | None:
+    if spec.agent_snapshot is None:
+        return None
+    document = asdict(spec.agent_snapshot)
+    document["digest"] = spec.agent_snapshot.digest()
+    return document
+
+
+def _run_spec_fingerprint(spec: InterAgentRunSpec) -> str:
+    payload = {
+        "workspace_id": spec.workspace_id,
+        "thread_id": spec.thread_id,
+        "root_runtime_session_id": spec.root_runtime_session_id,
+        "source_app_id": spec.source_app_id,
+        "mode": spec.mode,
+        "created_by_user_id": spec.created_by_user_id,
+        "participants": [_participant_spec_fingerprint_payload(participant) for participant in spec.participants],
+        "budget": asdict(spec.budget),
+        "edges": [asdict(edge) for edge in spec.edges],
+        "run_id": spec.run_id,
+        "orchestrator_participant_id": spec.orchestrator_participant_id,
+        "aggregator_participant_id": spec.aggregator_participant_id,
+        "merge_policy": spec.merge_policy,
+        "visibility_level": spec.visibility_level,
+    }
+    encoded = json.dumps(_canonical_fingerprint_value(payload), sort_keys=True, separators=(",", ":"))
+    return hashlib.sha256(encoded.encode("utf-8")).hexdigest()
+
+
+def _participant_spec_fingerprint_payload(spec: ParticipantSpec) -> dict[str, Any]:
+    return {
+        "kind": spec.kind,
+        "execution_mode": spec.execution_mode,
+        "label": spec.label,
+        "participant_id": spec.participant_id,
+        "agent_type_id": spec.agent_type_id,
+        "agent_snapshot_digest": spec.agent_snapshot.digest() if spec.agent_snapshot is not None else None,
+        "prompt_snapshot_ref": spec.prompt_snapshot_ref,
+        "skill_ids": sorted(spec.skill_ids),
+        "provider_id": spec.provider_id,
+        "authority_grant_ids": sorted(spec.authority_grant_ids),
+        "thread_visibility": spec.thread_visibility,
+    }
+
+
+def _canonical_fingerprint_value(value: Any) -> Any:
+    if isinstance(value, Decimal):
+        return str(value)
+    if isinstance(value, dict):
+        return {
+            str(key): _canonical_fingerprint_value(item)
+            for key, item in sorted(value.items(), key=lambda item: str(item[0]))
+        }
+    if isinstance(value, list):
+        return [_canonical_fingerprint_value(item) for item in value]
+    return value
 
 
 def _first_root_orchestrator_id(specs: list[ParticipantSpec], participant_ids: dict[int, str]) -> str:

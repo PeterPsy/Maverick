@@ -6,6 +6,7 @@ from core.inter_agent.events import (
     InterAgentEventRecord,
     InterAgentVisibilityPlane,
 )
+from core.inter_agent.errors import InterAgentIdempotencyConflictError
 from core.inter_agent.models import (
     AgentParticipantSnapshot,
     BudgetLedgerRecord,
@@ -16,7 +17,7 @@ from core.inter_agent.models import (
     ParticipantSpec,
 )
 from core.inter_agent.service import InterAgentService
-from core.inter_agent.store import InterAgentDocumentStore, InterAgentStore
+from core.inter_agent.store import InterAgentDocumentStore, InterAgentRunCreateBundle, InterAgentStore
 
 
 __all__ = [
@@ -27,8 +28,10 @@ __all__ = [
     "InterAgentDocumentStore",
     "InterAgentEventPage",
     "InterAgentEventRecord",
+    "InterAgentIdempotencyConflictError",
     "InterAgentParticipantRecord",
     "InterAgentRunRecord",
+    "InterAgentRunCreateBundle",
     "InterAgentRunSpec",
     "InterAgentService",
     "InterAgentStore",

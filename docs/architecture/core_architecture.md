@@ -335,6 +335,25 @@ reserve and release budget atomically, expire approvals fail-closed, and append
 bounded replay events. Runtime integration and operational spawn/send/wait
 surfaces remain a later runtime phase.
 
+The F1 store contract is workspace-safe by default. Normal reads and writes must
+carry `workspace_id`; operator-wide scans, if needed later, must be explicit
+operator methods rather than fallbacks inside ordinary run/event APIs.
+Participant identity is local to a run, so the persistence key is
+`(workspace_id, run_id, participant_id)`, not a global `participant_id`.
+
+Idempotent F1 operations must compare canonical fingerprints, not only ids. A
+`create_run` retry with the same workspace idempotency key returns the existing
+run only when the validated run spec fingerprint matches; mismatches fail as
+idempotency conflicts. Event append and budget reservation retries likewise
+compare their canonical payload envelopes. Budget reservation release is
+idempotent and releases the full reservation envelope for F1 accounting because
+there is no separate consumption ledger yet.
+
+Agents materialization is recoverable at F1. When a participant includes a
+materialized Agents snapshot, the participant record stores both the stable
+digest and a core-owned copy of the snapshot payload so replay and startup
+recovery do not depend on a mutable future Agents app record.
+
 ### 6. AI provider management
 
 The core owns the abstraction layer for model providers and model backends.

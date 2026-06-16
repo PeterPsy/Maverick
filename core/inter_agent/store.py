@@ -7,6 +7,7 @@ from dataclasses import asdict, dataclass, replace
 from datetime import UTC, datetime
 from decimal import Decimal
 import fcntl
+import hashlib
 import json
 import os
 from pathlib import Path
@@ -21,6 +22,7 @@ from core.inter_agent.errors import (
     InterAgentBudgetPolicyNotFoundError,
     InterAgentEdgeNotFoundError,
     InterAgentEventNotFoundError,
+    InterAgentIdempotencyConflictError,
     InterAgentParticipantNotFoundError,
     InterAgentRunNotFoundError,
     InterAgentValidationError,
@@ -67,6 +69,19 @@ class InterAgentCollections:
     retention_policies: "DocumentCollection"
 
 
+@dataclass(frozen=True)
+class InterAgentRunCreateBundle:
+    """All records needed to materialize one F1 run under a workspace lock."""
+
+    run: InterAgentRunRecord
+    budget_policy: BudgetPolicyRecord
+    budget_ledger: BudgetLedgerRecord
+    retention_policy: EventRetentionPolicyRecord
+    participants: list[InterAgentParticipantRecord]
+    edges: list[InterAgentEdgeRecord]
+    initial_events: list[InterAgentEventRecord]
+
+
 class DocumentCollection(Protocol):
     """Minimal document collection protocol used by inter-agent stores."""
 
@@ -109,10 +124,13 @@ class InterAgentEventCollection(DocumentCollection, Protocol):
 class InterAgentStore(Protocol):
     """Persistence contract for inter-agent records and ledgers."""
 
+    def create_run(self, bundle: InterAgentRunCreateBundle) -> InterAgentRunRecord:
+        ...
+
     def save_run(self, record: InterAgentRunRecord) -> InterAgentRunRecord:
         ...
 
-    def get_run(self, run_id: str) -> InterAgentRunRecord:
+    def get_run(self, run_id: str, *, workspace_id: str) -> InterAgentRunRecord:
         ...
 
     def find_run_by_idempotency_key(self, workspace_id: str, idempotency_key: str) -> InterAgentRunRecord | None:
@@ -124,40 +142,46 @@ class InterAgentStore(Protocol):
     def save_participant(self, record: InterAgentParticipantRecord) -> InterAgentParticipantRecord:
         ...
 
-    def get_participant(self, participant_id: str) -> InterAgentParticipantRecord:
+    def get_participant(
+        self,
+        participant_id: str,
+        *,
+        workspace_id: str,
+        run_id: str,
+    ) -> InterAgentParticipantRecord:
         ...
 
-    def list_participants(self, run_id: str) -> list[InterAgentParticipantRecord]:
+    def list_participants(self, run_id: str, *, workspace_id: str) -> list[InterAgentParticipantRecord]:
         ...
 
     def save_edge(self, record: InterAgentEdgeRecord) -> InterAgentEdgeRecord:
         ...
 
-    def get_edge(self, edge_id: str) -> InterAgentEdgeRecord:
+    def get_edge(self, edge_id: str, *, workspace_id: str) -> InterAgentEdgeRecord:
         ...
 
-    def list_edges(self, run_id: str) -> list[InterAgentEdgeRecord]:
+    def list_edges(self, run_id: str, *, workspace_id: str) -> list[InterAgentEdgeRecord]:
         ...
 
     def save_approval(self, record: ApprovalRequestRecord) -> ApprovalRequestRecord:
         ...
 
-    def get_approval(self, approval_id: str) -> ApprovalRequestRecord:
+    def get_approval(self, approval_id: str, *, workspace_id: str) -> ApprovalRequestRecord:
         ...
 
-    def list_approvals(self, run_id: str) -> list[ApprovalRequestRecord]:
+    def list_approvals(self, run_id: str, *, workspace_id: str) -> list[ApprovalRequestRecord]:
         ...
 
     def save_budget_policy(self, record: BudgetPolicyRecord) -> BudgetPolicyRecord:
         ...
 
-    def get_budget_policy(self, budget_policy_id: str) -> BudgetPolicyRecord:
+    def get_budget_policy(self, budget_policy_id: str, *, workspace_id: str) -> BudgetPolicyRecord:
         ...
 
     def save_budget_ledger(self, record: BudgetLedgerRecord) -> BudgetLedgerRecord:
         ...
 
-    def get_budget_ledger(self, budget_ledger_id: str) -> BudgetLedgerRecord:
+    def get_budget_ledger(self, budget_ledger_id: str, *, workspace_id: str) -> BudgetLedgerRecord:
         ...
 
     def reserve_budget(
@@ -191,7 +215,7 @@ class InterAgentStore(Protocol):
     def save_retention_policy(self, record: EventRetentionPolicyRecord) -> EventRetentionPolicyRecord:
         ...
 
-    def get_retention_policy(self, retention_policy_id: str) -> EventRetentionPolicyRecord:
+    def get_retention_policy(self, retention_policy_id: str, *, workspace_id: str) -> EventRetentionPolicyRecord:
         ...
 
     def append_event(
@@ -206,7 +230,7 @@ class InterAgentStore(Protocol):
         self,
         run_id: str,
         *,
-        workspace_id: str | None = None,
+        workspace_id: str,
         visibility_plane: InterAgentVisibilityPlane = "summary",
         after_event_id: str | None = None,
         before_event_id: str | None = None,
@@ -220,15 +244,49 @@ class InterAgentDocumentStore:
 
     def __init__(self, collections: InterAgentCollections) -> None:
         self.collections = collections
+        self._lock = RLock()
+
+    def create_run(self, bundle: InterAgentRunCreateBundle) -> InterAgentRunRecord:
+        workspace_id = _require_identifier(bundle.run.workspace_id, "workspace_id")
+        run = bundle.run
+        _validate_run_create_bundle(bundle)
+        with self._workspace_lock(workspace_id):
+            if run.idempotency_key:
+                existing = self.find_run_by_idempotency_key(workspace_id, run.idempotency_key)
+                if existing is not None:
+                    _ensure_spec_fingerprint_matches(existing, run)
+                    return existing
+            existing_run = self.collections.runs.find_one({"workspace_id": workspace_id, "run_id": run.run_id})
+            if existing_run is not None:
+                raise InterAgentIdempotencyConflictError(
+                    f"Inter-agent run `{run.run_id}` already exists in workspace `{workspace_id}`."
+                )
+            self.save_budget_policy(bundle.budget_policy)
+            self.save_budget_ledger(bundle.budget_ledger)
+            self.save_retention_policy(bundle.retention_policy)
+            self.save_run(run)
+            for participant in bundle.participants:
+                self.save_participant(participant)
+            for edge in bundle.edges:
+                self.save_edge(edge)
+            for event in bundle.initial_events:
+                self.append_event(event, retention_policy=bundle.retention_policy)
+            return run
 
     def save_run(self, record: InterAgentRunRecord) -> InterAgentRunRecord:
-        self.collections.runs.update_one({"run_id": record.run_id}, {"$set": _to_document(record)}, upsert=True)
+        self.collections.runs.update_one(
+            {"workspace_id": record.workspace_id, "run_id": record.run_id},
+            {"$set": _to_document(record)},
+            upsert=True,
+        )
         return record
 
-    def get_run(self, run_id: str) -> InterAgentRunRecord:
-        document = self.collections.runs.find_one({"run_id": run_id})
+    def get_run(self, run_id: str, *, workspace_id: str) -> InterAgentRunRecord:
+        document = self.collections.runs.find_one({"workspace_id": workspace_id, "run_id": run_id})
         if document is None:
-            raise InterAgentRunNotFoundError(f"Inter-agent run `{run_id}` was not found.")
+            raise InterAgentRunNotFoundError(
+                f"Inter-agent run `{run_id}` was not found in workspace `{workspace_id}`."
+            )
         return _run_from_document(document)
 
     def find_run_by_idempotency_key(self, workspace_id: str, idempotency_key: str) -> InterAgentRunRecord | None:
@@ -243,84 +301,120 @@ class InterAgentDocumentStore:
 
     def save_participant(self, record: InterAgentParticipantRecord) -> InterAgentParticipantRecord:
         self.collections.participants.update_one(
-            {"participant_id": record.participant_id},
+            {
+                "workspace_id": record.workspace_id,
+                "run_id": record.run_id,
+                "participant_id": record.participant_id,
+            },
             {"$set": _to_document(record)},
             upsert=True,
         )
         return record
 
-    def get_participant(self, participant_id: str) -> InterAgentParticipantRecord:
-        document = self.collections.participants.find_one({"participant_id": participant_id})
+    def get_participant(
+        self,
+        participant_id: str,
+        *,
+        workspace_id: str,
+        run_id: str,
+    ) -> InterAgentParticipantRecord:
+        document = self.collections.participants.find_one(
+            {"workspace_id": workspace_id, "run_id": run_id, "participant_id": participant_id}
+        )
         if document is None:
-            raise InterAgentParticipantNotFoundError(f"Inter-agent participant `{participant_id}` was not found.")
+            raise InterAgentParticipantNotFoundError(
+                f"Inter-agent participant `{participant_id}` was not found in run `{run_id}`."
+            )
         return _participant_from_document(document)
 
-    def list_participants(self, run_id: str) -> list[InterAgentParticipantRecord]:
-        documents = self.collections.participants.find({"run_id": run_id})
+    def list_participants(self, run_id: str, *, workspace_id: str) -> list[InterAgentParticipantRecord]:
+        documents = self.collections.participants.find({"workspace_id": workspace_id, "run_id": run_id})
         records = [_participant_from_document(document) for document in documents]
         records.sort(key=lambda item: (item.created_at, item.participant_id))
         return records
 
     def save_edge(self, record: InterAgentEdgeRecord) -> InterAgentEdgeRecord:
-        self.collections.edges.update_one({"edge_id": record.edge_id}, {"$set": _to_document(record)}, upsert=True)
+        self.collections.edges.update_one(
+            {"workspace_id": record.workspace_id, "edge_id": record.edge_id},
+            {"$set": _to_document(record)},
+            upsert=True,
+        )
         return record
 
-    def get_edge(self, edge_id: str) -> InterAgentEdgeRecord:
-        document = self.collections.edges.find_one({"edge_id": edge_id})
+    def get_edge(self, edge_id: str, *, workspace_id: str) -> InterAgentEdgeRecord:
+        document = self.collections.edges.find_one({"workspace_id": workspace_id, "edge_id": edge_id})
         if document is None:
-            raise InterAgentEdgeNotFoundError(f"Inter-agent edge `{edge_id}` was not found.")
+            raise InterAgentEdgeNotFoundError(
+                f"Inter-agent edge `{edge_id}` was not found in workspace `{workspace_id}`."
+            )
         return _edge_from_document(document)
 
-    def list_edges(self, run_id: str) -> list[InterAgentEdgeRecord]:
-        records = [_edge_from_document(document) for document in self.collections.edges.find({"run_id": run_id})]
+    def list_edges(self, run_id: str, *, workspace_id: str) -> list[InterAgentEdgeRecord]:
+        records = [
+            _edge_from_document(document)
+            for document in self.collections.edges.find({"workspace_id": workspace_id, "run_id": run_id})
+        ]
         records.sort(key=lambda item: (item.created_at, item.edge_id))
         return records
 
     def save_approval(self, record: ApprovalRequestRecord) -> ApprovalRequestRecord:
         self.collections.approvals.update_one(
-            {"approval_id": record.approval_id},
+            {"workspace_id": record.workspace_id, "approval_id": record.approval_id},
             {"$set": _to_document(record)},
             upsert=True,
         )
         return record
 
-    def get_approval(self, approval_id: str) -> ApprovalRequestRecord:
-        document = self.collections.approvals.find_one({"approval_id": approval_id})
+    def get_approval(self, approval_id: str, *, workspace_id: str) -> ApprovalRequestRecord:
+        document = self.collections.approvals.find_one({"workspace_id": workspace_id, "approval_id": approval_id})
         if document is None:
-            raise InterAgentApprovalNotFoundError(f"Inter-agent approval `{approval_id}` was not found.")
+            raise InterAgentApprovalNotFoundError(
+                f"Inter-agent approval `{approval_id}` was not found in workspace `{workspace_id}`."
+            )
         return _approval_from_document(document)
 
-    def list_approvals(self, run_id: str) -> list[ApprovalRequestRecord]:
-        records = [_approval_from_document(document) for document in self.collections.approvals.find({"run_id": run_id})]
+    def list_approvals(self, run_id: str, *, workspace_id: str) -> list[ApprovalRequestRecord]:
+        records = [
+            _approval_from_document(document)
+            for document in self.collections.approvals.find({"workspace_id": workspace_id, "run_id": run_id})
+        ]
         records.sort(key=lambda item: (item.expires_at, item.approval_id))
         return records
 
     def save_budget_policy(self, record: BudgetPolicyRecord) -> BudgetPolicyRecord:
         self.collections.budget_policies.update_one(
-            {"budget_policy_id": record.budget_policy_id},
+            {"workspace_id": record.workspace_id, "budget_policy_id": record.budget_policy_id},
             {"$set": _to_document(record)},
             upsert=True,
         )
         return record
 
-    def get_budget_policy(self, budget_policy_id: str) -> BudgetPolicyRecord:
-        document = self.collections.budget_policies.find_one({"budget_policy_id": budget_policy_id})
+    def get_budget_policy(self, budget_policy_id: str, *, workspace_id: str) -> BudgetPolicyRecord:
+        document = self.collections.budget_policies.find_one(
+            {"workspace_id": workspace_id, "budget_policy_id": budget_policy_id}
+        )
         if document is None:
-            raise InterAgentBudgetPolicyNotFoundError(f"Budget policy `{budget_policy_id}` was not found.")
+            raise InterAgentBudgetPolicyNotFoundError(
+                f"Budget policy `{budget_policy_id}` was not found in workspace `{workspace_id}`."
+            )
         return _budget_policy_from_document(document)
 
     def save_budget_ledger(self, record: BudgetLedgerRecord) -> BudgetLedgerRecord:
         self.collections.budget_ledgers.update_one(
-            {"budget_ledger_id": record.budget_ledger_id},
+            {"workspace_id": record.workspace_id, "budget_ledger_id": record.budget_ledger_id},
             {"$set": _to_document(record)},
             upsert=True,
         )
         return record
 
-    def get_budget_ledger(self, budget_ledger_id: str) -> BudgetLedgerRecord:
-        document = self.collections.budget_ledgers.find_one({"budget_ledger_id": budget_ledger_id})
+    def get_budget_ledger(self, budget_ledger_id: str, *, workspace_id: str) -> BudgetLedgerRecord:
+        document = self.collections.budget_ledgers.find_one(
+            {"workspace_id": workspace_id, "budget_ledger_id": budget_ledger_id}
+        )
         if document is None:
-            raise InterAgentBudgetLedgerNotFoundError(f"Budget ledger `{budget_ledger_id}` was not found.")
+            raise InterAgentBudgetLedgerNotFoundError(
+                f"Budget ledger `{budget_ledger_id}` was not found in workspace `{workspace_id}`."
+            )
         return _budget_ledger_from_document(document)
 
     def reserve_budget(
@@ -339,7 +433,7 @@ class InterAgentDocumentStore:
         estimated_cost: Decimal | int | str = Decimal("0"),
         now: datetime | None = None,
     ) -> BudgetLedgerRecord:
-        policy = self.get_budget_policy(budget_policy_id)
+        policy = self.get_budget_policy(budget_policy_id, workspace_id=workspace_id)
         if policy.workspace_id != workspace_id:
             raise InterAgentValidationError("Budget policy workspace_id does not match the requested ledger workspace.")
         mutation = _BudgetReservationMutation(
@@ -384,16 +478,20 @@ class InterAgentDocumentStore:
 
     def save_retention_policy(self, record: EventRetentionPolicyRecord) -> EventRetentionPolicyRecord:
         self.collections.retention_policies.update_one(
-            {"retention_policy_id": record.retention_policy_id},
+            {"workspace_id": record.workspace_id, "retention_policy_id": record.retention_policy_id},
             {"$set": _to_document(record)},
             upsert=True,
         )
         return record
 
-    def get_retention_policy(self, retention_policy_id: str) -> EventRetentionPolicyRecord:
-        document = self.collections.retention_policies.find_one({"retention_policy_id": retention_policy_id})
+    def get_retention_policy(self, retention_policy_id: str, *, workspace_id: str) -> EventRetentionPolicyRecord:
+        document = self.collections.retention_policies.find_one(
+            {"workspace_id": workspace_id, "retention_policy_id": retention_policy_id}
+        )
         if document is None:
-            raise InterAgentEventNotFoundError(f"Retention policy `{retention_policy_id}` was not found.")
+            raise InterAgentEventNotFoundError(
+                f"Retention policy `{retention_policy_id}` was not found in workspace `{workspace_id}`."
+            )
         return _retention_policy_from_document(document)
 
     def append_event(
@@ -402,6 +500,8 @@ class InterAgentDocumentStore:
         *,
         retention_policy: EventRetentionPolicyRecord,
     ) -> InterAgentEventRecord:
+        if retention_policy.workspace_id != record.workspace_id:
+            raise InterAgentValidationError("Retention policy workspace_id does not match the event workspace_id.")
         stored_document = self.collections.events.append_event(
             validate_event_record(record),
             retention_policy=retention_policy,
@@ -412,16 +512,14 @@ class InterAgentDocumentStore:
         self,
         run_id: str,
         *,
-        workspace_id: str | None = None,
+        workspace_id: str,
         visibility_plane: InterAgentVisibilityPlane = "summary",
         after_event_id: str | None = None,
         before_event_id: str | None = None,
         limit: int = DEFAULT_INTER_AGENT_EVENT_LIMIT,
     ) -> InterAgentEventPage:
         bounded_limit = max(1, min(int(limit), MAX_INTER_AGENT_EVENT_LIMIT))
-        query: dict[str, Any] = {"run_id": run_id}
-        if workspace_id is not None:
-            query["workspace_id"] = workspace_id
+        query: dict[str, Any] = {"workspace_id": workspace_id, "run_id": run_id}
         page = self.collections.events.find_event_page(
             query,
             visibility_plane=validate_visibility_plane(visibility_plane),
@@ -429,6 +527,11 @@ class InterAgentDocumentStore:
             before_event_id=before_event_id,
             limit=bounded_limit,
         )
+        if (after_event_id or before_event_id) and not page.get("cursor_found", True):
+            cursor = after_event_id or before_event_id
+            raise InterAgentEventNotFoundError(
+                f"Inter-agent event cursor `{cursor}` was not found in run `{run_id}`."
+            )
         events = [_event_from_document(document) for document in page["documents"]]
         return InterAgentEventPage(
             events=events,
@@ -456,12 +559,18 @@ class InterAgentDocumentStore:
                 lambda item: _to_document(mutator(_budget_ledger_from_document(item))),
             )
             return _budget_ledger_from_document(document)
-        ledger = self.get_budget_ledger(budget_ledger_id)
+        ledger = self.get_budget_ledger(budget_ledger_id, workspace_id=workspace_id)
         if ledger.workspace_id != workspace_id:
             raise InterAgentValidationError("Budget ledger workspace_id does not match the requested workspace.")
         updated = mutator(ledger)
         self.save_budget_ledger(updated)
         return updated
+
+    def _workspace_lock(self, workspace_id: str):
+        lock_path = getattr(self.collections.runs, "workspace_lock_path", None)
+        if callable(lock_path):
+            return _locked_json_path(lock_path(workspace_id))
+        return self._lock
 
 
 class WorkspaceInterAgentJsonCollection:
@@ -547,10 +656,17 @@ class WorkspaceInterAgentJsonCollection:
         workspace_id = str(query.get("workspace_id") or "").strip()
         if workspace_id:
             return [self._record_path(workspace_id)]
-        return sorted((self.start_path / "workspaces").glob(f"*/runtime/inter_agent/{self.filename}"))
+        raise InterAgentValidationError(f"Inter-agent {self.filename} reads require workspace_id.")
 
     def _record_path(self, workspace_id: str) -> Path:
         return workspace_runtime_root(workspace_id=workspace_id, start_path=self.start_path) / "inter_agent" / self.filename
+
+    def workspace_lock_path(self, workspace_id: str) -> Path:
+        return (
+            workspace_runtime_root(workspace_id=workspace_id, start_path=self.start_path)
+            / "inter_agent"
+            / "workspace_lock.json"
+        )
 
 
 class InterAgentEventJsonCollection(WorkspaceInterAgentJsonCollection):
@@ -567,11 +683,17 @@ class InterAgentEventJsonCollection(WorkspaceInterAgentJsonCollection):
     ) -> dict[str, Any]:
         path = self._event_path(workspace_id=record.workspace_id, run_id=record.run_id)
         incoming = _to_document(record)
+        incoming["idempotency_fingerprint"] = _event_idempotency_fingerprint(incoming)
         with self._lock:
             with _locked_json_path(path):
                 documents = _read_documents(path)
                 existing = _find_existing_event(documents, incoming)
                 if existing is not None:
+                    _ensure_idempotency_fingerprint_matches(
+                        existing.get("idempotency_fingerprint") or _event_idempotency_fingerprint(existing),
+                        incoming["idempotency_fingerprint"],
+                        entity="inter-agent event",
+                    )
                     return deepcopy(existing)
                 next_sequence = _next_event_sequence(documents)
                 stored = {**incoming, "sequence": next_sequence}
@@ -647,15 +769,13 @@ class InterAgentEventJsonCollection(WorkspaceInterAgentJsonCollection):
         run_id = str(query.get("run_id") or "").strip()
         if workspace_id and run_id:
             return [self._event_path(workspace_id=workspace_id, run_id=run_id)]
-        if run_id:
-            return sorted((self.start_path / "workspaces").glob(f"*/runtime/inter_agent/runs/{run_id}/events.json"))
         if workspace_id:
             return sorted(
                 workspace_runtime_root(workspace_id=workspace_id, start_path=self.start_path).glob(
                     "inter_agent/runs/*/events.json"
                 )
             )
-        return sorted((self.start_path / "workspaces").glob("*/runtime/inter_agent/runs/*/events.json"))
+        raise InterAgentValidationError("Inter-agent event reads require workspace_id.")
 
     def _event_path(self, *, workspace_id: str, run_id: str) -> Path:
         return (
@@ -693,24 +813,31 @@ class _BudgetReservationMutation:
             raise InterAgentValidationError("Budget ledger workspace_id does not match the policy workspace_id.")
         reservations = dict(ledger.operation_reservations)
         existing_document = reservations.get(self.reservation.reservation_id)
+        incoming_fingerprint = _budget_reservation_fingerprint(self.reservation)
         if existing_document is not None:
             existing = budget_reservation_from_document(existing_document)
+            _ensure_idempotency_fingerprint_matches(
+                existing.fingerprint or _budget_reservation_fingerprint(existing),
+                incoming_fingerprint,
+                entity="budget reservation",
+            )
             if existing.status == "reserved":
                 return ledger
             return ledger
         _ensure_budget_allows_reservation(ledger, self.policy, self.reservation)
-        reservations[self.reservation.reservation_id] = budget_reservation_to_document(self.reservation)
+        reservation = replace(self.reservation, fingerprint=incoming_fingerprint)
+        reservations[self.reservation.reservation_id] = budget_reservation_to_document(reservation)
         return replace(
             ledger,
-            reserved_participants=ledger.reserved_participants + self.reservation.participant_slots,
-            running_participants=ledger.running_participants + self.reservation.running_participants,
-            turns_used=ledger.turns_used + self.reservation.turns,
-            tool_calls_used=ledger.tool_calls_used + self.reservation.tool_calls,
-            handoffs_used=ledger.handoffs_used + self.reservation.handoffs,
-            estimated_tokens_used=ledger.estimated_tokens_used + self.reservation.estimated_tokens,
-            estimated_cost_used=ledger.estimated_cost_used + self.reservation.estimated_cost,
+            reserved_participants=ledger.reserved_participants + reservation.participant_slots,
+            running_participants=ledger.running_participants + reservation.running_participants,
+            turns_used=ledger.turns_used + reservation.turns,
+            tool_calls_used=ledger.tool_calls_used + reservation.tool_calls,
+            handoffs_used=ledger.handoffs_used + reservation.handoffs,
+            estimated_tokens_used=ledger.estimated_tokens_used + reservation.estimated_tokens,
+            estimated_cost_used=ledger.estimated_cost_used + reservation.estimated_cost,
             operation_reservations=reservations,
-            updated_at=self.reservation.created_at,
+            updated_at=reservation.created_at,
         )
 
 
@@ -733,6 +860,11 @@ class _BudgetReleaseMutation:
             ledger,
             reserved_participants=max(0, ledger.reserved_participants - existing.participant_slots),
             running_participants=max(0, ledger.running_participants - existing.running_participants),
+            turns_used=max(0, ledger.turns_used - existing.turns),
+            tool_calls_used=max(0, ledger.tool_calls_used - existing.tool_calls),
+            handoffs_used=max(0, ledger.handoffs_used - existing.handoffs),
+            estimated_tokens_used=max(0, ledger.estimated_tokens_used - existing.estimated_tokens),
+            estimated_cost_used=max(Decimal("0"), ledger.estimated_cost_used - existing.estimated_cost),
             operation_reservations=reservations,
             updated_at=self.released_at,
         )
@@ -757,6 +889,52 @@ def _ensure_budget_allows_reservation(
         raise InterAgentBudgetExceededError("Budget reservation would exceed max_estimated_tokens.")
     if policy.max_estimated_cost and ledger.estimated_cost_used + reservation.estimated_cost > policy.max_estimated_cost:
         raise InterAgentBudgetExceededError("Budget reservation would exceed max_estimated_cost.")
+
+
+def _validate_run_create_bundle(bundle: InterAgentRunCreateBundle) -> None:
+    workspace_id = bundle.run.workspace_id
+    run_id = bundle.run.run_id
+    if bundle.budget_policy.workspace_id != workspace_id:
+        raise InterAgentValidationError("Run budget policy workspace_id does not match the run workspace_id.")
+    if bundle.budget_ledger.workspace_id != workspace_id or bundle.budget_ledger.run_id != run_id:
+        raise InterAgentValidationError("Run budget ledger scope does not match the run scope.")
+    if bundle.retention_policy.workspace_id != workspace_id:
+        raise InterAgentValidationError("Run retention policy workspace_id does not match the run workspace_id.")
+    for participant in bundle.participants:
+        if participant.workspace_id != workspace_id or participant.run_id != run_id:
+            raise InterAgentValidationError("Participant scope does not match the run scope.")
+    for edge in bundle.edges:
+        if edge.workspace_id != workspace_id or edge.run_id != run_id:
+            raise InterAgentValidationError("Edge scope does not match the run scope.")
+    for event in bundle.initial_events:
+        if event.workspace_id != workspace_id or event.run_id != run_id:
+            raise InterAgentValidationError("Initial event scope does not match the run scope.")
+
+
+def _ensure_spec_fingerprint_matches(existing: InterAgentRunRecord, incoming: InterAgentRunRecord) -> None:
+    if existing.spec_fingerprint and incoming.spec_fingerprint and existing.spec_fingerprint != incoming.spec_fingerprint:
+        raise InterAgentIdempotencyConflictError(
+            f"Inter-agent run idempotency key `{incoming.idempotency_key}` was reused with a different run spec."
+        )
+
+
+def _ensure_idempotency_fingerprint_matches(existing: str, incoming: str, *, entity: str) -> None:
+    if existing != incoming:
+        raise InterAgentIdempotencyConflictError(f"Idempotent {entity} retry payload does not match the original.")
+
+
+def _budget_reservation_fingerprint(reservation: BudgetReservation) -> str:
+    document = budget_reservation_to_document(reservation)
+    for key in ("status", "created_at", "released_at", "fingerprint"):
+        document.pop(key, None)
+    return _stable_fingerprint(document)
+
+
+def _event_idempotency_fingerprint(document: dict[str, Any]) -> str:
+    payload = dict(document)
+    for key in ("event_id", "sequence", "created_at", "idempotency_fingerprint"):
+        payload.pop(key, None)
+    return _stable_fingerprint(payload)
 
 
 def _find_existing_event(documents: list[dict[str, Any]], incoming: dict[str, Any]) -> dict[str, Any] | None:
@@ -807,11 +985,14 @@ def _event_sort_key(document: dict[str, Any]) -> tuple[int, str]:
 def _run_from_document(document: dict[str, Any]) -> InterAgentRunRecord:
     payload = dict(document)
     payload["visibility_level"] = validate_visibility_plane(payload.get("visibility_level", "summary"))
+    payload.setdefault("spec_fingerprint", None)
     return InterAgentRunRecord(**payload)
 
 
 def _participant_from_document(document: dict[str, Any]) -> InterAgentParticipantRecord:
-    return InterAgentParticipantRecord(**document)
+    payload = dict(document)
+    payload.setdefault("agent_snapshot", None)
+    return InterAgentParticipantRecord(**payload)
 
 
 def _edge_from_document(document: dict[str, Any]) -> InterAgentEdgeRecord:
@@ -852,6 +1033,7 @@ def _retention_policy_from_document(document: dict[str, Any]) -> EventRetentionP
 def _event_from_document(document: dict[str, Any]) -> InterAgentEventRecord:
     payload = dict(document)
     payload["visibility_plane"] = validate_visibility_plane(payload.get("visibility_plane", "summary"))
+    payload.setdefault("idempotency_fingerprint", None)
     return InterAgentEventRecord(**payload)
 
 
@@ -873,6 +1055,26 @@ def _to_decimal(value: Decimal | int | str | float) -> Decimal:
     if isinstance(value, Decimal):
         return value
     return Decimal(str(value))
+
+
+def _stable_fingerprint(payload: Any) -> str:
+    encoded = json.dumps(_canonical_fingerprint_value(payload), sort_keys=True, separators=(",", ":"))
+    return hashlib.sha256(encoded.encode("utf-8")).hexdigest()
+
+
+def _canonical_fingerprint_value(value: Any) -> Any:
+    if isinstance(value, Decimal):
+        return str(value)
+    if isinstance(value, datetime):
+        return value.isoformat()
+    if isinstance(value, dict):
+        return {
+            str(key): _canonical_fingerprint_value(item)
+            for key, item in sorted(value.items(), key=lambda item: str(item[0]))
+        }
+    if isinstance(value, list):
+        return [_canonical_fingerprint_value(item) for item in value]
+    return value
 
 
 def _non_negative_int(value: int, field_name: str) -> int:

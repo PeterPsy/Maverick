@@ -2,11 +2,15 @@ from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
+import multiprocessing
+from pathlib import Path
 from unittest.mock import patch
 import unittest
 
 from core.api.platform_state import bootstrap_platform_state
+from core.inter_agent.errors import InterAgentIdempotencyConflictError
 from core.inter_agent.models import (
+    AgentParticipantSnapshot,
     ApprovalRequestRecord,
     BudgetPolicySpec,
     InterAgentRunSpec,
@@ -17,40 +21,63 @@ from core.inter_agent.store import build_inter_agent_document_store
 from tests.support.repo import make_temp_repo_root
 
 
+def _run_spec(
+    *,
+    idempotency_key: str | None = None,
+    researcher_label: str = "Researcher",
+    researcher_snapshot: AgentParticipantSnapshot | None = None,
+) -> InterAgentRunSpec:
+    return InterAgentRunSpec(
+        workspace_id="default",
+        thread_id="thread-1",
+        root_runtime_session_id="root-session",
+        source_app_id="chat",
+        mode="manager_tools",
+        created_by_user_id="user-1",
+        participants=[
+            ParticipantSpec(
+                participant_id="orchestrator",
+                kind="orchestrator",
+                execution_mode="root_orchestrator",
+                label="Orchestrator",
+            ),
+            ParticipantSpec(
+                participant_id="researcher",
+                kind="agent",
+                execution_mode="child_runtime_session",
+                label=researcher_label,
+                agent_type_id="research-agent",
+                agent_snapshot=researcher_snapshot,
+            ),
+        ],
+        budget=BudgetPolicySpec(
+            max_participants=3,
+            max_concurrent_participants=2,
+            max_total_turns=6,
+            max_turns_per_participant=3,
+            max_tool_calls=2,
+            max_estimated_cost=Decimal("1.00"),
+        ),
+        idempotency_key=idempotency_key,
+    )
+
+
+def _create_run_worker(start_path: str, idempotency_key: str, queue) -> None:
+    store = build_inter_agent_document_store(start_path=Path(start_path))
+    service = InterAgentService(store)
+    try:
+        run = service.create_run(
+            _run_spec(idempotency_key=idempotency_key),
+            now=datetime(2026, 6, 16, 12, 0, tzinfo=UTC),
+        )
+        queue.put(("ok", run.run_id))
+    except Exception as exc:  # pragma: no cover - surfaced through the queue assertion.
+        queue.put(("error", type(exc).__name__, str(exc)))
+
+
 class InterAgentServiceTest(unittest.TestCase):
     def run_spec(self, *, idempotency_key: str | None = None) -> InterAgentRunSpec:
-        return InterAgentRunSpec(
-            workspace_id="default",
-            thread_id="thread-1",
-            root_runtime_session_id="root-session",
-            source_app_id="chat",
-            mode="manager_tools",
-            created_by_user_id="user-1",
-            participants=[
-                ParticipantSpec(
-                    participant_id="orchestrator",
-                    kind="orchestrator",
-                    execution_mode="root_orchestrator",
-                    label="Orchestrator",
-                ),
-                ParticipantSpec(
-                    participant_id="researcher",
-                    kind="agent",
-                    execution_mode="child_runtime_session",
-                    label="Researcher",
-                    agent_type_id="research-agent",
-                ),
-            ],
-            budget=BudgetPolicySpec(
-                max_participants=3,
-                max_concurrent_participants=2,
-                max_total_turns=6,
-                max_turns_per_participant=3,
-                max_tool_calls=2,
-                max_estimated_cost=Decimal("1.00"),
-            ),
-            idempotency_key=idempotency_key,
-        )
+        return _run_spec(idempotency_key=idempotency_key)
 
     def test_create_run_materializes_records_and_no_runtime_sessions(self) -> None:
         repo_root = make_temp_repo_root(self)
@@ -60,7 +87,7 @@ class InterAgentServiceTest(unittest.TestCase):
 
         run = service.create_run(self.run_spec(idempotency_key="create-run-1"), now=now)
         same_run = service.create_run(self.run_spec(idempotency_key="create-run-1"), now=now + timedelta(minutes=1))
-        participants = store.list_participants(run.run_id)
+        participants = store.list_participants(run.run_id, workspace_id="default")
         events = store.list_event_page(run.run_id, workspace_id="default", visibility_plane="debug", limit=20).events
         sessions_root = repo_root / "workspaces" / "default" / "runtime" / "sessions"
 
@@ -73,6 +100,77 @@ class InterAgentServiceTest(unittest.TestCase):
         self.assertEqual([event.sequence for event in events], list(range(1, len(events) + 1)))
         self.assertEqual(len([event for event in events if event.event_type == "inter_agent.run.started"]), 1)
         self.assertFalse(sessions_root.exists())
+
+    def test_participant_ids_are_scoped_to_run(self) -> None:
+        repo_root = make_temp_repo_root(self)
+        store = build_inter_agent_document_store(start_path=repo_root)
+        service = InterAgentService(store)
+
+        first = service.create_run(self.run_spec(idempotency_key="run-a"))
+        second = service.create_run(self.run_spec(idempotency_key="run-b"))
+
+        self.assertEqual(
+            [participant.participant_id for participant in store.list_participants(first.run_id, workspace_id="default")],
+            ["orchestrator", "researcher"],
+        )
+        self.assertEqual(
+            [participant.participant_id for participant in store.list_participants(second.run_id, workspace_id="default")],
+            ["orchestrator", "researcher"],
+        )
+
+    def test_create_run_rejects_idempotency_key_with_different_spec(self) -> None:
+        repo_root = make_temp_repo_root(self)
+        store = build_inter_agent_document_store(start_path=repo_root)
+        service = InterAgentService(store)
+
+        service.create_run(_run_spec(idempotency_key="same-key"))
+
+        with self.assertRaises(InterAgentIdempotencyConflictError):
+            service.create_run(_run_spec(idempotency_key="same-key", researcher_label="Different Researcher"))
+
+    def test_concurrent_create_run_idempotency_materializes_once(self) -> None:
+        repo_root = make_temp_repo_root(self)
+        context = multiprocessing.get_context("fork")
+        queue = context.Queue()
+        processes = [
+            context.Process(target=_create_run_worker, args=(str(repo_root), "concurrent-run", queue))
+            for _ in range(8)
+        ]
+        for process in processes:
+            process.start()
+        for process in processes:
+            process.join(timeout=10)
+        results = [queue.get(timeout=1) for _ in processes]
+        store = build_inter_agent_document_store(start_path=repo_root)
+        runs = store.list_runs("default")
+
+        self.assertTrue(all(process.exitcode == 0 for process in processes))
+        self.assertTrue(all(result[0] == "ok" for result in results), results)
+        self.assertEqual(len({result[1] for result in results}), 1)
+        self.assertEqual(len(runs), 1)
+        self.assertEqual(len(store.list_participants(runs[0].run_id, workspace_id="default")), 2)
+
+    def test_agent_snapshot_is_copied_into_participant_record(self) -> None:
+        repo_root = make_temp_repo_root(self)
+        store = build_inter_agent_document_store(start_path=repo_root)
+        service = InterAgentService(store)
+        snapshot = AgentParticipantSnapshot(
+            agent_type_id="research-agent",
+            label="Researcher",
+            system_prompt="Research from the supplied sources only.",
+            skill_ids=["storage", "memory"],
+            skill_catalog_app_id="skills",
+            provider_id="codex",
+            revision_id="r1",
+        )
+
+        run = service.create_run(_run_spec(idempotency_key="snapshot-run", researcher_snapshot=snapshot))
+        researcher = store.get_participant("researcher", workspace_id="default", run_id=run.run_id)
+
+        self.assertEqual(researcher.agent_snapshot_digest, snapshot.digest())
+        self.assertIsNotNone(researcher.agent_snapshot)
+        self.assertEqual(researcher.agent_snapshot["system_prompt"], "Research from the supplied sources only.")
+        self.assertEqual(researcher.agent_snapshot["digest"], snapshot.digest())
 
     def test_budget_service_records_idempotent_budget_events(self) -> None:
         repo_root = make_temp_repo_root(self)
@@ -132,7 +230,7 @@ class InterAgentServiceTest(unittest.TestCase):
         store.save_approval(approval)
 
         expired = service.expire_pending_approvals(run, now=now)
-        stored = store.get_approval("approval-1")
+        stored = store.get_approval("approval-1", workspace_id="default")
 
         self.assertEqual([item.approval_id for item in expired], ["approval-1"])
         self.assertEqual(stored.status, "expired")

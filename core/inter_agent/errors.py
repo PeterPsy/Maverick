@@ -11,6 +11,10 @@ class InterAgentValidationError(InterAgentError, ValueError):
     """Raised when an inter-agent specification violates core invariants."""
 
 
+class InterAgentIdempotencyConflictError(InterAgentValidationError):
+    """Raised when an idempotent retry reuses a key with a different payload."""
+
+
 class InterAgentRunNotFoundError(InterAgentError, LookupError):
     """Raised when an inter-agent run cannot be found."""
 

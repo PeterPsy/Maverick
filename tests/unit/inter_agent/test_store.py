@@ -6,7 +6,11 @@ import multiprocessing
 import unittest
 from pathlib import Path
 
-from core.inter_agent.errors import InterAgentBudgetExceededError
+from core.inter_agent.errors import (
+    InterAgentBudgetExceededError,
+    InterAgentEventNotFoundError,
+    InterAgentIdempotencyConflictError,
+)
 from core.inter_agent.events import EventRetentionPolicyRecord, InterAgentEventRecord
 from core.inter_agent.models import BudgetPolicySpec, budget_policy_from_spec, empty_budget_ledger
 from core.inter_agent.store import build_inter_agent_document_store
@@ -16,13 +20,16 @@ from tests.support.repo import make_temp_repo_root
 def _event(
     index: int,
     *,
+    workspace_id: str = "default",
+    run_id: str = "run-1",
     visibility_plane: str = "summary",
     idempotency_key: str | None = None,
+    payload: dict[str, object] | None = None,
 ) -> InterAgentEventRecord:
     return InterAgentEventRecord(
         event_id=f"event-{index}",
-        workspace_id="default",
-        run_id="run-1",
+        workspace_id=workspace_id,
+        run_id=run_id,
         thread_id="thread-1",
         root_runtime_session_id="root-session",
         participant_id="orchestrator",
@@ -34,20 +41,21 @@ def _event(
         sequence=0,
         correlation_id=f"corr-{index}",
         idempotency_key=idempotency_key,
-        payload={"index": index},
+        payload=dict(payload or {"index": index}),
         created_at=datetime(2026, 6, 16, 12, index % 60, tzinfo=UTC),
     )
 
 
 def _retention(
     *,
+    workspace_id: str = "default",
     summary_max_events: int = 100,
     detail_max_events: int = 100,
     debug_max_events: int = 100,
 ) -> EventRetentionPolicyRecord:
     return EventRetentionPolicyRecord(
         retention_policy_id="retention-1",
-        workspace_id="default",
+        workspace_id=workspace_id,
         summary_max_events=summary_max_events,
         detail_max_events=detail_max_events,
         debug_max_events=debug_max_events,
@@ -86,7 +94,7 @@ class InterAgentStoreTest(unittest.TestCase):
         retention = _retention()
 
         first = store.append_event(_event(1, idempotency_key="same"), retention_policy=retention)
-        second = store.append_event(_event(2, idempotency_key="same"), retention_policy=retention)
+        second = store.append_event(_event(1, idempotency_key="same"), retention_policy=retention)
         third = store.append_event(_event(3), retention_policy=retention)
         page = store.list_event_page("run-1", workspace_id="default", visibility_plane="debug")
 
@@ -94,6 +102,19 @@ class InterAgentStoreTest(unittest.TestCase):
         self.assertEqual(first.sequence, 1)
         self.assertEqual(third.sequence, 2)
         self.assertEqual([event.event_id for event in page.events], ["event-1", "event-3"])
+
+    def test_event_idempotency_rejects_same_key_with_different_payload(self) -> None:
+        repo_root = make_temp_repo_root(self)
+        store = build_inter_agent_document_store(start_path=repo_root)
+        retention = _retention()
+
+        store.append_event(_event(1, idempotency_key="same"), retention_policy=retention)
+
+        with self.assertRaises(InterAgentIdempotencyConflictError):
+            store.append_event(
+                _event(2, idempotency_key="same", payload={"index": 999}),
+                retention_policy=retention,
+            )
 
     def test_event_paging_uses_visibility_hierarchy_and_cursors(self) -> None:
         repo_root = make_temp_repo_root(self)
@@ -128,6 +149,25 @@ class InterAgentStoreTest(unittest.TestCase):
         self.assertEqual([event.event_id for event in after_page.events], ["event-3", "event-4"])
         self.assertEqual([event.event_id for event in before_page.events], ["event-2", "event-3"])
         self.assertTrue(before_page.has_more_before)
+
+    def test_event_paging_requires_workspace_and_rejects_missing_cursor(self) -> None:
+        repo_root = make_temp_repo_root(self)
+        store = build_inter_agent_document_store(start_path=repo_root)
+        store.append_event(_event(1, workspace_id="default"), retention_policy=_retention(workspace_id="default"))
+        store.append_event(_event(2, workspace_id="beta"), retention_policy=_retention(workspace_id="beta"))
+
+        default_page = store.list_event_page("run-1", workspace_id="default", visibility_plane="debug")
+        beta_page = store.list_event_page("run-1", workspace_id="beta", visibility_plane="debug")
+
+        self.assertEqual([event.event_id for event in default_page.events], ["event-1"])
+        self.assertEqual([event.event_id for event in beta_page.events], ["event-2"])
+        with self.assertRaises(InterAgentEventNotFoundError):
+            store.list_event_page(
+                "run-1",
+                workspace_id="default",
+                visibility_plane="debug",
+                after_event_id="missing",
+            )
 
     def test_retention_is_applied_per_visibility_plane(self) -> None:
         repo_root = make_temp_repo_root(self)
@@ -210,6 +250,19 @@ class InterAgentStoreTest(unittest.TestCase):
             estimated_cost=Decimal("0.50"),
             now=now,
         )
+        with self.assertRaises(InterAgentIdempotencyConflictError):
+            store.reserve_budget(
+                workspace_id="default",
+                budget_ledger_id="ledger-1",
+                budget_policy_id="policy-1",
+                reservation_id="reservation-1",
+                participant_slots=1,
+                running_participants=1,
+                turns=2,
+                tool_calls=1,
+                estimated_cost=Decimal("0.50"),
+                now=now,
+            )
         released = store.release_budget(
             workspace_id="default",
             budget_ledger_id="ledger-1",
@@ -228,6 +281,9 @@ class InterAgentStoreTest(unittest.TestCase):
         self.assertEqual(second.turns_used, 1)
         self.assertEqual(released.reserved_participants, 0)
         self.assertEqual(released.running_participants, 0)
+        self.assertEqual(released.turns_used, 0)
+        self.assertEqual(released.tool_calls_used, 0)
+        self.assertEqual(released.estimated_cost_used, Decimal("0"))
         self.assertEqual(released_again.reserved_participants, 0)
 
     def test_concurrent_budget_reservations_are_atomically_limited(self) -> None:
@@ -266,7 +322,7 @@ class InterAgentStoreTest(unittest.TestCase):
         for process in processes:
             process.join(timeout=10)
         results = [queue.get(timeout=1) for _ in processes]
-        ledger = store.get_budget_ledger("ledger-1")
+        ledger = store.get_budget_ledger("ledger-1", workspace_id="default")
 
         self.assertTrue(all(process.exitcode == 0 for process in processes))
         self.assertEqual(results.count("reserved"), 4)

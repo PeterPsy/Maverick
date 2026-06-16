@@ -6,7 +6,7 @@ Workspace chat app that talks to the selected Maverick runtime provider.
 
 - Frontend, backend, CLI, and MCP entrypoints are declared in `app_contract.json`.
 - Chat's CLI and MCP inspect metadata lives in `cli/command_schemas.json` and `mcp/tool_schemas.json`; the no-argument CLI call and the `chat_operations_manifest` MCP tool return the compact `operations.manifest`.
-- The contract declares the bundled `chat-ops` skill plus the `chat-sidebar`, `chat-sidebar-footer`, `chat-floating`, `chat-floating-dock`, and Fleet-hosted `chat-runtime-text` widgets.
+- The contract declares the bundled `chat-ops` skill plus the `chat-sidebar`, `chat-sidebar-footer`, `chat-floating`, `chat-floating-dock`, and read-only `chat-runtime-text` widgets. `chat-runtime-text` is a Chat-owned preview widget and is not evidence that a Fleet app is installed.
 - Runtime threads, message sends, and turn interrupts are core-owned runtime operations. Chat does not expose placeholder MCP tools for those operations; the Chat app persists projects and view-filter UI state under `data/chat/state.json`.
 - Chat references are project-owned; thread list, mutation, deletion, and runtime cleanup go through core runtime APIs.
 - New runtime-thread titles are core-owned asynchronous metadata. When the first accepted user message is queued, the thread title is marked pending and Chat renders a skeleton title while the turn starts normally. A core background micro-task asks the configured Codex model for a concrete 4-8 word title from the first user message, attachments, and app-reference labels; if the model is unavailable or returns an invalid title, the core applies a deterministic fallback so the skeleton is not left pending. Non-pending titles, including user-renamed titles, are preserved.
@@ -25,7 +25,7 @@ Workspace chat app that talks to the selected Maverick runtime provider.
 - The base shell can move the selected floating chat into its fixed right dock through the generic `maverick.widget.dock.open` message. The dock mounts `chat-floating-dock` in the `shell.dock.right` slot, renders one chat frame, and writes the selected chat back as a collapsed overlay window when the dock closes. On mobile, base-shell hides the bottom-right overlay launcher and mounts the same `chat-floating-dock` widget in `shell.overlay.mobile.fullscreen` from the header Chat app icon, rendering one contextual chat below the persistent base-shell header instead of the desktop floating stack.
 - `chat-sidebar` owns only the shell sidebar's central chat/project list; `chat-sidebar-footer` owns the fixed shell footer action for starting a new chat.
 - HTTP runtime event and thread reads are not used as frontend bootstrap or realtime fallbacks.
-- The Fleet runtime text widget is read-only and renders compact transcript text for one `runtime_session_id`; it uses the same runtime-session websocket path as the full Chat app and does not create sessions or submit turns.
+- The runtime text widget is read-only and renders compact transcript text for one `runtime_session_id`; it uses the same runtime-session websocket path as the full Chat app and does not create sessions or submit turns.
 - Persisted `view_surfaces` cover runtime-thread/project browse filters and curated transcript selections; the widgets remain first-class embedded shell surfaces.
 
 ## SDK Flow

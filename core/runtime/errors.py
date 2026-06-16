@@ -27,5 +27,9 @@ class RuntimeThreadNotFoundError(RuntimeDomainError):
     """Raised when one core-owned runtime thread record is missing."""
 
 
+class RuntimeSessionHiddenError(RuntimeDomainError):
+    """Raised when a hidden runtime session is used as a user-visible thread."""
+
+
 class RuntimeTransitionError(RuntimeDomainError):
     """Raised when one runtime lifecycle transition is invalid."""

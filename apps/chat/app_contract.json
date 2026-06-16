@@ -228,7 +228,7 @@
     },
     {
       "widget_id": "chat-runtime-text",
-      "host": "fleet",
+      "host": "chat",
       "content_kinds": [
         "chat.runtime.text.preview"
       ],

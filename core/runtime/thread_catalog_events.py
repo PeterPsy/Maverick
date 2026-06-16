@@ -16,6 +16,7 @@ from core.runtime.runtime_threads import (
     update_runtime_thread_availability,
 )
 from core.runtime.errors import RuntimeSessionNotFoundError
+from core.runtime.runtime_session import runtime_session_allows_user_thread
 from core.runtime.thread_titles import DEFAULT_THREAD_TITLE
 
 if TYPE_CHECKING:
@@ -175,6 +176,8 @@ def _ensure_thread_for_runtime_session(
     except RuntimeSessionNotFoundError:
         return None
     if session.workspace_id != workspace_id:
+        return None
+    if not runtime_session_allows_user_thread(session):
         return None
     pending_hash = title_generation_input_hash.strip()
     return create_runtime_thread(

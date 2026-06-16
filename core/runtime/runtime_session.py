@@ -13,6 +13,11 @@ RuntimeSessionStatus = Literal["created", "running", "stopping", "stopped", "fai
 RuntimeApiTokenStatus = Literal["active", "revoked"]
 RuntimeSessionGrantOperation = Literal["cleanup", "interrupt", "restart"]
 RuntimeSessionGrantPrincipalKind = Literal["user", "app", "runtime_session"]
+RuntimeSessionKind = Literal["chat_root", "inter_agent_participant", "system"]
+RuntimeThreadVisibility = Literal["user", "hidden"]
+
+RUNTIME_SESSION_KINDS = {"chat_root", "inter_agent_participant", "system"}
+RUNTIME_THREAD_VISIBILITIES = {"user", "hidden"}
 
 
 @dataclass(frozen=True)
@@ -43,6 +48,8 @@ class RuntimeSessionRecord:
     updated_at: datetime
     ended_at: datetime | None
     last_progress_at: datetime | None
+    session_kind: RuntimeSessionKind = "chat_root"
+    thread_visibility: RuntimeThreadVisibility = "user"
     system_prompt: str | None = None
     skill_ids: list[str] = field(default_factory=list)
     skill_catalog_app_id: str | None = None
@@ -67,3 +74,32 @@ class RuntimeApiTokenRecord:
     issued_at: datetime
     expires_at: datetime
     revoked_at: datetime | None = None
+
+
+def coerce_runtime_session_kind(value: object | None) -> RuntimeSessionKind:
+    """Return a supported runtime session kind, defaulting only for omitted legacy data."""
+    if value is None or value == "":
+        return "chat_root"
+    normalized = str(value).strip()
+    if normalized in RUNTIME_SESSION_KINDS:
+        return normalized  # type: ignore[return-value]
+    raise ValueError(f"Unsupported runtime session kind `{normalized}`.")
+
+
+def coerce_runtime_thread_visibility(value: object | None) -> RuntimeThreadVisibility:
+    """Return a supported runtime thread visibility, defaulting only for omitted legacy data."""
+    if value is None or value == "":
+        return "user"
+    normalized = str(value).strip()
+    if normalized in RUNTIME_THREAD_VISIBILITIES:
+        return normalized  # type: ignore[return-value]
+    raise ValueError(f"Unsupported runtime thread visibility `{normalized}`.")
+
+
+def runtime_session_allows_user_thread(session: RuntimeSessionRecord) -> bool:
+    """Return whether this runtime session may be represented by a user-visible thread."""
+    try:
+        visibility = coerce_runtime_thread_visibility(getattr(session, "thread_visibility", "user"))
+    except ValueError:
+        visibility = "user"
+    return visibility == "user"

@@ -8,14 +8,15 @@ REPO_ROOT = Path(__file__).resolve().parents[3]
 
 
 class ChatWidgetHostingTests(unittest.TestCase):
-    def test_chat_declares_fleet_runtime_text_widget(self) -> None:
+    def test_chat_declares_runtime_text_widget_without_fleet_host(self) -> None:
         contract_source = (REPO_ROOT / "apps/chat/app_contract.json").read_text()
         vite_source = (REPO_ROOT / "apps/chat/vite.config.ts").read_text()
         widget_source = (REPO_ROOT / "apps/chat/frontend/src/widgets/runtime-text/main.tsx").read_text()
         widget_styles = (REPO_ROOT / "apps/chat/frontend/src/widgets/runtime-text/styles.css").read_text()
 
         self.assertIn('"widget_id": "chat-runtime-text"', contract_source)
-        self.assertIn('"host": "fleet"', contract_source)
+        self.assertIn('"host": "chat"', contract_source)
+        self.assertNotIn('"host": "fleet"', contract_source)
         self.assertIn('"chat.runtime.text.preview"', contract_source)
         self.assertIn('"widgets/runtime-text/index": "frontend/widgets/runtime-text/index.html"', vite_source)
         self.assertIn("useRuntimeEvents", widget_source)

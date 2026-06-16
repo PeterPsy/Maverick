@@ -9,7 +9,14 @@ from typing import TYPE_CHECKING
 from core.observability.service import append_platform_log, record_platform_audit, record_platform_event
 from core.runtime.errors import RuntimeTransitionError
 from core.runtime.routing import build_runtime_routing
-from core.runtime.runtime_session import RuntimeSessionGrantRecord, RuntimeSessionRecord
+from core.runtime.runtime_session import (
+    RuntimeSessionGrantRecord,
+    RuntimeSessionRecord,
+    RuntimeSessionKind,
+    RuntimeThreadVisibility,
+    coerce_runtime_session_kind,
+    coerce_runtime_thread_visibility,
+)
 from core.runtime.runtime_state import RuntimeStateRecord
 from core.runtime.store import RuntimeStore
 from core.workspaces.models import WorkspaceGovernanceRecord
@@ -44,6 +51,8 @@ def create_runtime_session(
     owner_user_id: str | None = None,
     created_by_user_id: str | None = None,
     creator_runtime_session_id: str | None = None,
+    session_kind: RuntimeSessionKind | str | None = None,
+    thread_visibility: RuntimeThreadVisibility | str | None = None,
     grants: list[RuntimeSessionGrantRecord | dict[str, str | None]] | None = None,
     governance: WorkspaceGovernanceRecord | None = None,
     platform_allows_full_access: bool = False,
@@ -76,6 +85,8 @@ def create_runtime_session(
         updated_at=timestamp,
         ended_at=None,
         last_progress_at=None,
+        session_kind=coerce_runtime_session_kind(session_kind),
+        thread_visibility=coerce_runtime_thread_visibility(thread_visibility),
         system_prompt=system_prompt.strip() if isinstance(system_prompt, str) and system_prompt.strip() else None,
         skill_ids=[str(skill_id).strip() for skill_id in (skill_ids or []) if str(skill_id).strip()],
         skill_catalog_app_id=skill_catalog_app_id.strip() if isinstance(skill_catalog_app_id, str) and skill_catalog_app_id.strip() else None,
@@ -106,6 +117,8 @@ def create_runtime_session(
             "agent_id": agent_id,
             "requested_mode": routing.requested_mode,
             "effective_mode": routing.effective_mode,
+            "session_kind": session.session_kind,
+            "thread_visibility": session.thread_visibility,
         }
         record_platform_event(
             observability_store,
@@ -201,6 +214,8 @@ def create_child_runtime_session(
         updated_at=timestamp,
         ended_at=None,
         last_progress_at=None,
+        session_kind="inter_agent_participant",
+        thread_visibility="hidden",
         system_prompt=parent.system_prompt,
         skill_ids=list(parent.skill_ids),
         skill_catalog_app_id=parent.skill_catalog_app_id,

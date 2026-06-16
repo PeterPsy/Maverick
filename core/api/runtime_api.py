@@ -18,7 +18,7 @@ from core.authorization.errors import AuthorizationError
 from core.authorization.service import authorize_runtime_session_create, require_runtime_session_operation
 from core.providers.errors import ProviderError
 from core.providers.service import resolve_provider_for_runtime_session
-from core.runtime.errors import RuntimeSessionNotFoundError, RuntimeThreadNotFoundError, RuntimeTurnNotFoundError
+from core.runtime.errors import RuntimeSessionHiddenError, RuntimeSessionNotFoundError, RuntimeThreadNotFoundError, RuntimeTurnNotFoundError
 from core.runtime.runtime_threads import (
     clear_runtime_threads_complete,
     create_runtime_thread,
@@ -40,7 +40,7 @@ from core.runtime.service import (
     transition_runtime_turn,
 )
 from core.runtime.runtime_events import RuntimeEventRecord
-from core.runtime.runtime_session import RuntimeSessionRecord
+from core.runtime.runtime_session import RuntimeSessionRecord, runtime_session_allows_user_thread
 from core.runtime.runtime_turns import RuntimeTurnRecord
 from core.runtime.turn_submission import (
     interrupt_runtime_provider_turn,
@@ -122,6 +122,29 @@ def _resolved_provider_id(state: PlatformState, session: RuntimeSessionRecord) -
     except ProviderError:
         return None
     return provider.provider_id
+
+
+def _hidden_runtime_session_response(start_response: StartResponse, session: RuntimeSessionRecord) -> list[bytes]:
+    return json_response(
+        start_response,
+        {
+            "error": "runtime_session_hidden",
+            "runtime_session_id": session.session_id,
+            "thread_visibility": session.thread_visibility,
+        },
+        status="409 Conflict",
+    )
+
+
+def _thread_references_hidden_session(state: PlatformState, thread) -> bool:
+    runtime_session_id = str(getattr(thread, "runtime_session_id", "") or "").strip()
+    if not runtime_session_id:
+        return False
+    try:
+        session = state.runtime_store.get_session(runtime_session_id)
+    except RuntimeSessionNotFoundError:
+        return False
+    return not runtime_session_allows_user_thread(session)
 
 
 def _provider_unavailable_response(state: PlatformState, workspace_id: str, error: Exception) -> dict[str, object]:
@@ -235,6 +258,8 @@ def _handle_thread_collection(state: PlatformState, context: RequestSession, met
         return json_response(start_response, {"error": "runtime_session_not_found"}, status="404 Not Found")
     if session.workspace_id != context.workspace_id:
         return json_response(start_response, {"error": "runtime_session_not_found"}, status="404 Not Found")
+    if not runtime_session_allows_user_thread(session):
+        return _hidden_runtime_session_response(start_response, session)
     existing = None
     try:
         existing = state.runtime_store.get_thread(session.session_id)
@@ -247,21 +272,24 @@ def _handle_thread_collection(state: PlatformState, context: RequestSession, met
     elif existing is None:
         requested_title = DEFAULT_THREAD_TITLE
         title_source = "placeholder"
-    thread = create_runtime_thread(
-        state.runtime_store,
-        workspace_id=context.workspace_id,
-        thread_id=session.session_id,
-        runtime_session_id=session.session_id,
-        title=requested_title,
-        title_source=title_source,
-        agent_label=str(body.get("agent_label") or "").strip() or session.agent_id,
-        agent_type_id=str(body.get("agent_type_id") or "").strip(),
-        agent_role_id=str(body.get("agent_role_id") or "").strip(),
-        source_app_id=str(body.get("source_app_id") or "").strip() or session.source_app_id or session.agent_id,
-        system_prompt=str(body.get("system_prompt") or "").strip() or session.system_prompt or "",
-        project_id=str(body.get("project_id") or "").strip() or None,
-        now=session.started_at or session.updated_at,
-    )
+    try:
+        thread = create_runtime_thread(
+            state.runtime_store,
+            workspace_id=context.workspace_id,
+            thread_id=session.session_id,
+            runtime_session_id=session.session_id,
+            title=requested_title,
+            title_source=title_source,
+            agent_label=str(body.get("agent_label") or "").strip() or session.agent_id,
+            agent_type_id=str(body.get("agent_type_id") or "").strip(),
+            agent_role_id=str(body.get("agent_role_id") or "").strip(),
+            source_app_id=str(body.get("source_app_id") or "").strip() or session.source_app_id or session.agent_id,
+            system_prompt=str(body.get("system_prompt") or "").strip() or session.system_prompt or "",
+            project_id=str(body.get("project_id") or "").strip() or None,
+            now=session.started_at or session.updated_at,
+        )
+    except RuntimeSessionHiddenError:
+        return _hidden_runtime_session_response(start_response, session)
     _publish_thread_change(state, workspace_id=context.workspace_id, action="updated" if existing else "created", thread=thread)
     return json_response(
         start_response,
@@ -310,6 +338,8 @@ def _handle_thread_item(
             return json_response(start_response, {"error": "runtime_thread_not_found"}, status="404 Not Found")
         if session.workspace_id != context.workspace_id:
             return json_response(start_response, {"error": "runtime_thread_not_found"}, status="404 Not Found")
+        if not runtime_session_allows_user_thread(session):
+            return _hidden_runtime_session_response(start_response, session)
         thread = create_runtime_thread(
             state.runtime_store,
             workspace_id=context.workspace_id,
@@ -325,18 +355,28 @@ def _handle_thread_item(
         _publish_thread_change(state, workspace_id=context.workspace_id, action="created", thread=thread)
     if thread.workspace_id != context.workspace_id:
         return json_response(start_response, {"error": "runtime_thread_not_found"}, status="404 Not Found")
+    if _thread_references_hidden_session(state, thread):
+        return json_response(start_response, {"error": "runtime_thread_not_found"}, status="404 Not Found")
     if method == "GET":
         return json_response(
             start_response,
             {"thread": thread_payload(thread, viewer_user_id=context.user.user_id), **_threads_payload(state, workspace_id=context.workspace_id, viewer_user_id=context.user.user_id)},
         )
     if method == "PATCH":
-        updated = update_runtime_thread(
-            state.runtime_store,
-            thread_id=thread_id,
-            workspace_id=context.workspace_id,
-            updates=body,
-        )
+        try:
+            updated = update_runtime_thread(
+                state.runtime_store,
+                thread_id=thread_id,
+                workspace_id=context.workspace_id,
+                updates=body,
+            )
+        except RuntimeSessionHiddenError:
+            runtime_session_id = str(body.get("runtime_session_id") or "").strip()
+            try:
+                session = state.runtime_store.get_session(runtime_session_id)
+            except RuntimeSessionNotFoundError:
+                return json_response(start_response, {"error": "runtime_thread_not_found"}, status="404 Not Found")
+            return _hidden_runtime_session_response(start_response, session)
         if updated is None:
             return json_response(start_response, {"error": "runtime_thread_not_found"}, status="404 Not Found")
         _publish_thread_change(state, workspace_id=context.workspace_id, action="updated", thread=updated)
@@ -404,6 +444,8 @@ def _handle_thread_read(
             return json_response(start_response, {"error": "runtime_thread_not_found"}, status="404 Not Found")
         if session.workspace_id != context.workspace_id:
             return json_response(start_response, {"error": "runtime_thread_not_found"}, status="404 Not Found")
+        if not runtime_session_allows_user_thread(session):
+            return _hidden_runtime_session_response(start_response, session)
         thread = create_runtime_thread(
             state.runtime_store,
             workspace_id=context.workspace_id,
@@ -418,6 +460,8 @@ def _handle_thread_read(
         )
         _publish_thread_change(state, workspace_id=context.workspace_id, action="created", thread=thread)
     if thread.workspace_id != context.workspace_id:
+        return json_response(start_response, {"error": "runtime_thread_not_found"}, status="404 Not Found")
+    if _thread_references_hidden_session(state, thread):
         return json_response(start_response, {"error": "runtime_thread_not_found"}, status="404 Not Found")
     updated = mark_runtime_thread_completed_response_read(
         state.runtime_store,
@@ -593,13 +637,14 @@ def _submit_runtime_turn_response(
             title_generation_input_hash=title_generation_input_hash,
             now=queued_turn.created_at,
         )
-        schedule_runtime_thread_title_generation(
-            state,
-            thread=thread,
-            input_text=input_text,
-            attachments=attachment_items,
-            app_references=app_reference_items,
-        )
+        if thread is not None:
+            schedule_runtime_thread_title_generation(
+                state,
+                thread=thread,
+                input_text=input_text,
+                attachments=attachment_items,
+                app_references=app_reference_items,
+            )
         dispatch_source_app_runtime_event(
             state,
             session=session,

@@ -8,7 +8,8 @@ from datetime import UTC, datetime
 from typing import Callable
 from uuid import uuid4
 
-from core.runtime.runtime_session import RuntimeSessionRecord
+from core.runtime.errors import RuntimeSessionHiddenError, RuntimeSessionNotFoundError
+from core.runtime.runtime_session import RuntimeSessionRecord, runtime_session_allows_user_thread
 from core.runtime.runtime_thread import RuntimeThreadRecord
 from core.runtime.runtime_turns import RuntimeTurnRecord
 from core.runtime.store import RuntimeStore
@@ -50,7 +51,11 @@ def thread_recency_key(thread: RuntimeThreadRecord) -> tuple[bool, datetime, dat
 
 
 def list_runtime_threads(store: RuntimeStore, *, workspace_id: str) -> list[RuntimeThreadRecord]:
-    stored_threads = store.list_threads(workspace_id)
+    stored_threads = _user_visible_runtime_threads(
+        store,
+        workspace_id=workspace_id,
+        threads=store.list_threads(workspace_id),
+    )
     facts_by_session_id = _turn_facts_by_session_id(store, stored_threads)
     threads = [
         _reconcile_runtime_thread_with_facts(
@@ -74,11 +79,15 @@ def ensure_runtime_threads_for_sessions(
     workspace_id: str,
     sessions: list[RuntimeSessionRecord],
 ) -> list[RuntimeThreadRecord]:
-    """Ensure every runtime session in a workspace has exactly one thread."""
+    """Ensure every user-visible runtime session in a workspace has one thread."""
     threads = store.list_threads(workspace_id)
     by_session_id = {thread.runtime_session_id: thread for thread in threads if thread.runtime_session_id}
     for session in sessions:
-        if session.workspace_id != workspace_id or session.session_id in by_session_id:
+        if (
+            session.workspace_id != workspace_id
+            or session.session_id in by_session_id
+            or not runtime_session_allows_user_thread(session)
+        ):
             continue
         thread = create_runtime_thread(
             store,
@@ -117,6 +126,7 @@ def create_runtime_thread(
     normalized_session_id = runtime_session_id.strip()
     if not normalized_session_id:
         raise ValueError("runtime_session_id is required")
+    _raise_if_runtime_session_hidden(store, runtime_session_id=normalized_session_id)
     timestamp = now or utcnow()
     existing = find_runtime_thread_by_session(store, workspace_id=workspace_id, runtime_session_id=normalized_session_id)
     if existing is not None:
@@ -233,6 +243,8 @@ def find_runtime_thread_by_session(
     normalized_session_id = runtime_session_id.strip()
     if not normalized_session_id:
         return None
+    if _runtime_session_is_hidden(store, runtime_session_id=normalized_session_id):
+        return None
     for thread in store.list_threads(workspace_id):
         if thread.runtime_session_id == normalized_session_id:
             return thread
@@ -270,6 +282,8 @@ def update_runtime_thread(
         if key not in updates:
             continue
         value = str(updates.get(key) or "").strip()
+        if key == "runtime_session_id" and value:
+            _raise_if_runtime_session_hidden(store, runtime_session_id=value)
         patch[key] = value[:limit] if limit else value
     if "project_id" in updates:
         project_id = str(updates.get("project_id") or "").strip()
@@ -336,6 +350,41 @@ def _turn_facts_by_session_id(store: RuntimeStore, threads: list[RuntimeThreadRe
     for session_id in {thread.runtime_session_id for thread in threads if thread.runtime_session_id}:
         facts_by_session_id[session_id] = _turn_facts_for_session(store.list_turns(session_id))
     return facts_by_session_id
+
+
+def _user_visible_runtime_threads(
+    store: RuntimeStore,
+    *,
+    workspace_id: str,
+    threads: list[RuntimeThreadRecord],
+) -> list[RuntimeThreadRecord]:
+    hidden_session_ids = {
+        session.session_id
+        for session in store.list_sessions(workspace_id)
+        if not runtime_session_allows_user_thread(session)
+    }
+    if not hidden_session_ids:
+        return threads
+    return [
+        thread
+        for thread in threads
+        if not thread.runtime_session_id or thread.runtime_session_id not in hidden_session_ids
+    ]
+
+
+def _runtime_session_is_hidden(store: RuntimeStore, *, runtime_session_id: str) -> bool:
+    try:
+        session = store.get_session(runtime_session_id)
+    except RuntimeSessionNotFoundError:
+        return False
+    return not runtime_session_allows_user_thread(session)
+
+
+def _raise_if_runtime_session_hidden(store: RuntimeStore, *, runtime_session_id: str) -> None:
+    if _runtime_session_is_hidden(store, runtime_session_id=runtime_session_id):
+        raise RuntimeSessionHiddenError(
+            f"Runtime session `{runtime_session_id}` is hidden and cannot be represented by a runtime thread."
+        )
 
 
 def _turn_facts_for_session(turns: list[RuntimeTurnRecord]) -> _ThreadTurnFacts:

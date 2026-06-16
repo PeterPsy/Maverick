@@ -138,6 +138,121 @@ class CalendarGoogleSyncTest(unittest.TestCase):
         self.assertEqual([call[0] for call in calls].count("POST"), 1)
         self.assertGreaterEqual([call[0] for call in calls].count("GET"), 4)
 
+    def test_sync_deduplicates_existing_remote_event_mirrors(self) -> None:
+        fixed_now = datetime(2026, 6, 17, 12, 0, tzinfo=UTC)
+
+        def transport(method: str, url: str, request: dict[str, object]) -> tuple[int, dict[str, object]]:
+            if url == "https://oauth2.googleapis.com/token":
+                return 200, {"access_token": "access-token", "token_type": "Bearer"}
+            if url.startswith("https://www.googleapis.com/calendar/v3/users/me/calendarList"):
+                return 200, {"items": [{"id": "primary", "summary": "Work", "timeZone": "UTC", "selected": True}]}
+            if url.startswith("https://www.googleapis.com/calendar/v3/calendars/primary/events"):
+                return 200, {
+                    "items": [
+                        {
+                            "id": "google-event-dup",
+                            "summary": "Mamma e babbo in però",
+                            "status": "confirmed",
+                            "start": {"dateTime": "2026-06-27T19:00:00Z", "timeZone": "UTC"},
+                            "end": {"dateTime": "2026-07-05T16:00:00Z", "timeZone": "UTC"},
+                            "created": "2026-05-11T19:48:16Z",
+                            "updated": "2026-06-13T19:18:03.976000Z",
+                        }
+                    ]
+                }
+            raise AssertionError(f"Unexpected request: {method} {url}")
+
+        duplicate_refs = {
+            "provider": "google",
+            "calendar_connection_id": "cal_conn_work",
+            "provider_calendar_id": "primary",
+            "provider_event_id": "google-event-dup",
+        }
+        with tempfile.TemporaryDirectory() as temp_dir:
+            data_root = Path(temp_dir) / "data"
+            data_root.mkdir(parents=True)
+            (data_root / "state.json").write_text(
+                json.dumps(
+                    {
+                        "schema_version": "3",
+                        "events": [
+                            {
+                                "id": "evt_older_mirror",
+                                "title": "Mamma e babbo in però",
+                                "startTime": "2026-06-24T19:00:00Z",
+                                "endTime": "2026-07-06T16:00:00Z",
+                                "timezone": "UTC",
+                                "color": "blue",
+                                "category": "Google Calendar",
+                                "tags": ["google"],
+                                "source": "google_calendar",
+                                "created_at": "2026-05-11T19:48:16Z",
+                                "updated_at": "2026-05-11T19:49:09.089000Z",
+                                "revision": 1,
+                                "external_refs": duplicate_refs,
+                            },
+                            {
+                                "id": "evt_newer_mirror",
+                                "title": "Mamma e babbo in però",
+                                "startTime": "2026-06-27T19:00:00Z",
+                                "endTime": "2026-07-05T16:00:00Z",
+                                "timezone": "UTC",
+                                "color": "blue",
+                                "category": "Google Calendar",
+                                "tags": ["google"],
+                                "source": "google_calendar",
+                                "created_at": "2026-05-11T19:48:16Z",
+                                "updated_at": "2026-06-13T19:18:03.976000Z",
+                                "revision": 2,
+                                "external_refs": duplicate_refs,
+                            },
+                        ],
+                        "connections": [
+                            {
+                                "id": "cal_conn_work",
+                                "provider": "google",
+                                "account_id": "ana@example.com",
+                                "account_label": "Ana Work",
+                                "status": "connected",
+                            }
+                        ],
+                        "calendars": [
+                            {
+                                "id": "primary",
+                                "connection_id": "cal_conn_work",
+                                "provider_calendar_id": "primary",
+                                "summary": "Work",
+                                "timezone": "UTC",
+                                "access_role": "owner",
+                                "selected": True,
+                                "sync_enabled": True,
+                            }
+                        ],
+                        "sync_state": [],
+                    }
+                ),
+                encoding="utf-8",
+            )
+            status_code, synced = _handle_action(
+                data_root,
+                {"action": "calendar_sync", "connection_id": "cal_conn_work", "calendar_id": "primary"},
+                app_secrets=_app_secrets(),
+                oauth_transport=transport,
+                oauth_now=fixed_now,
+            )
+            persisted = json.loads((data_root / "state.json").read_text(encoding="utf-8"))
+
+        mirrors = [
+            event
+            for event in persisted["events"]
+            if event["external_refs"].get("provider_event_id") == "google-event-dup"
+        ]
+        self.assertEqual(status_code, 200)
+        self.assertEqual(synced["deleted"], 1)
+        self.assertEqual(len(mirrors), 1)
+        self.assertEqual(mirrors[0]["id"], "evt_newer_mirror")
+        self.assertEqual(mirrors[0]["startTime"], "2026-06-27T19:00:00Z")
+
     def test_full_history_sync_stores_google_sync_token_when_requested(self) -> None:
         fixed_now = datetime(2026, 5, 28, 12, 0, tzinfo=UTC)
 

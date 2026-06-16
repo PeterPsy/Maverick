@@ -424,10 +424,15 @@ def _merge_remote_events(
     stale_time_max: str,
     now: datetime,
 ) -> dict[str, Any]:
-    next_events = list(events)
+    next_events, deduplicated = _dedupe_remote_calendar_events(
+        events,
+        connection_id=connection["id"],
+        provider_calendar_id=calendar["provider_calendar_id"],
+    )
     existing_by_remote_id = _events_by_remote_id(next_events, connection_id=connection["id"], provider_calendar_id=calendar["provider_calendar_id"])
     active_remote_ids: set[str] = set()
-    created = updated = deleted = unchanged = 0
+    created = updated = unchanged = 0
+    deleted = deduplicated
 
     for remote_event in remote_events:
         provider_event_id = str(remote_event.get("id") or "").strip()
@@ -609,6 +614,49 @@ def _events_by_remote_id(events: list[dict[str, Any]], *, connection_id: str, pr
         if provider_event_id:
             result[provider_event_id] = event
     return result
+
+
+def _dedupe_remote_calendar_events(
+    events: list[dict[str, Any]],
+    *,
+    connection_id: str,
+    provider_calendar_id: str,
+) -> tuple[list[dict[str, Any]], int]:
+    best_by_remote_id: dict[str, dict[str, Any]] = {}
+    duplicate_ids: set[str] = set()
+    for event in events:
+        if not _matches_remote_calendar(event, connection_id=connection_id, provider_calendar_id=provider_calendar_id):
+            continue
+        refs = event.get("external_refs") if isinstance(event.get("external_refs"), dict) else {}
+        provider_event_id = str(refs.get("provider_event_id") or "").strip()
+        if not provider_event_id:
+            continue
+        current = best_by_remote_id.get(provider_event_id)
+        if current is None:
+            best_by_remote_id[provider_event_id] = event
+            continue
+        keep, drop = _preferred_remote_mirror(current, event)
+        best_by_remote_id[provider_event_id] = keep
+        duplicate_ids.add(str(drop.get("id") or ""))
+    duplicate_ids.discard("")
+    if not duplicate_ids:
+        return list(events), 0
+    return [event for event in events if str(event.get("id") or "") not in duplicate_ids], len(duplicate_ids)
+
+
+def _preferred_remote_mirror(left: dict[str, Any], right: dict[str, Any]) -> tuple[dict[str, Any], dict[str, Any]]:
+    if _remote_mirror_sort_key(right) > _remote_mirror_sort_key(left):
+        return right, left
+    return left, right
+
+
+def _remote_mirror_sort_key(event: dict[str, Any]) -> tuple[str, int, str, str]:
+    return (
+        str(event.get("updated_at") or ""),
+        event_revision(event.get("revision")),
+        str(event.get("created_at") or ""),
+        str(event.get("id") or ""),
+    )
 
 
 def _matches_remote_calendar(event: dict[str, Any], *, connection_id: str, provider_calendar_id: str) -> bool:

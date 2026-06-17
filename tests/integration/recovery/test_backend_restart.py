@@ -7,9 +7,10 @@ from datetime import UTC, datetime
 import json
 from pathlib import Path
 import tempfile
+from types import SimpleNamespace
 import unittest
 
-from core.recovery.backend_restart import _close_orphan_non_terminal_turn_events
+from core.recovery.backend_restart import _close_orphan_non_terminal_turn_events, _is_inter_agent_root_turn
 from core.runtime.event_collection import RuntimeEventJsonCollection
 from core.runtime.errors import RuntimeTurnNotFoundError
 from core.runtime.runtime_events import RuntimeEventRecord
@@ -94,6 +95,24 @@ class BackendRestartRecoveryTestCase(unittest.TestCase):
         self.assertEqual(closed, 1)
         self.assertEqual(store.list_events_calls, 1)
         self.assertEqual(store.saved_events[0].event_type, "runtime.turn.cancelled")
+
+    def test_backend_restart_detects_inter_agent_root_turns(self) -> None:
+        turn = SimpleNamespace(turn_id="turn-ia-root")
+        events = [
+            RuntimeEventRecord(
+                event_id="event-ia-root",
+                workspace_id="default",
+                session_id="session-1",
+                plane="turn",
+                event_type="runtime.turn.queued",
+                turn_id="turn-ia-root",
+                process_id=None,
+                payload={"inter_agent_run_id": "run-1"},
+                created_at=NOW,
+            )
+        ]
+
+        self.assertTrue(_is_inter_agent_root_turn(turn, events))
 
     def test_runtime_event_recovery_query_skips_large_partition_without_removing_history(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:

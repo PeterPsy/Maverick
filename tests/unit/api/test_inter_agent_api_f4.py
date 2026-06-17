@@ -30,13 +30,13 @@ class InterAgentApiF4TestCase(AppReferenceApiTestSupport, unittest.TestCase):
         ):
             return bootstrap_platform_state(start_path=repo_root)
 
-    def _create_root_session(self, state, repo_root) -> None:
+    def _create_root_session(self, state, repo_root, *, source_app_id: str = "chat") -> None:
         create_runtime_session(
             state.runtime_store,
             session_id="root-session",
             workspace_id="default",
             agent_id="chat",
-            source_app_id="chat",
+            source_app_id=source_app_id,
             system_prompt="Parent prompt must not leak.",
             skill_ids=["parent-skill"],
             owner_user_id="parent-owner",
@@ -157,6 +157,29 @@ class InterAgentApiF4TestCase(AppReferenceApiTestSupport, unittest.TestCase):
         self.assertEqual(participant["skill_ids"], ["storage"])
         self.assertEqual(participant["agent_snapshot"]["skill_catalog_app_id"], "skills")
 
+    def test_create_agents_root_run_preserves_agent_snapshot_for_child_participant(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            repo_root = self._repo_root(temp_dir)
+            state = self._bootstrap_state(repo_root)
+            self._create_root_session(state, repo_root, source_app_id="agents")
+            app = PlatformHost(state, start_path=repo_root)
+            cookie = self._login(app)
+
+            create_status, create_payload, _headers = self._invoke(
+                app,
+                path="/api/inter-agent/runs",
+                method="POST",
+                body=_run_payload(run_id="run-agents-root-snapshot"),
+                cookie=cookie,
+            )
+            participant = next(item for item in create_payload["participants"] if item["participant_id"] == "researcher")
+
+        self.assertEqual(create_status, 201)
+        self.assertEqual(create_payload["run"]["source_app_id"], "agents")
+        self.assertEqual(participant["agent_snapshot"]["system_prompt"], "Research only.")
+        self.assertEqual(participant["skill_ids"], ["storage"])
+        self.assertEqual(participant["agent_snapshot"]["skill_catalog_app_id"], "skills")
+
     def test_execute_async_returns_queued_root_turn_without_inline_worker(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             repo_root = self._repo_root(temp_dir)
@@ -189,9 +212,12 @@ class InterAgentApiF4TestCase(AppReferenceApiTestSupport, unittest.TestCase):
                 )
             root_turn = state.runtime_store.get_turn(execute_payload["root_runtime_turn"]["turn_id"])
             root_thread = state.runtime_store.get_thread("root-session")
+            run_status = state.inter_agent_store.get_run("run-async-execute", workspace_id="default").status
 
         self.assertEqual(create_status, 201)
         self.assertEqual(execute_status, 202)
+        self.assertEqual(execute_payload["run"]["status"], "planning")
+        self.assertEqual(run_status, "planning")
         self.assertEqual(execute_payload["root_runtime_turn"]["status"], "queued")
         self.assertEqual(root_turn.status, "queued")
         self.assertEqual(root_thread.availability, "queued")

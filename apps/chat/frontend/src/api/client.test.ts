@@ -4,6 +4,7 @@ import {
   createInterAgentRun,
   deleteProject,
   executeInterAgentRun,
+  getInterAgentRun,
   getSpeechCapabilities,
   listInterAgentRunApprovals,
   listInterAgentRunEvents,
@@ -178,6 +179,9 @@ describe("inter-agent client calls", () => {
       if (path === "/api/inter-agent/runs" && init?.method === "POST") {
         return jsonResponse({ run: { run_id: "run-1" }, participants: [] }, 201);
       }
+      if (path === "/api/inter-agent/runs/run-1" && !init?.method) {
+        return jsonResponse({ run: { run_id: "run-1", status: "created" }, participants: [] });
+      }
       if (path === "/api/inter-agent/runs/run-1/execute") {
         return jsonResponse({ run: { run_id: "run-1", status: "completed" }, participants: [], root_runtime_events: [] });
       }
@@ -214,6 +218,7 @@ describe("inter-agent client calls", () => {
         },
       }),
     ).resolves.toMatchObject({ run: { run_id: "run-1" } });
+    await expect(getInterAgentRun("run-1")).resolves.toMatchObject({ run: { run_id: "run-1", status: "created" } });
     await expect(
       executeInterAgentRun("run-1", {
         input_text: "Plan",
@@ -234,13 +239,13 @@ describe("inter-agent client calls", () => {
       root_runtime_session_id: "session-1",
       mode: "manager_tools",
     });
-    expect(JSON.parse(String(fetchMock.mock.calls[2]?.[1]?.body || "{}"))).toMatchObject({
+    expect(JSON.parse(String(fetchMock.mock.calls[3]?.[1]?.body || "{}"))).toMatchObject({
       input_text: "Plan",
       client_message_id: "client-1",
       async: true,
       attachments: [{ id: "att-1", name: "brief.md" }],
     });
-    expect(JSON.parse(String(fetchMock.mock.calls[2]?.[1]?.body || "{}")).attachments[0]).not.toHaveProperty("objectUrl");
+    expect(JSON.parse(String(fetchMock.mock.calls[3]?.[1]?.body || "{}")).attachments[0]).not.toHaveProperty("objectUrl");
   });
 });
 

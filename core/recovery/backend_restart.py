@@ -96,10 +96,14 @@ def recover_interrupted_runtime_turns_after_backend_restart(
         resume_attempts = _backend_restart_resume_attempt_count(session_events)
         for turn in interrupted_turns:
             is_recovery_resume_turn = _is_backend_restart_resume_turn(turn, session_events)
+            is_inter_agent_root_turn = _is_inter_agent_root_turn(turn, session_events)
             failure_reason = f"Interrupted by {reason}; automatic resume turn queued."
             recovery_action = "automatic_resume_turn"
             target_status = "failed" if turn.status == "active" else "cancelled"
-            if is_recovery_resume_turn:
+            if is_inter_agent_root_turn:
+                failure_reason = f"Interrupted by {reason}; inter-agent run recovery will close the run."
+                recovery_action = "close_inter_agent_root_turn"
+            elif is_recovery_resume_turn:
                 if resume_attempts >= MAX_BACKEND_RESTART_RESUME_ATTEMPTS_PER_SESSION:
                     failure_reason = f"Interrupted by {reason}; recovery resume retry limit reached."
                     recovery_action = "close_resume_turn"
@@ -374,6 +378,15 @@ def _is_backend_restart_resume_turn(turn, events: list) -> bool:
             continue
         client_message_id = event.payload.get("client_message_id")
         if isinstance(client_message_id, str) and client_message_id.startswith(RESUME_CLIENT_MESSAGE_ID_PREFIX):
+            return True
+    return False
+
+
+def _is_inter_agent_root_turn(turn, events: list) -> bool:
+    for event in events:
+        if event.turn_id != turn.turn_id or not isinstance(event.payload, dict):
+            continue
+        if str(event.payload.get("inter_agent_run_id") or "").strip():
             return True
     return False
 

@@ -214,6 +214,9 @@ export function useChatNavigation({
       const requestedGraphRunId = query.get("view") === "graph" ? query.get("inter_agent_run_id") || "" : "";
       const firstThread = requestedThreadId ? threads.find((thread) => thread.thread_id === requestedThreadId) || null : threads[0] || null;
       if (!firstThread) {
+        if (requestedGraphRunId) {
+          setActiveInterAgentGraphRunId(requestedGraphRunId);
+        }
         if (runtimeThreadsError) {
           setError(runtimeThreadsError);
           return;

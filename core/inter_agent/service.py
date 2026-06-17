@@ -35,6 +35,7 @@ from core.inter_agent.store import InterAgentRunCreateBundle, InterAgentStore
 from core.runtime.errors import RuntimeSessionNotFoundError
 from core.runtime.lifecycle_service_sessions import create_child_runtime_session
 from core.runtime.runtime_session import RuntimeSessionRecord, runtime_session_allows_user_thread
+from core.runtime.runtime_threads import runtime_thread_availability_for_session, update_runtime_thread_availability
 from core.runtime.store import RuntimeStore
 from core.runtime.service import record_runtime_event, transition_runtime_session, transition_runtime_turn
 from core.runtime.turn_submission import (
@@ -206,6 +207,22 @@ class InterAgentService:
             created_at=created_at,
         )
         return self.store.append_event(event, retention_policy=retention_policy)
+
+    def mark_run_planning(
+        self,
+        *,
+        workspace_id: str,
+        run_id: str,
+        now: datetime | None = None,
+    ) -> InterAgentRunRecord:
+        """Persist a recoverable planning state before asynchronous execution is scheduled."""
+        timestamp = now or datetime.now(tz=UTC)
+        run = self.store.get_run(run_id, workspace_id=workspace_id)
+        if run.status != "created":
+            return run
+        updated = replace(run, status="planning", updated_at=timestamp)
+        self.store.save_run(updated)
+        return updated
 
     def reserve_budget(
         self,
@@ -716,6 +733,7 @@ class InterAgentService:
         recovered = 0
         failed_participants = 0
         failed_runs = 0
+        closed_root_turns = 0
         for run in self.store.list_runs(workspace_id):
             if run.status in TERMINAL_RUN_STATUSES:
                 continue
@@ -753,6 +771,11 @@ class InterAgentService:
             if active_child_count == 0 and run.status in {"running", "planning", "recovering"}:
                 updated = replace(run, status="failed", updated_at=timestamp, ended_at=timestamp)
                 self.store.save_run(updated)
+                closed_root_turns += _close_non_terminal_root_turns_for_run(
+                    runtime_store,
+                    run=updated,
+                    now=timestamp,
+                )
                 failed_runs += 1
                 self.record_event(
                     updated,
@@ -783,6 +806,7 @@ class InterAgentService:
             "recovered_runs": recovered,
             "failed_runs": failed_runs,
             "failed_participants": failed_participants,
+            "closed_root_turns": closed_root_turns,
         }
 
 
@@ -1039,6 +1063,64 @@ def _approval_resolver_is_eligible(
         return False
     resolver_roles = {item.lower() for item in _clean_string_list(role_ids or [])}
     return bool(eligible_roles.intersection(resolver_roles))
+
+
+def _close_non_terminal_root_turns_for_run(
+    runtime_store: RuntimeStore,
+    *,
+    run: InterAgentRunRecord,
+    now: datetime,
+) -> int:
+    try:
+        runtime_store.get_session(run.root_runtime_session_id)
+    except (RuntimeSessionNotFoundError, ValueError):
+        return 0
+    root_turn_ids = {
+        event.turn_id
+        for event in runtime_store.list_events(run.root_runtime_session_id)
+        if event.turn_id and isinstance(event.payload, dict) and event.payload.get("inter_agent_run_id") == run.run_id
+    }
+    if not root_turn_ids:
+        return 0
+    closed = 0
+    for turn in runtime_store.list_turns(run.root_runtime_session_id):
+        if turn.turn_id not in root_turn_ids or turn.status not in {"queued", "active"}:
+            continue
+        target_status = "cancelled" if turn.status == "queued" else "failed"
+        updated = transition_runtime_turn(
+            runtime_store,
+            turn_id=turn.turn_id,
+            target_status=target_status,
+            failure_reason="Inter-agent run failed during backend recovery.",
+            now=now,
+        )
+        record_runtime_event(
+            runtime_store,
+            event_id=str(uuid.uuid4()),
+            session_id=updated.session_id,
+            turn_id=updated.turn_id,
+            plane="turn",
+            event_type=f"runtime.turn.{target_status}",
+            payload={
+                "inter_agent_run_id": run.run_id,
+                "reason": "inter_agent_recovery_failed",
+            },
+            now=now,
+        )
+        closed += 1
+    if closed:
+        availability = runtime_thread_availability_for_session(
+            runtime_store,
+            runtime_session_id=run.root_runtime_session_id,
+        )
+        update_runtime_thread_availability(
+            runtime_store,
+            workspace_id=run.workspace_id,
+            runtime_session_id=run.root_runtime_session_id,
+            availability=availability,
+            now=now,
+        )
+    return closed
 
 
 def _selected_child_participants(

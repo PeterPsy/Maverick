@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import {
+  getInterAgentRun,
   listInterAgentRunApprovals,
   listInterAgentRunEvents,
   listInterAgentRuns,
@@ -168,17 +169,30 @@ export function useChatAppController({
   }, []);
   const refreshInterAgentRuns = useCallback(async () => {
     const runtimeSessionId = activeThread?.runtime_session_id || "";
-    if (!runtimeSessionId) {
+    const graphRunId = activeInterAgentGraphRunId || "";
+    if (!runtimeSessionId && !graphRunId) {
       setInterAgentRuns([]);
       setInterAgentEventsByRunId({});
       setInterAgentApprovalsByRunId({});
       return;
     }
     try {
-      const payload = await listInterAgentRuns();
-      const runDetails = payload.items
-        .filter((item) => item.run.root_runtime_session_id === runtimeSessionId)
-        .sort((left, right) => left.run.created_at.localeCompare(right.run.created_at));
+      let runDetails: InterAgentRunDetail[] = [];
+      if (runtimeSessionId) {
+        const payload = await listInterAgentRuns();
+        runDetails = payload.items.filter((item) => item.run.root_runtime_session_id === runtimeSessionId);
+        if (graphRunId && !runDetails.some((item) => item.run.run_id === graphRunId)) {
+          const listedGraphRun = payload.items.find((item) => item.run.run_id === graphRunId);
+          try {
+            runDetails.push(listedGraphRun || (await getInterAgentRun(graphRunId)));
+          } catch {
+            // Leave the graph stub visible if the run cannot be loaded yet.
+          }
+        }
+      } else if (graphRunId) {
+        runDetails = [await getInterAgentRun(graphRunId)];
+      }
+      runDetails.sort((left, right) => left.run.created_at.localeCompare(right.run.created_at));
       setInterAgentRuns(runDetails);
       const [eventEntries, approvalEntries] = await Promise.all([
         Promise.all(
@@ -209,7 +223,7 @@ export function useChatAppController({
       setInterAgentEventsByRunId({});
       setInterAgentApprovalsByRunId({});
     }
-  }, [activeThread?.runtime_session_id]);
+  }, [activeInterAgentGraphRunId, activeThread?.runtime_session_id]);
   const handleResolveInterAgentApproval = useCallback(
     async (approvalId: string, approved: boolean) => {
       const response = await resolveInterAgentApproval(approvalId, { approved });

@@ -53,6 +53,9 @@ from core.runtime.thread_title_jobs import schedule_runtime_thread_title_generat
 from core.workspaces.errors import WorkspaceMembershipError
 
 
+AGENT_SNAPSHOT_SOURCE_APP_IDS = {"chat", "agents"}
+
+
 def handle_inter_agent_api(
     state: PlatformState,
     environ: dict,
@@ -278,7 +281,7 @@ def _create_run(
         workspace_id=context.workspace_id,
         created_by_user_id=context.user.user_id,
         source_app_id=root_session.source_app_id or "chat",
-        allow_agent_snapshots=(root_session.source_app_id or "chat") == "chat",
+        allow_agent_snapshots=_root_session_allows_agent_snapshots(root_session),
     )
     run = service.create_run(spec)
     return json_response(start_response, run_detail_payload(state.inter_agent_store, run), status="201 Created")
@@ -416,6 +419,7 @@ def _execute_run(
             start_path=start_path,
         )
     if async_requested:
+        run = service.mark_run_planning(workspace_id=context.workspace_id, run_id=run.run_id)
         payload = run_detail_payload(state.inter_agent_store, run)
         if root_projection is not None:
             payload["root_runtime_turn"] = inter_agent_payload(root_projection["turn"])
@@ -447,6 +451,10 @@ def _execute_run(
         payload["root_runtime_turn"] = inter_agent_payload(root_projection["turn"])
         payload["root_runtime_events"] = inter_agent_payload(root_projection["events"] + result.root_runtime_events)
     return json_response(start_response, payload)
+
+
+def _root_session_allows_agent_snapshots(root_session) -> bool:
+    return (root_session.source_app_id or "chat") in AGENT_SNAPSHOT_SOURCE_APP_IDS
 
 
 def _start_inter_agent_execution_worker(

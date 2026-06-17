@@ -51,6 +51,10 @@ export function listInterAgentRuns(): Promise<{ items: InterAgentRunDetail[] }> 
   return requestJson<{ items: InterAgentRunDetail[] }>("/api/inter-agent/runs");
 }
 
+export function getInterAgentRun(runId: string): Promise<InterAgentRunDetail> {
+  return requestJson<InterAgentRunDetail>(`/api/inter-agent/runs/${encodeURIComponent(runId)}`);
+}
+
 export function createInterAgentRun(payload: CreateInterAgentRunPayload): Promise<InterAgentRunDetail> {
   return requestJson<InterAgentRunDetail>("/api/inter-agent/runs", {
     method: "POST",

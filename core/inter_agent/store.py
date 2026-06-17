@@ -937,8 +937,11 @@ class _BudgetReservationMutation:
         if existing_document is not None:
             existing = budget_reservation_from_document(existing_document)
             _ensure_idempotency_fingerprint_matches(
-                existing.fingerprint or _budget_reservation_fingerprint(existing),
+                _existing_budget_reservation_fingerprint(existing_document, existing),
                 incoming_fingerprint,
+                alternate_incoming=_legacy_budget_reservation_fingerprint(self.reservation)
+                if "participant_id" not in existing_document
+                else None,
                 entity="budget reservation",
             )
             if existing.status == "reserved":
@@ -1023,10 +1026,22 @@ def _turns_used_by_participant(ledger: BudgetLedgerRecord, participant_id: str) 
     turns = 0
     for document in ledger.operation_reservations.values():
         reservation = budget_reservation_from_document(document)
-        if reservation.status == "released" or reservation.participant_id != participant_id:
+        if reservation.status == "released":
+            continue
+        owner_participant_id = _reservation_participant_id(reservation)
+        if owner_participant_id is not None and owner_participant_id != participant_id:
             continue
         turns += reservation.turns
     return turns
+
+
+def _reservation_participant_id(reservation: BudgetReservation) -> str | None:
+    if reservation.participant_id:
+        return reservation.participant_id
+    parts = reservation.reservation_id.split(":")
+    if len(parts) >= 3 and parts[0] == "executor.turn":
+        return _clean_optional(parts[1])
+    return None
 
 
 def _validate_run_create_bundle(bundle: InterAgentRunCreateBundle) -> None:
@@ -1056,13 +1071,36 @@ def _ensure_spec_fingerprint_matches(existing: InterAgentRunRecord, incoming: In
         )
 
 
-def _ensure_idempotency_fingerprint_matches(existing: str, incoming: str, *, entity: str) -> None:
-    if existing != incoming:
+def _ensure_idempotency_fingerprint_matches(
+    existing: str,
+    incoming: str,
+    *,
+    entity: str,
+    alternate_incoming: str | None = None,
+) -> None:
+    if existing != incoming and existing != alternate_incoming:
         raise InterAgentIdempotencyConflictError(f"Idempotent {entity} retry payload does not match the original.")
 
 
 def _budget_reservation_fingerprint(reservation: BudgetReservation) -> str:
     document = budget_reservation_to_document(reservation)
+    return _budget_reservation_document_fingerprint(document)
+
+
+def _legacy_budget_reservation_fingerprint(reservation: BudgetReservation) -> str:
+    document = budget_reservation_to_document(reservation)
+    document.pop("participant_id", None)
+    return _budget_reservation_document_fingerprint(document)
+
+
+def _existing_budget_reservation_fingerprint(document: dict[str, Any], reservation: BudgetReservation) -> str:
+    if reservation.fingerprint:
+        return reservation.fingerprint
+    return _budget_reservation_document_fingerprint(document)
+
+
+def _budget_reservation_document_fingerprint(document: dict[str, Any]) -> str:
+    document = dict(document)
     for key in ("status", "created_at", "released_at", "fingerprint"):
         document.pop(key, None)
     return _stable_fingerprint(document)

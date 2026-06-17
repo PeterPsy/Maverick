@@ -42,6 +42,7 @@ class ParticipantExecutionResult:
     label: str
     status: str
     synthetic: bool = False
+    synthetic_source: str | None = None
     output_text: str = ""
     summary: str = ""
     partial_output: str = ""
@@ -94,6 +95,12 @@ def execute_inter_agent_run(
     controlled = _controlled_outputs(controlled_participants)
     if controlled and not allow_synthetic_participants:
         raise InterAgentOperationError("Controlled inter-agent participant output is available only for operator/test synthetic execution.")
+    planned_synthetic, planned_synthetic_source = _planned_synthetic_metadata(
+        run,
+        participants,
+        controlled,
+        allow_synthetic_participants=allow_synthetic_participants,
+    )
 
     started_at = clock()
     run = replace(run, status="planning", updated_at=started_at)
@@ -106,7 +113,12 @@ def execute_inter_agent_run(
         visibility_plane="summary",
         correlation_id=f"{run.run_id}:plan",
         idempotency_key=f"{run.run_id}:executor.plan.summary",
-        payload={"summary": plan_summary, "mode": run.mode},
+        payload={
+            "summary": plan_summary,
+            "mode": run.mode,
+            "synthetic": planned_synthetic,
+            "synthetic_source": planned_synthetic_source,
+        },
         now=started_at,
     )
     root_runtime_events: list[RuntimeEventRecord] = []
@@ -117,6 +129,8 @@ def execute_inter_agent_run(
                 run,
                 text=plan_summary,
                 summary_kind="plan",
+                synthetic=planned_synthetic,
+                synthetic_source=planned_synthetic_source,
                 now=started_at,
             )
         )
@@ -184,6 +198,8 @@ def execute_inter_agent_run(
                     failed,
                     text=f"Multi-agent run failed: {str(error)}",
                     summary_kind="failed",
+                    synthetic=planned_synthetic,
+                    synthetic_source=planned_synthetic_source,
                     now=failed_at,
                 )
             )
@@ -193,6 +209,7 @@ def execute_inter_agent_run(
 
     final_status = "failed" if any(result.status == "failed" for result in participant_results) else "completed"
     final_summary = _final_summary(final_status=final_status, participant_results=participant_results)
+    final_synthetic, final_synthetic_source = _result_synthetic_metadata(participant_results)
     ended_at = clock()
     latest_run = service.store.get_run(run.run_id, workspace_id=workspace_id)
     completed_run = replace(latest_run, status=final_status, updated_at=ended_at, ended_at=ended_at)
@@ -204,7 +221,12 @@ def execute_inter_agent_run(
         visibility_plane="summary",
         correlation_id=f"{completed_run.run_id}:final-summary",
         idempotency_key=f"{completed_run.run_id}:executor.summary.final",
-        payload={"summary": final_summary, "status": final_status},
+        payload={
+            "summary": final_summary,
+            "status": final_status,
+            "synthetic": final_synthetic,
+            "synthetic_source": final_synthetic_source,
+        },
         now=ended_at,
     )
     service.record_event(
@@ -214,7 +236,12 @@ def execute_inter_agent_run(
         visibility_plane="summary",
         correlation_id=completed_run.run_id,
         idempotency_key=f"{completed_run.run_id}:executor.run.{final_status}",
-        payload={"summary": final_summary, "status": final_status},
+        payload={
+            "summary": final_summary,
+            "status": final_status,
+            "synthetic": final_synthetic,
+            "synthetic_source": final_synthetic_source,
+        },
         now=ended_at,
     )
     if project_summaries:
@@ -224,6 +251,8 @@ def execute_inter_agent_run(
                 completed_run,
                 text=final_summary,
                 summary_kind=final_status,
+                synthetic=final_synthetic,
+                synthetic_source=final_synthetic_source,
                 now=ended_at,
             )
         )
@@ -506,6 +535,7 @@ def _execute_controlled_participant(
             artifact_refs=controlled.artifact_refs,
             partial_output=controlled.partial_output,
             synthetic=True,
+            synthetic_source=synthetic_source,
             clock=clock,
         )
     status = "failed" if controlled.status == "failed" else "completed"
@@ -524,6 +554,7 @@ def _execute_controlled_participant(
         runtime_session_id=None,
         runtime_turn_id=None,
         synthetic=True,
+        synthetic_source=synthetic_source,
         clock=clock,
     )
     return ParticipantExecutionResult(
@@ -531,6 +562,7 @@ def _execute_controlled_participant(
         label=participant.label,
         status=status,
         synthetic=True,
+        synthetic_source=synthetic_source,
         output_text=controlled.output_text,
         summary=summary,
         partial_output=controlled.partial_output,
@@ -586,6 +618,7 @@ def _execute_runtime_participant(
             runtime_session_id=runtime_session_id,
             runtime_turn_id=None,
             synthetic=False,
+            synthetic_source=None,
             clock=clock,
         )
         raise
@@ -600,6 +633,8 @@ def _execute_runtime_participant(
             task_id=task_id,
             artifact_refs=artifact_refs,
             partial_output=output_text,
+            synthetic=False,
+            synthetic_source=None,
             clock=clock,
         )
     summary = _compact_summary(output_text) or f"{participant.label} {status}."
@@ -616,6 +651,7 @@ def _execute_runtime_participant(
         runtime_session_id=session.session_id,
         runtime_turn_id=turn.turn_id,
         synthetic=False,
+        synthetic_source=None,
         clock=clock,
     )
     return ParticipantExecutionResult(
@@ -623,6 +659,7 @@ def _execute_runtime_participant(
         label=participant.label,
         status=status,
         synthetic=False,
+        synthetic_source=None,
         output_text=output_text,
         summary=summary,
         partial_output=output_text if status == "failed" else "",
@@ -647,6 +684,7 @@ def _finish_participant(
     runtime_session_id: str | None,
     runtime_turn_id: str | None,
     synthetic: bool,
+    synthetic_source: str | None,
     clock,
 ) -> None:
     finished_at = clock()
@@ -669,6 +707,7 @@ def _finish_participant(
             "output_text": output_text,
             "error": error,
             "synthetic": synthetic,
+            "synthetic_source": synthetic_source,
         },
         now=finished_at,
     )
@@ -681,7 +720,13 @@ def _finish_participant(
         visibility_plane="detail",
         correlation_id=participant.participant_id,
         idempotency_key=f"{run.run_id}:executor.participant.{status}:{participant.participant_id}:{task_id}",
-        payload={"participant_id": participant.participant_id, "status": status, "error": error, "synthetic": synthetic},
+        payload={
+            "participant_id": participant.participant_id,
+            "status": status,
+            "error": error,
+            "synthetic": synthetic,
+            "synthetic_source": synthetic_source,
+        },
         now=finished_at,
     )
     service.record_event(
@@ -693,7 +738,14 @@ def _finish_participant(
         visibility_plane="summary",
         correlation_id=task_id,
         idempotency_key=f"{run.run_id}:executor.participant.summary:{participant.participant_id}:{task_id}",
-        payload={"participant_id": participant.participant_id, "label": participant.label, "summary": summary, "status": status},
+        payload={
+            "participant_id": participant.participant_id,
+            "label": participant.label,
+            "summary": summary,
+            "status": status,
+            "synthetic": synthetic,
+            "synthetic_source": synthetic_source,
+        },
         now=finished_at,
     )
     service.release_budget(run, reservation_id=reservation_id, now=finished_at)
@@ -709,6 +761,7 @@ def _record_artifacts(
     partial_output: str,
     clock,
     synthetic: bool = False,
+    synthetic_source: str | None = None,
 ) -> None:
     service.record_event(
         run,
@@ -723,6 +776,7 @@ def _record_artifacts(
             "partial_output": partial_output,
             "status": "partial" if partial_output else "created",
             "synthetic": synthetic,
+            "synthetic_source": synthetic_source,
         },
         now=clock(),
     )
@@ -734,6 +788,8 @@ def _project_root_summary(
     *,
     text: str,
     summary_kind: str,
+    synthetic: bool,
+    synthetic_source: str | None,
     now: datetime,
 ) -> RuntimeEventRecord:
     return record_runtime_event(
@@ -748,6 +804,8 @@ def _project_root_summary(
             "step_kind": "inter_agent_summary",
             "inter_agent_run_id": run.run_id,
             "summary_kind": summary_kind,
+            "synthetic": synthetic,
+            "synthetic_source": synthetic_source,
         },
         now=now,
         event_bus=getattr(state, "runtime_event_bus", None),
@@ -796,6 +854,46 @@ def _controlled_output(value: Any) -> ControlledParticipantOutput:
 def _default_controlled_output(participant: InterAgentParticipantRecord) -> ControlledParticipantOutput:
     output = f"{participant.label} completed controlled MVP work."
     return ControlledParticipantOutput(output_text=output, summary=output)
+
+
+def _planned_synthetic_metadata(
+    run: InterAgentRunRecord,
+    participants: list[InterAgentParticipantRecord],
+    controlled_participants: dict[str, ControlledParticipantOutput],
+    *,
+    allow_synthetic_participants: bool,
+) -> tuple[bool, str | None]:
+    if not allow_synthetic_participants:
+        return False, None
+    sources = [
+        source
+        for participant in _work_participants(run, participants)
+        if (source := _synthetic_source_for_participant(participant, controlled_participants.get(participant.participant_id)))
+    ]
+    return bool(sources), _combine_synthetic_sources(sources)
+
+
+def _result_synthetic_metadata(participant_results: list[ParticipantExecutionResult]) -> tuple[bool, str | None]:
+    sources = [result.synthetic_source for result in participant_results if result.synthetic and result.synthetic_source]
+    return any(result.synthetic for result in participant_results), _combine_synthetic_sources(sources)
+
+
+def _synthetic_source_for_participant(
+    participant: InterAgentParticipantRecord,
+    controlled: ControlledParticipantOutput | None,
+) -> str | None:
+    if controlled is not None:
+        return "controlled_payload"
+    if participant.execution_mode != RUNTIME_CHILD_EXECUTION_MODE:
+        return "default_test_output"
+    return None
+
+
+def _combine_synthetic_sources(sources: list[str | None]) -> str | None:
+    unique = sorted({str(source).strip() for source in sources if str(source or "").strip()})
+    if not unique:
+        return None
+    return unique[0] if len(unique) == 1 else "mixed"
 
 
 def _work_participants(

@@ -339,8 +339,9 @@ can run deterministic synthetic participants only for tests or explicit
 operator-controlled execution, or use the F2 bridge to spawn real hidden child
 runtime sessions and send runtime turns. Public HTTP execution must not accept
 caller-supplied controlled participant output; CLI and MCP may use it only for an
-operator caller that opts into synthetic execution. Synthetic events and results
-must be marked explicitly. The executor emits normalized inter-agent events for
+operator caller that opts into synthetic execution. Synthetic events, results,
+summary-plane updates, and root transcript projections must be marked explicitly
+with their synthetic source. The executor emits normalized inter-agent events for
 plan, task, message, participant status, artifact, summary, and terminal run
 state, and projects only selected operational summaries to the root runtime
 session transcript as non-terminal runtime step updates. `runtime.output.final`
@@ -371,6 +372,10 @@ or explicit `inter_agent_root` grant authority; workspace membership alone is no
 enough to read another user's operational detail. Event replay must cap the
 served `summary`/`detail`/`debug` plane server-side by both caller authority and
 the run's visibility level.
+Budget ledger recovery must also remain tolerant of active runs created before
+participant-attributed turn reservations: idempotent retries of legacy
+reservations without `participant_id` must still match, and those consumed turns
+must not be ignored by per-participant limits.
 
 The F1 store contract is workspace-safe by default. Normal reads and writes must
 carry `workspace_id`; operator-wide scans, if needed later, must be explicit

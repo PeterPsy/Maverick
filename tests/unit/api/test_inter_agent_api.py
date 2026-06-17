@@ -285,6 +285,8 @@ class InterAgentApiTestCase(AppReferenceApiTestSupport, unittest.TestCase):
         self.assertIn("inter_agent.run.completed", event_types)
         self.assertEqual([event.event_type for event in root_events], ["runtime.step.updated", "runtime.step.updated"])
         self.assertIn("Multi-agent run completed", root_events[-1].payload["label"])
+        self.assertEqual([event.payload.get("synthetic") for event in root_events], [False, False])
+        self.assertEqual([event.payload.get("synthetic_source") for event in root_events], [None, None])
 
     def test_inter_agent_http_execute_rejects_controlled_participants(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:

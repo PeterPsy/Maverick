@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from dataclasses import replace
 from datetime import UTC, datetime
 from decimal import Decimal
 import multiprocessing
@@ -13,7 +14,7 @@ from core.inter_agent.errors import (
 )
 from core.inter_agent.events import EventRetentionPolicyRecord, InterAgentEventRecord
 from core.inter_agent.models import BudgetPolicySpec, budget_policy_from_spec, empty_budget_ledger
-from core.inter_agent.store import build_inter_agent_document_store
+from core.inter_agent.store import _stable_fingerprint, build_inter_agent_document_store
 from tests.support.repo import make_temp_repo_root
 
 
@@ -85,6 +86,27 @@ def _reserve_budget_worker(start_path: str, reservation_index: int, queue) -> No
         queue.put("reserved")
     except InterAgentBudgetExceededError:
         queue.put("exceeded")
+
+
+def _legacy_turn_reservation_document(reservation_id: str, *, turns: int, now: datetime) -> dict[str, object]:
+    document: dict[str, object] = {
+        "reservation_id": reservation_id,
+        "participant_slots": 0,
+        "running_participants": 0,
+        "turns": turns,
+        "tool_calls": 0,
+        "handoffs": 0,
+        "estimated_tokens": 0,
+        "estimated_cost": Decimal("0"),
+        "status": "reserved",
+        "created_at": now,
+        "released_at": None,
+    }
+    fingerprint_document = dict(document)
+    for key in ("status", "created_at", "released_at", "fingerprint"):
+        fingerprint_document.pop(key, None)
+    document["fingerprint"] = _stable_fingerprint(fingerprint_document)
+    return document
 
 
 class InterAgentStoreTest(unittest.TestCase):
@@ -345,6 +367,75 @@ class InterAgentStoreTest(unittest.TestCase):
         )
 
         self.assertEqual(reviewer.turns_used, 2)
+
+    def test_legacy_turn_reservation_retry_allows_participant_id_and_counts_limit(self) -> None:
+        repo_root = make_temp_repo_root(self)
+        store = build_inter_agent_document_store(start_path=repo_root)
+        now = datetime(2026, 6, 16, 12, 0, tzinfo=UTC)
+        store.save_budget_policy(
+            budget_policy_from_spec(
+                BudgetPolicySpec(
+                    max_participants=3,
+                    max_concurrent_participants=2,
+                    max_total_turns=4,
+                    max_turns_per_participant=1,
+                ),
+                budget_policy_id="policy-1",
+                workspace_id="default",
+                created_at=now,
+            )
+        )
+        ledger = empty_budget_ledger(
+            budget_ledger_id="ledger-1",
+            workspace_id="default",
+            run_id="run-1",
+            updated_at=now,
+        )
+        store.save_budget_ledger(
+            replace(
+                ledger,
+                turns_used=1,
+                operation_reservations={
+                    "turn-legacy": _legacy_turn_reservation_document(
+                        "turn-legacy",
+                        turns=1,
+                        now=now,
+                    ),
+                },
+            )
+        )
+
+        retry = store.reserve_budget(
+            workspace_id="default",
+            budget_ledger_id="ledger-1",
+            budget_policy_id="policy-1",
+            reservation_id="turn-legacy",
+            participant_id="researcher",
+            turns=1,
+            now=now,
+        )
+        with self.assertRaisesRegex(InterAgentBudgetExceededError, "max_turns_per_participant"):
+            store.reserve_budget(
+                workspace_id="default",
+                budget_ledger_id="ledger-1",
+                budget_policy_id="policy-1",
+                reservation_id="turn-new",
+                participant_id="researcher",
+                turns=1,
+                now=now,
+            )
+        with self.assertRaises(InterAgentIdempotencyConflictError):
+            store.reserve_budget(
+                workspace_id="default",
+                budget_ledger_id="ledger-1",
+                budget_policy_id="policy-1",
+                reservation_id="turn-legacy",
+                participant_id="researcher",
+                turns=2,
+                now=now,
+            )
+
+        self.assertEqual(retry.turns_used, 1)
 
     def test_concurrent_budget_reservations_are_atomically_limited(self) -> None:
         repo_root = make_temp_repo_root(self)

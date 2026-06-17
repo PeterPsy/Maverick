@@ -179,6 +179,8 @@ class InterAgentExecutorTest(unittest.TestCase):
 
         events = store.list_event_page(run.run_id, workspace_id="default", visibility_plane="debug", limit=100).events
         root_events = runtime_store.list_events("root-session")
+        summary_events = [event for event in events if event.event_type == "inter_agent.summary.updated"]
+        run_completed = next(event for event in events if event.event_type == "inter_agent.run.completed")
 
         self.assertEqual(result.run.status, "completed")
         self.assertEqual(
@@ -192,6 +194,13 @@ class InterAgentExecutorTest(unittest.TestCase):
         self.assertIn("manager-tools mode", root_events[0].payload["label"])
         self.assertIn("Multi-agent run completed", root_events[-1].payload["label"])
         self.assertTrue(result.participant_results[0].synthetic)
+        self.assertEqual(result.participant_results[0].synthetic_source, "controlled_payload")
+        self.assertTrue(all(event.payload.get("synthetic") is True for event in summary_events))
+        self.assertEqual({event.payload.get("synthetic_source") for event in summary_events}, {"controlled_payload"})
+        self.assertTrue(run_completed.payload.get("synthetic"))
+        self.assertEqual(run_completed.payload.get("synthetic_source"), "controlled_payload")
+        self.assertEqual([event.payload.get("synthetic") for event in root_events], [True, True])
+        self.assertEqual([event.payload.get("synthetic_source") for event in root_events], ["controlled_payload", "controlled_payload"])
 
     def test_controlled_participants_require_synthetic_execution_allowance(self) -> None:
         _repo_root, store, runtime_store = self._stores()

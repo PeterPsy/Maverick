@@ -106,7 +106,7 @@ Execution rules:
 
 - deterministic synthetic participants are allowed only for tests or explicit operator-controlled execution
 - public HTTP execution must not accept caller-supplied controlled participant output; CLI and MCP require an operator caller plus explicit synthetic opt-in
-- synthetic participant events and execution results must be marked explicitly
+- synthetic participant events, execution results, summary-plane updates, and root transcript projections must be marked explicitly with their synthetic source
 - real participant work must use hidden `child_runtime_session` sessions spawned through `InterAgentService`
 - `sequential` passes declared output from one participant into the next participant input
 - `concurrent` fans out participants under `max_concurrent_participants` and then aggregates through the root orchestrator or declared aggregator participant
@@ -114,6 +114,7 @@ Execution rules:
 - artifact refs and partial output must be persisted before a participant failure is recorded
 - root runtime projection is limited to selected summaries such as plan and terminal synthesis and must use non-terminal runtime step updates
 - successfully consumed turns stay counted in the budget ledger; only active participant/concurrency reservations are released on participant completion or failure
+- pre-participant-ledger turn reservations without `participant_id` must remain idempotent on retry and must still count toward per-participant turn enforcement, using reservation id inference where possible and conservative counting otherwise
 
 The F3 HTTP surface is `POST /api/inter-agent/runs/<run_id>/execute`. The matching CLI command is `inter-agent.runs.execute`, and the matching MCP tool is `inter_agent_execute`.
 

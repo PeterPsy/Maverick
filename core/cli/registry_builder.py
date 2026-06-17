@@ -14,6 +14,7 @@ from core.cli.core_commands import _core_command_specs
 from core.cli.models import CliCommandDefinition, CliInvocationContext
 from core.cli.runner import CliRunner
 from core.identity.store import IdentityStore
+from core.inter_agent.store import InterAgentStore
 from core.providers.provider_registry import ProviderRegistry
 from core.providers.store import ProviderStore
 from core.recovery.store import RecoveryStore
@@ -28,6 +29,7 @@ def build_core_cli_registry(
     workspace_store: WorkspaceStore | None = None,
     provider_store: ProviderStore | None = None,
     runtime_store: RuntimeStore | None = None,
+    inter_agent_store: InterAgentStore | None = None,
     secret_store: SecretStore | None = None,
     recovery_store: RecoveryStore | None = None,
     provider_registry: ProviderRegistry | None = None,
@@ -45,6 +47,7 @@ def build_core_cli_registry(
         workspace_store=workspace_store,
         provider_store=provider_store,
         runtime_store=runtime_store,
+        inter_agent_store=inter_agent_store,
         secret_store=secret_store,
         recovery_store=recovery_store,
         provider_registry=provider_registry,
@@ -83,6 +86,7 @@ def list_core_cli_commands(
     workspace_store: WorkspaceStore | None = None,
     provider_store: ProviderStore | None = None,
     runtime_store: RuntimeStore | None = None,
+    inter_agent_store: InterAgentStore | None = None,
     secret_store: SecretStore | None = None,
     recovery_store: RecoveryStore | None = None,
     provider_registry: ProviderRegistry | None = None,
@@ -99,6 +103,7 @@ def list_core_cli_commands(
         workspace_store=workspace_store,
         provider_store=provider_store,
         runtime_store=runtime_store,
+        inter_agent_store=inter_agent_store,
         secret_store=secret_store,
         recovery_store=recovery_store,
         provider_registry=provider_registry,
@@ -119,6 +124,7 @@ def run_core_cli_command(
     workspace_store: WorkspaceStore | None = None,
     provider_store: ProviderStore | None = None,
     runtime_store: RuntimeStore | None = None,
+    inter_agent_store: InterAgentStore | None = None,
     secret_store: SecretStore | None = None,
     recovery_store: RecoveryStore | None = None,
     provider_registry: ProviderRegistry | None = None,
@@ -134,6 +140,7 @@ def run_core_cli_command(
         workspace_store=workspace_store,
         provider_store=provider_store,
         runtime_store=runtime_store,
+        inter_agent_store=inter_agent_store,
         secret_store=secret_store,
         recovery_store=recovery_store,
         provider_registry=provider_registry,
@@ -153,6 +160,7 @@ def run_core_cli_command(
             workspace_store=workspace_store,
             provider_store=provider_store,
             runtime_store=runtime_store,
+            inter_agent_store=inter_agent_store,
             secret_store=secret_store,
             recovery_store=recovery_store,
             provider_registry=provider_registry,
@@ -173,6 +181,7 @@ def _hidden_app_command_exists(
     workspace_store: WorkspaceStore | None,
     provider_store: ProviderStore | None,
     runtime_store: RuntimeStore | None,
+    inter_agent_store: InterAgentStore | None,
     secret_store: SecretStore | None,
     recovery_store: RecoveryStore | None,
     provider_registry: ProviderRegistry | None,
@@ -189,6 +198,7 @@ def _hidden_app_command_exists(
         workspace_store=workspace_store,
         provider_store=provider_store,
         runtime_store=runtime_store,
+        inter_agent_store=inter_agent_store,
         secret_store=secret_store,
         recovery_store=recovery_store,
         provider_registry=provider_registry,

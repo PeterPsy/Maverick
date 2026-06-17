@@ -77,6 +77,12 @@ class RuntimeThreadVisibilityApiTestCase(AppReferenceApiTestSupport, unittest.Te
                 thread_visibility="hidden",
                 start_path=repo_root,
             )
+            queue_runtime_turn(
+                state.runtime_store,
+                turn_id="hidden-turn",
+                session_id="hidden-session",
+                input_text="hidden work",
+            )
             app = PlatformHost(state, start_path=repo_root)
             cookie = self._login(app)
 
@@ -110,6 +116,45 @@ class RuntimeThreadVisibilityApiTestCase(AppReferenceApiTestSupport, unittest.Te
                 body={"runtime_session_id": "hidden-session"},
                 cookie=cookie,
             )
+            raw_list_status, raw_list_payload, _headers = self._invoke(
+                app,
+                path="/api/runtime/sessions",
+                cookie=cookie,
+            )
+            raw_get_status, raw_get_payload, _headers = self._invoke(
+                app,
+                path="/api/runtime/sessions/hidden-session",
+                cookie=cookie,
+            )
+            raw_events_status, raw_events_payload, _headers = self._invoke(
+                app,
+                path="/api/runtime/sessions/hidden-session/events",
+                cookie=cookie,
+            )
+            raw_turns_status, raw_turns_payload, _headers = self._invoke(
+                app,
+                path="/api/runtime/sessions/hidden-session/turns",
+                cookie=cookie,
+            )
+            raw_post_turn_status, raw_post_turn_payload, _headers = self._invoke(
+                app,
+                path="/api/runtime/sessions/hidden-session/turns",
+                method="POST",
+                body={"input_text": "direct hidden"},
+                cookie=cookie,
+            )
+            turn_get_status, turn_get_payload, _headers = self._invoke(
+                app,
+                path="/api/runtime/turns/hidden-turn",
+                cookie=cookie,
+            )
+            turn_interrupt_status, turn_interrupt_payload, _headers = self._invoke(
+                app,
+                path="/api/runtime/turns/hidden-turn/interrupt",
+                method="POST",
+                body={},
+                cookie=cookie,
+            )
 
         self.assertEqual(create_status, 409)
         self.assertEqual(create_payload["error"], "runtime_session_hidden")
@@ -121,6 +166,18 @@ class RuntimeThreadVisibilityApiTestCase(AppReferenceApiTestSupport, unittest.Te
         self.assertEqual([thread["runtime_session_id"] for thread in list_payload["threads"]], ["visible-session"])
         self.assertEqual(patch_status, 409)
         self.assertEqual(patch_payload["error"], "runtime_session_hidden")
+        self.assertEqual(raw_list_status, 200)
+        self.assertEqual([session["session_id"] for session in raw_list_payload["items"]], ["visible-session"])
+        for status, payload in [
+            (raw_get_status, raw_get_payload),
+            (raw_events_status, raw_events_payload),
+            (raw_turns_status, raw_turns_payload),
+            (raw_post_turn_status, raw_post_turn_payload),
+            (turn_get_status, turn_get_payload),
+            (turn_interrupt_status, turn_interrupt_payload),
+        ]:
+            self.assertEqual(status, 409)
+            self.assertEqual(payload["error"], "runtime_session_hidden")
 
     def test_invalid_runtime_session_visibility_is_not_exposed_as_chat_thread(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:

@@ -2,14 +2,17 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import asdict, replace
 from datetime import UTC, datetime
 from decimal import Decimal
 import hashlib
 import json
+import time
 from typing import Any
 import uuid
 
+from core.inter_agent.errors import InterAgentOperationError
 from core.inter_agent.events import (
     EventRetentionPolicyRecord,
     InterAgentEventRecord,
@@ -29,15 +32,31 @@ from core.inter_agent.models import (
     validate_run_spec,
 )
 from core.inter_agent.store import InterAgentRunCreateBundle, InterAgentStore
+from core.runtime.errors import RuntimeSessionNotFoundError
+from core.runtime.lifecycle_service_sessions import create_child_runtime_session
+from core.runtime.runtime_session import RuntimeSessionGrantRecord, RuntimeSessionRecord, runtime_session_allows_user_thread
+from core.runtime.store import RuntimeStore
+from core.runtime.service import record_runtime_event, transition_runtime_session, transition_runtime_turn
+from core.runtime.turn_submission import (
+    interrupt_runtime_provider_turn,
+    release_idle_runtime_processes,
+    submit_runtime_turn,
+    submit_runtime_turn_async,
+)
 
 
 DEFAULT_SUMMARY_EVENT_LIMIT = 1000
 DEFAULT_DETAIL_EVENT_LIMIT = 500
 DEFAULT_DEBUG_EVENT_LIMIT = 100
+TERMINAL_RUN_STATUSES = {"completed", "failed", "cancelled"}
+TERMINAL_PARTICIPANT_STATUSES = {"completed", "failed", "cancelled"}
+RUNTIME_CHILD_EXECUTION_MODE = "child_runtime_session"
+DEFAULT_WAIT_TIMEOUT_SECONDS = 0.0
+MAX_WAIT_TIMEOUT_SECONDS = 30.0
 
 
 class InterAgentService:
-    """Coordinate inter-agent records without spawning runtimes or LLM work."""
+    """Coordinate inter-agent records and F2 runtime operations."""
 
     def __init__(self, store: InterAgentStore) -> None:
         self.store = store
@@ -289,6 +308,398 @@ class InterAgentService:
             )
         return expired
 
+    def spawn_participant_runtime_session(
+        self,
+        runtime_store: RuntimeStore,
+        *,
+        workspace_id: str,
+        run_id: str,
+        participant_id: str,
+        child_session_id: str | None = None,
+        child_agent_id: str | None = None,
+        system_prompt: str | None = None,
+        skill_ids: list[str] | None = None,
+        skill_catalog_app_id: str | None = None,
+        source_app_id: str | None = None,
+        owner_user_id: str | None = None,
+        created_by_user_id: str | None = None,
+        grants: list[RuntimeSessionGrantRecord | dict[str, str | None]] | None = None,
+        now: datetime | None = None,
+    ) -> tuple[InterAgentParticipantRecord, RuntimeSessionRecord, bool]:
+        """Spawn one hidden runtime session for an existing child participant.
+
+        The child receives only explicit materialized prompt, skills, owner, and
+        grants. Nothing is copied from the root runtime session by this service.
+        """
+        timestamp = now or datetime.now(tz=UTC)
+        run = self.store.get_run(run_id, workspace_id=workspace_id)
+        participant = self.store.get_participant(participant_id, workspace_id=workspace_id, run_id=run.run_id)
+        if participant.execution_mode != RUNTIME_CHILD_EXECUTION_MODE:
+            raise InterAgentOperationError("Only child_runtime_session participants can spawn hidden runtime sessions.")
+        if participant.thread_visibility != "hidden":
+            raise InterAgentOperationError("Child runtime participants must remain hidden.")
+        try:
+            root_session = runtime_store.get_session(run.root_runtime_session_id)
+        except (RuntimeSessionNotFoundError, ValueError) as exc:
+            raise InterAgentOperationError("Root runtime session is not available for this inter-agent run.") from exc
+        if root_session.workspace_id != run.workspace_id or root_session.workspace_id != workspace_id:
+            raise InterAgentOperationError("Root runtime session workspace does not match the inter-agent run.")
+        if not runtime_session_allows_user_thread(root_session):
+            raise InterAgentOperationError("Inter-agent runs must be rooted in a user-visible runtime session.")
+        existing_session_id = _clean_optional(participant.runtime_session_id)
+        if existing_session_id:
+            try:
+                existing_session = runtime_store.get_session(existing_session_id)
+            except (RuntimeSessionNotFoundError, ValueError):
+                existing_session = None
+            if existing_session is not None:
+                return participant, existing_session, False
+        materialized_prompt = _materialized_system_prompt(participant, explicit_prompt=system_prompt)
+        materialized_skill_ids = _materialized_skill_ids(participant, explicit_skill_ids=skill_ids)
+        materialized_skill_catalog_app_id = _materialized_skill_catalog_app_id(
+            participant,
+            explicit_skill_catalog_app_id=skill_catalog_app_id,
+        )
+        session_id = _clean_optional(child_session_id) or _stable_id("iasess", run.run_id, participant.participant_id)
+        agent_id = _clean_optional(child_agent_id) or participant.agent_type_id or participant.participant_id
+        reservation_id = f"spawn:{participant.participant_id}"
+        self.reserve_budget(
+            run,
+            reservation_id=reservation_id,
+            participant_slots=1,
+            running_participants=1,
+            turns=1,
+            now=timestamp,
+        )
+        try:
+            child = create_child_runtime_session(
+                runtime_store,
+                parent_session_id=run.root_runtime_session_id,
+                child_session_id=session_id,
+                child_agent_id=agent_id,
+                system_prompt=materialized_prompt,
+                skill_ids=materialized_skill_ids,
+                skill_catalog_app_id=materialized_skill_catalog_app_id,
+                source_app_id=_clean_optional(source_app_id) or run.source_app_id,
+                owner_user_id=_clean_optional(owner_user_id),
+                created_by_user_id=_clean_optional(created_by_user_id) or run.created_by_user_id,
+                grants=grants,
+                now=timestamp,
+            )
+            child = transition_runtime_session(runtime_store, session_id=child.session_id, target_status="running", now=timestamp)
+        except Exception:
+            self.release_budget(run, reservation_id=reservation_id, now=timestamp)
+            raise
+        updated = replace(
+            participant,
+            runtime_session_id=child.session_id,
+            status="running",
+            updated_at=timestamp,
+        )
+        self.store.save_participant(updated)
+        if run.status in {"created", "planning", "recovering"}:
+            run = replace(run, status="running", updated_at=timestamp)
+            self.store.save_run(run)
+        self.record_event(
+            run,
+            event_type="inter_agent.participant.started",
+            participant_id=updated.participant_id,
+            runtime_session_id=child.session_id,
+            visibility_plane="detail",
+            idempotency_key=f"{run.run_id}:participant.started:{updated.participant_id}:{child.session_id}",
+            correlation_id=child.session_id,
+            payload={
+                "participant_id": updated.participant_id,
+                "runtime_session_id": child.session_id,
+                "thread_visibility": child.thread_visibility,
+            },
+            now=timestamp,
+        )
+        return updated, child, True
+
+    def send_runtime_message(
+        self,
+        state: Any,
+        *,
+        workspace_id: str,
+        run_id: str,
+        participant_id: str,
+        input_text: str,
+        client_message_id: str | None = None,
+        async_requested: bool = False,
+        now: datetime | None = None,
+    ) -> tuple[InterAgentParticipantRecord, Any, list[Any]]:
+        """Send one runtime turn to a spawned child participant session."""
+        timestamp = now or datetime.now(tz=UTC)
+        run = self.store.get_run(run_id, workspace_id=workspace_id)
+        participant = self.store.get_participant(participant_id, workspace_id=workspace_id, run_id=run.run_id)
+        runtime_session_id = _clean_optional(participant.runtime_session_id)
+        if not runtime_session_id:
+            raise InterAgentOperationError("Participant has no spawned runtime session.")
+        try:
+            session = state.runtime_store.get_session(runtime_session_id)
+        except (RuntimeSessionNotFoundError, ValueError) as exc:
+            raise InterAgentOperationError("Participant runtime session is not available.") from exc
+        if session.workspace_id != workspace_id or session.thread_visibility != "hidden":
+            raise InterAgentOperationError("Participant runtime session violates hidden-session policy.")
+        message = str(input_text or "").strip()
+        if not message:
+            raise InterAgentOperationError("Inter-agent messages require input_text.")
+        submit = submit_runtime_turn_async if async_requested else submit_runtime_turn
+        turn, events = submit(
+            state,
+            session=session,
+            input_text=message,
+            client_message_id=_clean_optional(client_message_id),
+        )
+        self.record_event(
+            run,
+            event_type="inter_agent.message.sent",
+            participant_id=participant.participant_id,
+            runtime_session_id=session.session_id,
+            runtime_turn_id=turn.turn_id,
+            visibility_plane="detail",
+            idempotency_key=f"{run.run_id}:message.sent:{turn.turn_id}",
+            correlation_id=turn.turn_id,
+            payload={
+                "participant_id": participant.participant_id,
+                "runtime_session_id": session.session_id,
+                "runtime_turn_id": turn.turn_id,
+            },
+            now=timestamp,
+        )
+        return participant, turn, events
+
+    def wait_for_run(
+        self,
+        *,
+        workspace_id: str,
+        run_id: str,
+        timeout_seconds: float = DEFAULT_WAIT_TIMEOUT_SECONDS,
+        poll_interval_seconds: float = 0.1,
+    ) -> InterAgentRunRecord:
+        """Wait briefly for one run to reach a terminal state."""
+        timeout = max(0.0, min(float(timeout_seconds), MAX_WAIT_TIMEOUT_SECONDS))
+        deadline = time.monotonic() + timeout
+        while True:
+            run = self.store.get_run(run_id, workspace_id=workspace_id)
+            if run.status in TERMINAL_RUN_STATUSES or time.monotonic() >= deadline:
+                return run
+            time.sleep(max(0.01, min(float(poll_interval_seconds), 1.0)))
+
+    def interrupt_run(
+        self,
+        state: Any,
+        *,
+        workspace_id: str,
+        run_id: str,
+        participant_id: str | None = None,
+        reason: str = "inter_agent_interrupt",
+        now: datetime | None = None,
+    ) -> dict[str, Any]:
+        """Interrupt active child participant turns without deleting sessions."""
+        timestamp = now or datetime.now(tz=UTC)
+        run = self.store.get_run(run_id, workspace_id=workspace_id)
+        participants = _selected_child_participants(
+            self.store.list_participants(run.run_id, workspace_id=workspace_id),
+            participant_id=participant_id,
+        )
+        interrupted_sessions: list[dict[str, Any]] = []
+        for participant in participants:
+            if not participant.runtime_session_id:
+                continue
+            interrupted_sessions.append(
+                _interrupt_runtime_session(
+                    state,
+                    session_id=participant.runtime_session_id,
+                    reason=reason,
+                )
+            )
+            if participant.status not in TERMINAL_PARTICIPANT_STATUSES:
+                updated = replace(participant, status="cancelled", updated_at=timestamp)
+                self.store.save_participant(updated)
+                self.record_event(
+                    run,
+                    event_type="inter_agent.participant.status_changed",
+                    participant_id=participant.participant_id,
+                    runtime_session_id=participant.runtime_session_id,
+                    visibility_plane="detail",
+                    idempotency_key=f"{run.run_id}:participant.cancelled:{participant.participant_id}:{timestamp.isoformat()}",
+                    correlation_id=participant.participant_id,
+                    payload={"participant_id": participant.participant_id, "status": "cancelled", "reason": reason},
+                    now=timestamp,
+                )
+        if run.status not in TERMINAL_RUN_STATUSES:
+            run = replace(run, status="paused", updated_at=timestamp)
+            self.store.save_run(run)
+            self.record_event(
+                run,
+                event_type="inter_agent.run.paused",
+                participant_id=participant_id,
+                visibility_plane="summary",
+                idempotency_key=f"{run.run_id}:run.paused:{timestamp.isoformat()}",
+                correlation_id=run.run_id,
+                payload={"reason": reason, "participant_id": participant_id},
+                now=timestamp,
+            )
+        return {"run": run, "interrupted_sessions": interrupted_sessions}
+
+    def resume_run(
+        self,
+        *,
+        workspace_id: str,
+        run_id: str,
+        reason: str = "inter_agent_resume",
+        now: datetime | None = None,
+    ) -> InterAgentRunRecord:
+        """Mark a paused or recovering run runnable again without queuing work."""
+        timestamp = now or datetime.now(tz=UTC)
+        run = self.store.get_run(run_id, workspace_id=workspace_id)
+        if run.status in TERMINAL_RUN_STATUSES:
+            raise InterAgentOperationError("Terminal inter-agent runs cannot be resumed.")
+        updated = replace(run, status="running", updated_at=timestamp)
+        self.store.save_run(updated)
+        self.record_event(
+            updated,
+            event_type="inter_agent.run.resumed",
+            participant_id=updated.orchestrator_participant_id,
+            visibility_plane="summary",
+            idempotency_key=f"{updated.run_id}:run.resumed:{timestamp.isoformat()}",
+            correlation_id=updated.run_id,
+            payload={"reason": reason},
+            now=timestamp,
+        )
+        return updated
+
+    def close_run(
+        self,
+        *,
+        workspace_id: str,
+        run_id: str,
+        cleanup_runtime_session: Callable[[str, str], dict[str, object]],
+        reason: str = "inter_agent_run_closed",
+        terminal_status: str = "cancelled",
+        delete_records: bool = False,
+        now: datetime | None = None,
+    ) -> dict[str, Any]:
+        """Close one run and clean up all non-root child runtime sessions."""
+        timestamp = now or datetime.now(tz=UTC)
+        if terminal_status not in TERMINAL_RUN_STATUSES:
+            raise InterAgentOperationError("terminal_status must be completed, failed, or cancelled.")
+        run = self.store.get_run(run_id, workspace_id=workspace_id)
+        participants = self.store.list_participants(run.run_id, workspace_id=workspace_id)
+        cleanups: list[dict[str, object]] = []
+        for participant in participants:
+            if participant.execution_mode != RUNTIME_CHILD_EXECUTION_MODE or not participant.runtime_session_id:
+                continue
+            cleanup_result = cleanup_runtime_session(participant.runtime_session_id, reason)
+            cleanups.append({"participant_id": participant.participant_id, **cleanup_result})
+            if participant.status not in TERMINAL_PARTICIPANT_STATUSES:
+                self.store.save_participant(replace(participant, status="cancelled", updated_at=timestamp))
+        updated = replace(run, status=terminal_status, updated_at=timestamp, ended_at=timestamp)
+        self.store.save_run(updated)
+        event_type: InterAgentEventType = {
+            "completed": "inter_agent.run.completed",
+            "failed": "inter_agent.run.failed",
+            "cancelled": "inter_agent.run.cancelled",
+        }[terminal_status]  # type: ignore[assignment]
+        self.record_event(
+            updated,
+            event_type=event_type,
+            participant_id=updated.orchestrator_participant_id,
+            visibility_plane="summary",
+            idempotency_key=f"{updated.run_id}:run.closed:{terminal_status}:{timestamp.isoformat()}",
+            correlation_id=updated.run_id,
+            payload={"reason": reason, "status": terminal_status},
+            now=timestamp,
+        )
+        deleted: dict[str, int] | None = None
+        if delete_records:
+            deleted = self.store.delete_run_records(updated.run_id, workspace_id=workspace_id)
+        return {"run": updated, "participant_cleanups": cleanups, "deleted": deleted}
+
+    def recover_non_terminal_runs(
+        self,
+        runtime_store: RuntimeStore,
+        *,
+        workspace_id: str,
+        now: datetime | None = None,
+    ) -> dict[str, int]:
+        """Reconcile non-terminal inter-agent runs after backend startup."""
+        timestamp = now or datetime.now(tz=UTC)
+        inspected = 0
+        recovered = 0
+        failed_participants = 0
+        failed_runs = 0
+        for run in self.store.list_runs(workspace_id):
+            if run.status in TERMINAL_RUN_STATUSES:
+                continue
+            inspected += 1
+            participants = self.store.list_participants(run.run_id, workspace_id=workspace_id)
+            active_child_count = 0
+            for participant in participants:
+                if participant.execution_mode != RUNTIME_CHILD_EXECUTION_MODE:
+                    continue
+                if not participant.runtime_session_id:
+                    continue
+                try:
+                    runtime_store.get_session(participant.runtime_session_id)
+                    active_child_count += 1
+                except (RuntimeSessionNotFoundError, ValueError):
+                    if participant.status not in TERMINAL_PARTICIPANT_STATUSES:
+                        failed = replace(participant, status="failed", updated_at=timestamp)
+                        self.store.save_participant(failed)
+                        failed_participants += 1
+                        self.record_event(
+                            run,
+                            event_type="inter_agent.participant.status_changed",
+                            participant_id=participant.participant_id,
+                            runtime_session_id=participant.runtime_session_id,
+                            visibility_plane="detail",
+                            idempotency_key=f"{run.run_id}:participant.recovery_failed:{participant.participant_id}:{timestamp.isoformat()}",
+                            correlation_id=participant.participant_id,
+                            payload={
+                                "participant_id": participant.participant_id,
+                                "status": "failed",
+                                "reason": "runtime_session_missing_after_restart",
+                            },
+                            now=timestamp,
+                        )
+            if active_child_count == 0 and run.status in {"running", "planning", "recovering"}:
+                updated = replace(run, status="failed", updated_at=timestamp, ended_at=timestamp)
+                self.store.save_run(updated)
+                failed_runs += 1
+                self.record_event(
+                    updated,
+                    event_type="inter_agent.run.failed",
+                    participant_id=updated.orchestrator_participant_id,
+                    visibility_plane="summary",
+                    idempotency_key=f"{updated.run_id}:run.recovery_failed:{timestamp.isoformat()}",
+                    correlation_id=updated.run_id,
+                    payload={"reason": "no_active_child_runtime_sessions_after_restart"},
+                    now=timestamp,
+                )
+                continue
+            updated = replace(run, status="recovering" if run.status == "running" else run.status, updated_at=timestamp, recovery_generation=run.recovery_generation + 1)
+            self.store.save_run(updated)
+            recovered += 1
+            self.record_event(
+                updated,
+                event_type="inter_agent.run.recovered",
+                participant_id=updated.orchestrator_participant_id,
+                visibility_plane="summary",
+                idempotency_key=f"{updated.run_id}:run.recovered:{updated.recovery_generation}",
+                correlation_id=updated.run_id,
+                payload={"recovery_generation": updated.recovery_generation},
+                now=timestamp,
+            )
+        return {
+            "inspected_runs": inspected,
+            "recovered_runs": recovered,
+            "failed_runs": failed_runs,
+            "failed_participants": failed_participants,
+        }
+
 
 def default_event_retention_policy(
     *,
@@ -495,6 +906,99 @@ def _first_root_orchestrator_id(specs: list[ParticipantSpec], participant_ids: d
         if spec.kind == "orchestrator" and spec.execution_mode == "root_orchestrator":
             return participant_ids[index]
     raise ValueError("validated run spec did not include a root orchestrator")
+
+
+def _materialized_system_prompt(participant: InterAgentParticipantRecord, *, explicit_prompt: str | None) -> str | None:
+    prompt = _clean_optional(explicit_prompt)
+    if prompt:
+        return prompt
+    snapshot = participant.agent_snapshot if isinstance(participant.agent_snapshot, dict) else {}
+    return _clean_optional(snapshot.get("system_prompt")) if isinstance(snapshot.get("system_prompt"), str) else None
+
+
+def _materialized_skill_ids(
+    participant: InterAgentParticipantRecord,
+    *,
+    explicit_skill_ids: list[str] | None,
+) -> list[str]:
+    if explicit_skill_ids is not None:
+        return _clean_string_list(explicit_skill_ids)
+    return _clean_string_list(participant.skill_ids)
+
+
+def _materialized_skill_catalog_app_id(
+    participant: InterAgentParticipantRecord,
+    *,
+    explicit_skill_catalog_app_id: str | None,
+) -> str | None:
+    value = _clean_optional(explicit_skill_catalog_app_id)
+    if value:
+        return value
+    snapshot = participant.agent_snapshot if isinstance(participant.agent_snapshot, dict) else {}
+    snapshot_catalog = snapshot.get("skill_catalog_app_id")
+    return _clean_optional(snapshot_catalog) if isinstance(snapshot_catalog, str) else None
+
+
+def _selected_child_participants(
+    participants: list[InterAgentParticipantRecord],
+    *,
+    participant_id: str | None,
+) -> list[InterAgentParticipantRecord]:
+    target = _clean_optional(participant_id)
+    selected = [
+        participant
+        for participant in participants
+        if participant.execution_mode == RUNTIME_CHILD_EXECUTION_MODE and (target is None or participant.participant_id == target)
+    ]
+    if target is not None and not selected:
+        raise InterAgentOperationError(f"Child runtime participant `{target}` was not found.")
+    return selected
+
+
+def _interrupt_runtime_session(state: Any, *, session_id: str, reason: str) -> dict[str, Any]:
+    try:
+        session = state.runtime_store.get_session(session_id)
+    except (RuntimeSessionNotFoundError, ValueError):
+        return {"session_id": session_id, "found": False, "cancelled_turns": 0, "provider_interrupted": False}
+    provider_interrupted = interrupt_runtime_provider_turn(state, session)
+    cancelled_turns = 0
+    for turn in state.runtime_store.list_turns(session.session_id):
+        if turn.status not in {"queued", "active"}:
+            continue
+        cancelled = transition_runtime_turn(
+            state.runtime_store,
+            turn_id=turn.turn_id,
+            target_status="cancelled",
+            failure_reason=reason,
+        )
+        record_runtime_event(
+            state.runtime_store,
+            event_id=str(uuid.uuid4()),
+            session_id=session.session_id,
+            turn_id=cancelled.turn_id,
+            plane="turn",
+            event_type="runtime.turn.cancelled",
+            payload={"reason": reason},
+            event_bus=getattr(state, "runtime_event_bus", None),
+        )
+        cancelled_turns += 1
+    release_idle_runtime_processes(
+        state,
+        session_id=session.session_id,
+        provider_id=session.provider_id or "unconfigured",
+        reason=reason,
+        idle_ttl_seconds=0,
+    )
+    return {
+        "session_id": session.session_id,
+        "found": True,
+        "cancelled_turns": cancelled_turns,
+        "provider_interrupted": provider_interrupted,
+    }
+
+
+def _clean_string_list(values: list[str] | None) -> list[str]:
+    return [str(value).strip() for value in (values or []) if str(value).strip()]
 
 
 def _new_id(prefix: str) -> str:

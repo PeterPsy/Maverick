@@ -111,7 +111,11 @@ def _publish_thread_change(
 def _list_session_payloads(state: PlatformState, *, workspace_id: str, start_path) -> list[dict[str, object]]:
     sessions = state.runtime_store.list_sessions(workspace_id)
     reconciled = [_reconciled_session(state, session, start_path=start_path) for session in sessions]
-    return [_session_payload(session, provider_id=_resolved_provider_id(state, session)) for session in reconciled]
+    return [
+        _session_payload(session, provider_id=_resolved_provider_id(state, session))
+        for session in reconciled
+        if runtime_session_allows_user_thread(session)
+    ]
 
 
 def _resolved_provider_id(state: PlatformState, session: RuntimeSessionRecord) -> str | None:
@@ -561,6 +565,8 @@ def _handle_session_item(state: PlatformState, context: RequestSession, session_
         return json_response(start_response, {"error": "runtime_session_not_found"}, status="404 Not Found")
     if session.workspace_id != context.workspace_id:
         return json_response(start_response, {"error": "runtime_session_not_found"}, status="404 Not Found")
+    if not runtime_session_allows_user_thread(session):
+        return _hidden_runtime_session_response(start_response, session)
     session = _reconciled_session(state, session, start_path=start_path)
     return json_response(start_response, _session_payload(session, provider_id=_resolved_provider_id(state, session)))
 
@@ -584,6 +590,8 @@ def _handle_session_events(state: PlatformState, context: RequestSession, sessio
         return json_response(start_response, {"error": "runtime_session_not_found"}, status="404 Not Found")
     if session.workspace_id != context.workspace_id:
         return json_response(start_response, {"error": "runtime_session_not_found"}, status="404 Not Found")
+    if not runtime_session_allows_user_thread(session):
+        return _hidden_runtime_session_response(start_response, session)
     _reconciled_session(state, session, start_path=start_path)
     query = parse_qs(query_string, keep_blank_values=False)
     limit = _bounded_positive_int(query.get("limit", [None])[0], maximum=5000)
@@ -605,6 +613,8 @@ def _handle_session_turns(state: PlatformState, context: RequestSession, session
         return json_response(start_response, {"error": "runtime_session_not_found"}, status="404 Not Found")
     if session.workspace_id != context.workspace_id:
         return json_response(start_response, {"error": "runtime_session_not_found"}, status="404 Not Found")
+    if not runtime_session_allows_user_thread(session):
+        return _hidden_runtime_session_response(start_response, session)
     session = _reconciled_session(state, session, start_path=start_path)
     if method == "GET":
         return json_response(start_response, {"items": [_turn_payload(turn) for turn in state.runtime_store.list_turns(session_id)]})
@@ -765,6 +775,12 @@ def _handle_turn_item(state: PlatformState, context: RequestSession, turn_id: st
         return json_response(start_response, {"error": "runtime_turn_not_found"}, status="404 Not Found")
     if turn.workspace_id != context.workspace_id:
         return json_response(start_response, {"error": "runtime_turn_not_found"}, status="404 Not Found")
+    try:
+        session = state.runtime_store.get_session(turn.session_id)
+    except (RuntimeSessionNotFoundError, ValueError):
+        return json_response(start_response, {"error": "runtime_turn_not_found"}, status="404 Not Found")
+    if not runtime_session_allows_user_thread(session):
+        return _hidden_runtime_session_response(start_response, session)
     return json_response(start_response, _turn_payload(turn))
 
 
@@ -779,6 +795,8 @@ def _handle_turn_interrupt(state: PlatformState, context: RequestSession, turn_i
         session = state.runtime_store.get_session(turn.session_id)
     except (RuntimeSessionNotFoundError, ValueError):
         return json_response(start_response, {"error": "runtime_turn_not_found"}, status="404 Not Found")
+    if not runtime_session_allows_user_thread(session):
+        return _hidden_runtime_session_response(start_response, session)
     try:
         require_runtime_session_operation(
             workspace_store=state.workspace_store,

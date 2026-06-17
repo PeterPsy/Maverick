@@ -9,6 +9,8 @@ import shutil
 
 from core.api.app_mounts import handle_app_backend
 from core.api.platform_state import PlatformState
+from core.inter_agent.service import InterAgentService, TERMINAL_RUN_STATUSES
+from core.inter_agent.surfaces import inter_agent_payload
 from core.runtime.errors import RuntimeSessionNotFoundError
 from core.runtime.paths import runtime_session_root
 from core.runtime.runtime_threads import thread_payload
@@ -43,6 +45,13 @@ def cleanup_runtime_session(
             "runtime_root_deleted": False,
         }
 
+    inter_agent_cleanup = _cleanup_inter_agent_runs_for_root_session(
+        state,
+        workspace_id=session.workspace_id,
+        root_session_id=session.session_id,
+        reason=reason,
+        start_path=start_path or state.repository_root,
+    )
     app_cleanup = _cleanup_app_runtime_session_metadata(
         state,
         workspace_id=session.workspace_id,
@@ -79,6 +88,7 @@ def cleanup_runtime_session(
         **termination,
         "workspace_id": session.workspace_id,
         "deleted": deleted,
+        "inter_agent_cleanup": inter_agent_cleanup,
         "app_cleanup": app_cleanup,
         "deleted_threads": len(deleted_threads),
         "deleted_thread_ids": deleted_threads,
@@ -99,6 +109,37 @@ def _delete_runtime_threads_for_session(
         if state.runtime_store.delete_thread(thread.thread_id):
             deleted_thread_ids.append(thread.thread_id)
     return deleted_thread_ids
+
+
+def _cleanup_inter_agent_runs_for_root_session(
+    state: PlatformState,
+    *,
+    workspace_id: str,
+    root_session_id: str,
+    reason: str,
+    start_path,
+) -> list[dict[str, object]]:
+    service = InterAgentService(state.inter_agent_store)
+    results: list[dict[str, object]] = []
+    for run in state.inter_agent_store.list_runs(workspace_id):
+        if run.root_runtime_session_id != root_session_id or run.status in TERMINAL_RUN_STATUSES:
+            continue
+        result = service.close_run(
+            workspace_id=workspace_id,
+            run_id=run.run_id,
+            cleanup_runtime_session=lambda session_id, cleanup_reason: cleanup_runtime_session(
+                state,
+                session_id=session_id,
+                reason=cleanup_reason,
+                start_path=start_path,
+                publish_thread_events=False,
+            ),
+            reason=reason,
+            terminal_status="cancelled",
+            delete_records=True,
+        )
+        results.append(inter_agent_payload({"run_id": run.run_id, **result}))
+    return results
 
 
 def _publish_deleted_thread_cleanup(

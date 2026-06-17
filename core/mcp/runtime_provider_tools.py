@@ -7,6 +7,7 @@ from typing import Any
 from core.mcp.core_tool_helpers import OPERATOR_ONLY, WORKSPACE_SAFE, core_mcp_tool
 from core.mcp.models import McpInvocationContext, McpToolDefinition
 from core.providers.store import ProviderStore
+from core.runtime.runtime_session import runtime_session_allows_user_thread
 from core.runtime.store import RuntimeStore
 
 
@@ -32,6 +33,7 @@ def runtime_provider_tool_specs(
                     "effective_mode": item.effective_mode,
                 }
                 for item in runtime_store.list_sessions(workspace_id)
+                if runtime_session_allows_user_thread(item)
             ],
         }
 

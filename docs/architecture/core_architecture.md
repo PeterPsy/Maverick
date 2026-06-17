@@ -328,12 +328,16 @@ authorization ceiling: `summary` sees only summary events, `detail` sees summary
 and detail, and `debug` sees all three planes. Event retention is also per
 visibility plane so debug history can be shorter than user-facing summaries.
 
-F1-level inter-agent services must not spawn provider sessions, create hidden
-runtime sessions, invoke an LLM, or expose HTTP/CLI/MCP executor operations. They
-may validate `InterAgentRunSpec` and `ParticipantSpec`, persist schema records,
-reserve and release budget atomically, expire approvals fail-closed, and append
-bounded replay events. Runtime integration and operational spawn/send/wait
-surfaces remain a later runtime phase.
+F1-level inter-agent services did not spawn provider sessions, create hidden
+runtime sessions, invoke an LLM, or expose HTTP/CLI/MCP executor operations. F2
+adds the first policy-aware runtime bridge: core inter-agent surfaces may spawn a
+declared `child_runtime_session` participant into a hidden
+`session_kind=inter_agent_participant` runtime session, send turns to that child,
+wait, interrupt, resume, close, and recover runs. Those surfaces must materialize
+prompt, skill ids, skill catalog, source app, owner, creator, and grants from the
+participant spec or explicit authorized inputs; they must not clone
+authority-bearing prompt, skills, owner, grants, or secret access from the root
+runtime session.
 
 The F1 store contract is workspace-safe by default. Normal reads and writes must
 carry `workspace_id`; operator-wide scans, if needed later, must be explicit
@@ -804,7 +808,7 @@ Current transient command params include `new_chat`, `new_chat_request_id`, `new
 
 Creating a new empty chat thread must not preallocate or start a runtime session. A runtime session is created only when the first user message or an explicit runtime-session handoff requires execution. For a draft chat's first user message, Chat must create the runtime session and queue the first turn in one runtime request before doing route/catalog work that is not required to persist the message; default title generation is follow-on thread metadata from the queued message and must not be a prerequisite for starting the turn. Core may mark a new thread title as pending and resolve it asynchronously through a bounded AI micro-task, provided the thread remains visible and usable while the title is pending and a deterministic fallback clears the pending state if model generation fails.
 
-Runtime sessions are user-visible by default for legacy compatibility: missing `session_kind` is interpreted as `chat_root`, and missing `thread_visibility` is interpreted as `user`. Explicit `inter_agent_participant` sessions are the exception: they must be hidden, omitted visibility on a participant is normalized to `hidden`, and explicit `thread_visibility=user` is invalid for that kind. Invalid persisted visibility values fail closed and must not make a runtime session appear in user-facing thread catalogs. Sessions with `thread_visibility=hidden`, such as future `inter_agent_participant` child sessions, may have turns, runtime events, provider state, and process records, but must not create a `RuntimeThreadRecord`, appear in Chat catalogs, or be opened through runtime thread APIs. Direct attempts to create or open a runtime thread for a hidden session must fail with `runtime_session_hidden`.
+Runtime sessions are user-visible by default for legacy compatibility: missing `session_kind` is interpreted as `chat_root`, and missing `thread_visibility` is interpreted as `user`. Explicit `inter_agent_participant` sessions are the exception: they must be hidden, omitted visibility on a participant is normalized to `hidden`, and explicit `thread_visibility=user` is invalid for that kind. Invalid persisted visibility values fail closed and must not make a runtime session appear in user-facing thread catalogs. Sessions with `thread_visibility=hidden`, such as `inter_agent_participant` child sessions, may have turns, runtime events, provider state, and process records, but must not create a `RuntimeThreadRecord`, appear in Chat catalogs, or be opened through runtime thread APIs. Direct attempts to create or open a runtime thread for a hidden session must fail with `runtime_session_hidden`. Direct raw runtime HTTP routes and runtime session WebSocket streams must also apply server-side visibility: hidden sessions are excluded from `GET /api/runtime/sessions`, rejected from direct session, event, turn, submit-turn, and turn-interrupt HTTP access, and rejected by `WS /ws/runtime/sessions/<session_id>`.
 
 When a provider such as the built-in `agents` app is installed and enabled in the active workspace and satisfies both `agent.catalog` and `agent.prompt-materializer`, `chat` may use that provider's backend surface to initialize a draft chat with a selected agent prompt and skill metadata. This is an app-to-app use of official app backend surfaces, not a core dependency: the core must not read Agents data, parse role files, or special-case the Chat/Agents relationship. Chat may expose the selection in its composer before the first user turn; once a runtime session exists, that session keeps its original app-provided prompt and agent metadata.
 
@@ -1148,6 +1152,28 @@ Current first-use endpoints include:
 - `POST /api/runtime/threads/<thread_id>/read`
 - `WS /ws/runtime/sessions/<session_id>`
 - `WS /ws/runtime/threads`
+
+Inter-agent F2 runtime operations are exposed through the core-owned inter-agent
+surface, not through raw hidden runtime routes:
+
+- `POST /api/inter-agent/runs`
+- `GET /api/inter-agent/runs`
+- `GET /api/inter-agent/runs/<run_id>`
+- `GET /api/inter-agent/runs/<run_id>/events`
+- `POST /api/inter-agent/runs/<run_id>/participants`
+- `POST /api/inter-agent/runs/<run_id>/messages`
+- `GET|POST /api/inter-agent/runs/<run_id>/wait`
+- `POST /api/inter-agent/runs/<run_id>/interrupt`
+- `POST /api/inter-agent/runs/<run_id>/resume`
+- `POST /api/inter-agent/runs/<run_id>/close`
+
+The matching core CLI commands are `inter-agent.runs.create`,
+`inter-agent.participants.spawn`, `inter-agent.messages.send`,
+`inter-agent.runs.wait`, `inter-agent.runs.interrupt`,
+`inter-agent.runs.resume`, and `inter-agent.runs.close`. The matching MCP tools
+are `inter_agent_run_create`, `inter_agent_participant_spawn`,
+`inter_agent_message_send`, `inter_agent_wait`, `inter_agent_interrupt`,
+`inter_agent_resume`, and `inter_agent_close`.
 
 Runtime session creation must include an explicit `agent_id`.
 The core must not default missing runtime ownership metadata to a product app such as Chat.
@@ -1533,6 +1559,8 @@ Owns:
 - retries
 - delivery reconciliation
 - coordination state
+- policy-aware participant runtime-session spawn, send, wait, interrupt, resume,
+  close, cleanup, and startup recovery orchestration
 
 This package should be explicitly separate from `runtime/` even when the two collaborate closely.
 

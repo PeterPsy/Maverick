@@ -12,7 +12,13 @@ from core.api.app_events import APP_EVENTS_WS_PATH, AppEventBus, stream_app_even
 from core.api.platform_host import PlatformHost
 from core.api.platform_state import bootstrap_platform_state
 from core.api.runtime_thread_websocket import runtime_thread_snapshot_frame, stream_runtime_thread_events
-from core.api.runtime_websocket import WEBSOCKET_NOT_FOUND, WEBSOCKET_UNAUTHORIZED, initial_runtime_event_page, stream_runtime_session_events
+from core.api.runtime_websocket import (
+    WEBSOCKET_NOT_FOUND,
+    WEBSOCKET_POLICY_VIOLATION,
+    WEBSOCKET_UNAUTHORIZED,
+    initial_runtime_event_page,
+    stream_runtime_session_events,
+)
 from core.runtime.runtime_events import RuntimeEventRecord
 from core.runtime.runtime_thread import RuntimeThreadRecord
 from core.runtime.runtime_turns import RuntimeTurnRecord
@@ -445,6 +451,25 @@ class RuntimeWebSocketTestCase(unittest.IsolatedAsyncioTestCase):
         sent = await self.collect_websocket_messages(state, session_id="corrupt-session", cookie=cookie)
 
         self.assertEqual(sent, [{"type": "websocket.close", "code": WEBSOCKET_NOT_FOUND}])
+
+    async def test_runtime_websocket_closes_for_hidden_runtime_session(self) -> None:
+        state = bootstrap_platform_state(start_path=self.make_repo_root())
+        cookie = self.login_cookie(state)
+        session = create_runtime_session(
+            state.runtime_store,
+            session_id="hidden-session",
+            workspace_id="default",
+            agent_id="child-agent",
+            requested_mode=None,
+            session_kind="inter_agent_participant",
+            thread_visibility="hidden",
+            governance=state.workspace_store.get_governance("default"),
+            start_path=state.repository_root,
+        )
+
+        sent = await self.collect_websocket_messages(state, session_id=session.session_id, cookie=cookie)
+
+        self.assertEqual(sent, [{"type": "websocket.close", "code": WEBSOCKET_POLICY_VIOLATION}])
 
     async def test_runtime_websocket_sends_transport_heartbeat_without_runtime_event(self) -> None:
         state = bootstrap_platform_state(start_path=self.make_repo_root())

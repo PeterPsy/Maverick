@@ -15,6 +15,7 @@ from core.api.platform_state import PlatformState
 from core.api.session_api import resolve_request_session
 from core.runtime.errors import RuntimeSessionNotFoundError
 from core.runtime.runtime_events import RuntimeEventRecord
+from core.runtime.runtime_session import runtime_session_allows_user_thread
 from core.runtime.runtime_turns import RuntimeTurnRecord
 from core.runtime.store import RuntimeEventPage
 from core.shared.entrypoints import EntrypointShutdownController
@@ -231,6 +232,9 @@ async def stream_runtime_session_events(
         return
     if session.workspace_id != context.workspace_id:
         await send({"type": "websocket.close", "code": WEBSOCKET_NOT_FOUND})
+        return
+    if not runtime_session_allows_user_thread(session):
+        await send({"type": "websocket.close", "code": WEBSOCKET_POLICY_VIOLATION})
         return
 
     query = websocket_query(scope)

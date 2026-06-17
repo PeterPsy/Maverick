@@ -139,6 +139,9 @@ class InterAgentStore(Protocol):
     def list_runs(self, workspace_id: str) -> list[InterAgentRunRecord]:
         ...
 
+    def delete_run_records(self, run_id: str, *, workspace_id: str) -> dict[str, int]:
+        ...
+
     def save_participant(self, record: InterAgentParticipantRecord) -> InterAgentParticipantRecord:
         ...
 
@@ -344,6 +347,74 @@ class InterAgentDocumentStore:
 
     def list_runs(self, workspace_id: str) -> list[InterAgentRunRecord]:
         return [_run_from_document(document) for document in self.collections.runs.find({"workspace_id": workspace_id})]
+
+    def delete_run_records(self, run_id: str, *, workspace_id: str) -> dict[str, int]:
+        """Delete one run's inter-agent records from the workspace store."""
+        normalized_run_id = _require_identifier(run_id, "run_id")
+        normalized_workspace_id = _require_identifier(workspace_id, "workspace_id")
+        run_documents = list(
+            self.collections.runs.find({"workspace_id": normalized_workspace_id, "run_id": normalized_run_id})
+        )
+        deleted = {
+            "runs": 0,
+            "participants": self._delete_matching(
+                self.collections.participants,
+                {"workspace_id": normalized_workspace_id, "run_id": normalized_run_id},
+                "participant_id",
+            ),
+            "edges": self._delete_matching(
+                self.collections.edges,
+                {"workspace_id": normalized_workspace_id, "run_id": normalized_run_id},
+                "edge_id",
+            ),
+            "approvals": self._delete_matching(
+                self.collections.approvals,
+                {"workspace_id": normalized_workspace_id, "run_id": normalized_run_id},
+                "approval_id",
+            ),
+            "budget_policies": 0,
+            "budget_ledgers": self._delete_matching(
+                self.collections.budget_ledgers,
+                {"workspace_id": normalized_workspace_id, "run_id": normalized_run_id},
+                "budget_ledger_id",
+            ),
+            "retention_policies": 0,
+            "events": self._delete_matching(
+                self.collections.events,
+                {"workspace_id": normalized_workspace_id, "run_id": normalized_run_id},
+                "event_id",
+            ),
+        }
+        for run_document in run_documents:
+            budget_policy_id = run_document.get("budget_policy_id")
+            retention_policy_id = run_document.get("retention_policy_id")
+            if isinstance(budget_policy_id, str):
+                deleted["budget_policies"] += self._delete_matching(
+                    self.collections.budget_policies,
+                    {"workspace_id": normalized_workspace_id, "budget_policy_id": budget_policy_id},
+                    "budget_policy_id",
+                )
+            if isinstance(retention_policy_id, str):
+                deleted["retention_policies"] += self._delete_matching(
+                    self.collections.retention_policies,
+                    {"workspace_id": normalized_workspace_id, "retention_policy_id": retention_policy_id},
+                    "retention_policy_id",
+                )
+        deleted["runs"] = self._delete_matching(
+            self.collections.runs,
+            {"workspace_id": normalized_workspace_id, "run_id": normalized_run_id},
+            "run_id",
+        )
+        return deleted
+
+    def _delete_matching(self, collection: DocumentCollection, query: dict[str, Any], identity_field: str) -> int:
+        deleted = 0
+        for document in list(collection.find(query)):
+            identity_value = document.get(identity_field)
+            if isinstance(identity_value, str):
+                collection.delete_one({**query, identity_field: identity_value})
+                deleted += 1
+        return deleted
 
     def save_participant(self, record: InterAgentParticipantRecord) -> InterAgentParticipantRecord:
         self.collections.participants.update_one(

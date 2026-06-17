@@ -7,6 +7,7 @@ from typing import Any
 from core.cli.core_command_helpers import WORKSPACE_SAFE, core_cli_command
 from core.cli.models import CliCommandDefinition, CliInvocationContext
 from core.providers.store import ProviderStore
+from core.runtime.runtime_session import runtime_session_allows_user_thread
 from core.runtime.store import RuntimeStore
 
 
@@ -30,6 +31,7 @@ def runtime_provider_command_specs(
                     "effective_mode": item.effective_mode,
                 }
                 for item in runtime_store.list_sessions(context.workspace_id)
+                if runtime_session_allows_user_thread(item)
             ],
         }
 

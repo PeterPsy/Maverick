@@ -6,10 +6,51 @@ import json
 from types import SimpleNamespace
 
 from core.app_sdk.cli import run_cli_json
+from core.inter_agent.store import build_inter_agent_document_store
+from core.runtime.errors import RuntimeSessionNotFoundError
 from core.secrets.errors import SecretPolicyError
 from core.secrets.service import build_secret_ref, create_platform_secret, grant_app_secret_use
 from core.secrets.store import SecretCollections, SecretDocumentStore
 from tests.support.surfaces import *
+
+
+def _inter_agent_run_payload(*, run_id: str, root_session_id: str) -> dict:
+    return {
+        "run_id": run_id,
+        "thread_id": root_session_id,
+        "root_runtime_session_id": root_session_id,
+        "source_app_id": "chat",
+        "mode": "manager_tools",
+        "idempotency_key": run_id,
+        "participants": [
+            {
+                "participant_id": "orchestrator",
+                "kind": "orchestrator",
+                "execution_mode": "root_orchestrator",
+                "label": "Orchestrator",
+            },
+            {
+                "participant_id": "researcher",
+                "kind": "agent",
+                "execution_mode": "child_runtime_session",
+                "label": "Researcher",
+                "agent_type_id": "research-agent",
+                "agent_snapshot": {
+                    "agent_type_id": "research-agent",
+                    "label": "Researcher",
+                    "system_prompt": "Research only.",
+                    "skill_ids": ["storage"],
+                    "skill_catalog_app_id": "skills",
+                },
+            },
+        ],
+        "budget": {
+            "max_participants": 3,
+            "max_concurrent_participants": 2,
+            "max_total_turns": 4,
+            "max_turns_per_participant": 2,
+        },
+    }
 
 
 class TestMcpCliSurfaces(SurfaceTestBase):
@@ -27,6 +68,150 @@ class TestMcpCliSurfaces(SurfaceTestBase):
         self.assertIn("developer-context.list", [tool.tool_name for tool in tools])
         self.assertIn("developer-context.read", [tool.tool_name for tool in tools])
         self.assertIn("core.persistence.status", [tool.tool_name for tool in tools])
+
+    def test_inter_agent_cli_and_mcp_surfaces_spawn_hidden_runtime_sessions(self) -> None:
+        repo_root = self.make_repo_root()
+        app_store = self.make_app_store()
+        workspace_store = self.make_workspace_store()
+        ensure_default_workspace_record(workspace_store)
+        runtime_store = self.make_runtime_store()
+        inter_agent_store = build_inter_agent_document_store(start_path=repo_root)
+        create_runtime_session(
+            runtime_store,
+            session_id="root-cli",
+            workspace_id="default",
+            agent_id="chat",
+            source_app_id="chat",
+            start_path=repo_root,
+        )
+        create_runtime_session(
+            runtime_store,
+            session_id="root-mcp",
+            workspace_id="default",
+            agent_id="chat",
+            source_app_id="chat",
+            start_path=repo_root,
+        )
+        cli_context = CliInvocationContext(
+            caller_kind="operator",
+            workspace_id="default",
+            agent_id=None,
+            effective_mode="full-access",
+            user_id="operator",
+        )
+        mcp_context = McpInvocationContext(
+            caller_kind="operator",
+            workspace_id="default",
+            agent_id=None,
+            effective_mode="full-access",
+            user_id="operator",
+        )
+
+        commands = list_core_cli_commands(
+            runtime_store=runtime_store,
+            inter_agent_store=inter_agent_store,
+            workspace_id="default",
+            start_path=repo_root,
+        )
+        tools = list_mcp_tools(
+            runtime_store=runtime_store,
+            inter_agent_store=inter_agent_store,
+            workspace_id="default",
+            start_path=repo_root,
+        )
+        cli_create = run_core_cli_command(
+            command_id="inter-agent.runs.create",
+            context=cli_context,
+            runtime_store=runtime_store,
+            inter_agent_store=inter_agent_store,
+            workspace_id="default",
+            start_path=repo_root,
+            arguments=_inter_agent_run_payload(run_id="cli-run", root_session_id="root-cli"),
+        )
+        cli_spawn = run_core_cli_command(
+            command_id="inter-agent.participants.spawn",
+            context=cli_context,
+            runtime_store=runtime_store,
+            inter_agent_store=inter_agent_store,
+            workspace_id="default",
+            start_path=repo_root,
+            arguments={"run_id": "cli-run", "participant_id": "researcher", "child_session_id": "cli-child"},
+        )
+        mcp_create = call_mcp_tool(
+            tool_name="inter_agent_run_create",
+            context=mcp_context,
+            runtime_store=runtime_store,
+            inter_agent_store=inter_agent_store,
+            workspace_id="default",
+            start_path=repo_root,
+            arguments=_inter_agent_run_payload(run_id="mcp-run", root_session_id="root-mcp"),
+        )
+        mcp_spawn = call_mcp_tool(
+            tool_name="inter_agent_participant_spawn",
+            context=mcp_context,
+            runtime_store=runtime_store,
+            inter_agent_store=inter_agent_store,
+            workspace_id="default",
+            start_path=repo_root,
+            arguments={"run_id": "mcp-run", "participant_id": "researcher", "child_session_id": "mcp-child"},
+        )
+        cli_child_skill_ids = runtime_store.get_session("cli-child").skill_ids
+        mcp_wait = call_mcp_tool(
+            tool_name="inter_agent_wait",
+            context=mcp_context,
+            runtime_store=runtime_store,
+            inter_agent_store=inter_agent_store,
+            workspace_id="default",
+            start_path=repo_root,
+            arguments={"run_id": "mcp-run", "timeout_seconds": 0},
+        )
+        cli_close = run_core_cli_command(
+            command_id="inter-agent.runs.close",
+            context=cli_context,
+            app_store=app_store,
+            workspace_store=workspace_store,
+            runtime_store=runtime_store,
+            inter_agent_store=inter_agent_store,
+            workspace_id="default",
+            start_path=repo_root,
+            arguments={"run_id": "cli-run", "reason": "test-close"},
+        )
+
+        command_ids = {command.command_id for command in commands}
+        tool_names = {tool.tool_name for tool in tools}
+        self.assertTrue(
+            {
+                "inter-agent.runs.create",
+                "inter-agent.participants.spawn",
+                "inter-agent.messages.send",
+                "inter-agent.runs.wait",
+                "inter-agent.runs.interrupt",
+                "inter-agent.runs.resume",
+                "inter-agent.runs.close",
+            }.issubset(command_ids)
+        )
+        self.assertTrue(
+            {
+                "inter_agent_run_create",
+                "inter_agent_participant_spawn",
+                "inter_agent_message_send",
+                "inter_agent_wait",
+                "inter_agent_interrupt",
+                "inter_agent_resume",
+                "inter_agent_close",
+            }.issubset(tool_names)
+        )
+        self.assertEqual(cli_create["run"]["run_id"], "cli-run")
+        self.assertEqual(cli_spawn["runtime_session"]["session_kind"], "inter_agent_participant")
+        self.assertEqual(cli_spawn["runtime_session"]["thread_visibility"], "hidden")
+        self.assertEqual(cli_child_skill_ids, ["storage"])
+        self.assertEqual(mcp_create["run"]["run_id"], "mcp-run")
+        self.assertEqual(mcp_spawn["runtime_session"]["session_kind"], "inter_agent_participant")
+        self.assertEqual(mcp_spawn["runtime_session"]["thread_visibility"], "hidden")
+        self.assertEqual(mcp_wait["run"]["run_id"], "mcp-run")
+        self.assertEqual(cli_close["run"]["status"], "cancelled")
+        with self.assertRaises(RuntimeSessionNotFoundError):
+            runtime_store.get_session("cli-child")
 
     def test_developer_context_cli_and_mcp_return_canonical_document_text(self) -> None:
         repo_root = self.make_repo_root()

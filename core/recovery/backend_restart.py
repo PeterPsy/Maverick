@@ -7,6 +7,7 @@ from typing import TYPE_CHECKING
 from uuid import uuid4
 
 from core.apps.runtime_event_hooks import dispatch_source_app_runtime_event, dispatch_workspace_app_background_hooks
+from core.inter_agent.service import InterAgentService
 from core.providers.errors import ProviderError
 from core.runtime.errors import RuntimeTurnNotFoundError
 from core.runtime.service import record_runtime_event, transition_runtime_turn
@@ -184,6 +185,10 @@ def recover_interrupted_runtime_turns_after_backend_restart(
             event_bus=state.runtime_event_bus,
         )
     for workspace in state.workspace_store.list_workspaces():
+        InterAgentService(state.inter_agent_store).recover_non_terminal_runs(
+            state.runtime_store,
+            workspace_id=workspace.workspace_id,
+        )
         dispatch_workspace_app_background_hooks(
             state,
             workspace_id=workspace.workspace_id,

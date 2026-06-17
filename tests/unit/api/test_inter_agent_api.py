@@ -1,0 +1,286 @@
+from __future__ import annotations
+
+from datetime import UTC, datetime
+import tempfile
+import unittest
+from unittest.mock import patch
+
+from core.api.platform_host import PlatformHost
+from core.api.platform_state import bootstrap_platform_state
+from core.inter_agent.errors import InterAgentRunNotFoundError
+from core.runtime.errors import RuntimeSessionNotFoundError
+from core.runtime.runtime_events import RuntimeEventRecord
+from core.runtime.runtime_session import RuntimeSessionGrantRecord
+from core.runtime.runtime_turns import RuntimeTurnRecord
+from core.runtime.service import create_runtime_session
+from tests.unit.api.app_reference_test_support import AppReferenceApiTestSupport
+
+
+def _run_payload(*, run_id: str = "run-api-1") -> dict:
+    return {
+        "run_id": run_id,
+        "thread_id": "root-session",
+        "root_runtime_session_id": "root-session",
+        "source_app_id": "chat",
+        "mode": "manager_tools",
+        "idempotency_key": run_id,
+        "participants": [
+            {
+                "participant_id": "orchestrator",
+                "kind": "orchestrator",
+                "execution_mode": "root_orchestrator",
+                "label": "Orchestrator",
+            },
+            {
+                "participant_id": "researcher",
+                "kind": "agent",
+                "execution_mode": "child_runtime_session",
+                "label": "Researcher",
+                "agent_type_id": "research-agent",
+                "agent_snapshot": {
+                    "agent_type_id": "research-agent",
+                    "label": "Researcher",
+                    "system_prompt": "Research only.",
+                    "skill_ids": ["storage"],
+                    "skill_catalog_app_id": "skills",
+                },
+            },
+        ],
+        "budget": {
+            "max_participants": 3,
+            "max_concurrent_participants": 2,
+            "max_total_turns": 4,
+            "max_turns_per_participant": 2,
+        },
+    }
+
+
+class InterAgentApiTestCase(AppReferenceApiTestSupport, unittest.TestCase):
+    def _bootstrap_state(self, repo_root):
+        with patch.dict(
+            "os.environ",
+            {
+                "MAVERICK_ALLOW_INSECURE_TEST_DEFAULTS": "1",
+                "MAVERICK_ADMIN_USERNAME": "admin",
+                "MAVERICK_ADMIN_PASSWORD": "maverick",
+            },
+        ):
+            return bootstrap_platform_state(start_path=repo_root)
+
+    def _create_root_session(self, state, repo_root) -> None:
+        create_runtime_session(
+            state.runtime_store,
+            session_id="root-session",
+            workspace_id="default",
+            agent_id="chat",
+            source_app_id="chat",
+            system_prompt="Parent prompt must not leak.",
+            skill_ids=["parent-skill"],
+            owner_user_id="parent-owner",
+            grants=[
+                RuntimeSessionGrantRecord(
+                    operation="cleanup",
+                    grantee_kind="user",
+                    grantee_id="parent-owner",
+                    issued_by_user_id="parent-owner",
+                )
+            ],
+            governance=state.workspace_store.get_governance("default"),
+            platform_allows_full_access=True,
+            start_path=repo_root,
+        )
+
+    def test_inter_agent_http_spawn_send_wait_and_close_hidden_child_session(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            repo_root = self._repo_root(temp_dir)
+            state = self._bootstrap_state(repo_root)
+            self._create_root_session(state, repo_root)
+            app = PlatformHost(state, start_path=repo_root)
+            cookie = self._login(app)
+
+            create_status, create_payload, _headers = self._invoke(
+                app,
+                path="/api/inter-agent/runs",
+                method="POST",
+                body=_run_payload(),
+                cookie=cookie,
+            )
+            spawn_status, spawn_payload, _headers = self._invoke(
+                app,
+                path="/api/inter-agent/runs/run-api-1/participants",
+                method="POST",
+                body={"participant_id": "researcher", "child_session_id": "child-api-1"},
+                cookie=cookie,
+            )
+            runtime_list_status, runtime_list_payload, _headers = self._invoke(
+                app,
+                path="/api/runtime/sessions",
+                cookie=cookie,
+            )
+            child_route_status, child_route_payload, _headers = self._invoke(
+                app,
+                path="/api/runtime/sessions/child-api-1",
+                cookie=cookie,
+            )
+            now = datetime(2026, 6, 16, 12, 0, tzinfo=UTC)
+            turn = RuntimeTurnRecord(
+                turn_id="turn-api-1",
+                session_id="child-api-1",
+                workspace_id="default",
+                status="completed",
+                input_text="hello child",
+                created_at=now,
+                updated_at=now,
+                started_at=now,
+                completed_at=now,
+                failure_reason=None,
+            )
+            event = RuntimeEventRecord(
+                event_id="event-api-1",
+                workspace_id="default",
+                session_id="child-api-1",
+                plane="turn",
+                event_type="runtime.turn.completed",
+                turn_id="turn-api-1",
+                process_id=None,
+                payload={},
+                created_at=now,
+            )
+            with patch("core.inter_agent.service.submit_runtime_turn", return_value=(turn, [event])):
+                send_status, send_payload, _headers = self._invoke(
+                    app,
+                    path="/api/inter-agent/runs/run-api-1/messages",
+                    method="POST",
+                    body={"participant_id": "researcher", "input_text": "hello child"},
+                    cookie=cookie,
+                )
+            wait_status, wait_payload, _headers = self._invoke(
+                app,
+                path="/api/inter-agent/runs/run-api-1/wait",
+                method="POST",
+                body={"timeout_seconds": 0},
+                cookie=cookie,
+            )
+            close_status, close_payload, _headers = self._invoke(
+                app,
+                path="/api/inter-agent/runs/run-api-1/close",
+                method="POST",
+                body={"reason": "test-close"},
+                cookie=cookie,
+            )
+            root_session_id = state.runtime_store.get_session("root-session").session_id
+            child_deleted = False
+            try:
+                state.runtime_store.get_session("child-api-1")
+            except RuntimeSessionNotFoundError:
+                child_deleted = True
+
+        child_session = spawn_payload["runtime_session"]
+        self.assertEqual(create_status, 201)
+        self.assertEqual(create_payload["run"]["run_id"], "run-api-1")
+        self.assertEqual(spawn_status, 201)
+        self.assertEqual(child_session["session_kind"], "inter_agent_participant")
+        self.assertEqual(child_session["thread_visibility"], "hidden")
+        self.assertEqual(child_session["system_prompt"], "Research only.")
+        self.assertEqual(child_session["skill_ids"], ["storage"])
+        self.assertEqual(child_session["owner_user_id"], None)
+        self.assertEqual(child_session["grants"], [])
+        self.assertEqual(runtime_list_status, 200)
+        self.assertEqual([item["session_id"] for item in runtime_list_payload["items"]], ["root-session"])
+        self.assertEqual(child_route_status, 409)
+        self.assertEqual(child_route_payload["error"], "runtime_session_hidden")
+        self.assertEqual(send_status, 201)
+        self.assertEqual(send_payload["turn"]["turn_id"], "turn-api-1")
+        self.assertEqual(wait_status, 200)
+        self.assertEqual(wait_payload["run"]["run_id"], "run-api-1")
+        self.assertEqual(close_status, 200)
+        self.assertEqual(close_payload["run"].get("status"), "cancelled")
+        self.assertEqual(close_payload["participant_cleanups"][0]["participant_id"], "researcher")
+        self.assertEqual(close_payload["participant_cleanups"][0]["session_id"], "child-api-1")
+        self.assertEqual(root_session_id, "root-session")
+        self.assertTrue(child_deleted)
+
+    def test_inter_agent_http_rejects_hidden_root_session(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            repo_root = self._repo_root(temp_dir)
+            state = self._bootstrap_state(repo_root)
+            create_runtime_session(
+                state.runtime_store,
+                session_id="root-session",
+                workspace_id="default",
+                agent_id="hidden-root",
+                source_app_id="chat",
+                session_kind="inter_agent_participant",
+                thread_visibility="hidden",
+                governance=state.workspace_store.get_governance("default"),
+                start_path=repo_root,
+            )
+            app = PlatformHost(state, start_path=repo_root)
+            cookie = self._login(app)
+
+            status, payload, _headers = self._invoke(
+                app,
+                path="/api/inter-agent/runs",
+                method="POST",
+                body=_run_payload(run_id="hidden-root-run"),
+                cookie=cookie,
+            )
+
+        self.assertEqual(status, 409)
+        self.assertEqual(payload["error"], "root_runtime_session_hidden")
+
+    def test_root_runtime_cleanup_cascades_to_child_session_and_run_records(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            repo_root = self._repo_root(temp_dir)
+            state = self._bootstrap_state(repo_root)
+            self._create_root_session(state, repo_root)
+            app = PlatformHost(state, start_path=repo_root)
+            cookie = self._login(app)
+            create_status, _create_payload, _headers = self._invoke(
+                app,
+                path="/api/inter-agent/runs",
+                method="POST",
+                body=_run_payload(run_id="cleanup-run"),
+                cookie=cookie,
+            )
+            spawn_status, _spawn_payload, _headers = self._invoke(
+                app,
+                path="/api/inter-agent/runs/cleanup-run/participants",
+                method="POST",
+                body={"participant_id": "researcher", "child_session_id": "cleanup-child"},
+                cookie=cookie,
+            )
+            cleanup_status, cleanup_payload, _headers = self._invoke(
+                app,
+                path="/api/runtime/sessions/root-session/cleanup",
+                method="POST",
+                body={"reason": "root-cleanup"},
+                cookie=cookie,
+            )
+            root_deleted = False
+            child_deleted = False
+            run_deleted = False
+            try:
+                state.runtime_store.get_session("root-session")
+            except RuntimeSessionNotFoundError:
+                root_deleted = True
+            try:
+                state.runtime_store.get_session("cleanup-child")
+            except RuntimeSessionNotFoundError:
+                child_deleted = True
+            try:
+                state.inter_agent_store.get_run("cleanup-run", workspace_id="default")
+            except InterAgentRunNotFoundError:
+                run_deleted = True
+
+        self.assertEqual(create_status, 201)
+        self.assertEqual(spawn_status, 201)
+        self.assertEqual(cleanup_status, 200)
+        self.assertEqual(cleanup_payload["inter_agent_cleanup"][0]["run_id"], "cleanup-run")
+        self.assertTrue(root_deleted)
+        self.assertTrue(child_deleted)
+        self.assertTrue(run_deleted)
+
+
+if __name__ == "__main__":
+    unittest.main()

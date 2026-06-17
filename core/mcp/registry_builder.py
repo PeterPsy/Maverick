@@ -13,6 +13,7 @@ from core.mcp.models import McpInvocationContext, McpToolDefinition
 from core.mcp.runner import McpRunner
 from core.mcp.server import McpHostSurface, build_mcp_host_surface
 from core.mcp.tool_registry import McpToolRegistry
+from core.inter_agent.store import InterAgentStore
 from core.providers.provider_registry import ProviderRegistry
 from core.providers.store import ProviderStore
 from core.recovery.store import RecoveryStore
@@ -26,6 +27,7 @@ def build_core_mcp_registry(
     workspace_store: WorkspaceStore | None = None,
     provider_store: ProviderStore | None = None,
     runtime_store: RuntimeStore | None = None,
+    inter_agent_store: InterAgentStore | None = None,
     secret_store: SecretStore | None = None,
     recovery_store: RecoveryStore | None = None,
     provider_registry: ProviderRegistry | None = None,
@@ -42,6 +44,7 @@ def build_core_mcp_registry(
         workspace_store=workspace_store,
         provider_store=provider_store,
         runtime_store=runtime_store,
+        inter_agent_store=inter_agent_store,
         secret_store=secret_store,
         recovery_store=recovery_store,
         provider_registry=provider_registry,
@@ -71,6 +74,7 @@ def build_workspace_mcp_surface(
     workspace_store: WorkspaceStore | None = None,
     provider_store: ProviderStore | None = None,
     runtime_store: RuntimeStore | None = None,
+    inter_agent_store: InterAgentStore | None = None,
     secret_store: SecretStore | None = None,
     recovery_store: RecoveryStore | None = None,
     provider_registry: ProviderRegistry | None = None,
@@ -87,6 +91,7 @@ def build_workspace_mcp_surface(
         workspace_store=workspace_store,
         provider_store=provider_store,
         runtime_store=runtime_store,
+        inter_agent_store=inter_agent_store,
         secret_store=secret_store,
         recovery_store=recovery_store,
         provider_registry=provider_registry,
@@ -104,6 +109,7 @@ def list_mcp_tools(
     workspace_store: WorkspaceStore | None = None,
     provider_store: ProviderStore | None = None,
     runtime_store: RuntimeStore | None = None,
+    inter_agent_store: InterAgentStore | None = None,
     secret_store: SecretStore | None = None,
     recovery_store: RecoveryStore | None = None,
     provider_registry: ProviderRegistry | None = None,
@@ -119,6 +125,7 @@ def list_mcp_tools(
         workspace_store=workspace_store,
         provider_store=provider_store,
         runtime_store=runtime_store,
+        inter_agent_store=inter_agent_store,
         secret_store=secret_store,
         recovery_store=recovery_store,
         provider_registry=provider_registry,
@@ -138,6 +145,7 @@ def call_mcp_tool(
     workspace_store: WorkspaceStore | None = None,
     provider_store: ProviderStore | None = None,
     runtime_store: RuntimeStore | None = None,
+    inter_agent_store: InterAgentStore | None = None,
     secret_store: SecretStore | None = None,
     recovery_store: RecoveryStore | None = None,
     provider_registry: ProviderRegistry | None = None,
@@ -152,6 +160,7 @@ def call_mcp_tool(
         workspace_store=workspace_store,
         provider_store=provider_store,
         runtime_store=runtime_store,
+        inter_agent_store=inter_agent_store,
         secret_store=secret_store,
         recovery_store=recovery_store,
         provider_registry=provider_registry,
@@ -170,6 +179,7 @@ def call_mcp_tool(
             workspace_store=workspace_store,
             provider_store=provider_store,
             runtime_store=runtime_store,
+            inter_agent_store=inter_agent_store,
             secret_store=secret_store,
             recovery_store=recovery_store,
             provider_registry=provider_registry,
@@ -189,6 +199,7 @@ def _hidden_app_tool_exists(
     workspace_store: WorkspaceStore | None,
     provider_store: ProviderStore | None,
     runtime_store: RuntimeStore | None,
+    inter_agent_store: InterAgentStore | None,
     secret_store: SecretStore | None,
     recovery_store: RecoveryStore | None,
     provider_registry: ProviderRegistry | None,
@@ -204,6 +215,7 @@ def _hidden_app_tool_exists(
         workspace_store=workspace_store,
         provider_store=provider_store,
         runtime_store=runtime_store,
+        inter_agent_store=inter_agent_store,
         secret_store=secret_store,
         recovery_store=recovery_store,
         provider_registry=provider_registry,

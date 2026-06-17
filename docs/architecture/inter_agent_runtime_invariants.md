@@ -1,13 +1,13 @@
 # Inter-Agent Runtime Invariants
 
 Date: 2026-06-15
-Status: Accepted for F0
+Status: Accepted through F2
 
 ## Purpose
 
 This ADR fixes the runtime invariants required before Maverick can create real multi-agent child sessions.
 
-It is intentionally limited to names, visibility, legacy compatibility, and initial policy defaults. It does not introduce an executor, participant spawn API, graph mode, adapter, or real child-session workflow.
+It started with names, visibility, legacy compatibility, and initial policy defaults. F2 extends it with the first policy-aware participant spawn, message, wait, interrupt, resume, close, and recovery surfaces for hidden child runtime sessions. It still does not introduce graph mode, adapters, or handoff execution.
 
 ## Decisions
 
@@ -57,7 +57,7 @@ The new invariant is:
 - direct thread-open or thread-create calls for hidden sessions fail with `runtime_session_hidden`
 - thread catalogs and `WS /ws/runtime/threads` expose only user-visible runtime threads
 
-This keeps the primary Chat transcript as one visible conversation while allowing future participant sessions to execute without appearing as standalone chats.
+This keeps the primary Chat transcript as one visible conversation while allowing participant sessions to execute without appearing as standalone chats.
 
 ## Child Session Helper Boundary
 
@@ -65,20 +65,22 @@ The internal `create_child_runtime_session` helper is not the public multi-agent
 
 It may reuse only the parent session's resolved workspace boundary, workdir, execution mode, and runtime-session parent linkage. Prompt materialization, skill ids, skill catalog, source app, owner, creator, and operation grants must be explicit inputs produced by core policy, an authorized app snapshot, or a later `ParticipantSpec` materialization step. The helper defaults those authority-bearing fields to empty values and must not clone them from the parent session.
 
-## Inventory For F2
+## F2 Runtime Access Policy
 
-F0 models the visibility boundary and blocks thread creation for hidden sessions. F2 must apply server-side visibility policy to raw runtime session access paths before real participant sessions are exposed outside tests:
+F0 models the visibility boundary and blocks thread creation for hidden sessions. F2 applies server-side visibility policy to raw runtime session access paths before real participant sessions are exposed outside tests:
 
 - `GET /api/runtime/sessions`
 - `GET /api/runtime/sessions/<session_id>`
 - `GET /api/runtime/sessions/<session_id>/events`
 - `GET /api/runtime/sessions/<session_id>/turns`
 - `POST /api/runtime/sessions/<session_id>/turns`
+- `GET /api/runtime/turns/<turn_id>`
+- `POST /api/runtime/turns/<turn_id>/interrupt`
 - `WS /ws/runtime/sessions/<session_id>`
 - CLI and MCP runtime status surfaces
 
-Until that F2 policy exists, no public core, Chat, Agents, or app-owned surface may create real `inter_agent_participant` sessions.
+The only public F2 creation path for `inter_agent_participant` sessions is the core-owned inter-agent surface. HTTP uses `/api/inter-agent/runs/<run_id>/participants`; CLI uses `inter-agent.participants.spawn`; MCP uses `inter_agent_participant_spawn`. All three must route through the policy-aware service and must not call `create_child_runtime_session` with parent-copied authority.
 
 ## Gate
 
-No later phase may create real child runtime sessions outside tests until hidden thread visibility is modeled, documented, and covered by runtime-thread and API tests.
+No later phase may bypass the inter-agent service when creating real child runtime sessions. Hidden thread visibility and raw runtime access rejection must remain covered by runtime-thread, runtime HTTP, WebSocket, cleanup, and inter-agent service/API tests.

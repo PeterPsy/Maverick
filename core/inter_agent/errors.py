@@ -45,3 +45,7 @@ class InterAgentBudgetExceededError(InterAgentValidationError):
 
 class InterAgentEventNotFoundError(InterAgentError, LookupError):
     """Raised when an inter-agent event cursor cannot be resolved."""
+
+
+class InterAgentOperationError(InterAgentError):
+    """Raised when an inter-agent runtime operation cannot be completed."""

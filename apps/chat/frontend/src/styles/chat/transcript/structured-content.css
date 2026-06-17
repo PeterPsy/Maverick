@@ -217,13 +217,13 @@
 .chatapp-message-reference-chip.is-skill,
 .chatapp-message-reference-chip.is-entity,
 .chatapp-human-message__editorial-chip {
-  border-color: rgba(10, 10, 11, 0.08);
-  background: rgba(10, 10, 11, 0.055);
-  color: rgba(10, 10, 11, 0.86);
+  border-color: var(--chatapp-human-reference-chip-border);
+  background: var(--chatapp-human-reference-chip-bg);
+  color: var(--chatapp-human-reference-chip-text);
 }
 
 .chatapp-message-reference-chip__kind {
-  color: rgba(10, 10, 11, 0.48);
+  color: var(--chatapp-human-reference-chip-kind);
 }
 
 .chatapp-system-update,

@@ -37,6 +37,10 @@
     var(--maverick-card-shadow);
   --chatapp-human-message-meta: rgba(10, 10, 11, 0.48);
   --chatapp-human-message-meta-hover: var(--maverick-text-on-accent);
+  --chatapp-human-reference-chip-border: rgba(10, 10, 11, 0.08);
+  --chatapp-human-reference-chip-bg: rgba(10, 10, 11, 0.055);
+  --chatapp-human-reference-chip-text: rgba(10, 10, 11, 0.86);
+  --chatapp-human-reference-chip-kind: rgba(10, 10, 11, 0.48);
   --chatapp-agent-message-shadow:
     var(--chatapp-inner-edge),
     0 14px 44px rgba(0, 0, 0, 0.2);
@@ -126,6 +130,10 @@
   --chatapp-human-message-shadow: none;
   --chatapp-human-message-meta: rgba(255, 255, 255, 0.58);
   --chatapp-human-message-meta-hover: rgba(255, 255, 255, 0.92);
+  --chatapp-human-reference-chip-border: rgba(255, 255, 255, 0.16);
+  --chatapp-human-reference-chip-bg: rgba(255, 255, 255, 0.1);
+  --chatapp-human-reference-chip-text: rgba(255, 255, 255, 0.88);
+  --chatapp-human-reference-chip-kind: rgba(255, 255, 255, 0.56);
   --chatapp-agent-message-shadow: none;
   --chatapp-structured-message-shadow: none;
   --chatapp-structured-widget-shadow: none;

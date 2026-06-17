@@ -51,6 +51,13 @@ describe("chat light theme surfaces", () => {
     applyRootTheme("light");
 
     const humanMessage = element("div", "chatapp-human-message");
+    const referenceChip = document.createElement("span");
+    referenceChip.className = "chatapp-message-reference-chip is-app";
+    const referenceKind = document.createElement("span");
+    referenceKind.className = "chatapp-message-reference-chip__kind";
+    referenceChip.append(referenceKind);
+    humanMessage.append(referenceChip);
+
     const copyButton = document.createElement("button");
     copyButton.className = "chatapp-message-action chatapp-message-action--copy";
     humanMessage.append(copyButton);
@@ -62,6 +69,10 @@ describe("chat light theme surfaces", () => {
     footer.append(timestamp);
     humanMessage.append(footer);
 
+    expect(computedBackgroundColor(referenceChip)).toBe("rgba(255, 255, 255, 0.1)");
+    expect(computedBorderColor(referenceChip)).toBe("rgba(255, 255, 255, 0.16)");
+    expect(computedColor(referenceChip)).toBe("rgba(255, 255, 255, 0.88)");
+    expect(computedColor(referenceKind)).toBe("rgba(255, 255, 255, 0.56)");
     expect(computedColor(copyButton)).toBe("rgba(255, 255, 255, 0.58)");
     expect(computedColor(timestamp)).toBe("rgba(255, 255, 255, 0.58)");
 

@@ -17,6 +17,7 @@ export function MessageBubble({
   message,
   onActiveSpeechMessageChange,
   onCopyMessage,
+  onOpenInterAgentGraph,
   onToggleExpanded,
   speakingMessageId,
   speechMaxTextChars,
@@ -30,6 +31,7 @@ export function MessageBubble({
   message: ChatMessage;
   onActiveSpeechMessageChange: Dispatch<SetStateAction<string | null>>;
   onCopyMessage: (content: string) => Promise<void>;
+  onOpenInterAgentGraph?: (runId: string) => void;
   onToggleExpanded: (messageId: string) => void;
   speakingMessageId: string | null;
   speechMaxTextChars: number;
@@ -61,7 +63,7 @@ export function MessageBubble({
       ) : isToolMessage ? (
         <ToolCallInlineMessage createdAt={message.createdAt} defaultExpanded={message.id === latestToolMessageId} toolCalls={toolCalls} />
       ) : message.role === "step" && message.step ? (
-        <RuntimeStepMessage step={message.step} />
+        <RuntimeStepMessage onOpenInterAgentGraph={onOpenInterAgentGraph} step={message.step} />
       ) : message.role === "structured" && message.structuredContent ? (
         <StructuredContentMessage content={message.structuredContent} messageId={message.id} />
       ) : (

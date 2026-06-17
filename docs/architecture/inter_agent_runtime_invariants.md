@@ -1,13 +1,13 @@
 # Inter-Agent Runtime Invariants
 
-Date: 2026-06-15
-Status: Accepted through F3
+Date: 2026-06-17
+Status: Accepted through F4
 
 ## Purpose
 
 This ADR fixes the runtime invariants required before Maverick can create real multi-agent child sessions.
 
-It started with names, visibility, legacy compatibility, and initial policy defaults. F2 extends it with the first policy-aware participant spawn, message, wait, interrupt, resume, close, and recovery surfaces for hidden child runtime sessions. F3 adds the native MVP executor for `manager_tools`, `sequential`, and `concurrent` runs while keeping graph mode, adapters, and handoff execution out of scope.
+It started with names, visibility, legacy compatibility, and initial policy defaults. F2 extends it with the first policy-aware participant spawn, message, wait, interrupt, resume, close, and recovery surfaces for hidden child runtime sessions. F3 adds the native MVP executor for `manager_tools`, `sequential`, and `concurrent` runs while keeping graph mode, adapters, and handoff execution out of scope. F4 adds the initial Chat UX wiring, inline approvals, and graph entry links while keeping runtime execution inside core-owned inter-agent APIs.
 
 ## Decisions
 
@@ -24,6 +24,7 @@ It started with names, visibility, legacy compatibility, and initial policy defa
 11. The F3 native executor may run deterministic synthetic participants only for tests or explicit operator-controlled execution, or real hidden child runtime sessions through the F2 service. It must not bypass inter-agent spawn, message, budget, or root-session authority checks.
 12. The root Chat transcript receives only selected operational summaries from the executor as non-terminal `runtime.step.updated` projections. `runtime.output.final` is reserved for real assistant final answers.
 13. Full participant detail remains in `inter_agent` events for graph replay and audit, but event replay and run detail require creator, root-session owner, admin, operator, or explicit `inter_agent_root` grant authority and must cap `summary`/`detail`/`debug` server-side.
+14. Chat may request a persisted root transcript projection for an inter-agent execution by sending a `client_message_id` to `POST /api/inter-agent/runs/<run_id>/execute`. The projection records the user's root turn and bounded runtime lifecycle events on the visible root session; it does not expose hidden participant sessions or duplicate the full inter-agent event log.
 
 ## Initial Policy Defaults
 
@@ -117,6 +118,24 @@ Execution rules:
 - pre-participant-ledger turn reservations and matching `inter_agent.budget.reserved` events without `participant_id` must remain idempotent on retry and must still count toward per-participant turn enforcement, using reservation id inference where possible and conservative counting otherwise
 
 The F3 HTTP surface is `POST /api/inter-agent/runs/<run_id>/execute`. The matching CLI command is `inter-agent.runs.execute`, and the matching MCP tool is `inter_agent_execute`.
+
+## F4 Chat UX Policy
+
+The initial Chat UX is a client of the core-owned inter-agent surfaces. It may create runs, execute runs, list summary-plane run events, list approvals, resolve approvals, and open graph links. It must not create participant runtime sessions directly, read hidden runtime session APIs, or implement a parallel executor in the frontend.
+
+HTTP additions for F4:
+
+- `GET /api/inter-agent/runs/<run_id>/approvals` lists approval records for an authorized run viewer and expires stale pending approvals fail-closed before returning records.
+- `POST /api/inter-agent/approvals/<approval_id>/resolve` approves or rejects one pending approval through `InterAgentService.resolve_approval`; missing approvals return `inter_agent_approval_not_found`.
+- `POST /api/inter-agent/runs/<run_id>/execute` may include `client_message_id`, `attachments`, and `app_references` for Chat root transcript projection. Without `client_message_id`, the F3 execute response shape remains unchanged.
+
+Chat transcript rendering remains summary-first:
+
+- composer state is a UI selector for Off, Auto, or Multi; non-Off submissions still call core `inter_agent` APIs
+- run banners and orchestrator messages render only core-provided summaries
+- inline approvals read and resolve core approval records
+- graph links carry `inter_agent_run_id` for the F5 graph surface; F4 does not implement graph replay or WebSocket graph streaming
+- raw chain-of-thought, debug events, and hidden participant transcripts remain out of the primary Chat transcript
 
 ## Gate
 

@@ -313,6 +313,53 @@ class InterAgentService:
             )
         return expired
 
+    def resolve_approval(
+        self,
+        *,
+        workspace_id: str,
+        approval_id: str,
+        approved: bool,
+        resolved_by_user_id: str,
+        resolution_reason: str | None = None,
+        now: datetime | None = None,
+    ) -> ApprovalRequestRecord:
+        """Resolve one pending approval and emit the user-visible audit event."""
+        resolved_at = now or datetime.now(tz=UTC)
+        approval = self.store.get_approval(approval_id, workspace_id=workspace_id)
+        run = self.store.get_run(approval.run_id, workspace_id=workspace_id)
+        if approval.status != "pending":
+            raise InterAgentOperationError("approval_not_pending")
+        if approval.expires_at <= resolved_at:
+            self.expire_pending_approvals(run, now=resolved_at)
+            raise InterAgentOperationError("approval_expired")
+        status = "approved" if approved else "rejected"
+        updated = replace(
+            approval,
+            status=status,
+            resolved_by_user_id=_clean_optional(resolved_by_user_id),
+            resolved_at=resolved_at,
+            resolution_reason=_clean_optional(resolution_reason) or status,
+        )
+        self.store.save_approval(updated)
+        self.record_event(
+            run,
+            event_type="inter_agent.approval.resolved",
+            participant_id=approval.participant_id,
+            visibility_plane="summary",
+            idempotency_key=f"{run.run_id}:approval.resolved:{approval.approval_id}:{status}",
+            correlation_id=approval.approval_id,
+            payload={
+                "approval_id": approval.approval_id,
+                "participant_id": approval.participant_id,
+                "operation_kind": approval.operation_kind,
+                "status": status,
+                "summary": approval.summary,
+                "risk_level": approval.risk_level,
+            },
+            now=resolved_at,
+        )
+        return updated
+
     def spawn_participant_runtime_session(
         self,
         runtime_store: RuntimeStore,

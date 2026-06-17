@@ -1,7 +1,9 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import type { ChatMessage } from "../api/client";
+import type { InterAgentApprovalRecord, InterAgentEventRecord, InterAgentRunDetail } from "../api/client";
 import type { MentionItem } from "../lib/mentions";
 import { ChatTranscriptSkeleton } from "./ChatTranscriptSkeleton";
+import { InterAgentRunPanel } from "./InterAgentRunPanel";
 import { MessageList } from "./MessageList";
 import { MorphingSpinner } from "./ui/morphing-spinner";
 
@@ -9,11 +11,16 @@ export type ChatTranscriptProps = {
   error: string | null;
   isLoading: boolean;
   isLoadingOlderHistory?: boolean;
+  interAgentApprovalsByRunId?: Record<string, InterAgentApprovalRecord[]>;
+  interAgentEventsByRunId?: Record<string, InterAgentEventRecord[]>;
+  interAgentRuns?: InterAgentRunDetail[];
   loadingLabel: string;
   mentionItems: MentionItem[];
   messages: ChatMessage[];
   hasMoreOlderMessages?: boolean;
   onLoadOlderMessages?: () => void;
+  onOpenInterAgentGraph?: (runId: string) => void;
+  onResolveInterAgentApproval?: (approvalId: string, approved: boolean) => Promise<void>;
   speechMaxTextChars?: number;
   speechProviderAvailable?: boolean;
   speechProviderAppId?: string;
@@ -24,11 +31,16 @@ export function ChatTranscript({
   error,
   isLoading,
   isLoadingOlderHistory = false,
+  interAgentApprovalsByRunId = {},
+  interAgentEventsByRunId = {},
+  interAgentRuns = [],
   loadingLabel,
   mentionItems,
   messages,
   hasMoreOlderMessages = false,
   onLoadOlderMessages,
+  onOpenInterAgentGraph = () => undefined,
+  onResolveInterAgentApproval = async () => undefined,
   speechMaxTextChars = 0,
   speechProviderAvailable = true,
   speechProviderAppId = "",
@@ -117,7 +129,9 @@ export function ChatTranscript({
       .reverse()
       .find((message) => message.role === "tool" && (message.toolCalls?.length || message.toolCall))?.id || null;
 
-  if (!messages.length && isLoading && !error) {
+  const hasInterAgentContent = interAgentRuns.length > 0 || Object.values(interAgentApprovalsByRunId).some((items) => items.length > 0);
+
+  if (!messages.length && !hasInterAgentContent && isLoading && !error) {
     return (
       <section className="chatapp-chat-scroll" aria-busy="true" aria-live="polite">
         <div className="chatapp-chat-scroll__inner chatapp-chat-scroll__inner--skeleton" onScroll={updateScrollState} ref={viewportRef}>
@@ -127,7 +141,7 @@ export function ChatTranscript({
     );
   }
 
-  if (!messages.length && !isLoading && !error) {
+  if (!messages.length && !hasInterAgentContent && !isLoading && !error) {
     return (
       <section className="chatapp-chat-scroll">
         <div className="chatapp-chat-scroll__inner" onScroll={updateScrollState} ref={viewportRef} />
@@ -144,6 +158,13 @@ export function ChatTranscript({
             <span>Loading earlier messages</span>
           </div>
         ) : null}
+        <InterAgentRunPanel
+          approvalsByRunId={interAgentApprovalsByRunId}
+          eventsByRunId={interAgentEventsByRunId}
+          onOpenGraph={onOpenInterAgentGraph}
+          onResolveApproval={onResolveInterAgentApproval}
+          runs={interAgentRuns}
+        />
         <MessageList
           expandedMessages={expandedMessages}
           latestToolMessageId={latestToolMessageId}
@@ -151,6 +172,7 @@ export function ChatTranscript({
           messages={messages}
           onActiveSpeechMessageChange={setSpeakingMessageId}
           onCopyMessage={copyMessage}
+          onOpenInterAgentGraph={onOpenInterAgentGraph}
           onToggleExpanded={toggleExpanded}
           speakingMessageId={speakingMessageId}
           speechMaxTextChars={speechMaxTextChars}

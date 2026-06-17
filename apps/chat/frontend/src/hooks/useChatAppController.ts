@@ -1,7 +1,21 @@
 import { useCallback, useEffect, useState } from "react";
-import type { ChatThread, RuntimeEvent, RuntimeSession, RuntimeTurn } from "../api/client";
+import {
+  listInterAgentRunApprovals,
+  listInterAgentRunEvents,
+  listInterAgentRuns,
+  resolveInterAgentApproval,
+  type ChatThread,
+  type InterAgentApprovalRecord,
+  type InterAgentEventRecord,
+  type InterAgentRunDetail,
+  type MultiAgentComposerMode,
+  type RuntimeEvent,
+  type RuntimeSession,
+  type RuntimeTurn,
+} from "../api/client";
 import type { ExternalFileDrop, ExternalMentionDrop } from "../lib/externalInputs";
 import { type ActiveAppContext, loadWidgetActiveAppContext } from "../lib/activeAppContext";
+import { openAppParamsInShell } from "../lib/shellNavigation";
 import { postActiveThreadChanged } from "./chatActiveThreadNotifications";
 import { useChatComposerContext } from "./useChatComposerContext";
 import { useChatControllerPresentation } from "./useChatControllerPresentation";
@@ -99,6 +113,10 @@ export function useChatAppController({
   const [error, setError] = useState<string | null>(null);
   const [composerError, setComposerError] = useState<string | null>(null);
   const [activeAppContext, setActiveAppContext] = useState<ActiveAppContext | null>(null);
+  const [multiAgentMode, setMultiAgentMode] = useState<MultiAgentComposerMode>("off");
+  const [interAgentRuns, setInterAgentRuns] = useState<InterAgentRunDetail[]>([]);
+  const [interAgentEventsByRunId, setInterAgentEventsByRunId] = useState<Record<string, InterAgentEventRecord[]>>({});
+  const [interAgentApprovalsByRunId, setInterAgentApprovalsByRunId] = useState<Record<string, InterAgentApprovalRecord[]>>({});
   const hasExternalRuntimeThreads = Array.isArray(runtimeThreads);
   const canStopTurn = isActiveRuntimeTurnBusyForThread(activeTurn, activeThread);
   const isRuntimeBusy = canStopTurn;
@@ -141,6 +159,90 @@ export function useChatAppController({
     setEvents,
     setSelectedAgentTypeId,
   });
+  const upsertInterAgentRunDetail = useCallback((detail: InterAgentRunDetail) => {
+    setInterAgentRuns((current) => {
+      const next = current.filter((item) => item.run.run_id !== detail.run.run_id);
+      return [...next, detail].sort((left, right) => left.run.created_at.localeCompare(right.run.created_at));
+    });
+  }, []);
+  const refreshInterAgentRuns = useCallback(async () => {
+    const runtimeSessionId = activeThread?.runtime_session_id || "";
+    if (!runtimeSessionId) {
+      setInterAgentRuns([]);
+      setInterAgentEventsByRunId({});
+      setInterAgentApprovalsByRunId({});
+      return;
+    }
+    try {
+      const payload = await listInterAgentRuns();
+      const runDetails = payload.items
+        .filter((item) => item.run.root_runtime_session_id === runtimeSessionId)
+        .sort((left, right) => left.run.created_at.localeCompare(right.run.created_at));
+      setInterAgentRuns(runDetails);
+      const [eventEntries, approvalEntries] = await Promise.all([
+        Promise.all(
+          runDetails.map(async (detail) => {
+            try {
+              const eventsPayload = await listInterAgentRunEvents(detail.run.run_id, { visibilityPlane: "summary", limit: 80 });
+              return [detail.run.run_id, eventsPayload.items] as const;
+            } catch {
+              return [detail.run.run_id, []] as const;
+            }
+          }),
+        ),
+        Promise.all(
+          runDetails.map(async (detail) => {
+            try {
+              const approvalsPayload = await listInterAgentRunApprovals(detail.run.run_id);
+              return [detail.run.run_id, approvalsPayload.items] as const;
+            } catch {
+              return [detail.run.run_id, []] as const;
+            }
+          }),
+        ),
+      ]);
+      setInterAgentEventsByRunId(Object.fromEntries(eventEntries));
+      setInterAgentApprovalsByRunId(Object.fromEntries(approvalEntries));
+    } catch {
+      setInterAgentRuns([]);
+      setInterAgentEventsByRunId({});
+      setInterAgentApprovalsByRunId({});
+    }
+  }, [activeThread?.runtime_session_id]);
+  const handleResolveInterAgentApproval = useCallback(
+    async (approvalId: string, approved: boolean) => {
+      const response = await resolveInterAgentApproval(approvalId, { approved });
+      setInterAgentApprovalsByRunId((current) => {
+        const next = { ...current };
+        for (const [runId, approvals] of Object.entries(next)) {
+          next[runId] = approvals.map((approval) => (approval.approval_id === approvalId ? response.approval : approval));
+        }
+        return next;
+      });
+      await refreshInterAgentRuns();
+    },
+    [refreshInterAgentRuns],
+  );
+  const handleOpenInterAgentGraph = useCallback(
+    (runId: string) => {
+      const opened = openAppParamsInShell(
+        "chat",
+        {
+          app_page: `graph/${runId}`,
+          thread_id: activeThread?.thread_id || "",
+          inter_agent_run_id: runId,
+        },
+        { navigationScope },
+      );
+      if (!opened && typeof window !== "undefined") {
+        const url = new URL(window.location.href);
+        url.searchParams.set("view", "graph");
+        url.searchParams.set("inter_agent_run_id", runId);
+        window.history.pushState({}, "", url.toString());
+      }
+    },
+    [activeThread?.thread_id, navigationScope],
+  );
   const {
     failedUserMessages,
     handleSend,
@@ -161,8 +263,10 @@ export function useChatAppController({
     isBootstrapping,
     isHistoryLoading,
     isRuntimeBusy,
+    multiAgentMode,
     navigationScope,
     notifyActiveThreadChanged,
+    onInterAgentRunChanged: upsertInterAgentRunDetail,
     selectedAgentRuntimeConfig,
     setActiveSession,
     setActiveThread,
@@ -221,6 +325,21 @@ export function useChatAppController({
     setVisibleMessageLimit(50);
   }, [activeConversationKey]);
 
+  useEffect(() => {
+    void refreshInterAgentRuns();
+  }, [refreshInterAgentRuns]);
+
+  useEffect(() => {
+    const hasActiveRun = interAgentRuns.some((detail) => !["completed", "failed", "cancelled"].includes(detail.run.status));
+    if (!hasActiveRun) {
+      return;
+    }
+    const intervalId = window.setInterval(() => {
+      void refreshInterAgentRuns();
+    }, 3000);
+    return () => window.clearInterval(intervalId);
+  }, [interAgentRuns, refreshInterAgentRuns]);
+
   const loadInitialState = useCallback(async () => {
     setIsBootstrapping(true);
     try {
@@ -277,6 +396,8 @@ export function useChatAppController({
     handleReferenceAdd,
     handleReferenceRemove,
     handleSearchReferences,
+    handleOpenInterAgentGraph,
+    handleResolveInterAgentApproval,
     handleSelectAgent,
     handleSelectProvider,
     handleSend,
@@ -287,7 +408,11 @@ export function useChatAppController({
     isOlderHistoryLoading,
     isRuntimeBusy,
     isSending,
+    interAgentApprovalsByRunId,
+    interAgentEventsByRunId,
+    interAgentRuns,
     mentionItems,
+    multiAgentMode,
     hasMoreHistory,
     onLoadOlderHistory: handleLoadOlderHistory,
     onRevealOlderMessages: handleRevealOlderMessages,
@@ -296,6 +421,7 @@ export function useChatAppController({
     queuedMessages,
     removeAttachment,
     selectedAgentTypeId,
+    setMultiAgentMode,
     setComposer,
     speechMaxTextChars,
     speechProviderAppId,

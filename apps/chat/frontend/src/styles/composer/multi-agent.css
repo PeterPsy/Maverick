@@ -1,0 +1,99 @@
+.chatapp-multi-agent-control {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  min-width: 0;
+}
+
+.chatapp-multi-agent-control__button {
+  gap: 0.28rem;
+  width: auto;
+  min-width: 4.4rem;
+  padding: 0 0.58rem;
+}
+
+.chatapp-multi-agent-control__button.is-active {
+  color: var(--maverick-accent);
+}
+
+.chatapp-multi-agent-control__label {
+  display: inline-block;
+  min-width: 2rem;
+  overflow: hidden;
+  font-size: 0.72rem;
+  font-weight: 700;
+  line-height: 1;
+  text-align: left;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.chatapp-multi-agent-menu {
+  position: absolute;
+  bottom: calc(100% + 0.5rem);
+  left: 0;
+  z-index: 28;
+  display: grid;
+  width: min(13.5rem, calc(100vw - 2rem));
+  overflow: hidden;
+  border: 1px solid rgba(var(--maverick-contrast-rgb), 0.1);
+  border-radius: 0.75rem;
+  background: var(--maverick-popover-surface);
+  box-shadow: var(--maverick-popover-shadow);
+  backdrop-filter: blur(20px);
+}
+
+.chatapp-multi-agent-menu__item {
+  display: flex;
+  align-items: center;
+  gap: 0.52rem;
+  width: 100%;
+  min-height: 2.45rem;
+  padding: 0.58rem 0.72rem;
+  border: 0;
+  border-top: 1px solid rgba(var(--maverick-contrast-rgb), 0.06);
+  background: transparent;
+  color: var(--maverick-text);
+  cursor: pointer;
+  font: inherit;
+  font-size: 0.84rem;
+  font-weight: 650;
+  text-align: left;
+}
+
+.chatapp-multi-agent-menu__item:first-child {
+  border-top: 0;
+}
+
+.chatapp-multi-agent-menu__item:hover {
+  background: rgba(var(--maverick-contrast-rgb), 0.08);
+}
+
+.chatapp-multi-agent-menu__item .material-symbols-rounded {
+  color: var(--maverick-accent);
+  font-size: 1rem;
+}
+
+.chatapp-multi-agent-menu__budget {
+  padding: 0.48rem 0.72rem 0.58rem;
+  border-top: 1px solid rgba(var(--maverick-contrast-rgb), 0.06);
+  color: var(--maverick-text-soft);
+  font-size: 0.74rem;
+  line-height: 1.3;
+}
+
+@media (max-width: 520px) {
+  .chatapp-multi-agent-control__button {
+    min-width: 2.1rem;
+    padding: 0;
+  }
+
+  .chatapp-multi-agent-control__label {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+    white-space: nowrap;
+  }
+}

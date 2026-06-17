@@ -1,5 +1,6 @@
 import { FormEvent, KeyboardEvent, useRef, useState } from "react";
 import type { AgentTypeSummary, AppReference, ProviderItem } from "../api/client";
+import type { MultiAgentComposerMode } from "../api/client";
 import type { ComposerAttachment } from "../lib/attachments";
 import { hasInvalidAttachments } from "../lib/attachments";
 import type { MentionItem } from "../lib/mentions";
@@ -28,12 +29,15 @@ export type ChatComposerProps = {
   isEmptyMode?: boolean;
   isSending: boolean;
   mentionItems: MentionItem[];
+  multiAgentBudgetLabel?: string;
+  multiAgentMode?: MultiAgentComposerMode;
   onAddAttachments: (files: File[]) => void;
   onCapturePageArea?: () => void;
   onChange: (value: string) => void;
   onReferenceAdd?: (reference: AppReference) => void;
   onReferenceRemove?: (reference: AppReference) => void;
   onSearchReferences?: (query: string, signal: AbortSignal) => Promise<MentionItem[]>;
+  onSelectMultiAgentMode?: (mode: MultiAgentComposerMode) => void;
   onSelectAgent: (agentTypeId: string) => void;
   onSelectProvider: (providerId: string) => void;
   onRemoveAttachment: (attachmentId: string) => void;
@@ -64,12 +68,15 @@ export function ChatComposer({
   isEmptyMode = false,
   isSending,
   mentionItems,
+  multiAgentBudgetLabel = "",
+  multiAgentMode = "off",
   onAddAttachments,
   onCapturePageArea,
   onChange,
   onReferenceAdd,
   onReferenceRemove,
   onSearchReferences,
+  onSelectMultiAgentMode,
   onSelectAgent,
   onSelectProvider,
   onRemoveAttachment,
@@ -88,6 +95,7 @@ export function ChatComposer({
   value,
 }: ChatComposerProps) {
   const [caretIndex, setCaretIndex] = useState(value.length);
+  const [multiAgentMenuOpen, setMultiAgentMenuOpen] = useState(false);
   const editorRef = useRef<HTMLDivElement | null>(null);
   const pendingCaretIndexRef = useRef<number | null>(null);
   const {
@@ -259,6 +267,17 @@ export function ChatComposer({
                   providerAvailable={transcriptionProviderAvailable}
                   supportedContentTypes={transcriptionContentTypes}
                 />
+                <MultiAgentModeControl
+                  budgetLabel={multiAgentBudgetLabel}
+                  disabled={disabled || isSending}
+                  menuOpen={multiAgentMenuOpen}
+                  mode={multiAgentMode}
+                  onMenuOpenChange={setMultiAgentMenuOpen}
+                  onSelect={(nextMode) => {
+                    onSelectMultiAgentMode?.(nextMode);
+                    setMultiAgentMenuOpen(false);
+                  }}
+                />
                 <AgentSelector
                   agents={agents}
                   disabled={disabled || isSending}
@@ -290,4 +309,71 @@ export function ChatComposer({
       </section>
     </>
   );
+}
+
+function MultiAgentModeControl({
+  budgetLabel,
+  disabled,
+  menuOpen,
+  mode,
+  onMenuOpenChange,
+  onSelect,
+}: {
+  budgetLabel: string;
+  disabled: boolean;
+  menuOpen: boolean;
+  mode: MultiAgentComposerMode;
+  onMenuOpenChange: (open: boolean) => void;
+  onSelect: (mode: MultiAgentComposerMode) => void;
+}) {
+  const label = multiAgentModeLabel(mode);
+  return (
+    <div className="chatapp-multi-agent-control">
+      <button
+        aria-expanded={menuOpen}
+        aria-haspopup="menu"
+        aria-label={`Multi-agent mode: ${label}`}
+        className={`chatapp-composer__tool-button chatapp-multi-agent-control__button ${mode !== "off" ? "is-active" : ""}`}
+        disabled={disabled}
+        onClick={() => onMenuOpenChange(!menuOpen)}
+        title="Multi-agent mode"
+        type="button"
+      >
+        <span aria-hidden="true" className="material-symbols-rounded">
+          account_tree
+        </span>
+        <span className="chatapp-multi-agent-control__label">{label}</span>
+      </button>
+      {menuOpen ? (
+        <div className="chatapp-multi-agent-menu" role="menu">
+          {(["off", "auto", "multi"] as const).map((item) => (
+            <button
+              aria-checked={mode === item}
+              className="chatapp-multi-agent-menu__item"
+              key={item}
+              onClick={() => onSelect(item)}
+              role="menuitemradio"
+              type="button"
+            >
+              <span aria-hidden="true" className="material-symbols-rounded">
+                {mode === item ? "radio_button_checked" : "radio_button_unchecked"}
+              </span>
+              <span>{multiAgentModeLabel(item)}</span>
+            </button>
+          ))}
+          {budgetLabel ? <div className="chatapp-multi-agent-menu__budget">{budgetLabel}</div> : null}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+function multiAgentModeLabel(mode: MultiAgentComposerMode): string {
+  if (mode === "auto") {
+    return "Auto";
+  }
+  if (mode === "multi") {
+    return "Multi";
+  }
+  return "Off";
 }

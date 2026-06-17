@@ -6,7 +6,7 @@ import { createRoot } from "react-dom/client";
 import type { Root } from "react-dom/client";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { ApiError, transcribeSpeechBlob } from "../api/client";
-import type { AgentTypeSummary, AppReference, ProviderItem } from "../api/client";
+import type { AgentTypeSummary, AppReference, MultiAgentComposerMode, ProviderItem } from "../api/client";
 import type { MentionItem } from "../lib/mentions";
 import { ChatComposer } from "./ChatComposer";
 
@@ -158,7 +158,9 @@ async function renderComposer({
   mentionItems = [],
   onReferenceAdd = () => undefined,
   onSearchReferences = async () => [],
+  onSelectMultiAgentMode = () => undefined,
   onSelectAgent = () => undefined,
+  multiAgentMode = "off",
   onSubmit = () => undefined,
   transcriptionChunkedDictationSupported = false,
   transcriptionProviderAppId = "",
@@ -169,7 +171,9 @@ async function renderComposer({
   onAddAttachments?: (files: File[]) => void;
   onReferenceAdd?: (reference: AppReference) => void;
   onSearchReferences?: (query: string, signal: AbortSignal) => Promise<MentionItem[]>;
+  onSelectMultiAgentMode?: (mode: MultiAgentComposerMode) => void;
   onSelectAgent?: (agentTypeId: string) => void;
+  multiAgentMode?: MultiAgentComposerMode;
   onSubmit?: () => void;
   transcriptionChunkedDictationSupported?: boolean;
   transcriptionProviderAppId?: string;
@@ -194,6 +198,8 @@ async function renderComposer({
         executionMode={null}
         isSending={false}
         mentionItems={mentionItems}
+        multiAgentBudgetLabel="2 participants · 2 turns · 1 tool call"
+        multiAgentMode={multiAgentMode}
         onAddAttachments={onAddAttachments}
         onChange={(nextValue) => {
           latestValue = nextValue;
@@ -201,6 +207,7 @@ async function renderComposer({
         }}
         onReferenceAdd={onReferenceAdd}
         onSearchReferences={onSearchReferences}
+        onSelectMultiAgentMode={onSelectMultiAgentMode}
         onSelectAgent={onSelectAgent}
         onSelectProvider={() => undefined}
         onRemoveAttachment={() => undefined}
@@ -1251,5 +1258,25 @@ describe("ChatComposer reference search", () => {
     await dragOverEditor(dataTransfer);
 
     expect(element.querySelector(".chatapp-chat-dropzone")).toBeNull();
+  });
+
+  it("opens the multi-agent mode menu and selects a mode", async () => {
+    const onSelectMultiAgentMode = vi.fn();
+    const { element } = await renderComposer({ multiAgentMode: "off", onSelectMultiAgentMode });
+    const trigger = element.querySelector('button[aria-label="Multi-agent mode: Off"]') as HTMLButtonElement | null;
+
+    await act(async () => {
+      trigger?.click();
+    });
+
+    expect(element.textContent).toContain("Auto");
+    expect(element.textContent).toContain("2 participants · 2 turns · 1 tool call");
+
+    const autoButton = [...element.querySelectorAll('[role="menuitemradio"]')].find((item) => item.textContent?.includes("Auto")) as HTMLButtonElement;
+    await act(async () => {
+      autoButton.click();
+    });
+
+    expect(onSelectMultiAgentMode).toHaveBeenCalledWith("auto");
   });
 });

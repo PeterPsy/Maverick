@@ -1,10 +1,16 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   ApiError,
+  createInterAgentRun,
   deleteProject,
+  executeInterAgentRun,
   getSpeechCapabilities,
+  listInterAgentRunApprovals,
+  listInterAgentRunEvents,
+  listInterAgentRuns,
   listRuntimeSessionEvents,
   prewarmSpeechWorker,
+  resolveInterAgentApproval,
   selectedDependencyProviderAppId,
   selectedSharedDependencyProviderAppId,
   synthesizeSpeech,
@@ -156,6 +162,75 @@ describe("runtime event client calls", () => {
         headers: expect.objectContaining({ Accept: "application/json" }),
       }),
     );
+  });
+});
+
+describe("inter-agent client calls", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("calls core-owned inter-agent HTTP surfaces", async () => {
+    const fetchMock = vi.fn(async (path: string, init?: RequestInit) => {
+      if (path === "/api/inter-agent/runs" && !init?.method) {
+        return jsonResponse({ items: [] });
+      }
+      if (path === "/api/inter-agent/runs" && init?.method === "POST") {
+        return jsonResponse({ run: { run_id: "run-1" }, participants: [] }, 201);
+      }
+      if (path === "/api/inter-agent/runs/run-1/execute") {
+        return jsonResponse({ run: { run_id: "run-1", status: "completed" }, participants: [], root_runtime_events: [] });
+      }
+      if (path === "/api/inter-agent/runs/run-1/events?visibility_plane=summary&limit=10") {
+        return jsonResponse({ items: [] });
+      }
+      if (path === "/api/inter-agent/runs/run-1/approvals") {
+        return jsonResponse({ items: [] });
+      }
+      if (path === "/api/inter-agent/approvals/approval-1/resolve") {
+        return jsonResponse({ approval: { approval_id: "approval-1", status: "approved" } });
+      }
+      return jsonResponse({ error: "unexpected" }, 500);
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(listInterAgentRuns()).resolves.toEqual({ items: [] });
+    await expect(
+      createInterAgentRun({
+        thread_id: "thread-1",
+        root_runtime_session_id: "session-1",
+        mode: "manager_tools",
+        idempotency_key: "key-1",
+        participants: [
+          { participant_id: "orchestrator", kind: "orchestrator", execution_mode: "root_orchestrator", label: "Orchestrator" },
+          { participant_id: "assistant", kind: "agent", execution_mode: "child_runtime_session", label: "Assistant" },
+        ],
+        budget: {
+          max_participants: 2,
+          max_concurrent_participants: 1,
+          max_total_turns: 2,
+          max_turns_per_participant: 1,
+          max_tool_calls: 1,
+        },
+      }),
+    ).resolves.toMatchObject({ run: { run_id: "run-1" } });
+    await expect(executeInterAgentRun("run-1", { input_text: "Plan", client_message_id: "client-1" })).resolves.toMatchObject({
+      run: { status: "completed" },
+    });
+    await expect(listInterAgentRunEvents("run-1", { visibilityPlane: "summary", limit: 10 })).resolves.toEqual({ items: [] });
+    await expect(listInterAgentRunApprovals("run-1")).resolves.toEqual({ items: [] });
+    await expect(resolveInterAgentApproval("approval-1", { approved: true })).resolves.toMatchObject({
+      approval: { status: "approved" },
+    });
+
+    expect(JSON.parse(String(fetchMock.mock.calls[1]?.[1]?.body || "{}"))).toMatchObject({
+      root_runtime_session_id: "session-1",
+      mode: "manager_tools",
+    });
+    expect(JSON.parse(String(fetchMock.mock.calls[2]?.[1]?.body || "{}"))).toMatchObject({
+      input_text: "Plan",
+      client_message_id: "client-1",
+    });
   });
 });
 

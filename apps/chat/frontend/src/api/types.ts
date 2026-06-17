@@ -351,6 +351,146 @@ export type RuntimeStepMessage = {
   detail: Record<string, unknown>;
 };
 
+export type MultiAgentComposerMode = "off" | "auto" | "multi";
+
+export type InterAgentRunStatus =
+  | "created"
+  | "planning"
+  | "running"
+  | "paused"
+  | "waiting_approval"
+  | "completed"
+  | "failed"
+  | "cancelled"
+  | "recovering";
+
+export type InterAgentRunRecord = {
+  run_id: string;
+  workspace_id: string;
+  thread_id: string;
+  root_runtime_session_id: string;
+  source_app_id: string;
+  mode: string;
+  status: InterAgentRunStatus;
+  created_by_user_id: string;
+  orchestrator_participant_id: string;
+  budget_policy_id: string;
+  budget_ledger_id: string;
+  visibility_level: string;
+  created_at: string;
+  updated_at: string;
+  ended_at?: string | null;
+};
+
+export type InterAgentParticipantRecord = {
+  participant_id: string;
+  workspace_id: string;
+  run_id: string;
+  kind: string;
+  execution_mode: string;
+  agent_type_id?: string | null;
+  label: string;
+  runtime_session_id?: string | null;
+  status: string;
+  current_task_id?: string | null;
+  thread_visibility: string;
+  created_at: string;
+  updated_at: string;
+};
+
+export type InterAgentEdgeRecord = {
+  edge_id: string;
+  workspace_id: string;
+  run_id: string;
+  source_id: string;
+  target_id: string;
+  kind: string;
+  label: string;
+  status: string;
+  created_at: string;
+};
+
+export type InterAgentBudgetPolicyRecord = {
+  budget_policy_id: string;
+  workspace_id: string;
+  max_participants: number;
+  max_concurrent_participants: number;
+  max_handoffs: number;
+  max_rounds: number;
+  max_total_turns: number;
+  max_turns_per_participant: number;
+  max_tool_calls: number;
+  max_estimated_tokens: number;
+  max_estimated_cost: string;
+  max_idle_seconds: number;
+  max_stall_seconds: number;
+  approval_required_above_cost: string;
+  created_at: string;
+};
+
+export type InterAgentBudgetLedgerRecord = {
+  budget_ledger_id: string;
+  workspace_id: string;
+  run_id: string;
+  reserved_participants: number;
+  running_participants: number;
+  turns_used: number;
+  tool_calls_used: number;
+  handoffs_used: number;
+  estimated_tokens_used: number;
+  estimated_cost_used: string;
+  updated_at: string;
+};
+
+export type InterAgentApprovalRecord = {
+  approval_id: string;
+  workspace_id: string;
+  run_id: string;
+  participant_id: string;
+  requested_by_participant_id: string;
+  operation_kind: string;
+  resource_refs: Array<Record<string, unknown>>;
+  summary: string;
+  risk_level: string;
+  status: "pending" | "approved" | "rejected" | "expired" | "cancelled";
+  eligible_approver_user_ids: string[];
+  eligible_approver_roles: string[];
+  expires_at: string;
+  resolved_by_user_id?: string | null;
+  resolved_at?: string | null;
+  resolution_reason?: string | null;
+};
+
+export type InterAgentEventRecord = {
+  event_id: string;
+  workspace_id: string;
+  run_id: string;
+  thread_id: string;
+  root_runtime_session_id: string;
+  participant_id?: string | null;
+  runtime_session_id?: string | null;
+  runtime_turn_id?: string | null;
+  runtime_event_id?: string | null;
+  event_type: string;
+  visibility_plane: "summary" | "detail" | "debug";
+  sequence: number;
+  correlation_id: string;
+  idempotency_key: string;
+  payload: Record<string, unknown>;
+  created_at: string;
+};
+
+export type InterAgentRunDetail = {
+  run: InterAgentRunRecord;
+  participants: InterAgentParticipantRecord[];
+  edges: InterAgentEdgeRecord[];
+  budget_policy: InterAgentBudgetPolicyRecord | null;
+  budget_ledger: InterAgentBudgetLedgerRecord | null;
+  participant_results?: Array<Record<string, unknown>>;
+  root_runtime_events?: RuntimeEvent[];
+  root_runtime_turn?: RuntimeTurn;
+};
+
 export type WidgetRegistryItem = {
   owner_app_id: string;
   widget_id: string;

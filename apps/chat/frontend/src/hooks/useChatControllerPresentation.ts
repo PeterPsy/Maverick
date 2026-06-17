@@ -1,5 +1,17 @@
 import { useMemo } from "react";
-import type { AgentTypeSummary, AppReference, ChatMessage, ChatThread, ProviderItem, RuntimeEvent, RuntimeTurn } from "../api/client";
+import type {
+  AgentTypeSummary,
+  AppReference,
+  ChatMessage,
+  ChatThread,
+  InterAgentApprovalRecord,
+  InterAgentEventRecord,
+  InterAgentRunDetail,
+  MultiAgentComposerMode,
+  ProviderItem,
+  RuntimeEvent,
+  RuntimeTurn,
+} from "../api/client";
 import type { ChatSurfaceProps } from "../components/ChatSurface";
 import type { ExecutionMode } from "../components/ChatComposer";
 import type { ComposerAttachment } from "../lib/attachments";
@@ -36,6 +48,8 @@ type UseChatControllerPresentationParams = {
   handleReferenceAdd: (reference: AppReference) => void;
   handleReferenceRemove: (reference: AppReference) => void;
   handleSearchReferences: (query: string, signal: AbortSignal) => Promise<MentionItem[]>;
+  handleOpenInterAgentGraph: (runId: string) => void;
+  handleResolveInterAgentApproval: (approvalId: string, approved: boolean) => Promise<void>;
   handleSelectAgent: (agentTypeId: string) => void;
   handleSelectProvider: (providerId: string) => void;
   handleSend: () => void;
@@ -46,7 +60,11 @@ type UseChatControllerPresentationParams = {
   isOlderHistoryLoading: boolean;
   isRuntimeBusy: boolean;
   isSending: boolean;
+  interAgentApprovalsByRunId: Record<string, InterAgentApprovalRecord[]>;
+  interAgentEventsByRunId: Record<string, InterAgentEventRecord[]>;
+  interAgentRuns: InterAgentRunDetail[];
   mentionItems: MentionItem[];
+  multiAgentMode: MultiAgentComposerMode;
   pendingUserMessages: PendingMessage[];
   providers: ProviderItem[];
   queuedMessages: QueuedMessage[];
@@ -55,6 +73,7 @@ type UseChatControllerPresentationParams = {
   onLoadOlderHistory: () => void;
   onRevealOlderMessages: () => void;
   selectedAgentTypeId: string;
+  setMultiAgentMode: (mode: MultiAgentComposerMode) => void;
   setComposer: (value: string) => void;
   speechMaxTextChars: number;
   speechProviderAppId: string;
@@ -91,6 +110,8 @@ export function useChatControllerPresentation({
   handleReferenceAdd,
   handleReferenceRemove,
   handleSearchReferences,
+  handleOpenInterAgentGraph,
+  handleResolveInterAgentApproval,
   handleSelectAgent,
   handleSelectProvider,
   handleSend,
@@ -101,7 +122,11 @@ export function useChatControllerPresentation({
   isOlderHistoryLoading,
   isRuntimeBusy,
   isSending,
+  interAgentApprovalsByRunId,
+  interAgentEventsByRunId,
+  interAgentRuns,
   mentionItems,
+  multiAgentMode,
   pendingUserMessages,
   providers,
   queuedMessages,
@@ -110,6 +135,7 @@ export function useChatControllerPresentation({
   onLoadOlderHistory,
   onRevealOlderMessages,
   selectedAgentTypeId,
+  setMultiAgentMode,
   setComposer,
   speechMaxTextChars,
   speechProviderAppId,
@@ -151,6 +177,15 @@ export function useChatControllerPresentation({
     }
     return latestRuntimeStepLabel(events, activeTurn?.turn_id) || "Thinking";
   }, [activeTurn?.turn_id, events, isBootstrapping, isHistoryLoading, isRuntimeBusy]);
+  const multiAgentBudgetLabel = useMemo(() => {
+    if (multiAgentMode === "multi") {
+      return "2 participants · 4 turns · 4 tool calls";
+    }
+    if (multiAgentMode === "auto") {
+      return "2 participants · 2 turns · 1 tool call";
+    }
+    return "";
+  }, [multiAgentMode]);
   const { handleChatRootDragOver, handleChatRootDrop } = useChatRootDropHandlers({
     disabled: isThreadLoading,
     handleAddAttachments,
@@ -167,6 +202,8 @@ export function useChatControllerPresentation({
       executionMode,
       isSending: isRuntimeBusy || isSending,
       mentionItems: composerMentionItems,
+      multiAgentBudgetLabel,
+      multiAgentMode,
       onAddAttachments: handleAddAttachments,
       onCapturePageArea: enablePageCapture ? handleCapturePageArea : undefined,
       onChange: setComposer,
@@ -174,6 +211,7 @@ export function useChatControllerPresentation({
       onReferenceRemove: handleReferenceRemove,
       onRemoveAttachment: removeAttachment,
       onSearchReferences: handleSearchReferences,
+      onSelectMultiAgentMode: setMultiAgentMode,
       onSelectAgent: handleSelectAgent,
       onSelectProvider: handleSelectProvider,
       onStopTurn: handleStopTurn,
@@ -202,9 +240,14 @@ export function useChatControllerPresentation({
       hasMoreOlderMessages: hasHiddenMessages || hasMoreHistory,
       isLoading: canStopTurn || isThreadLoading,
       isLoadingOlderHistory: isOlderHistoryLoading,
+      interAgentApprovalsByRunId,
+      interAgentEventsByRunId,
+      interAgentRuns,
       loadingLabel,
       mentionItems,
       messages,
+      onOpenInterAgentGraph: handleOpenInterAgentGraph,
+      onResolveInterAgentApproval: handleResolveInterAgentApproval,
       onLoadOlderMessages: hasHiddenMessages ? onRevealOlderMessages : onLoadOlderHistory,
       speechMaxTextChars,
       speechProviderAppId,

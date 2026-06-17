@@ -367,6 +367,45 @@ class InterAgentServiceTest(unittest.TestCase):
         self.assertEqual(stored.status, "expired")
         self.assertEqual(stored.resolution_reason, "approval_timeout")
 
+    def test_resolve_pending_approval_records_summary_event(self) -> None:
+        repo_root = make_temp_repo_root(self)
+        store = build_inter_agent_document_store(start_path=repo_root)
+        service = InterAgentService(store)
+        now = datetime(2026, 6, 16, 12, 0, tzinfo=UTC)
+        run = service.create_run(self.run_spec(), now=now)
+        store.save_approval(
+            ApprovalRequestRecord(
+                approval_id="approval-resolve-1",
+                workspace_id="default",
+                run_id=run.run_id,
+                participant_id="researcher",
+                requested_by_participant_id="orchestrator",
+                operation_kind="storage.write",
+                resource_refs=[],
+                summary="Write generated output.",
+                risk_level="medium",
+                status="pending",
+                eligible_approver_user_ids=["user-1"],
+                eligible_approver_roles=[],
+                expires_at=now + timedelta(minutes=5),
+            )
+        )
+
+        resolved = service.resolve_approval(
+            workspace_id="default",
+            approval_id="approval-resolve-1",
+            approved=False,
+            resolved_by_user_id="user-1",
+            resolution_reason="needs-review",
+            now=now,
+        )
+        events = store.list_event_page(run.run_id, workspace_id="default", visibility_plane="summary").events
+
+        self.assertEqual(resolved.status, "rejected")
+        self.assertEqual(resolved.resolution_reason, "needs-review")
+        self.assertEqual(resolved.resolved_by_user_id, "user-1")
+        self.assertIn("inter_agent.approval.resolved", [event.event_type for event in events])
+
     def test_platform_state_exposes_inter_agent_store_separate_from_runtime_store(self) -> None:
         repo_root = make_temp_repo_root(self)
         with patch.dict(

@@ -1,0 +1,198 @@
+from __future__ import annotations
+
+from datetime import UTC, datetime, timedelta
+import tempfile
+import unittest
+from unittest.mock import patch
+
+from core.api.platform_host import PlatformHost
+from core.api.platform_state import bootstrap_platform_state
+from core.inter_agent.models import ApprovalRequestRecord
+from core.runtime.runtime_events import RuntimeEventRecord
+from core.runtime.runtime_session import RuntimeSessionGrantRecord
+from core.runtime.runtime_turns import RuntimeTurnRecord
+from core.runtime.service import create_runtime_session
+from tests.unit.api.app_reference_test_support import AppReferenceApiTestSupport
+from tests.unit.api.test_inter_agent_api import _run_payload
+
+
+class InterAgentApiF4TestCase(AppReferenceApiTestSupport, unittest.TestCase):
+    def _bootstrap_state(self, repo_root):
+        with patch.dict(
+            "os.environ",
+            {
+                "MAVERICK_ALLOW_INSECURE_TEST_DEFAULTS": "1",
+                "MAVERICK_ADMIN_USERNAME": "admin",
+                "MAVERICK_ADMIN_PASSWORD": "maverick",
+            },
+        ):
+            return bootstrap_platform_state(start_path=repo_root)
+
+    def _create_root_session(self, state, repo_root) -> None:
+        create_runtime_session(
+            state.runtime_store,
+            session_id="root-session",
+            workspace_id="default",
+            agent_id="chat",
+            source_app_id="chat",
+            system_prompt="Parent prompt must not leak.",
+            skill_ids=["parent-skill"],
+            owner_user_id="parent-owner",
+            grants=[
+                RuntimeSessionGrantRecord(
+                    operation="cleanup",
+                    grantee_kind="user",
+                    grantee_id="parent-owner",
+                    issued_by_user_id="parent-owner",
+                )
+            ],
+            governance=state.workspace_store.get_governance("default"),
+            platform_allows_full_access=True,
+            start_path=repo_root,
+        )
+
+    def test_execute_with_client_message_projects_root_turn(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            repo_root = self._repo_root(temp_dir)
+            state = self._bootstrap_state(repo_root)
+            self._create_root_session(state, repo_root)
+            app = PlatformHost(state, start_path=repo_root)
+            cookie = self._login(app)
+            now = datetime(2026, 6, 16, 12, 0, tzinfo=UTC)
+
+            def fake_submit(_state, *, session, input_text, client_message_id=None, async_requested=False):
+                turn = RuntimeTurnRecord(
+                    turn_id="turn-root-projection-child",
+                    session_id=session.session_id,
+                    workspace_id="default",
+                    status="completed",
+                    input_text=input_text,
+                    created_at=now,
+                    updated_at=now,
+                    started_at=now,
+                    completed_at=now,
+                    failure_reason=None,
+                )
+                event = RuntimeEventRecord(
+                    event_id="event-root-projection-final",
+                    workspace_id="default",
+                    session_id=session.session_id,
+                    plane="turn",
+                    event_type="runtime.output.final",
+                    turn_id=turn.turn_id,
+                    process_id=None,
+                    payload={"text": "Projected result."},
+                    created_at=now,
+                )
+                return turn, [event]
+
+            create_status, _create_payload, _headers = self._invoke(
+                app,
+                path="/api/inter-agent/runs",
+                method="POST",
+                body=_run_payload(run_id="run-root-projection"),
+                cookie=cookie,
+            )
+            with patch("core.inter_agent.service.submit_runtime_turn", side_effect=fake_submit):
+                execute_status, execute_payload, _headers = self._invoke(
+                    app,
+                    path="/api/inter-agent/runs/run-root-projection/execute",
+                    method="POST",
+                    body={
+                        "input_text": "Research the projection.",
+                        "client_message_id": "client-root-projection",
+                        "attachments": [{"id": "att-1", "name": "brief.md"}],
+                    },
+                    cookie=cookie,
+                )
+            root_events = state.runtime_store.list_events("root-session")
+            root_turn = state.runtime_store.get_turn(execute_payload["root_runtime_turn"]["turn_id"])
+            root_thread = state.runtime_store.get_thread("root-session")
+
+        self.assertEqual(create_status, 201)
+        self.assertEqual(execute_status, 200)
+        self.assertEqual(root_turn.status, "completed")
+        self.assertEqual(root_turn.input_text, "Research the projection.")
+        self.assertEqual(
+            [event.event_type for event in root_events],
+            [
+                "runtime.turn.queued",
+                "runtime.turn.started",
+                "runtime.step.updated",
+                "runtime.step.updated",
+                "runtime.turn.completed",
+            ],
+        )
+        self.assertEqual(root_events[0].payload["client_message_id"], "client-root-projection")
+        self.assertEqual(root_events[0].payload["attachments"][0]["name"], "brief.md")
+        self.assertEqual(execute_payload["root_runtime_events"][0]["event_type"], "runtime.turn.queued")
+        self.assertEqual(root_thread.availability, "free")
+        self.assertEqual(root_thread.last_completed_turn_id, root_turn.turn_id)
+
+    def test_lists_and_resolves_approvals(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            repo_root = self._repo_root(temp_dir)
+            state = self._bootstrap_state(repo_root)
+            self._create_root_session(state, repo_root)
+            app = PlatformHost(state, start_path=repo_root)
+            cookie = self._login(app)
+            expires_at = datetime.now(tz=UTC) + timedelta(minutes=5)
+
+            create_status, _create_payload, _headers = self._invoke(
+                app,
+                path="/api/inter-agent/runs",
+                method="POST",
+                body=_run_payload(run_id="run-approval-api"),
+                cookie=cookie,
+            )
+            state.inter_agent_store.save_approval(
+                ApprovalRequestRecord(
+                    approval_id="approval-api-1",
+                    workspace_id="default",
+                    run_id="run-approval-api",
+                    participant_id="researcher",
+                    requested_by_participant_id="orchestrator",
+                    operation_kind="storage.write",
+                    resource_refs=[{"app_id": "storage", "entity_type": "file", "entity_id": "file-1"}],
+                    summary="Write a generated file.",
+                    risk_level="medium",
+                    status="pending",
+                    eligible_approver_user_ids=["admin"],
+                    eligible_approver_roles=[],
+                    expires_at=expires_at,
+                )
+            )
+            list_status, list_payload, _headers = self._invoke(
+                app,
+                path="/api/inter-agent/runs/run-approval-api/approvals",
+                cookie=cookie,
+            )
+            missing_status, missing_payload, _headers = self._invoke(
+                app,
+                path="/api/inter-agent/approvals/missing-approval/resolve",
+                method="POST",
+                body={"approved": True},
+                cookie=cookie,
+            )
+            resolve_status, resolve_payload, _headers = self._invoke(
+                app,
+                path="/api/inter-agent/approvals/approval-api-1/resolve",
+                method="POST",
+                body={"approved": True, "reason": "looks-good"},
+                cookie=cookie,
+            )
+            events = state.inter_agent_store.list_event_page("run-approval-api", workspace_id="default", visibility_plane="summary").events
+
+        self.assertEqual(create_status, 201)
+        self.assertEqual(list_status, 200)
+        self.assertEqual(list_payload["items"][0]["approval_id"], "approval-api-1")
+        self.assertEqual(missing_status, 404)
+        self.assertEqual(missing_payload["error"], "inter_agent_approval_not_found")
+        self.assertEqual(resolve_status, 200)
+        self.assertEqual(resolve_payload["approval"]["status"], "approved")
+        self.assertEqual(resolve_payload["approval"]["resolution_reason"], "looks-good")
+        self.assertIn("inter_agent.approval.resolved", [event.event_type for event in events])
+
+
+if __name__ == "__main__":
+    unittest.main()

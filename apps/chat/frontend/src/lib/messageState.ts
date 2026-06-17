@@ -1,4 +1,4 @@
-import type { AppReference, ChatMessageAttachment } from "../api/client";
+import type { AppReference, ChatMessageAttachment, MultiAgentComposerMode } from "../api/client";
 import { uploadWorkspaceFile } from "../api/client";
 import type { ComposerAttachment } from "./attachments";
 
@@ -15,6 +15,7 @@ export type QueuedMessage = {
   content: string;
   attachments: ChatMessageAttachment[];
   appReferences: AppReference[];
+  multiAgentMode?: MultiAgentComposerMode;
 };
 
 export function attachmentToMessageAttachment(attachment: ComposerAttachment): ChatMessageAttachment {

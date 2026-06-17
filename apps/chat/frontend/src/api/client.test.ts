@@ -214,7 +214,14 @@ describe("inter-agent client calls", () => {
         },
       }),
     ).resolves.toMatchObject({ run: { run_id: "run-1" } });
-    await expect(executeInterAgentRun("run-1", { input_text: "Plan", client_message_id: "client-1" })).resolves.toMatchObject({
+    await expect(
+      executeInterAgentRun("run-1", {
+        input_text: "Plan",
+        client_message_id: "client-1",
+        async: true,
+        attachments: [{ id: "att-1", name: "brief.md", size: 12, type: "text/markdown", isImage: false, objectUrl: "blob:http://local/att-1" }],
+      }),
+    ).resolves.toMatchObject({
       run: { status: "completed" },
     });
     await expect(listInterAgentRunEvents("run-1", { visibilityPlane: "summary", limit: 10 })).resolves.toEqual({ items: [] });
@@ -230,7 +237,10 @@ describe("inter-agent client calls", () => {
     expect(JSON.parse(String(fetchMock.mock.calls[2]?.[1]?.body || "{}"))).toMatchObject({
       input_text: "Plan",
       client_message_id: "client-1",
+      async: true,
+      attachments: [{ id: "att-1", name: "brief.md" }],
     });
+    expect(JSON.parse(String(fetchMock.mock.calls[2]?.[1]?.body || "{}")).attachments[0]).not.toHaveProperty("objectUrl");
   });
 });
 

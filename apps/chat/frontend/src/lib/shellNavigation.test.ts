@@ -138,6 +138,11 @@ describe("chat shell navigation", () => {
       app_page: "runtime-sessions/session-123",
       runtime_session_id: "session-123",
     });
+    expect(normalizeChatRouteParams({ app_page: "graph/run-123" })).toEqual({
+      app_page: "graph/run-123",
+      view: "graph",
+      inter_agent_run_id: "run-123",
+    });
   });
 
   it("builds runtime-session thread metadata from shell params", () => {

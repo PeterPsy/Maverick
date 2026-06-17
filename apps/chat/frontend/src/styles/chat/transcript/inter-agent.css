@@ -260,6 +260,137 @@
   line-height: 1.42;
 }
 
+.chatapp-inter-agent-graph {
+  display: grid;
+  gap: 0.75rem;
+  width: min(100%, 48rem);
+  margin: 0 auto 0.55rem;
+  padding: 0.86rem;
+  border: 1px solid rgba(var(--maverick-contrast-rgb), 0.12);
+  border-radius: 0.72rem;
+  background: var(--maverick-surface);
+  color: var(--maverick-text);
+}
+
+.chatapp-inter-agent-graph__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  min-width: 0;
+}
+
+.chatapp-inter-agent-graph__header h2 {
+  margin: 0;
+  color: var(--maverick-text);
+  font-size: 1rem;
+  line-height: 1.2;
+}
+
+.chatapp-inter-agent-graph__eyebrow {
+  color: var(--maverick-text-soft);
+  font-size: 0.72rem;
+  font-weight: 750;
+  text-transform: uppercase;
+}
+
+.chatapp-inter-agent-graph__close {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2rem;
+  height: 2rem;
+  border: 0;
+  border-radius: 0.58rem;
+  background: rgba(var(--maverick-contrast-rgb), 0.06);
+  color: var(--maverick-text);
+  cursor: pointer;
+}
+
+.chatapp-inter-agent-graph__close .material-symbols-rounded {
+  font-size: 1.05rem;
+}
+
+.chatapp-inter-agent-graph__body {
+  display: grid;
+  grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.1fr);
+  gap: 0.75rem;
+}
+
+.chatapp-inter-agent-graph__participants,
+.chatapp-inter-agent-graph__timeline {
+  display: grid;
+  gap: 0.48rem;
+  min-width: 0;
+}
+
+.chatapp-inter-agent-graph__node {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: 0.55rem;
+  min-width: 0;
+  padding: 0.56rem 0.62rem;
+  border: 1px solid rgba(var(--maverick-contrast-rgb), 0.08);
+  border-radius: 0.58rem;
+  background: rgba(var(--maverick-contrast-rgb), 0.04);
+}
+
+.chatapp-inter-agent-graph__node .material-symbols-rounded {
+  color: var(--maverick-accent);
+  font-size: 1rem;
+}
+
+.chatapp-inter-agent-graph__node div {
+  display: grid;
+  gap: 0.12rem;
+  min-width: 0;
+}
+
+.chatapp-inter-agent-graph__node strong,
+.chatapp-inter-agent-graph__timeline strong {
+  overflow: hidden;
+  color: var(--maverick-text);
+  font-size: 0.82rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.chatapp-inter-agent-graph__node span,
+.chatapp-inter-agent-graph__timeline span,
+.chatapp-inter-agent-graph__empty,
+.chatapp-inter-agent-graph__approval {
+  color: var(--maverick-text-soft);
+  font-size: 0.75rem;
+}
+
+.chatapp-inter-agent-graph__timeline {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.chatapp-inter-agent-graph__timeline li {
+  display: grid;
+  gap: 0.14rem;
+  min-width: 0;
+  padding: 0.5rem 0;
+  border-bottom: 1px solid rgba(var(--maverick-contrast-rgb), 0.08);
+}
+
+.chatapp-inter-agent-graph__timeline li:last-child {
+  border-bottom: 0;
+}
+
+.chatapp-inter-agent-graph__approval {
+  justify-self: start;
+  padding: 0.34rem 0.5rem;
+  border-radius: 0.5rem;
+  background: rgba(245, 158, 11, 0.1);
+  color: #fbbf24;
+  font-weight: 750;
+}
+
 @media (max-width: 640px) {
   .chatapp-inter-agent-banner,
   .chatapp-inter-agent-approval {
@@ -274,5 +405,9 @@
 
   .chatapp-inter-agent-banner__body p {
     white-space: normal;
+  }
+
+  .chatapp-inter-agent-graph__body {
+    grid-template-columns: 1fr;
   }
 }

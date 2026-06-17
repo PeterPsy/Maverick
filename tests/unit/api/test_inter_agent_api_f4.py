@@ -7,11 +7,13 @@ from unittest.mock import patch
 
 from core.api.platform_host import PlatformHost
 from core.api.platform_state import bootstrap_platform_state
+from core.identity.service import create_user
 from core.inter_agent.models import ApprovalRequestRecord
 from core.runtime.runtime_events import RuntimeEventRecord
 from core.runtime.runtime_session import RuntimeSessionGrantRecord
 from core.runtime.runtime_turns import RuntimeTurnRecord
 from core.runtime.service import create_runtime_session
+from core.workspaces.service import ensure_workspace_membership
 from tests.unit.api.app_reference_test_support import AppReferenceApiTestSupport
 from tests.unit.api.test_inter_agent_api import _run_payload
 
@@ -93,7 +95,10 @@ class InterAgentApiF4TestCase(AppReferenceApiTestSupport, unittest.TestCase):
                 body=_run_payload(run_id="run-root-projection"),
                 cookie=cookie,
             )
-            with patch("core.inter_agent.service.submit_runtime_turn", side_effect=fake_submit):
+            with (
+                patch("core.inter_agent.service.submit_runtime_turn", side_effect=fake_submit),
+                patch("core.api.inter_agent_api.schedule_runtime_thread_title_generation"),
+            ):
                 execute_status, execute_payload, _headers = self._invoke(
                     app,
                     path="/api/inter-agent/runs/run-root-projection/execute",
@@ -101,7 +106,7 @@ class InterAgentApiF4TestCase(AppReferenceApiTestSupport, unittest.TestCase):
                     body={
                         "input_text": "Research the projection.",
                         "client_message_id": "client-root-projection",
-                        "attachments": [{"id": "att-1", "name": "brief.md"}],
+                        "attachments": [{"id": "att-1", "name": "brief.md", "objectUrl": "blob:http://local/att-1"}],
                     },
                     cookie=cookie,
                 )
@@ -125,9 +130,72 @@ class InterAgentApiF4TestCase(AppReferenceApiTestSupport, unittest.TestCase):
         )
         self.assertEqual(root_events[0].payload["client_message_id"], "client-root-projection")
         self.assertEqual(root_events[0].payload["attachments"][0]["name"], "brief.md")
+        self.assertNotIn("objectUrl", root_events[0].payload["attachments"][0])
         self.assertEqual(execute_payload["root_runtime_events"][0]["event_type"], "runtime.turn.queued")
         self.assertEqual(root_thread.availability, "free")
         self.assertEqual(root_thread.last_completed_turn_id, root_turn.turn_id)
+
+    def test_create_chat_run_preserves_agent_snapshot_for_child_participant(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            repo_root = self._repo_root(temp_dir)
+            state = self._bootstrap_state(repo_root)
+            self._create_root_session(state, repo_root)
+            app = PlatformHost(state, start_path=repo_root)
+            cookie = self._login(app)
+
+            create_status, create_payload, _headers = self._invoke(
+                app,
+                path="/api/inter-agent/runs",
+                method="POST",
+                body=_run_payload(run_id="run-agent-snapshot"),
+                cookie=cookie,
+            )
+            participant = next(item for item in create_payload["participants"] if item["participant_id"] == "researcher")
+
+        self.assertEqual(create_status, 201)
+        self.assertEqual(participant["agent_snapshot"]["system_prompt"], "Research only.")
+        self.assertEqual(participant["skill_ids"], ["storage"])
+        self.assertEqual(participant["agent_snapshot"]["skill_catalog_app_id"], "skills")
+
+    def test_execute_async_returns_queued_root_turn_without_inline_worker(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            repo_root = self._repo_root(temp_dir)
+            state = self._bootstrap_state(repo_root)
+            self._create_root_session(state, repo_root)
+            app = PlatformHost(state, start_path=repo_root)
+            cookie = self._login(app)
+
+            create_status, _create_payload, _headers = self._invoke(
+                app,
+                path="/api/inter-agent/runs",
+                method="POST",
+                body=_run_payload(run_id="run-async-execute"),
+                cookie=cookie,
+            )
+            with (
+                patch("core.api.inter_agent_api._start_inter_agent_execution_worker") as start_worker,
+                patch("core.api.inter_agent_api.schedule_runtime_thread_title_generation"),
+            ):
+                execute_status, execute_payload, _headers = self._invoke(
+                    app,
+                    path="/api/inter-agent/runs/run-async-execute/execute",
+                    method="POST",
+                    body={
+                        "input_text": "Research without blocking.",
+                        "client_message_id": "client-async-execute",
+                        "async": True,
+                    },
+                    cookie=cookie,
+                )
+            root_turn = state.runtime_store.get_turn(execute_payload["root_runtime_turn"]["turn_id"])
+            root_thread = state.runtime_store.get_thread("root-session")
+
+        self.assertEqual(create_status, 201)
+        self.assertEqual(execute_status, 202)
+        self.assertEqual(execute_payload["root_runtime_turn"]["status"], "queued")
+        self.assertEqual(root_turn.status, "queued")
+        self.assertEqual(root_thread.availability, "queued")
+        start_worker.assert_called_once()
 
     def test_lists_and_resolves_approvals(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -157,7 +225,7 @@ class InterAgentApiF4TestCase(AppReferenceApiTestSupport, unittest.TestCase):
                     summary="Write a generated file.",
                     risk_level="medium",
                     status="pending",
-                    eligible_approver_user_ids=["admin"],
+                    eligible_approver_user_ids=["user:admin"],
                     eligible_approver_roles=[],
                     expires_at=expires_at,
                 )
@@ -192,6 +260,69 @@ class InterAgentApiF4TestCase(AppReferenceApiTestSupport, unittest.TestCase):
         self.assertEqual(resolve_payload["approval"]["status"], "approved")
         self.assertEqual(resolve_payload["approval"]["resolution_reason"], "looks-good")
         self.assertIn("inter_agent.approval.resolved", [event.event_type for event in events])
+
+    def test_approval_resolution_uses_eligible_approver_policy(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            repo_root = self._repo_root(temp_dir)
+            state = self._bootstrap_state(repo_root)
+            self._create_root_session(state, repo_root)
+            create_user(state.identity_store, username="reviewer", password="reviewer-pass", platform_role="member")
+            ensure_workspace_membership(
+                state.workspace_store,
+                membership_id="default:user:reviewer",
+                workspace_id="default",
+                user_id="user:reviewer",
+                role="member",
+            )
+            app = PlatformHost(state, start_path=repo_root)
+            admin_cookie = self._login(app)
+            reviewer_cookie = self._login(app, username="reviewer", password="reviewer-pass")
+            expires_at = datetime.now(tz=UTC) + timedelta(minutes=5)
+
+            create_status, _create_payload, _headers = self._invoke(
+                app,
+                path="/api/inter-agent/runs",
+                method="POST",
+                body=_run_payload(run_id="run-approval-policy"),
+                cookie=admin_cookie,
+            )
+            state.inter_agent_store.save_approval(
+                ApprovalRequestRecord(
+                    approval_id="approval-policy-1",
+                    workspace_id="default",
+                    run_id="run-approval-policy",
+                    participant_id="researcher",
+                    requested_by_participant_id="orchestrator",
+                    operation_kind="storage.write",
+                    resource_refs=[],
+                    summary="Write a generated file.",
+                    risk_level="medium",
+                    status="pending",
+                    eligible_approver_user_ids=["user:reviewer"],
+                    eligible_approver_roles=[],
+                    expires_at=expires_at,
+                )
+            )
+            owner_status, owner_payload, _headers = self._invoke(
+                app,
+                path="/api/inter-agent/approvals/approval-policy-1/resolve",
+                method="POST",
+                body={"approved": True},
+                cookie=admin_cookie,
+            )
+            reviewer_status, reviewer_payload, _headers = self._invoke(
+                app,
+                path="/api/inter-agent/approvals/approval-policy-1/resolve",
+                method="POST",
+                body={"approved": True},
+                cookie=reviewer_cookie,
+            )
+
+        self.assertEqual(create_status, 201)
+        self.assertEqual(owner_status, 403)
+        self.assertEqual(owner_payload["error"], "inter_agent_approval_forbidden")
+        self.assertEqual(reviewer_status, 200)
+        self.assertEqual(reviewer_payload["approval"]["resolved_by_user_id"], "user:reviewer")
 
 
 if __name__ == "__main__":

@@ -14,7 +14,7 @@ from core.workspaces.errors import WorkspaceMembershipError
 
 if TYPE_CHECKING:
     from core.identity.store import IdentityStore
-    from core.inter_agent.models import InterAgentRunRecord
+    from core.inter_agent.models import ApprovalRequestRecord, InterAgentRunRecord
     from core.runtime.runtime_session import RuntimeSessionRecord
     from core.runtime.store import RuntimeStore
     from core.workspaces.store import WorkspaceStore
@@ -109,6 +109,45 @@ def authorize_inter_agent_run_operation(
     if user_id and run.created_by_user_id == user_id:
         return
     raise AuthorizationError("inter_agent_run_operation_forbidden")
+
+
+def authorize_inter_agent_approval_resolution(
+    *,
+    workspace_store: "WorkspaceStore | None",
+    context_workspace_id: str | None,
+    caller_kind: str,
+    run: "InterAgentRunRecord",
+    approval: "ApprovalRequestRecord",
+    user_id: str | None,
+    platform_role: str | None = None,
+    workspace_role: str | None = None,
+) -> None:
+    """Require the caller to be explicitly eligible to resolve one approval gate."""
+    authorize_inter_agent_run_view(context_workspace_id=context_workspace_id, run_workspace_id=run.workspace_id)
+    if approval.workspace_id != run.workspace_id or approval.run_id != run.run_id:
+        raise AuthorizationError("inter_agent_approval_not_found")
+    if caller_kind == "operator":
+        return
+    if not user_id:
+        raise AuthorizationError("inter_agent_approval_forbidden")
+    eligible_user_ids = {str(item).strip() for item in approval.eligible_approver_user_ids if str(item).strip()}
+    if user_id in eligible_user_ids:
+        return
+    eligible_roles = {str(item).strip().lower() for item in approval.eligible_approver_roles if str(item).strip()}
+    if not eligible_roles:
+        raise AuthorizationError("inter_agent_approval_forbidden")
+    effective_workspace_role = workspace_role or _workspace_role_for_user(
+        workspace_store=workspace_store,
+        workspace_id=run.workspace_id,
+        user_id=user_id,
+    )
+    role_candidates = _approval_role_candidates(
+        platform_role=platform_role,
+        workspace_role=effective_workspace_role,
+    )
+    if eligible_roles.intersection(role_candidates):
+        return
+    raise AuthorizationError("inter_agent_approval_forbidden")
 
 
 def authorize_inter_agent_participant_spawn(
@@ -301,6 +340,34 @@ def _min_visibility_plane(
     right: InterAgentVisibilityPlane,
 ) -> InterAgentVisibilityPlane:
     return left if VISIBILITY_ORDER.index(left) <= VISIBILITY_ORDER.index(right) else right
+
+
+def _approval_role_candidates(*, platform_role: str | None, workspace_role: str | None) -> set[str]:
+    candidates: set[str] = set()
+    for scope, role in (("platform", platform_role), ("workspace", workspace_role)):
+        normalized = str(role or "").strip().lower()
+        if not normalized:
+            continue
+        candidates.add(normalized)
+        candidates.add(f"{scope}:{normalized}")
+    return candidates
+
+
+def _workspace_role_for_user(
+    *,
+    workspace_store: "WorkspaceStore | None",
+    workspace_id: str,
+    user_id: str | None,
+) -> str | None:
+    if workspace_store is None or not user_id:
+        return None
+    try:
+        membership = workspace_store.get_membership(user_id=user_id, workspace_id=workspace_id)
+    except WorkspaceMembershipError:
+        return None
+    if membership.status != "active":
+        return None
+    return membership.role
 
 
 def _is_admin_context(

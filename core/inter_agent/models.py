@@ -438,7 +438,6 @@ def validate_agent_snapshot(snapshot: AgentParticipantSnapshot) -> AgentParticip
     """Validate a materialized Agents snapshot before storing its digest."""
     _require_non_empty(snapshot.agent_type_id, "agent_snapshot.agent_type_id")
     _require_non_empty(snapshot.label, "agent_snapshot.label")
-    _require_non_empty(snapshot.system_prompt, "agent_snapshot.system_prompt")
     _require_non_empty(snapshot.skill_catalog_app_id, "agent_snapshot.skill_catalog_app_id")
     if not all(str(skill_id).strip() for skill_id in snapshot.skill_ids):
         raise InterAgentValidationError("agent_snapshot.skill_ids cannot contain empty values.")

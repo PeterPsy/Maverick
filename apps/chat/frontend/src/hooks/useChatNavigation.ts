@@ -52,6 +52,7 @@ type UseChatNavigationParams = {
   runtimeThreads: ChatThread[] | null;
   runtimeThreadsError: string | null;
   runtimeThreadsLoaded: boolean;
+  setActiveInterAgentGraphRunId: Dispatch<SetStateAction<string | null>>;
   setActiveSession: Dispatch<SetStateAction<RuntimeSession | null>>;
   setActiveThread: Dispatch<SetStateAction<ChatThread | null>>;
   setActiveTurn: Dispatch<SetStateAction<RuntimeTurn | null>>;
@@ -91,6 +92,7 @@ export function useChatNavigation({
   runtimeThreads,
   runtimeThreadsError,
   runtimeThreadsLoaded,
+  setActiveInterAgentGraphRunId,
   setActiveSession,
   setActiveThread,
   setActiveTurn,
@@ -209,6 +211,7 @@ export function useChatNavigation({
         return;
       }
       const requestedThreadId = threadId || query.get("thread_id");
+      const requestedGraphRunId = query.get("view") === "graph" ? query.get("inter_agent_run_id") || "" : "";
       const firstThread = requestedThreadId ? threads.find((thread) => thread.thread_id === requestedThreadId) || null : threads[0] || null;
       if (!firstThread) {
         if (runtimeThreadsError) {
@@ -224,6 +227,7 @@ export function useChatNavigation({
         return;
       }
       await selectThreadWithoutHttp(firstThread);
+      setActiveInterAgentGraphRunId(requestedGraphRunId || null);
       setQueuedMessages(readPersistedQueuedMessages(queueStorageKey(navigationScope, firstThread?.thread_id || null)));
       setError(null);
     } catch (selectionError) {
@@ -246,6 +250,7 @@ export function useChatNavigation({
     setFailedUserMessages([]);
     setQueuedMessages([]);
     setActiveTurn(null);
+    setActiveInterAgentGraphRunId(null);
     setComposer("");
     setSelectedReferences([]);
     clearAttachments();
@@ -265,6 +270,7 @@ export function useChatNavigation({
     }
     setActiveThread(null);
     setDraftChat({ projectId, systemPrompt: "" });
+    setActiveInterAgentGraphRunId(null);
     setActiveSession(null);
     setEvents([]);
     setHasLoadedHistory(false);
@@ -306,6 +312,7 @@ export function useChatNavigation({
 
   async function handleSelectThread(thread: ChatThread) {
     await selectThreadWithoutHttp(thread);
+    setActiveInterAgentGraphRunId(null);
     notifyActiveThreadChanged(thread.thread_id);
     openChatThreadRouteInShell(thread.thread_id, { navigationScope });
     setError(null);
@@ -315,6 +322,7 @@ export function useChatNavigation({
     const normalizedParams = normalizeChatRouteParams(params);
     const requestedThreadId = typeof normalizedParams.thread_id === "string" ? normalizedParams.thread_id : null;
     const requestedRuntimeSessionId = typeof normalizedParams.runtime_session_id === "string" ? normalizedParams.runtime_session_id : null;
+    const requestedGraphRunId = scalarString(normalizedParams.view) === "graph" ? scalarString(normalizedParams.inter_agent_run_id) : "";
     const newChatProjectId = scalarString(normalizedParams.project_id) || null;
     const runtimeThreadMetadata = runtimeSessionThreadMetadataFromParams(normalizedParams);
     const shouldCreateChat = normalizedParams.new_chat === true || normalizedParams.new_chat === "1";
@@ -324,29 +332,34 @@ export function useChatNavigation({
       params: normalizedParams,
       requestedRuntimeSessionId,
       requestedThreadId,
+      requestedGraphRunId,
       shouldCreateChat,
       threadId,
     });
-    if (!requestedThreadId && !requestedRuntimeSessionId && !shouldCreateChat) {
+    if (!requestedThreadId && !requestedRuntimeSessionId && !shouldCreateChat && !requestedGraphRunId) {
+      return;
+    }
+    if (!requestedThreadId && !requestedRuntimeSessionId && !shouldCreateChat && requestedGraphRunId) {
+      setActiveInterAgentGraphRunId(requestedGraphRunId);
       return;
     }
     if (shouldCreateChat && !consumeNewChatRequest(normalizedParams, consumedNewChatRequests.current, consumedLegacyNewChatRequest)) {
       return;
     }
-    const navigationRequestKey = chatNavigationRequestKey({
+    const navigationRequestKey = `${chatNavigationRequestKey({
       newChatProjectId,
       requestedRuntimeSessionId,
       requestedThreadId,
       shouldCreateChat,
-    });
+    })}:${requestedGraphRunId}`;
     if (!shouldCreateChat) {
       if (navigationRequestRef.current === navigationRequestKey) {
         return;
       }
-      if (requestedRuntimeSessionId && activeThread?.runtime_session_id === requestedRuntimeSessionId) {
+      if (!requestedGraphRunId && requestedRuntimeSessionId && activeThread?.runtime_session_id === requestedRuntimeSessionId) {
         return;
       }
-      if (requestedThreadId && activeThread?.thread_id === requestedThreadId) {
+      if (!requestedGraphRunId && requestedThreadId && activeThread?.thread_id === requestedThreadId) {
         return;
       }
     }
@@ -370,6 +383,7 @@ export function useChatNavigation({
           return;
         }
       }
+      setActiveInterAgentGraphRunId(requestedGraphRunId || null);
       setError(null);
     } catch (navigationError) {
       setError(navigationError instanceof Error ? navigationError.message : "Unable to open chat.");

@@ -28,6 +28,7 @@ const EVENT_PROJECTION_EVENTS_PER_VISIBLE_MESSAGE = 80;
 
 type UseChatControllerPresentationParams = {
   activeProviderId: string;
+  activeInterAgentGraphRunId: string | null;
   activeThread: ChatThread | null;
   activeTurn: RuntimeTurn | null;
   agentOptions: AgentTypeSummary[];
@@ -65,6 +66,7 @@ type UseChatControllerPresentationParams = {
   interAgentRuns: InterAgentRunDetail[];
   mentionItems: MentionItem[];
   multiAgentMode: MultiAgentComposerMode;
+  onCloseInterAgentGraph: () => void;
   pendingUserMessages: PendingMessage[];
   providers: ProviderItem[];
   queuedMessages: QueuedMessage[];
@@ -90,6 +92,7 @@ type UseChatControllerPresentationParams = {
 
 export function useChatControllerPresentation({
   activeProviderId,
+  activeInterAgentGraphRunId,
   activeThread,
   activeTurn,
   agentOptions,
@@ -127,6 +130,7 @@ export function useChatControllerPresentation({
   interAgentRuns,
   mentionItems,
   multiAgentMode,
+  onCloseInterAgentGraph,
   pendingUserMessages,
   providers,
   queuedMessages,
@@ -238,6 +242,7 @@ export function useChatControllerPresentation({
     transcriptProps: {
       error,
       hasMoreOlderMessages: hasHiddenMessages || hasMoreHistory,
+      activeInterAgentGraphRunId,
       isLoading: canStopTurn || isThreadLoading,
       isLoadingOlderHistory: isOlderHistoryLoading,
       interAgentApprovalsByRunId,
@@ -246,6 +251,7 @@ export function useChatControllerPresentation({
       loadingLabel,
       mentionItems,
       messages,
+      onCloseInterAgentGraph,
       onOpenInterAgentGraph: handleOpenInterAgentGraph,
       onResolveInterAgentApproval: handleResolveInterAgentApproval,
       onLoadOlderMessages: hasHiddenMessages ? onRevealOlderMessages : onLoadOlderHistory,

@@ -320,6 +320,7 @@ class InterAgentService:
         approval_id: str,
         approved: bool,
         resolved_by_user_id: str,
+        resolved_by_role_ids: list[str] | None = None,
         resolution_reason: str | None = None,
         now: datetime | None = None,
     ) -> ApprovalRequestRecord:
@@ -329,6 +330,12 @@ class InterAgentService:
         run = self.store.get_run(approval.run_id, workspace_id=workspace_id)
         if approval.status != "pending":
             raise InterAgentOperationError("approval_not_pending")
+        if not _approval_resolver_is_eligible(
+            approval,
+            user_id=resolved_by_user_id,
+            role_ids=resolved_by_role_ids,
+        ):
+            raise InterAgentOperationError("approval_resolver_forbidden")
         if approval.expires_at <= resolved_at:
             self.expire_pending_approvals(run, now=resolved_at)
             raise InterAgentOperationError("approval_expired")
@@ -1015,6 +1022,23 @@ def _materialized_skill_catalog_app_id(
     snapshot = participant.agent_snapshot if isinstance(participant.agent_snapshot, dict) else {}
     snapshot_catalog = snapshot.get("skill_catalog_app_id")
     return _clean_optional(snapshot_catalog) if isinstance(snapshot_catalog, str) else None
+
+
+def _approval_resolver_is_eligible(
+    approval: ApprovalRequestRecord,
+    *,
+    user_id: str,
+    role_ids: list[str] | None,
+) -> bool:
+    normalized_user_id = _clean_optional(user_id)
+    eligible_user_ids = set(_clean_string_list(approval.eligible_approver_user_ids))
+    if normalized_user_id and normalized_user_id in eligible_user_ids:
+        return True
+    eligible_roles = {item.lower() for item in _clean_string_list(approval.eligible_approver_roles)}
+    if not eligible_roles:
+        return False
+    resolver_roles = {item.lower() for item in _clean_string_list(role_ids or [])}
+    return bool(eligible_roles.intersection(resolver_roles))
 
 
 def _selected_child_participants(

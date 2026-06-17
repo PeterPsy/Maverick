@@ -12,6 +12,7 @@ from core.inter_agent.models import (
     EdgeSpec,
     InterAgentRunSpec,
     ParticipantSpec,
+    validate_agent_snapshot,
     validate_run_spec,
 )
 
@@ -156,6 +157,17 @@ class InterAgentModelValidationTest(unittest.TestCase):
         )
 
         self.assertEqual(first.digest(), second.digest())
+
+    def test_agent_snapshot_allows_empty_system_prompt(self) -> None:
+        snapshot = AgentParticipantSnapshot(
+            agent_type_id="reviewer",
+            label="Reviewer",
+            system_prompt="",
+            skill_ids=["storage"],
+            skill_catalog_app_id="skills",
+        )
+
+        self.assertIs(validate_agent_snapshot(snapshot), snapshot)
 
     def test_user_visible_event_payload_rejects_raw_chain_of_thought(self) -> None:
         event = InterAgentEventRecord(

@@ -103,6 +103,9 @@ export function normalizeChatRouteParams(params: ShellRouteParams): ShellRoutePa
   if (kind === "runtime-sessions" && id) {
     return { ...params, runtime_session_id: id };
   }
+  if (kind === "graph" && id) {
+    return { ...params, view: "graph", inter_agent_run_id: id };
+  }
   return params;
 }
 

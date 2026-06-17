@@ -117,6 +117,7 @@ export function useChatAppController({
   const [interAgentRuns, setInterAgentRuns] = useState<InterAgentRunDetail[]>([]);
   const [interAgentEventsByRunId, setInterAgentEventsByRunId] = useState<Record<string, InterAgentEventRecord[]>>({});
   const [interAgentApprovalsByRunId, setInterAgentApprovalsByRunId] = useState<Record<string, InterAgentApprovalRecord[]>>({});
+  const [activeInterAgentGraphRunId, setActiveInterAgentGraphRunId] = useState<string | null>(null);
   const hasExternalRuntimeThreads = Array.isArray(runtimeThreads);
   const canStopTurn = isActiveRuntimeTurnBusyForThread(activeTurn, activeThread);
   const isRuntimeBusy = canStopTurn;
@@ -225,6 +226,7 @@ export function useChatAppController({
   );
   const handleOpenInterAgentGraph = useCallback(
     (runId: string) => {
+      setActiveInterAgentGraphRunId(runId);
       const opened = openAppParamsInShell(
         "chat",
         {
@@ -298,6 +300,7 @@ export function useChatAppController({
     runtimeThreads,
     runtimeThreadsError,
     runtimeThreadsLoaded,
+    setActiveInterAgentGraphRunId,
     setActiveSession,
     setActiveThread,
     setActiveTurn,
@@ -376,6 +379,7 @@ export function useChatAppController({
 
   const presentation = useChatControllerPresentation({
     activeProviderId,
+    activeInterAgentGraphRunId,
     activeThread,
     activeTurn,
     agentOptions,
@@ -412,6 +416,7 @@ export function useChatAppController({
     interAgentEventsByRunId,
     interAgentRuns,
     mentionItems,
+    onCloseInterAgentGraph: () => setActiveInterAgentGraphRunId(null),
     multiAgentMode,
     hasMoreHistory,
     onLoadOlderHistory: handleLoadOlderHistory,

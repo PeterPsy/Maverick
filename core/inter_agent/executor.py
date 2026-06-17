@@ -7,6 +7,7 @@ from dataclasses import dataclass, field, replace
 from datetime import UTC, datetime, timedelta
 from threading import Lock
 from typing import Any
+import time
 import uuid
 
 from core.inter_agent.errors import InterAgentOperationError
@@ -20,6 +21,9 @@ EXECUTABLE_MODES = {"manager_tools", "sequential", "concurrent"}
 SCHEMA_ONLY_MODES = {"handoff", "group_chat", "magentic_like"}
 TERMINAL_RUN_STATUSES = {"completed", "failed", "cancelled"}
 TERMINAL_PARTICIPANT_STATUSES = {"completed", "failed", "cancelled"}
+TERMINAL_RUNTIME_TURN_STATUSES = {"completed", "failed", "cancelled", "timed-out"}
+ASYNC_RUNTIME_TURN_WAIT_TIMEOUT_SECONDS = 6 * 60 * 60
+ASYNC_RUNTIME_TURN_POLL_SECONDS = 0.1
 
 
 @dataclass(frozen=True)
@@ -72,6 +76,7 @@ def execute_inter_agent_run(
     controlled_participants: dict[str, Any] | None = None,
     allow_synthetic_participants: bool = False,
     project_summaries: bool = True,
+    async_runtime_turns: bool = False,
     now: datetime | None = None,
 ) -> InterAgentExecutionResult:
     """Execute one F3-native inter-agent run without external adapters."""
@@ -150,6 +155,7 @@ def execute_inter_agent_run(
                 participant_inputs=inputs,
                 controlled_participants=controlled,
                 allow_synthetic_participants=allow_synthetic_participants,
+                async_runtime_turns=async_runtime_turns,
                 clock=clock,
             )
         elif run.mode == "sequential":
@@ -162,6 +168,7 @@ def execute_inter_agent_run(
                 participant_inputs=inputs,
                 controlled_participants=controlled,
                 allow_synthetic_participants=allow_synthetic_participants,
+                async_runtime_turns=async_runtime_turns,
                 clock=clock,
             )
         else:
@@ -174,6 +181,7 @@ def execute_inter_agent_run(
                 participant_inputs=inputs,
                 controlled_participants=controlled,
                 allow_synthetic_participants=allow_synthetic_participants,
+                async_runtime_turns=async_runtime_turns,
                 clock=clock,
             )
     except Exception as error:
@@ -278,6 +286,7 @@ def _execute_manager_tools(
     participant_inputs: dict[str, str],
     controlled_participants: dict[str, ControlledParticipantOutput],
     allow_synthetic_participants: bool,
+    async_runtime_turns: bool,
     clock,
 ) -> list[ParticipantExecutionResult]:
     results: list[ParticipantExecutionResult] = []
@@ -295,6 +304,7 @@ def _execute_manager_tools(
             ),
             controlled=controlled_participants.get(participant.participant_id),
             allow_synthetic_participants=allow_synthetic_participants,
+            async_runtime_turns=async_runtime_turns,
             clock=clock,
         )
         results.append(result)
@@ -311,6 +321,7 @@ def _execute_sequential(
     participant_inputs: dict[str, str],
     controlled_participants: dict[str, ControlledParticipantOutput],
     allow_synthetic_participants: bool,
+    async_runtime_turns: bool,
     clock,
 ) -> list[ParticipantExecutionResult]:
     results: list[ParticipantExecutionResult] = []
@@ -331,6 +342,7 @@ def _execute_sequential(
             input_text=participant_input,
             controlled=controlled_participants.get(participant.participant_id),
             allow_synthetic_participants=allow_synthetic_participants,
+            async_runtime_turns=async_runtime_turns,
             clock=clock,
         )
         results.append(result)
@@ -350,6 +362,7 @@ def _execute_concurrent(
     participant_inputs: dict[str, str],
     controlled_participants: dict[str, ControlledParticipantOutput],
     allow_synthetic_participants: bool,
+    async_runtime_turns: bool,
     clock,
 ) -> list[ParticipantExecutionResult]:
     aggregator_id = run.aggregator_participant_id or run.orchestrator_participant_id
@@ -376,6 +389,7 @@ def _execute_concurrent(
                 ),
                 controlled=controlled_participants.get(participant.participant_id),
                 allow_synthetic_participants=allow_synthetic_participants,
+                async_runtime_turns=async_runtime_turns,
                 clock=clock,
             ): participant.participant_id
             for index, participant in enumerate(fanout)
@@ -401,6 +415,7 @@ def _execute_concurrent(
                 ),
                 controlled=controlled_participants.get(aggregator.participant_id),
                 allow_synthetic_participants=allow_synthetic_participants,
+                async_runtime_turns=async_runtime_turns,
                 clock=clock,
             )
         )
@@ -417,6 +432,7 @@ def _execute_one_participant(
     input_text: str,
     controlled: ControlledParticipantOutput | None,
     allow_synthetic_participants: bool,
+    async_runtime_turns: bool,
     clock,
 ) -> ParticipantExecutionResult:
     task_id = f"task:{run.mode}:{task_index}:{participant.participant_id}"
@@ -461,6 +477,7 @@ def _execute_one_participant(
         participant=participant,
         task_id=task_id,
         input_text=input_text,
+        async_runtime_turns=async_runtime_turns,
         clock=clock,
     )
 
@@ -584,6 +601,7 @@ def _execute_runtime_participant(
     participant: InterAgentParticipantRecord,
     task_id: str,
     input_text: str,
+    async_runtime_turns: bool,
     clock,
 ) -> ParticipantExecutionResult:
     runtime_session_id: str | None = None
@@ -603,9 +621,12 @@ def _execute_runtime_participant(
             participant_id=spawned.participant_id,
             input_text=input_text,
             client_message_id=f"inter-agent:{run.run_id}:{task_id}",
-            async_requested=False,
+            async_requested=async_runtime_turns,
             now=clock(),
         )
+        if async_runtime_turns and turn.status not in TERMINAL_RUNTIME_TURN_STATUSES:
+            turn = _wait_for_runtime_turn(state, turn.turn_id)
+            events = _runtime_events_for_turn(state, session_id=session.session_id, turn_id=turn.turn_id)
     except Exception as error:
         latest = service.store.get_participant(participant.participant_id, workspace_id=run.workspace_id, run_id=run.run_id)
         if latest.runtime_session_id:
@@ -673,6 +694,21 @@ def _execute_runtime_participant(
         runtime_session_id=session.session_id,
         runtime_turn_id=turn.turn_id,
     )
+
+
+def _wait_for_runtime_turn(state: Any, turn_id: str) -> Any:
+    deadline = time.monotonic() + ASYNC_RUNTIME_TURN_WAIT_TIMEOUT_SECONDS
+    while True:
+        turn = state.runtime_store.get_turn(turn_id)
+        if turn.status in TERMINAL_RUNTIME_TURN_STATUSES:
+            return turn
+        if time.monotonic() >= deadline:
+            raise InterAgentOperationError("Timed out waiting for async participant runtime turn.")
+        time.sleep(ASYNC_RUNTIME_TURN_POLL_SECONDS)
+
+
+def _runtime_events_for_turn(state: Any, *, session_id: str, turn_id: str) -> list[RuntimeEventRecord]:
+    return [event for event in state.runtime_store.list_events(session_id) if event.turn_id == turn_id]
 
 
 def _finish_participant(

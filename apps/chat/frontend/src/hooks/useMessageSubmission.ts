@@ -33,6 +33,7 @@ export type AgentRuntimeConfig = {
   agent_id: string;
   agent_role_id: string;
   agent_type_id: string;
+  skill_catalog_app_id: string;
   skill_ids: string[];
   source_app_id: string;
   system_prompt: string;
@@ -137,6 +138,7 @@ export function useMessageSubmission({
             project_id: draftChat?.projectId ?? null,
             source_app_id: agentRuntimeConfig?.source_app_id || "chat",
             system_prompt: systemPrompt,
+            skill_catalog_app_id: agentRuntimeConfig?.skill_catalog_app_id,
             skill_ids: agentRuntimeConfig?.skill_ids || [],
             title: "New chat",
           },
@@ -214,6 +216,7 @@ export function useMessageSubmission({
         project_id: draftChat?.projectId ?? null,
         source_app_id: agentRuntimeConfig?.source_app_id || "chat",
         system_prompt: systemPrompt,
+        skill_catalog_app_id: agentRuntimeConfig?.skill_catalog_app_id,
         skill_ids: agentRuntimeConfig?.skill_ids || [],
         title: "New chat",
       });
@@ -258,6 +261,7 @@ export function useMessageSubmission({
       client_message_id: message.clientMessageId,
       attachments: message.attachments,
       app_references: message.appReferences,
+      async: true,
     });
     onInterAgentRunChanged?.(executed);
     if (session) {
@@ -335,7 +339,7 @@ export function useMessageSubmission({
   };
 }
 
-function interAgentRunPayload({
+export function interAgentRunPayload({
   agentRuntimeConfig,
   clientMessageId,
   mode,
@@ -348,12 +352,23 @@ function interAgentRunPayload({
 }) {
   const participantLabel = agentRuntimeConfig?.title || thread.agent_label || "Maverick agent";
   const agentTypeId = agentRuntimeConfig?.agent_type_id || thread.agent_type_id || "";
+  const agentSnapshot =
+    agentRuntimeConfig?.agent_type_id
+      ? {
+          agent_type_id: agentRuntimeConfig.agent_type_id,
+          label: participantLabel,
+          system_prompt: agentRuntimeConfig.system_prompt || "",
+          skill_ids: agentRuntimeConfig.skill_ids || [],
+          skill_catalog_app_id: agentRuntimeConfig.skill_catalog_app_id || "skills",
+        }
+      : undefined;
   const participant = {
     participant_id: "assistant",
     kind: "agent" as const,
     execution_mode: "child_runtime_session" as const,
     label: participantLabel,
     ...(agentTypeId ? { agent_type_id: agentTypeId } : {}),
+    ...(agentSnapshot ? { agent_snapshot: agentSnapshot } : {}),
   };
   return {
     thread_id: thread.thread_id,

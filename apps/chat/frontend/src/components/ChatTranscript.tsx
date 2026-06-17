@@ -8,6 +8,7 @@ import { MessageList } from "./MessageList";
 import { MorphingSpinner } from "./ui/morphing-spinner";
 
 export type ChatTranscriptProps = {
+  activeInterAgentGraphRunId?: string | null;
   error: string | null;
   isLoading: boolean;
   isLoadingOlderHistory?: boolean;
@@ -18,6 +19,7 @@ export type ChatTranscriptProps = {
   mentionItems: MentionItem[];
   messages: ChatMessage[];
   hasMoreOlderMessages?: boolean;
+  onCloseInterAgentGraph?: () => void;
   onLoadOlderMessages?: () => void;
   onOpenInterAgentGraph?: (runId: string) => void;
   onResolveInterAgentApproval?: (approvalId: string, approved: boolean) => Promise<void>;
@@ -28,6 +30,7 @@ export type ChatTranscriptProps = {
 };
 
 export function ChatTranscript({
+  activeInterAgentGraphRunId = null,
   error,
   isLoading,
   isLoadingOlderHistory = false,
@@ -38,6 +41,7 @@ export function ChatTranscript({
   mentionItems,
   messages,
   hasMoreOlderMessages = false,
+  onCloseInterAgentGraph = () => undefined,
   onLoadOlderMessages,
   onOpenInterAgentGraph = () => undefined,
   onResolveInterAgentApproval = async () => undefined,
@@ -129,7 +133,11 @@ export function ChatTranscript({
       .reverse()
       .find((message) => message.role === "tool" && (message.toolCalls?.length || message.toolCall))?.id || null;
 
-  const hasInterAgentContent = interAgentRuns.length > 0 || Object.values(interAgentApprovalsByRunId).some((items) => items.length > 0);
+  const activeGraphRun = activeInterAgentGraphRunId
+    ? interAgentRuns.find((detail) => detail.run.run_id === activeInterAgentGraphRunId) || null
+    : null;
+  const hasInterAgentContent =
+    interAgentRuns.length > 0 || Boolean(activeInterAgentGraphRunId) || Object.values(interAgentApprovalsByRunId).some((items) => items.length > 0);
 
   if (!messages.length && !hasInterAgentContent && isLoading && !error) {
     return (
@@ -157,6 +165,15 @@ export function ChatTranscript({
             <MorphingSpinner size="sm" className="chatapp-history-loader__icon" />
             <span>Loading earlier messages</span>
           </div>
+        ) : null}
+        {activeInterAgentGraphRunId ? (
+          <InterAgentGraphView
+            approvals={interAgentApprovalsByRunId[activeInterAgentGraphRunId] || []}
+            events={interAgentEventsByRunId[activeInterAgentGraphRunId] || []}
+            onClose={onCloseInterAgentGraph}
+            runDetail={activeGraphRun}
+            runId={activeInterAgentGraphRunId}
+          />
         ) : null}
         <InterAgentRunPanel
           approvalsByRunId={interAgentApprovalsByRunId}
@@ -206,4 +223,75 @@ export function ChatTranscript({
       ) : null}
     </section>
   );
+}
+
+function InterAgentGraphView({
+  approvals,
+  events,
+  onClose,
+  runDetail,
+  runId,
+}: {
+  approvals: InterAgentApprovalRecord[];
+  events: InterAgentEventRecord[];
+  onClose: () => void;
+  runDetail: InterAgentRunDetail | null;
+  runId: string;
+}) {
+  const pendingApprovalCount = approvals.filter((approval) => approval.status === "pending").length;
+  return (
+    <section className="chatapp-inter-agent-graph" aria-label="Inter-agent graph">
+      <header className="chatapp-inter-agent-graph__header">
+        <div>
+          <span className="chatapp-inter-agent-graph__eyebrow">Graph</span>
+          <h2>{runDetail ? runStatusLabel(runDetail.run.status) : "Loading run"}</h2>
+        </div>
+        <button className="chatapp-inter-agent-graph__close" onClick={onClose} type="button" aria-label="Close graph">
+          <span className="material-symbols-rounded" aria-hidden="true">
+            close
+          </span>
+        </button>
+      </header>
+      <div className="chatapp-inter-agent-graph__body">
+        <div className="chatapp-inter-agent-graph__participants">
+          {(runDetail?.participants || []).map((participant) => (
+            <div className={`chatapp-inter-agent-graph__node is-${participant.status}`} key={participant.participant_id}>
+              <span className="material-symbols-rounded" aria-hidden="true">
+                {participant.kind === "orchestrator" ? "hub" : "smart_toy"}
+              </span>
+              <div>
+                <strong>{participant.label}</strong>
+                <span>{participant.status}</span>
+              </div>
+            </div>
+          ))}
+          {!runDetail ? <div className="chatapp-inter-agent-graph__empty">Run {runId} is loading.</div> : null}
+        </div>
+        <ol className="chatapp-inter-agent-graph__timeline">
+          {events.slice(-8).map((event) => (
+            <li key={event.event_id}>
+              <span>{event.event_type.replace(/^inter_agent\./, "").replace(/\./g, " ")}</span>
+              <strong>{textPayload(event.payload.summary) || textPayload(event.payload.status) || event.visibility_plane}</strong>
+            </li>
+          ))}
+          {!events.length ? <li>No summary events yet.</li> : null}
+        </ol>
+      </div>
+      {pendingApprovalCount ? <div className="chatapp-inter-agent-graph__approval">{pendingApprovalCount} approval pending</div> : null}
+    </section>
+  );
+}
+
+function runStatusLabel(status: string): string {
+  if (status === "waiting_approval") {
+    return "Waiting approval";
+  }
+  return status
+    .split("_")
+    .map((part) => part.slice(0, 1).toUpperCase() + part.slice(1))
+    .join(" ");
+}
+
+function textPayload(value: unknown): string {
+  return typeof value === "string" ? value.trim() : "";
 }

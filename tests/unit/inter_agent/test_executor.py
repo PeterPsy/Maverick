@@ -341,6 +341,95 @@ class InterAgentExecutorTest(unittest.TestCase):
             sorted(session.session_id for session in child_sessions),
         )
 
+    def test_async_runtime_participant_waits_for_queued_turn_completion(self) -> None:
+        _repo_root, store, runtime_store = self._stores()
+        service = InterAgentService(store)
+        run = service.create_run(
+            _run_spec(
+                mode="concurrent",
+                run_id="async-runtime",
+                participants=[_participant("researcher", "Researcher", execution_mode="child_runtime_session")],
+                aggregator_participant_id="orchestrator",
+                merge_policy="orchestrator_summarizes",
+            ),
+            now=NOW,
+        )
+
+        def fake_submit_async(state, *, session, input_text, client_message_id=None):
+            turn_id = f"turn-{session.session_id}"
+            queued = RuntimeTurnRecord(
+                turn_id=turn_id,
+                session_id=session.session_id,
+                workspace_id="default",
+                status="queued",
+                input_text=input_text,
+                created_at=NOW,
+                updated_at=NOW,
+                started_at=None,
+                completed_at=None,
+                failure_reason=None,
+            )
+            completed = RuntimeTurnRecord(
+                turn_id=turn_id,
+                session_id=session.session_id,
+                workspace_id="default",
+                status="completed",
+                input_text=input_text,
+                created_at=NOW,
+                updated_at=NOW,
+                started_at=NOW,
+                completed_at=NOW,
+                failure_reason=None,
+            )
+            queued_event = RuntimeEventRecord(
+                event_id=f"event-queued-{session.session_id}",
+                workspace_id="default",
+                session_id=session.session_id,
+                plane="turn",
+                event_type="runtime.turn.queued",
+                turn_id=turn_id,
+                process_id=None,
+                payload={},
+                created_at=NOW,
+            )
+            final = RuntimeEventRecord(
+                event_id=f"event-final-{session.session_id}",
+                workspace_id="default",
+                session_id=session.session_id,
+                plane="turn",
+                event_type="runtime.output.final",
+                turn_id=turn_id,
+                process_id=None,
+                payload={"text": "Async child completed."},
+                created_at=NOW,
+            )
+            state.runtime_store.save_turn(queued)
+            state.runtime_store.save_event(queued_event)
+            state.runtime_store.save_turn(completed)
+            state.runtime_store.save_event(final)
+            return queued, [queued_event]
+
+        with (
+            patch("core.inter_agent.service.submit_runtime_turn", side_effect=AssertionError("sync path called")),
+            patch("core.inter_agent.service.submit_runtime_turn_async", side_effect=fake_submit_async) as submit_async,
+        ):
+            result = execute_inter_agent_run(
+                service,
+                _state(runtime_store),
+                workspace_id="default",
+                run_id=run.run_id,
+                input_text="Run the async child.",
+                project_summaries=False,
+                async_runtime_turns=True,
+                now=NOW,
+            )
+
+        self.assertTrue(submit_async.called)
+        self.assertEqual(result.run.status, "completed")
+        self.assertEqual(len(result.participant_results), 1)
+        self.assertEqual(result.participant_results[0].output_text, "Async child completed.")
+        self.assertEqual(result.participant_results[0].status, "completed")
+
     def test_failed_controlled_participant_records_artifact_partial_before_failure(self) -> None:
         _repo_root, store, runtime_store = self._stores()
         service = InterAgentService(store)

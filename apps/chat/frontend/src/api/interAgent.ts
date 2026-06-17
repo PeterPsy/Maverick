@@ -15,6 +15,13 @@ export type InterAgentParticipantSpecPayload = {
   execution_mode: "root_orchestrator" | "child_runtime_session" | "embedded_executor" | "human_gate" | "tool_proxy";
   label: string;
   agent_type_id?: string;
+  agent_snapshot?: {
+    agent_type_id: string;
+    label: string;
+    system_prompt: string;
+    skill_ids: string[];
+    skill_catalog_app_id: string;
+  };
 };
 
 export type CreateInterAgentRunPayload = {
@@ -37,6 +44,7 @@ export type ExecuteInterAgentRunPayload = {
   client_message_id?: string;
   attachments?: ChatMessageAttachment[];
   app_references?: AppReference[];
+  async?: boolean;
 };
 
 export function listInterAgentRuns(): Promise<{ items: InterAgentRunDetail[] }> {
@@ -63,8 +71,15 @@ export function executeInterAgentRun(
   return requestJson(`/api/inter-agent/runs/${encodeURIComponent(runId)}/execute`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(payload),
+    body: JSON.stringify({
+      ...payload,
+      attachments: payload.attachments ? serializableMessageAttachments(payload.attachments) : undefined,
+    }),
   });
+}
+
+function serializableMessageAttachments(attachments: ChatMessageAttachment[]) {
+  return attachments.map(({ objectUrl: _objectUrl, ...attachment }) => attachment);
 }
 
 export function listInterAgentRunEvents(

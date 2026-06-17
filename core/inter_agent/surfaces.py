@@ -79,6 +79,7 @@ def run_spec_from_payload(
     created_by_user_id: str,
     source_app_id: str = "chat",
     allow_materialized_authority: bool = False,
+    allow_agent_snapshots: bool = False,
 ) -> InterAgentRunSpec:
     """Build an InterAgentRunSpec from a public surface payload.
 
@@ -89,7 +90,11 @@ def run_spec_from_payload(
     authority.
     """
     participants = [
-        participant_spec_from_payload(item, allow_materialized_authority=allow_materialized_authority)
+        participant_spec_from_payload(
+            item,
+            allow_materialized_authority=allow_materialized_authority,
+            allow_agent_snapshots=allow_agent_snapshots or allow_materialized_authority,
+        )
         for item in _list_of_dicts(payload.get("participants"))
     ]
     edges = [edge_spec_from_payload(item) for item in _list_of_dicts(payload.get("edges"))]
@@ -117,6 +122,7 @@ def participant_spec_from_payload(
     payload: dict[str, Any],
     *,
     allow_materialized_authority: bool = False,
+    allow_agent_snapshots: bool = False,
 ) -> ParticipantSpec:
     """Build a participant spec from one surface payload item."""
     agent_snapshot = None
@@ -124,8 +130,9 @@ def participant_spec_from_payload(
     skill_ids: list[str] = []
     provider_id = None
     authority_grant_ids: list[str] = []
-    if allow_materialized_authority:
+    if allow_agent_snapshots or allow_materialized_authority:
         agent_snapshot = agent_snapshot_from_payload(payload.get("agent_snapshot"))
+    if allow_materialized_authority:
         prompt_snapshot_ref = _text(payload.get("prompt_snapshot_ref")) or None
         skill_ids = _string_list(payload.get("skill_ids"))
         provider_id = _text(payload.get("provider_id")) or None

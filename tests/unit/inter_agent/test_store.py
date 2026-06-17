@@ -231,6 +231,7 @@ class InterAgentStoreTest(unittest.TestCase):
             budget_ledger_id="ledger-1",
             budget_policy_id="policy-1",
             reservation_id="reservation-1",
+            participant_id="researcher",
             participant_slots=1,
             running_participants=1,
             turns=1,
@@ -243,6 +244,7 @@ class InterAgentStoreTest(unittest.TestCase):
             budget_ledger_id="ledger-1",
             budget_policy_id="policy-1",
             reservation_id="reservation-1",
+            participant_id="researcher",
             participant_slots=1,
             running_participants=1,
             turns=1,
@@ -256,6 +258,7 @@ class InterAgentStoreTest(unittest.TestCase):
                 budget_ledger_id="ledger-1",
                 budget_policy_id="policy-1",
                 reservation_id="reservation-1",
+                participant_id="researcher",
                 participant_slots=1,
                 running_participants=1,
                 turns=2,
@@ -285,6 +288,63 @@ class InterAgentStoreTest(unittest.TestCase):
         self.assertEqual(released.tool_calls_used, 0)
         self.assertEqual(released.estimated_cost_used, Decimal("0"))
         self.assertEqual(released_again.reserved_participants, 0)
+
+    def test_budget_reservation_enforces_max_turns_per_participant(self) -> None:
+        repo_root = make_temp_repo_root(self)
+        store = build_inter_agent_document_store(start_path=repo_root)
+        now = datetime(2026, 6, 16, 12, 0, tzinfo=UTC)
+        store.save_budget_policy(
+            budget_policy_from_spec(
+                BudgetPolicySpec(
+                    max_participants=3,
+                    max_concurrent_participants=2,
+                    max_total_turns=4,
+                    max_turns_per_participant=1,
+                ),
+                budget_policy_id="policy-1",
+                workspace_id="default",
+                created_at=now,
+            )
+        )
+        store.save_budget_ledger(
+            empty_budget_ledger(
+                budget_ledger_id="ledger-1",
+                workspace_id="default",
+                run_id="run-1",
+                updated_at=now,
+            )
+        )
+
+        store.reserve_budget(
+            workspace_id="default",
+            budget_ledger_id="ledger-1",
+            budget_policy_id="policy-1",
+            reservation_id="turn-1",
+            participant_id="researcher",
+            turns=1,
+            now=now,
+        )
+        with self.assertRaisesRegex(InterAgentBudgetExceededError, "max_turns_per_participant"):
+            store.reserve_budget(
+                workspace_id="default",
+                budget_ledger_id="ledger-1",
+                budget_policy_id="policy-1",
+                reservation_id="turn-2",
+                participant_id="researcher",
+                turns=1,
+                now=now,
+            )
+        reviewer = store.reserve_budget(
+            workspace_id="default",
+            budget_ledger_id="ledger-1",
+            budget_policy_id="policy-1",
+            reservation_id="turn-3",
+            participant_id="reviewer",
+            turns=1,
+            now=now,
+        )
+
+        self.assertEqual(reviewer.turns_used, 2)
 
     def test_concurrent_budget_reservations_are_atomically_limited(self) -> None:
         repo_root = make_temp_repo_root(self)

@@ -217,13 +217,40 @@ class InterAgentApiTestCase(AppReferenceApiTestSupport, unittest.TestCase):
         self.assertEqual(root_session_id, "root-session")
         self.assertTrue(child_deleted)
 
-    def test_inter_agent_http_execute_controlled_run_projects_root_summary(self) -> None:
+    def test_inter_agent_http_execute_runtime_run_projects_non_final_root_summary(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             repo_root = self._repo_root(temp_dir)
             state = self._bootstrap_state(repo_root)
             self._create_root_session(state, repo_root)
             app = PlatformHost(state, start_path=repo_root)
             cookie = self._login(app)
+            now = datetime(2026, 6, 16, 12, 0, tzinfo=UTC)
+
+            def fake_submit(_state, *, session, input_text, client_message_id=None, async_requested=False):
+                turn = RuntimeTurnRecord(
+                    turn_id="turn-execute-1",
+                    session_id=session.session_id,
+                    workspace_id="default",
+                    status="completed",
+                    input_text=input_text,
+                    created_at=now,
+                    updated_at=now,
+                    started_at=now,
+                    completed_at=now,
+                    failure_reason=None,
+                )
+                event = RuntimeEventRecord(
+                    event_id="event-execute-final",
+                    workspace_id="default",
+                    session_id=session.session_id,
+                    plane="turn",
+                    event_type="runtime.output.final",
+                    turn_id=turn.turn_id,
+                    process_id=None,
+                    payload={"text": "Rollout is ready."},
+                    created_at=now,
+                )
+                return turn, [event]
 
             create_status, create_payload, _headers = self._invoke(
                 app,
@@ -232,21 +259,14 @@ class InterAgentApiTestCase(AppReferenceApiTestSupport, unittest.TestCase):
                 body=_run_payload(run_id="run-api-execute"),
                 cookie=cookie,
             )
-            execute_status, execute_payload, _headers = self._invoke(
-                app,
-                path="/api/inter-agent/runs/run-api-execute/execute",
-                method="POST",
-                body={
-                    "input_text": "Research the rollout.",
-                    "controlled_participants": {
-                        "researcher": {
-                            "output_text": "Rollout is ready.",
-                            "summary": "Researcher confirmed rollout readiness.",
-                        }
-                    },
-                },
-                cookie=cookie,
-            )
+            with patch("core.inter_agent.service.submit_runtime_turn", side_effect=fake_submit):
+                execute_status, execute_payload, _headers = self._invoke(
+                    app,
+                    path="/api/inter-agent/runs/run-api-execute/execute",
+                    method="POST",
+                    body={"input_text": "Research the rollout."},
+                    cookie=cookie,
+                )
             events_status, events_payload, _headers = self._invoke(
                 app,
                 path="/api/inter-agent/runs/run-api-execute/events",
@@ -259,12 +279,39 @@ class InterAgentApiTestCase(AppReferenceApiTestSupport, unittest.TestCase):
         self.assertEqual(create_payload["run"]["run_id"], "run-api-execute")
         self.assertEqual(execute_status, 200)
         self.assertEqual(execute_payload["run"]["status"], "completed")
-        self.assertEqual(execute_payload["participant_results"][0]["summary"], "Researcher confirmed rollout readiness.")
+        self.assertEqual(execute_payload["participant_results"][0]["summary"], "Rollout is ready.")
         self.assertEqual(events_status, 200)
         self.assertIn("inter_agent.plan.summary_created", event_types)
         self.assertIn("inter_agent.run.completed", event_types)
-        self.assertEqual([event.event_type for event in root_events], ["runtime.output.final", "runtime.output.final"])
-        self.assertIn("Multi-agent run completed", root_events[-1].payload["text"])
+        self.assertEqual([event.event_type for event in root_events], ["runtime.step.updated", "runtime.step.updated"])
+        self.assertIn("Multi-agent run completed", root_events[-1].payload["label"])
+
+    def test_inter_agent_http_execute_rejects_controlled_participants(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            repo_root = self._repo_root(temp_dir)
+            state = self._bootstrap_state(repo_root)
+            self._create_root_session(state, repo_root)
+            app = PlatformHost(state, start_path=repo_root)
+            cookie = self._login(app)
+
+            create_status, _create_payload, _headers = self._invoke(
+                app,
+                path="/api/inter-agent/runs",
+                method="POST",
+                body=_run_payload(run_id="run-api-controlled-forbidden"),
+                cookie=cookie,
+            )
+            execute_status, execute_payload, _headers = self._invoke(
+                app,
+                path="/api/inter-agent/runs/run-api-controlled-forbidden/execute",
+                method="POST",
+                body={"controlled_participants": {"researcher": {"output_text": "synthetic"}}},
+                cookie=cookie,
+            )
+
+        self.assertEqual(create_status, 201)
+        self.assertEqual(execute_status, 403)
+        self.assertEqual(execute_payload["error"], "inter_agent_controlled_participants_forbidden")
 
     def test_inter_agent_http_spawn_rejects_unsafe_child_session_id(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:

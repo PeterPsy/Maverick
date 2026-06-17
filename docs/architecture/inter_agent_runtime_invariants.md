@@ -21,8 +21,9 @@ It started with names, visibility, legacy compatibility, and initial policy defa
 8. `session_kind="inter_agent_participant"` requires `thread_visibility="hidden"`; omitted visibility on an explicit participant is normalized to hidden, while explicit `user` visibility is invalid.
 9. Invalid persisted visibility values fail closed: they are rejected on direct session hydration and must not make an existing thread appear in user-facing thread catalogs.
 10. `handoff` is schema/event-only until F7. It is not executable MVP behavior unless a later ADR explicitly promotes it.
-11. The F3 native executor may run deterministic controlled participants or real hidden child runtime sessions through the F2 service. It must not bypass inter-agent spawn, message, budget, or root-session authority checks.
-12. The root Chat transcript receives only selected operational summaries from the executor. Full participant detail remains in `inter_agent` events for graph replay and audit.
+11. The F3 native executor may run deterministic synthetic participants only for tests or explicit operator-controlled execution, or real hidden child runtime sessions through the F2 service. It must not bypass inter-agent spawn, message, budget, or root-session authority checks.
+12. The root Chat transcript receives only selected operational summaries from the executor as non-terminal `runtime.step.updated` projections. `runtime.output.final` is reserved for real assistant final answers.
+13. Full participant detail remains in `inter_agent` events for graph replay and audit, but event replay and run detail require creator, root-session owner, admin, operator, or explicit `inter_agent_root` grant authority and must cap `summary`/`detail`/`debug` server-side.
 
 ## Initial Policy Defaults
 
@@ -32,7 +33,7 @@ Budget policy starts fail-closed and run-scoped:
 - spawn, handoff, fan-out, and runtime turn submission require core budget accounting before work starts
 - reservations and releases must be idempotent
 - participant/concurrency reservations are released on interrupt or close, while successfully submitted runtime turns remain consumed so `max_total_turns` cannot be bypassed by repeated message sends
-- turn, tool-call, estimated-token, estimated-cost, idle, and stall limits are enforced by the core
+- turn, per-participant turn, tool-call, estimated-token, estimated-cost, idle, and stall limits are enforced by the core
 - pause and cancellation remain available even when budget is exhausted
 
 Approval policy starts user-safe and workspace-aware:
@@ -103,13 +104,15 @@ Executable modes:
 
 Execution rules:
 
-- deterministic controlled participants are allowed for tests and controlled product flows
+- deterministic synthetic participants are allowed only for tests or explicit operator-controlled execution
+- public HTTP execution must not accept caller-supplied controlled participant output; CLI and MCP require an operator caller plus explicit synthetic opt-in
+- synthetic participant events and execution results must be marked explicitly
 - real participant work must use hidden `child_runtime_session` sessions spawned through `InterAgentService`
 - `sequential` passes declared output from one participant into the next participant input
 - `concurrent` fans out participants under `max_concurrent_participants` and then aggregates through the root orchestrator or declared aggregator participant
 - participant/task/artifact/summary/run lifecycle events are persisted as normalized `inter_agent` events
 - artifact refs and partial output must be persisted before a participant failure is recorded
-- root runtime projection is limited to selected summaries such as plan and terminal synthesis
+- root runtime projection is limited to selected summaries such as plan and terminal synthesis and must use non-terminal runtime step updates
 - successfully consumed turns stay counted in the budget ledger; only active participant/concurrency reservations are released on participant completion or failure
 
 The F3 HTTP surface is `POST /api/inter-agent/runs/<run_id>/execute`. The matching CLI command is `inter-agent.runs.execute`, and the matching MCP tool is `inter_agent_execute`.

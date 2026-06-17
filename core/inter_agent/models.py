@@ -311,6 +311,7 @@ class BudgetReservation:
     """One idempotent budget reservation inside a ledger."""
 
     reservation_id: str
+    participant_id: str | None
     participant_slots: int
     running_participants: int
     turns: int
@@ -501,6 +502,7 @@ def budget_reservation_to_document(reservation: BudgetReservation) -> dict[str, 
     """Serialize one budget reservation for storage inside a ledger."""
     return {
         "reservation_id": reservation.reservation_id,
+        "participant_id": reservation.participant_id,
         "participant_slots": reservation.participant_slots,
         "running_participants": reservation.running_participants,
         "turns": reservation.turns,
@@ -519,6 +521,7 @@ def budget_reservation_from_document(document: dict[str, Any]) -> BudgetReservat
     """Hydrate one budget reservation from a ledger document."""
     return BudgetReservation(
         reservation_id=str(document["reservation_id"]),
+        participant_id=_clean_optional(document.get("participant_id")),
         participant_slots=int(document.get("participant_slots") or 0),
         running_participants=int(document.get("running_participants") or 0),
         turns=int(document.get("turns") or 0),

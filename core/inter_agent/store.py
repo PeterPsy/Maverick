@@ -194,6 +194,7 @@ class InterAgentStore(Protocol):
         budget_ledger_id: str,
         budget_policy_id: str,
         reservation_id: str,
+        participant_id: str | None = None,
         participant_slots: int = 0,
         running_participants: int = 0,
         turns: int = 0,
@@ -541,6 +542,7 @@ class InterAgentDocumentStore:
         budget_ledger_id: str,
         budget_policy_id: str,
         reservation_id: str,
+        participant_id: str | None = None,
         participant_slots: int = 0,
         running_participants: int = 0,
         turns: int = 0,
@@ -557,6 +559,7 @@ class InterAgentDocumentStore:
             policy=policy,
             reservation=BudgetReservation(
                 reservation_id=_require_identifier(reservation_id, "reservation_id"),
+                participant_id=_clean_optional(participant_id),
                 participant_slots=_non_negative_int(participant_slots, "participant_slots"),
                 running_participants=_non_negative_int(running_participants, "running_participants"),
                 turns=_non_negative_int(turns, "turns"),
@@ -998,6 +1001,14 @@ def _ensure_budget_allows_reservation(
         raise InterAgentBudgetExceededError("Budget reservation would exceed max_concurrent_participants.")
     if ledger.turns_used + reservation.turns > policy.max_total_turns:
         raise InterAgentBudgetExceededError("Budget reservation would exceed max_total_turns.")
+    if reservation.turns:
+        if not reservation.participant_id:
+            raise InterAgentValidationError("Turn budget reservations require participant_id.")
+        if (
+            policy.max_turns_per_participant
+            and _turns_used_by_participant(ledger, reservation.participant_id) + reservation.turns > policy.max_turns_per_participant
+        ):
+            raise InterAgentBudgetExceededError("Budget reservation would exceed max_turns_per_participant.")
     if ledger.tool_calls_used + reservation.tool_calls > policy.max_tool_calls:
         raise InterAgentBudgetExceededError("Budget reservation would exceed max_tool_calls.")
     if ledger.handoffs_used + reservation.handoffs > policy.max_handoffs:
@@ -1006,6 +1017,16 @@ def _ensure_budget_allows_reservation(
         raise InterAgentBudgetExceededError("Budget reservation would exceed max_estimated_tokens.")
     if policy.max_estimated_cost and ledger.estimated_cost_used + reservation.estimated_cost > policy.max_estimated_cost:
         raise InterAgentBudgetExceededError("Budget reservation would exceed max_estimated_cost.")
+
+
+def _turns_used_by_participant(ledger: BudgetLedgerRecord, participant_id: str) -> int:
+    turns = 0
+    for document in ledger.operation_reservations.values():
+        reservation = budget_reservation_from_document(document)
+        if reservation.status == "released" or reservation.participant_id != participant_id:
+            continue
+        turns += reservation.turns
+    return turns
 
 
 def _validate_run_create_bundle(bundle: InterAgentRunCreateBundle) -> None:
@@ -1208,6 +1229,11 @@ def _require_identifier(value: str, field_name: str) -> str:
     if not normalized:
         raise InterAgentValidationError(f"`{field_name}` is required.")
     return normalized
+
+
+def _clean_optional(value: Any) -> str | None:
+    normalized = str(value or "").strip()
+    return normalized or None
 
 
 def _read_documents(path: Path) -> list[dict[str, Any]]:

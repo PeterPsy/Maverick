@@ -41,6 +41,7 @@ class ParticipantExecutionResult:
     participant_id: str
     label: str
     status: str
+    synthetic: bool = False
     output_text: str = ""
     summary: str = ""
     partial_output: str = ""
@@ -68,6 +69,7 @@ def execute_inter_agent_run(
     input_text: str = "",
     participant_inputs: dict[str, str] | None = None,
     controlled_participants: dict[str, Any] | None = None,
+    allow_synthetic_participants: bool = False,
     project_summaries: bool = True,
     now: datetime | None = None,
 ) -> InterAgentExecutionResult:
@@ -88,6 +90,10 @@ def execute_inter_agent_run(
     orchestrator = participant_by_id.get(run.orchestrator_participant_id)
     if orchestrator is None:
         raise InterAgentOperationError("Inter-agent run has no materialized root orchestrator participant.")
+
+    controlled = _controlled_outputs(controlled_participants)
+    if controlled and not allow_synthetic_participants:
+        raise InterAgentOperationError("Controlled inter-agent participant output is available only for operator/test synthetic execution.")
 
     started_at = clock()
     run = replace(run, status="planning", updated_at=started_at)
@@ -117,7 +123,6 @@ def execute_inter_agent_run(
 
     run = replace(run, status="running", updated_at=clock())
     service.store.save_run(run)
-    controlled = _controlled_outputs(controlled_participants)
     inputs = {str(key): str(value) for key, value in dict(participant_inputs or {}).items()}
 
     try:
@@ -130,6 +135,7 @@ def execute_inter_agent_run(
                 input_text=input_text,
                 participant_inputs=inputs,
                 controlled_participants=controlled,
+                allow_synthetic_participants=allow_synthetic_participants,
                 clock=clock,
             )
         elif run.mode == "sequential":
@@ -141,6 +147,7 @@ def execute_inter_agent_run(
                 input_text=input_text,
                 participant_inputs=inputs,
                 controlled_participants=controlled,
+                allow_synthetic_participants=allow_synthetic_participants,
                 clock=clock,
             )
         else:
@@ -152,6 +159,7 @@ def execute_inter_agent_run(
                 input_text=input_text,
                 participant_inputs=inputs,
                 controlled_participants=controlled,
+                allow_synthetic_participants=allow_synthetic_participants,
                 clock=clock,
             )
     except Exception as error:
@@ -235,6 +243,7 @@ def _execute_manager_tools(
     input_text: str,
     participant_inputs: dict[str, str],
     controlled_participants: dict[str, ControlledParticipantOutput],
+    allow_synthetic_participants: bool,
     clock,
 ) -> list[ParticipantExecutionResult]:
     results: list[ParticipantExecutionResult] = []
@@ -251,6 +260,7 @@ def _execute_manager_tools(
                 participant_inputs=participant_inputs,
             ),
             controlled=controlled_participants.get(participant.participant_id),
+            allow_synthetic_participants=allow_synthetic_participants,
             clock=clock,
         )
         results.append(result)
@@ -266,6 +276,7 @@ def _execute_sequential(
     input_text: str,
     participant_inputs: dict[str, str],
     controlled_participants: dict[str, ControlledParticipantOutput],
+    allow_synthetic_participants: bool,
     clock,
 ) -> list[ParticipantExecutionResult]:
     results: list[ParticipantExecutionResult] = []
@@ -285,6 +296,7 @@ def _execute_sequential(
             task_index=index,
             input_text=participant_input,
             controlled=controlled_participants.get(participant.participant_id),
+            allow_synthetic_participants=allow_synthetic_participants,
             clock=clock,
         )
         results.append(result)
@@ -303,6 +315,7 @@ def _execute_concurrent(
     input_text: str,
     participant_inputs: dict[str, str],
     controlled_participants: dict[str, ControlledParticipantOutput],
+    allow_synthetic_participants: bool,
     clock,
 ) -> list[ParticipantExecutionResult]:
     aggregator_id = run.aggregator_participant_id or run.orchestrator_participant_id
@@ -328,6 +341,7 @@ def _execute_concurrent(
                     participant_inputs=participant_inputs,
                 ),
                 controlled=controlled_participants.get(participant.participant_id),
+                allow_synthetic_participants=allow_synthetic_participants,
                 clock=clock,
             ): participant.participant_id
             for index, participant in enumerate(fanout)
@@ -352,6 +366,7 @@ def _execute_concurrent(
                     participant_inputs=participant_inputs,
                 ),
                 controlled=controlled_participants.get(aggregator.participant_id),
+                allow_synthetic_participants=allow_synthetic_participants,
                 clock=clock,
             )
         )
@@ -367,6 +382,7 @@ def _execute_one_participant(
     task_index: int,
     input_text: str,
     controlled: ControlledParticipantOutput | None,
+    allow_synthetic_participants: bool,
     clock,
 ) -> ParticipantExecutionResult:
     task_id = f"task:{run.mode}:{task_index}:{participant.participant_id}"
@@ -392,6 +408,8 @@ def _execute_one_participant(
         now=started_at,
     )
     if controlled is not None or participant.execution_mode != RUNTIME_CHILD_EXECUTION_MODE:
+        if not allow_synthetic_participants:
+            raise InterAgentOperationError("Synthetic inter-agent participant execution requires an operator/test allowance.")
         return _execute_controlled_participant(
             service,
             run,
@@ -399,6 +417,7 @@ def _execute_one_participant(
             task_id=task_id,
             input_text=input_text,
             controlled=controlled or _default_controlled_output(participant),
+            controlled_supplied=controlled is not None,
             clock=clock,
         )
     return _execute_runtime_participant(
@@ -420,13 +439,27 @@ def _execute_controlled_participant(
     task_id: str,
     input_text: str,
     controlled: ControlledParticipantOutput,
+    controlled_supplied: bool,
     clock,
 ) -> ParticipantExecutionResult:
     running_reservation_id = f"executor.running:{participant.participant_id}:{task_id}"
     turn_reservation_id = f"executor.turn:{participant.participant_id}:{task_id}"
-    service.reserve_budget(run, reservation_id=running_reservation_id, running_participants=1, now=clock())
+    synthetic_source = "controlled_payload" if controlled_supplied else "default_test_output"
+    service.reserve_budget(
+        run,
+        reservation_id=running_reservation_id,
+        participant_id=participant.participant_id,
+        running_participants=1,
+        now=clock(),
+    )
     try:
-        service.reserve_budget(run, reservation_id=turn_reservation_id, turns=1, now=clock())
+        service.reserve_budget(
+            run,
+            reservation_id=turn_reservation_id,
+            participant_id=participant.participant_id,
+            turns=1,
+            now=clock(),
+        )
     except Exception:
         service.release_budget(run, reservation_id=running_reservation_id, now=clock())
         raise
@@ -442,7 +475,9 @@ def _execute_controlled_participant(
         payload={
             "participant_id": participant.participant_id,
             "execution_mode": participant.execution_mode,
-            "controlled": True,
+            "synthetic": True,
+            "synthetic_source": synthetic_source,
+            "controlled": controlled_supplied,
         },
         now=clock(),
     )
@@ -455,7 +490,9 @@ def _execute_controlled_participant(
         idempotency_key=f"{run.run_id}:executor.message.sent:{participant.participant_id}:{task_id}",
         payload={
             "participant_id": participant.participant_id,
-            "delivery_mode": "controlled",
+            "delivery_mode": "synthetic_controlled" if controlled_supplied else "synthetic_default",
+            "synthetic": True,
+            "synthetic_source": synthetic_source,
             "input_text": input_text,
         },
         now=clock(),
@@ -468,6 +505,7 @@ def _execute_controlled_participant(
             task_id=task_id,
             artifact_refs=controlled.artifact_refs,
             partial_output=controlled.partial_output,
+            synthetic=True,
             clock=clock,
         )
     status = "failed" if controlled.status == "failed" else "completed"
@@ -485,12 +523,14 @@ def _execute_controlled_participant(
         reservation_id=running_reservation_id,
         runtime_session_id=None,
         runtime_turn_id=None,
+        synthetic=True,
         clock=clock,
     )
     return ParticipantExecutionResult(
         participant_id=participant.participant_id,
         label=participant.label,
         status=status,
+        synthetic=True,
         output_text=controlled.output_text,
         summary=summary,
         partial_output=controlled.partial_output,
@@ -545,6 +585,7 @@ def _execute_runtime_participant(
             reservation_id=_participant_spawn_reservation_id(participant.participant_id),
             runtime_session_id=runtime_session_id,
             runtime_turn_id=None,
+            synthetic=False,
             clock=clock,
         )
         raise
@@ -574,12 +615,14 @@ def _execute_runtime_participant(
         reservation_id=_participant_spawn_reservation_id(participant.participant_id),
         runtime_session_id=session.session_id,
         runtime_turn_id=turn.turn_id,
+        synthetic=False,
         clock=clock,
     )
     return ParticipantExecutionResult(
         participant_id=participant.participant_id,
         label=participant.label,
         status=status,
+        synthetic=False,
         output_text=output_text,
         summary=summary,
         partial_output=output_text if status == "failed" else "",
@@ -603,6 +646,7 @@ def _finish_participant(
     reservation_id: str,
     runtime_session_id: str | None,
     runtime_turn_id: str | None,
+    synthetic: bool,
     clock,
 ) -> None:
     finished_at = clock()
@@ -624,6 +668,7 @@ def _finish_participant(
             "summary": summary,
             "output_text": output_text,
             "error": error,
+            "synthetic": synthetic,
         },
         now=finished_at,
     )
@@ -636,7 +681,7 @@ def _finish_participant(
         visibility_plane="detail",
         correlation_id=participant.participant_id,
         idempotency_key=f"{run.run_id}:executor.participant.{status}:{participant.participant_id}:{task_id}",
-        payload={"participant_id": participant.participant_id, "status": status, "error": error},
+        payload={"participant_id": participant.participant_id, "status": status, "error": error, "synthetic": synthetic},
         now=finished_at,
     )
     service.record_event(
@@ -663,6 +708,7 @@ def _record_artifacts(
     artifact_refs: list[dict[str, Any]],
     partial_output: str,
     clock,
+    synthetic: bool = False,
 ) -> None:
     service.record_event(
         run,
@@ -676,6 +722,7 @@ def _record_artifacts(
             "artifact_refs": artifact_refs,
             "partial_output": partial_output,
             "status": "partial" if partial_output else "created",
+            "synthetic": synthetic,
         },
         now=clock(),
     )
@@ -694,9 +741,11 @@ def _project_root_summary(
         event_id=str(uuid.uuid4()),
         session_id=run.root_runtime_session_id,
         plane="runtime",
-        event_type="runtime.output.final",
+        event_type="runtime.step.updated",
         payload={
-            "text": text,
+            "label": text,
+            "summary": text,
+            "step_kind": "inter_agent_summary",
             "inter_agent_run_id": run.run_id,
             "summary_kind": summary_kind,
         },

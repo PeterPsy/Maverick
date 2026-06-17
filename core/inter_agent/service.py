@@ -212,6 +212,7 @@ class InterAgentService:
         run: InterAgentRunRecord,
         *,
         reservation_id: str,
+        participant_id: str | None = None,
         participant_slots: int = 0,
         running_participants: int = 0,
         turns: int = 0,
@@ -228,6 +229,7 @@ class InterAgentService:
             budget_ledger_id=run.budget_ledger_id,
             budget_policy_id=run.budget_policy_id,
             reservation_id=reservation_id,
+            participant_id=_clean_optional(participant_id),
             participant_slots=participant_slots,
             running_participants=running_participants,
             turns=turns,
@@ -245,6 +247,7 @@ class InterAgentService:
             correlation_id=reservation_id,
             payload={
                 "reservation_id": reservation_id,
+                "participant_id": _clean_optional(participant_id),
                 "participant_slots": participant_slots,
                 "running_participants": running_participants,
                 "turns": turns,
@@ -367,6 +370,7 @@ class InterAgentService:
         self.reserve_budget(
             run,
             reservation_id=reservation_id,
+            participant_id=participant.participant_id,
             participant_slots=1,
             running_participants=1,
             now=timestamp,
@@ -457,7 +461,7 @@ class InterAgentService:
             participant_id=participant.participant_id,
             client_message_id=client_message_id,
         )
-        self.reserve_budget(run, reservation_id=reservation_id, turns=1, now=timestamp)
+        self.reserve_budget(run, reservation_id=reservation_id, participant_id=participant.participant_id, turns=1, now=timestamp)
         submit = submit_runtime_turn_async if async_requested else submit_runtime_turn
         try:
             turn, events = submit(

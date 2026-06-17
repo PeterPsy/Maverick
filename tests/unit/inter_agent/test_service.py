@@ -188,6 +188,7 @@ class InterAgentServiceTest(unittest.TestCase):
         service.reserve_budget(
             run,
             reservation_id="spawn-researcher",
+            participant_id="researcher",
             participant_slots=1,
             running_participants=1,
             turns=1,

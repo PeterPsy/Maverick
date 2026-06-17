@@ -8,6 +8,7 @@ from core.authorization.errors import AuthorizationError
 from core.authorization.service import authorize_runtime_session_create
 from core.identity.errors import UserNotFoundError
 from core.identity.models import UserRecord
+from core.inter_agent.events import InterAgentVisibilityPlane, VISIBILITY_ORDER, validate_visibility_plane
 from core.runtime.runtime_session import RuntimeSessionGrantRecord, runtime_session_allows_user_thread
 from core.workspaces.errors import WorkspaceMembershipError
 
@@ -23,6 +24,64 @@ def authorize_inter_agent_run_view(*, context_workspace_id: str | None, run_work
     """Require the caller workspace to match the run workspace."""
     if context_workspace_id != run_workspace_id:
         raise AuthorizationError("inter_agent_run_not_found")
+
+
+def authorize_inter_agent_run_sensitive_view(
+    *,
+    workspace_store: "WorkspaceStore | None",
+    context_workspace_id: str | None,
+    caller_kind: str,
+    run: "InterAgentRunRecord",
+    user_id: str | None,
+    platform_role: str | None = None,
+    workspace_role: str | None = None,
+    root_session: "RuntimeSessionRecord | None" = None,
+    caller_runtime_session_id: str | None = None,
+) -> None:
+    """Require owner/admin/grant authority for run metadata and non-public events."""
+    authorize_inter_agent_run_view(context_workspace_id=context_workspace_id, run_workspace_id=run.workspace_id)
+    if _has_inter_agent_run_sensitive_view_authority(
+        workspace_store=workspace_store,
+        caller_kind=caller_kind,
+        run=run,
+        user_id=user_id,
+        platform_role=platform_role,
+        workspace_role=workspace_role,
+        root_session=root_session,
+        caller_runtime_session_id=caller_runtime_session_id,
+    ):
+        return
+    raise AuthorizationError("inter_agent_run_view_forbidden")
+
+
+def authorized_inter_agent_event_visibility(
+    *,
+    workspace_store: "WorkspaceStore | None",
+    context_workspace_id: str | None,
+    caller_kind: str,
+    run: "InterAgentRunRecord",
+    requested_visibility_plane: str,
+    user_id: str | None,
+    platform_role: str | None = None,
+    workspace_role: str | None = None,
+    root_session: "RuntimeSessionRecord | None" = None,
+    caller_runtime_session_id: str | None = None,
+) -> InterAgentVisibilityPlane:
+    """Return the highest event plane this caller may receive for one run."""
+    authorize_inter_agent_run_sensitive_view(
+        workspace_store=workspace_store,
+        context_workspace_id=context_workspace_id,
+        caller_kind=caller_kind,
+        run=run,
+        user_id=user_id,
+        platform_role=platform_role,
+        workspace_role=workspace_role,
+        root_session=root_session,
+        caller_runtime_session_id=caller_runtime_session_id,
+    )
+    requested = validate_visibility_plane(requested_visibility_plane)
+    run_cap = validate_visibility_plane(run.visibility_level)
+    return _min_visibility_plane(requested, run_cap)
 
 
 def authorize_inter_agent_run_operation(
@@ -191,6 +250,57 @@ def _session_grants_operation(
         ):
             return True
     return False
+
+
+def _has_inter_agent_run_sensitive_view_authority(
+    *,
+    workspace_store: "WorkspaceStore | None",
+    caller_kind: str,
+    run: "InterAgentRunRecord",
+    user_id: str | None,
+    platform_role: str | None,
+    workspace_role: str | None,
+    root_session: "RuntimeSessionRecord | None",
+    caller_runtime_session_id: str | None,
+) -> bool:
+    if caller_kind == "operator":
+        return True
+    if _is_admin_context(
+        workspace_store=workspace_store,
+        workspace_id=run.workspace_id,
+        user_id=user_id,
+        platform_role=platform_role,
+        workspace_role=workspace_role,
+    ):
+        return True
+    if user_id and run.created_by_user_id == user_id:
+        return True
+    if root_session is None:
+        return False
+    if user_id and root_session.owner_user_id == user_id:
+        return True
+    if user_id and _session_grants_operation(
+        root_session,
+        operation="inter_agent_root",
+        grantee_kind="user",
+        grantee_id=user_id,
+    ):
+        return True
+    if caller_runtime_session_id and _session_grants_operation(
+        root_session,
+        operation="inter_agent_root",
+        grantee_kind="runtime_session",
+        grantee_id=caller_runtime_session_id,
+    ):
+        return True
+    return False
+
+
+def _min_visibility_plane(
+    left: InterAgentVisibilityPlane,
+    right: InterAgentVisibilityPlane,
+) -> InterAgentVisibilityPlane:
+    return left if VISIBILITY_ORDER.index(left) <= VISIBILITY_ORDER.index(right) else right
 
 
 def _is_admin_context(

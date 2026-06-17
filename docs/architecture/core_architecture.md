@@ -335,12 +335,17 @@ declared `child_runtime_session` participant into a hidden
 `session_kind=inter_agent_participant` runtime session, send turns to that child,
 wait, interrupt, resume, close, and recover runs. F3 adds the native MVP
 executor for `manager_tools`, `sequential`, and `concurrent` runs. The executor
-can run deterministic controlled participants for tests and policy-safe product
-flows, or use the F2 bridge to spawn real hidden child runtime sessions and send
-runtime turns. It emits normalized inter-agent events for plan, task, message,
-participant status, artifact, summary, and terminal run state, and projects only
-selected operational summaries to the root runtime session transcript. `handoff`
-remains schema/event-only until F7.
+can run deterministic synthetic participants only for tests or explicit
+operator-controlled execution, or use the F2 bridge to spawn real hidden child
+runtime sessions and send runtime turns. Public HTTP execution must not accept
+caller-supplied controlled participant output; CLI and MCP may use it only for an
+operator caller that opts into synthetic execution. Synthetic events and results
+must be marked explicitly. The executor emits normalized inter-agent events for
+plan, task, message, participant status, artifact, summary, and terminal run
+state, and projects only selected operational summaries to the root runtime
+session transcript as non-terminal runtime step updates. `runtime.output.final`
+remains reserved for real assistant final answers. `handoff` remains
+schema/event-only until F7.
 
 Those surfaces must materialize prompt, skill ids, skill catalog, source app,
 owner, creator, and grants only from core policy or authorized materialized
@@ -359,6 +364,13 @@ are path-bearing ids and must validate as safe basenames before any runtime root
 is created or deleted. CLI and MCP inter-agent close operations must receive the
 same full platform cleanup state as HTTP so hidden child runtime roots, app
 cleanup metadata, and thread cleanup events follow the official cleanup path.
+Inter-agent run detail and event replay are also authority-bearing. HTTP run
+detail, run listing entries, and event replay beyond the caller's capped plane
+must require run creator, root-session owner, workspace/platform admin, operator,
+or explicit `inter_agent_root` grant authority; workspace membership alone is not
+enough to read another user's operational detail. Event replay must cap the
+served `summary`/`detail`/`debug` plane server-side by both caller authority and
+the run's visibility level.
 
 The F1 store contract is workspace-safe by default. Normal reads and writes must
 carry `workspace_id`; operator-wide scans, if needed later, must be explicit

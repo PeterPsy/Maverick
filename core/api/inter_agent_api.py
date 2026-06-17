@@ -10,8 +10,10 @@ from core.api.runtime_cleanup import cleanup_runtime_session
 from core.api.session_api import RequestSession, require_session
 from core.authorization.errors import AuthorizationError
 from core.inter_agent.authorization import (
+    authorized_inter_agent_event_visibility,
     authorize_inter_agent_participant_spawn,
     authorize_inter_agent_root_session_use,
+    authorize_inter_agent_run_sensitive_view,
     authorize_inter_agent_run_operation,
     authorize_inter_agent_run_view,
 )
@@ -107,6 +109,7 @@ def _handle_inter_agent_route(
             runs = [
                 run_detail_payload(state.inter_agent_store, run)
                 for run in state.inter_agent_store.list_runs(context.workspace_id)
+                if _can_view_run_detail(state, context, run)
             ]
             return json_response(start_response, {"items": runs})
         return json_response(start_response, {"error": "method_not_allowed"}, status="405 Method Not Allowed")
@@ -120,12 +123,30 @@ def _handle_inter_agent_route(
 
     if len(parts) == 2:
         if method == "GET":
+            authorize_inter_agent_run_sensitive_view(
+                workspace_store=state.workspace_store,
+                context_workspace_id=context.workspace_id,
+                caller_kind="http",
+                run=run,
+                user_id=context.user.user_id,
+                platform_role=context.user.platform_role,
+                root_session=_root_session_for_run(state, run),
+            )
             return json_response(start_response, run_detail_payload(state.inter_agent_store, run))
         return json_response(start_response, {"error": "method_not_allowed"}, status="405 Method Not Allowed")
     action = parts[2]
     if action == "events" and method == "GET":
         query = parse_qs(query_string, keep_blank_values=False)
-        visibility = validate_visibility_plane(query.get("visibility_plane", ["summary"])[0])
+        visibility = authorized_inter_agent_event_visibility(
+            workspace_store=state.workspace_store,
+            context_workspace_id=context.workspace_id,
+            caller_kind="http",
+            run=run,
+            requested_visibility_plane=validate_visibility_plane(query.get("visibility_plane", ["summary"])[0]),
+            user_id=context.user.user_id,
+            platform_role=context.user.platform_role,
+            root_session=_root_session_for_run(state, run),
+        )
         page = state.inter_agent_store.list_event_page(
             run.run_id,
             workspace_id=context.workspace_id,
@@ -337,6 +358,8 @@ def _execute_run(
             user_id=context.user.user_id,
             platform_role=context.user.platform_role,
         )
+    if isinstance(body.get("controlled_participants"), dict):
+        raise AuthorizationError("inter_agent_controlled_participants_forbidden")
     result = execute_inter_agent_run(
         service,
         state,
@@ -344,10 +367,34 @@ def _execute_run(
         run_id=run.run_id,
         input_text=_text(body.get("input_text")) or _text(body.get("message")),
         participant_inputs=body.get("participant_inputs") if isinstance(body.get("participant_inputs"), dict) else None,
-        controlled_participants=body.get("controlled_participants") if isinstance(body.get("controlled_participants"), dict) else None,
+        controlled_participants=None,
+        allow_synthetic_participants=False,
         project_summaries=_bool(body.get("project_summaries"), default=True),
     )
     return json_response(start_response, execution_result_payload(state.inter_agent_store, result))
+
+
+def _can_view_run_detail(state: PlatformState, context: RequestSession, run) -> bool:
+    try:
+        authorize_inter_agent_run_sensitive_view(
+            workspace_store=state.workspace_store,
+            context_workspace_id=context.workspace_id,
+            caller_kind="http",
+            run=run,
+            user_id=context.user.user_id,
+            platform_role=context.user.platform_role,
+            root_session=_root_session_for_run(state, run),
+        )
+    except AuthorizationError:
+        return False
+    return True
+
+
+def _root_session_for_run(state: PlatformState, run):
+    try:
+        return state.runtime_store.get_session(run.root_runtime_session_id)
+    except (RuntimeSessionNotFoundError, ValueError):
+        return None
 
 
 def _run_has_child_runtime_participants(state: PlatformState, run) -> bool:

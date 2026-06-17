@@ -202,12 +202,13 @@ class AppReferenceApiTestSupport:
     ) -> tuple[int, dict, dict[str, str]]:
         payload = json.dumps(body or {}).encode("utf-8") if body is not None else b""
         headers: dict[str, str] = {}
+        path_info, separator, query_string = path.partition("?")
         environ = {
-            "PATH_INFO": path,
+            "PATH_INFO": path_info,
             "REQUEST_METHOD": method,
             "CONTENT_LENGTH": str(len(payload)),
             "CONTENT_TYPE": "application/json",
-            "QUERY_STRING": "",
+            "QUERY_STRING": query_string if separator else "",
             "HTTP_HOST": "maverick.test",
             "wsgi.input": BytesIO(payload),
         }
@@ -232,12 +233,13 @@ class AppReferenceApiTestSupport:
         cookie: str | None = None,
     ) -> tuple[int, bytes, dict[str, str]]:
         headers: dict[str, str] = {}
+        path_info, separator, query_string = path.partition("?")
         environ = {
-            "PATH_INFO": path,
+            "PATH_INFO": path_info,
             "REQUEST_METHOD": method,
             "CONTENT_LENGTH": "0",
             "CONTENT_TYPE": "application/json",
-            "QUERY_STRING": "",
+            "QUERY_STRING": query_string if separator else "",
             "HTTP_HOST": "maverick.test",
             "wsgi.input": BytesIO(b""),
         }

@@ -329,6 +329,106 @@ class TestMcpCliSurfaces(SurfaceTestBase):
                 arguments={"run_id": "unsafe-mcp-run", "participant_id": "researcher", "child_session_id": "/tmp/evil"},
             )
 
+    def test_inter_agent_cli_and_mcp_gate_controlled_synthetic_execution(self) -> None:
+        repo_root = self.make_repo_root()
+        runtime_store = self.make_runtime_store()
+        inter_agent_store = build_inter_agent_document_store(start_path=repo_root)
+        create_runtime_session(
+            runtime_store,
+            session_id="root-cli",
+            workspace_id="default",
+            agent_id="chat",
+            source_app_id="chat",
+            start_path=repo_root,
+        )
+        create_runtime_session(
+            runtime_store,
+            session_id="root-mcp",
+            workspace_id="default",
+            agent_id="chat",
+            source_app_id="chat",
+            start_path=repo_root,
+        )
+        cli_context = CliInvocationContext(
+            caller_kind="operator",
+            workspace_id="default",
+            agent_id=None,
+            effective_mode="full-access",
+            user_id="operator",
+        )
+        mcp_context = McpInvocationContext(
+            caller_kind="operator",
+            workspace_id="default",
+            agent_id=None,
+            effective_mode="full-access",
+            user_id="operator",
+        )
+        run_core_cli_command(
+            command_id="inter-agent.runs.create",
+            context=cli_context,
+            runtime_store=runtime_store,
+            inter_agent_store=inter_agent_store,
+            workspace_id="default",
+            start_path=repo_root,
+            arguments=_inter_agent_run_payload(run_id="controlled-cli-run", root_session_id="root-cli"),
+        )
+        call_mcp_tool(
+            tool_name="inter_agent_run_create",
+            context=mcp_context,
+            runtime_store=runtime_store,
+            inter_agent_store=inter_agent_store,
+            workspace_id="default",
+            start_path=repo_root,
+            arguments=_inter_agent_run_payload(run_id="controlled-mcp-run", root_session_id="root-mcp"),
+        )
+
+        with self.assertRaisesRegex(AuthorizationError, "inter_agent_controlled_participants_forbidden"):
+            run_core_cli_command(
+                command_id="inter-agent.runs.execute",
+                context=cli_context,
+                runtime_store=runtime_store,
+                inter_agent_store=inter_agent_store,
+                workspace_id="default",
+                start_path=repo_root,
+                arguments={
+                    "run_id": "controlled-cli-run",
+                    "controlled_participants": {"researcher": {"output_text": "synthetic cli"}},
+                },
+            )
+        cli_result = run_core_cli_command(
+            command_id="inter-agent.runs.execute",
+            context=cli_context,
+            runtime_store=runtime_store,
+            inter_agent_store=inter_agent_store,
+            workspace_id="default",
+            start_path=repo_root,
+            arguments={
+                "run_id": "controlled-cli-run",
+                "allow_synthetic_participants": True,
+                "controlled_participants": {"researcher": {"output_text": "synthetic cli"}},
+                "project_summaries": False,
+            },
+        )
+        mcp_result = call_mcp_tool(
+            tool_name="inter_agent_execute",
+            context=mcp_context,
+            runtime_store=runtime_store,
+            inter_agent_store=inter_agent_store,
+            workspace_id="default",
+            start_path=repo_root,
+            arguments={
+                "run_id": "controlled-mcp-run",
+                "allow_synthetic_participants": True,
+                "controlled_participants": {"researcher": {"output_text": "synthetic mcp"}},
+                "project_summaries": False,
+            },
+        )
+
+        self.assertTrue(cli_result["participant_results"][0]["synthetic"])
+        self.assertTrue(mcp_result["participant_results"][0]["synthetic"])
+        cli_events = inter_agent_store.list_event_page("controlled-cli-run", workspace_id="default", visibility_plane="debug")
+        self.assertTrue(any(event.payload.get("synthetic") is True for event in cli_events.events))
+
     def test_inter_agent_cli_and_mcp_reject_sandbox_non_creator_run_operations(self) -> None:
         repo_root = self.make_repo_root()
         identity_store = IdentityDocumentStore(

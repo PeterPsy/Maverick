@@ -6,6 +6,7 @@ from types import SimpleNamespace
 from typing import Any
 
 from core.api.runtime_cleanup import cleanup_runtime_session
+from core.authorization.errors import AuthorizationError
 from core.identity.store import IdentityStore
 from core.inter_agent.authorization import (
     authorize_inter_agent_participant_spawn,
@@ -196,6 +197,10 @@ def inter_agent_tool_specs(
                 platform_role=context.platform_role,
                 workspace_role=context.workspace_role,
             )
+        allow_synthetic = _allow_synthetic_execution(arguments, caller_kind=context.caller_kind)
+        controlled_participants = arguments.get("controlled_participants") if isinstance(arguments.get("controlled_participants"), dict) else None
+        if controlled_participants is not None and not allow_synthetic:
+            raise AuthorizationError("inter_agent_controlled_participants_forbidden")
         result = execute_inter_agent_run(
             _service(),
             _state(),
@@ -203,7 +208,8 @@ def inter_agent_tool_specs(
             run_id=run.run_id,
             input_text=_text(arguments.get("input_text")) or _text(arguments.get("message")),
             participant_inputs=arguments.get("participant_inputs") if isinstance(arguments.get("participant_inputs"), dict) else None,
-            controlled_participants=arguments.get("controlled_participants") if isinstance(arguments.get("controlled_participants"), dict) else None,
+            controlled_participants=controlled_participants,
+            allow_synthetic_participants=allow_synthetic,
             project_summaries=_bool(arguments.get("project_summaries"), default=True),
         )
         return execution_result_payload(inter_agent_store, result)  # type: ignore[arg-type]
@@ -416,3 +422,11 @@ def _bool(value, *, default: bool) -> bool:
         if normalized in {"0", "false", "no", "off"}:
             return False
     return bool(value)
+
+
+def _allow_synthetic_execution(arguments: dict[str, Any], *, caller_kind: str) -> bool:
+    if not _bool(arguments.get("allow_synthetic_participants"), default=False):
+        return False
+    if caller_kind != "operator":
+        raise AuthorizationError("inter_agent_synthetic_participants_forbidden")
+    return True

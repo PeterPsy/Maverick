@@ -173,6 +173,7 @@ class InterAgentExecutorTest(unittest.TestCase):
                 },
                 "reviewer": {"output_text": "Risks are valid.", "summary": "Reviewer confirmed the risks."},
             },
+            allow_synthetic_participants=True,
             now=NOW,
         )
 
@@ -187,9 +188,28 @@ class InterAgentExecutorTest(unittest.TestCase):
         self.assertIn("inter_agent.plan.summary_created", [event.event_type for event in events])
         self.assertIn("inter_agent.artifact.created", [event.event_type for event in events])
         self.assertIn("inter_agent.run.completed", [event.event_type for event in events])
-        self.assertEqual([event.event_type for event in root_events], ["runtime.output.final", "runtime.output.final"])
-        self.assertIn("manager-tools mode", root_events[0].payload["text"])
-        self.assertIn("Multi-agent run completed", root_events[-1].payload["text"])
+        self.assertEqual([event.event_type for event in root_events], ["runtime.step.updated", "runtime.step.updated"])
+        self.assertIn("manager-tools mode", root_events[0].payload["label"])
+        self.assertIn("Multi-agent run completed", root_events[-1].payload["label"])
+        self.assertTrue(result.participant_results[0].synthetic)
+
+    def test_controlled_participants_require_synthetic_execution_allowance(self) -> None:
+        _repo_root, store, runtime_store = self._stores()
+        service = InterAgentService(store)
+        run = service.create_run(_run_spec(run_id="controlled-disallowed"), now=NOW)
+
+        with self.assertRaisesRegex(InterAgentOperationError, "Controlled inter-agent participant output"):
+            execute_inter_agent_run(
+                service,
+                _state(runtime_store),
+                workspace_id="default",
+                run_id=run.run_id,
+                controlled_participants={"researcher": {"output_text": "synthetic"}},
+                project_summaries=False,
+                now=NOW,
+            )
+
+        self.assertEqual(store.get_run(run.run_id, workspace_id="default").status, "created")
 
     def test_sequential_controlled_run_passes_previous_output_to_next_participant(self) -> None:
         _repo_root, store, runtime_store = self._stores()
@@ -216,6 +236,7 @@ class InterAgentExecutorTest(unittest.TestCase):
                 "researcher": {"output_text": "Primary evidence A.", "summary": "Evidence A found."},
                 "synthesizer": {"output_text": "Synthesis used evidence A.", "summary": "Synthesis completed."},
             },
+            allow_synthetic_participants=True,
             project_summaries=False,
             now=NOW,
         )
@@ -330,6 +351,7 @@ class InterAgentExecutorTest(unittest.TestCase):
                     "error": "controlled failure",
                 }
             },
+            allow_synthetic_participants=True,
             now=NOW,
         )
         events = store.list_event_page(run.run_id, workspace_id="default", visibility_plane="debug", limit=100).events
@@ -376,6 +398,7 @@ class InterAgentExecutorTest(unittest.TestCase):
                     "researcher": {"output_text": "first"},
                     "reviewer": {"output_text": "second"},
                 },
+                allow_synthetic_participants=True,
                 project_summaries=False,
                 now=NOW,
             )

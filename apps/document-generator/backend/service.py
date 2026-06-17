@@ -61,6 +61,26 @@ def app_events_for_result(action: str, result: dict[str, Any]) -> list[dict]:
     return app_events_for_action(action)
 
 
+def _pymupdf_health() -> dict[str, Any]:
+    try:
+        import fitz  # type: ignore[import-not-found]
+    except Exception as error:
+        return {
+            "available": False,
+            "required": True,
+            "package": "PyMuPDF",
+            "module": "fitz",
+            "detail": str(error),
+        }
+    return {
+        "available": True,
+        "required": True,
+        "package": "PyMuPDF",
+        "module": "fitz",
+        "version": str(getattr(fitz, "__version__", "") or ""),
+    }
+
+
 def _workspace_relative(path: Path, generated_root: Path) -> str:
     return f"storage/generated/{path.relative_to(generated_root).as_posix()}"
 
@@ -162,7 +182,19 @@ def handle_action(
     if action == "health.check":
         seed_state(data_root)
         generated_root.mkdir(parents=True, exist_ok=True)
-        return 200, {"status": "ok", "templates": len(list_templates(data_root)), "documents": len(list_jobs(data_root))}
+        pymupdf = _pymupdf_health()
+        healthy = bool(pymupdf.get("available"))
+        result = {
+            "status": "ok" if healthy else "degraded",
+            "templates": len(list_templates(data_root)),
+            "documents": len(list_jobs(data_root)),
+            "dependencies": {
+                "pymupdf": pymupdf,
+            },
+        }
+        if not healthy:
+            result["detail"] = "PyMuPDF is required for PDF text patching but is not available in the runtime."
+        return 200, result
     if action == "references.manifest":
         return 200, REFERENCE_MANIFEST
     if action == "references.search":

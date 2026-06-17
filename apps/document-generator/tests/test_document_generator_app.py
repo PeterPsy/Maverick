@@ -7,6 +7,7 @@ import json
 import os
 from pathlib import Path
 import shutil
+import subprocess
 import sys
 import tempfile
 import unittest
@@ -240,6 +241,77 @@ class DocumentGeneratorAppTestCase(unittest.TestCase):
             self.assertIn("Delta", combined_text)
             self.assertIn("xlsx text", combined_text)
             self.assertTrue(all(item["extraction"]["engine"] for item in extracted))
+
+    def test_health_hook_reports_degraded_when_pymupdf_is_missing(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            blocker = root / "block_fitz"
+            blocker.mkdir()
+            (blocker / "sitecustomize.py").write_text(
+                "\n".join(
+                    [
+                        "import builtins",
+                        "_real_import = builtins.__import__",
+                        "def _guarded_import(name, globals=None, locals=None, fromlist=(), level=0):",
+                        "    if name == 'fitz' or name.startswith('fitz.'):",
+                        "        raise ModuleNotFoundError(\"No module named 'fitz'\")",
+                        "    return _real_import(name, globals, locals, fromlist, level)",
+                        "builtins.__import__ = _guarded_import",
+                    ]
+                ),
+                encoding="utf-8",
+            )
+            env = dict(os.environ)
+            env["PYTHONPATH"] = f"{blocker}{os.pathsep}{REPO_ROOT}{os.pathsep}{env.get('PYTHONPATH', '')}"
+
+            completed = subprocess.run(
+                [sys.executable, str(APP_ROOT / "hooks" / "health_check.py")],
+                input=json.dumps(
+                    {
+                        "data_root": str(root / "data" / "document-generator"),
+                        "generated_storage_root": str(root / "storage" / "generated"),
+                    }
+                ),
+                text=True,
+                capture_output=True,
+                check=False,
+                cwd=str(APP_ROOT),
+                env=env,
+            )
+            output = json.loads(completed.stdout)
+
+            self.assertNotEqual(completed.returncode, 0)
+            self.assertEqual(output["status"], "degraded")
+            self.assertFalse(output["dependencies"]["pymupdf"]["available"])
+
+    def test_health_hook_passes_when_pymupdf_is_available(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            fake_dependency = root / "fake_dependency"
+            fake_dependency.mkdir()
+            (fake_dependency / "fitz.py").write_text("__version__ = 'test-version'\n", encoding="utf-8")
+            env = dict(os.environ)
+            env["PYTHONPATH"] = f"{fake_dependency}{os.pathsep}{REPO_ROOT}{os.pathsep}{env.get('PYTHONPATH', '')}"
+
+            completed = subprocess.run(
+                [sys.executable, str(APP_ROOT / "hooks" / "health_check.py")],
+                input=json.dumps(
+                    {
+                        "data_root": str(root / "data" / "document-generator"),
+                        "generated_storage_root": str(root / "storage" / "generated"),
+                    }
+                ),
+                text=True,
+                capture_output=True,
+                check=True,
+                cwd=str(APP_ROOT),
+                env=env,
+            )
+            output = json.loads(completed.stdout)
+
+            self.assertEqual(output["status"], "ok")
+            self.assertTrue(output["dependencies"]["pymupdf"]["available"])
+            self.assertEqual(output["dependencies"]["pymupdf"]["version"], "test-version")
 
     def test_modify_uploaded_document_confirmation_does_not_emit_data_changed_event(self) -> None:
         with tempfile.TemporaryDirectory() as temp:

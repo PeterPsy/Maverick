@@ -18,3 +18,5 @@ status_code, result = handle_action(
     {"action": "health.check"},
 )
 print(json.dumps({"status_code": status_code, **result}, ensure_ascii=False))
+if status_code >= 400 or result.get("status") != "ok":
+    sys.exit(1)

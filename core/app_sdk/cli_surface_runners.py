@@ -40,10 +40,13 @@ def _run_core_cli(
             _die("usage: maverick core cli list --json")
         return {"workspace_id": workspace_id, "commands": [_command_summary(command) for command in commands]}
     if operation == "inspect":
-        command = _require_cli_command(commands, _single_id(tokens, "maverick core cli inspect <command_id> --json"))
+        command_id = _single_id(tokens, "maverick core cli inspect <command_id> --json")
+        _reject_app_cli_command_in_core_scope(command_id)
+        command = _require_cli_command(commands, command_id)
         return {"workspace_id": workspace_id, "command": _command_detail(command)}
     if operation == "run":
         command_id, arguments = _run_target_and_arguments(tokens, options)
+        _reject_app_cli_command_in_core_scope(command_id)
         command = _require_cli_command(commands, command_id)
         return run_core_cli_command(
             command_id=command.command_id,
@@ -63,6 +66,19 @@ def _run_core_cli(
             arguments=arguments,
         )
     _die("core CLI operation must be list, inspect, or run")
+
+
+def _reject_app_cli_command_in_core_scope(command_id: str) -> None:
+    parts = str(command_id or "").split(".")
+    if len(parts) < 3 or parts[0] != "app":
+        return
+    app_id = parts[1]
+    command_name = ".".join(parts[2:])
+    _die(
+        "This is an app CLI command. Use: "
+        f"`maverick app {app_id} cli run {command_name} --json`"
+    )
+
 
 def _run_app_cli(
     app_id: str,

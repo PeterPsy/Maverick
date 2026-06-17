@@ -1,7 +1,7 @@
 {
   "commands": {
     "document-generator": {
-      "description": "Create DOCX, PPTX, PDF, and XLSX documents, extract text from workspace documents, convert workspace documents to agent-ready Markdown, and manage Document Generator references/view state.",
+      "description": "Create DOCX, PPTX, PDF, and XLSX documents, extract text from workspace documents, edit PDF text, convert workspace documents to agent-ready Markdown, and manage Document Generator references/view state.",
       "argument_schema": {
         "type": "object",
         "description": "Document Generator command arguments. With no action, generates a document from spec.",
@@ -13,6 +13,8 @@
               "generate_document",
               "validate_spec",
               "extract_text",
+              "patch_pdf_text",
+              "modify_uploaded_document",
               "convert_to_markdown",
               "list_templates",
               "list_outputs",
@@ -33,7 +35,38 @@
           },
           "workspace_relative_path": {
             "type": "string",
-            "description": "Input file under storage/uploaded/ or storage/generated/. Required for extract_text and convert_to_markdown; Markdown conversion accepts files up to 10 MiB."
+            "description": "Input file under storage/uploaded/ or storage/generated/. Required for extract_text, patch_pdf_text, modify_uploaded_document, and convert_to_markdown; Markdown conversion accepts files up to 10 MiB."
+          },
+          "patches": {
+            "type": "array",
+            "description": "PDF text patches for patch_pdf_text. Each item accepts match_text, replacement_text, occurrence, redact_original, case_sensitive, and optional page_number.",
+            "items": {
+              "type": "object"
+            }
+          },
+          "match_text": {
+            "type": "string",
+            "description": "Source text to replace for modify_uploaded_document or a single PDF patch."
+          },
+          "confirmed_match_text": {
+            "type": "string",
+            "description": "Confirmed source text after modify_uploaded_document returns multiple candidates."
+          },
+          "replacement_text": {
+            "type": "string",
+            "description": "Replacement text for PDF patching."
+          },
+          "occurrence": {
+            "description": "1-based match occurrence to replace, or all for patch_pdf_text patches.",
+            "oneOf": [
+              {"type": "integer", "minimum": 1},
+              {"type": "string", "enum": ["all"]}
+            ]
+          },
+          "redact_original": {
+            "type": "boolean",
+            "default": true,
+            "description": "When true, redact matched PDF text before inserting the replacement."
           },
           "output_filename": {
             "type": "string",
@@ -105,6 +138,19 @@
             "action": "extract_text",
             "workspace_relative_path": "storage/generated/report.docx",
             "max_chars": 50000
+          },
+          {
+            "action": "patch_pdf_text",
+            "workspace_relative_path": "storage/uploaded/contract.pdf",
+            "patches": [
+              {
+                "match_text": "18/09/2025",
+                "replacement_text": "17/06/2026",
+                "occurrence": 1,
+                "redact_original": true
+              }
+            ],
+            "output_filename": "contract-2026-06-17.pdf"
           }
         ]
       }

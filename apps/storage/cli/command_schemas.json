@@ -27,6 +27,7 @@
               "write_file",
               "file.content.write",
               "upload_file",
+              "upload_local_file",
               "local_upload_session.start",
               "local_upload_session.status",
               "local_upload_session.chunk",
@@ -111,6 +112,10 @@
           "content": {"type": "string"},
           "content_base64": {"type": "string"},
           "content_type": {"type": "string"},
+          "source_path": {
+            "type": "string",
+            "description": "CLI-only local source file path for upload_local_file. This is not exposed by Storage MCP or frontend surfaces."
+          },
           "size_bytes": {"type": "integer", "minimum": 0},
           "local_upload_session_id": {"type": "string"},
           "drive_upload_session_id": {"type": "string"},
@@ -219,6 +224,19 @@
               "role": {"enum": ["uploaded", "generated"]}
             },
             "required": ["action", "role", "file_name", "content_base64"]
+          },
+          {
+            "properties": {
+              "action": {"enum": ["upload_local_file"]},
+              "role": {"enum": ["uploaded", "generated"]},
+              "mode": {"enum": ["create"]}
+            },
+            "required": ["action", "source_path"],
+            "anyOf": [
+              {"required": ["workspace_relative_path"]},
+              {"required": ["role", "file_name"]},
+              {"required": ["role", "relative_path"]}
+            ]
           },
           {
             "properties": {

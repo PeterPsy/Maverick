@@ -7,7 +7,7 @@ from pathlib import Path
 import sys
 
 from errors import DocumentValidationError
-from service import app_events_for_action, handle_action
+from service import app_events_for_result, handle_action
 
 
 def _response(status_code: int, payload: dict) -> None:
@@ -32,7 +32,7 @@ def main() -> None:
         return
     response = {"status_code": status_code, "json": result}
     if status_code < 400:
-        response["app_events"] = app_events_for_action(action)
+        response["app_events"] = app_events_for_result(action, result)
     print(json.dumps(response, ensure_ascii=False))
 
 

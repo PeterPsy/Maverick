@@ -8,7 +8,7 @@ from typing import Any
 
 from errors import DocumentValidationError
 from office_extractors import extract_docx_text, extract_pptx_text, extract_xlsx_text
-from pdf_extractor import extract_pdf_text
+from pdf_extractor import extract_pdf_text_details
 from workspace_files import resolve_workspace_file
 
 
@@ -30,7 +30,8 @@ def extract_text_from_workspace_file(uploaded_root: Path | None, generated_root:
         raise DocumentValidationError("workspace file is too large for text extraction.")
 
     max_chars = _normalize_max_chars(body.get("max_chars"))
-    text = _extract_by_format(target, file_format)
+    extraction = _extract_by_format(target, file_format)
+    text = str(extraction.get("text") or "")
     normalized = _normalize_text(text)
     truncated = len(normalized) > max_chars
     if truncated:
@@ -46,6 +47,10 @@ def extract_text_from_workspace_file(uploaded_root: Path | None, generated_root:
         "text": normalized,
         "text_length": len(normalized),
         "truncated": truncated,
+        "extraction": {
+            "engine": extraction.get("engine"),
+            "layers": extraction.get("layers"),
+        },
     }
 
 
@@ -61,16 +66,26 @@ def _format_from_path(path: Path) -> str:
     return path.suffix.lower().lstrip(".")
 
 
-def _extract_by_format(path: Path, file_format: str) -> str:
+def _extract_by_format(path: Path, file_format: str) -> dict[str, Any]:
     if file_format == "docx":
-        return extract_docx_text(path)
+        return _text_details(extract_docx_text(path), engine="python-docx")
     if file_format == "pptx":
-        return extract_pptx_text(path)
+        return _text_details(extract_pptx_text(path), engine="python-pptx")
     if file_format == "xlsx":
-        return extract_xlsx_text(path)
+        return _text_details(extract_xlsx_text(path), engine="openpyxl")
     if file_format == "pdf":
-        return extract_pdf_text(path)
+        return extract_pdf_text_details(path)
     raise DocumentValidationError(f"Unsupported extraction format `{file_format}`.")
+
+
+def _text_details(text: str, *, engine: str) -> dict[str, Any]:
+    return {
+        "text": text,
+        "engine": engine,
+        "layers": {
+            "document_text": bool(text.strip()),
+        },
+    }
 
 
 def _normalize_text(text: str) -> str:

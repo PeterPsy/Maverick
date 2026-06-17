@@ -21,6 +21,7 @@ Common actions:
 - `catalog`: list uploaded and generated files and folders with metadata.
 - `create_folder`: create a folder inside `storage/uploaded/` or `storage/generated/` after Storage path validation.
 - `upload_file`: upload base64 file content into an existing folder under `storage/uploaded/` or `storage/generated/` without overwriting an existing file. Use this only for inline payloads up to 25 MiB decoded.
+- CLI-only `upload_local_file`: upload a trusted local source path into Storage through chunked local upload sessions without putting large base64 payloads on the shell command line.
 - `local_upload_session.start` / `local_upload_session.chunk` / `local_upload_session.status` / `local_upload_session.cancel`: upload local workspace files above 25 MiB and up to 500 MiB through 8 MiB decoded chunks. Start the session with role, folder, filename, content type, and total size; send chunks at the acknowledged `expected_offset`; call status to recover after ambiguous failures.
 - `move_file`: move a file into a folder or back to the storage root while keeping it inside its current storage role.
 - `move_folder`: move a non-root folder into another folder or back to the storage root while keeping it inside its current storage role; Storage rejects path escapes, collisions, and moves into the same folder subtree.
@@ -40,6 +41,20 @@ Common actions:
 - `delete_file`: delete a file from the active workspace storage root after Storage path validation.
 - `download_folder` / `read_folder`: read a validated folder as a bounded inline ZIP archive. Browser folder downloads stream through `/api/apps/<app_id>/media?media_kind=folder` so large archives are served as files instead of JSON/base64 payloads.
 - `delete_folder`: delete a non-root folder from the active workspace storage root after Storage path validation.
+
+For binary files already produced on the local filesystem by a trusted CLI workflow, prefer the CLI-only local upload wrapper:
+
+```bash
+maverick app storage cli run storage --arguments-json '{
+  "action": "upload_local_file",
+  "source_path": "/tmp/output.pdf",
+  "workspace_relative_path": "storage/generated/pdf-edits/output.pdf",
+  "content_type": "application/pdf",
+  "mode": "create"
+}'
+```
+
+Do not expose `source_path` through MCP, frontend, or browser-facing flows.
 
 ## Google Drive Agent Workflow
 

@@ -139,6 +139,7 @@ button {
   border-radius: 8px;
   background: transparent;
   color: var(--widget-muted);
+  text-decoration: none;
 }
 
 .file-widget__action:hover,
@@ -204,8 +205,7 @@ button {
 }
 
 .file-widget__document img,
-.file-widget__document video,
-.file-widget__document iframe {
+.file-widget__document video {
   display: block;
   width: 100%;
   max-height: none;
@@ -213,15 +213,27 @@ button {
   object-fit: contain;
 }
 
-.file-widget__document iframe {
-  height: 100%;
-  min-height: 26rem;
-}
-
 .file-widget__document audio {
   display: block;
   width: min(100%, 34rem);
   margin: 2rem auto;
+}
+
+.file-widget__pdf-page {
+  display: grid;
+  justify-items: center;
+  width: 100%;
+  min-height: 100%;
+  padding: 0.72rem;
+}
+
+.file-widget__pdf-page canvas {
+  display: block;
+  max-width: 100%;
+  height: auto;
+  border-radius: 6px;
+  background: #fff;
+  box-shadow: 0 14px 42px rgba(0, 0, 0, 0.34);
 }
 
 .file-widget__document pre {
@@ -358,6 +370,40 @@ button {
 .file-widget__empty {
   color: var(--widget-muted);
   font-size: 0.78rem;
+}
+
+.file-widget__fallback-actions {
+  display: inline-flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 0.45rem;
+  margin-top: 0.3rem;
+}
+
+.file-widget__fallback-actions button,
+.file-widget__fallback-actions a {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.35rem;
+  min-height: 2rem;
+  border: 1px solid var(--widget-border);
+  border-radius: 8px;
+  background: var(--widget-panel);
+  color: var(--widget-text);
+  padding: 0 0.68rem;
+  font-size: 0.78rem;
+  font-weight: 500;
+  text-decoration: none;
+}
+
+.file-widget__fallback-actions button:hover,
+.file-widget__fallback-actions button:focus-visible,
+.file-widget__fallback-actions a:hover,
+.file-widget__fallback-actions a:focus-visible {
+  border-color: var(--widget-border-strong);
+  background: rgba(255, 255, 255, 0.09);
+  outline: none;
 }
 
 .file-widget--skeleton {

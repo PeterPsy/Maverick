@@ -27,13 +27,25 @@ describe('storage file preview widget styles', () => {
     expect(source).toContain('const WIDGET_MAX_HEIGHT_PX = 520;');
   });
 
-  it('keeps iframe scrolling hidden and exposes a transient document scrollbar', () => {
+  it('keeps widget scrolling hidden and exposes a transient document scrollbar', () => {
     const styles = readStyle('styles.css');
 
     expect(styles).toMatch(/html,[\s\S]*body,[\s\S]*#storage-file-preview-root\s*{[\s\S]*overflow:\s*hidden;/);
     expect(styles).toContain('scrollbar-width: none;');
     expect(styles).toContain('.file-widget__document.is-scrolling');
     expect(styles).toContain('.file-widget__document.is-scrolling::-webkit-scrollbar-thumb');
+  });
+
+  it('renders PDF previews with PDF.js canvas instead of a nested browser iframe', () => {
+    const source = readStyle('main.tsx');
+    const styles = readStyle('styles.css');
+
+    expect(source).toContain("import * as pdfjs from 'pdfjs-dist';");
+    expect(source).toContain('pdfjs.getDocument({ url: previewUrl })');
+    expect(source).toContain('<canvas ref={canvasRef} />');
+    expect(source).not.toContain('<iframe');
+    expect(styles).toContain('.file-widget__pdf-page canvas');
+    expect(styles).not.toContain('.file-widget__document iframe');
   });
 
   it('keeps open-in-storage on the title and groups header action buttons', () => {

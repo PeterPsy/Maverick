@@ -39,6 +39,17 @@
         "reference",
         "view"
       ]
+    },
+    {
+      "interface": "document.edit-pdf",
+      "version": "1",
+      "description": "Workspace PDF text patching with generated Storage output and verification metadata.",
+      "surfaces": [
+        "cli",
+        "mcp",
+        "reference",
+        "view"
+      ]
     }
   ],
   "requires": [],
@@ -73,6 +84,8 @@
       "maverick_document_generator",
       "document_generator_convert_to_markdown",
       "document_generator_extract_text",
+      "document_generator_patch_pdf_text",
+      "document_generator_modify_uploaded_document",
       "document_generator_view_filter",
       "document_generator_set_view_filter",
       "document_generator_set_custom_view",

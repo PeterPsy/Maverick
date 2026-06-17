@@ -119,6 +119,8 @@ class DocumentGeneratorAppTestCase(unittest.TestCase):
         self.assertIn("maverick_document_generator", parsed.contract.capabilities.mcp_tools)
         self.assertIn("document_generator_convert_to_markdown", parsed.contract.capabilities.mcp_tools)
         self.assertIn("document_generator_extract_text", parsed.contract.capabilities.mcp_tools)
+        self.assertIn("document_generator_patch_pdf_text", parsed.contract.capabilities.mcp_tools)
+        self.assertIn("document_generator_modify_uploaded_document", parsed.contract.capabilities.mcp_tools)
         self.assertIn("document_generator_set_view_filter", parsed.contract.capabilities.mcp_tools)
         self.assertIn("document-generator-docs", parsed.contract.capabilities.skills)
         self.assertEqual(parsed.contract.capabilities.view_surfaces[0].view_id, "document-generator")
@@ -127,17 +129,23 @@ class DocumentGeneratorAppTestCase(unittest.TestCase):
         self.assertTrue((APP_ROOT / "mcp" / "tool_schemas.json").is_file())
         self.assertTrue((APP_ROOT / "frontend" / "dist" / "index.html").is_file())
 
-    def test_descriptor_sidecars_describe_markdown_conversion(self) -> None:
+    def test_descriptor_sidecars_describe_markdown_conversion_and_pdf_edits(self) -> None:
         cli_schema = json.loads((APP_ROOT / "cli" / "command_schemas.json").read_text(encoding="utf-8"))
         mcp_schema = json.loads((APP_ROOT / "mcp" / "tool_schemas.json").read_text(encoding="utf-8"))
 
         command_properties = cli_schema["commands"]["document-generator"]["argument_schema"]["properties"]
         tool = mcp_schema["tools"]["document_generator_convert_to_markdown"]
+        patch_tool = mcp_schema["tools"]["document_generator_patch_pdf_text"]
+        workflow_tool = mcp_schema["tools"]["document_generator_modify_uploaded_document"]
         tool_input_properties = tool["input_schema"]["properties"]
         tool_output_properties = tool["output_schema"]["properties"]
 
         self.assertIn("convert_to_markdown", command_properties["action"]["enum"])
+        self.assertIn("patch_pdf_text", command_properties["action"]["enum"])
+        self.assertIn("modify_uploaded_document", command_properties["action"]["enum"])
         self.assertIn("workspace_relative_path", command_properties)
+        self.assertIn("patches", command_properties)
+        self.assertIn("replacement_text", command_properties)
         self.assertIn("return_markdown", command_properties)
         self.assertIn("max_return_chars", command_properties)
         self.assertIn("Docling", tool["description"])
@@ -148,6 +156,9 @@ class DocumentGeneratorAppTestCase(unittest.TestCase):
         self.assertIn("markdown_path", tool_output_properties)
         self.assertIn("manifest_path", tool_output_properties)
         self.assertIn("markdown_truncated", tool_output_properties)
+        self.assertEqual(patch_tool["input_schema"]["required"], ["workspace_relative_path", "patches"])
+        self.assertIn("visual_diff_artifact", patch_tool["output_schema"]["properties"])
+        self.assertEqual(workflow_tool["input_schema"]["required"], ["workspace_relative_path", "replacement_text"])
 
     def test_dedicated_mcp_tool_action_cannot_be_overridden_by_arguments(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
@@ -228,6 +239,93 @@ class DocumentGeneratorAppTestCase(unittest.TestCase):
             self.assertIn("Charlie pdf text", combined_text)
             self.assertIn("Delta", combined_text)
             self.assertIn("xlsx text", combined_text)
+            self.assertTrue(all(item["extraction"]["engine"] for item in extracted))
+
+    def test_modify_uploaded_document_confirmation_does_not_emit_data_changed_event(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            data_root = root / "data" / "document-generator"
+            generated_root = root / "storage" / "generated"
+            generated = self.run_backend(
+                data_root=data_root,
+                generated_root=generated_root,
+                body={
+                    "action": "generate_document",
+                    "spec": {
+                        "format": "pdf",
+                        "title": "Two Dates",
+                        "sections": [{"text": "First 18/09/2025. Second 17/06/2026."}],
+                    },
+                },
+            )["json"]["document"]
+
+            result = self.run_backend(
+                data_root=data_root,
+                generated_root=generated_root,
+                body={
+                    "action": "modify_uploaded_document",
+                    "workspace_relative_path": generated["workspace_relative_path"],
+                    "replacement_text": "18/06/2026",
+                },
+            )
+
+            self.assertEqual(result["status_code"], 200)
+            self.assertEqual(result["json"]["status"], "needs_confirmation")
+            self.assertEqual(result["app_events"], [])
+
+    def test_backend_patches_pdf_text_when_pymupdf_is_available(self) -> None:
+        try:
+            import fitz  # type: ignore[import-not-found]
+        except ModuleNotFoundError:
+            self.skipTest("PyMuPDF is not installed in this test environment.")
+
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            data_root = root / "data" / "document-generator"
+            uploaded_root = root / "storage" / "uploaded"
+            generated_root = root / "storage" / "generated"
+            source = uploaded_root / "sample.pdf"
+            source.parent.mkdir(parents=True, exist_ok=True)
+            generated_root.mkdir(parents=True, exist_ok=True)
+            with fitz.open() as document:
+                page = document.new_page()
+                page.insert_text((72, 72), "Empoli, 18/09/2025", fontsize=12)
+                document.save(source)
+
+            result = self.run_backend(
+                data_root=data_root,
+                uploaded_root=uploaded_root,
+                generated_root=generated_root,
+                body={
+                    "action": "patch_pdf_text",
+                    "workspace_relative_path": "storage/uploaded/sample.pdf",
+                    "patches": [
+                        {
+                            "match_text": "18/09/2025",
+                            "replacement_text": "17/06/2026",
+                            "occurrence": 1,
+                            "redact_original": True,
+                        }
+                    ],
+                    "output_filename": "sample-updated.pdf",
+                },
+            )
+
+            output_path = root / result["json"]["workspace_relative_path"]
+            extracted = self.run_backend(
+                data_root=data_root,
+                uploaded_root=uploaded_root,
+                generated_root=generated_root,
+                body={"action": "extract_text", "workspace_relative_path": result["json"]["workspace_relative_path"]},
+            )
+
+            self.assertEqual(result["status_code"], 200)
+            self.assertTrue(output_path.is_file())
+            self.assertEqual(result["json"]["patches"][0]["old_match_count"], 1)
+            self.assertEqual(result["json"]["patches"][0]["remaining_old_match_count"], 0)
+            self.assertGreaterEqual(result["json"]["patches"][0]["new_match_count"], 1)
+            self.assertIn("17/06/2026", extracted["json"]["text"])
+            self.assertTrue((root / result["json"]["visual_diff_artifact"]).is_file())
 
     def test_markdown_converter_writes_docling_markdown_artifact(self) -> None:
         backend_path = str(APP_ROOT / "backend")

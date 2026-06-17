@@ -1,7 +1,7 @@
 {
   "tools": {
     "maverick_document_generator": {
-      "description": "Generic Document Generator operations tool. Use dedicated tools for document text extraction, Markdown conversion, references, and view-state actions when available.",
+      "description": "Generic Document Generator operations tool. Use dedicated tools for PDF text patching, document text extraction, Markdown conversion, references, and view-state actions when available.",
       "input_schema": {
         "type": "object",
         "properties": {
@@ -12,6 +12,8 @@
               "generate_document",
               "validate_spec",
               "extract_text",
+              "patch_pdf_text",
+              "modify_uploaded_document",
               "convert_to_markdown",
               "list_templates",
               "list_outputs",
@@ -32,7 +34,18 @@
           },
           "workspace_relative_path": {
             "type": "string",
-            "description": "Input file under storage/uploaded/ or storage/generated/ for extract_text or convert_to_markdown."
+            "description": "Input file under storage/uploaded/ or storage/generated/ for extract_text, PDF editing, or convert_to_markdown."
+          },
+          "patches": {
+            "type": "array",
+            "description": "PDF text patches for patch_pdf_text.",
+            "items": {"type": "object"}
+          },
+          "match_text": {
+            "type": "string"
+          },
+          "replacement_text": {
+            "type": "string"
           },
           "return_markdown": {
             "type": "boolean",
@@ -138,6 +151,96 @@
           "text": {"type": "string"},
           "text_length": {"type": "integer"},
           "truncated": {"type": "boolean"}
+        }
+      }
+    },
+    "document_generator_patch_pdf_text": {
+      "description": "Replace matched text in one workspace PDF, save a generated PDF under storage/generated/document-generator/pdf-edits/, and return verification counts plus a visual crop artifact when available.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "workspace_relative_path": {
+            "type": "string",
+            "description": "Required source PDF under storage/uploaded/ or storage/generated/."
+          },
+          "patches": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 20,
+            "items": {
+              "type": "object",
+              "properties": {
+                "match_text": {"type": "string"},
+                "replacement_text": {"type": "string"},
+                "occurrence": {
+                  "oneOf": [
+                    {"type": "integer", "minimum": 1},
+                    {"type": "string", "enum": ["all"]}
+                  ],
+                  "default": 1
+                },
+                "redact_original": {"type": "boolean", "default": true},
+                "case_sensitive": {"type": "boolean", "default": true},
+                "page_number": {"type": "integer", "minimum": 1}
+              },
+              "required": ["match_text", "replacement_text"],
+              "additionalProperties": false
+            }
+          },
+          "output_filename": {
+            "type": "string",
+            "description": "Optional plain PDF filename for the generated output."
+          },
+          "title": {
+            "type": "string"
+          }
+        },
+        "required": ["workspace_relative_path", "patches"],
+        "additionalProperties": false
+      },
+      "output_schema": {
+        "type": "object",
+        "properties": {
+          "status_code": {"type": "integer"},
+          "status": {"type": "string"},
+          "document": {"type": "object"},
+          "workspace_relative_path": {"type": "string"},
+          "sha256": {"type": "string"},
+          "patches": {"type": "array"},
+          "old_match_count": {"type": "integer"},
+          "new_match_count": {"type": "integer"},
+          "visual_diff_artifact": {"type": "string"},
+          "app_events": {"type": "array"}
+        }
+      }
+    },
+    "document_generator_modify_uploaded_document": {
+      "description": "Task-level helper for common uploaded PDF edits. If match_text is omitted, it extracts date candidates and patches automatically only when exactly one candidate is found.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "workspace_relative_path": {"type": "string"},
+          "match_text": {"type": "string"},
+          "confirmed_match_text": {"type": "string"},
+          "replacement_text": {"type": "string"},
+          "occurrence": {"type": "integer", "minimum": 1, "default": 1},
+          "redact_original": {"type": "boolean", "default": true},
+          "output_filename": {"type": "string"},
+          "title": {"type": "string"}
+        },
+        "required": ["workspace_relative_path", "replacement_text"],
+        "additionalProperties": false
+      },
+      "output_schema": {
+        "type": "object",
+        "properties": {
+          "status_code": {"type": "integer"},
+          "status": {"type": "string"},
+          "candidates": {"type": "array"},
+          "document": {"type": "object"},
+          "workspace_relative_path": {"type": "string"},
+          "patches": {"type": "array"},
+          "visual_diff_artifact": {"type": "string"}
         }
       }
     }

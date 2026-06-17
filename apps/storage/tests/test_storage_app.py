@@ -141,6 +141,20 @@ class StorageAppTestCase(unittest.TestCase):
             cwd=STORAGE_ROOT,
         )
 
+    def run_cli(self, *, data_root: Path, uploaded_root: Path, generated_root: Path, arguments: dict) -> dict:
+        return run_json_entrypoint(
+            STORAGE_ROOT / "cli" / "app_cli.py",
+            payload={
+                "workspace_id": "default",
+                "data_root": str(data_root),
+                "uploaded_storage_root": str(uploaded_root),
+                "generated_storage_root": str(generated_root),
+                "arguments": arguments,
+                "surface": "cli",
+            },
+            cwd=STORAGE_ROOT,
+        )
+
     def test_contract_declares_storage_surfaces(self) -> None:
         parsed = parse_app_contract_file(STORAGE_ROOT)
 
@@ -1416,6 +1430,52 @@ class StorageAppTestCase(unittest.TestCase):
             self.assertEqual((generated_root / "large.txt").read_bytes(), first + second)
             self.assertEqual(catalog["json"]["files"][0]["file_id"], completed["json"]["file"]["file_id"])
 
+    def test_cli_upload_local_file_writes_binary_without_inline_payload(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            generated_root = root / "storage" / "generated"
+            uploaded_root = root / "storage" / "uploaded"
+            generated_root.mkdir(parents=True)
+            uploaded_root.mkdir(parents=True)
+            data_root = root / "data" / "storage"
+            source = root / "tmp" / "output.pdf"
+            source.parent.mkdir(parents=True)
+            payload = b"%PDF-1.4\n% local upload\n"
+            source.write_bytes(payload)
+
+            result = self.run_cli(
+                data_root=data_root,
+                uploaded_root=uploaded_root,
+                generated_root=generated_root,
+                arguments={
+                    "action": "upload_local_file",
+                    "source_path": str(source),
+                    "workspace_relative_path": "storage/generated/pdf-edits/output.pdf",
+                    "content_type": "application/pdf",
+                    "mode": "create",
+                },
+            )
+            duplicate = self.run_cli(
+                data_root=data_root,
+                uploaded_root=uploaded_root,
+                generated_root=generated_root,
+                arguments={
+                    "action": "upload_local_file",
+                    "source_path": str(source),
+                    "workspace_relative_path": "storage/generated/pdf-edits/output.pdf",
+                    "content_type": "application/pdf",
+                    "mode": "create",
+                },
+            )
+
+            self.assertEqual(result["status_code"], 200)
+            self.assertEqual(result["status"], "uploaded")
+            self.assertEqual(result["bytes_uploaded"], len(payload))
+            self.assertEqual(result["file"]["workspace_relative_path"], "storage/generated/pdf-edits/output.pdf")
+            self.assertEqual((generated_root / "pdf-edits" / "output.pdf").read_bytes(), payload)
+            self.assertEqual(result["app_events"], [{"type": "maverick.app.data-changed", "resource": "files"}])
+            self.assertEqual(duplicate["status_code"], 400)
+
     def test_backend_local_upload_session_reserves_storage_quota(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp)
@@ -1878,6 +1938,7 @@ class StorageAppTestCase(unittest.TestCase):
             {"action": "file_info", "role": "generated", "relative_path": "report.md"},
             {"action": "read_file", "role": "uploaded", "relative_path": "source.txt"},
             {"action": "read_text", "role": "generated", "relative_path": "report.md"},
+            {"action": "upload_local_file", "source_path": "/tmp/output.pdf", "workspace_relative_path": "storage/generated/pdf-edits/output.pdf", "mode": "create"},
             {"action": "preview_table", "workspace_relative_path": "storage/generated/leads.csv"},
             {"action": "read_folder", "role": "generated"},
             {"action": "download_folder", "role": "uploaded"},
@@ -1895,6 +1956,7 @@ class StorageAppTestCase(unittest.TestCase):
             {"action": "read_file", "role": "all", "relative_path": "report.md"},
             {"action": "read_text", "role": "all", "relative_path": "report.md"},
             {"action": "preview_text", "role": "all", "relative_path": "report.md"},
+            {"action": "upload_local_file", "workspace_relative_path": "storage/generated/output.pdf"},
             {"action": "create_folder", "role": "all", "folder_name": "Reports"},
             {"action": "move_items", "role": "all", "target_folder_relative_path": "", "files": []},
             {"action": "move_items", "role": "generated", "files": []},

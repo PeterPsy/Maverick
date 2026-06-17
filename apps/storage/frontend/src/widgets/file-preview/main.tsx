@@ -1,5 +1,7 @@
 import { useEffect, useRef, useState, type RefObject } from 'react';
 import { createRoot } from 'react-dom/client';
+import * as pdfjs from 'pdfjs-dist';
+import pdfWorkerUrl from 'pdfjs-dist/build/pdf.worker.min.mjs?url';
 import { callBackend, decodeBase64, driveMediaStreamUrl, previewDriveFile, readFile } from '../../storageApi';
 import { iconForKind, kindLabels } from '../../storageMeta';
 import { Icon } from '../../Icon';
@@ -8,6 +10,8 @@ import { canRequestFullscreen, elementIsFullscreen, exitDocumentFullscreen, requ
 import { VideoPreview } from '../../videoPreview';
 import type { StorageFile } from '../../types';
 import './styles.css';
+
+pdfjs.GlobalWorkerOptions.workerSrc = pdfWorkerUrl;
 
 type WidgetContext = {
   content?: {
@@ -99,21 +103,86 @@ function postWidgetResize(element: HTMLElement, scrollElement?: HTMLElement | nu
   );
 }
 
-function Preview({ file, previewUrl, previewText }: { file: StorageFile; previewUrl: string; previewText: string }) {
-  if (file.preview_kind === 'image' && previewUrl) return <img src={previewUrl} alt={file.name} />;
-  if (file.preview_kind === 'video' && previewUrl) return <VideoPreview file={file} src={previewUrl} />;
-  if (file.preview_kind === 'audio' && previewUrl) return <audio src={previewUrl} controls />;
-  if (file.preview_kind === 'pdf' && previewUrl) return <iframe src={previewUrl} title={file.name} />;
-  if (file.preview_kind === 'markdown') return <MarkdownPreview text={previewText} compact />;
-  if (file.preview_kind === 'text') return <pre>{previewText}</pre>;
-  if (['document', 'presentation', 'spreadsheet'].includes(file.preview_kind) && previewText) return <pre>{previewText}</pre>;
+function PdfCanvasPreview({ file, previewUrl }: { file: StorageFile; previewUrl: string }) {
+  const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const [error, setError] = useState('');
+
+  useEffect(() => {
+    if (!previewUrl) return undefined;
+    let active = true;
+    setError('');
+    const loadingTask = pdfjs.getDocument({ url: previewUrl });
+    loadingTask.promise
+      .then(async (document) => {
+        const page = await document.getPage(1);
+        if (!active) return;
+        const baseViewport = page.getViewport({ scale: 1 });
+        const cssWidth = Math.min(900, Math.max(280, baseViewport.width));
+        const scale = cssWidth / baseViewport.width;
+        const viewport = page.getViewport({ scale });
+        const canvas = canvasRef.current;
+        const context = canvas?.getContext('2d');
+        if (!canvas || !context) throw new Error('PDF canvas is unavailable.');
+        const outputScale = Math.min(window.devicePixelRatio || 1, 2);
+        canvas.width = Math.floor(viewport.width * outputScale);
+        canvas.height = Math.floor(viewport.height * outputScale);
+        canvas.style.width = `${Math.floor(viewport.width)}px`;
+        canvas.style.height = `${Math.floor(viewport.height)}px`;
+        await page.render({
+          canvas,
+          canvasContext: context,
+          viewport,
+          transform: outputScale === 1 ? undefined : [outputScale, 0, 0, outputScale, 0, 0]
+        }).promise;
+      })
+      .catch((renderError: Error) => {
+        if (active) setError(renderError.message || 'PDF preview failed.');
+      });
+    return () => {
+      active = false;
+      void loadingTask.destroy();
+    };
+  }, [previewUrl]);
+
+  if (error) return <FileFallback file={file} previewUrl={previewUrl} reason={error} />;
+  return (
+    <div className="file-widget__pdf-page" aria-label={`PDF preview for ${file.name}`}>
+      <canvas ref={canvasRef} />
+    </div>
+  );
+}
+
+function FileFallback({ file, previewUrl, reason }: { file: StorageFile; previewUrl: string; reason?: string }) {
   return (
     <div className="file-widget__fallback">
       <Icon name={iconForKind(file.preview_kind)} />
       <strong>{kindLabels[file.preview_kind]}</strong>
-      <p>Open in Storage or download from the app to inspect this file.</p>
+      <p>{reason || 'Open in Storage or download this file to inspect it.'}</p>
+      <div className="file-widget__fallback-actions">
+        <button type="button" onClick={() => openStorage(file)}>
+          <Icon name="open_in_new" />
+          <span>Open in Storage</span>
+        </button>
+        {previewUrl ? (
+          <a href={previewUrl} download={file.name}>
+            <Icon name="download" />
+            <span>Download</span>
+          </a>
+        ) : null}
+      </div>
     </div>
   );
+}
+
+function Preview({ file, previewUrl, previewText }: { file: StorageFile; previewUrl: string; previewText: string }) {
+  if (file.preview_kind === 'image' && previewUrl) return <img src={previewUrl} alt={file.name} />;
+  if (file.preview_kind === 'video' && previewUrl) return <VideoPreview file={file} src={previewUrl} />;
+  if (file.preview_kind === 'audio' && previewUrl) return <audio src={previewUrl} controls />;
+  if (file.preview_kind === 'pdf' && previewUrl) return <PdfCanvasPreview file={file} previewUrl={previewUrl} />;
+  if (file.preview_kind === 'markdown') return <MarkdownPreview text={previewText} compact />;
+  if (file.preview_kind === 'text') return <pre>{previewText}</pre>;
+  if (['document', 'presentation', 'spreadsheet'].includes(file.preview_kind) && previewText) return <pre>{previewText}</pre>;
+  return <FileFallback file={file} previewUrl={previewUrl} />;
 }
 
 function FileWidgetSkeleton({ rootRef }: { rootRef: RefObject<HTMLElement | null> }) {
@@ -321,6 +390,17 @@ function StorageFilePreviewWidget() {
           >
             <Icon name="open_in_new" />
           </button>
+          {previewUrl ? (
+            <a
+              className="file-widget__action"
+              href={previewUrl}
+              download={file.name}
+              aria-label={`Download ${file.name}`}
+              title="Download"
+            >
+              <Icon name="download" />
+            </a>
+          ) : null}
         </div>
       </header>
       <section

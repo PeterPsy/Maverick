@@ -1,4 +1,4 @@
-"""PDF text extraction helpers for simple generated PDFs."""
+"""PDF text extraction helpers for generated and uploaded PDFs."""
 
 from __future__ import annotations
 
@@ -9,10 +9,63 @@ import zlib
 from errors import DocumentValidationError
 
 
-MAX_PDF_STREAM_BYTES = 4 * 1024 * 1024
+MAX_PDF_BYTES = 25 * 1024 * 1024
+MAX_PDF_STREAM_BYTES = 8 * 1024 * 1024
 
 
 def extract_pdf_text(path: Path) -> str:
+    """Extract plain text from a PDF."""
+    return str(extract_pdf_text_details(path)["text"])
+
+
+def extract_pdf_text_details(path: Path) -> dict[str, object]:
+    """Return PDF text plus extraction metadata for agent verification."""
+    if path.stat().st_size > MAX_PDF_BYTES:
+        raise DocumentValidationError("PDF is too large for text extraction.")
+    try:
+        return _extract_pdf_text_with_pymupdf(path)
+    except ModuleNotFoundError:
+        pass
+    except Exception:
+        # Keep the official extractor useful when one engine cannot parse a PDF.
+        pass
+    text = _extract_pdf_text_custom(path)
+    return {
+        "text": text,
+        "engine": "custom-pdf-parser",
+        "layers": {
+            "pdf_text": bool(text.strip()),
+            "overlay_text": "unknown",
+            "ocr": False,
+        },
+    }
+
+
+def _extract_pdf_text_with_pymupdf(path: Path) -> dict[str, object]:
+    fitz = _load_pymupdf()
+    chunks: list[str] = []
+    with fitz.open(path) as document:
+        for page in document:
+            chunks.append(page.get_text("text"))
+    text = "\n".join(chunk.strip() for chunk in chunks if chunk.strip())
+    return {
+        "text": text,
+        "engine": "pymupdf",
+        "layers": {
+            "pdf_text": bool(text.strip()),
+            "overlay_text": "included",
+            "ocr": False,
+        },
+    }
+
+
+def _load_pymupdf():
+    import fitz  # type: ignore[import-not-found]
+
+    return fitz
+
+
+def _extract_pdf_text_custom(path: Path) -> str:
     data = path.read_bytes()
     objects = _pdf_objects(data)
     cmaps = {

@@ -24,6 +24,7 @@ classifiers = [
 [project.optional-dependencies]
 document-generator = [
     "docling>=2.93,<3",
+    "PyMuPDF>=1.24,<2",
 ]
 speech = [
     "faster-whisper>=1.1,<2",

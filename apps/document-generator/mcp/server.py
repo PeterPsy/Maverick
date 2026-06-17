@@ -9,7 +9,7 @@ import sys
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "backend"))
 
 from errors import DocumentValidationError
-from service import app_events_for_action, handle_action
+from service import app_events_for_result, handle_action
 
 
 payload = json.loads(sys.stdin.read() or "{}")
@@ -17,6 +17,8 @@ arguments = payload.get("arguments") if isinstance(payload.get("arguments"), dic
 tool_actions = {
     "document_generator_convert_to_markdown": "convert_to_markdown",
     "document_generator_extract_text": "extract_text",
+    "document_generator_patch_pdf_text": "patch_pdf_text",
+    "document_generator_modify_uploaded_document": "modify_uploaded_document",
     "document_generator_reference_manifest": "references.manifest",
     "document_generator_reference_search": "references.search",
     "document_generator_reference_resolve": "references.resolve",
@@ -47,5 +49,5 @@ except DocumentValidationError as error:
 
 response = {"status_code": status_code, **result}
 if status_code < 400:
-    response["app_events"] = app_events_for_action(str(body.get("action") or "generate_document"))
+    response["app_events"] = app_events_for_result(str(body.get("action") or "generate_document"), result)
 print(json.dumps(response, ensure_ascii=False))

@@ -14,6 +14,7 @@ from generators.pptx_generator import generate_pptx
 from generators.xlsx_generator import generate_xlsx
 from markdown_converter import convert_workspace_file_to_markdown
 from models import normalize_spec
+from pdf_editor import modify_uploaded_document, patch_pdf_text
 from store import (
     list_jobs,
     list_templates,
@@ -47,11 +48,17 @@ REFERENCE_MANIFEST = {
 
 
 def app_events_for_action(action: str) -> list[dict]:
-    if action in {"generate_document", "convert_to_markdown"}:
+    if action in {"generate_document", "convert_to_markdown", "patch_pdf_text", "modify_uploaded_document"}:
         return [{"type": "maverick.app.data-changed", "resource": "documents"}]
     if action in {"set_view_filter", "set_custom_view", "clear_custom_view"}:
         return [{"type": "maverick.app.data-changed", "resource": "view-state"}]
     return []
+
+
+def app_events_for_result(action: str, result: dict[str, Any]) -> list[dict]:
+    if action in {"patch_pdf_text", "modify_uploaded_document"} and result.get("status") != "patched":
+        return []
+    return app_events_for_action(action)
 
 
 def _workspace_relative(path: Path, generated_root: Path) -> str:
@@ -134,6 +141,10 @@ def handle_action(
         return 200, validate_spec(body.get("spec"))
     if action == "extract_text":
         return 200, extract_text_from_workspace_file(uploaded_root, generated_root, body)
+    if action == "patch_pdf_text":
+        return 200, patch_pdf_text(data_root, uploaded_root, generated_root, body, local_app_id=local_app_id)
+    if action == "modify_uploaded_document":
+        return 200, modify_uploaded_document(data_root, uploaded_root, generated_root, body, local_app_id=local_app_id)
     if action == "convert_to_markdown":
         return 200, convert_workspace_file_to_markdown(data_root, uploaded_root, generated_root, body, local_app_id=local_app_id)
     if action == "list_templates":

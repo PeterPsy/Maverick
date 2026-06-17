@@ -12,6 +12,8 @@ import unittest
 from unittest.mock import patch
 
 from core.app_sdk.cli import _bootstrap_options_for_cli, _bootstrap_state_for_cli, main
+from core.app_sdk.cli_descriptors import _app_scoped_id
+from core.app_sdk.cli_surface_runners import _reject_app_cli_command_in_core_scope
 
 
 NO_RUNTIME_ENV = {
@@ -202,6 +204,18 @@ class CliBootstrapTests(unittest.TestCase):
 
         self.assertEqual(exit_code, 1)
         self.assertIn('"status_code": 400', output.getvalue())
+
+    def test_core_cli_app_command_error_suggests_app_wrapper(self) -> None:
+        with self.assertRaises(SystemExit) as captured:
+            _reject_app_cli_command_in_core_scope("app.document-generator.document-generator")
+
+        self.assertIn("maverick app document-generator cli run document-generator --json", str(captured.exception))
+
+    def test_app_cli_accepts_full_command_id_alias(self) -> None:
+        self.assertEqual(
+            _app_scoped_id("app.document-generator.", "app.document-generator.document-generator"),
+            "app.document-generator.document-generator",
+        )
 
 
 if __name__ == "__main__":

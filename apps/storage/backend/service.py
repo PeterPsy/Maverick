@@ -114,6 +114,7 @@ DATA_CHANGED_RESOURCES = {
     "move_items": "files",
     "update_markdown_file": "files",
     "upload_file": "files",
+    "upload_local_file": "files",
     "local_upload_session.chunk": "files",
     "write_file": "files",
     "file.content.write": "files",

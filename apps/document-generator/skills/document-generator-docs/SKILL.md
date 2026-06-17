@@ -1,15 +1,15 @@
 ---
 name: document-generator-docs
-description: "Use the Document Generator app CLI or MCP tool to create DOCX, PPTX, PDF, and XLSX files in workspace generated storage, extract text from workspace documents, or convert workspace documents to Markdown."
+description: "Use the Document Generator app CLI or MCP tool to create DOCX, PPTX, PDF, and XLSX files in workspace generated storage, edit PDF text, extract text from workspace documents, or convert workspace documents to Markdown."
 ---
 
 # Document Generator Docs
 
-Use this skill when a user asks an agent to create a document file, read text from a workspace document, or convert a workspace document into Markdown.
+Use this skill when a user asks an agent to create a document file, modify text in a workspace PDF, read text from a workspace document, or convert a workspace document into Markdown.
 
 ## App Scripts
 
-The app exposes one official CLI command plus MCP tools for generation, extraction, Markdown conversion, references, and view state. Use those surfaces for real work.
+The app exposes one official CLI command plus MCP tools for generation, PDF text patching, extraction, Markdown conversion, references, and view state. Use those surfaces for real work.
 
 Implementation scripts behind those surfaces:
 
@@ -17,6 +17,7 @@ Implementation scripts behind those surfaces:
 - MCP entrypoint: `<repo>/apps/document-generator/mcp/server.py`
 - shared service: `<repo>/apps/document-generator/backend/service.py`
 - text extractor: `<repo>/apps/document-generator/backend/extractors.py`
+- PDF text editor: `<repo>/apps/document-generator/backend/pdf_editor.py`
 - Markdown converter: `<repo>/apps/document-generator/backend/markdown_converter.py`
 - DOCX writer: `<repo>/apps/document-generator/backend/generators/docx_generator.py`
 - PPTX writer: `<repo>/apps/document-generator/backend/generators/pptx_generator.py`
@@ -51,6 +52,8 @@ Markdown conversion supports:
 - `xlsx`
 
 Markdown conversion uses Docling. If `convert_to_markdown` reports that Docling is unavailable, the platform environment needs the `document-generator` Python extra installed.
+
+PDF text patching uses PyMuPDF through the `document-generator` Python extra. Do not create a temporary virtualenv or hand-roll PDF coordinates for ordinary text replacement; use the official `patch_pdf_text` or `modify_uploaded_document` action first.
 
 Markdown conversion runs synchronously through the app entrypoint and accepts source files up to 10 MiB. For larger or scanned-heavy PDFs, ask the user to split or reduce the source before conversion.
 
@@ -154,6 +157,37 @@ Generate:
 }
 ```
 
+Patch an existing workspace PDF when the user asks to replace a visible field such as a date:
+
+```json
+{
+  "action": "patch_pdf_text",
+  "workspace_relative_path": "storage/uploaded/file-id/contract.pdf",
+  "patches": [
+    {
+      "match_text": "18/09/2025",
+      "replacement_text": "17/06/2026",
+      "occurrence": 1,
+      "redact_original": true
+    }
+  ],
+  "output_filename": "contract-2026-06-17.pdf"
+}
+```
+
+For simple requests like "change the date in this uploaded PDF", use the task-level workflow:
+
+```json
+{
+  "action": "modify_uploaded_document",
+  "workspace_relative_path": "storage/uploaded/file-id/contract.pdf",
+  "replacement_text": "17/06/2026",
+  "output_filename": "contract-2026-06-17.pdf"
+}
+```
+
+If the workflow returns `status: "needs_confirmation"`, ask one concise question using the returned date candidates, then call it again with `match_text` or `confirmed_match_text`.
+
 ### XLSX
 
 Use XLSX for spreadsheets, structured data, tables, trackers, exports, financial models, and simple datasets.
@@ -197,6 +231,33 @@ Extraction inputs should identify a workspace file under `storage/uploaded/` or 
   "action": "extract_text",
   "workspace_relative_path": "storage/uploaded/file-id/example.pdf",
   "max_chars": 50000
+}
+```
+
+For PDF text patching, prefer:
+
+- CLI command `app.document-generator.document-generator` with action `patch_pdf_text`
+- MCP tool `app.document-generator.document_generator_patch_pdf_text`
+- MCP tool `app.document-generator.document_generator_modify_uploaded_document` for simple uploaded-document date replacements
+
+Expected PDF patch shape:
+
+```json
+{
+  "status_code": 200,
+  "status": "patched",
+  "document": {
+    "format": "pdf",
+    "workspace_relative_path": "storage/generated/document-generator/pdf-edits/job-id/contract-2026-06-17.pdf"
+  },
+  "patches": [
+    {
+      "old_match_count": 1,
+      "remaining_old_match_count": 0,
+      "new_match_count": 1
+    }
+  ],
+  "visual_diff_artifact": "storage/generated/document-generator/pdf-edits/job-id/contract-2026-06-17-verification.png"
 }
 ```
 
@@ -244,7 +305,15 @@ Expected extraction shape:
   },
   "text": "Extracted document text...",
   "text_length": 1234,
-  "truncated": false
+  "truncated": false,
+  "extraction": {
+    "engine": "pymupdf",
+    "layers": {
+      "pdf_text": true,
+      "overlay_text": "included",
+      "ocr": false
+    }
+  }
 }
 ```
 
@@ -263,6 +332,8 @@ After generation:
 2. Read `document.workspace_relative_path`.
 3. Confirm the file exists under `storage/generated/`.
 4. Return the workspace-relative path to the user.
+
+After PDF patching, also check `patches[].remaining_old_match_count`, `patches[].new_match_count`, and `visual_diff_artifact` when present. Prefer returning the generated PDF Storage path plus the verification result, not raw local filesystem paths.
 
 Expected success shape:
 

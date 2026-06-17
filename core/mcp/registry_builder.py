@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import Any
 
 from core.apps.store import AppStore
+from core.identity.store import IdentityStore
 from core.mcp.errors import McpInvocationNotAllowedError
 from core.mcp.app_tools import _workspace_app_tool_definitions
 from core.mcp.core_tools import _core_tool_specs
@@ -24,6 +25,7 @@ from core.workspaces.store import WorkspaceStore
 def build_core_mcp_registry(
     *,
     app_store: AppStore | None = None,
+    identity_store: IdentityStore | None = None,
     workspace_store: WorkspaceStore | None = None,
     provider_store: ProviderStore | None = None,
     runtime_store: RuntimeStore | None = None,
@@ -41,6 +43,7 @@ def build_core_mcp_registry(
     registry = McpToolRegistry()
     for definition, handler in _core_tool_specs(
         app_store=app_store,
+        identity_store=identity_store,
         workspace_store=workspace_store,
         provider_store=provider_store,
         runtime_store=runtime_store,
@@ -71,6 +74,7 @@ def build_core_mcp_registry(
 def build_workspace_mcp_surface(
     *,
     app_store: AppStore | None = None,
+    identity_store: IdentityStore | None = None,
     workspace_store: WorkspaceStore | None = None,
     provider_store: ProviderStore | None = None,
     runtime_store: RuntimeStore | None = None,
@@ -88,6 +92,7 @@ def build_workspace_mcp_surface(
     """Build one MCP host surface for the requested workspace context."""
     registry = build_core_mcp_registry(
         app_store=app_store,
+        identity_store=identity_store,
         workspace_store=workspace_store,
         provider_store=provider_store,
         runtime_store=runtime_store,
@@ -106,6 +111,7 @@ def build_workspace_mcp_surface(
 def list_mcp_tools(
     *,
     app_store: AppStore | None = None,
+    identity_store: IdentityStore | None = None,
     workspace_store: WorkspaceStore | None = None,
     provider_store: ProviderStore | None = None,
     runtime_store: RuntimeStore | None = None,
@@ -122,6 +128,7 @@ def list_mcp_tools(
     """List visible MCP tools for the requested workspace context."""
     return build_core_mcp_registry(
         app_store=app_store,
+        identity_store=identity_store,
         workspace_store=workspace_store,
         provider_store=provider_store,
         runtime_store=runtime_store,
@@ -142,6 +149,7 @@ def call_mcp_tool(
     context: McpInvocationContext,
     arguments: dict[str, Any] | None = None,
     app_store: AppStore | None = None,
+    identity_store: IdentityStore | None = None,
     workspace_store: WorkspaceStore | None = None,
     provider_store: ProviderStore | None = None,
     runtime_store: RuntimeStore | None = None,
@@ -157,6 +165,7 @@ def call_mcp_tool(
     """Invoke one visible MCP tool under a trusted invocation context."""
     registry = build_core_mcp_registry(
         app_store=app_store,
+        identity_store=identity_store,
         workspace_store=workspace_store,
         provider_store=provider_store,
         runtime_store=runtime_store,
@@ -176,6 +185,7 @@ def call_mcp_tool(
         if _hidden_app_tool_exists(
             tool_name=tool_name,
             app_store=app_store,
+            identity_store=identity_store,
             workspace_store=workspace_store,
             provider_store=provider_store,
             runtime_store=runtime_store,
@@ -196,6 +206,7 @@ def _hidden_app_tool_exists(
     *,
     tool_name: str,
     app_store: AppStore | None,
+    identity_store: IdentityStore | None,
     workspace_store: WorkspaceStore | None,
     provider_store: ProviderStore | None,
     runtime_store: RuntimeStore | None,
@@ -212,6 +223,7 @@ def _hidden_app_tool_exists(
         return False
     unfiltered = build_core_mcp_registry(
         app_store=app_store,
+        identity_store=identity_store,
         workspace_store=workspace_store,
         provider_store=provider_store,
         runtime_store=runtime_store,

@@ -143,6 +143,13 @@ class RuntimeThreadVisibilityApiTestCase(AppReferenceApiTestSupport, unittest.Te
                 body={"input_text": "direct hidden"},
                 cookie=cookie,
             )
+            raw_cleanup_status, raw_cleanup_payload, _headers = self._invoke(
+                app,
+                path="/api/runtime/sessions/hidden-session/cleanup",
+                method="POST",
+                body={"reason": "direct-hidden-cleanup"},
+                cookie=cookie,
+            )
             turn_get_status, turn_get_payload, _headers = self._invoke(
                 app,
                 path="/api/runtime/turns/hidden-turn",
@@ -173,6 +180,7 @@ class RuntimeThreadVisibilityApiTestCase(AppReferenceApiTestSupport, unittest.Te
             (raw_events_status, raw_events_payload),
             (raw_turns_status, raw_turns_payload),
             (raw_post_turn_status, raw_post_turn_payload),
+            (raw_cleanup_status, raw_cleanup_payload),
             (turn_get_status, turn_get_payload),
             (turn_interrupt_status, turn_interrupt_payload),
         ]:

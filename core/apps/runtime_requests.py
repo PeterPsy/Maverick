@@ -15,6 +15,7 @@ from core.apps.surfaces import resolve_workspace_app_surface
 from core.providers.errors import ProviderError
 from core.providers.service import resolve_provider_for_runtime_session
 from core.runtime.errors import RuntimeSessionNotFoundError
+from core.runtime.runtime_session import runtime_session_allows_user_thread
 from core.runtime.runtime_threads import create_runtime_thread
 from core.runtime.service import create_runtime_session, record_runtime_event, transition_runtime_session, transition_runtime_turn
 from core.runtime.thread_catalog_events import set_thread_availability
@@ -338,6 +339,8 @@ def _runtime_session_for_request(
             raise AppHostingError(f"Runtime session `{existing_session_id}` was not found.") from exc
         if session.workspace_id != workspace_id:
             raise AppHostingError(f"Runtime session `{existing_session_id}` is outside workspace `{workspace_id}`.")
+        if not runtime_session_allows_user_thread(session):
+            raise AppHostingError(f"Runtime session `{existing_session_id}` is hidden and must be operated through inter-agent APIs.")
         if session.source_app_id and session.source_app_id != app_id:
             raise AppHostingError(f"Runtime session `{existing_session_id}` is owned by another source app.")
         return session
@@ -416,6 +419,8 @@ def _apply_one_runtime_interrupt_request(
         raise AppHostingError(f"Runtime turn `{turn_id}` was not found.") from exc
     if turn.workspace_id != workspace_id or session.workspace_id != workspace_id:
         raise AppHostingError(f"Runtime turn `{turn_id}` is outside workspace `{workspace_id}`.")
+    if not runtime_session_allows_user_thread(session):
+        raise AppHostingError(f"Runtime turn `{turn_id}` belongs to a hidden inter-agent session.")
     if session.source_app_id and session.source_app_id != app_id:
         raise AppHostingError(f"Runtime turn `{turn_id}` is owned by another source app.")
     if turn.status not in {"queued", "active"}:

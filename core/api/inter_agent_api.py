@@ -9,7 +9,11 @@ from core.api.platform_state import PlatformState
 from core.api.runtime_cleanup import cleanup_runtime_session
 from core.api.session_api import RequestSession, require_session
 from core.authorization.errors import AuthorizationError
-from core.authorization.service import authorize_runtime_session_create
+from core.inter_agent.authorization import (
+    authorize_inter_agent_participant_spawn,
+    authorize_inter_agent_run_operation,
+    authorize_inter_agent_run_view,
+)
 from core.inter_agent.errors import (
     InterAgentBudgetExceededError,
     InterAgentOperationError,
@@ -24,7 +28,6 @@ from core.inter_agent.surfaces import event_page_payload, inter_agent_payload, r
 from core.providers.errors import ProviderError
 from core.runtime.errors import RuntimeSessionNotFoundError
 from core.runtime.runtime_session import runtime_session_allows_user_thread
-from core.workspaces.errors import WorkspaceMembershipError
 
 
 def handle_inter_agent_api(
@@ -105,7 +108,7 @@ def _handle_inter_agent_route(
         return json_response(start_response, {"error": "inter_agent_route_not_found"}, status="404 Not Found")
     run_id = parts[1]
     run = state.inter_agent_store.get_run(run_id, workspace_id=context.workspace_id)
-    _authorize_run_view(context, run.workspace_id)
+    authorize_inter_agent_run_view(context_workspace_id=context.workspace_id, run_workspace_id=run.workspace_id)
 
     if len(parts) == 2:
         if method == "GET":
@@ -124,9 +127,16 @@ def _handle_inter_agent_route(
             limit=_query_limit(query),
         )
         return json_response(start_response, event_page_payload(page))
-    _authorize_run_mutation(state, context, run.created_by_user_id)
     if action == "participants" and method == "POST":
-        return _spawn_participant(state, context, service, run.run_id, body, start_response)
+        return _spawn_participant(state, context, service, run, body, start_response)
+    authorize_inter_agent_run_operation(
+        workspace_store=state.workspace_store,
+        context_workspace_id=context.workspace_id,
+        caller_kind="http",
+        run=run,
+        user_id=context.user.user_id,
+        platform_role=context.user.platform_role,
+    )
     if action == "messages" and method == "POST":
         return _send_message(state, context, service, run.run_id, body, start_response)
     if action == "wait" and method in {"GET", "POST"}:
@@ -158,6 +168,7 @@ def _handle_inter_agent_route(
                 session_id=session_id,
                 reason=reason,
                 start_path=start_path,
+                allow_hidden_inter_agent_cleanup=True,
             ),
             reason=_text(body.get("reason")) or "inter_agent_run_closed",
             terminal_status=_text(body.get("terminal_status")) or "cancelled",
@@ -174,15 +185,21 @@ def _create_run(
     body: dict,
     start_response: StartResponse,
 ) -> list[bytes]:
-    spec = run_spec_from_payload(body, workspace_id=context.workspace_id, created_by_user_id=context.user.user_id)
+    root_session_id = _text(body.get("root_runtime_session_id"))
     try:
-        root_session = state.runtime_store.get_session(spec.root_runtime_session_id)
+        root_session = state.runtime_store.get_session(root_session_id)
     except (RuntimeSessionNotFoundError, ValueError):
         return json_response(start_response, {"error": "root_runtime_session_not_found"}, status="404 Not Found")
     if root_session.workspace_id != context.workspace_id:
         return json_response(start_response, {"error": "root_runtime_session_not_found"}, status="404 Not Found")
     if not runtime_session_allows_user_thread(root_session):
         return json_response(start_response, {"error": "root_runtime_session_hidden"}, status="409 Conflict")
+    spec = run_spec_from_payload(
+        body,
+        workspace_id=context.workspace_id,
+        created_by_user_id=context.user.user_id,
+        source_app_id=root_session.source_app_id or "chat",
+    )
     run = service.create_run(spec)
     return json_response(start_response, run_detail_payload(state.inter_agent_store, run), status="201 Created")
 
@@ -191,33 +208,31 @@ def _spawn_participant(
     state: PlatformState,
     context: RequestSession,
     service: InterAgentService,
-    run_id: str,
+    run,
     body: dict,
     start_response: StartResponse,
 ) -> list[bytes]:
-    authorize_runtime_session_create(
+    owner_user_id = _text(body.get("owner_user_id")) or None
+    authorize_inter_agent_participant_spawn(
         workspace_store=state.workspace_store,
         runtime_store=state.runtime_store,
         user=context.user,
-        workspace_id=context.workspace_id,
+        context_workspace_id=context.workspace_id,
+        caller_kind="http",
+        run=run,
+        owner_user_id=owner_user_id,
+        user_id=context.user.user_id,
+        platform_role=context.user.platform_role,
     )
-    owner_user_id = _text(body.get("owner_user_id")) or None
-    if owner_user_id and owner_user_id != context.user.user_id and not _is_workspace_admin(state, context):
-        raise AuthorizationError("inter_agent_owner_forbidden")
     participant, session, created = service.spawn_participant_runtime_session(
         state.runtime_store,
         workspace_id=context.workspace_id,
-        run_id=run_id,
+        run_id=run.run_id,
         participant_id=_text(body.get("participant_id")),
         child_session_id=_text(body.get("child_session_id")) or None,
         child_agent_id=_text(body.get("child_agent_id")) or None,
-        system_prompt=_text(body.get("system_prompt")) or None,
-        skill_ids=_string_list(body.get("skill_ids")) if "skill_ids" in body else None,
-        skill_catalog_app_id=_text(body.get("skill_catalog_app_id")) or None,
-        source_app_id=_text(body.get("source_app_id")) or None,
         owner_user_id=owner_user_id,
         created_by_user_id=context.user.user_id,
-        grants=_platform_grants(body.get("grants")),
     )
     return json_response(
         start_response,
@@ -254,30 +269,6 @@ def _send_message(
     )
 
 
-def _authorize_run_view(context: RequestSession, workspace_id: str) -> None:
-    if context.workspace_id != workspace_id:
-        raise AuthorizationError("inter_agent_run_not_found")
-
-
-def _authorize_run_mutation(state: PlatformState, context: RequestSession, created_by_user_id: str) -> None:
-    if context.user.platform_role == "admin" or _is_workspace_admin(state, context):
-        return
-    if created_by_user_id == context.user.user_id:
-        return
-    raise AuthorizationError("inter_agent_run_operation_forbidden")
-
-
-def _is_workspace_admin(state: PlatformState, context: RequestSession) -> bool:
-    try:
-        membership = state.workspace_store.get_membership(
-            user_id=context.user.user_id,
-            workspace_id=context.workspace_id,
-        )
-    except WorkspaceMembershipError:
-        return False
-    return membership.status == "active" and membership.role == "admin"
-
-
 def _query_text(query: dict[str, list[str]], key: str) -> str | None:
     values = query.get(key)
     if not values:
@@ -293,18 +284,6 @@ def _query_limit(query: dict[str, list[str]]) -> int:
         return max(1, min(int(value), MAX_INTER_AGENT_EVENT_LIMIT))
     except ValueError:
         return DEFAULT_INTER_AGENT_EVENT_LIMIT
-
-
-def _platform_grants(value) -> list[dict[str, str | None]] | None:
-    if not isinstance(value, list):
-        return None
-    return [item for item in value if isinstance(item, dict)]
-
-
-def _string_list(value) -> list[str]:
-    if not isinstance(value, list):
-        return []
-    return [str(item).strip() for item in value if str(item).strip()]
 
 
 def _text(value) -> str:

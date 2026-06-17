@@ -43,6 +43,7 @@ def _mcp_tools(
     options = options or {}
     return list_mcp_tools(
         app_store=state.app_store,
+        identity_store=state.identity_store,
         workspace_store=state.workspace_store,
         runtime_store=state.runtime_store,
         inter_agent_store=getattr(state, "inter_agent_store", None),

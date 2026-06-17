@@ -247,6 +247,32 @@ class RuntimeThreadVisibilityTest(unittest.TestCase):
         self.assertEqual(child.created_by_user_id, "user-creator")
         self.assertEqual(child.grants, [grant])
 
+    def test_child_runtime_session_ignores_dict_platform_grants(self) -> None:
+        store = self.make_store()
+        with tempfile.TemporaryDirectory() as temp_dir:
+            parent = replace(
+                self.session("parent"),
+                runtime_root=f"{temp_dir}/runtime/sessions/parent",
+            )
+            store.save_session(parent)
+
+            child = create_child_runtime_session(
+                store,
+                parent_session_id="parent",
+                child_session_id="child",
+                child_agent_id="child-agent",
+                grants=[
+                    {
+                        "source": "platform",
+                        "operation": "cleanup",
+                        "grantee_kind": "user",
+                        "grantee_id": "attacker",
+                    }
+                ],  # type: ignore[list-item]
+            )
+
+        self.assertEqual(child.grants, [])
+
     def test_stale_hidden_threads_are_filtered_from_lists_and_websocket_snapshots(self) -> None:
         store = self.make_store()
         now = datetime(2026, 6, 15, 12, 0, tzinfo=UTC)

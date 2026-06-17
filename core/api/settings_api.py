@@ -18,7 +18,7 @@ from core.authorization.service import (
 from core.providers.service import builtin_provider_registry
 from core.recovery.service import execute_session_restart, record_provider_health, record_runtime_health, recovery_status
 from core.runtime.errors import RuntimeSessionNotFoundError
-from core.runtime.runtime_session import RuntimeSessionRecord
+from core.runtime.runtime_session import RuntimeSessionRecord, runtime_session_allows_user_thread
 from core.workspaces.errors import WorkspaceMembershipError
 
 
@@ -107,6 +107,7 @@ def _scoped_runtime_sessions(state: PlatformState, context: RequestSession) -> l
         session
         for session in state.runtime_store.list_all_sessions()
         if session.workspace_id in visible_workspace_ids
+        and runtime_session_allows_user_thread(session)
     ]
 
 

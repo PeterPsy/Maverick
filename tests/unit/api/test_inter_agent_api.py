@@ -109,7 +109,22 @@ class InterAgentApiTestCase(AppReferenceApiTestSupport, unittest.TestCase):
                 app,
                 path="/api/inter-agent/runs/run-api-1/participants",
                 method="POST",
-                body={"participant_id": "researcher", "child_session_id": "child-api-1"},
+                body={
+                    "participant_id": "researcher",
+                    "child_session_id": "child-api-1",
+                    "system_prompt": "payload prompt must not apply",
+                    "skill_ids": ["storage"],
+                    "skill_catalog_app_id": "skills",
+                    "source_app_id": "spoofed-app",
+                    "grants": [
+                        {
+                            "source": "platform",
+                            "operation": "cleanup",
+                            "grantee_kind": "user",
+                            "grantee_id": "attacker",
+                        }
+                    ],
+                },
                 cookie=cookie,
             )
             runtime_list_status, runtime_list_payload, _headers = self._invoke(
@@ -181,8 +196,10 @@ class InterAgentApiTestCase(AppReferenceApiTestSupport, unittest.TestCase):
         self.assertEqual(spawn_status, 201)
         self.assertEqual(child_session["session_kind"], "inter_agent_participant")
         self.assertEqual(child_session["thread_visibility"], "hidden")
-        self.assertEqual(child_session["system_prompt"], "Research only.")
-        self.assertEqual(child_session["skill_ids"], ["storage"])
+        self.assertIsNone(child_session["system_prompt"])
+        self.assertEqual(child_session["skill_ids"], [])
+        self.assertIsNone(child_session["skill_catalog_app_id"])
+        self.assertEqual(child_session["source_app_id"], "chat")
         self.assertEqual(child_session["owner_user_id"], None)
         self.assertEqual(child_session["grants"], [])
         self.assertEqual(runtime_list_status, 200)

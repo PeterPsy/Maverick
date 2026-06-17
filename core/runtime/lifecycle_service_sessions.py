@@ -52,7 +52,7 @@ def create_runtime_session(
     creator_runtime_session_id: str | None = None,
     session_kind: RuntimeSessionKind | str | None = None,
     thread_visibility: RuntimeThreadVisibility | str | None = None,
-    grants: list[RuntimeSessionGrantRecord | dict[str, str | None]] | None = None,
+    grants: list[RuntimeSessionGrantRecord] | None = None,
     governance: WorkspaceGovernanceRecord | None = None,
     platform_allows_full_access: bool = False,
     now: datetime | None = None,
@@ -157,35 +157,12 @@ def create_runtime_session(
 
 
 
-def _platform_runtime_grants(
-    grants: list[RuntimeSessionGrantRecord | dict[str, str | None]] | None,
-) -> list[RuntimeSessionGrantRecord]:
+def _platform_runtime_grants(grants: list[RuntimeSessionGrantRecord] | None) -> list[RuntimeSessionGrantRecord]:
     normalized: list[RuntimeSessionGrantRecord] = []
     for grant in grants or []:
         if isinstance(grant, RuntimeSessionGrantRecord):
             if grant.source == "platform" and grant.grantee_id:
                 normalized.append(grant)
-            continue
-        if not isinstance(grant, dict) or grant.get("source") != "platform":
-            continue
-        operation = grant.get("operation")
-        grantee_kind = grant.get("grantee_kind")
-        grantee_id = grant.get("grantee_id")
-        if operation not in {"cleanup", "interrupt", "restart"}:
-            continue
-        if grantee_kind not in {"user", "app", "runtime_session"}:
-            continue
-        if not isinstance(grantee_id, str) or not grantee_id.strip():
-            continue
-        issued_by_user_id = grant.get("issued_by_user_id")
-        normalized.append(
-            RuntimeSessionGrantRecord(
-                operation=operation,
-                grantee_kind=grantee_kind,
-                grantee_id=grantee_id.strip(),
-                issued_by_user_id=issued_by_user_id if isinstance(issued_by_user_id, str) else None,
-            )
-        )
     return normalized
 
 
@@ -202,7 +179,7 @@ def create_child_runtime_session(
     source_app_id: str | None = None,
     owner_user_id: str | None = None,
     created_by_user_id: str | None = None,
-    grants: list[RuntimeSessionGrantRecord | dict[str, str | None]] | None = None,
+    grants: list[RuntimeSessionGrantRecord] | None = None,
     now: datetime | None = None,
 ) -> RuntimeSessionRecord:
     """Create one runtime child session using only explicit materialized authority."""

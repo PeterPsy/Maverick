@@ -63,10 +63,24 @@ def event_page_payload(page: InterAgentEventPage) -> dict[str, Any]:
     )
 
 
-def run_spec_from_payload(payload: dict[str, Any], *, workspace_id: str, created_by_user_id: str) -> InterAgentRunSpec:
-    """Build an InterAgentRunSpec from a trusted surface payload."""
+def run_spec_from_payload(
+    payload: dict[str, Any],
+    *,
+    workspace_id: str,
+    created_by_user_id: str,
+    source_app_id: str = "chat",
+    allow_materialized_authority: bool = False,
+) -> InterAgentRunSpec:
+    """Build an InterAgentRunSpec from a public surface payload.
+
+    Public HTTP/CLI/MCP callers may choose topology and budget, but prompt,
+    skill, source-app, provider, and authority materialization must come from
+    core policy or an authorized Agents snapshot. Those fields are therefore
+    ignored unless an internal caller explicitly opts into trusted materialized
+    authority.
+    """
     participants = [
-        participant_spec_from_payload(item)
+        participant_spec_from_payload(item, allow_materialized_authority=allow_materialized_authority)
         for item in _list_of_dicts(payload.get("participants"))
     ]
     edges = [edge_spec_from_payload(item) for item in _list_of_dicts(payload.get("edges"))]
@@ -75,7 +89,7 @@ def run_spec_from_payload(payload: dict[str, Any], *, workspace_id: str, created
         workspace_id=workspace_id,
         thread_id=_text(payload.get("thread_id")) or _text(payload.get("root_runtime_session_id")),
         root_runtime_session_id=_text(payload.get("root_runtime_session_id")),
-        source_app_id=_text(payload.get("source_app_id")) or "chat",
+        source_app_id=_text(source_app_id) or "chat",
         mode=_text(payload.get("mode")) or "manager_tools",  # type: ignore[arg-type]
         created_by_user_id=created_by_user_id,
         participants=participants,
@@ -90,19 +104,34 @@ def run_spec_from_payload(payload: dict[str, Any], *, workspace_id: str, created
     )
 
 
-def participant_spec_from_payload(payload: dict[str, Any]) -> ParticipantSpec:
+def participant_spec_from_payload(
+    payload: dict[str, Any],
+    *,
+    allow_materialized_authority: bool = False,
+) -> ParticipantSpec:
     """Build a participant spec from one surface payload item."""
+    agent_snapshot = None
+    prompt_snapshot_ref = None
+    skill_ids: list[str] = []
+    provider_id = None
+    authority_grant_ids: list[str] = []
+    if allow_materialized_authority:
+        agent_snapshot = agent_snapshot_from_payload(payload.get("agent_snapshot"))
+        prompt_snapshot_ref = _text(payload.get("prompt_snapshot_ref")) or None
+        skill_ids = _string_list(payload.get("skill_ids"))
+        provider_id = _text(payload.get("provider_id")) or None
+        authority_grant_ids = _string_list(payload.get("authority_grant_ids"))
     return ParticipantSpec(
         participant_id=_text(payload.get("participant_id")) or None,
         kind=_text(payload.get("kind")),  # type: ignore[arg-type]
         execution_mode=_text(payload.get("execution_mode")),  # type: ignore[arg-type]
         label=_text(payload.get("label")),
         agent_type_id=_text(payload.get("agent_type_id")) or None,
-        agent_snapshot=agent_snapshot_from_payload(payload.get("agent_snapshot")),
-        prompt_snapshot_ref=_text(payload.get("prompt_snapshot_ref")) or None,
-        skill_ids=_string_list(payload.get("skill_ids")),
-        provider_id=_text(payload.get("provider_id")) or None,
-        authority_grant_ids=_string_list(payload.get("authority_grant_ids")),
+        agent_snapshot=agent_snapshot,
+        prompt_snapshot_ref=prompt_snapshot_ref,
+        skill_ids=skill_ids,
+        provider_id=provider_id,
+        authority_grant_ids=authority_grant_ids,
         thread_visibility=(_text(payload.get("thread_visibility")) or None),  # type: ignore[arg-type]
     )
 

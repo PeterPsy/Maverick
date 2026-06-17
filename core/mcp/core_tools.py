@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import Any
 
 from core.apps.store import AppStore
+from core.identity.store import IdentityStore
 from core.mcp.developer_context_tools import developer_context_tool_specs
 from core.mcp.inter_agent_tools import inter_agent_tool_specs
 from core.mcp.persistence_tools import persistence_tool_specs
@@ -26,6 +27,7 @@ from core.workspaces.store import WorkspaceStore
 def _core_tool_specs(
     *,
     app_store: AppStore | None = None,
+    identity_store: IdentityStore | None = None,
     workspace_store: WorkspaceStore | None = None,
     provider_store: ProviderStore | None = None,
     runtime_store: RuntimeStore | None = None,
@@ -45,6 +47,7 @@ def _core_tool_specs(
     specs.extend(
         inter_agent_tool_specs(
             app_store=app_store,
+            identity_store=identity_store,
             workspace_store=workspace_store,
             provider_store=provider_store,
             runtime_store=runtime_store,

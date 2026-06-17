@@ -27,8 +27,9 @@ It started with names, visibility, legacy compatibility, and initial policy defa
 Budget policy starts fail-closed and run-scoped:
 
 - non-`single_agent` runs must declare max participants and max concurrent participants
-- spawn, handoff, and fan-out require reservation before work starts
+- spawn, handoff, fan-out, and runtime turn submission require core budget accounting before work starts
 - reservations and releases must be idempotent
+- participant/concurrency reservations are released on interrupt or close, while successfully submitted runtime turns remain consumed so `max_total_turns` cannot be bypassed by repeated message sends
 - turn, tool-call, estimated-token, estimated-cost, idle, and stall limits are enforced by the core
 - pause and cancellation remain available even when budget is exhausted
 
@@ -63,7 +64,7 @@ This keeps the primary Chat transcript as one visible conversation while allowin
 
 The internal `create_child_runtime_session` helper is not the public multi-agent spawn API.
 
-It may reuse only the parent session's resolved workspace boundary, workdir, execution mode, and runtime-session parent linkage. Prompt materialization, skill ids, skill catalog, source app, owner, creator, and operation grants must be explicit inputs produced by core policy, an authorized app snapshot, or a later `ParticipantSpec` materialization step. The helper defaults those authority-bearing fields to empty values and must not clone them from the parent session.
+It may reuse only the parent session's resolved workspace boundary, workdir, execution mode, and runtime-session parent linkage. Prompt materialization, skill ids, skill catalog, source app, owner, creator, and operation grants must be explicit inputs produced by core policy, an authorized app snapshot, or a later `ParticipantSpec` materialization step. The helper defaults those authority-bearing fields to empty values and must not clone them from the parent session. Platform operation grants must be typed `RuntimeSessionGrantRecord` values minted by core policy; public payload dictionaries, even with `source="platform"`, are not grant material.
 
 ## F2 Runtime Access Policy
 
@@ -74,12 +75,15 @@ F0 models the visibility boundary and blocks thread creation for hidden sessions
 - `GET /api/runtime/sessions/<session_id>/events`
 - `GET /api/runtime/sessions/<session_id>/turns`
 - `POST /api/runtime/sessions/<session_id>/turns`
+- `POST /api/runtime/sessions/<session_id>/cleanup`
 - `GET /api/runtime/turns/<turn_id>`
 - `POST /api/runtime/turns/<turn_id>/interrupt`
 - `WS /ws/runtime/sessions/<session_id>`
 - CLI and MCP runtime status surfaces
 
-The only public F2 creation path for `inter_agent_participant` sessions is the core-owned inter-agent surface. HTTP uses `/api/inter-agent/runs/<run_id>/participants`; CLI uses `inter-agent.participants.spawn`; MCP uses `inter_agent_participant_spawn`. All three must route through the policy-aware service and must not call `create_child_runtime_session` with parent-copied authority.
+App-owned runtime launch, interrupt, and cleanup requests are also raw runtime paths for this purpose. If they name an existing hidden participant session or a turn belonging to one, they must fail closed and leave operation to `InterAgentService`.
+
+The only public F2 creation path for `inter_agent_participant` sessions is the core-owned inter-agent surface. HTTP uses `/api/inter-agent/runs/<run_id>/participants`; CLI uses `inter-agent.participants.spawn`; MCP uses `inter_agent_participant_spawn`. All three must route through the policy-aware service, require run creator/owner or admin authority for mutations, and must not call `create_child_runtime_session` with parent-copied or user-payload authority. Public run/spawn payloads may name topology, participant id, child session id, and owner under policy; they must not materialize prompt text, skill ids, skill catalog, source app, provider selection, agent snapshots, or runtime operation grants. Source app for a public inter-agent run is derived from the root runtime session, not from the caller payload.
 
 ## Gate
 

@@ -12,6 +12,7 @@ from core.authorization.errors import AuthorizationError
 from core.authorization.service import require_runtime_session_operation
 from core.identity.models import UserRecord
 from core.runtime.errors import RuntimeSessionNotFoundError, RuntimeThreadNotFoundError
+from core.runtime.runtime_session import runtime_session_allows_user_thread
 from core.runtime.runtime_threads import delete_runtime_thread_complete, thread_payload
 
 
@@ -188,6 +189,8 @@ def _runtime_cleanup_session_ids_for_request(
             return [session_id]
         if session.workspace_id != workspace_id:
             raise AppHostingError(f"App `{app_id}` cannot clean runtime session outside workspace `{workspace_id}`.")
+        if not runtime_session_allows_user_thread(session):
+            raise AppHostingError(f"App `{app_id}` cannot clean hidden inter-agent runtime session `{session_id}`.")
         return [session_id]
 
     return []
@@ -232,6 +235,8 @@ def _authorize_runtime_session_cleanup(
         return
     if session.workspace_id != workspace_id:
         raise AppHostingError(f"App `{app_id}` cannot clean runtime session outside workspace `{workspace_id}`.")
+    if not runtime_session_allows_user_thread(session):
+        raise AppHostingError(f"App `{app_id}` cannot clean hidden inter-agent runtime session `{session_id}`.")
     if user is None:
         raise AuthorizationError("runtime_session_cleanup_forbidden")
     require_runtime_session_operation(

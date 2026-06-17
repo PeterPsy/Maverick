@@ -749,6 +749,8 @@ def _handle_session_cleanup(
         return json_response(start_response, {"error": "runtime_session_not_found"}, status="404 Not Found")
     if session.workspace_id != context.workspace_id:
         return json_response(start_response, {"error": "runtime_session_not_found"}, status="404 Not Found")
+    if not runtime_session_allows_user_thread(session):
+        return _hidden_runtime_session_response(start_response, session)
     try:
         require_runtime_session_operation(
             workspace_store=state.workspace_store,

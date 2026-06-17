@@ -34,7 +34,7 @@ from core.inter_agent.models import (
 from core.inter_agent.store import InterAgentRunCreateBundle, InterAgentStore
 from core.runtime.errors import RuntimeSessionNotFoundError
 from core.runtime.lifecycle_service_sessions import create_child_runtime_session
-from core.runtime.runtime_session import RuntimeSessionGrantRecord, RuntimeSessionRecord, runtime_session_allows_user_thread
+from core.runtime.runtime_session import RuntimeSessionRecord, runtime_session_allows_user_thread
 from core.runtime.store import RuntimeStore
 from core.runtime.service import record_runtime_event, transition_runtime_session, transition_runtime_turn
 from core.runtime.turn_submission import (
@@ -323,13 +323,12 @@ class InterAgentService:
         source_app_id: str | None = None,
         owner_user_id: str | None = None,
         created_by_user_id: str | None = None,
-        grants: list[RuntimeSessionGrantRecord | dict[str, str | None]] | None = None,
         now: datetime | None = None,
     ) -> tuple[InterAgentParticipantRecord, RuntimeSessionRecord, bool]:
         """Spawn one hidden runtime session for an existing child participant.
 
-        The child receives only explicit materialized prompt, skills, owner, and
-        grants. Nothing is copied from the root runtime session by this service.
+        The child receives only explicit materialized prompt, skills, and owner.
+        Nothing is copied from the root runtime session by this service.
         """
         timestamp = now or datetime.now(tz=UTC)
         run = self.store.get_run(run_id, workspace_id=workspace_id)
@@ -362,13 +361,12 @@ class InterAgentService:
         )
         session_id = _clean_optional(child_session_id) or _stable_id("iasess", run.run_id, participant.participant_id)
         agent_id = _clean_optional(child_agent_id) or participant.agent_type_id or participant.participant_id
-        reservation_id = f"spawn:{participant.participant_id}"
+        reservation_id = _participant_spawn_reservation_id(participant.participant_id)
         self.reserve_budget(
             run,
             reservation_id=reservation_id,
             participant_slots=1,
             running_participants=1,
-            turns=1,
             now=timestamp,
         )
         try:
@@ -383,7 +381,7 @@ class InterAgentService:
                 source_app_id=_clean_optional(source_app_id) or run.source_app_id,
                 owner_user_id=_clean_optional(owner_user_id),
                 created_by_user_id=_clean_optional(created_by_user_id) or run.created_by_user_id,
-                grants=grants,
+                grants=[],
                 now=timestamp,
             )
             child = transition_runtime_session(runtime_store, session_id=child.session_id, target_status="running", now=timestamp)
@@ -432,6 +430,8 @@ class InterAgentService:
         """Send one runtime turn to a spawned child participant session."""
         timestamp = now or datetime.now(tz=UTC)
         run = self.store.get_run(run_id, workspace_id=workspace_id)
+        if run.status in TERMINAL_RUN_STATUSES:
+            raise InterAgentOperationError("Terminal inter-agent runs cannot accept new messages.")
         participant = self.store.get_participant(participant_id, workspace_id=workspace_id, run_id=run.run_id)
         runtime_session_id = _clean_optional(participant.runtime_session_id)
         if not runtime_session_id:
@@ -445,13 +445,23 @@ class InterAgentService:
         message = str(input_text or "").strip()
         if not message:
             raise InterAgentOperationError("Inter-agent messages require input_text.")
-        submit = submit_runtime_turn_async if async_requested else submit_runtime_turn
-        turn, events = submit(
-            state,
-            session=session,
-            input_text=message,
-            client_message_id=_clean_optional(client_message_id),
+        reservation_id = _message_turn_reservation_id(
+            run_id=run.run_id,
+            participant_id=participant.participant_id,
+            client_message_id=client_message_id,
         )
+        self.reserve_budget(run, reservation_id=reservation_id, turns=1, now=timestamp)
+        submit = submit_runtime_turn_async if async_requested else submit_runtime_turn
+        try:
+            turn, events = submit(
+                state,
+                session=session,
+                input_text=message,
+                client_message_id=_clean_optional(client_message_id),
+            )
+        except Exception:
+            self.release_budget(run, reservation_id=reservation_id, now=timestamp)
+            raise
         self.record_event(
             run,
             event_type="inter_agent.message.sent",
@@ -514,6 +524,11 @@ class InterAgentService:
                     session_id=participant.runtime_session_id,
                     reason=reason,
                 )
+            )
+            self.release_budget(
+                run,
+                reservation_id=_participant_spawn_reservation_id(participant.participant_id),
+                now=timestamp,
             )
             if participant.status not in TERMINAL_PARTICIPANT_STATUSES:
                 updated = replace(participant, status="cancelled", updated_at=timestamp)
@@ -594,6 +609,11 @@ class InterAgentService:
                 continue
             cleanup_result = cleanup_runtime_session(participant.runtime_session_id, reason)
             cleanups.append({"participant_id": participant.participant_id, **cleanup_result})
+            self.release_budget(
+                run,
+                reservation_id=_participant_spawn_reservation_id(participant.participant_id),
+                now=timestamp,
+            )
             if participant.status not in TERMINAL_PARTICIPANT_STATUSES:
                 self.store.save_participant(replace(participant, status="cancelled", updated_at=timestamp))
         updated = replace(run, status=terminal_status, updated_at=timestamp, ended_at=timestamp)
@@ -953,6 +973,17 @@ def _selected_child_participants(
     if target is not None and not selected:
         raise InterAgentOperationError(f"Child runtime participant `{target}` was not found.")
     return selected
+
+
+def _participant_spawn_reservation_id(participant_id: str) -> str:
+    return f"spawn:{participant_id}"
+
+
+def _message_turn_reservation_id(*, run_id: str, participant_id: str, client_message_id: str | None) -> str:
+    client_key = _clean_optional(client_message_id)
+    if client_key:
+        return _stable_id("turn", run_id, participant_id, client_key)
+    return _new_id("turn")
 
 
 def _interrupt_runtime_session(state: Any, *, session_id: str, reason: str) -> dict[str, Any]:

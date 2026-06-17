@@ -13,6 +13,7 @@ from core.inter_agent.service import InterAgentService, TERMINAL_RUN_STATUSES
 from core.inter_agent.surfaces import inter_agent_payload
 from core.runtime.errors import RuntimeSessionNotFoundError
 from core.runtime.paths import runtime_session_root
+from core.runtime.runtime_session import runtime_session_allows_user_thread
 from core.runtime.runtime_threads import thread_payload
 from core.runtime.session_termination import terminate_runtime_session
 
@@ -28,6 +29,7 @@ def cleanup_runtime_session(
     reason: str,
     start_path=None,
     publish_thread_events: bool = True,
+    allow_hidden_inter_agent_cleanup: bool = False,
 ) -> dict[str, object]:
     """Fully remove one runtime session, app cleanup metadata, and runtime files."""
     try:
@@ -44,6 +46,8 @@ def cleanup_runtime_session(
             "deleted_thread_ids": [],
             "runtime_root_deleted": False,
         }
+    if not allow_hidden_inter_agent_cleanup and not runtime_session_allows_user_thread(session):
+        raise RuntimeCleanupError("runtime_session_hidden")
 
     inter_agent_cleanup = _cleanup_inter_agent_runs_for_root_session(
         state,
@@ -133,6 +137,7 @@ def _cleanup_inter_agent_runs_for_root_session(
                 reason=cleanup_reason,
                 start_path=start_path,
                 publish_thread_events=False,
+                allow_hidden_inter_agent_cleanup=True,
             ),
             reason=reason,
             terminal_status="cancelled",

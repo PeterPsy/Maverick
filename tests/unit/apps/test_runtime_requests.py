@@ -2,10 +2,16 @@ from __future__ import annotations
 
 from pathlib import Path
 from types import SimpleNamespace
+from datetime import UTC, datetime
 import unittest
 from unittest.mock import patch
 
 import core.apps.runtime_requests as runtime_requests
+from core.runtime.runtime_turns import RuntimeTurnRecord
+from core.runtime.service import create_runtime_session
+from core.runtime.store import RuntimeCollections, RuntimeDocumentStore
+from tests.support.collections import FakeCollection
+from tests.support.repo import make_temp_repo_root
 
 
 class RuntimeRequestsTestCase(unittest.TestCase):
@@ -39,6 +45,18 @@ class RuntimeRequestsTestCase(unittest.TestCase):
                 }
             ],
         }
+
+    def _runtime_store(self) -> RuntimeDocumentStore:
+        return RuntimeDocumentStore(
+            RuntimeCollections(
+                sessions=FakeCollection(),
+                turns=FakeCollection(),
+                events=FakeCollection(),
+                processes=FakeCollection(),
+                states=FakeCollection(),
+                threads=FakeCollection(),
+            )
+        )
 
     def test_dependency_backend_invocation_passes_trusted_context(self) -> None:
         captured_payloads: list[dict[str, object]] = []
@@ -219,6 +237,53 @@ class RuntimeRequestsTestCase(unittest.TestCase):
                 }
             ],
         )
+
+    def test_app_runtime_requests_reject_hidden_inter_agent_sessions(self) -> None:
+        runtime_store = self._runtime_store()
+        now = datetime(2026, 6, 16, 12, 0, tzinfo=UTC)
+        repo_root = make_temp_repo_root(self)
+        create_runtime_session(
+            runtime_store,
+            session_id="hidden-child",
+            workspace_id="default",
+            agent_id="child-agent",
+            source_app_id="video-studio",
+            session_kind="inter_agent_participant",
+            thread_visibility="hidden",
+            start_path=repo_root,
+        )
+        runtime_store.save_turn(
+            RuntimeTurnRecord(
+                turn_id="hidden-turn",
+                session_id="hidden-child",
+                workspace_id="default",
+                status="active",
+                input_text="work",
+                created_at=now,
+                updated_at=now,
+                started_at=now,
+                completed_at=None,
+                failure_reason=None,
+            )
+        )
+        state = SimpleNamespace(runtime_store=runtime_store)
+
+        with self.assertRaisesRegex(runtime_requests.AppHostingError, "hidden"):
+            runtime_requests._runtime_session_for_request(
+                state,
+                request={"runtime_session_id": "hidden-child"},
+                workspace_id="default",
+                app_id="video-studio",
+                parsed=SimpleNamespace(),
+                start_path=repo_root,
+            )
+        with self.assertRaisesRegex(runtime_requests.AppHostingError, "hidden"):
+            runtime_requests._apply_one_runtime_interrupt_request(
+                state,
+                request={"turn_id": "hidden-turn"},
+                workspace_id="default",
+                app_id="video-studio",
+            )
 
     def test_dependency_backend_request_result_is_only_exposed_to_callback(self) -> None:
         callback_payloads: list[dict[str, object]] = []

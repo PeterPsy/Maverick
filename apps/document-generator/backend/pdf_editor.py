@@ -267,12 +267,19 @@ def _find_patch_matches(document: Any, patch: PdfTextPatch) -> list[tuple[int, A
             raise DocumentValidationError("page_number is outside the PDF page range.")
         page = document[page_index]
         for rect in page.search_for(patch.match_text):
-            matches.append((page_index, rect))
-    if not patch.case_sensitive:
-        # PyMuPDF search is already case-insensitive for most text. Re-checking
-        # extracted page text here would lose coordinates, so we keep its match set.
-        return matches
+            if not patch.case_sensitive or _rect_contains_text(page, rect, patch.match_text):
+                matches.append((page_index, rect))
     return matches
+
+
+def _rect_contains_text(page: Any, rect: Any, needle: str) -> bool:
+    try:
+        text = str(page.get_textbox(rect) or "")
+    except Exception:
+        return False
+    if needle in text:
+        return True
+    return " ".join(needle.split()) in " ".join(text.split())
 
 
 def _select_patch_matches(matches: list[tuple[int, Any]], patch: PdfTextPatch) -> list[tuple[int, Any]]:
@@ -394,7 +401,7 @@ def _load_pymupdf():
         import fitz  # type: ignore[import-not-found]
     except ModuleNotFoundError as error:
         raise DocumentValidationError(
-            "PyMuPDF is not installed. Install the document-generator extra with `python3 -m pip install -e '.[document-generator]'`."
+            "PyMuPDF is not installed. Install Maverick runtime dependencies with `python3 -m pip install -e .`."
         ) from error
     return fitz
 

@@ -114,7 +114,7 @@
           "content_type": {"type": "string"},
           "source_path": {
             "type": "string",
-            "description": "CLI-only local source file path for upload_local_file. This is not exposed by Storage MCP or frontend surfaces."
+            "description": "CLI-only local source file path for upload_local_file. Sandbox invocations may read only inside workspace_root; full-access operator invocations may read other local paths. This is not exposed by Storage MCP or frontend surfaces."
           },
           "size_bytes": {"type": "integer", "minimum": 0},
           "local_upload_session_id": {"type": "string"},

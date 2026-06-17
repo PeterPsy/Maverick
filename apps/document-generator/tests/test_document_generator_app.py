@@ -273,6 +273,66 @@ class DocumentGeneratorAppTestCase(unittest.TestCase):
             self.assertEqual(result["json"]["status"], "needs_confirmation")
             self.assertEqual(result["app_events"], [])
 
+    def test_pdf_patch_match_filter_respects_case_sensitive_flag(self) -> None:
+        backend_path = str(APP_ROOT / "backend")
+        if backend_path not in sys.path:
+            sys.path.insert(0, backend_path)
+        from pdf_editor import PdfTextPatch, _find_patch_matches
+
+        class FakePage:
+            def search_for(self, _needle: str) -> list[str]:
+                return ["upper-rect", "lower-rect"]
+
+            def get_textbox(self, rect: str) -> str:
+                return {"upper-rect": "Date", "lower-rect": "date"}[rect]
+
+        class FakeDocument:
+            page_count = 1
+
+            def __getitem__(self, _page_index: int) -> FakePage:
+                return FakePage()
+
+        patch = PdfTextPatch(
+            match_text="date",
+            replacement_text="DATE",
+            occurrence="all",
+            redact_original=True,
+            case_sensitive=True,
+            page_number=None,
+        )
+
+        self.assertEqual(_find_patch_matches(FakeDocument(), patch), [(0, "lower-rect")])
+
+    def test_pdf_patch_match_filter_keeps_pymupdf_matches_when_case_insensitive(self) -> None:
+        backend_path = str(APP_ROOT / "backend")
+        if backend_path not in sys.path:
+            sys.path.insert(0, backend_path)
+        from pdf_editor import PdfTextPatch, _find_patch_matches
+
+        class FakePage:
+            def search_for(self, _needle: str) -> list[str]:
+                return ["upper-rect", "lower-rect"]
+
+            def get_textbox(self, _rect: str) -> str:
+                raise AssertionError("case-insensitive search should not re-check rectangles")
+
+        class FakeDocument:
+            page_count = 1
+
+            def __getitem__(self, _page_index: int) -> FakePage:
+                return FakePage()
+
+        patch = PdfTextPatch(
+            match_text="date",
+            replacement_text="DATE",
+            occurrence="all",
+            redact_original=True,
+            case_sensitive=False,
+            page_number=None,
+        )
+
+        self.assertEqual(_find_patch_matches(FakeDocument(), patch), [(0, "upper-rect"), (0, "lower-rect")])
+
     def test_backend_patches_pdf_text_when_pymupdf_is_available(self) -> None:
         try:
             import fitz  # type: ignore[import-not-found]

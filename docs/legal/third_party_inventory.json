@@ -7,6 +7,8 @@
       "version": "0.1.0",
       "requires_python": ">=3.12",
       "runtime_dependencies": [
+        "cryptography>=43",
+        "PyMuPDF>=1.24,<2",
         "uvicorn[standard]>=0.30"
       ],
       "optional_dependencies": {
@@ -18,6 +20,9 @@
         ],
         "mongo": [
           "pymongo>=4.6"
+        ],
+        "speech": [
+          "faster-whisper>=1.1,<2"
         ]
       },
       "dev_dependencies": [
@@ -25,6 +30,7 @@
       ],
       "requirements_dev": [
         "uvicorn[standard]>=0.30",
+        "PyMuPDF>=1.24,<2",
         "pip-audit>=2.7"
       ]
     },
@@ -51,6 +57,7 @@
         "react-dom": "^19.2.3"
       },
       "dev_dependencies": {
+        "@types/node": "^24.13.1",
         "@types/react": "^19.2.7",
         "@types/react-dom": "^19.2.3",
         "@vitejs/plugin-react": "^5.1.1",
@@ -78,6 +85,7 @@
         "react-dom": "^19.2.3"
       },
       "dev_dependencies": {
+        "@types/node": "^24.13.1",
         "@types/react": "^19.2.7",
         "@types/react-dom": "^19.2.3",
         "@vitejs/plugin-react": "^5.1.1",
@@ -85,6 +93,43 @@
         "typescript": "^5.9.3",
         "vite": "^7.3.0",
         "vitest": "^4.1.4"
+      }
+    },
+    {
+      "app_id": "browser",
+      "package_name": "@maverick/browser",
+      "version": "0.1.0",
+      "private": true,
+      "dependencies": {
+        "playwright": "1.60.0"
+      },
+      "dev_dependencies": {}
+    },
+    {
+      "app_id": "calendar",
+      "package_name": "@maverick/calendar",
+      "version": "0.2.0",
+      "private": true,
+      "dependencies": {
+        "@radix-ui/react-dropdown-menu": "^2.1.16",
+        "@radix-ui/react-label": "^2.1.8",
+        "@radix-ui/react-select": "^2.2.6",
+        "@radix-ui/react-slot": "^1.2.4",
+        "class-variance-authority": "^0.7.1",
+        "lucide-react": "^1.14.0",
+        "motion": "^12.38.0",
+        "react": "^19.2.3",
+        "react-dom": "^19.2.3"
+      },
+      "dev_dependencies": {
+        "@tailwindcss/vite": "^4.1.17",
+        "@types/react": "^19.2.7",
+        "@types/react-dom": "^19.2.3",
+        "@vitejs/plugin-react": "^5.1.1",
+        "tailwindcss": "^4.1.17",
+        "typescript": "^5.9.3",
+        "vite": "^7.3.0",
+        "vitest": "^4.1.7"
       }
     },
     {
@@ -100,6 +145,7 @@
         "remark-gfm": "^4.0.1"
       },
       "dev_dependencies": {
+        "@types/node": "^24.13.1",
         "@types/react": "^19.2.7",
         "@types/react-dom": "^19.2.3",
         "@vitejs/plugin-react": "^5.1.1",
@@ -128,6 +174,45 @@
         "tailwindcss": "^4.1.17",
         "typescript": "^5.9.3",
         "vite": "^7.3.0"
+      }
+    },
+    {
+      "app_id": "crm",
+      "package_name": "crm",
+      "version": "0.4.2",
+      "private": true,
+      "dependencies": {
+        "framer-motion": "^12.40.0",
+        "lucide-react": "^1.14.0",
+        "react": "^19.0.0",
+        "react-dom": "^19.0.0"
+      },
+      "dev_dependencies": {
+        "@playwright/test": "^1.60.0",
+        "@types/react": "^19.0.0",
+        "@types/react-dom": "^19.0.0",
+        "@vitejs/plugin-react": "^4.7.0",
+        "typescript": "^5.0.0",
+        "vite": "^6.4.2"
+      }
+    },
+    {
+      "app_id": "design-studio",
+      "package_name": "@maverick/design-studio",
+      "version": "0.1.0",
+      "private": true,
+      "dependencies": {
+        "lucide-react": "^1.14.0",
+        "react": "^19.2.3",
+        "react-dom": "^19.2.3"
+      },
+      "dev_dependencies": {
+        "@types/react": "^19.2.7",
+        "@types/react-dom": "^19.2.3",
+        "@vitejs/plugin-react": "^5.1.1",
+        "typescript": "^5.9.3",
+        "vite": "^8.0.16",
+        "vitest": "^4.1.4"
       }
     },
     {
@@ -183,6 +268,44 @@
       }
     },
     {
+      "app_id": "fitness-coach",
+      "package_name": "fitness-coach",
+      "version": "0.1.0",
+      "private": true,
+      "dependencies": {
+        "lucide-react": "^0.468.0",
+        "react": "^19.0.0",
+        "react-dom": "^19.0.0"
+      },
+      "dev_dependencies": {
+        "@types/react": "^19.0.0",
+        "@types/react-dom": "^19.0.0",
+        "@vitejs/plugin-react": "^5.0.0",
+        "typescript": "^5.0.0",
+        "vite": "^7.0.0",
+        "vitest": "^4.1.8"
+      }
+    },
+    {
+      "app_id": "mail",
+      "package_name": "mail",
+      "version": "0.1.1",
+      "private": true,
+      "dependencies": {
+        "lucide-react": "^0.468.0",
+        "motion": "^12.38.0",
+        "react": "^19.0.0",
+        "react-dom": "^19.0.0"
+      },
+      "dev_dependencies": {
+        "@types/react": "^19.0.0",
+        "@types/react-dom": "^19.0.0",
+        "@vitejs/plugin-react": "^5.0.0",
+        "typescript": "^5.0.0",
+        "vite": "^7.0.0"
+      }
+    },
+    {
       "app_id": "memory",
       "package_name": "@maverick/memory",
       "version": "0.1.0",
@@ -224,6 +347,7 @@
         "react-dom": "^19.2.3"
       },
       "dev_dependencies": {
+        "@types/node": "^24.13.1",
         "@types/react": "^19.2.7",
         "@types/react-dom": "^19.2.3",
         "@vitejs/plugin-react": "^5.1.1",
@@ -245,17 +369,59 @@
         "clsx": "^2.1.1",
         "lucide-react": "^1.14.0",
         "motion": "^12.38.0",
+        "pdfjs-dist": "^5.7.284",
         "react": "^19.2.3",
         "react-dom": "^19.2.3",
         "tailwind-merge": "^3.6.0"
       },
       "dev_dependencies": {
+        "@types/node": "^24.13.1",
         "@types/react": "^19.2.7",
         "@types/react-dom": "^19.2.3",
         "@vitejs/plugin-react": "^5.1.1",
         "typescript": "^5.9.3",
         "vite": "^7.3.0",
         "vitest": "^4.1.4"
+      }
+    },
+    {
+      "app_id": "vault",
+      "package_name": "@maverick/vault",
+      "version": "0.1.0",
+      "private": true,
+      "dependencies": {
+        "lucide-react": "^0.468.0",
+        "react": "^19.2.3",
+        "react-dom": "^19.2.3"
+      },
+      "dev_dependencies": {
+        "@types/react": "^19.2.7",
+        "@types/react-dom": "^19.2.3",
+        "@vitejs/plugin-react": "^5.1.1",
+        "typescript": "^5.9.3",
+        "vite": "^7.3.0"
+      }
+    },
+    {
+      "app_id": "website-studio",
+      "package_name": "website-studio",
+      "version": "0.4.1",
+      "private": true,
+      "dependencies": {
+        "clsx": "^2.1.1",
+        "lucide-react": "^1.17.0",
+        "motion": "^12.40.0",
+        "react": "^19.0.0",
+        "react-dom": "^19.0.0",
+        "tailwind-merge": "^3.6.0"
+      },
+      "dev_dependencies": {
+        "@playwright/test": "^1.60.0",
+        "@types/react": "^19.0.0",
+        "@types/react-dom": "^19.0.0",
+        "@vitejs/plugin-react": "^5.0.0",
+        "typescript": "^5.0.0",
+        "vite": "^7.0.0"
       }
     }
   ]

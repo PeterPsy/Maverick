@@ -12,7 +12,7 @@ Agent-facing document generation, document text extraction, and Docling-backed M
 - The `document-generator` CLI action `patch_pdf_text` and MCP tool `document_generator_patch_pdf_text` replace matched text in workspace PDFs, save generated outputs under `storage/generated/document-generator/pdf-edits/<job_id>/`, and return hash, match counts, and a visual crop artifact when available.
 - The `document-generator` CLI action `modify_uploaded_document` and MCP tool `document_generator_modify_uploaded_document` provide a task-level helper for simple uploaded-PDF date replacements, returning candidate dates when confirmation is required.
 - The `document-generator` CLI action `convert_to_markdown` and MCP tool `document_generator_convert_to_markdown` use Docling to convert workspace files up to 10 MiB under `storage/generated/` or `storage/uploaded/` into Markdown artifacts under `storage/generated/document-generator/markdown/<job_id>/`.
-- Docling and PyMuPDF are loaded lazily so generation and extraction actions continue to run when optional dependencies are absent. Install the extra with `python3 -m pip install -e '.[document-generator]'` before using `convert_to_markdown` or `patch_pdf_text`.
+- PyMuPDF is a Maverick runtime dependency used by `patch_pdf_text`. Docling is loaded lazily for Markdown conversion; install the extra with `python3 -m pip install -e '.[document-generator]'` before using `convert_to_markdown`.
 - App-owned CLI/MCP descriptor sidecars live under `cli/command_schemas.json` and `mcp/tool_schemas.json` so agents can discover conversion arguments and result shapes through scoped inspect calls.
 
 ## SDK Flow

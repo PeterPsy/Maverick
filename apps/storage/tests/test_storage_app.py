@@ -141,14 +141,26 @@ class StorageAppTestCase(unittest.TestCase):
             cwd=STORAGE_ROOT,
         )
 
-    def run_cli(self, *, data_root: Path, uploaded_root: Path, generated_root: Path, arguments: dict) -> dict:
+    def run_cli(
+        self,
+        *,
+        data_root: Path,
+        uploaded_root: Path,
+        generated_root: Path,
+        arguments: dict,
+        workspace_root: Path | None = None,
+        effective_mode: str = "sandbox",
+    ) -> dict:
+        resolved_workspace_root = workspace_root if workspace_root is not None else data_root.parents[1]
         return run_json_entrypoint(
             STORAGE_ROOT / "cli" / "app_cli.py",
             payload={
                 "workspace_id": "default",
                 "data_root": str(data_root),
+                "workspace_root": str(resolved_workspace_root),
                 "uploaded_storage_root": str(uploaded_root),
                 "generated_storage_root": str(generated_root),
+                "effective_mode": effective_mode,
                 "arguments": arguments,
                 "surface": "cli",
             },
@@ -1476,6 +1488,69 @@ class StorageAppTestCase(unittest.TestCase):
             self.assertEqual(result["app_events"], [{"type": "maverick.app.data-changed", "resource": "files"}])
             self.assertEqual(duplicate["status_code"], 400)
 
+    def test_cli_upload_local_file_rejects_sandbox_source_outside_workspace(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            workspace_root = root / "workspace"
+            generated_root = workspace_root / "storage" / "generated"
+            uploaded_root = workspace_root / "storage" / "uploaded"
+            generated_root.mkdir(parents=True)
+            uploaded_root.mkdir(parents=True)
+            data_root = workspace_root / "data" / "storage"
+            source = root / "outside.pdf"
+            source.write_bytes(b"%PDF-1.4\n% outside workspace\n")
+
+            result = self.run_cli(
+                data_root=data_root,
+                uploaded_root=uploaded_root,
+                generated_root=generated_root,
+                workspace_root=workspace_root,
+                arguments={
+                    "action": "upload_local_file",
+                    "source_path": str(source),
+                    "workspace_relative_path": "storage/generated/pdf-edits/outside.pdf",
+                    "content_type": "application/pdf",
+                    "mode": "create",
+                },
+            )
+
+            self.assertEqual(result["status_code"], 400)
+            self.assertEqual(result["error"], "validation_error")
+            self.assertIn("inside the workspace root", result["detail"])
+            self.assertFalse((generated_root / "pdf-edits" / "outside.pdf").exists())
+
+    def test_cli_upload_local_file_allows_operator_source_in_full_access_mode(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            workspace_root = root / "workspace"
+            generated_root = workspace_root / "storage" / "generated"
+            uploaded_root = workspace_root / "storage" / "uploaded"
+            generated_root.mkdir(parents=True)
+            uploaded_root.mkdir(parents=True)
+            data_root = workspace_root / "data" / "storage"
+            source = root / "outside.pdf"
+            payload = b"%PDF-1.4\n% operator local upload\n"
+            source.write_bytes(payload)
+
+            result = self.run_cli(
+                data_root=data_root,
+                uploaded_root=uploaded_root,
+                generated_root=generated_root,
+                workspace_root=workspace_root,
+                effective_mode="full-access",
+                arguments={
+                    "action": "upload_local_file",
+                    "source_path": str(source),
+                    "workspace_relative_path": "storage/generated/pdf-edits/operator.pdf",
+                    "content_type": "application/pdf",
+                    "mode": "create",
+                },
+            )
+
+            self.assertEqual(result["status_code"], 200)
+            self.assertEqual(result["status"], "uploaded")
+            self.assertEqual((generated_root / "pdf-edits" / "operator.pdf").read_bytes(), payload)
+
     def test_backend_local_upload_session_reserves_storage_quota(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp)
@@ -1938,7 +2013,7 @@ class StorageAppTestCase(unittest.TestCase):
             {"action": "file_info", "role": "generated", "relative_path": "report.md"},
             {"action": "read_file", "role": "uploaded", "relative_path": "source.txt"},
             {"action": "read_text", "role": "generated", "relative_path": "report.md"},
-            {"action": "upload_local_file", "source_path": "/tmp/output.pdf", "workspace_relative_path": "storage/generated/pdf-edits/output.pdf", "mode": "create"},
+            {"action": "upload_local_file", "source_path": "/workspace/output.pdf", "workspace_relative_path": "storage/generated/pdf-edits/output.pdf", "mode": "create"},
             {"action": "preview_table", "workspace_relative_path": "storage/generated/leads.csv"},
             {"action": "read_folder", "role": "generated"},
             {"action": "download_folder", "role": "uploaded"},

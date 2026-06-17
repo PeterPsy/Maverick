@@ -53,7 +53,7 @@ Markdown conversion supports:
 
 Markdown conversion uses Docling. If `convert_to_markdown` reports that Docling is unavailable, the platform environment needs the `document-generator` Python extra installed.
 
-PDF text patching uses PyMuPDF through the `document-generator` Python extra. Do not create a temporary virtualenv or hand-roll PDF coordinates for ordinary text replacement; use the official `patch_pdf_text` or `modify_uploaded_document` action first.
+PDF text patching uses the PyMuPDF runtime dependency. Do not create a temporary virtualenv or hand-roll PDF coordinates for ordinary text replacement; use the official `patch_pdf_text` or `modify_uploaded_document` action first.
 
 Markdown conversion runs synchronously through the app entrypoint and accepts source files up to 10 MiB. For larger or scanned-heavy PDFs, ask the user to split or reduce the source before conversion.
 

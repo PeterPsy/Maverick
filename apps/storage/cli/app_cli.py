@@ -18,7 +18,11 @@ from store_files_paths import reference_from_payload
 
 
 def _upload_local_file_payload(*, data_root: Path, uploaded_root: Path, generated_root: Path, body: dict) -> tuple[int, dict]:
-    source = _local_source_path(body.get("source_path"))
+    source = _local_source_path(
+        body.get("source_path"),
+        workspace_root=body.get("_workspace_root"),
+        effective_mode=body.get("_effective_mode"),
+    )
     mode = str(body.get("mode") or "create").strip().lower()
     if mode != "create":
         raise StorageValidationError("upload_local_file supports mode=create only.", operation="upload_local_file")
@@ -124,7 +128,7 @@ def _ensure_local_upload_folder(*, data_root: Path, uploaded_root: Path, generat
         parent = (Path(parent) / part).as_posix() if parent else part
 
 
-def _local_source_path(raw_source: object) -> Path:
+def _local_source_path(raw_source: object, *, workspace_root: object, effective_mode: object) -> Path:
     value = str(raw_source or "").strip()
     if not value:
         raise StorageValidationError("source_path is required.", operation="upload_local_file")
@@ -133,7 +137,29 @@ def _local_source_path(raw_source: object) -> Path:
     source = Path(value).expanduser().resolve()
     if not source.is_file():
         raise StorageValidationError("source_path must point to a readable local file.", operation="upload_local_file")
+    _ensure_sandbox_source_inside_workspace(
+        source,
+        workspace_root=workspace_root,
+        effective_mode=effective_mode,
+    )
     return source
+
+
+def _ensure_sandbox_source_inside_workspace(source: Path, *, workspace_root: object, effective_mode: object) -> None:
+    if str(effective_mode or "sandbox").strip().lower() == "full-access":
+        return
+    raw_root = str(workspace_root or "").strip()
+    if not raw_root:
+        raise StorageValidationError(
+            "upload_local_file requires workspace_root when running in sandbox mode.",
+            operation="upload_local_file",
+        )
+    root = Path(raw_root).expanduser().resolve()
+    if source != root and root not in source.parents:
+        raise StorageValidationError(
+            "sandbox upload_local_file source_path must be inside the workspace root.",
+            operation="upload_local_file",
+        )
 
 
 def _local_upload_target(body: dict, source: Path) -> tuple[str, str, str]:
@@ -162,6 +188,7 @@ body = {
     "_app_secrets": payload.get("app_secrets", {}),
     "_surface": str(payload.get("surface") or "cli"),
     "_effective_mode": str(payload.get("effective_mode") or "sandbox"),
+    "_workspace_root": str(payload.get("workspace_root") or ""),
     "action": STORAGE_ACTION_ALIASES.get(requested_action, requested_action),
 }
 if payload.get("surface") == "secret_selector":

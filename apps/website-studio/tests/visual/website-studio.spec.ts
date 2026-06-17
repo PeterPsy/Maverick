@@ -82,7 +82,7 @@ test.describe('Website Studio visual smoke', () => {
 
       await expect(canvas).toBeVisible();
       await expect(iframe).toBeVisible();
-      await expect(iframe).toHaveAttribute('data-preview-url', /client_version=website-studio-preview-frame-v8/);
+      await expect(iframe).toHaveAttribute('data-preview-url', /client_version=website-studio-preview-frame-v9/);
       await expect(page.locator('.preview-status')).toHaveCount(0);
       await expect(page.locator('.site-status-panel')).toHaveCount(0);
       await expect(infoPanel).toHaveCount(0);
@@ -271,8 +271,8 @@ test.describe('Website Studio preview runtime', () => {
       expect(body.action).toBe('preview_document');
       documentRequests += 1;
       const previewId = body.preview_id || 'preview_hot_a';
-      const routePath = previewId.endsWith('_b') ? '/about' : '/';
-      const suffix = previewId.endsWith('_b') ? 'b' : 'a';
+      const routePath = previewId.endsWith('_c') ? '/changed' : previewId.endsWith('_b') ? '/about' : '/';
+      const gatewayId = previewId.endsWith('_c') ? 'gw_logo_changed' : 'gw_logo_shared';
       await route.fulfill({
         status: 200,
         contentType: 'application/json',
@@ -292,7 +292,7 @@ test.describe('Website Studio preview runtime', () => {
             route: routePath,
             asset_refs: ['assets/logo.svg'],
             asset_gateway: {
-              'assets/logo.svg': `/api/apps/website-studio/backend/file/gw_logo_${suffix}`
+              'assets/logo.svg': `/api/apps/website-studio/backend/file/${gatewayId}`
             }
           }
         })
@@ -304,7 +304,7 @@ test.describe('Website Studio preview runtime', () => {
       await route.fulfill({
         status: 200,
         contentType: 'image/svg+xml',
-        headers: { 'Cache-Control': 'public, max-age=3600' },
+        headers: { 'Access-Control-Allow-Origin': '*', 'Cache-Control': 'public, max-age=3600' },
         body: '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24"><rect width="24" height="24" fill="#1d7f64"/></svg>'
       });
     });
@@ -313,11 +313,15 @@ test.describe('Website Studio preview runtime', () => {
 
     const previewFrame = page.frameLocator('#preview');
     await expect(previewFrame.locator('[data-testid="route"]')).toContainText('/');
-    await expect(previewFrame.locator('[data-testid="logo"]')).toHaveAttribute('src', /gw_logo_a/);
+    await expect(previewFrame.locator('[data-testid="logo"]')).toHaveAttribute('src', /gw_logo_shared/);
     await previewFrame.locator('body').evaluate(() => {
       (window as unknown as { __websiteStudioRouteMarker?: string }).__websiteStudioRouteMarker = 'home-stayed-mounted';
       document.body.setAttribute('data-route-marker', 'home-stayed-mounted');
     });
+    await expect.poll(async () => page.evaluate(() => {
+      return (window as unknown as { __WEBSITE_STUDIO_ASSET_BLOB_CACHE_SIZE__?: () => number }).__WEBSITE_STUDIO_ASSET_BLOB_CACHE_SIZE__?.() || 0;
+    }), { timeout: 3_000 }).toBeGreaterThan(0);
+    const sharedGatewayRequestsAfterWarm = gatewayRequests.filter((path) => path.endsWith('gw_logo_shared')).length;
 
     await page.evaluate(() => {
       window.postMessage(
@@ -333,9 +337,26 @@ test.describe('Website Studio preview runtime', () => {
     });
 
     await expect(previewFrame.locator('[data-testid="route"]')).toContainText('/about');
-    await expect(previewFrame.locator('[data-testid="logo"]')).toHaveAttribute('src', /gw_logo_a/);
+    await expect(previewFrame.locator('[data-testid="logo"]')).toHaveAttribute('src', /^blob:/);
     expect(documentRequests).toBe(2);
-    expect(gatewayRequests.some((path) => path.endsWith('gw_logo_b'))).toBe(false);
+    expect(gatewayRequests.filter((path) => path.endsWith('gw_logo_shared')).length).toBe(sharedGatewayRequestsAfterWarm);
+
+    await page.evaluate(() => {
+      window.postMessage(
+        {
+          type: 'website-studio.preview.navigate',
+          owner_app_id: 'website-studio',
+          preview_id: 'preview_hot_c',
+          route: '/changed',
+          preview_url: '/apps/website-studio/preview-runtime/?preview_id=preview_hot_c&route=%2Fchanged'
+        },
+        window.location.origin
+      );
+    });
+
+    await expect(previewFrame.locator('[data-testid="route"]')).toContainText('/changed');
+    await expect(previewFrame.locator('[data-testid="logo"]')).toHaveAttribute('src', /gw_logo_changed/);
+    expect(gatewayRequests.some((path) => path.endsWith('gw_logo_changed'))).toBe(true);
 
     await page.evaluate(() => {
       window.postMessage(
@@ -355,7 +376,7 @@ test.describe('Website Studio preview runtime', () => {
     await expect.poll(async () => previewFrame.locator('body').evaluate(() => {
       return (window as unknown as { __websiteStudioRouteMarker?: string }).__websiteStudioRouteMarker || '';
     }), { timeout: 1_000 }).toBe('home-stayed-mounted');
-    expect(documentRequests).toBe(2);
+    expect(documentRequests).toBe(3);
   });
 
   test('mounts the document before slow lazy media finishes loading', async ({ page }) => {
@@ -518,7 +539,7 @@ test.describe('Website Studio preview runtime', () => {
     await expect.poll(async () => page.evaluate(() => {
       const reports = (window as unknown as { __WEBSITE_STUDIO_PREVIEW_REPORTS__?: { report?: { asset_broker?: { cache_size?: number } } }[] }).__WEBSITE_STUDIO_PREVIEW_REPORTS__ || [];
       return Math.max(...reports.map((entry) => entry.report?.asset_broker?.cache_size || 0), 0);
-    }), { timeout: 3_000 }).toBe(0);
+    }), { timeout: 3_000 }).toBeGreaterThan(0);
     await expect.poll(async () => page.evaluate(() => {
       const reports = (window as unknown as { __WEBSITE_STUDIO_PREVIEW_REPORTS__?: { report?: { asset_coverage?: { images?: { src?: string }[] } } }[] }).__WEBSITE_STUDIO_PREVIEW_REPORTS__ || [];
       return reports.some((entry) => entry.report?.asset_coverage?.images?.some((item) => item.src?.includes('/api/apps/website-studio/backend/file/gw_')));

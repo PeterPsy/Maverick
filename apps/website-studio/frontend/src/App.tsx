@@ -29,8 +29,8 @@ type PreviewNavigateCommand = {
 };
 
 const EMPTY_SITEMAP: SitemapPayload = { site_id: '', items: [], routes: [], assets: [] };
-const PREVIEW_RUNTIME_VERSION = 'preview-browser-stream-v5';
-const PREVIEW_CLIENT_VERSION = 'website-studio-preview-frame-v8';
+const PREVIEW_RUNTIME_VERSION = 'preview-browser-stream-v6';
+const PREVIEW_CLIENT_VERSION = 'website-studio-preview-frame-v9';
 
 export function App() {
   const [sites, setSites] = useState<Site[]>([]);

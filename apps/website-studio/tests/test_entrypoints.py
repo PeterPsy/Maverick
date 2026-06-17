@@ -1639,13 +1639,13 @@ class WebsiteStudioEntrypointTest(unittest.TestCase):
             with ZipFile(archive, "w") as zip_file:
                 zip_file.writestr(
                     "index.html",
-                    '<!doctype html><html><body><main><h1>Home</h1><img src="assets/logo.webp" alt=""></main></body></html>',
+                    '<!doctype html><html><body><main><h1>Home</h1><img src="assets/logo.svg" alt=""></main></body></html>',
                 )
                 zip_file.writestr(
                     "about.html",
-                    '<!doctype html><html><body><main><h1>About</h1><img src="assets/logo.webp" alt=""></main></body></html>',
+                    '<!doctype html><html><body><main><h1>About</h1><img src="assets/logo.svg" alt=""></main></body></html>',
                 )
-                zip_file.writestr("assets/logo.webp", b"logo")
+                zip_file.writestr("assets/logo.svg", '<svg xmlns="http://www.w3.org/2000/svg"><rect width="24" height="24"/></svg>')
             encoded = base64.b64encode(archive.getvalue()).decode("ascii")
 
             status, imported = handle_action(data_root, {"action": "import_zip", "display_name": "Shared Assets", "archive_base64": encoded})
@@ -1663,21 +1663,43 @@ class WebsiteStudioEntrypointTest(unittest.TestCase):
             status, about_document = handle_action(data_root, {"action": "preview_document", "preview_id": about_preview["preview_id"]})
             self.assertEqual(status, 200)
 
-            home_gateway = home_document["source_map"]["asset_gateway"]["assets/logo.webp"]
-            about_gateway = about_document["source_map"]["asset_gateway"]["assets/logo.webp"]
+            home_gateway = home_document["source_map"]["asset_gateway"]["assets/logo.svg"]
+            about_gateway = about_document["source_map"]["asset_gateway"]["assets/logo.svg"]
             self.assertEqual(home_gateway, about_gateway)
             self.assertIn(home_gateway, about_document["html"])
 
             logo_manifests = []
             for path in (data_root / "run" / "file-gateway").glob("gw_*.json"):
                 manifest = json.loads(path.read_text(encoding="utf-8"))
-                if manifest.get("asset_path") == "assets/logo.webp":
+                if manifest.get("asset_path") == "assets/logo.svg":
                     logo_manifests.append(manifest)
             self.assertEqual(len(logo_manifests), 1)
             self.assertEqual(logo_manifests[0]["file_response"]["cache_control"], "private, max-age=1800")
             reuse_index = json.loads((data_root / "run" / "file-gateway" / "reuse-index.json").read_text(encoding="utf-8"))
             self.assertEqual(reuse_index["schema"], "website-studio.file_gateway_reuse_index.v1")
             self.assertTrue(reuse_index["entries"])
+
+            status, logo_file = handle_action(data_root, {"action": "read_file", "site_id": site_id, "path": "assets/logo.svg"})
+            self.assertEqual(status, 200)
+            status, _ = handle_action(
+                data_root,
+                {
+                    "action": "write_file",
+                    "site_id": site_id,
+                    "path": "assets/logo.svg",
+                    "content": '<svg xmlns="http://www.w3.org/2000/svg"><circle cx="12" cy="12" r="12"/></svg>',
+                    "expected_hash": logo_file["file"]["hash"],
+                },
+            )
+            self.assertEqual(status, 200)
+            status, changed_preview = handle_action(data_root, {"action": "build_preview", "site_id": site_id, "route": "/"})
+            self.assertEqual(status, 200)
+            self.assertNotEqual(changed_preview["preview_id"], home_preview["preview_id"])
+            status, changed_document = handle_action(data_root, {"action": "preview_document", "preview_id": changed_preview["preview_id"]})
+            self.assertEqual(status, 200)
+            changed_gateway = changed_document["source_map"]["asset_gateway"]["assets/logo.svg"]
+            self.assertNotEqual(changed_gateway, home_gateway)
+            self.assertIn(changed_gateway, changed_document["html"])
 
     def test_preview_media_gateway_replacement_records_html_only_aliases(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -2893,6 +2915,10 @@ class WebsiteStudioEntrypointTest(unittest.TestCase):
         self.assertIn("loadPreviewDocument", runtime_source)
         self.assertIn("documentCache", runtime_source)
         self.assertIn("assetGatewayCache", runtime_source)
+        self.assertIn("assetBlobCache", runtime_source)
+        self.assertIn("website-studio.preview.asset-cache-warm", runtime_source)
+        self.assertIn("asset_blob_cache", runtime_source)
+        self.assertIn("credentials: 'omit'", runtime_source)
         self.assertIn("website-studio.preview.navigate", runtime_source)
         self.assertIn("website-studio.preview.target", runtime_source)
         self.assertIn("__WEBSITE_STUDIO_PREVIEW_REPORT__", runtime_source)
@@ -2914,7 +2940,7 @@ class WebsiteStudioEntrypointTest(unittest.TestCase):
         self.assertNotIn("dataUrlFromBytes", runtime_source)
         self.assertNotIn("response.arrayBuffer", runtime_source)
         self.assertNotIn("credentials: 'same-origin'", runtime_source)
-        self.assertNotIn("response.blob()", runtime_source)
+        self.assertIn("URL.createObjectURL(blob)", runtime_source)
         self.assertNotIn("asset materialization failed", runtime_source)
         self.assertNotIn("currentAssetUrls", runtime_source)
         self.assertNotIn("fetchMediaText", runtime_source)

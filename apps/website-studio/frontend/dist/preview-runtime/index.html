@@ -35,14 +35,19 @@
       const root = document.getElementById('root');
       const initialFrame = document.getElementById('preview');
       const frameCacheLimit = 8;
+      const assetBlobCacheLimit = 96;
+      const assetBlobCacheMaxBytes = 8 * 1024 * 1024;
       let activeFrame = initialFrame;
       let loadRunId = 0;
       const documentCache = new Map();
       const frameCache = new Map();
       const assetGatewayCache = new Map();
+      const assetBlobCache = new Map();
+      const pendingAssetBlobFetches = new Map();
       const previewReports = [];
       window.__WEBSITE_STUDIO_PREVIEW_REPORT__ = null;
       window.__WEBSITE_STUDIO_PREVIEW_REPORTS__ = previewReports;
+      window.__WEBSITE_STUDIO_ASSET_BLOB_CACHE_SIZE__ = () => assetBlobCache.size;
 
       window.addEventListener('message', (event) => {
         const data = event.data || {};
@@ -86,6 +91,12 @@
             report: envelope.report
           }, window.location.origin);
         } catch {}
+      });
+
+      window.addEventListener('message', (event) => {
+        const data = event.data || {};
+        if (!data || data.type !== 'website-studio.preview.asset-cache-warm' || !isPreviewFrameWindow(event.source)) return;
+        warmAssetBlobCache(data.url).catch(() => {});
       });
 
       function previewTargetFromParams(searchParams) {
@@ -134,6 +145,69 @@
         if (!entry?.documentUrl) return;
         URL.revokeObjectURL(entry.documentUrl);
         entry.documentUrl = '';
+      }
+
+      function normalizedGatewayCacheKey(value) {
+        try {
+          const url = new URL(String(value || ''), window.location.origin);
+          if (url.origin !== window.location.origin || !url.pathname.startsWith(fileGatewayPrefix)) return '';
+          url.hash = '';
+          return url.toString();
+        } catch {
+          return '';
+        }
+      }
+
+      function cachedAssetBlobUrl(value, hash = '') {
+        const entry = assetBlobCache.get(normalizedGatewayCacheKey(value));
+        return entry?.objectUrl ? `${entry.objectUrl}${hash || ''}` : '';
+      }
+
+      function cacheAssetBlob(key, blob) {
+        const cleanKey = normalizedGatewayCacheKey(key);
+        if (!cleanKey || !(blob instanceof Blob) || !blob.size || blob.size > assetBlobCacheMaxBytes) return;
+        const previous = assetBlobCache.get(cleanKey);
+        if (previous?.objectUrl) URL.revokeObjectURL(previous.objectUrl);
+        assetBlobCache.delete(cleanKey);
+        assetBlobCache.set(cleanKey, {
+          bytes: blob.size,
+          contentType: blob.type || 'application/octet-stream',
+          objectUrl: URL.createObjectURL(blob),
+          updatedAt: Date.now()
+        });
+        pruneAssetBlobCache();
+      }
+
+      function pruneAssetBlobCache() {
+        while (assetBlobCache.size > assetBlobCacheLimit) {
+          const key = assetBlobCache.keys().next().value;
+          if (key === undefined) break;
+          const entry = assetBlobCache.get(key);
+          if (entry?.objectUrl) URL.revokeObjectURL(entry.objectUrl);
+          assetBlobCache.delete(key);
+        }
+      }
+
+      async function warmAssetBlobCache(value) {
+        const key = normalizedGatewayCacheKey(value);
+        if (!key || assetBlobCache.has(key)) return;
+        const pending = pendingAssetBlobFetches.get(key);
+        if (pending) {
+          await pending;
+          return;
+        }
+        const request = (async () => {
+          const response = await fetch(key, { cache: 'force-cache', credentials: 'omit' });
+          if (!response.ok) return;
+          const size = Number.parseInt(response.headers.get('content-length') || '0', 10);
+          if (Number.isFinite(size) && size > assetBlobCacheMaxBytes) return;
+          const blob = await response.blob();
+          cacheAssetBlob(key, blob);
+        })().finally(() => {
+          pendingAssetBlobFetches.delete(key);
+        });
+        pendingAssetBlobFetches.set(key, request);
+        await request;
       }
 
       function ensureFrameEntry(previewId) {
@@ -270,8 +344,8 @@
         const raw = String(value || '').trim();
         if (skipAssetUrl(raw)) return '';
         const gateway = gatewayUrlForPreviewAssetUrl(raw, sourceMap);
-        if (gateway) return gateway;
-        if (isPreviewAssetUrl(raw)) return normalizedAssetDocumentUrl(raw);
+        if (gateway) return cachedAssetBlobUrl(gateway) || gateway;
+        if (isPreviewAssetUrl(raw)) return cachedAssetBlobUrl(raw) || normalizedAssetDocumentUrl(raw);
         try {
           const parsed = new URL(raw, window.location.origin);
           if (isPreviewAssetUrl(parsed.toString())) return parsed.toString();
@@ -302,7 +376,7 @@
         }
         if (!clean) return '';
         const gateway = gatewayUrlForPath(clean, sourceMap);
-        if (gateway) return gateway + hash;
+        if (gateway) return cachedAssetBlobUrl(gateway, hash) || gateway + hash;
         const url = new URL(mediaPath, window.location.origin);
         url.searchParams.set('preview_id', currentPreviewId);
         url.searchParams.set('path', clean);
@@ -707,7 +781,9 @@
           preview_id: currentPreviewId,
           runtime_origin: window.location.origin,
           asset_refs: Array.isArray(sourceMap?.asset_refs) ? sourceMap.asset_refs.slice(0, 240) : [],
-          asset_gateway: sourceMap?.asset_gateway && typeof sourceMap.asset_gateway === 'object' ? sourceMap.asset_gateway : {}
+          asset_gateway: sourceMap?.asset_gateway && typeof sourceMap.asset_gateway === 'object' ? sourceMap.asset_gateway : {},
+          asset_blob_cache: assetBlobCacheForSourceMap(sourceMap),
+          asset_blob_cache_size: assetBlobCache.size
         };
         broker.textContent = `
 (() => {
@@ -727,6 +803,43 @@
     [typeof HTMLLinkElement === 'undefined' ? null : HTMLLinkElement.prototype, 'href', 'href'],
     [typeof HTMLMediaElement === 'undefined' ? null : HTMLMediaElement.prototype, 'src', 'src']
   ];
+  const assetBlobCache = config.asset_blob_cache && typeof config.asset_blob_cache === 'object' ? config.asset_blob_cache : {};
+  const warmedAssetUrls = new Set();
+  let publishedCacheEntries = Number(config.asset_blob_cache_size || 0) || 0;
+
+  const gatewayCacheKey = (value) => {
+    try {
+      const url = new URL(String(value || ''), config.runtime_origin);
+      if (url.origin !== config.runtime_origin || !url.pathname.startsWith(fileGatewayPrefix)) return '';
+      url.hash = '';
+      return url.toString();
+    } catch {
+      return '';
+    }
+  };
+
+  const blobUrlForGateway = (value, hash = '') => {
+    const key = gatewayCacheKey(value);
+    const blobUrl = key ? String(assetBlobCache[key] || '') : '';
+    return blobUrl.startsWith('blob:') ? blobUrl + (hash || '') : '';
+  };
+
+  const requestAssetWarm = (value) => {
+    const key = gatewayCacheKey(value);
+    if (!key || warmedAssetUrls.has(key) || assetBlobCache[key]) return;
+    warmedAssetUrls.add(key);
+    publishedCacheEntries = Math.max(publishedCacheEntries, Object.keys(assetBlobCache).length + warmedAssetUrls.size);
+    try {
+      parent.postMessage({ type: 'website-studio.preview.asset-cache-warm', preview_id: config.preview_id || '', url: key }, config.runtime_origin);
+    } catch {}
+  };
+
+  const assetUrlForGateway = (value, hash = '', options = {}) => {
+    const cached = blobUrlForGateway(value, hash);
+    if (cached) return cached;
+    if (options.warm !== false) requestAssetWarm(value);
+    return value + (hash || '');
+  };
 
   const mediaUrlForPath = (path) => {
     let clean = String(path || '').replace(/^\\/+/, '');
@@ -745,7 +858,7 @@
     }
     if (!clean) return '';
     const gateway = gatewayUrlForPath(clean);
-    if (gateway) return gateway + hash;
+    if (gateway) return assetUrlForGateway(gateway, hash);
     const url = new URL(mediaPath, config.runtime_origin);
     url.searchParams.set('preview_id', config.preview_id || '');
     url.searchParams.set('path', clean);
@@ -797,15 +910,18 @@
     return assetRefs.has(pathOnly);
   };
 
-  const normalizeLocalAssetUrl = (value) => {
+  const normalizeLocalAssetUrl = (value, options = {}) => {
     const raw = String(value || '').trim();
     if (skipAssetUrl(raw)) return '';
     const gateway = gatewayUrlForPreviewAssetUrl(raw);
-    if (gateway) return gateway;
-    if (isPreviewAssetUrl(raw)) return new URL(raw, config.runtime_origin).toString();
+    if (gateway) return assetUrlForGateway(gateway, '', options);
+    if (isPreviewAssetUrl(raw)) {
+      const normalized = new URL(raw, config.runtime_origin).toString();
+      return normalized.includes(fileGatewayPrefix) ? assetUrlForGateway(normalized, '', options) : normalized;
+    }
     try {
       const parsed = new URL(raw, config.runtime_origin);
-      if (isPreviewAssetUrl(parsed.toString())) return parsed.toString();
+      if (isPreviewAssetUrl(parsed.toString())) return parsed.pathname.startsWith(fileGatewayPrefix) ? assetUrlForGateway(parsed.toString(), '', options) : parsed.toString();
       if (parsed.origin !== config.runtime_origin) return '';
       const clean = parsed.pathname.replace(/^\\/+/, '');
       if (!isLocalAssetCandidate(clean + parsed.search + parsed.hash)) return '';
@@ -824,13 +940,13 @@
     });
   };
 
-  const normalizeSrcset = (value) => {
+  const normalizeSrcset = (value, options = {}) => {
     const items = [];
     for (const item of String(value || '').split(',')) {
       const trimmed = item.trim();
       if (!trimmed) continue;
       const parts = trimmed.split(/\\s+/);
-      const next = normalizeLocalAssetUrl(parts[0]);
+      const next = normalizeLocalAssetUrl(parts[0], options);
       if (next) parts[0] = next;
       items.push(parts.join(' '));
     }
@@ -842,13 +958,13 @@
     for (const attr of brokeredAttrs) {
       if (!element.hasAttribute(attr)) continue;
       const value = element.getAttribute(attr) || '';
-      const next = normalizeLocalAssetUrl(value);
+      const next = normalizeLocalAssetUrl(value, { warm: !attr.startsWith('data-') });
       if (next && next !== value) originalSetAttribute.call(element, attr, next);
     }
     for (const attr of srcsetAttrs) {
       if (!element.hasAttribute(attr)) continue;
       const value = element.getAttribute(attr) || '';
-      const next = normalizeSrcset(value);
+      const next = normalizeSrcset(value, { warm: !attr.startsWith('data-') });
       if (next && next !== value) originalSetAttribute.call(element, attr, next);
     }
     if (element.hasAttribute('style')) {
@@ -919,7 +1035,7 @@
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', () => scan(document), { once: true });
   else scan(document);
   [50, 150, 500, 1200, 3000].forEach((delay) => window.setTimeout(() => scan(document), delay));
-  window.__WEBSITE_STUDIO_ASSET_BROKER__ = { scan, cache_size: () => 0 };
+  window.__WEBSITE_STUDIO_ASSET_BROKER__ = { scan, cache_size: () => Math.max(publishedCacheEntries, Object.keys(assetBlobCache).length) };
 })();
         `.trim();
         head.insertBefore(broker, head.firstChild);
@@ -944,16 +1060,25 @@
         }
       }
 
+      function assetBlobCacheForSourceMap(sourceMap) {
+        const gateway = sourceMap?.asset_gateway && typeof sourceMap.asset_gateway === 'object' ? sourceMap.asset_gateway : {};
+        const result = {};
+        for (const value of Object.values(gateway)) {
+          const key = normalizedGatewayCacheKey(value);
+          const entry = key ? assetBlobCache.get(key) : null;
+          if (entry?.objectUrl) result[key] = entry.objectUrl;
+        }
+        return result;
+      }
+
       function mergeCachedAssetGateway(sourceMap) {
         const next = { ...(sourceMap || {}) };
         const incoming = next.asset_gateway && typeof next.asset_gateway === 'object' ? next.asset_gateway : {};
-        const merged = { ...incoming };
+        const merged = {};
         for (const [path, gateway] of Object.entries(incoming)) {
           if (!validFileGatewayUrl(gateway)) continue;
-          if (!assetGatewayCache.has(path)) boundedSet(assetGatewayCache, path, gateway, 800);
-        }
-        for (const [path, gateway] of assetGatewayCache.entries()) {
           merged[path] = gateway;
+          boundedSet(assetGatewayCache, path, gateway, 800);
         }
         next.asset_gateway = merged;
         return next;

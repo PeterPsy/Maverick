@@ -82,7 +82,7 @@ DEFAULT_RETAIN_PREVIEWS_PER_ROUTE = 3
 DEFAULT_RETAIN_RUNTIME_SESSIONS = 20
 DEFAULT_RETENTION_REVIEW_CADENCE = "run dry-run during routine workspace maintenance and prune after reviewing counts"
 MAX_SOURCE_MAP_ASSET_INDEX = 120
-PREVIEW_RUNTIME_VERSION = "preview-browser-stream-v5"
+PREVIEW_RUNTIME_VERSION = "preview-browser-stream-v6"
 FILE_GATEWAY_SCHEMA = "maverick.app.file_gateway.v1"
 FILE_GATEWAY_REUSE_INDEX_SCHEMA = "website-studio.file_gateway_reuse_index.v1"
 PREVIEW_FILE_GATEWAY_TTL = timedelta(minutes=30)
@@ -2215,34 +2215,6 @@ def _reusable_preview_file_gateway_token(
             now=now,
         ):
             return indexed_token
-    try:
-        candidates = sorted(manifest_root.glob("gw_*.json"), key=lambda path: path.stat().st_mtime_ns, reverse=True)
-    except OSError:
-        return ""
-    for path in candidates[:1000]:
-        token = path.stem
-        manifest = _read_preview_file_gateway_manifest(manifest_root, token)
-        if not _preview_file_gateway_manifest_matches(
-            manifest,
-            app_id=app_id,
-            file_response=file_response,
-            asset_path=asset_path,
-            resolved_path=resolved_path,
-            now=now,
-        ):
-            continue
-        expires_at = _parse_gateway_timestamp(manifest.get("expires_at") if isinstance(manifest, dict) else None)
-        if expires_at is not None:
-            _write_preview_file_gateway_reuse_index_entry(
-                manifest_root,
-                token=token,
-                app_id=app_id,
-                file_response=file_response,
-                asset_path=asset_path,
-                resolved_path=resolved_path,
-                expires_at=expires_at.isoformat(),
-            )
-        return token
     return ""
 
 

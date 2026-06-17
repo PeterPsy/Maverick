@@ -217,6 +217,34 @@ class InterAgentApiTestCase(AppReferenceApiTestSupport, unittest.TestCase):
         self.assertEqual(root_session_id, "root-session")
         self.assertTrue(child_deleted)
 
+    def test_inter_agent_http_spawn_rejects_unsafe_child_session_id(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            repo_root = self._repo_root(temp_dir)
+            state = self._bootstrap_state(repo_root)
+            self._create_root_session(state, repo_root)
+            app = PlatformHost(state, start_path=repo_root)
+            cookie = self._login(app)
+
+            create_status, _create_payload, _headers = self._invoke(
+                app,
+                path="/api/inter-agent/runs",
+                method="POST",
+                body=_run_payload(run_id="unsafe-child-run"),
+                cookie=cookie,
+            )
+            spawn_status, spawn_payload, _headers = self._invoke(
+                app,
+                path="/api/inter-agent/runs/unsafe-child-run/participants",
+                method="POST",
+                body={"participant_id": "researcher", "child_session_id": "../escape"},
+                cookie=cookie,
+            )
+
+        self.assertEqual(create_status, 201)
+        self.assertEqual(spawn_status, 400)
+        self.assertEqual(spawn_payload["error"], "inter_agent_validation_failed")
+        self.assertIn("runtime_session_id_unsafe", spawn_payload["detail"])
+
     def test_inter_agent_http_rejects_hidden_root_session(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             repo_root = self._repo_root(temp_dir)

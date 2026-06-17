@@ -12,7 +12,7 @@ import time
 from typing import Any
 import uuid
 
-from core.inter_agent.errors import InterAgentOperationError
+from core.inter_agent.errors import InterAgentOperationError, InterAgentValidationError
 from core.inter_agent.events import (
     EventRetentionPolicyRecord,
     InterAgentEventRecord,
@@ -385,6 +385,9 @@ class InterAgentService:
                 now=timestamp,
             )
             child = transition_runtime_session(runtime_store, session_id=child.session_id, target_status="running", now=timestamp)
+        except ValueError as error:
+            self.release_budget(run, reservation_id=reservation_id, now=timestamp)
+            raise InterAgentValidationError(str(error)) from error
         except Exception:
             self.release_budget(run, reservation_id=reservation_id, now=timestamp)
             raise

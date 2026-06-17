@@ -9,6 +9,7 @@ from core.app_sdk.cli import run_cli_json
 from core.authorization.errors import AuthorizationError
 from core.identity.service import create_user
 from core.identity.store import IdentityCollections, IdentityDocumentStore
+from core.inter_agent.errors import InterAgentValidationError
 from core.inter_agent.store import build_inter_agent_document_store
 from core.api.app_events import AppEventBus
 from core.runtime.errors import RuntimeSessionNotFoundError
@@ -253,6 +254,80 @@ class TestMcpCliSurfaces(SurfaceTestBase):
             runtime_store.get_session("cli-child")
         with self.assertRaises(RuntimeSessionNotFoundError):
             runtime_store.get_session("mcp-child")
+
+    def test_inter_agent_cli_and_mcp_reject_unsafe_child_session_id_as_validation_error(self) -> None:
+        repo_root = self.make_repo_root()
+        runtime_store = self.make_runtime_store()
+        inter_agent_store = build_inter_agent_document_store(start_path=repo_root)
+        create_runtime_session(
+            runtime_store,
+            session_id="root-cli",
+            workspace_id="default",
+            agent_id="chat",
+            source_app_id="chat",
+            start_path=repo_root,
+        )
+        create_runtime_session(
+            runtime_store,
+            session_id="root-mcp",
+            workspace_id="default",
+            agent_id="chat",
+            source_app_id="chat",
+            start_path=repo_root,
+        )
+        cli_context = CliInvocationContext(
+            caller_kind="operator",
+            workspace_id="default",
+            agent_id=None,
+            effective_mode="full-access",
+            user_id="operator",
+        )
+        mcp_context = McpInvocationContext(
+            caller_kind="operator",
+            workspace_id="default",
+            agent_id=None,
+            effective_mode="full-access",
+            user_id="operator",
+        )
+        run_core_cli_command(
+            command_id="inter-agent.runs.create",
+            context=cli_context,
+            runtime_store=runtime_store,
+            inter_agent_store=inter_agent_store,
+            workspace_id="default",
+            start_path=repo_root,
+            arguments=_inter_agent_run_payload(run_id="unsafe-cli-run", root_session_id="root-cli"),
+        )
+        call_mcp_tool(
+            tool_name="inter_agent_run_create",
+            context=mcp_context,
+            runtime_store=runtime_store,
+            inter_agent_store=inter_agent_store,
+            workspace_id="default",
+            start_path=repo_root,
+            arguments=_inter_agent_run_payload(run_id="unsafe-mcp-run", root_session_id="root-mcp"),
+        )
+
+        with self.assertRaisesRegex(InterAgentValidationError, "runtime_session_id_unsafe"):
+            run_core_cli_command(
+                command_id="inter-agent.participants.spawn",
+                context=cli_context,
+                runtime_store=runtime_store,
+                inter_agent_store=inter_agent_store,
+                workspace_id="default",
+                start_path=repo_root,
+                arguments={"run_id": "unsafe-cli-run", "participant_id": "researcher", "child_session_id": "../escape"},
+            )
+        with self.assertRaisesRegex(InterAgentValidationError, "runtime_session_id_unsafe"):
+            call_mcp_tool(
+                tool_name="inter_agent_participant_spawn",
+                context=mcp_context,
+                runtime_store=runtime_store,
+                inter_agent_store=inter_agent_store,
+                workspace_id="default",
+                start_path=repo_root,
+                arguments={"run_id": "unsafe-mcp-run", "participant_id": "researcher", "child_session_id": "/tmp/evil"},
+            )
 
     def test_inter_agent_cli_and_mcp_reject_sandbox_non_creator_run_operations(self) -> None:
         repo_root = self.make_repo_root()

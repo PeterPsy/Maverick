@@ -333,14 +333,23 @@ runtime sessions, invoke an LLM, or expose HTTP/CLI/MCP executor operations. F2
 adds the first policy-aware runtime bridge: core inter-agent surfaces may spawn a
 declared `child_runtime_session` participant into a hidden
 `session_kind=inter_agent_participant` runtime session, send turns to that child,
-wait, interrupt, resume, close, and recover runs. Those surfaces must materialize
-prompt, skill ids, skill catalog, source app, owner, creator, and grants only
-from core policy or authorized materialized snapshots; public HTTP, CLI, and MCP
-payloads must not mint those authority-bearing values. Public run creation
-derives `source_app_id` from the root runtime session, and public spawn ignores
-payload prompt, skill, catalog, source-app, provider, snapshot, and operation
-grant fields. The bridge must not clone authority-bearing prompt, skills, owner,
-grants, or secret access from the root runtime session.
+wait, interrupt, resume, close, and recover runs. F3 adds the native MVP
+executor for `manager_tools`, `sequential`, and `concurrent` runs. The executor
+can run deterministic controlled participants for tests and policy-safe product
+flows, or use the F2 bridge to spawn real hidden child runtime sessions and send
+runtime turns. It emits normalized inter-agent events for plan, task, message,
+participant status, artifact, summary, and terminal run state, and projects only
+selected operational summaries to the root runtime session transcript. `handoff`
+remains schema/event-only until F7.
+
+Those surfaces must materialize prompt, skill ids, skill catalog, source app,
+owner, creator, and grants only from core policy or authorized materialized
+snapshots; public HTTP, CLI, and MCP payloads must not mint those
+authority-bearing values. Public run creation derives `source_app_id` from the
+root runtime session, and public spawn ignores payload prompt, skill, catalog,
+source-app, provider, snapshot, and operation grant fields. The bridge and
+native executor must not clone authority-bearing prompt, skills, owner, grants,
+or secret access from the root runtime session.
 
 Root runtime sessions are also authority-bearing. Non-operator callers may attach
 an inter-agent run to a root session only when they own that root, are
@@ -1175,6 +1184,7 @@ surface, not through raw hidden runtime routes:
 - `GET /api/inter-agent/runs/<run_id>/events`
 - `POST /api/inter-agent/runs/<run_id>/participants`
 - `POST /api/inter-agent/runs/<run_id>/messages`
+- `POST /api/inter-agent/runs/<run_id>/execute`
 - `GET|POST /api/inter-agent/runs/<run_id>/wait`
 - `POST /api/inter-agent/runs/<run_id>/interrupt`
 - `POST /api/inter-agent/runs/<run_id>/resume`
@@ -1182,11 +1192,11 @@ surface, not through raw hidden runtime routes:
 
 The matching core CLI commands are `inter-agent.runs.create`,
 `inter-agent.participants.spawn`, `inter-agent.messages.send`,
-`inter-agent.runs.wait`, `inter-agent.runs.interrupt`,
+`inter-agent.runs.execute`, `inter-agent.runs.wait`, `inter-agent.runs.interrupt`,
 `inter-agent.runs.resume`, and `inter-agent.runs.close`. The matching MCP tools
 are `inter_agent_run_create`, `inter_agent_participant_spawn`,
-`inter_agent_message_send`, `inter_agent_wait`, `inter_agent_interrupt`,
-`inter_agent_resume`, and `inter_agent_close`.
+`inter_agent_message_send`, `inter_agent_execute`, `inter_agent_wait`,
+`inter_agent_interrupt`, `inter_agent_resume`, and `inter_agent_close`.
 
 Inter-agent mutation surfaces share the same run authority rule: the local
 operator, the run creator, a platform admin, or a workspace admin may mutate a

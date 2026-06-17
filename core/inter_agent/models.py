@@ -219,6 +219,8 @@ class InterAgentRunRecord:
     recovery_generation: int
     idempotency_key: str | None = None
     spec_fingerprint: str | None = None
+    aggregator_participant_id: str | None = None
+    merge_policy: str | None = None
 
 
 @dataclass(frozen=True)

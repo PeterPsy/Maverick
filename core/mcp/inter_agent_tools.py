@@ -12,9 +12,10 @@ from core.inter_agent.authorization import (
     authorize_inter_agent_root_session_use,
     authorize_inter_agent_run_operation,
 )
+from core.inter_agent.executor import execute_inter_agent_run
 from core.inter_agent.service import InterAgentService
 from core.inter_agent.store import InterAgentStore
-from core.inter_agent.surfaces import inter_agent_payload, run_detail_payload, run_spec_from_payload
+from core.inter_agent.surfaces import execution_result_payload, inter_agent_payload, run_detail_payload, run_spec_from_payload
 from core.mcp.core_tool_helpers import WORKSPACE_SAFE, core_mcp_tool
 from core.mcp.models import McpInvocationContext, McpToolDefinition
 from core.providers.store import ProviderStore
@@ -166,6 +167,47 @@ def inter_agent_tool_specs(
             "events": inter_agent_payload(events),
         }
 
+    def _execute(arguments: dict[str, Any], context: McpInvocationContext) -> dict[str, Any]:
+        if runtime_store is None:
+            raise RuntimeError("runtime_store is required for inter-agent execution.")
+        run = _authorized_run(arguments, context)
+        root_session = _root_session_by_id(runtime_store, workspace_id=run.workspace_id, session_id=run.root_runtime_session_id)
+        authorize_inter_agent_root_session_use(
+            workspace_store=workspace_store,
+            identity_store=identity_store,
+            context_workspace_id=run.workspace_id,
+            caller_kind=context.caller_kind,
+            root_session=root_session,
+            user_id=context.user_id,
+            platform_role=context.platform_role,
+            workspace_role=context.workspace_role,
+            caller_runtime_session_id=context.runtime_session_id,
+        )
+        if _run_has_child_runtime_participants(inter_agent_store, run):  # type: ignore[arg-type]
+            authorize_inter_agent_participant_spawn(
+                workspace_store=workspace_store,
+                runtime_store=runtime_store,
+                identity_store=identity_store,
+                context_workspace_id=run.workspace_id,
+                caller_kind=context.caller_kind,
+                run=run,
+                owner_user_id=None,
+                user_id=context.user_id,
+                platform_role=context.platform_role,
+                workspace_role=context.workspace_role,
+            )
+        result = execute_inter_agent_run(
+            _service(),
+            _state(),
+            workspace_id=run.workspace_id,
+            run_id=run.run_id,
+            input_text=_text(arguments.get("input_text")) or _text(arguments.get("message")),
+            participant_inputs=arguments.get("participant_inputs") if isinstance(arguments.get("participant_inputs"), dict) else None,
+            controlled_participants=arguments.get("controlled_participants") if isinstance(arguments.get("controlled_participants"), dict) else None,
+            project_summaries=_bool(arguments.get("project_summaries"), default=True),
+        )
+        return execution_result_payload(inter_agent_store, result)  # type: ignore[arg-type]
+
     def _wait(arguments: dict[str, Any], context: McpInvocationContext) -> dict[str, Any]:
         run = _authorized_run(arguments, context)
         run = _service().wait_for_run(
@@ -241,6 +283,15 @@ def inter_agent_tool_specs(
                 invocation_policy=WORKSPACE_SAFE,
             ),
             _send,
+        ),
+        (
+            core_mcp_tool(
+                tool_name="inter_agent_execute",
+                description="Execute one native MVP inter-agent run and project selected summaries to the root session.",
+                owner_id="inter_agent",
+                invocation_policy=WORKSPACE_SAFE,
+            ),
+            _execute,
         ),
         (
             core_mcp_tool(
@@ -342,5 +393,26 @@ def _root_session_by_id(runtime_store: RuntimeStore, *, workspace_id: str, sessi
     return root_session
 
 
+def _run_has_child_runtime_participants(inter_agent_store: InterAgentStore, run) -> bool:
+    return any(
+        participant.execution_mode == "child_runtime_session"
+        for participant in inter_agent_store.list_participants(run.run_id, workspace_id=run.workspace_id)
+    )
+
+
 def _text(value) -> str:
     return str(value or "").strip()
+
+
+def _bool(value, *, default: bool) -> bool:
+    if value is None:
+        return default
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, str):
+        normalized = value.strip().lower()
+        if normalized in {"1", "true", "yes", "on"}:
+            return True
+        if normalized in {"0", "false", "no", "off"}:
+            return False
+    return bool(value)

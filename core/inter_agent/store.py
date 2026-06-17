@@ -1103,6 +1103,8 @@ def _run_from_document(document: dict[str, Any]) -> InterAgentRunRecord:
     payload = dict(document)
     payload["visibility_level"] = validate_visibility_plane(payload.get("visibility_level", "summary"))
     payload.setdefault("spec_fingerprint", None)
+    payload.setdefault("aggregator_participant_id", None)
+    payload.setdefault("merge_policy", None)
     return InterAgentRunRecord(**payload)
 
 

@@ -107,6 +107,8 @@ class InterAgentService:
             recovery_generation=0,
             idempotency_key=idempotency_key,
             spec_fingerprint=spec_fingerprint,
+            aggregator_participant_id=_clean_optional(validated.aggregator_participant_id),
+            merge_policy=_clean_optional(validated.merge_policy),
         )
         budget_ledger = empty_budget_ledger(
             budget_ledger_id=budget_ledger_id,

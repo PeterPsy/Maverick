@@ -46,6 +46,15 @@ def run_detail_payload(store: InterAgentStore, run) -> dict[str, Any]:
     }
 
 
+def execution_result_payload(store: InterAgentStore, result) -> dict[str, Any]:
+    """Return one native executor result with refreshed run details."""
+    return {
+        **run_detail_payload(store, result.run),
+        "participant_results": inter_agent_payload(result.participant_results),
+        "root_runtime_events": inter_agent_payload(result.root_runtime_events),
+    }
+
+
 def event_page_payload(page: InterAgentEventPage) -> dict[str, Any]:
     """Return a JSON-safe event page payload."""
     return inter_agent_payload(

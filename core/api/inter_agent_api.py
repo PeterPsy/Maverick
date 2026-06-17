@@ -23,9 +23,16 @@ from core.inter_agent.errors import (
     InterAgentValidationError,
 )
 from core.inter_agent.events import validate_visibility_plane
+from core.inter_agent.executor import execute_inter_agent_run
 from core.inter_agent.service import InterAgentService
 from core.inter_agent.store import DEFAULT_INTER_AGENT_EVENT_LIMIT, MAX_INTER_AGENT_EVENT_LIMIT
-from core.inter_agent.surfaces import event_page_payload, inter_agent_payload, run_detail_payload, run_spec_from_payload
+from core.inter_agent.surfaces import (
+    event_page_payload,
+    execution_result_payload,
+    inter_agent_payload,
+    run_detail_payload,
+    run_spec_from_payload,
+)
 from core.providers.errors import ProviderError
 from core.runtime.errors import RuntimeSessionNotFoundError
 from core.runtime.runtime_session import runtime_session_allows_user_thread
@@ -140,6 +147,8 @@ def _handle_inter_agent_route(
     )
     if action == "messages" and method == "POST":
         return _send_message(state, context, service, run.run_id, body, start_response)
+    if action == "execute" and method == "POST":
+        return _execute_run(state, context, service, run, body, start_response)
     if action == "wait" and method in {"GET", "POST"}:
         timeout = float(body.get("timeout_seconds") or _query_text(parse_qs(query_string), "timeout_seconds") or 0)
         waited = service.wait_for_run(workspace_id=context.workspace_id, run_id=run.run_id, timeout_seconds=timeout)
@@ -295,6 +304,59 @@ def _send_message(
     )
 
 
+def _execute_run(
+    state: PlatformState,
+    context: RequestSession,
+    service: InterAgentService,
+    run,
+    body: dict,
+    start_response: StartResponse,
+) -> list[bytes]:
+    try:
+        root_session = state.runtime_store.get_session(run.root_runtime_session_id)
+    except (RuntimeSessionNotFoundError, ValueError):
+        return json_response(start_response, {"error": "root_runtime_session_not_found"}, status="404 Not Found")
+    authorize_inter_agent_root_session_use(
+        workspace_store=state.workspace_store,
+        user=context.user,
+        context_workspace_id=context.workspace_id,
+        caller_kind="http",
+        root_session=root_session,
+        user_id=context.user.user_id,
+        platform_role=context.user.platform_role,
+    )
+    if _run_has_child_runtime_participants(state, run):
+        authorize_inter_agent_participant_spawn(
+            workspace_store=state.workspace_store,
+            runtime_store=state.runtime_store,
+            user=context.user,
+            context_workspace_id=context.workspace_id,
+            caller_kind="http",
+            run=run,
+            owner_user_id=None,
+            user_id=context.user.user_id,
+            platform_role=context.user.platform_role,
+        )
+    result = execute_inter_agent_run(
+        service,
+        state,
+        workspace_id=context.workspace_id,
+        run_id=run.run_id,
+        input_text=_text(body.get("input_text")) or _text(body.get("message")),
+        participant_inputs=body.get("participant_inputs") if isinstance(body.get("participant_inputs"), dict) else None,
+        controlled_participants=body.get("controlled_participants") if isinstance(body.get("controlled_participants"), dict) else None,
+        project_summaries=_bool(body.get("project_summaries"), default=True),
+    )
+    return json_response(start_response, execution_result_payload(state.inter_agent_store, result))
+
+
+def _run_has_child_runtime_participants(state: PlatformState, run) -> bool:
+    return any(
+        participant.execution_mode == "child_runtime_session"
+        for participant in state.inter_agent_store.list_participants(run.run_id, workspace_id=run.workspace_id)
+    )
+
+
 def _query_text(query: dict[str, list[str]], key: str) -> str | None:
     values = query.get(key)
     if not values:
@@ -314,3 +376,17 @@ def _query_limit(query: dict[str, list[str]]) -> int:
 
 def _text(value) -> str:
     return str(value or "").strip()
+
+
+def _bool(value, *, default: bool) -> bool:
+    if value is None:
+        return default
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, str):
+        normalized = value.strip().lower()
+        if normalized in {"1", "true", "yes", "on"}:
+            return True
+        if normalized in {"0", "false", "no", "off"}:
+            return False
+    return bool(value)

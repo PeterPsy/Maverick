@@ -1,13 +1,13 @@
 # Inter-Agent Runtime Invariants
 
 Date: 2026-06-15
-Status: Accepted through F2
+Status: Accepted through F3
 
 ## Purpose
 
 This ADR fixes the runtime invariants required before Maverick can create real multi-agent child sessions.
 
-It started with names, visibility, legacy compatibility, and initial policy defaults. F2 extends it with the first policy-aware participant spawn, message, wait, interrupt, resume, close, and recovery surfaces for hidden child runtime sessions. It still does not introduce graph mode, adapters, or handoff execution.
+It started with names, visibility, legacy compatibility, and initial policy defaults. F2 extends it with the first policy-aware participant spawn, message, wait, interrupt, resume, close, and recovery surfaces for hidden child runtime sessions. F3 adds the native MVP executor for `manager_tools`, `sequential`, and `concurrent` runs while keeping graph mode, adapters, and handoff execution out of scope.
 
 ## Decisions
 
@@ -21,6 +21,8 @@ It started with names, visibility, legacy compatibility, and initial policy defa
 8. `session_kind="inter_agent_participant"` requires `thread_visibility="hidden"`; omitted visibility on an explicit participant is normalized to hidden, while explicit `user` visibility is invalid.
 9. Invalid persisted visibility values fail closed: they are rejected on direct session hydration and must not make an existing thread appear in user-facing thread catalogs.
 10. `handoff` is schema/event-only until F7. It is not executable MVP behavior unless a later ADR explicitly promotes it.
+11. The F3 native executor may run deterministic controlled participants or real hidden child runtime sessions through the F2 service. It must not bypass inter-agent spawn, message, budget, or root-session authority checks.
+12. The root Chat transcript receives only selected operational summaries from the executor. Full participant detail remains in `inter_agent` events for graph replay and audit.
 
 ## Initial Policy Defaults
 
@@ -89,6 +91,29 @@ The only public F2 creation path for `inter_agent_participant` sessions is the c
 
 Inter-agent close over HTTP, CLI, and MCP must use the full runtime cleanup path when full platform state is available. Hidden child cleanup may be allowed only for this inter-agent service path; raw runtime cleanup remains hidden-session-blocked. Fallback store-only termination is reserved for deliberately partial test or recovery state and must not be the normal hosted CLI/MCP behavior.
 
+## F3 Native Executor Policy
+
+The initial native executor is a core-owned MVP surface, not an adapter framework.
+
+Executable modes:
+
+- `manager_tools`
+- `sequential`
+- `concurrent`
+
+Execution rules:
+
+- deterministic controlled participants are allowed for tests and controlled product flows
+- real participant work must use hidden `child_runtime_session` sessions spawned through `InterAgentService`
+- `sequential` passes declared output from one participant into the next participant input
+- `concurrent` fans out participants under `max_concurrent_participants` and then aggregates through the root orchestrator or declared aggregator participant
+- participant/task/artifact/summary/run lifecycle events are persisted as normalized `inter_agent` events
+- artifact refs and partial output must be persisted before a participant failure is recorded
+- root runtime projection is limited to selected summaries such as plan and terminal synthesis
+- successfully consumed turns stay counted in the budget ledger; only active participant/concurrency reservations are released on participant completion or failure
+
+The F3 HTTP surface is `POST /api/inter-agent/runs/<run_id>/execute`. The matching CLI command is `inter-agent.runs.execute`, and the matching MCP tool is `inter_agent_execute`.
+
 ## Gate
 
-No later phase may bypass the inter-agent service when creating real child runtime sessions. Hidden thread visibility and raw runtime access rejection must remain covered by runtime-thread, runtime HTTP, WebSocket, cleanup, and inter-agent service/API tests.
+No later phase may bypass the inter-agent service when creating real child runtime sessions. Hidden thread visibility and raw runtime access rejection must remain covered by runtime-thread, runtime HTTP, WebSocket, cleanup, and inter-agent service/API tests. Adapter phases must map back into the same run, participant, budget, artifact, and event contracts rather than owning Maverick session or secret state.

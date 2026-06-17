@@ -217,6 +217,55 @@ class InterAgentApiTestCase(AppReferenceApiTestSupport, unittest.TestCase):
         self.assertEqual(root_session_id, "root-session")
         self.assertTrue(child_deleted)
 
+    def test_inter_agent_http_execute_controlled_run_projects_root_summary(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            repo_root = self._repo_root(temp_dir)
+            state = self._bootstrap_state(repo_root)
+            self._create_root_session(state, repo_root)
+            app = PlatformHost(state, start_path=repo_root)
+            cookie = self._login(app)
+
+            create_status, create_payload, _headers = self._invoke(
+                app,
+                path="/api/inter-agent/runs",
+                method="POST",
+                body=_run_payload(run_id="run-api-execute"),
+                cookie=cookie,
+            )
+            execute_status, execute_payload, _headers = self._invoke(
+                app,
+                path="/api/inter-agent/runs/run-api-execute/execute",
+                method="POST",
+                body={
+                    "input_text": "Research the rollout.",
+                    "controlled_participants": {
+                        "researcher": {
+                            "output_text": "Rollout is ready.",
+                            "summary": "Researcher confirmed rollout readiness.",
+                        }
+                    },
+                },
+                cookie=cookie,
+            )
+            events_status, events_payload, _headers = self._invoke(
+                app,
+                path="/api/inter-agent/runs/run-api-execute/events",
+                cookie=cookie,
+            )
+            root_events = state.runtime_store.list_events("root-session")
+
+        event_types = [event["event_type"] for event in events_payload["items"]]
+        self.assertEqual(create_status, 201)
+        self.assertEqual(create_payload["run"]["run_id"], "run-api-execute")
+        self.assertEqual(execute_status, 200)
+        self.assertEqual(execute_payload["run"]["status"], "completed")
+        self.assertEqual(execute_payload["participant_results"][0]["summary"], "Researcher confirmed rollout readiness.")
+        self.assertEqual(events_status, 200)
+        self.assertIn("inter_agent.plan.summary_created", event_types)
+        self.assertIn("inter_agent.run.completed", event_types)
+        self.assertEqual([event.event_type for event in root_events], ["runtime.output.final", "runtime.output.final"])
+        self.assertIn("Multi-agent run completed", root_events[-1].payload["text"])
+
     def test_inter_agent_http_spawn_rejects_unsafe_child_session_id(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             repo_root = self._repo_root(temp_dir)

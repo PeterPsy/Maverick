@@ -7,7 +7,7 @@ from types import SimpleNamespace
 from unittest.mock import patch
 import unittest
 
-from core.inter_agent.errors import InterAgentBudgetExceededError
+from core.inter_agent.errors import InterAgentBudgetExceededError, InterAgentOperationError
 from core.inter_agent.models import AgentParticipantSnapshot, BudgetPolicySpec, InterAgentRunSpec, ParticipantSpec
 from core.inter_agent.service import InterAgentService
 from core.inter_agent.store import build_inter_agent_document_store
@@ -327,6 +327,57 @@ class InterAgentRuntimeServiceTest(unittest.TestCase):
             "cancelled",
         )
         self.assertEqual(resumed.status, "running")
+
+    def test_send_runtime_message_rejects_paused_run_and_cancelled_participant(self) -> None:
+        repo_root = make_temp_repo_root(self)
+        store = build_inter_agent_document_store(start_path=repo_root)
+        runtime_store = self._runtime_store()
+        service = InterAgentService(store)
+        now = datetime(2026, 6, 16, 12, 0, tzinfo=UTC)
+        runtime_store.save_session(self._runtime_session("root-session", repo_root=repo_root))
+        runtime_store.save_state(self._runtime_state("root-session"))
+        run = service.create_run(_run_spec(idempotency_key="blocked-after-interrupt"), now=now)
+        participant, _child, _created = service.spawn_participant_runtime_session(
+            runtime_store,
+            workspace_id="default",
+            run_id=run.run_id,
+            participant_id="researcher",
+            now=now,
+        )
+        service.interrupt_run(
+            _state(runtime_store),
+            workspace_id="default",
+            run_id=run.run_id,
+            participant_id=participant.participant_id,
+            reason="test-interrupt",
+            now=now,
+        )
+
+        with self.assertRaisesRegex(InterAgentOperationError, "run is not accepting"):
+            service.send_runtime_message(
+                _state(runtime_store),
+                workspace_id="default",
+                run_id=run.run_id,
+                participant_id=participant.participant_id,
+                input_text="blocked while paused",
+                now=now,
+            )
+
+        service.resume_run(
+            workspace_id="default",
+            run_id=run.run_id,
+            reason="test-resume",
+            now=now + timedelta(seconds=1),
+        )
+        with self.assertRaisesRegex(InterAgentOperationError, "Participant is not accepting"):
+            service.send_runtime_message(
+                _state(runtime_store),
+                workspace_id="default",
+                run_id=run.run_id,
+                participant_id=participant.participant_id,
+                input_text="blocked after resume",
+                now=now,
+            )
 
     def test_startup_recovery_marks_missing_child_session_failed(self) -> None:
         repo_root = make_temp_repo_root(self)

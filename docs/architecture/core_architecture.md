@@ -342,6 +342,15 @@ payload prompt, skill, catalog, source-app, provider, snapshot, and operation
 grant fields. The bridge must not clone authority-bearing prompt, skills, owner,
 grants, or secret access from the root runtime session.
 
+Root runtime sessions are also authority-bearing. Non-operator callers may attach
+an inter-agent run to a root session only when they own that root, are
+workspace/platform admin, or hold an explicit platform-minted `inter_agent_root`
+grant; workspace membership alone is not sufficient. Child runtime session ids
+are path-bearing ids and must validate as safe basenames before any runtime root
+is created or deleted. CLI and MCP inter-agent close operations must receive the
+same full platform cleanup state as HTTP so hidden child runtime roots, app
+cleanup metadata, and thread cleanup events follow the official cleanup path.
+
 The F1 store contract is workspace-safe by default. Normal reads and writes must
 carry `workspace_id`; operator-wide scans, if needed later, must be explicit
 operator methods rather than fallbacks inside ordinary run/event APIs.

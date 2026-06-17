@@ -430,9 +430,11 @@ class InterAgentService:
         """Send one runtime turn to a spawned child participant session."""
         timestamp = now or datetime.now(tz=UTC)
         run = self.store.get_run(run_id, workspace_id=workspace_id)
-        if run.status in TERMINAL_RUN_STATUSES:
-            raise InterAgentOperationError("Terminal inter-agent runs cannot accept new messages.")
+        if run.status != "running":
+            raise InterAgentOperationError("Inter-agent run is not accepting new messages.")
         participant = self.store.get_participant(participant_id, workspace_id=workspace_id, run_id=run.run_id)
+        if participant.status != "running":
+            raise InterAgentOperationError("Participant is not accepting new messages.")
         runtime_session_id = _clean_optional(participant.runtime_session_id)
         if not runtime_session_id:
             raise InterAgentOperationError("Participant has no spawned runtime session.")

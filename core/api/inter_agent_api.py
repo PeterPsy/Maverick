@@ -11,6 +11,7 @@ from core.api.session_api import RequestSession, require_session
 from core.authorization.errors import AuthorizationError
 from core.inter_agent.authorization import (
     authorize_inter_agent_participant_spawn,
+    authorize_inter_agent_root_session_use,
     authorize_inter_agent_run_operation,
     authorize_inter_agent_run_view,
 )
@@ -194,6 +195,18 @@ def _create_run(
         return json_response(start_response, {"error": "root_runtime_session_not_found"}, status="404 Not Found")
     if not runtime_session_allows_user_thread(root_session):
         return json_response(start_response, {"error": "root_runtime_session_hidden"}, status="409 Conflict")
+    try:
+        authorize_inter_agent_root_session_use(
+            workspace_store=state.workspace_store,
+            user=context.user,
+            context_workspace_id=context.workspace_id,
+            caller_kind="http",
+            root_session=root_session,
+            user_id=context.user.user_id,
+            platform_role=context.user.platform_role,
+        )
+    except AuthorizationError as error:
+        return json_response(start_response, {"error": error.reason}, status="403 Forbidden")
     spec = run_spec_from_payload(
         body,
         workspace_id=context.workspace_id,
@@ -213,6 +226,10 @@ def _spawn_participant(
     start_response: StartResponse,
 ) -> list[bytes]:
     owner_user_id = _text(body.get("owner_user_id")) or None
+    try:
+        root_session = state.runtime_store.get_session(run.root_runtime_session_id)
+    except (RuntimeSessionNotFoundError, ValueError):
+        return json_response(start_response, {"error": "root_runtime_session_not_found"}, status="404 Not Found")
     authorize_inter_agent_participant_spawn(
         workspace_store=state.workspace_store,
         runtime_store=state.runtime_store,
@@ -221,6 +238,15 @@ def _spawn_participant(
         caller_kind="http",
         run=run,
         owner_user_id=owner_user_id,
+        user_id=context.user.user_id,
+        platform_role=context.user.platform_role,
+    )
+    authorize_inter_agent_root_session_use(
+        workspace_store=state.workspace_store,
+        user=context.user,
+        context_workspace_id=context.workspace_id,
+        caller_kind="http",
+        root_session=root_session,
         user_id=context.user.user_id,
         platform_role=context.user.platform_role,
     )

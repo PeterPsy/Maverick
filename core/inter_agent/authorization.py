@@ -8,11 +8,13 @@ from core.authorization.errors import AuthorizationError
 from core.authorization.service import authorize_runtime_session_create
 from core.identity.errors import UserNotFoundError
 from core.identity.models import UserRecord
+from core.runtime.runtime_session import RuntimeSessionGrantRecord, runtime_session_allows_user_thread
 from core.workspaces.errors import WorkspaceMembershipError
 
 if TYPE_CHECKING:
     from core.identity.store import IdentityStore
     from core.inter_agent.models import InterAgentRunRecord
+    from core.runtime.runtime_session import RuntimeSessionRecord
     from core.runtime.store import RuntimeStore
     from core.workspaces.store import WorkspaceStore
 
@@ -95,6 +97,56 @@ def authorize_inter_agent_participant_spawn(
         raise AuthorizationError("inter_agent_owner_forbidden")
 
 
+def authorize_inter_agent_root_session_use(
+    *,
+    workspace_store: "WorkspaceStore | None",
+    identity_store: "IdentityStore | None" = None,
+    user: UserRecord | None = None,
+    context_workspace_id: str | None,
+    caller_kind: str,
+    root_session: "RuntimeSessionRecord",
+    user_id: str | None = None,
+    platform_role: str | None = None,
+    workspace_role: str | None = None,
+    caller_runtime_session_id: str | None = None,
+) -> None:
+    """Require authority to attach an inter-agent run to one root runtime session."""
+    if context_workspace_id != root_session.workspace_id:
+        raise AuthorizationError("root_runtime_session_not_found")
+    if not runtime_session_allows_user_thread(root_session):
+        raise AuthorizationError("root_runtime_session_hidden")
+    if caller_kind == "operator":
+        return
+    effective_user_id = user_id or (user.user_id if user is not None else None)
+    effective_platform_role = platform_role or (user.platform_role if user is not None else None)
+    if _is_admin_context(
+        workspace_store=workspace_store,
+        workspace_id=root_session.workspace_id,
+        user_id=effective_user_id,
+        platform_role=effective_platform_role,
+        workspace_role=workspace_role,
+    ):
+        return
+    resolved_user = _resolve_user(user=user, identity_store=identity_store, user_id=effective_user_id)
+    if root_session.owner_user_id and root_session.owner_user_id == resolved_user.user_id:
+        return
+    if _session_grants_operation(
+        root_session,
+        operation="inter_agent_root",
+        grantee_kind="user",
+        grantee_id=resolved_user.user_id,
+    ):
+        return
+    if caller_runtime_session_id and _session_grants_operation(
+        root_session,
+        operation="inter_agent_root",
+        grantee_kind="runtime_session",
+        grantee_id=caller_runtime_session_id,
+    ):
+        return
+    raise AuthorizationError("inter_agent_root_session_forbidden")
+
+
 def _resolve_user(
     *,
     user: UserRecord | None,
@@ -114,6 +166,31 @@ def _resolve_user(
     if not resolved.is_active:
         raise AuthorizationError("runtime_session_create_forbidden")
     return resolved
+
+
+def _session_grants_operation(
+    session: "RuntimeSessionRecord",
+    *,
+    operation: str,
+    grantee_kind: str,
+    grantee_id: str,
+) -> bool:
+    for grant in session.grants:
+        if isinstance(grant, RuntimeSessionGrantRecord):
+            if grant.operation == operation and grant.grantee_kind == grantee_kind and grant.grantee_id == grantee_id:
+                return True
+            continue
+        if not isinstance(grant, dict):
+            continue
+        if grant.get("source") != "platform":
+            continue
+        if (
+            grant.get("operation") == operation
+            and grant.get("grantee_kind") == grantee_kind
+            and grant.get("grantee_id") == grantee_id
+        ):
+            return True
+    return False
 
 
 def _is_admin_context(

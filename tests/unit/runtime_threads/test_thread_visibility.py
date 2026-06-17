@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import replace
 from datetime import UTC, datetime
+from pathlib import Path
 from types import SimpleNamespace
 import tempfile
 import unittest
@@ -272,6 +273,27 @@ class RuntimeThreadVisibilityTest(unittest.TestCase):
             )
 
         self.assertEqual(child.grants, [])
+
+    def test_child_runtime_session_rejects_unsafe_path_segment_ids(self) -> None:
+        store = self.make_store()
+        with tempfile.TemporaryDirectory() as temp_dir:
+            parent = replace(
+                self.session("parent"),
+                runtime_root=f"{temp_dir}/runtime/sessions/parent",
+            )
+            store.save_session(parent)
+
+            for unsafe_id in ("../escape", "/tmp/evil"):
+                with self.subTest(unsafe_id=unsafe_id):
+                    with self.assertRaises(ValueError):
+                        create_child_runtime_session(
+                            store,
+                            parent_session_id="parent",
+                            child_session_id=unsafe_id,
+                            child_agent_id="child-agent",
+                        )
+
+            self.assertFalse((Path(temp_dir) / "runtime" / "escape").exists())
 
     def test_stale_hidden_threads_are_filtered_from_lists_and_websocket_snapshots(self) -> None:
         store = self.make_store()

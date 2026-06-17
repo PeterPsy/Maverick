@@ -38,6 +38,9 @@ def _core_command_specs(
     recovery_store: RecoveryStore | None = None,
     provider_registry: ProviderRegistry | None = None,
     observability_store=None,
+    runtime_event_bus=None,
+    runtime_thread_event_bus=None,
+    app_event_bus=None,
     start_path: Path | None = None,
 ) -> list[tuple[CliCommandDefinition, Any]]:
     """Build all core-owned CLI command specs without mixing command domains."""
@@ -68,7 +71,11 @@ def _core_command_specs(
             provider_store=provider_store,
             runtime_store=runtime_store,
             inter_agent_store=inter_agent_store,
+            secret_store=secret_store,
             observability_store=observability_store,
+            runtime_event_bus=runtime_event_bus,
+            runtime_thread_event_bus=runtime_thread_event_bus,
+            app_event_bus=app_event_bus,
             start_path=start_path,
         )
     )

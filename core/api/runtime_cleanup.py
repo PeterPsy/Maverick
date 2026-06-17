@@ -48,6 +48,14 @@ def cleanup_runtime_session(
         }
     if not allow_hidden_inter_agent_cleanup and not runtime_session_allows_user_thread(session):
         raise RuntimeCleanupError("runtime_session_hidden")
+    try:
+        runtime_root = runtime_session_root(
+            workspace_id=session.workspace_id,
+            session_id=session.session_id,
+            start_path=start_path or state.repository_root,
+        )
+    except ValueError as error:
+        raise RuntimeCleanupError("runtime_session_id_unsafe") from error
 
     inter_agent_cleanup = _cleanup_inter_agent_runs_for_root_session(
         state,
@@ -79,11 +87,7 @@ def cleanup_runtime_session(
     if publish_thread_events and deleted_threads:
         _publish_deleted_thread_cleanup(state, workspace_id=session.workspace_id, deleted_thread_ids=deleted_threads)
     runtime_root_deleted = _delete_runtime_root(
-        runtime_session_root(
-            workspace_id=session.workspace_id,
-            session_id=session.session_id,
-            start_path=start_path or state.repository_root,
-        ),
+        runtime_root,
         workspace_id=session.workspace_id,
         session_id=session.session_id,
         start_path=start_path or state.repository_root,
@@ -253,11 +257,14 @@ def _delete_runtime_root(
     session_id: str,
     start_path,
 ) -> bool:
-    expected_root = runtime_session_root(
-        workspace_id=workspace_id,
-        session_id=session_id,
-        start_path=start_path,
-    ).resolve()
+    try:
+        expected_root = runtime_session_root(
+            workspace_id=workspace_id,
+            session_id=session_id,
+            start_path=start_path,
+        ).resolve()
+    except ValueError as error:
+        raise RuntimeCleanupError("runtime_session_id_unsafe") from error
     resolved_root = runtime_root.resolve(strict=False)
     if resolved_root != expected_root:
         raise RuntimeCleanupError(

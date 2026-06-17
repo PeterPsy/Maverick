@@ -12,7 +12,7 @@ from core.execution_policy.models import ExecutionMode
 
 RuntimeSessionStatus = Literal["created", "running", "stopping", "stopped", "failed"]
 RuntimeApiTokenStatus = Literal["active", "revoked"]
-RuntimeSessionGrantOperation = Literal["cleanup", "interrupt", "restart"]
+RuntimeSessionGrantOperation = Literal["cleanup", "interrupt", "restart", "inter_agent_root"]
 RuntimeSessionGrantPrincipalKind = Literal["user", "app", "runtime_session"]
 RuntimeSessionKind = Literal["chat_root", "inter_agent_participant", "system"]
 RuntimeThreadVisibility = Literal["user", "hidden"]

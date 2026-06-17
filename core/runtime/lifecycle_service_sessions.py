@@ -8,6 +8,7 @@ from typing import TYPE_CHECKING
 
 from core.observability.service import append_platform_log, record_platform_audit, record_platform_event
 from core.runtime.errors import RuntimeTransitionError
+from core.runtime.paths import normalize_runtime_session_id
 from core.runtime.routing import build_runtime_routing
 from core.runtime.runtime_session import (
     RuntimeSessionGrantRecord,
@@ -61,6 +62,7 @@ def create_runtime_session(
 ) -> RuntimeSessionRecord:
     """Create one runtime session and its initial runtime state."""
     timestamp = now or utcnow()
+    session_id = normalize_runtime_session_id(session_id)
     normalized_session_kind, normalized_thread_visibility = normalize_runtime_session_visibility(
         session_kind,
         thread_visibility,
@@ -185,6 +187,7 @@ def create_child_runtime_session(
     """Create one runtime child session using only explicit materialized authority."""
     parent = store.get_session(parent_session_id)
     timestamp = now or utcnow()
+    child_session_id = normalize_runtime_session_id(child_session_id)
     runtime_root = Path(parent.runtime_root).parent / child_session_id
     runtime_root.mkdir(parents=True, exist_ok=True)
     session = RuntimeSessionRecord(

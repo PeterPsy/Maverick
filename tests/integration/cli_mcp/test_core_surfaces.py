@@ -10,7 +10,11 @@ from core.authorization.errors import AuthorizationError
 from core.identity.service import create_user
 from core.identity.store import IdentityCollections, IdentityDocumentStore
 from core.inter_agent.store import build_inter_agent_document_store
+from core.api.app_events import AppEventBus
 from core.runtime.errors import RuntimeSessionNotFoundError
+from core.runtime.event_bus import RuntimeEventBus
+from core.runtime.runtime_session import RuntimeSessionGrantRecord
+from core.runtime.thread_event_bus import RuntimeThreadEventBus
 from core.secrets.errors import SecretPolicyError
 from core.secrets.service import build_secret_ref, create_platform_secret, grant_app_secret_use
 from core.secrets.store import SecretCollections, SecretDocumentStore
@@ -161,6 +165,11 @@ class TestMcpCliSurfaces(SurfaceTestBase):
         )
         cli_child_skill_ids = runtime_store.get_session("cli-child").skill_ids
         mcp_child = runtime_store.get_session("mcp-child")
+        cli_child_root = Path(runtime_store.get_session("cli-child").runtime_root)
+        mcp_child_root = Path(mcp_child.runtime_root)
+        runtime_event_bus = RuntimeEventBus()
+        runtime_thread_event_bus = RuntimeThreadEventBus()
+        app_event_bus = AppEventBus()
         mcp_wait = call_mcp_tool(
             tool_name="inter_agent_wait",
             context=mcp_context,
@@ -177,9 +186,28 @@ class TestMcpCliSurfaces(SurfaceTestBase):
             workspace_store=workspace_store,
             runtime_store=runtime_store,
             inter_agent_store=inter_agent_store,
+            secret_store=object(),
+            runtime_event_bus=runtime_event_bus,
+            runtime_thread_event_bus=runtime_thread_event_bus,
+            app_event_bus=app_event_bus,
             workspace_id="default",
             start_path=repo_root,
             arguments={"run_id": "cli-run", "reason": "test-close"},
+        )
+        mcp_close = call_mcp_tool(
+            tool_name="inter_agent_close",
+            context=mcp_context,
+            app_store=app_store,
+            workspace_store=workspace_store,
+            runtime_store=runtime_store,
+            inter_agent_store=inter_agent_store,
+            secret_store=object(),
+            runtime_event_bus=runtime_event_bus,
+            runtime_thread_event_bus=runtime_thread_event_bus,
+            app_event_bus=app_event_bus,
+            workspace_id="default",
+            start_path=repo_root,
+            arguments={"run_id": "mcp-run", "reason": "test-close"},
         )
 
         command_ids = {command.command_id for command in commands}
@@ -218,8 +246,13 @@ class TestMcpCliSurfaces(SurfaceTestBase):
         self.assertEqual(mcp_child.skill_ids, [])
         self.assertEqual(mcp_wait["run"]["run_id"], "mcp-run")
         self.assertEqual(cli_close["run"]["status"], "cancelled")
+        self.assertEqual(mcp_close["run"]["status"], "cancelled")
+        self.assertFalse(cli_child_root.exists())
+        self.assertFalse(mcp_child_root.exists())
         with self.assertRaises(RuntimeSessionNotFoundError):
             runtime_store.get_session("cli-child")
+        with self.assertRaises(RuntimeSessionNotFoundError):
+            runtime_store.get_session("mcp-child")
 
     def test_inter_agent_cli_and_mcp_reject_sandbox_non_creator_run_operations(self) -> None:
         repo_root = self.make_repo_root()
@@ -308,6 +341,106 @@ class TestMcpCliSurfaces(SurfaceTestBase):
                 start_path=repo_root,
                 arguments={"run_id": "owner-run", "participant_id": "researcher", "child_session_id": "forbidden-child"},
             )
+
+    def test_inter_agent_cli_and_mcp_authorize_root_session_owner_or_explicit_grant(self) -> None:
+        repo_root = self.make_repo_root()
+        identity_store = IdentityDocumentStore(
+            IdentityCollections(
+                users=FakeCollection(),
+                credentials=FakeCollection(),
+                auth_sessions=FakeCollection(),
+            )
+        )
+        workspace_store = self.make_workspace_store()
+        ensure_default_workspace_record(workspace_store)
+        owner = create_user(identity_store, username="ia.root.owner", password="owner-pass", platform_role="member")
+        other = create_user(identity_store, username="ia.root.other", password="other-pass", platform_role="member")
+        for user in (owner, other):
+            ensure_workspace_membership(
+                workspace_store,
+                membership_id=f"default:{user.user_id}",
+                workspace_id="default",
+                user_id=user.user_id,
+                role="member",
+            )
+        runtime_store = self.make_runtime_store()
+        inter_agent_store = build_inter_agent_document_store(start_path=repo_root)
+        create_runtime_session(
+            runtime_store,
+            session_id="owned-root",
+            workspace_id="default",
+            agent_id="chat",
+            source_app_id="chat",
+            owner_user_id=owner.user_id,
+            created_by_user_id=owner.user_id,
+            grants=[
+                RuntimeSessionGrantRecord(
+                    operation="inter_agent_root",
+                    grantee_kind="user",
+                    grantee_id=other.user_id,
+                    issued_by_user_id=owner.user_id,
+                )
+            ],
+            start_path=repo_root,
+        )
+        create_runtime_session(
+            runtime_store,
+            session_id="ungranted-root",
+            workspace_id="default",
+            agent_id="chat",
+            source_app_id="chat",
+            owner_user_id=owner.user_id,
+            created_by_user_id=owner.user_id,
+            start_path=repo_root,
+        )
+        other_context = CliInvocationContext(
+            caller_kind="sandbox_agent",
+            workspace_id="default",
+            agent_id="other-runtime",
+            effective_mode="sandbox",
+            platform_role="member",
+            user_id=other.user_id,
+            workspace_role="member",
+        )
+
+        with self.assertRaisesRegex(AuthorizationError, "inter_agent_root_session_forbidden"):
+            run_core_cli_command(
+                command_id="inter-agent.runs.create",
+                context=other_context,
+                identity_store=identity_store,
+                workspace_store=workspace_store,
+                runtime_store=runtime_store,
+                inter_agent_store=inter_agent_store,
+                workspace_id="default",
+                start_path=repo_root,
+                arguments=_inter_agent_run_payload(run_id="forbidden-root-run", root_session_id="ungranted-root"),
+            )
+
+        cli_result = run_core_cli_command(
+            command_id="inter-agent.runs.create",
+            context=other_context,
+            identity_store=identity_store,
+            workspace_store=workspace_store,
+            runtime_store=runtime_store,
+            inter_agent_store=inter_agent_store,
+            workspace_id="default",
+            start_path=repo_root,
+            arguments=_inter_agent_run_payload(run_id="granted-root-run", root_session_id="owned-root"),
+        )
+        mcp_result = call_mcp_tool(
+            tool_name="inter_agent_run_create",
+            context=McpInvocationContext(**other_context.__dict__),
+            identity_store=identity_store,
+            workspace_store=workspace_store,
+            runtime_store=runtime_store,
+            inter_agent_store=inter_agent_store,
+            workspace_id="default",
+            start_path=repo_root,
+            arguments=_inter_agent_run_payload(run_id="granted-root-run-mcp", root_session_id="owned-root"),
+        )
+
+        self.assertEqual(cli_result["run"]["run_id"], "granted-root-run")
+        self.assertEqual(mcp_result["run"]["run_id"], "granted-root-run-mcp")
 
     def test_developer_context_cli_and_mcp_return_canonical_document_text(self) -> None:
         repo_root = self.make_repo_root()

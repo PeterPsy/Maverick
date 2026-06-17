@@ -12,6 +12,7 @@ from core.cli.models import CliCommandDefinition, CliInvocationContext
 from core.identity.store import IdentityStore
 from core.inter_agent.authorization import (
     authorize_inter_agent_participant_spawn,
+    authorize_inter_agent_root_session_use,
     authorize_inter_agent_run_operation,
 )
 from core.inter_agent.service import InterAgentService
@@ -33,8 +34,11 @@ def inter_agent_command_specs(
     provider_store: ProviderStore | None = None,
     runtime_store: RuntimeStore | None = None,
     inter_agent_store: InterAgentStore | None = None,
+    secret_store=None,
     observability_store=None,
     runtime_event_bus=None,
+    runtime_thread_event_bus=None,
+    app_event_bus=None,
     start_path=None,
 ) -> list[tuple[CliCommandDefinition, Any]]:
     """Build core inter-agent command specs."""
@@ -52,6 +56,9 @@ def inter_agent_command_specs(
             runtime_store=runtime_store,
             inter_agent_store=inter_agent_store,
             runtime_event_bus=runtime_event_bus,
+            runtime_thread_event_bus=runtime_thread_event_bus,
+            app_event_bus=app_event_bus,
+            secret_store=secret_store,
             observability_store=observability_store,
             repository_root=start_path,
         )
@@ -77,11 +84,23 @@ def inter_agent_command_specs(
             raise RuntimeError("runtime_store is required for inter-agent run creation.")
         workspace_id = _workspace_id(context, arguments)
         user_id = context.user_id or "operator"
+        root_session = _root_session(runtime_store, workspace_id=workspace_id, arguments=arguments)
+        authorize_inter_agent_root_session_use(
+            workspace_store=workspace_store,
+            identity_store=identity_store,
+            context_workspace_id=workspace_id,
+            caller_kind=context.caller_kind,
+            root_session=root_session,
+            user_id=context.user_id,
+            platform_role=context.platform_role,
+            workspace_role=context.workspace_role,
+            caller_runtime_session_id=context.runtime_session_id,
+        )
         spec = run_spec_from_payload(
             arguments,
             workspace_id=workspace_id,
             created_by_user_id=user_id,
-            source_app_id=_root_source_app_id(runtime_store, workspace_id=workspace_id, arguments=arguments),
+            source_app_id=root_session.source_app_id or "chat",
         )
         run = _service().create_run(spec)
         return run_detail_payload(inter_agent_store, run)  # type: ignore[arg-type]
@@ -103,6 +122,18 @@ def inter_agent_command_specs(
             user_id=context.user_id,
             platform_role=context.platform_role,
             workspace_role=context.workspace_role,
+        )
+        root_session = _root_session_by_id(runtime_store, workspace_id=workspace_id, session_id=run.root_runtime_session_id)
+        authorize_inter_agent_root_session_use(
+            workspace_store=workspace_store,
+            identity_store=identity_store,
+            context_workspace_id=workspace_id,
+            caller_kind=context.caller_kind,
+            root_session=root_session,
+            user_id=context.user_id,
+            platform_role=context.platform_role,
+            workspace_role=context.workspace_role,
+            caller_runtime_session_id=context.runtime_session_id,
         )
         participant, session, created = _service().spawn_participant_runtime_session(
             runtime_store,
@@ -303,17 +334,21 @@ def _workspace_id(context: CliInvocationContext, arguments: dict[str, Any]) -> s
     return workspace_id
 
 
-def _root_source_app_id(runtime_store: RuntimeStore, *, workspace_id: str, arguments: dict[str, Any]) -> str:
+def _root_session(runtime_store: RuntimeStore, *, workspace_id: str, arguments: dict[str, Any]):
     root_session_id = _text(arguments.get("root_runtime_session_id"))
+    return _root_session_by_id(runtime_store, workspace_id=workspace_id, session_id=root_session_id)
+
+
+def _root_session_by_id(runtime_store: RuntimeStore, *, workspace_id: str, session_id: str):
     try:
-        root_session = runtime_store.get_session(root_session_id)
+        root_session = runtime_store.get_session(session_id)
     except (RuntimeSessionNotFoundError, ValueError) as error:
         raise AuthorizationError("root_runtime_session_not_found") from error
     if root_session.workspace_id != workspace_id:
         raise AuthorizationError("root_runtime_session_not_found")
     if not runtime_session_allows_user_thread(root_session):
         raise AuthorizationError("root_runtime_session_hidden")
-    return root_session.source_app_id or "chat"
+    return root_session
 
 def _text(value) -> str:
     return str(value or "").strip()

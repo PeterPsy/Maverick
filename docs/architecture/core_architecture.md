@@ -374,8 +374,9 @@ served `summary`/`detail`/`debug` plane server-side by both caller authority and
 the run's visibility level.
 Budget ledger recovery must also remain tolerant of active runs created before
 participant-attributed turn reservations: idempotent retries of legacy
-reservations without `participant_id` must still match, and those consumed turns
-must not be ignored by per-participant limits.
+reservations and matching `inter_agent.budget.reserved` events without
+`participant_id` must still match, and those consumed turns must not be ignored
+by per-participant limits.
 
 The F1 store contract is workspace-safe by default. Normal reads and writes must
 carry `workspace_id`; operator-wide scans, if needed later, must be explicit

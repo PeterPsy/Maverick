@@ -412,10 +412,14 @@ class InterAgentExecutorTest(unittest.TestCase):
                 now=NOW,
             )
         ledger = store.get_budget_ledger(run.budget_ledger_id, workspace_id="default")
+        events = store.list_event_page(run.run_id, workspace_id="default", visibility_plane="debug", limit=100).events
+        run_failed = next(event for event in events if event.event_type == "inter_agent.run.failed")
 
         self.assertEqual(ledger.running_participants, 0)
         self.assertEqual(ledger.turns_used, 1)
         self.assertEqual(store.get_run(run.run_id, workspace_id="default").status, "failed")
+        self.assertTrue(run_failed.payload.get("synthetic"))
+        self.assertEqual(run_failed.payload.get("synthetic_source"), "controlled_payload")
 
     def test_handoff_execution_remains_schema_only(self) -> None:
         _repo_root, store, runtime_store = self._stores()

@@ -812,6 +812,7 @@ class InterAgentEventJsonCollection(WorkspaceInterAgentJsonCollection):
                     _ensure_idempotency_fingerprint_matches(
                         existing.get("idempotency_fingerprint") or _event_idempotency_fingerprint(existing),
                         incoming["idempotency_fingerprint"],
+                        alternate_incoming=_legacy_inter_agent_event_fingerprint(existing, incoming),
                         entity="inter-agent event",
                     )
                     return deepcopy(existing)
@@ -1111,6 +1112,24 @@ def _event_idempotency_fingerprint(document: dict[str, Any]) -> str:
     for key in ("event_id", "sequence", "created_at", "idempotency_fingerprint"):
         payload.pop(key, None)
     return _stable_fingerprint(payload)
+
+
+def _legacy_inter_agent_event_fingerprint(existing: dict[str, Any], incoming: dict[str, Any]) -> str | None:
+    if existing.get("event_type") != "inter_agent.budget.reserved":
+        return None
+    if incoming.get("event_type") != "inter_agent.budget.reserved":
+        return None
+    existing_payload = existing.get("payload")
+    incoming_payload = incoming.get("payload")
+    if not isinstance(existing_payload, dict) or not isinstance(incoming_payload, dict):
+        return None
+    if "participant_id" in existing_payload or "participant_id" not in incoming_payload:
+        return None
+    legacy_incoming = dict(incoming)
+    legacy_payload = dict(incoming_payload)
+    legacy_payload.pop("participant_id", None)
+    legacy_incoming["payload"] = legacy_payload
+    return _event_idempotency_fingerprint(legacy_incoming)
 
 
 def _find_existing_event(documents: list[dict[str, Any]], incoming: dict[str, Any]) -> dict[str, Any] | None:

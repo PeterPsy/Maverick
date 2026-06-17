@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 import multiprocessing
@@ -17,7 +18,7 @@ from core.inter_agent.models import (
     ParticipantSpec,
 )
 from core.inter_agent.service import InterAgentService
-from core.inter_agent.store import build_inter_agent_document_store
+from core.inter_agent.store import _stable_fingerprint, build_inter_agent_document_store
 from tests.support.repo import make_temp_repo_root
 
 
@@ -73,6 +74,27 @@ def _create_run_worker(start_path: str, idempotency_key: str, queue) -> None:
         queue.put(("ok", run.run_id))
     except Exception as exc:  # pragma: no cover - surfaced through the queue assertion.
         queue.put(("error", type(exc).__name__, str(exc)))
+
+
+def _legacy_budget_reservation_document(reservation_id: str, *, turns: int, now: datetime) -> dict[str, object]:
+    document: dict[str, object] = {
+        "reservation_id": reservation_id,
+        "participant_slots": 0,
+        "running_participants": 0,
+        "turns": turns,
+        "tool_calls": 0,
+        "handoffs": 0,
+        "estimated_tokens": 0,
+        "estimated_cost": Decimal("0"),
+        "status": "reserved",
+        "created_at": now,
+        "released_at": None,
+    }
+    fingerprint_document = dict(document)
+    for key in ("status", "created_at", "released_at", "fingerprint"):
+        fingerprint_document.pop(key, None)
+    document["fingerprint"] = _stable_fingerprint(fingerprint_document)
+    return document
 
 
 class InterAgentServiceTest(unittest.TestCase):
@@ -263,6 +285,57 @@ class InterAgentServiceTest(unittest.TestCase):
         self.assertEqual(released_again.reserved_participants, 0)
         self.assertEqual(len([event for event in events if event.event_type == "inter_agent.budget.reserved"]), 1)
         self.assertEqual(len([event for event in events if event.event_type == "inter_agent.budget.released"]), 1)
+
+    def test_budget_service_legacy_reserved_event_retry_allows_participant_id(self) -> None:
+        repo_root = make_temp_repo_root(self)
+        store = build_inter_agent_document_store(start_path=repo_root)
+        service = InterAgentService(store)
+        now = datetime(2026, 6, 16, 12, 0, tzinfo=UTC)
+        run = service.create_run(self.run_spec(), now=now)
+        ledger = store.get_budget_ledger(run.budget_ledger_id, workspace_id="default")
+        store.save_budget_ledger(
+            replace(
+                ledger,
+                turns_used=1,
+                operation_reservations={
+                    "turn-legacy": _legacy_budget_reservation_document(
+                        "turn-legacy",
+                        turns=1,
+                        now=now,
+                    ),
+                },
+            )
+        )
+        service.record_event(
+            run,
+            event_type="inter_agent.budget.reserved",
+            visibility_plane="detail",
+            idempotency_key=f"{run.run_id}:budget.reserved:turn-legacy",
+            correlation_id="turn-legacy",
+            payload={
+                "reservation_id": "turn-legacy",
+                "participant_slots": 0,
+                "running_participants": 0,
+                "turns": 1,
+                "tool_calls": 0,
+                "handoffs": 0,
+                "estimated_tokens": 0,
+                "estimated_cost": "0",
+            },
+            now=now,
+        )
+
+        retry = service.reserve_budget(
+            run,
+            reservation_id="turn-legacy",
+            participant_id="researcher",
+            turns=1,
+            now=now,
+        )
+        events = store.list_event_page(run.run_id, workspace_id="default", visibility_plane="debug", limit=20).events
+
+        self.assertEqual(retry.turns_used, 1)
+        self.assertEqual(len([event for event in events if event.event_type == "inter_agent.budget.reserved"]), 1)
 
     def test_pending_approval_timeout_fails_closed(self) -> None:
         repo_root = make_temp_repo_root(self)

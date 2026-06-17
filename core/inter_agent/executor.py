@@ -188,7 +188,12 @@ def execute_inter_agent_run(
             visibility_plane="summary",
             correlation_id=failed.run_id,
             idempotency_key=f"{failed.run_id}:executor.run.failed",
-            payload={"error": str(error), "status": "failed"},
+            payload={
+                "error": str(error),
+                "status": "failed",
+                "synthetic": planned_synthetic,
+                "synthetic_source": planned_synthetic_source,
+            },
             now=failed_at,
         )
         if project_summaries:

@@ -114,7 +114,7 @@ Execution rules:
 - artifact refs and partial output must be persisted before a participant failure is recorded
 - root runtime projection is limited to selected summaries such as plan and terminal synthesis and must use non-terminal runtime step updates
 - successfully consumed turns stay counted in the budget ledger; only active participant/concurrency reservations are released on participant completion or failure
-- pre-participant-ledger turn reservations without `participant_id` must remain idempotent on retry and must still count toward per-participant turn enforcement, using reservation id inference where possible and conservative counting otherwise
+- pre-participant-ledger turn reservations and matching `inter_agent.budget.reserved` events without `participant_id` must remain idempotent on retry and must still count toward per-participant turn enforcement, using reservation id inference where possible and conservative counting otherwise
 
 The F3 HTTP surface is `POST /api/inter-agent/runs/<run_id>/execute`. The matching CLI command is `inter-agent.runs.execute`, and the matching MCP tool is `inter_agent_execute`.
 

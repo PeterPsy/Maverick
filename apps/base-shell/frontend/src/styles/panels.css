@@ -324,6 +324,7 @@
   min-width: var(--bs-sidebar-icon-size, 2.4rem);
   min-height: var(--bs-sidebar-icon-size, 2.4rem);
   border-radius: min(1.125rem, calc(var(--bs-sidebar-icon-size, 2.4rem) * 0.375));
+  box-shadow: var(--maverick-sidebar-app-icon-shadow);
 }
 
 .bs-app-logo.bs-app-logo--rail .material-symbols-rounded {

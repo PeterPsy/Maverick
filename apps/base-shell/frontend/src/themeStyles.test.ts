@@ -30,6 +30,14 @@ describe("base shell light theme surfaces", () => {
 
     const appGridPanel = element("section", "bs-app-grid-panel");
     expect(getComputedStyle(appGridPanel).backgroundImage).toContain("rgba(255, 255, 255, 0.88)");
+
+    expect(computedBoxShadow(element("span", "bs-app-logo bs-app-logo--rail"))).toBe("none");
+
+    const dropTargetButton = element("button", "bs-sidebar__rail-button is-drop-target");
+    const dropTargetLogo = document.createElement("span");
+    dropTargetLogo.className = "bs-app-logo bs-app-logo--rail";
+    dropTargetButton.append(dropTargetLogo);
+    expect(computedBoxShadow(dropTargetLogo)).toBe("none");
   });
 
   it("routes shell fade and overlay selectors through semantic tokens", () => {
@@ -78,4 +86,8 @@ function element(tagName: string, className: string): HTMLElement {
 
 function computedBackgroundColor(node: Element): string {
   return getComputedStyle(node).backgroundColor;
+}
+
+function computedBoxShadow(node: Element): string {
+  return getComputedStyle(node).boxShadow;
 }

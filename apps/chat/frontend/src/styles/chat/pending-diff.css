@@ -110,9 +110,7 @@
   border-color: rgba(var(--maverick-contrast-rgb), 0.065);
   border-radius: var(--chatapp-cell-radius);
   background: var(--chatapp-soft-surface);
-  box-shadow:
-    var(--chatapp-inner-edge),
-    var(--maverick-panel-card-shadow);
+  box-shadow: var(--chatapp-diff-card-shadow);
   backdrop-filter: blur(26px);
 }
 

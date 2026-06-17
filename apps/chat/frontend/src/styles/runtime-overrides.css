@@ -141,11 +141,11 @@
 }
 
 .chatapp-execution-chip.is-full-access {
-  border-color: rgba(251, 146, 60, 0.34);
+  border-color: var(--chatapp-full-access-chip-border);
   background:
-    radial-gradient(circle at 18% 0%, rgba(251, 146, 60, 0.26), transparent 42%),
-    rgba(251, 113, 133, 0.12);
-  color: #ffedd5;
+    radial-gradient(circle at 18% 0%, var(--chatapp-full-access-chip-glow), transparent 42%),
+    var(--chatapp-full-access-chip-bg);
+  color: var(--chatapp-full-access-chip-text);
 }
 
 .chatapp-root .chatapp-agent-block__body p {

@@ -6,7 +6,7 @@
   padding: 0.75rem 0.95rem;
   border-radius: var(--chatapp-cell-radius);
   background: var(--maverick-accent);
-  box-shadow: var(--chatapp-inner-edge);
+  box-shadow: var(--chatapp-human-message-shadow);
   color: var(--maverick-text-on-accent);
 }
 

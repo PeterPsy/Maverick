@@ -28,6 +28,13 @@
   --maverick-focus: rgba(var(--maverick-contrast-rgb), 0.32);
   --maverick-shadow-panel: rgba(0, 0, 0, 0.36);
   --maverick-shadow-soft: rgba(0, 0, 0, 0.22);
+  --maverick-sidebar-app-icon-shadow:
+    var(--maverick-inner-edge),
+    0 10px 24px rgba(0, 0, 0, 0.22);
+  --maverick-sidebar-app-icon-drop-target-shadow:
+    var(--maverick-inner-edge),
+    0 0 0 2px rgba(var(--maverick-contrast-rgb), 0.34),
+    0 10px 24px rgba(0, 0, 0, 0.22);
   --maverick-panel-gradient: linear-gradient(180deg, rgba(18, 18, 18, 0.92), rgba(18, 18, 18, 0.98)), var(--maverick-bg);
   --maverick-dialog-scrim: rgba(0, 0, 0, 0.62);
   --maverick-dialog-surface: rgba(22, 22, 23, 0.96);
@@ -78,6 +85,8 @@
   --maverick-focus: rgba(15, 23, 42, 0.28);
   --maverick-shadow-panel: rgba(15, 23, 42, 0.16);
   --maverick-shadow-soft: rgba(15, 23, 42, 0.12);
+  --maverick-sidebar-app-icon-shadow: none;
+  --maverick-sidebar-app-icon-drop-target-shadow: none;
   --maverick-panel-gradient: linear-gradient(180deg, rgba(255, 255, 255, 0.88), rgba(247, 248, 251, 0.98)), var(--maverick-bg);
   --maverick-dialog-scrim: rgba(15, 23, 42, 0.22);
   --maverick-dialog-surface: rgba(255, 255, 255, 0.96);

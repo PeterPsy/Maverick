@@ -212,12 +212,7 @@
     var(--maverick-shell-mobile-content-top-offset, env(safe-area-inset-top, 0px)) +
     2.15rem
   );
-  background: linear-gradient(
-    180deg,
-    var(--maverick-bg) 0%,
-    rgba(7, 7, 8, 0.86) 34%,
-    rgba(7, 7, 8, 0) 100%
-  );
+  background: var(--chatapp-chat-top-fade);
   pointer-events: none;
 }
 

@@ -33,6 +33,43 @@ describe("chat light theme surfaces", () => {
     expect(computedBackgroundColor(pre)).toBe("rgba(15, 23, 42, 0.065)");
   });
 
+  it("removes light transcript shadows and the top dark fade", () => {
+    installStyles(resolve(currentDir, "main.css"));
+    applyRootTheme("light");
+
+    expect(rootToken("--chatapp-chat-top-fade")).toBe("none");
+    expect(computedBoxShadow(element("div", "chatapp-human-message"))).toBe("none");
+    expect(computedBoxShadow(element("section", "chatapp-agent-block"))).toBe("none");
+    expect(computedBoxShadow(element("div", "chatapp-structured-card"))).toBe("none");
+    expect(computedBoxShadow(element("div", "chatapp-tool-inline"))).toBe("none");
+    expect(computedBoxShadow(element("section", "chatapp-tool-call-panel"))).toBe("none");
+    expect(computedBoxShadow(element("div", "chatapp-diff-card"))).toBe("none");
+  });
+
+  it("uses readable light colors for human message metadata and full-access badges", () => {
+    installStyles(resolve(currentDir, "main.css"));
+    applyRootTheme("light");
+
+    const humanMessage = element("div", "chatapp-human-message");
+    const copyButton = document.createElement("button");
+    copyButton.className = "chatapp-message-action chatapp-message-action--copy";
+    humanMessage.append(copyButton);
+
+    const footer = document.createElement("div");
+    footer.className = "chatapp-message-mobile-footer";
+    const timestamp = document.createElement("time");
+    timestamp.className = "chatapp-bubble__time";
+    footer.append(timestamp);
+    humanMessage.append(footer);
+
+    expect(computedColor(copyButton)).toBe("rgba(255, 255, 255, 0.58)");
+    expect(computedColor(timestamp)).toBe("rgba(255, 255, 255, 0.58)");
+
+    const fullAccessChip = element("span", "chatapp-execution-chip is-full-access");
+    expect(computedColor(fullAccessChip)).toBe("#9a3412");
+    expect(computedBorderColor(fullAccessChip)).toBe("rgba(234, 88, 12, 0.34)");
+  });
+
   it("computes floating and sidebar widget edit surfaces from light tokens", () => {
     installStyles(resolve(currentDir, "main.css"));
     installStyles(resolve(currentDir, "../widgets/chat-floating/styles.css"));
@@ -119,4 +156,20 @@ function element(tagName: string, className: string): HTMLElement {
 
 function computedBackgroundColor(node: Element): string {
   return getComputedStyle(node).backgroundColor;
+}
+
+function computedBoxShadow(node: Element): string {
+  return getComputedStyle(node).boxShadow;
+}
+
+function computedColor(node: Element): string {
+  return getComputedStyle(node).color;
+}
+
+function computedBorderColor(node: Element): string {
+  return getComputedStyle(node).borderColor;
+}
+
+function rootToken(name: string): string {
+  return getComputedStyle(document.documentElement).getPropertyValue(name).trim();
 }

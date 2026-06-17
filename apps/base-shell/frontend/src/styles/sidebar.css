@@ -225,10 +225,7 @@
 }
 
 .bs-sidebar__rail-button.is-drop-target .bs-app-logo--rail {
-  box-shadow:
-    var(--bs-sidebar-inner-edge),
-    0 0 0 2px rgba(var(--maverick-contrast-rgb), 0.34),
-    0 10px 24px rgba(0, 0, 0, 0.22);
+  box-shadow: var(--maverick-sidebar-app-icon-drop-target-shadow);
 }
 
 .bs-sidebar__rail-button.is-dragging {
@@ -297,9 +294,7 @@
   width: var(--bs-sidebar-icon-size, 2.4rem);
   height: var(--bs-sidebar-icon-size, 2.4rem);
   border-radius: min(1.125rem, calc(var(--bs-sidebar-icon-size, 2.4rem) * 0.375));
-  box-shadow:
-    var(--bs-sidebar-inner-edge),
-    0 10px 24px rgba(0, 0, 0, 0.22);
+  box-shadow: var(--maverick-sidebar-app-icon-shadow);
   transition: transform 700ms cubic-bezier(0.175, 0.885, 0.32, 2.2);
 }
 

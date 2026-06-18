@@ -385,6 +385,14 @@ export function interAgentRunPayload({
       },
       participant,
     ],
+    edges: [
+      {
+        source_id: "orchestrator",
+        target_id: "assistant",
+        kind: "delegated" as const,
+        label: participantLabel,
+      },
+    ],
     budget: {
       max_participants: 2,
       max_concurrent_participants: mode === "multi" ? 2 : 1,

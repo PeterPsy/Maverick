@@ -53,6 +53,14 @@ describe("interAgentRunPayload", () => {
       },
     });
     expect(payload.visibility_level).toBe("detail");
+    expect(payload.edges).toEqual([
+      {
+        source_id: "orchestrator",
+        target_id: "assistant",
+        kind: "delegated",
+        label: "Researcher",
+      },
+    ]);
   });
 
   it("keeps selected skills in the snapshot when the agent prompt is empty", () => {

@@ -28,6 +28,13 @@ export type InterAgentParticipantSpecPayload = {
   };
 };
 
+export type InterAgentEdgeSpecPayload = {
+  source_id: string;
+  target_id: string;
+  kind: "delegated" | "handed_off" | "reviewed_by" | "produced" | "depends_on" | "requested_approval";
+  label?: string;
+};
+
 export type CreateInterAgentRunPayload = {
   thread_id: string;
   root_runtime_session_id: string;
@@ -35,6 +42,7 @@ export type CreateInterAgentRunPayload = {
   idempotency_key: string;
   visibility_level?: InterAgentVisibilityPlane;
   participants: InterAgentParticipantSpecPayload[];
+  edges?: InterAgentEdgeSpecPayload[];
   budget: {
     max_participants: number;
     max_concurrent_participants: number;

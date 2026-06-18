@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type CSSProperties } from "react";
 import type {
   InterAgentApprovalRecord,
   InterAgentArtifactRecord,
@@ -199,24 +199,93 @@ function GraphCanvas({
 }) {
   const participants = runDetail?.participants || [];
   const edges = runDetail?.edges || [];
+  const layout = useMemo(() => graphBoardLayout(participants, runDetail?.run.orchestrator_participant_id), [
+    participants,
+    runDetail?.run.orchestrator_participant_id,
+  ]);
+  const edgeLinks = useMemo(() => graphEdgeLinks(edges, layout.nodesById), [edges, layout.nodesById]);
+  const markerId = useMemo(() => svgFragmentId("chatapp-inter-agent-arrow", runDetail?.run.run_id || "run"), [
+    runDetail?.run.run_id,
+  ]);
+  const boardHeightRem = Math.min(33, Math.max(17, layout.rowCount * 6.2 + 5));
   return (
     <div className="chatapp-inter-agent-graph__canvas" aria-label="Graph participants and edges">
       {participants.length ? (
-        <div className="chatapp-inter-agent-graph__nodes">
-          {participants.map((participant) => (
+        <div
+          className="chatapp-inter-agent-graph__board"
+          style={{ "--graph-board-min-height": `${boardHeightRem}rem` } as CSSProperties}
+        >
+          <svg
+            className="chatapp-inter-agent-graph__edge-layer"
+            viewBox="0 0 100 100"
+            preserveAspectRatio="none"
+            aria-hidden="true"
+          >
+            <defs>
+              <marker
+                id={markerId}
+                markerHeight="6"
+                markerWidth="6"
+                orient="auto"
+                refX="5"
+                refY="3"
+                viewBox="0 0 6 6"
+              >
+                <path d="M0,0 L6,3 L0,6 Z" />
+              </marker>
+            </defs>
+            {edgeLinks.map((link) => (
+              <path
+                className={`chatapp-inter-agent-graph__edge-path ${selected?.kind === "edge" && selected.edgeId === link.edge.edge_id ? "is-selected" : ""}`}
+                d={edgePath(link)}
+                data-edge-id={link.edge.edge_id}
+                key={link.edge.edge_id}
+                markerEnd={`url(#${markerId})`}
+                vectorEffect="non-scaling-stroke"
+              />
+            ))}
+          </svg>
+          {edgeLinks.map((link) => (
             <button
-              className={`chatapp-inter-agent-graph__node is-${participant.status} ${selected?.kind === "participant" && selected.participantId === participant.participant_id ? "is-selected" : ""}`}
-              key={participant.participant_id}
-              onClick={() => onSelect({ id: `participant:${participant.participant_id}`, kind: "participant", participantId: participant.participant_id })}
+              className={`chatapp-inter-agent-graph__edge-chip ${selected?.kind === "edge" && selected.edgeId === link.edge.edge_id ? "is-selected" : ""}`}
+              key={link.edge.edge_id}
+              onClick={() =>
+                onSelect({ id: `edge:${link.edge.edge_id}`, kind: "edge", edgeId: link.edge.edge_id })
+              }
+              style={
+                { "--graph-edge-x": `${link.midpoint.x}%`, "--graph-edge-y": `${link.midpoint.y}%` } as CSSProperties
+              }
+              title={`${link.source.participant.label} -> ${link.target.participant.label}`}
               type="button"
             >
-              <span className="material-symbols-rounded" aria-hidden="true">{participantIcon(participant.kind)}</span>
+              <span className="material-symbols-rounded" aria-hidden="true">arrow_forward</span>
+              <span>{edgeDisplayLabel(link.edge)}</span>
+            </button>
+          ))}
+          {layout.nodes.map((node) => (
+            <button
+              className={`chatapp-inter-agent-graph__node is-${node.participant.status} ${selected?.kind === "participant" && selected.participantId === node.participant.participant_id ? "is-selected" : ""}`}
+              data-participant-id={node.participant.participant_id}
+              key={node.participant.participant_id}
+              onClick={() =>
+                onSelect({
+                  id: `participant:${node.participant.participant_id}`,
+                  kind: "participant",
+                  participantId: node.participant.participant_id,
+                })
+              }
+              style={{ "--graph-node-x": `${node.x}%`, "--graph-node-y": `${node.y}%` } as CSSProperties}
+              type="button"
+            >
+              <span className="material-symbols-rounded" aria-hidden="true">{participantIcon(node.participant.kind)}</span>
               <span className="chatapp-inter-agent-graph__node-copy">
-                <strong>{participant.label}</strong>
-                <span>{participant.kind} - {participant.status}</span>
+                <strong>{node.participant.label}</strong>
+                <span>{node.participant.kind} - {node.participant.status}</span>
               </span>
             </button>
           ))}
+          {!edgeLinks.length && edges.length ? <div className="chatapp-inter-agent-graph__edge-empty">Some graph links reference unavailable participants.</div> : null}
+          {!edges.length ? <div className="chatapp-inter-agent-graph__edge-empty">No graph links recorded.</div> : null}
         </div>
       ) : (
         <div className="chatapp-inter-agent-graph__empty">
@@ -224,24 +293,116 @@ function GraphCanvas({
           <span>No participants yet.</span>
         </div>
       )}
-      <div className="chatapp-inter-agent-graph__edges">
-        {edges.map((edge) => (
-          <button
-            className={`chatapp-inter-agent-graph__edge ${selected?.kind === "edge" && selected.edgeId === edge.edge_id ? "is-selected" : ""}`}
-            key={edge.edge_id}
-            onClick={() => onSelect({ id: `edge:${edge.edge_id}`, kind: "edge", edgeId: edge.edge_id })}
-            type="button"
-          >
-            <span>{edge.source_id}</span>
-            <span className="material-symbols-rounded" aria-hidden="true">arrow_forward</span>
-            <span>{edge.target_id}</span>
-            <strong>{edge.label || edge.kind}</strong>
-          </button>
-        ))}
-        {!edges.length && participants.length ? <div className="chatapp-inter-agent-graph__edge-empty">No explicit edges recorded.</div> : null}
-      </div>
     </div>
   );
+}
+
+type GraphParticipant = NonNullable<InterAgentRunDetail>["participants"][number];
+type GraphEdge = NonNullable<InterAgentRunDetail>["edges"][number];
+
+type GraphBoardNode = {
+  participant: GraphParticipant;
+  x: number;
+  y: number;
+};
+
+type GraphEdgeLink = {
+  edge: GraphEdge;
+  midpoint: { x: number; y: number };
+  source: GraphBoardNode;
+  target: GraphBoardNode;
+};
+
+function graphBoardLayout(
+  participants: GraphParticipant[],
+  orchestratorParticipantId?: string | null,
+): { nodes: GraphBoardNode[]; nodesById: Map<string, GraphBoardNode>; rowCount: number } {
+  if (!participants.length) {
+    return { nodes: [], nodesById: new Map(), rowCount: 1 };
+  }
+  const orchestrators = participants.filter((participant) =>
+    participant.participant_id === orchestratorParticipantId || participant.kind === "orchestrator"
+  );
+  const topParticipants = orchestrators.length ? orchestrators : [participants[0]];
+  const topIds = new Set(topParticipants.map((participant) => participant.participant_id));
+  const lowerParticipants = participants.filter((participant) => !topIds.has(participant.participant_id));
+  const lowerRows = chunk(lowerParticipants, 3);
+  const nodes: GraphBoardNode[] = [];
+  const topY = lowerRows.length ? 16 : 50;
+
+  topParticipants.forEach((participant, index) => {
+    nodes.push({ participant, x: distributedX(index, topParticipants.length), y: topY });
+  });
+  lowerRows.forEach((row, rowIndex) => {
+    const y = lowerRows.length === 1 ? 64 : 40 + (rowIndex * 44) / Math.max(1, lowerRows.length - 1);
+    row.forEach((participant, index) => {
+      nodes.push({ participant, x: distributedX(index, row.length), y });
+    });
+  });
+
+  return {
+    nodes,
+    nodesById: new Map(nodes.map((node) => [node.participant.participant_id, node])),
+    rowCount: Math.max(2, 1 + lowerRows.length),
+  };
+}
+
+function graphEdgeLinks(edges: GraphEdge[], nodesById: Map<string, GraphBoardNode>): GraphEdgeLink[] {
+  return edges.flatMap((edge) => {
+    const source = nodesById.get(edge.source_id);
+    const target = nodesById.get(edge.target_id);
+    if (!source || !target) {
+      return [];
+    }
+    return [
+      {
+        edge,
+        midpoint: {
+          x: (source.x + target.x) / 2,
+          y: (source.y + target.y) / 2,
+        },
+        source,
+        target,
+      },
+    ];
+  });
+}
+
+function edgePath(link: GraphEdgeLink): string {
+  const verticalDirection = link.target.y >= link.source.y ? 1 : -1;
+  const startY = link.source.y + 8 * verticalDirection;
+  const endY = link.target.y - 8 * verticalDirection;
+  const verticalOffset = 18 * verticalDirection;
+  return [
+    `M ${link.source.x} ${startY}`,
+    `C ${link.source.x} ${startY + verticalOffset}`,
+    `${link.target.x} ${endY - verticalOffset}`,
+    `${link.target.x} ${endY}`,
+  ].join(" ");
+}
+
+function edgeDisplayLabel(edge: GraphEdge): string {
+  return edge.label || edge.kind.replace(/_/g, " ");
+}
+
+function distributedX(index: number, count: number): number {
+  if (count <= 1) {
+    return 50;
+  }
+  const span = count === 2 ? 34 : 56;
+  return 50 - span / 2 + (span * index) / Math.max(1, count - 1);
+}
+
+function chunk<T>(items: T[], size: number): T[][] {
+  const chunks: T[][] = [];
+  for (let index = 0; index < items.length; index += size) {
+    chunks.push(items.slice(index, index + size));
+  }
+  return chunks;
+}
+
+function svgFragmentId(prefix: string, value: string): string {
+  return `${prefix}-${String(value || "run").replace(/[^A-Za-z0-9_-]/g, "-")}`;
 }
 
 function Timeline({

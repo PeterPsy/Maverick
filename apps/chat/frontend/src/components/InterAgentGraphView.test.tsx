@@ -213,6 +213,27 @@ describe("InterAgentGraphView", () => {
     expect(element.textContent).toContain("No artifacts recorded.");
   });
 
+  it("renders graph edges as visual board connectors", async () => {
+    const element = await renderGraph();
+    const edgePath = element.querySelector('.chatapp-inter-agent-graph__edge-path[data-edge-id="edge-1"]');
+    const edgeChip = element.querySelector(".chatapp-inter-agent-graph__edge-chip") as HTMLButtonElement | null;
+
+    expect(edgePath).not.toBeNull();
+    expect(edgeChip?.textContent).toContain("Research");
+    expect(element.textContent).not.toContain("No graph links recorded.");
+
+    await act(async () => {
+      edgeChip?.click();
+      await Promise.resolve();
+    });
+
+    expect(edgePath?.getAttribute("class")).toContain("is-selected");
+    expect(element.textContent).toContain("Source");
+    expect(element.textContent).toContain("orchestrator");
+    expect(element.textContent).toContain("Target");
+    expect(element.textContent).toContain("researcher");
+  });
+
   it("keeps long labels visible inside graph panels", async () => {
     const longLabel = "Researcher with a very long operational label that should wrap instead of overlapping adjacent graph controls";
     const longSummary = "A very long event summary that should remain inspectable without hiding the timeline row content";

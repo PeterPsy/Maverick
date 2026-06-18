@@ -4,7 +4,7 @@ import { Plus } from 'lucide-react';
 import './styles.css';
 
 const DEFAULT_APP_ID = 'mail';
-const PRIMARY_ACTION_LABEL = 'Add account';
+const PRIMARY_ACTION_LABEL = 'Connect Account';
 const WIDGET_ID = 'mail-sidebar-footer';
 
 function postPrimaryActionState(appId: string, available: boolean) {

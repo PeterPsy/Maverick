@@ -688,6 +688,151 @@ class MailServiceTest(unittest.TestCase):
             self.assertEqual(payload["error"], "validation_error")
             self.assertIn("Connection `missing` was not found", payload["detail"])
 
+    def test_delete_disconnected_connection_purges_local_mail_cache(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            data_root = Path(tmp)
+            ensure_schema(data_root)
+            now = now_timestamp()
+            connection_id = "mail_connection_gmail_person-example.com"
+            thread_id = "email_thread_gmail_thread_1"
+            message_id = "email_message_gmail_msg_1"
+            attachment_id = "mail_attachment_gmail_att_1"
+            draft_id = "mail_draft_person_1"
+            with connect(data_root) as db:
+                db.execute(
+                    """
+                    INSERT INTO connections(id, provider, email_address, display_name, status, scopes_json, created_at, updated_at)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    (connection_id, "gmail", "person@example.com", "person@example.com", "disconnected", "[]", now, now),
+                )
+                db.execute(
+                    """
+                    INSERT INTO oauth_credentials(id, connection_id, provider, secret_ref, grant_id, encrypted_token_json, status, created_at, updated_at)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    ("oauth_credential_person", connection_id, "gmail", "platform:secret-alias/person", "grant:person", "{}", "disconnected", now, now),
+                )
+                db.execute(
+                    """
+                    INSERT INTO provider_credentials(id, connection_id, provider, logical_name, secret_ref, grant_id, resource_type, resource_id, status, metadata_json, created_at, updated_at)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    ("provider_credential_person", connection_id, "gmail", "gmail-refresh-token", "platform:secret-alias/person", "grant:person", "mail_connection", connection_id, "disconnected", "{}", now, now),
+                )
+                db.execute(
+                    "INSERT INTO folders(id, connection_id, provider_folder_id, name, canonical, folder_type, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                    ("folder_person_inbox", connection_id, "INBOX", "Inbox", "inbox", "inbox", now, now),
+                )
+                db.execute(
+                    "INSERT INTO labels(id, connection_id, provider_label_id, name, canonical) VALUES (?, ?, ?, ?, ?)",
+                    ("label_person_inbox", connection_id, "INBOX", "Inbox", "inbox"),
+                )
+                db.execute(
+                    """
+                    INSERT INTO threads(id, connection_id, provider_thread_id, subject, participants_json, last_message_at, snippet, unread, starred, labels_json, updated_at)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    (thread_id, connection_id, "thread-1", "Subject", "[]", now, "Snippet", 1, 0, '["inbox"]', now),
+                )
+                db.execute(
+                    """
+                    INSERT INTO messages(id, thread_id, provider_message_id, sender_json, recipients_json, sent_at, body_text, headers_json, has_attachments)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    (message_id, thread_id, "msg-1", "{}", "[]", now, "Body", "{}", 1),
+                )
+                db.execute(
+                    """
+                    INSERT INTO attachments(id, message_id, provider_attachment_id, filename, content_type, size_bytes, storage_state, storage_ref_json, created_at, updated_at)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    (attachment_id, message_id, "att-1", "report.pdf", "application/pdf", 10, "metadata_only", "{}", now, now),
+                )
+                db.execute(
+                    """
+                    INSERT INTO drafts(id, connection_id, thread_id, to_json, cc_json, bcc_json, subject, body_text, status, dirty, created_at, updated_at)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    (draft_id, connection_id, thread_id, "[]", "[]", "[]", "Draft", "Draft body", "draft", 1, now, now),
+                )
+                db.execute(
+                    """
+                    INSERT INTO sync_state(connection_id, last_sync_at, last_error, cursor, last_full_sync_at, last_incremental_sync_at, provider_history_id)
+                    VALUES (?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    (connection_id, now, "", "{}", now, now, "history-1"),
+                )
+                db.executemany(
+                    """
+                    INSERT INTO entity_links(id, source_entity_type, source_entity_id, target_app_id, target_entity_type, target_entity_id, relation, metadata_json, created_at, updated_at)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    [
+                        ("link_connection", "mail_connection", connection_id, "memory", "memory_node", "memory-1", "mentions", "{}", now, now),
+                        ("link_thread", "email_thread", thread_id, "memory", "memory_node", "memory-2", "mentions", "{}", now, now),
+                        ("link_message", "email_message", message_id, "memory", "memory_node", "memory-3", "mentions", "{}", now, now),
+                    ],
+                )
+
+            status, payload = handle_action(data_root, {"action": "connections.delete", "connection_id": connection_id})
+
+            self.assertEqual(status, 200, payload)
+            self.assertEqual(payload["delete"]["status"], "deleted")
+            self.assertEqual(payload["delete"]["cache"], {"thread_count": 1, "message_count": 1, "attachment_count": 1, "draft_count": 1})
+            self.assertEqual(payload["delete"]["deleted"]["connection_count"], 1)
+            self.assertEqual(payload["delete"]["deleted"]["thread_count"], 1)
+            self.assertEqual(payload["delete"]["deleted"]["message_count"], 1)
+            self.assertEqual(payload["delete"]["deleted"]["attachment_count"], 1)
+            self.assertEqual(payload["delete"]["deleted"]["draft_count"], 1)
+            self.assertEqual(payload["delete"]["deleted"]["folder_count"], 1)
+            self.assertEqual(payload["delete"]["deleted"]["label_count"], 1)
+            self.assertEqual(payload["delete"]["deleted"]["sync_state_count"], 1)
+            self.assertEqual(payload["delete"]["deleted"]["oauth_credential_count"], 1)
+            self.assertEqual(payload["delete"]["deleted"]["provider_credential_count"], 1)
+            self.assertEqual(payload["delete"]["deleted"]["entity_link_count"], 3)
+            with connect(data_root) as db:
+                for table in [
+                    "connections",
+                    "oauth_credentials",
+                    "provider_credentials",
+                    "folders",
+                    "labels",
+                    "threads",
+                    "messages",
+                    "attachments",
+                    "drafts",
+                    "sync_state",
+                    "entity_links",
+                ]:
+                    with self.subTest(table=table):
+                        self.assertEqual(db.execute(f"SELECT COUNT(*) AS count FROM {table}").fetchone()["count"], 0)
+                audit_row = db.execute("SELECT action, target_id FROM audit_log WHERE action = ?", ("connections.delete",)).fetchone()
+            self.assertEqual(audit_row["target_id"], connection_id)
+
+    def test_delete_connected_connection_requires_disconnect_first(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            data_root = Path(tmp)
+            ensure_schema(data_root)
+            now = now_timestamp()
+            connection_id = "mail_connection_gmail_person-example.com"
+            with connect(data_root) as db:
+                db.execute(
+                    """
+                    INSERT INTO connections(id, provider, email_address, display_name, status, scopes_json, created_at, updated_at)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    (connection_id, "gmail", "person@example.com", "person@example.com", "connected", "[]", now, now),
+                )
+
+            status, payload = handle_action(data_root, {"action": "connections.delete", "connection_id": connection_id})
+
+            self.assertEqual(status, 400)
+            self.assertEqual(payload["error"], "validation_error")
+            self.assertIn("must be disconnected before removal", payload["detail"])
+            with connect(data_root) as db:
+                self.assertEqual(db.execute("SELECT COUNT(*) AS count FROM connections").fetchone()["count"], 1)
+
     def test_threads_list_returns_pagination_metadata(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             data_root = Path(tmp)
@@ -2377,12 +2522,26 @@ class MailServiceTest(unittest.TestCase):
         self.assertNotIn("privateEmailForm", app_source)
         self.assertNotIn("provider-tabs", styles)
         self.assertNotIn("private-email-grid", styles)
+        self.assertIn("const PRIMARY_ACTION_LABEL = 'Connect Account';", footer_source)
         self.assertIn("add_account: true", footer_source)
         self.assertIn("maverick.widget.open-app", footer_source)
         self.assertIn("mail-account-modal", app_source)
         self.assertIn("Open OAuth", app_source)
         self.assertIn("Open Vault", app_source)
         self.assertIn("action: MAIL_BACKEND_ACTIONS.connectionsPrepareImapSmtp", app_source)
+        self.assertIn("openBlankAuthorizationWindow()", app_source)
+        self.assertIn("maverick.app.external-url", app_source)
+        self.assertNotIn("window.location.assign(payload.authorization_url)", app_source)
+
+    def test_frontend_sidebar_removes_disconnected_accounts_with_trash(self) -> None:
+        api_source = (APP_ROOT / "frontend" / "src" / "api.ts").read_text(encoding="utf-8")
+        sidebar_source = (APP_ROOT / "frontend" / "src" / "widgets" / "mail-sidebar" / "main.tsx").read_text(encoding="utf-8")
+        self.assertIn("connectionsDelete: 'connections.delete'", api_source)
+        self.assertIn("Trash2", sidebar_source)
+        self.assertIn("const removeDisconnected = targetConnection.status === 'disconnected';", sidebar_source)
+        self.assertIn("action: MAIL_BACKEND_ACTIONS.connectionsDelete", sidebar_source)
+        self.assertIn("aria-label={isDisconnected ? `Remove ${node.label}` : `Disconnect ${node.label}`}", sidebar_source)
+        self.assertIn("disabled={Boolean(activeOperation)}", sidebar_source)
 
     def test_frontend_renders_html_email_in_isolated_frame(self) -> None:
         app_source = (APP_ROOT / "frontend" / "src" / "App.tsx").read_text(encoding="utf-8")

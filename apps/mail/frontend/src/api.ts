@@ -128,6 +128,7 @@ export const MAIL_BACKEND_ACTIONS = {
   connectionsActivateImapSmtp: 'connections.activate_imap_smtp',
   connectionsUpdateImapSmtp: 'connections.update_imap_smtp',
   connectionsDisconnect: 'connections.disconnect',
+  connectionsDelete: 'connections.delete',
   mailboxesCounts: 'mailboxes.counts',
   threadsList: 'threads.list',
   threadsGet: 'threads.get',

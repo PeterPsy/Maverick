@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
-import { LogOut, Mail, RefreshCw, Square, SquareCheck } from 'lucide-react';
+import { LogOut, Mail, RefreshCw, Square, SquareCheck, Trash2 } from 'lucide-react';
 import {
   callBackend,
   MAIL_BACKEND_ACTIONS,
@@ -292,8 +292,20 @@ function MailSidebarWidget() {
   }
 
   async function disconnect(targetConnection: MailConnection) {
-    setActiveOperation(`disconnect:${targetConnection.id}`);
+    const removeDisconnected = targetConnection.status === 'disconnected';
+    setActiveOperation(`${removeDisconnected ? 'delete' : 'disconnect'}:${targetConnection.id}`);
     try {
+      if (removeDisconnected) {
+        const payload = await callBackend<{ delete?: { status?: string; display_name?: string; email_address?: string } }>({
+          action: MAIL_BACKEND_ACTIONS.connectionsDelete,
+          connection_id: targetConnection.id,
+          ...noSecretRequest()
+        });
+        const removedLabel = payload.delete?.display_name || payload.delete?.email_address || targetConnection.display_name || targetConnection.email_address;
+        setNotice(`${removedLabel} removed.`);
+        await refresh();
+        return;
+      }
       const payload = await callBackend<{ disconnect?: { status?: string; detail?: string } }>({
         action: MAIL_BACKEND_ACTIONS.connectionsDisconnect,
         connection_id: targetConnection.id,
@@ -404,6 +416,7 @@ function MailTreeNodeView({ node, level, isLast, onSelect, onSyncConnection, onD
   const isDisconnected = node.account?.status === 'disconnected';
   const isSyncing = activeOperation === `sync:${node.account?.id}`;
   const isDisconnecting = activeOperation === `disconnect:${node.account?.id}`;
+  const isDeleting = activeOperation === `delete:${node.account?.id}`;
   const displayCount = node.mailbox === 'inbox' ? node.count?.unread || 0 : node.count?.total || 0;
   const label = node.type === 'account' && node.status && node.status !== 'connected' ? `${node.label} (${node.status})` : node.label;
   const icon = node.type === 'account'
@@ -444,16 +457,20 @@ function MailTreeNodeView({ node, level, isLast, onSelect, onSyncConnection, onD
               <RefreshCw className={isSyncing ? 'is-spinning' : ''} aria-hidden="true" />
             </button>
             <button
-              aria-label={`Disconnect ${node.label}`}
+              aria-label={isDisconnected ? `Remove ${node.label}` : `Disconnect ${node.label}`}
               className="mail-folder-tree-sync mail-folder-tree-disconnect"
-              disabled={Boolean(activeOperation) || isDisconnected}
+              disabled={Boolean(activeOperation)}
               onClick={(event) => {
                 event.stopPropagation();
                 void onDisconnectConnection(node.account!);
               }}
               type="button"
             >
-              <LogOut className={isDisconnecting ? 'is-spinning' : ''} aria-hidden="true" />
+              {isDisconnected ? (
+                <Trash2 className={isDeleting ? 'is-spinning' : ''} aria-hidden="true" />
+              ) : (
+                <LogOut className={isDisconnecting ? 'is-spinning' : ''} aria-hidden="true" />
+              )}
             </button>
           </span>
         ) : null}

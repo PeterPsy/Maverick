@@ -24,6 +24,7 @@ from store import (
     DEFAULT_BODY_HTML_CHARS,
     DEFAULT_BODY_TEXT_CHARS,
     count_threads,
+    delete_disconnected_connection,
     disconnect_connection,
     get_connection,
     get_attachment,
@@ -43,6 +44,7 @@ from view_state import clear_custom_view, load_view_state, set_custom_view, set_
 MUTATING_ACTIONS = {
     "connections.start_oauth",
     "connections.complete_oauth",
+    "connections.delete",
     "connections.disconnect",
     "connections.prepare_imap_smtp",
     "connections.update_imap_smtp",
@@ -102,6 +104,13 @@ def handle_action(data_root: Path, payload: dict[str, object]) -> tuple[int, dic
                     data_root,
                     _required_string(payload.get("connection_id") or payload.get("id"), "connection_id"),
                     reason=str(payload.get("reason") or "").strip(),
+                )
+            }
+        if action == "connections.delete":
+            return 200, {
+                "delete": delete_disconnected_connection(
+                    data_root,
+                    _required_string(payload.get("connection_id") or payload.get("id"), "connection_id"),
                 )
             }
         if action in {"folders.list", "mail_list_folders"}:

@@ -23,6 +23,8 @@ import {
   DEFAULT_MAILBOX_SCOPE_IDS,
   isMailbox,
   mailboxScopeIdsFromParams,
+  normalizeMailboxScopeIds,
+  parseMailboxScopeId,
   primaryMailboxScope,
   serializeMailboxScopeIds
 } from './mailboxScopes';
@@ -140,6 +142,15 @@ function connectionSecretRequest(connection?: MailConnection | null) {
   return gmailSecretRequest(connection.id);
 }
 
+function mailboxScopeIdsForConnections(scopeIds: string[], connections: MailConnection[]) {
+  const connectionIds = new Set(connections.map((connection) => connection.id));
+  const filtered = normalizeMailboxScopeIds(scopeIds).filter((scopeId) => {
+    const scope = parseMailboxScopeId(scopeId);
+    return Boolean(scope && (!scope.connectionId || connectionIds.has(scope.connectionId)));
+  });
+  return filtered.length ? filtered : DEFAULT_MAILBOX_SCOPE_IDS;
+}
+
 function openVaultIssues() {
   window.parent?.postMessage(
     {
@@ -248,6 +259,50 @@ function inlineImageDataUrl(dataBase64Url?: string, contentType?: string) {
     return null;
   }
   return `data:${safeImageContentType(contentType)};base64,${dataBase64}`;
+}
+
+function openBlankAuthorizationWindow() {
+  const popup = window.open('about:blank', '_blank');
+  if (!popup) {
+    return null;
+  }
+  try {
+    popup.document.title = 'Opening Gmail';
+    popup.document.body.style.fontFamily = 'system-ui, sans-serif';
+    popup.document.body.style.padding = '24px';
+    popup.document.body.textContent = 'Opening Gmail...';
+  } catch {
+    return popup;
+  }
+  return popup;
+}
+
+function openAuthorizationUrl(authorizationUrl: string, popup: Window | null) {
+  if (popup && !popup.closed) {
+    popup.location.replace(authorizationUrl);
+    try {
+      popup.opener = null;
+      popup.focus();
+    } catch {
+      return;
+    }
+    return;
+  }
+  if (window.top && window.top !== window) {
+    window.parent.postMessage({ type: 'maverick.app.external-url', url: authorizationUrl }, window.location.origin);
+    return;
+  }
+  window.location.assign(authorizationUrl);
+}
+
+function closeAuthorizationWindow(popup: Window | null) {
+  if (popup && !popup.closed) {
+    try {
+      popup.close();
+    } catch {
+      return;
+    }
+  }
 }
 
 function escapeRegExp(value: string) {
@@ -762,8 +817,13 @@ export function App() {
   const [readerShowImages, setReaderShowImages] = useState(false);
   const threadListRequestRef = useRef(0);
   const threadOpenRequestRef = useRef(0);
+  const selectedThreadRef = useRef<MailThread | null>(null);
   const serializedMailboxScopes = useMemo(() => serializeMailboxScopeIds(mailboxScopeIds), [mailboxScopeIds]);
   const primaryScope = useMemo(() => primaryMailboxScope(mailboxScopeIds), [mailboxScopeIds]);
+
+  useEffect(() => {
+    selectedThreadRef.current = selectedThread;
+  }, [selectedThread]);
 
   const secretRequestForConnectionId = useCallback((id?: string) => {
     if (!id) {
@@ -834,8 +894,32 @@ export function App() {
         return;
       }
       setConnections(connectionPayload.items);
+      const nextMailboxScopeIds = mailboxScopeIdsForConnections(mailboxScopeIds, connectionPayload.items);
+      const nextSerializedMailboxScopes = serializeMailboxScopeIds(nextMailboxScopeIds);
+      const nextPrimaryScope = primaryMailboxScope(nextMailboxScopeIds);
+      if (nextSerializedMailboxScopes !== serializedMailboxScopes) {
+        setMailboxScopeIds(nextMailboxScopeIds);
+        setMailbox(nextPrimaryScope.mailbox);
+        setConnectionId(nextPrimaryScope.connectionId);
+        notifySelection({
+          mailbox: nextPrimaryScope.mailbox,
+          mailbox_scopes: nextSerializedMailboxScopes,
+          thread: null,
+          connection_id: nextPrimaryScope.connectionId
+        });
+      }
       setThreads(threadPayload.items);
       setTotalThreads(threadPayload.total_count ?? threadPayload.items.length);
+      const selected = selectedThreadRef.current;
+      if (selected && !connectionPayload.items.some((item) => item.id === selected.connection_id)) {
+        setSelectedThread(null);
+        notifySelection({
+          mailbox: nextPrimaryScope.mailbox,
+          mailbox_scopes: nextSerializedMailboxScopes,
+          thread: null,
+          connection_id: nextPrimaryScope.connectionId
+        });
+      }
     } catch (error) {
       if (threadListRequestRef.current !== requestId) {
         return;
@@ -846,7 +930,7 @@ export function App() {
         setThreadListLoading(false);
       }
     }
-  }, [mailbox, page, primaryScope.connectionId, query, serializedMailboxScopes]);
+  }, [mailbox, mailboxScopeIds, page, primaryScope.connectionId, query, serializedMailboxScopes]);
 
   useEffect(() => {
     setPage(1);
@@ -1012,6 +1096,7 @@ export function App() {
   }
 
   async function startGmailOAuth() {
+    const authorizationWindow = openBlankAuthorizationWindow();
     setBusy(true);
     try {
       const payload = await callBackend<{ status: string; authorization_url?: string; detail?: string }>({
@@ -1024,11 +1109,14 @@ export function App() {
         }
       });
       if (payload.authorization_url) {
-        window.location.assign(payload.authorization_url);
+        setAccountModalOpen(false);
+        openAuthorizationUrl(payload.authorization_url, authorizationWindow);
         return;
       }
+      closeAuthorizationWindow(authorizationWindow);
       setNotice(payload.detail || `Gmail setup status: ${payload.status}`);
     } catch (error) {
+      closeAuthorizationWindow(authorizationWindow);
       setNotice((error as Error).message);
     } finally {
       setBusy(false);

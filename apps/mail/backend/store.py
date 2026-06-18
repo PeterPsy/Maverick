@@ -124,6 +124,92 @@ def disconnect_connection(data_root: Path, connection_id: str, *, reason: str = 
     }
 
 
+def delete_disconnected_connection(data_root: Path, connection_id: str) -> dict[str, object]:
+    ensure_schema(data_root)
+    connection_id = connection_id.strip()
+    if not connection_id:
+        raise ValueError("connection_id is required")
+    with connect(data_root) as db:
+        row = db.execute("SELECT * FROM connections WHERE id = ?", (connection_id,)).fetchone()
+        if row is None:
+            raise ValueError(f"Connection `{connection_id}` was not found")
+        if str(row["status"]) != "disconnected":
+            raise ValueError(f"Connection `{connection_id}` must be disconnected before removal")
+        cache_counts = _connection_cache_counts(db, connection_id)
+        folder_count = int(db.execute("SELECT COUNT(*) AS count FROM folders WHERE connection_id = ?", (connection_id,)).fetchone()["count"])
+        label_count = int(db.execute("SELECT COUNT(*) AS count FROM labels WHERE connection_id = ?", (connection_id,)).fetchone()["count"])
+        sync_state_count = int(db.execute("SELECT COUNT(*) AS count FROM sync_state WHERE connection_id = ?", (connection_id,)).fetchone()["count"])
+        oauth_credential_count = int(db.execute("SELECT COUNT(*) AS count FROM oauth_credentials WHERE connection_id = ?", (connection_id,)).fetchone()["count"])
+        provider_credential_count = int(db.execute("SELECT COUNT(*) AS count FROM provider_credentials WHERE connection_id = ?", (connection_id,)).fetchone()["count"])
+        entity_link_count = _delete_entity_links_for_connection(db, connection_id)
+        attachment_rows = db.execute(
+            """
+            DELETE FROM attachments
+            WHERE message_id IN (
+              SELECT messages.id
+              FROM messages JOIN threads ON messages.thread_id = threads.id
+              WHERE threads.connection_id = ?
+            )
+            """,
+            (connection_id,),
+        ).rowcount
+        message_rows = db.execute(
+            "DELETE FROM messages WHERE thread_id IN (SELECT id FROM threads WHERE connection_id = ?)",
+            (connection_id,),
+        ).rowcount
+        thread_rows = db.execute("DELETE FROM threads WHERE connection_id = ?", (connection_id,)).rowcount
+        draft_rows = db.execute("DELETE FROM drafts WHERE connection_id = ?", (connection_id,)).rowcount
+        folder_rows = db.execute("DELETE FROM folders WHERE connection_id = ?", (connection_id,)).rowcount
+        label_rows = db.execute("DELETE FROM labels WHERE connection_id = ?", (connection_id,)).rowcount
+        sync_state_rows = db.execute("DELETE FROM sync_state WHERE connection_id = ?", (connection_id,)).rowcount
+        oauth_credential_rows = db.execute("DELETE FROM oauth_credentials WHERE connection_id = ?", (connection_id,)).rowcount
+        provider_credential_rows = db.execute("DELETE FROM provider_credentials WHERE connection_id = ?", (connection_id,)).rowcount
+        connection_rows = db.execute("DELETE FROM connections WHERE id = ?", (connection_id,)).rowcount
+    deleted = {
+        "connection_count": int(connection_rows),
+        "thread_count": int(thread_rows),
+        "message_count": int(message_rows),
+        "attachment_count": int(attachment_rows),
+        "draft_count": int(draft_rows),
+        "folder_count": int(folder_rows),
+        "label_count": int(label_rows),
+        "sync_state_count": int(sync_state_rows),
+        "oauth_credential_count": int(oauth_credential_rows),
+        "provider_credential_count": int(provider_credential_rows),
+        "entity_link_count": int(entity_link_count),
+    }
+    expected = {
+        **cache_counts,
+        "folder_count": folder_count,
+        "label_count": label_count,
+        "sync_state_count": sync_state_count,
+        "oauth_credential_count": oauth_credential_count,
+        "provider_credential_count": provider_credential_count,
+        "entity_link_count": int(entity_link_count),
+    }
+    audit(
+        data_root,
+        "connections.delete",
+        "mail_connection",
+        connection_id,
+        {
+            "provider": str(row["provider"]),
+            "email_address": str(row["email_address"]),
+            "previous_status": str(row["status"]),
+            "deleted": deleted,
+        },
+    )
+    return {
+        "status": "deleted",
+        "connection_id": connection_id,
+        "email_address": str(row["email_address"]),
+        "display_name": str(row["display_name"]),
+        "cache": cache_counts,
+        "expected": expected,
+        "deleted": deleted,
+    }
+
+
 def list_labels(data_root: Path, connection_id: str | None = None) -> list[dict[str, object]]:
     ensure_schema(data_root)
     sql = "SELECT * FROM labels"
@@ -449,6 +535,64 @@ def _connection_cache_counts(db, connection_id: str) -> dict[str, int]:
         "attachment_count": attachment_count,
         "draft_count": draft_count,
     }
+
+
+def _delete_entity_links_for_connection(db, connection_id: str) -> int:
+    return int(
+        db.execute(
+            """
+            DELETE FROM entity_links
+            WHERE (source_entity_type = 'mail_connection' AND source_entity_id = ?)
+              OR (target_app_id = 'mail' AND target_entity_type = 'mail_connection' AND target_entity_id = ?)
+              OR (source_entity_type = 'email_thread' AND source_entity_id IN (
+                SELECT id FROM threads WHERE connection_id = ?
+              ))
+              OR (target_app_id = 'mail' AND target_entity_type = 'email_thread' AND target_entity_id IN (
+                SELECT id FROM threads WHERE connection_id = ?
+              ))
+              OR (source_entity_type = 'email_message' AND source_entity_id IN (
+                SELECT messages.id
+                FROM messages JOIN threads ON messages.thread_id = threads.id
+                WHERE threads.connection_id = ?
+              ))
+              OR (target_app_id = 'mail' AND target_entity_type = 'email_message' AND target_entity_id IN (
+                SELECT messages.id
+                FROM messages JOIN threads ON messages.thread_id = threads.id
+                WHERE threads.connection_id = ?
+              ))
+              OR (source_entity_type = 'mail_attachment' AND source_entity_id IN (
+                SELECT attachments.id
+                FROM attachments JOIN messages ON attachments.message_id = messages.id
+                JOIN threads ON messages.thread_id = threads.id
+                WHERE threads.connection_id = ?
+              ))
+              OR (target_app_id = 'mail' AND target_entity_type = 'mail_attachment' AND target_entity_id IN (
+                SELECT attachments.id
+                FROM attachments JOIN messages ON attachments.message_id = messages.id
+                JOIN threads ON messages.thread_id = threads.id
+                WHERE threads.connection_id = ?
+              ))
+              OR (source_entity_type = 'mail_draft' AND source_entity_id IN (
+                SELECT id FROM drafts WHERE connection_id = ?
+              ))
+              OR (target_app_id = 'mail' AND target_entity_type = 'mail_draft' AND target_entity_id IN (
+                SELECT id FROM drafts WHERE connection_id = ?
+              ))
+            """,
+            (
+                connection_id,
+                connection_id,
+                connection_id,
+                connection_id,
+                connection_id,
+                connection_id,
+                connection_id,
+                connection_id,
+                connection_id,
+                connection_id,
+            ),
+        ).rowcount
+    )
 
 
 def _connection(row) -> dict[str, object]:

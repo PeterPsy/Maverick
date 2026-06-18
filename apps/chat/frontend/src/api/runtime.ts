@@ -165,6 +165,7 @@ export function uploadWorkspaceFile(payload: {
 export function interruptRuntimeTurn(turnId: string): Promise<{
   turn: RuntimeTurn;
   event?: RuntimeEvent;
+  inter_agent_cleanup?: Array<Record<string, unknown>>;
   interrupted: boolean;
 }> {
   return requestJson(`/api/runtime/turns/${encodeURIComponent(turnId)}/interrupt`, {

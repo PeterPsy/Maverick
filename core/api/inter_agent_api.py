@@ -1004,7 +1004,13 @@ def _execute_inter_agent_run_with_root_projection(
             async_runtime_turns=async_runtime_turns,
         )
         if root_projection is not None:
-            _mark_root_inter_agent_turn_completed(state, workspace_id=workspace_id, root_projection=root_projection, status=result.run.status)
+            _mark_root_inter_agent_turn_completed(
+                state,
+                workspace_id=workspace_id,
+                root_projection=root_projection,
+                status=result.run.status,
+                final_answer=result.final_answer,
+            )
     except Exception as error:
         if root_projection is not None:
             _mark_root_inter_agent_turn_failed(state, workspace_id=workspace_id, root_projection=root_projection, error=error)
@@ -1057,11 +1063,68 @@ def _mark_root_inter_agent_turn_completed(
     workspace_id: str,
     root_projection: dict[str, object],
     status: str,
+    final_answer: str,
 ) -> None:
     turn = root_projection["turn"]
+    current = state.runtime_store.get_turn(turn.turn_id)
+    if current.status in {"completed", "failed", "cancelled", "timed-out"}:
+        root_projection["turn"] = current
+        set_thread_availability(
+            state,
+            workspace_id=workspace_id,
+            runtime_session_id=current.session_id,
+            availability="free",
+        )
+        return
+    if status == "cancelled":
+        cancelled_turn = transition_runtime_turn(
+            state.runtime_store,
+            turn_id=current.turn_id,
+            target_status="cancelled",
+            failure_reason="Inter-agent run cancelled.",
+        )
+        root_projection["turn"] = cancelled_turn
+        cancelled_event = record_runtime_event(
+            state.runtime_store,
+            event_id=str(uuid4()),
+            session_id=cancelled_turn.session_id,
+            turn_id=cancelled_turn.turn_id,
+            plane="turn",
+            event_type="runtime.turn.cancelled",
+            payload={
+                "inter_agent_run_id": _root_projection_run_id(root_projection),
+                "reason": "inter_agent_run_cancelled",
+            },
+            event_bus=state.runtime_event_bus,
+        )
+        root_projection["events"].append(cancelled_event)
+        set_thread_availability(
+            state,
+            workspace_id=workspace_id,
+            runtime_session_id=cancelled_turn.session_id,
+            availability="free",
+            now=cancelled_event.created_at,
+        )
+        return
+    answer = _text(final_answer)
+    if answer:
+        output_event = record_runtime_event(
+            state.runtime_store,
+            event_id=str(uuid4()),
+            session_id=current.session_id,
+            turn_id=current.turn_id,
+            plane="turn",
+            event_type="runtime.output.final",
+            payload={
+                "inter_agent_run_id": _root_projection_run_id(root_projection),
+                "text": answer,
+            },
+            event_bus=state.runtime_event_bus,
+        )
+        root_projection["events"].append(output_event)
     completed_turn = transition_runtime_turn(
         state.runtime_store,
-        turn_id=turn.turn_id,
+        turn_id=current.turn_id,
         target_status="completed",
     )
     root_projection["turn"] = completed_turn
@@ -1095,14 +1158,20 @@ def _mark_root_inter_agent_turn_failed(
     turn = root_projection["turn"]
     current = state.runtime_store.get_turn(turn.turn_id)
     if current.status in {"completed", "failed", "cancelled", "timed-out"}:
-        failed_turn = current
-    else:
-        failed_turn = transition_runtime_turn(
-            state.runtime_store,
-            turn_id=current.turn_id,
-            target_status="failed",
-            failure_reason=str(error),
+        root_projection["turn"] = current
+        set_thread_availability(
+            state,
+            workspace_id=workspace_id,
+            runtime_session_id=current.session_id,
+            availability="free",
         )
+        return
+    failed_turn = transition_runtime_turn(
+        state.runtime_store,
+        turn_id=current.turn_id,
+        target_status="failed",
+        failure_reason=str(error),
+    )
     root_projection["turn"] = failed_turn
     failed_event = record_runtime_event(
         state.runtime_store,

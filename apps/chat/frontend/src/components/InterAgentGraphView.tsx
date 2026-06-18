@@ -122,7 +122,7 @@ export function InterAgentGraphView({
       </header>
 
       <div className="chatapp-inter-agent-graph__statusbar" aria-live="polite">
-        <span>{runDetail?.participants.length || 0} participants</span>
+        <span>{runDetail?.participants.length || 0} nodes</span>
         <span>{events.length} events</span>
         <span>{artifacts.length} artifacts</span>
         {pendingApprovalCount ? <span>{pendingApprovalCount} pending approvals</span> : null}

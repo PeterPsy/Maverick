@@ -5,10 +5,12 @@ import tempfile
 import unittest
 from unittest.mock import patch
 
+from core.api.inter_agent_api import _mark_root_inter_agent_turn_completed
 from core.api.platform_host import PlatformHost
 from core.apps.dependencies import save_app_dependency_selection
 from core.runtime.runtime_events import RuntimeEventRecord
 from core.runtime.runtime_turns import RuntimeTurnRecord
+from core.runtime.service import queue_runtime_turn, record_runtime_event, transition_runtime_turn
 from tests.unit.api.inter_agent_api_f4_support import InterAgentApiF4Fixture, run_payload_without_snapshot
 from tests.unit.api.test_inter_agent_api import _run_payload
 
@@ -82,6 +84,7 @@ class InterAgentApiF4TestCase(InterAgentApiF4Fixture, unittest.TestCase):
 
         self.assertEqual(create_status, 201)
         self.assertEqual(execute_status, 200)
+        self.assertEqual(execute_payload["final_answer"], "Projected result.")
         self.assertEqual(root_turn.status, "completed")
         self.assertEqual(root_turn.input_text, "Research the projection.")
         self.assertEqual(
@@ -91,15 +94,60 @@ class InterAgentApiF4TestCase(InterAgentApiF4Fixture, unittest.TestCase):
                 "runtime.turn.started",
                 "runtime.step.updated",
                 "runtime.step.updated",
+                "runtime.output.final",
                 "runtime.turn.completed",
             ],
         )
+        self.assertEqual(root_events[-2].payload["text"], "Projected result.")
         self.assertEqual(root_events[0].payload["client_message_id"], "client-root-projection")
         self.assertEqual(root_events[0].payload["attachments"][0]["name"], "brief.md")
         self.assertNotIn("objectUrl", root_events[0].payload["attachments"][0])
         self.assertEqual(execute_payload["root_runtime_events"][0]["event_type"], "runtime.turn.queued")
         self.assertEqual(root_thread.availability, "free")
         self.assertEqual(root_thread.last_completed_turn_id, root_turn.turn_id)
+
+    def test_root_projection_completion_ignores_already_cancelled_turn(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            repo_root = self._repo_root(temp_dir)
+            state = self._bootstrap_state(repo_root)
+            self._create_root_session(state, repo_root)
+            turn = queue_runtime_turn(
+                state.runtime_store,
+                turn_id="turn-cancelled-projection",
+                session_id="root-session",
+                input_text="Cancel before completion.",
+            )
+            queued_event = record_runtime_event(
+                state.runtime_store,
+                event_id="event-cancelled-projection-queued",
+                session_id="root-session",
+                turn_id=turn.turn_id,
+                plane="turn",
+                event_type="runtime.turn.queued",
+                payload={"input_text": turn.input_text, "inter_agent_run_id": "run-cancelled-projection"},
+                event_bus=state.runtime_event_bus,
+            )
+            active = transition_runtime_turn(state.runtime_store, turn_id=turn.turn_id, target_status="active")
+            cancelled = transition_runtime_turn(
+                state.runtime_store,
+                turn_id=active.turn_id,
+                target_status="cancelled",
+                failure_reason="Interrupted by user.",
+            )
+            root_projection = {"turn": active, "events": [queued_event]}
+
+            _mark_root_inter_agent_turn_completed(
+                state,
+                workspace_id="default",
+                root_projection=root_projection,
+                status="completed",
+                final_answer="This must not be projected.",
+            )
+            root_events = state.runtime_store.list_events("root-session")
+
+        self.assertEqual(root_projection["turn"], cancelled)
+        self.assertNotIn("runtime.output.final", [event.event_type for event in root_events])
+        self.assertNotIn("runtime.turn.completed", [event.event_type for event in root_events])
 
     def test_create_chat_root_rejects_untrusted_agent_snapshot(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:

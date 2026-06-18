@@ -285,6 +285,7 @@ class InterAgentApiTestCase(AppReferenceApiTestSupport, unittest.TestCase):
         self.assertEqual(create_payload["run"]["run_id"], "run-api-execute")
         self.assertEqual(execute_status, 200)
         self.assertEqual(execute_payload["run"]["status"], "completed")
+        self.assertEqual(execute_payload["final_answer"], "Rollout is ready.")
         self.assertEqual(execute_payload["participant_results"][0]["summary"], "Rollout is ready.")
         self.assertEqual(events_status, 200)
         self.assertIn("inter_agent.plan.summary_created", event_types)
@@ -454,7 +455,6 @@ class InterAgentApiTestCase(AppReferenceApiTestSupport, unittest.TestCase):
         self.assertTrue(root_deleted)
         self.assertTrue(child_deleted)
         self.assertTrue(run_deleted)
-
 
 if __name__ == "__main__":
     unittest.main()

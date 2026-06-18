@@ -220,6 +220,36 @@ class InterAgentExecutorTest(unittest.TestCase):
 
         self.assertEqual(store.get_run(run.run_id, workspace_id="default").status, "created")
 
+    def test_manager_tools_delegates_worker_prompt_instead_of_forwarding_raw_request(self) -> None:
+        _repo_root, store, runtime_store = self._stores()
+        service = InterAgentService(store)
+        run = service.create_run(_run_spec(run_id="manager-delegated-prompt"), now=NOW)
+        original_prompt = "The orchestrator must assign this work to the operational agent."
+
+        result = execute_inter_agent_run(
+            service,
+            _state(runtime_store),
+            workspace_id="default",
+            run_id=run.run_id,
+            input_text=original_prompt,
+            controlled_participants={"researcher": {"output_text": "Worker result.", "summary": "Worker completed."}},
+            allow_synthetic_participants=True,
+            project_summaries=False,
+            now=NOW,
+        )
+        message_event = next(
+            event
+            for event in store.list_event_page(run.run_id, workspace_id="default", visibility_plane="debug", limit=100).events
+            if event.event_type == "inter_agent.message.sent"
+        )
+        delegated_prompt = message_event.payload["input_text"]
+
+        self.assertEqual(result.final_answer, "Worker result.")
+        self.assertNotEqual(delegated_prompt, original_prompt)
+        self.assertIn("delegated worker", delegated_prompt)
+        self.assertIn("Do not act as the orchestrator", delegated_prompt)
+        self.assertIn(f"User request:\n{original_prompt}", delegated_prompt)
+
     def test_sequential_controlled_run_passes_previous_output_to_next_participant(self) -> None:
         _repo_root, store, runtime_store = self._stores()
         service = InterAgentService(store)

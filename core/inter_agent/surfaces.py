@@ -52,6 +52,7 @@ def execution_result_payload(store: InterAgentStore, result) -> dict[str, Any]:
         **run_detail_payload(store, result.run),
         "participant_results": inter_agent_payload(result.participant_results),
         "root_runtime_events": inter_agent_payload(result.root_runtime_events),
+        "final_answer": inter_agent_payload(getattr(result, "final_answer", "")),
     }
 
 

@@ -22,9 +22,9 @@ It started with names, visibility, legacy compatibility, and initial policy defa
 9. Invalid persisted visibility values fail closed: they are rejected on direct session hydration and must not make an existing thread appear in user-facing thread catalogs.
 10. `handoff` is schema/event-only until F7. It is not executable MVP behavior unless a later ADR explicitly promotes it.
 11. The F3 native executor may run deterministic synthetic participants only for tests or explicit operator-controlled execution, or real hidden child runtime sessions through the F2 service. It must not bypass inter-agent spawn, message, budget, or root-session authority checks.
-12. The root Chat transcript receives only selected operational summaries from the executor as non-terminal `runtime.step.updated` projections. `runtime.output.final` is reserved for real assistant final answers.
+12. The root Chat transcript receives selected operational summaries from the executor as non-terminal `runtime.step.updated` projections. When Chat requests a persisted root turn projection, the final assistant answer must be projected as `runtime.output.final` on that root turn, while detailed participant work remains in `inter_agent` events.
 13. Full participant detail remains in `inter_agent` events for graph replay and audit, but event replay and run detail require creator, root-session owner, admin, operator, or explicit `inter_agent_root` grant authority and must cap `summary`/`detail`/`debug` server-side.
-14. Chat may request a persisted root transcript projection for an inter-agent execution by sending a `client_message_id` to `POST /api/inter-agent/runs/<run_id>/execute`. The projection records the user's root turn and bounded runtime lifecycle events on the visible root session; it does not expose hidden participant sessions or duplicate the full inter-agent event log.
+14. Chat may request a persisted root transcript projection for an inter-agent execution by sending a `client_message_id` to `POST /api/inter-agent/runs/<run_id>/execute`. The projection records the user's root turn, bounded runtime lifecycle events, and the final answer on the visible root session; it does not expose hidden participant sessions or duplicate the full inter-agent event log.
 15. Graph mode consumes `inter_agent` events, run detail, approvals, and artifacts through core-owned replay and live surfaces. It must not read hidden runtime sessions directly.
 
 ## Initial Policy Defaults
@@ -110,11 +110,12 @@ Execution rules:
 - public HTTP execution must not accept caller-supplied controlled participant output; CLI and MCP require an operator caller plus explicit synthetic opt-in
 - synthetic participant events, execution results, summary-plane updates, and root transcript projections must be marked explicitly with their synthetic source
 - real participant work must use hidden `child_runtime_session` sessions spawned through `InterAgentService`
+- `manager_tools` must send child workers a delegated task frame, not the raw user prompt alone; workers must be told to complete the assigned work and not role-play the orchestrator or re-delegate
 - `sequential` passes declared output from one participant into the next participant input
 - `concurrent` fans out participants under `max_concurrent_participants` and then aggregates through the root orchestrator or declared aggregator participant
 - participant/task/artifact/summary/run lifecycle events are persisted as normalized `inter_agent` events
 - artifact refs and partial output must be persisted before a participant failure is recorded
-- root runtime projection is limited to selected summaries such as plan and terminal synthesis and must use non-terminal runtime step updates
+- root runtime projection uses non-terminal runtime step updates for selected plan/status summaries and `runtime.output.final` for the final answer when a root turn projection exists
 - successfully consumed turns stay counted in the budget ledger; only active participant/concurrency reservations are released on participant completion or failure
 - pre-participant-ledger turn reservations and matching `inter_agent.budget.reserved` events without `participant_id` must remain idempotent on retry and must still count toward per-participant turn enforcement, using reservation id inference where possible and conservative counting otherwise
 
@@ -150,6 +151,8 @@ Core additions for F5:
 - `GET /api/inter-agent/runs/<run_id>/artifacts` projects artifact records from authorized `inter_agent.artifact.created` events and supports the same paging and visibility parameters as event replay.
 
 Chat graph mode may render graph nodes, edges, timeline, inspector, approvals, artifacts, empty/loading/error states, and pause/resume/stop controls. Pause uses `POST /api/inter-agent/runs/<run_id>/interrupt`; stop uses `POST /api/inter-agent/runs/<run_id>/close` with `terminal_status=cancelled`; resume uses `POST /api/inter-agent/runs/<run_id>/resume`. Chat-created multi-agent runs request `visibility_level=detail` so graph mode can show tasks, participant state, and artifacts by default without exposing debug-plane data.
+
+If the visible root runtime turn for a Chat-projected inter-agent run is interrupted through the generic runtime turn API, the core must close the linked inter-agent run as `cancelled`, clean up active hidden child participant sessions through the inter-agent close path, and avoid any later `cancelled -> completed` root turn transition.
 
 The F5 WebSocket may poll the inter-agent event store for the MVP. A dedicated inter-agent event bus can be introduced later if run event volume requires fanout semantics comparable to runtime session events.
 

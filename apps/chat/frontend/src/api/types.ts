@@ -519,6 +519,7 @@ export type InterAgentRunDetail = {
   edges: InterAgentEdgeRecord[];
   budget_policy: InterAgentBudgetPolicyRecord | null;
   budget_ledger: InterAgentBudgetLedgerRecord | null;
+  final_answer?: string;
   participant_results?: Array<Record<string, unknown>>;
   root_runtime_events?: RuntimeEvent[];
   root_runtime_turn?: RuntimeTurn;

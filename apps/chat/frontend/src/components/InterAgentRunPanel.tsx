@@ -110,7 +110,8 @@ function InterAgentBanner({
     .reverse()
     .map((event) => textPayload(event.payload.summary) || textPayload(event.payload.status))
     .find(Boolean);
-  const participantCount = runDetail.participants.filter((participant) => participant.kind !== "orchestrator").length;
+  const workerCount = runDetail.participants.filter((participant) => participant.kind !== "orchestrator").length;
+  const hasOrchestrator = runDetail.participants.some((participant) => participant.kind === "orchestrator");
   const budget = runDetail.budget_policy;
   return (
     <aside className={`chatapp-inter-agent-banner is-${runDetail.run.status}`}>
@@ -120,7 +121,7 @@ function InterAgentBanner({
       <div className="chatapp-inter-agent-banner__body">
         <div className="chatapp-inter-agent-banner__meta">
           <span>{runStatusLabel(runDetail.run.status)}</span>
-          <span>{participantLabel(participantCount || 1)}</span>
+          <span>{runTopologyLabel(workerCount, hasOrchestrator)}</span>
           {budget ? <span>{budget.max_total_turns} turns</span> : null}
         </div>
         {latestSummary ? <p>{latestSummary}</p> : null}
@@ -145,8 +146,12 @@ function runStatusLabel(status: string): string {
     .join(" ");
 }
 
-function participantLabel(count: number): string {
-  return `${count} participant${count === 1 ? "" : "s"}`;
+function runTopologyLabel(workerCount: number, hasOrchestrator: boolean): string {
+  if (workerCount <= 0) {
+    return hasOrchestrator ? "orchestrator only" : "0 workers";
+  }
+  const workerLabel = `${workerCount} worker${workerCount === 1 ? "" : "s"}`;
+  return hasOrchestrator ? `${workerLabel} + orchestrator` : workerLabel;
 }
 
 function textPayload(value: unknown): string {

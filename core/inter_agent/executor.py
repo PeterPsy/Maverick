@@ -63,6 +63,7 @@ class InterAgentExecutionResult:
     run: InterAgentRunRecord
     participant_results: list[ParticipantExecutionResult]
     root_runtime_events: list[RuntimeEventRecord]
+    final_answer: str = ""
 
 
 def execute_inter_agent_run(
@@ -83,7 +84,7 @@ def execute_inter_agent_run(
     clock = _clock(now)
     run = service.store.get_run(run_id, workspace_id=workspace_id)
     if run.status in TERMINAL_RUN_STATUSES:
-        return InterAgentExecutionResult(run=run, participant_results=[], root_runtime_events=[])
+        return InterAgentExecutionResult(run=run, participant_results=[], root_runtime_events=[], final_answer="")
     if run.mode == "single_agent":
         raise InterAgentOperationError("single_agent runs execute through the normal runtime turn path.")
     if run.mode in SCHEMA_ONLY_MODES:
@@ -187,6 +188,8 @@ def execute_inter_agent_run(
     except Exception as error:
         failed_at = clock()
         latest_run = service.store.get_run(run.run_id, workspace_id=workspace_id)
+        if latest_run.status == "cancelled":
+            return InterAgentExecutionResult(run=latest_run, participant_results=[], root_runtime_events=root_runtime_events, final_answer="")
         failed = replace(latest_run, status="failed", updated_at=failed_at, ended_at=failed_at)
         service.store.save_run(failed)
         service.record_event(
@@ -220,11 +223,19 @@ def execute_inter_agent_run(
             raise
         raise InterAgentOperationError(str(error)) from error
 
-    final_status = "failed" if any(result.status == "failed" for result in participant_results) else "completed"
+    final_status = _final_run_status(participant_results)
     final_summary = _final_summary(final_status=final_status, participant_results=participant_results)
+    final_answer = _final_answer_text(final_status=final_status, participant_results=participant_results)
     final_synthetic, final_synthetic_source = _result_synthetic_metadata(participant_results)
     ended_at = clock()
     latest_run = service.store.get_run(run.run_id, workspace_id=workspace_id)
+    if latest_run.status == "cancelled":
+        return InterAgentExecutionResult(
+            run=latest_run,
+            participant_results=participant_results,
+            root_runtime_events=root_runtime_events,
+            final_answer=final_answer,
+        )
     completed_run = replace(latest_run, status=final_status, updated_at=ended_at, ended_at=ended_at)
     service.store.save_run(completed_run)
     service.record_event(
@@ -242,9 +253,14 @@ def execute_inter_agent_run(
         },
         now=ended_at,
     )
+    terminal_event_type = {
+        "completed": "inter_agent.run.completed",
+        "failed": "inter_agent.run.failed",
+        "cancelled": "inter_agent.run.cancelled",
+    }[final_status]
     service.record_event(
         completed_run,
-        event_type="inter_agent.run.completed" if final_status == "completed" else "inter_agent.run.failed",
+        event_type=terminal_event_type,  # type: ignore[arg-type]
         participant_id=orchestrator.participant_id,
         visibility_plane="summary",
         correlation_id=completed_run.run_id,
@@ -273,6 +289,7 @@ def execute_inter_agent_run(
         run=completed_run,
         participant_results=participant_results,
         root_runtime_events=root_runtime_events,
+        final_answer=final_answer,
     )
 
 
@@ -297,7 +314,7 @@ def _execute_manager_tools(
             run=run,
             participant=participant,
             task_index=index,
-            input_text=_participant_input(
+            input_text=_manager_tools_participant_input(
                 participant,
                 base_input=input_text,
                 participant_inputs=participant_inputs,
@@ -606,6 +623,14 @@ def _execute_runtime_participant(
 ) -> ParticipantExecutionResult:
     runtime_session_id: str | None = None
     try:
+        latest_run = service.store.get_run(run.run_id, workspace_id=run.workspace_id)
+        if latest_run.status in TERMINAL_RUN_STATUSES:
+            return ParticipantExecutionResult(
+                participant_id=participant.participant_id,
+                label=participant.label,
+                status=latest_run.status,
+                error=f"Inter-agent run is {latest_run.status}.",
+            )
         spawned, session, _created = service.spawn_participant_runtime_session(
             state.runtime_store,
             workspace_id=run.workspace_id,
@@ -628,9 +653,18 @@ def _execute_runtime_participant(
             turn = _wait_for_runtime_turn(state, turn.turn_id)
             events = _runtime_events_for_turn(state, session_id=session.session_id, turn_id=turn.turn_id)
     except Exception as error:
+        latest_run = service.store.get_run(run.run_id, workspace_id=run.workspace_id)
         latest = service.store.get_participant(participant.participant_id, workspace_id=run.workspace_id, run_id=run.run_id)
         if latest.runtime_session_id:
             runtime_session_id = latest.runtime_session_id
+        if latest_run.status == "cancelled" or latest.status == "cancelled":
+            return ParticipantExecutionResult(
+                participant_id=participant.participant_id,
+                label=participant.label,
+                status="cancelled",
+                error=str(error),
+                runtime_session_id=runtime_session_id,
+            )
         _finish_participant(
             service,
             run,
@@ -977,6 +1011,48 @@ def _participant_input(
     return text or f"Execute the assigned task for {participant.label}."
 
 
+def _manager_tools_participant_input(
+    participant: InterAgentParticipantRecord,
+    *,
+    base_input: str,
+    participant_inputs: dict[str, str],
+) -> str:
+    specific = participant_inputs.get(participant.participant_id, "").strip()
+    user_request = str(base_input or "").strip()
+    if specific:
+        sections = [
+            "You are a delegated worker in a Maverick multi-agent manager-tools run.",
+            f"Participant: {participant.label} ({participant.participant_id}).",
+            (
+                "Complete only the delegated task below. Do not act as the orchestrator, "
+                "do not announce a handoff, and do not delegate further."
+            ),
+            f"Delegated task:\n{specific}",
+        ]
+        if user_request and user_request != specific:
+            sections.append(f"Original user request for context:\n{user_request}")
+        return "\n\n".join(sections)
+    if user_request:
+        return "\n\n".join(
+            [
+                "You are a delegated worker in a Maverick multi-agent manager-tools run.",
+                f"Participant: {participant.label} ({participant.participant_id}).",
+                (
+                    "Produce the final answer for the user's request. Do not act as the orchestrator, "
+                    "do not announce a handoff, and do not delegate further."
+                ),
+                f"User request:\n{user_request}",
+            ]
+        )
+    return "\n\n".join(
+        [
+            "You are a delegated worker in a Maverick multi-agent manager-tools run.",
+            f"Participant: {participant.label} ({participant.participant_id}).",
+            "Execute the assigned task and return the final answer. Do not act as the orchestrator or delegate further.",
+        ]
+    )
+
+
 def _merge_input_for_aggregator(*, input_text: str, fanout_results: list[ParticipantExecutionResult]) -> str:
     sections = [str(input_text or "").strip()] if str(input_text or "").strip() else []
     for result in fanout_results:
@@ -996,12 +1072,54 @@ def _plan_summary(run: InterAgentRunRecord, participants: list[InterAgentPartici
 def _final_summary(*, final_status: str, participant_results: list[ParticipantExecutionResult]) -> str:
     if not participant_results:
         return "Multi-agent run completed without participant work."
-    prefix = "Multi-agent run completed." if final_status == "completed" else "Multi-agent run failed."
+    if final_status == "completed":
+        prefix = "Multi-agent run completed."
+    elif final_status == "cancelled":
+        prefix = "Multi-agent run cancelled."
+    else:
+        prefix = "Multi-agent run failed."
     summaries = []
     for result in participant_results:
         text = result.summary or result.output_text or result.partial_output or result.error or result.status
         summaries.append(f"{result.label}: {_compact_summary(text)}")
     return f"{prefix} " + " ".join(summaries)
+
+
+def _final_run_status(participant_results: list[ParticipantExecutionResult]) -> str:
+    if any(result.status == "cancelled" for result in participant_results):
+        return "cancelled"
+    if any(result.status == "failed" for result in participant_results):
+        return "failed"
+    return "completed"
+
+
+def _final_answer_text(*, final_status: str, participant_results: list[ParticipantExecutionResult]) -> str:
+    if not participant_results:
+        return ""
+    if final_status == "cancelled":
+        return ""
+    successful = [result for result in participant_results if result.status == "completed"]
+    if len(successful) == 1:
+        return str(successful[0].output_text or successful[0].summary or "").strip()
+    if successful:
+        sections = []
+        for result in successful:
+            text = str(result.output_text or result.summary or "").strip()
+            if text:
+                sections.append(f"{result.label}:\n{text}")
+        if sections:
+            return "\n\n".join(sections)
+    failed = [result for result in participant_results if result.status == "failed"]
+    if failed:
+        details = []
+        for result in failed:
+            text = str(result.partial_output or result.output_text or result.error or result.summary or "").strip()
+            if text:
+                details.append(f"{result.label}: {text}")
+        if details:
+            return f"Multi-agent run failed before producing a final answer. {' '.join(details)}"
+        return "Multi-agent run failed before producing a final answer."
+    return ""
 
 
 def _runtime_output_text(events: list[Any]) -> str:

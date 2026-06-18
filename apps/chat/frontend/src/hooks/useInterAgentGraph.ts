@@ -8,6 +8,7 @@ import {
   listInterAgentRunArtifacts,
   listInterAgentRunEvents,
   resumeInterAgentRun,
+  resolveInterAgentApproval,
   type InterAgentApprovalRecord,
   type InterAgentArtifactRecord,
   type InterAgentEventRecord,
@@ -305,6 +306,25 @@ export function useInterAgentGraph({
     }
   }, [refreshRecords, runDetail, runId]);
 
+  const resolveApproval = useCallback(
+    async (approvalId: string, approved: boolean) => {
+      const response = await resolveInterAgentApproval(approvalId, { approved });
+      setApprovals((current) => {
+        let matched = false;
+        const next = current.map((approval) => {
+          if (approval.approval_id !== approvalId) {
+            return approval;
+          }
+          matched = true;
+          return response.approval;
+        });
+        return matched ? next : [...next, response.approval];
+      });
+      await refreshRecords();
+    },
+    [refreshRecords],
+  );
+
   return {
     actionPending,
     approvals,
@@ -317,6 +337,7 @@ export function useInterAgentGraph({
     pauseRun,
     refreshRecords,
     requestOlderHistory,
+    resolveApproval,
     resumeRun,
     runDetail,
     stopRun,
@@ -339,6 +360,27 @@ function applyRunEventUpdates(detail: InterAgentRunDetail | null, events: InterA
           ),
         };
       }
+    }
+    if (event.event_type === "inter_agent.participant.started" && event.participant_id) {
+      const eventRuntimeSessionId = typeof event.runtime_session_id === "string" ? event.runtime_session_id : "";
+      const payloadRuntimeSessionId = typeof event.payload.runtime_session_id === "string" ? event.payload.runtime_session_id : "";
+      const runtimeSessionId = eventRuntimeSessionId || payloadRuntimeSessionId || null;
+      const runPromotedToRunning =
+        next.run.status === "created" || next.run.status === "planning" || next.run.status === "recovering";
+      next = {
+        ...next,
+        run: runPromotedToRunning ? { ...next.run, status: "running", updated_at: event.created_at } : next.run,
+        participants: next.participants.map((participant) =>
+          participant.participant_id === event.participant_id
+            ? {
+                ...participant,
+                runtime_session_id: runtimeSessionId || participant.runtime_session_id,
+                status: "running",
+                updated_at: event.created_at,
+              }
+            : participant,
+        ),
+      };
     }
     const runStatus = runStatusFromEvent(event);
     if (runStatus) {

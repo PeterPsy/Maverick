@@ -114,6 +114,7 @@ class InterAgentEventCollection(DocumentCollection, Protocol):
         query: dict[str, Any],
         *,
         visibility_plane: InterAgentVisibilityPlane,
+        event_types: set[str] | None,
         after_event_id: str | None,
         before_event_id: str | None,
         limit: int,
@@ -236,6 +237,7 @@ class InterAgentStore(Protocol):
         *,
         workspace_id: str,
         visibility_plane: InterAgentVisibilityPlane = "summary",
+        event_types: set[str] | None = None,
         after_event_id: str | None = None,
         before_event_id: str | None = None,
         limit: int = DEFAULT_INTER_AGENT_EVENT_LIMIT,
@@ -634,6 +636,7 @@ class InterAgentDocumentStore:
         *,
         workspace_id: str,
         visibility_plane: InterAgentVisibilityPlane = "summary",
+        event_types: set[str] | None = None,
         after_event_id: str | None = None,
         before_event_id: str | None = None,
         limit: int = DEFAULT_INTER_AGENT_EVENT_LIMIT,
@@ -643,6 +646,7 @@ class InterAgentDocumentStore:
         page = self.collections.events.find_event_page(
             query,
             visibility_plane=validate_visibility_plane(visibility_plane),
+            event_types=set(event_types) if event_types else None,
             after_event_id=after_event_id,
             before_event_id=before_event_id,
             limit=bounded_limit,
@@ -828,6 +832,7 @@ class InterAgentEventJsonCollection(WorkspaceInterAgentJsonCollection):
         query: dict[str, Any],
         *,
         visibility_plane: InterAgentVisibilityPlane,
+        event_types: set[str] | None,
         after_event_id: str | None,
         before_event_id: str | None,
         limit: int,
@@ -846,6 +851,8 @@ class InterAgentEventJsonCollection(WorkspaceInterAgentJsonCollection):
         documents.sort(key=_event_sort_key)
         visible_planes = visible_planes_for(visibility_plane)
         documents = [document for document in documents if document.get("visibility_plane") in visible_planes]
+        if event_types:
+            documents = [document for document in documents if document.get("event_type") in event_types]
         if after_event_id:
             selected = []
             for document in documents:

@@ -204,6 +204,7 @@ def _handle_inter_agent_route(
             run.run_id,
             workspace_id=context.workspace_id,
             visibility_plane=visibility,
+            event_types={"inter_agent.artifact.created"},
             after_event_id=_query_text(query, "after_event_id"),
             before_event_id=_query_text(query, "before_event_id"),
             limit=_query_limit(query),

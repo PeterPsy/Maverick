@@ -18,6 +18,7 @@ from core.inter_agent.authorization import (
 )
 from core.inter_agent.errors import InterAgentEventNotFoundError, InterAgentRunNotFoundError
 from core.inter_agent.events import InterAgentEventPage, InterAgentEventRecord, validate_visibility_plane
+from core.inter_agent.service import InterAgentService
 from core.inter_agent.surfaces import artifact_items_payload, inter_agent_payload, run_detail_payload
 from core.runtime.errors import RuntimeSessionNotFoundError
 from core.shared.entrypoints import EntrypointShutdownController
@@ -217,6 +218,7 @@ async def stream_inter_agent_run_events(
     last_heartbeat_at = datetime.now(tz=UTC)
     try:
         await send({"type": "websocket.accept", "subprotocol": None, "headers": []})
+        InterAgentService(state.inter_agent_store).expire_pending_approvals(run)
         initial_page = initial_inter_agent_event_page(
             state,
             run,
@@ -265,7 +267,7 @@ async def stream_inter_agent_run_events(
                     client_frame = _parse_client_frame(incoming)
                     if client_frame is not None:
                         ack_event_id = _ack_event_id(client_frame)
-                        if ack_event_id:
+                        if ack_event_id and ack_event_id in seen_event_ids:
                             last_event_id = ack_event_id
                         if client_frame.get("type") == "inter_agent.history.before":
                             before_event_id = client_frame.get("before_event_id")

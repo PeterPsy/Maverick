@@ -10,7 +10,7 @@ from unittest.mock import patch
 from core.api.inter_agent_websocket import _events_after_cursor, stream_inter_agent_run_events
 from core.api.platform_host import PlatformHost
 from core.api.platform_state import bootstrap_platform_state
-from core.inter_agent.models import BudgetPolicySpec, InterAgentRunSpec, ParticipantSpec
+from core.inter_agent.models import ApprovalRequestRecord, BudgetPolicySpec, InterAgentRunSpec, ParticipantSpec
 from core.inter_agent.service import InterAgentService
 from core.runtime.service import create_runtime_session
 from tests.unit.api.app_reference_test_support import AppReferenceApiTestSupport
@@ -209,6 +209,69 @@ class InterAgentWebSocketTestCase(AppReferenceApiTestSupport, unittest.IsolatedA
         live_frames = [frame for frame in frames if frame["type"] == "inter_agent.event"]
         self.assertTrue(any(frame["event"]["payload"].get("summary") == "Live update" for frame in live_frames))
 
+    async def test_inter_agent_websocket_ignores_ack_for_undelivered_event(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            repo_root = self._repo_root(temp_dir)
+            state = self._bootstrap_state(repo_root)
+            service, run = self._create_run(state, repo_root, run_id="run-ws-ack")
+            app = PlatformHost(state, start_path=repo_root)
+            cookie = self._login(app)
+            sent: list[dict] = []
+            incoming: asyncio.Queue[dict] = asyncio.Queue()
+            await incoming.put({"type": "websocket.connect"})
+
+            async def receive() -> dict:
+                return await incoming.get()
+
+            async def send(message: dict) -> None:
+                sent.append(message)
+
+            task = asyncio.create_task(
+                stream_inter_agent_run_events(
+                    state=state,
+                    scope={
+                        "type": "websocket",
+                        "path": f"/ws/inter-agent/runs/{run.run_id}",
+                        "query_string": b"visibility_plane=summary&initial_event_limit=50",
+                        "headers": [(b"cookie", cookie.encode("latin1"))],
+                    },
+                    receive=receive,
+                    send=send,
+                    heartbeat_interval_seconds=10,
+                    poll_interval_seconds=0.1,
+                )
+            )
+            await _wait_for_frame(sent, "inter_agent.snapshot")
+            first_live = service.record_event(
+                run,
+                event_type="inter_agent.summary.updated",
+                participant_id="orchestrator",
+                visibility_plane="summary",
+                payload={"summary": "First undelivered live update"},
+                now=datetime(2026, 6, 18, 10, 4, tzinfo=UTC),
+            )
+            service.record_event(
+                run,
+                event_type="inter_agent.summary.updated",
+                participant_id="orchestrator",
+                visibility_plane="summary",
+                payload={"summary": "Second live update"},
+                now=datetime(2026, 6, 18, 10, 5, tzinfo=UTC),
+            )
+            await incoming.put(
+                {
+                    "type": "websocket.receive",
+                    "text": json.dumps({"type": "inter_agent.ack", "last_event_id": first_live.event_id}),
+                }
+            )
+            await _wait_for_live_event(sent, first_live.event_id)
+            await incoming.put({"type": "websocket.disconnect"})
+            await task
+
+        frames = [json.loads(item["text"]) for item in sent if item.get("type") == "websocket.send"]
+        live_event_ids = [frame["event"]["event_id"] for frame in frames if frame["type"] == "inter_agent.event"]
+        self.assertIn(first_live.event_id, live_event_ids)
+
     def test_inter_agent_event_polling_without_cursor_returns_bounded_tail(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             repo_root = self._repo_root(temp_dir)
@@ -252,6 +315,72 @@ class InterAgentWebSocketTestCase(AppReferenceApiTestSupport, unittest.IsolatedA
         self.assertEqual(payload["items"][0]["label"], "Research report")
         self.assertEqual(payload["items"][0]["status"], "partial")
 
+    async def test_inter_agent_artifacts_http_route_pages_artifact_events_before_limit(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            repo_root = self._repo_root(temp_dir)
+            state = self._bootstrap_state(repo_root)
+            service, run = self._create_run(state, repo_root, run_id="run-artifacts-tail")
+            for index in range(60):
+                service.record_event(
+                    run,
+                    event_type="inter_agent.summary.updated",
+                    participant_id="orchestrator",
+                    visibility_plane="summary",
+                    payload={"summary": f"Later summary {index}"},
+                    now=datetime(2026, 6, 18, 10, 4, tzinfo=UTC) + timedelta(minutes=index),
+                )
+            app = PlatformHost(state, start_path=repo_root)
+            cookie = self._login(app)
+
+            status, payload, _headers = self._invoke(
+                app,
+                path=f"/api/inter-agent/runs/{run.run_id}/artifacts?visibility_plane=detail&limit=50",
+                cookie=cookie,
+            )
+
+        self.assertEqual(status, 200)
+        self.assertEqual(payload["items"][0]["label"], "Research report")
+        self.assertFalse(payload["has_more_before"])
+
+    async def test_inter_agent_websocket_snapshot_expires_pending_approvals(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            repo_root = self._repo_root(temp_dir)
+            state = self._bootstrap_state(repo_root)
+            _service, run = self._create_run(state, repo_root, run_id="run-ws-expired-approval")
+            state.inter_agent_store.save_approval(
+                ApprovalRequestRecord(
+                    approval_id="approval-expired-ws",
+                    workspace_id="default",
+                    run_id=run.run_id,
+                    participant_id="researcher",
+                    requested_by_participant_id="orchestrator",
+                    operation_kind="storage.write",
+                    resource_refs=[],
+                    summary="Write a generated file.",
+                    risk_level="medium",
+                    status="pending",
+                    eligible_approver_user_ids=["user:admin"],
+                    eligible_approver_roles=[],
+                    expires_at=datetime(2026, 6, 18, 9, 0, tzinfo=UTC),
+                )
+            )
+            app = PlatformHost(state, start_path=repo_root)
+            cookie = self._login(app)
+
+            sent = await self._collect_snapshot(
+                state,
+                run_id=run.run_id,
+                cookie=cookie,
+                query_string=b"visibility_plane=detail&initial_event_limit=50",
+            )
+            stored = state.inter_agent_store.get_approval("approval-expired-ws", workspace_id="default")
+
+        frames = [json.loads(item["text"]) for item in sent if item.get("type") == "websocket.send"]
+        snapshot = frames[0]
+        self.assertEqual(snapshot["type"], "inter_agent.snapshot")
+        self.assertEqual(snapshot["approvals"][0]["status"], "expired")
+        self.assertEqual(stored.status, "expired")
+
 
 async def _wait_for_frame(sent: list[dict], frame_type: str) -> dict:
     deadline = datetime.now(tz=UTC) + timedelta(seconds=3)
@@ -264,6 +393,19 @@ async def _wait_for_frame(sent: list[dict], frame_type: str) -> dict:
                 return frame
         await asyncio.sleep(0.02)
     raise AssertionError(f"Timed out waiting for {frame_type}")
+
+
+async def _wait_for_live_event(sent: list[dict], event_id: str) -> dict:
+    deadline = datetime.now(tz=UTC) + timedelta(seconds=3)
+    while datetime.now(tz=UTC) < deadline:
+        for message in sent:
+            if message.get("type") != "websocket.send":
+                continue
+            frame = json.loads(message["text"])
+            if frame.get("type") == "inter_agent.event" and frame.get("event", {}).get("event_id") == event_id:
+                return frame
+        await asyncio.sleep(0.02)
+    raise AssertionError(f"Timed out waiting for live event {event_id}")
 
 
 if __name__ == "__main__":

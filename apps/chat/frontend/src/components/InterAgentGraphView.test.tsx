@@ -5,13 +5,14 @@ import { act } from "react";
 import { createRoot } from "react-dom/client";
 import type { Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { InterAgentRunDetail } from "../api/client";
+import type { InterAgentApprovalRecord, InterAgentRunDetail } from "../api/client";
 import {
   getInterAgentRun,
   interruptInterAgentRun,
   listInterAgentRunApprovals,
   listInterAgentRunArtifacts,
   listInterAgentRunEvents,
+  resolveInterAgentApproval,
 } from "../api/client";
 import { InterAgentGraphView } from "./InterAgentGraphView";
 
@@ -24,6 +25,7 @@ vi.mock("../api/client", () => ({
   listInterAgentRunArtifacts: vi.fn(),
   listInterAgentRunEvents: vi.fn(),
   resumeInterAgentRun: vi.fn(),
+  resolveInterAgentApproval: vi.fn(),
 }));
 
 class FakeWebSocket {
@@ -125,6 +127,25 @@ function runDetail(overrides: Partial<InterAgentRunDetail> = {}): InterAgentRunD
   return { ...detail, ...overrides };
 }
 
+function approvalRecord(overrides: Partial<InterAgentApprovalRecord> = {}): InterAgentApprovalRecord {
+  return {
+    approval_id: "approval-1",
+    workspace_id: "default",
+    run_id: "run-1",
+    participant_id: "researcher",
+    requested_by_participant_id: "orchestrator",
+    operation_kind: "storage.write",
+    resource_refs: [],
+    summary: "Write a generated file.",
+    risk_level: "medium",
+    status: "pending",
+    eligible_approver_user_ids: ["user:admin"],
+    eligible_approver_roles: [],
+    expires_at: "2026-06-18T10:30:00Z",
+    ...overrides,
+  };
+}
+
 async function renderGraph(props: Partial<Parameters<typeof InterAgentGraphView>[0]> = {}) {
   container = document.createElement("div");
   document.body.append(container);
@@ -163,6 +184,7 @@ beforeEach(() => {
     newest_event_id: null,
   });
   vi.mocked(interruptInterAgentRun).mockResolvedValue({ run: { ...runDetail().run, status: "paused" } });
+  vi.mocked(resolveInterAgentApproval).mockResolvedValue({ approval: approvalRecord({ status: "approved" }) });
 });
 
 afterEach(() => {
@@ -276,5 +298,75 @@ describe("InterAgentGraphView", () => {
     });
 
     expect(interruptInterAgentRun).toHaveBeenCalledWith("run-1", { reason: "chat_graph_pause" });
+  });
+
+  it("resolves approval from the graph inspector and updates local approval state", async () => {
+    const pendingApproval = approvalRecord();
+    const approvedApproval = approvalRecord({
+      status: "approved",
+      resolved_at: "2026-06-18T10:05:00Z",
+      resolution_reason: "approved",
+    });
+    vi.mocked(resolveInterAgentApproval).mockResolvedValue({ approval: approvedApproval });
+    vi.mocked(listInterAgentRunApprovals).mockResolvedValueOnce({ items: [pendingApproval] }).mockResolvedValue({ items: [approvedApproval] });
+    const element = await renderGraph({ initialApprovals: [pendingApproval] });
+
+    expect(element.textContent).toContain("pending");
+
+    await act(async () => {
+      (Array.from(element.querySelectorAll("button")).find((button) => button.textContent === "Approve") as HTMLButtonElement | undefined)?.click();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(resolveInterAgentApproval).toHaveBeenCalledWith("approval-1", { approved: true });
+    expect(element.textContent).toContain("approved");
+    expect(Array.from(element.querySelectorAll("button")).some((button) => button.textContent === "Approve")).toBe(false);
+  });
+
+  it("applies participant.started live events to graph run detail", async () => {
+    const base = runDetail();
+    const createdDetail = runDetail({
+      run: { ...base.run, status: "created" },
+      participants: base.participants.map((participant) =>
+        participant.participant_id === "researcher"
+          ? { ...participant, runtime_session_id: null, status: "idle" }
+          : participant,
+      ),
+    });
+    vi.mocked(getInterAgentRun).mockResolvedValue(createdDetail);
+    const element = await renderGraph({ initialRunDetail: createdDetail });
+
+    expect(element.textContent).toContain("agent - idle");
+
+    await act(async () => {
+      FakeWebSocket.instances[0]?.onmessage?.({
+        data: JSON.stringify({
+          type: "inter_agent.event",
+          event: {
+            event_id: "event-started",
+            workspace_id: "default",
+            run_id: "run-1",
+            thread_id: "thread-1",
+            root_runtime_session_id: "session-1",
+            participant_id: "researcher",
+            runtime_session_id: "child-99",
+            runtime_turn_id: null,
+            runtime_event_id: null,
+            event_type: "inter_agent.participant.started",
+            visibility_plane: "detail",
+            sequence: 2,
+            correlation_id: "child-99",
+            idempotency_key: "event-started",
+            payload: { participant_id: "researcher", runtime_session_id: "child-99" },
+            created_at: "2026-06-18T10:02:00Z",
+          },
+        }),
+      });
+      await Promise.resolve();
+    });
+
+    expect(element.textContent).toContain("Running");
+    expect(element.textContent).toContain("agent - running");
   });
 });

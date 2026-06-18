@@ -173,7 +173,6 @@ export function ChatTranscript({
             initialEvents={interAgentEventsByRunId[activeInterAgentGraphRunId] || []}
             initialRunDetail={activeGraphRun}
             onClose={onCloseInterAgentGraph}
-            onResolveApproval={onResolveInterAgentApproval}
             runId={activeInterAgentGraphRunId}
           />
         ) : null}

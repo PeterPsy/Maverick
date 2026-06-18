@@ -23,7 +23,6 @@ type InterAgentGraphViewProps = {
   initialEvents?: InterAgentEventRecord[];
   initialRunDetail?: InterAgentRunDetail | null;
   onClose: () => void;
-  onResolveApproval?: (approvalId: string, approved: boolean) => Promise<void>;
   runId: string;
 };
 
@@ -32,7 +31,6 @@ export function InterAgentGraphView({
   initialEvents = [],
   initialRunDetail = null,
   onClose,
-  onResolveApproval = async () => undefined,
   runId,
 }: InterAgentGraphViewProps) {
   const [selected, setSelected] = useState<InterAgentGraphSelection | null>(null);
@@ -48,6 +46,7 @@ export function InterAgentGraphView({
     isHistoryLoading,
     pauseRun,
     requestOlderHistory,
+    resolveApproval,
     resumeRun,
     runDetail,
     stopRun,
@@ -154,7 +153,7 @@ export function InterAgentGraphView({
           onSelect={(eventId) => setSelected({ id: `event:${eventId}`, kind: "event", eventId })}
           selected={selected}
         />
-        <Inspector item={selectedItem} onResolveApproval={onResolveApproval} />
+        <Inspector item={selectedItem} onResolveApproval={resolveApproval} />
       </div>
 
       <ArtifactsStrip

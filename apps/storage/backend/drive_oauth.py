@@ -21,6 +21,7 @@ from drive_connection_store import (
     now_timestamp,
     public_connection,
     read_state,
+    remove_connection,
     replace_connection,
 )
 from errors import StorageValidationError
@@ -240,30 +241,19 @@ def complete_oauth(
         profile=profile,
         account_email=account_email,
     )
-    if duplicate is not None:
-        append_audit(
-            data_root,
-            "drive.oauth.complete_duplicate_account",
-            "drive_connection",
-            state_record["id"],
-            {
-                "provider": GOOGLE_DRIVE_PROVIDER,
-                "account_email": account_email,
-                "duplicate_connection_id": duplicate["id"],
-            },
-        )
-        raise StorageValidationError(
-            f"Google Drive account `{account_email}` is already connected as `{duplicate['id']}`. "
-            "Disconnect that connection before connecting the same account again.",
-            operation="drive_connections.complete_oauth",
-            example={"action": "drive_connections.disconnect", "connection_id": duplicate["id"]},
-        )
+    target_connection = duplicate or state_record
+    target_connection_id = str(target_connection.get("id") or state_record["id"])
     workspace_id = str(payload.get("_workspace_id") or "default").strip() or "default"
-    secret_ref = _scoped_secret_ref(workspace_id=workspace_id, connection_id=state_record["id"])
-    grant_id = _scoped_grant_id(workspace_id=workspace_id, connection_id=state_record["id"])
+    secret_ref = _scoped_secret_ref(workspace_id=workspace_id, connection_id=target_connection_id)
+    grant_id = _scoped_grant_id(workspace_id=workspace_id, connection_id=target_connection_id)
     now = now_timestamp()
+    external_refs = {}
+    if duplicate is not None and isinstance(target_connection.get("external_refs"), dict):
+        external_refs = dict(target_connection.get("external_refs") or {})
+    external_refs.update(_connected_external_refs(profile))
     connection = {
-        **state_record,
+        **target_connection,
+        "id": target_connection_id,
         "account_email": account_email,
         "display_name": str(profile.get("name") or account_email).strip(),
         "status": "connected",
@@ -277,21 +267,36 @@ def complete_oauth(
             "status": "active",
             "oauth_metadata": _oauth_metadata(token_payload),
         },
-        "external_refs": _connected_external_refs(profile),
+        "external_refs": external_refs,
     }
     replace_connection(data_root, connection)
+    if duplicate is not None and state_record["id"] != connection["id"]:
+        remove_connection(data_root, state_record["id"])
     append_audit(
         data_root,
-        "drive.oauth.complete",
+        "drive.oauth.reconnect" if duplicate is not None else "drive.oauth.complete",
         "drive_connection",
         connection["id"],
-        {"provider": GOOGLE_DRIVE_PROVIDER, "access_mode": access_mode, "account_email": account_email},
+        {
+            "provider": GOOGLE_DRIVE_PROVIDER,
+            "access_mode": access_mode,
+            "account_email": account_email,
+            **(
+                {
+                    "pending_connection_id": state_record["id"],
+                    "reused_connection_id": connection["id"],
+                }
+                if duplicate is not None
+                else {}
+            ),
+        },
     )
     return {
         "flow": "complete_oauth",
         "provider": GOOGLE_DRIVE_PROVIDER,
         "access_mode": access_mode,
         "status": "connected",
+        "reconnected": duplicate is not None,
         "connection_id": connection["id"],
         "connection": public_connection(connection),
         "credential": {

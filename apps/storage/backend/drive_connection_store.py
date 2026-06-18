@@ -96,6 +96,20 @@ def replace_connection(data_root: Path, connection: dict[str, Any]) -> dict[str,
     return connection
 
 
+def remove_connection(data_root: Path, connection_id: str) -> None:
+    connection_id = str(connection_id or "").strip()
+    if not connection_id:
+        return
+
+    def updater(state: dict[str, Any]) -> dict[str, Any]:
+        state["connections"] = [
+            item for item in state["connections"] if str(item.get("id") or "") != connection_id
+        ]
+        return state
+
+    update_state(data_root, updater)
+
+
 def sync_state_for_connection(data_root: Path, connection_id: str) -> dict[str, Any]:
     return normalize_sync_state(get_connection(data_root, connection_id).get("sync_state"))
 

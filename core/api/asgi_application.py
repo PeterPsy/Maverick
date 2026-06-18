@@ -14,6 +14,7 @@ from core.api.app_events import APP_EVENTS_WS_PATH, stream_app_events
 from core.api.backend_recovery import start_backend_restart_recovery
 from core.api.background_hooks import start_background_hook_scheduler
 from core.api.http import max_json_body_bytes
+from core.api.inter_agent_websocket import INTER_AGENT_RUN_WS_PREFIX, stream_inter_agent_run_events
 from core.api.platform_host import PlatformHost
 from core.api.platform_state import PlatformState, bootstrap_platform_state
 from core.api.runtime_thread_websocket import RUNTIME_THREADS_WS_PATH, stream_runtime_thread_events
@@ -83,6 +84,15 @@ class PlatformAsgiHost:
             return
         if path == RUNTIME_THREADS_WS_PATH:
             await stream_runtime_thread_events(
+                state=self.state,
+                scope=scope,
+                receive=receive,
+                send=send,
+                shutdown_controller=self.shutdown_controller,
+            )
+            return
+        if path.startswith(INTER_AGENT_RUN_WS_PREFIX):
+            await stream_inter_agent_run_events(
                 state=self.state,
                 scope=scope,
                 receive=receive,

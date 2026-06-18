@@ -327,6 +327,10 @@ visibility. Server-side replay must treat those visibility planes as an
 authorization ceiling: `summary` sees only summary events, `detail` sees summary
 and detail, and `debug` sees all three planes. Event retention is also per
 visibility plane so debug history can be shorter than user-facing summaries.
+F5 exposes the same replay contract to Chat graph mode through
+`WS /ws/inter-agent/runs/<run_id>` and
+`GET /api/inter-agent/runs/<run_id>/artifacts`; both surfaces cap
+`summary`/`detail`/`debug` server-side by caller authority and run visibility.
 
 F1-level inter-agent services did not spawn provider sessions, create hidden
 runtime sessions, invoke an LLM, or expose HTTP/CLI/MCP executor operations. F2

@@ -7,7 +7,7 @@ from datetime import datetime
 from decimal import Decimal
 from typing import Any
 
-from core.inter_agent.events import InterAgentEventPage
+from core.inter_agent.events import InterAgentEventPage, InterAgentEventRecord
 from core.inter_agent.models import (
     AgentParticipantSnapshot,
     BudgetPolicySpec,
@@ -72,6 +72,33 @@ def event_page_payload(page: InterAgentEventPage) -> dict[str, Any]:
     )
 
 
+def artifact_items_payload(events: list[InterAgentEventRecord]) -> list[dict[str, Any]]:
+    """Return artifact records projected from inter-agent artifact events."""
+    artifacts: list[dict[str, Any]] = []
+    for event in events:
+        if event.event_type != "inter_agent.artifact.created":
+            continue
+        refs = event.payload.get("artifact_refs")
+        if not isinstance(refs, list):
+            refs = []
+        for index, ref in enumerate(refs):
+            if not isinstance(ref, dict):
+                continue
+            item = {str(key): inter_agent_payload(value) for key, value in ref.items()}
+            item.setdefault("artifact_id", _artifact_id(event, item, index))
+            item.setdefault("label", _artifact_label(item, index))
+            item["event_id"] = event.event_id
+            item["run_id"] = event.run_id
+            item["participant_id"] = event.participant_id
+            item["created_at"] = inter_agent_payload(event.created_at)
+            item["status"] = str(event.payload.get("status") or item.get("status") or "created")
+            partial_output = event.payload.get("partial_output")
+            if isinstance(partial_output, str) and partial_output.strip():
+                item["partial_output"] = partial_output
+            artifacts.append(item)
+    return artifacts
+
+
 def run_spec_from_payload(
     payload: dict[str, Any],
     *,
@@ -116,6 +143,22 @@ def run_spec_from_payload(
         visibility_level=_text(payload.get("visibility_level")) or "summary",  # type: ignore[arg-type]
         idempotency_key=_text(payload.get("idempotency_key")) or None,
     )
+
+
+def _artifact_id(event: InterAgentEventRecord, item: dict[str, Any], index: int) -> str:
+    for key in ("file_id", "workspace_relative_path", "relative_path", "id", "artifact_id"):
+        value = item.get(key)
+        if isinstance(value, str) and value.strip():
+            return value.strip()
+    return f"{event.event_id}:{index}"
+
+
+def _artifact_label(item: dict[str, Any], index: int) -> str:
+    for key in ("label", "name", "filename", "title", "workspace_relative_path", "relative_path"):
+        value = item.get(key)
+        if isinstance(value, str) and value.strip():
+            return value.strip()
+    return f"Artifact {index + 1}"
 
 
 def participant_spec_from_payload(

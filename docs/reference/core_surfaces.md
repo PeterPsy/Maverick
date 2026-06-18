@@ -21,11 +21,26 @@ Primary control-plane routes include:
 - `/api/app-store/install-local`
 - `/api/app-store/uninstall`
 - `/api/runtime/status`
+- `/api/inter-agent/runs`
+- `/api/inter-agent/runs/<run_id>/events`
+- `/api/inter-agent/runs/<run_id>/artifacts`
+- `/api/inter-agent/runs/<run_id>/interrupt`
+- `/api/inter-agent/runs/<run_id>/resume`
+- `/api/inter-agent/runs/<run_id>/close`
 - `/api/providers/active`
 - `/api/recovery/status`
 - `/api/recovery/health`
 
 These routes are generic platform surfaces, not app-owned business APIs.
+
+Primary core WebSocket routes include:
+
+- `/ws/runtime/threads`
+- `/ws/runtime/sessions/<session_id>`
+- `/ws/inter-agent/runs/<run_id>`
+
+The inter-agent WebSocket serves graph snapshots, bounded replay, history pages,
+live event frames, and heartbeats with server-side visibility filtering.
 
 ## Core CLI
 

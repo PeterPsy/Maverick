@@ -52,6 +52,7 @@ describe("interAgentRunPayload", () => {
         skill_ids: ["storage", "browser"],
       },
     });
+    expect(payload.visibility_level).toBe("detail");
   });
 
   it("keeps selected skills in the snapshot when the agent prompt is empty", () => {

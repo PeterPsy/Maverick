@@ -3,8 +3,12 @@ import type {
   ChatMessageAttachment,
   AppReference,
   InterAgentApprovalRecord,
+  InterAgentArtifactPage,
   InterAgentEventRecord,
+  InterAgentEventPage,
   InterAgentRunDetail,
+  InterAgentVisibilityPlane,
+  InterAgentWebSocketFrame,
   RuntimeEvent,
   RuntimeTurn,
 } from "./types";
@@ -29,6 +33,7 @@ export type CreateInterAgentRunPayload = {
   root_runtime_session_id: string;
   mode: "manager_tools" | "sequential" | "concurrent";
   idempotency_key: string;
+  visibility_level?: InterAgentVisibilityPlane;
   participants: InterAgentParticipantSpecPayload[];
   budget: {
     max_participants: number;
@@ -88,14 +93,38 @@ function serializableMessageAttachments(attachments: ChatMessageAttachment[]) {
 
 export function listInterAgentRunEvents(
   runId: string,
-  options: { visibilityPlane?: "summary" | "detail" | "debug"; limit?: number } = {},
-): Promise<{ items: InterAgentEventRecord[] }> {
+  options: { afterEventId?: string | null; beforeEventId?: string | null; visibilityPlane?: InterAgentVisibilityPlane; limit?: number } = {},
+): Promise<InterAgentEventPage> {
   const query = new URLSearchParams();
   query.set("visibility_plane", options.visibilityPlane || "summary");
+  if (options.afterEventId) {
+    query.set("after_event_id", options.afterEventId);
+  }
+  if (options.beforeEventId) {
+    query.set("before_event_id", options.beforeEventId);
+  }
   if (options.limit && Number.isFinite(options.limit)) {
     query.set("limit", String(Math.max(1, Math.floor(options.limit))));
   }
-  return requestJson<{ items: InterAgentEventRecord[] }>(`/api/inter-agent/runs/${encodeURIComponent(runId)}/events?${query.toString()}`);
+  return requestJson<InterAgentEventPage>(`/api/inter-agent/runs/${encodeURIComponent(runId)}/events?${query.toString()}`);
+}
+
+export function listInterAgentRunArtifacts(
+  runId: string,
+  options: { afterEventId?: string | null; beforeEventId?: string | null; visibilityPlane?: InterAgentVisibilityPlane; limit?: number } = {},
+): Promise<InterAgentArtifactPage> {
+  const query = new URLSearchParams();
+  query.set("visibility_plane", options.visibilityPlane || "detail");
+  if (options.afterEventId) {
+    query.set("after_event_id", options.afterEventId);
+  }
+  if (options.beforeEventId) {
+    query.set("before_event_id", options.beforeEventId);
+  }
+  if (options.limit && Number.isFinite(options.limit)) {
+    query.set("limit", String(Math.max(1, Math.floor(options.limit))));
+  }
+  return requestJson<InterAgentArtifactPage>(`/api/inter-agent/runs/${encodeURIComponent(runId)}/artifacts?${query.toString()}`);
 }
 
 export function listInterAgentRunApprovals(runId: string): Promise<{ items: InterAgentApprovalRecord[] }> {
@@ -111,4 +140,56 @@ export function resolveInterAgentApproval(
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(payload),
   });
+}
+
+export function interruptInterAgentRun(runId: string, payload: { participant_id?: string; reason?: string } = {}): Promise<{
+  run: InterAgentRunDetail["run"];
+  interrupted_sessions?: Array<Record<string, unknown>>;
+}> {
+  return requestJson(`/api/inter-agent/runs/${encodeURIComponent(runId)}/interrupt`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+}
+
+export function resumeInterAgentRun(runId: string, payload: { reason?: string } = {}): Promise<InterAgentRunDetail> {
+  return requestJson<InterAgentRunDetail>(`/api/inter-agent/runs/${encodeURIComponent(runId)}/resume`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+}
+
+export function closeInterAgentRun(
+  runId: string,
+  payload: { delete_records?: boolean; reason?: string; terminal_status?: "completed" | "failed" | "cancelled" } = {},
+): Promise<{
+  run: InterAgentRunDetail["run"];
+  participant_cleanups?: Array<Record<string, unknown>>;
+  deleted?: Record<string, number> | null;
+}> {
+  return requestJson(`/api/inter-agent/runs/${encodeURIComponent(runId)}/close`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+}
+
+export function interAgentWebSocketUrl(
+  runId: string,
+  options: { lastEventId?: string | null; initialEventLimit?: number; visibilityPlane?: InterAgentVisibilityPlane } = {},
+): string {
+  const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
+  const url = new URL(`${protocol}//${window.location.host}/ws/inter-agent/runs/${encodeURIComponent(runId)}`);
+  if (options.lastEventId) {
+    url.searchParams.set("last_event_id", options.lastEventId);
+  }
+  url.searchParams.set("initial_event_limit", String(options.initialEventLimit || 240));
+  url.searchParams.set("visibility_plane", options.visibilityPlane || "summary");
+  return url.toString();
+}
+
+export function interAgentEventFromWebSocketFrame(frame: InterAgentWebSocketFrame): InterAgentEventRecord | null {
+  return frame.type === "inter_agent.event" ? frame.event : null;
 }

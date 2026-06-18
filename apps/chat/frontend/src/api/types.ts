@@ -352,6 +352,7 @@ export type RuntimeStepMessage = {
 };
 
 export type MultiAgentComposerMode = "off" | "auto" | "multi";
+export type InterAgentVisibilityPlane = "summary" | "detail" | "debug";
 
 export type InterAgentRunStatus =
   | "created"
@@ -376,7 +377,7 @@ export type InterAgentRunRecord = {
   orchestrator_participant_id: string;
   budget_policy_id: string;
   budget_ledger_id: string;
-  visibility_level: string;
+  visibility_level: InterAgentVisibilityPlane;
   created_at: string;
   updated_at: string;
   ended_at?: string | null;
@@ -472,12 +473,44 @@ export type InterAgentEventRecord = {
   runtime_turn_id?: string | null;
   runtime_event_id?: string | null;
   event_type: string;
-  visibility_plane: "summary" | "detail" | "debug";
+  visibility_plane: InterAgentVisibilityPlane;
   sequence: number;
   correlation_id: string;
   idempotency_key: string;
   payload: Record<string, unknown>;
   created_at: string;
+};
+
+export type InterAgentArtifactRecord = {
+  artifact_id: string;
+  event_id: string;
+  run_id: string;
+  participant_id?: string | null;
+  label: string;
+  status: string;
+  created_at?: string | null;
+  workspace_relative_path?: string;
+  relative_path?: string;
+  file_id?: string;
+  deep_link?: string;
+  partial_output?: string;
+  [key: string]: unknown;
+};
+
+export type InterAgentEventPage = {
+  items: InterAgentEventRecord[];
+  visibility_plane: InterAgentVisibilityPlane;
+  limit: number;
+  after_event_id?: string | null;
+  before_event_id?: string | null;
+  has_more_before?: boolean;
+  has_more_after?: boolean;
+  oldest_event_id?: string | null;
+  newest_event_id?: string | null;
+};
+
+export type InterAgentArtifactPage = Omit<InterAgentEventPage, "items"> & {
+  items: InterAgentArtifactRecord[];
 };
 
 export type InterAgentRunDetail = {
@@ -490,6 +523,31 @@ export type InterAgentRunDetail = {
   root_runtime_events?: RuntimeEvent[];
   root_runtime_turn?: RuntimeTurn;
 };
+
+export type InterAgentWebSocketFrame =
+  | {
+      type: "inter_agent.snapshot";
+      run_detail: InterAgentRunDetail;
+      approvals: InterAgentApprovalRecord[];
+      artifacts: InterAgentArtifactRecord[];
+      events: InterAgentEventRecord[];
+      visibility_plane: InterAgentVisibilityPlane;
+      last_event_id: string | null;
+      has_more_before?: boolean;
+      oldest_event_id?: string | null;
+    }
+  | {
+      type: "inter_agent.history.page";
+      events: InterAgentEventRecord[];
+      artifacts?: InterAgentArtifactRecord[];
+      visibility_plane: InterAgentVisibilityPlane;
+      before_event_id: string | null;
+      oldest_event_id: string | null;
+      newest_event_id: string | null;
+      has_more_before: boolean;
+    }
+  | { type: "inter_agent.event"; event: InterAgentEventRecord }
+  | { type: "inter_agent.heartbeat"; run_id: string; at: string };
 
 export type WidgetRegistryItem = {
   owner_app_id: string;

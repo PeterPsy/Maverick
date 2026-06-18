@@ -9,9 +9,13 @@ import { synthesizeSpeech } from "../api/client";
 import type { ChatMessage } from "../api/client";
 import { ChatTranscript } from "./ChatTranscript";
 
-vi.mock("../api/client", () => ({
-  synthesizeSpeech: vi.fn(),
-}));
+vi.mock("../api/client", async () => {
+  const actual = await vi.importActual<typeof import("../api/client")>("../api/client");
+  return {
+    ...actual,
+    synthesizeSpeech: vi.fn(),
+  };
+});
 
 let container: HTMLDivElement | null = null;
 let root: Root | null = null;

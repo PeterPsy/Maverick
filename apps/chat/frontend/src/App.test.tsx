@@ -13,6 +13,10 @@ import {
   getSpeechCapabilities,
   listAgentCatalog,
   listApps,
+  listInterAgentRunApprovals,
+  listInterAgentRunArtifacts,
+  listInterAgentRunEvents,
+  listInterAgentRuns,
   listProviders,
   listSkills,
   prewarmSpeechWorker,
@@ -39,22 +43,34 @@ vi.mock("./hooks/useRuntimeThreads", async () => {
 
 vi.mock("./api/client", () => ({
   createRuntimeSessionWithTurn: vi.fn(),
+  createInterAgentRun: vi.fn(),
   createThread: vi.fn(),
+  executeInterAgentRun: vi.fn(),
   getAgentDefinition: vi.fn(),
   getAppDependencies: vi.fn(),
   getSpeechCapabilities: vi.fn(),
   getWidgetContext: vi.fn(),
+  getInterAgentRun: vi.fn(),
+  interAgentWebSocketUrl: vi.fn(() => "ws://maverick.test/ws/inter-agent/runs/run-1"),
+  interruptInterAgentRun: vi.fn(),
   interruptRuntimeTurn: vi.fn(),
   isRuntimeSessionUnavailableError: vi.fn(() => false),
   listAgentCatalog: vi.fn(),
   listApps: vi.fn(),
+  listInterAgentRunApprovals: vi.fn(),
+  listInterAgentRunArtifacts: vi.fn(),
+  listInterAgentRunEvents: vi.fn(),
+  listInterAgentRuns: vi.fn(),
   listProviders: vi.fn(),
   listSkills: vi.fn(),
   markThreadRead: vi.fn(),
   orderChatThreads: vi.fn((threads: unknown[]) => threads),
   prewarmSpeechWorker: vi.fn(),
   previewAgentPrompt: vi.fn(),
+  closeInterAgentRun: vi.fn(),
   selectProvider: vi.fn(),
+  resolveInterAgentApproval: vi.fn(),
+  resumeInterAgentRun: vi.fn(),
   selectedDependencyProviderAppId: (payload: AppDependenciesPayload, alias: string) =>
     payload.dependencies.find((dependency) => dependency.alias === alias)?.selected_provider_app_ids[0] || "",
   selectedSharedDependencyProviderAppId: (payload: AppDependenciesPayload, aliases: string[]) => {
@@ -169,6 +185,26 @@ beforeEach(() => {
     items: [],
   });
   vi.mocked(listApps).mockResolvedValue([]);
+  vi.mocked(listInterAgentRuns).mockResolvedValue({ items: [] });
+  vi.mocked(listInterAgentRunEvents).mockResolvedValue({
+    items: [],
+    visibility_plane: "summary",
+    limit: 80,
+    has_more_before: false,
+    has_more_after: false,
+    oldest_event_id: null,
+    newest_event_id: null,
+  });
+  vi.mocked(listInterAgentRunApprovals).mockResolvedValue({ items: [] });
+  vi.mocked(listInterAgentRunArtifacts).mockResolvedValue({
+    items: [],
+    visibility_plane: "detail",
+    limit: 80,
+    has_more_before: false,
+    has_more_after: false,
+    oldest_event_id: null,
+    newest_event_id: null,
+  });
   vi.mocked(listSkills).mockResolvedValue([]);
   vi.mocked(getAppDependencies).mockResolvedValue(dependencyPayload(["agents"]));
   vi.mocked(getSpeechCapabilities).mockResolvedValue({

@@ -38,6 +38,7 @@ from core.inter_agent.executor import execute_inter_agent_run
 from core.inter_agent.service import InterAgentService
 from core.inter_agent.store import DEFAULT_INTER_AGENT_EVENT_LIMIT, MAX_INTER_AGENT_EVENT_LIMIT
 from core.inter_agent.surfaces import (
+    artifact_items_payload,
     event_page_payload,
     execution_result_payload,
     inter_agent_payload,
@@ -187,6 +188,33 @@ def _handle_inter_agent_route(
             limit=_query_limit(query),
         )
         return json_response(start_response, event_page_payload(page))
+    if action == "artifacts" and method == "GET":
+        query = parse_qs(query_string, keep_blank_values=False)
+        visibility = authorized_inter_agent_event_visibility(
+            workspace_store=state.workspace_store,
+            context_workspace_id=context.workspace_id,
+            caller_kind="http",
+            run=run,
+            requested_visibility_plane=validate_visibility_plane(query.get("visibility_plane", ["detail"])[0]),
+            user_id=context.user.user_id,
+            platform_role=context.user.platform_role,
+            root_session=_root_session_for_run(state, run),
+        )
+        page = state.inter_agent_store.list_event_page(
+            run.run_id,
+            workspace_id=context.workspace_id,
+            visibility_plane=visibility,
+            after_event_id=_query_text(query, "after_event_id"),
+            before_event_id=_query_text(query, "before_event_id"),
+            limit=_query_limit(query),
+        )
+        return json_response(
+            start_response,
+            {
+                **event_page_payload(page),
+                "items": artifact_items_payload(page.events),
+            },
+        )
     if action == "approvals" and method == "GET":
         authorize_inter_agent_run_sensitive_view(
             workspace_store=state.workspace_store,

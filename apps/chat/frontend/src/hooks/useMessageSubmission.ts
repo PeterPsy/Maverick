@@ -375,6 +375,7 @@ export function interAgentRunPayload({
     root_runtime_session_id: thread.runtime_session_id,
     mode: "manager_tools" as const,
     idempotency_key: `chat:${clientMessageId}:${mode}`,
+    visibility_level: "detail" as const,
     participants: [
       {
         participant_id: "orchestrator",

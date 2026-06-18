@@ -1,17 +1,21 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   ApiError,
+  closeInterAgentRun,
   createInterAgentRun,
   deleteProject,
   executeInterAgentRun,
   getInterAgentRun,
   getSpeechCapabilities,
+  interruptInterAgentRun,
+  listInterAgentRunArtifacts,
   listInterAgentRunApprovals,
   listInterAgentRunEvents,
   listInterAgentRuns,
   listRuntimeSessionEvents,
   prewarmSpeechWorker,
   resolveInterAgentApproval,
+  resumeInterAgentRun,
   selectedDependencyProviderAppId,
   selectedSharedDependencyProviderAppId,
   synthesizeSpeech,
@@ -188,11 +192,23 @@ describe("inter-agent client calls", () => {
       if (path === "/api/inter-agent/runs/run-1/events?visibility_plane=summary&limit=10") {
         return jsonResponse({ items: [] });
       }
+      if (path === "/api/inter-agent/runs/run-1/artifacts?visibility_plane=detail&limit=10") {
+        return jsonResponse({ items: [{ artifact_id: "artifact-1", label: "Report" }] });
+      }
       if (path === "/api/inter-agent/runs/run-1/approvals") {
         return jsonResponse({ items: [] });
       }
       if (path === "/api/inter-agent/approvals/approval-1/resolve") {
         return jsonResponse({ approval: { approval_id: "approval-1", status: "approved" } });
+      }
+      if (path === "/api/inter-agent/runs/run-1/interrupt") {
+        return jsonResponse({ run: { run_id: "run-1", status: "paused" } });
+      }
+      if (path === "/api/inter-agent/runs/run-1/resume") {
+        return jsonResponse({ run: { run_id: "run-1", status: "running" }, participants: [] });
+      }
+      if (path === "/api/inter-agent/runs/run-1/close") {
+        return jsonResponse({ run: { run_id: "run-1", status: "cancelled" }, participant_cleanups: [] });
       }
       return jsonResponse({ error: "unexpected" }, 500);
     });
@@ -230,9 +246,17 @@ describe("inter-agent client calls", () => {
       run: { status: "completed" },
     });
     await expect(listInterAgentRunEvents("run-1", { visibilityPlane: "summary", limit: 10 })).resolves.toEqual({ items: [] });
+    await expect(listInterAgentRunArtifacts("run-1", { visibilityPlane: "detail", limit: 10 })).resolves.toEqual({
+      items: [{ artifact_id: "artifact-1", label: "Report" }],
+    });
     await expect(listInterAgentRunApprovals("run-1")).resolves.toEqual({ items: [] });
     await expect(resolveInterAgentApproval("approval-1", { approved: true })).resolves.toMatchObject({
       approval: { status: "approved" },
+    });
+    await expect(interruptInterAgentRun("run-1", { reason: "pause" })).resolves.toMatchObject({ run: { status: "paused" } });
+    await expect(resumeInterAgentRun("run-1", { reason: "resume" })).resolves.toMatchObject({ run: { status: "running" } });
+    await expect(closeInterAgentRun("run-1", { reason: "stop", terminal_status: "cancelled" })).resolves.toMatchObject({
+      run: { status: "cancelled" },
     });
 
     expect(JSON.parse(String(fetchMock.mock.calls[1]?.[1]?.body || "{}"))).toMatchObject({
@@ -246,6 +270,9 @@ describe("inter-agent client calls", () => {
       attachments: [{ id: "att-1", name: "brief.md" }],
     });
     expect(JSON.parse(String(fetchMock.mock.calls[3]?.[1]?.body || "{}")).attachments[0]).not.toHaveProperty("objectUrl");
+    expect(JSON.parse(String(fetchMock.mock.calls.at(-3)?.[1]?.body || "{}"))).toEqual({ reason: "pause" });
+    expect(JSON.parse(String(fetchMock.mock.calls.at(-2)?.[1]?.body || "{}"))).toEqual({ reason: "resume" });
+    expect(JSON.parse(String(fetchMock.mock.calls.at(-1)?.[1]?.body || "{}"))).toEqual({ reason: "stop", terminal_status: "cancelled" });
   });
 });
 

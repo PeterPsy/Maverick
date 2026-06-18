@@ -342,6 +342,77 @@ class InterAgentWebSocketTestCase(AppReferenceApiTestSupport, unittest.IsolatedA
         self.assertEqual(payload["items"][0]["label"], "Research report")
         self.assertFalse(payload["has_more_before"])
 
+    async def test_inter_agent_artifacts_http_route_accepts_visible_non_artifact_cursors(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            repo_root = self._repo_root(temp_dir)
+            state = self._bootstrap_state(repo_root)
+            service, run = self._create_run(state, repo_root, run_id="run-artifacts-cursor")
+            summary_marker = service.record_event(
+                run,
+                event_type="inter_agent.summary.updated",
+                participant_id="orchestrator",
+                visibility_plane="summary",
+                payload={"summary": "Cursor marker"},
+                now=datetime(2026, 6, 18, 10, 4, tzinfo=UTC),
+            )
+            service.record_event(
+                run,
+                event_type="inter_agent.artifact.created",
+                participant_id="researcher",
+                visibility_plane="detail",
+                payload={
+                    "artifact_refs": [
+                        {
+                            "workspace_relative_path": "storage/generated/reports/final.md",
+                            "label": "Final report",
+                        }
+                    ],
+                    "status": "created",
+                },
+                now=datetime(2026, 6, 18, 10, 5, tzinfo=UTC),
+            )
+            app = PlatformHost(state, start_path=repo_root)
+            cookie = self._login(app)
+
+            after_status, after_payload, _headers = self._invoke(
+                app,
+                path=(
+                    f"/api/inter-agent/runs/{run.run_id}/artifacts"
+                    f"?visibility_plane=detail&after_event_id={summary_marker.event_id}&limit=50"
+                ),
+                cookie=cookie,
+            )
+            before_status, before_payload, _headers = self._invoke(
+                app,
+                path=(
+                    f"/api/inter-agent/runs/{run.run_id}/artifacts"
+                    f"?visibility_plane=detail&before_event_id={summary_marker.event_id}&limit=50"
+                ),
+                cookie=cookie,
+            )
+
+        self.assertEqual(after_status, 200)
+        self.assertEqual([item["label"] for item in after_payload["items"]], ["Final report"])
+        self.assertEqual(before_status, 200)
+        self.assertEqual([item["label"] for item in before_payload["items"]], ["Research report"])
+
+    async def test_inter_agent_artifacts_http_route_returns_404_for_missing_cursor(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            repo_root = self._repo_root(temp_dir)
+            state = self._bootstrap_state(repo_root)
+            _service, run = self._create_run(state, repo_root, run_id="run-artifacts-missing-cursor")
+            app = PlatformHost(state, start_path=repo_root)
+            cookie = self._login(app)
+
+            status, payload, _headers = self._invoke(
+                app,
+                path=f"/api/inter-agent/runs/{run.run_id}/artifacts?visibility_plane=detail&after_event_id=missing-event&limit=50",
+                cookie=cookie,
+            )
+
+        self.assertEqual(status, 404)
+        self.assertEqual(payload["error"], "inter_agent_event_not_found")
+
     async def test_inter_agent_websocket_snapshot_expires_pending_approvals(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             repo_root = self._repo_root(temp_dir)

@@ -26,9 +26,10 @@ from core.inter_agent.authorization import (
     authorize_inter_agent_run_view,
 )
 from core.inter_agent.errors import (
-    InterAgentBudgetExceededError,
-    InterAgentOperationError,
     InterAgentApprovalNotFoundError,
+    InterAgentBudgetExceededError,
+    InterAgentEventNotFoundError,
+    InterAgentOperationError,
     InterAgentParticipantNotFoundError,
     InterAgentRunNotFoundError,
     InterAgentValidationError,
@@ -104,6 +105,12 @@ def handle_inter_agent_api(
         return json_response(start_response, {"error": "inter_agent_participant_not_found"}, status="404 Not Found")
     except InterAgentApprovalNotFoundError:
         return json_response(start_response, {"error": "inter_agent_approval_not_found"}, status="404 Not Found")
+    except InterAgentEventNotFoundError as error:
+        return json_response(
+            start_response,
+            {"error": "inter_agent_event_not_found", "detail": str(error)},
+            status="404 Not Found",
+        )
     except InterAgentBudgetExceededError as error:
         return json_response(
             start_response,

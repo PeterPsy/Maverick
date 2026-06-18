@@ -840,8 +840,6 @@ class InterAgentEventJsonCollection(WorkspaceInterAgentJsonCollection):
         if after_event_id and before_event_id:
             raise InterAgentValidationError("Use either after_event_id or before_event_id, not both.")
         documents: list[dict[str, Any]] = []
-        cursor_seen = after_event_id is None and before_event_id is None
-        cursor_found = after_event_id is None and before_event_id is None
         for path in self._candidate_paths(query):
             if not path.is_file():
                 continue
@@ -851,32 +849,22 @@ class InterAgentEventJsonCollection(WorkspaceInterAgentJsonCollection):
         documents.sort(key=_event_sort_key)
         visible_planes = visible_planes_for(visibility_plane)
         documents = [document for document in documents if document.get("visibility_plane") in visible_planes]
-        if event_types:
-            documents = [document for document in documents if document.get("event_type") in event_types]
         if after_event_id:
-            selected = []
-            for document in documents:
-                if cursor_seen:
-                    selected.append(document)
-                    continue
-                if document.get("event_id") == after_event_id:
-                    cursor_seen = True
-                    cursor_found = True
+            cursor_index = _event_cursor_index(documents, after_event_id)
+            if cursor_index is None:
+                return {"documents": [], "has_more_before": False, "has_more_after": False, "cursor_found": False}
+            selected = _filter_event_documents_by_type(documents[cursor_index + 1 :], event_types)
             return {
                 "documents": selected[:limit],
                 "has_more_before": bool(selected),
                 "has_more_after": len(selected) > limit,
-                "cursor_found": cursor_found,
+                "cursor_found": True,
             }
         if before_event_id:
-            before_documents = []
-            for document in documents:
-                if document.get("event_id") == before_event_id:
-                    cursor_found = True
-                    break
-                before_documents.append(document)
-            if not cursor_found:
+            cursor_index = _event_cursor_index(documents, before_event_id)
+            if cursor_index is None:
                 return {"documents": [], "has_more_before": False, "has_more_after": False, "cursor_found": False}
+            before_documents = _filter_event_documents_by_type(documents[:cursor_index], event_types)
             has_more_before = len(before_documents) > limit
             return {
                 "documents": before_documents[-limit:],
@@ -884,6 +872,7 @@ class InterAgentEventJsonCollection(WorkspaceInterAgentJsonCollection):
                 "has_more_after": True,
                 "cursor_found": True,
             }
+        documents = _filter_event_documents_by_type(documents, event_types)
         has_more_before = len(documents) > limit
         return {
             "documents": documents[-limit:],
@@ -1174,6 +1163,19 @@ def _pruned_event_documents(
             kept.extend(plane_documents[-max_events:])
     kept.sort(key=_event_sort_key)
     return kept
+
+
+def _event_cursor_index(documents: list[dict[str, Any]], event_id: str) -> int | None:
+    for index, document in enumerate(documents):
+        if document.get("event_id") == event_id:
+            return index
+    return None
+
+
+def _filter_event_documents_by_type(documents: list[dict[str, Any]], event_types: set[str] | None) -> list[dict[str, Any]]:
+    if not event_types:
+        return documents
+    return [document for document in documents if document.get("event_type") in event_types]
 
 
 def _event_sort_key(document: dict[str, Any]) -> tuple[int, str]:

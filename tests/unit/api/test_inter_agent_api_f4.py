@@ -15,6 +15,7 @@ from core.apps.contract_builders import (
     build_required_interface_declaration,
 )
 from core.apps.contracts import write_app_contract_file
+from core.apps.dependencies import save_app_dependency_selection
 from core.identity.service import create_user
 from core.inter_agent.models import ApprovalRequestRecord
 from core.runtime.runtime_events import RuntimeEventRecord
@@ -44,7 +45,14 @@ class InterAgentApiF4TestCase(AppReferenceApiTestSupport, unittest.TestCase):
         ):
             return bootstrap_platform_state(start_path=repo_root)
 
-    def _write_snapshot_dependency_apps(self, repo_root, *, agent_provider_app_id: str = "agents") -> None:
+    def _write_snapshot_dependency_apps(
+        self,
+        repo_root,
+        *,
+        agent_provider_app_id: str = "agents",
+        provider_returns_skill_catalog: bool = True,
+        provider_requires_runtime_skills: bool = False,
+    ) -> None:
         chat_root = repo_root / "apps" / "chat"
         agents_root = repo_root / "apps" / agent_provider_app_id
         skills_root = repo_root / "apps" / "skills"
@@ -53,6 +61,11 @@ class InterAgentApiF4TestCase(AppReferenceApiTestSupport, unittest.TestCase):
         skills_root.mkdir(parents=True, exist_ok=True)
         agents_backend = agents_root / "backend" / "app_backend.py"
         agents_backend.parent.mkdir(parents=True, exist_ok=True)
+        provider_skill_catalog_line = (
+            '                    "skill_catalog_app_id": "skills",\n'
+            if provider_returns_skill_catalog
+            else ""
+        )
         agents_backend.write_text(
             """from __future__ import annotations
 
@@ -81,8 +94,7 @@ def main() -> None:
                     "name": "Provider Researcher",
                     "description": "Materialized by provider.",
                     "skill_ids": ["provider-storage"],
-                    "skill_catalog_app_id": "skills",
-                    "enabled": True,
+__PROVIDER_SKILL_CATALOG_LINE__                    "enabled": True,
                     "updated_at": "provider-revision-1",
                 },
             }
@@ -99,7 +111,7 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-""",
+""".replace("__PROVIDER_SKILL_CATALOG_LINE__", provider_skill_catalog_line),
             encoding="utf-8",
         )
         write_app_contract_file(
@@ -138,6 +150,18 @@ if __name__ == "__main__":
                 publisher="maverick",
                 contract=build_app_contract(
                     entrypoints=build_app_entrypoints(backend="backend/app_backend.py"),
+                    requires=(
+                        [
+                            build_required_interface_declaration(
+                                alias="runtime-skills",
+                                interface="skill.catalog",
+                                required=True,
+                                description="Runtime skill catalog.",
+                            )
+                        ]
+                        if provider_requires_runtime_skills
+                        else []
+                    ),
                     provides=[
                         build_provided_interface_declaration(
                             interface="agent.catalog",
@@ -173,6 +197,21 @@ if __name__ == "__main__":
             ),
         )
 
+    def _write_active_context_app(self, repo_root) -> None:
+        storage_root = repo_root / "apps" / "storage"
+        storage_root.mkdir(parents=True, exist_ok=True)
+        write_app_contract_file(
+            storage_root,
+            build_parsed_app_contract(
+                app_id="storage",
+                name="Storage",
+                version="0.1.0",
+                description="Workspace files",
+                publisher="maverick",
+                contract=build_app_contract(),
+            ),
+        )
+
     def _create_root_session(
         self,
         state,
@@ -180,6 +219,7 @@ if __name__ == "__main__":
         *,
         source_app_id: str = "chat",
         skill_catalog_app_id: str | None = None,
+        system_prompt: str = "Parent prompt must not leak.",
     ) -> None:
         create_runtime_session(
             state.runtime_store,
@@ -187,7 +227,7 @@ if __name__ == "__main__":
             workspace_id="default",
             agent_id="chat",
             source_app_id=source_app_id,
-            system_prompt="Parent prompt must not leak.",
+            system_prompt=system_prompt,
             skill_ids=["parent-skill"],
             skill_catalog_app_id=skill_catalog_app_id,
             owner_user_id="parent-owner",
@@ -312,7 +352,12 @@ if __name__ == "__main__":
             repo_root = self._repo_root(temp_dir)
             self._write_snapshot_dependency_apps(repo_root)
             state = self._bootstrap_state(repo_root)
-            self._create_root_session(state, repo_root, source_app_id="agents", skill_catalog_app_id="skills")
+            self._create_root_session(
+                state,
+                repo_root,
+                source_app_id="agents",
+                skill_catalog_app_id="skills",
+            )
             app = PlatformHost(state, start_path=repo_root)
             cookie = self._login(app)
 
@@ -336,6 +381,49 @@ if __name__ == "__main__":
         self.assertEqual(participant["agent_snapshot"]["skill_catalog_app_id"], "skills")
         self.assertEqual(participant["agent_snapshot"]["provider_id"], "agents")
         self.assertEqual(participant["agent_snapshot"]["revision_id"], "provider-revision-1")
+
+    def test_create_agents_root_run_preserves_validated_active_app_context(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            repo_root = self._repo_root(temp_dir)
+            self._write_snapshot_dependency_apps(repo_root)
+            self._write_active_context_app(repo_root)
+            state = self._bootstrap_state(repo_root)
+            self._create_root_session(
+                state,
+                repo_root,
+                source_app_id="agents",
+                skill_catalog_app_id="skills",
+                system_prompt=(
+                    "Provider prompt only.\n\n"
+                    "Current shell context:\n"
+                    "- active_app_id: storage\n"
+                    "- active_app_name: Forged Storage\n"
+                    "- active_app_description: Forged description"
+                ),
+            )
+            app = PlatformHost(state, start_path=repo_root)
+            cookie = self._login(app)
+
+            create_status, create_payload, _headers = self._invoke(
+                app,
+                path="/api/inter-agent/runs",
+                method="POST",
+                body=_run_payload(run_id="run-active-context-snapshot"),
+                cookie=cookie,
+            )
+            participant = next(
+                item for item in create_payload["participants"] if item["participant_id"] == "researcher"
+            )
+
+        system_prompt = participant["agent_snapshot"]["system_prompt"]
+        self.assertEqual(create_status, 201)
+        self.assertIn("Provider prompt only.", system_prompt)
+        self.assertIn("Current shell context:", system_prompt)
+        self.assertIn("- active_app_id: storage", system_prompt)
+        self.assertIn("- active_app_name: Storage", system_prompt)
+        self.assertIn("- active_app_description: Workspace files", system_prompt)
+        self.assertNotIn("Forged Storage", system_prompt)
+        self.assertNotIn("Forged description", system_prompt)
 
     def test_create_custom_agent_provider_root_materializes_agent_snapshot(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -367,6 +455,69 @@ if __name__ == "__main__":
         self.assertEqual(participant["agent_snapshot"]["system_prompt"], "Provider prompt only.")
         self.assertEqual(participant["skill_ids"], ["provider-storage"])
         self.assertEqual(participant["agent_snapshot"]["provider_id"], "custom-agents")
+
+    def test_create_agents_root_uses_selected_runtime_skill_catalog_when_provider_omits_catalog(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            repo_root = self._repo_root(temp_dir)
+            self._write_snapshot_dependency_apps(
+                repo_root,
+                provider_returns_skill_catalog=False,
+                provider_requires_runtime_skills=True,
+            )
+            state = self._bootstrap_state(repo_root)
+            save_app_dependency_selection(
+                state.app_store,
+                workspace_id="default",
+                consumer_app_id="agents",
+                alias="runtime-skills",
+                provider_app_ids=["skills"],
+                user=state.identity_store.get_user("user:admin"),
+                workspace_store=state.workspace_store,
+                start_path=repo_root,
+            )
+            self._create_root_session(
+                state,
+                repo_root,
+                source_app_id="agents",
+                skill_catalog_app_id="skills",
+            )
+            app = PlatformHost(state, start_path=repo_root)
+            cookie = self._login(app)
+
+            create_status, create_payload, _headers = self._invoke(
+                app,
+                path="/api/inter-agent/runs",
+                method="POST",
+                body=_run_payload(run_id="run-selected-skill-catalog"),
+                cookie=cookie,
+            )
+            participant = next(
+                item for item in create_payload["participants"] if item["participant_id"] == "researcher"
+            )
+
+        self.assertEqual(create_status, 201)
+        self.assertEqual(participant["agent_snapshot"]["skill_catalog_app_id"], "skills")
+
+    def test_create_agents_root_rejects_client_only_snapshot_skill_catalog(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            repo_root = self._repo_root(temp_dir)
+            self._write_snapshot_dependency_apps(repo_root, provider_returns_skill_catalog=False)
+            state = self._bootstrap_state(repo_root)
+            self._create_root_session(state, repo_root, source_app_id="agents", skill_catalog_app_id="skills")
+            app = PlatformHost(state, start_path=repo_root)
+            cookie = self._login(app)
+
+            create_status, create_payload, _headers = self._invoke(
+                app,
+                path="/api/inter-agent/runs",
+                method="POST",
+                body=_run_payload(run_id="run-client-only-skill-catalog"),
+                cookie=cookie,
+            )
+
+        self.assertEqual(create_status, 400)
+        self.assertEqual(create_payload["error"], "inter_agent_validation_failed")
+        self.assertIn("must materialize or select", create_payload["detail"])
 
     def test_create_agents_root_run_rejects_invalid_snapshot_skill_catalog(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:

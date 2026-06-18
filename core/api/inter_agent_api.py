@@ -7,6 +7,7 @@ from urllib.parse import parse_qs
 from uuid import uuid4
 
 from core.api.app_reference_payloads import materialize_runtime_app_references
+from core.api.app_registry import enabled_app_items
 from core.api.http import StartResponse, json_response, read_json_body
 from core.api.platform_state import PlatformState
 from core.api.runtime_cleanup import cleanup_runtime_session
@@ -62,6 +63,8 @@ from core.workspaces.errors import WorkspaceMembershipError
 
 CHAT_APP_ID = "chat"
 CHAT_AGENT_PROVIDER_ALIASES = ("agent-catalog", "agent-prompt-materializer")
+ACTIVE_APP_CONTEXT_HEADER = "Current shell context:"
+ACTIVE_APP_CONTEXT_KEYS = {"active_app_id", "active_app_name", "active_app_description"}
 
 
 def handle_inter_agent_api(
@@ -488,6 +491,12 @@ def _materialize_agent_snapshots_for_payload(
     provider_ids = _chat_agent_snapshot_provider_ids(state, context, start_path=start_path)
     if not provider_app_id or provider_app_id not in provider_ids:
         raise InterAgentValidationError("agent_snapshot requires Chat's selected agent provider.")
+    active_app_context = _trusted_active_app_context_from_root_session(
+        state,
+        context,
+        root_session,
+        start_path=start_path,
+    )
     materialized_participants: list[object] = []
     for participant in participants:
         if not isinstance(participant, dict) or not isinstance(participant.get("agent_snapshot"), dict):
@@ -499,6 +508,7 @@ def _materialize_agent_snapshots_for_payload(
             participant=participant,
             snapshot=participant["agent_snapshot"],
             provider_app_id=provider_app_id,
+            active_app_context=active_app_context,
             start_path=start_path,
         )
         materialized_participant = dict(participant)
@@ -516,6 +526,7 @@ def _materialize_agent_snapshot_from_provider(
     participant: dict,
     snapshot: dict,
     provider_app_id: str,
+    active_app_context: dict[str, str] | None,
     start_path,
 ) -> dict:
     requested_agent_type_id = _requested_agent_type_id_for_snapshot(participant, snapshot)
@@ -556,10 +567,14 @@ def _materialize_agent_snapshot_from_provider(
         body={"action": "preview_prompt", "agent_type_id": requested_agent_type_id},
         start_path=start_path,
     )
+    system_prompt = _system_prompt_with_active_app_context(
+        _text(prompt_payload.get("rendered")),
+        active_app_context,
+    )
     return {
         "agent_type_id": requested_agent_type_id,
         "label": _text(agent_definition.get("name")) or requested_agent_type_id,
-        "system_prompt": _text(prompt_payload.get("rendered")),
+        "system_prompt": system_prompt,
         "skill_ids": _string_items(agent_definition.get("skill_ids")),
         "skill_catalog_app_id": _materialized_agent_snapshot_skill_catalog(
             state,
@@ -598,6 +613,93 @@ def _requested_agent_type_id_for_snapshot(participant: dict, snapshot: dict) -> 
     if not requested_agent_type_id:
         raise InterAgentValidationError("agent_snapshot.agent_type_id is required.")
     return requested_agent_type_id
+
+
+def _trusted_active_app_context_from_root_session(
+    state: PlatformState,
+    context: RequestSession,
+    root_session,
+    *,
+    start_path,
+) -> dict[str, str] | None:
+    active_app_id = _active_app_id_from_system_prompt(_text(root_session.system_prompt))
+    if not active_app_id or active_app_id == CHAT_APP_ID:
+        return None
+    app_item = next(
+        (
+            item
+            for item in enabled_app_items(
+                state,
+                workspace_id=context.workspace_id,
+                start_path=start_path,
+                user=context.user,
+            )
+            if _text(item.get("app_id")) == active_app_id or _text(item.get("mount_app_id")) == active_app_id
+        ),
+        None,
+    )
+    if app_item is None:
+        return None
+    app_id = _text(app_item.get("app_id"))
+    if not app_id or app_id == CHAT_APP_ID:
+        return None
+    return {
+        "app_id": app_id,
+        "name": _context_line_value(app_item.get("name")) or app_id,
+        "description": _context_line_value(app_item.get("description")),
+    }
+
+
+def _active_app_id_from_system_prompt(system_prompt: str) -> str:
+    block = _final_active_app_context_block(system_prompt)
+    if not block:
+        return ""
+    fields: dict[str, str] = {}
+    for line in block.splitlines()[1:]:
+        normalized = line.strip()
+        if not normalized:
+            continue
+        if not normalized.startswith("- "):
+            return ""
+        key, separator, value = normalized[2:].partition(":")
+        if not separator:
+            return ""
+        normalized_key = key.strip()
+        if normalized_key not in ACTIVE_APP_CONTEXT_KEYS:
+            return ""
+        fields[normalized_key] = value.strip()
+    return fields.get("active_app_id", "")
+
+
+def _final_active_app_context_block(system_prompt: str) -> str:
+    prompt = _text(system_prompt)
+    if not prompt:
+        return ""
+    marker = f"\n\n{ACTIVE_APP_CONTEXT_HEADER}"
+    marker_index = prompt.rfind(marker)
+    if marker_index >= 0:
+        return prompt[marker_index + 2 :]
+    if prompt.startswith(ACTIVE_APP_CONTEXT_HEADER):
+        return prompt
+    return ""
+
+
+def _system_prompt_with_active_app_context(base_prompt: str, active_app_context: dict[str, str] | None) -> str:
+    if not active_app_context:
+        return base_prompt
+    lines = [
+        ACTIVE_APP_CONTEXT_HEADER,
+        f"- active_app_id: {active_app_context['app_id']}",
+        f"- active_app_name: {active_app_context['name']}",
+    ]
+    description = _text(active_app_context.get("description"))
+    if description:
+        lines.append(f"- active_app_description: {description}")
+    return "\n\n".join(part for part in (base_prompt.strip(), "\n".join(lines)) if part)
+
+
+def _context_line_value(value) -> str:
+    return " ".join(_text(value).split())
 
 
 def _invoke_chat_agent_provider_backend(
@@ -666,8 +768,8 @@ def _materialized_agent_snapshot_skill_catalog(
                 allow_missing_source_app=True,
             )
         )
-    except AppHostingError:
-        selected_skill_catalog_app_id = ""
+    except AppHostingError as error:
+        raise InterAgentValidationError(str(error)) from error
     if (
         materialized_skill_catalog_app_id
         and selected_skill_catalog_app_id
@@ -696,9 +798,9 @@ def _materialized_agent_snapshot_skill_catalog(
         return materialized_skill_catalog_app_id
     if selected_skill_catalog_app_id:
         return selected_skill_catalog_app_id
-    if explicit_skill_catalog_app_id:
-        return explicit_skill_catalog_app_id
-    raise InterAgentValidationError("agent_snapshot.skill_catalog_app_id is required.")
+    raise InterAgentValidationError(
+        "Agent provider must materialize or select a runtime skill catalog."
+    )
 
 
 def _chat_agent_snapshot_provider_ids(

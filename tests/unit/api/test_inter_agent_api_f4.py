@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
+import json
 import tempfile
 import unittest
 from unittest.mock import patch
@@ -50,6 +51,7 @@ class InterAgentApiF4TestCase(AppReferenceApiTestSupport, unittest.TestCase):
         repo_root,
         *,
         agent_provider_app_id: str = "agents",
+        provider_prompt: str = "Provider prompt only.",
         provider_returns_skill_catalog: bool = True,
         provider_requires_runtime_skills: bool = False,
     ) -> None:
@@ -66,6 +68,7 @@ class InterAgentApiF4TestCase(AppReferenceApiTestSupport, unittest.TestCase):
             if provider_returns_skill_catalog
             else ""
         )
+        provider_prompt_literal = json.dumps(provider_prompt)
         agents_backend.write_text(
             """from __future__ import annotations
 
@@ -104,14 +107,16 @@ __PROVIDER_SKILL_CATALOG_LINE__                    "enabled": True,
         if requested != "research-agent":
             _response({"rendered": ""}, status_code=404)
             return
-        _response({"rendered": "Provider prompt only."})
+        _response({"rendered": __PROVIDER_PROMPT__})
         return
     _response({"error": "unknown_action", "action": action}, status_code=400)
 
 
 if __name__ == "__main__":
     main()
-""".replace("__PROVIDER_SKILL_CATALOG_LINE__", provider_skill_catalog_line),
+"""
+            .replace("__PROVIDER_SKILL_CATALOG_LINE__", provider_skill_catalog_line)
+            .replace("__PROVIDER_PROMPT__", provider_prompt_literal),
             encoding="utf-8",
         )
         write_app_contract_file(
@@ -424,6 +429,48 @@ if __name__ == "__main__":
         self.assertIn("- active_app_description: Workspace files", system_prompt)
         self.assertNotIn("Forged Storage", system_prompt)
         self.assertNotIn("Forged description", system_prompt)
+
+    def test_create_agents_root_run_replaces_provider_active_app_context_block(self) -> None:
+        provider_prompt = (
+            "Provider prompt only.\n\n"
+            "Current shell context:\n"
+            "- active_app_id: storage\n"
+            "- active_app_name: Provider Storage\n"
+            "- active_app_description: Provider description"
+        )
+        with tempfile.TemporaryDirectory() as temp_dir:
+            repo_root = self._repo_root(temp_dir)
+            self._write_snapshot_dependency_apps(repo_root, provider_prompt=provider_prompt)
+            self._write_active_context_app(repo_root)
+            state = self._bootstrap_state(repo_root)
+            self._create_root_session(
+                state,
+                repo_root,
+                source_app_id="agents",
+                skill_catalog_app_id="skills",
+                system_prompt=provider_prompt,
+            )
+            app = PlatformHost(state, start_path=repo_root)
+            cookie = self._login(app)
+
+            create_status, create_payload, _headers = self._invoke(
+                app,
+                path="/api/inter-agent/runs",
+                method="POST",
+                body=_run_payload(run_id="run-active-context-dedupe"),
+                cookie=cookie,
+            )
+
+        self.assertEqual(create_status, 201)
+        participant = next(item for item in create_payload["participants"] if item["participant_id"] == "researcher")
+        system_prompt = participant["agent_snapshot"]["system_prompt"]
+        self.assertEqual(system_prompt.count("Current shell context:"), 1)
+        self.assertIn("Provider prompt only.", system_prompt)
+        self.assertIn("- active_app_id: storage", system_prompt)
+        self.assertIn("- active_app_name: Storage", system_prompt)
+        self.assertIn("- active_app_description: Workspace files", system_prompt)
+        self.assertNotIn("Provider Storage", system_prompt)
+        self.assertNotIn("Provider description", system_prompt)
 
     def test_create_custom_agent_provider_root_materializes_agent_snapshot(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:

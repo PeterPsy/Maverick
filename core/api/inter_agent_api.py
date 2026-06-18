@@ -684,18 +684,33 @@ def _final_active_app_context_block(system_prompt: str) -> str:
     return ""
 
 
+def _prompt_without_final_active_app_context_block(system_prompt: str) -> str:
+    prompt = _text(system_prompt)
+    if not prompt:
+        return ""
+    marker = f"\n\n{ACTIVE_APP_CONTEXT_HEADER}"
+    marker_index = prompt.rfind(marker)
+    if marker_index >= 0:
+        return prompt[:marker_index]
+    if prompt.startswith(ACTIVE_APP_CONTEXT_HEADER):
+        return ""
+    return prompt
+
+
 def _system_prompt_with_active_app_context(base_prompt: str, active_app_context: dict[str, str] | None) -> str:
     if not active_app_context:
         return base_prompt
+    active_app_id = active_app_context["app_id"]
+    prompt_base = _prompt_without_final_active_app_context_block(base_prompt)
     lines = [
         ACTIVE_APP_CONTEXT_HEADER,
-        f"- active_app_id: {active_app_context['app_id']}",
+        f"- active_app_id: {active_app_id}",
         f"- active_app_name: {active_app_context['name']}",
     ]
     description = _text(active_app_context.get("description"))
     if description:
         lines.append(f"- active_app_description: {description}")
-    return "\n\n".join(part for part in (base_prompt.strip(), "\n".join(lines)) if part)
+    return "\n\n".join(part for part in (prompt_base.strip(), "\n".join(lines)) if part)
 
 
 def _context_line_value(value) -> str:

@@ -277,7 +277,7 @@ def _credentials_from_secrets(app_secrets: dict[str, Any]) -> GitHubAppCredentia
     missing = [name for name in REQUIRED_SECRETS if not str(app_secrets.get(name) or "").strip()]
     if missing:
         raise GitHubActionsError(f"Missing delivered GitHub App secret(s): {', '.join(missing)}")
-    private_key = str(app_secrets["github-app-private-key"]).strip().replace("\\n", "\n")
+    private_key = _normalize_private_key(str(app_secrets["github-app-private-key"]))
     return GitHubAppCredentials(
         app_id=str(app_secrets["github-app-id"]).strip(),
         installation_id=str(app_secrets["github-installation-id"]).strip(),
@@ -372,6 +372,20 @@ def _rsa_sha256_sign(private_key: str, signing_input: bytes) -> bytes:
         return key.sign(signing_input, padding.PKCS1v15(), hashes.SHA256())
     except Exception as error:
         raise GitHubActionsError("Could not sign GitHub App JWT with the delivered private key.") from error
+
+
+def _normalize_private_key(value: str) -> str:
+    text = value.strip().strip("\"'")
+    text = text.replace("\\r\\n", "\n").replace("\\n", "\n").replace("\r\n", "\n").replace("\r", "\n")
+    if "BEGIN " in text and "PRIVATE KEY" in text:
+        return text
+    try:
+        decoded = base64.b64decode(text, validate=True).decode("utf-8", errors="strict").strip()
+    except Exception:
+        return text
+    if "BEGIN " in decoded and "PRIVATE KEY" in decoded:
+        return decoded
+    return text
 
 
 def _tail_text(text: str, *, max_bytes: int) -> str:

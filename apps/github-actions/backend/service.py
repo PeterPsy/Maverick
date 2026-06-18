@@ -7,6 +7,7 @@ from datetime import datetime, timedelta, timezone
 import base64
 import io
 import json
+import re
 import time
 from typing import Any
 from urllib import error, parse, request
@@ -280,7 +281,7 @@ def _credentials_from_secrets(app_secrets: dict[str, Any]) -> GitHubAppCredentia
     private_key = _normalize_private_key(str(app_secrets["github-app-private-key"]))
     return GitHubAppCredentials(
         app_id=str(app_secrets["github-app-id"]).strip(),
-        installation_id=str(app_secrets["github-installation-id"]).strip(),
+        installation_id=_normalize_installation_id(str(app_secrets["github-installation-id"])),
         private_key=private_key,
     )
 
@@ -385,6 +386,19 @@ def _normalize_private_key(value: str) -> str:
         return text
     if "BEGIN " in decoded and "PRIVATE KEY" in decoded:
         return decoded
+    return text
+
+
+def _normalize_installation_id(value: str) -> str:
+    text = value.strip().strip("\"'")
+    if text.isdigit():
+        return text
+    match = re.search(r"(?:installations/|installation_id=)(\d+)", text)
+    if match:
+        return match.group(1)
+    number_match = re.search(r"(\d{5,})", text)
+    if number_match:
+        return number_match.group(1)
     return text
 
 

@@ -685,7 +685,7 @@ def _execute_runtime_participant(
     latest_run = service.store.get_run(run.run_id, workspace_id=run.workspace_id)
     latest_participant = service.store.get_participant(participant.participant_id, workspace_id=run.workspace_id, run_id=run.run_id)
     runtime_session_id = latest_participant.runtime_session_id or session.session_id
-    if latest_run.status == "cancelled" or latest_participant.status == "cancelled" or turn.status == "cancelled":
+    if latest_run.status == "cancelled" or latest_participant.status == "cancelled":
         return ParticipantExecutionResult(
             participant_id=participant.participant_id,
             label=participant.label,
@@ -696,6 +696,50 @@ def _execute_runtime_participant(
         )
     output_text = _runtime_output_text(events)
     artifact_refs = _runtime_artifact_refs(events)
+    if turn.status == "cancelled":
+        summary = _compact_summary(output_text) or f"{participant.label} cancelled."
+        if artifact_refs or output_text:
+            _record_artifacts(
+                service,
+                run,
+                participant=latest_participant,
+                task_id=task_id,
+                artifact_refs=artifact_refs,
+                partial_output=output_text,
+                synthetic=False,
+                synthetic_source=None,
+                clock=clock,
+            )
+        _finish_participant(
+            service,
+            run,
+            participant=latest_participant,
+            status="cancelled",
+            task_id=task_id,
+            summary=summary,
+            output_text=output_text,
+            error=turn.failure_reason,
+            reservation_id=_participant_spawn_reservation_id(participant.participant_id),
+            runtime_session_id=runtime_session_id,
+            runtime_turn_id=turn.turn_id,
+            synthetic=False,
+            synthetic_source=None,
+            clock=clock,
+        )
+        return ParticipantExecutionResult(
+            participant_id=participant.participant_id,
+            label=participant.label,
+            status="cancelled",
+            synthetic=False,
+            synthetic_source=None,
+            output_text=output_text,
+            summary=summary,
+            partial_output=output_text,
+            artifact_refs=artifact_refs,
+            error=turn.failure_reason,
+            runtime_session_id=runtime_session_id,
+            runtime_turn_id=turn.turn_id,
+        )
     status = "completed" if turn.status == "completed" else "failed"
     if status == "failed" and (artifact_refs or output_text):
         _record_artifacts(

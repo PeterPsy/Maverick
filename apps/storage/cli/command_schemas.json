@@ -131,11 +131,6 @@
             "type": "boolean",
             "description": "Controls whether read_file returns inline content when return_handle is true."
           },
-          "include_local_path": {
-            "type": "boolean",
-            "default": false,
-            "description": "When true with return_handle, include the local workspace file path for authorized local agents."
-          },
           "new_name": {"type": "string"},
           "target_folder_relative_path": {"type": "string"},
           "files": {"type": "array", "items": {"type": "object"}},

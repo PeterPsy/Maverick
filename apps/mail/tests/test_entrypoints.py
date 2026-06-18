@@ -1090,6 +1090,41 @@ class MailServiceTest(unittest.TestCase):
             self.assertEqual(preview["result"]["draft"]["body_html"], "")
             self.assertEqual(preview["result"]["draft"]["reply_to"], [])
 
+    def test_gmail_draft_preview_validates_workspace_attachments(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            workspace_root = Path(tmp)
+            data_root = workspace_root / "data" / "mail"
+            generated_root = workspace_root / "storage" / "generated"
+            attachment_path = generated_root / "reports" / "result.txt"
+            attachment_path.parent.mkdir(parents=True)
+            attachment_path.write_text("storage attachment", encoding="utf-8")
+            self._insert_gmail_fixture(data_root)
+            status, created = handle_action(
+                data_root,
+                {
+                    "action": "drafts.create",
+                    "to": [{"email": "customer@example.com"}],
+                    "subject": "Follow up",
+                    "body_text": "See attached.",
+                    "workspace_attachments": ["storage/generated/reports/result.txt"],
+                    "_generated_storage_root": str(generated_root),
+                },
+            )
+            self.assertEqual(status, 201, created)
+            attachment_path.unlink()
+
+            status, preview = handle_action(
+                data_root,
+                {
+                    "action": "drafts.send",
+                    "draft_id": created["draft"]["id"],
+                    "_generated_storage_root": str(generated_root),
+                },
+            )
+
+            self.assertEqual(status, 400)
+            self.assertIn("was not found", preview["detail"])
+
     def test_mail_send_accepts_html_body_and_sends_multipart_gmail_message(self) -> None:
         sent_payloads: list[dict[str, object]] = []
 
@@ -1182,18 +1217,88 @@ class MailServiceTest(unittest.TestCase):
 
     def test_save_thread_attachments_dedupes_and_targets_storage_folder(self) -> None:
         calls: list[dict[str, object]] = []
+        content = b"same-content"
+        data_base64url = base64.urlsafe_b64encode(content).decode("ascii").rstrip("=")
 
         class FakeProvider:
             def fetch_attachment(self, data_root: Path, attachment_id: str, **kwargs) -> dict[str, object]:
                 calls.append({"attachment_id": attachment_id, **kwargs})
                 return {
-                    "status": "saved",
-                    "size_bytes": 12,
-                    "storage_ref": {
-                        "workspace_relative_path": f"storage/generated/customer/{attachment_id}.pdf",
-                        "size_bytes": 12,
-                        "sha256": f"sha-{attachment_id}",
+                    "status": "fetched",
+                    "size_bytes": len(content),
+                    "data_base64url": data_base64url,
+                }
+
+        with tempfile.TemporaryDirectory() as tmp:
+            data_root = Path(tmp)
+            ensure_schema(data_root)
+            now = now_timestamp()
+            with connect(data_root) as db:
+                db.execute(
+                    """
+                    INSERT INTO connections(id, provider, email_address, display_name, status, scopes_json, created_at, updated_at)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    ("mail_connection_gmail_person-example.com", "gmail", "person@example.com", "person@example.com", "connected", "[]", now, now),
+                )
+                db.execute(
+                    """
+                    INSERT INTO threads(id, connection_id, provider_thread_id, subject, participants_json, last_message_at, snippet, unread, starred, labels_json, updated_at)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    ("email_thread_gmail_thread_1", "mail_connection_gmail_person-example.com", "thread-1", "Subject", "[]", now, "", 0, 0, "[]", now),
+                )
+                db.execute(
+                    """
+                    INSERT INTO messages(id, thread_id, provider_message_id, sender_json, recipients_json, sent_at, body_text, headers_json, has_attachments)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    ("email_message_gmail_msg_1", "email_thread_gmail_thread_1", "msg-1", "{}", "[]", now, "", "{}", 1),
+                )
+                for attachment_id in ("att_1", "att_2"):
+                    db.execute(
+                        """
+                        INSERT INTO attachments(id, message_id, provider_attachment_id, filename, content_type, size_bytes, storage_state, storage_ref_json, created_at, updated_at)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        """,
+                        (attachment_id, "email_message_gmail_msg_1", attachment_id, "report.pdf", "application/pdf", len(content), "metadata_only", "{}", now, now),
+                    )
+
+            with patch("backend.service.provider_for_connection", return_value=FakeProvider()):
+                status, payload = handle_action(
+                    data_root,
+                    {
+                        "action": "mail_save_attachments",
+                        "thread_id": "email_thread_gmail_thread_1",
+                        "target_folder": "storage/generated/customer",
+                        "_generated_storage_root": str(Path(tmp) / "storage" / "generated"),
                     },
+                )
+
+            self.assertEqual(status, 200, payload)
+            self.assertEqual(payload["saved_count"], 1)
+            self.assertEqual(payload["skipped"][0]["reason"], "duplicate_sha256")
+            self.assertEqual(len(calls), 2)
+            self.assertTrue(all(call["save_to_storage"] is False for call in calls))
+            saved_files = sorted((Path(tmp) / "storage" / "generated" / "customer").iterdir())
+            self.assertEqual([item.name for item in saved_files], ["report.pdf"])
+
+    def test_save_thread_attachments_does_not_skip_same_metadata_with_different_hashes(self) -> None:
+        calls: list[str] = []
+        contents = {
+            "att_1": b"first-bytes!",
+            "att_2": b"other-bytes!",
+        }
+
+        class FakeProvider:
+            def fetch_attachment(self, data_root: Path, attachment_id: str, **kwargs) -> dict[str, object]:
+                calls.append(attachment_id)
+                key = "att_1" if attachment_id.endswith("att_1") else "att_2"
+                content = contents[key]
+                return {
+                    "status": "fetched",
+                    "size_bytes": len(content),
+                    "data_base64url": base64.urlsafe_b64encode(content).decode("ascii").rstrip("="),
                 }
 
         with tempfile.TemporaryDirectory() as tmp:
@@ -1243,9 +1348,11 @@ class MailServiceTest(unittest.TestCase):
                 )
 
             self.assertEqual(status, 200, payload)
-            self.assertEqual(payload["saved_count"], 1)
-            self.assertEqual(payload["skipped"][0]["reason"], "duplicate_metadata")
-            self.assertEqual(calls[0]["storage_target_folder"], "storage/generated/customer")
+            self.assertEqual(payload["saved_count"], 2)
+            self.assertEqual(payload["skipped_count"], 0)
+            self.assertEqual([call.rsplit("_", 1)[-1] for call in calls], ["1", "2"])
+            saved_files = sorted((Path(tmp) / "storage" / "generated" / "customer").iterdir())
+            self.assertEqual([item.name for item in saved_files], ["report.pdf", "report.v2.pdf"])
 
     def test_mail_send_confirm_requires_recipient(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

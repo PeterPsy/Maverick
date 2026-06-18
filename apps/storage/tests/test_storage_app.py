@@ -968,6 +968,7 @@ class StorageAppTestCase(unittest.TestCase):
                     "action": "file.content.read",
                     "workspace_relative_path": "storage/generated/reports/summary.txt",
                     "return_handle": True,
+                    "include_local_path": True,
                 },
             )
 
@@ -981,6 +982,7 @@ class StorageAppTestCase(unittest.TestCase):
             self.assertEqual(handle["status_code"], 200, handle)
             self.assertNotIn("content_base64", handle["json"])
             self.assertEqual(handle["json"]["file_handle"]["workspace_relative_path"], "storage/generated/reports/summary.txt")
+            self.assertNotIn("local_path", handle["json"]["file_handle"])
 
     def test_backend_rejects_writes_over_configured_storage_budget(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
@@ -2308,6 +2310,10 @@ class StorageAppTestCase(unittest.TestCase):
         self.assertNotIn("file.media_stream", flattened_actions)
         write_tool = next(tool for tool in tools if tool.tool_name == "app.storage.storage_write_file")
         self.assertIn("workspace_relative_path", write_tool.input_schema["properties"])
+        read_tool = next(tool for tool in tools if tool.tool_name == "app.storage.storage_read_file")
+        self.assertNotIn("include_local_path", read_tool.input_schema["properties"])
+        generic_tool = next(tool for tool in tools if tool.tool_name == "app.storage.maverick_storage")
+        self.assertNotIn("include_local_path", generic_tool.input_schema["properties"])
         self.assertIn("oneOf", write_tool.input_schema)
         localize_tool = next(tool for tool in tools if tool.tool_name == "app.storage.storage_file_localize")
         self.assertIn("stable_storage_file_id", localize_tool.input_schema["properties"])

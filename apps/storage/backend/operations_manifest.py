@@ -198,7 +198,7 @@ def operations_manifest_payload() -> dict[str, Any]:
                 "aliases": ["read_file"],
                 "description": "Read one file as bounded base64 content, or return a Storage file handle without inline bytes.",
                 "required_any": ["workspace_relative_path", "role + relative_path"],
-                "optional": ["max_bytes", "return_handle", "include_content", "include_local_path"],
+                "optional": ["max_bytes", "return_handle", "include_content"],
                 "payload_profile": "explicit_content",
             },
             {

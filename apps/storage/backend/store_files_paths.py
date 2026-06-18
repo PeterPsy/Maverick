@@ -281,7 +281,6 @@ def read_file_payload(
     max_bytes: int,
     return_handle: bool = False,
     include_content: bool = True,
-    include_local_path: bool = False,
 ) -> dict:
     if max_bytes <= 0 or max_bytes > MAX_READ_BYTES:
         raise StorageValidationError(f"max_bytes must be between 1 and {MAX_READ_BYTES}.")
@@ -307,8 +306,6 @@ def read_file_payload(
             "size_bytes": record["size_bytes"],
             "sha256": record.get("sha256") or hash_file(path),
         }
-        if include_local_path:
-            handle["local_path"] = str(path)
         payload["file_handle"] = handle
     return payload
 

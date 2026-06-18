@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+import base64
+import binascii
+import hashlib
 from pathlib import Path
 
 from connections import (
@@ -20,6 +23,7 @@ from drafts import create_draft, delete_draft, get_draft, update_draft
 from oauth import complete_oauth, provider_status, start_oauth
 from providers.registry import provider_for_connection
 from references import reference_manifest, reference_resolve, reference_search, reference_summary
+from storage_attachments import save_attachment_to_storage
 from store import (
     DEFAULT_BODY_HTML_CHARS,
     DEFAULT_BODY_TEXT_CHARS,
@@ -347,8 +351,8 @@ def _save_thread_attachments(data_root: Path, payload: dict[str, object]) -> dic
     mode = payload.get("mode") or "versioned"
     saved: list[dict[str, object]] = []
     skipped: list[dict[str, object]] = []
-    seen_metadata: set[tuple[str, int]] = set()
     seen_hashes: set[str] = set()
+    generated_storage_root = _optional_path(payload.get("_generated_storage_root"))
     for message in thread.get("messages", []):
         if not isinstance(message, dict):
             continue
@@ -360,32 +364,37 @@ def _save_thread_attachments(data_root: Path, payload: dict[str, object]) -> dic
                 continue
             filename = str(attachment.get("filename") or "")
             size_bytes = int(attachment.get("size_bytes") or 0)
-            metadata_key = (filename.casefold(), size_bytes)
-            if dedupe and metadata_key in seen_metadata:
-                skipped.append({"attachment_id": attachment.get("id"), "filename": filename, "reason": "duplicate_metadata"})
-                continue
-            seen_metadata.add(metadata_key)
             fetch = provider.fetch_attachment(
                 data_root,
                 str(attachment["id"]),
                 app_secrets=_app_secrets(payload),
                 metadata_only=False,
                 max_bytes=max_bytes,
-                save_to_storage=True,
-                generated_storage_root=_optional_path(payload.get("_generated_storage_root")),
-                storage_target_folder=target_folder,
-                storage_mode=mode,
+                save_to_storage=False,
             )
-            if fetch.get("status") != "saved":
+            if fetch.get("status") != "fetched":
                 skipped.append({"attachment_id": attachment.get("id"), "filename": filename, "reason": fetch.get("status"), "detail": fetch.get("detail")})
                 continue
-            storage_ref = fetch.get("storage_ref") if isinstance(fetch.get("storage_ref"), dict) else {}
-            sha256 = str(storage_ref.get("sha256") or "")
+            try:
+                attachment_bytes = _attachment_bytes_from_fetch(fetch)
+            except ValueError as error:
+                skipped.append({"attachment_id": attachment.get("id"), "filename": filename, "reason": "invalid_payload", "detail": str(error)})
+                continue
+            sha256 = hashlib.sha256(attachment_bytes).hexdigest()
             if dedupe and sha256 and sha256 in seen_hashes:
                 skipped.append({"attachment_id": attachment.get("id"), "filename": filename, "reason": "duplicate_sha256", "sha256": sha256})
                 continue
-            if sha256:
-                seen_hashes.add(sha256)
+            seen_hashes.add(sha256)
+            storage_ref = save_attachment_to_storage(
+                data_root,
+                attachment_id=str(attachment["id"]),
+                filename=filename,
+                content_type=str(attachment.get("content_type") or "application/octet-stream"),
+                attachment_bytes=attachment_bytes,
+                generated_storage_root=generated_storage_root,
+                target_folder=target_folder,
+                mode=mode,
+            )
             saved.append(
                 {
                     "attachment_id": attachment.get("id"),
@@ -413,6 +422,18 @@ def _save_thread_attachments(data_root: Path, payload: dict[str, object]) -> dic
         "saved_count": len(saved),
         "skipped_count": len(skipped),
     }
+
+
+def _attachment_bytes_from_fetch(fetch: dict[str, object]) -> bytes:
+    data_base64url = str(fetch.get("data_base64url") or "").strip()
+    if not data_base64url:
+        if int(fetch.get("size_bytes") or 0) == 0:
+            return b""
+        raise ValueError("Provider did not return attachment bytes.")
+    try:
+        return base64.urlsafe_b64decode(data_base64url + ("=" * (-len(data_base64url) % 4)))
+    except (binascii.Error, ValueError) as error:
+        raise ValueError("Provider returned invalid attachment bytes.") from error
 
 
 def _attachment_filter_matches(attachment: dict[str, object], payload: dict[str, object]) -> bool:

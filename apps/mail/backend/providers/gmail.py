@@ -152,9 +152,6 @@ class GmailProvider:
     ) -> dict[str, object]:
         draft = get_draft(data_root, draft_id)
         _require_recipients(draft)
-        if not confirm:
-            return {"dry_run": True, "requires_confirmation": True, "draft": draft}
-        secrets = _require_app_secrets(app_secrets)
         connection = _connection(data_root, str(draft["connection_id"]))
         message = _draft_message(
             draft,
@@ -163,6 +160,9 @@ class GmailProvider:
             uploaded_storage_root=uploaded_storage_root,
             generated_storage_root=generated_storage_root,
         )
+        if not confirm:
+            return {"dry_run": True, "requires_confirmation": True, "draft": draft}
+        secrets = _require_app_secrets(app_secrets)
         raw = base64.urlsafe_b64encode(message.as_bytes()).decode("ascii").rstrip("=")
         payload: dict[str, object] = {"raw": raw}
         if draft.get("thread_id"):

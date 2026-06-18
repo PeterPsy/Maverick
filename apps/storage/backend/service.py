@@ -820,7 +820,6 @@ def handle_action(
             max_bytes=max_bytes,
             return_handle=return_handle,
             include_content=include_content,
-            include_local_path=_bool_value(body.get("include_local_path")),
         )
     if action in {"read_text", "file.text.read"}:
         role, relative_path = reference_from_payload(

@@ -56,6 +56,17 @@
             "type": "string",
             "description": "Generated Storage target path for spreadsheet.transform."
           },
+          "mode": {
+            "type": "string",
+            "enum": ["create", "overwrite", "versioned"],
+            "default": "create",
+            "description": "Spreadsheet transform write policy. overwrite requires confirm=true when target_file exists."
+          },
+          "confirm": {
+            "type": "boolean",
+            "default": false,
+            "description": "Required with mode=overwrite for an existing target_file."
+          },
           "operations": {
             "type": "array",
             "description": "Spreadsheet transform operations such as lookup_and_copy, write_cells, or find_values.",
@@ -166,6 +177,7 @@
           {
             "action": "spreadsheet.transform",
             "target_file": "storage/generated/output.xlsx",
+            "mode": "versioned",
             "source_files": ["storage/generated/source.xlsx", "storage/generated/output.xlsx"],
             "operations": [
               {

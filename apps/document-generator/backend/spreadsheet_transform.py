@@ -19,6 +19,7 @@ from workspace_files import resolve_workspace_file, workspace_relative_generated
 
 
 MAX_SPREADSHEET_BYTES = 50 * 1024 * 1024
+SPREADSHEET_WRITE_MODES = {"create", "overwrite", "versioned"}
 XLSX_NS = "http://schemas.openxmlformats.org/spreadsheetml/2006/main"
 REL_NS = "http://schemas.openxmlformats.org/officeDocument/2006/relationships"
 PKG_REL_NS = "http://schemas.openxmlformats.org/package/2006/relationships"
@@ -220,18 +221,30 @@ def transform_spreadsheet(
     body: dict[str, Any],
 ) -> dict[str, Any]:
     target_workspace_path = _required_workspace_path(body.get("target_file"), "target_file")
-    target_path = _resolve_generated_output(generated_root, target_workspace_path)
+    requested_target_path = _resolve_generated_output(generated_root, target_workspace_path)
+    write_mode = _write_mode(body.get("mode"))
+    target_path = _target_for_write_mode(
+        requested_target_path,
+        mode=write_mode,
+        confirm=_truthy(body.get("confirm")),
+    )
+    output_workspace_path = workspace_relative_generated_path(target_path, generated_root.resolve())
+    target_existed = requested_target_path.exists()
+    effective_mode = "versioned" if target_path != requested_target_path else ("overwrite" if target_existed else "create")
     source_refs = _source_refs(body.get("source_files"))
-    base_workspace_path = str(body.get("base_file") or target_workspace_path)
-    if target_workspace_path not in [item[1] for item in source_refs] and target_path.exists():
+    source_paths = {path for _alias, path in source_refs}
+    base_workspace_path = _required_workspace_path(body.get("base_file"), "base_file") if body.get("base_file") else target_workspace_path
+    if target_workspace_path not in source_paths and requested_target_path.exists():
         source_refs.append(("target", target_workspace_path))
+    elif base_workspace_path != target_workspace_path and base_workspace_path not in source_paths:
+        source_refs.append(("target", base_workspace_path))
     if not source_refs:
         source_refs.append(("target", base_workspace_path))
 
     workbooks = _load_workbooks(uploaded_root, generated_root, source_refs)
     target_ref = _target_workbook_ref(workbooks, target_workspace_path, base_workspace_path)
     target_workbook = target_ref.workbook
-    before_hash = _hash_file(target_path) if target_path.exists() else ""
+    before_hash = _hash_file(requested_target_path) if requested_target_path.exists() else ""
     operations = _operations(body.get("operations"))
     audit_operations: list[dict[str, Any]] = []
     warnings: list[str] = []
@@ -253,7 +266,10 @@ def transform_spreadsheet(
     after_hash = _hash_file(target_path)
     report_path = _write_report(
         generated_root=generated_root,
-        target_workspace_path=target_workspace_path,
+        requested_target_workspace_path=target_workspace_path,
+        target_workspace_path=output_workspace_path,
+        write_mode=write_mode,
+        effective_mode=effective_mode,
         before_hash=before_hash,
         after_hash=after_hash,
         operations=audit_operations,
@@ -271,6 +287,9 @@ def transform_spreadsheet(
             "kind": "spreadsheet_transform",
             "report_path": report_path,
             "operation_count": len(audit_operations),
+            "requested_target_file": target_workspace_path,
+            "write_mode": write_mode,
+            "effective_mode": effective_mode,
         },
     }
     save_job(data_root, job)
@@ -282,7 +301,10 @@ def transform_spreadsheet(
         "sha256_after": after_hash,
         "audit": {
             "source_files": _unique_source_paths(workbooks),
+            "requested_target_file": target_workspace_path,
             "target_file": job["workspace_relative_path"],
+            "write_mode": write_mode,
+            "effective_mode": effective_mode,
             "operations": audit_operations,
             "warnings": warnings,
             "report_path": report_path,
@@ -476,7 +498,10 @@ def _expected_keys(raw_lookup: object, workbooks: dict[str, WorkbookRef], target
 def _write_report(
     *,
     generated_root: Path,
+    requested_target_workspace_path: str,
     target_workspace_path: str,
+    write_mode: str,
+    effective_mode: str,
     before_hash: str,
     after_hash: str,
     operations: list[dict[str, Any]],
@@ -489,6 +514,9 @@ def _write_report(
         "# Spreadsheet Transform Verification",
         "",
         f"- target: `{target_workspace_path}`",
+        f"- requested_target: `{requested_target_workspace_path}`",
+        f"- write_mode: `{write_mode}`",
+        f"- effective_mode: `{effective_mode}`",
         f"- sha256_before: `{before_hash}`",
         f"- sha256_after: `{after_hash}`",
         f"- operations: {len(operations)}",
@@ -564,6 +592,42 @@ def _resolve_generated_output(generated_root: Path, workspace_relative_path: str
     if root not in target.parents:
         raise DocumentValidationError("target_file escapes generated storage.")
     return target
+
+
+def _write_mode(value: object) -> str:
+    mode = str(value or "create").strip().lower()
+    if mode not in SPREADSHEET_WRITE_MODES:
+        raise DocumentValidationError("mode must be create, overwrite, or versioned.")
+    return mode
+
+
+def _target_for_write_mode(requested_target: Path, *, mode: str, confirm: bool) -> Path:
+    if requested_target.exists() and not requested_target.is_file():
+        raise DocumentValidationError("target_file exists but is not a file.")
+    if mode == "create" and requested_target.exists():
+        raise DocumentValidationError("target_file already exists; use mode=overwrite with confirm=true or mode=versioned.")
+    if mode == "overwrite":
+        if not requested_target.exists():
+            raise DocumentValidationError("mode=overwrite requires target_file to exist.")
+        if not confirm:
+            raise DocumentValidationError("mode=overwrite requires confirm=true for an existing target_file.")
+    if mode == "versioned" and requested_target.exists():
+        return _versioned_generated_path(requested_target)
+    return requested_target
+
+
+def _versioned_generated_path(target: Path) -> Path:
+    suffix = target.suffix
+    stem = target.name[: -len(suffix)] if suffix else target.name
+    for index in range(2, 10_000):
+        candidate = target.parent / f"{stem}.v{index}{suffix}"
+        if not candidate.exists():
+            return candidate
+    raise DocumentValidationError("Could not allocate a versioned target_file name.")
+
+
+def _truthy(value: object) -> bool:
+    return value is True or str(value or "").strip().lower() in {"1", "true", "yes", "on"}
 
 
 def _required_workspace_path(value: object, field: str) -> str:

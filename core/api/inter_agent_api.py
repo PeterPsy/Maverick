@@ -13,6 +13,7 @@ from core.api.runtime_cleanup import cleanup_runtime_session
 from core.api.session_api import RequestSession, require_session
 from core.apps.dependencies import resolve_app_dependencies
 from core.apps.errors import AppHostingError
+from core.apps.runtime_requests import invoke_dependency_backend_request
 from core.authorization.errors import AuthorizationError
 from core.inter_agent.authorization import (
     authorize_inter_agent_approval_resolution,
@@ -52,7 +53,10 @@ from core.runtime.thread_catalog_events import (
     set_thread_availability,
 )
 from core.runtime.thread_title_jobs import schedule_runtime_thread_title_generation, thread_title_input_hash
-from core.skills.runtime_catalog import validate_runtime_skill_catalog_provider_app_id
+from core.skills.runtime_catalog import (
+    selected_runtime_skill_catalog_app_id_for_source_app,
+    validate_runtime_skill_catalog_provider_app_id,
+)
 from core.workspaces.errors import WorkspaceMembershipError
 
 
@@ -282,7 +286,7 @@ def _create_run(
         )
     except AuthorizationError as error:
         return json_response(start_response, {"error": error.reason}, status="403 Forbidden")
-    allow_agent_snapshots = _root_session_allows_agent_snapshots(
+    materialized_body, allow_agent_snapshots = _materialize_agent_snapshots_for_payload(
         state,
         context,
         root_session,
@@ -290,7 +294,7 @@ def _create_run(
         start_path=start_path,
     )
     spec = run_spec_from_payload(
-        body,
+        materialized_body,
         workspace_id=context.workspace_id,
         created_by_user_id=context.user.user_id,
         source_app_id=root_session.source_app_id or "chat",
@@ -466,36 +470,235 @@ def _execute_run(
     return json_response(start_response, payload)
 
 
-def _root_session_allows_agent_snapshots(
+def _materialize_agent_snapshots_for_payload(
     state: PlatformState,
     context: RequestSession,
     root_session,
     body: dict,
     *,
     start_path,
-) -> bool:
-    snapshots = _agent_snapshot_payloads(body)
-    if not snapshots:
-        return False
-    source_app_id = _text(root_session.source_app_id)
-    provider_ids = _chat_agent_snapshot_provider_ids(state, context, start_path=start_path)
-    if not source_app_id or source_app_id not in provider_ids:
-        raise InterAgentValidationError("agent_snapshot requires Chat's selected agent provider.")
-    for snapshot in snapshots:
-        _validate_agent_snapshot_skill_catalog(state, context, snapshot, start_path=start_path)
-    return True
-
-
-def _agent_snapshot_payloads(body: dict) -> list[dict]:
+) -> tuple[dict, bool]:
     participants = body.get("participants") if isinstance(body.get("participants"), list) else []
-    snapshots: list[dict] = []
+    if not any(
+        isinstance(participant, dict) and isinstance(participant.get("agent_snapshot"), dict)
+        for participant in participants
+    ):
+        return body, False
+    provider_app_id = _text(root_session.source_app_id)
+    provider_ids = _chat_agent_snapshot_provider_ids(state, context, start_path=start_path)
+    if not provider_app_id or provider_app_id not in provider_ids:
+        raise InterAgentValidationError("agent_snapshot requires Chat's selected agent provider.")
+    materialized_participants: list[object] = []
     for participant in participants:
-        if not isinstance(participant, dict):
+        if not isinstance(participant, dict) or not isinstance(participant.get("agent_snapshot"), dict):
+            materialized_participants.append(participant)
             continue
-        snapshot = participant.get("agent_snapshot")
-        if isinstance(snapshot, dict):
-            snapshots.append(snapshot)
-    return snapshots
+        materialized_snapshot = _materialize_agent_snapshot_from_provider(
+            state,
+            context,
+            participant=participant,
+            snapshot=participant["agent_snapshot"],
+            provider_app_id=provider_app_id,
+            start_path=start_path,
+        )
+        materialized_participant = dict(participant)
+        materialized_participant["agent_snapshot"] = materialized_snapshot
+        materialized_participant["agent_type_id"] = materialized_snapshot["agent_type_id"]
+        materialized_participant["label"] = materialized_snapshot["label"]
+        materialized_participants.append(materialized_participant)
+    return {**body, "participants": materialized_participants}, True
+
+
+def _materialize_agent_snapshot_from_provider(
+    state: PlatformState,
+    context: RequestSession,
+    *,
+    participant: dict,
+    snapshot: dict,
+    provider_app_id: str,
+    start_path,
+) -> dict:
+    requested_agent_type_id = _requested_agent_type_id_for_snapshot(participant, snapshot)
+    explicit_provider_id = _text(snapshot.get("provider_id"))
+    if explicit_provider_id and explicit_provider_id != provider_app_id:
+        raise InterAgentValidationError(
+            "agent_snapshot.provider_id does not match Chat's selected agent provider."
+        )
+    definition_payload = _invoke_chat_agent_provider_backend(
+        state,
+        context,
+        provider_app_id=provider_app_id,
+        dependency_alias="agent-catalog",
+        body={"action": "get_agent_definition", "id": requested_agent_type_id},
+        start_path=start_path,
+    )
+    agent_definition = (
+        definition_payload.get("agent_definition")
+        if isinstance(definition_payload.get("agent_definition"), dict)
+        else None
+    )
+    if not bool(definition_payload.get("exists")) or agent_definition is None:
+        raise InterAgentValidationError(
+            f"agent_snapshot.agent_type_id `{requested_agent_type_id}` was not found."
+        )
+    definition_agent_type_id = _text(agent_definition.get("id"))
+    if definition_agent_type_id != requested_agent_type_id:
+        raise InterAgentValidationError("Agent provider returned a mismatched agent definition.")
+    if agent_definition.get("enabled") is False:
+        raise InterAgentValidationError(
+            f"agent_snapshot.agent_type_id `{requested_agent_type_id}` is disabled."
+        )
+    prompt_payload = _invoke_chat_agent_provider_backend(
+        state,
+        context,
+        provider_app_id=provider_app_id,
+        dependency_alias="agent-prompt-materializer",
+        body={"action": "preview_prompt", "agent_type_id": requested_agent_type_id},
+        start_path=start_path,
+    )
+    return {
+        "agent_type_id": requested_agent_type_id,
+        "label": _text(agent_definition.get("name")) or requested_agent_type_id,
+        "system_prompt": _text(prompt_payload.get("rendered")),
+        "skill_ids": _string_items(agent_definition.get("skill_ids")),
+        "skill_catalog_app_id": _materialized_agent_snapshot_skill_catalog(
+            state,
+            context,
+            provider_app_id=provider_app_id,
+            provider_skill_catalog_app_id=(
+                _text(agent_definition.get("skill_catalog_app_id"))
+                or _text(prompt_payload.get("skill_catalog_app_id"))
+            ),
+            snapshot=snapshot,
+            start_path=start_path,
+        ),
+        "provider_id": provider_app_id,
+        "revision_id": (
+            _text(agent_definition.get("revision_id"))
+            or _text(agent_definition.get("updated_at"))
+            or None
+        ),
+        "metadata": {
+            "source": "chat_dependency_backend",
+            "definition_updated_at": _text(agent_definition.get("updated_at")),
+        },
+    }
+
+
+def _requested_agent_type_id_for_snapshot(participant: dict, snapshot: dict) -> str:
+    participant_agent_type_id = _text(participant.get("agent_type_id"))
+    snapshot_agent_type_id = _text(snapshot.get("agent_type_id"))
+    if (
+        participant_agent_type_id
+        and snapshot_agent_type_id
+        and participant_agent_type_id != snapshot_agent_type_id
+    ):
+        raise InterAgentValidationError("agent_snapshot.agent_type_id must match participant.agent_type_id.")
+    requested_agent_type_id = snapshot_agent_type_id or participant_agent_type_id
+    if not requested_agent_type_id:
+        raise InterAgentValidationError("agent_snapshot.agent_type_id is required.")
+    return requested_agent_type_id
+
+
+def _invoke_chat_agent_provider_backend(
+    state: PlatformState,
+    context: RequestSession,
+    *,
+    provider_app_id: str,
+    dependency_alias: str,
+    body: dict,
+    start_path,
+) -> dict:
+    try:
+        result = invoke_dependency_backend_request(
+            state,
+            workspace_id=context.workspace_id,
+            app_id=CHAT_APP_ID,
+            dependency_alias=dependency_alias,
+            provider_app_id=provider_app_id,
+            body=body,
+            user=context.user,
+            start_path=start_path,
+        )
+    except AppHostingError as error:
+        raise InterAgentValidationError(str(error)) from error
+    payload = result.get("json") if isinstance(result.get("json"), dict) else result
+    if not isinstance(payload, dict):
+        raise InterAgentValidationError(f"Dependency alias `{dependency_alias}` returned an invalid response.")
+    return payload
+
+
+def _materialized_agent_snapshot_skill_catalog(
+    state: PlatformState,
+    context: RequestSession,
+    *,
+    provider_app_id: str,
+    provider_skill_catalog_app_id: str,
+    snapshot: dict,
+    start_path,
+) -> str:
+    explicit_skill_catalog_app_id = _text(snapshot.get("skill_catalog_app_id"))
+    if explicit_skill_catalog_app_id:
+        _validate_agent_snapshot_skill_catalog(
+            state,
+            context,
+            explicit_skill_catalog_app_id,
+            start_path=start_path,
+        )
+    materialized_skill_catalog_app_id = _text(provider_skill_catalog_app_id)
+    if materialized_skill_catalog_app_id:
+        _validate_agent_snapshot_skill_catalog(
+            state,
+            context,
+            materialized_skill_catalog_app_id,
+            start_path=start_path,
+        )
+    selected_skill_catalog_app_id = ""
+    try:
+        selected_skill_catalog_app_id = _text(
+            selected_runtime_skill_catalog_app_id_for_source_app(
+                state.app_store,
+                workspace_id=context.workspace_id,
+                source_app_id=provider_app_id,
+                user=context.user,
+                workspace_store=state.workspace_store,
+                start_path=start_path,
+                allow_missing_source_app=True,
+            )
+        )
+    except AppHostingError:
+        selected_skill_catalog_app_id = ""
+    if (
+        materialized_skill_catalog_app_id
+        and selected_skill_catalog_app_id
+        and materialized_skill_catalog_app_id != selected_skill_catalog_app_id
+    ):
+        raise InterAgentValidationError(
+            "Agent provider skill catalog does not match the selected provider skill catalog."
+        )
+    if (
+        materialized_skill_catalog_app_id
+        and explicit_skill_catalog_app_id
+        and materialized_skill_catalog_app_id != explicit_skill_catalog_app_id
+    ):
+        raise InterAgentValidationError(
+            "agent_snapshot.skill_catalog_app_id does not match the materialized provider skill catalog."
+        )
+    if (
+        selected_skill_catalog_app_id
+        and explicit_skill_catalog_app_id
+        and selected_skill_catalog_app_id != explicit_skill_catalog_app_id
+    ):
+        raise InterAgentValidationError(
+            "agent_snapshot.skill_catalog_app_id does not match the selected provider skill catalog."
+        )
+    if materialized_skill_catalog_app_id:
+        return materialized_skill_catalog_app_id
+    if selected_skill_catalog_app_id:
+        return selected_skill_catalog_app_id
+    if explicit_skill_catalog_app_id:
+        return explicit_skill_catalog_app_id
+    raise InterAgentValidationError("agent_snapshot.skill_catalog_app_id is required.")
 
 
 def _chat_agent_snapshot_provider_ids(
@@ -536,15 +739,16 @@ def _dependency_selected_or_automatic_backend_provider_ids(dependency: dict | No
     if dependency is None:
         return []
     backend_candidate_ids = _dependency_backend_candidate_ids(dependency)
+    dependency_status = _text(dependency.get("status"))
     selected = [
         app_id
         for app_id in _string_items(dependency.get("selected_provider_app_ids"))
         if app_id in backend_candidate_ids
     ]
     if selected:
-        return selected
+        return selected if dependency_status == "resolved" else []
     if (
-        dependency.get("status") == "optional_unset"
+        dependency_status == "optional_unset"
         and dependency.get("cardinality") == "one"
         and not _string_items(dependency.get("stale_provider_app_ids"))
         and not _text(dependency.get("blocked_reason"))
@@ -569,18 +773,18 @@ def _dependency_backend_candidate_ids(dependency: dict) -> list[str]:
 def _validate_agent_snapshot_skill_catalog(
     state: PlatformState,
     context: RequestSession,
-    snapshot: dict,
+    skill_catalog_app_id: str,
     *,
     start_path,
 ) -> None:
-    skill_catalog_app_id = _text(snapshot.get("skill_catalog_app_id"))
-    if not skill_catalog_app_id:
+    normalized = _text(skill_catalog_app_id)
+    if not normalized:
         raise InterAgentValidationError("agent_snapshot.skill_catalog_app_id is required.")
     try:
         validate_runtime_skill_catalog_provider_app_id(
             state.app_store,
             workspace_id=context.workspace_id,
-            provider_app_id=skill_catalog_app_id,
+            provider_app_id=normalized,
             user=context.user,
             workspace_store=state.workspace_store,
             start_path=start_path,

@@ -99,6 +99,30 @@ def apply_app_runtime_requests(
     return results
 
 
+def invoke_dependency_backend_request(
+    state,
+    *,
+    workspace_id: str,
+    app_id: str,
+    dependency_alias: str,
+    body: dict[str, Any],
+    start_path: Path,
+    provider_app_id: str | None = None,
+    user=None,
+) -> dict[str, Any]:
+    """Invoke one selected dependency backend through the same platform boundary used by apps."""
+    return _invoke_dependency_backend(
+        state,
+        workspace_id=workspace_id,
+        app_id=app_id,
+        dependency_alias=dependency_alias,
+        body=body,
+        start_path=start_path,
+        provider_app_id=provider_app_id,
+        user=user,
+    )
+
+
 def _pop_runtime_requests(result: dict[str, Any]) -> object:
     response_json = result.get("json") if isinstance(result.get("json"), dict) else None
     for key in RUNTIME_REQUEST_KEYS:
@@ -508,6 +532,8 @@ def _invoke_dependency_backend(
     dependency_alias: str,
     body: dict[str, Any],
     start_path: Path,
+    provider_app_id: str | None = None,
+    user=None,
 ) -> dict[str, Any]:
     if not dependency_alias:
         raise AppHostingError("Dependency backend request requires dependency_alias.")
@@ -515,18 +541,34 @@ def _invoke_dependency_backend(
         state.app_store,
         workspace_id=workspace_id,
         consumer_app_id=app_id,
+        user=user,
         workspace_store=state.workspace_store,
         start_path=start_path,
     )
-    dependency = next((item for item in dependencies.get("dependencies", []) if item.get("alias") == dependency_alias), None)
+    dependency = next(
+        (item for item in dependencies.get("dependencies", []) if item.get("alias") == dependency_alias),
+        None,
+    )
     if not isinstance(dependency, dict):
         raise AppHostingError(f"Dependency alias `{dependency_alias}` is not declared by app `{app_id}`.")
     dependency_status = str(dependency.get("status") or "").strip()
-    if dependency_status and dependency_status != "resolved":
+    requested_provider_id = str(provider_app_id or "").strip()
+    provider_ids = dependency.get("selected_provider_app_ids") if isinstance(dependency, dict) else []
+    selected_provider_ids = (
+        [str(item).strip() for item in provider_ids if str(item).strip()]
+        if isinstance(provider_ids, list)
+        else []
+    )
+    if dependency_status and dependency_status != "resolved" and (
+        dependency_status != "optional_unset" or not requested_provider_id
+    ):
         blocked_reason = str(dependency.get("blocked_reason") or dependency_status).strip()
         raise AppHostingError(f"Dependency alias `{dependency_alias}` is not resolved: {blocked_reason}.")
-    provider_ids = dependency.get("selected_provider_app_ids") if isinstance(dependency, dict) else []
-    provider_id = str(provider_ids[0]).strip() if isinstance(provider_ids, list) and provider_ids else ""
+    if requested_provider_id and selected_provider_ids and requested_provider_id not in selected_provider_ids:
+        raise AppHostingError(
+            f"Dependency provider `{requested_provider_id}` is not selected for alias `{dependency_alias}`."
+        )
+    provider_id = requested_provider_id or (selected_provider_ids[0] if selected_provider_ids else "")
     if not provider_id:
         raise AppHostingError(f"Dependency alias `{dependency_alias}` has no selected provider app.")
     candidate = _dependency_candidate_for_provider(dependency, provider_id)

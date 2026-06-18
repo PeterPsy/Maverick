@@ -9,6 +9,7 @@ from core.api.platform_host import PlatformHost
 from core.api.platform_state import bootstrap_platform_state
 from core.apps.contract_builders import (
     build_app_contract,
+    build_app_entrypoints,
     build_parsed_app_contract,
     build_provided_interface_declaration,
     build_required_interface_declaration,
@@ -50,6 +51,57 @@ class InterAgentApiF4TestCase(AppReferenceApiTestSupport, unittest.TestCase):
         chat_root.mkdir(parents=True, exist_ok=True)
         agents_root.mkdir(parents=True, exist_ok=True)
         skills_root.mkdir(parents=True, exist_ok=True)
+        agents_backend = agents_root / "backend" / "app_backend.py"
+        agents_backend.parent.mkdir(parents=True, exist_ok=True)
+        agents_backend.write_text(
+            """from __future__ import annotations
+
+import json
+import sys
+
+
+def _response(payload: dict, *, status_code: int = 200) -> None:
+    print(json.dumps({"status_code": status_code, "json": payload}))
+
+
+def main() -> None:
+    payload = json.loads(sys.stdin.read() or "{}")
+    body = payload.get("body") if isinstance(payload.get("body"), dict) else {}
+    action = str(body.get("action") or "")
+    requested = str(body.get("id") or body.get("agent_type_id") or "").strip()
+    if action == "get_agent_definition":
+        if requested != "research-agent":
+            _response({"exists": False, "agent_type_id": requested})
+            return
+        _response(
+            {
+                "exists": True,
+                "agent_definition": {
+                    "id": "research-agent",
+                    "name": "Provider Researcher",
+                    "description": "Materialized by provider.",
+                    "skill_ids": ["provider-storage"],
+                    "skill_catalog_app_id": "skills",
+                    "enabled": True,
+                    "updated_at": "provider-revision-1",
+                },
+            }
+        )
+        return
+    if action == "preview_prompt":
+        if requested != "research-agent":
+            _response({"rendered": ""}, status_code=404)
+            return
+        _response({"rendered": "Provider prompt only."})
+        return
+    _response({"error": "unknown_action", "action": action}, status_code=400)
+
+
+if __name__ == "__main__":
+    main()
+""",
+            encoding="utf-8",
+        )
         write_app_contract_file(
             chat_root,
             build_parsed_app_contract(
@@ -85,6 +137,7 @@ class InterAgentApiF4TestCase(AppReferenceApiTestSupport, unittest.TestCase):
                 description="Agents test app.",
                 publisher="maverick",
                 contract=build_app_contract(
+                    entrypoints=build_app_entrypoints(backend="backend/app_backend.py"),
                     provides=[
                         build_provided_interface_declaration(
                             interface="agent.catalog",
@@ -254,7 +307,7 @@ class InterAgentApiF4TestCase(AppReferenceApiTestSupport, unittest.TestCase):
         self.assertEqual(create_payload["error"], "inter_agent_validation_failed")
         self.assertIn("selected agent provider", create_payload["detail"])
 
-    def test_create_agents_root_run_preserves_agent_snapshot_for_child_participant(self) -> None:
+    def test_create_agents_root_run_materializes_agent_snapshot_from_provider(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             repo_root = self._repo_root(temp_dir)
             self._write_snapshot_dependency_apps(repo_root)
@@ -270,20 +323,31 @@ class InterAgentApiF4TestCase(AppReferenceApiTestSupport, unittest.TestCase):
                 body=_run_payload(run_id="run-agents-root-snapshot"),
                 cookie=cookie,
             )
-            participant = next(item for item in create_payload["participants"] if item["participant_id"] == "researcher")
+            participant = next(
+                item for item in create_payload["participants"] if item["participant_id"] == "researcher"
+            )
 
         self.assertEqual(create_status, 201)
         self.assertEqual(create_payload["run"]["source_app_id"], "agents")
-        self.assertEqual(participant["agent_snapshot"]["system_prompt"], "Research only.")
-        self.assertEqual(participant["skill_ids"], ["storage"])
+        self.assertEqual(participant["label"], "Provider Researcher")
+        self.assertEqual(participant["agent_snapshot"]["label"], "Provider Researcher")
+        self.assertEqual(participant["agent_snapshot"]["system_prompt"], "Provider prompt only.")
+        self.assertEqual(participant["skill_ids"], ["provider-storage"])
         self.assertEqual(participant["agent_snapshot"]["skill_catalog_app_id"], "skills")
+        self.assertEqual(participant["agent_snapshot"]["provider_id"], "agents")
+        self.assertEqual(participant["agent_snapshot"]["revision_id"], "provider-revision-1")
 
-    def test_create_custom_agent_provider_root_preserves_agent_snapshot_for_child_participant(self) -> None:
+    def test_create_custom_agent_provider_root_materializes_agent_snapshot(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             repo_root = self._repo_root(temp_dir)
             self._write_snapshot_dependency_apps(repo_root, agent_provider_app_id="custom-agents")
             state = self._bootstrap_state(repo_root)
-            self._create_root_session(state, repo_root, source_app_id="custom-agents", skill_catalog_app_id="skills")
+            self._create_root_session(
+                state,
+                repo_root,
+                source_app_id="custom-agents",
+                skill_catalog_app_id="skills",
+            )
             app = PlatformHost(state, start_path=repo_root)
             cookie = self._login(app)
 
@@ -294,12 +358,15 @@ class InterAgentApiF4TestCase(AppReferenceApiTestSupport, unittest.TestCase):
                 body=_run_payload(run_id="run-custom-provider-snapshot"),
                 cookie=cookie,
             )
-            participant = next(item for item in create_payload["participants"] if item["participant_id"] == "researcher")
+            participant = next(
+                item for item in create_payload["participants"] if item["participant_id"] == "researcher"
+            )
 
         self.assertEqual(create_status, 201)
         self.assertEqual(create_payload["run"]["source_app_id"], "custom-agents")
-        self.assertEqual(participant["agent_snapshot"]["system_prompt"], "Research only.")
-        self.assertEqual(participant["skill_ids"], ["storage"])
+        self.assertEqual(participant["agent_snapshot"]["system_prompt"], "Provider prompt only.")
+        self.assertEqual(participant["skill_ids"], ["provider-storage"])
+        self.assertEqual(participant["agent_snapshot"]["provider_id"], "custom-agents")
 
     def test_create_agents_root_run_rejects_invalid_snapshot_skill_catalog(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:

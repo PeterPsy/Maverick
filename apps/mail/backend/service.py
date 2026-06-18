@@ -370,19 +370,63 @@ def _save_thread_attachments(data_root: Path, payload: dict[str, object]) -> dic
                 app_secrets=_app_secrets(payload),
                 metadata_only=False,
                 max_bytes=max_bytes,
-                save_to_storage=False,
+                save_to_storage=True,
+                generated_storage_root=generated_storage_root,
+                storage_target_folder=target_folder,
+                storage_mode=mode,
+                skip_sha256s=seen_hashes if dedupe else None,
             )
+            if fetch.get("status") == "duplicate_sha256":
+                sha256 = str(fetch.get("sha256") or "")
+                skipped.append(
+                    {"attachment_id": attachment.get("id"), "filename": filename, "reason": "duplicate_sha256", "sha256": sha256}
+                )
+                continue
+            if fetch.get("status") == "saved":
+                storage_ref = fetch.get("storage_ref") if isinstance(fetch.get("storage_ref"), dict) else {}
+                sha256 = str(storage_ref.get("sha256") or fetch.get("sha256") or "")
+                if sha256:
+                    seen_hashes.add(sha256)
+                saved.append(
+                    {
+                        "attachment_id": attachment.get("id"),
+                        "message_id": message.get("id"),
+                        "thread_id": thread_id,
+                        "filename": filename,
+                        "content_type": attachment.get("content_type") or "",
+                        "size_bytes": storage_ref.get("size_bytes", fetch.get("size_bytes", size_bytes)),
+                        "sha256": sha256,
+                        "workspace_relative_path": storage_ref.get("workspace_relative_path"),
+                        "source": {
+                            "message_id": message.get("id"),
+                            "sent_at": message.get("sent_at"),
+                            "sender": message.get("sender"),
+                        },
+                    }
+                )
+                continue
             if fetch.get("status") != "fetched":
-                skipped.append({"attachment_id": attachment.get("id"), "filename": filename, "reason": fetch.get("status"), "detail": fetch.get("detail")})
+                skipped.append(
+                    {
+                        "attachment_id": attachment.get("id"),
+                        "filename": filename,
+                        "reason": fetch.get("status"),
+                        "detail": fetch.get("detail"),
+                    }
+                )
                 continue
             try:
                 attachment_bytes = _attachment_bytes_from_fetch(fetch)
             except ValueError as error:
-                skipped.append({"attachment_id": attachment.get("id"), "filename": filename, "reason": "invalid_payload", "detail": str(error)})
+                skipped.append(
+                    {"attachment_id": attachment.get("id"), "filename": filename, "reason": "invalid_payload", "detail": str(error)}
+                )
                 continue
             sha256 = hashlib.sha256(attachment_bytes).hexdigest()
             if dedupe and sha256 and sha256 in seen_hashes:
-                skipped.append({"attachment_id": attachment.get("id"), "filename": filename, "reason": "duplicate_sha256", "sha256": sha256})
+                skipped.append(
+                    {"attachment_id": attachment.get("id"), "filename": filename, "reason": "duplicate_sha256", "sha256": sha256}
+                )
                 continue
             seen_hashes.add(sha256)
             storage_ref = save_attachment_to_storage(

@@ -892,7 +892,29 @@ class StorageAppTestCase(unittest.TestCase):
                     "action": "write_file",
                     "workspace_relative_path": "storage/generated/reports/summary.txt",
                     "mode": "overwrite",
+                    "confirm": True,
                     "content_base64": "c2Vjb25kIHZlcnNpb24=",
+                },
+            )
+            implicit_overwrite = self.run_backend(
+                data_root=root / "data" / "storage",
+                uploaded_root=root / "storage" / "uploaded",
+                generated_root=generated_root,
+                body={
+                    "action": "file.content.write",
+                    "workspace_relative_path": "storage/generated/reports/summary.txt",
+                    "content": "third version",
+                },
+            )
+            unconfirmed_overwrite = self.run_backend(
+                data_root=root / "data" / "storage",
+                uploaded_root=root / "storage" / "uploaded",
+                generated_root=generated_root,
+                body={
+                    "action": "file.content.write",
+                    "workspace_relative_path": "storage/generated/reports/summary.txt",
+                    "mode": "overwrite",
+                    "content": "third version",
                 },
             )
             rejected = self.run_backend(
@@ -913,6 +935,9 @@ class StorageAppTestCase(unittest.TestCase):
             self.assertEqual(created["json"]["bytes_written"], len("first version"))
             self.assertEqual(overwritten["status_code"], 200)
             self.assertEqual(target.read_text(encoding="utf-8"), "second version")
+            self.assertEqual(implicit_overwrite["status_code"], 400)
+            self.assertEqual(unconfirmed_overwrite["status_code"], 400)
+            self.assertIn("confirm=true", unconfirmed_overwrite["json"]["detail"])
             self.assertEqual(rejected["status_code"], 400)
 
     def test_backend_write_versioned_upload_overwrite_and_read_handle(self) -> None:
@@ -957,6 +982,7 @@ class StorageAppTestCase(unittest.TestCase):
                     "folder_relative_path": "reports",
                     "file_name": "summary.txt",
                     "mode": "overwrite",
+                    "confirm": True,
                     "content_base64": b64encode(b"third").decode("ascii"),
                 },
             )
@@ -974,6 +1000,11 @@ class StorageAppTestCase(unittest.TestCase):
 
             self.assertEqual(created["status_code"], 200, created)
             self.assertEqual(versioned["status_code"], 200, versioned)
+            self.assertEqual(versioned["json"]["audit"]["effective_mode"], "versioned")
+            self.assertEqual(versioned["json"]["audit"]["requested_workspace_relative_path"], "storage/generated/reports/summary.txt")
+            self.assertEqual(versioned["json"]["audit"]["workspace_relative_path"], "storage/generated/reports/summary.v2.txt")
+            self.assertTrue(versioned["json"]["audit"]["previous_sha256"])
+            self.assertFalse(versioned["json"]["audit"]["replaced"])
             self.assertEqual(uploaded["status_code"], 200, uploaded)
             self.assertEqual(target.read_text(encoding="utf-8"), "third")
             self.assertEqual((generated_root / "reports" / "summary.v2.txt").read_text(encoding="utf-8"), "second")
@@ -2570,6 +2601,7 @@ class StorageAppTestCase(unittest.TestCase):
                 "action": "write",
                 "workspace_relative_path": "storage/generated/fleet/mcp-output.txt",
                 "mode": "overwrite",
+                "confirm": True,
                 "content": "cli output",
             },
             app_store=state.app_store,

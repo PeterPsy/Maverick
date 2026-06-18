@@ -8,6 +8,7 @@ from collections.abc import Callable
 from datetime import UTC, datetime
 from email.message import EmailMessage
 from email.utils import getaddresses, parsedate_to_datetime
+import hashlib
 import json
 from pathlib import Path
 import re
@@ -19,7 +20,12 @@ from database import connect, ensure_schema, now_timestamp
 from email_rendering import render_email_body
 from drafts import get_draft
 from store import audit, get_attachment, get_thread, list_threads
-from storage_attachments import attach_workspace_attachments, save_attachment_to_storage
+from storage_attachments import (
+    attach_workspace_attachments,
+    draft_confirmation_preview,
+    draft_with_current_attachments,
+    save_attachment_to_storage,
+)
 
 from .base import ProviderCapability
 
@@ -153,7 +159,7 @@ class GmailProvider:
         draft = get_draft(data_root, draft_id)
         _require_recipients(draft)
         connection = _connection(data_root, str(draft["connection_id"]))
-        message = _draft_message(
+        message, attachments = _draft_message(
             draft,
             sender_email=str(connection["email_address"]),
             sender_name=str(connection["display_name"]),
@@ -161,7 +167,18 @@ class GmailProvider:
             generated_storage_root=generated_storage_root,
         )
         if not confirm:
-            return {"dry_run": True, "requires_confirmation": True, "draft": draft}
+            preview_draft = draft_with_current_attachments(draft, attachments)
+            return {
+                "dry_run": True,
+                "requires_confirmation": True,
+                "draft": preview_draft,
+                "confirmation_preview": draft_confirmation_preview(
+                    preview_draft,
+                    sender_email=str(connection["email_address"]),
+                    sender_name=str(connection["display_name"]),
+                    attachments=attachments,
+                ),
+            }
         secrets = _require_app_secrets(app_secrets)
         raw = base64.urlsafe_b64encode(message.as_bytes()).decode("ascii").rstrip("=")
         payload: dict[str, object] = {"raw": raw}
@@ -177,7 +194,7 @@ class GmailProvider:
             self._fetch_and_cache_thread(data_root, str(draft["connection_id"]), provider_thread_id, secrets)
         audit(data_root, "gmail.draft.send", "mail_draft", draft_id, {"provider_message_id": str(sent.get("id") or "")})
         local_thread_id = _local_thread_id(str(draft["connection_id"]), provider_thread_id) if provider_thread_id else str(draft.get("thread_id") or "")
-        return {"sent": True, "provider_message_id": str(sent.get("id") or ""), "thread_id": local_thread_id}
+        return {"sent": True, "provider_message_id": str(sent.get("id") or ""), "thread_id": local_thread_id, "attachments": attachments}
 
     def sync_incremental(
         self,
@@ -265,6 +282,7 @@ class GmailProvider:
         generated_storage_root: Path | None = None,
         storage_target_folder: object = None,
         storage_mode: object = "versioned",
+        skip_sha256s: set[str] | None = None,
     ) -> dict[str, object]:
         attachment = get_attachment(data_root, attachment_id)
         resolved_attachment_id = str(attachment["id"])
@@ -308,6 +326,9 @@ class GmailProvider:
         fetched_size = len(attachment_bytes)
         if fetched_size > max_bytes:
             return {**metadata, "status": "too_large", "size_bytes": fetched_size, "max_bytes": max_bytes}
+        sha256 = hashlib.sha256(attachment_bytes).hexdigest()
+        if save_to_storage and skip_sha256s and sha256 in skip_sha256s:
+            return {**metadata, "status": "duplicate_sha256", "size_bytes": fetched_size, "sha256": sha256}
         if save_to_storage:
             storage_ref = _save_attachment_to_storage(
                 data_root,
@@ -323,6 +344,7 @@ class GmailProvider:
                 **metadata,
                 "status": "saved",
                 "size_bytes": fetched_size,
+                "sha256": sha256,
                 "storage_state": "saved",
                 "storage_ref": storage_ref,
             }
@@ -737,7 +759,7 @@ def _draft_message(
     sender_name: str,
     uploaded_storage_root: Path | None = None,
     generated_storage_root: Path | None = None,
-) -> EmailMessage:
+) -> tuple[EmailMessage, list[dict[str, object]]]:
     message = EmailMessage()
     message["From"] = f"{sender_name} <{sender_email}>" if sender_name else sender_email
     message["To"] = ", ".join(_format_address(item) for item in draft.get("to", []))
@@ -752,13 +774,13 @@ def _draft_message(
     body_html = str(draft.get("body_html") or "")
     if body_html:
         message.add_alternative(body_html, subtype="html")
-    attach_workspace_attachments(
+    attachments = attach_workspace_attachments(
         message,
         draft,
         uploaded_root=uploaded_storage_root,
         generated_root=generated_storage_root,
     )
-    return message
+    return message, attachments
 
 
 def _format_address(value: object) -> str:

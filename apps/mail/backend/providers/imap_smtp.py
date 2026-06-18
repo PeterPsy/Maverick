@@ -9,6 +9,7 @@ from email import policy
 from email.message import EmailMessage
 from email.parser import BytesParser
 from email.utils import formatdate, getaddresses, parsedate_to_datetime
+import hashlib
 import imaplib
 import json
 from pathlib import Path
@@ -21,7 +22,12 @@ from database import connect, ensure_schema, now_timestamp
 from drafts import get_draft
 from email_rendering import render_email_body
 from store import audit, get_attachment, get_thread, list_threads
-from storage_attachments import attach_workspace_attachments, save_attachment_to_storage
+from storage_attachments import (
+    attach_workspace_attachments,
+    draft_confirmation_preview,
+    draft_with_current_attachments,
+    save_attachment_to_storage,
+)
 
 from .base import ProviderCapability
 
@@ -175,7 +181,7 @@ class ImapSmtpProvider:
         draft = get_draft(data_root, draft_id)
         _require_recipients(draft)
         settings = _connection_settings(data_root, str(draft["connection_id"]))
-        message = _draft_message(
+        message, attachments = _draft_message(
             draft,
             sender_email=str(settings["email_address"]),
             sender_name=str(settings.get("display_name") or ""),
@@ -183,7 +189,18 @@ class ImapSmtpProvider:
             generated_storage_root=generated_storage_root,
         )
         if not confirm:
-            return {"dry_run": True, "requires_confirmation": True, "draft": draft}
+            preview_draft = draft_with_current_attachments(draft, attachments)
+            return {
+                "dry_run": True,
+                "requires_confirmation": True,
+                "draft": preview_draft,
+                "confirmation_preview": draft_confirmation_preview(
+                    preview_draft,
+                    sender_email=str(settings["email_address"]),
+                    sender_name=str(settings.get("display_name") or ""),
+                    attachments=attachments,
+                ),
+            }
         with self._smtp(settings) as client:
             client.login(str(settings["username"]), _smtp_password(app_secrets))
             client.send_message(message)
@@ -201,7 +218,12 @@ class ImapSmtpProvider:
             flags={"\\Seen"},
         )
         audit(data_root, "imap_smtp.draft.send", "mail_draft", draft_id, {"provider": "smtp"})
-        return {"sent": True, "provider_message_id": str(message["Message-ID"] or ""), "thread_id": str(draft.get("thread_id") or "")}
+        return {
+            "sent": True,
+            "provider_message_id": str(message["Message-ID"] or ""),
+            "thread_id": str(draft.get("thread_id") or ""),
+            "attachments": attachments,
+        }
 
     def mark_read(
         self,
@@ -272,6 +294,7 @@ class ImapSmtpProvider:
         generated_storage_root: Path | None = None,
         storage_target_folder: object = None,
         storage_mode: object = "versioned",
+        skip_sha256s: set[str] | None = None,
     ) -> dict[str, object]:
         attachment = get_attachment(data_root, attachment_id)
         metadata = {
@@ -304,6 +327,9 @@ class ImapSmtpProvider:
             return {**metadata, "status": "invalid_payload", "detail": "Provider attachment was not found."}
         if len(payload) > max_bytes:
             return {**metadata, "status": "too_large", "size_bytes": len(payload), "max_bytes": max_bytes}
+        sha256 = hashlib.sha256(payload).hexdigest()
+        if save_to_storage and skip_sha256s and sha256 in skip_sha256s:
+            return {**metadata, "status": "duplicate_sha256", "size_bytes": len(payload), "sha256": sha256}
         data_base64url = base64.urlsafe_b64encode(payload).decode("ascii").rstrip("=")
         if save_to_storage:
             storage_ref = _save_attachment(
@@ -316,7 +342,14 @@ class ImapSmtpProvider:
                 target_folder=storage_target_folder,
                 mode=storage_mode,
             )
-            return {**metadata, "status": "saved", "size_bytes": len(payload), "storage_state": "saved", "storage_ref": storage_ref}
+            return {
+                **metadata,
+                "status": "saved",
+                "size_bytes": len(payload),
+                "sha256": sha256,
+                "storage_state": "saved",
+                "storage_ref": storage_ref,
+            }
         return {**metadata, "status": "fetched", "size_bytes": len(payload), "data_base64url": data_base64url}
 
     def _imap(self, settings: dict[str, object]):
@@ -678,7 +711,7 @@ def _draft_message(
     sender_name: str,
     uploaded_storage_root: Path | None = None,
     generated_storage_root: Path | None = None,
-) -> EmailMessage:
+) -> tuple[EmailMessage, list[dict[str, object]]]:
     message = EmailMessage()
     message["From"] = f"{sender_name} <{sender_email}>" if sender_name else sender_email
     message["To"] = ", ".join(_format_address(item) for item in draft.get("to", []))
@@ -695,13 +728,13 @@ def _draft_message(
     body_html = str(draft.get("body_html") or "")
     if body_html:
         message.add_alternative(body_html, subtype="html")
-    attach_workspace_attachments(
+    attachments = attach_workspace_attachments(
         message,
         draft,
         uploaded_root=uploaded_storage_root,
         generated_root=generated_storage_root,
     )
-    return message
+    return message, attachments
 
 
 def _append_sent_copy(settings: dict[str, object], imap_factory: ImapFactory, password: str, message: EmailMessage) -> None:

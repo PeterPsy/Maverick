@@ -100,6 +100,37 @@ def attach_workspace_attachments(
     return attached
 
 
+def draft_with_current_attachments(draft: dict[str, object], attachments: list[dict[str, object]]) -> dict[str, object]:
+    preview_draft = dict(draft)
+    preview_draft["workspace_attachments"] = attachments
+    return preview_draft
+
+
+def draft_confirmation_preview(
+    draft: dict[str, object],
+    *,
+    sender_email: str,
+    sender_name: str,
+    attachments: list[dict[str, object]],
+) -> dict[str, object]:
+    return {
+        "draft_id": draft.get("id") or "",
+        "thread_id": draft.get("thread_id") or "",
+        "from": {"email": sender_email, "name": sender_name},
+        "to": draft.get("to", []),
+        "cc": draft.get("cc", []),
+        "bcc": draft.get("bcc", []),
+        "reply_to": draft.get("reply_to", []),
+        "subject": draft.get("subject") or "",
+        "body_text": draft.get("body_text") or "",
+        "body_html": draft.get("body_html") or "",
+        "attachments": attachments,
+        "attachment_count": len(attachments),
+        "attachment_total_bytes": sum(int(item.get("size_bytes") or 0) for item in attachments),
+        "snapshot_at": now_timestamp(),
+    }
+
+
 def resolve_workspace_storage_file(
     workspace_relative_path: str,
     *,

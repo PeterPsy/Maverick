@@ -422,6 +422,85 @@ class DocumentGeneratorAppTestCase(unittest.TestCase):
             self.assertNotIn("10", original_text["json"]["text"])
             self.assertIn("10", versioned_text["json"]["text"])
 
+    def test_backend_spreadsheet_transform_rejects_unpersisted_target_alias(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            data_root = root / "data" / "document-generator"
+            generated_root = root / "storage" / "generated"
+            generated_root.mkdir(parents=True)
+            source = self.run_backend(
+                data_root=data_root,
+                generated_root=generated_root,
+                body={
+                    "action": "generate_document",
+                    "spec": {
+                        "format": "xlsx",
+                        "title": "Source",
+                        "output_filename": "source.xlsx",
+                        "sheets": [{"name": "Data", "rows": [["Key", "Value"], ["A", "10"]]}],
+                    },
+                },
+            )["json"]["document"]
+            output = self.run_backend(
+                data_root=data_root,
+                generated_root=generated_root,
+                body={
+                    "action": "generate_document",
+                    "spec": {
+                        "format": "xlsx",
+                        "title": "Output",
+                        "output_filename": "output.xlsx",
+                        "sheets": [{"name": "Data", "rows": [["Key", "Copied"], ["A", ""]]}],
+                    },
+                },
+            )["json"]["document"]
+            other = self.run_backend(
+                data_root=data_root,
+                generated_root=generated_root,
+                body={
+                    "action": "generate_document",
+                    "spec": {
+                        "format": "xlsx",
+                        "title": "Other",
+                        "output_filename": "other.xlsx",
+                        "sheets": [{"name": "Data", "rows": [["Key", "Copied"], ["A", ""]]}],
+                    },
+                },
+            )["json"]["document"]
+
+            transformed = self.run_backend(
+                data_root=data_root,
+                generated_root=generated_root,
+                body={
+                    "action": "spreadsheet.transform",
+                    "source_files": [
+                        {"alias": "source", "path": source["workspace_relative_path"]},
+                        {"alias": "output", "path": output["workspace_relative_path"]},
+                        {"alias": "other", "path": other["workspace_relative_path"]},
+                    ],
+                    "target_file": output["workspace_relative_path"],
+                    "mode": "overwrite",
+                    "confirm": True,
+                    "operations": [
+                        {
+                            "type": "lookup_and_copy",
+                            "lookup": ["A"],
+                            "source": {"file": "source", "sheet": 0, "key_column": "A", "columns": ["B"]},
+                            "target": {"file": "other", "sheet": 0, "key_column": "A", "columns": ["B"]},
+                        }
+                    ],
+                },
+            )
+            other_text = self.run_backend(
+                data_root=data_root,
+                generated_root=generated_root,
+                body={"action": "extract_text", "workspace_relative_path": other["workspace_relative_path"]},
+            )
+
+            self.assertEqual(transformed["status_code"], 400)
+            self.assertIn("target_file workbook", transformed["json"]["detail"])
+            self.assertNotIn("10", other_text["json"]["text"])
+
     def test_health_hook_reports_degraded_when_pymupdf_is_missing(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp)

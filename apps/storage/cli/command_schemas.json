@@ -467,7 +467,7 @@
           {"action": "catalog", "limit": 20},
           {"action": "file.content.read", "workspace_relative_path": "storage/generated/report.md"},
           {"action": "file.text.read", "workspace_relative_path": "storage/generated/report.md"},
-          {"action": "file.content.write", "workspace_relative_path": "storage/generated/report.md", "mode": "overwrite", "content": "# Report"},
+          {"action": "file.content.write", "workspace_relative_path": "storage/generated/report.md", "mode": "overwrite", "confirm": true, "content": "# Report"},
           {"action": "drive_search", "connection_id": "drive_conn_example", "query": "mimeType='application/pdf'", "limit": 20},
           {"action": "drive_export", "connection_id": "drive_conn_example", "drive_file_id": "1AbC", "export_mime_type": "application/pdf"},
           {"action": "file.localize", "stable_storage_file_id": "file_drive_example"}

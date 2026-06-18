@@ -381,6 +381,7 @@
           "role": {"type": "string", "enum": ["uploaded", "generated"], "default": "generated"},
           "relative_path": {"type": "string"},
           "mode": {"type": "string", "enum": ["create", "overwrite", "upsert", "versioned"]},
+          "confirm": {"type": "boolean", "default": false},
           "content": {"type": "string"},
           "content_base64": {"type": "string"}
         },

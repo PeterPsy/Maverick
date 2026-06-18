@@ -323,6 +323,7 @@ def _lookup_and_copy(
     target_spec = _required_object(operation.get("target"), "target")
     source = _workbook_for_spec(workbooks, source_spec, "source")
     target = _workbook_for_spec(workbooks, target_spec, "target", default=target_ref)
+    _require_output_target(target, target_ref)
     source_sheet = source_spec.get("sheet", 0)
     target_sheet = target_spec.get("sheet", 0)
     source_key_column = source_spec.get("key_column") or "A"
@@ -472,6 +473,14 @@ def _workbook_for_spec(
     if ref is None:
         raise DocumentValidationError(f"{field}.file `{key}` was not found in source_files.")
     return ref
+
+
+def _require_output_target(target: WorkbookRef, target_ref: WorkbookRef) -> None:
+    if target.workbook is not target_ref.workbook:
+        raise DocumentValidationError(
+            "lookup_and_copy target.file must reference the target_file workbook; "
+            "writing to other source_files would not be persisted."
+        )
 
 
 def _row_index(workbook: Workbook, sheet: object, key_column: object) -> dict[str, int]:

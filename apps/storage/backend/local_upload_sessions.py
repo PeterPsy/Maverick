@@ -24,6 +24,8 @@ from store_files_paths import (
     safe_file_name,
     storage_root_for_role,
     storage_write_lock,
+    write_audit_payload,
+    write_confirmed,
 )
 
 
@@ -41,6 +43,7 @@ def create_local_upload_session(
     content_type: object,
     size_bytes: int,
     mode: object = "create",
+    confirm: object = False,
     uploaded_root: Path,
     generated_root: Path,
 ) -> dict[str, Any]:
@@ -67,6 +70,7 @@ def create_local_upload_session(
             requested_target=requested_target,
             mode=write_mode,
             operation="local_upload_session.start",
+            confirm=confirm,
         )
         reserved_bytes = _active_session_reserved_bytes(data_root=data_root)
         _enforce_reserved_upload_budget(
@@ -88,6 +92,7 @@ def create_local_upload_session(
             "provider": "local",
             "role": role,
             "mode": write_mode,
+            "confirm": write_confirmed(confirm),
             "folder_relative_path": "" if folder == root else folder.relative_to(root).as_posix(),
             "requested_relative_path": requested_target.relative_to(root).as_posix(),
             "relative_path": target.relative_to(root).as_posix(),
@@ -249,6 +254,7 @@ def _complete_upload(
         requested_target=requested_target,
         mode=write_mode,
         operation="local_upload_session.chunk",
+        confirm=bool(session.get("confirm")),
     )
     if part_path.stat().st_size != int(session.get("size_bytes") or 0):
         raise StorageValidationError("Local upload session did not receive the declared number of bytes.", operation="local_upload_session.chunk")
@@ -262,21 +268,22 @@ def _complete_upload(
         operation="local_upload_session.chunk",
     )
     target.parent.mkdir(parents=True, exist_ok=True)
-    previous_sha256 = hash_file(target) if target.exists() and target.is_file() else ""
+    previous_path = requested_target if requested_target.exists() and requested_target.is_file() else None
+    previous_sha256 = hash_file(previous_path) if previous_path else ""
     sha256 = _hash_file(part_path)
     part_path.replace(target)
     record = upsert_file_record(data_root=data_root, role=role, root=root, path=target, sha256=sha256)
-    audit = {
-        "operation": "local_upload_session.complete",
-        "requested_mode": write_mode,
-        "effective_mode": "create" if not previous_sha256 else "overwrite",
-        "requested_workspace_relative_path": f"storage/{role}/{requested_target.relative_to(root).as_posix()}",
-        "workspace_relative_path": record["workspace_relative_path"],
-        "previous_sha256": previous_sha256,
-        "sha256": sha256,
-        "bytes_written": int(session.get("size_bytes") or 0),
-        "replaced": bool(previous_sha256 and target == requested_target),
-    }
+    audit = write_audit_payload(
+        operation="local_upload_session.complete",
+        requested_mode=write_mode,
+        role=role,
+        root=root,
+        requested_target=requested_target,
+        target=target,
+        previous_sha256=previous_sha256,
+        sha256=sha256,
+        bytes_written=int(session.get("size_bytes") or 0),
+    )
     return _update_session(
         data_root,
         session,

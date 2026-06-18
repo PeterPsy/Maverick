@@ -89,6 +89,7 @@ class MailProvider(Protocol):
         generated_storage_root: Path | None = None,
         storage_target_folder: object = None,
         storage_mode: object = "versioned",
+        skip_sha256s: set[str] | None = None,
     ) -> dict[str, object]:
         """Fetch an attachment or return a clear provider limitation."""
         ...

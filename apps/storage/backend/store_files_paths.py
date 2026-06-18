@@ -94,7 +94,7 @@ def safe_file_name(raw_name: str) -> str:
 
 
 def normalize_write_mode(raw_mode: object, *, operation: str = "file.content.write") -> str:
-    mode = str(raw_mode or "overwrite").strip().lower()
+    mode = str(raw_mode or "create").strip().lower()
     if mode not in WRITE_MODES:
         raise StorageValidationError(
             "mode must be create, overwrite, upsert, or versioned.",
@@ -104,7 +104,11 @@ def normalize_write_mode(raw_mode: object, *, operation: str = "file.content.wri
     return mode
 
 
-def prepare_write_target(*, root: Path, requested_target: Path, mode: str, operation: str) -> Path:
+def write_confirmed(raw_confirm: object) -> bool:
+    return raw_confirm is True or str(raw_confirm or "").strip().lower() in {"1", "true", "yes", "on"}
+
+
+def prepare_write_target(*, root: Path, requested_target: Path, mode: str, operation: str, confirm: object = False) -> Path:
     target = requested_target.resolve()
     if target == root or root not in target.parents:
         raise StorageValidationError("File path escapes the selected storage root.", operation=operation)
@@ -112,11 +116,47 @@ def prepare_write_target(*, root: Path, requested_target: Path, mode: str, opera
         raise StorageValidationError("Target path is not a file.", operation=operation)
     if mode == "create" and target.exists():
         raise StorageValidationError("File already exists.", operation=operation)
-    if mode == "overwrite" and not target.exists():
-        raise StorageValidationError("File does not exist.", operation=operation)
+    if mode == "overwrite":
+        if not target.exists():
+            raise StorageValidationError("File does not exist.", operation=operation)
+        if not write_confirmed(confirm):
+            raise StorageValidationError("mode=overwrite requires confirm=true for an existing file.", operation=operation)
+    if mode == "upsert" and target.exists() and not write_confirmed(confirm):
+        raise StorageValidationError("mode=upsert requires confirm=true when replacing an existing file.", operation=operation)
     if mode == "versioned" and target.exists():
         return versioned_storage_path(target)
     return target
+
+
+def write_audit_payload(
+    *,
+    operation: str,
+    requested_mode: str,
+    role: str,
+    root: Path,
+    requested_target: Path,
+    target: Path,
+    previous_sha256: str,
+    sha256: str,
+    bytes_written: int,
+) -> dict:
+    if target != requested_target:
+        effective_mode = "versioned"
+    elif previous_sha256:
+        effective_mode = "overwrite"
+    else:
+        effective_mode = "create"
+    return {
+        "operation": operation,
+        "requested_mode": requested_mode,
+        "effective_mode": effective_mode,
+        "requested_workspace_relative_path": f"storage/{role}/{requested_target.relative_to(root).as_posix()}",
+        "workspace_relative_path": f"storage/{role}/{target.relative_to(root).as_posix()}",
+        "previous_sha256": previous_sha256,
+        "sha256": sha256,
+        "bytes_written": bytes_written,
+        "replaced": bool(previous_sha256 and target == requested_target),
+    }
 
 
 def versioned_storage_path(target: Path) -> Path:
@@ -319,6 +359,7 @@ def write_file_payload(
     content: object,
     content_base64: object,
     mode: object,
+    confirm: object = False,
     uploaded_root: Path,
     generated_root: Path,
 ) -> dict:
@@ -332,9 +373,10 @@ def write_file_payload(
             requested_target=requested_target,
             mode=write_mode,
             operation="file.content.write",
+            confirm=confirm,
         )
         previous_path = requested_target if requested_target.exists() and requested_target.is_file() else None
-        previous_sha256 = hash_file(previous_path) if previous_path and target == requested_target else ""
+        previous_sha256 = hash_file(previous_path) if previous_path else ""
         target.parent.mkdir(parents=True, exist_ok=True)
         enforce_storage_budget(uploaded_root=uploaded_root, generated_root=generated_root, target=target, payload_size=len(payload))
         atomic_write_bytes(target, payload)
@@ -346,17 +388,17 @@ def write_file_payload(
             path=target,
             sha256=new_sha256,
         )
-    audit = {
-        "operation": "file.content.write",
-        "requested_mode": write_mode,
-        "effective_mode": "create" if not previous_sha256 else "overwrite",
-        "requested_workspace_relative_path": f"storage/{role}/{requested_target.relative_to(root).as_posix()}",
-        "workspace_relative_path": record["workspace_relative_path"],
-        "previous_sha256": previous_sha256,
-        "sha256": new_sha256,
-        "bytes_written": len(payload),
-        "replaced": bool(previous_sha256 and target == requested_target),
-    }
+    audit = write_audit_payload(
+        operation="file.content.write",
+        requested_mode=write_mode,
+        role=role,
+        root=root,
+        requested_target=requested_target,
+        target=target,
+        previous_sha256=previous_sha256,
+        sha256=new_sha256,
+        bytes_written=len(payload),
+    )
     return {"file": record, "bytes_written": len(payload), "audit": audit}
 
 

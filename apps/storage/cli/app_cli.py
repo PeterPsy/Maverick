@@ -23,7 +23,8 @@ def _upload_local_file_payload(*, data_root: Path, uploaded_root: Path, generate
         workspace_root=body.get("_workspace_root"),
         effective_mode=body.get("_effective_mode"),
     )
-    mode = normalize_write_mode(body.get("mode") or "create", operation="upload_local_file")
+    mode = normalize_write_mode(body.get("mode"), operation="upload_local_file")
+    confirm = body.get("confirm")
     role, folder_relative_path, file_name = _local_upload_target(body, source)
     content_type = str(body.get("content_type") or mimetypes.guess_type(source.name)[0] or "application/octet-stream")
     size_bytes = source.stat().st_size
@@ -50,6 +51,7 @@ def _upload_local_file_payload(*, data_root: Path, uploaded_root: Path, generate
                 "relative_path": relative_path,
                 "content_base64": "",
                 "mode": mode,
+                "confirm": confirm,
             },
         )
         return status_code, {
@@ -73,6 +75,7 @@ def _upload_local_file_payload(*, data_root: Path, uploaded_root: Path, generate
             "content_type": content_type,
             "size_bytes": size_bytes,
             "mode": mode,
+            "confirm": confirm,
         },
     )
     session_id = str(started["upload_session"]["id"])

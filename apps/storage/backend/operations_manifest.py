@@ -166,6 +166,7 @@ def operations_manifest_payload() -> dict[str, Any]:
                     "action": "file.content.write",
                     "workspace_relative_path": "storage/generated/report.md",
                     "mode": "overwrite",
+                    "confirm": True,
                     "content": "# Report",
                 },
             },

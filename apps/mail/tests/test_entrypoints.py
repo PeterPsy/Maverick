@@ -6,6 +6,7 @@ import base64
 from email import policy
 from email.message import EmailMessage
 from email.parser import BytesParser
+import hashlib
 import json
 import os
 from pathlib import Path
@@ -24,6 +25,7 @@ from backend.service import app_events_for_action
 from backend.database import connect, ensure_schema, health_payload, now_timestamp
 from backend.providers.gmail import GmailProvider
 from backend.providers.imap_smtp import ImapSmtpProvider
+from backend.storage_attachments import save_attachment_to_storage
 from backend.store import list_threads
 
 
@@ -1125,6 +1127,44 @@ class MailServiceTest(unittest.TestCase):
             self.assertEqual(status, 400)
             self.assertIn("was not found", preview["detail"])
 
+    def test_gmail_draft_preview_returns_current_attachment_snapshot(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            workspace_root = Path(tmp)
+            data_root = workspace_root / "data" / "mail"
+            generated_root = workspace_root / "storage" / "generated"
+            attachment_path = generated_root / "reports" / "result.txt"
+            attachment_path.parent.mkdir(parents=True)
+            attachment_path.write_text("old attachment", encoding="utf-8")
+            self._insert_gmail_fixture(data_root)
+            status, created = handle_action(
+                data_root,
+                {
+                    "action": "drafts.create",
+                    "to": [{"email": "customer@example.com"}],
+                    "subject": "Follow up",
+                    "body_text": "See attached.",
+                    "workspace_attachments": ["storage/generated/reports/result.txt"],
+                    "_generated_storage_root": str(generated_root),
+                },
+            )
+            self.assertEqual(status, 201, created)
+            attachment_path.write_text("fresh attachment", encoding="utf-8")
+
+            status, preview = handle_action(
+                data_root,
+                {
+                    "action": "drafts.send",
+                    "draft_id": created["draft"]["id"],
+                    "_generated_storage_root": str(generated_root),
+                },
+            )
+
+            expected_sha = hashlib.sha256(b"fresh attachment").hexdigest()
+            self.assertEqual(status, 200, preview)
+            self.assertEqual(preview["result"]["confirmation_preview"]["attachments"][0]["sha256"], expected_sha)
+            self.assertEqual(preview["result"]["draft"]["workspace_attachments"][0]["sha256"], expected_sha)
+            self.assertEqual(preview["result"]["confirmation_preview"]["attachments"][0]["size_bytes"], len("fresh attachment"))
+
     def test_mail_send_accepts_html_body_and_sends_multipart_gmail_message(self) -> None:
         sent_payloads: list[dict[str, object]] = []
 
@@ -1223,6 +1263,21 @@ class MailServiceTest(unittest.TestCase):
         class FakeProvider:
             def fetch_attachment(self, data_root: Path, attachment_id: str, **kwargs) -> dict[str, object]:
                 calls.append({"attachment_id": attachment_id, **kwargs})
+                sha256 = hashlib.sha256(content).hexdigest()
+                if sha256 in kwargs.get("skip_sha256s", set()):
+                    return {"status": "duplicate_sha256", "size_bytes": len(content), "sha256": sha256}
+                if kwargs.get("save_to_storage"):
+                    storage_ref = save_attachment_to_storage(
+                        data_root,
+                        attachment_id=attachment_id,
+                        filename="report.pdf",
+                        content_type="application/pdf",
+                        attachment_bytes=content,
+                        generated_storage_root=kwargs.get("generated_storage_root"),
+                        target_folder=kwargs.get("storage_target_folder"),
+                        mode=kwargs.get("storage_mode"),
+                    )
+                    return {"status": "saved", "size_bytes": len(content), "sha256": sha256, "storage_ref": storage_ref}
                 return {
                     "status": "fetched",
                     "size_bytes": len(content),
@@ -1279,7 +1334,8 @@ class MailServiceTest(unittest.TestCase):
             self.assertEqual(payload["saved_count"], 1)
             self.assertEqual(payload["skipped"][0]["reason"], "duplicate_sha256")
             self.assertEqual(len(calls), 2)
-            self.assertTrue(all(call["save_to_storage"] is False for call in calls))
+            self.assertTrue(all(call["save_to_storage"] is True for call in calls))
+            self.assertNotIn("data_base64url", calls[0])
             saved_files = sorted((Path(tmp) / "storage" / "generated" / "customer").iterdir())
             self.assertEqual([item.name for item in saved_files], ["report.pdf"])
 
@@ -1295,6 +1351,19 @@ class MailServiceTest(unittest.TestCase):
                 calls.append(attachment_id)
                 key = "att_1" if attachment_id.endswith("att_1") else "att_2"
                 content = contents[key]
+                sha256 = hashlib.sha256(content).hexdigest()
+                if kwargs.get("save_to_storage"):
+                    storage_ref = save_attachment_to_storage(
+                        data_root,
+                        attachment_id=attachment_id,
+                        filename="report.pdf",
+                        content_type="application/pdf",
+                        attachment_bytes=content,
+                        generated_storage_root=kwargs.get("generated_storage_root"),
+                        target_folder=kwargs.get("storage_target_folder"),
+                        mode=kwargs.get("storage_mode"),
+                    )
+                    return {"status": "saved", "size_bytes": len(content), "sha256": sha256, "storage_ref": storage_ref}
                 return {
                     "status": "fetched",
                     "size_bytes": len(content),

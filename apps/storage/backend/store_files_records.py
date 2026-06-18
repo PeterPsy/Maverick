@@ -32,6 +32,7 @@ from store_files_paths import (
     safe_folder_name,
     storage_write_lock,
     storage_root_for_role,
+    write_audit_payload,
     write_content_bytes,
 )
 from storage_reference_resolver import StorageReferenceResolver
@@ -71,6 +72,7 @@ def upload_file_payload(
     file_name: object,
     content_base64: object,
     mode: object = "create",
+    confirm: object = False,
     data_root: Path,
     uploaded_root: Path,
     generated_root: Path,
@@ -91,23 +93,25 @@ def upload_file_payload(
             requested_target=requested_target,
             mode=write_mode,
             operation="upload_file",
+            confirm=confirm,
         )
-        previous_sha256 = hash_file(target) if target.exists() and target.is_file() else ""
+        previous_path = requested_target if requested_target.exists() and requested_target.is_file() else None
+        previous_sha256 = hash_file(previous_path) if previous_path else ""
         enforce_storage_budget(uploaded_root=uploaded_root, generated_root=generated_root, target=target, payload_size=len(payload))
         atomic_write_bytes(target, payload)
         new_sha256 = content_hash(payload)
         record = upsert_file_record(data_root=data_root, role=role, root=root, path=target, sha256=new_sha256)
-    audit = {
-        "operation": "upload_file",
-        "requested_mode": write_mode,
-        "effective_mode": "create" if not previous_sha256 else "overwrite",
-        "requested_workspace_relative_path": f"storage/{role}/{requested_target.relative_to(root).as_posix()}",
-        "workspace_relative_path": record["workspace_relative_path"],
-        "previous_sha256": previous_sha256,
-        "sha256": new_sha256,
-        "bytes_written": len(payload),
-        "replaced": bool(previous_sha256 and target == requested_target),
-    }
+    audit = write_audit_payload(
+        operation="upload_file",
+        requested_mode=write_mode,
+        role=role,
+        root=root,
+        requested_target=requested_target,
+        target=target,
+        previous_sha256=previous_sha256,
+        sha256=new_sha256,
+        bytes_written=len(payload),
+    )
     return {"file": record, "bytes_written": len(payload), "audit": audit}
 
 

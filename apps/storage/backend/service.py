@@ -545,6 +545,7 @@ def handle_action(
             content_type=body.get("content_type"),
             size_bytes=_optional_nonnegative_int(body, "size_bytes") or 0,
             mode=body.get("mode") or "create",
+            confirm=body.get("confirm"),
             uploaded_root=uploaded_root,
             generated_root=generated_root,
         )
@@ -849,6 +850,7 @@ def handle_action(
             content=body.get("content"),
             content_base64=body.get("content_base64"),
             mode=body.get("mode"),
+            confirm=body.get("confirm"),
             uploaded_root=uploaded_root,
             generated_root=generated_root,
         )
@@ -859,6 +861,7 @@ def handle_action(
             file_name=body.get("file_name"),
             content_base64=body.get("content_base64"),
             mode=body.get("mode") or "create",
+            confirm=body.get("confirm"),
             data_root=data_root,
             uploaded_root=uploaded_root,
             generated_root=generated_root,

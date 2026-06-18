@@ -13,7 +13,7 @@ from core.runtime.runtime_session import RuntimeSessionGrantRecord
 from core.runtime.service import create_runtime_session
 from core.workspaces.service import ensure_workspace_membership
 from tests.unit.api.app_reference_test_support import AppReferenceApiTestSupport
-from tests.unit.api.test_inter_agent_api import _run_payload
+from tests.unit.api.test_inter_agent_api import _run_payload_without_snapshot
 
 
 class InterAgentApiAuthorizationTestCase(AppReferenceApiTestSupport, unittest.TestCase):
@@ -61,7 +61,7 @@ class InterAgentApiAuthorizationTestCase(AppReferenceApiTestSupport, unittest.Te
                 app,
                 path="/api/inter-agent/runs",
                 method="POST",
-                body={**_run_payload(run_id="run-api-auth"), "visibility_level": "detail"},
+                body={**_run_payload_without_snapshot(run_id="run-api-auth"), "visibility_level": "detail"},
                 cookie=admin_cookie,
             )
             run = state.inter_agent_store.get_run("run-api-auth", workspace_id="default")

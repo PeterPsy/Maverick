@@ -55,6 +55,12 @@ def _run_payload(*, run_id: str = "run-api-1") -> dict:
     }
 
 
+def _run_payload_without_snapshot(*, run_id: str = "run-api-1") -> dict:
+    payload = _run_payload(run_id=run_id)
+    payload["participants"][1].pop("agent_snapshot", None)
+    return payload
+
+
 class InterAgentApiTestCase(AppReferenceApiTestSupport, unittest.TestCase):
     def _bootstrap_state(self, repo_root):
         with patch.dict(
@@ -102,7 +108,7 @@ class InterAgentApiTestCase(AppReferenceApiTestSupport, unittest.TestCase):
                 app,
                 path="/api/inter-agent/runs",
                 method="POST",
-                body=_run_payload(),
+                body=_run_payload_without_snapshot(),
                 cookie=cookie,
             )
             spawn_status, spawn_payload, _headers = self._invoke(
@@ -196,9 +202,9 @@ class InterAgentApiTestCase(AppReferenceApiTestSupport, unittest.TestCase):
         self.assertEqual(spawn_status, 201)
         self.assertEqual(child_session["session_kind"], "inter_agent_participant")
         self.assertEqual(child_session["thread_visibility"], "hidden")
-        self.assertEqual(child_session["system_prompt"], "Research only.")
-        self.assertEqual(child_session["skill_ids"], ["storage"])
-        self.assertEqual(child_session["skill_catalog_app_id"], "skills")
+        self.assertEqual(child_session["system_prompt"], None)
+        self.assertEqual(child_session["skill_ids"], [])
+        self.assertEqual(child_session["skill_catalog_app_id"], None)
         self.assertEqual(child_session["source_app_id"], "chat")
         self.assertEqual(child_session["owner_user_id"], None)
         self.assertEqual(child_session["grants"], [])
@@ -256,7 +262,7 @@ class InterAgentApiTestCase(AppReferenceApiTestSupport, unittest.TestCase):
                 app,
                 path="/api/inter-agent/runs",
                 method="POST",
-                body=_run_payload(run_id="run-api-execute"),
+                body=_run_payload_without_snapshot(run_id="run-api-execute"),
                 cookie=cookie,
             )
             with patch("core.inter_agent.service.submit_runtime_turn", side_effect=fake_submit):
@@ -300,7 +306,7 @@ class InterAgentApiTestCase(AppReferenceApiTestSupport, unittest.TestCase):
                 app,
                 path="/api/inter-agent/runs",
                 method="POST",
-                body=_run_payload(run_id="run-api-controlled-forbidden"),
+                body=_run_payload_without_snapshot(run_id="run-api-controlled-forbidden"),
                 cookie=cookie,
             )
             execute_status, execute_payload, _headers = self._invoke(
@@ -327,7 +333,7 @@ class InterAgentApiTestCase(AppReferenceApiTestSupport, unittest.TestCase):
                 app,
                 path="/api/inter-agent/runs",
                 method="POST",
-                body=_run_payload(run_id="unsafe-child-run"),
+                body=_run_payload_without_snapshot(run_id="unsafe-child-run"),
                 cookie=cookie,
             )
             spawn_status, spawn_payload, _headers = self._invoke(
@@ -365,7 +371,7 @@ class InterAgentApiTestCase(AppReferenceApiTestSupport, unittest.TestCase):
                 app,
                 path="/api/inter-agent/runs",
                 method="POST",
-                body=_run_payload(run_id="hidden-root-run"),
+                body=_run_payload_without_snapshot(run_id="hidden-root-run"),
                 cookie=cookie,
             )
 
@@ -383,7 +389,7 @@ class InterAgentApiTestCase(AppReferenceApiTestSupport, unittest.TestCase):
                 app,
                 path="/api/inter-agent/runs",
                 method="POST",
-                body=_run_payload(run_id="cleanup-run"),
+                body=_run_payload_without_snapshot(run_id="cleanup-run"),
                 cookie=cookie,
             )
             spawn_status, _spawn_payload, _headers = self._invoke(

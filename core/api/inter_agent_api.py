@@ -11,6 +11,8 @@ from core.api.http import StartResponse, json_response, read_json_body
 from core.api.platform_state import PlatformState
 from core.api.runtime_cleanup import cleanup_runtime_session
 from core.api.session_api import RequestSession, require_session
+from core.apps.dependencies import resolve_app_dependencies
+from core.apps.errors import AppHostingError
 from core.authorization.errors import AuthorizationError
 from core.inter_agent.authorization import (
     authorize_inter_agent_approval_resolution,
@@ -50,10 +52,12 @@ from core.runtime.thread_catalog_events import (
     set_thread_availability,
 )
 from core.runtime.thread_title_jobs import schedule_runtime_thread_title_generation, thread_title_input_hash
+from core.skills.runtime_catalog import validate_runtime_skill_catalog_provider_app_id
 from core.workspaces.errors import WorkspaceMembershipError
 
 
-AGENT_SNAPSHOT_SOURCE_APP_IDS = {"chat", "agents"}
+CHAT_APP_ID = "chat"
+CHAT_AGENT_PROVIDER_ALIASES = ("agent-catalog", "agent-prompt-materializer")
 
 
 def handle_inter_agent_api(
@@ -122,7 +126,7 @@ def _handle_inter_agent_route(
 ) -> list[bytes]:
     if path == "/api/inter-agent/runs":
         if method == "POST":
-            return _create_run(state, context, service, body, start_response)
+            return _create_run(state, context, service, body, start_response, start_path=start_path)
         if method == "GET":
             runs = [
                 run_detail_payload(state.inter_agent_store, run)
@@ -254,6 +258,8 @@ def _create_run(
     service: InterAgentService,
     body: dict,
     start_response: StartResponse,
+    *,
+    start_path,
 ) -> list[bytes]:
     root_session_id = _text(body.get("root_runtime_session_id"))
     try:
@@ -276,12 +282,19 @@ def _create_run(
         )
     except AuthorizationError as error:
         return json_response(start_response, {"error": error.reason}, status="403 Forbidden")
+    allow_agent_snapshots = _root_session_allows_agent_snapshots(
+        state,
+        context,
+        root_session,
+        body,
+        start_path=start_path,
+    )
     spec = run_spec_from_payload(
         body,
         workspace_id=context.workspace_id,
         created_by_user_id=context.user.user_id,
         source_app_id=root_session.source_app_id or "chat",
-        allow_agent_snapshots=_root_session_allows_agent_snapshots(root_session),
+        allow_agent_snapshots=allow_agent_snapshots,
     )
     run = service.create_run(spec)
     return json_response(start_response, run_detail_payload(state.inter_agent_store, run), status="201 Created")
@@ -453,8 +466,127 @@ def _execute_run(
     return json_response(start_response, payload)
 
 
-def _root_session_allows_agent_snapshots(root_session) -> bool:
-    return (root_session.source_app_id or "chat") in AGENT_SNAPSHOT_SOURCE_APP_IDS
+def _root_session_allows_agent_snapshots(
+    state: PlatformState,
+    context: RequestSession,
+    root_session,
+    body: dict,
+    *,
+    start_path,
+) -> bool:
+    snapshots = _agent_snapshot_payloads(body)
+    if not snapshots:
+        return False
+    source_app_id = _text(root_session.source_app_id)
+    provider_ids = _chat_agent_snapshot_provider_ids(state, context, start_path=start_path)
+    if not source_app_id or source_app_id not in provider_ids:
+        raise InterAgentValidationError("agent_snapshot requires Chat's selected agent provider.")
+    for snapshot in snapshots:
+        _validate_agent_snapshot_skill_catalog(state, context, snapshot, start_path=start_path)
+    return True
+
+
+def _agent_snapshot_payloads(body: dict) -> list[dict]:
+    participants = body.get("participants") if isinstance(body.get("participants"), list) else []
+    snapshots: list[dict] = []
+    for participant in participants:
+        if not isinstance(participant, dict):
+            continue
+        snapshot = participant.get("agent_snapshot")
+        if isinstance(snapshot, dict):
+            snapshots.append(snapshot)
+    return snapshots
+
+
+def _chat_agent_snapshot_provider_ids(
+    state: PlatformState,
+    context: RequestSession,
+    *,
+    start_path,
+) -> set[str]:
+    try:
+        dependencies = resolve_app_dependencies(
+            state.app_store,
+            workspace_id=context.workspace_id,
+            consumer_app_id=CHAT_APP_ID,
+            user=context.user,
+            workspace_store=state.workspace_store,
+            start_path=start_path,
+        )
+    except AppHostingError as error:
+        raise InterAgentValidationError(str(error)) from error
+    dependency_by_alias = {
+        str(item.get("alias") or ""): item
+        for item in dependencies.get("dependencies", [])
+        if isinstance(item, dict)
+    }
+    selected_by_alias = [
+        _dependency_selected_or_automatic_backend_provider_ids(dependency_by_alias.get(alias))
+        for alias in CHAT_AGENT_PROVIDER_ALIASES
+    ]
+    if len(selected_by_alias) != len(CHAT_AGENT_PROVIDER_ALIASES) or any(not ids for ids in selected_by_alias):
+        return set()
+    shared = set(selected_by_alias[0])
+    for ids in selected_by_alias[1:]:
+        shared.intersection_update(ids)
+    return shared
+
+
+def _dependency_selected_or_automatic_backend_provider_ids(dependency: dict | None) -> list[str]:
+    if dependency is None:
+        return []
+    backend_candidate_ids = _dependency_backend_candidate_ids(dependency)
+    selected = [
+        app_id
+        for app_id in _string_items(dependency.get("selected_provider_app_ids"))
+        if app_id in backend_candidate_ids
+    ]
+    if selected:
+        return selected
+    if (
+        dependency.get("status") == "optional_unset"
+        and dependency.get("cardinality") == "one"
+        and not _string_items(dependency.get("stale_provider_app_ids"))
+        and not _text(dependency.get("blocked_reason"))
+    ):
+        return backend_candidate_ids
+    return []
+
+
+def _dependency_backend_candidate_ids(dependency: dict) -> list[str]:
+    candidates = dependency.get("candidates") if isinstance(dependency.get("candidates"), list) else []
+    ids: list[str] = []
+    for candidate in candidates:
+        if not isinstance(candidate, dict):
+            continue
+        surfaces = candidate.get("surfaces") if isinstance(candidate.get("surfaces"), list) else []
+        app_id = _text(candidate.get("app_id"))
+        if app_id and "backend" in {str(surface) for surface in surfaces}:
+            ids.append(app_id)
+    return ids
+
+
+def _validate_agent_snapshot_skill_catalog(
+    state: PlatformState,
+    context: RequestSession,
+    snapshot: dict,
+    *,
+    start_path,
+) -> None:
+    skill_catalog_app_id = _text(snapshot.get("skill_catalog_app_id"))
+    if not skill_catalog_app_id:
+        raise InterAgentValidationError("agent_snapshot.skill_catalog_app_id is required.")
+    try:
+        validate_runtime_skill_catalog_provider_app_id(
+            state.app_store,
+            workspace_id=context.workspace_id,
+            provider_app_id=skill_catalog_app_id,
+            user=context.user,
+            workspace_store=state.workspace_store,
+            start_path=start_path,
+        )
+    except AppHostingError as error:
+        raise InterAgentValidationError(str(error)) from error
 
 
 def _start_inter_agent_execution_worker(
@@ -815,6 +947,12 @@ def _query_limit(query: dict[str, list[str]]) -> int:
 
 def _text(value) -> str:
     return str(value or "").strip()
+
+
+def _string_items(value) -> list[str]:
+    if not isinstance(value, list):
+        return []
+    return [_text(item) for item in value if _text(item)]
 
 
 def _bool(value, *, default: bool) -> bool:

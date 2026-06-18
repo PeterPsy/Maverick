@@ -7,6 +7,13 @@ from unittest.mock import patch
 
 from core.api.platform_host import PlatformHost
 from core.api.platform_state import bootstrap_platform_state
+from core.apps.contract_builders import (
+    build_app_contract,
+    build_parsed_app_contract,
+    build_provided_interface_declaration,
+    build_required_interface_declaration,
+)
+from core.apps.contracts import write_app_contract_file
 from core.identity.service import create_user
 from core.inter_agent.models import ApprovalRequestRecord
 from core.runtime.runtime_events import RuntimeEventRecord
@@ -16,6 +23,12 @@ from core.runtime.service import create_runtime_session
 from core.workspaces.service import ensure_workspace_membership
 from tests.unit.api.app_reference_test_support import AppReferenceApiTestSupport
 from tests.unit.api.test_inter_agent_api import _run_payload
+
+
+def _run_payload_without_snapshot(*, run_id: str) -> dict:
+    payload = _run_payload(run_id=run_id)
+    payload["participants"][1].pop("agent_snapshot", None)
+    return payload
 
 
 class InterAgentApiF4TestCase(AppReferenceApiTestSupport, unittest.TestCase):
@@ -30,7 +43,91 @@ class InterAgentApiF4TestCase(AppReferenceApiTestSupport, unittest.TestCase):
         ):
             return bootstrap_platform_state(start_path=repo_root)
 
-    def _create_root_session(self, state, repo_root, *, source_app_id: str = "chat") -> None:
+    def _write_snapshot_dependency_apps(self, repo_root, *, agent_provider_app_id: str = "agents") -> None:
+        chat_root = repo_root / "apps" / "chat"
+        agents_root = repo_root / "apps" / agent_provider_app_id
+        skills_root = repo_root / "apps" / "skills"
+        chat_root.mkdir(parents=True, exist_ok=True)
+        agents_root.mkdir(parents=True, exist_ok=True)
+        skills_root.mkdir(parents=True, exist_ok=True)
+        write_app_contract_file(
+            chat_root,
+            build_parsed_app_contract(
+                app_id="chat",
+                name="Chat",
+                version="0.2.0",
+                description="Chat test app.",
+                publisher="maverick",
+                contract=build_app_contract(
+                    requires=[
+                        build_required_interface_declaration(
+                            alias="agent-catalog",
+                            interface="agent.catalog",
+                            required=False,
+                            description="Agent catalog.",
+                        ),
+                        build_required_interface_declaration(
+                            alias="agent-prompt-materializer",
+                            interface="agent.prompt-materializer",
+                            required=False,
+                            description="Agent prompt materializer.",
+                        ),
+                    ]
+                ),
+            ),
+        )
+        write_app_contract_file(
+            agents_root,
+            build_parsed_app_contract(
+                app_id=agent_provider_app_id,
+                name="Agents",
+                version="0.1.0",
+                description="Agents test app.",
+                publisher="maverick",
+                contract=build_app_contract(
+                    provides=[
+                        build_provided_interface_declaration(
+                            interface="agent.catalog",
+                            description="Agent catalog.",
+                            surfaces=["backend"],
+                        ),
+                        build_provided_interface_declaration(
+                            interface="agent.prompt-materializer",
+                            description="Agent prompt materializer.",
+                            surfaces=["backend"],
+                        ),
+                    ]
+                ),
+            ),
+        )
+        write_app_contract_file(
+            skills_root,
+            build_parsed_app_contract(
+                app_id="skills",
+                name="Skills",
+                version="0.1.0",
+                description="Skills test app.",
+                publisher="maverick",
+                contract=build_app_contract(
+                    provides=[
+                        build_provided_interface_declaration(
+                            interface="skill.catalog",
+                            description="Skill catalog.",
+                            surfaces=["backend"],
+                        )
+                    ]
+                ),
+            ),
+        )
+
+    def _create_root_session(
+        self,
+        state,
+        repo_root,
+        *,
+        source_app_id: str = "chat",
+        skill_catalog_app_id: str | None = None,
+    ) -> None:
         create_runtime_session(
             state.runtime_store,
             session_id="root-session",
@@ -39,6 +136,7 @@ class InterAgentApiF4TestCase(AppReferenceApiTestSupport, unittest.TestCase):
             source_app_id=source_app_id,
             system_prompt="Parent prompt must not leak.",
             skill_ids=["parent-skill"],
+            skill_catalog_app_id=skill_catalog_app_id,
             owner_user_id="parent-owner",
             grants=[
                 RuntimeSessionGrantRecord(
@@ -92,7 +190,7 @@ class InterAgentApiF4TestCase(AppReferenceApiTestSupport, unittest.TestCase):
                 app,
                 path="/api/inter-agent/runs",
                 method="POST",
-                body=_run_payload(run_id="run-root-projection"),
+                body=_run_payload_without_snapshot(run_id="run-root-projection"),
                 cookie=cookie,
             )
             with (
@@ -135,9 +233,10 @@ class InterAgentApiF4TestCase(AppReferenceApiTestSupport, unittest.TestCase):
         self.assertEqual(root_thread.availability, "free")
         self.assertEqual(root_thread.last_completed_turn_id, root_turn.turn_id)
 
-    def test_create_chat_run_preserves_agent_snapshot_for_child_participant(self) -> None:
+    def test_create_chat_root_rejects_untrusted_agent_snapshot(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             repo_root = self._repo_root(temp_dir)
+            self._write_snapshot_dependency_apps(repo_root)
             state = self._bootstrap_state(repo_root)
             self._create_root_session(state, repo_root)
             app = PlatformHost(state, start_path=repo_root)
@@ -150,18 +249,17 @@ class InterAgentApiF4TestCase(AppReferenceApiTestSupport, unittest.TestCase):
                 body=_run_payload(run_id="run-agent-snapshot"),
                 cookie=cookie,
             )
-            participant = next(item for item in create_payload["participants"] if item["participant_id"] == "researcher")
 
-        self.assertEqual(create_status, 201)
-        self.assertEqual(participant["agent_snapshot"]["system_prompt"], "Research only.")
-        self.assertEqual(participant["skill_ids"], ["storage"])
-        self.assertEqual(participant["agent_snapshot"]["skill_catalog_app_id"], "skills")
+        self.assertEqual(create_status, 400)
+        self.assertEqual(create_payload["error"], "inter_agent_validation_failed")
+        self.assertIn("selected agent provider", create_payload["detail"])
 
     def test_create_agents_root_run_preserves_agent_snapshot_for_child_participant(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             repo_root = self._repo_root(temp_dir)
+            self._write_snapshot_dependency_apps(repo_root)
             state = self._bootstrap_state(repo_root)
-            self._create_root_session(state, repo_root, source_app_id="agents")
+            self._create_root_session(state, repo_root, source_app_id="agents", skill_catalog_app_id="skills")
             app = PlatformHost(state, start_path=repo_root)
             cookie = self._login(app)
 
@@ -180,6 +278,52 @@ class InterAgentApiF4TestCase(AppReferenceApiTestSupport, unittest.TestCase):
         self.assertEqual(participant["skill_ids"], ["storage"])
         self.assertEqual(participant["agent_snapshot"]["skill_catalog_app_id"], "skills")
 
+    def test_create_custom_agent_provider_root_preserves_agent_snapshot_for_child_participant(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            repo_root = self._repo_root(temp_dir)
+            self._write_snapshot_dependency_apps(repo_root, agent_provider_app_id="custom-agents")
+            state = self._bootstrap_state(repo_root)
+            self._create_root_session(state, repo_root, source_app_id="custom-agents", skill_catalog_app_id="skills")
+            app = PlatformHost(state, start_path=repo_root)
+            cookie = self._login(app)
+
+            create_status, create_payload, _headers = self._invoke(
+                app,
+                path="/api/inter-agent/runs",
+                method="POST",
+                body=_run_payload(run_id="run-custom-provider-snapshot"),
+                cookie=cookie,
+            )
+            participant = next(item for item in create_payload["participants"] if item["participant_id"] == "researcher")
+
+        self.assertEqual(create_status, 201)
+        self.assertEqual(create_payload["run"]["source_app_id"], "custom-agents")
+        self.assertEqual(participant["agent_snapshot"]["system_prompt"], "Research only.")
+        self.assertEqual(participant["skill_ids"], ["storage"])
+
+    def test_create_agents_root_run_rejects_invalid_snapshot_skill_catalog(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            repo_root = self._repo_root(temp_dir)
+            self._write_snapshot_dependency_apps(repo_root)
+            state = self._bootstrap_state(repo_root)
+            self._create_root_session(state, repo_root, source_app_id="agents", skill_catalog_app_id="skills")
+            app = PlatformHost(state, start_path=repo_root)
+            cookie = self._login(app)
+            payload = _run_payload(run_id="run-invalid-skill-catalog")
+            payload["participants"][1]["agent_snapshot"]["skill_catalog_app_id"] = "missing-skills"
+
+            create_status, create_payload, _headers = self._invoke(
+                app,
+                path="/api/inter-agent/runs",
+                method="POST",
+                body=payload,
+                cookie=cookie,
+            )
+
+        self.assertEqual(create_status, 400)
+        self.assertEqual(create_payload["error"], "inter_agent_validation_failed")
+        self.assertIn("skill.catalog", create_payload["detail"])
+
     def test_execute_async_returns_queued_root_turn_without_inline_worker(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             repo_root = self._repo_root(temp_dir)
@@ -192,7 +336,7 @@ class InterAgentApiF4TestCase(AppReferenceApiTestSupport, unittest.TestCase):
                 app,
                 path="/api/inter-agent/runs",
                 method="POST",
-                body=_run_payload(run_id="run-async-execute"),
+                body=_run_payload_without_snapshot(run_id="run-async-execute"),
                 cookie=cookie,
             )
             with (
@@ -236,7 +380,7 @@ class InterAgentApiF4TestCase(AppReferenceApiTestSupport, unittest.TestCase):
                 app,
                 path="/api/inter-agent/runs",
                 method="POST",
-                body=_run_payload(run_id="run-approval-api"),
+                body=_run_payload_without_snapshot(run_id="run-approval-api"),
                 cookie=cookie,
             )
             state.inter_agent_store.save_approval(
@@ -309,7 +453,7 @@ class InterAgentApiF4TestCase(AppReferenceApiTestSupport, unittest.TestCase):
                 app,
                 path="/api/inter-agent/runs",
                 method="POST",
-                body=_run_payload(run_id="run-approval-policy"),
+                body=_run_payload_without_snapshot(run_id="run-approval-policy"),
                 cookie=admin_cookie,
             )
             state.inter_agent_store.save_approval(

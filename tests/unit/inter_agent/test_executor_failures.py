@@ -6,27 +6,18 @@ from core.inter_agent.errors import InterAgentOperationError
 from core.inter_agent.executor import execute_inter_agent_run
 from core.inter_agent.models import BudgetPolicySpec, EdgeSpec, InterAgentRunSpec
 from core.inter_agent.service import InterAgentService
-from core.inter_agent.store import build_inter_agent_document_store
-from tests.support.repo import make_temp_repo_root
-from tests.unit.inter_agent.test_executor import (
+from tests.unit.inter_agent.executor_test_support import (
     NOW,
-    _participant,
-    _root_session,
-    _run_spec,
-    _runtime_state,
-    _runtime_store,
-    _state,
+    build_executor_stores,
+    participant_spec as _participant,
+    run_spec as _run_spec,
+    runtime_state_namespace as _state,
 )
 
 
 class InterAgentExecutorFailureTest(unittest.TestCase):
     def _stores(self):
-        repo_root = make_temp_repo_root(self)
-        inter_agent_store = build_inter_agent_document_store(start_path=repo_root)
-        runtime_store = _runtime_store()
-        runtime_store.save_session(_root_session(repo_root))
-        runtime_store.save_state(_runtime_state())
-        return repo_root, inter_agent_store, runtime_store
+        return build_executor_stores(self)
 
     def test_controlled_budget_failure_releases_running_reservation(self) -> None:
         _repo_root, store, runtime_store = self._stores()

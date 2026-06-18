@@ -682,6 +682,18 @@ def _execute_runtime_participant(
             clock=clock,
         )
         raise
+    latest_run = service.store.get_run(run.run_id, workspace_id=run.workspace_id)
+    latest_participant = service.store.get_participant(participant.participant_id, workspace_id=run.workspace_id, run_id=run.run_id)
+    runtime_session_id = latest_participant.runtime_session_id or session.session_id
+    if latest_run.status == "cancelled" or latest_participant.status == "cancelled" or turn.status == "cancelled":
+        return ParticipantExecutionResult(
+            participant_id=participant.participant_id,
+            label=participant.label,
+            status="cancelled",
+            error=turn.failure_reason,
+            runtime_session_id=runtime_session_id,
+            runtime_turn_id=turn.turn_id,
+        )
     output_text = _runtime_output_text(events)
     artifact_refs = _runtime_artifact_refs(events)
     status = "completed" if turn.status == "completed" else "failed"
@@ -701,7 +713,7 @@ def _execute_runtime_participant(
     _finish_participant(
         service,
         run,
-        participant=service.store.get_participant(participant.participant_id, workspace_id=run.workspace_id, run_id=run.run_id),
+        participant=latest_participant,
         status=status,
         task_id=task_id,
         summary=summary,

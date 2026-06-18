@@ -1,149 +1,25 @@
 from __future__ import annotations
 
-from datetime import UTC, datetime
-from decimal import Decimal
-from pathlib import Path
-from types import SimpleNamespace
 from unittest.mock import patch
 import unittest
 
 from core.inter_agent.errors import InterAgentOperationError
 from core.inter_agent.executor import execute_inter_agent_run
-from core.inter_agent.models import BudgetPolicySpec, InterAgentRunSpec, ParticipantSpec
 from core.inter_agent.service import InterAgentService
-from core.inter_agent.store import build_inter_agent_document_store
 from core.runtime.runtime_events import RuntimeEventRecord
-from core.runtime.runtime_session import RuntimeSessionRecord
-from core.runtime.runtime_state import RuntimeStateRecord
 from core.runtime.runtime_turns import RuntimeTurnRecord
-from core.runtime.store import RuntimeCollections, RuntimeDocumentStore
-from tests.support.collections import FakeCollection
-from tests.support.repo import make_temp_repo_root
-
-
-NOW = datetime(2026, 6, 17, 12, 0, tzinfo=UTC)
-
-
-def _participant(
-    participant_id: str,
-    label: str,
-    *,
-    execution_mode: str = "embedded_executor",
-) -> ParticipantSpec:
-    return ParticipantSpec(
-        participant_id=participant_id,
-        kind="agent",
-        execution_mode=execution_mode,  # type: ignore[arg-type]
-        label=label,
-        agent_type_id=f"{participant_id}-agent",
-    )
-
-
-def _run_spec(
-    *,
-    mode: str = "manager_tools",
-    run_id: str = "run-f3",
-    participants: list[ParticipantSpec] | None = None,
-    aggregator_participant_id: str | None = None,
-    merge_policy: str | None = None,
-    edges: list[EdgeSpec] | None = None,
-) -> InterAgentRunSpec:
-    return InterAgentRunSpec(
-        workspace_id="default",
-        thread_id="root-session",
-        root_runtime_session_id="root-session",
-        source_app_id="chat",
-        mode=mode,  # type: ignore[arg-type]
-        created_by_user_id="user-1",
-        participants=[
-            ParticipantSpec(
-                participant_id="orchestrator",
-                kind="orchestrator",
-                execution_mode="root_orchestrator",
-                label="Orchestrator",
-            ),
-            *(participants or [_participant("researcher", "Researcher")]),
-        ],
-        budget=BudgetPolicySpec(
-            max_participants=5,
-            max_concurrent_participants=3,
-            max_handoffs=1,
-            max_total_turns=8,
-            max_turns_per_participant=4,
-            max_tool_calls=2,
-            max_estimated_cost=Decimal("2.00"),
-        ),
-        aggregator_participant_id=aggregator_participant_id,
-        merge_policy=merge_policy,
-        edges=edges or [],
-        run_id=run_id,
-        idempotency_key=run_id,
-    )
-
-
-def _runtime_store() -> RuntimeDocumentStore:
-    return RuntimeDocumentStore(
-        RuntimeCollections(
-            sessions=FakeCollection(),
-            turns=FakeCollection(),
-            events=FakeCollection(),
-            processes=FakeCollection(),
-            states=FakeCollection(),
-            threads=FakeCollection(),
-        )
-    )
-
-
-def _state(runtime_store: RuntimeDocumentStore) -> SimpleNamespace:
-    return SimpleNamespace(runtime_store=runtime_store, provider_store=object(), runtime_event_bus=None)
-
-
-def _root_session(repo_root: Path) -> RuntimeSessionRecord:
-    workspace_root = repo_root / "workspaces" / "default"
-    runtime_root = workspace_root / "runtime" / "sessions" / "root-session"
-    runtime_root.mkdir(parents=True, exist_ok=True)
-    return RuntimeSessionRecord(
-        session_id="root-session",
-        workspace_id="default",
-        agent_id="chat",
-        status="running",
-        requested_mode=None,
-        effective_mode="sandbox",
-        workspace_root=str(workspace_root),
-        workdir=str(workspace_root),
-        runtime_root=str(runtime_root),
-        started_at=NOW,
-        updated_at=NOW,
-        ended_at=None,
-        last_progress_at=NOW,
-        source_app_id="chat",
-        owner_user_id="user-1",
-    )
-
-
-def _runtime_state() -> RuntimeStateRecord:
-    return RuntimeStateRecord(
-        session_id="root-session",
-        workspace_id="default",
-        current_turn_id=None,
-        session_status="running",
-        turn_status=None,
-        last_progress_at=NOW,
-        watchdog_deadline_at=None,
-        forced_stop_reason=None,
-        last_error_detail=None,
-        updated_at=NOW,
-    )
+from tests.unit.inter_agent.executor_test_support import (
+    NOW,
+    build_executor_stores,
+    participant_spec as _participant,
+    run_spec as _run_spec,
+    runtime_state_namespace as _state,
+)
 
 
 class InterAgentExecutorTest(unittest.TestCase):
     def _stores(self):
-        repo_root = make_temp_repo_root(self)
-        inter_agent_store = build_inter_agent_document_store(start_path=repo_root)
-        runtime_store = _runtime_store()
-        runtime_store.save_session(_root_session(repo_root))
-        runtime_store.save_state(_runtime_state())
-        return repo_root, inter_agent_store, runtime_store
+        return build_executor_stores(self)
 
     def test_manager_tools_controlled_run_projects_root_summary_and_graph_events(self) -> None:
         _repo_root, store, runtime_store = self._stores()

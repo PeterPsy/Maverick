@@ -7,6 +7,7 @@ import binascii
 from contextlib import contextmanager
 from datetime import UTC, datetime
 import fcntl
+import hashlib
 import mimetypes
 import os
 from pathlib import Path
@@ -36,6 +37,7 @@ MAX_CUSTOM_VIEW_FILES = 500
 MAX_TEXT_PREVIEW_CACHE_ENTRIES = 200
 MAX_MARKDOWN_EDIT_BYTES = 2 * 1024 * 1024
 MAX_WRITE_BYTES = MAX_INLINE_WRITE_BYTES
+WRITE_MODES = {"create", "overwrite", "upsert", "versioned"}
 
 
 def safe_folder_relative_path(raw_path: object) -> Path:
@@ -89,6 +91,51 @@ def safe_file_name(raw_name: str) -> str:
     if "/" in value or "\\" in value or "\x00" in value:
         raise StorageValidationError("new_name must be a file name, not a path.")
     return value
+
+
+def normalize_write_mode(raw_mode: object, *, operation: str = "file.content.write") -> str:
+    mode = str(raw_mode or "overwrite").strip().lower()
+    if mode not in WRITE_MODES:
+        raise StorageValidationError(
+            "mode must be create, overwrite, upsert, or versioned.",
+            operation=operation,
+            allowed_values={"mode": sorted(WRITE_MODES)},
+        )
+    return mode
+
+
+def prepare_write_target(*, root: Path, requested_target: Path, mode: str, operation: str) -> Path:
+    target = requested_target.resolve()
+    if target == root or root not in target.parents:
+        raise StorageValidationError("File path escapes the selected storage root.", operation=operation)
+    if target.exists() and not target.is_file():
+        raise StorageValidationError("Target path is not a file.", operation=operation)
+    if mode == "create" and target.exists():
+        raise StorageValidationError("File already exists.", operation=operation)
+    if mode == "overwrite" and not target.exists():
+        raise StorageValidationError("File does not exist.", operation=operation)
+    if mode == "versioned" and target.exists():
+        return versioned_storage_path(target)
+    return target
+
+
+def versioned_storage_path(target: Path) -> Path:
+    suffix = target.suffix
+    stem = target.name[: -len(suffix)] if suffix else target.name
+    parent = target.parent
+    for index in range(2, 10_000):
+        candidate = parent / f"{stem}.v{index}{suffix}"
+        if not candidate.exists():
+            return candidate
+    raise StorageValidationError("Could not allocate a versioned file name.")
+
+
+def hash_file(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as handle:
+        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
 
 
 
@@ -224,7 +271,18 @@ def _storage_catalog(*, uploaded_root: Path, generated_root: Path) -> StorageCat
 
 
 
-def read_file_payload(*, role: str, relative_path: str, data_root: Path, uploaded_root: Path, generated_root: Path, max_bytes: int) -> dict:
+def read_file_payload(
+    *,
+    role: str,
+    relative_path: str,
+    data_root: Path,
+    uploaded_root: Path,
+    generated_root: Path,
+    max_bytes: int,
+    return_handle: bool = False,
+    include_content: bool = True,
+    include_local_path: bool = False,
+) -> dict:
     if max_bytes <= 0 or max_bytes > MAX_READ_BYTES:
         raise StorageValidationError(f"max_bytes must be between 1 and {MAX_READ_BYTES}.")
     path = resolve_storage_file(
@@ -233,14 +291,26 @@ def read_file_payload(*, role: str, relative_path: str, data_root: Path, uploade
         uploaded_root=uploaded_root,
         generated_root=generated_root,
     )
-    if path.stat().st_size > max_bytes:
+    if include_content and path.stat().st_size > max_bytes:
         raise StorageValidationError("File is too large to read through Storage preview.")
     root = storage_root_for_role(role=role, uploaded_root=uploaded_root, generated_root=generated_root).resolve()
     record = upsert_file_record(data_root=data_root, role=role, root=root, path=path.resolve())
-    return {
-        "file": record,
-        "content_base64": b64encode(path.read_bytes()).decode("ascii"),
-    }
+    payload = {"file": record}
+    if include_content:
+        payload["content_base64"] = b64encode(path.read_bytes()).decode("ascii")
+    if return_handle:
+        handle = {
+            "kind": "workspace_storage_file",
+            "role": role,
+            "relative_path": record["relative_path"],
+            "workspace_relative_path": record["workspace_relative_path"],
+            "size_bytes": record["size_bytes"],
+            "sha256": record.get("sha256") or hash_file(path),
+        }
+        if include_local_path:
+            handle["local_path"] = str(path)
+        payload["file_handle"] = handle
+    return payload
 
 
 
@@ -256,37 +326,41 @@ def write_file_payload(
     generated_root: Path,
 ) -> dict:
     payload = write_content_bytes(content=content, content_base64=content_base64)
-    write_mode = str(mode or "overwrite").strip().lower()
-    if write_mode not in {"create", "overwrite", "upsert"}:
-        raise StorageValidationError("mode must be create, overwrite, or upsert.")
+    write_mode = normalize_write_mode(mode)
     root = storage_root_for_role(role=role, uploaded_root=uploaded_root, generated_root=generated_root).resolve()
-    target = (root / safe_relative_path(relative_path)).resolve()
-    if target == root or root not in target.parents:
-        raise StorageValidationError("File path escapes the selected storage root.")
-    if target.exists() and not target.is_file():
-        raise StorageValidationError("Target path is not a file.")
-    if write_mode == "create" and target.exists():
-        raise StorageValidationError("File already exists.")
-    if write_mode == "overwrite" and not target.exists():
-        raise StorageValidationError("File does not exist.")
+    requested_target = (root / safe_relative_path(relative_path)).resolve()
     with storage_write_lock(data_root):
+        target = prepare_write_target(
+            root=root,
+            requested_target=requested_target,
+            mode=write_mode,
+            operation="file.content.write",
+        )
+        previous_path = requested_target if requested_target.exists() and requested_target.is_file() else None
+        previous_sha256 = hash_file(previous_path) if previous_path and target == requested_target else ""
         target.parent.mkdir(parents=True, exist_ok=True)
-        if target.exists() and not target.is_file():
-            raise StorageValidationError("Target path is not a file.")
-        if write_mode == "create" and target.exists():
-            raise StorageValidationError("File already exists.")
-        if write_mode == "overwrite" and not target.exists():
-            raise StorageValidationError("File does not exist.")
         enforce_storage_budget(uploaded_root=uploaded_root, generated_root=generated_root, target=target, payload_size=len(payload))
         atomic_write_bytes(target, payload)
+        new_sha256 = content_hash(payload)
         record = upsert_file_record(
             data_root=data_root,
             role=role,
             root=root,
             path=target,
-            sha256=content_hash(payload),
+            sha256=new_sha256,
         )
-    return {"file": record, "bytes_written": len(payload)}
+    audit = {
+        "operation": "file.content.write",
+        "requested_mode": write_mode,
+        "effective_mode": "create" if not previous_sha256 else "overwrite",
+        "requested_workspace_relative_path": f"storage/{role}/{requested_target.relative_to(root).as_posix()}",
+        "workspace_relative_path": record["workspace_relative_path"],
+        "previous_sha256": previous_sha256,
+        "sha256": new_sha256,
+        "bytes_written": len(payload),
+        "replaced": bool(previous_sha256 and target == requested_target),
+    }
+    return {"file": record, "bytes_written": len(payload), "audit": audit}
 
 
 def write_content_bytes(*, content: object, content_base64: object) -> bytes:

@@ -14,6 +14,7 @@
               "extract_text",
               "patch_pdf_text",
               "modify_uploaded_document",
+              "spreadsheet.transform",
               "convert_to_markdown",
               "list_templates",
               "list_outputs",
@@ -34,7 +35,26 @@
           },
           "workspace_relative_path": {
             "type": "string",
-            "description": "Input file under storage/uploaded/ or storage/generated/ for extract_text, PDF editing, or convert_to_markdown."
+            "description": "Input file under storage/uploaded/ or storage/generated/ for extract_text, PDF editing, spreadsheet transforms, or convert_to_markdown."
+          },
+          "source_files": {
+            "type": "array",
+            "description": "Spreadsheet source files for spreadsheet.transform. Entries may be workspace paths or {alias,path} objects.",
+            "items": {
+              "oneOf": [
+                {"type": "string"},
+                {"type": "object"}
+              ]
+            }
+          },
+          "target_file": {
+            "type": "string",
+            "description": "Generated Storage target path for spreadsheet.transform."
+          },
+          "operations": {
+            "type": "array",
+            "description": "Spreadsheet transform operations such as lookup_and_copy, write_cells, or find_values.",
+            "items": {"type": "object"}
           },
           "patches": {
             "type": "array",
@@ -126,7 +146,7 @@
       }
     },
     "document_generator_extract_text": {
-      "description": "Extract bounded plain text from one workspace PDF, DOCX, PPTX, or XLSX under storage/uploaded/ or storage/generated/.",
+      "description": "Extract bounded plain text from one workspace PDF, DOCX, PPTX, XLSX, or ODT under storage/uploaded/ or storage/generated/.",
       "input_schema": {
         "type": "object",
         "properties": {
@@ -151,6 +171,47 @@
           "text": {"type": "string"},
           "text_length": {"type": "integer"},
           "truncated": {"type": "boolean"}
+        }
+      }
+    },
+    "document_generator_spreadsheet_transform": {
+      "description": "Apply deterministic spreadsheet transforms to XLSX, CSV, or TSV files and return a modified Storage file plus structured audit/report metadata.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "source_files": {
+            "type": "array",
+            "items": {
+              "oneOf": [
+                {"type": "string"},
+                {"type": "object"}
+              ]
+            }
+          },
+          "base_file": {"type": "string"},
+          "target_file": {"type": "string", "pattern": "^storage/generated/.+"},
+          "operations": {
+            "type": "array",
+            "minItems": 1,
+            "items": {"type": "object"}
+          },
+          "title": {"type": "string"}
+        },
+        "required": ["target_file", "operations"],
+        "additionalProperties": false
+      },
+      "output_schema": {
+        "type": "object",
+        "properties": {
+          "status_code": {"type": "integer"},
+          "status": {"type": "string"},
+          "document": {"type": "object"},
+          "workspace_relative_path": {"type": "string"},
+          "sha256_before": {"type": "string"},
+          "sha256_after": {"type": "string"},
+          "audit": {"type": "object"},
+          "report_path": {"type": "string"},
+          "app_events": {"type": "array"}
         }
       }
     },

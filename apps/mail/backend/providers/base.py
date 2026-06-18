@@ -63,6 +63,8 @@ class MailProvider(Protocol):
         draft_id: str,
         confirm: bool = False,
         app_secrets: dict[str, object] | None = None,
+        uploaded_storage_root: Path | None = None,
+        generated_storage_root: Path | None = None,
     ) -> dict[str, object]:
         """Preview or send one draft."""
         ...
@@ -85,6 +87,8 @@ class MailProvider(Protocol):
         max_bytes: int | None = None,
         save_to_storage: bool = False,
         generated_storage_root: Path | None = None,
+        storage_target_folder: object = None,
+        storage_mode: object = "versioned",
     ) -> dict[str, object]:
         """Fetch an attachment or return a clear provider limitation."""
         ...

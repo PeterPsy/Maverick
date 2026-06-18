@@ -186,7 +186,16 @@
           "reply_to": { "type": "array", "items": { "type": "object" } },
           "subject": { "type": "string" },
           "body_text": { "type": "string" },
-          "body_html": { "type": "string" }
+          "body_html": { "type": "string" },
+          "workspace_attachments": {
+            "type": "array",
+            "items": {
+              "oneOf": [
+                { "type": "string" },
+                { "type": "object" }
+              ]
+            }
+          }
         },
         "required": ["subject", "body_text"],
         "anyOf": [
@@ -211,7 +220,16 @@
           "reply_to": { "type": "array", "items": { "type": "object" } },
           "subject": { "type": "string" },
           "body_text": { "type": "string" },
-          "body_html": { "type": "string" }
+          "body_html": { "type": "string" },
+          "workspace_attachments": {
+            "type": "array",
+            "items": {
+              "oneOf": [
+                { "type": "string" },
+                { "type": "object" }
+              ]
+            }
+          }
         },
         "required": ["draft_id"],
         "additionalProperties": false
@@ -264,6 +282,15 @@
           "subject": { "type": "string" },
           "body_text": { "type": "string" },
           "body_html": { "type": "string" },
+          "workspace_attachments": {
+            "type": "array",
+            "items": {
+              "oneOf": [
+                { "type": "string" },
+                { "type": "object" }
+              ]
+            }
+          },
           "confirm": { "type": "boolean", "default": false }
         },
         "required": ["subject", "body_text"],
@@ -363,7 +390,9 @@
           "attachment_id": { "type": "string" },
           "metadata_only": { "type": "boolean", "default": true },
           "max_bytes": { "type": "integer", "minimum": 1, "maximum": 10000000 },
-          "save_to_storage": { "type": "boolean", "default": false }
+          "save_to_storage": { "type": "boolean", "default": false },
+          "target_folder": { "type": "string" },
+          "mode": { "type": "string", "enum": ["create", "overwrite", "versioned"], "default": "versioned" }
         },
         "required": ["attachment_id"],
         "additionalProperties": false
@@ -386,6 +415,42 @@
           "resource_type": "mail_connection",
           "resource_lookup": { "kind": "mail_connection_from_arguments" },
           "when": { "metadata_only": false }
+        }
+      ]
+    },
+    "mail_save_attachments": {
+      "description": "Save matching attachments from one mail thread directly to generated Storage with filtering, dedupe, and compact Storage refs.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "thread_id": { "type": "string" },
+          "target_folder": { "type": "string", "default": "storage/generated/mail/attachments" },
+          "dedupe": { "type": "boolean", "default": true },
+          "mode": { "type": "string", "enum": ["create", "overwrite", "versioned"], "default": "versioned" },
+          "max_bytes": { "type": "integer", "minimum": 1, "maximum": 10000000 },
+          "filename_contains": { "type": "string" },
+          "extensions": { "type": "array", "items": { "type": "string" } },
+          "content_types": { "type": "array", "items": { "type": "string" } },
+          "max_size_bytes": { "type": "integer", "minimum": 1 }
+        },
+        "required": ["thread_id"],
+        "additionalProperties": false
+      },
+      "output_schema": { "type": "object" },
+      "secret_selectors": [
+        {
+          "required_secrets": ["gmail-oauth-client-id", "gmail-oauth-client-secret"],
+          "resource_lookup": { "kind": "mail_connection_from_arguments" }
+        },
+        {
+          "required_secrets": ["gmail-refresh-token"],
+          "resource_type": "mail_connection",
+          "resource_lookup": { "kind": "mail_connection_from_arguments" }
+        },
+        {
+          "required_secrets": ["mailbox-password"],
+          "resource_type": "mail_connection",
+          "resource_lookup": { "kind": "mail_connection_from_arguments" }
         }
       ]
     },

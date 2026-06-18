@@ -160,6 +160,31 @@ def _xlsx_text(
         return "\n".join(rows)
 
 
+def _odt_text(
+    path: Path,
+    *,
+    max_file_bytes: int = MAX_PREVIEW_FILE_BYTES,
+    max_archive_entries: int = MAX_ARCHIVE_ENTRIES,
+    max_decompressed_bytes: int = MAX_ARCHIVE_DECOMPRESSED_BYTES,
+) -> str:
+    _validate_file_budget(path, max_file_bytes=max_file_bytes)
+    with zipfile.ZipFile(path) as archive:
+        _validate_archive_budget(
+            archive,
+            max_entries=max_archive_entries,
+            max_decompressed_bytes=max_decompressed_bytes,
+        )
+        root = ElementTree.fromstring(_read_archive_member(archive, "content.xml", max_decompressed_bytes=max_decompressed_bytes))
+    blocks: list[str] = []
+    for element in root.iter():
+        if _local_name(element.tag) not in {"h", "p", "list-item"}:
+            continue
+        text = " ".join("".join(element.itertext()).split())
+        if text:
+            blocks.append(text)
+    return "\n".join(blocks)
+
+
 def _validate_file_budget(path: Path, *, max_file_bytes: int = MAX_PREVIEW_FILE_BYTES) -> None:
     if path.stat().st_size > max_file_bytes:
         raise ValueError("file is too large for text extraction.")
@@ -295,6 +320,8 @@ def extract_text_preview(path: Path, preview_kind: str, max_chars: int | None = 
             return _trim_preview(_pptx_text(path), max_chars)
         if suffix == ".xlsx":
             return _trim_preview(_xlsx_text(path), max_chars)
+        if suffix == ".odt":
+            return _trim_preview(_odt_text(path), max_chars)
     except (ValueError, KeyError, ElementTree.ParseError, zipfile.BadZipFile, OSError, UnicodeDecodeError):
         return ""
     return ""
@@ -302,7 +329,7 @@ def extract_text_preview(path: Path, preview_kind: str, max_chars: int | None = 
 
 def text_content_supported(path: Path, preview_kind: str) -> bool:
     suffix = path.suffix.lower()
-    return preview_kind in {"text", "markdown"} or suffix in {".docx", ".pptx", ".xlsx"}
+    return preview_kind in {"text", "markdown"} or suffix in {".docx", ".pptx", ".xlsx", ".odt"}
 
 
 def extract_text_content(path: Path, preview_kind: str) -> str:
@@ -326,6 +353,13 @@ def extract_text_content(path: Path, preview_kind: str) -> str:
         )
     if suffix == ".xlsx":
         return _xlsx_text(
+            path,
+            max_file_bytes=MAX_TEXT_READ_FILE_BYTES,
+            max_archive_entries=MAX_TEXT_READ_ARCHIVE_ENTRIES,
+            max_decompressed_bytes=MAX_TEXT_READ_ARCHIVE_DECOMPRESSED_BYTES,
+        )
+    if suffix == ".odt":
+        return _odt_text(
             path,
             max_file_bytes=MAX_TEXT_READ_FILE_BYTES,
             max_archive_entries=MAX_TEXT_READ_ARCHIVE_ENTRIES,

@@ -544,6 +544,7 @@ def handle_action(
             file_name=body.get("file_name"),
             content_type=body.get("content_type"),
             size_bytes=_optional_nonnegative_int(body, "size_bytes") or 0,
+            mode=body.get("mode") or "create",
             uploaded_root=uploaded_root,
             generated_root=generated_root,
         )
@@ -808,6 +809,8 @@ def handle_action(
             workspace_relative_path=str(body.get("workspace_relative_path") or ""),
         )
         max_bytes = _optional_positive_int(body, "max_bytes", maximum=MAX_READ_BYTES) or MAX_PREVIEW_BYTES
+        return_handle = _bool_value(body.get("return_handle") or body.get("return_file_handle"))
+        include_content = _bool_value(body.get("include_content")) if "include_content" in body else not return_handle
         return 200, read_file_payload(
             role=role,
             relative_path=relative_path,
@@ -815,6 +818,9 @@ def handle_action(
             uploaded_root=uploaded_root,
             generated_root=generated_root,
             max_bytes=max_bytes,
+            return_handle=return_handle,
+            include_content=include_content,
+            include_local_path=_bool_value(body.get("include_local_path")),
         )
     if action in {"read_text", "file.text.read"}:
         role, relative_path = reference_from_payload(
@@ -853,6 +859,7 @@ def handle_action(
             folder_relative_path=body.get("folder_relative_path"),
             file_name=body.get("file_name"),
             content_base64=body.get("content_base64"),
+            mode=body.get("mode") or "create",
             data_root=data_root,
             uploaded_root=uploaded_root,
             generated_root=generated_root,

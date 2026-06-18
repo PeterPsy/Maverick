@@ -3,7 +3,7 @@
   "contract_version": "1.0",
   "name": "Document Generator",
   "version": "0.2.0",
-  "description": "Agent-facing document generation, extraction, and Markdown conversion app for DOCX, PPTX, PDF, and XLSX files.",
+  "description": "Agent-facing document generation, extraction, Markdown conversion, and spreadsheet transformation app for DOCX, PPTX, PDF, XLSX, CSV, TSV, and ODT files.",
   "publisher": "maverick",
   "minimum_core_version": "0.1.0",
   "provides": [
@@ -50,6 +50,17 @@
         "reference",
         "view"
       ]
+    },
+    {
+      "interface": "document-generator.spreadsheet.transform",
+      "version": "1",
+      "description": "Workspace spreadsheet lookup, write, copy, and verification transforms for XLSX, CSV, and TSV files.",
+      "surfaces": [
+        "cli",
+        "mcp",
+        "reference",
+        "view"
+      ]
     }
   ],
   "requires": [],
@@ -86,6 +97,7 @@
       "document_generator_extract_text",
       "document_generator_patch_pdf_text",
       "document_generator_modify_uploaded_document",
+      "document_generator_spreadsheet_transform",
       "document_generator_view_filter",
       "document_generator_set_view_filter",
       "document_generator_set_custom_view",
@@ -107,7 +119,7 @@
     "data_events": [
       {
         "resource": "documents",
-        "description": "Emitted when generated document jobs, Markdown conversions, or output files are created through official Document Generator surfaces."
+        "description": "Emitted when generated document jobs, Markdown conversions, spreadsheet transforms, or output files are created through official Document Generator surfaces."
       },
       {
         "resource": "view-state",

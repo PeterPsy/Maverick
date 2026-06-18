@@ -15,6 +15,7 @@
               "extract_text",
               "patch_pdf_text",
               "modify_uploaded_document",
+              "spreadsheet.transform",
               "convert_to_markdown",
               "list_templates",
               "list_outputs",
@@ -35,7 +36,30 @@
           },
           "workspace_relative_path": {
             "type": "string",
-            "description": "Input file under storage/uploaded/ or storage/generated/. Required for extract_text, patch_pdf_text, modify_uploaded_document, and convert_to_markdown; Markdown conversion accepts files up to 10 MiB."
+            "description": "Input file under storage/uploaded/ or storage/generated/. Required for extract_text, patch_pdf_text, modify_uploaded_document, spreadsheet.transform inputs, and convert_to_markdown; Markdown conversion accepts files up to 10 MiB."
+          },
+          "source_files": {
+            "type": "array",
+            "description": "Spreadsheet source files for spreadsheet.transform. Entries may be workspace paths or {alias,path} objects.",
+            "items": {
+              "oneOf": [
+                {"type": "string"},
+                {"type": "object"}
+              ]
+            }
+          },
+          "base_file": {
+            "type": "string",
+            "description": "Optional existing workbook to copy when target_file does not exist."
+          },
+          "target_file": {
+            "type": "string",
+            "description": "Generated Storage target path for spreadsheet.transform."
+          },
+          "operations": {
+            "type": "array",
+            "description": "Spreadsheet transform operations such as lookup_and_copy, write_cells, or find_values.",
+            "items": {"type": "object"}
           },
           "patches": {
             "type": "array",
@@ -138,6 +162,18 @@
             "action": "extract_text",
             "workspace_relative_path": "storage/generated/report.docx",
             "max_chars": 50000
+          },
+          {
+            "action": "spreadsheet.transform",
+            "target_file": "storage/generated/output.xlsx",
+            "source_files": ["storage/generated/source.xlsx", "storage/generated/output.xlsx"],
+            "operations": [
+              {
+                "type": "lookup_and_copy",
+                "source": {"file": "source", "sheet": 0, "key_column": "A", "columns": ["B"]},
+                "target": {"file": "output", "sheet": 0, "key_column": "A", "columns": ["C"]}
+              }
+            ]
           },
           {
             "action": "patch_pdf_text",

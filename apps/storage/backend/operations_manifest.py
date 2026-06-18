@@ -143,6 +143,16 @@ def operations_manifest_payload() -> dict[str, Any]:
                 "example": {"action": "file.content.read", "workspace_relative_path": "storage/generated/report.md"},
             },
             {
+                "task": "read_one_file_without_inline_bytes",
+                "operation": "file.content.read",
+                "calls_required": 1,
+                "example": {
+                    "action": "file.content.read",
+                    "workspace_relative_path": "storage/generated/report.pdf",
+                    "return_handle": True,
+                },
+            },
+            {
                 "task": "read_one_text_document",
                 "operation": "file.text.read",
                 "calls_required": 1,
@@ -186,9 +196,9 @@ def operations_manifest_payload() -> dict[str, Any]:
             {
                 "action": "file.content.read",
                 "aliases": ["read_file"],
-                "description": "Read one file as bounded base64 content.",
+                "description": "Read one file as bounded base64 content, or return a Storage file handle without inline bytes.",
                 "required_any": ["workspace_relative_path", "role + relative_path"],
-                "optional": ["max_bytes"],
+                "optional": ["max_bytes", "return_handle", "include_content", "include_local_path"],
                 "payload_profile": "explicit_content",
             },
             {
@@ -202,7 +212,7 @@ def operations_manifest_payload() -> dict[str, Any]:
             {
                 "action": "file.content.write",
                 "aliases": ["write", "write_file", "write-file", "write-content"],
-                "description": "Create or overwrite one small workspace Storage file inline.",
+                "description": "Create, overwrite, upsert, or write a versioned small workspace Storage file inline.",
                 "required_any": ["workspace_relative_path", "role + relative_path"],
                 "required_one_of": ["content", "content_base64"],
                 "optional": ["mode"],
@@ -212,7 +222,7 @@ def operations_manifest_payload() -> dict[str, Any]:
                 "action": "local_upload_session.start",
                 "description": "Start a chunked local Storage upload for files that exceed the inline base64 write path.",
                 "required": ["role", "file_name", "size_bytes"],
-                "optional": ["folder_relative_path", "content_type"],
+                "optional": ["folder_relative_path", "content_type", "mode"],
                 "payload_profile": "local_upload_session",
             },
             {

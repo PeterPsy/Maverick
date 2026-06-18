@@ -19,6 +19,7 @@ tool_actions = {
     "document_generator_extract_text": "extract_text",
     "document_generator_patch_pdf_text": "patch_pdf_text",
     "document_generator_modify_uploaded_document": "modify_uploaded_document",
+    "document_generator_spreadsheet_transform": "spreadsheet.transform",
     "document_generator_reference_manifest": "references.manifest",
     "document_generator_reference_search": "references.search",
     "document_generator_reference_resolve": "references.resolve",

@@ -7,12 +7,12 @@ import re
 from typing import Any
 
 from errors import DocumentValidationError
-from office_extractors import extract_docx_text, extract_pptx_text, extract_xlsx_text
+from office_extractors import extract_docx_text, extract_odt_text, extract_pptx_text, extract_xlsx_text
 from pdf_extractor import extract_pdf_text_details
 from workspace_files import resolve_workspace_file
 
 
-SUPPORTED_EXTRACT_FORMATS = {"pdf", "docx", "pptx", "xlsx"}
+SUPPORTED_EXTRACT_FORMATS = {"pdf", "docx", "pptx", "xlsx", "odt"}
 DEFAULT_MAX_CHARS = 50000
 MAX_CHARS_LIMIT = 200000
 MAX_EXTRACT_FILE_BYTES = 25 * 1024 * 1024
@@ -33,23 +33,34 @@ def extract_text_from_workspace_file(uploaded_root: Path | None, generated_root:
     extraction = _extract_by_format(target, file_format)
     text = str(extraction.get("text") or "")
     normalized = _normalize_text(text)
-    truncated = len(normalized) > max_chars
+    text_length = len(normalized)
+    truncated = text_length > max_chars
+    warnings = list(extraction.get("warnings") or [])
+    if not normalized:
+        warnings.append("No extractable text was found.")
     if truncated:
-        normalized = normalized[:max_chars].rstrip()
+        returned_text = normalized[:max_chars].rstrip()
+    else:
+        returned_text = normalized
 
     return {
         "document": {
             "workspace_relative_path": workspace_relative_path,
             "filename": target.name,
             "format": file_format,
+            "detected_format": file_format,
             "size_bytes": target.stat().st_size,
         },
-        "text": normalized,
-        "text_length": len(normalized),
+        "text": returned_text,
+        "text_length": text_length,
+        "returned_text_length": len(returned_text),
         "truncated": truncated,
+        "warnings": warnings,
         "extraction": {
             "engine": extraction.get("engine"),
             "layers": extraction.get("layers"),
+            "format": file_format,
+            "warnings": warnings,
         },
     }
 
@@ -72,7 +83,9 @@ def _extract_by_format(path: Path, file_format: str) -> dict[str, Any]:
     if file_format == "pptx":
         return _text_details(extract_pptx_text(path), engine="python-pptx")
     if file_format == "xlsx":
-        return _text_details(extract_xlsx_text(path), engine="openpyxl")
+        return _text_details(extract_xlsx_text(path), engine="xlsx-openxml")
+    if file_format == "odt":
+        return _text_details(extract_odt_text(path), engine="odf-zip-xml")
     if file_format == "pdf":
         return extract_pdf_text_details(path)
     raise DocumentValidationError(f"Unsupported extraction format `{file_format}`.")
@@ -85,6 +98,7 @@ def _text_details(text: str, *, engine: str) -> dict[str, Any]:
         "layers": {
             "document_text": bool(text.strip()),
         },
+        "warnings": [],
     }
 
 

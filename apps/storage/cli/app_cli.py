@@ -14,7 +14,7 @@ from errors import StorageValidationError, validation_error_payload
 from limits import LOCAL_UPLOAD_SESSION_CHUNK_BYTES
 from operations_manifest import STORAGE_ACTION_ALIASES
 from service import app_events_for_action, handle_action, secret_lookup_for_drive_action
-from store_files_paths import reference_from_payload
+from store_files_paths import normalize_write_mode, reference_from_payload
 
 
 def _upload_local_file_payload(*, data_root: Path, uploaded_root: Path, generated_root: Path, body: dict) -> tuple[int, dict]:
@@ -23,9 +23,7 @@ def _upload_local_file_payload(*, data_root: Path, uploaded_root: Path, generate
         workspace_root=body.get("_workspace_root"),
         effective_mode=body.get("_effective_mode"),
     )
-    mode = str(body.get("mode") or "create").strip().lower()
-    if mode != "create":
-        raise StorageValidationError("upload_local_file supports mode=create only.", operation="upload_local_file")
+    mode = normalize_write_mode(body.get("mode") or "create", operation="upload_local_file")
     role, folder_relative_path, file_name = _local_upload_target(body, source)
     content_type = str(body.get("content_type") or mimetypes.guess_type(source.name)[0] or "application/octet-stream")
     size_bytes = source.stat().st_size
@@ -51,7 +49,7 @@ def _upload_local_file_payload(*, data_root: Path, uploaded_root: Path, generate
                 "role": role,
                 "relative_path": relative_path,
                 "content_base64": "",
-                "mode": "create",
+                "mode": mode,
             },
         )
         return status_code, {
@@ -74,6 +72,7 @@ def _upload_local_file_payload(*, data_root: Path, uploaded_root: Path, generate
             "file_name": file_name,
             "content_type": content_type,
             "size_bytes": size_bytes,
+            "mode": mode,
         },
     )
     session_id = str(started["upload_session"]["id"])

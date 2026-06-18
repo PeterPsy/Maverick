@@ -1132,6 +1132,121 @@ class MailServiceTest(unittest.TestCase):
             self.assertEqual(message.get_body(preferencelist=("plain",)).get_content().strip(), "Plain confirmation")
             self.assertEqual(message.get_body(preferencelist=("html",)).get_content().strip(), "<p><strong>HTML confirmation</strong></p>")
 
+    def test_mail_send_attaches_workspace_storage_file(self) -> None:
+        sent_payloads: list[dict[str, object]] = []
+
+        def fake_transport(request) -> dict[str, object]:
+            if request.full_url == "https://oauth2.googleapis.com/token":
+                return {"access_token": "access-token", "expires_in": 3600, "token_type": "Bearer"}
+            if request.full_url == "https://gmail.googleapis.com/gmail/v1/users/me/messages/send":
+                payload = json.loads(request.data.decode("utf-8"))
+                sent_payloads.append(payload)
+                return {"id": "provider-message-attachment", "threadId": ""}
+            raise AssertionError(f"unexpected request {request.full_url}")
+
+        with tempfile.TemporaryDirectory() as tmp:
+            workspace_root = Path(tmp)
+            data_root = workspace_root / "data" / "mail"
+            generated_root = workspace_root / "storage" / "generated"
+            uploaded_root = workspace_root / "storage" / "uploaded"
+            attachment_path = generated_root / "reports" / "result.txt"
+            attachment_path.parent.mkdir(parents=True)
+            attachment_path.write_text("storage attachment", encoding="utf-8")
+            self._insert_gmail_fixture(data_root)
+
+            with patch("backend.service.provider_for_connection", return_value=GmailProvider(transport=fake_transport)):
+                status, payload = handle_action(
+                    data_root,
+                    {
+                        "action": "mail_send",
+                        "to": [{"email": "customer@example.com"}],
+                        "subject": "Attachment",
+                        "body_text": "See attached.",
+                        "workspace_attachments": ["storage/generated/reports/result.txt"],
+                        "confirm": True,
+                        "_app_secrets": self._gmail_secrets(),
+                        "_generated_storage_root": str(generated_root),
+                        "_uploaded_storage_root": str(uploaded_root),
+                    },
+                )
+
+            self.assertEqual(status, 200, payload)
+            self.assertEqual(payload["draft"]["workspace_attachments"][0]["workspace_relative_path"], "storage/generated/reports/result.txt")
+            raw = str(sent_payloads[0]["raw"])
+            padded = raw + ("=" * (-len(raw) % 4))
+            message = BytesParser(policy=policy.default).parsebytes(base64.urlsafe_b64decode(padded.encode("ascii")))
+            attachments = list(message.iter_attachments())
+            self.assertEqual(len(attachments), 1)
+            self.assertEqual(attachments[0].get_filename(), "result.txt")
+            self.assertEqual(attachments[0].get_payload(decode=True), b"storage attachment")
+
+    def test_save_thread_attachments_dedupes_and_targets_storage_folder(self) -> None:
+        calls: list[dict[str, object]] = []
+
+        class FakeProvider:
+            def fetch_attachment(self, data_root: Path, attachment_id: str, **kwargs) -> dict[str, object]:
+                calls.append({"attachment_id": attachment_id, **kwargs})
+                return {
+                    "status": "saved",
+                    "size_bytes": 12,
+                    "storage_ref": {
+                        "workspace_relative_path": f"storage/generated/customer/{attachment_id}.pdf",
+                        "size_bytes": 12,
+                        "sha256": f"sha-{attachment_id}",
+                    },
+                }
+
+        with tempfile.TemporaryDirectory() as tmp:
+            data_root = Path(tmp)
+            ensure_schema(data_root)
+            now = now_timestamp()
+            with connect(data_root) as db:
+                db.execute(
+                    """
+                    INSERT INTO connections(id, provider, email_address, display_name, status, scopes_json, created_at, updated_at)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    ("mail_connection_gmail_person-example.com", "gmail", "person@example.com", "person@example.com", "connected", "[]", now, now),
+                )
+                db.execute(
+                    """
+                    INSERT INTO threads(id, connection_id, provider_thread_id, subject, participants_json, last_message_at, snippet, unread, starred, labels_json, updated_at)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    ("email_thread_gmail_thread_1", "mail_connection_gmail_person-example.com", "thread-1", "Subject", "[]", now, "", 0, 0, "[]", now),
+                )
+                db.execute(
+                    """
+                    INSERT INTO messages(id, thread_id, provider_message_id, sender_json, recipients_json, sent_at, body_text, headers_json, has_attachments)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    ("email_message_gmail_msg_1", "email_thread_gmail_thread_1", "msg-1", "{}", "[]", now, "", "{}", 1),
+                )
+                for attachment_id in ("att_1", "att_2"):
+                    db.execute(
+                        """
+                        INSERT INTO attachments(id, message_id, provider_attachment_id, filename, content_type, size_bytes, storage_state, storage_ref_json, created_at, updated_at)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        """,
+                        (attachment_id, "email_message_gmail_msg_1", attachment_id, "report.pdf", "application/pdf", 12, "metadata_only", "{}", now, now),
+                    )
+
+            with patch("backend.service.provider_for_connection", return_value=FakeProvider()):
+                status, payload = handle_action(
+                    data_root,
+                    {
+                        "action": "mail_save_attachments",
+                        "thread_id": "email_thread_gmail_thread_1",
+                        "target_folder": "storage/generated/customer",
+                        "_generated_storage_root": str(Path(tmp) / "storage" / "generated"),
+                    },
+                )
+
+            self.assertEqual(status, 200, payload)
+            self.assertEqual(payload["saved_count"], 1)
+            self.assertEqual(payload["skipped"][0]["reason"], "duplicate_metadata")
+            self.assertEqual(calls[0]["storage_target_folder"], "storage/generated/customer")
+
     def test_mail_send_confirm_requires_recipient(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             data_root = Path(tmp)
@@ -1212,7 +1327,7 @@ class MailServiceTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             status, payload = handle_action(Path(tmp), {"action": "health.check"})
             self.assertEqual(status, 200)
-            self.assertEqual(payload["schema_version"], "7")
+            self.assertEqual(payload["schema_version"], "8")
             self.assertEqual(payload["health_status"], "healthy")
             self.assertEqual(payload["database"], "mail.sqlite")
             with connect(Path(tmp)) as db:
@@ -1223,6 +1338,7 @@ class MailServiceTest(unittest.TestCase):
             self.assertIn("body_html_original_bounded", message_columns)
             self.assertIn("body_html_gmail_sanitized", message_columns)
             self.assertIn("body_html_rendered", message_columns)
+            self.assertIn("workspace_attachments_json", draft_columns)
             self.assertIn("render_policy_json", message_columns)
             self.assertIn("body_html", draft_columns)
             self.assertIn("reply_to_json", draft_columns)

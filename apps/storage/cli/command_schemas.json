@@ -121,7 +121,21 @@
           "drive_upload_session_id": {"type": "string"},
           "refresh_remote": {"type": "boolean", "default": false},
           "chunk_offset": {"type": "integer", "minimum": 0},
-          "mode": {"type": "string", "enum": ["create", "overwrite"]},
+          "mode": {"type": "string", "enum": ["create", "overwrite", "upsert", "versioned"]},
+          "return_handle": {
+            "type": "boolean",
+            "default": false,
+            "description": "When true, return a Storage file handle instead of inline base64 unless include_content=true."
+          },
+          "include_content": {
+            "type": "boolean",
+            "description": "Controls whether read_file returns inline content when return_handle is true."
+          },
+          "include_local_path": {
+            "type": "boolean",
+            "default": false,
+            "description": "When true with return_handle, include the local workspace file path for authorized local agents."
+          },
           "new_name": {"type": "string"},
           "target_folder_relative_path": {"type": "string"},
           "files": {"type": "array", "items": {"type": "object"}},
@@ -229,7 +243,7 @@
             "properties": {
               "action": {"enum": ["upload_local_file"]},
               "role": {"enum": ["uploaded", "generated"]},
-              "mode": {"enum": ["create"]}
+              "mode": {"enum": ["create", "overwrite", "upsert", "versioned"]}
             },
             "required": ["action", "source_path"],
             "anyOf": [

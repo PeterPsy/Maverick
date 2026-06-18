@@ -11,7 +11,7 @@ import re
 import sqlite3
 
 
-SCHEMA_VERSION = "7"
+SCHEMA_VERSION = "8"
 REFERENCE_ENTITIES = ["mail_connection", "email_thread", "email_message", "mail_attachment", "mail_draft"]
 REQUIRED_TABLES = [
     "schema_metadata",
@@ -180,6 +180,7 @@ def ensure_schema(data_root: Path) -> None:
               subject TEXT NOT NULL,
               body_text TEXT NOT NULL,
               body_html TEXT NOT NULL DEFAULT '',
+              workspace_attachments_json TEXT NOT NULL DEFAULT '[]',
               status TEXT NOT NULL,
               dirty INTEGER NOT NULL DEFAULT 1,
               created_at TEXT NOT NULL,
@@ -237,6 +238,7 @@ def ensure_schema(data_root: Path) -> None:
         _ensure_column(db, "messages", "inline_assets_json", "TEXT NOT NULL DEFAULT '[]'")
         _ensure_column(db, "drafts", "reply_to_json", "TEXT NOT NULL DEFAULT '[]'")
         _ensure_column(db, "drafts", "body_html", "TEXT NOT NULL DEFAULT ''")
+        _ensure_column(db, "drafts", "workspace_attachments_json", "TEXT NOT NULL DEFAULT '[]'")
         _backfill_message_render_columns(db)
         db.execute(
             "INSERT OR REPLACE INTO schema_metadata(key, value) VALUES (?, ?)",

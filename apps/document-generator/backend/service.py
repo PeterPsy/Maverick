@@ -15,6 +15,7 @@ from generators.xlsx_generator import generate_xlsx
 from markdown_converter import convert_workspace_file_to_markdown
 from models import normalize_spec
 from pdf_editor import modify_uploaded_document, patch_pdf_text
+from spreadsheet_transform import transform_spreadsheet
 from store import (
     list_jobs,
     list_templates,
@@ -48,7 +49,7 @@ REFERENCE_MANIFEST = {
 
 
 def app_events_for_action(action: str) -> list[dict]:
-    if action in {"generate_document", "convert_to_markdown", "patch_pdf_text", "modify_uploaded_document"}:
+    if action in {"generate_document", "convert_to_markdown", "patch_pdf_text", "modify_uploaded_document", "spreadsheet.transform"}:
         return [{"type": "maverick.app.data-changed", "resource": "documents"}]
     if action in {"set_view_filter", "set_custom_view", "clear_custom_view"}:
         return [{"type": "maverick.app.data-changed", "resource": "view-state"}]
@@ -167,6 +168,8 @@ def handle_action(
         return 200, modify_uploaded_document(data_root, uploaded_root, generated_root, body, local_app_id=local_app_id)
     if action == "convert_to_markdown":
         return 200, convert_workspace_file_to_markdown(data_root, uploaded_root, generated_root, body, local_app_id=local_app_id)
+    if action == "spreadsheet.transform":
+        return 200, transform_spreadsheet(data_root, uploaded_root, generated_root, body)
     if action == "list_templates":
         return 200, {"templates": list_templates(data_root)}
     if action == "list_outputs":

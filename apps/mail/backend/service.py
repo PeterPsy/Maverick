@@ -61,6 +61,8 @@ MUTATING_ACTIONS = {
     "mail_send_draft",
     "messages.send",
     "mail_send",
+    "attachments.save_all",
+    "mail_save_attachments",
     "labels.modify",
     "mail_modify_labels",
     "messages.mark_read",
@@ -70,7 +72,7 @@ MUTATING_ACTIONS = {
     "clear_custom_view",
 }
 
-ATTACHMENT_GET_ACTIONS = {"attachments.get", "mail_get_attachment"}
+ATTACHMENT_GET_ACTIONS = {"attachments.get", "mail_get_attachment", "attachments.save_all", "mail_save_attachments"}
 INTERACTIVE_SYNC_MAX_THREADS = 25
 
 
@@ -196,6 +198,8 @@ def handle_action(data_root: Path, payload: dict[str, object]) -> tuple[int, dic
                     draft_id,
                     confirm=bool(payload.get("confirm")),
                     app_secrets=_app_secrets(payload),
+                    uploaded_storage_root=_optional_path(payload.get("_uploaded_storage_root")),
+                    generated_storage_root=_optional_path(payload.get("_generated_storage_root")),
                 )
             }
         if action in {"messages.send", "mail_send"}:
@@ -203,7 +207,14 @@ def handle_action(data_root: Path, payload: dict[str, object]) -> tuple[int, dic
             _require_connected(data_root, connection_id)
             draft = create_draft(data_root, {**payload, "connection_id": connection_id})
             provider = provider_for_connection(data_root, str(draft["connection_id"]))
-            result = provider.send_draft(data_root, str(draft["id"]), confirm=bool(payload.get("confirm")), app_secrets=_app_secrets(payload))
+            result = provider.send_draft(
+                data_root,
+                str(draft["id"]),
+                confirm=bool(payload.get("confirm")),
+                app_secrets=_app_secrets(payload),
+                uploaded_storage_root=_optional_path(payload.get("_uploaded_storage_root")),
+                generated_storage_root=_optional_path(payload.get("_generated_storage_root")),
+            )
             return 200, {"draft": draft, "result": result}
         if action in {"labels.modify", "mail_modify_labels"}:
             thread_id = _required_string(payload.get("thread_id") or payload.get("id"), "thread_id")
@@ -249,8 +260,12 @@ def handle_action(data_root: Path, payload: dict[str, object]) -> tuple[int, dic
                     max_bytes=_optional_bounded_int(payload.get("max_bytes"), 1, 10_000_000),
                     save_to_storage=bool(payload.get("save_to_storage")),
                     generated_storage_root=_optional_path(payload.get("_generated_storage_root")),
+                    storage_target_folder=payload.get("target_folder"),
+                    storage_mode=payload.get("mode") or "versioned",
                 ),
             }
+        if action in {"attachments.save_all", "mail_save_attachments"}:
+            return 200, _save_thread_attachments(data_root, payload)
         if action in {"reference_manifest", "mail_reference_manifest"}:
             return 200, reference_manifest()
         if action in {"reference_search", "mail_reference_search"}:
@@ -301,6 +316,9 @@ def resolve_secret_resource_inventory(data_root: Path) -> dict[str, object]:
 
 def app_events_for_action(action: str, result: dict[str, object] | None = None) -> list[dict[str, str]]:
     if action in ATTACHMENT_GET_ACTIONS:
+        if action in {"attachments.save_all", "mail_save_attachments"}:
+            saved = result.get("saved") if isinstance(result, dict) else None
+            return [_data_changed_event("threads")] if saved else []
         if _attachment_saved_to_storage(result):
             return [_data_changed_event("threads")]
         return []
@@ -315,6 +333,114 @@ def app_events_for_action(action: str, result: dict[str, object] | None = None) 
     else:
         resource = "threads"
     return [_data_changed_event(resource)]
+
+
+def _save_thread_attachments(data_root: Path, payload: dict[str, object]) -> dict[str, object]:
+    thread_id = _required_string(payload.get("thread_id") or payload.get("id"), "thread_id")
+    thread = get_thread(data_root, thread_id)
+    connection_id = str(thread["connection_id"])
+    _require_connected(data_root, connection_id)
+    provider = provider_for_connection(data_root, connection_id)
+    max_bytes = _optional_bounded_int(payload.get("max_bytes"), 1, 10_000_000) or 10_000_000
+    dedupe = bool(payload.get("dedupe", True))
+    target_folder = payload.get("target_folder") or "storage/generated/mail/attachments"
+    mode = payload.get("mode") or "versioned"
+    saved: list[dict[str, object]] = []
+    skipped: list[dict[str, object]] = []
+    seen_metadata: set[tuple[str, int]] = set()
+    seen_hashes: set[str] = set()
+    for message in thread.get("messages", []):
+        if not isinstance(message, dict):
+            continue
+        for attachment in message.get("attachments", []):
+            if not isinstance(attachment, dict):
+                continue
+            if not _attachment_filter_matches(attachment, payload):
+                skipped.append({"attachment_id": attachment.get("id"), "reason": "filtered"})
+                continue
+            filename = str(attachment.get("filename") or "")
+            size_bytes = int(attachment.get("size_bytes") or 0)
+            metadata_key = (filename.casefold(), size_bytes)
+            if dedupe and metadata_key in seen_metadata:
+                skipped.append({"attachment_id": attachment.get("id"), "filename": filename, "reason": "duplicate_metadata"})
+                continue
+            seen_metadata.add(metadata_key)
+            fetch = provider.fetch_attachment(
+                data_root,
+                str(attachment["id"]),
+                app_secrets=_app_secrets(payload),
+                metadata_only=False,
+                max_bytes=max_bytes,
+                save_to_storage=True,
+                generated_storage_root=_optional_path(payload.get("_generated_storage_root")),
+                storage_target_folder=target_folder,
+                storage_mode=mode,
+            )
+            if fetch.get("status") != "saved":
+                skipped.append({"attachment_id": attachment.get("id"), "filename": filename, "reason": fetch.get("status"), "detail": fetch.get("detail")})
+                continue
+            storage_ref = fetch.get("storage_ref") if isinstance(fetch.get("storage_ref"), dict) else {}
+            sha256 = str(storage_ref.get("sha256") or "")
+            if dedupe and sha256 and sha256 in seen_hashes:
+                skipped.append({"attachment_id": attachment.get("id"), "filename": filename, "reason": "duplicate_sha256", "sha256": sha256})
+                continue
+            if sha256:
+                seen_hashes.add(sha256)
+            saved.append(
+                {
+                    "attachment_id": attachment.get("id"),
+                    "message_id": message.get("id"),
+                    "thread_id": thread_id,
+                    "filename": filename,
+                    "content_type": attachment.get("content_type") or "",
+                    "size_bytes": storage_ref.get("size_bytes", fetch.get("size_bytes", size_bytes)),
+                    "sha256": sha256,
+                    "workspace_relative_path": storage_ref.get("workspace_relative_path"),
+                    "source": {
+                        "message_id": message.get("id"),
+                        "sent_at": message.get("sent_at"),
+                        "sender": message.get("sender"),
+                    },
+                }
+            )
+    return {
+        "status": "saved",
+        "thread_id": thread_id,
+        "target_folder": target_folder,
+        "dedupe": dedupe,
+        "saved": saved,
+        "skipped": skipped,
+        "saved_count": len(saved),
+        "skipped_count": len(skipped),
+    }
+
+
+def _attachment_filter_matches(attachment: dict[str, object], payload: dict[str, object]) -> bool:
+    filename = str(attachment.get("filename") or "")
+    content_type = str(attachment.get("content_type") or "")
+    size_bytes = int(attachment.get("size_bytes") or 0)
+    name_contains = _optional_string(payload.get("filename_contains"))
+    if name_contains and name_contains.casefold() not in filename.casefold():
+        return False
+    extensions = _string_filter_set(payload.get("extensions") or payload.get("extension"))
+    if extensions:
+        suffix = Path(filename).suffix.lower().lstrip(".")
+        if suffix not in extensions:
+            return False
+    content_types = _string_filter_set(payload.get("content_types") or payload.get("content_type"))
+    if content_types and content_type.casefold() not in content_types:
+        return False
+    max_size = _optional_bounded_int(payload.get("max_size_bytes"), 1, 10_000_000_000)
+    if max_size is not None and size_bytes > max_size:
+        return False
+    return True
+
+
+def _string_filter_set(value: object) -> set[str]:
+    if value in (None, ""):
+        return set()
+    values = value if isinstance(value, list) else [value]
+    return {str(item).strip().lower().lstrip(".") for item in values if str(item).strip()}
 
 
 def _data_changed_event(resource: str) -> dict[str, str]:
@@ -439,6 +565,8 @@ def _secret_resource_connection_id(data_root: Path, payload: dict[str, object]) 
             "mail_mark_read",
             "messages.send",
             "mail_send",
+            "attachments.save_all",
+            "mail_save_attachments",
         }
         else None
     )

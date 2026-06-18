@@ -3,7 +3,7 @@
   "contract_version": "1.0",
   "name": "Mail",
   "version": "0.2.0",
-  "description": "Maverick Mail app with inbox, thread, draft, CLI, MCP, and reference surfaces backed by app-owned SQLite storage.",
+  "description": "Maverick Mail app with inbox, thread, draft, Storage-backed attachment, CLI, MCP, and reference surfaces backed by app-owned SQLite storage.",
   "publisher": "workspace",
   "minimum_core_version": "0.1.0",
   "provides": [
@@ -80,6 +80,7 @@
       "mail_modify_labels",
       "mail_mark_read",
       "mail_get_attachment",
+      "mail_save_attachments",
       "mail_sync"
     ],
     "cli_commands": [
@@ -203,7 +204,7 @@
   },
   "storage": {
     "storage_kind": "sqlite",
-    "data_schema_version": "7",
+    "data_schema_version": "8",
     "primary_paths": [
       "data/mail/mail.sqlite"
     ],

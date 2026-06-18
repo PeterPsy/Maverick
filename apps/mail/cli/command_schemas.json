@@ -7,7 +7,7 @@
         "properties": {
           "action": {
             "type": "string",
-            "description": "Mail action such as connections.start_oauth, connections.complete_oauth, connections.prepare_imap_smtp, connections.test_imap_smtp, connections.activate_imap_smtp, connections.disconnect, threads.list, threads.get, drafts.create, drafts.send, messages.search, labels.modify, attachments.get, folders.list, or health.check."
+            "description": "Mail action such as connections.start_oauth, connections.complete_oauth, connections.prepare_imap_smtp, connections.test_imap_smtp, connections.activate_imap_smtp, connections.disconnect, threads.list, threads.get, drafts.create, drafts.send, messages.search, labels.modify, attachments.get, attachments.save_all, folders.list, or health.check."
           },
           "connection_id": { "type": "string" },
           "thread_id": { "type": "string" },
@@ -56,9 +56,25 @@
           "max_body_chars": { "type": "integer", "minimum": 200, "maximum": 50000 },
           "max_body_html_chars": { "type": "integer", "minimum": 200, "maximum": 250000 },
           "body_html": { "type": "string" },
+          "workspace_attachments": {
+            "type": "array",
+            "items": {
+              "oneOf": [
+                {"type": "string"},
+                {"type": "object"}
+              ]
+            }
+          },
           "metadata_only": { "type": "boolean", "default": true },
           "max_bytes": { "type": "integer", "minimum": 1, "maximum": 10000000 },
-          "save_to_storage": { "type": "boolean", "default": false }
+          "save_to_storage": { "type": "boolean", "default": false },
+          "target_folder": { "type": "string" },
+          "mode": { "type": "string", "enum": ["create", "overwrite", "versioned"], "default": "versioned" },
+          "dedupe": { "type": "boolean", "default": true },
+          "filename_contains": { "type": "string" },
+          "extensions": { "type": "array", "items": { "type": "string" } },
+          "content_types": { "type": "array", "items": { "type": "string" } },
+          "max_size_bytes": { "type": "integer", "minimum": 1 }
         },
         "additionalProperties": true
       },
@@ -88,6 +104,8 @@
               "mail_send_draft",
               "messages.send",
               "mail_send",
+              "attachments.save_all",
+              "mail_save_attachments",
               "labels.modify",
               "mail_modify_labels",
               "messages.mark_read",
@@ -163,6 +181,29 @@
           "when": {
             "action": ["attachments.get", "mail_get_attachment"],
             "metadata_only": false
+          }
+        },
+        {
+          "required_secrets": ["gmail-oauth-client-id", "gmail-oauth-client-secret"],
+          "resource_lookup": { "kind": "mail_connection_from_arguments" },
+          "when": {
+            "action": ["attachments.save_all", "mail_save_attachments"]
+          }
+        },
+        {
+          "required_secrets": ["mailbox-password"],
+          "resource_type": "mail_connection",
+          "resource_lookup": { "kind": "mail_connection_from_arguments" },
+          "when": {
+            "action": ["attachments.save_all", "mail_save_attachments"]
+          }
+        },
+        {
+          "required_secrets": ["gmail-refresh-token"],
+          "resource_type": "mail_connection",
+          "resource_lookup": { "kind": "mail_connection_from_arguments" },
+          "when": {
+            "action": ["attachments.save_all", "mail_save_attachments"]
           }
         }
       ]

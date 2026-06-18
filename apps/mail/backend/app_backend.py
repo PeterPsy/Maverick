@@ -22,6 +22,7 @@ body["_app_secrets"] = payload.raw.get("app_secrets", {})
 body["_workspace_id"] = payload.workspace_id
 body["_app_id"] = payload.app_id
 body["_generated_storage_root"] = payload.raw.get("generated_storage_root", "")
+body["_uploaded_storage_root"] = payload.raw.get("uploaded_storage_root", "")
 action = str(body.get("action") or "list")
 status_code, result = handle_action(Path(payload.data_root), body)
 secret_writes = result.pop("platform_secret_writes", [])

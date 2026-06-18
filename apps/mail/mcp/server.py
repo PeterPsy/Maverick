@@ -35,6 +35,7 @@ TOOL_ACTIONS = {
     "mail_modify_labels": "mail_modify_labels",
     "mail_mark_read": "mail_mark_read",
     "mail_get_attachment": "mail_get_attachment",
+    "mail_save_attachments": "mail_save_attachments",
     "mail_sync": "mail_sync",
 }
 
@@ -52,6 +53,7 @@ if payload.raw.get("surface") == "secret_selector":
     raise SystemExit(0)
 arguments["_app_secrets"] = payload.raw.get("app_secrets", {})
 arguments["_generated_storage_root"] = payload.raw.get("generated_storage_root", "")
+arguments["_uploaded_storage_root"] = payload.raw.get("uploaded_storage_root", "")
 arguments["_workspace_id"] = payload.workspace_id
 tool_name = str(payload.raw.get("tool_name") or "")
 arguments.setdefault("action", TOOL_ACTIONS.get(tool_name, "mail_list_threads"))

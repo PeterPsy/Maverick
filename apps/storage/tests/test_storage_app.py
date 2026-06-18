@@ -915,6 +915,73 @@ class StorageAppTestCase(unittest.TestCase):
             self.assertEqual(target.read_text(encoding="utf-8"), "second version")
             self.assertEqual(rejected["status_code"], 400)
 
+    def test_backend_write_versioned_upload_overwrite_and_read_handle(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            generated_root = root / "storage" / "generated"
+            uploaded_root = root / "storage" / "uploaded"
+            generated_root.mkdir(parents=True)
+            uploaded_root.mkdir(parents=True)
+            data_root = root / "data" / "storage"
+            target = generated_root / "reports" / "summary.txt"
+
+            created = self.run_backend(
+                data_root=data_root,
+                uploaded_root=uploaded_root,
+                generated_root=generated_root,
+                body={
+                    "action": "file.content.write",
+                    "workspace_relative_path": "storage/generated/reports/summary.txt",
+                    "mode": "create",
+                    "content": "first",
+                },
+            )
+            versioned = self.run_backend(
+                data_root=data_root,
+                uploaded_root=uploaded_root,
+                generated_root=generated_root,
+                body={
+                    "action": "file.content.write",
+                    "workspace_relative_path": "storage/generated/reports/summary.txt",
+                    "mode": "versioned",
+                    "content": "second",
+                },
+            )
+            uploaded = self.run_backend(
+                data_root=data_root,
+                uploaded_root=uploaded_root,
+                generated_root=generated_root,
+                body={
+                    "action": "upload_file",
+                    "role": "generated",
+                    "folder_relative_path": "reports",
+                    "file_name": "summary.txt",
+                    "mode": "overwrite",
+                    "content_base64": b64encode(b"third").decode("ascii"),
+                },
+            )
+            handle = self.run_backend(
+                data_root=data_root,
+                uploaded_root=uploaded_root,
+                generated_root=generated_root,
+                body={
+                    "action": "file.content.read",
+                    "workspace_relative_path": "storage/generated/reports/summary.txt",
+                    "return_handle": True,
+                },
+            )
+
+            self.assertEqual(created["status_code"], 200, created)
+            self.assertEqual(versioned["status_code"], 200, versioned)
+            self.assertEqual(uploaded["status_code"], 200, uploaded)
+            self.assertEqual(target.read_text(encoding="utf-8"), "third")
+            self.assertEqual((generated_root / "reports" / "summary.v2.txt").read_text(encoding="utf-8"), "second")
+            self.assertTrue(uploaded["json"]["audit"]["previous_sha256"])
+            self.assertTrue(uploaded["json"]["audit"]["replaced"])
+            self.assertEqual(handle["status_code"], 200, handle)
+            self.assertNotIn("content_base64", handle["json"])
+            self.assertEqual(handle["json"]["file_handle"]["workspace_relative_path"], "storage/generated/reports/summary.txt")
+
     def test_backend_rejects_writes_over_configured_storage_budget(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp)
@@ -1788,6 +1855,17 @@ class StorageAppTestCase(unittest.TestCase):
                       <w:body><w:p><w:r><w:t>Quarterly brief</w:t></w:r></w:p></w:body>
                     </w:document>""",
                 )
+            odt = generated_root / "instructions.odt"
+            with zipfile.ZipFile(odt, "w") as archive:
+                archive.writestr(
+                    "content.xml",
+                    """<?xml version="1.0" encoding="UTF-8"?>
+                    <office:document-content
+                      xmlns:office="urn:oasis:names:tc:opendocument:xmlns:office:1.0"
+                      xmlns:text="urn:oasis:names:tc:opendocument:xmlns:text:1.0">
+                      <office:body><office:text><text:p>ODT operative instructions</text:p></office:text></office:body>
+                    </office:document-content>""",
+                )
 
             preview = self.run_backend(
                 data_root=root / "data" / "storage",
@@ -1801,12 +1879,20 @@ class StorageAppTestCase(unittest.TestCase):
                 generated_root=generated_root,
                 body={"action": "preview_text", "workspace_relative_path": "storage/generated/brief.docx"},
             )
+            odt_text = self.run_backend(
+                data_root=root / "data" / "storage",
+                uploaded_root=root / "storage" / "uploaded",
+                generated_root=generated_root,
+                body={"action": "read_text", "workspace_relative_path": "storage/generated/instructions.odt"},
+            )
 
             self.assertEqual(preview["status_code"], 200)
             self.assertEqual(preview["json"]["file"]["preview_kind"], "document")
             self.assertIn("Quarterly brief", preview["json"]["preview_text"])
             self.assertFalse(preview["json"]["cache_hit"])
             self.assertTrue(cached_preview["json"]["cache_hit"])
+            self.assertEqual(odt_text["status_code"], 200, odt_text)
+            self.assertIn("ODT operative instructions", odt_text["json"]["text"])
 
     def test_backend_extracts_table_preview_for_csv_and_xlsx(self) -> None:
         with tempfile.TemporaryDirectory() as temp:

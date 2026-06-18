@@ -21,6 +21,7 @@ from database import connect, ensure_schema, now_timestamp
 from drafts import get_draft
 from email_rendering import render_email_body
 from store import audit, get_attachment, get_thread, list_threads
+from storage_attachments import attach_workspace_attachments, save_attachment_to_storage
 
 from .base import ProviderCapability
 
@@ -168,11 +169,19 @@ class ImapSmtpProvider:
         draft_id: str,
         confirm: bool = False,
         app_secrets: dict[str, object] | None = None,
+        uploaded_storage_root: Path | None = None,
+        generated_storage_root: Path | None = None,
     ) -> dict[str, object]:
         draft = get_draft(data_root, draft_id)
         _require_recipients(draft)
         settings = _connection_settings(data_root, str(draft["connection_id"]))
-        message = _draft_message(draft, sender_email=str(settings["email_address"]), sender_name=str(settings.get("display_name") or ""))
+        message = _draft_message(
+            draft,
+            sender_email=str(settings["email_address"]),
+            sender_name=str(settings.get("display_name") or ""),
+            uploaded_storage_root=uploaded_storage_root,
+            generated_storage_root=generated_storage_root,
+        )
         if not confirm:
             return {"dry_run": True, "requires_confirmation": True, "draft": draft}
         with self._smtp(settings) as client:
@@ -261,6 +270,8 @@ class ImapSmtpProvider:
         max_bytes: int | None = None,
         save_to_storage: bool = False,
         generated_storage_root: Path | None = None,
+        storage_target_folder: object = None,
+        storage_mode: object = "versioned",
     ) -> dict[str, object]:
         attachment = get_attachment(data_root, attachment_id)
         metadata = {
@@ -295,7 +306,16 @@ class ImapSmtpProvider:
             return {**metadata, "status": "too_large", "size_bytes": len(payload), "max_bytes": max_bytes}
         data_base64url = base64.urlsafe_b64encode(payload).decode("ascii").rstrip("=")
         if save_to_storage:
-            storage_ref = _save_attachment(data_root, attachment_id, str(attachment["filename"]), payload, generated_storage_root)
+            storage_ref = _save_attachment(
+                data_root,
+                attachment_id,
+                str(attachment["filename"]),
+                str(attachment.get("content_type") or "application/octet-stream"),
+                payload,
+                generated_storage_root,
+                target_folder=storage_target_folder,
+                mode=storage_mode,
+            )
             return {**metadata, "status": "saved", "size_bytes": len(payload), "storage_state": "saved", "storage_ref": storage_ref}
         return {**metadata, "status": "fetched", "size_bytes": len(payload), "data_base64url": data_base64url}
 
@@ -651,7 +671,14 @@ def _parse_message(message: EmailMessage, *, flags: set[str] | None = None) -> d
     }
 
 
-def _draft_message(draft: dict[str, object], *, sender_email: str, sender_name: str) -> EmailMessage:
+def _draft_message(
+    draft: dict[str, object],
+    *,
+    sender_email: str,
+    sender_name: str,
+    uploaded_storage_root: Path | None = None,
+    generated_storage_root: Path | None = None,
+) -> EmailMessage:
     message = EmailMessage()
     message["From"] = f"{sender_name} <{sender_email}>" if sender_name else sender_email
     message["To"] = ", ".join(_format_address(item) for item in draft.get("to", []))
@@ -668,6 +695,12 @@ def _draft_message(draft: dict[str, object], *, sender_email: str, sender_name: 
     body_html = str(draft.get("body_html") or "")
     if body_html:
         message.add_alternative(body_html, subtype="html")
+    attach_workspace_attachments(
+        message,
+        draft,
+        uploaded_root=uploaded_storage_root,
+        generated_root=generated_storage_root,
+    )
     return message
 
 
@@ -765,21 +798,27 @@ def _attachment_bytes(message: EmailMessage, part_index: int) -> bytes | None:
     return None
 
 
-def _save_attachment(data_root: Path, attachment_id: str, filename: str, payload: bytes, generated_storage_root: Path | None) -> dict[str, object]:
-    root = generated_storage_root or data_root / "generated"
-    target_dir = root / "mail" / "attachments"
-    target_dir.mkdir(parents=True, exist_ok=True)
-    safe_name = re.sub(r"[^A-Za-z0-9._-]+", "_", filename).strip("._") or "attachment.bin"
-    relative_path = Path("mail") / "attachments" / f"{attachment_id}_{safe_name}"
-    target = root / relative_path
-    target.write_bytes(payload)
-    storage_ref = {"provider": "generated_storage", "path": str(relative_path), "size_bytes": len(payload)}
-    with connect(data_root) as db:
-        db.execute(
-            "UPDATE attachments SET storage_state = ?, storage_ref_json = ?, updated_at = ? WHERE id = ?",
-            ("saved", json.dumps(storage_ref, ensure_ascii=True, sort_keys=True), now_timestamp(), attachment_id),
-        )
-    return storage_ref
+def _save_attachment(
+    data_root: Path,
+    attachment_id: str,
+    filename: str,
+    content_type: str,
+    payload: bytes,
+    generated_storage_root: Path | None,
+    *,
+    target_folder: object = None,
+    mode: object = "versioned",
+) -> dict[str, object]:
+    return save_attachment_to_storage(
+        data_root,
+        attachment_id=attachment_id,
+        filename=filename,
+        content_type=content_type,
+        attachment_bytes=payload,
+        generated_storage_root=generated_storage_root,
+        target_folder=target_folder,
+        mode=mode,
+    )
 
 
 def _thread_key(message: EmailMessage, subject: object) -> str:

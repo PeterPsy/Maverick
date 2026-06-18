@@ -7,6 +7,7 @@ from pathlib import Path
 from uuid import uuid4
 
 from database import connect, ensure_schema, now_timestamp
+from storage_attachments import normalize_workspace_attachments
 from store import audit, get_thread, list_connections
 
 
@@ -19,13 +20,14 @@ def create_draft(data_root: Path, payload: dict[str, object]) -> dict[str, objec
     subject = _required_string(payload.get("subject"), "subject")
     body_text = _required_string(payload.get("body_text"), "body_text")
     body_html = _optional_string(payload.get("body_html")) or ""
+    workspace_attachments = normalize_workspace_attachments(payload)
     now = now_timestamp()
     draft_id = f"mail_draft_{uuid4().hex[:16]}"
     with connect(data_root) as db:
         db.execute(
             """
-            INSERT INTO drafts(id, connection_id, thread_id, to_json, cc_json, bcc_json, reply_to_json, subject, body_text, body_html, status, dirty, created_at, updated_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            INSERT INTO drafts(id, connection_id, thread_id, to_json, cc_json, bcc_json, reply_to_json, subject, body_text, body_html, workspace_attachments_json, status, dirty, created_at, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 draft_id,
@@ -38,13 +40,14 @@ def create_draft(data_root: Path, payload: dict[str, object]) -> dict[str, objec
                 subject,
                 body_text,
                 body_html,
+                json.dumps(workspace_attachments, ensure_ascii=True, sort_keys=True),
                 "draft",
                 1,
                 now,
                 now,
             ),
         )
-    audit(data_root, "draft.create", "mail_draft", draft_id, {"subject": subject})
+    audit(data_root, "draft.create", "mail_draft", draft_id, {"subject": subject, "workspace_attachments": len(workspace_attachments)})
     return get_draft(data_root, draft_id)
 
 
@@ -68,13 +71,18 @@ def update_draft(data_root: Path, draft_id: str, payload: dict[str, object]) -> 
         "subject": _required_string(payload.get("subject", draft["subject"]), "subject"),
         "body_text": _required_string(payload.get("body_text", draft["body_text"]), "body_text"),
         "body_html": _optional_string(payload.get("body_html", draft.get("body_html"))) or "",
+        "workspace_attachments_json": json.dumps(
+            normalize_workspace_attachments(payload) if "workspace_attachments" in payload or "attachments" in payload else draft.get("workspace_attachments", []),
+            ensure_ascii=True,
+            sort_keys=True,
+        ),
         "updated_at": now_timestamp(),
     }
     with connect(data_root) as db:
         db.execute(
             """
             UPDATE drafts
-            SET to_json = ?, cc_json = ?, bcc_json = ?, reply_to_json = ?, subject = ?, body_text = ?, body_html = ?, dirty = 1, updated_at = ?
+            SET to_json = ?, cc_json = ?, bcc_json = ?, reply_to_json = ?, subject = ?, body_text = ?, body_html = ?, workspace_attachments_json = ?, dirty = 1, updated_at = ?
             WHERE id = ? AND status != 'sent'
             """,
             (
@@ -85,6 +93,7 @@ def update_draft(data_root: Path, draft_id: str, payload: dict[str, object]) -> 
                 values["subject"],
                 values["body_text"],
                 values["body_html"],
+                values["workspace_attachments_json"],
                 values["updated_at"],
                 draft_id,
             ),
@@ -139,6 +148,7 @@ def _draft(row) -> dict[str, object]:
     item["cc"] = _loads_list(item.pop("cc_json"))
     item["bcc"] = _loads_list(item.pop("bcc_json"))
     item["reply_to"] = _loads_list(item.pop("reply_to_json", "[]"))
+    item["workspace_attachments"] = _loads_list(item.pop("workspace_attachments_json", "[]"))
     item["dirty"] = bool(item["dirty"])
     item["deep_link"] = f"/app/mail?draft={item['id']}"
     return item

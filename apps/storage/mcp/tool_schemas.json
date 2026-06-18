@@ -91,6 +91,9 @@
           "offset": {"type": "integer", "minimum": 0},
           "limit": {"type": "integer", "minimum": 1, "maximum": 2000},
           "max_bytes": {"type": "integer", "minimum": 1},
+          "return_handle": {"type": "boolean", "default": false},
+          "include_content": {"type": "boolean"},
+          "include_local_path": {"type": "boolean", "default": false},
           "max_chars": {"type": "integer", "minimum": 1},
           "content": {"type": "string"},
           "content_base64": {"type": "string"},
@@ -100,7 +103,7 @@
           "drive_upload_session_id": {"type": "string"},
           "refresh_remote": {"type": "boolean", "default": false},
           "chunk_offset": {"type": "integer", "minimum": 0},
-          "mode": {"type": "string", "enum": ["create", "overwrite"]},
+          "mode": {"type": "string", "enum": ["create", "overwrite", "upsert", "versioned"]},
           "entity_type": {"type": "string", "enum": ["file", "folder"]},
           "entity_id": {"type": "string"},
           "provider": {"type": "string", "enum": ["google_drive"]},
@@ -282,14 +285,17 @@
       "output_schema": {"type": "object", "properties": {"file": {"type": "object"}}}
     },
     "storage_read_file": {
-      "description": "Read one Storage file as bounded base64 content. Use only after selecting an explicit file.",
+      "description": "Read one Storage file as bounded base64 content or return a Storage file handle without inline bytes.",
       "input_schema": {
         "type": "object",
         "properties": {
           "workspace_relative_path": {"type": "string", "pattern": "^storage/(uploaded|generated)/.+$"},
           "role": {"type": "string", "enum": ["uploaded", "generated"]},
           "relative_path": {"type": "string"},
-          "max_bytes": {"type": "integer", "minimum": 1}
+          "max_bytes": {"type": "integer", "minimum": 1},
+          "return_handle": {"type": "boolean", "default": false},
+          "include_content": {"type": "boolean"},
+          "include_local_path": {"type": "boolean", "default": false}
         },
         "anyOf": [
           {"required": ["workspace_relative_path"]},
@@ -297,10 +303,10 @@
         ],
         "additionalProperties": false
       },
-      "output_schema": {"type": "object", "properties": {"file": {"type": "object"}, "content_base64": {"type": "string"}}}
+      "output_schema": {"type": "object", "properties": {"file": {"type": "object"}, "content_base64": {"type": "string"}, "file_handle": {"type": "object"}}}
     },
     "storage_read_text": {
-      "description": "Extract complete text for a supported Storage text, Markdown, DOCX, PPTX, or XLSX file. Use offset and max_chars to page very large documents.",
+      "description": "Extract complete text for a supported Storage text, Markdown, DOCX, PPTX, XLSX, or ODT file. Use offset and max_chars to page very large documents.",
       "input_schema": {
         "type": "object",
         "properties": {
@@ -332,7 +338,7 @@
       }
     },
     "storage_preview_text": {
-      "description": "Extract a bounded text preview for a text, Markdown, DOCX, PPTX, or XLSX Storage file.",
+      "description": "Extract a bounded text preview for a text, Markdown, DOCX, PPTX, XLSX, or ODT Storage file.",
       "input_schema": {
         "type": "object",
         "properties": {
@@ -369,14 +375,14 @@
       "output_schema": {"type": "object", "properties": {"sheets": {"type": "array"}, "file": {"type": "object"}}}
     },
     "storage_write_file": {
-      "description": "Create or overwrite one workspace Storage file through the official Storage write path.",
+      "description": "Create, overwrite, upsert, or write a versioned workspace Storage file through the official Storage write path.",
       "input_schema": {
         "type": "object",
         "properties": {
           "workspace_relative_path": {"type": "string", "pattern": "^storage/(uploaded|generated)/.+$"},
           "role": {"type": "string", "enum": ["uploaded", "generated"], "default": "generated"},
           "relative_path": {"type": "string"},
-          "mode": {"type": "string", "enum": ["create", "overwrite"]},
+          "mode": {"type": "string", "enum": ["create", "overwrite", "upsert", "versioned"]},
           "content": {"type": "string"},
           "content_base64": {"type": "string"}
         },

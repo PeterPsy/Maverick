@@ -22,7 +22,10 @@ from store_files_paths import (
     atomic_write_bytes,
     enforce_storage_budget,
     folder_record,
+    hash_file,
     is_system_upload_folder,
+    normalize_write_mode,
+    prepare_write_target,
     resolve_storage_file,
     resolve_storage_folder,
     safe_file_name,
@@ -67,11 +70,13 @@ def upload_file_payload(
     folder_relative_path: object,
     file_name: object,
     content_base64: object,
+    mode: object = "create",
     data_root: Path,
     uploaded_root: Path,
     generated_root: Path,
 ) -> dict:
     payload = write_content_bytes(content=None, content_base64=content_base64)
+    write_mode = normalize_write_mode(mode, operation="upload_file")
     root = storage_root_for_role(role=role, uploaded_root=uploaded_root, generated_root=generated_root).resolve()
     with storage_write_lock(data_root):
         folder = resolve_storage_folder(
@@ -80,15 +85,30 @@ def upload_file_payload(
             uploaded_root=uploaded_root,
             generated_root=generated_root,
         )
-        target = (folder / safe_file_name(str(file_name or ""))).resolve()
-        if root not in target.parents:
-            raise StorageValidationError("Uploaded file must stay inside the selected storage root.")
-        if target.exists():
-            raise StorageValidationError("A file or folder with that name already exists in the target folder.")
+        requested_target = (folder / safe_file_name(str(file_name or ""))).resolve()
+        target = prepare_write_target(
+            root=root,
+            requested_target=requested_target,
+            mode=write_mode,
+            operation="upload_file",
+        )
+        previous_sha256 = hash_file(target) if target.exists() and target.is_file() else ""
         enforce_storage_budget(uploaded_root=uploaded_root, generated_root=generated_root, target=target, payload_size=len(payload))
         atomic_write_bytes(target, payload)
-        record = upsert_file_record(data_root=data_root, role=role, root=root, path=target, sha256=content_hash(payload))
-    return {"file": record, "bytes_written": len(payload)}
+        new_sha256 = content_hash(payload)
+        record = upsert_file_record(data_root=data_root, role=role, root=root, path=target, sha256=new_sha256)
+    audit = {
+        "operation": "upload_file",
+        "requested_mode": write_mode,
+        "effective_mode": "create" if not previous_sha256 else "overwrite",
+        "requested_workspace_relative_path": f"storage/{role}/{requested_target.relative_to(root).as_posix()}",
+        "workspace_relative_path": record["workspace_relative_path"],
+        "previous_sha256": previous_sha256,
+        "sha256": new_sha256,
+        "bytes_written": len(payload),
+        "replaced": bool(previous_sha256 and target == requested_target),
+    }
+    return {"file": record, "bytes_written": len(payload), "audit": audit}
 
 
 
@@ -139,7 +159,7 @@ def read_text_payload(
     root = storage_root_for_role(role=role, uploaded_root=uploaded_root, generated_root=generated_root).resolve()
     record = upsert_file_record(data_root=data_root, role=role, root=root, path=path.resolve())
     if not text_content_supported(path, record["preview_kind"]):
-        raise StorageValidationError("Text read is only available for text, Markdown, DOCX, PPTX, and XLSX files.")
+        raise StorageValidationError("Text read is only available for text, Markdown, DOCX, PPTX, XLSX, and ODT files.")
     try:
         text = extract_text_content(path, record["preview_kind"])
     except (ValueError, KeyError, ElementTree.ParseError, zipfile.BadZipFile, OSError, UnicodeDecodeError) as error:

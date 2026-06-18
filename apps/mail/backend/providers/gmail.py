@@ -19,6 +19,7 @@ from database import connect, ensure_schema, now_timestamp
 from email_rendering import render_email_body
 from drafts import get_draft
 from store import audit, get_attachment, get_thread, list_threads
+from storage_attachments import attach_workspace_attachments, save_attachment_to_storage
 
 from .base import ProviderCapability
 
@@ -146,6 +147,8 @@ class GmailProvider:
         draft_id: str,
         confirm: bool = False,
         app_secrets: dict[str, object] | None = None,
+        uploaded_storage_root: Path | None = None,
+        generated_storage_root: Path | None = None,
     ) -> dict[str, object]:
         draft = get_draft(data_root, draft_id)
         _require_recipients(draft)
@@ -153,7 +156,13 @@ class GmailProvider:
             return {"dry_run": True, "requires_confirmation": True, "draft": draft}
         secrets = _require_app_secrets(app_secrets)
         connection = _connection(data_root, str(draft["connection_id"]))
-        message = _draft_message(draft, sender_email=str(connection["email_address"]), sender_name=str(connection["display_name"]))
+        message = _draft_message(
+            draft,
+            sender_email=str(connection["email_address"]),
+            sender_name=str(connection["display_name"]),
+            uploaded_storage_root=uploaded_storage_root,
+            generated_storage_root=generated_storage_root,
+        )
         raw = base64.urlsafe_b64encode(message.as_bytes()).decode("ascii").rstrip("=")
         payload: dict[str, object] = {"raw": raw}
         if draft.get("thread_id"):
@@ -254,6 +263,8 @@ class GmailProvider:
         max_bytes: int | None = None,
         save_to_storage: bool = False,
         generated_storage_root: Path | None = None,
+        storage_target_folder: object = None,
+        storage_mode: object = "versioned",
     ) -> dict[str, object]:
         attachment = get_attachment(data_root, attachment_id)
         resolved_attachment_id = str(attachment["id"])
@@ -302,8 +313,11 @@ class GmailProvider:
                 data_root,
                 attachment_id=resolved_attachment_id,
                 filename=str(attachment["filename"]),
+                content_type=str(attachment["content_type"] or "application/octet-stream"),
                 attachment_bytes=attachment_bytes,
                 generated_storage_root=generated_storage_root,
+                target_folder=storage_target_folder,
+                mode=storage_mode,
             )
             return {
                 **metadata,
@@ -716,7 +730,14 @@ def _addresses(value: str) -> list[dict[str, str]]:
     return result
 
 
-def _draft_message(draft: dict[str, object], *, sender_email: str, sender_name: str) -> EmailMessage:
+def _draft_message(
+    draft: dict[str, object],
+    *,
+    sender_email: str,
+    sender_name: str,
+    uploaded_storage_root: Path | None = None,
+    generated_storage_root: Path | None = None,
+) -> EmailMessage:
     message = EmailMessage()
     message["From"] = f"{sender_name} <{sender_email}>" if sender_name else sender_email
     message["To"] = ", ".join(_format_address(item) for item in draft.get("to", []))
@@ -731,6 +752,12 @@ def _draft_message(draft: dict[str, object], *, sender_email: str, sender_name: 
     body_html = str(draft.get("body_html") or "")
     if body_html:
         message.add_alternative(body_html, subtype="html")
+    attach_workspace_attachments(
+        message,
+        draft,
+        uploaded_root=uploaded_storage_root,
+        generated_root=generated_storage_root,
+    )
     return message
 
 
@@ -830,27 +857,22 @@ def _save_attachment_to_storage(
     *,
     attachment_id: str,
     filename: str,
+    content_type: str,
     attachment_bytes: bytes,
     generated_storage_root: Path | None,
+    target_folder: object = None,
+    mode: object = "versioned",
 ) -> dict[str, object]:
-    if generated_storage_root is None:
-        raise ValueError("save_to_storage requires generated storage from the platform entrypoint")
-    safe_name = _safe_filename(filename)
-    target_dir = _attachment_storage_dir(generated_storage_root)
-    target, collision_renamed = _write_unique_attachment(target_dir, attachment_id, safe_name, attachment_bytes)
-    storage_ref = {
-        "workspace_relative_path": f"storage/generated/mail/attachments/{target.name}",
-        "filename": filename,
-        "stored_filename": target.name,
-    }
-    if collision_renamed:
-        storage_ref["collision"] = "renamed"
-    with connect(data_root) as db:
-        db.execute(
-            "UPDATE attachments SET storage_state = ?, storage_ref_json = ?, updated_at = ? WHERE id = ?",
-            ("saved", json.dumps(storage_ref, ensure_ascii=True, sort_keys=True), now_timestamp(), attachment_id),
-        )
-    return storage_ref
+    return save_attachment_to_storage(
+        data_root,
+        attachment_id=attachment_id,
+        filename=filename,
+        content_type=content_type,
+        attachment_bytes=attachment_bytes,
+        generated_storage_root=generated_storage_root,
+        target_folder=target_folder,
+        mode=mode,
+    )
 
 
 def _attachment_storage_dir(generated_storage_root: Path) -> Path:

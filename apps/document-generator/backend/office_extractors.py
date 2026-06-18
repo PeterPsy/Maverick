@@ -47,6 +47,25 @@ def extract_xlsx_text(path: Path) -> str:
     return "\n\n".join(sheet for sheet in sheets if sheet)
 
 
+def extract_odt_text(path: Path) -> str:
+    with zipfile.ZipFile(path) as archive:
+        _validate_archive_budget(archive)
+        raw_xml = _read_archive_member(archive, "content.xml")
+    try:
+        root = ET.fromstring(raw_xml)
+    except ET.ParseError:
+        return ""
+    blocks: list[str] = []
+    for element in root.iter():
+        local_name = element.tag.rsplit("}", 1)[-1]
+        if local_name not in {"h", "p", "list-item"}:
+            continue
+        text = " ".join("".join(element.itertext()).split())
+        if text:
+            blocks.append(text)
+    return "\n".join(blocks)
+
+
 def _xml_text(raw_xml: bytes) -> str:
     try:
         root = ET.fromstring(raw_xml)

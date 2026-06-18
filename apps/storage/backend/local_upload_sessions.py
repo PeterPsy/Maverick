@@ -17,6 +17,9 @@ from inventory import upsert_file_record
 from limits import LOCAL_UPLOAD_SESSION_CHUNK_BYTES, MAX_STORAGE_FILE_TRANSFER_BYTES
 from store_files_paths import (
     enforce_storage_budget,
+    hash_file,
+    normalize_write_mode,
+    prepare_write_target,
     resolve_storage_folder,
     safe_file_name,
     storage_root_for_role,
@@ -37,6 +40,7 @@ def create_local_upload_session(
     file_name: object,
     content_type: object,
     size_bytes: int,
+    mode: object = "create",
     uploaded_root: Path,
     generated_root: Path,
 ) -> dict[str, Any]:
@@ -49,6 +53,7 @@ def create_local_upload_session(
         )
     with storage_write_lock(data_root):
         prune_local_upload_sessions(data_root=data_root)
+        write_mode = normalize_write_mode(mode, operation="local_upload_session.start")
         root = storage_root_for_role(role=role, uploaded_root=uploaded_root, generated_root=generated_root).resolve()
         folder = resolve_storage_folder(
             role=role,
@@ -56,11 +61,13 @@ def create_local_upload_session(
             uploaded_root=uploaded_root,
             generated_root=generated_root,
         )
-        target = (folder / safe_file_name(file_name)).resolve()
-        if root not in target.parents:
-            raise StorageValidationError("Uploaded file must stay inside the selected storage root.", operation="local_upload_session.start")
-        if target.exists():
-            raise StorageValidationError("A file or folder with that name already exists in the target folder.", operation="local_upload_session.start")
+        requested_target = (folder / safe_file_name(file_name)).resolve()
+        target = prepare_write_target(
+            root=root,
+            requested_target=requested_target,
+            mode=write_mode,
+            operation="local_upload_session.start",
+        )
         reserved_bytes = _active_session_reserved_bytes(data_root=data_root)
         _enforce_reserved_upload_budget(
             uploaded_root=uploaded_root,
@@ -80,7 +87,9 @@ def create_local_upload_session(
             "status": "uploading",
             "provider": "local",
             "role": role,
+            "mode": write_mode,
             "folder_relative_path": "" if folder == root else folder.relative_to(root).as_posix(),
+            "requested_relative_path": requested_target.relative_to(root).as_posix(),
             "relative_path": target.relative_to(root).as_posix(),
             "file_name": target.name,
             "content_type": str(content_type or "application/octet-stream").strip() or "application/octet-stream",
@@ -143,6 +152,7 @@ def append_local_upload_chunk(
                 "provider": "local",
                 "upload_session": public_local_upload_session(session),
                 "file": session.get("file"),
+                "audit": session.get("audit", {}),
             }
         if status == "canceled":
             raise StorageValidationError("Local upload session was canceled.", operation="local_upload_session.chunk")
@@ -186,7 +196,13 @@ def append_local_upload_chunk(
             uploaded_root=uploaded_root,
             generated_root=generated_root,
         )
-        return {"status": "uploaded", "provider": "local", "upload_session": public_local_upload_session(completed), "file": completed["file"]}
+        return {
+            "status": "uploaded",
+            "provider": "local",
+            "upload_session": public_local_upload_session(completed),
+            "file": completed["file"],
+            "audit": completed.get("audit", {}),
+        }
 
 
 def public_local_upload_session(record: dict[str, Any]) -> dict[str, Any]:
@@ -224,13 +240,16 @@ def _complete_upload(
     generated_root: Path,
 ) -> dict[str, Any]:
     role = str(session.get("role") or "")
-    relative_path = str(session.get("relative_path") or "")
+    relative_path = str(session.get("requested_relative_path") or session.get("relative_path") or "")
+    write_mode = str(session.get("mode") or "create")
     root = storage_root_for_role(role=role, uploaded_root=uploaded_root, generated_root=generated_root).resolve()
-    target = (root / relative_path).resolve()
-    if root not in target.parents:
-        raise StorageValidationError("Uploaded file must stay inside the selected storage root.", operation="local_upload_session.chunk")
-    if target.exists():
-        raise StorageValidationError("A file or folder with that name already exists in the target folder.", operation="local_upload_session.chunk")
+    requested_target = (root / relative_path).resolve()
+    target = prepare_write_target(
+        root=root,
+        requested_target=requested_target,
+        mode=write_mode,
+        operation="local_upload_session.chunk",
+    )
     if part_path.stat().st_size != int(session.get("size_bytes") or 0):
         raise StorageValidationError("Local upload session did not receive the declared number of bytes.", operation="local_upload_session.chunk")
     reserved_bytes = _active_session_reserved_bytes(data_root=data_root, exclude_session_id=str(session.get("id") or ""))
@@ -243,13 +262,33 @@ def _complete_upload(
         operation="local_upload_session.chunk",
     )
     target.parent.mkdir(parents=True, exist_ok=True)
+    previous_sha256 = hash_file(target) if target.exists() and target.is_file() else ""
     sha256 = _hash_file(part_path)
     part_path.replace(target)
     record = upsert_file_record(data_root=data_root, role=role, root=root, path=target, sha256=sha256)
+    audit = {
+        "operation": "local_upload_session.complete",
+        "requested_mode": write_mode,
+        "effective_mode": "create" if not previous_sha256 else "overwrite",
+        "requested_workspace_relative_path": f"storage/{role}/{requested_target.relative_to(root).as_posix()}",
+        "workspace_relative_path": record["workspace_relative_path"],
+        "previous_sha256": previous_sha256,
+        "sha256": sha256,
+        "bytes_written": int(session.get("size_bytes") or 0),
+        "replaced": bool(previous_sha256 and target == requested_target),
+    }
     return _update_session(
         data_root,
         session,
-        {"status": "complete", "bytes_uploaded": int(session.get("size_bytes") or 0), "error": "", "file": record},
+        {
+            "status": "complete",
+            "bytes_uploaded": int(session.get("size_bytes") or 0),
+            "error": "",
+            "file": record,
+            "relative_path": record["relative_path"],
+            "file_name": record["name"],
+            "audit": audit,
+        },
     )
 
 

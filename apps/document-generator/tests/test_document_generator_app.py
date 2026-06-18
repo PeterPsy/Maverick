@@ -120,6 +120,7 @@ class DocumentGeneratorAppTestCase(unittest.TestCase):
         self.assertIn("maverick_document_generator", parsed.contract.capabilities.mcp_tools)
         self.assertIn("document_generator_convert_to_markdown", parsed.contract.capabilities.mcp_tools)
         self.assertIn("document_generator_extract_text", parsed.contract.capabilities.mcp_tools)
+        self.assertIn("document_generator_spreadsheet_transform", parsed.contract.capabilities.mcp_tools)
         self.assertIn("document_generator_patch_pdf_text", parsed.contract.capabilities.mcp_tools)
         self.assertIn("document_generator_modify_uploaded_document", parsed.contract.capabilities.mcp_tools)
         self.assertIn("document_generator_set_view_filter", parsed.contract.capabilities.mcp_tools)
@@ -241,6 +242,100 @@ class DocumentGeneratorAppTestCase(unittest.TestCase):
             self.assertIn("Delta", combined_text)
             self.assertIn("xlsx text", combined_text)
             self.assertTrue(all(item["extraction"]["engine"] for item in extracted))
+
+    def test_backend_extracts_odt_text(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            generated_root = root / "storage" / "generated"
+            generated_root.mkdir(parents=True)
+            odt = generated_root / "instructions.odt"
+            with zipfile.ZipFile(odt, "w") as archive:
+                archive.writestr(
+                    "content.xml",
+                    """<?xml version="1.0" encoding="UTF-8"?>
+                    <office:document-content
+                      xmlns:office="urn:oasis:names:tc:opendocument:xmlns:office:1.0"
+                      xmlns:text="urn:oasis:names:tc:opendocument:xmlns:text:1.0">
+                      <office:body><office:text><text:h>Title</text:h><text:p>ODT workflow instructions</text:p></office:text></office:body>
+                    </office:document-content>""",
+                )
+
+            extracted = self.run_backend(
+                data_root=root / "data" / "document-generator",
+                generated_root=generated_root,
+                body={"action": "extract_text", "workspace_relative_path": "storage/generated/instructions.odt"},
+            )
+
+            self.assertEqual(extracted["status_code"], 200, extracted)
+            self.assertEqual(extracted["json"]["document"]["detected_format"], "odt")
+            self.assertIn("ODT workflow instructions", extracted["json"]["text"])
+            self.assertFalse(extracted["json"]["truncated"])
+
+    def test_backend_spreadsheet_transform_lookup_copy_writes_audit_report(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            data_root = root / "data" / "document-generator"
+            generated_root = root / "storage" / "generated"
+            generated_root.mkdir(parents=True)
+            source = self.run_backend(
+                data_root=data_root,
+                generated_root=generated_root,
+                body={
+                    "action": "generate_document",
+                    "spec": {
+                        "format": "xlsx",
+                        "title": "Source",
+                        "output_filename": "source.xlsx",
+                        "sheets": [{"name": "Data", "rows": [["Key", "Value"], ["A", "10"], ["B", "20"]]}],
+                    },
+                },
+            )["json"]["document"]
+            target = self.run_backend(
+                data_root=data_root,
+                generated_root=generated_root,
+                body={
+                    "action": "generate_document",
+                    "spec": {
+                        "format": "xlsx",
+                        "title": "Target",
+                        "output_filename": "target.xlsx",
+                        "sheets": [{"name": "Data", "rows": [["Key", "Name", "Copied"], ["A", "Alpha", ""], ["B", "Bravo", ""]]}],
+                    },
+                },
+            )["json"]["document"]
+
+            transformed = self.run_backend(
+                data_root=data_root,
+                generated_root=generated_root,
+                body={
+                    "action": "spreadsheet.transform",
+                    "source_files": [
+                        {"alias": "source", "path": source["workspace_relative_path"]},
+                        {"alias": "target", "path": target["workspace_relative_path"]},
+                    ],
+                    "target_file": target["workspace_relative_path"],
+                    "operations": [
+                        {
+                            "type": "lookup_and_copy",
+                            "lookup": ["A", "B"],
+                            "source": {"file": "source", "sheet": 0, "key_column": "A", "columns": ["B"]},
+                            "target": {"file": "target", "sheet": 0, "key_column": "A", "columns": ["C"]},
+                        }
+                    ],
+                },
+            )
+            extracted = self.run_backend(
+                data_root=data_root,
+                generated_root=generated_root,
+                body={"action": "extract_text", "workspace_relative_path": target["workspace_relative_path"]},
+            )
+
+            self.assertEqual(transformed["status_code"], 200, transformed)
+            self.assertEqual(transformed["json"]["status"], "transformed")
+            self.assertEqual(transformed["json"]["audit"]["operations"][0]["changed_cells"], 2)
+            self.assertTrue((root / transformed["json"]["report_path"]).is_file())
+            self.assertIn("10", extracted["json"]["text"])
+            self.assertIn("20", extracted["json"]["text"])
 
     def test_health_hook_reports_degraded_when_pymupdf_is_missing(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
@@ -622,6 +717,7 @@ class DocumentGeneratorAppTestCase(unittest.TestCase):
         self.assertIn("app.document-generator.maverick_document_generator", [tool.tool_name for tool in tools])
         self.assertIn("app.document-generator.document_generator_convert_to_markdown", [tool.tool_name for tool in tools])
         self.assertIn("app.document-generator.document_generator_extract_text", [tool.tool_name for tool in tools])
+        self.assertIn("app.document-generator.document_generator_spreadsheet_transform", [tool.tool_name for tool in tools])
         self.assertIn("app.document-generator.document-generator", [command.command_id for command in commands])
         markdown_tool = next(tool for tool in tools if tool.tool_name == "app.document-generator.document_generator_convert_to_markdown")
         document_command = next(command for command in commands if command.command_id == "app.document-generator.document-generator")

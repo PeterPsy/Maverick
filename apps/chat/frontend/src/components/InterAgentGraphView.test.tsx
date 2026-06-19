@@ -92,6 +92,7 @@ function runDetail(overrides: Partial<InterAgentRunDetail> = {}): InterAgentRunD
         thread_visibility: "user",
         created_at: "2026-06-18T10:00:00Z",
         updated_at: "2026-06-18T10:00:00Z",
+        sequence_index: 0,
       },
       {
         participant_id: "researcher",
@@ -107,6 +108,7 @@ function runDetail(overrides: Partial<InterAgentRunDetail> = {}): InterAgentRunD
         thread_visibility: "hidden",
         created_at: "2026-06-18T10:00:00Z",
         updated_at: "2026-06-18T10:00:00Z",
+        sequence_index: 1,
       },
     ],
     edges: [
@@ -251,6 +253,7 @@ describe("InterAgentGraphView", () => {
           label: "Implementer",
           runtime_session_id: "child-implementer",
           status: "completed",
+          sequence_index: 1,
         },
         {
           ...base.participants[1],
@@ -258,6 +261,7 @@ describe("InterAgentGraphView", () => {
           label: "Reviewer",
           runtime_session_id: "child-reviewer",
           status: "running",
+          sequence_index: 2,
         },
       ],
       edges: [

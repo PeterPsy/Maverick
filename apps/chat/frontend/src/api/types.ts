@@ -397,6 +397,7 @@ export type InterAgentParticipantRecord = {
   thread_visibility: string;
   created_at: string;
   updated_at: string;
+  sequence_index: number;
 };
 
 export type InterAgentEdgeRecord = {

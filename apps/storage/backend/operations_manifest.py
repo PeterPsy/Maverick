@@ -20,6 +20,9 @@ STORAGE_ACTIONS = [
     "read_text",
     "file.text.read",
     "file.content.write",
+    "image.inspect",
+    "image.compose_pair",
+    "image.compose_side_by_side",
     "upload_file",
     "local_upload_session.start",
     "local_upload_session.status",
@@ -79,6 +82,7 @@ STORAGE_ACTION_ALIASES = {
     "write-content": "file.content.write",
     "read_file": "file.content.read",
     "read_text": "file.text.read",
+    "image.compose_side_by_side": "image.compose_pair",
 }
 
 
@@ -108,6 +112,8 @@ def operations_manifest_payload() -> dict[str, Any]:
             {"surface": "mcp", "name": "storage_preview_text", "operation": "file.preview.text"},
             {"surface": "mcp", "name": "storage_preview_table", "operation": "file.preview.table"},
             {"surface": "mcp", "name": "storage_write_file", "operation": "file.content.write"},
+            {"surface": "mcp", "name": "storage_image_inspect", "operation": "image.inspect"},
+            {"surface": "mcp", "name": "storage_image_compose_pair", "operation": "image.compose_pair"},
             {"surface": "mcp", "name": "storage_drive_list_roots", "operation": "drive_list_roots"},
             {"surface": "mcp", "name": "storage_drive_list_children", "operation": "drive_list_children"},
             {"surface": "mcp", "name": "storage_drive_search", "operation": "drive_search"},
@@ -170,6 +176,21 @@ def operations_manifest_payload() -> dict[str, Any]:
                     "content": "# Report",
                 },
             },
+            {
+                "task": "combine_front_back_images",
+                "operation": "image.compose_pair",
+                "calls_required": 1,
+                "example": {
+                    "action": "image.compose_pair",
+                    "images": [
+                        "storage/generated/mail/attachments/id-front.jpg",
+                        "storage/generated/mail/attachments/id-back.jpg",
+                    ],
+                    "target_folder": "image-ops",
+                    "file_name": "id-card.jpg",
+                    "mode": "versioned",
+                },
+            },
         ],
         "operations": [
             {
@@ -218,6 +239,28 @@ def operations_manifest_payload() -> dict[str, Any]:
                 "required_one_of": ["content", "content_base64"],
                 "optional": ["mode"],
                 "payload_profile": "single_write_result",
+            },
+            {
+                "action": "image.inspect",
+                "description": "Read image dimensions, display orientation, size, and SHA-256 for local Storage images.",
+                "required_any": ["images", "workspace_relative_paths", "workspace_relative_path"],
+                "payload_profile": "image_metadata",
+            },
+            {
+                "action": "image.compose_pair",
+                "aliases": ["image.compose_side_by_side"],
+                "description": "Auto-rotate and compose two local Storage images side by side into storage/generated.",
+                "required": ["images"],
+                "optional": [
+                    "target_folder",
+                    "file_name",
+                    "target_workspace_relative_path",
+                    "output_format",
+                    "height",
+                    "mode",
+                    "confirm",
+                ],
+                "payload_profile": "single_generated_image",
             },
             {
                 "action": "local_upload_session.start",

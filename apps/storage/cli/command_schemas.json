@@ -26,6 +26,9 @@
               "write-content",
               "write_file",
               "file.content.write",
+              "image.inspect",
+              "image.compose_pair",
+              "image.compose_side_by_side",
               "upload_file",
               "upload_local_file",
               "local_upload_session.start",
@@ -112,6 +115,26 @@
           "content": {"type": "string"},
           "content_base64": {"type": "string"},
           "content_type": {"type": "string"},
+          "images": {
+            "type": "array",
+            "items": {
+              "oneOf": [
+                {"type": "string"},
+                {"type": "object"}
+              ]
+            },
+            "maxItems": 20
+          },
+          "left_workspace_relative_path": {"type": "string", "pattern": "^storage/(uploaded|generated)/.+$"},
+          "right_workspace_relative_path": {"type": "string", "pattern": "^storage/(uploaded|generated)/.+$"},
+          "target_folder": {"type": "string"},
+          "target_workspace_relative_path": {"type": "string", "pattern": "^storage/generated/.+$"},
+          "output_workspace_relative_path": {"type": "string", "pattern": "^storage/generated/.+$"},
+          "output_format": {"type": "string", "enum": ["jpg", "jpeg", "png"]},
+          "format": {"type": "string", "enum": ["jpg", "jpeg", "png"]},
+          "height": {"type": "integer", "minimum": 1, "maximum": 5000},
+          "output_height": {"type": "integer", "minimum": 1, "maximum": 5000},
+          "background_color": {"type": "string"},
           "source_path": {
             "type": "string",
             "description": "CLI-only local source file path for upload_local_file. Sandbox invocations may read only inside workspace_root; full-access operator invocations may read other local paths. This is not exposed by Storage MCP or frontend surfaces."
@@ -225,6 +248,30 @@
             "oneOf": [
               {"required": ["content"]},
               {"required": ["content_base64"]}
+            ]
+          },
+          {
+            "properties": {
+              "action": {"enum": ["image.inspect"]},
+              "role": {"enum": ["uploaded", "generated"]}
+            },
+            "required": ["action"],
+            "anyOf": [
+              {"required": ["images"]},
+              {"required": ["workspace_relative_paths"]},
+              {"required": ["workspace_relative_path"]},
+              {"required": ["role", "relative_path"]}
+            ]
+          },
+          {
+            "properties": {
+              "action": {"enum": ["image.compose_pair", "image.compose_side_by_side"]}
+            },
+            "required": ["action"],
+            "anyOf": [
+              {"required": ["images"]},
+              {"required": ["workspace_relative_paths"]},
+              {"required": ["left_workspace_relative_path", "right_workspace_relative_path"]}
             ]
           },
           {

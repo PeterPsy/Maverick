@@ -29,6 +29,8 @@ Common actions:
 - `read_file`: read a specific file by `role` and `relative_path` for bounded inline binary/download workflows. Use Storage media URLs for browser downloads of large local files.
 - `read_text` / `file.text.read`: extract document text from text, Markdown, DOCX, PPTX, and XLSX files without the preview character cap; use `offset` and `max_chars` only when you intentionally want a window.
 - `write_file` / `file.content.write`: create or overwrite a file by `role` and `relative_path` or `workspace_relative_path`, with UTF-8 `content` or `content_base64`.
+- `image.inspect`: inspect one or more local Storage images for dimensions, display orientation, size, and sha256.
+- `image.compose_pair` / `storage_image_compose_pair`: auto-rotate two local Storage images, compose them side by side, save the result under `storage/generated`, and return generated file metadata. Use this for front/back document image composition instead of ad hoc image scripts.
 - `preview_text`: extract a bounded text preview for UI-style preview workflows, not for complete document reading.
 - `preview_table`: extract structured sheet rows for CSV and spreadsheet files so Storage can render a table preview.
 - `update_markdown_file`: replace the UTF-8 contents of a validated `.md` file in workspace storage.

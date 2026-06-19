@@ -268,6 +268,35 @@
         }
       ]
     },
+    "mail_send_draft_approved": {
+      "description": "Send a draft using the latest unexpired dry-run preview. Does not accept or expose confirmation tokens.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "draft_id": { "type": "string" },
+          "connection_id": { "type": "string" }
+        },
+        "required": ["draft_id"],
+        "additionalProperties": false
+      },
+      "output_schema": { "type": "object" },
+      "secret_selectors": [
+        {
+          "required_secrets": ["gmail-oauth-client-id", "gmail-oauth-client-secret"],
+          "resource_lookup": { "kind": "mail_connection_from_arguments" }
+        },
+        {
+          "required_secrets": ["gmail-refresh-token"],
+          "resource_type": "mail_connection",
+          "resource_lookup": { "kind": "mail_connection_from_arguments" }
+        },
+        {
+          "required_secrets": ["mailbox-password"],
+          "resource_type": "mail_connection",
+          "resource_lookup": { "kind": "mail_connection_from_arguments" }
+        }
+      ]
+    },
     "mail_send": {
       "description": "Create and optionally send one message. Defaults to dry-run unless confirm=true.",
       "input_schema": {
@@ -343,6 +372,35 @@
           "resource_type": "mail_connection",
           "resource_lookup": { "kind": "mail_connection_from_arguments" },
           "when": { "confirm": true }
+        }
+      ]
+    },
+    "mail_send_approved": {
+      "description": "Send the draft produced by a prior dry-run preview using server-side approval. Does not accept or expose confirmation tokens.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "draft_id": { "type": "string" },
+          "connection_id": { "type": "string" }
+        },
+        "required": ["draft_id"],
+        "additionalProperties": false
+      },
+      "output_schema": { "type": "object" },
+      "secret_selectors": [
+        {
+          "required_secrets": ["gmail-oauth-client-id", "gmail-oauth-client-secret"],
+          "resource_lookup": { "kind": "mail_connection_from_arguments" }
+        },
+        {
+          "required_secrets": ["gmail-refresh-token"],
+          "resource_type": "mail_connection",
+          "resource_lookup": { "kind": "mail_connection_from_arguments" }
+        },
+        {
+          "required_secrets": ["mailbox-password"],
+          "resource_type": "mail_connection",
+          "resource_lookup": { "kind": "mail_connection_from_arguments" }
         }
       ]
     },

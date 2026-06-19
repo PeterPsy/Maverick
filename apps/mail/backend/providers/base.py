@@ -66,6 +66,7 @@ class MailProvider(Protocol):
         uploaded_storage_root: Path | None = None,
         generated_storage_root: Path | None = None,
         confirmation_token: object = None,
+        use_latest_confirmation: bool = False,
     ) -> dict[str, object]:
         """Preview or send one draft."""
         ...

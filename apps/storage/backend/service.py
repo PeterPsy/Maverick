@@ -44,6 +44,7 @@ from drive_localization import (
     stream_prepared_drive_media_response_body,
 )
 from google_drive_provider import DriveProviderError, GoogleDriveProvider
+from image_operations import image_compose_pair_payload, image_inspect_payload
 from inventory import preview_kind as inventory_preview_kind, upsert_remote_file_records
 from operations_manifest import STORAGE_ACTION_ALIASES, STORAGE_ACTIONS, operations_manifest_payload
 from reference_entities import (
@@ -118,6 +119,8 @@ DATA_CHANGED_RESOURCES = {
     "local_upload_session.chunk": "files",
     "write_file": "files",
     "file.content.write": "files",
+    "image.compose_pair": "files",
+    "image.compose_side_by_side": "files",
     "drive_connections.start_oauth": "drive-connections",
     "drive_connections.complete_oauth": "drive-connections",
     "drive_connections.disconnect": "drive-connections",
@@ -853,6 +856,20 @@ def handle_action(
             confirm=body.get("confirm"),
             uploaded_root=uploaded_root,
             generated_root=generated_root,
+        )
+    if action == "image.inspect":
+        return 200, image_inspect_payload(
+            data_root=data_root,
+            uploaded_root=uploaded_root,
+            generated_root=generated_root,
+            body=body,
+        )
+    if action in {"image.compose_pair", "image.compose_side_by_side"}:
+        return 200, image_compose_pair_payload(
+            data_root=data_root,
+            uploaded_root=uploaded_root,
+            generated_root=generated_root,
+            body=body,
         )
     if action == "upload_file":
         return 200, upload_file_payload(

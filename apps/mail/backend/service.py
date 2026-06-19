@@ -6,6 +6,8 @@ import base64
 import binascii
 import hashlib
 from pathlib import Path
+import re
+import unicodedata
 
 from connections import (
     IMAP_PASSWORD_SECRET,
@@ -63,9 +65,13 @@ MUTATING_ACTIONS = {
     "mail_update_draft",
     "drafts.delete",
     "drafts.send",
+    "drafts.send_approved",
     "mail_send_draft",
+    "mail_send_draft_approved",
     "messages.send",
+    "messages.send_approved",
     "mail_send",
+    "mail_send_approved",
     "attachments.save_all",
     "mail_save_attachments",
     "labels.modify",
@@ -207,6 +213,28 @@ def handle_action(data_root: Path, payload: dict[str, object]) -> tuple[int, dic
                     confirmation_token=payload.get("confirmation_token"),
                 )
             }
+        if action in {"drafts.send_approved", "mail_send_draft_approved", "messages.send_approved", "mail_send_approved"}:
+            draft_id = _required_string(payload.get("draft_id") or payload.get("id"), "draft_id")
+            draft = get_draft(data_root, draft_id)
+            connection_id = str(draft["connection_id"])
+            requested_connection_id = _optional_string(payload.get("connection_id"))
+            if requested_connection_id and _effective_connection_id(data_root, requested_connection_id) != connection_id:
+                raise ValueError("draft_id belongs to a different mail connection")
+            _require_connected(data_root, connection_id)
+            provider = provider_for_connection(data_root, connection_id)
+            result = provider.send_draft(
+                data_root,
+                draft_id,
+                confirm=True,
+                app_secrets=_app_secrets(payload),
+                uploaded_storage_root=_optional_path(payload.get("_uploaded_storage_root")),
+                generated_storage_root=_optional_path(payload.get("_generated_storage_root")),
+                use_latest_confirmation=True,
+            )
+            response: dict[str, object] = {"result": result}
+            if action in {"messages.send_approved", "mail_send_approved"}:
+                response["draft"] = draft
+            return 200, response
         if action in {"messages.send", "mail_send"}:
             if bool(payload.get("confirm")):
                 if not str(payload.get("confirmation_token") or "").strip():
@@ -375,6 +403,7 @@ def _save_thread_attachments(data_root: Path, payload: dict[str, object]) -> dic
     mode = payload.get("mode") or "versioned"
     saved: list[dict[str, object]] = []
     skipped: list[dict[str, object]] = []
+    source_attachments: list[dict[str, object]] = []
     seen_hashes: set[str] = set()
     generated_storage_root = _optional_path(payload.get("_generated_storage_root"))
     for message in thread.get("messages", []):
@@ -383,11 +412,28 @@ def _save_thread_attachments(data_root: Path, payload: dict[str, object]) -> dic
         for attachment in message.get("attachments", []):
             if not isinstance(attachment, dict):
                 continue
-            if not _attachment_filter_matches(attachment, payload):
-                skipped.append({"attachment_id": attachment.get("id"), "reason": "filtered"})
-                continue
             filename = str(attachment.get("filename") or "")
             size_bytes = int(attachment.get("size_bytes") or 0)
+            source_attachments.append(
+                {
+                    "attachment_id": attachment.get("id"),
+                    "message_id": message.get("id"),
+                    "filename": filename,
+                    "content_type": attachment.get("content_type") or "",
+                    "size_bytes": size_bytes,
+                }
+            )
+            if not _attachment_filter_matches(attachment, payload):
+                skipped.append(
+                    {
+                        "attachment_id": attachment.get("id"),
+                        "filename": filename,
+                        "content_type": attachment.get("content_type") or "",
+                        "size_bytes": size_bytes,
+                        "reason": "filtered",
+                    }
+                )
+                continue
             fetch = provider.fetch_attachment(
                 data_root,
                 str(attachment["id"]),
@@ -403,7 +449,14 @@ def _save_thread_attachments(data_root: Path, payload: dict[str, object]) -> dic
             if fetch.get("status") == "duplicate_sha256":
                 sha256 = str(fetch.get("sha256") or "")
                 skipped.append(
-                    {"attachment_id": attachment.get("id"), "filename": filename, "reason": "duplicate_sha256", "sha256": sha256}
+                    {
+                        "attachment_id": attachment.get("id"),
+                        "filename": filename,
+                        "content_type": attachment.get("content_type") or "",
+                        "size_bytes": fetch.get("size_bytes", size_bytes),
+                        "reason": "duplicate_sha256",
+                        "sha256": sha256,
+                    }
                 )
                 continue
             if fetch.get("status") == "saved":
@@ -449,7 +502,14 @@ def _save_thread_attachments(data_root: Path, payload: dict[str, object]) -> dic
             sha256 = hashlib.sha256(attachment_bytes).hexdigest()
             if dedupe and sha256 and sha256 in seen_hashes:
                 skipped.append(
-                    {"attachment_id": attachment.get("id"), "filename": filename, "reason": "duplicate_sha256", "sha256": sha256}
+                    {
+                        "attachment_id": attachment.get("id"),
+                        "filename": filename,
+                        "content_type": attachment.get("content_type") or "",
+                        "size_bytes": fetch.get("size_bytes", size_bytes),
+                        "reason": "duplicate_sha256",
+                        "sha256": sha256,
+                    }
                 )
                 continue
             seen_hashes.add(sha256)
@@ -480,6 +540,8 @@ def _save_thread_attachments(data_root: Path, payload: dict[str, object]) -> dic
                     },
                 }
             )
+    attachment_summary = _attachment_save_summary(source_attachments, saved, skipped)
+    document_part_hints = _document_part_hints(source_attachments)
     return {
         "status": "saved",
         "thread_id": thread_id,
@@ -489,6 +551,8 @@ def _save_thread_attachments(data_root: Path, payload: dict[str, object]) -> dic
         "skipped": skipped,
         "saved_count": len(saved),
         "skipped_count": len(skipped),
+        "attachment_summary": attachment_summary,
+        "document_part_hints": document_part_hints,
     }
 
 
@@ -530,6 +594,122 @@ def _string_filter_set(value: object) -> set[str]:
         return set()
     values = value if isinstance(value, list) else [value]
     return {str(item).strip().lower().lstrip(".") for item in values if str(item).strip()}
+
+
+def _attachment_save_summary(
+    source_attachments: list[dict[str, object]],
+    saved: list[dict[str, object]],
+    skipped: list[dict[str, object]],
+) -> dict[str, object]:
+    filtered_count = sum(1 for item in skipped if item.get("reason") == "filtered")
+    groups: dict[str, dict[str, object]] = {}
+    for item in [*saved, *skipped]:
+        sha256 = str(item.get("sha256") or "").strip()
+        if not sha256:
+            continue
+        group = groups.setdefault(
+            sha256,
+            {
+                "sha256": sha256,
+                "count": 0,
+                "attachment_ids": [],
+                "filenames": [],
+                "size_bytes": int(item.get("size_bytes") or 0),
+                "workspace_relative_paths": [],
+            },
+        )
+        group["count"] = int(group["count"]) + 1
+        _append_unique(group["attachment_ids"], item.get("attachment_id"))
+        _append_unique(group["filenames"], item.get("filename"))
+        _append_unique(group["workspace_relative_paths"], item.get("workspace_relative_path"))
+    unique_by_sha256 = sorted(groups.values(), key=lambda item: (str(item.get("filenames") or ""), str(item.get("sha256") or "")))
+    duplicate_count = sum(max(0, int(item.get("count") or 0) - 1) for item in unique_by_sha256)
+    return {
+        "total_count": len(source_attachments),
+        "matched_count": len(source_attachments) - filtered_count,
+        "filtered_count": filtered_count,
+        "saved_count": len(saved),
+        "skipped_count": len(skipped),
+        "unique_count_by_sha256": len(unique_by_sha256),
+        "duplicate_count_by_sha256": duplicate_count,
+        "unique_by_sha256": unique_by_sha256,
+    }
+
+
+def _append_unique(target: object, value: object) -> None:
+    if not isinstance(target, list):
+        return
+    text = str(value or "").strip()
+    if text and text not in target:
+        target.append(text)
+
+
+def _document_part_hints(source_attachments: list[dict[str, object]]) -> list[dict[str, object]]:
+    document_types = {
+        "identity_card": {
+            "label": "carta identita",
+            "keywords": (
+                "carta identita",
+                "carta d identita",
+                "documento identita",
+                "documento d identita",
+                "identity card",
+                "id card",
+                "carta id",
+            ),
+        },
+        "health_card": {
+            "label": "tessera sanitaria",
+            "keywords": (
+                "tessera sanitaria",
+                "codice fiscale",
+                "health card",
+            ),
+        },
+    }
+    side_keywords = {
+        "front": ("fronte", "front", "davanti", "anteriore"),
+        "back": ("retro", "back", "posteriore"),
+    }
+    detected: dict[str, dict[str, object]] = {}
+    for attachment in source_attachments:
+        filename = str(attachment.get("filename") or "")
+        normalized = _normalized_document_name(filename)
+        for document_type, spec in document_types.items():
+            if not any(keyword in normalized for keyword in spec["keywords"]):
+                continue
+            item = detected.setdefault(
+                document_type,
+                {"document_type": document_type, "label": spec["label"], "present_sides": set(), "evidence_filenames": []},
+            )
+            _append_unique(item["evidence_filenames"], filename)
+            for side, keywords in side_keywords.items():
+                if any(keyword in normalized for keyword in keywords):
+                    present_sides = item["present_sides"]
+                    if isinstance(present_sides, set):
+                        present_sides.add(side)
+    hints: list[dict[str, object]] = []
+    for item in detected.values():
+        present = sorted(item["present_sides"]) if isinstance(item.get("present_sides"), set) else []
+        if not present:
+            continue
+        missing = [side for side in ("front", "back") if side not in present]
+        hints.append(
+            {
+                "document_type": item["document_type"],
+                "label": item["label"],
+                "present_sides": present,
+                "missing_sides": missing,
+                "evidence_filenames": item["evidence_filenames"],
+                "severity": "warning" if missing else "info",
+            }
+        )
+    return sorted(hints, key=lambda item: str(item.get("document_type") or ""))
+
+
+def _normalized_document_name(value: str) -> str:
+    ascii_text = unicodedata.normalize("NFKD", value).encode("ascii", "ignore").decode("ascii")
+    return re.sub(r"[^a-z0-9]+", " ", ascii_text.casefold()).strip()
 
 
 def _data_changed_event(resource: str) -> dict[str, str]:
@@ -689,7 +869,22 @@ def _secret_resource_connection_id(data_root: Path, payload: dict[str, object]) 
     )
     if thread_id:
         return _effective_connection_id(data_root, str(get_thread(data_root, thread_id)["connection_id"]))
-    draft_id = _optional_string(payload.get("draft_id")) or (fallback_id if action in {"drafts.send", "mail_send_draft", "drafts.get", "drafts.update", "mail_update_draft"} else None)
+    draft_id = _optional_string(payload.get("draft_id")) or (
+        fallback_id
+        if action
+        in {
+            "drafts.send",
+            "mail_send_draft",
+            "drafts.send_approved",
+            "mail_send_draft_approved",
+            "messages.send_approved",
+            "mail_send_approved",
+            "drafts.get",
+            "drafts.update",
+            "mail_update_draft",
+        }
+        else None
+    )
     if draft_id:
         return _effective_connection_id(data_root, str(get_draft(data_root, draft_id)["connection_id"]))
     attachment_id = _optional_string(payload.get("attachment_id")) or (fallback_id if action in {"attachments.get", "mail_get_attachment"} else None)

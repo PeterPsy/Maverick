@@ -174,6 +174,8 @@ def require_confirmation_token(
     provided = str(confirmation_token or "").strip()
     if not provided:
         raise ValueError("confirm=true requires confirmation_token from a dry-run preview")
+    if _is_redacted_placeholder(provided):
+        raise ValueError(_REDACTED_CONFIRMATION_TOKEN_MESSAGE)
     token_hash = _hash_token(provided)
     now = now_timestamp()
     actual = draft_confirmation_snapshot_hash(preview)
@@ -211,10 +213,62 @@ def require_confirmation_token(
         raise ValueError("confirmation_token could not be consumed; run a new dry-run preview before confirming send")
 
 
+def require_latest_confirmation(
+    *,
+    data_root: Path,
+    draft_id: str,
+    preview: dict[str, object],
+) -> None:
+    ensure_schema(data_root)
+    now = now_timestamp()
+    actual = draft_confirmation_snapshot_hash(preview)
+    with connect(data_root) as db:
+        result = db.execute(
+            """
+            UPDATE send_confirmations
+            SET used_at = ?
+            WHERE id = (
+              SELECT id FROM send_confirmations
+              WHERE draft_id = ?
+                AND used_at = ''
+                AND expires_at > ?
+                AND snapshot_hash = ?
+              ORDER BY created_at DESC
+              LIMIT 1
+            )
+              AND used_at = ''
+            """,
+            (now, draft_id, now, actual),
+        )
+        if result.rowcount == 1:
+            return
+        row = db.execute(
+            """
+            SELECT used_at, expires_at, snapshot_hash FROM send_confirmations
+            WHERE draft_id = ?
+            ORDER BY created_at DESC
+            LIMIT 1
+            """,
+            (draft_id,),
+        ).fetchone()
+        if row is None:
+            raise ValueError("send_approved requires a fresh dry-run preview for this draft")
+        if str(row["used_at"] or ""):
+            raise ValueError("server-side send approval was already used; run a new dry-run preview before approved send")
+        if str(row["expires_at"] or "") <= now:
+            raise ValueError("server-side send approval expired; run a new dry-run preview before approved send")
+        expected = str(row["snapshot_hash"] or "")
+        if not hmac.compare_digest(expected, actual):
+            raise ValueError("Email confirmation preview changed; run a new dry-run preview before approved send")
+        raise ValueError("send_approved could not consume a dry-run preview; run a new dry-run preview before approved send")
+
+
 def draft_id_for_confirmation_token(data_root: Path, confirmation_token: object = None) -> str:
     provided = str(confirmation_token or "").strip()
     if not provided:
         raise ValueError("confirm=true requires confirmation_token from a dry-run preview")
+    if _is_redacted_placeholder(provided):
+        raise ValueError(_REDACTED_CONFIRMATION_TOKEN_MESSAGE)
     ensure_schema(data_root)
     token_hash = _hash_token(provided)
     now = now_timestamp()
@@ -237,6 +291,16 @@ def draft_confirmation_snapshot_hash(preview: dict[str, object]) -> str:
 
 def _hash_token(token: str) -> str:
     return hashlib.sha256(token.encode("utf-8")).hexdigest()
+
+
+_REDACTED_CONFIRMATION_TOKEN_MESSAGE = (
+    "confirmation_token was redacted by the CLI output profile; use mail_send_approved or drafts.send_approved "
+    "after a dry-run preview, or rerun the preview with output_profile=full and keep the token out of logs."
+)
+
+
+def _is_redacted_placeholder(value: str) -> bool:
+    return value.strip().casefold() in {"<redacted>", "[redacted]"}
 
 
 def _confirmation_material(preview: dict[str, object]) -> dict[str, object]:

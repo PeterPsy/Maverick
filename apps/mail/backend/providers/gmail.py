@@ -26,6 +26,7 @@ from storage_attachments import (
     draft_with_current_attachments,
     preview_with_confirmation_token,
     require_confirmation_token,
+    require_latest_confirmation,
     save_attachment_to_storage,
 )
 
@@ -161,6 +162,7 @@ class GmailProvider:
         uploaded_storage_root: Path | None = None,
         generated_storage_root: Path | None = None,
         confirmation_token: object = None,
+        use_latest_confirmation: bool = False,
     ) -> dict[str, object]:
         draft = get_draft(data_root, draft_id)
         _require_recipients(draft)
@@ -186,7 +188,10 @@ class GmailProvider:
                 "draft": preview_draft,
                 "confirmation_preview": preview_with_confirmation_token(data_root, confirmation_preview),
             }
-        require_confirmation_token(data_root=data_root, draft_id=draft_id, preview=confirmation_preview, confirmation_token=confirmation_token)
+        if use_latest_confirmation:
+            require_latest_confirmation(data_root=data_root, draft_id=draft_id, preview=confirmation_preview)
+        else:
+            require_confirmation_token(data_root=data_root, draft_id=draft_id, preview=confirmation_preview, confirmation_token=confirmation_token)
         secrets = _require_app_secrets(app_secrets)
         raw = base64.urlsafe_b64encode(message.as_bytes()).decode("ascii").rstrip("=")
         payload: dict[str, object] = {"raw": raw}

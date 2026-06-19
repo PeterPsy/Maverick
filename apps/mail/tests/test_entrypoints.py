@@ -1478,6 +1478,129 @@ class MailServiceTest(unittest.TestCase):
             self.assertIn("already used", replay["detail"])
             self.assertEqual(len(sent_payloads), 1)
 
+    def test_mail_send_approved_consumes_latest_preview_without_token(self) -> None:
+        sent_payloads: list[dict[str, object]] = []
+
+        def fake_transport(request) -> dict[str, object]:
+            if request.full_url == "https://oauth2.googleapis.com/token":
+                return {"access_token": "access-token", "expires_in": 3600, "token_type": "Bearer"}
+            if request.full_url == "https://gmail.googleapis.com/gmail/v1/users/me/messages/send":
+                payload = json.loads(request.data.decode("utf-8"))
+                sent_payloads.append(payload)
+                return {"id": "provider-message-approved", "threadId": ""}
+            raise AssertionError(f"unexpected request {request.full_url}")
+
+        with tempfile.TemporaryDirectory() as tmp:
+            data_root = Path(tmp)
+            self._insert_gmail_fixture(data_root)
+            with patch("backend.service.provider_for_connection", return_value=GmailProvider(transport=fake_transport)):
+                status, preview = handle_action(
+                    data_root,
+                    {
+                        "action": "mail_send",
+                        "to": [{"email": "customer@example.com"}],
+                        "subject": "Approved",
+                        "body_text": "Send after user approval.",
+                    },
+                )
+                self.assertEqual(status, 200, preview)
+                draft_id = preview["draft"]["id"]
+                self.assertRegex(preview["result"]["confirmation_preview"]["confirmation_token"], r"^[A-Za-z0-9_-]{32,}$")
+
+                status, sent = handle_action(
+                    data_root,
+                    {
+                        "action": "mail_send_approved",
+                        "draft_id": draft_id,
+                        "_app_secrets": self._gmail_secrets(),
+                    },
+                )
+                self.assertEqual(status, 200, sent)
+                self.assertTrue(sent["result"]["sent"])
+                self.assertEqual(sent["draft"]["id"], draft_id)
+
+                status, replay = handle_action(
+                    data_root,
+                    {
+                        "action": "mail_send_approved",
+                        "draft_id": draft_id,
+                        "_app_secrets": self._gmail_secrets(),
+                    },
+                )
+
+            self.assertEqual(status, 400)
+            self.assertIn("already used", replay["detail"])
+            self.assertEqual(len(sent_payloads), 1)
+
+    def test_drafts_send_approved_rejects_changed_preview(self) -> None:
+        transport_calls: list[str] = []
+
+        def fake_transport(request) -> dict[str, object]:
+            transport_calls.append(request.full_url)
+            raise AssertionError(f"unexpected request {request.full_url}")
+
+        with tempfile.TemporaryDirectory() as tmp:
+            data_root = Path(tmp)
+            self._insert_gmail_fixture(data_root)
+            status, created = handle_action(
+                data_root,
+                {
+                    "action": "drafts.create",
+                    "to": [{"email": "customer@example.com"}],
+                    "subject": "Approved changed",
+                    "body_text": "Original body.",
+                },
+            )
+            self.assertEqual(status, 201, created)
+            draft_id = created["draft"]["id"]
+            status, preview = handle_action(data_root, {"action": "drafts.send", "draft_id": draft_id})
+            self.assertEqual(status, 200, preview)
+            status, updated = handle_action(data_root, {"action": "drafts.update", "draft_id": draft_id, "body_text": "Changed body."})
+            self.assertEqual(status, 200, updated)
+
+            with patch("backend.service.provider_for_connection", return_value=GmailProvider(transport=fake_transport)):
+                status, payload = handle_action(
+                    data_root,
+                    {
+                        "action": "drafts.send_approved",
+                        "draft_id": draft_id,
+                        "_app_secrets": self._gmail_secrets(),
+                    },
+                )
+
+            self.assertEqual(status, 400)
+            self.assertIn("preview changed", payload["detail"])
+            self.assertEqual(transport_calls, [])
+
+    def test_redacted_confirmation_token_has_diagnostic_error(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            data_root = Path(tmp)
+            self._insert_gmail_fixture(data_root)
+            status, created = handle_action(
+                data_root,
+                {
+                    "action": "drafts.create",
+                    "to": [{"email": "customer@example.com"}],
+                    "subject": "Redacted token",
+                    "body_text": "This should explain the profile problem.",
+                },
+            )
+            self.assertEqual(status, 201, created)
+            status, payload = handle_action(
+                data_root,
+                {
+                    "action": "drafts.send",
+                    "draft_id": created["draft"]["id"],
+                    "confirm": True,
+                    "confirmation_token": "<redacted>",
+                    "_app_secrets": self._gmail_secrets(),
+                },
+            )
+
+            self.assertEqual(status, 400)
+            self.assertIn("redacted by the CLI output profile", payload["detail"])
+            self.assertIn("mail_send_approved", payload["detail"])
+
     def test_draft_confirmation_token_is_consumed_atomically(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             data_root = Path(tmp)
@@ -1671,6 +1794,55 @@ class MailServiceTest(unittest.TestCase):
             self.assertEqual(lookup["resource_id"], token_connection_id)
             self.assertNotEqual(lookup["resource_id"], default_connection_id)
 
+    def test_mail_send_approved_secret_lookup_resolves_draft_connection(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            data_root = Path(tmp)
+            default_connection_id = self._insert_gmail_fixture(data_root)
+            draft_connection_id = "mail_connection_gmail_customer-success-example.com"
+            now = now_timestamp()
+            with connect(data_root) as db:
+                db.execute(
+                    """
+                    INSERT INTO connections(id, provider, email_address, display_name, status, scopes_json, settings_json, created_at, updated_at)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    (
+                        draft_connection_id,
+                        "gmail",
+                        "customer-success@example.com",
+                        "Customer Success",
+                        "connected",
+                        "[]",
+                        "{}",
+                        now,
+                        now,
+                    ),
+                )
+            status, created = handle_action(
+                data_root,
+                {
+                    "action": "drafts.create",
+                    "connection_id": draft_connection_id,
+                    "to": [{"email": "customer@example.com"}],
+                    "subject": "Approved connection",
+                    "body_text": "Resolve secrets from draft_id.",
+                },
+            )
+            self.assertEqual(status, 201, created)
+
+            lookup = resolve_secret_resource(
+                data_root,
+                {
+                    "action": "mail_send_approved",
+                    "draft_id": created["draft"]["id"],
+                    "_app_secret_selector": {"logical_names": ["gmail-refresh-token"]},
+                },
+            )
+
+            self.assertTrue(lookup["requires_secrets"])
+            self.assertEqual(lookup["resource_id"], draft_connection_id)
+            self.assertNotEqual(lookup["resource_id"], default_connection_id)
+
     def test_mail_send_accepts_html_body_and_sends_multipart_gmail_message(self) -> None:
         sent_payloads: list[dict[str, object]] = []
 
@@ -1851,7 +2023,18 @@ class MailServiceTest(unittest.TestCase):
                         INSERT INTO attachments(id, message_id, provider_attachment_id, filename, content_type, size_bytes, storage_state, storage_ref_json, created_at, updated_at)
                         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                         """,
-                        (attachment_id, "email_message_gmail_msg_1", attachment_id, "report.pdf", "application/pdf", len(content), "metadata_only", "{}", now, now),
+                        (
+                            attachment_id,
+                            "email_message_gmail_msg_1",
+                            attachment_id,
+                            "carta-identita-retro.pdf",
+                            "application/pdf",
+                            len(content),
+                            "metadata_only",
+                            "{}",
+                            now,
+                            now,
+                        ),
                     )
 
             with patch("backend.service.provider_for_connection", return_value=FakeProvider()):
@@ -1868,6 +2051,13 @@ class MailServiceTest(unittest.TestCase):
             self.assertEqual(status, 200, payload)
             self.assertEqual(payload["saved_count"], 1)
             self.assertEqual(payload["skipped"][0]["reason"], "duplicate_sha256")
+            self.assertEqual(payload["attachment_summary"]["total_count"], 2)
+            self.assertEqual(payload["attachment_summary"]["unique_count_by_sha256"], 1)
+            self.assertEqual(payload["attachment_summary"]["duplicate_count_by_sha256"], 1)
+            self.assertEqual(payload["attachment_summary"]["unique_by_sha256"][0]["filenames"], ["carta-identita-retro.pdf"])
+            self.assertEqual(payload["document_part_hints"][0]["document_type"], "identity_card")
+            self.assertEqual(payload["document_part_hints"][0]["present_sides"], ["back"])
+            self.assertEqual(payload["document_part_hints"][0]["missing_sides"], ["front"])
             self.assertEqual(len(calls), 2)
             self.assertTrue(all(call["save_to_storage"] is True for call in calls))
             self.assertNotIn("data_base64url", calls[0])
@@ -3605,6 +3795,18 @@ class MailServiceTest(unittest.TestCase):
                 for option in condition.get("anyOf", [])
             )
         )
+
+    def test_mcp_approved_send_schemas_do_not_accept_confirmation_tokens(self) -> None:
+        schemas = json.loads((APP_ROOT / "mcp" / "tool_schemas.json").read_text(encoding="utf-8"))
+        contract = json.loads((APP_ROOT / "app_contract.json").read_text(encoding="utf-8"))
+
+        for tool_name in ("mail_send_draft_approved", "mail_send_approved"):
+            self.assertIn(tool_name, schemas["tools"])
+            self.assertIn(tool_name, contract["capabilities"]["mcp_tools"])
+            input_schema = schemas["tools"][tool_name]["input_schema"]
+            self.assertEqual(input_schema["required"], ["draft_id"])
+            self.assertNotIn("confirmation_token", input_schema["properties"])
+            self.assertFalse(any(selector.get("when") for selector in schemas["tools"][tool_name]["secret_selectors"]))
 
     def test_reference_resolve_thread(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

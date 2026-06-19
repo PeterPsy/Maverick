@@ -8,6 +8,7 @@ import json
 import os
 from pathlib import Path
 import shutil
+import subprocess
 import tempfile
 import unittest
 from unittest.mock import patch
@@ -181,6 +182,8 @@ class StorageAppTestCase(unittest.TestCase):
         self.assertIn("storage_set_view_filter", parsed.contract.capabilities.mcp_tools)
         self.assertIn("storage_reference_manifest", parsed.contract.capabilities.mcp_tools)
         self.assertIn("storage_write_file", parsed.contract.capabilities.mcp_tools)
+        self.assertIn("storage_image_inspect", parsed.contract.capabilities.mcp_tools)
+        self.assertIn("storage_image_compose_pair", parsed.contract.capabilities.mcp_tools)
         self.assertIn("storage_drive_list_roots", parsed.contract.capabilities.mcp_tools)
         self.assertIn("storage_drive_list_children", parsed.contract.capabilities.mcp_tools)
         self.assertIn("storage_drive_search", parsed.contract.capabilities.mcp_tools)
@@ -191,6 +194,7 @@ class StorageAppTestCase(unittest.TestCase):
         provided_interfaces = {item.interface for item in parsed.contract.provides}
         self.assertIn("file.text.read", provided_interfaces)
         self.assertIn("file.content.write", provided_interfaces)
+        self.assertIn("file.image.ops", provided_interfaces)
         self.assertIn("file.media.stream", provided_interfaces)
         media_interface = next(item for item in parsed.contract.provides if item.interface == "file.media.stream")
         self.assertEqual(media_interface.surfaces, ["backend", "view", "widget"])
@@ -293,6 +297,78 @@ class StorageAppTestCase(unittest.TestCase):
                 self.assertFalse(item["stale"])
                 self.assertTrue(item["capabilities"]["can_read"])
                 self.assertTrue(item["capabilities"]["can_write"])
+
+    def test_image_inspect_and_compose_pair_writes_generated_image(self) -> None:
+        ffmpeg = shutil.which("ffmpeg")
+        ffprobe = shutil.which("ffprobe")
+        if not ffmpeg or not ffprobe:
+            self.skipTest("ffmpeg and ffprobe are required for Storage image operations")
+
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            uploaded_root = root / "storage" / "uploaded"
+            generated_root = root / "storage" / "generated"
+            data_root = root / "data" / "storage"
+            generated_root.mkdir(parents=True)
+            front = generated_root / "id-front.png"
+            back = generated_root / "id-back.png"
+            for path, size, color in ((front, "120x80", "red"), (back, "100x80", "blue")):
+                subprocess.run(
+                    [
+                        ffmpeg,
+                        "-hide_banner",
+                        "-loglevel",
+                        "error",
+                        "-y",
+                        "-f",
+                        "lavfi",
+                        "-i",
+                        f"color=c={color}:s={size}:d=0.1",
+                        "-frames:v",
+                        "1",
+                        str(path),
+                    ],
+                    check=True,
+                    timeout=20,
+                )
+
+            inspected = self.run_backend(
+                data_root=data_root,
+                uploaded_root=uploaded_root,
+                generated_root=generated_root,
+                body={
+                    "action": "image.inspect",
+                    "workspace_relative_paths": ["storage/generated/id-front.png", "storage/generated/id-back.png"],
+                },
+            )
+
+            self.assertEqual(inspected["status_code"], 200, inspected)
+            self.assertEqual(inspected["json"]["image_count"], 2)
+            self.assertEqual(inspected["json"]["images"][0]["display_height"], 80)
+            self.assertNotIn("local_path", inspected["json"]["images"][0])
+
+            composed = self.run_backend(
+                data_root=data_root,
+                uploaded_root=uploaded_root,
+                generated_root=generated_root,
+                body={
+                    "action": "image.compose_pair",
+                    "images": ["storage/generated/id-front.png", "storage/generated/id-back.png"],
+                    "target_folder": "documents",
+                    "file_name": "id-card.jpg",
+                    "height": 60,
+                    "mode": "create",
+                },
+            )
+
+            self.assertEqual(composed["status_code"], 200, composed)
+            payload = composed["json"]
+            self.assertEqual(payload["workspace_relative_path"], "storage/generated/documents/id-card.jpg")
+            self.assertTrue((generated_root / "documents" / "id-card.jpg").is_file())
+            self.assertEqual(payload["file"]["preview_kind"], "image")
+            self.assertEqual(payload["output_image"]["display_height"], 60)
+            self.assertEqual(len(payload["source_images"]), 2)
+            self.assertNotIn("local_path", payload["source_images"][0])
 
     def test_backend_catalog_preserves_remote_provider_records(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
@@ -2133,6 +2209,8 @@ class StorageAppTestCase(unittest.TestCase):
             {"action": "read_file", "role": "uploaded", "relative_path": "source.txt"},
             {"action": "read_text", "role": "generated", "relative_path": "report.md"},
             {"action": "upload_local_file", "source_path": "/workspace/output.pdf", "workspace_relative_path": "storage/generated/pdf-edits/output.pdf", "mode": "create"},
+            {"action": "image.inspect", "workspace_relative_path": "storage/generated/id-front.png"},
+            {"action": "image.compose_pair", "images": ["storage/generated/id-front.png", "storage/generated/id-back.png"], "file_name": "id-card.jpg"},
             {"action": "preview_table", "workspace_relative_path": "storage/generated/leads.csv"},
             {"action": "read_folder", "role": "generated"},
             {"action": "download_folder", "role": "uploaded"},
@@ -2323,6 +2401,8 @@ class StorageAppTestCase(unittest.TestCase):
         self.assertIn("app.storage.storage_read_file", [tool.tool_name for tool in tools])
         self.assertIn("app.storage.storage_read_text", [tool.tool_name for tool in tools])
         self.assertIn("app.storage.storage_write_file", [tool.tool_name for tool in tools])
+        self.assertIn("app.storage.storage_image_inspect", [tool.tool_name for tool in tools])
+        self.assertIn("app.storage.storage_image_compose_pair", [tool.tool_name for tool in tools])
         self.assertIn("app.storage.storage_file_localize", [tool.tool_name for tool in tools])
         self.assertNotIn("app.storage.storage_file_media_stream", [tool.tool_name for tool in tools])
         self.assertIn("app.storage.storage", [command.command_id for command in commands])
@@ -2336,6 +2416,7 @@ class StorageAppTestCase(unittest.TestCase):
         ]
         flattened_actions = {action for group in action_groups for action in group}
         self.assertIn("file.catalog.list", flattened_actions)
+        self.assertIn("image.compose_pair", flattened_actions)
         self.assertIn("file.preview.table", flattened_actions)
         self.assertIn("file.localize", flattened_actions)
         self.assertNotIn("file.media_stream", flattened_actions)
@@ -2351,6 +2432,8 @@ class StorageAppTestCase(unittest.TestCase):
         table_tool = next(tool for tool in tools if tool.tool_name == "app.storage.storage_preview_table")
         self.assertIn("sheets", table_tool.output_schema["properties"])
         self.assertNotIn("rows", table_tool.output_schema["properties"])
+        image_tool = next(tool for tool in tools if tool.tool_name == "app.storage.storage_image_compose_pair")
+        self.assertNotIn("source_path", image_tool.input_schema["properties"])
 
     @integration_test("storage platform integration suite; run with scripts/test_suite.py --level integration")
     def test_platform_backend_and_frontend_mount_storage(self) -> None:

@@ -31,6 +31,8 @@ tool_actions = {
     "storage_set_custom_view": "set_custom_view",
     "storage_clear_custom_view": "clear_custom_view",
     "storage_write_file": "file.content.write",
+    "storage_image_inspect": "image.inspect",
+    "storage_image_compose_pair": "image.compose_pair",
     "storage_drive_connections_list": "drive_connections.list",
     "storage_drive_connections_start_oauth": "drive_connections.start_oauth",
     "storage_drive_connections_disconnect": "drive_connections.disconnect",

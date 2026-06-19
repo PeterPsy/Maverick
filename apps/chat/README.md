@@ -39,3 +39,17 @@ Workspace chat app that talks to the selected Maverick runtime provider.
 ```
 
 `register-local`, `install-local`, and `package` operate on workspace-local app projects under `workspaces/<workspace_id>/apps/<app_id>/`; they are not the correct lifecycle for this built-in Chat app source.
+
+## Browser E2E
+
+Chat has an app-level Playwright harness for full-browser smoke coverage:
+
+```bash
+npm run test:e2e
+```
+
+The suite starts the Chat Vite frontend at `/apps/chat/`, mocks Chat's declared HTTP and WebSocket surfaces at the protocol boundary, covers normal runtime send, and covers selected-agent multi-agent graph flow. On a fresh machine, install the Chromium browser once with:
+
+```bash
+npx playwright install chromium
+```

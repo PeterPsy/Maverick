@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it } from "vitest";
-import { persistQueuedMessages, queueStorageKey, readPersistedQueuedMessages } from "./queuedMessages";
+import { migratePersistedQueuedMessages, persistQueuedMessages, queueStorageKey, readPersistedQueuedMessages } from "./queuedMessages";
 
 function installLocalStorageWindow() {
   const values = new Map<string, string>();
@@ -87,5 +87,31 @@ describe("queued message persistence", () => {
 
     persistQueuedMessages(storageKey, []);
     expect(window.localStorage.getItem(storageKey)).toBeNull();
+  });
+
+  it("migrates persisted draft queues to the created thread key", () => {
+    const draftStorageKey = queueStorageKey("floating-window", "draft:draft-1");
+    const threadStorageKey = queueStorageKey("floating-window", "thread:thread-1");
+    persistQueuedMessages(threadStorageKey, [
+      {
+        clientMessageId: "message-existing",
+        content: "Existing queued message",
+        appReferences: [],
+        attachments: [],
+      },
+    ]);
+    persistQueuedMessages(draftStorageKey, [
+      {
+        clientMessageId: "message-draft",
+        content: "Draft queued message",
+        appReferences: [],
+        attachments: [],
+      },
+    ]);
+
+    migratePersistedQueuedMessages("floating-window", "draft:draft-1", "thread:thread-1");
+
+    expect(window.localStorage.getItem(draftStorageKey)).toBeNull();
+    expect(readPersistedQueuedMessages(threadStorageKey).map((message) => message.clientMessageId)).toEqual(["message-existing", "message-draft"]);
   });
 });

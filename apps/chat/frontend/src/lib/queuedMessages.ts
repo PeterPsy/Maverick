@@ -63,6 +63,19 @@ export function persistQueuedMessages(storageKey: string, queuedMessages: Queued
   }
 }
 
+export function migratePersistedQueuedMessages(navigationScope: string, fromConversationKey: string, toConversationKey: string) {
+  if (!fromConversationKey || !toConversationKey || fromConversationKey === toConversationKey) {
+    return;
+  }
+  const fromStorageKey = queueStorageKey(navigationScope, fromConversationKey);
+  const queuedMessages = readPersistedQueuedMessages(fromStorageKey);
+  if (queuedMessages.length) {
+    const toStorageKey = queueStorageKey(navigationScope, toConversationKey);
+    persistQueuedMessages(toStorageKey, [...readPersistedQueuedMessages(toStorageKey), ...queuedMessages]);
+  }
+  persistQueuedMessages(fromStorageKey, []);
+}
+
 function persistedAppReferences(value: unknown): AppReference[] {
   if (!Array.isArray(value)) {
     return [];

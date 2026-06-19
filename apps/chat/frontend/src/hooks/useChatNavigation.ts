@@ -279,8 +279,9 @@ export function useChatNavigation({
     }
     setActiveThread(null);
     const draft = { draftId: createDraftId(), projectId, systemPrompt: "" };
+    const conversationKey = conversationKeyFor(null, draft);
     setDraftChat(draft);
-    setQueuedMessagesForConversation(conversationKeyFor(null, draft), readPersistedQueuedMessages(queueStorageKey(navigationScope, null)));
+    setQueuedMessagesForConversation(conversationKey, readPersistedQueuedMessages(queueStorageKey(navigationScope, conversationKey)));
     setActiveInterAgentGraphRunId(null);
     setActiveSession(null);
     setEvents([]);
@@ -311,7 +312,7 @@ export function useChatNavigation({
     setIsOlderHistoryLoading(false);
     if (thread) {
       const conversationKey = conversationKeyFor(thread, null);
-      setQueuedMessagesForConversation(conversationKey, readPersistedQueuedMessages(queueStorageKey(navigationScope, thread.thread_id)));
+      setQueuedMessagesForConversation(conversationKey, readPersistedQueuedMessages(queueStorageKey(navigationScope, conversationKey)));
     }
     setActiveTurn(cachedActiveTurnForThread(thread, cachedTranscript));
     if (!thread?.runtime_session_id) {

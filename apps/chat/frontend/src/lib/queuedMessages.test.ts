@@ -26,13 +26,14 @@ describe("queued message persistence", () => {
     window.localStorage.clear();
   });
 
-  it("builds queue storage keys per navigation scope and thread", () => {
-    expect(queueStorageKey("", null)).toBe("maverick.chat.queued-messages.v1:main:new");
-    expect(queueStorageKey("widget-1", "thread-1")).toBe("maverick.chat.queued-messages.v1:widget-1:thread-1");
+  it("builds queue storage keys per navigation scope and conversation", () => {
+    expect(queueStorageKey("", "draft:draft-1")).toBe("maverick.chat.queued-messages.v1:main:draft:draft-1");
+    expect(queueStorageKey("widget-1", "thread:thread-1")).toBe("maverick.chat.queued-messages.v1:widget-1:thread:thread-1");
+    expect(queueStorageKey("widget-1", "draft:draft-1")).not.toBe(queueStorageKey("widget-1", "draft:draft-2"));
   });
 
   it("persists queued messages without object URLs", () => {
-    const storageKey = queueStorageKey("", "thread-1");
+    const storageKey = queueStorageKey("", "thread:thread-1");
 
     persistQueuedMessages(storageKey, [
       {
@@ -73,7 +74,7 @@ describe("queued message persistence", () => {
   });
 
   it("drops invalid payloads and clears empty queues", () => {
-    const storageKey = queueStorageKey("", null);
+    const storageKey = queueStorageKey("", "draft:draft-1");
 
     window.localStorage.setItem(
       storageKey,

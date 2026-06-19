@@ -1,15 +1,14 @@
 import { useEffect, useRef } from "react";
-import type { ChatThread } from "../api/client";
 import type { QueuedMessage } from "../lib/messageState";
 import { persistQueuedMessages, queueStorageKey } from "../lib/queuedMessages";
 
 export function useQueuedMessagePersistence({
-  activeThread,
+  activeConversationKey,
   isBootstrapping,
   navigationScope,
   queuedMessages,
 }: {
-  activeThread: ChatThread | null;
+  activeConversationKey: string;
   isBootstrapping: boolean;
   navigationScope: string;
   queuedMessages: QueuedMessage[];
@@ -24,9 +23,9 @@ export function useQueuedMessagePersistence({
   }, [isBootstrapping]);
 
   useEffect(() => {
-    if (isBootstrapping || !hasHydratedQueuedMessagesRef.current) {
+    if (isBootstrapping || !hasHydratedQueuedMessagesRef.current || !activeConversationKey) {
       return;
     }
-    persistQueuedMessages(queueStorageKey(navigationScope, activeThread?.thread_id || null), queuedMessages);
-  }, [activeThread?.thread_id, isBootstrapping, navigationScope, queuedMessages]);
+    persistQueuedMessages(queueStorageKey(navigationScope, activeConversationKey), queuedMessages);
+  }, [activeConversationKey, isBootstrapping, navigationScope, queuedMessages]);
 }

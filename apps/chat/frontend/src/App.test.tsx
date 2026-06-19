@@ -23,6 +23,8 @@ import {
   listSkills,
   prewarmSpeechWorker,
   previewAgentPrompt,
+  sendRuntimeTurn,
+  uploadWorkspaceFile,
 } from "./api/client";
 import type { AgentTypeSummary, AppDependenciesPayload, ChatThread, RuntimeSession, RuntimeTurn } from "./api/client";
 import { clearAgentRuntimeConfigCache } from "./hooks/useChatRuntimeControls";
@@ -80,6 +82,7 @@ vi.mock("./api/client", () => ({
     return providerIds.length && providerIds.every((providerId) => providerId && providerId === providerIds[0]) ? providerIds[0] : "";
   },
   sendRuntimeTurn: vi.fn(),
+  uploadWorkspaceFile: vi.fn(),
 }));
 
 const socialVideoAgent: AgentTypeSummary = {
@@ -201,6 +204,21 @@ function runtimeTurn(turnId: string, sessionId: string, status = "queued"): Runt
   };
 }
 
+function uploadedWorkspaceFile(filename: string) {
+  return {
+    file: {
+      file_id: `file-${filename}`,
+      workspace_id: "default",
+      relative_path: `storage/uploads/${filename}`,
+      filename,
+      content_type: "text/plain",
+      size_bytes: 12,
+      sha256: "sha256",
+      created_at: "2026-05-21T00:00:00Z",
+    },
+  };
+}
+
 beforeEach(() => {
   window.localStorage.clear();
   clearAgentRuntimeConfigCache();
@@ -248,6 +266,7 @@ beforeEach(() => {
   vi.mocked(getAgentDefinition).mockResolvedValue({ exists: true, agent_definition: socialVideoAgent });
   vi.mocked(previewAgentPrompt).mockResolvedValue({ rendered: "Agent prompt" });
   vi.mocked(prewarmSpeechWorker).mockResolvedValue({});
+  vi.mocked(uploadWorkspaceFile).mockResolvedValue(uploadedWorkspaceFile("default.txt"));
   vi.mocked(interruptRuntimeTurn).mockResolvedValue({
     turn: runtimeTurn("turn-stopped", "session-created", "cancelled"),
     interrupted: true,
@@ -308,6 +327,21 @@ async function clickSend(element: HTMLElement) {
   }
   await act(async () => {
     sendButton.click();
+  });
+}
+
+async function addTextAttachment(element: HTMLElement, filename = "notes.txt") {
+  const fileInput = element.querySelector('input[type="file"]') as HTMLInputElement | null;
+  if (!fileInput) {
+    throw new Error("Attachment file input was not rendered.");
+  }
+  const file = new File(["attachment"], filename, { type: "text/plain" });
+  Object.defineProperty(fileInput, "files", {
+    configurable: true,
+    value: [file],
+  });
+  await act(async () => {
+    fileInput.dispatchEvent(new Event("change", { bubbles: true }));
   });
 }
 
@@ -613,6 +647,83 @@ describe("App thread navigation", () => {
     );
   });
 
+  it("keeps uploaded draft attachments bound to the original draft after navigation", async () => {
+    const existingThread = thread("thread-existing", "session-existing", { title: "Existing thread" });
+    const createdThread = thread("thread-created", "session-created", { title: "Created thread" });
+    const upload = deferred<Awaited<ReturnType<typeof uploadWorkspaceFile>>>();
+    const createTurn = deferred<Awaited<ReturnType<typeof createRuntimeSessionWithTurn>>>();
+    vi.mocked(uploadWorkspaceFile).mockReturnValue(upload.promise);
+    vi.mocked(createRuntimeSessionWithTurn).mockReturnValue(createTurn.promise);
+    const element = await renderApp({
+      navigationScope: "floating-window",
+      newChatRequestId: "request-upload",
+      runtimeThreads: [existingThread],
+      runtimeThreadsLoaded: true,
+    });
+
+    await waitForAssertion(() => {
+      expect(element.textContent).toContain("How can I help today?");
+    });
+    await addTextAttachment(element);
+    await typeComposerMessage(element, "hello with attachment");
+    await clickSend(element);
+
+    await waitForAssertion(() => {
+      expect(uploadWorkspaceFile).toHaveBeenCalled();
+      expect(element.textContent).toContain("hello with attachment");
+      expect(element.textContent).toContain("Starting");
+      expect(element.querySelector('[aria-label="Stop chat"]')).not.toBeNull();
+    });
+
+    await act(async () => {
+      root?.render(
+        <App
+          navigationScope="floating-window"
+          runtimeThreads={[existingThread]}
+          runtimeThreadsLoaded
+          threadId={existingThread.thread_id}
+        />,
+      );
+    });
+
+    await act(async () => {
+      upload.resolve(uploadedWorkspaceFile("notes.txt"));
+      await upload.promise;
+    });
+
+    await waitForAssertion(() => {
+      expect(createRuntimeSessionWithTurn).toHaveBeenCalledWith(
+        expect.objectContaining({
+          inputText: "hello with attachment",
+          attachments: expect.arrayContaining([
+            expect.objectContaining({
+              fileId: "file-notes.txt",
+              relativePath: "storage/uploads/notes.txt",
+            }),
+          ]),
+        }),
+      );
+    });
+    expect(sendRuntimeTurn).not.toHaveBeenCalledWith(
+      existingThread.runtime_session_id,
+      expect.any(String),
+      expect.any(String),
+      expect.any(Array),
+      expect.any(Array),
+      expect.any(Object),
+    );
+
+    await act(async () => {
+      createTurn.resolve({
+        session: runtimeSession("session-created"),
+        thread: createdThread,
+        turn: runtimeTurn("turn-created", "session-created"),
+        events: [],
+      });
+      await createTurn.promise;
+    });
+  });
+
   it("aborts a draft submit before the runtime ack arrives", async () => {
     let submitSignal: AbortSignal | undefined;
     vi.mocked(createRuntimeSessionWithTurn).mockImplementation(
@@ -650,6 +761,43 @@ describe("App thread navigation", () => {
       expect(submitSignal?.aborted).toBe(true);
       expect(element.textContent).not.toContain("Starting");
     });
+  });
+
+  it("aborts an attachment upload before runtime submission starts", async () => {
+    const upload = deferred<Awaited<ReturnType<typeof uploadWorkspaceFile>>>();
+    vi.mocked(uploadWorkspaceFile).mockReturnValue(upload.promise);
+    const element = await renderApp({
+      navigationScope: "floating-window",
+      newChatRequestId: "request-upload-abort",
+      runtimeThreads: [],
+      runtimeThreadsLoaded: true,
+    });
+
+    await waitForAssertion(() => {
+      expect(element.textContent).toContain("How can I help today?");
+    });
+    await addTextAttachment(element);
+    await typeComposerMessage(element, "stop upload");
+    await clickSend(element);
+
+    await waitForAssertion(() => {
+      expect(uploadWorkspaceFile).toHaveBeenCalled();
+      expect(element.textContent).toContain("Starting");
+      expect(element.querySelector('[aria-label="Stop chat"]')).not.toBeNull();
+    });
+
+    await act(async () => {
+      (element.querySelector('[aria-label="Stop chat"]') as HTMLButtonElement | null)?.click();
+    });
+
+    await waitForAssertion(() => {
+      expect(element.textContent).not.toContain("Starting");
+    });
+    await act(async () => {
+      upload.resolve(uploadedWorkspaceFile("notes.txt"));
+      await upload.promise;
+    });
+    expect(createRuntimeSessionWithTurn).not.toHaveBeenCalled();
   });
 
   it("interrupts the submitted turn id after the runtime ack arrives", async () => {

@@ -19,7 +19,7 @@ import { hasInvalidAttachments } from "../lib/attachments";
 import { ActiveAppContext, mergeAppReferences } from "../lib/activeAppContext";
 import { appReferencesFromText } from "../lib/mentions";
 import type { MentionItem } from "../lib/mentions";
-import { PendingMessage, QueuedMessage, uploadComposerAttachment } from "../lib/messageState";
+import { PendingMessage, QueuedMessage, attachmentToMessageAttachment, uploadComposerAttachment } from "../lib/messageState";
 import { mergeRuntimeEvents } from "../lib/runtimeEvents";
 import { loadDefaultSystemPrompt } from "../lib/activeAppContext";
 import { openChatThreadRouteInShell } from "../lib/shellNavigation";
@@ -77,6 +77,14 @@ type InFlightSubmission = {
   abortController: AbortController;
   clientMessageId: string;
   turnId?: string;
+};
+
+type SubmissionTarget = {
+  activeAppContext: ActiveAppContext | null;
+  conversationKey: string;
+  draftChat: DraftChat | null;
+  thread: ChatThread | null;
+  threadIds: Set<string>;
 };
 
 export function conversationKeyFor(activeThread: ChatThread | null, draftChat: DraftChat | null): string {
@@ -164,8 +172,10 @@ export function useMessageSubmission({
 }: UseMessageSubmissionParams) {
   const activeConversationKey = conversationKeyFor(activeThread, draftChat);
   const activeConversationKeyRef = useRef(activeConversationKey);
+  const activeAppContextRef = useRef(activeAppContext);
   const activeThreadRef = useRef(activeThread);
   const draftChatRef = useRef(draftChat);
+  const threadsRef = useRef(threads);
   const inFlightSubmissionsRef = useRef<Record<string, InFlightSubmission>>({});
   const [pendingUserMessagesByConversationKey, setPendingUserMessagesByConversationKey] = useState<ConversationItems<PendingMessage>>({});
   const [failedUserMessagesByConversationKey, setFailedUserMessagesByConversationKey] = useState<ConversationItems<PendingMessage>>({});
@@ -180,9 +190,11 @@ export function useMessageSubmission({
 
   useEffect(() => {
     activeConversationKeyRef.current = activeConversationKey;
+    activeAppContextRef.current = activeAppContext;
     activeThreadRef.current = activeThread;
     draftChatRef.current = draftChat;
-  }, [activeConversationKey, activeThread, draftChat]);
+    threadsRef.current = threads;
+  }, [activeAppContext, activeConversationKey, activeThread, draftChat, threads]);
 
   const setPendingUserMessages = useCallback<Dispatch<SetStateAction<PendingMessage[]>>>((action) => {
     setItemsForConversation(setPendingUserMessagesByConversationKey, activeConversationKeyRef.current, action);
@@ -237,6 +249,21 @@ export function useMessageSubmission({
   function removePendingMessage(conversationKey: string, clientMessageId: string) {
     setItemsForConversation(setPendingUserMessagesByConversationKey, conversationKey, (current) =>
       current.filter((item) => item.clientMessageId !== clientMessageId),
+    );
+  }
+
+  function replacePendingMessage(conversationKey: string, message: QueuedMessage) {
+    setItemsForConversation(setPendingUserMessagesByConversationKey, conversationKey, (current) =>
+      current.map((item) =>
+        item.clientMessageId === message.clientMessageId
+          ? {
+              ...item,
+              attachments: message.attachments,
+              appReferences: message.appReferences,
+              content: message.content,
+            }
+          : item,
+      ),
     );
   }
 
@@ -300,6 +327,119 @@ export function useMessageSubmission({
     return Boolean(conversationKey && activeConversationKeyRef.current === conversationKey);
   }
 
+  function currentSubmissionTarget(conversationKey = activeConversationKeyRef.current): SubmissionTarget | null {
+    const targetThread = activeThreadRef.current;
+    const targetDraftChat = draftChatRef.current;
+    const targetConversationKey = conversationKeyFor(targetThread, targetDraftChat);
+    if (!conversationKey || targetConversationKey !== conversationKey) {
+      return null;
+    }
+    return {
+      activeAppContext: activeAppContextRef.current,
+      conversationKey,
+      draftChat: targetDraftChat,
+      thread: targetThread,
+      threadIds: new Set(threadsRef.current.map((item) => item.thread_id)),
+    };
+  }
+
+  function hasTargetThread(target: SubmissionTarget, thread: ChatThread | null): thread is ChatThread {
+    return Boolean(thread && (target.threadIds.has(thread.thread_id) || target.thread?.thread_id === thread.thread_id));
+  }
+
+  function startSubmission(target: SubmissionTarget, message: QueuedMessage): AbortController {
+    const abortController = new AbortController();
+    inFlightSubmissionsRef.current[target.conversationKey] = {
+      abortController,
+      clientMessageId: message.clientMessageId,
+    };
+    setItemsForConversation(setPendingUserMessagesByConversationKey, target.conversationKey, (current) => [
+      ...current,
+      {
+        clientMessageId: message.clientMessageId,
+        content: message.content,
+        createdAt: new Date().toISOString(),
+        attachments: message.attachments,
+        appReferences: message.appReferences,
+      },
+    ]);
+    setItemsForConversation(setFailedUserMessagesByConversationKey, target.conversationKey, (current) =>
+      current.filter((item) => item.clientMessageId !== message.clientMessageId),
+    );
+    setConversationSending(target.conversationKey, true);
+    if (isConversationStillActive(target.conversationKey)) {
+      setError(null);
+    }
+    return abortController;
+  }
+
+  function clearSubmission(target: SubmissionTarget, clientMessageId: string) {
+    removePendingMessage(target.conversationKey, clientMessageId);
+    setSubmittedTurnForConversation(target.conversationKey, null);
+    delete inFlightSubmissionsRef.current[target.conversationKey];
+    setConversationSending(target.conversationKey, false);
+  }
+
+  async function uploadAttachmentWithAbort(attachment: ComposerAttachment, signal: AbortSignal) {
+    throwIfAborted(signal);
+    return new Promise<Awaited<ReturnType<typeof uploadComposerAttachment>>>((resolve, reject) => {
+      let settled = false;
+      const cleanup = () => {
+        signal.removeEventListener("abort", abort);
+      };
+      const abort = () => {
+        if (settled) {
+          return;
+        }
+        settled = true;
+        cleanup();
+        reject(abortError());
+      };
+      signal.addEventListener("abort", abort, { once: true });
+      void uploadComposerAttachment(attachment).then(
+        (uploadedAttachment) => {
+          if (settled) {
+            return;
+          }
+          settled = true;
+          cleanup();
+          if (signal.aborted) {
+            reject(abortError());
+            return;
+          }
+          resolve(uploadedAttachment);
+        },
+        (uploadError) => {
+          if (settled) {
+            return;
+          }
+          settled = true;
+          cleanup();
+          reject(uploadError);
+        },
+      );
+    });
+  }
+
+  function abortError(): Error | DOMException {
+    if (typeof DOMException !== "undefined") {
+      return new DOMException("Message submission was stopped.", "AbortError");
+    }
+    const error = new Error("Message submission was stopped.");
+    error.name = "AbortError";
+    return error;
+  }
+
+  async function uploadAttachmentsWithAbort(attachmentsToUpload: ComposerAttachment[], signal: AbortSignal) {
+    if (!attachmentsToUpload.length) {
+      throwIfAborted(signal);
+      return [];
+    }
+    const uploadedAttachments = await Promise.all(attachmentsToUpload.map((attachment) => uploadAttachmentWithAbort(attachment, signal)));
+    throwIfAborted(signal);
+    return uploadedAttachments;
+  }
+
   async function stopActiveSubmission(): Promise<boolean> {
     const conversationKey = activeConversationKeyRef.current;
     const inFlightSubmission = inFlightSubmissionsRef.current[conversationKey];
@@ -341,43 +481,23 @@ export function useMessageSubmission({
     }
   }
 
-  async function submitMessage(message: QueuedMessage, conversationKey = activeConversationKeyRef.current) {
-    const targetThread = activeThreadRef.current;
-    const targetDraftChat = draftChatRef.current;
-    const abortController = new AbortController();
-    inFlightSubmissionsRef.current[conversationKey] = {
-      abortController,
-      clientMessageId: message.clientMessageId,
-    };
-    setItemsForConversation(setPendingUserMessagesByConversationKey, conversationKey, (current) => [
-      ...current,
-      {
-        clientMessageId: message.clientMessageId,
-        content: message.content,
-        createdAt: new Date().toISOString(),
-        attachments: message.attachments,
-        appReferences: message.appReferences,
-      },
-    ]);
-    setItemsForConversation(setFailedUserMessagesByConversationKey, conversationKey, (current) =>
-      current.filter((item) => item.clientMessageId !== message.clientMessageId),
-    );
-    setConversationSending(conversationKey, true);
-    if (isConversationStillActive(conversationKey)) {
-      setError(null);
-    }
+  async function submitMessage(message: QueuedMessage, target: SubmissionTarget, abortController: AbortController) {
+    const conversationKey = target.conversationKey;
+    const targetThread = target.thread;
+    const targetDraftChat = target.draftChat;
     try {
       throwIfAborted(abortController.signal);
       if (message.multiAgentMode && message.multiAgentMode !== "off") {
-        await submitInterAgentMessage(message, conversationKey, abortController.signal, targetThread, targetDraftChat);
+        await submitInterAgentMessage(message, target, abortController.signal);
         return;
       }
       let thread = targetThread;
       let response: Awaited<ReturnType<typeof sendRuntimeTurn>>;
       if (!thread) {
-        const agentRuntimeConfig = await selectedAgentRuntimeConfig(activeAppContext);
+        const agentRuntimeConfig = await selectedAgentRuntimeConfig(target.activeAppContext);
         throwIfAborted(abortController.signal);
-        const systemPrompt = agentRuntimeConfig?.system_prompt || targetDraftChat?.systemPrompt || (await loadDefaultSystemPrompt(activeAppContext));
+        const systemPrompt =
+          agentRuntimeConfig?.system_prompt || targetDraftChat?.systemPrompt || (await loadDefaultSystemPrompt(target.activeAppContext));
         throwIfAborted(abortController.signal);
         response = await createRuntimeSessionWithTurn({
           appReferences: message.appReferences,
@@ -397,7 +517,7 @@ export function useMessageSubmission({
           },
           signal: abortController.signal,
         });
-      } else if (!threads.some((item) => item.thread_id === thread?.thread_id)) {
+      } else if (!hasTargetThread(target, thread)) {
         throw new Error("This chat no longer exists.");
       } else {
         if (!thread.runtime_session_id) {
@@ -475,17 +595,19 @@ export function useMessageSubmission({
 
   async function submitInterAgentMessage(
     message: QueuedMessage,
-    conversationKey: string,
+    target: SubmissionTarget,
     signal: AbortSignal,
-    targetThread: ChatThread | null,
-    targetDraftChat: DraftChat | null,
   ) {
+    const conversationKey = target.conversationKey;
+    const targetThread = target.thread;
+    const targetDraftChat = target.draftChat;
     let thread = targetThread;
     let session: RuntimeSession | null = null;
-    const agentRuntimeConfig = await selectedAgentRuntimeConfig(activeAppContext);
+    const agentRuntimeConfig = await selectedAgentRuntimeConfig(target.activeAppContext);
     throwIfAborted(signal);
     if (!thread) {
-      const systemPrompt = agentRuntimeConfig?.system_prompt || targetDraftChat?.systemPrompt || (await loadDefaultSystemPrompt(activeAppContext));
+      const systemPrompt =
+        agentRuntimeConfig?.system_prompt || targetDraftChat?.systemPrompt || (await loadDefaultSystemPrompt(target.activeAppContext));
       throwIfAborted(signal);
       session = await createRuntimeSession(
         {
@@ -520,7 +642,7 @@ export function useMessageSubmission({
         updated_at: now,
         last_user_message_at: now,
       };
-    } else if (!threads.some((item) => item.thread_id === thread?.thread_id)) {
+    } else if (!hasTargetThread(target, thread)) {
       throw new Error("This chat no longer exists.");
     }
     if (!thread.runtime_session_id) {
@@ -596,43 +718,79 @@ export function useMessageSubmission({
 
   async function handleSend() {
     const input = composer.trim();
-    if ((!input && !attachments.length) || hasInvalidAttachments(attachments)) {
+    const targetAttachments = [...attachments];
+    if ((!input && !targetAttachments.length) || hasInvalidAttachments(targetAttachments)) {
       return;
     }
-    const targetConversationKey = activeConversationKeyRef.current;
-    if (!targetConversationKey) {
+    const target = currentSubmissionTarget();
+    if (!target) {
       return;
     }
     const clientMessageId = crypto.randomUUID();
+    const appReferences = mergeAppReferences(appReferencesFromText(input, composerMentionItems), target.activeAppContext);
+    const localMessage: QueuedMessage = {
+      clientMessageId,
+      content: input,
+      attachments: targetAttachments.map(attachmentToMessageAttachment),
+      appReferences,
+      multiAgentMode,
+    };
+    const shouldQueue = isRuntimeBusy || Boolean(sendingByConversationKey[target.conversationKey]);
     setComposerError(null);
-    let messageAttachments;
-    try {
-      messageAttachments = await Promise.all(attachments.map(uploadComposerAttachment));
-    } catch (uploadError) {
-      setComposerError(uploadError instanceof Error ? uploadError.message : "Unable to upload attachments.");
-      return;
-    }
     setComposer("");
     setSelectedReferences([]);
     clearAttachments();
-    const appReferences = mergeAppReferences(appReferencesFromText(input, composerMentionItems), activeAppContext);
-    if (isRuntimeBusy || Boolean(sendingByConversationKey[targetConversationKey])) {
-      setItemsForConversation(setQueuedMessagesByConversationKey, targetConversationKey, (current) => [
+    if (shouldQueue) {
+      let messageAttachments;
+      try {
+        messageAttachments = await Promise.all(targetAttachments.map(uploadComposerAttachment));
+      } catch (uploadError) {
+        if (isConversationStillActive(target.conversationKey)) {
+          setComposerError(uploadError instanceof Error ? uploadError.message : "Unable to upload attachments.");
+          setComposer(input);
+          setSelectedReferences(appReferences);
+        }
+        return;
+      }
+      setItemsForConversation(setQueuedMessagesByConversationKey, target.conversationKey, (current) => [
         ...current,
         { clientMessageId, content: input, attachments: messageAttachments, appReferences, multiAgentMode },
       ]);
       return;
     }
-    await submitMessage({ clientMessageId, content: input, attachments: messageAttachments, appReferences, multiAgentMode }, targetConversationKey);
+    const abortController = startSubmission(target, localMessage);
+    try {
+      const message = {
+        ...localMessage,
+        attachments: await uploadAttachmentsWithAbort(targetAttachments, abortController.signal),
+      };
+      replacePendingMessage(target.conversationKey, message);
+      await submitMessage(message, target, abortController);
+    } catch (uploadError) {
+      clearSubmission(target, clientMessageId);
+      if (!isAbortError(uploadError)) {
+        addFailedMessage(target.conversationKey, localMessage);
+        if (isConversationStillActive(target.conversationKey)) {
+          setComposerError(uploadError instanceof Error ? uploadError.message : "Unable to upload attachments.");
+          setComposer(input);
+          setSelectedReferences(appReferences);
+        }
+      }
+    }
   }
 
   useEffect(() => {
     if (isBootstrapping || isHistoryLoading || isRuntimeBusy || isSending || queuedMessages.length === 0 || !activeConversationKey) {
       return;
     }
+    const target = currentSubmissionTarget(activeConversationKey);
+    if (!target) {
+      return;
+    }
     const [nextMessage, ...remainingMessages] = queuedMessages;
     setQueuedMessages(remainingMessages);
-    void submitMessage(nextMessage, activeConversationKey);
+    const abortController = startSubmission(target, nextMessage);
+    void submitMessage(nextMessage, target, abortController);
   }, [activeConversationKey, isBootstrapping, isHistoryLoading, isRuntimeBusy, isSending, queuedMessages]);
 
   useEffect(() => {

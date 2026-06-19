@@ -419,7 +419,7 @@ export function useChatAppController({
     postActiveThreadChanged({ activeThread, activeThreadId, navigationScope, threadId });
   }
 
-  useQueuedMessagePersistence({ activeThread, isBootstrapping, navigationScope, queuedMessages });
+  useQueuedMessagePersistence({ activeConversationKey, isBootstrapping, navigationScope, queuedMessages });
 
   const presentation = useChatControllerPresentation({
     activeProviderId,

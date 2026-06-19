@@ -3,8 +3,8 @@ import type { QueuedMessage } from "./messageState";
 
 const QUEUED_MESSAGES_STORAGE_PREFIX = "maverick.chat.queued-messages.v1";
 
-export function queueStorageKey(navigationScope: string, threadId: string | null): string {
-  return `${QUEUED_MESSAGES_STORAGE_PREFIX}:${navigationScope || "main"}:${threadId || "new"}`;
+export function queueStorageKey(navigationScope: string, conversationKey: string): string {
+  return `${QUEUED_MESSAGES_STORAGE_PREFIX}:${navigationScope || "main"}:${conversationKey || "none"}`;
 }
 
 export function readPersistedQueuedMessages(storageKey: string): QueuedMessage[] {

@@ -366,19 +366,22 @@ function createMockState(): MockState {
 async function handleChatBackend(route: Route) {
   const body = postBody(route);
   if (body.action === "projects.list") {
+    expectPostBody(route, body, { action: "projects.list" });
     await fulfillJson(route, { projects: [], preferences: {} });
     return;
   }
   if (body.action === "view_filter") {
+    expectPostBody(route, body, { action: "view_filter" });
     await fulfillJson(route, { state: { view_filter: { mode: "thread", query: "", entity_type: "thread", title: "" } } });
     return;
   }
-  await fulfillJson(route, { ok: true });
+  await fulfillUnhandledBackend(route, "Chat backend", body);
 }
 
 async function handleAgentsBackend(route: Route) {
   const body = postBody(route);
   if (body.action === "catalog.compact") {
+    expectPostBody(route, body, { action: "catalog.compact", entity_type: "agent_type", limit: 100 });
     await fulfillJson(route, {
       workspace_id: WORKSPACE_ID,
       agent_types: [researcherAgentSummary()],
@@ -386,6 +389,7 @@ async function handleAgentsBackend(route: Route) {
     return;
   }
   if (body.action === "get_agent_definition") {
+    expectPostBody(route, body, { action: "get_agent_definition", id: RESEARCHER_AGENT_ID });
     await fulfillJson(route, {
       exists: true,
       agent_definition: {
@@ -398,13 +402,20 @@ async function handleAgentsBackend(route: Route) {
     return;
   }
   if (body.action === "preview_prompt") {
+    expectPostBody(route, body, { action: "preview_prompt", agent_type_id: RESEARCHER_AGENT_ID });
     await fulfillJson(route, { rendered: "Research with citations." });
     return;
   }
-  await fulfillJson(route, { ok: true });
+  await fulfillUnhandledBackend(route, "Agents backend", body);
 }
 
 async function handleSkillsBackend(route: Route) {
+  const body = postBody(route);
+  if (body.action !== "catalog") {
+    await fulfillUnhandledBackend(route, "Skills backend", body);
+    return;
+  }
+  expectPostBody(route, body, { action: "catalog" });
   await fulfillJson(route, {
     skills: [
       { id: "storage", name: "Storage", description: "Use workspace files.", enabled: true },
@@ -914,6 +925,20 @@ function lastInterAgentEventId(events: InterAgentEvent[]): string | null {
 
 function postBody(route: Route): JsonRecord {
   return safeJson(route.request().postData() || "{}") || {};
+}
+
+function expectPostBody(route: Route, body: JsonRecord, expectedBody: JsonRecord) {
+  expect(route.request().method()).toBe("POST");
+  expect(body).toEqual(expectedBody);
+}
+
+async function fulfillUnhandledBackend(route: Route, backendName: string, body: JsonRecord) {
+  const request = route.request();
+  const path = new URL(request.url()).pathname;
+  const action = typeof body.action === "string" && body.action ? body.action : "<missing>";
+  const detail = `Unhandled ${backendName} mock action: ${request.method()} ${path} action=${action}`;
+  await fulfillJson(route, { detail }, 404);
+  throw new Error(detail);
 }
 
 function safeJson(value: string): JsonRecord | null {

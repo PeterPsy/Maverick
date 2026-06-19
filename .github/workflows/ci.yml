@@ -58,6 +58,14 @@ jobs:
       - name: Test when available
         working-directory: ${{ matrix.app }}
         run: npm test --if-present
+      - name: Install Chat Playwright browsers
+        if: matrix.app == 'apps/chat'
+        working-directory: ${{ matrix.app }}
+        run: npx playwright install --with-deps chromium
+      - name: Chat browser smoke tests
+        if: matrix.app == 'apps/chat'
+        working-directory: ${{ matrix.app }}
+        run: npm run test:e2e
 
   committed-dist:
     runs-on: ubuntu-latest

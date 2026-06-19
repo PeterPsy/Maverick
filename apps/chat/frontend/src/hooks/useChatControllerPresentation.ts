@@ -17,7 +17,7 @@ import type { ExecutionMode } from "../components/ChatComposer";
 import type { ComposerAttachment } from "../lib/attachments";
 import type { MentionItem } from "../lib/mentions";
 import type { PendingMessage, QueuedMessage } from "../lib/messageState";
-import { latestRuntimeStepLabel } from "../lib/runtimeStepLabels";
+import { runtimeActivityLabel } from "../lib/runtimeActivity";
 import { eventsToMessages } from "../lib/transcript";
 import { useChatRootDropHandlers } from "./useChatRootDropHandlers";
 import { useDockedComposerHeight } from "./useDockedComposerHeight";
@@ -178,21 +178,18 @@ export function useChatControllerPresentation({
     isEmptyChatView,
     queuedMessageCount: queuedMessages.length,
   });
-  const loadingLabel = useMemo(() => {
-    if (isHistoryLoading) {
-      return "Loading history";
-    }
-    if (isBootstrapping) {
-      return "Loading chat";
-    }
-    if (!isRuntimeBusy && isSending) {
-      return "Starting";
-    }
-    if (!isRuntimeBusy) {
-      return "";
-    }
-    return latestRuntimeStepLabel(events, activeTurn?.turn_id) || "Thinking";
-  }, [activeTurn?.turn_id, events, isBootstrapping, isHistoryLoading, isRuntimeBusy, isSending]);
+  const loadingLabel = useMemo(
+    () =>
+      runtimeActivityLabel({
+        activeTurn,
+        events,
+        isBootstrapping,
+        isHistoryLoading,
+        isRuntimeBusy,
+        isSending,
+      }),
+    [activeTurn, events, isBootstrapping, isHistoryLoading, isRuntimeBusy, isSending],
+  );
   const multiAgentBudgetLabel = useMemo(() => {
     if (multiAgentMode === "multi") {
       return "2 participants · 4 turns · 4 tool calls";

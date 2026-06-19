@@ -148,6 +148,9 @@ def _reduce_json_large(value: str, *, target_bytes: int) -> ReducerOutput | None
         payload = json.loads(stripped)
     except json.JSONDecodeError:
         return None
+    semantic_result = _reduce_semantic_json_payload(payload, target_bytes=target_bytes)
+    if semantic_result is not None:
+        return semantic_result
     lines: list[str] = []
     facts: dict[str, Any] = {}
     if isinstance(payload, dict):
@@ -174,6 +177,277 @@ def _reduce_json_large(value: str, *, target_bytes: int) -> ReducerOutput | None
         lines.append(f"json root: {type(payload).__name__}")
         lines.append(_bounded_json(payload))
     return ReducerOutput(text=truncate_middle_bytes("\n".join(lines), target_bytes), facts=facts)
+
+
+def _reduce_semantic_json_payload(payload: Any, *, target_bytes: int) -> ReducerOutput | None:
+    semantic_list = _semantic_list(payload)
+    if semantic_list is None:
+        return None
+    list_key, items = semantic_list
+    rendered_limit = min(len(items), 12)
+    lines: list[str] = ["semantic json payload"]
+    facts: dict[str, Any] = {
+        "semantic_items": len(items),
+        "semantic_items_rendered": rendered_limit,
+    }
+    if isinstance(payload, dict):
+        keys = list(payload.keys())
+        lines.append(f"top_level_key_count: {len(keys)}")
+        lines.append("top_level_keys: " + ", ".join(str(key) for key in keys[:80]))
+        for key in ("status_code", "status", "query", "profile", "app_id", "workspace_id", "message", "detail"):
+            if key in payload and not isinstance(payload.get(key), (dict, list)):
+                lines.append(f"{key}: {_bounded_text(payload.get(key), 240)}")
+    lines.append(f"{list_key}: semantic array length {len(items)}")
+    for index, item in enumerate(items[:rendered_limit], start=1):
+        summary = _semantic_item_summary(item)
+        lines.append(f"{index}. {_bounded_json_bytes(summary, 1_400)}")
+    omitted = len(items) - rendered_limit
+    if omitted > 0:
+        lines.append(f"omitted_semantic_items: {omitted}")
+    return ReducerOutput(text=truncate_middle_bytes("\n".join(lines), target_bytes), facts=facts)
+
+
+def _semantic_list(payload: Any) -> tuple[str, list[Any]] | None:
+    if isinstance(payload, dict):
+        for key in ("items", "results"):
+            value = payload.get(key)
+            if _looks_like_semantic_items(value):
+                return key, value
+    if _looks_like_semantic_items(payload):
+        return "root", payload
+    return None
+
+
+def _looks_like_semantic_items(value: Any) -> bool:
+    if not isinstance(value, list) or not value:
+        return False
+    candidates = [item for item in value[:8] if isinstance(item, dict)]
+    if not candidates:
+        return False
+    return sum(1 for item in candidates if _looks_like_semantic_item(item)) >= max(1, len(candidates) // 2)
+
+
+def _looks_like_semantic_item(item: dict[str, Any]) -> bool:
+    textish = any(key in item for key in ("title", "summary", "body_text", "snippet", "description"))
+    if "kind" in item and (textish or "entity" in item or "locator" in item):
+        return True
+    if "entity" in item and textish:
+        return True
+    if "locator" in item and textish:
+        return True
+    if "node_id" in item and textish:
+        return True
+    return False
+
+
+def _semantic_item_summary(item: Any) -> dict[str, Any]:
+    if not isinstance(item, dict):
+        return {"value": _bounded_text(item, 240)}
+    node = item.get("node") if isinstance(item.get("node"), dict) else {}
+    body_text = str(item.get("body_text") or node.get("body_text") or "")
+    compiled = item.get("compiled") if isinstance(item.get("compiled"), dict) else {}
+    summary = _compact_json_dict(
+        {
+            "kind": item.get("kind"),
+            "id": item.get("id") or node.get("id"),
+            "node_id": item.get("node_id") or node.get("node_id"),
+            "type": item.get("type") or node.get("type"),
+            "title": _bounded_text(item.get("title") or node.get("title"), 240),
+            "summary": _bounded_text(item.get("summary") or node.get("summary") or body_text, 240),
+            "body_text": _bounded_text(body_text, 180),
+            "body_text_char_count": len(body_text) if body_text else item.get("body_text_char_count"),
+            "freshness": item.get("freshness"),
+            "relevance": item.get("relevance"),
+            "reason": _bounded_text(item.get("reason"), 160),
+            "match_sources": item.get("match_sources"),
+            "entity": item.get("entity"),
+            "locator": item.get("locator"),
+            "source_chunk_matches": _semantic_source_chunks(item.get("source_chunk_matches")),
+            "citations": _semantic_citations(item.get("citations")),
+            "provenance": _semantic_refs(item.get("provenance")),
+            "storage_references": _semantic_storage_refs(item.get("storage_references")),
+            "compiled": _semantic_compiled(compiled),
+        }
+    )
+    return summary
+
+
+def _semantic_compiled(value: dict[str, Any]) -> dict[str, Any]:
+    if not value:
+        return {}
+    body_markdown = str(value.get("body_markdown") or "")
+    return _compact_json_dict(
+        {
+            "wiki_page_id": value.get("wiki_page_id"),
+            "summary": _bounded_text(value.get("summary"), 180),
+            "body_markdown_char_count": len(body_markdown) if body_markdown else value.get("body_markdown_char_count"),
+            "freshness": value.get("freshness"),
+            "compiled_at": value.get("compiled_at"),
+            "claims": _semantic_claims(value.get("claims")),
+            "citations": _semantic_citations(value.get("citations")),
+            "storage_references": _semantic_storage_refs(value.get("storage_references")),
+            "lint_findings": _semantic_lint_findings(value.get("lint_findings")),
+        }
+    )
+
+
+def _semantic_claims(value: Any) -> list[dict[str, Any]]:
+    claims = value if isinstance(value, list) else []
+    compacted: list[dict[str, Any]] = []
+    for claim in claims[:3]:
+        if not isinstance(claim, dict):
+            continue
+        compacted.append(
+            _compact_json_dict(
+                {
+                    "id": claim.get("id"),
+                    "claim_id": claim.get("claim_id"),
+                    "claim_text": _bounded_text(claim.get("claim_text") or claim.get("summary"), 180),
+                    "status": claim.get("status"),
+                    "confidence": claim.get("confidence"),
+                    "citations": _semantic_citations(claim.get("citations")),
+                }
+            )
+        )
+    return compacted
+
+
+def _semantic_citations(value: Any) -> list[dict[str, Any]]:
+    citations = value if isinstance(value, list) else []
+    compacted: list[dict[str, Any]] = []
+    for citation in citations[:3]:
+        if not isinstance(citation, dict):
+            continue
+        compacted.append(
+            _compact_json_dict(
+                {
+                    "id": citation.get("id"),
+                    "claim_id": citation.get("claim_id"),
+                    "source_id": citation.get("source_id"),
+                    "source_version_id": citation.get("source_version_id"),
+                    "source_chunk_id": citation.get("source_chunk_id"),
+                    "external_ref_id": citation.get("external_ref_id"),
+                    "locator": citation.get("locator"),
+                    "locator_kind": citation.get("locator_kind"),
+                    "quote": _bounded_text(citation.get("quote"), 120),
+                    "quote_sha256": citation.get("quote_sha256"),
+                    "storage_reference": _semantic_storage_ref(citation.get("storage_reference")),
+                }
+            )
+        )
+    return compacted
+
+
+def _semantic_source_chunks(value: Any) -> list[dict[str, Any]]:
+    chunks = value if isinstance(value, list) else []
+    compacted: list[dict[str, Any]] = []
+    for chunk in chunks[:3]:
+        if not isinstance(chunk, dict):
+            continue
+        compacted.append(
+            _compact_json_dict(
+                {
+                    "kind": chunk.get("kind"),
+                    "source_id": chunk.get("source_id"),
+                    "source_document_id": chunk.get("source_document_id"),
+                    "source_version_id": chunk.get("source_version_id"),
+                    "chunk_id": chunk.get("chunk_id"),
+                    "title": _bounded_text(chunk.get("title"), 180),
+                    "freshness": chunk.get("freshness"),
+                    "locator": chunk.get("locator"),
+                    "source": chunk.get("source"),
+                    "citations": _semantic_citations(chunk.get("citations")),
+                }
+            )
+        )
+    return compacted
+
+
+def _semantic_refs(value: Any) -> list[dict[str, Any]]:
+    refs = value if isinstance(value, list) else []
+    compacted: list[dict[str, Any]] = []
+    for ref in refs[:3]:
+        if not isinstance(ref, dict):
+            continue
+        metadata = ref.get("metadata") if isinstance(ref.get("metadata"), dict) else {}
+        compacted.append(
+            _compact_json_dict(
+                {
+                    "id": ref.get("id"),
+                    "ref_kind": ref.get("ref_kind"),
+                    "owning_app_id": ref.get("owning_app_id"),
+                    "entity_type": ref.get("entity_type"),
+                    "entity_id": ref.get("entity_id"),
+                    "file_id": ref.get("file_id"),
+                    "workspace_relative_path": ref.get("workspace_relative_path"),
+                    "uri": ref.get("uri"),
+                    "title": _bounded_text(ref.get("title"), 180),
+                    "metadata": _compact_json_dict(
+                        {
+                            "provider": metadata.get("provider"),
+                            "connection_id": metadata.get("connection_id"),
+                            "drive_file_id": metadata.get("drive_file_id"),
+                            "source_version": metadata.get("source_version"),
+                            "indexed_source_version": metadata.get("indexed_source_version"),
+                        }
+                    ),
+                }
+            )
+        )
+    return compacted
+
+
+def _semantic_storage_refs(value: Any) -> list[dict[str, Any]]:
+    refs = value if isinstance(value, list) else []
+    return [ref for ref in (_semantic_storage_ref(ref) for ref in refs[:3]) if ref]
+
+
+def _semantic_storage_ref(value: Any) -> dict[str, Any]:
+    if not isinstance(value, dict):
+        return {}
+    compacted = _compact_json_dict(
+        {
+            "app_id": value.get("app_id"),
+            "owning_app_id": value.get("owning_app_id"),
+            "entity_type": value.get("entity_type"),
+            "provider": value.get("provider"),
+            "stable_storage_file_id": value.get("stable_storage_file_id"),
+            "file_id": value.get("file_id"),
+            "entity_id": value.get("entity_id"),
+            "ref_kind": value.get("ref_kind"),
+            "title": _bounded_text(value.get("title"), 180),
+            "display_path": _bounded_text(value.get("display_path"), 240),
+            "connection_id": value.get("connection_id"),
+            "drive_file_id": value.get("drive_file_id"),
+            "source_version": value.get("source_version"),
+            "deep_link": value.get("deep_link"),
+            "reference_resolve_request": value.get("reference_resolve_request"),
+            "preview_request": value.get("preview_request"),
+            "export_request": value.get("export_request"),
+        }
+    )
+    if "workspace_relative_path" in value:
+        compacted["workspace_relative_path"] = str(value.get("workspace_relative_path") or "")
+    return compacted
+
+
+def _semantic_lint_findings(value: Any) -> list[dict[str, Any]]:
+    findings = value if isinstance(value, list) else []
+    compacted: list[dict[str, Any]] = []
+    for finding in findings[:2]:
+        if not isinstance(finding, dict):
+            continue
+        compacted.append(
+            _compact_json_dict(
+                {
+                    "id": finding.get("id"),
+                    "finding_type": finding.get("finding_type"),
+                    "severity": finding.get("severity"),
+                    "message": _bounded_text(finding.get("message"), 180),
+                }
+            )
+        )
+    return compacted
 
 
 def _test_summary_counts(value: str) -> dict[str, int]:
@@ -238,6 +512,30 @@ def _git_porcelain_status_label(stripped: str) -> str:
     if "M" in codes or "T" in codes:
         return "modified"
     return ""
+
+
+def _bounded_text(value: Any, max_chars: int) -> str:
+    text = " ".join(str(value or "").split()).strip()
+    if max_chars <= 0 or not text:
+        return ""
+    if len(text) <= max_chars:
+        return text
+    if max_chars <= 3:
+        return text[:max_chars]
+    return text[: max_chars - 3].rstrip() + "..."
+
+
+def _bounded_json_bytes(value: Any, max_bytes: int) -> str:
+    return truncate_middle_bytes(json.dumps(value, ensure_ascii=False, sort_keys=True, default=str), max_bytes).replace("\n", " ")
+
+
+def _compact_json_dict(value: dict[str, Any]) -> dict[str, Any]:
+    compacted: dict[str, Any] = {}
+    for key, item in value.items():
+        if item is None or item == "" or item == [] or item == {}:
+            continue
+        compacted[key] = item
+    return compacted
 
 
 def _bounded_json(value: Any) -> str:

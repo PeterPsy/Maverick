@@ -1,6 +1,6 @@
 # Memory Architecture
 
-Date: 2026-06-03
+Date: 2026-06-19
 
 ## Purpose
 
@@ -91,9 +91,9 @@ Storage remains the owner of local files, Drive OAuth, Drive bytes, preview/expo
 
 Memory exposes agent-facing surfaces through the app contract:
 
-- `memory_context` returns normalized `memory_node` context packs with compiled page data and top-level compiled citations when available
+- `memory_context` returns bounded `agent_compact` `memory_node` context packs for provider context. Items preserve node identity, title, type, summary, bounded `body_text` snippets, `body_text_char_count`, relevance, match sources, compact provenance, compact Storage references, compact compiled wiki summaries/citations/freshness, and expand instructions. It must not duplicate full `body_text` under nested node envelopes or return full compiled `body_markdown`; callers needing full detail should expand by node or source chunk id.
 - `memory_inspect_node` returns node details plus compiled page, claims, citations, sources, and lint findings
-- `memory_search` searches graph nodes plus compiled page and claim text and returns the same normalized `memory_node` retrieval envelope as `memory_context`
+- `memory_search` searches graph nodes plus compiled page and claim text and returns the richer normalized `memory_node` retrieval envelope for search workflows. Agents should prefer `memory_context` for default prompt context and use `memory_inspect_node` or `memory_fetch_chunks` to expand specific results.
 - `memory_compile` compiles one node into the internal wiki layer and emits a redaction-safe `memory_compile_completed` event with compile/run counts, not source text
 - `memory_lint` refreshes quality findings and emits a redaction-safe `memory_lint_refreshed` event with node and severity counts
 - `memory_ingest_source` ingests generic app-owned sources. The implemented adapters are `inline_markdown` for generated Markdown evidence, `storage_file` for workspace Storage files under `storage/uploaded/` or `storage/generated/`, `remote_storage_file` for Storage-owned Drive indexing payloads, and `app_entity` snapshots through official app reference surfaces; Storage-backed adapters ask Storage for file metadata, previewability, bounded preview text, and only then bounded UTF-8 text bytes as fallback before writing Memory-owned verified source bodies and chunks, or a `reference_snapshot` when extraction is unavailable
@@ -112,4 +112,4 @@ The first compiler may be deterministic and use existing node text, references, 
 
 ## UI Rule
 
-Do not add a separate Wiki tab or app. The graph stays primary. Compiled wiki content appears in the node inspector and in agent-facing context payloads.
+Do not add a separate Wiki tab or app. The graph stays primary. Full compiled wiki content appears in the node inspector; agent-facing context payloads expose compact compiled summaries, citations, freshness, and expansion pointers.

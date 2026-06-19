@@ -1,7 +1,7 @@
 {
   "commands": {
     "memory": {
-      "description": "Search, retrieve, update, link, inspect, compile, and lint workspace Memory nodes. Retrieval actions include reusable Storage references when available. The default action is context retrieval.",
+      "description": "Search, retrieve, update, link, inspect, compile, and lint workspace Memory nodes. The default context action returns bounded agent-compact results with reusable Storage references and expansion hints; inspect/fetch actions return full detail when needed.",
       "argument_schema": {
         "type": "object",
         "properties": {

@@ -969,7 +969,7 @@ class MemoryAppTestCase(unittest.TestCase):
             self.assertEqual(len(graph["edges"]), 1)
             self.assertEqual(graph["edges"][0]["kind"], "mentions")
 
-    def test_search_and_context_share_memory_node_envelope(self) -> None:
+    def test_search_returns_full_envelope_and_context_returns_agent_compact_payload(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
             data_root = Path(temp) / "data" / "memory"
             node = self.run_backend(
@@ -985,26 +985,75 @@ class MemoryAppTestCase(unittest.TestCase):
             search = self.run_backend(data_root, {"action": "search", "query": "renewal owner"})["json"]
             context = self.run_backend(data_root, {"action": "context", "query": "renewal owner"})["json"]
 
-            for item in (search["results"][0], context["items"][0]):
-                self.assertEqual(item["kind"], "memory_node")
-                self.assertEqual(item["id"], node["id"])
-                self.assertEqual(item["node_id"], node["id"])
-                self.assertEqual(item["source_version_id"], "")
-                self.assertEqual(item["chunk_id"], "")
-                self.assertEqual(item["freshness"], "unknown")
-                self.assertEqual(item["citations"], [])
-                self.assertEqual(item["locator"], {"kind": "memory_node", "value": node["id"]})
-                self.assertEqual(item["entity"], {"entity_type": "node", "entity_id": node["id"]})
-                self.assertEqual(item["node"]["id"], node["id"])
-                self.assertEqual(item["node"]["node_id"], node["id"])
-                self.assertEqual(item["title"], "Acme renewal owner")
-                self.assertEqual(item["type"], "fact")
-                self.assertIn("match_sources", item)
-                self.assertIn("source_chunk_matches", item)
-                self.assertIn("storage_references", item)
-                self.assertIn("compiled", item)
-                self.assertIsInstance(item["relevance"], float)
-                self.assertNotIn("score", item)
+            search_item = search["results"][0]
+            self.assertEqual(search_item["kind"], "memory_node")
+            self.assertEqual(search_item["id"], node["id"])
+            self.assertEqual(search_item["node_id"], node["id"])
+            self.assertEqual(search_item["node"]["id"], node["id"])
+            self.assertEqual(search_item["node"]["node_id"], node["id"])
+            self.assertEqual(search_item["title"], "Acme renewal owner")
+            self.assertEqual(search_item["type"], "fact")
+            self.assertIn("compiled", search_item)
+            self.assertNotIn("score", search_item)
+
+            context_item = context["items"][0]
+            self.assertEqual(context["profile"], "agent_compact")
+            self.assertEqual(context["expand"]["node_tool"], "memory_inspect_node")
+            self.assertEqual(context_item["kind"], "memory_node")
+            self.assertEqual(context_item["id"], node["id"])
+            self.assertEqual(context_item["node_id"], node["id"])
+            self.assertEqual(context_item["source_version_id"], "")
+            self.assertEqual(context_item["chunk_id"], "")
+            self.assertEqual(context_item["freshness"], "unknown")
+            self.assertEqual(context_item["citations"], [])
+            self.assertEqual(context_item["locator"], {"kind": "memory_node", "value": node["id"]})
+            self.assertEqual(context_item["entity"], {"entity_type": "node", "entity_id": node["id"]})
+            self.assertEqual(context_item["title"], "Acme renewal owner")
+            self.assertEqual(context_item["type"], "fact")
+            self.assertEqual(context_item["body_text"], "Acme renewal owner is Dana.")
+            self.assertEqual(context_item["body_text_char_count"], len("Acme renewal owner is Dana."))
+            self.assertFalse(context_item["body_text_truncated"])
+            self.assertIn("match_sources", context_item)
+            self.assertIn("source_chunk_matches", context_item)
+            self.assertIn("storage_references", context_item)
+            self.assertIn("compiled", context_item)
+            self.assertIsInstance(context_item["relevance"], float)
+            self.assertNotIn("node", context_item)
+            self.assertNotIn("score", context_item)
+
+    def test_context_payload_is_bounded_for_agent_provider_history(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            data_root = Path(temp) / "data" / "memory"
+            tail_marker = "TAIL-MARKER-SHOULD-NOT-LEAK"
+            for index in range(8):
+                self.run_backend(
+                    data_root,
+                    {
+                        "action": "remember",
+                        "title": f"Atlas retention policy {index}",
+                        "summary": f"Atlas retention policy {index} summary.",
+                        "body": (
+                            f"Atlas retention policy {index} belongs in compact context. "
+                            + ("Long operational detail. " * 700)
+                            + tail_marker
+                        ),
+                        "type": "fact",
+                    },
+                )
+
+            context = self.run_backend(data_root, {"action": "context", "query": "Atlas retention policy", "limit": 8})["json"]
+            encoded = json.dumps(context, ensure_ascii=False)
+
+            self.assertEqual(context["profile"], "agent_compact")
+            self.assertLessEqual(len(encoded.encode("utf-8")), 12_000)
+            self.assertEqual(context["total_candidate_count"], 8)
+            self.assertLessEqual(context["item_count"], 8)
+            self.assertNotIn(tail_marker, encoded)
+            first = context["items"][0]
+            self.assertNotIn("node", first)
+            self.assertNotIn("body_markdown", encoded)
+            self.assertGreater(first["body_text_char_count"], len(first.get("body_text", "")))
+            self.assertTrue(first["body_text_truncated"])
 
     def test_search_and_context_include_compiled_citations_in_memory_node_envelope(self) -> None:
         with tempfile.TemporaryDirectory() as temp:

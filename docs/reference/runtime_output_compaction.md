@@ -1,6 +1,6 @@
 # Runtime Output Compaction
 
-Date: 2026-06-16
+Date: 2026-06-19
 
 Maverick compacts large `runtime.tool_call.*` payloads before the events are persisted, published to the runtime event bus, replayed through runtime history, or consumed by downstream app hooks. Runtime-token CLI calls can also request a provider-oriented compact response for large textual JSON fields. Maverick-managed Codex sessions additionally install a provider hook that can replace large shell tool results before Codex continues from the tool output when Codex actually runs the trusted hook.
 
@@ -55,6 +55,8 @@ Allowed values are `full` and `provider_compact`. Missing `output_profile` means
 When `provider_compact` is requested, the API runs the CLI normally, preserves `status_code` and HTTP status behavior, and compacts large textual JSON fields before returning the response. It also redacts recognizable sensitive text and any value under a sensitive structured key, including non-string scalars, objects, and lists, even when the field is below the compaction size threshold, because the runtime-local shim normally sends this stdout into provider context. The same redaction and compaction policy is applied to `SystemExit` and unexpected exception `detail` fields raised while invoking the CLI. Metadata is added under top-level `output_compaction` with `scope: runtime_cli_response`. The runtime-local `maverick` shim requests `provider_compact` by default; agents can set `MAVERICK_RUNTIME_CLI_OUTPUT_PROFILE=full` when they need the exact full JSON payload.
 
 `provider_compact` deliberately preserves explicit document-body fields from truncation for read surfaces where shortening would corrupt the requested source material. Redaction still runs on those fields, and redacted document bodies receive `output_compaction` metadata with `applied: false`. Current preserved top-level fields are developer-context `content`, Storage `file.text.read` `text`, and Storage preview or handoff `preview_text` when the response shape identifies Storage file metadata. Other large text fields remain eligible for compaction.
+
+For large JSON payloads, the structured reducer first checks for app-style semantic result lists such as top-level `items` or `results` containing objects with retrieval markers like `kind`, `entity`, `locator`, or `node_id`. Those payloads are summarized as semantic items that preserve ids, titles, summaries, bounded body snippets, body length counts, compact citations, source chunk ids, provenance, Storage references, compiled summaries, and expansion-safe metadata before falling back to the generic top-level-key and array-sample reducer. This prevents provider-history compaction from turning app retrieval payloads into an unhelpful structural sample.
 
 If the CLI response compactor fails unexpectedly for a large field, the API returns that field as redacted pass-through text and records `pass_through_reason: compactor_failed` plus a non-sensitive `compaction_error` class name in the compaction metadata.
 

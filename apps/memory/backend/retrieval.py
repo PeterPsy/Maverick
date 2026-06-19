@@ -7,6 +7,7 @@ import re
 import sqlite3
 from typing import Any
 
+from context_payloads import agent_compact_context_payload
 from content_store import read_body
 from database import connect, ensure_schema, normalize_limit, record_event, row_payload
 from errors import MemoryValidationError
@@ -154,7 +155,7 @@ def context_payload(data_root: Path, query: str, *, limit: int = 8, record_acces
                 break
         if record_access_event:
             record_event(db, event_type="retrieval_context_generated", payload={"query": query, "item_count": len(items)})
-    return {"query": query, "items": items[:normalized_limit]}
+    return agent_compact_context_payload(query, items[:normalized_limit], requested_limit=normalized_limit)
 
 
 def add_source_chunk_matches(db: sqlite3.Connection, data_root: Path, results: list[dict[str, Any]], query: str, *, limit: int) -> None:

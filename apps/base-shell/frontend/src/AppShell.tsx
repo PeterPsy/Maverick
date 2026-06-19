@@ -607,6 +607,7 @@ export function AppShell() {
           onToggleSidebar={toggleMobileSidebar}
           onPrimaryAction={invokeMobilePrimaryAction}
           primaryActionLabel={mobilePrimaryAction.label}
+          shellTheme={shellTheme}
         />
       ) : null}
       {isMobileLayout ? (

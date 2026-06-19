@@ -17,11 +17,10 @@ import { DEFAULT_SHELL_THEME_MODE, DEFAULT_SHELL_THEME_STATE } from "../theme";
 import { AppLogo } from "./AppLogo";
 import { BrandMark } from "./BrandMark";
 import { SidebarAppRail } from "./SidebarAppRail";
+import { sidebarLogoSrc } from "./sidebarLogo";
 import { WidgetSlot } from "./WidgetSlot";
 import type { WidgetPrimaryActionState } from "./WidgetSlot";
 import { WorkspaceSwitcher } from "./WorkspaceSwitcher";
-
-const SIDEBAR_DESKTOP_LOGO_SRC = "/apps/base-shell/sidebar-logo.svg";
 
 type TrackedSwipe = SidebarSwipePoint & {
   id: number;
@@ -91,6 +90,7 @@ export function Sidebar({
   const [isRailReordering, setIsRailReordering] = useState(false);
   const [isResizeActive, setIsResizeActive] = useState(false);
   const [resizeHandleY, setResizeHandleY] = useState("50%");
+  const logoSrc = sidebarLogoSrc(shellTheme);
   const visibleAppsById = new Map(shellVisibleApps(apps).map((app) => [app.app_id, app]));
   const railApps = shellAppRailApps(apps, pinnedAppIds);
   const activeApp = activeAppId ? visibleAppsById.get(activeAppId) || null : null;
@@ -328,7 +328,7 @@ export function Sidebar({
 
           <div className="bs-sidebar__shell-controls">
             {!isMobileLayout ? (
-              <img alt="" aria-hidden="true" className="bs-sidebar__desktop-logo" src={SIDEBAR_DESKTOP_LOGO_SRC} />
+              <img alt="" aria-hidden="true" className="bs-sidebar__desktop-logo" src={logoSrc} />
             ) : null}
             <div className="bs-sidebar__control-cluster">
               <div className="bs-sidebar__theme-switcher" aria-label="Theme mode">

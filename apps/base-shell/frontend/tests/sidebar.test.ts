@@ -65,11 +65,15 @@ describe("Sidebar desktop layout contract", () => {
 
   it("keeps the desktop logo inline with sidebar controls only on desktop", () => {
     const sidebarSource = readSource("components/Sidebar.tsx");
+    const logoSource = readSource("components/sidebarLogo.ts");
     const sidebarStyles = readStyle("sidebar.css");
     const responsiveStyles = readStyle("responsive.css");
 
-    expect(sidebarSource).toContain('SIDEBAR_DESKTOP_LOGO_SRC = "/apps/base-shell/sidebar-logo.svg"');
+    expect(logoSource).toContain('SIDEBAR_LOGO_DARK_SRC = "/apps/base-shell/sidebar-logo.svg"');
+    expect(logoSource).toContain('SIDEBAR_LOGO_LIGHT_SRC = "/apps/base-shell/sidebar-logo-black.svg"');
+    expect(sidebarSource).toContain("const logoSrc = sidebarLogoSrc(shellTheme);");
     expect(sidebarSource).toContain('className="bs-sidebar__desktop-logo"');
+    expect(sidebarSource).toContain("src={logoSrc}");
     expect(sidebarSource).toContain('className="bs-sidebar__control-cluster"');
     expect(sidebarSource).toContain("{!isMobileLayout ? (");
     expect(sidebarStyles).toContain(".bs-sidebar__desktop-logo");
@@ -121,7 +125,9 @@ describe("Sidebar desktop layout contract", () => {
     expect(appShellSource).toContain("onOpenNewChat={openNewChat}");
     expect(appShellSource).toContain("onToggleSidebar={toggleMobileSidebar}");
     expect(appShellSource).toContain("onTogglePinnedApps={toggleMobilePinnedApps}");
-    expect(headerSource).toContain('SIDEBAR_DESKTOP_LOGO_SRC = "/apps/base-shell/sidebar-logo.svg"');
+    expect(appShellSource).toContain("shellTheme={shellTheme}");
+    expect(headerSource).toContain("const logoSrc = sidebarLogoSrc(shellTheme);");
+    expect(headerSource).toContain("src={logoSrc}");
     expect(headerSource).toContain('aria-label={isSidebarOpen ? "Chiudi sidebar" : "Apri sidebar"}');
     expect(headerSource).toContain('aria-label={isPinnedAppsOpen ? "Chiudi applicazioni pinnate" : "Apri applicazioni pinnate"}');
     expect(headerSource).toContain('aria-label="Nuova chat"');

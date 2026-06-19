@@ -1,7 +1,7 @@
 import type { AppRegistryItem } from "../api";
+import { DEFAULT_SHELL_THEME_STATE, type ShellThemeState } from "../theme";
 import { AppLogo } from "./AppLogo";
-
-const SIDEBAR_DESKTOP_LOGO_SRC = "/apps/base-shell/sidebar-logo.svg";
+import { sidebarLogoSrc } from "./sidebarLogo";
 
 export function MobileShellHeader({
   activeApp,
@@ -18,6 +18,7 @@ export function MobileShellHeader({
   onToggleSidebar,
   onPrimaryAction,
   primaryActionLabel,
+  shellTheme = DEFAULT_SHELL_THEME_STATE,
 }: {
   activeApp: AppRegistryItem | null;
   chatApp: AppRegistryItem | null;
@@ -33,8 +34,10 @@ export function MobileShellHeader({
   onToggleSidebar: () => void;
   onPrimaryAction: () => void;
   primaryActionLabel: string;
+  shellTheme?: ShellThemeState;
 }) {
   const actionLabel = primaryActionLabel || "Azione principale";
+  const logoSrc = sidebarLogoSrc(shellTheme);
 
   return (
     <header className="bs-mobile-shell-header" aria-label="Mobile shell navigation">
@@ -74,7 +77,7 @@ export function MobileShellHeader({
         title="Nuova chat"
         type="button"
       >
-        <img alt="Maverick" className="bs-mobile-shell-header__logo" src={SIDEBAR_DESKTOP_LOGO_SRC} />
+        <img alt="Maverick" className="bs-mobile-shell-header__logo" src={logoSrc} />
       </button>
       <div className="bs-mobile-shell-header__actions">
         <button

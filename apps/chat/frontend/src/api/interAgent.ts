@@ -6,6 +6,7 @@ import type {
   InterAgentArtifactPage,
   InterAgentEventRecord,
   InterAgentEventPage,
+  InterAgentParticipantTranscriptPayload,
   InterAgentRunDetail,
   InterAgentVisibilityPlane,
   InterAgentWebSocketFrame,
@@ -141,6 +142,21 @@ export function listInterAgentRunArtifacts(
 
 export function listInterAgentRunApprovals(runId: string): Promise<{ items: InterAgentApprovalRecord[] }> {
   return requestJson<{ items: InterAgentApprovalRecord[] }>(`/api/inter-agent/runs/${encodeURIComponent(runId)}/approvals`);
+}
+
+export function getInterAgentParticipantTranscript(
+  runId: string,
+  participantId: string,
+  options: { limit?: number } = {},
+): Promise<InterAgentParticipantTranscriptPayload> {
+  const query = new URLSearchParams();
+  if (options.limit && Number.isFinite(options.limit)) {
+    query.set("limit", String(Math.max(1, Math.floor(options.limit))));
+  }
+  const suffix = query.toString() ? `?${query.toString()}` : "";
+  return requestJson<InterAgentParticipantTranscriptPayload>(
+    `/api/inter-agent/runs/${encodeURIComponent(runId)}/participants/${encodeURIComponent(participantId)}/transcript${suffix}`,
+  );
 }
 
 export function resolveInterAgentApproval(

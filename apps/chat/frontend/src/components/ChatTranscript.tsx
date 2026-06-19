@@ -3,7 +3,6 @@ import type { ChatMessage } from "../api/client";
 import type { InterAgentApprovalRecord, InterAgentEventRecord, InterAgentRunDetail } from "../api/client";
 import type { MentionItem } from "../lib/mentions";
 import { ChatTranscriptSkeleton } from "./ChatTranscriptSkeleton";
-import { InterAgentGraphView } from "./InterAgentGraphView";
 import { InterAgentRunPanel } from "./InterAgentRunPanel";
 import { MessageList } from "./MessageList";
 import { MorphingSpinner } from "./ui/morphing-spinner";
@@ -44,7 +43,6 @@ export function ChatTranscript({
   mentionItems,
   messages,
   hasMoreOlderMessages = false,
-  onCloseInterAgentGraph = () => undefined,
   onLoadOlderMessages,
   onOpenInterAgentGraph = () => undefined,
   onResolveInterAgentApproval = async () => undefined,
@@ -149,9 +147,6 @@ export function ChatTranscript({
       .reverse()
       .find((message) => message.role === "tool" && (message.toolCalls?.length || message.toolCall))?.id || null;
 
-  const activeGraphRun = activeInterAgentGraphRunId
-    ? interAgentRuns.find((detail) => detail.run.run_id === activeInterAgentGraphRunId) || null
-    : null;
   const hasInterAgentContent =
     interAgentRuns.length > 0 || Boolean(activeInterAgentGraphRunId) || Object.values(interAgentApprovalsByRunId).some((items) => items.length > 0);
 
@@ -181,15 +176,6 @@ export function ChatTranscript({
             <MorphingSpinner size="sm" className="chatapp-history-loader__icon" />
             <span>Loading earlier messages</span>
           </div>
-        ) : null}
-        {activeInterAgentGraphRunId ? (
-          <InterAgentGraphView
-            initialApprovals={interAgentApprovalsByRunId[activeInterAgentGraphRunId] || []}
-            initialEvents={interAgentEventsByRunId[activeInterAgentGraphRunId] || []}
-            initialRunDetail={activeGraphRun}
-            onClose={onCloseInterAgentGraph}
-            runId={activeInterAgentGraphRunId}
-          />
         ) : null}
         <InterAgentRunPanel
           approvalsByRunId={interAgentApprovalsByRunId}

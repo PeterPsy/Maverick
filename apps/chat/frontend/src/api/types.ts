@@ -498,6 +498,29 @@ export type InterAgentArtifactRecord = {
   [key: string]: unknown;
 };
 
+export type InterAgentParticipantTranscriptItem = {
+  message_id: string;
+  kind: "input" | "output" | "summary" | "artifact" | "approval" | "status";
+  role: "user" | "participant" | "system";
+  text: string;
+  status: string;
+  created_at: string;
+  truncated?: boolean;
+};
+
+export type InterAgentParticipantTranscriptPayload = {
+  run_id: string;
+  participant: {
+    participant_id: string;
+    label: string;
+    kind: string;
+    status: string;
+  };
+  items: InterAgentParticipantTranscriptItem[];
+  item_count: number;
+  truncated: boolean;
+};
+
 export type InterAgentEventPage = {
   items: InterAgentEventRecord[];
   visibility_plane: InterAgentVisibilityPlane;

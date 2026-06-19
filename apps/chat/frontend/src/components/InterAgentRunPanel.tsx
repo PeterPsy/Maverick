@@ -79,7 +79,7 @@ export function InterAgentRunPanel({
                   Approve
                 </button>
                 <button
-                  aria-label="Open graph"
+                  aria-label="Agent nodes"
                   className="chatapp-inter-agent-approval__graph"
                   onClick={() => onOpenGraph(run.run.run_id)}
                   type="button"
@@ -126,11 +126,15 @@ function InterAgentBanner({
         </div>
         {latestSummary ? <p>{latestSummary}</p> : null}
       </div>
-      <button className="chatapp-inter-agent-banner__graph" onClick={() => onOpenGraph(runDetail.run.run_id)} type="button">
+      <button
+        className={`chatapp-inter-agent-banner__graph ${isLiveRunStatus(runDetail.run.status) ? "is-live" : ""}`}
+        onClick={() => onOpenGraph(runDetail.run.run_id)}
+        type="button"
+      >
         <span aria-hidden="true" className="material-symbols-rounded">
           account_tree
         </span>
-        <span>Open graph</span>
+        <span>Agent nodes</span>
       </button>
     </aside>
   );
@@ -156,4 +160,8 @@ function runTopologyLabel(workerCount: number, hasOrchestrator: boolean): string
 
 function textPayload(value: unknown): string {
   return typeof value === "string" ? value.trim() : "";
+}
+
+function isLiveRunStatus(status: string): boolean {
+  return status === "running" || status === "planning" || status === "waiting_approval" || status === "recovering";
 }

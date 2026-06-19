@@ -242,6 +242,26 @@ def _handle_inter_agent_route(
                 )
             },
         )
+    if len(parts) == 5 and action == "participants" and parts[4] == "transcript" and method == "GET":
+        authorize_inter_agent_run_sensitive_view(
+            workspace_store=state.workspace_store,
+            context_workspace_id=context.workspace_id,
+            caller_kind="http",
+            run=run,
+            user_id=context.user.user_id,
+            platform_role=context.user.platform_role,
+            root_session=_root_session_for_run(state, run),
+        )
+        participant = state.inter_agent_store.get_participant(
+            parts[3],
+            workspace_id=context.workspace_id,
+            run_id=run.run_id,
+        )
+        query = parse_qs(query_string, keep_blank_values=False)
+        return json_response(
+            start_response,
+            _participant_transcript_payload(state, run, participant, limit=_query_limit(query)),
+        )
     if action == "participants" and method == "POST":
         return _spawn_participant(state, context, service, run, body, start_response)
     authorize_inter_agent_run_operation(
@@ -419,6 +439,272 @@ def _send_message(
         },
         status="202 Accepted" if body.get("async") else "201 Created",
     )
+
+
+def _participant_transcript_payload(state: PlatformState, run, participant, *, limit: int) -> dict:
+    """Project one participant into a product-facing transcript without hidden-session metadata."""
+    runtime_items, runtime_turn_ids_with_output = _runtime_participant_transcript_items(
+        state,
+        participant,
+        limit=limit,
+    )
+    event_items = _inter_agent_participant_transcript_items(
+        state,
+        run,
+        participant,
+        runtime_turn_ids_with_output=runtime_turn_ids_with_output,
+        limit=limit,
+    )
+    ordered = sorted(
+        [*runtime_items, *event_items],
+        key=lambda item: (str(item.get("created_at") or ""), int(item.get("_sequence") or 0), str(item.get("_source") or "")),
+    )
+    items = [
+        {key: value for key, value in item.items() if not key.startswith("_")}
+        for item in ordered[-limit:]
+    ]
+    for index, item in enumerate(items, start=1):
+        item["message_id"] = f"{participant.participant_id}:message:{index}"
+    return {
+        "run_id": run.run_id,
+        "participant": {
+            "participant_id": participant.participant_id,
+            "label": participant.label,
+            "kind": participant.kind,
+            "status": participant.status,
+        },
+        "items": items,
+        "item_count": len(items),
+        "truncated": len(ordered) > len(items),
+    }
+
+
+def _runtime_participant_transcript_items(state: PlatformState, participant, *, limit: int) -> tuple[list[dict], set[str]]:
+    session_id = _text(getattr(participant, "runtime_session_id", None))
+    if not session_id:
+        return [], set()
+    try:
+        session = state.runtime_store.get_session(session_id)
+    except (RuntimeSessionNotFoundError, ValueError):
+        return [], set()
+    if session.workspace_id != participant.workspace_id:
+        return [], set()
+    turns = sorted(state.runtime_store.list_turns(session_id), key=lambda item: (item.created_at, item.turn_id))
+    events = sorted(state.runtime_store.list_events(session_id), key=lambda item: (item.created_at, item.event_id))
+    events_by_turn: dict[str, list] = {}
+    for event in events:
+        if event.turn_id:
+            events_by_turn.setdefault(event.turn_id, []).append(event)
+    items: list[dict] = []
+    turn_ids_with_output: set[str] = set()
+    for turn in turns[-limit:]:
+        if turn.input_text:
+            items.append(
+                _safe_transcript_item(
+                    kind="input",
+                    role="user",
+                    text=turn.input_text,
+                    created_at=turn.created_at,
+                    status=turn.status,
+                    source=f"runtime-turn-input:{turn.turn_id}",
+                )
+            )
+        output_text = _runtime_turn_output_text(events_by_turn.get(turn.turn_id, []))
+        if output_text:
+            turn_ids_with_output.add(turn.turn_id)
+            items.append(
+                _safe_transcript_item(
+                    kind="output",
+                    role="participant",
+                    text=output_text,
+                    created_at=turn.completed_at or turn.updated_at,
+                    status=turn.status,
+                    source=f"runtime-turn-output:{turn.turn_id}",
+                )
+            )
+        elif turn.failure_reason:
+            items.append(
+                _safe_transcript_item(
+                    kind="status",
+                    role="system",
+                    text=turn.failure_reason,
+                    created_at=turn.updated_at,
+                    status=turn.status,
+                    source=f"runtime-turn-failure:{turn.turn_id}",
+                )
+            )
+    return items, turn_ids_with_output
+
+
+def _inter_agent_participant_transcript_items(
+    state: PlatformState,
+    run,
+    participant,
+    *,
+    runtime_turn_ids_with_output: set[str],
+    limit: int,
+) -> list[dict]:
+    page = state.inter_agent_store.list_event_page(
+        run.run_id,
+        workspace_id=run.workspace_id,
+        visibility_plane="detail",
+        limit=min(MAX_INTER_AGENT_EVENT_LIMIT, max(limit * 3, DEFAULT_INTER_AGENT_EVENT_LIMIT)),
+    )
+    items: list[dict] = []
+    for event in page.events:
+        if event.participant_id != participant.participant_id:
+            continue
+        item = _transcript_item_from_inter_agent_event(
+            event,
+            runtime_turn_ids_with_output=runtime_turn_ids_with_output,
+        )
+        if item:
+            items.append(item)
+    return items
+
+
+def _transcript_item_from_inter_agent_event(event, *, runtime_turn_ids_with_output: set[str]) -> dict | None:
+    payload = event.payload if isinstance(event.payload, dict) else {}
+    if event.event_type == "inter_agent.task.assigned":
+        text = _text(payload.get("input_text")) or _text(payload.get("task"))
+        if not text:
+            return None
+        return _safe_transcript_item(
+            kind="input",
+            role="user",
+            text=text,
+            created_at=event.created_at,
+            status=_text(payload.get("status")) or "assigned",
+            source=f"inter-agent-input:{event.sequence}",
+            sequence=event.sequence,
+        )
+    if event.event_type == "inter_agent.task.completed":
+        if _text(event.runtime_turn_id) in runtime_turn_ids_with_output:
+            return None
+        text = _text(payload.get("output_text")) or _text(payload.get("summary")) or _text(payload.get("error"))
+        if not text:
+            return None
+        return _safe_transcript_item(
+            kind="output",
+            role="participant",
+            text=text,
+            created_at=event.created_at,
+            status=_text(payload.get("status")) or "completed",
+            source=f"inter-agent-output:{event.sequence}",
+            sequence=event.sequence,
+        )
+    if event.event_type == "inter_agent.summary.updated":
+        text = _text(payload.get("summary"))
+        if not text:
+            return None
+        return _safe_transcript_item(
+            kind="summary",
+            role="participant",
+            text=text,
+            created_at=event.created_at,
+            status=_text(payload.get("status")) or "updated",
+            source=f"inter-agent-summary:{event.sequence}",
+            sequence=event.sequence,
+        )
+    if event.event_type == "inter_agent.artifact.created":
+        artifact_refs = payload.get("artifact_refs")
+        if not isinstance(artifact_refs, list):
+            artifact_refs = []
+        labels = [
+            _artifact_ref_label(ref)
+            for ref in artifact_refs
+            if isinstance(ref, dict) and _artifact_ref_label(ref)
+        ]
+        text = _text(payload.get("partial_output"))
+        if labels:
+            text = "\n".join(
+                [
+                    *(["Created artifacts: " + ", ".join(labels)] if labels else []),
+                    *([text] if text else []),
+                ]
+            )
+        if not text:
+            return None
+        return _safe_transcript_item(
+            kind="artifact",
+            role="participant",
+            text=text,
+            created_at=event.created_at,
+            status=_text(payload.get("status")) or "created",
+            source=f"inter-agent-artifact:{event.sequence}",
+            sequence=event.sequence,
+        )
+    if event.event_type in {"inter_agent.approval.requested", "inter_agent.approval.resolved"}:
+        text = _text(payload.get("summary")) or _text(payload.get("status"))
+        if not text:
+            return None
+        return _safe_transcript_item(
+            kind="approval",
+            role="system",
+            text=text,
+            created_at=event.created_at,
+            status=_text(payload.get("status")) or event.event_type.rsplit(".", 1)[-1],
+            source=f"inter-agent-approval:{event.sequence}",
+            sequence=event.sequence,
+        )
+    return None
+
+
+def _runtime_turn_output_text(events: list) -> str:
+    final_events = [event for event in events if event.event_type == "runtime.output.final"]
+    for event in reversed(final_events):
+        payload = event.payload if isinstance(event.payload, dict) else {}
+        text = _text(payload.get("complete_text")) or _text(payload.get("text"))
+        if text:
+            return text
+    deltas: list[str] = []
+    for event in events:
+        if event.event_type != "runtime.output.delta":
+            continue
+        payload = event.payload if isinstance(event.payload, dict) else {}
+        text = payload.get("text")
+        if isinstance(text, str) and text:
+            deltas.append(text)
+    return "".join(deltas).strip()
+
+
+def _safe_transcript_item(
+    *,
+    kind: str,
+    role: str,
+    text: str,
+    created_at,
+    status: str,
+    source: str,
+    sequence: int = 0,
+) -> dict:
+    safe_text, truncated = _bounded_transcript_text(text)
+    return {
+        "message_id": "",
+        "kind": kind,
+        "role": role,
+        "text": safe_text,
+        "status": status,
+        "created_at": created_at,
+        "truncated": truncated,
+        "_sequence": sequence,
+        "_source": source,
+    }
+
+
+def _bounded_transcript_text(value: str, *, limit: int = 6000) -> tuple[str, bool]:
+    text = _text(value)
+    if len(text) <= limit:
+        return text, False
+    return f"{text[:limit].rstrip()}\n[truncated]", True
+
+
+def _artifact_ref_label(ref: dict) -> str:
+    for key in ("label", "name", "filename", "workspace_relative_path", "relative_path", "file_id"):
+        value = _text(ref.get(key))
+        if value:
+            return value
+    return ""
 
 
 def _execute_run(

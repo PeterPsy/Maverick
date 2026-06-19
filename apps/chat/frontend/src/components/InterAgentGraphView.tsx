@@ -1,22 +1,14 @@
 import { useEffect, useMemo, useState, type CSSProperties } from "react";
-import type {
-  InterAgentApprovalRecord,
-  InterAgentArtifactRecord,
-  InterAgentEventRecord,
-  InterAgentRunDetail,
-  InterAgentVisibilityPlane,
+import {
+  getInterAgentParticipantTranscript,
+  type InterAgentApprovalRecord,
+  type InterAgentEventRecord,
+  type InterAgentParticipantTranscriptPayload,
+  type InterAgentRunDetail,
+  type InterAgentVisibilityPlane,
 } from "../api/client";
 import { useInterAgentGraph } from "../hooks/useInterAgentGraph";
-import {
-  defaultGraphSelection,
-  eventDisplayLabel,
-  eventSummary,
-  isTerminalRunStatus,
-  participantIcon,
-  runStatusLabel,
-  selectionExists,
-  type InterAgentGraphSelection,
-} from "../lib/interAgentGraph";
+import { eventSummary, isTerminalRunStatus, participantIcon, runStatusLabel } from "../lib/interAgentGraph";
 
 type InterAgentGraphViewProps = {
   initialApprovals?: InterAgentApprovalRecord[];
@@ -26,6 +18,9 @@ type InterAgentGraphViewProps = {
   runId: string;
 };
 
+const GRAPH_VISIBILITY_PLANE: InterAgentVisibilityPlane = "detail";
+const TRANSCRIPT_LIMIT = 80;
+
 export function InterAgentGraphView({
   initialApprovals = [],
   initialEvents = [],
@@ -33,19 +28,17 @@ export function InterAgentGraphView({
   onClose,
   runId,
 }: InterAgentGraphViewProps) {
-  const [selected, setSelected] = useState<InterAgentGraphSelection | null>(null);
-  const [visibilityPlane, setVisibilityPlane] = useState<InterAgentVisibilityPlane>("detail");
+  const [selectedParticipantId, setSelectedParticipantId] = useState<string | null>(null);
+  const [transcript, setTranscript] = useState<InterAgentParticipantTranscriptPayload | null>(null);
+  const [transcriptError, setTranscriptError] = useState<string | null>(null);
+  const [transcriptLoading, setTranscriptLoading] = useState(false);
   const {
     actionPending,
     approvals,
-    artifacts,
     connectionState,
     error,
     events,
-    hasMoreHistory,
-    isHistoryLoading,
     pauseRun,
-    requestOlderHistory,
     resolveApproval,
     resumeRun,
     runDetail,
@@ -55,36 +48,76 @@ export function InterAgentGraphView({
     initialEvents,
     initialRunDetail,
     runId,
-    visibilityPlane,
+    visibilityPlane: GRAPH_VISIBILITY_PLANE,
   });
 
+  const participants = runDetail?.participants || [];
+  const edges = runDetail?.edges || [];
   const terminal = isTerminalRunStatus(runDetail?.run.status || "");
   const paused = runDetail?.run.status === "paused" || runDetail?.run.status === "recovering";
-  const pendingApprovalCount = approvals.filter((approval) => approval.status === "pending").length;
-  const selectedItem = useMemo(
-    () => selectedItemFor(selected, runDetail, events, artifacts, approvals),
-    [approvals, artifacts, events, runDetail, selected],
-  );
+  const selectedParticipant =
+    participants.find((participant) => participant.participant_id === selectedParticipantId) || null;
+  const pendingApprovals = approvals.filter((approval) => approval.status === "pending");
+  const latestSummary = useMemo(() => latestRunSummary(events), [events]);
 
   useEffect(() => {
-    if (selectionExists(selected, runDetail, events, artifacts, approvals)) {
+    if (selectedParticipantId && participants.some((participant) => participant.participant_id === selectedParticipantId)) {
       return;
     }
-    setSelected(defaultGraphSelection({ approvals, artifacts, events, runDetail }));
-  }, [approvals, artifacts, events, runDetail, selected]);
+    const orchestrator =
+      participants.find((participant) => participant.participant_id === runDetail?.run.orchestrator_participant_id) ||
+      participants.find((participant) => participant.kind === "orchestrator") ||
+      participants[0] ||
+      null;
+    setSelectedParticipantId(orchestrator?.participant_id || null);
+  }, [participants, runDetail?.run.orchestrator_participant_id, selectedParticipantId]);
+
+  useEffect(() => {
+    if (!selectedParticipantId) {
+      setTranscript(null);
+      setTranscriptError(null);
+      setTranscriptLoading(false);
+      return;
+    }
+    let cancelled = false;
+    setTranscriptLoading(true);
+    setTranscriptError(null);
+    void getInterAgentParticipantTranscript(runId, selectedParticipantId, { limit: TRANSCRIPT_LIMIT })
+      .then((payload) => {
+        if (cancelled) {
+          return;
+        }
+        setTranscript(payload);
+      })
+      .catch((loadError) => {
+        if (cancelled) {
+          return;
+        }
+        setTranscript(null);
+        setTranscriptError(loadError instanceof Error ? loadError.message : "Unable to load participant transcript.");
+      })
+      .finally(() => {
+        if (!cancelled) {
+          setTranscriptLoading(false);
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [events.length, runId, selectedParticipantId, selectedParticipant?.updated_at]);
 
   return (
-    <section className="chatapp-inter-agent-graph" aria-label="Inter-agent graph">
+    <section className="chatapp-inter-agent-graph chatapp-agent-nodes-view" aria-label="Agent nodes view">
       <header className="chatapp-inter-agent-graph__header">
         <div className="chatapp-inter-agent-graph__title">
           <span className={`chatapp-inter-agent-graph__stream is-${connectionState}`} />
           <div>
-            <span className="chatapp-inter-agent-graph__eyebrow">Multi-agent graph</span>
+            <span className="chatapp-inter-agent-graph__eyebrow">Agent nodes view</span>
             <h2>{runDetail ? runStatusLabel(runDetail.run.status) : "Loading run"}</h2>
+            {latestSummary ? <p>{latestSummary}</p> : null}
           </div>
         </div>
         <div className="chatapp-inter-agent-graph__header-actions">
-          <SegmentedVisibilityControl value={visibilityPlane} onChange={setVisibilityPlane} />
           <button
             className="chatapp-inter-agent-graph__button"
             disabled={!runDetail || terminal || paused || actionPending !== null}
@@ -115,17 +148,16 @@ export function InterAgentGraphView({
             <span className="material-symbols-rounded" aria-hidden="true">stop</span>
             <span>Stop</span>
           </button>
-          <button className="chatapp-inter-agent-graph__close" onClick={onClose} type="button" aria-label="Close graph">
+          <button className="chatapp-inter-agent-graph__close" onClick={onClose} type="button" aria-label="Close Agent nodes">
             <span className="material-symbols-rounded" aria-hidden="true">close</span>
           </button>
         </div>
       </header>
 
       <div className="chatapp-inter-agent-graph__statusbar" aria-live="polite">
-        <span>{runDetail?.participants.length || 0} nodes</span>
-        <span>{events.length} events</span>
-        <span>{artifacts.length} artifacts</span>
-        {pendingApprovalCount ? <span>{pendingApprovalCount} pending approvals</span> : null}
+        <span>{participants.length} nodes</span>
+        <span>{edges.length} connections</span>
+        {pendingApprovals.length ? <span>{pendingApprovals.length} pending approvals</span> : null}
         {actionPending ? <span>{actionPending} pending</span> : null}
       </div>
 
@@ -139,63 +171,43 @@ export function InterAgentGraphView({
       {!runDetail && connectionState === "connecting" ? (
         <div className="chatapp-inter-agent-graph__loading" role="status" aria-live="polite">
           <span className="chatapp-inter-agent-graph__loading-dot" />
-          <span>Loading graph</span>
+          <span>Loading Agent nodes</span>
         </div>
       ) : null}
 
       <div className="chatapp-inter-agent-graph__body">
-        <GraphCanvas runDetail={runDetail} selected={selected} onSelect={setSelected} />
-        <Timeline
-          events={events}
-          hasMoreHistory={hasMoreHistory}
-          isHistoryLoading={isHistoryLoading}
-          onLoadOlder={requestOlderHistory}
-          onSelect={(eventId) => setSelected({ id: `event:${eventId}`, kind: "event", eventId })}
-          selected={selected}
+        <GraphCanvas
+          onSelectParticipant={setSelectedParticipantId}
+          runDetail={runDetail}
+          selectedParticipantId={selectedParticipantId}
         />
-        <Inspector item={selectedItem} onResolveApproval={resolveApproval} />
+        <ParticipantTranscript
+          error={transcriptError}
+          isLoading={transcriptLoading}
+          participant={selectedParticipant}
+          transcript={transcript}
+        />
       </div>
 
-      <ArtifactsStrip
-        artifacts={artifacts}
-        onSelect={(artifactId) => setSelected({ id: `artifact:${artifactId}`, kind: "artifact", artifactId })}
-        selected={selected}
-      />
+      {pendingApprovals.length ? (
+        <ApprovalShelf
+          approvals={pendingApprovals}
+          onSelectParticipant={setSelectedParticipantId}
+          onResolveApproval={resolveApproval}
+        />
+      ) : null}
     </section>
   );
 }
 
-function SegmentedVisibilityControl({
-  onChange,
-  value,
-}: {
-  onChange: (value: InterAgentVisibilityPlane) => void;
-  value: InterAgentVisibilityPlane;
-}) {
-  return (
-    <div className="chatapp-inter-agent-graph__segments" aria-label="Event visibility">
-      {(["summary", "detail", "debug"] as const).map((plane) => (
-        <button
-          className={plane === value ? "is-active" : ""}
-          key={plane}
-          onClick={() => onChange(plane)}
-          type="button"
-        >
-          {plane}
-        </button>
-      ))}
-    </div>
-  );
-}
-
 function GraphCanvas({
-  onSelect,
+  onSelectParticipant,
   runDetail,
-  selected,
+  selectedParticipantId,
 }: {
-  onSelect: (selection: InterAgentGraphSelection) => void;
+  onSelectParticipant: (participantId: string) => void;
   runDetail: InterAgentRunDetail | null;
-  selected: InterAgentGraphSelection | null;
+  selectedParticipantId: string | null;
 }) {
   const participants = runDetail?.participants || [];
   const edges = runDetail?.edges || [];
@@ -207,9 +219,9 @@ function GraphCanvas({
   const markerId = useMemo(() => svgFragmentId("chatapp-inter-agent-arrow", runDetail?.run.run_id || "run"), [
     runDetail?.run.run_id,
   ]);
-  const boardHeightRem = Math.min(33, Math.max(17, layout.rowCount * 6.2 + 5));
+  const boardHeightRem = Math.min(38, Math.max(21, layout.rowCount * 6.8 + 7));
   return (
-    <div className="chatapp-inter-agent-graph__canvas" aria-label="Graph participants and edges">
+    <div className="chatapp-inter-agent-graph__canvas" aria-label="Agent node map">
       {participants.length ? (
         <div
           className="chatapp-inter-agent-graph__board"
@@ -236,7 +248,7 @@ function GraphCanvas({
             </defs>
             {edgeLinks.map((link) => (
               <path
-                className={`chatapp-inter-agent-graph__edge-path ${selected?.kind === "edge" && selected.edgeId === link.edge.edge_id ? "is-selected" : ""}`}
+                className="chatapp-inter-agent-graph__edge-path"
                 d={edgePath(link)}
                 data-edge-id={link.edge.edge_id}
                 key={link.edge.edge_id}
@@ -246,54 +258,169 @@ function GraphCanvas({
             ))}
           </svg>
           {edgeLinks.map((link) => (
-            <button
-              className={`chatapp-inter-agent-graph__edge-chip ${selected?.kind === "edge" && selected.edgeId === link.edge.edge_id ? "is-selected" : ""}`}
+            <div
+              className="chatapp-inter-agent-graph__edge-chip"
               key={link.edge.edge_id}
-              onClick={() =>
-                onSelect({ id: `edge:${link.edge.edge_id}`, kind: "edge", edgeId: link.edge.edge_id })
-              }
               style={
                 { "--graph-edge-x": `${link.midpoint.x}%`, "--graph-edge-y": `${link.midpoint.y}%` } as CSSProperties
               }
               title={`${link.source.participant.label} -> ${link.target.participant.label}`}
-              type="button"
             >
               <span className="material-symbols-rounded" aria-hidden="true">arrow_forward</span>
               <span>{edgeDisplayLabel(link.edge)}</span>
-            </button>
+            </div>
           ))}
           {layout.nodes.map((node) => (
             <button
-              className={`chatapp-inter-agent-graph__node is-${node.participant.status} ${selected?.kind === "participant" && selected.participantId === node.participant.participant_id ? "is-selected" : ""}`}
+              className={`chatapp-inter-agent-graph__node is-${node.participant.status} ${
+                selectedParticipantId === node.participant.participant_id ? "is-selected" : ""
+              }`}
               data-participant-id={node.participant.participant_id}
               key={node.participant.participant_id}
-              onClick={() =>
-                onSelect({
-                  id: `participant:${node.participant.participant_id}`,
-                  kind: "participant",
-                  participantId: node.participant.participant_id,
-                })
-              }
+              onClick={() => onSelectParticipant(node.participant.participant_id)}
               style={{ "--graph-node-x": `${node.x}%`, "--graph-node-y": `${node.y}%` } as CSSProperties}
               type="button"
             >
               <span className="material-symbols-rounded" aria-hidden="true">{participantIcon(node.participant.kind)}</span>
               <span className="chatapp-inter-agent-graph__node-copy">
                 <strong>{node.participant.label}</strong>
-                <span>{node.participant.kind} - {node.participant.status}</span>
+                <span>{participantStatusLabel(node.participant.kind, node.participant.status)}</span>
               </span>
             </button>
           ))}
-          {!edgeLinks.length && edges.length ? <div className="chatapp-inter-agent-graph__edge-empty">Some graph links reference unavailable participants.</div> : null}
-          {!edges.length ? <div className="chatapp-inter-agent-graph__edge-empty">No graph links recorded.</div> : null}
+          {!edgeLinks.length && edges.length ? (
+            <div className="chatapp-inter-agent-graph__edge-empty">Some connections are unavailable.</div>
+          ) : null}
+          {!edges.length ? <div className="chatapp-inter-agent-graph__edge-empty">No connections recorded.</div> : null}
         </div>
       ) : (
         <div className="chatapp-inter-agent-graph__empty">
           <span className="material-symbols-rounded" aria-hidden="true">account_tree</span>
-          <span>No participants yet.</span>
+          <span>No agent nodes yet.</span>
         </div>
       )}
     </div>
+  );
+}
+
+function ParticipantTranscript({
+  error,
+  isLoading,
+  participant,
+  transcript,
+}: {
+  error: string | null;
+  isLoading: boolean;
+  participant: NonNullable<InterAgentRunDetail>["participants"][number] | null;
+  transcript: InterAgentParticipantTranscriptPayload | null;
+}) {
+  return (
+    <aside className="chatapp-inter-agent-graph__transcript" aria-label="Participant transcript">
+      <div className="chatapp-inter-agent-graph__panel-title">
+        <span>Participant transcript</span>
+        {participant ? <small>{participant.status}</small> : null}
+      </div>
+      {participant ? (
+        <div className="chatapp-inter-agent-graph__participant-heading">
+          <span className="material-symbols-rounded" aria-hidden="true">{participantIcon(participant.kind)}</span>
+          <div>
+            <strong>{participant.label}</strong>
+            <small>{participantStatusLabel(participant.kind, participant.status)}</small>
+          </div>
+        </div>
+      ) : (
+        <div className="chatapp-inter-agent-graph__empty is-compact">No participant selected.</div>
+      )}
+      {isLoading ? (
+        <div className="chatapp-inter-agent-graph__loading is-compact" role="status" aria-live="polite">
+          <span className="chatapp-inter-agent-graph__loading-dot" />
+          <span>Loading transcript</span>
+        </div>
+      ) : null}
+      {error ? (
+        <div className="chatapp-inter-agent-graph__notice is-error" role="alert">
+          <span className="material-symbols-rounded" aria-hidden="true">error</span>
+          <span>{error}</span>
+        </div>
+      ) : null}
+      {!isLoading && !error && transcript?.items.length ? (
+        <ol className="chatapp-inter-agent-graph__transcript-list">
+          {transcript.items.map((item) => (
+            <li className={`is-${item.role} is-${item.kind}`} key={item.message_id}>
+              <span className="material-symbols-rounded" aria-hidden="true">{transcriptItemIcon(item.kind, item.role)}</span>
+              <div>
+                <small>{transcriptItemLabel(item.kind, item.role, item.status)}</small>
+                <p>{item.text}</p>
+              </div>
+            </li>
+          ))}
+        </ol>
+      ) : null}
+      {!isLoading && !error && participant && !transcript?.items.length ? (
+        <div className="chatapp-inter-agent-graph__empty is-compact">No transcript yet.</div>
+      ) : null}
+    </aside>
+  );
+}
+
+function ApprovalShelf({
+  approvals,
+  onResolveApproval,
+  onSelectParticipant,
+}: {
+  approvals: InterAgentApprovalRecord[];
+  onResolveApproval: (approvalId: string, approved: boolean) => Promise<void>;
+  onSelectParticipant: (participantId: string) => void;
+}) {
+  const [resolvingApprovalId, setResolvingApprovalId] = useState<string | null>(null);
+
+  async function resolveApproval(approvalId: string, approved: boolean) {
+    setResolvingApprovalId(approvalId);
+    try {
+      await onResolveApproval(approvalId, approved);
+    } finally {
+      setResolvingApprovalId(null);
+    }
+  }
+
+  return (
+    <section className="chatapp-inter-agent-graph__approvals" aria-label="Pending approvals">
+      {approvals.map((approval) => (
+        <article className="chatapp-inter-agent-approval" key={approval.approval_id}>
+          <div className="chatapp-inter-agent-approval__main">
+            <button
+              className={`chatapp-inter-agent-approval__risk is-${approval.risk_level}`}
+              onClick={() => onSelectParticipant(approval.participant_id)}
+              type="button"
+            >
+              {approval.risk_level}
+            </button>
+            <div className="chatapp-inter-agent-approval__copy">
+              <strong>{approval.operation_kind}</strong>
+              <p>{approval.summary}</p>
+            </div>
+          </div>
+          <div className="chatapp-inter-agent-approval__actions">
+            <button
+              className="chatapp-inter-agent-approval__button"
+              disabled={resolvingApprovalId === approval.approval_id}
+              onClick={() => resolveApproval(approval.approval_id, false)}
+              type="button"
+            >
+              Reject
+            </button>
+            <button
+              className="chatapp-inter-agent-approval__button is-primary"
+              disabled={resolvingApprovalId === approval.approval_id}
+              onClick={() => resolveApproval(approval.approval_id, true)}
+              type="button"
+            >
+              Approve
+            </button>
+          </div>
+        </article>
+      ))}
+    </section>
   );
 }
 
@@ -328,13 +455,13 @@ function graphBoardLayout(
   const lowerParticipants = participants.filter((participant) => !topIds.has(participant.participant_id));
   const lowerRows = chunk(lowerParticipants, 3);
   const nodes: GraphBoardNode[] = [];
-  const topY = lowerRows.length ? 16 : 50;
+  const topY = lowerRows.length ? 15 : 50;
 
   topParticipants.forEach((participant, index) => {
     nodes.push({ participant, x: distributedX(index, topParticipants.length), y: topY });
   });
   lowerRows.forEach((row, rowIndex) => {
-    const y = lowerRows.length === 1 ? 64 : 40 + (rowIndex * 44) / Math.max(1, lowerRows.length - 1);
+    const y = lowerRows.length === 1 ? 64 : 36 + (rowIndex * 46) / Math.max(1, lowerRows.length - 1);
     row.forEach((participant, index) => {
       nodes.push({ participant, x: distributedX(index, row.length), y });
     });
@@ -389,7 +516,7 @@ function distributedX(index: number, count: number): number {
   if (count <= 1) {
     return 50;
   }
-  const span = count === 2 ? 34 : 56;
+  const span = count === 2 ? 36 : 58;
   return 50 - span / 2 + (span * index) / Math.max(1, count - 1);
 }
 
@@ -405,237 +532,37 @@ function svgFragmentId(prefix: string, value: string): string {
   return `${prefix}-${String(value || "run").replace(/[^A-Za-z0-9_-]/g, "-")}`;
 }
 
-function Timeline({
-  events,
-  hasMoreHistory,
-  isHistoryLoading,
-  onLoadOlder,
-  onSelect,
-  selected,
-}: {
-  events: InterAgentEventRecord[];
-  hasMoreHistory: boolean;
-  isHistoryLoading: boolean;
-  onLoadOlder: () => void;
-  onSelect: (eventId: string) => void;
-  selected: InterAgentGraphSelection | null;
-}) {
+function latestRunSummary(events: InterAgentEventRecord[]): string {
   return (
-    <aside className="chatapp-inter-agent-graph__timeline" aria-label="Timeline">
-      <div className="chatapp-inter-agent-graph__panel-title">
-        <span>Timeline</span>
-        {hasMoreHistory ? (
-          <button disabled={isHistoryLoading} onClick={onLoadOlder} type="button">
-            {isHistoryLoading ? "Loading" : "Older"}
-          </button>
-        ) : null}
-      </div>
-      <ol>
-        {events.map((event) => (
-          <li key={event.event_id}>
-            <button
-              className={selected?.kind === "event" && selected.eventId === event.event_id ? "is-selected" : ""}
-              onClick={() => onSelect(event.event_id)}
-              type="button"
-            >
-              <span>{eventDisplayLabel(event)}</span>
-              <strong>{eventSummary(event)}</strong>
-              <small>{event.visibility_plane} - #{event.sequence}</small>
-            </button>
-          </li>
-        ))}
-      </ol>
-      {!events.length ? <div className="chatapp-inter-agent-graph__empty is-compact">No events for this filter.</div> : null}
-    </aside>
+    [...events]
+      .reverse()
+      .map((event) => eventSummary(event))
+      .find((summary) => summary && summary !== "summary" && summary !== "detail" && summary !== "debug") || ""
   );
 }
 
-function ArtifactsStrip({
-  artifacts,
-  onSelect,
-  selected,
-}: {
-  artifacts: InterAgentArtifactRecord[];
-  onSelect: (artifactId: string) => void;
-  selected: InterAgentGraphSelection | null;
-}) {
-  return (
-    <section className="chatapp-inter-agent-graph__artifacts" aria-label="Artifacts">
-      <div className="chatapp-inter-agent-graph__panel-title">
-        <span>Artifacts</span>
-        <small>{artifacts.length}</small>
-      </div>
-      <div className="chatapp-inter-agent-graph__artifact-list">
-        {artifacts.map((artifact) => (
-          <button
-            className={selected?.kind === "artifact" && selected.artifactId === artifact.artifact_id ? "is-selected" : ""}
-            key={artifact.artifact_id}
-            onClick={() => onSelect(artifact.artifact_id)}
-            type="button"
-          >
-            <span className="material-symbols-rounded" aria-hidden="true">draft</span>
-            <span>
-              <strong>{artifact.label}</strong>
-              <small>{artifact.status}</small>
-            </span>
-          </button>
-        ))}
-        {!artifacts.length ? <div className="chatapp-inter-agent-graph__empty is-compact">No artifacts recorded.</div> : null}
-      </div>
-    </section>
-  );
+function participantStatusLabel(kind: string, status: string): string {
+  return `${kind.replace(/_/g, " ")} - ${status.replace(/_/g, " ")}`;
 }
 
-type InspectorItem =
-  | { kind: "participant"; value: NonNullable<InterAgentRunDetail>["participants"][number] }
-  | { kind: "edge"; value: NonNullable<InterAgentRunDetail>["edges"][number] }
-  | { kind: "event"; value: InterAgentEventRecord }
-  | { kind: "artifact"; value: InterAgentArtifactRecord }
-  | { kind: "approval"; value: InterAgentApprovalRecord }
-  | null;
-
-function Inspector({
-  item,
-  onResolveApproval,
-}: {
-  item: InspectorItem;
-  onResolveApproval: (approvalId: string, approved: boolean) => Promise<void>;
-}) {
-  const [resolving, setResolving] = useState(false);
-
-  async function resolveApproval(approvalId: string, approved: boolean) {
-    setResolving(true);
-    try {
-      await onResolveApproval(approvalId, approved);
-    } finally {
-      setResolving(false);
-    }
+function transcriptItemIcon(kind: string, role: string): string {
+  if (kind === "artifact") {
+    return "draft";
   }
-
-  return (
-    <aside className="chatapp-inter-agent-graph__inspector" aria-label="Inspector">
-      <div className="chatapp-inter-agent-graph__panel-title">
-        <span>Inspector</span>
-      </div>
-      {!item ? <div className="chatapp-inter-agent-graph__empty is-compact">Select a node, event, or artifact.</div> : null}
-      {item?.kind === "participant" ? (
-        <InspectorBlock
-          title={item.value.label}
-          rows={[
-            ["Kind", item.value.kind],
-            ["Status", item.value.status],
-            ["Execution", item.value.execution_mode],
-            ["Runtime session", item.value.runtime_session_id || "none"],
-          ]}
-        />
-      ) : null}
-      {item?.kind === "edge" ? (
-        <InspectorBlock
-          title={item.value.label || item.value.kind}
-          rows={[
-            ["Source", item.value.source_id],
-            ["Target", item.value.target_id],
-            ["Status", item.value.status],
-          ]}
-        />
-      ) : null}
-      {item?.kind === "event" ? (
-        <InspectorBlock
-          title={eventDisplayLabel(item.value)}
-          rows={[
-            ["Summary", eventSummary(item.value)],
-            ["Participant", item.value.participant_id || "run"],
-            ["Visibility", item.value.visibility_plane],
-            ["Sequence", String(item.value.sequence)],
-          ]}
-          payload={item.value.payload}
-        />
-      ) : null}
-      {item?.kind === "artifact" ? (
-        <InspectorBlock
-          title={item.value.label}
-          rows={[
-            ["Status", item.value.status],
-            ["Participant", item.value.participant_id || "unknown"],
-            ["Path", item.value.workspace_relative_path || item.value.relative_path || item.value.file_id || "not linked"],
-          ]}
-          payload={item.value.partial_output ? { partial_output: item.value.partial_output } : undefined}
-        />
-      ) : null}
-      {item?.kind === "approval" ? (
-        <>
-          <InspectorBlock
-            title={item.value.operation_kind}
-            rows={[
-              ["Risk", item.value.risk_level],
-              ["Status", item.value.status],
-              ["Participant", item.value.participant_id],
-              ["Summary", item.value.summary],
-            ]}
-          />
-          {item.value.status === "pending" ? (
-            <div className="chatapp-inter-agent-graph__approval-actions">
-              <button disabled={resolving} onClick={() => resolveApproval(item.value.approval_id, false)} type="button">Reject</button>
-              <button disabled={resolving} onClick={() => resolveApproval(item.value.approval_id, true)} type="button">Approve</button>
-            </div>
-          ) : null}
-        </>
-      ) : null}
-    </aside>
-  );
+  if (kind === "approval") {
+    return "approval";
+  }
+  if (role === "user") {
+    return "subdirectory_arrow_right";
+  }
+  if (role === "system") {
+    return "info";
+  }
+  return "smart_toy";
 }
 
-function InspectorBlock({
-  payload,
-  rows,
-  title,
-}: {
-  payload?: Record<string, unknown>;
-  rows: Array<[string, string]>;
-  title: string;
-}) {
-  return (
-    <div className="chatapp-inter-agent-graph__inspect-block">
-      <h3>{title}</h3>
-      <dl>
-        {rows.map(([label, value]) => (
-          <div key={label}>
-            <dt>{label}</dt>
-            <dd>{value}</dd>
-          </div>
-        ))}
-      </dl>
-      {payload ? <pre>{JSON.stringify(payload, null, 2)}</pre> : null}
-    </div>
-  );
-}
-
-function selectedItemFor(
-  selection: InterAgentGraphSelection | null,
-  runDetail: InterAgentRunDetail | null,
-  events: InterAgentEventRecord[],
-  artifacts: InterAgentArtifactRecord[],
-  approvals: InterAgentApprovalRecord[],
-): InspectorItem {
-  if (!selection) {
-    return null;
-  }
-  if (selection.kind === "participant") {
-    const value = runDetail?.participants.find((participant) => participant.participant_id === selection.participantId);
-    return value ? { kind: "participant", value } : null;
-  }
-  if (selection.kind === "edge") {
-    const value = runDetail?.edges.find((edge) => edge.edge_id === selection.edgeId);
-    return value ? { kind: "edge", value } : null;
-  }
-  if (selection.kind === "event") {
-    const value = events.find((event) => event.event_id === selection.eventId);
-    return value ? { kind: "event", value } : null;
-  }
-  if (selection.kind === "artifact") {
-    const value = artifacts.find((artifact) => artifact.artifact_id === selection.artifactId);
-    return value ? { kind: "artifact", value } : null;
-  }
-  const value = approvals.find((approval) => approval.approval_id === selection.approvalId);
-  return value ? { kind: "approval", value } : null;
+function transcriptItemLabel(kind: string, role: string, status: string): string {
+  const owner = role === "user" ? "Request" : role === "system" ? "System" : "Participant";
+  const state = status ? ` - ${status.replace(/_/g, " ")}` : "";
+  return `${owner} ${kind.replace(/_/g, " ")}${state}`;
 }

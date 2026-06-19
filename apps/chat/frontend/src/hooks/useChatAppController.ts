@@ -275,6 +275,22 @@ export function useChatAppController({
     },
     [activeThread?.thread_id, navigationScope],
   );
+  const handleCloseInterAgentGraph = useCallback(() => {
+    setActiveInterAgentGraphRunId(null);
+    const opened = openAppParamsInShell(
+      "chat",
+      {
+        thread_id: activeThread?.thread_id || "",
+      },
+      { navigationScope },
+    );
+    if (!opened && typeof window !== "undefined") {
+      const url = new URL(window.location.href);
+      url.searchParams.delete("view");
+      url.searchParams.delete("inter_agent_run_id");
+      window.history.pushState({}, "", url.toString());
+    }
+  }, [activeThread?.thread_id, navigationScope]);
   const {
     activeSubmissionTurnId,
     failedUserMessages,
@@ -461,7 +477,7 @@ export function useChatAppController({
     interAgentEventsByRunId,
     interAgentRuns,
     mentionItems,
-    onCloseInterAgentGraph: () => setActiveInterAgentGraphRunId(null),
+    onCloseInterAgentGraph: handleCloseInterAgentGraph,
     multiAgentMode,
     hasMoreHistory,
     onLoadOlderHistory: handleLoadOlderHistory,

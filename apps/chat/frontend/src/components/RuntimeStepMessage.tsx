@@ -20,8 +20,8 @@ export function RuntimeStepMessage({
             <span>{summaryKindLabel(step.detail.summary_kind)}</span>
           </div>
           {onOpenInterAgentGraph ? (
-            <button className="chatapp-inter-agent-message__graph" onClick={() => onOpenInterAgentGraph(interAgentRunId)} type="button">
-              Open graph
+            <button className="chatapp-inter-agent-message__graph is-live" onClick={() => onOpenInterAgentGraph(interAgentRunId)} type="button">
+              Agent nodes
             </button>
           ) : null}
         </div>

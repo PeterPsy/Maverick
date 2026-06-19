@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from datetime import UTC, datetime, timedelta
 from email.message import EmailMessage
 import hashlib
 import hmac
@@ -10,13 +11,16 @@ import mimetypes
 import os
 from pathlib import Path
 import re
+import secrets
 import tempfile
+from uuid import uuid4
 
-from database import connect, now_timestamp
+from database import connect, ensure_schema, now_timestamp
 
 
 MAX_OUTBOUND_ATTACHMENT_BYTES = 25 * 1024 * 1024
 MAX_OUTBOUND_TOTAL_BYTES = 25 * 1024 * 1024
+CONFIRMATION_TOKEN_TTL_SECONDS = 15 * 60
 FILE_ROLES = {"uploaded", "generated"}
 
 
@@ -130,25 +134,99 @@ def draft_confirmation_preview(
         "attachment_total_bytes": sum(int(item.get("size_bytes") or 0) for item in attachments),
         "snapshot_at": now_timestamp(),
     }
-    preview["confirmation_token"] = draft_confirmation_token(preview)
     return preview
+
+
+def preview_with_confirmation_token(data_root: Path, preview: dict[str, object]) -> dict[str, object]:
+    ensure_schema(data_root)
+    draft_id = str(preview.get("draft_id") or "").strip()
+    if not draft_id:
+        raise ValueError("confirmation preview requires a draft_id")
+    now_dt = datetime.now(tz=UTC)
+    now = now_dt.isoformat()
+    expires_at = (now_dt + timedelta(seconds=CONFIRMATION_TOKEN_TTL_SECONDS)).isoformat()
+    token = secrets.token_urlsafe(32)
+    token_hash = _hash_token(token)
+    snapshot_hash = draft_confirmation_snapshot_hash(preview)
+    with connect(data_root) as db:
+        db.execute("DELETE FROM send_confirmations WHERE draft_id = ? AND used_at = ''", (draft_id,))
+        db.execute("DELETE FROM send_confirmations WHERE expires_at <= ? OR used_at != ''", (now,))
+        db.execute(
+            """
+            INSERT INTO send_confirmations(id, draft_id, token_hash, snapshot_hash, created_at, expires_at, used_at)
+            VALUES (?, ?, ?, ?, ?, ?, '')
+            """,
+            (f"mail_send_confirmation_{uuid4().hex[:16]}", draft_id, token_hash, snapshot_hash, now, expires_at),
+        )
+    token_preview = dict(preview)
+    token_preview["confirmation_token"] = token
+    token_preview["confirmation_expires_at"] = expires_at
+    return token_preview
 
 
 def require_confirmation_token(
     *,
+    data_root: Path,
+    draft_id: str,
     preview: dict[str, object],
     confirmation_token: object = None,
 ) -> None:
     provided = str(confirmation_token or "").strip()
     if not provided:
         raise ValueError("confirm=true requires confirmation_token from a dry-run preview")
-    expected = draft_confirmation_token(preview)
-    if not hmac.compare_digest(provided, expected):
-        raise ValueError("Email confirmation preview changed; run a new dry-run preview before confirming send")
+    token_hash = _hash_token(provided)
+    now = now_timestamp()
+    with connect(data_root) as db:
+        row = db.execute(
+            """
+            SELECT * FROM send_confirmations
+            WHERE draft_id = ? AND token_hash = ?
+            """,
+            (draft_id, token_hash),
+        ).fetchone()
+        if row is None:
+            raise ValueError("confirm=true requires a valid confirmation_token from a dry-run preview")
+        if str(row["used_at"] or ""):
+            raise ValueError("confirmation_token was already used; run a new dry-run preview before confirming send")
+        if str(row["expires_at"] or "") <= now:
+            raise ValueError("confirmation_token expired; run a new dry-run preview before confirming send")
+        expected = str(row["snapshot_hash"] or "")
+        actual = draft_confirmation_snapshot_hash(preview)
+        if not hmac.compare_digest(expected, actual):
+            raise ValueError("Email confirmation preview changed; run a new dry-run preview before confirming send")
+        db.execute("UPDATE send_confirmations SET used_at = ? WHERE id = ?", (now, row["id"]))
 
 
-def draft_confirmation_token(preview: dict[str, object]) -> str:
-    material = {
+def draft_id_for_confirmation_token(data_root: Path, confirmation_token: object = None) -> str:
+    provided = str(confirmation_token or "").strip()
+    if not provided:
+        raise ValueError("confirm=true requires confirmation_token from a dry-run preview")
+    ensure_schema(data_root)
+    token_hash = _hash_token(provided)
+    now = now_timestamp()
+    with connect(data_root) as db:
+        row = db.execute("SELECT * FROM send_confirmations WHERE token_hash = ?", (token_hash,)).fetchone()
+    if row is None:
+        raise ValueError("confirm=true requires a valid confirmation_token from a dry-run preview")
+    if str(row["used_at"] or ""):
+        raise ValueError("confirmation_token was already used; run a new dry-run preview before confirming send")
+    if str(row["expires_at"] or "") <= now:
+        raise ValueError("confirmation_token expired; run a new dry-run preview before confirming send")
+    return str(row["draft_id"] or "")
+
+
+def draft_confirmation_snapshot_hash(preview: dict[str, object]) -> str:
+    material = _confirmation_material(preview)
+    encoded = json.dumps(material, ensure_ascii=True, sort_keys=True, separators=(",", ":")).encode("utf-8")
+    return hashlib.sha256(encoded).hexdigest()
+
+
+def _hash_token(token: str) -> str:
+    return hashlib.sha256(token.encode("utf-8")).hexdigest()
+
+
+def _confirmation_material(preview: dict[str, object]) -> dict[str, object]:
+    return {
         "thread_id": preview.get("thread_id") or "",
         "from": preview.get("from") or {},
         "to": preview.get("to") or [],
@@ -160,8 +238,6 @@ def draft_confirmation_token(preview: dict[str, object]) -> str:
         "body_html": preview.get("body_html") or "",
         "attachments": [_confirmation_attachment(item) for item in preview.get("attachments") or [] if isinstance(item, dict)],
     }
-    encoded = json.dumps(material, ensure_ascii=True, sort_keys=True, separators=(",", ":")).encode("utf-8")
-    return hashlib.sha256(encoded).hexdigest()
 
 
 def _confirmation_attachment(item: dict[str, object]) -> dict[str, object]:
@@ -172,6 +248,7 @@ def _confirmation_attachment(item: dict[str, object]) -> dict[str, object]:
         "size_bytes": int(item.get("size_bytes") or 0),
         "sha256": item.get("sha256") or "",
     }
+
 
 
 def resolve_workspace_storage_file(

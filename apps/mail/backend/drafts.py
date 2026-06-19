@@ -114,6 +114,7 @@ def get_draft(data_root: Path, draft_id: str) -> dict[str, object]:
 def delete_draft(data_root: Path, draft_id: str) -> dict[str, object]:
     get_draft(data_root, draft_id)
     with connect(data_root) as db:
+        db.execute("DELETE FROM send_confirmations WHERE draft_id = ?", (draft_id,))
         db.execute("DELETE FROM drafts WHERE id = ? AND status != 'sent'", (draft_id,))
     audit(data_root, "draft.delete", "mail_draft", draft_id, {})
     return {"deleted": True, "id": draft_id}

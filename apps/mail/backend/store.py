@@ -158,6 +158,7 @@ def delete_disconnected_connection(data_root: Path, connection_id: str) -> dict[
             (connection_id,),
         ).rowcount
         thread_rows = db.execute("DELETE FROM threads WHERE connection_id = ?", (connection_id,)).rowcount
+        db.execute("DELETE FROM send_confirmations WHERE draft_id IN (SELECT id FROM drafts WHERE connection_id = ?)", (connection_id,))
         draft_rows = db.execute("DELETE FROM drafts WHERE connection_id = ?", (connection_id,)).rowcount
         folder_rows = db.execute("DELETE FROM folders WHERE connection_id = ?", (connection_id,)).rowcount
         label_rows = db.execute("DELETE FROM labels WHERE connection_id = ?", (connection_id,)).rowcount

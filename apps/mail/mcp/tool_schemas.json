@@ -245,7 +245,7 @@
           "confirm": { "type": "boolean", "default": false },
           "confirmation_token": {
             "type": "string",
-            "description": "Token returned in confirmation_preview; required when confirm=true."
+            "description": "Opaque token returned in confirmation_preview; required when confirm=true."
           }
         },
         "required": ["draft_id"],
@@ -298,7 +298,7 @@
           "confirm": { "type": "boolean", "default": false },
           "confirmation_token": {
             "type": "string",
-            "description": "Token returned in confirmation_preview; required when confirm=true."
+            "description": "Opaque token returned in confirmation_preview; required when confirm=true."
           }
         },
         "required": ["subject", "body_text"],

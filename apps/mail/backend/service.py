@@ -23,7 +23,7 @@ from drafts import create_draft, delete_draft, get_draft, update_draft
 from oauth import complete_oauth, provider_status, start_oauth
 from providers.registry import provider_for_connection
 from references import reference_manifest, reference_resolve, reference_search, reference_summary
-from storage_attachments import save_attachment_to_storage
+from storage_attachments import draft_id_for_confirmation_token, save_attachment_to_storage
 from store import (
     DEFAULT_BODY_HTML_CHARS,
     DEFAULT_BODY_TEXT_CHARS,
@@ -208,6 +208,27 @@ def handle_action(data_root: Path, payload: dict[str, object]) -> tuple[int, dic
                 )
             }
         if action in {"messages.send", "mail_send"}:
+            if bool(payload.get("confirm")):
+                if not str(payload.get("confirmation_token") or "").strip():
+                    _preflight_mail_send_confirmation(data_root, payload)
+                draft_id = draft_id_for_confirmation_token(data_root, payload.get("confirmation_token"))
+                draft = get_draft(data_root, draft_id)
+                connection_id = str(draft["connection_id"])
+                requested_connection_id = _optional_string(payload.get("connection_id"))
+                if requested_connection_id and requested_connection_id != connection_id:
+                    raise ValueError("confirmation_token belongs to a different mail connection")
+                _require_connected(data_root, connection_id)
+                provider = provider_for_connection(data_root, connection_id)
+                result = provider.send_draft(
+                    data_root,
+                    str(draft["id"]),
+                    confirm=True,
+                    app_secrets=_app_secrets(payload),
+                    uploaded_storage_root=_optional_path(payload.get("_uploaded_storage_root")),
+                    generated_storage_root=_optional_path(payload.get("_generated_storage_root")),
+                    confirmation_token=payload.get("confirmation_token"),
+                )
+                return 200, {"draft": draft, "result": result}
             connection_id = _payload_connection_id(data_root, payload)
             _require_connected(data_root, connection_id)
             draft = create_draft(data_root, {**payload, "connection_id": connection_id})
@@ -215,11 +236,10 @@ def handle_action(data_root: Path, payload: dict[str, object]) -> tuple[int, dic
             result = provider.send_draft(
                 data_root,
                 str(draft["id"]),
-                confirm=bool(payload.get("confirm")),
+                confirm=False,
                 app_secrets=_app_secrets(payload),
                 uploaded_storage_root=_optional_path(payload.get("_uploaded_storage_root")),
                 generated_storage_root=_optional_path(payload.get("_generated_storage_root")),
-                confirmation_token=payload.get("confirmation_token"),
             )
             return 200, {"draft": draft, "result": result}
         if action in {"labels.modify", "mail_modify_labels"}:
@@ -580,6 +600,20 @@ def _payload_connection_id(data_root: Path, payload: dict[str, object]) -> str |
     connected = [connection for connection in connections if connection.get("status") == "connected"]
     selected = connected[0] if connected else connections[0]
     return _effective_connection_id(data_root, str(selected["id"]))
+
+
+def _preflight_mail_send_confirmation(data_root: Path, payload: dict[str, object]) -> None:
+    connection_id = _payload_connection_id(data_root, payload)
+    _require_connected(data_root, connection_id)
+    has_explicit_recipient = any(_non_empty_items(payload.get(key)) for key in ("to", "cc", "bcc"))
+    if not has_explicit_recipient and not _optional_string(payload.get("thread_id")):
+        raise ValueError("At least one recipient in to, cc, or bcc is required")
+
+
+def _non_empty_items(value: object) -> bool:
+    if isinstance(value, list):
+        return bool(value)
+    return bool(str(value or "").strip())
 
 
 def _threads_list_provider_payload(

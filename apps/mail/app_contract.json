@@ -204,7 +204,7 @@
   },
   "storage": {
     "storage_kind": "sqlite",
-    "data_schema_version": "8",
+    "data_schema_version": "9",
     "primary_paths": [
       "data/mail/mail.sqlite"
     ],

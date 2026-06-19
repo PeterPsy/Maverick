@@ -11,7 +11,7 @@ import re
 import sqlite3
 
 
-SCHEMA_VERSION = "8"
+SCHEMA_VERSION = "9"
 REFERENCE_ENTITIES = ["mail_connection", "email_thread", "email_message", "mail_attachment", "mail_draft"]
 REQUIRED_TABLES = [
     "schema_metadata",
@@ -25,6 +25,7 @@ REQUIRED_TABLES = [
     "messages",
     "attachments",
     "drafts",
+    "send_confirmations",
     "sync_state",
     "entity_links",
     "audit_log",
@@ -187,6 +188,15 @@ def ensure_schema(data_root: Path) -> None:
               updated_at TEXT NOT NULL,
               sent_at TEXT
             );
+            CREATE TABLE IF NOT EXISTS send_confirmations (
+              id TEXT PRIMARY KEY,
+              draft_id TEXT NOT NULL,
+              token_hash TEXT NOT NULL UNIQUE,
+              snapshot_hash TEXT NOT NULL,
+              created_at TEXT NOT NULL,
+              expires_at TEXT NOT NULL,
+              used_at TEXT NOT NULL DEFAULT ''
+            );
             CREATE TABLE IF NOT EXISTS sync_state (
               connection_id TEXT PRIMARY KEY,
               last_sync_at TEXT,
@@ -218,6 +228,8 @@ def ensure_schema(data_root: Path) -> None:
             CREATE INDEX IF NOT EXISTS idx_messages_thread ON messages(thread_id);
             CREATE INDEX IF NOT EXISTS idx_attachments_message ON attachments(message_id);
             CREATE INDEX IF NOT EXISTS idx_drafts_updated ON drafts(updated_at);
+            CREATE INDEX IF NOT EXISTS idx_send_confirmations_draft ON send_confirmations(draft_id);
+            CREATE INDEX IF NOT EXISTS idx_send_confirmations_token ON send_confirmations(token_hash);
             CREATE INDEX IF NOT EXISTS idx_entity_links_source ON entity_links(source_entity_type, source_entity_id);
             CREATE INDEX IF NOT EXISTS idx_entity_links_target ON entity_links(target_app_id, target_entity_type, target_entity_id);
         """)
@@ -392,6 +404,7 @@ def _remove_mock_provider_rows(db: sqlite3.Connection) -> None:
         _delete_where_in(db, "audit_log", "target_id", ids)
     _delete_where_in(db, "attachments", "id", attachment_ids)
     _delete_where_in(db, "messages", "id", message_ids)
+    _delete_where_in(db, "send_confirmations", "draft_id", draft_ids)
     _delete_where_in(db, "drafts", "id", draft_ids)
     _delete_where_in(db, "threads", "id", thread_ids)
     _delete_where_in(db, "folders", "connection_id", connection_ids)

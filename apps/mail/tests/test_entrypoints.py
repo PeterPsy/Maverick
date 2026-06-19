@@ -25,7 +25,7 @@ from backend.service import app_events_for_action
 from backend.database import connect, ensure_schema, health_payload, now_timestamp
 from backend.providers.gmail import GmailProvider
 from backend.providers.imap_smtp import ImapSmtpProvider
-from backend.storage_attachments import save_attachment_to_storage
+from backend.storage_attachments import draft_confirmation_preview, draft_confirmation_snapshot_hash, save_attachment_to_storage
 from backend.store import list_threads
 
 
@@ -814,6 +814,7 @@ class MailServiceTest(unittest.TestCase):
                     "messages",
                     "attachments",
                     "drafts",
+                    "send_confirmations",
                     "sync_state",
                     "entity_links",
                 ]:
@@ -1101,7 +1102,8 @@ class MailServiceTest(unittest.TestCase):
             self.assertTrue(preview["result"]["requires_confirmation"])
             self.assertEqual(preview["result"]["draft"]["body_html"], "")
             self.assertEqual(preview["result"]["draft"]["reply_to"], [])
-            self.assertRegex(preview["result"]["confirmation_preview"]["confirmation_token"], r"^[0-9a-f]{64}$")
+            self.assertRegex(preview["result"]["confirmation_preview"]["confirmation_token"], r"^[A-Za-z0-9_-]{32,}$")
+            self.assertTrue(preview["result"]["confirmation_preview"]["confirmation_expires_at"])
 
     def test_gmail_draft_confirm_requires_confirmation_token_without_attachments(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -1129,6 +1131,50 @@ class MailServiceTest(unittest.TestCase):
 
             self.assertEqual(status, 400)
             self.assertIn("confirmation_token", payload["detail"])
+
+    def test_gmail_draft_confirm_rejects_forged_snapshot_digest_without_preview(self) -> None:
+        transport_calls: list[str] = []
+
+        def fake_transport(request) -> dict[str, object]:
+            transport_calls.append(request.full_url)
+            raise AssertionError(f"unexpected request {request.full_url}")
+
+        with tempfile.TemporaryDirectory() as tmp:
+            data_root = Path(tmp)
+            self._insert_gmail_fixture(data_root)
+            status, created = handle_action(
+                data_root,
+                {
+                    "action": "drafts.create",
+                    "to": [{"email": "customer@example.com"}],
+                    "subject": "Follow up",
+                    "body_text": "Thanks for the context.",
+                },
+            )
+            self.assertEqual(status, 201, created)
+            forged_preview = draft_confirmation_preview(
+                created["draft"],
+                sender_email="person@example.com",
+                sender_name="person@example.com",
+                attachments=[],
+            )
+            forged_token = draft_confirmation_snapshot_hash(forged_preview)
+
+            with patch("backend.service.provider_for_connection", return_value=GmailProvider(transport=fake_transport)):
+                status, payload = handle_action(
+                    data_root,
+                    {
+                        "action": "drafts.send",
+                        "draft_id": created["draft"]["id"],
+                        "confirm": True,
+                        "confirmation_token": forged_token,
+                        "_app_secrets": self._gmail_secrets(),
+                    },
+                )
+
+            self.assertEqual(status, 400)
+            self.assertIn("valid confirmation_token", payload["detail"])
+            self.assertEqual(transport_calls, [])
 
     def test_gmail_draft_confirm_rejects_changed_body_preview_without_attachments(self) -> None:
         transport_calls: list[str] = []
@@ -1250,7 +1296,8 @@ class MailServiceTest(unittest.TestCase):
             expected_sha = hashlib.sha256(b"fresh attachment").hexdigest()
             self.assertEqual(status, 200, preview)
             self.assertEqual(preview["result"]["confirmation_preview"]["attachments"][0]["sha256"], expected_sha)
-            self.assertRegex(preview["result"]["confirmation_preview"]["confirmation_token"], r"^[0-9a-f]{64}$")
+            self.assertRegex(preview["result"]["confirmation_preview"]["confirmation_token"], r"^[A-Za-z0-9_-]{32,}$")
+            self.assertTrue(preview["result"]["confirmation_preview"]["confirmation_expires_at"])
             self.assertEqual(preview["result"]["draft"]["workspace_attachments"][0]["sha256"], expected_sha)
             self.assertEqual(preview["result"]["confirmation_preview"]["attachments"][0]["size_bytes"], len("fresh attachment"))
 
@@ -1347,6 +1394,85 @@ class MailServiceTest(unittest.TestCase):
             self.assertEqual(status, 400)
             self.assertIn("preview changed", payload["detail"])
             self.assertEqual(transport_calls, [])
+
+    def test_gmail_draft_confirmation_token_is_one_time_use(self) -> None:
+        sent_payloads: list[dict[str, object]] = []
+
+        def fake_transport(request) -> dict[str, object]:
+            if request.full_url == "https://oauth2.googleapis.com/token":
+                return {"access_token": "access-token", "expires_in": 3600, "token_type": "Bearer"}
+            if request.full_url == "https://gmail.googleapis.com/gmail/v1/users/me/messages/send":
+                payload = json.loads(request.data.decode("utf-8"))
+                sent_payloads.append(payload)
+                return {"id": "provider-message-once", "threadId": ""}
+            raise AssertionError(f"unexpected request {request.full_url}")
+
+        with tempfile.TemporaryDirectory() as tmp:
+            data_root = Path(tmp)
+            self._insert_gmail_fixture(data_root)
+            status, created = handle_action(
+                data_root,
+                {
+                    "action": "drafts.create",
+                    "to": [{"email": "customer@example.com"}],
+                    "subject": "One shot",
+                    "body_text": "Send once.",
+                },
+            )
+            self.assertEqual(status, 201, created)
+            draft_id = created["draft"]["id"]
+            status, preview = handle_action(data_root, {"action": "drafts.send", "draft_id": draft_id})
+            self.assertEqual(status, 200, preview)
+            confirmation_token = preview["result"]["confirmation_preview"]["confirmation_token"]
+
+            with patch("backend.service.provider_for_connection", return_value=GmailProvider(transport=fake_transport)):
+                status, sent = handle_action(
+                    data_root,
+                    {
+                        "action": "drafts.send",
+                        "draft_id": draft_id,
+                        "confirm": True,
+                        "confirmation_token": confirmation_token,
+                        "_app_secrets": self._gmail_secrets(),
+                    },
+                )
+                self.assertEqual(status, 200, sent)
+                status, replay = handle_action(
+                    data_root,
+                    {
+                        "action": "drafts.send",
+                        "draft_id": draft_id,
+                        "confirm": True,
+                        "confirmation_token": confirmation_token,
+                        "_app_secrets": self._gmail_secrets(),
+                    },
+                )
+
+            self.assertEqual(status, 400)
+            self.assertIn("already used", replay["detail"])
+            self.assertEqual(len(sent_payloads), 1)
+
+    def test_mail_send_confirm_without_token_does_not_create_draft(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            data_root = Path(tmp)
+            self._insert_gmail_fixture(data_root)
+
+            status, payload = handle_action(
+                data_root,
+                {
+                    "action": "mail_send",
+                    "to": [{"email": "customer@example.com"}],
+                    "subject": "No preview",
+                    "body_text": "This must not create a draft.",
+                    "confirm": True,
+                },
+            )
+
+            self.assertEqual(status, 400)
+            self.assertIn("confirmation_token", payload["detail"])
+            with connect(data_root) as db:
+                draft_count = db.execute("SELECT COUNT(*) AS count FROM drafts").fetchone()["count"]
+            self.assertEqual(draft_count, 0)
 
     def test_mail_send_accepts_html_body_and_sends_multipart_gmail_message(self) -> None:
         sent_payloads: list[dict[str, object]] = []
@@ -1715,7 +1841,7 @@ class MailServiceTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             status, payload = handle_action(Path(tmp), {"action": "health.check"})
             self.assertEqual(status, 200)
-            self.assertEqual(payload["schema_version"], "8")
+            self.assertEqual(payload["schema_version"], "9")
             self.assertEqual(payload["health_status"], "healthy")
             self.assertEqual(payload["database"], "mail.sqlite")
             with connect(Path(tmp)) as db:
@@ -1723,6 +1849,7 @@ class MailServiceTest(unittest.TestCase):
                 draft_columns = {row["name"] for row in db.execute("PRAGMA table_info(drafts)").fetchall()}
                 connection_columns = {row["name"] for row in db.execute("PRAGMA table_info(connections)").fetchall()}
                 provider_credential_table = db.execute("SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'provider_credentials'").fetchone()
+                send_confirmation_table = db.execute("SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'send_confirmations'").fetchone()
             self.assertIn("body_html_original_bounded", message_columns)
             self.assertIn("body_html_gmail_sanitized", message_columns)
             self.assertIn("body_html_rendered", message_columns)
@@ -1732,6 +1859,7 @@ class MailServiceTest(unittest.TestCase):
             self.assertIn("reply_to_json", draft_columns)
             self.assertIn("settings_json", connection_columns)
             self.assertIsNotNone(provider_credential_table)
+            self.assertIsNotNone(send_confirmation_table)
 
     def test_read_only_health_reports_missing_database(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

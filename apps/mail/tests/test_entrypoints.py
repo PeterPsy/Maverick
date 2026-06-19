@@ -3660,6 +3660,19 @@ class MailServiceTest(unittest.TestCase):
         self.assertIn("...(refresh && connectionId ? secretRequestForConnectionId(connectionId) : noSecretRequest())", app_source)
         self.assertIn("openThread(selectedThread.id, selectedThread.connection_id, true)", app_source)
 
+    def test_frontend_threads_drag_to_chat_as_mail_references(self) -> None:
+        app_source = (APP_ROOT / "frontend" / "src" / "App.tsx").read_text(encoding="utf-8")
+        drag_source = (APP_ROOT / "frontend" / "src" / "lib" / "mailThreadDragDrop.ts").read_text(encoding="utf-8")
+        styles = (APP_ROOT / "frontend" / "src" / "styles.css").read_text(encoding="utf-8")
+
+        self.assertIn("mailThreadDragPayloadFromThread", app_source)
+        self.assertIn("writeMailThreadDragData(event.dataTransfer", app_source)
+        self.assertIn("onDragStart={(event) => handleThreadDragStart(event, thread)}", app_source)
+        self.assertIn("application/x-maverick-mail-thread", drag_source)
+        self.assertIn("thread_id: thread.id", drag_source)
+        self.assertIn('.thread-row[draggable="true"]', styles)
+        self.assertIn(".thread-row.is-dragging", styles)
+
     def test_frontend_add_account_lives_in_sidebar_and_opens_provider_modal(self) -> None:
         app_source = (APP_ROOT / "frontend" / "src" / "App.tsx").read_text(encoding="utf-8")
         styles = (APP_ROOT / "frontend" / "src" / "styles.css").read_text(encoding="utf-8")

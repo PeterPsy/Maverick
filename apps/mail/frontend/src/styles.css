@@ -693,6 +693,19 @@ p {
     background 180ms ease;
 }
 
+.thread-row[draggable="true"] {
+  cursor: grab;
+}
+
+.thread-row[draggable="true"]:active {
+  cursor: grabbing;
+}
+
+.thread-row.is-dragging {
+  filter: saturate(0.28) brightness(0.68);
+  opacity: 0.48;
+}
+
 .thread-row:hover {
   background: transparent;
 }

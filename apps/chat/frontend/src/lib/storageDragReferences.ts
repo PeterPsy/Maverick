@@ -8,6 +8,7 @@ const STORAGE_SELECTION_DRAG_DATA_TYPE = "application/x-maverick-storage-selecti
 const STORAGE_DRIVE_FILE_DRAG_DATA_TYPE = "application/x-maverick-storage-drive-file";
 const STORAGE_DRIVE_FOLDER_DRAG_DATA_TYPE = "application/x-maverick-storage-drive-folder";
 const CHECKLIST_DRAG_DATA_TYPE = "application/x-maverick-checklist";
+const MAIL_THREAD_DRAG_DATA_TYPE = "application/x-maverick-mail-thread";
 
 type StorageRole = "uploaded" | "generated";
 type StoragePreviewKind =
@@ -89,11 +90,27 @@ type ChecklistDragPayload = {
   title: string;
 };
 
+type MailThreadDragPayload = {
+  connection_id: string;
+  deep_link: string;
+  last_message_at: string;
+  owner_app_id: string;
+  sender: string;
+  snippet: string;
+  subject: string;
+  thread_id: string;
+  unread: boolean;
+};
+
 type StorageReferenceDataTransfer = Pick<DataTransfer, "getData" | "types">;
 type StorageReferenceTypeDataTransfer = Pick<DataTransfer, "types">;
 
 export function hasAppReferenceDragData(dataTransfer: StorageReferenceTypeDataTransfer): boolean {
-  return hasStorageReferenceDragData(dataTransfer) || hasChecklistReferenceDragData(dataTransfer);
+  return (
+    hasStorageReferenceDragData(dataTransfer) ||
+    hasChecklistReferenceDragData(dataTransfer) ||
+    hasMailReferenceDragData(dataTransfer)
+  );
 }
 
 export function hasStorageReferenceDragData(dataTransfer: StorageReferenceTypeDataTransfer): boolean {
@@ -111,6 +128,7 @@ export function appReferenceMentionItemsFromDataTransfer(dataTransfer: StorageRe
   const references = [
     ...storageReferencesFromDataTransfer(dataTransfer),
     ...checklistReferencesFromDataTransfer(dataTransfer),
+    ...mailReferencesFromDataTransfer(dataTransfer),
   ];
   return uniqueMentionItems(references);
 }
@@ -161,6 +179,11 @@ function checklistReferencesFromDataTransfer(dataTransfer: StorageReferenceDataT
   return checklist ? [checklistReference(checklist)] : [];
 }
 
+function mailReferencesFromDataTransfer(dataTransfer: StorageReferenceDataTransfer): AppReference[] {
+  const thread = readMailThreadDragData(dataTransfer);
+  return thread ? [mailThreadReference(thread)] : [];
+}
+
 function readStorageFileDragData(dataTransfer: Pick<DataTransfer, "getData">): StorageFileDragPayload | null {
   return readStoragePayload(dataTransfer, STORAGE_FILE_DRAG_DATA_TYPE, normalizeStorageFileDragPayload);
 }
@@ -183,6 +206,10 @@ function readStorageDriveFolderDragData(dataTransfer: Pick<DataTransfer, "getDat
 
 function readChecklistDragData(dataTransfer: Pick<DataTransfer, "getData">): ChecklistDragPayload | null {
   return readStoragePayload(dataTransfer, CHECKLIST_DRAG_DATA_TYPE, normalizeChecklistDragPayload);
+}
+
+function readMailThreadDragData(dataTransfer: Pick<DataTransfer, "getData">): MailThreadDragPayload | null {
+  return readStoragePayload(dataTransfer, MAIL_THREAD_DRAG_DATA_TYPE, normalizeMailThreadDragPayload);
 }
 
 function readStoragePayload<T>(
@@ -275,6 +302,18 @@ function checklistReference(payload: ChecklistDragPayload): AppReference {
   };
 }
 
+function mailThreadReference(payload: MailThreadDragPayload): AppReference {
+  return {
+    type: "entity",
+    app_id: payload.owner_app_id,
+    entity_type: "email_thread",
+    entity_id: payload.thread_id,
+    label: payload.subject,
+    summary: payload.snippet || (payload.sender ? `From ${payload.sender}` : "Mail thread"),
+    deep_link: payload.deep_link,
+  };
+}
+
 function appReferenceMentionItem(reference: AppReference): MentionItem {
   if (reference.type !== "entity") {
     return {
@@ -296,6 +335,10 @@ function appReferenceMentionItem(reference: AppReference): MentionItem {
 
 function hasChecklistReferenceDragData(dataTransfer: StorageReferenceTypeDataTransfer): boolean {
   return dataTransferTypes(dataTransfer).includes(CHECKLIST_DRAG_DATA_TYPE);
+}
+
+function hasMailReferenceDragData(dataTransfer: StorageReferenceTypeDataTransfer): boolean {
+  return dataTransferTypes(dataTransfer).includes(MAIL_THREAD_DRAG_DATA_TYPE);
 }
 
 function storageFolderEntityId(payload: StorageFolderDragPayload): string {
@@ -490,6 +533,30 @@ function normalizeChecklistDragPayload(payload: unknown): ChecklistDragPayload |
   };
 }
 
+function normalizeMailThreadDragPayload(payload: unknown): MailThreadDragPayload | null {
+  if (!payload || typeof payload !== "object") {
+    return null;
+  }
+  const record = payload as Record<string, unknown>;
+  const ownerAppId = normalizeRequiredText(record.owner_app_id);
+  const threadId = normalizeReferenceId(record.thread_id);
+  const deepLink = normalizeMailThreadDeepLink(record.deep_link, ownerAppId, threadId);
+  if (!ownerAppId || !threadId || !deepLink) {
+    return null;
+  }
+  return {
+    connection_id: normalizeReferenceId(record.connection_id),
+    deep_link: deepLink,
+    last_message_at: normalizeRequiredText(record.last_message_at),
+    owner_app_id: ownerAppId,
+    sender: normalizeRequiredText(record.sender),
+    snippet: normalizeRequiredText(record.snippet),
+    subject: normalizeRequiredText(record.subject) || "Email thread",
+    thread_id: threadId,
+    unread: typeof record.unread === "boolean" ? record.unread : false,
+  };
+}
+
 function normalizeStorageDriveBreadcrumbPayloads(value: unknown, fallbackConnectionId: string): StorageDriveBreadcrumbPayload[] | null {
   if (value === undefined) {
     return [];
@@ -612,6 +679,15 @@ function normalizeChecklistDeepLink(value: unknown, ownerAppId: string, checklis
     return "";
   }
   const expected = `/app/${encodeURIComponent(ownerAppId)}/checklists/${encodeURIComponent(checklistId)}`;
+  return value.trim() === expected ? expected : "";
+}
+
+function normalizeMailThreadDeepLink(value: unknown, ownerAppId: string, threadId: string): string {
+  if (typeof value !== "string" || !ownerAppId || !threadId) {
+    return "";
+  }
+  const params = new URLSearchParams({ thread: threadId });
+  const expected = `/app/${encodeURIComponent(ownerAppId)}?${params.toString()}`;
   return value.trim() === expected ? expected : "";
 }
 

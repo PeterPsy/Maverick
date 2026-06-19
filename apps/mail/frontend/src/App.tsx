@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import type { DragEvent } from 'react';
 import {
   Archive,
   ChevronDown,
@@ -19,6 +20,7 @@ import {
   type MailThread
 } from './api';
 import SlidingPagination from './components/ui/sliding-pagination';
+import { mailThreadDragPayloadFromThread, writeMailThreadDragData } from './lib/mailThreadDragDrop';
 import {
   DEFAULT_MAILBOX_SCOPE_IDS,
   isMailbox,
@@ -819,6 +821,7 @@ export function App() {
   const [accountModalOpen, setAccountModalOpen] = useState(false);
   const [readerPlain, setReaderPlain] = useState(false);
   const [readerShowImages, setReaderShowImages] = useState(false);
+  const [draggingThreadId, setDraggingThreadId] = useState('');
   const threadListRequestRef = useRef(0);
   const threadOpenRequestRef = useRef(0);
   const selectedThreadRef = useRef<MailThread | null>(null);
@@ -1255,6 +1258,11 @@ export function App() {
     }
   }
 
+  function handleThreadDragStart(event: DragEvent<HTMLElement>, thread: MailThread) {
+    setDraggingThreadId(thread.id);
+    writeMailThreadDragData(event.dataTransfer, mailThreadDragPayloadFromThread(thread));
+  }
+
   return (
     <main className={`mail-shell ${selectedThread || threadOpenLoading ? 'is-reading' : 'is-list-only'}`}>
       <div className="toolbar">
@@ -1350,7 +1358,15 @@ export function App() {
               const recipient = connectionById.get(thread.connection_id);
               const recipientLabel = recipient?.display_name || recipient?.email_address || 'Mail account';
               return (
-                <article key={thread.id} className={`thread-row ${selectedThread?.id === thread.id ? 'selected' : ''}`}>
+                <article
+                  key={thread.id}
+                  className={`thread-row ${selectedThread?.id === thread.id ? 'selected' : ''} ${
+                    draggingThreadId === thread.id ? 'is-dragging' : ''
+                  }`}
+                  draggable
+                  onDragEnd={() => setDraggingThreadId('')}
+                  onDragStart={(event) => handleThreadDragStart(event, thread)}
+                >
                   <button className="thread-row__body" type="button" onClick={() => openThread(thread.id, thread.connection_id)}>
                     <span className="thread-avatar" aria-hidden="true">{avatarInitials(thread)}</span>
                     <span className="thread-copy">

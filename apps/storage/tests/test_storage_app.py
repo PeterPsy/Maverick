@@ -228,6 +228,17 @@ class StorageAppTestCase(unittest.TestCase):
         self.assertEqual(widget.frontend.mount, "frontend/dist/widgets/file-preview")
         self.assertTrue((STORAGE_ROOT / "frontend" / "dist" / "widgets" / "file-preview" / "index.html").is_file())
 
+    def test_image_background_color_descriptors_are_bounded(self) -> None:
+        cli_background = self.storage_cli_argument_schema()["properties"]["background_color"]
+        self.assertIn("#RRGGBB", cli_background["description"])
+        self.assertIn("#[0-9A-Fa-f]{6}", cli_background["pattern"])
+
+        mcp_descriptor = json.loads((STORAGE_ROOT / "mcp" / "tool_schemas.json").read_text(encoding="utf-8"))
+        generic_background = mcp_descriptor["tools"]["maverick_storage"]["input_schema"]["properties"]["background_color"]
+        compose_background = mcp_descriptor["tools"]["storage_image_compose_pair"]["input_schema"]["properties"]["background_color"]
+        self.assertEqual(generic_background["pattern"], cli_background["pattern"])
+        self.assertEqual(compose_background["pattern"], cli_background["pattern"])
+
     def test_backend_catalog_derives_uploaded_and_generated_files(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp)
@@ -357,6 +368,7 @@ class StorageAppTestCase(unittest.TestCase):
                     "target_folder": "documents",
                     "file_name": "id-card.jpg",
                     "height": 60,
+                    "background_color": "#ffffff",
                     "mode": "create",
                 },
             )
@@ -369,6 +381,21 @@ class StorageAppTestCase(unittest.TestCase):
             self.assertEqual(payload["output_image"]["display_height"], 60)
             self.assertEqual(len(payload["source_images"]), 2)
             self.assertNotIn("local_path", payload["source_images"][0])
+
+            rejected = self.run_backend(
+                data_root=data_root,
+                uploaded_root=uploaded_root,
+                generated_root=generated_root,
+                body={
+                    "action": "image.compose_pair",
+                    "images": ["storage/generated/id-front.png", "storage/generated/id-back.png"],
+                    "file_name": "bad-color.jpg",
+                    "background_color": "white[left];null[out]",
+                },
+            )
+
+            self.assertEqual(rejected["status_code"], 400)
+            self.assertIn("background_color", rejected["json"]["detail"])
 
     def test_backend_catalog_preserves_remote_provider_records(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
@@ -664,6 +691,18 @@ class StorageAppTestCase(unittest.TestCase):
 
             self.assertEqual(health["status_code"], 200)
             self.assertEqual(health["json"]["status"], "ok")
+            image_operations = health["json"]["image_operations"]
+            self.assertEqual(image_operations["dependencies"]["ffprobe"]["available"], shutil.which("ffprobe") is not None)
+            self.assertEqual(image_operations["dependencies"]["ffmpeg"]["available"], shutil.which("ffmpeg") is not None)
+            self.assertEqual(
+                image_operations["available"],
+                bool(shutil.which("ffprobe") and shutil.which("ffmpeg")),
+            )
+            self.assertEqual(image_operations["operations"]["image.inspect"]["available"], shutil.which("ffprobe") is not None)
+            self.assertEqual(
+                image_operations["operations"]["image.compose_pair"]["available"],
+                bool(shutil.which("ffprobe") and shutil.which("ffmpeg")),
+            )
             self.assertFalse((data_root / "files.json").exists())
 
     def test_backend_persists_view_filter_for_shared_ui_control(self) -> None:

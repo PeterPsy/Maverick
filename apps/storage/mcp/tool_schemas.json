@@ -119,7 +119,11 @@
           "format": {"type": "string", "enum": ["jpg", "jpeg", "png"]},
           "height": {"type": "integer", "minimum": 1, "maximum": 5000},
           "output_height": {"type": "integer", "minimum": 1, "maximum": 5000},
-          "background_color": {"type": "string"},
+          "background_color": {
+            "type": "string",
+            "description": "Supported color name or #RRGGBB.",
+            "pattern": "^(#[0-9A-Fa-f]{6}|black|blue|brown|cyan|gray|green|grey|magenta|orange|pink|purple|red|white|yellow)$"
+          },
           "size_bytes": {"type": "integer", "minimum": 0},
           "local_upload_session_id": {"type": "string"},
           "drive_upload_session_id": {"type": "string"},
@@ -488,7 +492,11 @@
           "format": {"type": "string", "enum": ["jpg", "jpeg", "png"]},
           "height": {"type": "integer", "minimum": 1, "maximum": 5000},
           "output_height": {"type": "integer", "minimum": 1, "maximum": 5000},
-          "background_color": {"type": "string"},
+          "background_color": {
+            "type": "string",
+            "description": "Supported color name or #RRGGBB.",
+            "pattern": "^(#[0-9A-Fa-f]{6}|black|blue|brown|cyan|gray|green|grey|magenta|orange|pink|purple|red|white|yellow)$"
+          },
           "mode": {"type": "string", "enum": ["create", "overwrite", "upsert", "versioned"], "default": "create"},
           "confirm": {"type": "boolean", "default": false}
         },

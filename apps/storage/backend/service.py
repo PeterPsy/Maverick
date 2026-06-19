@@ -44,7 +44,7 @@ from drive_localization import (
     stream_prepared_drive_media_response_body,
 )
 from google_drive_provider import DriveProviderError, GoogleDriveProvider
-from image_operations import image_compose_pair_payload, image_inspect_payload
+from image_operations import image_compose_pair_payload, image_dependencies_health, image_inspect_payload
 from inventory import preview_kind as inventory_preview_kind, upsert_remote_file_records
 from operations_manifest import STORAGE_ACTION_ALIASES, STORAGE_ACTIONS, operations_manifest_payload
 from reference_entities import (
@@ -1086,7 +1086,11 @@ def handle_action(
         seed_state(data_root)
         uploaded_root.mkdir(parents=True, exist_ok=True)
         generated_root.mkdir(parents=True, exist_ok=True)
-        return 200, {"status": "ok", "storage_roots": {"uploaded": uploaded_root.is_dir(), "generated": generated_root.is_dir()}}
+        return 200, {
+            "status": "ok",
+            "storage_roots": {"uploaded": uploaded_root.is_dir(), "generated": generated_root.is_dir()},
+            "image_operations": image_dependencies_health(),
+        }
     if action == "references.manifest":
         return 200, REFERENCE_MANIFEST
     if action == "references.search":

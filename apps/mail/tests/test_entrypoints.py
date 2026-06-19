@@ -1600,6 +1600,7 @@ class MailServiceTest(unittest.TestCase):
             self.assertEqual(status, 400)
             self.assertIn("redacted by the CLI output profile", payload["detail"])
             self.assertIn("mail_send_approved", payload["detail"])
+            self.assertIn("MAVERICK_RUNTIME_CLI_OUTPUT_PROFILE=full", payload["detail"])
 
     def test_draft_confirmation_token_is_consumed_atomically(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

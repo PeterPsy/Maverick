@@ -295,7 +295,7 @@ def _hash_token(token: str) -> str:
 
 _REDACTED_CONFIRMATION_TOKEN_MESSAGE = (
     "confirmation_token was redacted by the CLI output profile; use mail_send_approved or drafts.send_approved "
-    "after a dry-run preview, or rerun the preview with output_profile=full and keep the token out of logs."
+    "after a dry-run preview, or rerun the preview with MAVERICK_RUNTIME_CLI_OUTPUT_PROFILE=full and keep the token out of logs."
 )
 
 

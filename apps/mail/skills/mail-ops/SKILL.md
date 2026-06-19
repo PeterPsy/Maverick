@@ -15,7 +15,7 @@ Preferred workflow:
 - Create drafts with `mail_create_draft` or `mail_update_draft` before sending.
 - Treat `mail_send`, `mail_send_draft`, and approved-send tools as high-impact actions. Use dry-run first, show recipients, subject, full body, thread context, and attachment filenames, then require explicit user confirmation before sending.
 - Prefer `mail_send_approved` or `mail_send_draft_approved` after the user confirms a dry-run preview. These actions consume the latest server-side preview for the draft and do not require the model or shell to handle `confirmation_token`.
-- Use `confirm=true` with `confirmation_token` only as a fallback. If the CLI output profile redacts the token as `<redacted>`, rerun the preview with `output_profile=full` only if absolutely necessary, keep the token in memory, and never print or store it.
+- Use `confirm=true` with `confirmation_token` only as a fallback. If the CLI output profile redacts the token as `<redacted>`, rerun the preview with `MAVERICK_RUNTIME_CLI_OUTPUT_PROFILE=full` only if absolutely necessary, keep the token in memory, and never print or store it.
 - Save attachments to Storage only when requested or operationally useful. When using `mail_save_attachments`, inspect `attachment_summary` and `document_part_hints` before deciding whether more source material is missing.
 
 Security rules:

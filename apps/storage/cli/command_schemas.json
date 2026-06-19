@@ -134,7 +134,11 @@
           "format": {"type": "string", "enum": ["jpg", "jpeg", "png"]},
           "height": {"type": "integer", "minimum": 1, "maximum": 5000},
           "output_height": {"type": "integer", "minimum": 1, "maximum": 5000},
-          "background_color": {"type": "string"},
+          "background_color": {
+            "type": "string",
+            "description": "Supported color name or #RRGGBB.",
+            "pattern": "^(#[0-9A-Fa-f]{6}|black|blue|brown|cyan|gray|green|grey|magenta|orange|pink|purple|red|white|yellow)$"
+          },
           "source_path": {
             "type": "string",
             "description": "CLI-only local source file path for upload_local_file. Sandbox invocations may read only inside workspace_root; full-access operator invocations may read other local paths. This is not exposed by Storage MCP or frontend surfaces."

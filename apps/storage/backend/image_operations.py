@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import re
 import shutil
 import subprocess
 import tempfile
@@ -34,6 +35,23 @@ DEFAULT_OUTPUT_HEIGHT = 1800
 MAX_OUTPUT_HEIGHT = 5000
 FFPROBE_TIMEOUT_SECONDS = 15
 FFMPEG_TIMEOUT_SECONDS = 120
+SAFE_BACKGROUND_COLOR_NAMES = {
+    "black",
+    "blue",
+    "brown",
+    "cyan",
+    "gray",
+    "green",
+    "grey",
+    "magenta",
+    "orange",
+    "pink",
+    "purple",
+    "red",
+    "white",
+    "yellow",
+}
+HEX_BACKGROUND_COLOR_RE = re.compile(r"^#[0-9A-Fa-f]{6}$")
 
 
 def image_inspect_payload(
@@ -48,6 +66,23 @@ def image_inspect_payload(
         for ref in _image_refs_from_body(body, minimum=1, maximum=20)
     ]
     return {"status": "ok", "images": images, "image_count": len(images)}
+
+
+def image_dependencies_health() -> dict[str, Any]:
+    dependencies = {
+        "ffprobe": _binary_dependency_health("ffprobe"),
+        "ffmpeg": _binary_dependency_health("ffmpeg"),
+    }
+    inspect_available = bool(dependencies["ffprobe"]["available"])
+    compose_available = bool(dependencies["ffprobe"]["available"] and dependencies["ffmpeg"]["available"])
+    return {
+        "available": compose_available,
+        "dependencies": dependencies,
+        "operations": {
+            "image.inspect": {"available": inspect_available, "requires": ["ffprobe"]},
+            "image.compose_pair": {"available": compose_available, "requires": ["ffprobe", "ffmpeg"]},
+        },
+    }
 
 
 def image_compose_pair_payload(
@@ -84,7 +119,7 @@ def image_compose_pair_payload(
             target_dir=target.parent,
             output_format=output_format,
             target_height=target_height,
-            background_color=str(body.get("background_color") or "white"),
+            background_color=_background_color(body.get("background_color")),
         )
         enforce_storage_budget(uploaded_root=uploaded_root, generated_root=generated_root, target=target, payload_size=len(composed_bytes))
         atomic_write_bytes(target, composed_bytes)
@@ -245,6 +280,25 @@ def _output_format(body: dict[str, Any]) -> tuple[str, str]:
     if requested not in SUPPORTED_OUTPUT_FORMATS:
         raise StorageValidationError("output_format must be jpg or png.", operation="image.compose_pair")
     return SUPPORTED_OUTPUT_FORMATS[requested]
+
+
+def _background_color(value: object) -> str:
+    requested = str(value or "white").strip()
+    lowered = requested.casefold()
+    if lowered in SAFE_BACKGROUND_COLOR_NAMES:
+        return lowered
+    if HEX_BACKGROUND_COLOR_RE.fullmatch(requested):
+        return requested.lower()
+    raise StorageValidationError(
+        "background_color must be a supported color name or #RRGGBB.",
+        operation="image.compose_pair",
+        allowed_values={"background_color": sorted(SAFE_BACKGROUND_COLOR_NAMES)},
+        example={"background_color": "white"},
+    )
+
+
+def _binary_dependency_health(binary: str) -> dict[str, Any]:
+    return {"available": shutil.which(binary) is not None, "binary": binary}
 
 
 def _target_height(body: dict[str, Any], sources: list[dict[str, Any]]) -> int:

@@ -26,6 +26,7 @@ from storage_attachments import (
     attach_workspace_attachments,
     draft_confirmation_preview,
     draft_with_current_attachments,
+    require_attachment_confirmation_token,
     save_attachment_to_storage,
 )
 
@@ -177,6 +178,7 @@ class ImapSmtpProvider:
         app_secrets: dict[str, object] | None = None,
         uploaded_storage_root: Path | None = None,
         generated_storage_root: Path | None = None,
+        confirmation_token: object = None,
     ) -> dict[str, object]:
         draft = get_draft(data_root, draft_id)
         _require_recipients(draft)
@@ -188,19 +190,21 @@ class ImapSmtpProvider:
             uploaded_storage_root=uploaded_storage_root,
             generated_storage_root=generated_storage_root,
         )
+        preview_draft = draft_with_current_attachments(draft, attachments)
+        confirmation_preview = draft_confirmation_preview(
+            preview_draft,
+            sender_email=str(settings["email_address"]),
+            sender_name=str(settings.get("display_name") or ""),
+            attachments=attachments,
+        )
         if not confirm:
-            preview_draft = draft_with_current_attachments(draft, attachments)
             return {
                 "dry_run": True,
                 "requires_confirmation": True,
                 "draft": preview_draft,
-                "confirmation_preview": draft_confirmation_preview(
-                    preview_draft,
-                    sender_email=str(settings["email_address"]),
-                    sender_name=str(settings.get("display_name") or ""),
-                    attachments=attachments,
-                ),
+                "confirmation_preview": confirmation_preview,
             }
+        require_attachment_confirmation_token(attachments=attachments, preview=confirmation_preview, confirmation_token=confirmation_token)
         with self._smtp(settings) as client:
             client.login(str(settings["username"]), _smtp_password(app_secrets))
             client.send_message(message)

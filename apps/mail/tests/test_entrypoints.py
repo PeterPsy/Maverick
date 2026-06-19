@@ -1162,8 +1162,103 @@ class MailServiceTest(unittest.TestCase):
             expected_sha = hashlib.sha256(b"fresh attachment").hexdigest()
             self.assertEqual(status, 200, preview)
             self.assertEqual(preview["result"]["confirmation_preview"]["attachments"][0]["sha256"], expected_sha)
+            self.assertRegex(preview["result"]["confirmation_preview"]["confirmation_token"], r"^[0-9a-f]{64}$")
             self.assertEqual(preview["result"]["draft"]["workspace_attachments"][0]["sha256"], expected_sha)
             self.assertEqual(preview["result"]["confirmation_preview"]["attachments"][0]["size_bytes"], len("fresh attachment"))
+
+    def test_gmail_draft_confirm_with_workspace_attachment_requires_confirmation_token(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            workspace_root = Path(tmp)
+            data_root = workspace_root / "data" / "mail"
+            generated_root = workspace_root / "storage" / "generated"
+            attachment_path = generated_root / "reports" / "result.txt"
+            attachment_path.parent.mkdir(parents=True)
+            attachment_path.write_text("storage attachment", encoding="utf-8")
+            self._insert_gmail_fixture(data_root)
+            status, created = handle_action(
+                data_root,
+                {
+                    "action": "drafts.create",
+                    "to": [{"email": "customer@example.com"}],
+                    "subject": "Follow up",
+                    "body_text": "See attached.",
+                    "workspace_attachments": ["storage/generated/reports/result.txt"],
+                    "_generated_storage_root": str(generated_root),
+                },
+            )
+            self.assertEqual(status, 201, created)
+
+            status, payload = handle_action(
+                data_root,
+                {
+                    "action": "drafts.send",
+                    "draft_id": created["draft"]["id"],
+                    "confirm": True,
+                    "_generated_storage_root": str(generated_root),
+                },
+            )
+
+            self.assertEqual(status, 400)
+            self.assertIn("confirmation_token", payload["detail"])
+
+    def test_gmail_draft_confirm_rejects_changed_workspace_attachment_snapshot(self) -> None:
+        transport_calls: list[str] = []
+
+        def fake_transport(request) -> dict[str, object]:
+            transport_calls.append(request.full_url)
+            raise AssertionError(f"unexpected request {request.full_url}")
+
+        with tempfile.TemporaryDirectory() as tmp:
+            workspace_root = Path(tmp)
+            data_root = workspace_root / "data" / "mail"
+            generated_root = workspace_root / "storage" / "generated"
+            uploaded_root = workspace_root / "storage" / "uploaded"
+            attachment_path = generated_root / "reports" / "result.txt"
+            attachment_path.parent.mkdir(parents=True)
+            attachment_path.write_text("preview attachment", encoding="utf-8")
+            self._insert_gmail_fixture(data_root)
+            status, created = handle_action(
+                data_root,
+                {
+                    "action": "drafts.create",
+                    "to": [{"email": "customer@example.com"}],
+                    "subject": "Follow up",
+                    "body_text": "See attached.",
+                    "workspace_attachments": ["storage/generated/reports/result.txt"],
+                    "_generated_storage_root": str(generated_root),
+                },
+            )
+            self.assertEqual(status, 201, created)
+            status, preview = handle_action(
+                data_root,
+                {
+                    "action": "drafts.send",
+                    "draft_id": created["draft"]["id"],
+                    "_generated_storage_root": str(generated_root),
+                    "_uploaded_storage_root": str(uploaded_root),
+                },
+            )
+            self.assertEqual(status, 200, preview)
+            confirmation_token = preview["result"]["confirmation_preview"]["confirmation_token"]
+            attachment_path.write_text("changed attachment", encoding="utf-8")
+
+            with patch("backend.service.provider_for_connection", return_value=GmailProvider(transport=fake_transport)):
+                status, payload = handle_action(
+                    data_root,
+                    {
+                        "action": "drafts.send",
+                        "draft_id": created["draft"]["id"],
+                        "confirm": True,
+                        "confirmation_token": confirmation_token,
+                        "_app_secrets": self._gmail_secrets(),
+                        "_generated_storage_root": str(generated_root),
+                        "_uploaded_storage_root": str(uploaded_root),
+                    },
+                )
+
+            self.assertEqual(status, 400)
+            self.assertIn("snapshot changed", payload["detail"])
+            self.assertEqual(transport_calls, [])
 
     def test_mail_send_accepts_html_body_and_sends_multipart_gmail_message(self) -> None:
         sent_payloads: list[dict[str, object]] = []
@@ -1230,6 +1325,20 @@ class MailServiceTest(unittest.TestCase):
             self._insert_gmail_fixture(data_root)
 
             with patch("backend.service.provider_for_connection", return_value=GmailProvider(transport=fake_transport)):
+                status, preview = handle_action(
+                    data_root,
+                    {
+                        "action": "mail_send",
+                        "to": [{"email": "customer@example.com"}],
+                        "subject": "Attachment",
+                        "body_text": "See attached.",
+                        "workspace_attachments": ["storage/generated/reports/result.txt"],
+                        "_generated_storage_root": str(generated_root),
+                        "_uploaded_storage_root": str(uploaded_root),
+                    },
+                )
+                self.assertEqual(status, 200, preview)
+                confirmation_token = preview["result"]["confirmation_preview"]["confirmation_token"]
                 status, payload = handle_action(
                     data_root,
                     {
@@ -1239,6 +1348,7 @@ class MailServiceTest(unittest.TestCase):
                         "body_text": "See attached.",
                         "workspace_attachments": ["storage/generated/reports/result.txt"],
                         "confirm": True,
+                        "confirmation_token": confirmation_token,
                         "_app_secrets": self._gmail_secrets(),
                         "_generated_storage_root": str(generated_root),
                         "_uploaded_storage_root": str(uploaded_root),

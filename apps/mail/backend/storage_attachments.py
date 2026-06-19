@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from email.message import EmailMessage
 import hashlib
+import hmac
 import json
 import mimetypes
 import os
@@ -113,7 +114,7 @@ def draft_confirmation_preview(
     sender_name: str,
     attachments: list[dict[str, object]],
 ) -> dict[str, object]:
-    return {
+    preview = {
         "draft_id": draft.get("id") or "",
         "thread_id": draft.get("thread_id") or "",
         "from": {"email": sender_email, "name": sender_name},
@@ -128,6 +129,51 @@ def draft_confirmation_preview(
         "attachment_count": len(attachments),
         "attachment_total_bytes": sum(int(item.get("size_bytes") or 0) for item in attachments),
         "snapshot_at": now_timestamp(),
+    }
+    preview["confirmation_token"] = draft_confirmation_token(preview)
+    return preview
+
+
+def require_attachment_confirmation_token(
+    *,
+    attachments: list[dict[str, object]],
+    preview: dict[str, object],
+    confirmation_token: object = None,
+) -> None:
+    if not attachments:
+        return
+    provided = str(confirmation_token or "").strip()
+    if not provided:
+        raise ValueError("confirm=true with workspace attachments requires confirmation_token from a dry-run preview")
+    expected = draft_confirmation_token(preview)
+    if not hmac.compare_digest(provided, expected):
+        raise ValueError("Workspace attachment snapshot changed; run a new dry-run preview before confirming send")
+
+
+def draft_confirmation_token(preview: dict[str, object]) -> str:
+    material = {
+        "thread_id": preview.get("thread_id") or "",
+        "from": preview.get("from") or {},
+        "to": preview.get("to") or [],
+        "cc": preview.get("cc") or [],
+        "bcc": preview.get("bcc") or [],
+        "reply_to": preview.get("reply_to") or [],
+        "subject": preview.get("subject") or "",
+        "body_text": preview.get("body_text") or "",
+        "body_html": preview.get("body_html") or "",
+        "attachments": [_confirmation_attachment(item) for item in preview.get("attachments") or [] if isinstance(item, dict)],
+    }
+    encoded = json.dumps(material, ensure_ascii=True, sort_keys=True, separators=(",", ":")).encode("utf-8")
+    return hashlib.sha256(encoded).hexdigest()
+
+
+def _confirmation_attachment(item: dict[str, object]) -> dict[str, object]:
+    return {
+        "workspace_relative_path": item.get("workspace_relative_path") or "",
+        "filename": item.get("filename") or "",
+        "content_type": item.get("content_type") or "",
+        "size_bytes": int(item.get("size_bytes") or 0),
+        "sha256": item.get("sha256") or "",
     }
 
 

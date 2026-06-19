@@ -204,6 +204,7 @@ def handle_action(data_root: Path, payload: dict[str, object]) -> tuple[int, dic
                     app_secrets=_app_secrets(payload),
                     uploaded_storage_root=_optional_path(payload.get("_uploaded_storage_root")),
                     generated_storage_root=_optional_path(payload.get("_generated_storage_root")),
+                    confirmation_token=payload.get("confirmation_token"),
                 )
             }
         if action in {"messages.send", "mail_send"}:
@@ -218,6 +219,7 @@ def handle_action(data_root: Path, payload: dict[str, object]) -> tuple[int, dic
                 app_secrets=_app_secrets(payload),
                 uploaded_storage_root=_optional_path(payload.get("_uploaded_storage_root")),
                 generated_storage_root=_optional_path(payload.get("_generated_storage_root")),
+                confirmation_token=payload.get("confirmation_token"),
             )
             return 200, {"draft": draft, "result": result}
         if action in {"labels.modify", "mail_modify_labels"}:

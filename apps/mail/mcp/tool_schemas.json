@@ -242,7 +242,8 @@
         "type": "object",
         "properties": {
           "draft_id": { "type": "string" },
-          "confirm": { "type": "boolean", "default": false }
+          "confirm": { "type": "boolean", "default": false },
+          "confirmation_token": { "type": "string" }
         },
         "required": ["draft_id"],
         "additionalProperties": false
@@ -291,7 +292,8 @@
               ]
             }
           },
-          "confirm": { "type": "boolean", "default": false }
+          "confirm": { "type": "boolean", "default": false },
+          "confirmation_token": { "type": "string" }
         },
         "required": ["subject", "body_text"],
         "anyOf": [

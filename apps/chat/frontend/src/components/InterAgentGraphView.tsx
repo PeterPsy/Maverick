@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type CSSProperties } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type PointerEvent, type WheelEvent } from "react";
 import {
   getInterAgentParticipantTranscript,
   type InterAgentApprovalRecord,
@@ -20,6 +20,13 @@ type InterAgentGraphViewProps = {
 
 const GRAPH_VISIBILITY_PLANE: InterAgentVisibilityPlane = "detail";
 const TRANSCRIPT_LIMIT = 80;
+const GRAPH_NODE_WIDTH = 220;
+const GRAPH_NODE_HEIGHT = 72;
+const GRAPH_COLUMN_GAP = 84;
+const GRAPH_ROW_GAP = 128;
+const GRAPH_PADDING = 56;
+const GRAPH_MIN_ZOOM = 0.25;
+const GRAPH_MAX_ZOOM = 1.6;
 
 export function InterAgentGraphView({
   initialApprovals = [],
@@ -219,79 +226,126 @@ function GraphCanvas({
   const markerId = useMemo(() => svgFragmentId("chatapp-inter-agent-arrow", runDetail?.run.run_id || "run"), [
     runDetail?.run.run_id,
   ]);
-  const boardHeightRem = Math.min(38, Math.max(21, layout.rowCount * 6.8 + 7));
+  const {
+    boardRef,
+    fitToView,
+    isPanning,
+    onPointerDown,
+    onPointerMove,
+    onPointerUp,
+    onWheel,
+    transform,
+    zoomBy,
+  } = useGraphViewport(layout);
+  const boardHeightRem = Math.min(38, Math.max(21, layout.height / 16 + 3));
   return (
     <div className="chatapp-inter-agent-graph__canvas" aria-label="Agent node map">
       {participants.length ? (
         <div
-          className="chatapp-inter-agent-graph__board"
+          className={`chatapp-inter-agent-graph__board ${isPanning ? "is-panning" : ""}`}
+          onPointerDown={onPointerDown}
+          onPointerMove={onPointerMove}
+          onPointerUp={onPointerUp}
+          onPointerCancel={onPointerUp}
+          onWheel={onWheel}
+          ref={boardRef}
           style={{ "--graph-board-min-height": `${boardHeightRem}rem` } as CSSProperties}
         >
-          <svg
-            className="chatapp-inter-agent-graph__edge-layer"
-            viewBox="0 0 100 100"
-            preserveAspectRatio="none"
-            aria-hidden="true"
-          >
-            <defs>
-              <marker
-                id={markerId}
-                markerHeight="6"
-                markerWidth="6"
-                orient="auto"
-                refX="5"
-                refY="3"
-                viewBox="0 0 6 6"
-              >
-                <path d="M0,0 L6,3 L0,6 Z" />
-              </marker>
-            </defs>
-            {edgeLinks.map((link) => (
-              <path
-                className="chatapp-inter-agent-graph__edge-path"
-                d={edgePath(link)}
-                data-edge-id={link.edge.edge_id}
-                key={link.edge.edge_id}
-                markerEnd={`url(#${markerId})`}
-                vectorEffect="non-scaling-stroke"
-              />
-            ))}
-          </svg>
-          {edgeLinks.map((link) => (
-            <div
-              className="chatapp-inter-agent-graph__edge-chip"
-              key={link.edge.edge_id}
-              style={
-                { "--graph-edge-x": `${link.midpoint.x}%`, "--graph-edge-y": `${link.midpoint.y}%` } as CSSProperties
-              }
-              title={`${link.source.participant.label} -> ${link.target.participant.label}`}
-            >
-              <span className="material-symbols-rounded" aria-hidden="true">arrow_forward</span>
-              <span>{edgeDisplayLabel(link.edge)}</span>
-            </div>
-          ))}
-          {layout.nodes.map((node) => (
-            <button
-              className={`chatapp-inter-agent-graph__node is-${node.participant.status} ${
-                selectedParticipantId === node.participant.participant_id ? "is-selected" : ""
-              }`}
-              data-participant-id={node.participant.participant_id}
-              key={node.participant.participant_id}
-              onClick={() => onSelectParticipant(node.participant.participant_id)}
-              style={{ "--graph-node-x": `${node.x}%`, "--graph-node-y": `${node.y}%` } as CSSProperties}
-              type="button"
-            >
-              <span className="material-symbols-rounded" aria-hidden="true">{participantIcon(node.participant.kind)}</span>
-              <span className="chatapp-inter-agent-graph__node-copy">
-                <strong>{node.participant.label}</strong>
-                <span>{participantStatusLabel(node.participant.kind, node.participant.status)}</span>
-              </span>
+          <div className="chatapp-inter-agent-graph__canvas-controls" aria-label="Canvas controls">
+            <button aria-label="Zoom out" onClick={() => zoomBy(0.86)} title="Zoom out" type="button">
+              <span className="material-symbols-rounded" aria-hidden="true">remove</span>
             </button>
-          ))}
-          {!edgeLinks.length && edges.length ? (
-            <div className="chatapp-inter-agent-graph__edge-empty">Some connections are unavailable.</div>
-          ) : null}
-          {!edges.length ? <div className="chatapp-inter-agent-graph__edge-empty">No connections recorded.</div> : null}
+            <button aria-label="Fit graph" onClick={fitToView} title="Fit graph" type="button">
+              <span className="material-symbols-rounded" aria-hidden="true">fit_screen</span>
+            </button>
+            <button aria-label="Zoom in" onClick={() => zoomBy(1.14)} title="Zoom in" type="button">
+              <span className="material-symbols-rounded" aria-hidden="true">add</span>
+            </button>
+          </div>
+          <div
+            className="chatapp-inter-agent-graph__surface"
+            style={
+              {
+                "--graph-pan-x": `${transform.x}px`,
+                "--graph-pan-y": `${transform.y}px`,
+                "--graph-surface-height": `${layout.height}px`,
+                "--graph-surface-width": `${layout.width}px`,
+                "--graph-zoom": transform.zoom,
+              } as CSSProperties
+            }
+          >
+            <svg
+              className="chatapp-inter-agent-graph__edge-layer"
+              viewBox={`0 0 ${layout.width} ${layout.height}`}
+              preserveAspectRatio="none"
+              aria-hidden="true"
+            >
+              <defs>
+                <marker
+                  id={markerId}
+                  markerHeight="6"
+                  markerWidth="6"
+                  orient="auto"
+                  refX="5"
+                  refY="3"
+                  viewBox="0 0 6 6"
+                >
+                  <path d="M0,0 L6,3 L0,6 Z" />
+                </marker>
+              </defs>
+              {edgeLinks.map((link) => (
+                <path
+                  className="chatapp-inter-agent-graph__edge-path"
+                  d={edgePath(link)}
+                  data-edge-id={link.edge.edge_id}
+                  key={link.edge.edge_id}
+                  markerEnd={`url(#${markerId})`}
+                  vectorEffect="non-scaling-stroke"
+                />
+              ))}
+            </svg>
+            {edgeLinks.map((link) => (
+              <div
+                className="chatapp-inter-agent-graph__edge-chip"
+                key={link.edge.edge_id}
+                style={
+                  { "--graph-edge-x": `${link.midpoint.x}px`, "--graph-edge-y": `${link.midpoint.y}px` } as CSSProperties
+                }
+                title={`${link.source.participant.label} -> ${link.target.participant.label}`}
+              >
+                <span className="material-symbols-rounded" aria-hidden="true">arrow_forward</span>
+                <span>{edgeDisplayLabel(link.edge)}</span>
+              </div>
+            ))}
+            {layout.nodes.map((node) => (
+              <button
+                className={`chatapp-inter-agent-graph__node is-${node.participant.status} ${
+                  selectedParticipantId === node.participant.participant_id ? "is-selected" : ""
+                }`}
+                data-participant-id={node.participant.participant_id}
+                key={node.participant.participant_id}
+                onClick={() => onSelectParticipant(node.participant.participant_id)}
+                style={
+                  {
+                    "--graph-node-width": `${GRAPH_NODE_WIDTH}px`,
+                    "--graph-node-x": `${node.x}px`,
+                    "--graph-node-y": `${node.y}px`,
+                  } as CSSProperties
+                }
+                type="button"
+              >
+                <span className="material-symbols-rounded" aria-hidden="true">{participantIcon(node.participant.kind)}</span>
+                <span className="chatapp-inter-agent-graph__node-copy">
+                  <strong>{node.participant.label}</strong>
+                  <span>{participantStatusLabel(node.participant.kind, node.participant.status)}</span>
+                </span>
+              </button>
+            ))}
+            {!edgeLinks.length && edges.length ? (
+              <div className="chatapp-inter-agent-graph__edge-empty">Some connections are unavailable.</div>
+            ) : null}
+            {!edges.length ? <div className="chatapp-inter-agent-graph__edge-empty">No connections recorded.</div> : null}
+          </div>
         </div>
       ) : (
         <div className="chatapp-inter-agent-graph__empty">
@@ -433,6 +487,13 @@ type GraphBoardNode = {
   y: number;
 };
 
+type GraphBoardLayout = {
+  height: number;
+  nodes: GraphBoardNode[];
+  nodesById: Map<string, GraphBoardNode>;
+  width: number;
+};
+
 type GraphEdgeLink = {
   edge: GraphEdge;
   midpoint: { x: number; y: number };
@@ -440,12 +501,130 @@ type GraphEdgeLink = {
   target: GraphBoardNode;
 };
 
+type GraphTransform = {
+  x: number;
+  y: number;
+  zoom: number;
+};
+
+function useGraphViewport(layout: GraphBoardLayout) {
+  const boardRef = useRef<HTMLDivElement | null>(null);
+  const dragRef = useRef<{ pointerId: number; startClientX: number; startClientY: number; startX: number; startY: number } | null>(null);
+  const [isPanning, setIsPanning] = useState(false);
+  const [transform, setTransform] = useState<GraphTransform>({ x: 24, y: 24, zoom: 1 });
+
+  const fitToView = useCallback(() => {
+    const board = boardRef.current;
+    const rect = board?.getBoundingClientRect();
+    const viewportWidth = rect?.width || board?.clientWidth || 720;
+    const viewportHeight = rect?.height || board?.clientHeight || 420;
+    const zoom = clamp(
+      Math.min((viewportWidth - 32) / layout.width, (viewportHeight - 32) / layout.height),
+      GRAPH_MIN_ZOOM,
+      Math.min(1.2, GRAPH_MAX_ZOOM),
+    );
+    setTransform({
+      x: Math.round((viewportWidth - layout.width * zoom) / 2),
+      y: Math.round((viewportHeight - layout.height * zoom) / 2),
+      zoom,
+    });
+  }, [layout.height, layout.width]);
+
+  useEffect(() => {
+    fitToView();
+  }, [fitToView]);
+
+  useEffect(() => {
+    const board = boardRef.current;
+    const ResizeObserverConstructor = typeof ResizeObserver === "undefined" ? null : ResizeObserver;
+    if (!board || !ResizeObserverConstructor) {
+      return;
+    }
+    const observer = new ResizeObserverConstructor(() => fitToView());
+    observer.observe(board);
+    return () => observer.disconnect();
+  }, [fitToView]);
+
+  const zoomBy = useCallback((factor: number, origin?: { x: number; y: number }) => {
+    setTransform((current) => {
+      const nextZoom = clamp(current.zoom * factor, GRAPH_MIN_ZOOM, GRAPH_MAX_ZOOM);
+      const anchor = origin || {
+        x: (boardRef.current?.getBoundingClientRect().width || 720) / 2,
+        y: (boardRef.current?.getBoundingClientRect().height || 420) / 2,
+      };
+      const graphX = (anchor.x - current.x) / current.zoom;
+      const graphY = (anchor.y - current.y) / current.zoom;
+      return {
+        x: anchor.x - graphX * nextZoom,
+        y: anchor.y - graphY * nextZoom,
+        zoom: nextZoom,
+      };
+    });
+  }, []);
+
+  const onPointerDown = useCallback((event: PointerEvent<HTMLDivElement>) => {
+    const target = event.target instanceof Element ? event.target : null;
+    if (target?.closest("button")) {
+      return;
+    }
+    event.currentTarget.setPointerCapture(event.pointerId);
+    dragRef.current = {
+      pointerId: event.pointerId,
+      startClientX: event.clientX,
+      startClientY: event.clientY,
+      startX: transform.x,
+      startY: transform.y,
+    };
+    setIsPanning(true);
+  }, [transform.x, transform.y]);
+
+  const onPointerMove = useCallback((event: PointerEvent<HTMLDivElement>) => {
+    const drag = dragRef.current;
+    if (!drag || drag.pointerId !== event.pointerId) {
+      return;
+    }
+    setTransform((current) => ({
+      ...current,
+      x: drag.startX + event.clientX - drag.startClientX,
+      y: drag.startY + event.clientY - drag.startClientY,
+    }));
+  }, []);
+
+  const onPointerUp = useCallback((event: PointerEvent<HTMLDivElement>) => {
+    if (dragRef.current?.pointerId === event.pointerId) {
+      dragRef.current = null;
+      setIsPanning(false);
+    }
+  }, []);
+
+  const onWheel = useCallback((event: WheelEvent<HTMLDivElement>) => {
+    event.preventDefault();
+    const rect = event.currentTarget.getBoundingClientRect();
+    zoomBy(event.deltaY > 0 ? 0.9 : 1.1, {
+      x: event.clientX - rect.left,
+      y: event.clientY - rect.top,
+    });
+  }, [zoomBy]);
+
+  return {
+    boardRef,
+    fitToView,
+    isPanning,
+    onPointerDown,
+    onPointerMove,
+    onPointerUp,
+    onWheel,
+    transform,
+    zoomBy,
+  };
+}
+
 function graphBoardLayout(
   participants: GraphParticipant[],
   orchestratorParticipantId?: string | null,
-): { nodes: GraphBoardNode[]; nodesById: Map<string, GraphBoardNode>; rowCount: number } {
+): GraphBoardLayout {
   if (!participants.length) {
-    return { nodes: [], nodesById: new Map(), rowCount: 1 };
+    return { height: 320, nodes: [], nodesById: new Map(), width: 640 };
   }
   const orchestrators = participants.filter((participant) =>
     participant.participant_id === orchestratorParticipantId || participant.kind === "orchestrator"
@@ -453,24 +632,30 @@ function graphBoardLayout(
   const topParticipants = orchestrators.length ? orchestrators : [participants[0]];
   const topIds = new Set(topParticipants.map((participant) => participant.participant_id));
   const lowerParticipants = participants.filter((participant) => !topIds.has(participant.participant_id));
-  const lowerRows = chunk(lowerParticipants, 3);
+  const lowerColumns = Math.max(1, Math.min(4, Math.ceil(Math.sqrt(Math.max(1, lowerParticipants.length)))));
+  const lowerRows = chunk(lowerParticipants, lowerColumns);
+  const columnCount = Math.max(topParticipants.length, lowerColumns);
+  const width = GRAPH_PADDING * 2 + columnCount * GRAPH_NODE_WIDTH + Math.max(0, columnCount - 1) * GRAPH_COLUMN_GAP;
+  const rowCount = 1 + lowerRows.length;
+  const height = GRAPH_PADDING * 2 + rowCount * GRAPH_NODE_HEIGHT + Math.max(0, rowCount - 1) * GRAPH_ROW_GAP;
   const nodes: GraphBoardNode[] = [];
-  const topY = lowerRows.length ? 15 : 50;
+  const topY = GRAPH_PADDING + GRAPH_NODE_HEIGHT / 2;
 
   topParticipants.forEach((participant, index) => {
-    nodes.push({ participant, x: distributedX(index, topParticipants.length), y: topY });
+    nodes.push({ participant, x: rowX(index, topParticipants.length, width), y: topY });
   });
   lowerRows.forEach((row, rowIndex) => {
-    const y = lowerRows.length === 1 ? 64 : 36 + (rowIndex * 46) / Math.max(1, lowerRows.length - 1);
+    const y = topY + GRAPH_NODE_HEIGHT + GRAPH_ROW_GAP + rowIndex * (GRAPH_NODE_HEIGHT + GRAPH_ROW_GAP);
     row.forEach((participant, index) => {
-      nodes.push({ participant, x: distributedX(index, row.length), y });
+      nodes.push({ participant, x: rowX(index, row.length, width), y });
     });
   });
 
   return {
+    height,
     nodes,
     nodesById: new Map(nodes.map((node) => [node.participant.participant_id, node])),
-    rowCount: Math.max(2, 1 + lowerRows.length),
+    width,
   };
 }
 
@@ -497,9 +682,9 @@ function graphEdgeLinks(edges: GraphEdge[], nodesById: Map<string, GraphBoardNod
 
 function edgePath(link: GraphEdgeLink): string {
   const verticalDirection = link.target.y >= link.source.y ? 1 : -1;
-  const startY = link.source.y + 8 * verticalDirection;
-  const endY = link.target.y - 8 * verticalDirection;
-  const verticalOffset = 18 * verticalDirection;
+  const startY = link.source.y + (GRAPH_NODE_HEIGHT / 2 + 10) * verticalDirection;
+  const endY = link.target.y - (GRAPH_NODE_HEIGHT / 2 + 10) * verticalDirection;
+  const verticalOffset = Math.min(96, Math.max(42, Math.abs(endY - startY) / 2)) * verticalDirection;
   return [
     `M ${link.source.x} ${startY}`,
     `C ${link.source.x} ${startY + verticalOffset}`,
@@ -512,12 +697,13 @@ function edgeDisplayLabel(edge: GraphEdge): string {
   return edge.label || edge.kind.replace(/_/g, " ");
 }
 
-function distributedX(index: number, count: number): number {
+function rowX(index: number, count: number, boardWidth: number): number {
   if (count <= 1) {
-    return 50;
+    return boardWidth / 2;
   }
-  const span = count === 2 ? 36 : 58;
-  return 50 - span / 2 + (span * index) / Math.max(1, count - 1);
+  const rowWidth = count * GRAPH_NODE_WIDTH + (count - 1) * GRAPH_COLUMN_GAP;
+  const rowStart = (boardWidth - rowWidth) / 2 + GRAPH_NODE_WIDTH / 2;
+  return rowStart + index * (GRAPH_NODE_WIDTH + GRAPH_COLUMN_GAP);
 }
 
 function chunk<T>(items: T[], size: number): T[][] {
@@ -526,6 +712,10 @@ function chunk<T>(items: T[], size: number): T[][] {
     chunks.push(items.slice(index, index + size));
   }
   return chunks;
+}
+
+function clamp(value: number, min: number, max: number): number {
+  return Math.min(max, Math.max(min, value));
 }
 
 function svgFragmentId(prefix: string, value: string): string {

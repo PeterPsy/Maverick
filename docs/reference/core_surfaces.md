@@ -24,6 +24,7 @@ Primary control-plane routes include:
 - `/api/inter-agent/runs`
 - `/api/inter-agent/runs/<run_id>/events`
 - `/api/inter-agent/runs/<run_id>/artifacts`
+- `/api/inter-agent/runs/<run_id>/participants/<participant_id>/transcript`
 - `/api/inter-agent/runs/<run_id>/interrupt`
 - `/api/inter-agent/runs/<run_id>/resume`
 - `/api/inter-agent/runs/<run_id>/close`

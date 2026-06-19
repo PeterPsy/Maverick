@@ -516,6 +516,7 @@ export type InterAgentParticipantTranscriptPayload = {
     kind: string;
     status: string;
   };
+  visibility_plane: InterAgentVisibilityPlane;
   items: InterAgentParticipantTranscriptItem[];
   item_count: number;
   truncated: boolean;

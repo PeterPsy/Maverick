@@ -258,9 +258,25 @@ def _handle_inter_agent_route(
             run_id=run.run_id,
         )
         query = parse_qs(query_string, keep_blank_values=False)
+        visibility = authorized_inter_agent_event_visibility(
+            workspace_store=state.workspace_store,
+            context_workspace_id=context.workspace_id,
+            caller_kind="http",
+            run=run,
+            requested_visibility_plane="detail",
+            user_id=context.user.user_id,
+            platform_role=context.user.platform_role,
+            root_session=_root_session_for_run(state, run),
+        )
         return json_response(
             start_response,
-            _participant_transcript_payload(state, run, participant, limit=_query_limit(query)),
+            _participant_transcript_payload(
+                state,
+                run,
+                participant,
+                limit=_query_limit(query),
+                visibility_plane=visibility,
+            ),
         )
     if action == "participants" and method == "POST":
         return _spawn_participant(state, context, service, run, body, start_response)
@@ -441,19 +457,20 @@ def _send_message(
     )
 
 
-def _participant_transcript_payload(state: PlatformState, run, participant, *, limit: int) -> dict:
+def _participant_transcript_payload(state: PlatformState, run, participant, *, limit: int, visibility_plane: str) -> dict:
     """Project one participant into a product-facing transcript without hidden-session metadata."""
     runtime_items, runtime_turn_ids_with_output = _runtime_participant_transcript_items(
         state,
         participant,
         limit=limit,
     )
-    event_items = _inter_agent_participant_transcript_items(
+    event_items, event_truncated = _inter_agent_participant_transcript_items(
         state,
         run,
         participant,
         runtime_turn_ids_with_output=runtime_turn_ids_with_output,
         limit=limit,
+        visibility_plane=visibility_plane,
     )
     ordered = sorted(
         [*runtime_items, *event_items],
@@ -473,9 +490,10 @@ def _participant_transcript_payload(state: PlatformState, run, participant, *, l
             "kind": participant.kind,
             "status": participant.status,
         },
+        "visibility_plane": visibility_plane,
         "items": items,
         "item_count": len(items),
-        "truncated": len(ordered) > len(items),
+        "truncated": event_truncated or len(ordered) > len(items),
     }
 
 
@@ -543,24 +561,45 @@ def _inter_agent_participant_transcript_items(
     *,
     runtime_turn_ids_with_output: set[str],
     limit: int,
-) -> list[dict]:
-    page = state.inter_agent_store.list_event_page(
-        run.run_id,
-        workspace_id=run.workspace_id,
-        visibility_plane="detail",
-        limit=min(MAX_INTER_AGENT_EVENT_LIMIT, max(limit * 3, DEFAULT_INTER_AGENT_EVENT_LIMIT)),
-    )
+    visibility_plane: str,
+) -> tuple[list[dict], bool]:
     items: list[dict] = []
-    for event in page.events:
-        if event.participant_id != participant.participant_id:
-            continue
-        item = _transcript_item_from_inter_agent_event(
-            event,
-            runtime_turn_ids_with_output=runtime_turn_ids_with_output,
+    before_event_id: str | None = None
+    target_count = limit + 1
+    page_limit = min(MAX_INTER_AGENT_EVENT_LIMIT, max(limit * 3, DEFAULT_INTER_AGENT_EVENT_LIMIT))
+    transcript_event_types = {
+        "inter_agent.message.sent",
+        "inter_agent.task.assigned",
+        "inter_agent.task.completed",
+        "inter_agent.summary.updated",
+        "inter_agent.artifact.created",
+        "inter_agent.approval.requested",
+        "inter_agent.approval.resolved",
+    }
+    while len(items) < target_count:
+        page = state.inter_agent_store.list_event_page(
+            run.run_id,
+            workspace_id=run.workspace_id,
+            visibility_plane=visibility_plane,
+            event_types=transcript_event_types,
+            before_event_id=before_event_id,
+            limit=page_limit,
         )
-        if item:
-            items.append(item)
-    return items
+        for event in page.events:
+            if event.participant_id != participant.participant_id:
+                continue
+            item = _transcript_item_from_inter_agent_event(
+                event,
+                runtime_turn_ids_with_output=runtime_turn_ids_with_output,
+            )
+            if item:
+                items.append(item)
+        if len(items) >= target_count:
+            break
+        if not page.has_more_before or not page.oldest_event_id:
+            break
+        before_event_id = page.oldest_event_id
+    return items, len(items) > limit
 
 
 def _transcript_item_from_inter_agent_event(event, *, runtime_turn_ids_with_output: set[str]) -> dict | None:
@@ -576,6 +615,19 @@ def _transcript_item_from_inter_agent_event(event, *, runtime_turn_ids_with_outp
             created_at=event.created_at,
             status=_text(payload.get("status")) or "assigned",
             source=f"inter-agent-input:{event.sequence}",
+            sequence=event.sequence,
+        )
+    if event.event_type == "inter_agent.message.sent":
+        text = _text(payload.get("input_text")) or _text(payload.get("message")) or _text(payload.get("content"))
+        if not text:
+            return None
+        return _safe_transcript_item(
+            kind="input",
+            role="user",
+            text=text,
+            created_at=event.created_at,
+            status=_text(payload.get("status")) or "sent",
+            source=f"inter-agent-message:{event.sequence}",
             sequence=event.sequence,
         )
     if event.event_type == "inter_agent.task.completed":

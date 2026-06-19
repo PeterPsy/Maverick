@@ -63,7 +63,7 @@ class InterAgentParticipantTranscriptApiTestCase(AppReferenceApiTestSupport, uni
                 app,
                 path="/api/inter-agent/runs",
                 method="POST",
-                body=_run_payload_without_snapshot(run_id="run-api-transcript"),
+                body={**_run_payload_without_snapshot(run_id="run-api-transcript"), "visibility_level": "detail"},
                 cookie=cookie,
             )
             spawn_status, _spawn_payload, _headers = self._invoke(
@@ -157,6 +157,152 @@ class InterAgentParticipantTranscriptApiTestCase(AppReferenceApiTestSupport, uni
         self.assertNotIn("raw_debug_payload", serialized)
         self.assertNotIn("debug_payload", serialized)
         self.assertNotIn("Duplicate runtime result.", serialized)
+
+    def test_applies_run_visibility_cap_to_inter_agent_events(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            repo_root = self._repo_root(temp_dir)
+            state = self._bootstrap_state(repo_root)
+            self._create_root_session(state, repo_root)
+            app = PlatformHost(state, start_path=repo_root)
+            cookie = self._login(app)
+
+            create_status, _create_payload, _headers = self._invoke(
+                app,
+                path="/api/inter-agent/runs",
+                method="POST",
+                body={**_run_payload_without_snapshot(run_id="run-api-transcript-summary"), "visibility_level": "summary"},
+                cookie=cookie,
+            )
+            run = state.inter_agent_store.get_run("run-api-transcript-summary", workspace_id="default")
+            service = InterAgentService(state.inter_agent_store)
+            service.record_event(
+                run,
+                event_type="inter_agent.task.completed",
+                participant_id="researcher",
+                visibility_plane="detail",
+                correlation_id="detail-task",
+                idempotency_key="run-api-transcript-summary:detail-task",
+                payload={"output_text": "Detail output must not leak."},
+            )
+            transcript_status, transcript_payload, _headers = self._invoke(
+                app,
+                path="/api/inter-agent/runs/run-api-transcript-summary/participants/researcher/transcript",
+                cookie=cookie,
+            )
+
+        serialized = json.dumps(transcript_payload)
+        self.assertEqual(create_status, 201)
+        self.assertEqual(transcript_status, 200)
+        self.assertEqual(transcript_payload["visibility_plane"], "summary")
+        self.assertEqual(transcript_payload["item_count"], 0)
+        self.assertNotIn("Detail output must not leak.", serialized)
+
+    def test_pages_back_until_participant_transcript_items_are_found(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            repo_root = self._repo_root(temp_dir)
+            state = self._bootstrap_state(repo_root)
+            self._create_root_session(state, repo_root)
+            app = PlatformHost(state, start_path=repo_root)
+            cookie = self._login(app)
+            now = datetime(2026, 6, 16, 12, 0, tzinfo=UTC)
+
+            create_status, _create_payload, _headers = self._invoke(
+                app,
+                path="/api/inter-agent/runs",
+                method="POST",
+                body={**_run_payload_without_snapshot(run_id="run-api-transcript-paged"), "visibility_level": "detail"},
+                cookie=cookie,
+            )
+            run = state.inter_agent_store.get_run("run-api-transcript-paged", workspace_id="default")
+            service = InterAgentService(state.inter_agent_store)
+            service.record_event(
+                run,
+                event_type="inter_agent.message.sent",
+                participant_id="researcher",
+                visibility_plane="detail",
+                correlation_id="researcher-input",
+                idempotency_key="run-api-transcript-paged:researcher-input",
+                payload={"input_text": "Need early participant input."},
+                now=now,
+            )
+            for index in range(300):
+                service.record_event(
+                    run,
+                    event_type="inter_agent.summary.updated",
+                    participant_id="orchestrator",
+                    visibility_plane="detail",
+                    correlation_id=f"orchestrator-tail-{index}",
+                    idempotency_key=f"run-api-transcript-paged:orchestrator-tail-{index}",
+                    payload={"summary": f"orchestrator tail {index}"},
+                    now=now,
+                )
+            transcript_status, transcript_payload, _headers = self._invoke(
+                app,
+                path="/api/inter-agent/runs/run-api-transcript-paged/participants/researcher/transcript?limit=80",
+                cookie=cookie,
+            )
+
+        item_texts = [item["text"] for item in transcript_payload["items"]]
+        self.assertEqual(create_status, 201)
+        self.assertEqual(transcript_status, 200)
+        self.assertEqual(transcript_payload["visibility_plane"], "detail")
+        self.assertEqual(transcript_payload["item_count"], 1)
+        self.assertFalse(transcript_payload["truncated"])
+        self.assertIn("Need early participant input.", item_texts)
+
+    def test_transcript_limit_keeps_newest_participant_items_after_paging(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            repo_root = self._repo_root(temp_dir)
+            state = self._bootstrap_state(repo_root)
+            self._create_root_session(state, repo_root)
+            app = PlatformHost(state, start_path=repo_root)
+            cookie = self._login(app)
+            now = datetime(2026, 6, 16, 12, 0, tzinfo=UTC)
+
+            create_status, _create_payload, _headers = self._invoke(
+                app,
+                path="/api/inter-agent/runs",
+                method="POST",
+                body={**_run_payload_without_snapshot(run_id="run-api-transcript-limit"), "visibility_level": "detail"},
+                cookie=cookie,
+            )
+            run = state.inter_agent_store.get_run("run-api-transcript-limit", workspace_id="default")
+            service = InterAgentService(state.inter_agent_store)
+            for index in range(90):
+                service.record_event(
+                    run,
+                    event_type="inter_agent.message.sent",
+                    participant_id="researcher",
+                    visibility_plane="detail",
+                    correlation_id=f"researcher-input-{index}",
+                    idempotency_key=f"run-api-transcript-limit:researcher-input-{index}",
+                    payload={"input_text": f"participant input {index}"},
+                    now=now,
+                )
+            for index in range(300):
+                service.record_event(
+                    run,
+                    event_type="inter_agent.summary.updated",
+                    participant_id="orchestrator",
+                    visibility_plane="detail",
+                    correlation_id=f"orchestrator-after-limit-{index}",
+                    idempotency_key=f"run-api-transcript-limit:orchestrator-after-limit-{index}",
+                    payload={"summary": f"orchestrator after {index}"},
+                    now=now,
+                )
+            transcript_status, transcript_payload, _headers = self._invoke(
+                app,
+                path="/api/inter-agent/runs/run-api-transcript-limit/participants/researcher/transcript?limit=80",
+                cookie=cookie,
+            )
+
+        item_texts = [item["text"] for item in transcript_payload["items"]]
+        self.assertEqual(create_status, 201)
+        self.assertEqual(transcript_status, 200)
+        self.assertEqual(transcript_payload["item_count"], 80)
+        self.assertTrue(transcript_payload["truncated"])
+        self.assertNotIn("participant input 0", item_texts)
+        self.assertIn("participant input 89", item_texts)
 
 
 if __name__ == "__main__":

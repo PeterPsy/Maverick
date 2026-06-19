@@ -8,6 +8,7 @@ export function RuntimeStepMessage({
   step: RuntimeStep;
 }) {
   const interAgentRunId = interAgentRunIdFromStep(step);
+  const isLive = !isTerminalInterAgentStep(step);
   if (interAgentRunId) {
     return (
       <div className="chatapp-inter-agent-message">
@@ -20,7 +21,11 @@ export function RuntimeStepMessage({
             <span>{summaryKindLabel(step.detail.summary_kind)}</span>
           </div>
           {onOpenInterAgentGraph ? (
-            <button className="chatapp-inter-agent-message__graph is-live" onClick={() => onOpenInterAgentGraph(interAgentRunId)} type="button">
+            <button
+              className={`chatapp-inter-agent-message__graph ${isLive ? "is-live" : ""}`}
+              onClick={() => onOpenInterAgentGraph(interAgentRunId)}
+              type="button"
+            >
               Agent nodes
             </button>
           ) : null}
@@ -43,6 +48,11 @@ function interAgentRunIdFromStep(step: RuntimeStep): string {
     return "";
   }
   return typeof step.detail.inter_agent_run_id === "string" ? step.detail.inter_agent_run_id : "";
+}
+
+function isTerminalInterAgentStep(step: RuntimeStep): boolean {
+  const candidates = [step.detail.summary_kind, step.detail.run_status, step.detail.status];
+  return candidates.some((value) => typeof value === "string" && ["completed", "failed", "cancelled"].includes(value));
 }
 
 function summaryKindLabel(value: unknown): string {

@@ -146,6 +146,7 @@ function transcriptPayload(participantId: string): InterAgentParticipantTranscri
       kind: participantId === "researcher" ? "agent" : "orchestrator",
       status: "running",
     },
+    visibility_plane: "detail",
     items: [
       {
         message_id: `${participantId}:message:1`,
@@ -271,6 +272,9 @@ describe("InterAgentGraphView", () => {
     expect(element.textContent).toContain("2 nodes");
     expect(element.textContent).toContain("1 connections");
     expect(element.querySelectorAll("[data-participant-id]").length).toBe(2);
+    expect(element.querySelector('[aria-label="Zoom out"]')).not.toBeNull();
+    expect(element.querySelector('[aria-label="Fit graph"]')).not.toBeNull();
+    expect(element.querySelector('[aria-label="Zoom in"]')).not.toBeNull();
     expect(element.textContent).toContain("Participant transcript");
     expect(element.textContent).toContain("Coordinate the run.");
     expect(element.textContent).toContain("Plan created.");
@@ -306,6 +310,48 @@ describe("InterAgentGraphView", () => {
 
     expect(element.textContent).toContain(longLabel);
     expect(element.querySelector(".chatapp-inter-agent-graph__node-copy")).not.toBeNull();
+  });
+
+  it("uses a navigable graph surface with separated node coordinates", async () => {
+    const base = runDetail();
+    const detail = runDetail({
+      participants: [
+        base.participants[0],
+        base.participants[1],
+        {
+          ...base.participants[1],
+          participant_id: "reviewer",
+          agent_type_id: "reviewer",
+          label: "Reviewer with a long label",
+          runtime_session_id: "child-2",
+          sequence_index: 2,
+        },
+        {
+          ...base.participants[1],
+          participant_id: "implementer",
+          agent_type_id: "implementer",
+          label: "Implementer with a long label",
+          runtime_session_id: "child-3",
+          sequence_index: 3,
+        },
+      ],
+      edges: [
+        base.edges[0],
+        { ...base.edges[0], edge_id: "edge-2", target_id: "reviewer", label: "Review" },
+        { ...base.edges[0], edge_id: "edge-3", target_id: "implementer", label: "Build" },
+      ],
+    });
+    vi.mocked(getInterAgentRun).mockResolvedValue(detail);
+    const element = await renderGraph({ initialRunDetail: detail });
+    const surface = element.querySelector(".chatapp-inter-agent-graph__surface") as HTMLElement | null;
+    const nodeStyles = Array.from(element.querySelectorAll<HTMLElement>("[data-participant-id]")).map((node) =>
+      node.getAttribute("style") || "",
+    );
+
+    expect(surface?.getAttribute("style")).toContain("--graph-zoom");
+    expect(nodeStyles.length).toBe(4);
+    expect(new Set(nodeStyles).size).toBe(4);
+    expect(nodeStyles.every((style) => style.includes("--graph-node-width: 220px"))).toBe(true);
   });
 
   it("sends pause and stop requests through the inter-agent API", async () => {

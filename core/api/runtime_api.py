@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+from contextlib import suppress
 from dataclasses import asdict
+import time
 from urllib.parse import parse_qs
 from uuid import uuid4
 
@@ -19,6 +21,7 @@ from core.authorization.service import authorize_runtime_session_create, require
 from core.inter_agent.errors import InterAgentRunNotFoundError
 from core.inter_agent.service import InterAgentService, TERMINAL_RUN_STATUSES
 from core.inter_agent.surfaces import inter_agent_payload
+from core.observability.service import append_platform_log
 from core.providers.errors import ProviderError
 from core.providers.service import resolve_provider_for_runtime_session
 from core.runtime.errors import RuntimeSessionHiddenError, RuntimeSessionNotFoundError, RuntimeThreadNotFoundError, RuntimeTurnNotFoundError
@@ -32,8 +35,7 @@ from core.runtime.runtime_threads import (
     thread_payload,
     update_runtime_thread,
 )
-from core.runtime.thread_catalog_events import mark_thread_user_message_queued, set_thread_availability
-from core.runtime.thread_title_jobs import schedule_runtime_thread_title_generation, thread_title_input_hash
+from core.runtime.thread_catalog_events import set_thread_availability
 from core.runtime.thread_titles import DEFAULT_THREAD_TITLE
 from core.runtime.service import (
     create_runtime_session,
@@ -173,6 +175,54 @@ def _provider_unavailable_response(state: PlatformState, workspace_id: str, erro
         "detail": str(error),
         "provider_status": status,
     }
+
+
+def _log_runtime_api_timing(
+    state: PlatformState,
+    context: RequestSession,
+    *,
+    route: str,
+    method: str,
+    elapsed_ms: float,
+    runtime_session_id: str = "",
+) -> None:
+    with suppress(Exception):
+        append_platform_log(
+            log_plane="runtime",
+            message="Runtime API timing",
+            payload={
+                "component": "runtime_api",
+                "route": route,
+                "method": method,
+                "elapsed_ms": round(elapsed_ms, 3),
+            },
+            workspace_id=context.workspace_id,
+            runtime_session_id=runtime_session_id or None,
+            start_path=state.repository_root,
+        )
+
+
+def _timed_runtime_api_response(
+    state: PlatformState,
+    context: RequestSession,
+    *,
+    route: str,
+    method: str,
+    runtime_session_id: str = "",
+    handler,
+) -> list[bytes]:
+    started_at = time.perf_counter()
+    try:
+        return handler()
+    finally:
+        _log_runtime_api_timing(
+            state,
+            context,
+            route=route,
+            method=method,
+            elapsed_ms=(time.perf_counter() - started_at) * 1000,
+            runtime_session_id=runtime_session_id,
+        )
 
 
 def _create_session(state: PlatformState, context: RequestSession, body: dict, *, agent_id: str, start_path) -> RuntimeSessionRecord:
@@ -654,31 +704,8 @@ def _submit_runtime_turn_response(
         start_path=start_path,
     )
     async_requested = bool(body.get("async"))
-    title_generation_input_hash = thread_title_input_hash(
-        input_text,
-        attachments=attachment_items,
-        app_references=app_reference_items,
-    )
 
     def notify_source_app_queued(queued_turn: RuntimeTurnRecord, _events: list[RuntimeEventRecord]) -> None:
-        thread = mark_thread_user_message_queued(
-            state,
-            workspace_id=session.workspace_id,
-            runtime_session_id=session.session_id,
-            input_text=input_text,
-            attachments=attachment_items,
-            app_references=app_reference_items,
-            title_generation_input_hash=title_generation_input_hash,
-            now=queued_turn.created_at,
-        )
-        if thread is not None:
-            schedule_runtime_thread_title_generation(
-                state,
-                thread=thread,
-                input_text=input_text,
-                attachments=attachment_items,
-                app_references=app_reference_items,
-            )
         dispatch_source_app_runtime_event(
             state,
             session=session,
@@ -931,7 +958,13 @@ def handle_runtime_api(state: PlatformState, environ: dict, start_response: Star
     if path == "/api/runtime/threads/clear":
         return _handle_thread_clear(state, context, method, body, start_response, start_path=start_path)
     if path == "/api/runtime/sessions":
-        return _handle_session_collection(state, context, method, body, start_response, start_path=start_path)
+        return _timed_runtime_api_response(
+            state,
+            context,
+            route="/api/runtime/sessions",
+            method=method,
+            handler=lambda: _handle_session_collection(state, context, method, body, start_response, start_path=start_path),
+        )
 
     parts = [part for part in path.removeprefix("/api/runtime/").split("/") if part]
     if len(parts) == 3 and parts[0] == "threads" and parts[2] == "read":
@@ -943,7 +976,14 @@ def handle_runtime_api(state: PlatformState, environ: dict, start_response: Star
     if len(parts) == 3 and parts[0] == "sessions" and parts[2] == "events" and method == "GET":
         return _handle_session_events(state, context, parts[1], start_response, start_path=start_path, query_string=query_string)
     if len(parts) == 3 and parts[0] == "sessions" and parts[2] == "turns":
-        return _handle_session_turns(state, context, parts[1], method, body, start_response, start_path=start_path)
+        return _timed_runtime_api_response(
+            state,
+            context,
+            route="/api/runtime/sessions/:id/turns",
+            method=method,
+            runtime_session_id=parts[1],
+            handler=lambda: _handle_session_turns(state, context, parts[1], method, body, start_response, start_path=start_path),
+        )
     if len(parts) == 3 and parts[0] == "sessions" and parts[2] == "cleanup":
         return _handle_session_cleanup(state, context, parts[1], method, body, start_response, start_path=start_path)
     if len(parts) == 2 and parts[0] == "turns" and method == "GET":

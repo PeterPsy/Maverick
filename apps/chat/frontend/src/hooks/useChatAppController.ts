@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   getInterAgentRun,
   listInterAgentRunApprovals,
@@ -25,7 +25,7 @@ import { useChatNavigation } from "./useChatNavigation";
 import { useChatReadReceipts } from "./useChatReadReceipts";
 import { useChatRuntimeControls } from "./useChatRuntimeControls";
 import { useComposerAttachments } from "./useComposerAttachments";
-import { DraftChat, useMessageSubmission } from "./useMessageSubmission";
+import { DraftChat, conversationKeyFor, useMessageSubmission } from "./useMessageSubmission";
 import { useQueuedMessagePersistence } from "./useQueuedMessagePersistence";
 
 type UseChatAppControllerParams = {
@@ -119,9 +119,13 @@ export function useChatAppController({
   const [interAgentEventsByRunId, setInterAgentEventsByRunId] = useState<Record<string, InterAgentEventRecord[]>>({});
   const [interAgentApprovalsByRunId, setInterAgentApprovalsByRunId] = useState<Record<string, InterAgentApprovalRecord[]>>({});
   const [activeInterAgentGraphRunId, setActiveInterAgentGraphRunId] = useState<string | null>(null);
+  const interAgentRefreshScopeRef = useRef("");
   const hasExternalRuntimeThreads = Array.isArray(runtimeThreads);
-  const canStopTurn = isActiveRuntimeTurnBusyForThread(activeTurn, activeThread);
-  const isRuntimeBusy = canStopTurn;
+  const activeConversationKey = conversationKeyFor(activeThread, draftChat);
+  const interAgentRefreshScope = `${activeThread?.runtime_session_id || ""}:${activeInterAgentGraphRunId || ""}`;
+  interAgentRefreshScopeRef.current = interAgentRefreshScope;
+  const runtimeCanStopTurn = isActiveRuntimeTurnBusyForThread(activeTurn, activeThread);
+  const isRuntimeBusy = runtimeCanStopTurn;
 
   const { handleChatRootPointerDown } = useChatReadReceipts({
     activeThread,
@@ -147,11 +151,11 @@ export function useChatAppController({
     setComposerError,
     workspaceId,
   });
-  const { handleSelectAgent, handleSelectProvider, handleStopTurn, selectedAgentRuntimeConfig } = useChatRuntimeControls({
+  const runtimeControls = useChatRuntimeControls({
     activeThread,
     activeTurn,
     agentCatalogAppId,
-    canStopTurn,
+    canStopTurn: runtimeCanStopTurn,
     selectedAgentTypeId,
     workspaceId,
     setActiveProviderId,
@@ -170,10 +174,14 @@ export function useChatAppController({
   const refreshInterAgentRuns = useCallback(async () => {
     const runtimeSessionId = activeThread?.runtime_session_id || "";
     const graphRunId = activeInterAgentGraphRunId || "";
+    const refreshScope = `${runtimeSessionId}:${graphRunId}`;
+    const isCurrentRefreshScope = () => interAgentRefreshScopeRef.current === refreshScope;
     if (!runtimeSessionId && !graphRunId) {
-      setInterAgentRuns([]);
-      setInterAgentEventsByRunId({});
-      setInterAgentApprovalsByRunId({});
+      if (isCurrentRefreshScope()) {
+        setInterAgentRuns([]);
+        setInterAgentEventsByRunId({});
+        setInterAgentApprovalsByRunId({});
+      }
       return;
     }
     try {
@@ -193,6 +201,9 @@ export function useChatAppController({
         runDetails = [await getInterAgentRun(graphRunId)];
       }
       runDetails.sort((left, right) => left.run.created_at.localeCompare(right.run.created_at));
+      if (!isCurrentRefreshScope()) {
+        return;
+      }
       setInterAgentRuns(runDetails);
       const [eventEntries, approvalEntries] = await Promise.all([
         Promise.all(
@@ -216,12 +227,17 @@ export function useChatAppController({
           }),
         ),
       ]);
+      if (!isCurrentRefreshScope()) {
+        return;
+      }
       setInterAgentEventsByRunId(Object.fromEntries(eventEntries));
       setInterAgentApprovalsByRunId(Object.fromEntries(approvalEntries));
     } catch {
-      setInterAgentRuns([]);
-      setInterAgentEventsByRunId({});
-      setInterAgentApprovalsByRunId({});
+      if (isCurrentRefreshScope()) {
+        setInterAgentRuns([]);
+        setInterAgentEventsByRunId({});
+        setInterAgentApprovalsByRunId({});
+      }
     }
   }, [activeInterAgentGraphRunId, activeThread?.runtime_session_id]);
   const handleResolveInterAgentApproval = useCallback(
@@ -260,14 +276,19 @@ export function useChatAppController({
     [activeThread?.thread_id, navigationScope],
   );
   const {
+    activeSubmissionTurnId,
     failedUserMessages,
     handleSend,
     isSending,
     pendingUserMessages,
     queuedMessages,
     setFailedUserMessages,
+    setFailedUserMessagesForConversation,
     setPendingUserMessages,
+    setPendingUserMessagesForConversation,
     setQueuedMessages,
+    setQueuedMessagesForConversation,
+    stopActiveSubmission,
   } = useMessageSubmission({
     activeAppContext,
     activeThread,
@@ -283,7 +304,7 @@ export function useChatAppController({
     navigationScope,
     notifyActiveThreadChanged,
     onInterAgentRunChanged: upsertInterAgentRunDetail,
-    selectedAgentRuntimeConfig,
+    selectedAgentRuntimeConfig: runtimeControls.selectedAgentRuntimeConfig,
     setActiveSession,
     setActiveThread,
     setActiveTurn,
@@ -296,6 +317,13 @@ export function useChatAppController({
     setThreads,
     threads,
   });
+  const canStopTurn = runtimeCanStopTurn || isSending || Boolean(activeSubmissionTurnId);
+  const handleStopTurn = useCallback(async () => {
+    if (await stopActiveSubmission()) {
+      return;
+    }
+    await runtimeControls.handleStopTurn();
+  }, [runtimeControls, stopActiveSubmission]);
   const { handleNavigationParams, handleUnavailableRuntimeSession } = useChatNavigation({
     activeAppContext,
     activeSession,
@@ -323,20 +351,22 @@ export function useChatAppController({
     setError,
     setEvents,
     setFailedUserMessages,
+    setFailedUserMessagesForConversation,
     setHasLoadedHistory,
     setHasMoreHistory,
     setIsBootstrapping,
     setIsHistoryLoading,
     setIsOlderHistoryLoading,
     setPendingUserMessages,
+    setPendingUserMessagesForConversation,
     setQueuedMessages,
+    setQueuedMessagesForConversation,
     setSelectedReferences,
     setThreads,
     threadId,
     threads,
   });
   const executionMode = activeSession?.effective_mode === "sandbox" || activeSession?.effective_mode === "full-access" ? activeSession.effective_mode : null;
-  const activeConversationKey = activeThread?.thread_id || (draftChat ? "draft" : "");
 
   useEffect(() => {
     setVisibleMessageLimit(50);
@@ -393,6 +423,7 @@ export function useChatAppController({
 
   const presentation = useChatControllerPresentation({
     activeProviderId,
+    activeConversationKey,
     activeInterAgentGraphRunId,
     activeThread,
     activeTurn,
@@ -416,8 +447,8 @@ export function useChatAppController({
     handleSearchReferences,
     handleOpenInterAgentGraph,
     handleResolveInterAgentApproval,
-    handleSelectAgent,
-    handleSelectProvider,
+    handleSelectAgent: runtimeControls.handleSelectAgent,
+    handleSelectProvider: runtimeControls.handleSelectProvider,
     handleSend,
     handleStopTurn,
     hasLoadedHistory,

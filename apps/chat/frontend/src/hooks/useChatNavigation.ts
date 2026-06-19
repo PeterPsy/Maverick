@@ -22,11 +22,18 @@ import {
   scalarString,
 } from "../lib/shellNavigation";
 import { debugThreadSync, findThreadByRuntimeSession } from "../lib/threadNavigation";
-import type { DraftChat } from "./useMessageSubmission";
+import { conversationKeyFor, type DraftChat } from "./useMessageSubmission";
 import { useRuntimeThreadCatalog } from "./useRuntimeThreadCatalog";
 import { useRuntimeTranscriptCache } from "./useRuntimeTranscriptCache";
 
 const THREAD_NOT_FOUND_MESSAGE = "This chat is no longer available.";
+
+function createDraftId(): string {
+  if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
+    return crypto.randomUUID();
+  }
+  return `draft-${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
+}
 
 type CreateChatOptions = {
   activeAppContext?: ActiveAppContext | null;
@@ -61,13 +68,16 @@ type UseChatNavigationParams = {
   setError: Dispatch<SetStateAction<string | null>>;
   setEvents: Dispatch<SetStateAction<RuntimeEvent[]>>;
   setFailedUserMessages: Dispatch<SetStateAction<PendingMessage[]>>;
+  setFailedUserMessagesForConversation: (conversationKey: string, action: SetStateAction<PendingMessage[]>) => void;
   setHasLoadedHistory: Dispatch<SetStateAction<boolean>>;
   setHasMoreHistory: Dispatch<SetStateAction<boolean>>;
   setIsOlderHistoryLoading: Dispatch<SetStateAction<boolean>>;
   setIsBootstrapping: Dispatch<SetStateAction<boolean>>;
   setIsHistoryLoading: Dispatch<SetStateAction<boolean>>;
   setPendingUserMessages: Dispatch<SetStateAction<PendingMessage[]>>;
+  setPendingUserMessagesForConversation: (conversationKey: string, action: SetStateAction<PendingMessage[]>) => void;
   setQueuedMessages: Dispatch<SetStateAction<QueuedMessage[]>>;
+  setQueuedMessagesForConversation: (conversationKey: string, action: SetStateAction<QueuedMessage[]>) => void;
   setSelectedReferences: Dispatch<SetStateAction<AppReference[]>>;
   setThreads: Dispatch<SetStateAction<ChatThread[]>>;
   threadId: string | null;
@@ -101,13 +111,16 @@ export function useChatNavigation({
   setError,
   setEvents,
   setFailedUserMessages,
+  setFailedUserMessagesForConversation,
   setHasLoadedHistory,
   setHasMoreHistory,
   setIsBootstrapping,
   setIsHistoryLoading,
   setIsOlderHistoryLoading,
   setPendingUserMessages,
+  setPendingUserMessagesForConversation,
   setQueuedMessages,
+  setQueuedMessagesForConversation,
   setSelectedReferences,
   setThreads,
   threadId,
@@ -199,14 +212,12 @@ export function useChatNavigation({
         handledNewChatPropRequestRef.current = newChatRequestId;
         suppressedExternalThreadIdRef.current = threadId || null;
         createDraftChat({ activeAppContext, projectId: newChatProjectId });
-        setQueuedMessages(readPersistedQueuedMessages(queueStorageKey(navigationScope, null)));
         setError(null);
         return;
       }
       if (query.get("new_chat") === "1") {
         suppressedExternalThreadIdRef.current = threadId || null;
         createDraftChat({ activeAppContext, projectId: query.get("project_id") });
-        setQueuedMessages(readPersistedQueuedMessages(queueStorageKey(navigationScope, null)));
         setError(null);
         return;
       }
@@ -225,13 +236,11 @@ export function useChatNavigation({
           suppressedExternalThreadIdRef.current = requestedThreadId;
         }
         createDraftChat({ activeAppContext, resetView: false });
-        setQueuedMessages(readPersistedQueuedMessages(queueStorageKey(navigationScope, null)));
         setError(requestedThreadId ? THREAD_NOT_FOUND_MESSAGE : null);
         return;
       }
       await selectThreadWithoutHttp(firstThread);
       setActiveInterAgentGraphRunId(requestedGraphRunId || null);
-      setQueuedMessages(readPersistedQueuedMessages(queueStorageKey(navigationScope, firstThread?.thread_id || null)));
       setError(null);
     } catch (selectionError) {
       setError(selectionError instanceof Error ? selectionError.message : "Unable to load chat.");
@@ -249,9 +258,6 @@ export function useChatNavigation({
     setHasMoreHistory(false);
     setIsHistoryLoading(false);
     setIsOlderHistoryLoading(false);
-    setPendingUserMessages([]);
-    setFailedUserMessages([]);
-    setQueuedMessages([]);
     setActiveTurn(null);
     setActiveInterAgentGraphRunId(null);
     setComposer("");
@@ -272,7 +278,9 @@ export function useChatNavigation({
       resetActiveConversation();
     }
     setActiveThread(null);
-    setDraftChat({ projectId, systemPrompt: "" });
+    const draft = { draftId: createDraftId(), projectId, systemPrompt: "" };
+    setDraftChat(draft);
+    setQueuedMessagesForConversation(conversationKeyFor(null, draft), readPersistedQueuedMessages(queueStorageKey(navigationScope, null)));
     setActiveInterAgentGraphRunId(null);
     setActiveSession(null);
     setEvents([]);
@@ -282,9 +290,6 @@ export function useChatNavigation({
     setIsOlderHistoryLoading(false);
     setActiveTurn(null);
     if (resetView) {
-      setPendingUserMessages([]);
-      setFailedUserMessages([]);
-      setQueuedMessages([]);
     }
     void loadDefaultSystemPrompt(activeAppContextOverride ?? activeAppContext).then((systemPrompt) => {
       setDraftChat((current) => (current ? { ...current, systemPrompt } : current));
@@ -304,9 +309,10 @@ export function useChatNavigation({
     setHasLoadedHistory(cachedHistoryLoaded);
     setHasMoreHistory(cachedTranscript?.hasMoreHistory === true);
     setIsOlderHistoryLoading(false);
-    setPendingUserMessages([]);
-    setFailedUserMessages([]);
-    setQueuedMessages([]);
+    if (thread) {
+      const conversationKey = conversationKeyFor(thread, null);
+      setQueuedMessagesForConversation(conversationKey, readPersistedQueuedMessages(queueStorageKey(navigationScope, thread.thread_id)));
+    }
     setActiveTurn(cachedActiveTurnForThread(thread, cachedTranscript));
     if (!thread?.runtime_session_id) {
       setIsHistoryLoading(false);
@@ -421,9 +427,9 @@ export function useChatNavigation({
       setHasLoadedHistory(false);
       setHasMoreHistory(false);
       setIsOlderHistoryLoading(false);
-      setPendingUserMessages([]);
-      setFailedUserMessages([]);
-      setQueuedMessages([]);
+      setPendingUserMessagesForConversation(conversationKeyFor(payload.thread, null), []);
+      setFailedUserMessagesForConversation(conversationKeyFor(payload.thread, null), []);
+      setQueuedMessagesForConversation(conversationKeyFor(payload.thread, null), []);
       setActiveTurn(null);
       notifyActiveThreadChanged(payload.thread.thread_id);
     } catch (runtimeSessionError) {
@@ -448,7 +454,6 @@ export function useChatNavigation({
     }
     suppressedExternalThreadIdRef.current = threadId;
     createDraftChat({ resetView: false });
-    setQueuedMessages(readPersistedQueuedMessages(queueStorageKey(navigationScope, null)));
     setError(THREAD_NOT_FOUND_MESSAGE);
     return false;
   }

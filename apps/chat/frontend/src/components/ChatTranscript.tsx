@@ -10,6 +10,7 @@ import { MorphingSpinner } from "./ui/morphing-spinner";
 
 export type ChatTranscriptProps = {
   activeInterAgentGraphRunId?: string | null;
+  conversationKey?: string;
   error: string | null;
   isLoading: boolean;
   isLoadingOlderHistory?: boolean;
@@ -32,6 +33,7 @@ export type ChatTranscriptProps = {
 
 export function ChatTranscript({
   activeInterAgentGraphRunId = null,
+  conversationKey = "",
   error,
   isLoading,
   isLoadingOlderHistory = false,
@@ -117,6 +119,19 @@ export function ChatTranscript({
       setShowScrollJump(true);
     }
   }, [messages.length, isLoading, error]);
+
+  useLayoutEffect(() => {
+    const viewport = viewportRef.current;
+    scrollAnchorRef.current = null;
+    loadOlderPendingRef.current = false;
+    setIsNearBottom(true);
+    setShowScrollJump(false);
+    setExpandedMessages(new Set());
+    setSpeakingMessageId(null);
+    if (viewport) {
+      viewport.scrollTop = viewport.scrollHeight;
+    }
+  }, [conversationKey]);
 
   useLayoutEffect(() => {
     const viewport = viewportRef.current;

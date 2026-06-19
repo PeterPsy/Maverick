@@ -7,10 +7,12 @@ import type { Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { App } from "./App";
 import {
+  createRuntimeSessionWithTurn,
   createThread,
   getAgentDefinition,
   getAppDependencies,
   getSpeechCapabilities,
+  interruptRuntimeTurn,
   listAgentCatalog,
   listApps,
   listInterAgentRunApprovals,
@@ -22,7 +24,7 @@ import {
   prewarmSpeechWorker,
   previewAgentPrompt,
 } from "./api/client";
-import type { AgentTypeSummary, AppDependenciesPayload, ChatThread } from "./api/client";
+import type { AgentTypeSummary, AppDependenciesPayload, ChatThread, RuntimeSession, RuntimeTurn } from "./api/client";
 import { clearAgentRuntimeConfigCache } from "./hooks/useChatRuntimeControls";
 
 vi.mock("./hooks/useRuntimeEvents", () => ({
@@ -176,6 +178,29 @@ function thread(threadId: string, runtimeSessionId: string, overrides: Partial<C
   };
 }
 
+function runtimeSession(sessionId: string): RuntimeSession {
+  return {
+    session_id: sessionId,
+    workspace_id: "default",
+    agent_id: "chat",
+    status: "running",
+    effective_mode: "sandbox",
+  };
+}
+
+function runtimeTurn(turnId: string, sessionId: string, status = "queued"): RuntimeTurn {
+  return {
+    turn_id: turnId,
+    session_id: sessionId,
+    workspace_id: "default",
+    status,
+    input_text: "hello",
+    failure_reason: null,
+    created_at: "2026-05-21T00:00:01Z",
+    updated_at: "2026-05-21T00:00:01Z",
+  };
+}
+
 beforeEach(() => {
   window.localStorage.clear();
   clearAgentRuntimeConfigCache();
@@ -223,6 +248,10 @@ beforeEach(() => {
   vi.mocked(getAgentDefinition).mockResolvedValue({ exists: true, agent_definition: socialVideoAgent });
   vi.mocked(previewAgentPrompt).mockResolvedValue({ rendered: "Agent prompt" });
   vi.mocked(prewarmSpeechWorker).mockResolvedValue({});
+  vi.mocked(interruptRuntimeTurn).mockResolvedValue({
+    turn: runtimeTurn("turn-stopped", "session-created", "cancelled"),
+    interrupted: true,
+  });
 });
 
 afterEach(() => {
@@ -259,6 +288,27 @@ async function waitForAssertion(assertion: () => void) {
     }
   }
   throw lastError;
+}
+
+async function typeComposerMessage(element: HTMLElement, message: string) {
+  const editor = element.querySelector('[role="textbox"]') as HTMLElement | null;
+  if (!editor) {
+    throw new Error("Composer textbox was not rendered.");
+  }
+  await act(async () => {
+    editor.textContent = message;
+    editor.dispatchEvent(new Event("input", { bubbles: true }));
+  });
+}
+
+async function clickSend(element: HTMLElement) {
+  const sendButton = element.querySelector('[aria-label="Send message"]') as HTMLButtonElement | null;
+  if (!sendButton) {
+    throw new Error("Send button was not rendered.");
+  }
+  await act(async () => {
+    sendButton.click();
+  });
 }
 
 function deferred<T>() {
@@ -492,6 +542,146 @@ describe("App thread navigation", () => {
         }),
         window.location.origin,
       );
+    });
+  });
+
+  it("does not let a slow draft submit steal the active thread after navigation", async () => {
+    const existingThread = thread("thread-existing", "session-existing", { title: "Existing thread" });
+    const createdThread = thread("thread-created", "session-created", { title: "Created thread" });
+    const createTurn = deferred<Awaited<ReturnType<typeof createRuntimeSessionWithTurn>>>();
+    vi.mocked(createRuntimeSessionWithTurn).mockReturnValue(createTurn.promise);
+    const postMessageSpy = vi.spyOn(window.parent, "postMessage");
+    const element = await renderApp({
+      navigationScope: "floating-window",
+      newChatRequestId: "request-slow",
+      runtimeThreads: [existingThread],
+      runtimeThreadsLoaded: true,
+    });
+
+    await waitForAssertion(() => {
+      expect(element.textContent).toContain("How can I help today?");
+    });
+    await typeComposerMessage(element, "hello");
+    await clickSend(element);
+
+    await waitForAssertion(() => {
+      expect(createRuntimeSessionWithTurn).toHaveBeenCalled();
+      expect(element.textContent).toContain("hello");
+      expect(element.textContent).toContain("Starting");
+    });
+
+    await act(async () => {
+      root?.render(
+        <App
+          navigationScope="floating-window"
+          runtimeThreads={[existingThread]}
+          runtimeThreadsLoaded
+          threadId={existingThread.thread_id}
+        />,
+      );
+    });
+    await waitForAssertion(() => {
+      expect(postMessageSpy).toHaveBeenCalledWith(
+        expect.objectContaining({
+          active_thread_id: existingThread.thread_id,
+          navigation_scope: "floating-window",
+          owner_app_id: "chat",
+          type: "maverick.chat.active-thread-changed",
+        }),
+        window.location.origin,
+      );
+    });
+
+    await act(async () => {
+      createTurn.resolve({
+        session: runtimeSession("session-created"),
+        thread: createdThread,
+        turn: runtimeTurn("turn-created", "session-created"),
+        events: [],
+      });
+      await createTurn.promise;
+    });
+
+    expect(postMessageSpy).not.toHaveBeenCalledWith(
+      expect.objectContaining({
+        active_thread_id: createdThread.thread_id,
+        navigation_scope: "floating-window",
+        owner_app_id: "chat",
+        type: "maverick.chat.active-thread-changed",
+      }),
+      window.location.origin,
+    );
+  });
+
+  it("aborts a draft submit before the runtime ack arrives", async () => {
+    let submitSignal: AbortSignal | undefined;
+    vi.mocked(createRuntimeSessionWithTurn).mockImplementation(
+      (payload) =>
+        new Promise((resolve, reject) => {
+          submitSignal = payload.signal;
+          payload.signal?.addEventListener("abort", () => {
+            reject(new DOMException("Stopped", "AbortError"));
+          });
+          void resolve;
+        }),
+    );
+    const element = await renderApp({
+      navigationScope: "floating-window",
+      newChatRequestId: "request-abort",
+      runtimeThreads: [],
+      runtimeThreadsLoaded: true,
+    });
+
+    await waitForAssertion(() => {
+      expect(element.textContent).toContain("How can I help today?");
+    });
+    await typeComposerMessage(element, "stop before ack");
+    await clickSend(element);
+    await waitForAssertion(() => {
+      expect(element.textContent).toContain("Starting");
+      expect(element.querySelector('[aria-label="Stop chat"]')).not.toBeNull();
+    });
+
+    await act(async () => {
+      (element.querySelector('[aria-label="Stop chat"]') as HTMLButtonElement | null)?.click();
+    });
+
+    await waitForAssertion(() => {
+      expect(submitSignal?.aborted).toBe(true);
+      expect(element.textContent).not.toContain("Starting");
+    });
+  });
+
+  it("interrupts the submitted turn id after the runtime ack arrives", async () => {
+    const createdThread = thread("thread-created", "session-created", { title: "Created thread" });
+    vi.mocked(createRuntimeSessionWithTurn).mockResolvedValue({
+      session: runtimeSession("session-created"),
+      thread: createdThread,
+      turn: runtimeTurn("turn-created", "session-created"),
+      events: [],
+    });
+    const element = await renderApp({
+      navigationScope: "floating-window",
+      newChatRequestId: "request-stop-turn",
+      runtimeThreads: [],
+      runtimeThreadsLoaded: true,
+    });
+
+    await waitForAssertion(() => {
+      expect(element.textContent).toContain("How can I help today?");
+    });
+    await typeComposerMessage(element, "stop after ack");
+    await clickSend(element);
+    await waitForAssertion(() => {
+      expect(element.querySelector('[aria-label="Stop chat"]')).not.toBeNull();
+    });
+
+    await act(async () => {
+      (element.querySelector('[aria-label="Stop chat"]') as HTMLButtonElement | null)?.click();
+    });
+
+    await waitForAssertion(() => {
+      expect(interruptRuntimeTurn).toHaveBeenCalledWith("turn-created");
     });
   });
 

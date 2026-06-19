@@ -28,6 +28,7 @@ const EVENT_PROJECTION_EVENTS_PER_VISIBLE_MESSAGE = 80;
 
 type UseChatControllerPresentationParams = {
   activeProviderId: string;
+  activeConversationKey: string;
   activeInterAgentGraphRunId: string | null;
   activeThread: ChatThread | null;
   activeTurn: RuntimeTurn | null;
@@ -92,6 +93,7 @@ type UseChatControllerPresentationParams = {
 
 export function useChatControllerPresentation({
   activeProviderId,
+  activeConversationKey,
   activeInterAgentGraphRunId,
   activeThread,
   activeTurn,
@@ -161,7 +163,14 @@ export function useChatControllerPresentation({
     : selectedAgentTypeId;
   const isTranscriptHistoryPending = Boolean(activeThread?.runtime_session_id && !hasLoadedHistory && messages.length === 0);
   const isEmptyChatView =
-    Boolean(draftChat) && messages.length === 0 && !isRuntimeBusy && !isBootstrapping && !isHistoryLoading && !isTranscriptHistoryPending && !error;
+    Boolean(draftChat) &&
+    messages.length === 0 &&
+    !isRuntimeBusy &&
+    !isSending &&
+    !isBootstrapping &&
+    !isHistoryLoading &&
+    !isTranscriptHistoryPending &&
+    !error;
   const isThreadLoading = isBootstrapping || isHistoryLoading || isTranscriptHistoryPending;
   const { chatMainStyle, dockedComposerRef } = useDockedComposerHeight({
     attachmentCount: attachments.length,
@@ -176,11 +185,14 @@ export function useChatControllerPresentation({
     if (isBootstrapping) {
       return "Loading chat";
     }
+    if (!isRuntimeBusy && isSending) {
+      return "Starting";
+    }
     if (!isRuntimeBusy) {
       return "";
     }
     return latestRuntimeStepLabel(events, activeTurn?.turn_id) || "Thinking";
-  }, [activeTurn?.turn_id, events, isBootstrapping, isHistoryLoading, isRuntimeBusy]);
+  }, [activeTurn?.turn_id, events, isBootstrapping, isHistoryLoading, isRuntimeBusy, isSending]);
   const multiAgentBudgetLabel = useMemo(() => {
     if (multiAgentMode === "multi") {
       return "2 participants · 4 turns · 4 tool calls";
@@ -243,6 +255,7 @@ export function useChatControllerPresentation({
       error,
       hasMoreOlderMessages: hasHiddenMessages || hasMoreHistory,
       activeInterAgentGraphRunId,
+      conversationKey: activeConversationKey,
       isLoading: canStopTurn || isThreadLoading,
       isLoadingOlderHistory: isOlderHistoryLoading,
       interAgentApprovalsByRunId,

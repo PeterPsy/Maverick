@@ -24,10 +24,11 @@ export function isRuntimeSessionUnavailableError(error: unknown, sessionId?: str
   return error.path.startsWith(runtimePathPrefix);
 }
 
-export function createRuntimeSession(options: RuntimeSessionOptions = {}): Promise<RuntimeSession> {
+export function createRuntimeSession(options: RuntimeSessionOptions = {}, requestOptions: { signal?: AbortSignal } = {}): Promise<RuntimeSession> {
   return requestJson<RuntimeSession>("/api/runtime/sessions", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
+    signal: requestOptions.signal,
     body: JSON.stringify({
       agent_id: options.agent_id || "chat",
       agent_role_id: options.agent_role_id || "",
@@ -52,12 +53,14 @@ export function createRuntimeSessionWithTurn({
   clientMessageId,
   inputText,
   options = {},
+  signal,
 }: {
   appReferences?: AppReference[];
   attachments?: ChatMessageAttachment[];
   clientMessageId?: string;
   inputText: string;
   options?: RuntimeSessionOptions;
+  signal?: AbortSignal;
 }): Promise<{
   session: RuntimeSession;
   thread?: ChatThread;
@@ -85,6 +88,7 @@ export function createRuntimeSessionWithTurn({
   return requestJson("/api/runtime/sessions", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
+    signal,
     body: JSON.stringify(body),
   });
 }
@@ -128,6 +132,7 @@ export function sendRuntimeTurn(
   clientMessageId?: string,
   attachments: ChatMessageAttachment[] = [],
   appReferences: AppReference[] = [],
+  requestOptions: { signal?: AbortSignal } = {},
 ): Promise<{
   session: RuntimeSession;
   thread?: ChatThread;
@@ -146,6 +151,7 @@ export function sendRuntimeTurn(
   return requestJson(`/api/runtime/sessions/${encodeURIComponent(sessionId)}/turns`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
+    signal: requestOptions.signal,
     body: JSON.stringify(body),
   });
 }

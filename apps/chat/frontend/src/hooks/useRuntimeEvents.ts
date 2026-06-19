@@ -140,17 +140,26 @@ export function useRuntimeEvents({
       oldestEventIdRef.current = oldestEventId || firstPersistedRuntimeEventId(events) || firstRuntimeEventId(events);
     }
 
+    function socketIsCurrent(candidate: WebSocket | null): candidate is WebSocket {
+      return Boolean(candidate && !cancelled && socketRef.current === candidate);
+    }
+
+    function eventsForCurrentSession(incoming: RuntimeEvent[]): RuntimeEvent[] {
+      return incoming.filter((event) => event.session_id === currentSessionId);
+    }
+
     function applyIncomingEvents(incoming: RuntimeEvent[], oldestEventId?: string | null) {
-      if (!incoming.length) {
+      const scopedIncoming = eventsForCurrentSession(incoming);
+      if (!scopedIncoming.length) {
         return;
       }
-      const persistedIncoming = incoming.filter((event) => !isSyntheticRuntimeEvent(event));
-      lastEventId = (persistedIncoming.at(-1) || incoming[incoming.length - 1]).event_id;
+      const persistedIncoming = scopedIncoming.filter((event) => !isSyntheticRuntimeEvent(event));
+      lastEventId = (persistedIncoming.at(-1) || scopedIncoming[scopedIncoming.length - 1]).event_id;
       setEvents((current) => {
-        const merged = mergeRuntimeEvents(current, incoming);
+        const merged = mergeRuntimeEvents(eventsForCurrentSession(current), scopedIncoming);
         setOldestEventCursor(merged, oldestEventId);
         const currentTurn = activeTurnRef.current;
-        if (currentTurn) {
+        if (currentTurn?.session_id === currentSessionId) {
           applyRuntimeEventEffects(merged, currentTurn, setActiveTurn, setPendingUserMessages);
         }
         setActiveTurn(inferActiveRuntimeTurn(merged, currentSessionId));
@@ -159,8 +168,9 @@ export function useRuntimeEvents({
     }
 
     function applyHistoryPage(incoming: RuntimeEvent[], oldestEventId?: string | null) {
+      const scopedIncoming = eventsForCurrentSession(incoming);
       setEvents((current) => {
-        const merged = mergeRuntimeEvents(current, incoming);
+        const merged = mergeRuntimeEvents(eventsForCurrentSession(current), scopedIncoming);
         setOldestEventCursor(merged, oldestEventId);
         setActiveTurn(inferActiveRuntimeTurn(merged, currentSessionId));
         return merged;
@@ -173,10 +183,11 @@ export function useRuntimeEvents({
     }
 
     setEvents((current) => {
-      lastEventId = lastRuntimeEventId(current);
-      setOldestEventCursor(current);
-      setActiveTurn(inferActiveRuntimeTurn(current, currentSessionId));
-      return current;
+      const scopedCurrent = eventsForCurrentSession(current);
+      lastEventId = lastRuntimeEventId(scopedCurrent);
+      setOldestEventCursor(scopedCurrent);
+      setActiveTurn(inferActiveRuntimeTurn(scopedCurrent, currentSessionId));
+      return scopedCurrent;
     });
 
     function connectWebSocket() {
@@ -185,16 +196,28 @@ export function useRuntimeEvents({
       socket = new WebSocket(runtimeWebSocketUrl(currentSessionId, replayCursor));
       socketRef.current = socket;
       socket.onopen = () => {
+        if (!socketIsCurrent(socket)) {
+          return;
+        }
         socketOpened = true;
         lastFrameAt = Date.now();
         startHeartbeatWatchdog();
         setError(null);
       };
       socket.onmessage = (event) => {
-        lastFrameAt = Date.now();
+        if (!socketIsCurrent(socket)) {
+          return;
+        }
         try {
           const frame = JSON.parse(event.data) as RuntimeWebSocketFrame;
+          if ("session_id" in frame && frame.session_id !== currentSessionId) {
+            return;
+          }
+          lastFrameAt = Date.now();
           if (frame.type === "runtime.snapshot") {
+            if (frame.session.session_id !== currentSessionId) {
+              return;
+            }
             receivedInitialSnapshot = true;
             setActiveSession(frame.session);
             lastEventId = frame.last_event_id || lastEventId;
@@ -219,15 +242,24 @@ export function useRuntimeEvents({
             applyIncomingEvents([runtimeEvent]);
           }
         } catch (parseError) {
+          if (!socketIsCurrent(socket)) {
+            return;
+          }
           setError(parseError instanceof Error ? parseError.message : "Unable to parse runtime WebSocket frame.");
         }
       };
       socket.onerror = () => {
+        if (!socketIsCurrent(socket)) {
+          return;
+        }
         if (!socketOpened) {
           setError("Runtime WebSocket is unavailable.");
         }
       };
       socket.onclose = (event) => {
+        if (!socketIsCurrent(socket)) {
+          return;
+        }
         stopHeartbeatWatchdog();
         if (socketRef.current === socket) {
           socketRef.current = null;

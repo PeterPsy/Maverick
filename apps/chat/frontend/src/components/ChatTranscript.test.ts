@@ -1,6 +1,43 @@
-import { describe, expect, it } from "vitest";
+/**
+ * @vitest-environment happy-dom
+ */
+import { act, createElement } from "react";
+import { createRoot } from "react-dom/client";
+import type { Root } from "react-dom/client";
+import { afterEach, describe, expect, it } from "vitest";
 import { fallbackMatchesForAppReference } from "../lib/messageReferenceMatches";
-import type { AppReference } from "../api/client";
+import type { AppReference, ChatMessage } from "../api/client";
+import { ChatTranscript } from "./ChatTranscript";
+
+let root: Root | null = null;
+let container: HTMLDivElement | null = null;
+
+afterEach(() => {
+  root?.unmount();
+  root = null;
+  container?.remove();
+  container = null;
+});
+
+function transcriptProps(conversationKey: string, messages: ChatMessage[]) {
+  return {
+    conversationKey,
+    error: null,
+    isLoading: false,
+    loadingLabel: "",
+    mentionItems: [],
+    messages,
+  };
+}
+
+function message(id: string, content: string): ChatMessage {
+  return {
+    id,
+    role: "agent",
+    content,
+    createdAt: "2026-06-19T00:00:00Z",
+  };
+}
 
 describe("chat transcript reference fallback matches", () => {
   it("matches entity references by stable ref marker when the label changed", () => {
@@ -90,5 +127,45 @@ describe("chat transcript reference fallback matches", () => {
         end: 60,
       },
     ]);
+  });
+});
+
+describe("chat transcript scroll state", () => {
+  it("resets to the bottom when the conversation key changes", async () => {
+    const originalScrollHeight = Object.getOwnPropertyDescriptor(HTMLElement.prototype, "scrollHeight");
+    Object.defineProperty(HTMLElement.prototype, "scrollHeight", {
+      configurable: true,
+      get() {
+        return this.classList.contains("chatapp-chat-scroll__inner") ? 960 : 0;
+      },
+    });
+    container = document.createElement("div");
+    document.body.append(container);
+    root = createRoot(container);
+
+    try {
+      await act(async () => {
+        root?.render(createElement(ChatTranscript, transcriptProps("thread:first", [message("a", "First")])));
+      });
+      const viewport = container.querySelector(".chatapp-chat-scroll__inner") as HTMLDivElement | null;
+      expect(viewport).not.toBeNull();
+      if (!viewport) {
+        return;
+      }
+      viewport.scrollTop = 120;
+
+      await act(async () => {
+        root?.render(createElement(ChatTranscript, transcriptProps("thread:second", [message("b", "Second")])));
+      });
+
+      expect(viewport.scrollTop).toBe(960);
+      expect(container.querySelector(".chatapp-chat-scroll-jump")).toBeNull();
+    } finally {
+      if (originalScrollHeight) {
+        Object.defineProperty(HTMLElement.prototype, "scrollHeight", originalScrollHeight);
+      } else {
+        delete (HTMLElement.prototype as { scrollHeight?: unknown }).scrollHeight;
+      }
+    }
   });
 });

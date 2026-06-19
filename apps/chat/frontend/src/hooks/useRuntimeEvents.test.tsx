@@ -1,7 +1,7 @@
 /**
  * @vitest-environment happy-dom
  */
-import { act, useState } from "react";
+import { act, useEffect, useState } from "react";
 import { createRoot } from "react-dom/client";
 import type { Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -43,6 +43,13 @@ const session: RuntimeSession = {
   workspace_id: "default",
 };
 
+type RuntimeEventsHarnessState = {
+  activeSession: RuntimeSession | null;
+  activeTurn: RuntimeTurn | null;
+  error: string | null;
+  events: RuntimeEvent[];
+};
+
 function event(eventId: string): RuntimeEvent {
   return {
     event_id: eventId,
@@ -54,22 +61,34 @@ function event(eventId: string): RuntimeEvent {
   };
 }
 
-function RuntimeEventsHarness({ initialEvents, olderHistoryRequestId = 0 }: { initialEvents: RuntimeEvent[]; olderHistoryRequestId?: number }) {
+function RuntimeEventsHarness({
+  initialEvents,
+  olderHistoryRequestId = 0,
+  onState,
+  runtimeSessionId = "session-1",
+}: {
+  initialEvents: RuntimeEvent[];
+  olderHistoryRequestId?: number;
+  onState?: (state: RuntimeEventsHarnessState) => void;
+  runtimeSessionId?: string;
+}) {
   const [activeSession, setActiveSession] = useState<RuntimeSession | null>(null);
   const [activeTurn, setActiveTurn] = useState<RuntimeTurn | null>(null);
   const [events, setEvents] = useState<RuntimeEvent[]>(initialEvents);
   const [hasMoreHistory, setHasMoreHistory] = useState(false);
   const [, setIsOlderHistoryLoading] = useState(false);
-  const [, setError] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
   const [, setPendingUserMessages] = useState<PendingMessage[]>([]);
-  void activeSession;
-  void events;
+
+  useEffect(() => {
+    onState?.({ activeSession, activeTurn, error, events });
+  }, [activeSession, activeTurn, error, events, onState]);
 
   useRuntimeEvents({
     activeTurn,
     hasMoreHistory,
     olderHistoryRequestId,
-    runtimeSessionId: "session-1",
+    runtimeSessionId,
     setActiveSession,
     setActiveTurn,
     setError,
@@ -177,5 +196,32 @@ describe("useRuntimeEvents", () => {
       before_event_id: "event-2",
       limit: 250,
     });
+  });
+
+  it("ignores frames and errors from sockets that are no longer current", async () => {
+    let latestState: RuntimeEventsHarnessState | null = null;
+    const onState = (state: RuntimeEventsHarnessState) => {
+      latestState = state;
+    };
+
+    await act(async () => {
+      root?.render(<RuntimeEventsHarness initialEvents={[]} onState={onState} />);
+    });
+    const staleSocket = MockWebSocket.instances[0];
+
+    await act(async () => {
+      root?.render(<RuntimeEventsHarness initialEvents={[]} onState={onState} runtimeSessionId="session-2" />);
+    });
+
+    await act(async () => {
+      staleSocket.onmessage?.({
+        data: JSON.stringify({ type: "runtime.event", event: event("stale-event") }),
+      } as MessageEvent);
+      staleSocket.onerror?.();
+    });
+
+    const state = latestState as RuntimeEventsHarnessState | null;
+    expect((state?.events ?? []).map((item) => item.event_id)).toEqual([]);
+    expect(state?.error ?? null).toBeNull();
   });
 });

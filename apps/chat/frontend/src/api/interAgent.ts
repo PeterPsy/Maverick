@@ -68,10 +68,11 @@ export function getInterAgentRun(runId: string): Promise<InterAgentRunDetail> {
   return requestJson<InterAgentRunDetail>(`/api/inter-agent/runs/${encodeURIComponent(runId)}`);
 }
 
-export function createInterAgentRun(payload: CreateInterAgentRunPayload): Promise<InterAgentRunDetail> {
+export function createInterAgentRun(payload: CreateInterAgentRunPayload, requestOptions: { signal?: AbortSignal } = {}): Promise<InterAgentRunDetail> {
   return requestJson<InterAgentRunDetail>("/api/inter-agent/runs", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
+    signal: requestOptions.signal,
     body: JSON.stringify(payload),
   });
 }
@@ -79,6 +80,7 @@ export function createInterAgentRun(payload: CreateInterAgentRunPayload): Promis
 export function executeInterAgentRun(
   runId: string,
   payload: ExecuteInterAgentRunPayload,
+  requestOptions: { signal?: AbortSignal } = {},
 ): Promise<
   InterAgentRunDetail & {
     root_runtime_events?: RuntimeEvent[];
@@ -88,6 +90,7 @@ export function executeInterAgentRun(
   return requestJson(`/api/inter-agent/runs/${encodeURIComponent(runId)}/execute`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
+    signal: requestOptions.signal,
     body: JSON.stringify({
       ...payload,
       attachments: payload.attachments ? serializableMessageAttachments(payload.attachments) : undefined,

@@ -1,4 +1,4 @@
-import { Dispatch, SetStateAction, useEffect, useState } from "react";
+import { Dispatch, SetStateAction, useCallback, useEffect, useRef, useState } from "react";
 import {
   AppReference,
   ChatThread,
@@ -11,6 +11,7 @@ import {
   createRuntimeSession,
   createRuntimeSessionWithTurn,
   executeInterAgentRun,
+  interruptRuntimeTurn,
   sendRuntimeTurn,
 } from "../api/client";
 import type { ComposerAttachment } from "../lib/attachments";
@@ -25,6 +26,7 @@ import { openChatThreadRouteInShell } from "../lib/shellNavigation";
 import { upsertOrderedThread } from "../lib/threadNavigation";
 
 export type DraftChat = {
+  draftId: string;
   projectId: string | null;
   systemPrompt: string;
 };
@@ -69,6 +71,69 @@ type UseMessageSubmissionParams = {
   threads: ChatThread[];
 };
 
+type ConversationItems<T> = Record<string, T[]>;
+
+type InFlightSubmission = {
+  abortController: AbortController;
+  clientMessageId: string;
+  turnId?: string;
+};
+
+export function conversationKeyFor(activeThread: ChatThread | null, draftChat: DraftChat | null): string {
+  if (activeThread?.thread_id) {
+    return `thread:${activeThread.thread_id}`;
+  }
+  if (draftChat?.draftId) {
+    return `draft:${draftChat.draftId}`;
+  }
+  return "";
+}
+
+function threadConversationKey(threadId: string): string {
+  return `thread:${threadId}`;
+}
+
+function itemsForConversation<T>(itemsByConversationKey: ConversationItems<T>, conversationKey: string): T[] {
+  return conversationKey ? itemsByConversationKey[conversationKey] || [] : [];
+}
+
+function setItemsForConversation<T>(
+  setter: Dispatch<SetStateAction<ConversationItems<T>>>,
+  conversationKey: string,
+  action: SetStateAction<T[]>,
+) {
+  if (!conversationKey) {
+    return;
+  }
+  setter((current) => {
+    const currentItems = current[conversationKey] || [];
+    const nextItems = typeof action === "function" ? (action as (previous: T[]) => T[])(currentItems) : action;
+    if (!nextItems.length) {
+      const { [conversationKey]: _removed, ...remaining } = current;
+      return remaining;
+    }
+    return { ...current, [conversationKey]: nextItems };
+  });
+}
+
+function isAbortError(error: unknown): boolean {
+  return typeof DOMException !== "undefined" && error instanceof DOMException
+    ? error.name === "AbortError"
+    : error instanceof Error && error.name === "AbortError";
+}
+
+function throwIfAborted(signal: AbortSignal) {
+  if (!signal.aborted) {
+    return;
+  }
+  if (typeof DOMException !== "undefined") {
+    throw new DOMException("Message submission was stopped.", "AbortError");
+  }
+  const error = new Error("Message submission was stopped.");
+  error.name = "AbortError";
+  throw error;
+}
+
 export function useMessageSubmission({
   activeAppContext,
   activeThread,
@@ -97,13 +162,86 @@ export function useMessageSubmission({
   setThreads,
   threads,
 }: UseMessageSubmissionParams) {
-  const [pendingUserMessages, setPendingUserMessages] = useState<PendingMessage[]>([]);
-  const [failedUserMessages, setFailedUserMessages] = useState<PendingMessage[]>([]);
-  const [queuedMessages, setQueuedMessages] = useState<QueuedMessage[]>([]);
-  const [isSending, setIsSending] = useState(false);
+  const activeConversationKey = conversationKeyFor(activeThread, draftChat);
+  const activeConversationKeyRef = useRef(activeConversationKey);
+  const activeThreadRef = useRef(activeThread);
+  const draftChatRef = useRef(draftChat);
+  const inFlightSubmissionsRef = useRef<Record<string, InFlightSubmission>>({});
+  const [pendingUserMessagesByConversationKey, setPendingUserMessagesByConversationKey] = useState<ConversationItems<PendingMessage>>({});
+  const [failedUserMessagesByConversationKey, setFailedUserMessagesByConversationKey] = useState<ConversationItems<PendingMessage>>({});
+  const [queuedMessagesByConversationKey, setQueuedMessagesByConversationKey] = useState<ConversationItems<QueuedMessage>>({});
+  const [sendingByConversationKey, setSendingByConversationKey] = useState<Record<string, true>>({});
+  const [submittedTurnByConversationKey, setSubmittedTurnByConversationKey] = useState<Record<string, string>>({});
+  const pendingUserMessages = itemsForConversation(pendingUserMessagesByConversationKey, activeConversationKey);
+  const failedUserMessages = itemsForConversation(failedUserMessagesByConversationKey, activeConversationKey);
+  const queuedMessages = itemsForConversation(queuedMessagesByConversationKey, activeConversationKey);
+  const isSending = Boolean(activeConversationKey && sendingByConversationKey[activeConversationKey]);
+  const activeSubmissionTurnId = activeConversationKey ? submittedTurnByConversationKey[activeConversationKey] || "" : "";
 
-  async function submitMessage(message: QueuedMessage) {
-    setPendingUserMessages((current) => [
+  useEffect(() => {
+    activeConversationKeyRef.current = activeConversationKey;
+    activeThreadRef.current = activeThread;
+    draftChatRef.current = draftChat;
+  }, [activeConversationKey, activeThread, draftChat]);
+
+  const setPendingUserMessages = useCallback<Dispatch<SetStateAction<PendingMessage[]>>>((action) => {
+    setItemsForConversation(setPendingUserMessagesByConversationKey, activeConversationKeyRef.current, action);
+  }, []);
+
+  const setFailedUserMessages = useCallback<Dispatch<SetStateAction<PendingMessage[]>>>((action) => {
+    setItemsForConversation(setFailedUserMessagesByConversationKey, activeConversationKeyRef.current, action);
+  }, []);
+
+  const setQueuedMessages = useCallback<Dispatch<SetStateAction<QueuedMessage[]>>>((action) => {
+    setItemsForConversation(setQueuedMessagesByConversationKey, activeConversationKeyRef.current, action);
+  }, []);
+
+  const setPendingUserMessagesForConversation = useCallback((conversationKey: string, action: SetStateAction<PendingMessage[]>) => {
+    setItemsForConversation(setPendingUserMessagesByConversationKey, conversationKey, action);
+  }, []);
+
+  const setFailedUserMessagesForConversation = useCallback((conversationKey: string, action: SetStateAction<PendingMessage[]>) => {
+    setItemsForConversation(setFailedUserMessagesByConversationKey, conversationKey, action);
+  }, []);
+
+  const setQueuedMessagesForConversation = useCallback((conversationKey: string, action: SetStateAction<QueuedMessage[]>) => {
+    setItemsForConversation(setQueuedMessagesByConversationKey, conversationKey, action);
+  }, []);
+
+  function setConversationSending(conversationKey: string, isConversationSending: boolean) {
+    setSendingByConversationKey((current) => {
+      if (!conversationKey) {
+        return current;
+      }
+      if (isConversationSending) {
+        return { ...current, [conversationKey]: true };
+      }
+      const { [conversationKey]: _removed, ...remaining } = current;
+      return remaining;
+    });
+  }
+
+  function setSubmittedTurnForConversation(conversationKey: string, turnId: string | null) {
+    setSubmittedTurnByConversationKey((current) => {
+      if (!conversationKey) {
+        return current;
+      }
+      if (turnId) {
+        return { ...current, [conversationKey]: turnId };
+      }
+      const { [conversationKey]: _removed, ...remaining } = current;
+      return remaining;
+    });
+  }
+
+  function removePendingMessage(conversationKey: string, clientMessageId: string) {
+    setItemsForConversation(setPendingUserMessagesByConversationKey, conversationKey, (current) =>
+      current.filter((item) => item.clientMessageId !== clientMessageId),
+    );
+  }
+
+  function addFailedMessage(conversationKey: string, message: QueuedMessage) {
+    setItemsForConversation(setFailedUserMessagesByConversationKey, conversationKey, (current) => [
       ...current,
       {
         clientMessageId: message.clientMessageId,
@@ -113,19 +251,134 @@ export function useMessageSubmission({
         appReferences: message.appReferences,
       },
     ]);
-    setFailedUserMessages((current) => current.filter((item) => item.clientMessageId !== message.clientMessageId));
-    setIsSending(true);
-    setError(null);
+  }
+
+  function migrateConversationState(fromConversationKey: string, toConversationKey: string) {
+    if (!fromConversationKey || !toConversationKey || fromConversationKey === toConversationKey) {
+      return;
+    }
+    setPendingUserMessagesByConversationKey((current) => {
+      const items = current[fromConversationKey] || [];
+      if (!items.length) {
+        return current;
+      }
+      const { [fromConversationKey]: _removed, ...remaining } = current;
+      return { ...remaining, [toConversationKey]: [...(remaining[toConversationKey] || []), ...items] };
+    });
+    setFailedUserMessagesByConversationKey((current) => {
+      const items = current[fromConversationKey] || [];
+      if (!items.length) {
+        return current;
+      }
+      const { [fromConversationKey]: _removed, ...remaining } = current;
+      return { ...remaining, [toConversationKey]: [...(remaining[toConversationKey] || []), ...items] };
+    });
+    setQueuedMessagesByConversationKey((current) => {
+      const items = current[fromConversationKey] || [];
+      if (!items.length) {
+        return current;
+      }
+      const { [fromConversationKey]: _removed, ...remaining } = current;
+      return { ...remaining, [toConversationKey]: [...(remaining[toConversationKey] || []), ...items] };
+    });
+    setSubmittedTurnByConversationKey((current) => {
+      const turnId = current[fromConversationKey];
+      if (!turnId) {
+        return current;
+      }
+      const { [fromConversationKey]: _removed, ...remaining } = current;
+      return { ...remaining, [toConversationKey]: turnId };
+    });
+    const inFlight = inFlightSubmissionsRef.current[fromConversationKey];
+    if (inFlight) {
+      delete inFlightSubmissionsRef.current[fromConversationKey];
+      inFlightSubmissionsRef.current[toConversationKey] = inFlight;
+    }
+  }
+
+  function isConversationStillActive(conversationKey: string): boolean {
+    return Boolean(conversationKey && activeConversationKeyRef.current === conversationKey);
+  }
+
+  async function stopActiveSubmission(): Promise<boolean> {
+    const conversationKey = activeConversationKeyRef.current;
+    const inFlightSubmission = inFlightSubmissionsRef.current[conversationKey];
+    const turnId = (conversationKey && submittedTurnByConversationKey[conversationKey]) || inFlightSubmission?.turnId || "";
+    if (!conversationKey || (!inFlightSubmission && !turnId)) {
+      return false;
+    }
+    if (!turnId) {
+      inFlightSubmission?.abortController.abort();
+      if (inFlightSubmission?.clientMessageId) {
+        removePendingMessage(conversationKey, inFlightSubmission.clientMessageId);
+      }
+      delete inFlightSubmissionsRef.current[conversationKey];
+      setConversationSending(conversationKey, false);
+      setSubmittedTurnForConversation(conversationKey, null);
+      return true;
+    }
     try {
+      const response = await interruptRuntimeTurn(turnId);
+      if (isConversationStillActive(conversationKey)) {
+        setActiveTurn(response.turn);
+        if (response.event) {
+          setEvents((current) => mergeRuntimeEvents(current, [response.event as RuntimeEvent]));
+        }
+        setError(null);
+      }
+      if (inFlightSubmission?.clientMessageId) {
+        removePendingMessage(conversationKey, inFlightSubmission.clientMessageId);
+      }
+      delete inFlightSubmissionsRef.current[conversationKey];
+      setConversationSending(conversationKey, false);
+      setSubmittedTurnForConversation(conversationKey, null);
+      return true;
+    } catch (stopError) {
+      if (isConversationStillActive(conversationKey)) {
+        setError(stopError instanceof Error ? stopError.message : "Unable to stop runtime turn.");
+      }
+      return true;
+    }
+  }
+
+  async function submitMessage(message: QueuedMessage, conversationKey = activeConversationKeyRef.current) {
+    const targetThread = activeThreadRef.current;
+    const targetDraftChat = draftChatRef.current;
+    const abortController = new AbortController();
+    inFlightSubmissionsRef.current[conversationKey] = {
+      abortController,
+      clientMessageId: message.clientMessageId,
+    };
+    setItemsForConversation(setPendingUserMessagesByConversationKey, conversationKey, (current) => [
+      ...current,
+      {
+        clientMessageId: message.clientMessageId,
+        content: message.content,
+        createdAt: new Date().toISOString(),
+        attachments: message.attachments,
+        appReferences: message.appReferences,
+      },
+    ]);
+    setItemsForConversation(setFailedUserMessagesByConversationKey, conversationKey, (current) =>
+      current.filter((item) => item.clientMessageId !== message.clientMessageId),
+    );
+    setConversationSending(conversationKey, true);
+    if (isConversationStillActive(conversationKey)) {
+      setError(null);
+    }
+    try {
+      throwIfAborted(abortController.signal);
       if (message.multiAgentMode && message.multiAgentMode !== "off") {
-        await submitInterAgentMessage(message);
+        await submitInterAgentMessage(message, conversationKey, abortController.signal, targetThread, targetDraftChat);
         return;
       }
-      let thread = activeThread;
+      let thread = targetThread;
       let response: Awaited<ReturnType<typeof sendRuntimeTurn>>;
       if (!thread) {
         const agentRuntimeConfig = await selectedAgentRuntimeConfig(activeAppContext);
-        const systemPrompt = agentRuntimeConfig?.system_prompt || draftChat?.systemPrompt || (await loadDefaultSystemPrompt(activeAppContext));
+        throwIfAborted(abortController.signal);
+        const systemPrompt = agentRuntimeConfig?.system_prompt || targetDraftChat?.systemPrompt || (await loadDefaultSystemPrompt(activeAppContext));
+        throwIfAborted(abortController.signal);
         response = await createRuntimeSessionWithTurn({
           appReferences: message.appReferences,
           attachments: message.attachments,
@@ -135,15 +388,15 @@ export function useMessageSubmission({
             agent_id: agentRuntimeConfig?.agent_id,
             agent_role_id: agentRuntimeConfig?.agent_role_id,
             agent_type_id: agentRuntimeConfig?.agent_type_id,
-            project_id: draftChat?.projectId ?? null,
+            project_id: targetDraftChat?.projectId ?? null,
             source_app_id: agentRuntimeConfig?.source_app_id || "chat",
             system_prompt: systemPrompt,
             skill_catalog_app_id: agentRuntimeConfig?.skill_catalog_app_id,
             skill_ids: agentRuntimeConfig?.skill_ids || [],
             title: "New chat",
           },
+          signal: abortController.signal,
         });
-        setDraftChat(null);
       } else if (!threads.some((item) => item.thread_id === thread?.thread_id)) {
         throw new Error("This chat no longer exists.");
       } else {
@@ -156,16 +409,15 @@ export function useMessageSubmission({
           message.clientMessageId,
           message.attachments,
           message.appReferences,
+          { signal: abortController.signal },
         );
       }
+      throwIfAborted(abortController.signal);
       const responseThread = response.thread;
       const baseThread = responseThread || thread;
       if (!baseThread) {
         throw new Error("Runtime thread was not created.");
       }
-      setActiveSession(response.session);
-      setActiveTurn(response.turn);
-      setEvents((current) => mergeRuntimeEvents(current, response.events));
       const userMessageAt = response.turn.created_at || new Date().toISOString();
       const optimisticThread = {
         ...baseThread,
@@ -173,53 +425,82 @@ export function useMessageSubmission({
         availability: response.turn.status === "queued" || response.turn.status === "active" ? response.turn.status : "free",
         last_user_message_at: userMessageAt,
       };
-      setActiveThread((current) => (current?.thread_id === optimisticThread.thread_id ? { ...current, ...optimisticThread } : optimisticThread));
+      const threadKey = threadConversationKey(optimisticThread.thread_id);
+      migrateConversationState(conversationKey, threadKey);
+      inFlightSubmissionsRef.current[threadKey] = {
+        ...(inFlightSubmissionsRef.current[threadKey] || {
+          abortController,
+          clientMessageId: message.clientMessageId,
+        }),
+        turnId: response.turn.turn_id,
+      };
+      setSubmittedTurnForConversation(threadKey, response.turn.turn_id);
       setThreads((current) => upsertOrderedThread(current, optimisticThread));
-      if (!thread) {
+      if (isConversationStillActive(conversationKey)) {
+        setActiveSession(response.session);
+        setActiveTurn(response.turn);
+        setEvents((current) => mergeRuntimeEvents(current, response.events));
+        setActiveThread((current) => (current?.thread_id === optimisticThread.thread_id ? { ...current, ...optimisticThread } : optimisticThread));
+        if (!thread) {
+          setDraftChat(null);
+        }
+      }
+      if (!thread && isConversationStillActive(conversationKey)) {
         notifyActiveThreadChanged(optimisticThread.thread_id);
         openChatThreadRouteInShell(optimisticThread.thread_id, { navigationScope });
       }
       if (response.turn.status !== "queued" && response.turn.status !== "active") {
-        setPendingUserMessages((current) => current.filter((item) => item.clientMessageId !== message.clientMessageId));
+        removePendingMessage(threadKey, message.clientMessageId);
+        setSubmittedTurnForConversation(threadKey, null);
       }
     } catch (sendError) {
-      setError(sendError instanceof Error ? sendError.message : "Unable to send message.");
-      setActiveTurn(null);
-      setComposer(message.content);
-      setSelectedReferences(message.appReferences);
-      setPendingUserMessages((current) => current.filter((item) => item.clientMessageId !== message.clientMessageId));
-      setFailedUserMessages((current) => [
-        ...current,
-        {
-          clientMessageId: message.clientMessageId,
-          content: message.content,
-          createdAt: new Date().toISOString(),
-          attachments: message.attachments,
-          appReferences: message.appReferences,
-        },
-      ]);
+      removePendingMessage(conversationKey, message.clientMessageId);
+      setSubmittedTurnForConversation(conversationKey, null);
+      if (!isAbortError(sendError)) {
+        addFailedMessage(conversationKey, message);
+        if (isConversationStillActive(conversationKey)) {
+          setError(sendError instanceof Error ? sendError.message : "Unable to send message.");
+          setActiveTurn(null);
+          setComposer(message.content);
+          setSelectedReferences(message.appReferences);
+        }
+      }
     } finally {
-      setIsSending(false);
+      if (!inFlightSubmissionsRef.current[conversationKey]?.turnId) {
+        delete inFlightSubmissionsRef.current[conversationKey];
+      }
+      setConversationSending(conversationKey, false);
     }
   }
 
-  async function submitInterAgentMessage(message: QueuedMessage) {
-    let thread = activeThread;
+  async function submitInterAgentMessage(
+    message: QueuedMessage,
+    conversationKey: string,
+    signal: AbortSignal,
+    targetThread: ChatThread | null,
+    targetDraftChat: DraftChat | null,
+  ) {
+    let thread = targetThread;
     let session: RuntimeSession | null = null;
     const agentRuntimeConfig = await selectedAgentRuntimeConfig(activeAppContext);
+    throwIfAborted(signal);
     if (!thread) {
-      const systemPrompt = agentRuntimeConfig?.system_prompt || draftChat?.systemPrompt || (await loadDefaultSystemPrompt(activeAppContext));
-      session = await createRuntimeSession({
-        agent_id: agentRuntimeConfig?.agent_id,
-        agent_role_id: agentRuntimeConfig?.agent_role_id,
-        agent_type_id: agentRuntimeConfig?.agent_type_id,
-        project_id: draftChat?.projectId ?? null,
-        source_app_id: agentRuntimeConfig?.source_app_id || "chat",
-        system_prompt: systemPrompt,
-        skill_catalog_app_id: agentRuntimeConfig?.skill_catalog_app_id,
-        skill_ids: agentRuntimeConfig?.skill_ids || [],
-        title: "New chat",
-      });
+      const systemPrompt = agentRuntimeConfig?.system_prompt || targetDraftChat?.systemPrompt || (await loadDefaultSystemPrompt(activeAppContext));
+      throwIfAborted(signal);
+      session = await createRuntimeSession(
+        {
+          agent_id: agentRuntimeConfig?.agent_id,
+          agent_role_id: agentRuntimeConfig?.agent_role_id,
+          agent_type_id: agentRuntimeConfig?.agent_type_id,
+          project_id: targetDraftChat?.projectId ?? null,
+          source_app_id: agentRuntimeConfig?.source_app_id || "chat",
+          system_prompt: systemPrompt,
+          skill_catalog_app_id: agentRuntimeConfig?.skill_catalog_app_id,
+          skill_ids: agentRuntimeConfig?.skill_ids || [],
+          title: "New chat",
+        },
+        { signal },
+      );
       const now = new Date().toISOString();
       thread = {
         thread_id: session.session_id,
@@ -232,14 +513,13 @@ export function useMessageSubmission({
         agent_role_id: agentRuntimeConfig?.agent_role_id || "",
         source_app_id: agentRuntimeConfig?.source_app_id || "chat",
         system_prompt: systemPrompt,
-        project_id: draftChat?.projectId ?? null,
+        project_id: targetDraftChat?.projectId ?? null,
         archived: false,
         availability: "queued",
         created_at: now,
         updated_at: now,
         last_user_message_at: now,
       };
-      setDraftChat(null);
     } else if (!threads.some((item) => item.thread_id === thread?.thread_id)) {
       throw new Error("This chat no longer exists.");
     }
@@ -254,25 +534,20 @@ export function useMessageSubmission({
         thread,
         clientMessageId: message.clientMessageId,
       }),
+      { signal },
     );
-    onInterAgentRunChanged?.(runDetail);
+    throwIfAborted(signal);
+    if (isConversationStillActive(conversationKey)) {
+      onInterAgentRunChanged?.(runDetail);
+    }
     const executed = await executeInterAgentRun(runDetail.run.run_id, {
       input_text: message.content,
       client_message_id: message.clientMessageId,
       attachments: message.attachments,
       app_references: message.appReferences,
       async: true,
-    });
-    onInterAgentRunChanged?.(executed);
-    if (session) {
-      setActiveSession(session);
-    }
-    if (executed.root_runtime_turn) {
-      setActiveTurn(executed.root_runtime_turn);
-    }
-    if (executed.root_runtime_events?.length) {
-      setEvents((current) => mergeRuntimeEvents(current, executed.root_runtime_events || []));
-    }
+    }, { signal });
+    throwIfAborted(signal);
     const userMessageAt = executed.root_runtime_turn?.created_at || new Date().toISOString();
     const availability =
       executed.root_runtime_turn?.status === "queued" || executed.root_runtime_turn?.status === "active" ? executed.root_runtime_turn.status : "free";
@@ -282,20 +557,50 @@ export function useMessageSubmission({
       last_user_message_at: userMessageAt,
       updated_at: userMessageAt,
     };
-    setActiveThread((current) => (current?.thread_id === optimisticThread.thread_id ? { ...current, ...optimisticThread } : optimisticThread));
+    const threadKey = threadConversationKey(optimisticThread.thread_id);
+    migrateConversationState(conversationKey, threadKey);
+    if (executed.root_runtime_turn) {
+      inFlightSubmissionsRef.current[threadKey] = {
+        ...(inFlightSubmissionsRef.current[threadKey] || {
+          abortController: inFlightSubmissionsRef.current[conversationKey]?.abortController || new AbortController(),
+          clientMessageId: message.clientMessageId,
+        }),
+        turnId: executed.root_runtime_turn.turn_id,
+      };
+      setSubmittedTurnForConversation(threadKey, executed.root_runtime_turn.turn_id);
+    }
     setThreads((current) => upsertOrderedThread(current, optimisticThread));
-    if (!activeThread) {
+    if (isConversationStillActive(conversationKey)) {
+      onInterAgentRunChanged?.(executed);
+      if (session) {
+        setActiveSession(session);
+        setDraftChat(null);
+      }
+      if (executed.root_runtime_turn) {
+        setActiveTurn(executed.root_runtime_turn);
+      }
+      if (executed.root_runtime_events?.length) {
+        setEvents((current) => mergeRuntimeEvents(current, executed.root_runtime_events || []));
+      }
+      setActiveThread((current) => (current?.thread_id === optimisticThread.thread_id ? { ...current, ...optimisticThread } : optimisticThread));
+    }
+    if (!targetThread && isConversationStillActive(conversationKey)) {
       notifyActiveThreadChanged(optimisticThread.thread_id);
       openChatThreadRouteInShell(optimisticThread.thread_id, { navigationScope });
     }
     if (!executed.root_runtime_turn || (executed.root_runtime_turn.status !== "queued" && executed.root_runtime_turn.status !== "active")) {
-      setPendingUserMessages((current) => current.filter((item) => item.clientMessageId !== message.clientMessageId));
+      removePendingMessage(threadKey, message.clientMessageId);
+      setSubmittedTurnForConversation(threadKey, null);
     }
   }
 
   async function handleSend() {
     const input = composer.trim();
     if ((!input && !attachments.length) || hasInvalidAttachments(attachments)) {
+      return;
+    }
+    const targetConversationKey = activeConversationKeyRef.current;
+    if (!targetConversationKey) {
       return;
     }
     const clientMessageId = crypto.randomUUID();
@@ -311,31 +616,50 @@ export function useMessageSubmission({
     setSelectedReferences([]);
     clearAttachments();
     const appReferences = mergeAppReferences(appReferencesFromText(input, composerMentionItems), activeAppContext);
-    if (isRuntimeBusy || isSending) {
-      setQueuedMessages((current) => [...current, { clientMessageId, content: input, attachments: messageAttachments, appReferences, multiAgentMode }]);
+    if (isRuntimeBusy || Boolean(sendingByConversationKey[targetConversationKey])) {
+      setItemsForConversation(setQueuedMessagesByConversationKey, targetConversationKey, (current) => [
+        ...current,
+        { clientMessageId, content: input, attachments: messageAttachments, appReferences, multiAgentMode },
+      ]);
       return;
     }
-    await submitMessage({ clientMessageId, content: input, attachments: messageAttachments, appReferences, multiAgentMode });
+    await submitMessage({ clientMessageId, content: input, attachments: messageAttachments, appReferences, multiAgentMode }, targetConversationKey);
   }
 
   useEffect(() => {
-    if (isBootstrapping || isHistoryLoading || isRuntimeBusy || isSending || queuedMessages.length === 0) {
+    if (isBootstrapping || isHistoryLoading || isRuntimeBusy || isSending || queuedMessages.length === 0 || !activeConversationKey) {
       return;
     }
     const [nextMessage, ...remainingMessages] = queuedMessages;
     setQueuedMessages(remainingMessages);
-    void submitMessage(nextMessage);
-  }, [isBootstrapping, isHistoryLoading, isRuntimeBusy, isSending, queuedMessages]);
+    void submitMessage(nextMessage, activeConversationKey);
+  }, [activeConversationKey, isBootstrapping, isHistoryLoading, isRuntimeBusy, isSending, queuedMessages]);
+
+  useEffect(() => {
+    if (!activeConversationKey || isRuntimeBusy) {
+      return;
+    }
+    const inFlightSubmission = inFlightSubmissionsRef.current[activeConversationKey];
+    if (inFlightSubmission?.turnId) {
+      delete inFlightSubmissionsRef.current[activeConversationKey];
+      setSubmittedTurnForConversation(activeConversationKey, null);
+    }
+  }, [activeConversationKey, isRuntimeBusy]);
 
   return {
+    activeSubmissionTurnId,
     failedUserMessages,
     handleSend,
     isSending,
     pendingUserMessages,
     queuedMessages,
     setFailedUserMessages,
+    setFailedUserMessagesForConversation,
     setPendingUserMessages,
+    setPendingUserMessagesForConversation,
     setQueuedMessages,
+    setQueuedMessagesForConversation,
+    stopActiveSubmission,
   };
 }
 

@@ -16,6 +16,13 @@ export function MarkdownMessage({ content }: { content: string }) {
 function MarkdownLink({ children, href, onClick, ...props }: ComponentPropsWithoutRef<"a">) {
   const storageTarget = typeof href === "string" ? storageLinkTargetFromHref(href) : null;
   if (!storageTarget) {
+    if (isAbsoluteHttpUrl(href)) {
+      return (
+        <a {...props} href={href} onClick={onClick} rel={externalLinkRel(props.rel)} target="_blank">
+          {children}
+        </a>
+      );
+    }
     return (
       <a href={href} onClick={onClick} {...props}>
         {children}
@@ -45,4 +52,30 @@ function MarkdownLink({ children, href, onClick, ...props }: ComponentPropsWitho
       {children}
     </a>
   );
+}
+
+function isAbsoluteHttpUrl(value: unknown): value is string {
+  if (typeof value !== "string" || !value.trim()) {
+    return false;
+  }
+  try {
+    const url = new URL(value);
+    return url.protocol === "http:" || url.protocol === "https:";
+  } catch {
+    return false;
+  }
+}
+
+function externalLinkRel(value: unknown): string {
+  const relValues = new Set(
+    typeof value === "string"
+      ? value
+          .split(/\s+/)
+          .map((item) => item.trim())
+          .filter(Boolean)
+      : [],
+  );
+  relValues.add("noopener");
+  relValues.add("noreferrer");
+  return Array.from(relValues).join(" ");
 }

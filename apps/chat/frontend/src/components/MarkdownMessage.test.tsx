@@ -18,6 +18,36 @@ afterEach(() => {
 });
 
 describe("MarkdownMessage", () => {
+  it("opens absolute http links in a separate browser context", async () => {
+    container = document.createElement("div");
+    document.body.appendChild(container);
+    root = createRoot(container);
+
+    await act(async () => {
+      root?.render(<MarkdownMessage content={"[Apple Developer](https://developer.apple.com/register/)"} />);
+    });
+
+    const link = container.querySelector("a");
+    expect(link?.getAttribute("href")).toBe("https://developer.apple.com/register/");
+    expect(link?.getAttribute("target")).toBe("_blank");
+    expect(link?.getAttribute("rel")).toBe("noopener noreferrer");
+  });
+
+  it("keeps relative non-storage links inside the current frame", async () => {
+    container = document.createElement("div");
+    document.body.appendChild(container);
+    root = createRoot(container);
+
+    await act(async () => {
+      root?.render(<MarkdownMessage content={"[Internal docs](/docs/getting-started)"} />);
+    });
+
+    const link = container.querySelector("a");
+    expect(link?.getAttribute("href")).toBe("/docs/getting-started");
+    expect(link?.getAttribute("target")).toBeNull();
+    expect(link?.getAttribute("rel")).toBeNull();
+  });
+
   it("routes workspace storage links through the shell instead of navigating the chat frame", async () => {
     const messages: Array<{ message: unknown; targetOrigin: string }> = [];
     const originalParent = window.parent;
@@ -48,6 +78,7 @@ describe("MarkdownMessage", () => {
       expect(link?.getAttribute("href")).toBe(
         "/app/storage?workspace_relative_path=storage%2Fgenerated%2Fagents-cli-mcp-speed-report.md",
       );
+      expect(link?.getAttribute("target")).toBeNull();
 
       link?.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
 
@@ -83,6 +114,7 @@ describe("MarkdownMessage", () => {
 
       const link = container.querySelector("a");
       expect(link?.getAttribute("href")).toBe("/app/storage/files/file_123");
+      expect(link?.getAttribute("target")).toBeNull();
 
       link?.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
 

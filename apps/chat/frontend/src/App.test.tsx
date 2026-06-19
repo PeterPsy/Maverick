@@ -321,7 +321,7 @@ async function typeComposerMessage(element: HTMLElement, message: string) {
 }
 
 async function clickSend(element: HTMLElement) {
-  const sendButton = element.querySelector('[aria-label="Send message"]') as HTMLButtonElement | null;
+  const sendButton = element.querySelector('[aria-label="Send message"], [aria-label="Queue message"]') as HTMLButtonElement | null;
   if (!sendButton) {
     throw new Error("Send button was not rendered.");
   }
@@ -721,6 +721,75 @@ describe("App thread navigation", () => {
         events: [],
       });
       await createTurn.promise;
+    });
+  });
+
+  it("sends a queued attachment after its upload resolves behind draft migration", async () => {
+    const createdThread = thread("thread-created", "session-created", { title: "Created thread" });
+    const upload = deferred<Awaited<ReturnType<typeof uploadWorkspaceFile>>>();
+    const createTurn = deferred<Awaited<ReturnType<typeof createRuntimeSessionWithTurn>>>();
+    vi.mocked(uploadWorkspaceFile).mockReturnValue(upload.promise);
+    vi.mocked(createRuntimeSessionWithTurn).mockReturnValue(createTurn.promise);
+    vi.mocked(sendRuntimeTurn).mockResolvedValue({
+      session: runtimeSession("session-created"),
+      thread: createdThread,
+      turn: runtimeTurn("turn-second", "session-created", "completed"),
+      events: [],
+    });
+    const element = await renderApp({
+      navigationScope: "floating-window",
+      newChatRequestId: "request-queued-upload",
+      runtimeThreads: [],
+      runtimeThreadsLoaded: true,
+    });
+
+    await waitForAssertion(() => {
+      expect(element.textContent).toContain("How can I help today?");
+    });
+    await typeComposerMessage(element, "first message");
+    await clickSend(element);
+    await waitForAssertion(() => {
+      expect(createRuntimeSessionWithTurn).toHaveBeenCalled();
+      expect(element.textContent).toContain("Starting");
+    });
+
+    await addTextAttachment(element);
+    await typeComposerMessage(element, "second with attachment");
+    await clickSend(element);
+    await waitForAssertion(() => {
+      expect(uploadWorkspaceFile).toHaveBeenCalled();
+    });
+
+    await act(async () => {
+      createTurn.resolve({
+        session: runtimeSession("session-created"),
+        thread: createdThread,
+        turn: runtimeTurn("turn-created", "session-created", "completed"),
+        events: [],
+      });
+      await createTurn.promise;
+    });
+    expect(sendRuntimeTurn).not.toHaveBeenCalled();
+
+    await act(async () => {
+      upload.resolve(uploadedWorkspaceFile("notes.txt"));
+      await upload.promise;
+    });
+
+    await waitForAssertion(() => {
+      expect(sendRuntimeTurn).toHaveBeenCalledWith(
+        "session-created",
+        "second with attachment",
+        expect.any(String),
+        expect.arrayContaining([
+          expect.objectContaining({
+            fileId: "file-notes.txt",
+            relativePath: "storage/uploads/notes.txt",
+          }),
+        ]),
+        expect.any(Array),
+        expect.any(Object),
+      );
     });
   });
 

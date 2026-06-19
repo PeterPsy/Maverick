@@ -176,6 +176,7 @@ export function useMessageSubmission({
   const activeThreadRef = useRef(activeThread);
   const draftChatRef = useRef(draftChat);
   const threadsRef = useRef(threads);
+  const conversationKeyAliasesRef = useRef<Record<string, string>>({});
   const inFlightSubmissionsRef = useRef<Record<string, InFlightSubmission>>({});
   const [pendingUserMessagesByConversationKey, setPendingUserMessagesByConversationKey] = useState<ConversationItems<PendingMessage>>({});
   const [failedUserMessagesByConversationKey, setFailedUserMessagesByConversationKey] = useState<ConversationItems<PendingMessage>>({});
@@ -284,6 +285,7 @@ export function useMessageSubmission({
     if (!fromConversationKey || !toConversationKey || fromConversationKey === toConversationKey) {
       return;
     }
+    conversationKeyAliasesRef.current[fromConversationKey] = toConversationKey;
     setPendingUserMessagesByConversationKey((current) => {
       const items = current[fromConversationKey] || [];
       if (!items.length) {
@@ -325,6 +327,16 @@ export function useMessageSubmission({
 
   function isConversationStillActive(conversationKey: string): boolean {
     return Boolean(conversationKey && activeConversationKeyRef.current === conversationKey);
+  }
+
+  function resolveConversationKeyAlias(conversationKey: string): string {
+    let resolvedConversationKey = conversationKey;
+    const seenConversationKeys = new Set<string>();
+    while (conversationKeyAliasesRef.current[resolvedConversationKey] && !seenConversationKeys.has(resolvedConversationKey)) {
+      seenConversationKeys.add(resolvedConversationKey);
+      resolvedConversationKey = conversationKeyAliasesRef.current[resolvedConversationKey];
+    }
+    return resolvedConversationKey;
   }
 
   function currentSubmissionTarget(conversationKey = activeConversationKeyRef.current): SubmissionTarget | null {
@@ -745,14 +757,15 @@ export function useMessageSubmission({
       try {
         messageAttachments = await Promise.all(targetAttachments.map(uploadComposerAttachment));
       } catch (uploadError) {
-        if (isConversationStillActive(target.conversationKey)) {
+        if (isConversationStillActive(resolveConversationKeyAlias(target.conversationKey))) {
           setComposerError(uploadError instanceof Error ? uploadError.message : "Unable to upload attachments.");
           setComposer(input);
           setSelectedReferences(appReferences);
         }
         return;
       }
-      setItemsForConversation(setQueuedMessagesByConversationKey, target.conversationKey, (current) => [
+      const queueConversationKey = resolveConversationKeyAlias(target.conversationKey);
+      setItemsForConversation(setQueuedMessagesByConversationKey, queueConversationKey, (current) => [
         ...current,
         { clientMessageId, content: input, attachments: messageAttachments, appReferences, multiAgentMode },
       ]);

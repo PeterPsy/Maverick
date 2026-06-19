@@ -8,6 +8,7 @@ from typing import Any
 
 MEMORY_CONTEXT_PROFILE = "agent_compact"
 MEMORY_CONTEXT_TARGET_BYTES = 9_500
+MEMORY_CONTEXT_QUERY_SNIPPET_CHARS = 420
 MEMORY_CONTEXT_COMPACTION_LEVELS = (
     {
         "summary_chars": 360,
@@ -107,8 +108,13 @@ def build_agent_context_payload(
     omitted_item_count: int = 0,
 ) -> dict[str, Any]:
     compact_items = [agent_compact_memory_item(item, options=options) for item in items]
+    query_text = normalize_spaces(query)
+    query_snippet = bounded_text(query_text, MEMORY_CONTEXT_QUERY_SNIPPET_CHARS)
     return {
-        "query": query,
+        "query": query_snippet,
+        "query_snippet": query_snippet,
+        "query_char_count": len(query_text),
+        "query_truncated": query_snippet != query_text,
         "profile": MEMORY_CONTEXT_PROFILE,
         "requested_limit": requested_limit,
         "item_count": len(compact_items),

@@ -1,7 +1,7 @@
 {
   "tools": {
     "memory_context": {
-      "description": "Return bounded agent-compact Memory context for an agent query, including node ids, summaries, bounded body snippets, body length counts, compact provenance, compiled wiki summaries/citations, reusable Storage references, and expansion hints.",
+      "description": "Return bounded agent-compact Memory context for an agent query, including bounded query snippet/count metadata, node ids, summaries, bounded body snippets, body length counts, compact provenance, compiled wiki summaries/citations, reusable Storage references, and expansion hints.",
       "input_schema": {
         "type": "object",
         "properties": {

@@ -998,6 +998,10 @@ class MemoryAppTestCase(unittest.TestCase):
 
             context_item = context["items"][0]
             self.assertEqual(context["profile"], "agent_compact")
+            self.assertEqual(context["query"], "renewal owner")
+            self.assertEqual(context["query_snippet"], "renewal owner")
+            self.assertEqual(context["query_char_count"], len("renewal owner"))
+            self.assertFalse(context["query_truncated"])
             self.assertEqual(context["expand"]["node_tool"], "memory_inspect_node")
             self.assertEqual(context_item["kind"], "memory_node")
             self.assertEqual(context_item["id"], node["id"])
@@ -1054,6 +1058,43 @@ class MemoryAppTestCase(unittest.TestCase):
             self.assertNotIn("body_markdown", encoded)
             self.assertGreater(first["body_text_char_count"], len(first.get("body_text", "")))
             self.assertTrue(first["body_text_truncated"])
+
+    def test_context_payload_bounds_long_query_before_dropping_items(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            data_root = Path(temp) / "data" / "memory"
+            for index in range(3):
+                self.run_backend(
+                    data_root,
+                    {
+                        "action": "remember",
+                        "title": f"Atlas retention policy {index}",
+                        "summary": f"Atlas retention policy {index} summary.",
+                        "body": f"Atlas retention policy {index} should survive a long agent query.",
+                        "type": "fact",
+                    },
+                )
+
+            query = "Atlas retention policy " + ("filler " * 3000)
+            context = self.run_backend(
+                data_root,
+                {"action": "context", "query": query, "limit": 3},
+            )["json"]
+            encoded = json.dumps(context, ensure_ascii=False)
+
+            self.assertEqual(context["profile"], "agent_compact")
+            self.assertEqual(context["item_count"], 3)
+            self.assertEqual(context["total_candidate_count"], 3)
+            self.assertEqual(context["omitted_item_count"], 0)
+            self.assertFalse(context["has_more"])
+            self.assertEqual(context["query"], context["query_snippet"])
+            self.assertEqual(context["query_char_count"], len(" ".join(query.split()).strip()))
+            self.assertTrue(context["query_truncated"])
+            self.assertLess(len(context["query_snippet"]), 500)
+            self.assertLessEqual(len(encoded.encode("utf-8")), 12_000)
+            self.assertEqual(
+                {item["title"] for item in context["items"]},
+                {f"Atlas retention policy {index}" for index in range(3)},
+            )
 
     def test_search_and_context_include_compiled_citations_in_memory_node_envelope(self) -> None:
         with tempfile.TemporaryDirectory() as temp:

@@ -134,20 +134,17 @@ def draft_confirmation_preview(
     return preview
 
 
-def require_attachment_confirmation_token(
+def require_confirmation_token(
     *,
-    attachments: list[dict[str, object]],
     preview: dict[str, object],
     confirmation_token: object = None,
 ) -> None:
-    if not attachments:
-        return
     provided = str(confirmation_token or "").strip()
     if not provided:
-        raise ValueError("confirm=true with workspace attachments requires confirmation_token from a dry-run preview")
+        raise ValueError("confirm=true requires confirmation_token from a dry-run preview")
     expected = draft_confirmation_token(preview)
     if not hmac.compare_digest(provided, expected):
-        raise ValueError("Workspace attachment snapshot changed; run a new dry-run preview before confirming send")
+        raise ValueError("Email confirmation preview changed; run a new dry-run preview before confirming send")
 
 
 def draft_confirmation_token(preview: dict[str, object]) -> str:

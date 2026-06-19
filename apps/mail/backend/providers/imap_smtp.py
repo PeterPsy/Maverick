@@ -26,7 +26,7 @@ from storage_attachments import (
     attach_workspace_attachments,
     draft_confirmation_preview,
     draft_with_current_attachments,
-    require_attachment_confirmation_token,
+    require_confirmation_token,
     save_attachment_to_storage,
 )
 
@@ -204,7 +204,7 @@ class ImapSmtpProvider:
                 "draft": preview_draft,
                 "confirmation_preview": confirmation_preview,
             }
-        require_attachment_confirmation_token(attachments=attachments, preview=confirmation_preview, confirmation_token=confirmation_token)
+        require_confirmation_token(preview=confirmation_preview, confirmation_token=confirmation_token)
         with self._smtp(settings) as client:
             client.login(str(settings["username"]), _smtp_password(app_secrets))
             client.send_message(message)

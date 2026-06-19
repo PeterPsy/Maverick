@@ -51,7 +51,10 @@
             "items": { "type": "object" }
           },
           "confirm": { "type": "boolean", "default": false },
-          "confirmation_token": { "type": "string" },
+          "confirmation_token": {
+            "type": "string",
+            "description": "Token returned in confirmation_preview; required when confirm=true."
+          },
           "max_threads": { "type": "integer", "minimum": 1, "maximum": 2000 },
           "max_messages": { "type": "integer", "minimum": 1, "maximum": 100 },
           "max_body_chars": { "type": "integer", "minimum": 200, "maximum": 50000 },

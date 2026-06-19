@@ -243,7 +243,10 @@
         "properties": {
           "draft_id": { "type": "string" },
           "confirm": { "type": "boolean", "default": false },
-          "confirmation_token": { "type": "string" }
+          "confirmation_token": {
+            "type": "string",
+            "description": "Token returned in confirmation_preview; required when confirm=true."
+          }
         },
         "required": ["draft_id"],
         "additionalProperties": false
@@ -293,7 +296,10 @@
             }
           },
           "confirm": { "type": "boolean", "default": false },
-          "confirmation_token": { "type": "string" }
+          "confirmation_token": {
+            "type": "string",
+            "description": "Token returned in confirmation_preview; required when confirm=true."
+          }
         },
         "required": ["subject", "body_text"],
         "anyOf": [

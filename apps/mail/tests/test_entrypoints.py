@@ -442,12 +442,22 @@ class MailServiceTest(unittest.TestCase):
             )
             self.assertEqual(status, 201)
             with patch("backend.service.provider_for_connection", return_value=provider):
+                status, preview = handle_action(
+                    data_root,
+                    {
+                        "action": "drafts.send",
+                        "draft_id": draft_payload["draft"]["id"],
+                    },
+                )
+                self.assertEqual(status, 200, preview)
+                confirmation_token = preview["result"]["confirmation_preview"]["confirmation_token"]
                 status, sent = handle_action(
                     data_root,
                     {
                         "action": "drafts.send",
                         "draft_id": draft_payload["draft"]["id"],
                         "confirm": True,
+                        "confirmation_token": confirmation_token,
                         "_app_secrets": {"mailbox-password": "mailbox-secret"},
                     },
                 )
@@ -1091,6 +1101,84 @@ class MailServiceTest(unittest.TestCase):
             self.assertTrue(preview["result"]["requires_confirmation"])
             self.assertEqual(preview["result"]["draft"]["body_html"], "")
             self.assertEqual(preview["result"]["draft"]["reply_to"], [])
+            self.assertRegex(preview["result"]["confirmation_preview"]["confirmation_token"], r"^[0-9a-f]{64}$")
+
+    def test_gmail_draft_confirm_requires_confirmation_token_without_attachments(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            data_root = Path(tmp)
+            self._insert_gmail_fixture(data_root)
+            status, created = handle_action(
+                data_root,
+                {
+                    "action": "drafts.create",
+                    "to": [{"email": "customer@example.com"}],
+                    "subject": "Follow up",
+                    "body_text": "Thanks for the context.",
+                },
+            )
+            self.assertEqual(status, 201, created)
+
+            status, payload = handle_action(
+                data_root,
+                {
+                    "action": "drafts.send",
+                    "draft_id": created["draft"]["id"],
+                    "confirm": True,
+                },
+            )
+
+            self.assertEqual(status, 400)
+            self.assertIn("confirmation_token", payload["detail"])
+
+    def test_gmail_draft_confirm_rejects_changed_body_preview_without_attachments(self) -> None:
+        transport_calls: list[str] = []
+
+        def fake_transport(request) -> dict[str, object]:
+            transport_calls.append(request.full_url)
+            raise AssertionError(f"unexpected request {request.full_url}")
+
+        with tempfile.TemporaryDirectory() as tmp:
+            data_root = Path(tmp)
+            self._insert_gmail_fixture(data_root)
+            status, created = handle_action(
+                data_root,
+                {
+                    "action": "drafts.create",
+                    "to": [{"email": "customer@example.com"}],
+                    "subject": "Follow up",
+                    "body_text": "Preview body.",
+                },
+            )
+            self.assertEqual(status, 201, created)
+            draft_id = created["draft"]["id"]
+            status, preview = handle_action(data_root, {"action": "drafts.send", "draft_id": draft_id})
+            self.assertEqual(status, 200, preview)
+            confirmation_token = preview["result"]["confirmation_preview"]["confirmation_token"]
+            status, updated = handle_action(
+                data_root,
+                {
+                    "action": "drafts.update",
+                    "draft_id": draft_id,
+                    "body_text": "Changed body.",
+                },
+            )
+            self.assertEqual(status, 200, updated)
+
+            with patch("backend.service.provider_for_connection", return_value=GmailProvider(transport=fake_transport)):
+                status, payload = handle_action(
+                    data_root,
+                    {
+                        "action": "drafts.send",
+                        "draft_id": draft_id,
+                        "confirm": True,
+                        "confirmation_token": confirmation_token,
+                        "_app_secrets": self._gmail_secrets(),
+                    },
+                )
+
+            self.assertEqual(status, 400)
+            self.assertIn("preview changed", payload["detail"])
+            self.assertEqual(transport_calls, [])
 
     def test_gmail_draft_preview_validates_workspace_attachments(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -1257,7 +1345,7 @@ class MailServiceTest(unittest.TestCase):
                 )
 
             self.assertEqual(status, 400)
-            self.assertIn("snapshot changed", payload["detail"])
+            self.assertIn("preview changed", payload["detail"])
             self.assertEqual(transport_calls, [])
 
     def test_mail_send_accepts_html_body_and_sends_multipart_gmail_message(self) -> None:
@@ -1276,6 +1364,19 @@ class MailServiceTest(unittest.TestCase):
             data_root = Path(tmp)
             self._insert_gmail_fixture(data_root)
             with patch("backend.service.provider_for_connection", return_value=GmailProvider(transport=fake_transport)):
+                status, preview = handle_action(
+                    data_root,
+                    {
+                        "action": "mail_send",
+                        "to": [{"email": "customer@example.com", "name": "Customer"}],
+                        "subject": "Richiesta ricevuta | Loopino",
+                        "body_text": "Plain confirmation",
+                        "body_html": "<p><strong>HTML confirmation</strong></p>",
+                        "reply_to": [{"email": "team@loopino.ai", "name": "Loopino"}],
+                    },
+                )
+                self.assertEqual(status, 200, preview)
+                confirmation_token = preview["result"]["confirmation_preview"]["confirmation_token"]
                 status, payload = handle_action(
                     data_root,
                     {
@@ -1286,6 +1387,7 @@ class MailServiceTest(unittest.TestCase):
                         "body_html": "<p><strong>HTML confirmation</strong></p>",
                         "reply_to": [{"email": "team@loopino.ai", "name": "Loopino"}],
                         "confirm": True,
+                        "confirmation_token": confirmation_token,
                         "_app_secrets": self._gmail_secrets(),
                     },
                 )

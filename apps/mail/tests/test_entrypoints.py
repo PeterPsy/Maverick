@@ -170,6 +170,25 @@ class MailServiceTest(unittest.TestCase):
                 resolve_secret_resource(
                     data_root,
                     {
+                        "action": "mail_list_threads",
+                        "connection_id": "mail_connection_gmail_person-example.com",
+                        "_app_secret_selector": {"logical_names": ["gmail-refresh-token"]},
+                    },
+                )["requires_secrets"]
+            )
+            self.assertFalse(
+                resolve_secret_resource(
+                    data_root,
+                    {
+                        "action": "threads.list",
+                        "connection_id": "mail_connection_gmail_person-example.com",
+                    },
+                )["requires_secrets"]
+            )
+            self.assertFalse(
+                resolve_secret_resource(
+                    data_root,
+                    {
                         "connection_id": "mail_connection_imap_team-loopino.ai",
                         "_app_secret_selector": {"logical_names": ["gmail-refresh-token"]},
                     },
@@ -3537,6 +3556,28 @@ class MailServiceTest(unittest.TestCase):
         self.assertTrue(all("when" not in selector for selector in thread_selectors))
         self.assertTrue(all(selector.get("when") == {"metadata_only": False} for selector in attachment_selectors))
         self.assertEqual(thread_properties["max_body_html_chars"]["maximum"], 250000)
+
+    def test_declared_thread_list_surfaces_are_cache_first(self) -> None:
+        mcp_schemas = json.loads((APP_ROOT / "mcp" / "tool_schemas.json").read_text(encoding="utf-8"))
+        cli_schemas = json.loads((APP_ROOT / "cli" / "command_schemas.json").read_text(encoding="utf-8"))
+
+        list_tool = mcp_schemas["tools"]["mail_list_threads"]
+        list_properties = list_tool["input_schema"]["properties"]
+        self.assertNotIn("sync_query", list_properties)
+        self.assertNotIn("sync_max_threads", list_properties)
+        self.assertNotIn("secret_selectors", list_tool)
+
+        command = cli_schemas["commands"]["mail"]
+        cli_properties = command["argument_schema"]["properties"]
+        self.assertNotIn("sync_query", cli_properties)
+        self.assertNotIn("sync_max_threads", cli_properties)
+        selector_actions: set[str] = set()
+        for selector in command["secret_selectors"]:
+            actions = selector.get("when", {}).get("action", [])
+            for action in ([actions] if isinstance(actions, str) else actions):
+                selector_actions.add(str(action))
+        self.assertNotIn("threads.list", selector_actions)
+        self.assertNotIn("mail_list_threads", selector_actions)
 
     def test_mcp_mail_send_schema_allows_token_only_confirmation(self) -> None:
         schemas = json.loads((APP_ROOT / "mcp" / "tool_schemas.json").read_text(encoding="utf-8"))

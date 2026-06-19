@@ -24,8 +24,6 @@
           },
           "label": { "type": "string" },
           "offset": { "type": "integer", "minimum": 0 },
-          "sync_query": { "type": "string" },
-          "sync_max_threads": { "type": "integer", "minimum": 1, "maximum": 2000 },
           "provider": { "type": "string" },
           "email_address": { "type": "string" },
           "username": { "type": "string" },
@@ -107,8 +105,6 @@
           "resource_lookup": { "kind": "mail_connection_from_arguments" },
           "when": {
             "action": [
-              "threads.list",
-              "mail_list_threads",
               "threads.get",
               "mail_get_thread",
               "threads.sync",
@@ -132,8 +128,6 @@
           "resource_lookup": { "kind": "mail_connection_from_arguments" },
           "when": {
             "action": [
-              "threads.list",
-              "mail_list_threads",
               "threads.get",
               "mail_get_thread",
               "threads.sync",

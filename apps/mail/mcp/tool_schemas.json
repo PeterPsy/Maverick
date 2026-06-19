@@ -125,24 +125,11 @@
           "query": { "type": "string" },
           "unread": { "type": "boolean" },
           "max_threads": { "type": "integer", "minimum": 1, "maximum": 2000 },
-          "offset": { "type": "integer", "minimum": 0 },
-          "sync_query": { "type": "string" },
-          "sync_max_threads": { "type": "integer", "minimum": 1, "maximum": 2000 }
+          "offset": { "type": "integer", "minimum": 0 }
         },
         "additionalProperties": false
       },
-      "output_schema": { "type": "object" },
-      "secret_selectors": [
-        {
-          "required_secrets": ["gmail-oauth-client-id", "gmail-oauth-client-secret"],
-          "resource_lookup": { "kind": "mail_connection_from_arguments" }
-        },
-        {
-          "required_secrets": ["gmail-refresh-token"],
-          "resource_type": "mail_connection",
-          "resource_lookup": { "kind": "mail_connection_from_arguments" }
-        }
-      ]
+      "output_schema": { "type": "object" }
     },
     "mail_get_thread": {
       "description": "Read one mail thread with bounded message bodies.",

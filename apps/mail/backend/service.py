@@ -78,6 +78,7 @@ MUTATING_ACTIONS = {
 }
 
 ATTACHMENT_GET_ACTIONS = {"attachments.get", "mail_get_attachment", "attachments.save_all", "mail_save_attachments"}
+THREAD_LIST_ACTIONS = {"threads.list", "mail_list_threads", "list"}
 INTERACTIVE_SYNC_MAX_THREADS = 25
 
 
@@ -124,7 +125,7 @@ def handle_action(data_root: Path, payload: dict[str, object]) -> tuple[int, dic
             return 200, {"items": list_folders(data_root, _optional_string(payload.get("connection_id")))}
         if action in {"labels.list", "mail_list_labels"}:
             return 200, {"items": list_labels(data_root, _optional_string(payload.get("connection_id")))}
-        if action in {"threads.list", "mail_list_threads", "list"}:
+        if action in THREAD_LIST_ACTIONS:
             cache_total_count = count_threads(data_root, payload)
             return 200, {
                 "items": list_threads(data_root, payload),
@@ -315,6 +316,8 @@ def handle_action(data_root: Path, payload: dict[str, object]) -> tuple[int, dic
 def resolve_secret_resource(data_root: Path, payload: dict[str, object]) -> dict[str, object]:
     """Resolve whether an invocation needs a per-connection provider secret grant."""
     try:
+        if _is_cache_only_thread_list_action(payload):
+            return {"requires_secrets": False}
         connection_id = _secret_resource_connection_id(data_root, payload)
         if not connection_id:
             return {"requires_secrets": False}
@@ -632,6 +635,11 @@ def _provider_sync_query(provider: object, payload: dict[str, object]) -> str | 
 
 def _payload_has_mailbox_filter(payload: dict[str, object]) -> bool:
     return bool(_optional_string(payload.get("mailbox") or payload.get("label") or payload.get("mailbox_scopes")))
+
+
+def _is_cache_only_thread_list_action(payload: dict[str, object]) -> bool:
+    action = _optional_string(payload.get("action"))
+    return bool(action and action in THREAD_LIST_ACTIONS)
 
 
 def _is_disconnected(data_root: Path, connection_id: str | None) -> bool:

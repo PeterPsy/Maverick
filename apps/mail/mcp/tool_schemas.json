@@ -115,10 +115,19 @@
         "properties": {
           "connection_id": { "type": "string" },
           "mailbox": { "type": "string" },
+          "mailbox_scopes": {
+            "oneOf": [
+              { "type": "string" },
+              { "type": "array", "items": { "type": "string" } }
+            ]
+          },
           "label": { "type": "string" },
           "query": { "type": "string" },
           "unread": { "type": "boolean" },
-          "max_threads": { "type": "integer", "minimum": 1, "maximum": 2000 }
+          "max_threads": { "type": "integer", "minimum": 1, "maximum": 2000 },
+          "offset": { "type": "integer", "minimum": 0 },
+          "sync_query": { "type": "string" },
+          "sync_max_threads": { "type": "integer", "minimum": 1, "maximum": 2000 }
         },
         "additionalProperties": false
       },
@@ -487,6 +496,13 @@
         "type": "object",
         "properties": {
           "connection_id": { "type": "string" },
+          "mailbox": { "type": "string" },
+          "mailbox_scopes": {
+            "oneOf": [
+              { "type": "string" },
+              { "type": "array", "items": { "type": "string" } }
+            ]
+          },
           "query": { "type": "string" },
           "max_threads": { "type": "integer", "minimum": 1, "maximum": 2000 },
           "page_token": { "type": "string" },

@@ -127,12 +127,22 @@ def handle_action(data_root: Path, payload: dict[str, object]) -> tuple[int, dic
             connection_id = _payload_connection_id(data_root, payload)
             provider = provider_for_connection(data_root, connection_id)
             provider_payload = _threads_list_provider_payload(data_root, payload, connection_id, provider)
-            return 200, {
-                "items": provider.list_threads(data_root, provider_payload),
+            sync_result = _threads_list_provider_sync(data_root, provider, provider_payload)
+            list_payload = {**provider_payload, "_skip_provider_list_sync": True} if sync_result else provider_payload
+            cache_total_count = count_threads(data_root, list_payload)
+            response = {
+                "items": provider.list_threads(data_root, list_payload),
                 "limit": _bounded_int(payload.get("max_threads") or payload.get("limit"), 50, 1, 200),
                 "offset": _bounded_int(payload.get("offset"), 0, 0, 100_000),
-                "total_count": count_threads(data_root, provider_payload),
+                "total_count": cache_total_count,
             }
+            provider_total_estimate = _sync_result_estimate(sync_result)
+            if provider_total_estimate is not None:
+                response["cache_total_count"] = cache_total_count
+                response["provider_total_estimate"] = provider_total_estimate
+                response["provider_has_more"] = bool(sync_result and sync_result.get("has_more"))
+                response["total_count"] = max(cache_total_count, provider_total_estimate)
+            return 200, response
         if action in {"mailboxes.counts", "mail_mailbox_counts"}:
             return 200, {"counts": mailbox_counts(data_root)}
         if action in {"threads.get", "mail_get_thread", "get"}:
@@ -160,7 +170,7 @@ def handle_action(data_root: Path, payload: dict[str, object]) -> tuple[int, dic
                     connection_id,
                     app_secrets=_app_secrets(payload),
                     max_threads=_bounded_int(payload.get("max_threads") or payload.get("limit"), INTERACTIVE_SYNC_MAX_THREADS, 1, 2000),
-                    query=_optional_string(payload.get("query")),
+                    query=_provider_sync_query(provider, payload),
                     page_token=_optional_string(payload.get("page_token")),
                     continue_cursor=bool(payload.get("continue_cursor")),
                 )
@@ -632,6 +642,43 @@ def _threads_list_provider_payload(
     ):
         return {**payload, "connection_id": connection_id}
     return payload
+
+
+def _threads_list_provider_sync(data_root: Path, provider: object, payload: dict[str, object]) -> dict[str, object] | None:
+    sync_for_thread_list = getattr(provider, "sync_for_thread_list", None)
+    if not callable(sync_for_thread_list):
+        return None
+    result = sync_for_thread_list(data_root, payload)
+    return result if isinstance(result, dict) else None
+
+
+def _provider_sync_query(provider: object, payload: dict[str, object]) -> str | None:
+    query = _optional_string(payload.get("query"))
+    if query:
+        sync_query_for_payload = getattr(provider, "sync_query_for_payload", None)
+        if callable(sync_query_for_payload):
+            return sync_query_for_payload(payload, default_recent=False)
+        return query
+    if not _payload_has_mailbox_filter(payload):
+        return None
+    sync_query_for_payload = getattr(provider, "sync_query_for_payload", None)
+    if callable(sync_query_for_payload):
+        return sync_query_for_payload(payload, default_recent=False)
+    return None
+
+
+def _payload_has_mailbox_filter(payload: dict[str, object]) -> bool:
+    return bool(_optional_string(payload.get("mailbox") or payload.get("label") or payload.get("mailbox_scopes")))
+
+
+def _sync_result_estimate(sync_result: dict[str, object] | None) -> int | None:
+    if not sync_result:
+        return None
+    try:
+        parsed = int(sync_result.get("result_size_estimate"))
+    except (TypeError, ValueError):
+        return None
+    return max(0, parsed)
 
 
 def _is_disconnected(data_root: Path, connection_id: str | None) -> bool:

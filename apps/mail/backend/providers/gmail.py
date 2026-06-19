@@ -43,6 +43,17 @@ GMAIL_CLIENT_SECRET_SECRET = "gmail-oauth-client-secret"
 GOOGLE_TOKEN_ENDPOINT = "https://oauth2.googleapis.com/token"
 GMAIL_API_ROOT = "https://gmail.googleapis.com/gmail/v1/users/me"
 GMAIL_THREAD_PAGE_SIZE = 100
+GMAIL_THREAD_LIST_PREFETCH_MAX = 2000
+GMAIL_DEFAULT_THREAD_LIST_QUERY = "newer_than:30d"
+GMAIL_MAILBOX_QUERIES = {
+    "inbox": "in:inbox",
+    "sent": "in:sent",
+    "drafts": "in:drafts",
+    "starred": "is:starred",
+    "trash": "in:trash",
+}
+AGGREGATE_MAILBOX_SCOPE_PREFIX = "all:"
+CONNECTION_MAILBOX_SCOPE_PREFIX = "connection:"
 
 HttpTransport = Callable[[Request], dict[str, object]]
 
@@ -80,17 +91,26 @@ class GmailProvider:
         return self._gmail_json("GET", "profile", access_token=access_token)
 
     def list_threads(self, data_root: Path, payload: dict[str, object]) -> list[dict[str, object]]:
-        connection_id = _optional_string(payload.get("connection_id"))
-        if connection_id and _as_secret_map(payload).get(GMAIL_REFRESH_TOKEN_SECRET):
-            self.sync_incremental(
-                data_root,
-                connection_id,
-                app_secrets=_as_secret_map(payload),
-                max_threads=_bounded_int(payload.get("max_threads") or payload.get("limit"), 50, 1, 100),
-                query=str(payload.get("sync_query") or "newer_than:30d"),
-                persist_cursor=False,
-            )
+        if not payload.get("_skip_provider_list_sync"):
+            self.sync_for_thread_list(data_root, payload)
         return list_threads(data_root, payload)
+
+    def sync_query_for_payload(self, payload: dict[str, object], default_recent: bool = True) -> str | None:
+        return _gmail_sync_query(payload, default_recent=default_recent)
+
+    def sync_for_thread_list(self, data_root: Path, payload: dict[str, object]) -> dict[str, object] | None:
+        connection_id = _optional_string(payload.get("connection_id"))
+        app_secrets = _as_secret_map(payload)
+        if not connection_id or not app_secrets.get(GMAIL_REFRESH_TOKEN_SECRET):
+            return None
+        return self.sync_incremental(
+            data_root,
+            connection_id,
+            app_secrets=app_secrets,
+            max_threads=_thread_list_sync_limit(payload),
+            query=self.sync_query_for_payload(payload, default_recent=True),
+            persist_cursor=False,
+        )
 
     def get_thread(
         self,
@@ -219,6 +239,7 @@ class GmailProvider:
         max_total = _bounded_int(max_threads, 100, 1, 2000)
         query_text = str(query or "").strip()
         synced = 0
+        result_size_estimate: int | None = None
         next_page_token = str(page_token or "").strip()
         if continue_cursor and not next_page_token:
             next_page_token = _sync_cursor(data_root, connection_id)
@@ -231,6 +252,8 @@ class GmailProvider:
             if next_page_token:
                 params["pageToken"] = next_page_token
             response = self._gmail_json("GET", f"threads?{urlencode(params)}", access_token=access_token)
+            if result_size_estimate is None:
+                result_size_estimate = _optional_non_negative_int(response.get("resultSizeEstimate"))
             thread_refs = response.get("threads") if isinstance(response.get("threads"), list) else []
             for item in thread_refs:
                 if synced >= max_total:
@@ -273,6 +296,7 @@ class GmailProvider:
             "synced_threads": synced,
             "has_more": bool(next_page_token),
             "next_page_token": next_page_token,
+            "result_size_estimate": result_size_estimate,
             "mode": "gmail",
         }
 
@@ -415,6 +439,72 @@ class GmailProvider:
 def _urlopen_json(request: Request) -> dict[str, object]:
     with urlopen(request, timeout=30) as response:
         return json.loads(response.read().decode("utf-8"))
+
+
+def _thread_list_sync_limit(payload: dict[str, object]) -> int:
+    explicit = payload.get("sync_max_threads") or payload.get("sync_limit")
+    if explicit not in (None, ""):
+        return _bounded_int(explicit, 50, 1, GMAIL_THREAD_LIST_PREFETCH_MAX)
+    limit = _bounded_int(payload.get("max_threads") or payload.get("limit"), 50, 1, 200)
+    offset = _bounded_int(payload.get("offset"), 0, 0, 100_000)
+    return _bounded_int(limit + offset, limit, 1, GMAIL_THREAD_LIST_PREFETCH_MAX)
+
+
+def _gmail_sync_query(payload: dict[str, object], default_recent: bool = True) -> str | None:
+    explicit = _optional_string(payload.get("sync_query"))
+    if explicit:
+        return explicit
+    mailbox_query = GMAIL_MAILBOX_QUERIES.get(_thread_list_mailbox(payload) or "")
+    search_query = _optional_string(payload.get("query"))
+    parts: list[str] = []
+    if mailbox_query:
+        parts.append(mailbox_query)
+    elif default_recent and not search_query:
+        parts.append(GMAIL_DEFAULT_THREAD_LIST_QUERY)
+    if search_query:
+        parts.append(search_query)
+    return " ".join(parts) or None
+
+
+def _thread_list_mailbox(payload: dict[str, object]) -> str | None:
+    direct = _optional_string(payload.get("mailbox") or payload.get("label"))
+    if direct and direct.lower() in GMAIL_MAILBOX_QUERIES:
+        return direct.lower()
+    scoped_mailboxes = {mailbox for mailbox in _mailbox_scope_mailboxes(payload.get("mailbox_scopes")) if mailbox in GMAIL_MAILBOX_QUERIES}
+    return next(iter(scoped_mailboxes)) if len(scoped_mailboxes) == 1 else None
+
+
+def _mailbox_scope_mailboxes(value: object) -> list[str]:
+    if isinstance(value, list):
+        raw_scopes: list[object] = value
+    else:
+        raw_scopes = [scope.strip() for scope in str(value or "").split(",") if scope.strip()]
+    mailboxes: list[str] = []
+    seen: set[str] = set()
+    for raw_scope in raw_scopes:
+        mailbox = _mailbox_scope_mailbox(raw_scope)
+        if not mailbox or mailbox in seen:
+            continue
+        seen.add(mailbox)
+        mailboxes.append(mailbox)
+    return mailboxes
+
+
+def _mailbox_scope_mailbox(value: object) -> str | None:
+    if isinstance(value, dict):
+        mailbox = _optional_string(value.get("mailbox"))
+        return mailbox.lower() if mailbox and mailbox.lower() in GMAIL_MAILBOX_QUERIES else None
+    scope_id = _optional_string(value)
+    if not scope_id:
+        return None
+    if scope_id.startswith(AGGREGATE_MAILBOX_SCOPE_PREFIX):
+        mailbox = scope_id.removeprefix(AGGREGATE_MAILBOX_SCOPE_PREFIX)
+    elif scope_id.startswith(CONNECTION_MAILBOX_SCOPE_PREFIX) and ":" in scope_id.removeprefix(CONNECTION_MAILBOX_SCOPE_PREFIX):
+        mailbox = scope_id.rsplit(":", 1)[1]
+    else:
+        return None
+    mailbox = mailbox.strip().lower()
+    return mailbox if mailbox in GMAIL_MAILBOX_QUERIES else None
 
 
 def _cache_thread(data_root: Path, connection_id: str, thread: dict[str, object]) -> None:
@@ -877,6 +967,14 @@ def _bounded_int(value: object, default: int, minimum: int, maximum: int) -> int
     except (TypeError, ValueError):
         parsed = default
     return max(minimum, min(maximum, parsed))
+
+
+def _optional_non_negative_int(value: object) -> int | None:
+    try:
+        parsed = int(value)
+    except (TypeError, ValueError):
+        return None
+    return max(0, parsed)
 
 
 def _save_attachment_to_storage(

@@ -16,7 +16,16 @@
           "draft_id": { "type": "string" },
           "query": { "type": "string" },
           "mailbox": { "type": "string" },
+          "mailbox_scopes": {
+            "oneOf": [
+              { "type": "string" },
+              { "type": "array", "items": { "type": "string" } }
+            ]
+          },
           "label": { "type": "string" },
+          "offset": { "type": "integer", "minimum": 0 },
+          "sync_query": { "type": "string" },
+          "sync_max_threads": { "type": "integer", "minimum": 1, "maximum": 2000 },
           "provider": { "type": "string" },
           "email_address": { "type": "string" },
           "username": { "type": "string" },

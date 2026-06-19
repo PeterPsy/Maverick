@@ -43,6 +43,46 @@ export function writeMailThreadDragData(dataTransfer: MailThreadDragDataTransfer
   dataTransfer.effectAllowed = 'copy';
 }
 
+export function mountMailThreadDragPreview(thread: MailThread): HTMLElement | null {
+  if (typeof document === 'undefined' || !document.body) {
+    return null;
+  }
+  const preview = document.createElement('div');
+  preview.className = 'mail-thread-drag-preview';
+  preview.setAttribute('aria-hidden', 'true');
+
+  const icon = document.createElement('span');
+  icon.className = 'mail-thread-drag-preview__icon';
+  icon.append(mailIconSvg());
+
+  const title = document.createElement('span');
+  title.className = 'mail-thread-drag-preview__title';
+  title.textContent = thread.subject.trim() || 'Email thread';
+
+  preview.append(icon, title);
+  document.body.append(preview);
+  return preview;
+}
+
+function mailIconSvg() {
+  const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+  svg.setAttribute('viewBox', '0 0 24 24');
+  svg.setAttribute('fill', 'none');
+  svg.setAttribute('stroke', 'currentColor');
+  svg.setAttribute('stroke-width', '1.9');
+  svg.setAttribute('stroke-linecap', 'round');
+  svg.setAttribute('stroke-linejoin', 'round');
+  svg.setAttribute('aria-hidden', 'true');
+
+  const outline = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+  outline.setAttribute('d', 'M4 6h16v12H4z');
+  const flap = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+  flap.setAttribute('d', 'm4 7 8 6 8-6');
+
+  svg.append(outline, flap);
+  return svg;
+}
+
 function addressLabel(address?: MailAddress) {
   if (!address?.email) {
     return '';

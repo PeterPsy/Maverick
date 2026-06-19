@@ -3666,12 +3666,16 @@ class MailServiceTest(unittest.TestCase):
         styles = (APP_ROOT / "frontend" / "src" / "styles.css").read_text(encoding="utf-8")
 
         self.assertIn("mailThreadDragPayloadFromThread", app_source)
+        self.assertIn("mountMailThreadDragPreview", app_source)
         self.assertIn("writeMailThreadDragData(event.dataTransfer", app_source)
+        self.assertIn("event.dataTransfer.setDragImage(dragPreview, 22, 22)", app_source)
         self.assertIn("onDragStart={(event) => handleThreadDragStart(event, thread)}", app_source)
         self.assertIn("application/x-maverick-mail-thread", drag_source)
         self.assertIn("thread_id: thread.id", drag_source)
+        self.assertIn("mail-thread-drag-preview__title", drag_source)
         self.assertIn('.thread-row[draggable="true"]', styles)
         self.assertIn(".thread-row.is-dragging", styles)
+        self.assertIn(".mail-thread-drag-preview", styles)
 
     def test_frontend_add_account_lives_in_sidebar_and_opens_provider_modal(self) -> None:
         app_source = (APP_ROOT / "frontend" / "src" / "App.tsx").read_text(encoding="utf-8")

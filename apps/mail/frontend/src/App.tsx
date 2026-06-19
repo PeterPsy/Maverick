@@ -20,7 +20,7 @@ import {
   type MailThread
 } from './api';
 import SlidingPagination from './components/ui/sliding-pagination';
-import { mailThreadDragPayloadFromThread, writeMailThreadDragData } from './lib/mailThreadDragDrop';
+import { mailThreadDragPayloadFromThread, mountMailThreadDragPreview, writeMailThreadDragData } from './lib/mailThreadDragDrop';
 import {
   DEFAULT_MAILBOX_SCOPE_IDS,
   isMailbox,
@@ -825,8 +825,11 @@ export function App() {
   const threadListRequestRef = useRef(0);
   const threadOpenRequestRef = useRef(0);
   const selectedThreadRef = useRef<MailThread | null>(null);
+  const dragPreviewRef = useRef<HTMLElement | null>(null);
   const serializedMailboxScopes = useMemo(() => serializeMailboxScopeIds(mailboxScopeIds), [mailboxScopeIds]);
   const primaryScope = useMemo(() => primaryMailboxScope(mailboxScopeIds), [mailboxScopeIds]);
+
+  useEffect(() => () => cleanupThreadDragPreview(), []);
 
   useEffect(() => {
     selectedThreadRef.current = selectedThread;
@@ -1259,8 +1262,24 @@ export function App() {
   }
 
   function handleThreadDragStart(event: DragEvent<HTMLElement>, thread: MailThread) {
+    cleanupThreadDragPreview();
     setDraggingThreadId(thread.id);
     writeMailThreadDragData(event.dataTransfer, mailThreadDragPayloadFromThread(thread));
+    const dragPreview = mountMailThreadDragPreview(thread);
+    if (dragPreview) {
+      dragPreviewRef.current = dragPreview;
+      event.dataTransfer.setDragImage(dragPreview, 22, 22);
+    }
+  }
+
+  function handleThreadDragEnd() {
+    setDraggingThreadId('');
+    cleanupThreadDragPreview();
+  }
+
+  function cleanupThreadDragPreview() {
+    dragPreviewRef.current?.remove();
+    dragPreviewRef.current = null;
   }
 
   return (
@@ -1364,7 +1383,7 @@ export function App() {
                     draggingThreadId === thread.id ? 'is-dragging' : ''
                   }`}
                   draggable
-                  onDragEnd={() => setDraggingThreadId('')}
+                  onDragEnd={handleThreadDragEnd}
                   onDragStart={(event) => handleThreadDragStart(event, thread)}
                 >
                   <button className="thread-row__body" type="button" onClick={() => openThread(thread.id, thread.connection_id)}>

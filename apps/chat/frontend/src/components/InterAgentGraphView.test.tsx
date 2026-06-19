@@ -7,6 +7,7 @@ import type { Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { InterAgentApprovalRecord, InterAgentRunDetail } from "../api/client";
 import {
+  closeInterAgentRun,
   getInterAgentRun,
   interruptInterAgentRun,
   listInterAgentRunApprovals,
@@ -184,6 +185,10 @@ beforeEach(() => {
     newest_event_id: null,
   });
   vi.mocked(interruptInterAgentRun).mockResolvedValue({ run: { ...runDetail().run, status: "paused" } });
+  vi.mocked(closeInterAgentRun).mockResolvedValue({
+    run: { ...runDetail().run, status: "cancelled" },
+    participant_cleanups: [],
+  });
   vi.mocked(resolveInterAgentApproval).mockResolvedValue({ approval: approvalRecord({ status: "approved" }) });
 });
 
@@ -232,6 +237,139 @@ describe("InterAgentGraphView", () => {
     expect(element.textContent).toContain("orchestrator");
     expect(element.textContent).toContain("Target");
     expect(element.textContent).toContain("researcher");
+  });
+
+  it("renders a multi-worker demo graph with timeline, artifacts, and stop control", async () => {
+    const base = runDetail();
+    const detail = runDetail({
+      run: { ...base.run, mode: "sequential" },
+      participants: [
+        base.participants[0],
+        {
+          ...base.participants[1],
+          participant_id: "implementer",
+          label: "Implementer",
+          runtime_session_id: "child-implementer",
+          status: "completed",
+        },
+        {
+          ...base.participants[1],
+          participant_id: "reviewer",
+          label: "Reviewer",
+          runtime_session_id: "child-reviewer",
+          status: "running",
+        },
+      ],
+      edges: [
+        {
+          ...base.edges[0],
+          edge_id: "edge-implementation",
+          source_id: "orchestrator",
+          target_id: "implementer",
+          kind: "delegated",
+          label: "Implementation",
+        },
+        {
+          ...base.edges[0],
+          edge_id: "edge-review",
+          source_id: "implementer",
+          target_id: "reviewer",
+          kind: "reviewed_by",
+          label: "Review",
+        },
+        {
+          ...base.edges[0],
+          edge_id: "edge-final-review",
+          source_id: "reviewer",
+          target_id: "orchestrator",
+          kind: "produced",
+          label: "Final review",
+        },
+      ],
+    });
+    vi.mocked(getInterAgentRun).mockResolvedValue(detail);
+    const element = await renderGraph({
+      initialRunDetail: detail,
+      initialEvents: [
+        {
+          event_id: "event-plan",
+          workspace_id: "default",
+          run_id: "run-1",
+          thread_id: "thread-1",
+          root_runtime_session_id: "session-1",
+          participant_id: "orchestrator",
+          runtime_session_id: null,
+          runtime_turn_id: null,
+          runtime_event_id: null,
+          event_type: "inter_agent.plan.summary_created",
+          visibility_plane: "summary",
+          sequence: 1,
+          correlation_id: "event-plan",
+          idempotency_key: "event-plan",
+          payload: { summary: "Orchestrator started a staged multi-agent run with 2 worker nodes." },
+          created_at: "2026-06-18T10:00:01Z",
+        },
+        {
+          event_id: "event-artifact",
+          workspace_id: "default",
+          run_id: "run-1",
+          thread_id: "thread-1",
+          root_runtime_session_id: "session-1",
+          participant_id: "reviewer",
+          runtime_session_id: "child-reviewer",
+          runtime_turn_id: "turn-reviewer",
+          runtime_event_id: null,
+          event_type: "inter_agent.artifact.created",
+          visibility_plane: "detail",
+          sequence: 2,
+          correlation_id: "event-artifact",
+          idempotency_key: "event-artifact",
+          payload: {
+            artifact_refs: [{ artifact_id: "artifact-final", label: "Final brief", workspace_relative_path: "storage/generated/final.md" }],
+            partial_output: "Reviewer draft before final synthesis.",
+            status: "created",
+          },
+          created_at: "2026-06-18T10:00:02Z",
+        },
+      ],
+    });
+
+    expect(element.textContent).toContain("3 nodes");
+    expect(element.querySelectorAll("[data-participant-id]").length).toBe(3);
+    expect(element.textContent).toContain("Implementer");
+    expect(element.textContent).toContain("Reviewer");
+    expect(element.querySelectorAll(".chatapp-inter-agent-graph__edge-path").length).toBe(3);
+    expect(element.textContent).toContain("Orchestrator started a staged multi-agent run with 2 worker nodes.");
+    expect(element.textContent).toContain("Final brief");
+
+    const reviewEdge = Array.from(element.querySelectorAll(".chatapp-inter-agent-graph__edge-chip")).find((button) =>
+      button.textContent?.includes("Review"),
+    ) as HTMLButtonElement | undefined;
+    await act(async () => {
+      reviewEdge?.click();
+      await Promise.resolve();
+    });
+    expect(element.textContent).toContain("Source");
+    expect(element.textContent).toContain("implementer");
+    expect(element.textContent).toContain("Target");
+    expect(element.textContent).toContain("reviewer");
+
+    const artifactButton = Array.from(element.querySelectorAll(".chatapp-inter-agent-graph__artifact-list button")).find((button) =>
+      button.textContent?.includes("Final brief"),
+    ) as HTMLButtonElement | undefined;
+    await act(async () => {
+      artifactButton?.click();
+      await Promise.resolve();
+    });
+    expect(element.textContent).toContain("storage/generated/final.md");
+    expect(element.textContent).toContain("Reviewer draft before final synthesis.");
+
+    await act(async () => {
+      (Array.from(element.querySelectorAll("button")).find((button) => button.textContent?.includes("Stop")) as HTMLButtonElement | undefined)?.click();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    expect(closeInterAgentRun).toHaveBeenCalledWith("run-1", { reason: "chat_graph_stop", terminal_status: "cancelled" });
   });
 
   it("keeps long labels visible inside graph panels", async () => {

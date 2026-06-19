@@ -695,17 +695,18 @@ def _execute_runtime_participant(
             runtime_turn_id=turn.turn_id,
         )
     output_text = _runtime_output_text(events)
+    partial_output = _runtime_partial_output_text(events)
     artifact_refs = _runtime_artifact_refs(events)
     if turn.status == "cancelled":
-        summary = _compact_summary(output_text) or f"{participant.label} cancelled."
-        if artifact_refs or output_text:
+        summary = _runtime_participant_summary(participant.label, "cancelled", output_text=output_text)
+        if artifact_refs or partial_output:
             _record_artifacts(
                 service,
                 run,
                 participant=latest_participant,
                 task_id=task_id,
                 artifact_refs=artifact_refs,
-                partial_output=output_text,
+                partial_output=partial_output,
                 synthetic=False,
                 synthetic_source=None,
                 clock=clock,
@@ -734,26 +735,31 @@ def _execute_runtime_participant(
             synthetic_source=None,
             output_text=output_text,
             summary=summary,
-            partial_output=output_text,
+            partial_output=partial_output,
             artifact_refs=artifact_refs,
             error=turn.failure_reason,
             runtime_session_id=runtime_session_id,
             runtime_turn_id=turn.turn_id,
         )
     status = "completed" if turn.status == "completed" else "failed"
-    if status == "failed" and (artifact_refs or output_text):
+    if status == "failed" and (artifact_refs or partial_output):
         _record_artifacts(
             service,
             run,
             participant=participant,
             task_id=task_id,
             artifact_refs=artifact_refs,
-            partial_output=output_text,
+            partial_output=partial_output,
             synthetic=False,
             synthetic_source=None,
             clock=clock,
         )
-    summary = _compact_summary(output_text) or f"{participant.label} {status}."
+    summary = _runtime_participant_summary(
+        participant.label,
+        status,
+        output_text=output_text,
+        error=turn.failure_reason,
+    )
     _finish_participant(
         service,
         run,
@@ -778,7 +784,7 @@ def _execute_runtime_participant(
         synthetic_source=None,
         output_text=output_text,
         summary=summary,
-        partial_output=output_text if status == "failed" else "",
+        partial_output=partial_output,
         artifact_refs=artifact_refs,
         error=turn.failure_reason,
         runtime_session_id=session.session_id,
@@ -1060,7 +1066,10 @@ def _participant_input(
     previous_output: str = "",
 ) -> str:
     specific = participant_inputs.get(participant.participant_id, "").strip()
-    text = specific or str(base_input or "").strip()
+    request_text = str(base_input or "").strip()
+    text = specific or request_text
+    if specific and request_text and specific != request_text:
+        text = f"{text}\n\nOriginal user request:\n{request_text}"
     if previous_output:
         suffix = f"Previous participant output:\n{previous_output}"
         text = f"{text}\n\n{suffix}" if text else suffix
@@ -1118,11 +1127,12 @@ def _merge_input_for_aggregator(*, input_text: str, fanout_results: list[Partici
 
 def _plan_summary(run: InterAgentRunRecord, participants: list[InterAgentParticipantRecord]) -> str:
     work_count = len(_work_participants(run, participants))
+    worker_nodes = _plural(work_count, "worker node")
     if run.mode == "concurrent":
-        return f"Orchestrator started a concurrent multi-agent run with {work_count} participant(s)."
+        return f"Orchestrator started a parallel multi-agent run with {worker_nodes}."
     if run.mode == "sequential":
-        return f"Orchestrator started a sequential multi-agent run with {work_count} participant(s)."
-    return f"Orchestrator started manager-tools mode with {work_count} participant(s)."
+        return f"Orchestrator started a staged multi-agent run with {worker_nodes}."
+    return f"Orchestrator started a delegated multi-agent run with {worker_nodes}."
 
 
 def _final_summary(*, final_status: str, participant_results: list[ParticipantExecutionResult]) -> str:
@@ -1169,7 +1179,7 @@ def _final_answer_text(*, final_status: str, participant_results: list[Participa
     if failed:
         details = []
         for result in failed:
-            text = str(result.partial_output or result.output_text or result.error or result.summary or "").strip()
+            text = str(result.output_text or result.error or result.summary or "").strip()
             if text:
                 details.append(f"{result.label}: {text}")
         if details:
@@ -1180,16 +1190,47 @@ def _final_answer_text(*, final_status: str, participant_results: list[Participa
 
 def _runtime_output_text(events: list[Any]) -> str:
     final_text = ""
+    for event in events:
+        payload = getattr(event, "payload", {})
+        if not isinstance(payload, dict):
+            continue
+        if getattr(event, "event_type", "") != "runtime.output.final":
+            continue
+        text = payload.get("text")
+        if isinstance(text, str) and text.strip():
+            final_text = text
+    return final_text.strip()
+
+
+def _runtime_partial_output_text(events: list[Any]) -> str:
     deltas: list[str] = []
     for event in events:
         payload = getattr(event, "payload", {})
         if not isinstance(payload, dict):
             continue
-        if getattr(event, "event_type", "") == "runtime.output.final" and isinstance(payload.get("text"), str):
-            final_text = payload["text"]
-        elif getattr(event, "event_type", "") == "runtime.output.delta" and isinstance(payload.get("text"), str):
+        if getattr(event, "event_type", "") == "runtime.output.delta" and isinstance(payload.get("text"), str):
             deltas.append(payload["text"])
-    return (final_text or "".join(deltas)).strip()
+    return "".join(deltas).strip()
+
+
+def _runtime_participant_summary(
+    label: str,
+    status: str,
+    *,
+    output_text: str,
+    error: str | None = None,
+) -> str:
+    summary = _compact_summary(output_text)
+    if summary:
+        return summary
+    if status == "completed":
+        return f"{label} completed without a final answer."
+    if status == "cancelled":
+        return f"{label} cancelled."
+    error_text = _compact_summary(error or "")
+    if error_text:
+        return f"{label} failed: {error_text}"
+    return f"{label} failed before producing a final answer."
 
 
 def _runtime_artifact_refs(events: list[Any]) -> list[dict[str, Any]]:
@@ -1210,6 +1251,12 @@ def _compact_summary(value: str, *, max_chars: int = 240) -> str:
     if len(text) <= max_chars:
         return text
     return f"{text[: max_chars - 3].rstrip()}..."
+
+
+def _plural(count: int, singular: str) -> str:
+    if count == 1:
+        return f"1 {singular}"
+    return f"{count} {singular}s"
 
 
 def _max_concurrent_participants(service: InterAgentService, run: InterAgentRunRecord) -> int:

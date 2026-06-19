@@ -22,6 +22,7 @@ import { eventsToMessages } from "../lib/transcript";
 import { useChatRootDropHandlers } from "./useChatRootDropHandlers";
 import { useDockedComposerHeight } from "./useDockedComposerHeight";
 import type { DraftChat } from "./useMessageSubmission";
+import { interAgentComposerBudgetLabel } from "./useMessageSubmission";
 
 const EVENT_PROJECTION_MIN_LIMIT = 500;
 const EVENT_PROJECTION_EVENTS_PER_VISIBLE_MESSAGE = 80;
@@ -191,13 +192,7 @@ export function useChatControllerPresentation({
     [activeTurn, events, isBootstrapping, isHistoryLoading, isRuntimeBusy, isSending],
   );
   const multiAgentBudgetLabel = useMemo(() => {
-    if (multiAgentMode === "multi") {
-      return "2 participants · 4 turns · 4 tool calls";
-    }
-    if (multiAgentMode === "auto") {
-      return "2 participants · 2 turns · 1 tool call";
-    }
-    return "";
+    return interAgentComposerBudgetLabel(multiAgentMode);
   }, [multiAgentMode]);
   const { handleChatRootDragOver, handleChatRootDrop } = useChatRootDropHandlers({
     disabled: isThreadLoading,

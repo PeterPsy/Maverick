@@ -55,6 +55,7 @@ export type CreateInterAgentRunPayload = {
 export type ExecuteInterAgentRunPayload = {
   input_text: string;
   client_message_id?: string;
+  participant_inputs?: Record<string, string>;
   attachments?: ChatMessageAttachment[];
   app_references?: AppReference[];
   async?: boolean;

@@ -198,7 +198,7 @@ async function renderComposer({
         executionMode={null}
         isSending={false}
         mentionItems={mentionItems}
-        multiAgentBudgetLabel="2 participants · 2 turns · 1 tool call"
+        multiAgentBudgetLabel="1 worker · 1 turn · 1 tool call"
         multiAgentMode={multiAgentMode}
         onAddAttachments={onAddAttachments}
         onChange={(nextValue) => {
@@ -1270,7 +1270,7 @@ describe("ChatComposer reference search", () => {
     });
 
     expect(element.textContent).toContain("Auto");
-    expect(element.textContent).toContain("2 participants · 2 turns · 1 tool call");
+    expect(element.textContent).toContain("1 worker · 1 turn · 1 tool call");
 
     const autoButton = [...element.querySelectorAll('[role="menuitemradio"]')].find((item) => item.textContent?.includes("Auto")) as HTMLButtonElement;
     await act(async () => {

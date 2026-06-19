@@ -67,7 +67,8 @@ class InterAgentExecutorTest(unittest.TestCase):
         self.assertIn("inter_agent.artifact.created", [event.event_type for event in events])
         self.assertIn("inter_agent.run.completed", [event.event_type for event in events])
         self.assertEqual([event.event_type for event in root_events], ["runtime.step.updated", "runtime.step.updated"])
-        self.assertIn("manager-tools mode", root_events[0].payload["label"])
+        self.assertEqual(root_events[0].payload["label"], "Orchestrator started a delegated multi-agent run with 2 worker nodes.")
+        self.assertNotIn("participant(s)", root_events[0].payload["label"])
         self.assertIn("Multi-agent run completed", root_events[-1].payload["label"])
         self.assertTrue(result.participant_results[0].synthetic)
         self.assertEqual(result.participant_results[0].synthetic_source, "controlled_payload")
@@ -147,6 +148,10 @@ class InterAgentExecutorTest(unittest.TestCase):
             workspace_id="default",
             run_id=run.run_id,
             input_text="Research then synthesize.",
+            participant_inputs={
+                "researcher": "Find the primary evidence.",
+                "synthesizer": "Synthesize the prior evidence.",
+            },
             controlled_participants={
                 "researcher": {"output_text": "Primary evidence A.", "summary": "Evidence A found."},
                 "synthesizer": {"output_text": "Synthesis used evidence A.", "summary": "Synthesis completed."},
@@ -163,6 +168,8 @@ class InterAgentExecutorTest(unittest.TestCase):
         ]
 
         self.assertEqual(len(message_events), 2)
+        self.assertIn("Synthesize the prior evidence.", message_events[1].payload["input_text"])
+        self.assertIn("Original user request:\nResearch then synthesize.", message_events[1].payload["input_text"])
         self.assertIn("Primary evidence A.", message_events[1].payload["input_text"])
 
     def test_concurrent_runtime_participants_spawn_hidden_sessions_and_complete(self) -> None:
@@ -335,6 +342,76 @@ class InterAgentExecutorTest(unittest.TestCase):
         self.assertEqual(len(result.participant_results), 1)
         self.assertEqual(result.participant_results[0].output_text, "Async child completed.")
         self.assertEqual(result.participant_results[0].status, "completed")
+
+    def test_runtime_participant_requires_explicit_final_output_for_final_answer(self) -> None:
+        _repo_root, store, runtime_store = self._stores()
+        service = InterAgentService(store)
+        run = service.create_run(
+            _run_spec(
+                run_id="runtime-empty-final",
+                participants=[_participant("researcher", "Researcher", execution_mode="child_runtime_session")],
+            ),
+            now=NOW,
+        )
+
+        def fake_submit(state, *, session, input_text, client_message_id=None, async_requested=False):
+            turn_id = f"turn-{session.session_id}"
+            turn = RuntimeTurnRecord(
+                turn_id=turn_id,
+                session_id=session.session_id,
+                workspace_id="default",
+                status="completed",
+                input_text=input_text,
+                created_at=NOW,
+                updated_at=NOW,
+                started_at=NOW,
+                completed_at=NOW,
+                failure_reason=None,
+            )
+            delta = RuntimeEventRecord(
+                event_id=f"event-delta-{session.session_id}",
+                workspace_id="default",
+                session_id=session.session_id,
+                plane="turn",
+                event_type="runtime.output.delta",
+                turn_id=turn_id,
+                process_id=None,
+                payload={"text": "Mi oriento sul codice e preparo il piano."},
+                created_at=NOW,
+            )
+            final = RuntimeEventRecord(
+                event_id=f"event-final-{session.session_id}",
+                workspace_id="default",
+                session_id=session.session_id,
+                plane="turn",
+                event_type="runtime.output.final",
+                turn_id=turn_id,
+                process_id=None,
+                payload={"text": ""},
+                created_at=NOW,
+            )
+            state.runtime_store.save_turn(turn)
+            state.runtime_store.save_event(delta)
+            state.runtime_store.save_event(final)
+            return turn, [delta, final]
+
+        with patch("core.inter_agent.service.submit_runtime_turn", side_effect=fake_submit):
+            result = execute_inter_agent_run(
+                service,
+                _state(runtime_store),
+                workspace_id="default",
+                run_id=run.run_id,
+                input_text="Review readiness.",
+                project_summaries=False,
+                now=NOW,
+            )
+
+        participant_result = result.participant_results[0]
+        self.assertEqual(participant_result.output_text, "")
+        self.assertEqual(participant_result.partial_output, "Mi oriento sul codice e preparo il piano.")
+        self.assertEqual(participant_result.summary, "Researcher completed without a final answer.")
+        self.assertEqual(result.final_answer, "Researcher completed without a final answer.")
+        self.assertNotIn("Mi oriento", result.final_answer)
 
     def test_failed_controlled_participant_records_artifact_partial_before_failure(self) -> None:
         _repo_root, store, runtime_store = self._stores()

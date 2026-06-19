@@ -282,7 +282,7 @@ class BaseShellAppMountingTests(unittest.TestCase):
         submit_source = submission_source[submit_start:submit_end]
 
         self.assertIn("response = await createRuntimeSessionWithTurn({", submit_source)
-        self.assertIn("project_id: draftChat?.projectId ?? null", submit_source)
+        self.assertIn("project_id: targetDraftChat?.projectId ?? null", submit_source)
         self.assertIn("inputText: message.content", submit_source)
         self.assertIn("response = await sendRuntimeTurn(", submit_source)
         self.assertIn("if (!thread.runtime_session_id)", submit_source)
@@ -290,11 +290,11 @@ class BaseShellAppMountingTests(unittest.TestCase):
         self.assertIn("getWidgetContext", (REPO_ROOT / "apps/chat/frontend/src/lib/activeAppContext.ts").read_text())
         self.assertIn("activeAppContextFromWidgetContext", shell_messages_source)
         self.assertIn('payload.type === "maverick.widget.context-changed"', shell_messages_source)
-        self.assertIn("mergeAppReferences(appReferencesFromText(input, composerMentionItems), activeAppContext)", submission_source)
+        self.assertIn("mergeAppReferences(appReferencesFromText(input, composerMentionItems), target.activeAppContext)", submission_source)
         self.assertIn("QUEUED_MESSAGES_STORAGE_PREFIX", (REPO_ROOT / "apps/chat/frontend/src/lib/queuedMessages.ts").read_text())
         self.assertIn("readPersistedQueuedMessages", navigation_source)
         self.assertIn("persistQueuedMessages", persistence_source)
-        self.assertIn("queueStorageKey(navigationScope, activeThread?.thread_id || null)", persistence_source)
+        self.assertIn("queueStorageKey(navigationScope, activeConversationKey)", persistence_source)
         self.assertIn("useRuntimeEvents", app_source)
         self.assertIn("onRuntimeSnapshot: handleRuntimeSnapshot", controller_source)
         self.assertIn("setHasLoadedHistory(true)", controller_source)

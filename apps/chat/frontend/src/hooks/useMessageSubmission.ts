@@ -7,6 +7,8 @@ import {
   RuntimeEvent,
   RuntimeSession,
   RuntimeTurn,
+  type CreateInterAgentRunPayload,
+  type InterAgentParticipantSpecPayload,
   createInterAgentRun,
   createRuntimeSession,
   createRuntimeSessionWithTurn,
@@ -41,6 +43,12 @@ export type AgentRuntimeConfig = {
   source_app_id: string;
   system_prompt: string;
   title: string;
+};
+
+type InterAgentWorkerPlan = {
+  participantId: string;
+  label: string;
+  task: string;
 };
 
 type UseMessageSubmissionParams = {
@@ -663,15 +671,13 @@ export function useMessageSubmission({
       throw new Error("This chat does not have a runtime session.");
     }
 
-    const runDetail = await createInterAgentRun(
-      interAgentRunPayload({
-        agentRuntimeConfig,
-        mode: message.multiAgentMode || "auto",
-        thread,
-        clientMessageId: message.clientMessageId,
-      }),
-      { signal },
-    );
+    const runPlan = interAgentRunPlan({
+      agentRuntimeConfig,
+      mode: message.multiAgentMode || "auto",
+      thread,
+      clientMessageId: message.clientMessageId,
+    });
+    const runDetail = await createInterAgentRun(runPlan.payload, { signal });
     throwIfAborted(signal);
     if (isConversationStillActive(conversationKey)) {
       onInterAgentRunChanged?.(runDetail);
@@ -679,6 +685,7 @@ export function useMessageSubmission({
     const executed = await executeInterAgentRun(runDetail.run.run_id, {
       input_text: message.content,
       client_message_id: message.clientMessageId,
+      participant_inputs: runPlan.participantInputs,
       attachments: message.attachments,
       app_references: message.appReferences,
       async: true,
@@ -847,55 +854,177 @@ export function interAgentRunPayload({
   mode: MultiAgentComposerMode;
   thread: ChatThread;
 }) {
+  return interAgentRunPlan({ agentRuntimeConfig, clientMessageId, mode, thread }).payload;
+}
+
+export function interAgentComposerBudgetLabel(mode: MultiAgentComposerMode): string {
+  if (mode === "off") {
+    return "";
+  }
+  const budget = interAgentBudget(mode);
+  const workerCount = interAgentWorkerPlans(mode).length;
+  return [
+    pluralLabel(workerCount, "worker"),
+    pluralLabel(budget.max_total_turns, "turn"),
+    pluralLabel(budget.max_tool_calls, "tool call"),
+  ].join(" · ");
+}
+
+function interAgentRunPlan({
+  agentRuntimeConfig,
+  clientMessageId,
+  mode,
+  thread,
+}: {
+  agentRuntimeConfig: AgentRuntimeConfig | null;
+  clientMessageId: string;
+  mode: MultiAgentComposerMode;
+  thread: ChatThread;
+}): { payload: CreateInterAgentRunPayload; participantInputs?: Record<string, string> } {
   const participantLabel = agentRuntimeConfig?.title || thread.agent_label || "Maverick agent";
   const agentTypeId = agentRuntimeConfig?.agent_type_id || thread.agent_type_id || "";
+  const workerPlans = interAgentWorkerPlans(mode);
+  const participants: InterAgentParticipantSpecPayload[] = [
+    {
+      participant_id: "orchestrator",
+      kind: "orchestrator",
+      execution_mode: "root_orchestrator",
+      label: "Orchestrator",
+    },
+    ...workerPlans.map((worker) =>
+      interAgentWorkerParticipant({
+        agentRuntimeConfig,
+        agentTypeId,
+        fallbackLabel: participantLabel,
+        worker,
+      }),
+    ),
+  ];
+  return {
+    payload: {
+      thread_id: thread.thread_id,
+      root_runtime_session_id: thread.runtime_session_id,
+      mode: mode === "multi" ? "sequential" : "manager_tools",
+      idempotency_key: `chat:${clientMessageId}:${mode}`,
+      visibility_level: "detail",
+      participants,
+      edges: interAgentEdges(mode, participantLabel),
+      budget: interAgentBudget(mode),
+    },
+    participantInputs:
+      mode === "multi" ? Object.fromEntries(workerPlans.map((worker) => [worker.participantId, worker.task])) : undefined,
+  };
+}
+
+function interAgentWorkerParticipant({
+  agentRuntimeConfig,
+  agentTypeId,
+  fallbackLabel,
+  worker,
+}: {
+  agentRuntimeConfig: AgentRuntimeConfig | null;
+  agentTypeId: string;
+  fallbackLabel: string;
+  worker: InterAgentWorkerPlan;
+}): InterAgentParticipantSpecPayload {
   const agentSnapshot =
     agentRuntimeConfig?.agent_type_id
       ? {
           agent_type_id: agentRuntimeConfig.agent_type_id,
-          label: participantLabel,
+          label: worker.label || fallbackLabel,
           system_prompt: agentRuntimeConfig.system_prompt || "",
           skill_ids: agentRuntimeConfig.skill_ids || [],
           skill_catalog_app_id: agentRuntimeConfig.skill_catalog_app_id || "skills",
         }
       : undefined;
-  const participant = {
-    participant_id: "assistant",
-    kind: "agent" as const,
-    execution_mode: "child_runtime_session" as const,
-    label: participantLabel,
+  return {
+    participant_id: worker.participantId,
+    kind: "agent",
+    execution_mode: "child_runtime_session",
+    label: worker.label || fallbackLabel,
     ...(agentTypeId ? { agent_type_id: agentTypeId } : {}),
     ...(agentSnapshot ? { agent_snapshot: agentSnapshot } : {}),
   };
-  return {
-    thread_id: thread.thread_id,
-    root_runtime_session_id: thread.runtime_session_id,
-    mode: "manager_tools" as const,
-    idempotency_key: `chat:${clientMessageId}:${mode}`,
-    visibility_level: "detail" as const,
-    participants: [
+}
+
+function interAgentWorkerPlans(mode: MultiAgentComposerMode): InterAgentWorkerPlan[] {
+  if (mode === "multi") {
+    return [
       {
-        participant_id: "orchestrator",
-        kind: "orchestrator" as const,
-        execution_mode: "root_orchestrator" as const,
-        label: "Orchestrator",
+        participantId: "implementer",
+        label: "Implementer",
+        task: "Act as the implementer. Produce the concrete answer or implementation plan for the user request.",
       },
-      participant,
-    ],
-    edges: [
+      {
+        participantId: "reviewer",
+        label: "Reviewer",
+        task:
+          "Act as the reviewer. Check the implementer's output against the original user request, " +
+          "call out gaps, and provide the final review.",
+      },
+    ];
+  }
+  return [
+    {
+      participantId: "assistant",
+      label: "",
+      task: "",
+    },
+  ];
+}
+
+function interAgentEdges(mode: MultiAgentComposerMode, participantLabel: string): CreateInterAgentRunPayload["edges"] {
+  if (mode === "multi") {
+    return [
       {
         source_id: "orchestrator",
-        target_id: "assistant",
-        kind: "delegated" as const,
-        label: participantLabel,
+        target_id: "implementer",
+        kind: "delegated",
+        label: "Implementation",
       },
-    ],
-    budget: {
-      max_participants: 2,
-      max_concurrent_participants: mode === "multi" ? 2 : 1,
-      max_total_turns: mode === "multi" ? 4 : 2,
-      max_turns_per_participant: mode === "multi" ? 2 : 1,
-      max_tool_calls: mode === "multi" ? 4 : 1,
+      {
+        source_id: "implementer",
+        target_id: "reviewer",
+        kind: "reviewed_by",
+        label: "Review",
+      },
+      {
+        source_id: "reviewer",
+        target_id: "orchestrator",
+        kind: "produced",
+        label: "Final review",
+      },
+    ];
+  }
+  return [
+    {
+      source_id: "orchestrator",
+      target_id: "assistant",
+      kind: "delegated",
+      label: participantLabel,
     },
+  ];
+}
+
+function interAgentBudget(mode: MultiAgentComposerMode): CreateInterAgentRunPayload["budget"] {
+  if (mode === "multi") {
+    return {
+      max_participants: 3,
+      max_concurrent_participants: 1,
+      max_total_turns: 2,
+      max_turns_per_participant: 1,
+      max_tool_calls: 2,
+    };
+  }
+  return {
+    max_participants: 2,
+    max_concurrent_participants: 1,
+    max_total_turns: 1,
+    max_turns_per_participant: 1,
+    max_tool_calls: 1,
   };
+}
+
+function pluralLabel(count: number, singular: string): string {
+  return `${count} ${singular}${count === 1 ? "" : "s"}`;
 }

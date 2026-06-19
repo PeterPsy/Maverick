@@ -43,7 +43,6 @@ GMAIL_CLIENT_SECRET_SECRET = "gmail-oauth-client-secret"
 GOOGLE_TOKEN_ENDPOINT = "https://oauth2.googleapis.com/token"
 GMAIL_API_ROOT = "https://gmail.googleapis.com/gmail/v1/users/me"
 GMAIL_THREAD_PAGE_SIZE = 100
-GMAIL_THREAD_LIST_PREFETCH_MAX = 2000
 GMAIL_DEFAULT_THREAD_LIST_QUERY = "newer_than:30d"
 GMAIL_MAILBOX_QUERIES = {
     "inbox": "in:inbox",
@@ -91,26 +90,10 @@ class GmailProvider:
         return self._gmail_json("GET", "profile", access_token=access_token)
 
     def list_threads(self, data_root: Path, payload: dict[str, object]) -> list[dict[str, object]]:
-        if not payload.get("_skip_provider_list_sync"):
-            self.sync_for_thread_list(data_root, payload)
         return list_threads(data_root, payload)
 
     def sync_query_for_payload(self, payload: dict[str, object], default_recent: bool = True) -> str | None:
         return _gmail_sync_query(payload, default_recent=default_recent)
-
-    def sync_for_thread_list(self, data_root: Path, payload: dict[str, object]) -> dict[str, object] | None:
-        connection_id = _optional_string(payload.get("connection_id"))
-        app_secrets = _as_secret_map(payload)
-        if not connection_id or not app_secrets.get(GMAIL_REFRESH_TOKEN_SECRET):
-            return None
-        return self.sync_incremental(
-            data_root,
-            connection_id,
-            app_secrets=app_secrets,
-            max_threads=_thread_list_sync_limit(payload),
-            query=self.sync_query_for_payload(payload, default_recent=True),
-            persist_cursor=False,
-        )
 
     def get_thread(
         self,
@@ -238,11 +221,12 @@ class GmailProvider:
         access_token = self._access_token(secrets)
         max_total = _bounded_int(max_threads, 100, 1, 2000)
         query_text = str(query or "").strip()
+        cursor_scope = _gmail_cursor_scope(query_text)
         synced = 0
         result_size_estimate: int | None = None
         next_page_token = str(page_token or "").strip()
         if continue_cursor and not next_page_token:
-            next_page_token = _sync_cursor(data_root, connection_id)
+            next_page_token = _sync_cursor(data_root, connection_id, cursor_scope)
         response: dict[str, object] = {}
         while synced < max_total:
             page_size = min(GMAIL_THREAD_PAGE_SIZE, max_total - synced)
@@ -265,7 +249,11 @@ class GmailProvider:
             if not next_page_token:
                 break
         now = now_timestamp()
-        cursor_to_store = next_page_token if persist_cursor else _sync_cursor(data_root, connection_id)
+        cursor_to_store = (
+            _sync_cursor_payload(data_root, connection_id, cursor_scope, next_page_token)
+            if persist_cursor
+            else _sync_cursor_blob(data_root, connection_id)
+        )
         with connect(data_root) as db:
             db.execute(
                 """
@@ -439,15 +427,6 @@ class GmailProvider:
 def _urlopen_json(request: Request) -> dict[str, object]:
     with urlopen(request, timeout=30) as response:
         return json.loads(response.read().decode("utf-8"))
-
-
-def _thread_list_sync_limit(payload: dict[str, object]) -> int:
-    explicit = payload.get("sync_max_threads") or payload.get("sync_limit")
-    if explicit not in (None, ""):
-        return _bounded_int(explicit, 50, 1, GMAIL_THREAD_LIST_PREFETCH_MAX)
-    limit = _bounded_int(payload.get("max_threads") or payload.get("limit"), 50, 1, 200)
-    offset = _bounded_int(payload.get("offset"), 0, 0, 100_000)
-    return _bounded_int(limit + offset, limit, 1, GMAIL_THREAD_LIST_PREFETCH_MAX)
 
 
 def _gmail_sync_query(payload: dict[str, object], default_recent: bool = True) -> str | None:
@@ -894,10 +873,50 @@ def _connection(data_root: Path, connection_id: str) -> dict[str, object]:
     return dict(row)
 
 
-def _sync_cursor(data_root: Path, connection_id: str) -> str:
+def _gmail_cursor_scope(query_text: str) -> str:
+    normalized_query = " ".join(query_text.split())
+    return f"gmail:v1:q:{normalized_query}" if normalized_query else "gmail:v1:default"
+
+
+def _sync_cursor(data_root: Path, connection_id: str, cursor_scope: str) -> str:
+    cursor_map, legacy_cursor = _sync_cursor_state(data_root, connection_id)
+    scoped_cursor = str(cursor_map.get(cursor_scope) or "").strip()
+    if scoped_cursor:
+        return scoped_cursor
+    return legacy_cursor.strip() if cursor_scope == "gmail:v1:default" else ""
+
+
+def _sync_cursor_payload(data_root: Path, connection_id: str, cursor_scope: str, next_page_token: str) -> str:
+    cursor_map, legacy_cursor = _sync_cursor_state(data_root, connection_id)
+    if legacy_cursor:
+        cursor_map.setdefault("gmail:v1:default", legacy_cursor)
+    if next_page_token:
+        cursor_map[cursor_scope] = next_page_token
+    else:
+        cursor_map.pop(cursor_scope, None)
+    return json.dumps({"gmail": cursor_map}, ensure_ascii=True, sort_keys=True)
+
+
+def _sync_cursor_blob(data_root: Path, connection_id: str) -> str:
     with connect(data_root) as db:
         row = db.execute("SELECT cursor FROM sync_state WHERE connection_id = ?", (connection_id,)).fetchone()
-    return str(row["cursor"] or "").strip() if row is not None else ""
+    return str(row["cursor"] or "") if row is not None else ""
+
+
+def _sync_cursor_state(data_root: Path, connection_id: str) -> tuple[dict[str, str], str]:
+    raw = _sync_cursor_blob(data_root, connection_id).strip()
+    if not raw:
+        return {}, ""
+    try:
+        parsed = json.loads(raw)
+    except json.JSONDecodeError:
+        return {}, raw
+    if not isinstance(parsed, dict):
+        return {}, ""
+    gmail = parsed.get("gmail")
+    if isinstance(gmail, dict):
+        return {str(key): str(value) for key, value in gmail.items() if str(value).strip()}, ""
+    return {str(key): str(value) for key, value in parsed.items() if str(key).startswith("gmail:v1:") and str(value).strip()}, ""
 
 
 def _message(data_root: Path, message_id: str) -> dict[str, object]:

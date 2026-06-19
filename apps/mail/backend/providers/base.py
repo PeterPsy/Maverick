@@ -22,7 +22,7 @@ class MailProvider(Protocol):
         ...
 
     def list_threads(self, data_root: Path, payload: dict[str, object]) -> list[dict[str, object]]:
-        """Return cached or provider-backed threads."""
+        """Return cached threads."""
         ...
 
     def get_thread(

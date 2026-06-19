@@ -151,29 +151,8 @@ function mailboxScopeIdsForConnections(scopeIds: string[], connections: MailConn
   return filtered.length ? filtered : DEFAULT_MAILBOX_SCOPE_IDS;
 }
 
-function threadListPrefetchLimit(page: number) {
-  return Math.max(THREADS_PAGE_SIZE, page * THREADS_PAGE_SIZE);
-}
-
 function isUsableConnection(connection?: MailConnection | null) {
   return Boolean(connection && connection.status !== 'disconnected');
-}
-
-function threadListConnection(scopeConnectionId: string | null, selectedConnectionId: string | null, connections: MailConnection[]) {
-  const byId = new Map(connections.map((connection) => [connection.id, connection]));
-  const scoped = scopeConnectionId ? byId.get(scopeConnectionId) : null;
-  if (isUsableConnection(scoped)) {
-    return scoped;
-  }
-  const selected = selectedConnectionId ? byId.get(selectedConnectionId) : null;
-  if (isUsableConnection(selected)) {
-    return selected;
-  }
-  return connections.find(isUsableConnection) || connections[0] || null;
-}
-
-function threadListSecretRequest(connection?: MailConnection | null) {
-  return connection?.provider === 'gmail' ? gmailSecretRequest(connection.id) : noSecretRequest();
 }
 
 function openVaultIssues() {
@@ -910,17 +889,15 @@ export function App() {
       const nextMailboxScopeIds = mailboxScopeIdsForConnections(mailboxScopeIds, nextConnections);
       const nextSerializedMailboxScopes = serializeMailboxScopeIds(nextMailboxScopeIds);
       const nextPrimaryScope = primaryMailboxScope(nextMailboxScopeIds);
-      const syncConnection = threadListConnection(nextPrimaryScope.connectionId, connectionId, nextConnections);
       const threadPayload = await callBackend<ThreadListPayload>({
         action: MAIL_BACKEND_ACTIONS.threadsList,
         mailbox: nextPrimaryScope.mailbox,
         mailbox_scopes: nextSerializedMailboxScopes,
-        ...(syncConnection ? { connection_id: syncConnection.id } : {}),
+        ...(nextPrimaryScope.connectionId ? { connection_id: nextPrimaryScope.connectionId } : {}),
         ...(query ? { query } : {}),
         max_threads: THREADS_PAGE_SIZE,
-        sync_max_threads: threadListPrefetchLimit(page),
         offset,
-        ...threadListSecretRequest(syncConnection)
+        ...noSecretRequest()
       });
       if (threadListRequestRef.current !== requestId) {
         return;
@@ -1184,7 +1161,7 @@ export function App() {
         mailbox,
         mailbox_scopes: serializedMailboxScopes,
         ...(query ? { query } : {}),
-        max_threads: threadListPrefetchLimit(page),
+        max_threads: MAIL_INTERACTIVE_SYNC_THREADS,
         ...connectionSecretRequest(connection)
       });
       const synced = payload.sync?.synced_messages ?? payload.sync?.synced_threads ?? 0;

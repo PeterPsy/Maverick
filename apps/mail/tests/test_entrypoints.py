@@ -880,7 +880,7 @@ class MailServiceTest(unittest.TestCase):
             self.assertGreaterEqual(counts["starred"]["total"], 1)
             self.assertEqual(counts["sent"]["total"], 0)
 
-    def test_threads_list_counts_implicit_gmail_default_connection_filter(self) -> None:
+    def test_threads_list_without_connection_id_stays_cache_aggregate(self) -> None:
         class FakeGmailProvider:
             provider_id = "gmail"
 
@@ -940,9 +940,12 @@ class MailServiceTest(unittest.TestCase):
                 )
 
             self.assertEqual(status, 200)
-            self.assertEqual(provider.payload["connection_id"], "mail_connection_gmail_a-example.com")
-            self.assertEqual([item["connection_id"] for item in payload["items"]], ["mail_connection_gmail_a-example.com"])
-            self.assertEqual(payload["total_count"], 1)
+            self.assertEqual(provider.payload, {})
+            self.assertEqual(
+                [item["connection_id"] for item in payload["items"]],
+                ["mail_connection_gmail_a-example.com", "mail_connection_gmail_b-example.com"],
+            )
+            self.assertEqual(payload["total_count"], 2)
 
     def test_threads_list_filters_multiple_mailbox_scopes_as_union(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -2733,7 +2736,7 @@ class MailServiceTest(unittest.TestCase):
                 ).fetchone()["cursor"]
             self.assertEqual(cursor, "historic-cursor")
 
-    def test_threads_list_uses_default_gmail_connection_for_lightweight_sync(self) -> None:
+    def test_threads_list_does_not_sync_default_gmail_connection(self) -> None:
         calls: list[str] = []
 
         def fake_transport(request) -> dict[str, object]:
@@ -2788,12 +2791,11 @@ class MailServiceTest(unittest.TestCase):
                 )
 
             self.assertEqual(status, 200)
-            self.assertEqual(payload["items"][0]["subject"], "Default Gmail")
-            self.assertEqual(payload["items"][0]["connection_id"], connection_id)
-            self.assertTrue(any(url == "https://oauth2.googleapis.com/token" for url in calls))
-            self.assertTrue(any(url.startswith("https://gmail.googleapis.com/gmail/v1/users/me/threads?") for url in calls))
+            self.assertEqual(payload["items"], [])
+            self.assertEqual(payload["total_count"], 0)
+            self.assertEqual(calls, [])
 
-    def test_threads_list_prefetches_current_gmail_mailbox_and_reports_provider_total(self) -> None:
+    def test_threads_list_is_cache_first_for_gmail_mailbox_pages(self) -> None:
         calls: list[str] = []
 
         def thread_payload(thread_id: str) -> dict[str, object]:
@@ -2852,6 +2854,28 @@ class MailServiceTest(unittest.TestCase):
                     """,
                     (connection_id, "gmail", "person@example.com", "person@example.com", "connected", "[]", now, now),
                 )
+                db.executemany(
+                    """
+                    INSERT INTO threads(id, connection_id, provider_thread_id, subject, participants_json, last_message_at, snippet, unread, starred, labels_json, updated_at)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    [
+                        (
+                            f"email_thread_gmail_person_sent_{index}",
+                            connection_id,
+                            f"sent-{index}",
+                            f"Sent thread {index}",
+                            "[]",
+                            f"2024-03-09T00:00:0{index}Z",
+                            f"Sent snippet {index}",
+                            0,
+                            0,
+                            '["sent"]',
+                            now,
+                        )
+                        for index in range(1, 5)
+                    ],
+                )
 
             with patch("backend.service.provider_for_connection", return_value=GmailProvider(transport=fake_transport)):
                 status, payload = handle_action(
@@ -2868,12 +2892,12 @@ class MailServiceTest(unittest.TestCase):
 
             self.assertEqual(status, 200)
             self.assertEqual(len(payload["items"]), 2)
-            self.assertEqual(payload["cache_total_count"], 4)
-            self.assertEqual(payload["provider_total_estimate"], 503)
-            self.assertEqual(payload["total_count"], 503)
-            self.assertTrue(payload["provider_has_more"])
+            self.assertEqual(payload["total_count"], 4)
+            self.assertNotIn("cache_total_count", payload)
+            self.assertNotIn("provider_total_estimate", payload)
+            self.assertNotIn("provider_has_more", payload)
             self.assertTrue(all("sent" in item["labels"] for item in payload["items"]))
-            self.assertTrue(any("q=in%3Asent" in url for url in calls))
+            self.assertEqual(calls, [])
 
     def test_threads_sync_derives_gmail_query_from_mailbox(self) -> None:
         calls: list[str] = []
@@ -2941,6 +2965,105 @@ class MailServiceTest(unittest.TestCase):
             self.assertEqual(payload["sync"]["synced_threads"], 1)
             self.assertEqual(payload["sync"]["result_size_estimate"], 1)
             self.assertTrue(any("q=in%3Asent" in url for url in calls))
+
+    def test_gmail_sync_cursor_is_scoped_by_mailbox_query(self) -> None:
+        thread_list_calls: list[tuple[str, str]] = []
+
+        def thread_payload(thread_id: str, labels: list[str]) -> dict[str, object]:
+            return {
+                "id": thread_id,
+                "snippet": f"Snippet {thread_id}",
+                "messages": [
+                    {
+                        "id": f"msg-{thread_id}",
+                        "threadId": thread_id,
+                        "labelIds": labels,
+                        "internalDate": "1710000000000",
+                        "payload": {
+                            "mimeType": "text/plain",
+                            "headers": [
+                                {"name": "Subject", "value": f"Thread {thread_id}"},
+                                {"name": "From", "value": "Person <person@example.com>"},
+                                {"name": "To", "value": "Recipient <recipient@example.com>"},
+                            ],
+                            "body": {"data": "U2NvcGVkIGN1cnNvcg"},
+                        },
+                    }
+                ],
+            }
+
+        def fake_transport(request) -> dict[str, object]:
+            url = request.full_url
+            if url == "https://oauth2.googleapis.com/token":
+                return {"access_token": "access-token", "expires_in": 3600, "token_type": "Bearer"}
+            if url.startswith("https://gmail.googleapis.com/gmail/v1/users/me/threads?"):
+                query = parse_qs(urlparse(url).query)
+                gmail_query = query.get("q", [""])[0]
+                page_token = query.get("pageToken", [""])[0]
+                thread_list_calls.append((gmail_query, page_token))
+                if gmail_query == "in:sent" and not page_token:
+                    return {"threads": [{"id": "sent-1"}], "nextPageToken": "sent-cursor"}
+                if gmail_query == "in:inbox" and not page_token:
+                    return {"threads": [{"id": "inbox-1"}], "nextPageToken": "inbox-cursor"}
+                if gmail_query == "in:sent" and page_token == "sent-cursor":
+                    return {"threads": []}
+                raise AssertionError(f"unexpected thread list request {url}")
+            if url.startswith("https://gmail.googleapis.com/gmail/v1/users/me/threads/sent-1?"):
+                return thread_payload("sent-1", ["SENT"])
+            if url.startswith("https://gmail.googleapis.com/gmail/v1/users/me/threads/inbox-1?"):
+                return thread_payload("inbox-1", ["INBOX"])
+            raise AssertionError(f"unexpected request {url}")
+
+        with tempfile.TemporaryDirectory() as tmp:
+            data_root = Path(tmp)
+            ensure_schema(data_root)
+            now = now_timestamp()
+            connection_id = "mail_connection_gmail_person-example.com"
+            with connect(data_root) as db:
+                db.execute(
+                    """
+                    INSERT INTO connections(id, provider, email_address, display_name, status, scopes_json, created_at, updated_at)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    (connection_id, "gmail", "person@example.com", "person@example.com", "connected", "[]", now, now),
+                )
+
+            provider = GmailProvider(transport=fake_transport)
+            with patch("backend.service.provider_for_connection", return_value=provider):
+                for mailbox in ("sent", "inbox"):
+                    status, _ = handle_action(
+                        data_root,
+                        {
+                            "action": "threads.sync",
+                            "connection_id": connection_id,
+                            "mailbox": mailbox,
+                            "max_threads": 1,
+                            "_app_secrets": self._gmail_secrets(),
+                        },
+                    )
+                    self.assertEqual(status, 200)
+
+                with connect(data_root) as db:
+                    cursor_blob = db.execute("SELECT cursor FROM sync_state WHERE connection_id = ?", (connection_id,)).fetchone()["cursor"]
+                cursor = json.loads(cursor_blob)
+                self.assertEqual(cursor["gmail"]["gmail:v1:q:in:sent"], "sent-cursor")
+                self.assertEqual(cursor["gmail"]["gmail:v1:q:in:inbox"], "inbox-cursor")
+
+                status, _ = handle_action(
+                    data_root,
+                    {
+                        "action": "threads.sync",
+                        "connection_id": connection_id,
+                        "mailbox": "sent",
+                        "continue_cursor": True,
+                        "max_threads": 1,
+                        "_app_secrets": self._gmail_secrets(),
+                    },
+                )
+                self.assertEqual(status, 200)
+
+        self.assertIn(("in:sent", "sent-cursor"), thread_list_calls)
+        self.assertNotIn(("in:sent", "inbox-cursor"), thread_list_calls)
 
     def test_secret_resource_lookup_resolves_gmail_thread_connection(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

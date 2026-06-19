@@ -3565,7 +3565,9 @@ class MailServiceTest(unittest.TestCase):
         list_properties = list_tool["input_schema"]["properties"]
         self.assertNotIn("sync_query", list_properties)
         self.assertNotIn("sync_max_threads", list_properties)
+        self.assertEqual(list_properties["max_threads"]["maximum"], 200)
         self.assertNotIn("secret_selectors", list_tool)
+        self.assertEqual(mcp_schemas["tools"]["mail_sync"]["input_schema"]["properties"]["max_threads"]["maximum"], 2000)
 
         command = cli_schemas["commands"]["mail"]
         cli_properties = command["argument_schema"]["properties"]

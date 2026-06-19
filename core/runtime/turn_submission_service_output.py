@@ -214,7 +214,7 @@ def _complete_output_text(output_text: str, streamed_text: str) -> str:
     if suffix and suffix != output_text:
         separator = "" if streamed_text.endswith(("\n", " ")) else "\n"
         return f"{streamed_text}{separator}{suffix}"
-    return output_text if len(output_text) >= len(streamed_text) else streamed_text
+    return output_text
 
 
 

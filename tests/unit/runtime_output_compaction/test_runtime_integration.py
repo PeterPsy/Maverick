@@ -13,6 +13,7 @@ from core.api.runtime_websocket import runtime_event_frame
 from core.providers.codex_app_server_runtime_notifications import _structured_content_from_completed_item
 from core.runtime.execution_events import RuntimeExecutionEvent, parse_provider_json_event
 from core.runtime.service import create_runtime_session, record_runtime_event
+from core.runtime.turn_submission_service_events import _record_final_output
 from core.runtime.turn_submission_service_output import _RuntimeTurnOutputRecorder
 
 
@@ -26,6 +27,43 @@ class RuntimeOutputCompactionIntegrationTest(unittest.TestCase):
         (repo_root / "docs" / "architecture").mkdir(parents=True, exist_ok=True)
         (repo_root / "AGENTS.md").write_text("", encoding="utf-8")
         return repo_root
+
+    def make_state_and_session(self, *, session_id: str = "sess-final"):
+        repo_root = self.make_repo_root()
+        with patch.dict(
+            os.environ,
+            {
+                "MAVERICK_ALLOW_INSECURE_TEST_DEFAULTS": "1",
+                "MAVERICK_ADMIN_USERNAME": "admin",
+                "MAVERICK_ADMIN_PASSWORD": "maverick",
+            },
+        ):
+            state = bootstrap_platform_state(start_path=repo_root, install_builtin_apps=False)
+        session = create_runtime_session(
+            state.runtime_store,
+            session_id=session_id,
+            workspace_id="default",
+            agent_id="test-agent",
+            start_path=repo_root,
+            now=datetime(2026, 6, 15, tzinfo=UTC),
+        )
+        return state, session
+
+    def recorded_final_payload(self, *, deltas: list[str], output_text: str) -> dict:
+        state, session = self.make_state_and_session()
+        recorder = _RuntimeTurnOutputRecorder(state, session_id=session.session_id, turn_id="turn-final")
+        for delta in deltas:
+            recorder.record(RuntimeExecutionEvent(event_type="runtime.output.delta", payload={"text": delta}))
+        event = _record_final_output(
+            state,
+            session_id=session.session_id,
+            turn_id="turn-final",
+            provider_id="test-provider",
+            output_text=recorder.final_text(output_text),
+            complete_text=recorder.complete_text(output_text),
+            exit_code=0,
+        )
+        return event.payload
 
     def test_provider_hook_lifecycle_noise_is_not_chat_facing_output(self) -> None:
         self.assertIsNone(parse_provider_json_event("hook started"))
@@ -272,6 +310,34 @@ class RuntimeOutputCompactionIntegrationTest(unittest.TestCase):
         self.assertEqual(recorded.payload["text"], output)
         self.assertNotIn("output_compaction", recorded.payload)
         self.assertEqual(recorder.final_text(output + "world"), "world")
+        self.assertEqual(recorder.complete_text(output + "world"), output + "world")
+
+    def test_final_event_carries_complete_text_when_full_answer_streamed_in_delta(self) -> None:
+        payload = self.recorded_final_payload(
+            deltas=["Answer streamed in deltas."],
+            output_text="",
+        )
+
+        self.assertEqual(payload["text"], "")
+        self.assertEqual(payload["complete_text"], "Answer streamed in deltas.")
+
+    def test_final_event_carries_complete_text_when_final_is_suffix(self) -> None:
+        payload = self.recorded_final_payload(
+            deltas=["Hello "],
+            output_text="Hello world",
+        )
+
+        self.assertEqual(payload["text"], "world")
+        self.assertEqual(payload["complete_text"], "Hello world")
+
+    def test_final_event_keeps_progress_delta_out_of_complete_final_answer(self) -> None:
+        payload = self.recorded_final_payload(
+            deltas=["Mi oriento sul codice e preparo il piano."],
+            output_text="Final answer only.",
+        )
+
+        self.assertEqual(payload["text"], "Final answer only.")
+        self.assertEqual(payload["complete_text"], "Final answer only.")
 
     def test_chat_render_structured_event_survives_long_tool_output_compaction(self) -> None:
         chat_render = {

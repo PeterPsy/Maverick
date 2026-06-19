@@ -99,6 +99,7 @@ class InterAgentApiF4TestCase(InterAgentApiF4Fixture, unittest.TestCase):
             ],
         )
         self.assertEqual(root_events[-2].payload["text"], "Projected result.")
+        self.assertEqual(root_events[-2].payload["complete_text"], "Projected result.")
         self.assertEqual(root_events[0].payload["client_message_id"], "client-root-projection")
         self.assertEqual(root_events[0].payload["attachments"][0]["name"], "brief.md")
         self.assertNotIn("objectUrl", root_events[0].payload["attachments"][0])

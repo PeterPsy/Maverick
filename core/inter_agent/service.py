@@ -900,6 +900,7 @@ def _participant_records_from_specs(
                 thread_visibility=spec.thread_visibility or "hidden",
                 created_at=created_at,
                 updated_at=created_at,
+                sequence_index=index,
             )
         )
     return records

@@ -142,6 +142,7 @@ def submit_runtime_turn_async(
                     turn_id=turn.turn_id,
                     provider_id=provider.provider_id,
                     output_text=final_output_text,
+                    complete_text=app_output_text,
                     exit_code=result.exit_code,
                 )
                 completed_turn, terminal_event = _complete_turn_from_exit_code(state, session_id=session.session_id, turn_id=turn.turn_id, provider_id=provider.provider_id, exit_code=result.exit_code)

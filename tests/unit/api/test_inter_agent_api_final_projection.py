@@ -88,6 +88,7 @@ class InterAgentApiFinalProjectionTestCase(InterAgentApiF4Fixture, unittest.Test
         self.assertEqual(execute_status, 200)
         self.assertEqual(execute_payload["final_answer"], "Researcher completed without a final answer.")
         self.assertEqual([event.payload["text"] for event in final_events], ["Researcher completed without a final answer."])
+        self.assertEqual([event.payload["complete_text"] for event in final_events], ["Researcher completed without a final answer."])
         self.assertNotIn("maverick3-code-skill", final_events[0].payload["text"])
 
 

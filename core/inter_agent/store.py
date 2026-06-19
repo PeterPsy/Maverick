@@ -450,7 +450,7 @@ class InterAgentDocumentStore:
     def list_participants(self, run_id: str, *, workspace_id: str) -> list[InterAgentParticipantRecord]:
         documents = self.collections.participants.find({"workspace_id": workspace_id, "run_id": run_id})
         records = [_participant_from_document(document) for document in documents]
-        records.sort(key=lambda item: (item.created_at, item.participant_id))
+        records.sort(key=_participant_sort_key)
         return records
 
     def save_edge(self, record: InterAgentEdgeRecord) -> InterAgentEdgeRecord:
@@ -1178,6 +1178,14 @@ def _filter_event_documents_by_type(documents: list[dict[str, Any]], event_types
     return [document for document in documents if document.get("event_type") in event_types]
 
 
+def _participant_sort_key(record: InterAgentParticipantRecord) -> tuple[int, datetime, str]:
+    try:
+        sequence_index = int(record.sequence_index)
+    except (TypeError, ValueError):
+        sequence_index = 0
+    return sequence_index, record.created_at, record.participant_id
+
+
 def _event_sort_key(document: dict[str, Any]) -> tuple[int, str]:
     try:
         sequence = int(document.get("sequence") or 0)
@@ -1198,6 +1206,7 @@ def _run_from_document(document: dict[str, Any]) -> InterAgentRunRecord:
 def _participant_from_document(document: dict[str, Any]) -> InterAgentParticipantRecord:
     payload = dict(document)
     payload.setdefault("agent_snapshot", None)
+    payload.setdefault("sequence_index", 0)
     return InterAgentParticipantRecord(**payload)
 
 

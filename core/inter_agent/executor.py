@@ -1196,7 +1196,10 @@ def _runtime_output_text(events: list[Any]) -> str:
             continue
         if getattr(event, "event_type", "") != "runtime.output.final":
             continue
+        complete_text = payload.get("complete_text")
         text = payload.get("text")
+        if isinstance(complete_text, str) and complete_text.strip():
+            text = complete_text
         if isinstance(text, str) and text.strip():
             final_text = text
     return final_text.strip()

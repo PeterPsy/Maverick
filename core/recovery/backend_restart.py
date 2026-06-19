@@ -341,6 +341,9 @@ def _output_text_for_turn(events: list, turn_id: str) -> str:
     if not output_events:
         return streamed_text
     latest = sorted(output_events, key=lambda event: (event.created_at, event.event_id))[-1]
+    complete_text = str(latest.payload.get("complete_text") or "")
+    if complete_text:
+        return complete_text
     return _complete_output_text(str(latest.payload.get("text") or ""), streamed_text)
 
 

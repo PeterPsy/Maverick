@@ -1118,6 +1118,7 @@ def _mark_root_inter_agent_turn_completed(
             payload={
                 "inter_agent_run_id": _root_projection_run_id(root_projection),
                 "text": answer,
+                "complete_text": answer,
             },
             event_bus=state.runtime_event_bus,
         )

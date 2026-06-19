@@ -246,6 +246,7 @@ class InterAgentParticipantRecord:
     thread_visibility: RuntimeThreadVisibility
     created_at: datetime
     updated_at: datetime
+    sequence_index: int = 0
 
 
 @dataclass(frozen=True)

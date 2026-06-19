@@ -31,6 +31,7 @@ def _record_final_output(
     turn_id: str,
     provider_id: str,
     output_text: str,
+    complete_text: str,
     exit_code: int,
 ) -> RuntimeEventRecord:
     return record_runtime_event(
@@ -40,7 +41,12 @@ def _record_final_output(
         turn_id=turn_id,
         plane="turn",
         event_type="runtime.output.final",
-        payload={"text": output_text, "provider_id": provider_id, "exit_code": exit_code},
+        payload={
+            "text": output_text,
+            "complete_text": complete_text,
+            "provider_id": provider_id,
+            "exit_code": exit_code,
+        },
         event_bus=state.runtime_event_bus,
     )
 

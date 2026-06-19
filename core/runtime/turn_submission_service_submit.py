@@ -112,7 +112,17 @@ def submit_runtime_turn(
         )
         final_output_text = output_recorder.final_text(result.output_text)
         app_output_text = output_recorder.complete_text(result.output_text)
-        events.append(_record_final_output(state, session_id=session.session_id, turn_id=turn.turn_id, provider_id=provider.provider_id, output_text=final_output_text, exit_code=result.exit_code))
+        events.append(
+            _record_final_output(
+                state,
+                session_id=session.session_id,
+                turn_id=turn.turn_id,
+                provider_id=provider.provider_id,
+                output_text=final_output_text,
+                complete_text=app_output_text,
+                exit_code=result.exit_code,
+            )
+        )
         turn, terminal_event = _complete_turn_from_exit_code(state, session_id=session.session_id, turn_id=turn.turn_id, provider_id=provider.provider_id, exit_code=result.exit_code)
         events.append(terminal_event)
         dispatch_source_app_runtime_event(

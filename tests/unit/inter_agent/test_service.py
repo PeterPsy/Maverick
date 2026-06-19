@@ -202,6 +202,42 @@ class InterAgentServiceTest(unittest.TestCase):
         )
         self.assertEqual([event.sequence for event in events], [1, 2, 3, 4])
 
+    def test_create_run_persists_participant_sequence_from_spec_order(self) -> None:
+        repo_root = make_temp_repo_root(self)
+        store = build_inter_agent_document_store(start_path=repo_root)
+        service = InterAgentService(store)
+        spec = replace(
+            _run_spec(idempotency_key="sequence-order"),
+            participants=[
+                ParticipantSpec(
+                    participant_id="orchestrator",
+                    kind="orchestrator",
+                    execution_mode="root_orchestrator",
+                    label="Orchestrator",
+                ),
+                ParticipantSpec(
+                    participant_id="z_first",
+                    kind="agent",
+                    execution_mode="child_runtime_session",
+                    label="First",
+                    agent_type_id="first-agent",
+                ),
+                ParticipantSpec(
+                    participant_id="a_second",
+                    kind="agent",
+                    execution_mode="child_runtime_session",
+                    label="Second",
+                    agent_type_id="second-agent",
+                ),
+            ],
+        )
+
+        run = service.create_run(spec, now=datetime(2026, 6, 16, 12, 0, tzinfo=UTC))
+        participants = store.list_participants(run.run_id, workspace_id="default")
+
+        self.assertEqual([participant.participant_id for participant in participants], ["orchestrator", "z_first", "a_second"])
+        self.assertEqual([participant.sequence_index for participant in participants], [0, 1, 2])
+
     def test_create_run_retry_repairs_missing_records_without_resetting_ledger(self) -> None:
         repo_root = make_temp_repo_root(self)
         store = build_inter_agent_document_store(start_path=repo_root)

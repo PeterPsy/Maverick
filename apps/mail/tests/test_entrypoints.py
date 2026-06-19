@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from contextlib import contextmanager
 import base64
 from email import policy
 from email.message import EmailMessage
@@ -13,6 +14,7 @@ from pathlib import Path
 import subprocess
 import sys
 import tempfile
+import threading
 import unittest
 from unittest.mock import patch
 
@@ -20,12 +22,13 @@ APP_ROOT = Path(__file__).resolve().parents[1]
 FIXTURE_ROOT = APP_ROOT / "tests" / "fixtures"
 sys.path.insert(0, str(APP_ROOT))
 sys.path.insert(0, str(APP_ROOT / "backend"))
+import backend.storage_attachments as storage_attachments
 from backend.service import handle_action, resolve_secret_resource, resolve_secret_resource_inventory
 from backend.service import app_events_for_action
 from backend.database import connect, ensure_schema, health_payload, now_timestamp
 from backend.providers.gmail import GmailProvider
 from backend.providers.imap_smtp import ImapSmtpProvider
-from backend.storage_attachments import draft_confirmation_preview, draft_confirmation_snapshot_hash, save_attachment_to_storage
+from backend.storage_attachments import draft_confirmation_preview, draft_confirmation_snapshot_hash, require_confirmation_token, save_attachment_to_storage
 from backend.store import list_threads
 
 
@@ -1452,6 +1455,85 @@ class MailServiceTest(unittest.TestCase):
             self.assertIn("already used", replay["detail"])
             self.assertEqual(len(sent_payloads), 1)
 
+    def test_draft_confirmation_token_is_consumed_atomically(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            data_root = Path(tmp)
+            self._insert_gmail_fixture(data_root)
+            status, created = handle_action(
+                data_root,
+                {
+                    "action": "drafts.create",
+                    "to": [{"email": "customer@example.com"}],
+                    "subject": "Race",
+                    "body_text": "Only one confirmation can win.",
+                },
+            )
+            self.assertEqual(status, 201, created)
+            draft_id = created["draft"]["id"]
+            status, preview = handle_action(data_root, {"action": "drafts.send", "draft_id": draft_id})
+            self.assertEqual(status, 200, preview)
+            confirmation_preview = preview["result"]["confirmation_preview"]
+            confirmation_token = confirmation_preview["confirmation_token"]
+            original_connect = storage_attachments.connect
+            select_barrier = threading.Barrier(2)
+
+            class DelayedConfirmationConnection:
+                def __init__(self, db):
+                    self._db = db
+                    self._saw_confirmation_update = False
+
+                def execute(self, sql, *args, **kwargs):
+                    normalized = " ".join(str(sql).split()).upper()
+                    if normalized.startswith("UPDATE SEND_CONFIRMATIONS"):
+                        self._saw_confirmation_update = True
+                    cursor = self._db.execute(sql, *args, **kwargs)
+                    if (
+                        normalized.startswith("SELECT")
+                        and "FROM SEND_CONFIRMATIONS" in normalized
+                        and not self._saw_confirmation_update
+                    ):
+                        select_barrier.wait(timeout=5)
+                    return cursor
+
+                def __getattr__(self, name):
+                    return getattr(self._db, name)
+
+            @contextmanager
+            def delayed_connect(root):
+                with original_connect(root) as db:
+                    yield DelayedConfirmationConnection(db)
+
+            results: list[tuple[str, str]] = []
+            results_lock = threading.Lock()
+
+            def consume_token() -> None:
+                try:
+                    require_confirmation_token(
+                        data_root=data_root,
+                        draft_id=draft_id,
+                        preview=confirmation_preview,
+                        confirmation_token=confirmation_token,
+                    )
+                except ValueError as error:
+                    result = ("error", str(error))
+                else:
+                    result = ("ok", "")
+                with results_lock:
+                    results.append(result)
+
+            with patch("backend.storage_attachments.connect", delayed_connect):
+                threads = [threading.Thread(target=consume_token) for _ in range(2)]
+                for thread in threads:
+                    thread.start()
+                for thread in threads:
+                    thread.join(timeout=10)
+
+            self.assertEqual(len(results), 2)
+            self.assertEqual(sum(1 for status, _message in results if status == "ok"), 1)
+            errors = [message for status, message in results if status == "error"]
+            self.assertEqual(len(errors), 1)
+            self.assertIn("already used", errors[0])
+
     def test_mail_send_confirm_without_token_does_not_create_draft(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             data_root = Path(tmp)
@@ -1473,6 +1555,98 @@ class MailServiceTest(unittest.TestCase):
             with connect(data_root) as db:
                 draft_count = db.execute("SELECT COUNT(*) AS count FROM drafts").fetchone()["count"]
             self.assertEqual(draft_count, 0)
+
+    def test_mail_send_confirm_accepts_confirmation_token_only(self) -> None:
+        sent_payloads: list[dict[str, object]] = []
+
+        def fake_transport(request) -> dict[str, object]:
+            if request.full_url == "https://oauth2.googleapis.com/token":
+                return {"access_token": "access-token", "expires_in": 3600, "token_type": "Bearer"}
+            if request.full_url == "https://gmail.googleapis.com/gmail/v1/users/me/messages/send":
+                payload = json.loads(request.data.decode("utf-8"))
+                sent_payloads.append(payload)
+                return {"id": "provider-message-token-only", "threadId": ""}
+            raise AssertionError(f"unexpected request {request.full_url}")
+
+        with tempfile.TemporaryDirectory() as tmp:
+            data_root = Path(tmp)
+            self._insert_gmail_fixture(data_root)
+            with patch("backend.service.provider_for_connection", return_value=GmailProvider(transport=fake_transport)):
+                status, preview = handle_action(
+                    data_root,
+                    {
+                        "action": "mail_send",
+                        "to": [{"email": "customer@example.com"}],
+                        "subject": "Token only",
+                        "body_text": "Confirm without resubmitting content.",
+                    },
+                )
+                self.assertEqual(status, 200, preview)
+                confirmation_token = preview["result"]["confirmation_preview"]["confirmation_token"]
+                status, payload = handle_action(
+                    data_root,
+                    {
+                        "action": "mail_send",
+                        "confirm": True,
+                        "confirmation_token": confirmation_token,
+                        "_app_secrets": self._gmail_secrets(),
+                    },
+                )
+
+            self.assertEqual(status, 200, payload)
+            self.assertTrue(payload["result"]["sent"])
+            self.assertEqual(payload["draft"]["subject"], "Token only")
+            self.assertEqual(len(sent_payloads), 1)
+
+    def test_mail_send_secret_lookup_resolves_confirmation_token_connection(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            data_root = Path(tmp)
+            default_connection_id = self._insert_gmail_fixture(data_root)
+            token_connection_id = "mail_connection_gmail_customer-success-example.com"
+            with connect(data_root) as db:
+                db.execute(
+                    """
+                    INSERT INTO connections(id, provider, email_address, display_name, status, scopes_json, settings_json, created_at, updated_at)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    (
+                        token_connection_id,
+                        "gmail",
+                        "customer-success@example.com",
+                        "Customer Success",
+                        "connected",
+                        "[]",
+                        "{}",
+                        "2000-01-01T00:00:00+00:00",
+                        "2000-01-01T00:00:00+00:00",
+                    ),
+                )
+            status, preview = handle_action(
+                data_root,
+                {
+                    "action": "mail_send",
+                    "connection_id": token_connection_id,
+                    "to": [{"email": "customer@example.com"}],
+                    "subject": "Token connection",
+                    "body_text": "Resolve secrets from the confirmation token.",
+                },
+            )
+            self.assertEqual(status, 200, preview)
+            confirmation_token = preview["result"]["confirmation_preview"]["confirmation_token"]
+
+            lookup = resolve_secret_resource(
+                data_root,
+                {
+                    "action": "mail_send",
+                    "confirm": True,
+                    "confirmation_token": confirmation_token,
+                    "_app_secret_selector": {"logical_names": ["gmail-refresh-token"]},
+                },
+            )
+
+            self.assertTrue(lookup["requires_secrets"])
+            self.assertEqual(lookup["resource_id"], token_connection_id)
+            self.assertNotEqual(lookup["resource_id"], default_connection_id)
 
     def test_mail_send_accepts_html_body_and_sends_multipart_gmail_message(self) -> None:
         sent_payloads: list[dict[str, object]] = []
@@ -3090,6 +3264,31 @@ class MailServiceTest(unittest.TestCase):
         self.assertTrue(all("when" not in selector for selector in thread_selectors))
         self.assertTrue(all(selector.get("when") == {"metadata_only": False} for selector in attachment_selectors))
         self.assertEqual(thread_properties["max_body_html_chars"]["maximum"], 250000)
+
+    def test_mcp_mail_send_schema_allows_token_only_confirmation(self) -> None:
+        schemas = json.loads((APP_ROOT / "mcp" / "tool_schemas.json").read_text(encoding="utf-8"))
+        mail_send_schema = schemas["tools"]["mail_send"]["input_schema"]
+
+        self.assertNotIn("required", mail_send_schema)
+        confirm_branches = [
+            branch
+            for branch in mail_send_schema["oneOf"]
+            if branch.get("properties", {}).get("confirm", {}).get("const") is True
+        ]
+        self.assertEqual(len(confirm_branches), 1)
+        self.assertEqual(confirm_branches[0]["required"], ["confirm", "confirmation_token"])
+        self.assertNotIn("subject", confirm_branches[0]["required"])
+        self.assertEqual(mail_send_schema["properties"]["confirmation_token"]["minLength"], 1)
+        dry_run_branches = [branch for branch in mail_send_schema["oneOf"] if "allOf" in branch]
+        self.assertEqual(len(dry_run_branches), 1)
+        self.assertIn({"required": ["subject", "body_text"]}, dry_run_branches[0]["allOf"])
+        self.assertTrue(
+            any(
+                option.get("required") == ["to"]
+                for condition in dry_run_branches[0]["allOf"]
+                for option in condition.get("anyOf", [])
+            )
+        )
 
     def test_reference_resolve_thread(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

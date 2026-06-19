@@ -298,15 +298,34 @@
           "confirm": { "type": "boolean", "default": false },
           "confirmation_token": {
             "type": "string",
+            "minLength": 1,
             "description": "Opaque token returned in confirmation_preview; required when confirm=true."
           }
         },
-        "required": ["subject", "body_text"],
-        "anyOf": [
-          { "required": ["to"] },
-          { "required": ["cc"] },
-          { "required": ["bcc"] },
-          { "required": ["thread_id"] }
+        "oneOf": [
+          {
+            "properties": { "confirm": { "const": true } },
+            "required": ["confirm", "confirmation_token"]
+          },
+          {
+            "allOf": [
+              {
+                "anyOf": [
+                  { "not": { "required": ["confirm"] } },
+                  { "properties": { "confirm": { "const": false } } }
+                ]
+              },
+              { "required": ["subject", "body_text"] },
+              {
+                "anyOf": [
+                  { "required": ["to"] },
+                  { "required": ["cc"] },
+                  { "required": ["bcc"] },
+                  { "required": ["thread_id"] }
+                ]
+              }
+            ]
+          }
         ],
         "additionalProperties": false
       },

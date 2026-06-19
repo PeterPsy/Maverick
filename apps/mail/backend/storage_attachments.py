@@ -176,10 +176,25 @@ def require_confirmation_token(
         raise ValueError("confirm=true requires confirmation_token from a dry-run preview")
     token_hash = _hash_token(provided)
     now = now_timestamp()
+    actual = draft_confirmation_snapshot_hash(preview)
     with connect(data_root) as db:
+        result = db.execute(
+            """
+            UPDATE send_confirmations
+            SET used_at = ?
+            WHERE draft_id = ?
+              AND token_hash = ?
+              AND used_at = ''
+              AND expires_at > ?
+              AND snapshot_hash = ?
+            """,
+            (now, draft_id, token_hash, now, actual),
+        )
+        if result.rowcount == 1:
+            return
         row = db.execute(
             """
-            SELECT * FROM send_confirmations
+            SELECT used_at, expires_at, snapshot_hash FROM send_confirmations
             WHERE draft_id = ? AND token_hash = ?
             """,
             (draft_id, token_hash),
@@ -191,10 +206,9 @@ def require_confirmation_token(
         if str(row["expires_at"] or "") <= now:
             raise ValueError("confirmation_token expired; run a new dry-run preview before confirming send")
         expected = str(row["snapshot_hash"] or "")
-        actual = draft_confirmation_snapshot_hash(preview)
         if not hmac.compare_digest(expected, actual):
             raise ValueError("Email confirmation preview changed; run a new dry-run preview before confirming send")
-        db.execute("UPDATE send_confirmations SET used_at = ? WHERE id = ?", (now, row["id"]))
+        raise ValueError("confirmation_token could not be consumed; run a new dry-run preview before confirming send")
 
 
 def draft_id_for_confirmation_token(data_root: Path, confirmation_token: object = None) -> str:

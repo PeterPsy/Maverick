@@ -650,9 +650,17 @@ def _require_connected(data_root: Path, connection_id: str | None) -> None:
 
 def _secret_resource_connection_id(data_root: Path, payload: dict[str, object]) -> str | None:
     explicit = _optional_string(payload.get("connection_id"))
+    action = str(payload.get("action") or "")
+    if action in {"messages.send", "mail_send"} and bool(payload.get("confirm")):
+        confirmation_token = _optional_string(payload.get("confirmation_token"))
+        if confirmation_token:
+            draft_id = draft_id_for_confirmation_token(data_root, confirmation_token)
+            token_connection_id = _effective_connection_id(data_root, str(get_draft(data_root, draft_id)["connection_id"]))
+            if explicit and _effective_connection_id(data_root, explicit) != token_connection_id:
+                raise ValueError("confirmation_token belongs to a different mail connection")
+            return token_connection_id
     if explicit:
         return _effective_connection_id(data_root, explicit)
-    action = str(payload.get("action") or "")
     fallback_id = _optional_string(payload.get("id"))
     thread_id = _optional_string(payload.get("thread_id")) or (
         fallback_id

@@ -8,7 +8,7 @@ from datetime import UTC, datetime
 from typing import Callable
 from uuid import uuid4
 
-from core.runtime.errors import RuntimeSessionHiddenError, RuntimeSessionNotFoundError
+from core.runtime.errors import RuntimeSessionHiddenError, RuntimeSessionNotFoundError, RuntimeThreadNotFoundError
 from core.runtime.runtime_session import RuntimeSessionRecord, runtime_session_allows_user_thread
 from core.runtime.runtime_thread import RuntimeThreadRecord
 from core.runtime.runtime_turns import RuntimeTurnRecord
@@ -167,7 +167,7 @@ def create_runtime_thread(
             patch["project_id"] = project_id.strip()
         if len(patch) == 1:
             return existing
-        return store.save_thread(replace(existing, **patch))
+        return _save_latest_runtime_thread_patch(store, workspace_id=workspace_id, thread=existing, patch=patch)
     latest_completed_response = runtime_thread_last_completed_response_for_session(store, runtime_session_id=normalized_session_id)
     thread = RuntimeThreadRecord(
         thread_id=thread_id or normalized_session_id or str(uuid4()),
@@ -342,7 +342,7 @@ def _reconcile_runtime_thread_with_facts(
     if not patch:
         return thread
     patch["updated_at"] = now or utcnow()
-    return store.save_thread(replace(thread, **patch))
+    return _save_latest_runtime_thread_patch(store, workspace_id=workspace_id, thread=thread, patch=patch)
 
 
 def _turn_facts_by_session_id(store: RuntimeStore, threads: list[RuntimeThreadRecord]) -> dict[str, _ThreadTurnFacts]:
@@ -530,7 +530,7 @@ def mark_runtime_thread_response_completed(
     if thread.last_completed_response_at is None or thread.last_completed_response_at <= timestamp:
         patch["last_completed_response_at"] = timestamp
         patch["last_completed_turn_id"] = turn_id
-    return store.save_thread(replace(thread, **patch))
+    return _save_latest_runtime_thread_patch(store, workspace_id=workspace_id, thread=thread, patch=patch)
 
 
 def mark_runtime_thread_completed_response_read(
@@ -552,12 +552,14 @@ def mark_runtime_thread_completed_response_read(
     if receipts.get(normalized_user_id) == timestamp:
         return thread
     receipts[normalized_user_id] = timestamp
-    return store.save_thread(
-        replace(
-            thread,
-            completed_response_read_at_by_user_id=receipts,
-            updated_at=timestamp,
-        )
+    return _save_latest_runtime_thread_patch(
+        store,
+        workspace_id=workspace_id,
+        thread=thread,
+        patch={
+            "completed_response_read_at_by_user_id": receipts,
+            "updated_at": timestamp,
+        },
     )
 
 
@@ -584,7 +586,76 @@ def update_runtime_thread_availability(
     if not value or thread.availability == value:
         return thread
     timestamp = now or utcnow()
-    return store.save_thread(replace(thread, availability=value, updated_at=timestamp))
+    return _save_latest_runtime_thread_patch(
+        store,
+        workspace_id=workspace_id,
+        thread=thread,
+        patch={"availability": value, "updated_at": timestamp},
+    )
+
+
+def _save_latest_runtime_thread_patch(
+    store: RuntimeStore,
+    *,
+    workspace_id: str,
+    thread: RuntimeThreadRecord,
+    patch: dict[str, object],
+) -> RuntimeThreadRecord:
+    """Apply a partial thread patch to the freshest stored record."""
+    if not patch:
+        return thread
+    try:
+        latest = store.get_thread(thread.thread_id)
+    except RuntimeThreadNotFoundError:
+        return thread
+    if latest.workspace_id != workspace_id:
+        return thread
+    clean_patch = _runtime_thread_patch_for_latest(latest, patch)
+    if not clean_patch:
+        return latest
+    return store.save_thread(replace(latest, **clean_patch))
+
+
+def _runtime_thread_patch_for_latest(thread: RuntimeThreadRecord, patch: dict[str, object]) -> dict[str, object]:
+    clean_patch = dict(patch)
+    _drop_stale_datetime_patch(clean_patch, "last_user_message_at", thread.last_user_message_at)
+    _drop_stale_datetime_patch(clean_patch, "updated_at", thread.updated_at)
+    if _drop_stale_datetime_patch(clean_patch, "last_completed_response_at", thread.last_completed_response_at):
+        clean_patch.pop("last_completed_turn_id", None)
+    if "completed_response_read_at_by_user_id" in clean_patch:
+        clean_patch["completed_response_read_at_by_user_id"] = _merged_completed_response_receipts(
+            thread.completed_response_read_at_by_user_id,
+            clean_patch["completed_response_read_at_by_user_id"],
+        )
+    return clean_patch
+
+
+def _drop_stale_datetime_patch(patch: dict[str, object], key: str, current: datetime | None) -> bool:
+    if key not in patch:
+        return False
+    value = patch.get(key)
+    if not isinstance(value, datetime):
+        patch.pop(key, None)
+        return True
+    if current is not None and current > value:
+        patch.pop(key, None)
+        return True
+    return False
+
+
+def _merged_completed_response_receipts(current: dict[str, datetime] | None, value: object) -> dict[str, datetime]:
+    merged = dict(current or {})
+    if not isinstance(value, dict):
+        return merged
+    for user_id, read_at in value.items():
+        normalized_user_id = str(user_id or "").strip()
+        if not normalized_user_id or not isinstance(read_at, datetime):
+            continue
+        existing = merged.get(normalized_user_id)
+        if existing is not None and existing > read_at:
+            continue
+        merged[normalized_user_id] = read_at
+    return merged
 
 
 def _normalized_thread_availability(value: str) -> str:

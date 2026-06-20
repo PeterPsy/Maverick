@@ -1,9 +1,12 @@
-"""Phase 1 service layer for Senses."""
+"""Phase 2 service layer for Senses."""
 
 from __future__ import annotations
 
+from base64 import b64decode, b64encode
+import binascii
 from datetime import UTC, datetime, timedelta
 import hashlib
+import json
 from pathlib import Path
 import secrets
 import sqlite3
@@ -26,14 +29,23 @@ from database import (
 
 APP_ID = "senses"
 APP_NAME = "Senses"
-APP_VERSION = "0.2.0"
-PHASE = "phase-1"
+APP_VERSION = "0.3.0"
+PHASE = "phase-2"
 PAIRING_CODE_ALPHABET = "".join(char for char in string.ascii_uppercase + string.digits if char not in {"0", "O", "I", "1"})
 PAIRING_CODE_LENGTH = 8
 PAIRING_TTL_MIN_SECONDS = 60
 PAIRING_TTL_MAX_SECONDS = 3600
 ADMIN_WORKSPACE_ROLES = {"admin"}
 ADMIN_PLATFORM_ROLES = {"admin"}
+CAPTURE_REQUEST_SCHEMA_VERSION = "senses.capture.v1"
+CAPTURE_ACCEPTED_SCHEMA_VERSION = "senses.capture.accepted.v1"
+CAPTURE_CLOCK_SKEW_SECONDS = 600
+FRAME_RATE_LIMIT_WINDOW_SECONDS = 60
+FRAME_RATE_LIMIT_MAX = 30
+SUPPORTED_FRAME_CONTENT_TYPES = {
+    "image/jpeg": ".jpg",
+    "image/png": ".png",
+}
 REQUIRED_DEPENDENCIES = (
     {
         "alias": "storage-file-content-write",
@@ -59,9 +71,10 @@ DECLARED_BACKEND_ACTIONS = (
     "devices.revoke",
     "settings.get",
     "settings.update",
-)
-DEFERRED_ACTIONS = (
     "ingest.frame",
+)
+CALLBACK_BACKEND_ACTIONS = ("storage_write.completed",)
+DEFERRED_ACTIONS = (
     "routing.dispatch_capture",
     "device-token ingress",
 )
@@ -85,6 +98,8 @@ def handle_action(data_root: Path, payload: dict[str, object]) -> tuple[int, dic
         return 200, health_action_payload(data_root, workspace_id, dependencies)
     if action in {"reference_manifest", "references.manifest"}:
         return 200, reference_manifest()
+    if action == "storage_write.completed":
+        return storage_write_completed(data_root, workspace_id, payload)
 
     if action == "overview":
         auth_error = require_authenticated(actor)
@@ -126,11 +141,16 @@ def handle_action(data_root: Path, payload: dict[str, object]) -> tuple[int, dic
         if auth_error is not None:
             return auth_error
         return settings_update(data_root, workspace_id, actor, payload)
+    if action == "ingest.frame":
+        auth_error = require_authenticated(actor)
+        if auth_error is not None:
+            return auth_error
+        return ingest_frame(data_root, workspace_id, actor, dependencies, payload)
 
     return error_payload(
         400,
         "unsupported_action",
-        f"Unsupported Senses Phase 1 action `{action}`.",
+        f"Unsupported Senses Phase 2 action `{action}`.",
         allowed_actions=list(DECLARED_BACKEND_ACTIONS),
         deferred_actions=list(DEFERRED_ACTIONS),
     )
@@ -165,7 +185,7 @@ def require_authenticated(actor: dict[str, str | None]) -> tuple[int, dict[str, 
     return error_payload(
         401,
         "authentication_required",
-        "Senses Phase 1 actions require a Maverick user session.",
+        "Senses Phase 2 actions require a Maverick user session.",
     )
 
 
@@ -207,12 +227,14 @@ def manifest_payload(
             "skills": [],
         },
         "backend_actions": list(DECLARED_BACKEND_ACTIONS),
+        "callback_actions": list(CALLBACK_BACKEND_ACTIONS),
         "required_dependencies": list(REQUIRED_DEPENDENCIES),
         "dependency_resolution": dependencies,
         "deferred_to_later_phases": list(DEFERRED_ACTIONS),
         "notes": [
-            "Senses Phase 1 uses Maverick user sessions for pairing and device registry operations.",
-            "Device-token ingress, frame ingestion, and routing remain deferred.",
+            "Senses Phase 2 uses Maverick user sessions for pairing, device registry, and frame ingestion.",
+            "ingest.frame stores captures through the declared Storage dependency and does not launch runtime turns.",
+            "Device-token ingress and routing remain deferred.",
         ],
     }
 
@@ -245,6 +267,7 @@ def overview_payload(
         "settings": settings_payload(data_root, workspace_id),
         "devices": list_devices(data_root, workspace_id, actor, include_all=actor_is_manager(actor)),
         "pairing_sessions": list_pairing_sessions(data_root, workspace_id, actor),
+        "captures": list_captures(data_root, workspace_id, actor, include_all=actor_is_manager(actor)),
         "dependencies": dependencies,
     }
 
@@ -656,6 +679,313 @@ def settings_update(
     return 200, settings_get(data_root, workspace_id, actor)
 
 
+def ingest_frame(
+    data_root: Path,
+    workspace_id: str,
+    actor: dict[str, str | None],
+    dependencies: dict[str, object],
+    payload: dict[str, object],
+) -> tuple[int, dict[str, object]]:
+    if dependencies["status"] != "resolved":
+        return error_payload(
+            503,
+            "dependency_unavailable",
+            "Senses requires the Storage write dependency before accepting frame ingestion.",
+            dependencies=dependencies,
+        )
+
+    settings = settings_payload(data_root, workspace_id)
+    prepared, validation_error = prepare_capture_payload(payload, settings)
+    if validation_error is not None:
+        return validation_error
+
+    device_id = str(prepared["device_id"])
+    device_session_id = str(prepared["device_session_id"])
+    actor_user_id = str(actor["user_id"])
+    timestamp = now_timestamp()
+    ensure_schema(data_root, workspace_id)
+    db = connect(data_root)
+    dependency_request: dict[str, object] | None = None
+    try:
+        db.execute("BEGIN IMMEDIATE")
+        auth_error = validate_device_for_ingest(
+            db,
+            workspace_id=workspace_id,
+            actor_user_id=actor_user_id,
+            device_id=device_id,
+            device_session_id=device_session_id,
+        )
+        if auth_error is not None:
+            db.rollback()
+            return auth_error
+
+        existing = db.execute(
+            """
+            SELECT * FROM ingestion_requests
+            WHERE workspace_id = ? AND device_id = ? AND idempotency_key = ?
+            """,
+            (workspace_id, device_id, prepared["idempotency_key"]),
+        ).fetchone()
+        if existing is not None:
+            if str(existing["request_hash"]) != str(prepared["request_hash"]):
+                db.rollback()
+                return error_payload(
+                    409,
+                    "idempotency_conflict",
+                    "The idempotency_key was already used for a different Senses capture payload.",
+                )
+            capture = capture_by_id(db, workspace_id, str(existing["capture_id"] or ""))
+            if capture is None:
+                db.rollback()
+                return error_payload(
+                    500,
+                    "storage_write_failed",
+                    "Senses ingestion state is missing the capture record for this idempotency key.",
+                )
+            if str(capture["status"]) == "storage_failed":
+                db.execute(
+                    """
+                    UPDATE captures
+                    SET status = 'storage_pending', error_code = NULL, updated_at = ?
+                    WHERE workspace_id = ? AND capture_id = ?
+                    """,
+                    (timestamp, workspace_id, capture["capture_id"]),
+                )
+                db.execute(
+                    """
+                    UPDATE ingestion_requests
+                    SET status = 'storage_pending', error_code = NULL, completed_at = NULL
+                    WHERE workspace_id = ? AND request_id = ?
+                    """,
+                    (workspace_id, existing["request_id"]),
+                )
+                capture = capture_by_id(db, workspace_id, str(capture["capture_id"]))
+                dependency_request = storage_write_dependency_request(capture, prepared)
+            db.commit()
+            response = ingest_acceptance_response(existing, capture)
+            if dependency_request is not None:
+                response["dependency_backend_requests"] = [dependency_request]
+            return 200, response
+
+        rate_error = rate_limit_error(db, workspace_id=workspace_id, device_id=device_id)
+        if rate_error is not None:
+            db.rollback()
+            return rate_error
+
+        capture_id = prefixed_id("cap")
+        workspace_relative_path = capture_storage_path(
+            device_id=device_id,
+            capture_id=capture_id,
+            captured_at=prepared["captured_at_datetime"],
+            content_type=str(prepared["content_type"]),
+        )
+        request_id = str(prepared["request_id"])
+        db.execute(
+            """
+            INSERT INTO ingestion_requests(
+              workspace_id, request_id, device_id, device_session_id, idempotency_key,
+              client_capture_id, capture_id, request_hash, status, created_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'storage_pending', ?)
+            """,
+            (
+                workspace_id,
+                request_id,
+                device_id,
+                device_session_id,
+                prepared["idempotency_key"],
+                prepared["client_capture_id"],
+                capture_id,
+                prepared["request_hash"],
+                timestamp,
+            ),
+        )
+        db.execute(
+            """
+            INSERT INTO captures(
+              workspace_id, capture_id, device_id, device_session_id, ingestion_request_id,
+              input_mode, prompt, content_type, workspace_relative_path, sha256, size_bytes,
+              width, height, retention_class, status, captured_at, ingested_at,
+              metadata_json, created_at, updated_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'storage_pending', ?, ?, ?, ?, ?)
+            """,
+            (
+                workspace_id,
+                capture_id,
+                device_id,
+                device_session_id,
+                request_id,
+                prepared["input_mode"],
+                prepared["prompt"],
+                prepared["content_type"],
+                workspace_relative_path,
+                prepared["sha256"],
+                prepared["size_bytes"],
+                prepared["width"],
+                prepared["height"],
+                settings.get("default_retention_class") or "chat_attachment",
+                prepared["captured_at"],
+                timestamp,
+                encode_json_object(prepared["metadata"]),
+                timestamp,
+                timestamp,
+            ),
+        )
+        db.execute(
+            "UPDATE devices SET last_seen_at = ?, updated_at = ? WHERE workspace_id = ? AND device_id = ?",
+            (timestamp, timestamp, workspace_id, device_id),
+        )
+        db.execute(
+            """
+            UPDATE device_sessions
+            SET last_seen_at = ?
+            WHERE workspace_id = ? AND device_session_id = ?
+            """,
+            (timestamp, workspace_id, device_session_id),
+        )
+        write_audit(
+            db,
+            workspace_id=workspace_id,
+            event_type="capture.accepted",
+            actor_user_id=actor_user_id,
+            device_id=device_id,
+            details={
+                "capture_id": capture_id,
+                "request_id": request_id,
+                "workspace_relative_path": workspace_relative_path,
+                "sha256": prepared["sha256"],
+                "size_bytes": prepared["size_bytes"],
+            },
+        )
+        db.commit()
+        capture = capture_by_id(db, workspace_id, capture_id)
+        ingestion_request = db.execute(
+            "SELECT * FROM ingestion_requests WHERE workspace_id = ? AND request_id = ?",
+            (workspace_id, request_id),
+        ).fetchone()
+    except sqlite3.IntegrityError:
+        db.rollback()
+        return error_payload(
+            409,
+            "idempotency_conflict",
+            "Senses could not claim this request_id or idempotency_key because it already exists.",
+        )
+    except Exception:
+        db.rollback()
+        raise
+    finally:
+        db.close()
+
+    response = ingest_acceptance_response(ingestion_request, capture)
+    response["dependency_backend_requests"] = [storage_write_dependency_request(capture, prepared)]
+    return 202, response
+
+
+def storage_write_completed(data_root: Path, workspace_id: str, payload: dict[str, object]) -> tuple[int, dict[str, object]]:
+    if text_or_none(payload.get("_app_surface")) != "dependency_backend_request_callback":
+        return error_payload(
+            403,
+            "senses_permission_forbidden",
+            "Senses Storage callbacks may only run through the dependency backend callback surface.",
+        )
+    capture_id = text_or_none(payload.get("capture_id"))
+    if not capture_id:
+        return error_payload(400, "invalid_capture", "storage_write.completed requires capture_id.")
+    if text_or_none(payload.get("dependency_alias")) != "storage-file-content-write":
+        return error_payload(
+            400,
+            "invalid_dependency_callback",
+            "Senses storage callback must come from the storage-file-content-write dependency.",
+        )
+
+    timestamp = now_timestamp()
+    ensure_schema(data_root, workspace_id)
+    db = connect(data_root)
+    try:
+        db.execute("BEGIN IMMEDIATE")
+        capture = capture_by_id(db, workspace_id, capture_id)
+        if capture is None:
+            db.rollback()
+            return error_payload(404, "capture_not_found", "No matching Senses capture was found.")
+        if str(payload.get("dependency_backend_status") or "") != "completed":
+            updated = mark_capture_storage_failed(
+                db,
+                workspace_id=workspace_id,
+                capture=capture,
+                error_code="storage_write_failed",
+                error_detail=bounded_text(payload.get("error"), fallback="storage dependency failed", max_length=240),
+                timestamp=timestamp,
+            )
+            db.commit()
+            return 200, {"ok": True, "status": "storage_failed", "capture": capture_payload(updated), "error": None}
+
+        storage_result = storage_result_payload(payload.get("dependency_backend_result"))
+        storage_error = validate_storage_result(capture, storage_result)
+        if storage_error is not None:
+            updated = mark_capture_storage_failed(
+                db,
+                workspace_id=workspace_id,
+                capture=capture,
+                error_code="storage_write_failed",
+                error_detail=storage_error,
+                timestamp=timestamp,
+            )
+            db.commit()
+            return 200, {"ok": True, "status": "storage_failed", "capture": capture_payload(updated), "error": None}
+
+        db.execute(
+            """
+            UPDATE captures
+            SET status = 'stored',
+                storage_file_id = ?,
+                workspace_relative_path = ?,
+                sha256 = ?,
+                size_bytes = ?,
+                error_code = NULL,
+                updated_at = ?
+            WHERE workspace_id = ? AND capture_id = ?
+            """,
+            (
+                storage_result["storage_file_id"],
+                storage_result["workspace_relative_path"],
+                storage_result["sha256"],
+                storage_result["size_bytes"],
+                timestamp,
+                workspace_id,
+                capture_id,
+            ),
+        )
+        db.execute(
+            """
+            UPDATE ingestion_requests
+            SET status = 'stored', error_code = NULL, completed_at = ?
+            WHERE workspace_id = ? AND request_id = ?
+            """,
+            (timestamp, workspace_id, capture["ingestion_request_id"]),
+        )
+        write_audit(
+            db,
+            workspace_id=workspace_id,
+            event_type="capture.stored",
+            actor_user_id=None,
+            device_id=str(capture["device_id"]),
+            details={
+                "capture_id": capture_id,
+                "storage_file_id": storage_result["storage_file_id"],
+                "workspace_relative_path": storage_result["workspace_relative_path"],
+                "sha256": storage_result["sha256"],
+                "size_bytes": storage_result["size_bytes"],
+            },
+        )
+        db.commit()
+        updated = capture_by_id(db, workspace_id, capture_id)
+    except Exception:
+        db.rollback()
+        raise
+    finally:
+        db.close()
+    return 200, {"ok": True, "status": "stored", "capture": capture_payload(updated), "error": None}
+
+
 def list_devices(
     data_root: Path,
     workspace_id: str,
@@ -718,6 +1048,564 @@ def list_pairing_sessions(
     finally:
         db.close()
     return [pairing_payload(row) for row in rows]
+
+
+def list_captures(
+    data_root: Path,
+    workspace_id: str,
+    actor: dict[str, str | None],
+    *,
+    include_all: bool,
+    limit: int = 50,
+) -> list[dict[str, object]]:
+    ensure_schema(data_root, workspace_id)
+    db = connect(data_root)
+    try:
+        params: list[object] = [workspace_id]
+        where = ["workspace_id = ?"]
+        if not include_all:
+            where.append(
+                "device_id IN (SELECT device_id FROM devices WHERE workspace_id = ? AND owner_user_id = ?)"
+            )
+            params.extend([workspace_id, actor["user_id"]])
+        rows = db.execute(
+            f"""
+            SELECT * FROM captures
+            WHERE {" AND ".join(where)}
+            ORDER BY captured_at DESC, created_at DESC
+            LIMIT ?
+            """,
+            [*params, max(1, min(250, int(limit)))],
+        ).fetchall()
+    finally:
+        db.close()
+    return [capture_payload(row) for row in rows]
+
+
+def prepare_capture_payload(
+    payload: dict[str, object],
+    settings: dict[str, object],
+) -> tuple[dict[str, object], tuple[int, dict[str, object]] | None]:
+    if text_or_none(payload.get("capture_id")):
+        return {}, error_payload(
+            400,
+            "invalid_capture_id",
+            "capture_id is generated by Senses and must not be supplied by the client.",
+        )
+    schema_version = text_or_none(payload.get("schema_version"))
+    if schema_version != CAPTURE_REQUEST_SCHEMA_VERSION:
+        return {}, error_payload(
+            400,
+            "invalid_schema_version",
+            f"ingest.frame requires schema_version `{CAPTURE_REQUEST_SCHEMA_VERSION}`.",
+        )
+    request_id = bounded_identifier(payload.get("request_id"), max_length=128)
+    if not request_id:
+        return {}, error_payload(400, "invalid_request_id", "ingest.frame requires request_id.")
+    idempotency_key = bounded_identifier(payload.get("idempotency_key"), max_length=160)
+    if not idempotency_key:
+        return {}, error_payload(400, "invalid_idempotency_key", "ingest.frame requires idempotency_key.")
+    device_id = bounded_identifier(payload.get("device_id"), max_length=128)
+    device_session_id = bounded_identifier(payload.get("device_session_id"), max_length=128)
+    if not device_id or not device_session_id:
+        return {}, error_payload(400, "invalid_device", "ingest.frame requires device_id and device_session_id.")
+
+    content_type = normalize_content_type(payload.get("content_type"))
+    if content_type not in SUPPORTED_FRAME_CONTENT_TYPES:
+        return {}, error_payload(
+            415,
+            "unsupported_media_type",
+            "Senses frame ingestion supports image/jpeg and diagnostic image/png payloads.",
+        )
+    raw_content_base64 = payload.get("content_base64")
+    if not isinstance(raw_content_base64, str) or not raw_content_base64.strip():
+        return {}, error_payload(400, "invalid_base64", "ingest.frame requires content_base64.")
+    try:
+        decoded = b64decode(raw_content_base64, validate=True)
+    except (ValueError, binascii.Error):
+        return {}, error_payload(400, "invalid_base64", "content_base64 must be valid base64.")
+    max_frame_bytes = bounded_int(settings.get("max_frame_bytes"), default=8388608, minimum=1, maximum=52428800)
+    if len(decoded) > max_frame_bytes:
+        return {}, error_payload(
+            413,
+            "capture_too_large",
+            "Decoded frame bytes exceed the configured Senses max_frame_bytes limit.",
+            max_frame_bytes=max_frame_bytes,
+        )
+    hash_error = validate_client_content_hash(payload, decoded)
+    if hash_error is not None:
+        return {}, hash_error
+    sanitized, media_error = sanitized_frame_bytes(decoded, content_type)
+    if media_error is not None:
+        return {}, media_error
+    if len(sanitized) > max_frame_bytes:
+        return {}, error_payload(
+            413,
+            "capture_too_large",
+            "Sanitized frame bytes exceed the configured Senses max_frame_bytes limit.",
+            max_frame_bytes=max_frame_bytes,
+        )
+
+    captured_at, timestamp_error = parse_capture_timestamp(payload.get("captured_at"))
+    if timestamp_error is not None:
+        return {}, timestamp_error
+
+    metadata = metadata_payload(payload.get("metadata"))
+    width = optional_bounded_int(metadata.get("width"), minimum=1, maximum=100000)
+    height = optional_bounded_int(metadata.get("height"), minimum=1, maximum=100000)
+    prompt = bounded_text(payload.get("prompt"), fallback="", max_length=2048)
+    input_mode = bounded_text(payload.get("input_mode"), fallback="vision.snapshot", max_length=80)
+    client_capture_id = bounded_identifier(payload.get("client_capture_id"), max_length=160)
+    sha256 = hashlib.sha256(sanitized).hexdigest()
+    request_hash = capture_request_hash(
+        {
+            "schema_version": schema_version,
+            "device_id": device_id,
+            "device_session_id": device_session_id,
+            "idempotency_key": idempotency_key,
+            "client_capture_id": client_capture_id,
+            "input_mode": input_mode,
+            "prompt": prompt,
+            "content_type": content_type,
+            "sha256": sha256,
+            "size_bytes": len(sanitized),
+            "captured_at": captured_at.isoformat(),
+            "metadata": metadata,
+        }
+    )
+    return {
+        "schema_version": schema_version,
+        "request_id": request_id,
+        "device_id": device_id,
+        "device_session_id": device_session_id,
+        "idempotency_key": idempotency_key,
+        "client_capture_id": client_capture_id,
+        "input_mode": input_mode,
+        "prompt": prompt,
+        "content_type": content_type,
+        "content_base64": b64encode(sanitized).decode("ascii"),
+        "captured_at": captured_at.isoformat(),
+        "captured_at_datetime": captured_at,
+        "metadata": metadata,
+        "width": width,
+        "height": height,
+        "sha256": sha256,
+        "size_bytes": len(sanitized),
+        "request_hash": request_hash,
+    }, None
+
+
+def validate_device_for_ingest(
+    db: sqlite3.Connection,
+    *,
+    workspace_id: str,
+    actor_user_id: str,
+    device_id: str,
+    device_session_id: str,
+) -> tuple[int, dict[str, object]] | None:
+    device = db.execute(
+        "SELECT * FROM devices WHERE workspace_id = ? AND device_id = ?",
+        (workspace_id, device_id),
+    ).fetchone()
+    if device is None:
+        return error_payload(404, "device_not_found", "No matching Senses device was found.")
+    if str(device["status"]) != "active" or str(device["owner_user_id"]) != actor_user_id:
+        return error_payload(403, "device_not_authorized", "This Maverick user session cannot ingest for that device.")
+    device_session = db.execute(
+        """
+        SELECT * FROM device_sessions
+        WHERE workspace_id = ? AND device_session_id = ? AND device_id = ?
+        """,
+        (workspace_id, device_session_id, device_id),
+    ).fetchone()
+    if device_session is None:
+        return error_payload(400, "invalid_device", "The Senses device_session_id does not match that device.")
+    if str(device_session["status"]) != "active" or str(device_session["user_id"]) != actor_user_id:
+        return error_payload(403, "device_not_authorized", "The Senses device session is not active for this user.")
+    return None
+
+
+def rate_limit_error(
+    db: sqlite3.Connection,
+    *,
+    workspace_id: str,
+    device_id: str,
+) -> tuple[int, dict[str, object]] | None:
+    cutoff = (datetime.now(tz=UTC) - timedelta(seconds=FRAME_RATE_LIMIT_WINDOW_SECONDS)).isoformat()
+    count = int(
+        db.execute(
+            """
+            SELECT COUNT(*) FROM ingestion_requests
+            WHERE workspace_id = ?
+              AND device_id = ?
+              AND status IN ('storage_pending', 'stored')
+              AND created_at >= ?
+            """,
+            (workspace_id, device_id, cutoff),
+        ).fetchone()[0]
+    )
+    if count < FRAME_RATE_LIMIT_MAX:
+        return None
+    return error_payload(
+        429,
+        "rate_limited",
+        "Senses frame ingestion rate limit exceeded for this device.",
+        retry_after_seconds=FRAME_RATE_LIMIT_WINDOW_SECONDS,
+    )
+
+
+def capture_by_id(db: sqlite3.Connection, workspace_id: str, capture_id: str) -> sqlite3.Row | None:
+    if not capture_id:
+        return None
+    return db.execute(
+        "SELECT * FROM captures WHERE workspace_id = ? AND capture_id = ?",
+        (workspace_id, capture_id),
+    ).fetchone()
+
+
+def capture_storage_path(
+    *,
+    device_id: str,
+    capture_id: str,
+    captured_at: datetime,
+    content_type: str,
+) -> str:
+    extension = SUPPORTED_FRAME_CONTENT_TYPES[content_type]
+    return f"storage/generated/senses/{device_id}/{captured_at.date().isoformat()}/{capture_id}{extension}"
+
+
+def storage_write_dependency_request(
+    capture: sqlite3.Row | None,
+    prepared: dict[str, object],
+) -> dict[str, object]:
+    if capture is None:
+        raise RuntimeError("Cannot create Senses Storage dependency request without a capture row.")
+    capture_id = str(capture["capture_id"])
+    return {
+        "request_id": f"write-{capture_id}",
+        "dependency_alias": "storage-file-content-write",
+        "body": {
+            "action": "file.content.write",
+            "mode": "create",
+            "workspace_relative_path": capture["workspace_relative_path"],
+            "content_base64": prepared["content_base64"],
+        },
+        "callback": {
+            "action": "storage_write.completed",
+            "payload": {"capture_id": capture_id},
+        },
+    }
+
+
+def ingest_acceptance_response(
+    ingestion_request: sqlite3.Row | None,
+    capture: sqlite3.Row | None,
+) -> dict[str, object]:
+    if ingestion_request is None or capture is None:
+        raise RuntimeError("Cannot build Senses ingest response without persisted rows.")
+    storage = storage_payload(capture)
+    return {
+        "ok": True,
+        "schema_version": CAPTURE_ACCEPTED_SCHEMA_VERSION,
+        "request_id": ingestion_request["request_id"],
+        "status": "stored" if storage["status"] == "stored" else "accepted",
+        "capture_id": capture["capture_id"],
+        "idempotency_key": ingestion_request["idempotency_key"],
+        "storage": storage,
+        "dispatch": {
+            "required": True,
+            "action": "routing.dispatch_capture",
+            "ready_status": "stored",
+        },
+        "error": None,
+    }
+
+
+def storage_payload(capture: sqlite3.Row | None) -> dict[str, object]:
+    if capture is None:
+        return {}
+    status = str(capture["status"])
+    if status == "stored":
+        storage_status = "stored"
+    elif status == "storage_failed":
+        storage_status = "failed"
+    else:
+        storage_status = "pending"
+    return {
+        "status": storage_status,
+        "storage_file_id": capture["storage_file_id"],
+        "workspace_relative_path": capture["workspace_relative_path"],
+        "sha256": capture["sha256"],
+        "size_bytes": capture["size_bytes"],
+    }
+
+
+def capture_payload(row: sqlite3.Row | None) -> dict[str, object]:
+    if row is None:
+        return {}
+    return {
+        "workspace_id": row["workspace_id"],
+        "capture_id": row["capture_id"],
+        "device_id": row["device_id"],
+        "device_session_id": row["device_session_id"],
+        "ingestion_request_id": row["ingestion_request_id"],
+        "input_mode": row["input_mode"],
+        "prompt": row["prompt"],
+        "content_type": row["content_type"],
+        "storage": storage_payload(row),
+        "width": row["width"],
+        "height": row["height"],
+        "retention_class": row["retention_class"],
+        "status": row["status"],
+        "error_code": row["error_code"],
+        "captured_at": row["captured_at"],
+        "ingested_at": row["ingested_at"],
+        "runtime_session_id": row["runtime_session_id"],
+        "thread_id": row["thread_id"],
+        "turn_id": row["turn_id"],
+        "deleted_at": row["deleted_at"],
+        "metadata": decode_json_object(row["metadata_json"]),
+        "created_at": row["created_at"],
+        "updated_at": row["updated_at"],
+    }
+
+
+def storage_result_payload(value: object) -> dict[str, object]:
+    if not isinstance(value, dict):
+        return {}
+    result_json = value.get("json") if isinstance(value.get("json"), dict) else value
+    if not isinstance(result_json, dict):
+        return {}
+    file_payload = result_json.get("file") if isinstance(result_json.get("file"), dict) else {}
+    audit = result_json.get("audit") if isinstance(result_json.get("audit"), dict) else {}
+    storage_file_id = text_or_none(
+        file_payload.get("file_id")
+        or file_payload.get("stable_storage_file_id")
+        or file_payload.get("id")
+        or result_json.get("file_id")
+    )
+    workspace_relative_path = text_or_none(file_payload.get("workspace_relative_path") or result_json.get("workspace_relative_path"))
+    sha256 = text_or_none(file_payload.get("sha256") or audit.get("sha256") or result_json.get("sha256"))
+    size_bytes = optional_bounded_int(file_payload.get("size_bytes") or result_json.get("bytes_written"), minimum=0, maximum=52428800)
+    return {
+        "storage_file_id": storage_file_id,
+        "workspace_relative_path": workspace_relative_path,
+        "sha256": sha256,
+        "size_bytes": size_bytes,
+    }
+
+
+def validate_storage_result(capture: sqlite3.Row, storage_result: dict[str, object]) -> str | None:
+    if not storage_result.get("storage_file_id"):
+        return "Storage result did not include a file id."
+    if storage_result.get("workspace_relative_path") != capture["workspace_relative_path"]:
+        return "Storage result path did not match the Senses capture path."
+    if storage_result.get("sha256") != capture["sha256"]:
+        return "Storage result sha256 did not match the Senses capture hash."
+    if storage_result.get("size_bytes") != capture["size_bytes"]:
+        return "Storage result size did not match the Senses capture size."
+    return None
+
+
+def mark_capture_storage_failed(
+    db: sqlite3.Connection,
+    *,
+    workspace_id: str,
+    capture: sqlite3.Row,
+    error_code: str,
+    error_detail: str,
+    timestamp: str,
+) -> sqlite3.Row | None:
+    db.execute(
+        """
+        UPDATE captures
+        SET status = 'storage_failed', error_code = ?, updated_at = ?
+        WHERE workspace_id = ? AND capture_id = ?
+        """,
+        (error_code, timestamp, workspace_id, capture["capture_id"]),
+    )
+    db.execute(
+        """
+        UPDATE ingestion_requests
+        SET status = 'storage_failed', error_code = ?, completed_at = ?
+        WHERE workspace_id = ? AND request_id = ?
+        """,
+        (error_code, timestamp, workspace_id, capture["ingestion_request_id"]),
+    )
+    write_audit(
+        db,
+        workspace_id=workspace_id,
+        event_type="capture.storage_failed",
+        actor_user_id=None,
+        device_id=str(capture["device_id"]),
+        details={
+            "capture_id": capture["capture_id"],
+            "error_code": error_code,
+            "error_detail": error_detail,
+        },
+    )
+    return capture_by_id(db, workspace_id, str(capture["capture_id"]))
+
+
+def parse_capture_timestamp(value: object) -> tuple[datetime, tuple[int, dict[str, object]] | None]:
+    text = text_or_none(value)
+    if not text:
+        return datetime.now(tz=UTC), error_payload(
+            400,
+            "invalid_capture_timestamp",
+            "ingest.frame requires captured_at.",
+    )
+    try:
+        normalized = f"{text[:-1]}+00:00" if text.endswith("Z") else text
+        parsed = datetime.fromisoformat(normalized)
+    except ValueError:
+        return datetime.now(tz=UTC), error_payload(
+            400,
+            "invalid_capture_timestamp",
+            "captured_at must be an ISO-8601 timestamp.",
+        )
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=UTC)
+    parsed = parsed.astimezone(UTC)
+    skew = abs((datetime.now(tz=UTC) - parsed).total_seconds())
+    if skew > CAPTURE_CLOCK_SKEW_SECONDS:
+        return parsed, error_payload(
+            400,
+            "invalid_capture_timestamp",
+            "captured_at is outside the 10 minute MVP clock skew window.",
+            max_skew_seconds=CAPTURE_CLOCK_SKEW_SECONDS,
+        )
+    return parsed, None
+
+
+def validate_client_content_hash(
+    payload: dict[str, object],
+    decoded: bytes,
+) -> tuple[int, dict[str, object]] | None:
+    declared = text_or_none(payload.get("content_sha256") or payload.get("sha256"))
+    if not declared:
+        return None
+    normalized = declared.lower()
+    if len(normalized) != 64 or any(char not in "0123456789abcdef" for char in normalized):
+        return error_payload(400, "invalid_content_hash", "content_sha256 must be a lowercase sha256 hex digest.")
+    if hashlib.sha256(decoded).hexdigest() != normalized:
+        return error_payload(400, "invalid_content_hash", "content_sha256 does not match decoded content.")
+    return None
+
+
+def sanitized_frame_bytes(decoded: bytes, content_type: str) -> tuple[bytes, tuple[int, dict[str, object]] | None]:
+    if content_type == "image/jpeg":
+        if not decoded.startswith(b"\xff\xd8"):
+            return b"", error_payload(400, "invalid_content_type", "content_type image/jpeg does not match JPEG bytes.")
+        try:
+            return strip_jpeg_exif(decoded), None
+        except ValueError as exc:
+            return b"", error_payload(400, "invalid_content_type", str(exc))
+    if content_type == "image/png":
+        if not decoded.startswith(b"\x89PNG\r\n\x1a\n"):
+            return b"", error_payload(400, "invalid_content_type", "content_type image/png does not match PNG bytes.")
+        try:
+            return strip_png_exif(decoded), None
+        except ValueError as exc:
+            return b"", error_payload(400, "invalid_content_type", str(exc))
+    return b"", error_payload(415, "unsupported_media_type", "Unsupported Senses frame content type.")
+
+
+def strip_jpeg_exif(data: bytes) -> bytes:
+    output = bytearray(data[:2])
+    index = 2
+    length = len(data)
+    while index < length:
+        if data[index] != 0xFF:
+            output.extend(data[index:])
+            break
+        marker_start = index
+        while index < length and data[index] == 0xFF:
+            index += 1
+        if index >= length:
+            output.extend(data[marker_start:])
+            break
+        marker = data[index]
+        index += 1
+        if marker == 0x00:
+            output.extend(data[marker_start:index])
+            continue
+        if marker == 0xD9 or 0xD0 <= marker <= 0xD7 or marker == 0x01:
+            output.extend(data[marker_start:index])
+            if marker == 0xD9:
+                output.extend(data[index:])
+                break
+            continue
+        if index + 2 > length:
+            raise ValueError("JPEG segment length is truncated.")
+        segment_length = int.from_bytes(data[index:index + 2], "big")
+        if segment_length < 2:
+            raise ValueError("JPEG segment length is invalid.")
+        segment_end = index + segment_length
+        if segment_end > length:
+            raise ValueError("JPEG segment extends beyond payload.")
+        segment_payload = data[index + 2:segment_end]
+        if marker == 0xDA:
+            output.extend(data[marker_start:])
+            break
+        if marker == 0xE1 and segment_payload.startswith(b"Exif\x00\x00"):
+            index = segment_end
+            continue
+        output.extend(data[marker_start:segment_end])
+        index = segment_end
+    return bytes(output)
+
+
+def strip_png_exif(data: bytes) -> bytes:
+    signature = b"\x89PNG\r\n\x1a\n"
+    output = bytearray(signature)
+    index = len(signature)
+    length = len(data)
+    while index < length:
+        if index + 8 > length:
+            raise ValueError("PNG chunk header is truncated.")
+        chunk_length = int.from_bytes(data[index:index + 4], "big")
+        chunk_type = data[index + 4:index + 8]
+        chunk_end = index + 12 + chunk_length
+        if chunk_end > length:
+            raise ValueError("PNG chunk extends beyond payload.")
+        if chunk_type != b"eXIf":
+            output.extend(data[index:chunk_end])
+        index = chunk_end
+        if chunk_type == b"IEND":
+            output.extend(data[index:])
+            break
+    return bytes(output)
+
+
+def capture_request_hash(value: dict[str, object]) -> str:
+    payload = json.dumps(value, ensure_ascii=True, sort_keys=True, separators=(",", ":"))
+    return hashlib.sha256(payload.encode("utf-8")).hexdigest()
+
+
+def normalize_content_type(value: object) -> str:
+    return str(value or "").split(";", 1)[0].strip().lower()
+
+
+def bounded_identifier(value: object, *, max_length: int) -> str:
+    text = text_or_none(value)
+    if not text or len(text) > max_length:
+        return ""
+    if any(char.isspace() for char in text):
+        return ""
+    return text
+
+
+def optional_bounded_int(value: object, *, minimum: int, maximum: int) -> int | None:
+    if value is None or value == "":
+        return None
+    try:
+        parsed = int(value)
+    except (TypeError, ValueError):
+        return None
+    if parsed < minimum or parsed > maximum:
+        return None
+    return parsed
 
 
 def insert_pairing_session(
@@ -870,7 +1758,7 @@ def reference_manifest() -> dict[str, object]:
         "app_id": APP_ID,
         "schema_version": "1",
         "entity_types": [],
-        "notes": ["Senses reference search remains deferred until capture records exist."],
+        "notes": ["Senses capture records exist in Phase 2; reference search and resolve remain deferred."],
     }
 
 
@@ -941,6 +1829,11 @@ def app_events_for_action(action: str) -> list[dict[str, str]]:
         return [{"type": "maverick.app.data-changed", "owner_app_id": APP_ID, "resource": "devices"}]
     if normalized == "settings.update":
         return [{"type": "maverick.app.data-changed", "owner_app_id": APP_ID, "resource": "settings"}]
+    if normalized in {"ingest.frame", "storage_write.completed"}:
+        return [
+            {"type": "maverick.app.data-changed", "owner_app_id": APP_ID, "resource": "captures"},
+            {"type": "maverick.app.data-changed", "owner_app_id": APP_ID, "resource": "devices"},
+        ]
     return []
 
 

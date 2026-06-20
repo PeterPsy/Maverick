@@ -1,7 +1,10 @@
-"""Phase 1 backend tests for Senses."""
+"""Phase 2 backend tests for Senses."""
 
 from __future__ import annotations
 
+from base64 import b64decode, b64encode
+from datetime import UTC, datetime, timedelta
+import hashlib
 import json
 import os
 from pathlib import Path
@@ -18,6 +21,7 @@ sys.path.insert(0, str(APP_ROOT / "backend"))
 
 from core.shared.entrypoints import run_json_entrypoint
 from database import WORKSPACE_TABLES, db_path, ensure_schema, table_columns
+import service
 from service import app_events_for_action, handle_action
 
 
@@ -105,7 +109,47 @@ def start_and_complete_device(data_root: Path, user_id: str = "user-1") -> dict[
     return completed
 
 
-class SensesPhase1EntrypointTest(unittest.TestCase):
+def jpeg_with_exif() -> bytes:
+    exif_payload = b"Exif\x00\x00GPSSECRET"
+    app1 = b"\xff\xe1" + (len(exif_payload) + 2).to_bytes(2, "big") + exif_payload
+    jfif_payload = b"JFIF\x00"
+    app0 = b"\xff\xe0" + (len(jfif_payload) + 2).to_bytes(2, "big") + jfif_payload
+    scan = b"\xff\xda\x00\x08\x01\x01\x00\x00?\x00" + b"\x11\x22\xff\xd9"
+    return b"\xff\xd8" + app1 + app0 + scan
+
+
+def capture_request(
+    completed: dict[str, object],
+    *,
+    request_id: str = "req-1",
+    idempotency_key: str = "idem-1",
+    content: bytes | None = None,
+    content_type: str = "image/jpeg",
+    prompt: str = "Cosa sto guardando?",
+) -> dict[str, object]:
+    body = content if content is not None else jpeg_with_exif()
+    return {
+        "action": "ingest.frame",
+        "_workspace_id": "default",
+        "_app_actor": actor(),
+        "_app_dependencies": resolved_storage_dependencies(),
+        "schema_version": "senses.capture.v1",
+        "request_id": request_id,
+        "device_id": completed["device"]["device_id"],
+        "device_session_id": completed["device_session"]["device_session_id"],
+        "idempotency_key": idempotency_key,
+        "client_capture_id": "ios-local-1",
+        "input_mode": "vision.snapshot",
+        "prompt": prompt,
+        "content_type": content_type,
+        "content_base64": b64encode(body).decode("ascii"),
+        "content_sha256": hashlib.sha256(body).hexdigest(),
+        "captured_at": datetime.now(tz=UTC).isoformat().replace("+00:00", "Z"),
+        "metadata": {"adapter_id": "meta_glasses", "width": 1600, "height": 1200},
+    }
+
+
+class SensesPhase2EntrypointTest(unittest.TestCase):
     def test_schema_is_workspace_scoped_and_idempotent(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             data_root = Path(tmp)
@@ -126,7 +170,7 @@ class SensesPhase1EntrypointTest(unittest.TestCase):
             self.assertEqual(settings_count, 1)
             self.assertTrue(set(WORKSPACE_TABLES).issubset(table_names))
 
-    def test_manifest_reports_phase_1_surfaces(self) -> None:
+    def test_manifest_reports_phase_2_surfaces(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             status, manifest = handle_action(
                 Path(tmp),
@@ -138,12 +182,14 @@ class SensesPhase1EntrypointTest(unittest.TestCase):
                 },
             )
             self.assertEqual(status, 200)
-            self.assertEqual(manifest["phase"], "phase-1")
+            self.assertEqual(manifest["phase"], "phase-2")
             self.assertEqual(manifest["dependency_resolution"]["status"], "resolved")
             self.assertEqual(manifest["declared_surfaces"]["frontend"], True)
             self.assertIn("pairing.start", manifest["backend_actions"])
             self.assertIn("devices.revoke", manifest["backend_actions"])
-            self.assertIn("ingest.frame", manifest["deferred_to_later_phases"])
+            self.assertIn("ingest.frame", manifest["backend_actions"])
+            self.assertIn("storage_write.completed", manifest["callback_actions"])
+            self.assertNotIn("ingest.frame", manifest["deferred_to_later_phases"])
 
     def test_missing_workspace_id_is_rejected(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -305,6 +351,217 @@ class SensesPhase1EntrypointTest(unittest.TestCase):
             self.assertFalse(updated["settings"]["allow_member_pairing"])
             self.assertEqual(updated["settings"]["pairing_code_ttl_seconds"], 120)
 
+    def test_ingest_frame_persists_capture_and_requests_storage_write(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            data_root = Path(tmp)
+            completed = start_and_complete_device(data_root)
+
+            status, accepted = handle_action(data_root, capture_request(completed))
+
+            self.assertEqual(status, 202)
+            self.assertTrue(accepted["ok"])
+            self.assertEqual(accepted["schema_version"], "senses.capture.accepted.v1")
+            self.assertEqual(accepted["status"], "accepted")
+            self.assertEqual(accepted["storage"]["status"], "pending")
+            self.assertEqual(accepted["dispatch"]["action"], "routing.dispatch_capture")
+            self.assertNotIn("runtime_launch_requests", accepted)
+
+            requests = accepted["dependency_backend_requests"]
+            self.assertEqual(len(requests), 1)
+            storage_request = requests[0]
+            self.assertEqual(storage_request["dependency_alias"], "storage-file-content-write")
+            self.assertEqual(storage_request["body"]["action"], "file.content.write")
+            self.assertEqual(storage_request["body"]["mode"], "create")
+            self.assertEqual(storage_request["callback"]["action"], "storage_write.completed")
+            self.assertEqual(storage_request["callback"]["payload"]["capture_id"], accepted["capture_id"])
+            self.assertIn(f"/{accepted['capture_id']}.jpg", storage_request["body"]["workspace_relative_path"])
+
+            sanitized = b64decode(storage_request["body"]["content_base64"])
+            self.assertNotIn(b"Exif\x00\x00", sanitized)
+            self.assertNotIn(b"GPSSECRET", sanitized)
+            self.assertEqual(hashlib.sha256(sanitized).hexdigest(), accepted["storage"]["sha256"])
+            self.assertEqual(len(sanitized), accepted["storage"]["size_bytes"])
+
+            with sqlite3.connect(db_path(data_root)) as db:
+                ingestion = db.execute(
+                    "SELECT status, capture_id FROM ingestion_requests WHERE request_id = ?",
+                    ("req-1",),
+                ).fetchone()
+                capture = db.execute(
+                    "SELECT status, storage_file_id, workspace_relative_path, sha256, size_bytes FROM captures WHERE capture_id = ?",
+                    (accepted["capture_id"],),
+                ).fetchone()
+            self.assertEqual(ingestion, ("storage_pending", accepted["capture_id"]))
+            self.assertEqual(capture[0], "storage_pending")
+            self.assertIsNone(capture[1])
+            self.assertEqual(capture[2], accepted["storage"]["workspace_relative_path"])
+            self.assertEqual(capture[3], accepted["storage"]["sha256"])
+            self.assertEqual(capture[4], accepted["storage"]["size_bytes"])
+
+    def test_ingest_frame_idempotency_success_and_conflict(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            data_root = Path(tmp)
+            completed = start_and_complete_device(data_root)
+            request = capture_request(completed)
+
+            status, first = handle_action(data_root, dict(request))
+            self.assertEqual(status, 202)
+            status, replay = handle_action(data_root, dict(request))
+            self.assertEqual(status, 200)
+            self.assertEqual(replay["capture_id"], first["capture_id"])
+            self.assertNotIn("dependency_backend_requests", replay)
+
+            conflict_request = dict(request)
+            conflict_request["prompt"] = "Payload diverso"
+            status, conflict = handle_action(data_root, conflict_request)
+            self.assertEqual(status, 409)
+            self.assertEqual(conflict["error"], "idempotency_conflict")
+
+    def test_storage_write_callback_marks_capture_stored_without_runtime_launch(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            data_root = Path(tmp)
+            completed = start_and_complete_device(data_root)
+            request = capture_request(completed)
+            status, accepted = handle_action(data_root, dict(request))
+            self.assertEqual(status, 202)
+
+            storage = accepted["storage"]
+            file_id = f"generated:senses/{accepted['capture_id']}"
+            status, callback = handle_action(
+                data_root,
+                {
+                    "action": "storage_write.completed",
+                    "_workspace_id": "default",
+                    "_app_surface": "dependency_backend_request_callback",
+                    "capture_id": accepted["capture_id"],
+                    "request_id": f"write-{accepted['capture_id']}",
+                    "dependency_alias": "storage-file-content-write",
+                    "dependency_backend_status": "completed",
+                    "dependency_backend_result": {
+                        "status_code": 200,
+                        "dependency_provider_app_id": "storage",
+                        "json": {
+                            "file": {
+                                "file_id": file_id,
+                                "workspace_relative_path": storage["workspace_relative_path"],
+                                "sha256": storage["sha256"],
+                                "size_bytes": storage["size_bytes"],
+                            },
+                            "bytes_written": storage["size_bytes"],
+                        },
+                    },
+                },
+            )
+
+            self.assertEqual(status, 200)
+            self.assertTrue(callback["ok"])
+            self.assertEqual(callback["status"], "stored")
+            self.assertEqual(callback["capture"]["storage"]["storage_file_id"], file_id)
+            self.assertNotIn("runtime_launch_requests", callback)
+
+            with sqlite3.connect(db_path(data_root)) as db:
+                stored = db.execute(
+                    "SELECT status, storage_file_id FROM captures WHERE capture_id = ?",
+                    (accepted["capture_id"],),
+                ).fetchone()
+                ingestion_status = db.execute(
+                    "SELECT status FROM ingestion_requests WHERE capture_id = ?",
+                    (accepted["capture_id"],),
+                ).fetchone()[0]
+            self.assertEqual(stored, ("stored", file_id))
+            self.assertEqual(ingestion_status, "stored")
+
+            status, replay = handle_action(data_root, dict(request))
+            self.assertEqual(status, 200)
+            self.assertEqual(replay["storage"]["status"], "stored")
+            self.assertEqual(replay["storage"]["storage_file_id"], file_id)
+
+            status, public_callback = handle_action(
+                data_root,
+                {
+                    "action": "storage_write.completed",
+                    "_workspace_id": "default",
+                    "capture_id": accepted["capture_id"],
+                    "dependency_alias": "storage-file-content-write",
+                },
+            )
+            self.assertEqual(status, 403)
+            self.assertEqual(public_callback["error"], "senses_permission_forbidden")
+
+    def test_ingest_frame_validation_and_authorization_fail_closed(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            data_root = Path(tmp)
+            completed = start_and_complete_device(data_root)
+
+            unauthenticated = capture_request(completed)
+            unauthenticated["_app_actor"] = actor("")
+            status, denied = handle_action(data_root, unauthenticated)
+            self.assertEqual(status, 401)
+            self.assertEqual(denied["error"], "authentication_required")
+
+            wrong_user = capture_request(completed)
+            wrong_user["_app_actor"] = actor("user-2")
+            status, forbidden = handle_action(data_root, wrong_user)
+            self.assertEqual(status, 403)
+            self.assertEqual(forbidden["error"], "device_not_authorized")
+
+            invalid_base64 = capture_request(completed)
+            invalid_base64["content_base64"] = "not base64"
+            status, invalid = handle_action(data_root, invalid_base64)
+            self.assertEqual(status, 400)
+            self.assertEqual(invalid["error"], "invalid_base64")
+
+            unsupported = capture_request(completed)
+            unsupported["content_type"] = "image/gif"
+            status, unsupported_payload = handle_action(data_root, unsupported)
+            self.assertEqual(status, 415)
+            self.assertEqual(unsupported_payload["error"], "unsupported_media_type")
+
+            too_old = capture_request(completed)
+            too_old["captured_at"] = (datetime.now(tz=UTC) - timedelta(minutes=15)).isoformat()
+            status, timestamp = handle_action(data_root, too_old)
+            self.assertEqual(status, 400)
+            self.assertEqual(timestamp["error"], "invalid_capture_timestamp")
+
+            too_large = capture_request(completed, idempotency_key="large", request_id="large")
+            too_large["content_base64"] = b64encode(b"\xff\xd8" + b"x" * 128).decode("ascii")
+            too_large["content_sha256"] = hashlib.sha256(b"\xff\xd8" + b"x" * 128).hexdigest()
+            status, _updated = handle_action(
+                data_root,
+                {
+                    "action": "settings.update",
+                    "_workspace_id": "default",
+                    "_app_actor": actor("admin-1", "admin"),
+                    "max_frame_bytes": 16,
+                },
+            )
+            self.assertEqual(status, 200)
+            status, large = handle_action(data_root, too_large)
+            self.assertEqual(status, 413)
+            self.assertEqual(large["error"], "capture_too_large")
+
+    def test_ingest_frame_rate_limit_is_persisted_per_device(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            data_root = Path(tmp)
+            completed = start_and_complete_device(data_root)
+            previous_limit = service.FRAME_RATE_LIMIT_MAX
+            service.FRAME_RATE_LIMIT_MAX = 1
+            try:
+                status, first = handle_action(
+                    data_root,
+                    capture_request(completed, request_id="rate-1", idempotency_key="rate-1"),
+                )
+                self.assertEqual(status, 202)
+                self.assertTrue(first["ok"])
+                status, limited = handle_action(
+                    data_root,
+                    capture_request(completed, request_id="rate-2", idempotency_key="rate-2"),
+                )
+            finally:
+                service.FRAME_RATE_LIMIT_MAX = previous_limit
+            self.assertEqual(status, 429)
+            self.assertEqual(limited["error"], "rate_limited")
+
     def test_cli_and_mcp_expose_only_non_user_session_surfaces(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             cli_manifest = run_json_entrypoint(
@@ -369,15 +626,15 @@ class SensesPhase1EntrypointTest(unittest.TestCase):
                 },
             )
             self.assertTrue(cli_manifest["ok"])
-            self.assertEqual(cli_manifest["phase"], "phase-1")
+            self.assertEqual(cli_manifest["phase"], "phase-2")
             self.assertFalse(cli_overview["ok"])
             self.assertEqual(cli_overview["error"], "unsupported_cli_action")
             self.assertTrue(mcp_manifest["ok"])
-            self.assertEqual(mcp_manifest["phase"], "phase-1")
+            self.assertEqual(mcp_manifest["phase"], "phase-2")
             self.assertFalse(mcp_pairing["ok"])
             self.assertEqual(mcp_pairing["error"], "unsupported_tool")
             self.assertTrue(mcp_override["ok"])
-            self.assertEqual(mcp_override["phase"], "phase-1")
+            self.assertEqual(mcp_override["phase"], "phase-2")
             self.assertNotIn("pairing", mcp_override)
             self.assertFalse(db_path(Path(tmp)).exists())
 
@@ -444,7 +701,7 @@ class SensesPhase1EntrypointTest(unittest.TestCase):
             self.assertTrue(payload["ok"])
             self.assertNotIn("dependencies", payload)
 
-    def test_reference_manifest_remains_capture_deferred(self) -> None:
+    def test_reference_manifest_defers_reference_search_after_capture_schema(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             status, payload = handle_action(Path(tmp), {"action": "reference_manifest", "_workspace_id": "default"})
             self.assertEqual(status, 200)

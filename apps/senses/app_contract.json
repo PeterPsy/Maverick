@@ -2,8 +2,8 @@
   "app_id": "senses",
   "contract_version": "1.0",
   "name": "Senses",
-  "version": "0.2.0",
-  "description": "Device and sensor connector for Maverick workspace inputs with user-session pairing and device registry.",
+  "version": "0.3.0",
+  "description": "Device and sensor connector for Maverick workspace inputs with user-session pairing, frame ingestion, and Storage-backed captures.",
   "publisher": "maverick",
   "minimum_core_version": "0.1.0",
   "provides": [
@@ -59,11 +59,6 @@
     },
     "host": {
       "telemetry": false
-    },
-    "providers": {
-      "model_proxy": false,
-      "credential_source": "none",
-      "deliver_secrets_to_app": false
     }
   },
   "capabilities": {
@@ -90,6 +85,10 @@
       {
         "resource": "settings",
         "description": "Senses settings changed."
+      },
+      {
+        "resource": "captures",
+        "description": "Senses capture metadata or Storage references changed."
       }
     ],
     "view_surfaces": [],
@@ -110,7 +109,7 @@
   },
   "storage": {
     "storage_kind": "sqlite+files",
-    "data_schema_version": "2",
+    "data_schema_version": "3",
     "primary_paths": [
       "data/senses/senses.sqlite"
     ],
@@ -127,7 +126,6 @@
     ]
   },
   "hook_timeouts": {
-    "backend_seconds": 30,
     "install_seconds": 60,
     "upgrade_seconds": 120,
     "migrate_seconds": 300,

@@ -8,7 +8,7 @@ from pathlib import Path
 import sqlite3
 
 
-SCHEMA_VERSION = "2"
+SCHEMA_VERSION = "3"
 DB_FILENAME = "senses.sqlite"
 PRIMARY_DB_PATH = f"data/senses/{DB_FILENAME}"
 WORKSPACE_TABLES = (
@@ -17,6 +17,8 @@ WORKSPACE_TABLES = (
     "devices",
     "pairing_sessions",
     "device_sessions",
+    "ingestion_requests",
+    "captures",
     "audit",
 )
 
@@ -135,6 +137,68 @@ def ensure_schema(data_root: Path, workspace_id: str) -> None:
 
             CREATE INDEX IF NOT EXISTS idx_senses_device_sessions_device
               ON device_sessions(workspace_id, device_id, status);
+
+            CREATE TABLE IF NOT EXISTS ingestion_requests (
+              workspace_id TEXT NOT NULL,
+              request_id TEXT NOT NULL,
+              device_id TEXT NOT NULL,
+              device_session_id TEXT,
+              idempotency_key TEXT NOT NULL,
+              client_capture_id TEXT,
+              capture_id TEXT,
+              request_hash TEXT NOT NULL,
+              status TEXT NOT NULL,
+              error_code TEXT,
+              created_at TEXT NOT NULL,
+              completed_at TEXT,
+              PRIMARY KEY (workspace_id, request_id),
+              UNIQUE (workspace_id, device_id, idempotency_key)
+            );
+
+            CREATE INDEX IF NOT EXISTS idx_senses_ingestion_status_time
+              ON ingestion_requests(workspace_id, status, created_at DESC);
+
+            CREATE TABLE IF NOT EXISTS captures (
+              workspace_id TEXT NOT NULL,
+              capture_id TEXT NOT NULL,
+              device_id TEXT NOT NULL,
+              device_session_id TEXT,
+              ingestion_request_id TEXT,
+              input_mode TEXT NOT NULL,
+              prompt TEXT NOT NULL,
+              content_type TEXT NOT NULL,
+              storage_file_id TEXT,
+              workspace_relative_path TEXT,
+              sha256 TEXT,
+              size_bytes INTEGER NOT NULL,
+              width INTEGER,
+              height INTEGER,
+              retention_class TEXT NOT NULL,
+              status TEXT NOT NULL,
+              error_code TEXT,
+              captured_at TEXT NOT NULL,
+              ingested_at TEXT,
+              runtime_session_id TEXT,
+              thread_id TEXT,
+              turn_id TEXT,
+              deleted_at TEXT,
+              metadata_json TEXT NOT NULL DEFAULT '{}',
+              created_at TEXT NOT NULL,
+              updated_at TEXT NOT NULL,
+              PRIMARY KEY (workspace_id, capture_id),
+              FOREIGN KEY (workspace_id, device_id)
+                REFERENCES devices(workspace_id, device_id)
+                ON DELETE CASCADE
+            );
+
+            CREATE INDEX IF NOT EXISTS idx_senses_captures_device_time
+              ON captures(workspace_id, device_id, captured_at DESC);
+
+            CREATE INDEX IF NOT EXISTS idx_senses_captures_status_time
+              ON captures(workspace_id, status, captured_at DESC);
+
+            CREATE INDEX IF NOT EXISTS idx_senses_captures_runtime
+              ON captures(workspace_id, runtime_session_id, turn_id);
 
             CREATE TABLE IF NOT EXISTS audit (
               workspace_id TEXT NOT NULL,

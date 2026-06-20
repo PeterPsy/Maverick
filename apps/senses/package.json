@@ -2,7 +2,7 @@
   "name": "@maverick/senses",
   "private": true,
   "type": "module",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "scripts": {
     "prebuild": "node ../../scripts/check-node-runtime.mjs",
     "build": "tsc --noEmit && vite build",

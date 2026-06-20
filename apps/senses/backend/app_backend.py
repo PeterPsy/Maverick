@@ -16,6 +16,7 @@ body = dict(payload.body)
 body["_app_dependencies"] = payload.raw.get("app_dependencies", {})
 body["_workspace_id"] = payload.workspace_id
 body["_app_id"] = payload.app_id
+body["_app_surface"] = payload.raw.get("surface")
 body["_app_actor"] = {
     "user_id": payload.user_id,
     "workspace_role": payload.workspace_role,

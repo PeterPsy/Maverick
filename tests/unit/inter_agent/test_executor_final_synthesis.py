@@ -135,6 +135,58 @@ class InterAgentExecutorFinalSynthesisTest(unittest.TestCase):
         self.assertNotIn("Use two workers", implementer_prompt)
         self.assertNotIn("one reviewer", implementer_prompt)
 
+    def test_sequential_worker_prompt_strips_italian_routing_request(self) -> None:
+        _repo_root, store, runtime_store = self._stores()
+        service = InterAgentService(store)
+        run = service.create_run(
+            _run_spec(
+                mode="sequential",
+                run_id="sequential-italian-routing-prompt",
+                participants=[
+                    _participant("implementer", "Implementer"),
+                    _participant("reviewer", "Reviewer"),
+                ],
+            ),
+            now=NOW,
+        )
+        original_prompt = (
+            "Usa la modalit\u00e0 multi-agent. "
+            "Implementer: prepara la risposta. "
+            "Reviewer: controlla la risposta. "
+            "Rispondi al cliente in massimo 10 righe."
+        )
+
+        execute_inter_agent_run(
+            service,
+            _state(runtime_store),
+            workspace_id="default",
+            run_id=run.run_id,
+            input_text=original_prompt,
+            participant_inputs={
+                "implementer": "Prepara la risposta per il cliente.",
+                "reviewer": "Restituisci la risposta finale.",
+            },
+            controlled_participants={
+                "implementer": {"output_text": "Bozza.", "summary": "Bozza pronta."},
+                "reviewer": {"output_text": "Finale.", "summary": "Finale pronta."},
+            },
+            allow_synthetic_participants=True,
+            project_summaries=False,
+            now=NOW,
+        )
+        message_events = [
+            event
+            for event in store.list_event_page(run.run_id, workspace_id="default", visibility_plane="debug", limit=100).events
+            if event.event_type == "inter_agent.message.sent"
+        ]
+        implementer_prompt = message_events[0].payload["input_text"]
+
+        self.assertIn("User request content:", implementer_prompt)
+        self.assertIn("Rispondi al cliente in massimo 10 righe.", implementer_prompt)
+        self.assertNotIn("Usa la modalit\u00e0 multi-agent", implementer_prompt)
+        self.assertNotIn("Implementer: prepara la risposta", implementer_prompt)
+        self.assertNotIn("Reviewer: controlla la risposta", implementer_prompt)
+
 
 if __name__ == "__main__":
     unittest.main()

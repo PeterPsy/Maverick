@@ -1094,18 +1094,28 @@ def _participant_by_id(
 
 
 _LEADING_WORKER_DIRECTIVE_RE = re.compile(
-    r"^\s*(?:please\s+)?(?:use|run|create|start|spawn)\s+"
-    r"(?:one|two|three|four|five|six|seven|eight|nine|ten|\d+)\s+"
-    r"(?:workers?|agents?)\b\s*(?::[^.!?]*?)?(?:,\s*(?:but|and)\s+|\s+to\s+)",
+    r"^\s*(?:(?:please|per favore)\s+)?"
+    r"(?:use|run|create|start|spawn|usa|usare|utilizza|utilizzare|crea|creare|avvia|avviare|esegui|eseguire)\s+"
+    r"(?:one|two|three|four|five|six|seven|eight|nine|ten|"
+    r"uno|una|due|tre|quattro|cinque|sei|sette|otto|nove|dieci|\d+)\s+"
+    r"(?:workers?|agents?|agenti|worker)\b\s*(?::[^.!?]*?)?"
+    r"(?:,\s*(?:but|and|ma|e)\s+|\s+(?:to|per)\s+)",
     re.IGNORECASE,
 )
 _ROUTING_DIRECTIVE_TERM_RE = re.compile(
-    r"\b(?:workers?|implementers?|reviewers?|orchestrators?|orchestration|multi[- ]agent|handoffs?|routing)\b",
+    r"\b(?:workers?|implementers?|reviewers?|orchestrators?|orchestrator[ei]?|"
+    r"orchestration|orchestrazione|multi[- ]agent|handoffs?|routing|instradamento|modalit[a\u00e0])\b",
     re.IGNORECASE,
 )
 _ROUTING_DIRECTIVE_VERB_RE = re.compile(
-    r"\b(?:assign|delegate|handoff|route|routing|orchestrate|spawn|must|should)\b"
-    r"|^\s*(?:please\s+)?(?:use|run|create|start)\b",
+    r"\b(?:assign|delegate|handoff|route|routing|orchestrate|spawn|must|should|"
+    r"assegna|assegnare|delega|delegare|instrada|instradare|orchestra|orchestrare|deve|dovrebbe)\b"
+    r"|^\s*(?:(?:please|per favore)\s+)?"
+    r"(?:use|run|create|start|usa|usare|utilizza|utilizzare|crea|creare|avvia|avviare|esegui|eseguire)\b",
+    re.IGNORECASE,
+)
+_ROUTING_ROLE_LABEL_RE = re.compile(
+    r"^\s*(?:implementer|reviewer|orchestrator|orchestratore|revisore)\s*:",
     re.IGNORECASE,
 )
 
@@ -1128,6 +1138,8 @@ def _looks_like_orchestration_directive(value: str) -> bool:
     text = str(value or "").strip().lower()
     if not text:
         return False
+    if _ROUTING_ROLE_LABEL_RE.search(text):
+        return True
     if not _ROUTING_DIRECTIVE_TERM_RE.search(text):
         return False
     if _ROUTING_DIRECTIVE_VERB_RE.search(text):

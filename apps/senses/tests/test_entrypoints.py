@@ -353,6 +353,21 @@ class SensesPhase1EntrypointTest(unittest.TestCase):
                     "arguments": {},
                 },
             )
+            mcp_override = run_json_entrypoint(
+                APP_ROOT / "mcp" / "server.py",
+                cwd=APP_ROOT,
+                payload={
+                    "app_id": "senses",
+                    "workspace_id": "default",
+                    "data_root": tmp,
+                    "user_id": "user-1",
+                    "workspace_role": "member",
+                    "platform_role": "member",
+                    "app_dependencies": resolved_storage_dependencies(),
+                    "tool_name": "senses_operations_manifest",
+                    "arguments": {"action": "pairing.start"},
+                },
+            )
             self.assertTrue(cli_manifest["ok"])
             self.assertEqual(cli_manifest["phase"], "phase-1")
             self.assertFalse(cli_overview["ok"])
@@ -361,6 +376,10 @@ class SensesPhase1EntrypointTest(unittest.TestCase):
             self.assertEqual(mcp_manifest["phase"], "phase-1")
             self.assertFalse(mcp_pairing["ok"])
             self.assertEqual(mcp_pairing["error"], "unsupported_tool")
+            self.assertTrue(mcp_override["ok"])
+            self.assertEqual(mcp_override["phase"], "phase-1")
+            self.assertNotIn("pairing", mcp_override)
+            self.assertFalse(db_path(Path(tmp)).exists())
 
     def test_mcp_rejects_unknown_tool_name(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

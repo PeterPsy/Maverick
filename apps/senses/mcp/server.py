@@ -40,8 +40,8 @@ arguments["_app_actor"] = {
     "platform_role": payload.platform_role,
     "effective_mode": payload.effective_mode,
 }
-arguments.setdefault("action", action)
+arguments["action"] = action
 status_code, result = handle_action(Path(payload.data_root), arguments)
 if status_code < 400:
-    result["app_events"] = app_events_for_action(str(arguments.get("action") or "manifest"))
+    result["app_events"] = app_events_for_action(action)
 emit_json(result)

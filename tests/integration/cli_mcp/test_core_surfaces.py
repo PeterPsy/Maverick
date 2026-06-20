@@ -6,6 +6,7 @@ import json
 from types import SimpleNamespace
 
 from core.app_sdk.cli import run_cli_json
+from core.apps.models import AppVisibilityDeclaration
 from core.authorization.errors import AuthorizationError
 from core.identity.service import create_user
 from core.identity.store import IdentityCollections, IdentityDocumentStore
@@ -841,8 +842,31 @@ class TestMcpCliSurfaces(SurfaceTestBase):
 
     def test_app_cli_and_mcp_receive_dependency_resolution_payload(self) -> None:
         store = self.make_app_store()
+        identity_store = IdentityDocumentStore(
+            IdentityCollections(
+                users=FakeCollection(),
+                credentials=FakeCollection(),
+                auth_sessions=FakeCollection(),
+            )
+        )
         workspace_store = self.make_workspace_store()
         ensure_default_workspace_record(workspace_store)
+        admin = create_user(identity_store, username="deps.admin", password="admin-pass", platform_role="member")
+        member = create_user(identity_store, username="deps.member", password="member-pass", platform_role="member")
+        ensure_workspace_membership(
+            workspace_store,
+            membership_id=f"default:{admin.user_id}",
+            workspace_id="default",
+            user_id=admin.user_id,
+            role="admin",
+        )
+        ensure_workspace_membership(
+            workspace_store,
+            membership_id=f"default:{member.user_id}",
+            workspace_id="default",
+            user_id=member.user_id,
+            role="member",
+        )
         now = datetime.now(tz=UTC)
         repo_root = self.make_repo_root()
         provider_root = repo_root / "apps" / "storage-provider"
@@ -855,6 +879,11 @@ class TestMcpCliSurfaces(SurfaceTestBase):
                 description="Storage provider app.",
                 publisher="maverick",
                 contract=build_app_contract(
+                    visibility=AppVisibilityDeclaration(
+                        platform_roles=None,
+                        workspace_roles=["admin"],
+                        capabilities=None,
+                    ),
                     provides=[
                         build_provided_interface_declaration(
                             interface="file.catalog",
@@ -893,7 +922,7 @@ class TestMcpCliSurfaces(SurfaceTestBase):
         state = SimpleNamespace(
             repository_root=repo_root,
             app_store=store,
-            identity_store=None,
+            identity_store=identity_store,
             workspace_store=workspace_store,
             runtime_store=None,
             provider_store=None,
@@ -902,6 +931,75 @@ class TestMcpCliSurfaces(SurfaceTestBase):
             observability_store=None,
             app_event_bus=None,
         )
+        admin_context = CliInvocationContext(
+            caller_kind="full_access_agent",
+            workspace_id="default",
+            agent_id="deps-admin-runtime",
+            effective_mode="full-access",
+            platform_role="member",
+            user_id=admin.user_id,
+            workspace_role="admin",
+        )
+        member_context = CliInvocationContext(
+            caller_kind="full_access_agent",
+            workspace_id="default",
+            agent_id="deps-member-runtime",
+            effective_mode="full-access",
+            platform_role="member",
+            user_id=member.user_id,
+            workspace_role="member",
+        )
+        sandbox_admin_context = CliInvocationContext(
+            caller_kind="sandbox_agent",
+            workspace_id="default",
+            agent_id="deps-admin-sandbox",
+            effective_mode="sandbox",
+            platform_role="member",
+            user_id=admin.user_id,
+            workspace_role="admin",
+        )
+        dependency_set_command = next(
+            command
+            for command in list_core_cli_commands(
+                app_store=store,
+                identity_store=identity_store,
+                workspace_store=workspace_store,
+                workspace_id="default",
+                start_path=repo_root,
+            )
+            if command.command_id == "app.checklists.dependencies.set"
+        )
+        self.assertFalse(dependency_set_command.invocation_policy.sandbox_agent_allowed)
+        with self.assertRaisesRegex(AuthorizationError, "app_dependency_management_forbidden"):
+            run_cli_json(
+                [
+                    "core",
+                    "cli",
+                    "run",
+                    "app.checklists.dependencies.set",
+                    "--arguments-json",
+                    '{"alias":"files","provider_app_ids":["storage-provider"]}',
+                    "--json",
+                ],
+                state=state,
+                repository_root=repo_root,
+                trusted_context=member_context,
+            )
+        with self.assertRaises(CliInvocationNotAllowedError):
+            run_cli_json(
+                [
+                    "core",
+                    "cli",
+                    "run",
+                    "app.checklists.dependencies.set",
+                    "--arguments-json",
+                    '{"alias":"files","provider_app_ids":["storage-provider"]}',
+                    "--json",
+                ],
+                state=state,
+                repository_root=repo_root,
+                trusted_context=sandbox_admin_context,
+            )
         dependency_set = run_cli_json(
             [
                 "core",
@@ -914,29 +1012,38 @@ class TestMcpCliSurfaces(SurfaceTestBase):
             ],
             state=state,
             repository_root=repo_root,
+            trusted_context=admin_context,
         )
         dependency_status = run_cli_json(
             ["core", "cli", "run", "app.checklists.dependencies", "--json"],
             state=state,
             repository_root=repo_root,
+            trusted_context=admin_context,
         )
         cli_context = CliInvocationContext(
-            caller_kind="sandbox_agent",
+            caller_kind="full_access_agent",
             workspace_id="default",
             agent_id="agent-1",
-            effective_mode="sandbox",
+            effective_mode="full-access",
+            platform_role="member",
+            user_id=admin.user_id,
+            workspace_role="admin",
         )
         mcp_context = McpInvocationContext(
-            caller_kind="sandbox_agent",
+            caller_kind="full_access_agent",
             workspace_id="default",
             agent_id="agent-1",
-            effective_mode="sandbox",
+            effective_mode="full-access",
+            platform_role="member",
+            user_id=admin.user_id,
+            workspace_role="admin",
         )
 
         cli_result = run_core_cli_command(
             command_id="app.checklists.checklists",
             context=cli_context,
             app_store=store,
+            identity_store=identity_store,
             workspace_store=workspace_store,
             workspace_id="default",
             start_path=repo_root,
@@ -946,6 +1053,7 @@ class TestMcpCliSurfaces(SurfaceTestBase):
             tool_name="app.checklists.checklists.list",
             context=mcp_context,
             app_store=store,
+            identity_store=identity_store,
             workspace_store=workspace_store,
             workspace_id="default",
             start_path=repo_root,

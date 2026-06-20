@@ -12,8 +12,14 @@ from core.apps.models import AppSourceRecord, WorkspaceLocalAppProjectRecord
 from core.apps.service import delete_workspace_local_app_project, install_store_app, install_workspace_local_app, uninstall_workspace_app
 from core.apps.store import AppStore
 from core.apps.workspace_local_discovery import sync_workspace_local_app_projects
+from core.authorization.errors import AuthorizationError
+from core.authorization.service import require_app_dependency_management
 from core.cli.core_command_helpers import record_cli_audit
 from core.cli.models import CliCommandDefinition, CliInvocationContext, CliInvocationPolicy
+from core.identity.errors import UserNotFoundError
+from core.identity.models import UserRecord
+from core.identity.store import IdentityStore
+from core.workspaces.store import WorkspaceStore
 
 
 APP_MANAGEMENT = CliInvocationPolicy(
@@ -40,11 +46,21 @@ APP_WORKSPACE_READ = CliInvocationPolicy(
     requires_full_access=False,
 )
 
+APP_DEPENDENCY_MANAGEMENT = CliInvocationPolicy(
+    operator_only=False,
+    required_platform_role=None,
+    sandbox_agent_allowed=False,
+    requires_workspace_context=True,
+    requires_full_access=False,
+)
+
 
 def app_lifecycle_command_specs(
     *,
     app_store: AppStore | None,
     workspace_id: str | None,
+    identity_store: IdentityStore | None = None,
+    workspace_store: WorkspaceStore | None = None,
     start_path: Path | None = None,
     observability_store=None,
     app_event_bus=None,
@@ -82,6 +98,8 @@ def app_lifecycle_command_specs(
                 _dependencies_command(
                     app_store,
                     app_id=app_id,
+                    identity_store=identity_store,
+                    workspace_store=workspace_store,
                     workspace_id=workspace_id,
                     start_path=start_path,
                 )
@@ -90,7 +108,9 @@ def app_lifecycle_command_specs(
                 _dependency_set_command(
                     app_store,
                     app_id=app_id,
+                    identity_store=identity_store,
                     observability_store=observability_store,
+                    workspace_store=workspace_store,
                     workspace_id=workspace_id,
                     start_path=start_path,
                 )
@@ -198,13 +218,36 @@ def _dependency_set_command_definition(*, app_id: str, description: str, workspa
         owner_id=app_id,
         workspace_id=workspace_id,
         exposure_scope="core_global",
-        invocation_policy=APP_MANAGEMENT,
+        invocation_policy=APP_DEPENDENCY_MANAGEMENT,
         entrypoint_path=None,
     )
 
 
 def _target_workspace_id(arguments: dict[str, Any], context: CliInvocationContext, fallback: str) -> str:
     return str(arguments.get("workspace_id") or context.workspace_id or fallback).strip()
+
+
+def _context_user(identity_store: IdentityStore | None, context: CliInvocationContext) -> UserRecord | None:
+    if identity_store is None or not context.user_id:
+        return None
+    try:
+        return identity_store.get_user(context.user_id)
+    except UserNotFoundError:
+        return None
+
+
+def _require_dependency_management_user(
+    *,
+    identity_store: IdentityStore | None,
+    workspace_store: WorkspaceStore | None,
+    context: CliInvocationContext,
+    workspace_id: str,
+) -> UserRecord:
+    user = _context_user(identity_store, context)
+    if user is None or workspace_store is None:
+        raise AuthorizationError("app_dependency_management_forbidden")
+    require_app_dependency_management(workspace_store, user=user, workspace_id=workspace_id)
+    return user
 
 
 def _install_command(
@@ -282,15 +325,22 @@ def _dependencies_command(
     app_store: AppStore,
     *,
     app_id: str,
+    identity_store: IdentityStore | None,
+    workspace_store: WorkspaceStore | None,
     workspace_id: str,
     start_path: Path | None,
 ) -> tuple[CliCommandDefinition, Any]:
     def _handler(arguments: dict[str, Any], context: CliInvocationContext) -> dict[str, Any]:
         target_workspace_id = _target_workspace_id(arguments, context, workspace_id)
+        user = _context_user(identity_store, context)
         return resolve_app_dependencies(
             app_store,
             workspace_id=target_workspace_id,
             consumer_app_id=app_id,
+            user=user,
+            workspace_store=workspace_store,
+            platform_role=context.platform_role,
+            workspace_role=context.workspace_role,
             start_path=start_path,
         )
 
@@ -308,12 +358,20 @@ def _dependency_set_command(
     app_store: AppStore,
     *,
     app_id: str,
+    identity_store: IdentityStore | None,
     observability_store,
+    workspace_store: WorkspaceStore | None,
     workspace_id: str,
     start_path: Path | None,
 ) -> tuple[CliCommandDefinition, Any]:
     def _handler(arguments: dict[str, Any], context: CliInvocationContext) -> dict[str, Any]:
         target_workspace_id = _target_workspace_id(arguments, context, workspace_id)
+        user = _require_dependency_management_user(
+            identity_store=identity_store,
+            workspace_store=workspace_store,
+            context=context,
+            workspace_id=target_workspace_id,
+        )
         alias = str(arguments.get("alias") or "").strip()
         provider_app_ids = arguments.get("provider_app_ids")
         if not isinstance(provider_app_ids, list):
@@ -324,6 +382,10 @@ def _dependency_set_command(
             consumer_app_id=app_id,
             alias=alias,
             provider_app_ids=[str(item) for item in provider_app_ids],
+            user=user,
+            workspace_store=workspace_store,
+            platform_role=context.platform_role,
+            workspace_role=context.workspace_role,
             start_path=start_path,
         )
         record_cli_audit(

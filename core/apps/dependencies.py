@@ -89,6 +89,8 @@ def list_dependency_provider_candidates(
     consumer_app_id: str | None = None,
     user: UserRecord | None = None,
     workspace_store: "WorkspaceStore | None" = None,
+    platform_role: str | None = None,
+    workspace_role: str | None = None,
     start_path: Path | None = None,
 ) -> list[DependencyProviderCandidate]:
     """List enabled apps that provide one compatible generic app interface."""
@@ -108,10 +110,18 @@ def list_dependency_provider_candidates(
                 platform_roles=parsed.contract.visibility.platform_roles,
                 workspace_roles=parsed.contract.visibility.workspace_roles,
                 capabilities=parsed.contract.visibility.capabilities,
+                platform_role=platform_role,
+                workspace_role=workspace_role,
             ):
                 continue
-        elif parsed.contract.visibility.platform_roles and (user is None or user.platform_role not in parsed.contract.visibility.platform_roles):
-            continue
+        else:
+            effective_platform_role = platform_role or (user.platform_role if user is not None else None)
+            platform_roles = set(parsed.contract.visibility.platform_roles or [])
+            workspace_roles = set(parsed.contract.visibility.workspace_roles or [])
+            if platform_roles and effective_platform_role not in platform_roles:
+                continue
+            if workspace_roles and workspace_role not in workspace_roles:
+                continue
         for provided in parsed.contract.provides:
             if provided.interface != interface:
                 continue
@@ -148,6 +158,8 @@ def resolve_app_dependencies(
     consumer_app_id: str,
     user: UserRecord | None = None,
     workspace_store: "WorkspaceStore | None" = None,
+    platform_role: str | None = None,
+    workspace_role: str | None = None,
     start_path: Path | None = None,
 ) -> dict[str, object]:
     """Resolve one consumer app's declared interface requirements in a workspace."""
@@ -174,6 +186,8 @@ def resolve_app_dependencies(
             consumer_app_id=consumer_app_id,
             user=user,
             workspace_store=workspace_store,
+            platform_role=platform_role,
+            workspace_role=workspace_role,
             start_path=start_path,
         )
         candidate_ids = {candidate.app_id for candidate in candidates}
@@ -237,6 +251,8 @@ def save_app_dependency_selection(
     provider_app_ids: list[str],
     user: UserRecord | None = None,
     workspace_store: "WorkspaceStore | None" = None,
+    platform_role: str | None = None,
+    workspace_role: str | None = None,
     start_path: Path | None = None,
 ) -> dict[str, object]:
     """Validate and persist a provider selection for one consumer requirement alias."""
@@ -261,6 +277,8 @@ def save_app_dependency_selection(
         consumer_app_id=consumer_app_id,
         user=user,
         workspace_store=workspace_store,
+        platform_role=platform_role,
+        workspace_role=workspace_role,
         start_path=start_path,
     )
     candidate_ids = {candidate.app_id for candidate in candidates}
@@ -279,6 +297,8 @@ def save_app_dependency_selection(
             consumer_app_id=consumer_app_id,
             user=user,
             workspace_store=workspace_store,
+            platform_role=platform_role,
+            workspace_role=workspace_role,
             start_path=start_path,
         )
     now = _timestamp()
@@ -303,5 +323,7 @@ def save_app_dependency_selection(
         consumer_app_id=consumer_app_id,
         user=user,
         workspace_store=workspace_store,
+        platform_role=platform_role,
+        workspace_role=workspace_role,
         start_path=start_path,
     )

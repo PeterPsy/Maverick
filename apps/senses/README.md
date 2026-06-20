@@ -51,7 +51,8 @@ python3 -m unittest discover -s apps/senses/tests -p 'test_*.py'
 ```
 
 After Senses and Storage are installed and enabled in the workspace, configure
-the required Storage providers through the core-owned app dependency commands:
+the required Storage providers from an authorized workspace-admin context
+through the core-owned app dependency commands:
 
 ```bash
 maverick core cli run app.senses.dependencies.set \

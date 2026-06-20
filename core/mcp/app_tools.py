@@ -169,6 +169,8 @@ def _workspace_app_tool_definitions(
                             workspace_id=str(context.workspace_id),
                             app_id=_app_id,
                             workspace_store=_workspace_store,
+                            platform_role=context.platform_role,
+                            workspace_role=context.workspace_role,
                             start_path=_start_path,
                         ),
                         "app_secrets": app_secret_result.secrets,
@@ -237,6 +239,8 @@ def _app_dependencies_payload(
     workspace_id: str,
     app_id: str,
     workspace_store=None,
+    platform_role: str | None = None,
+    workspace_role: str | None = None,
     start_path: Path | None,
 ) -> dict[str, object]:
     try:
@@ -245,6 +249,8 @@ def _app_dependencies_payload(
             workspace_id=workspace_id,
             consumer_app_id=app_id,
             workspace_store=workspace_store,
+            platform_role=platform_role,
+            workspace_role=workspace_role,
             start_path=start_path,
         )
     except Exception:

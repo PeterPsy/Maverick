@@ -13,6 +13,7 @@ import sqlite3
 import string
 from typing import Any
 import uuid
+import zlib
 
 from database import (
     SCHEMA_VERSION,
@@ -46,6 +47,34 @@ SUPPORTED_FRAME_CONTENT_TYPES = {
     "image/jpeg": ".jpg",
     "image/png": ".png",
 }
+PNG_SIGNATURE = b"\x89PNG\r\n\x1a\n"
+JPEG_START_OF_FRAME_MARKERS = {
+    0xC0,
+    0xC1,
+    0xC2,
+    0xC3,
+    0xC5,
+    0xC6,
+    0xC7,
+    0xC9,
+    0xCA,
+    0xCB,
+    0xCD,
+    0xCE,
+    0xCF,
+}
+JPEG_METADATA_MARKERS = {0xE1, 0xED, 0xFE}
+PNG_COLOR_TYPE_SAMPLES = {0: 1, 2: 3, 3: 1, 4: 2, 6: 4}
+PNG_ALLOWED_BIT_DEPTHS = {
+    0: {1, 2, 4, 8, 16},
+    2: {8, 16},
+    3: {1, 2, 4, 8},
+    4: {8, 16},
+    6: {8, 16},
+}
+PNG_MAX_DECOMPRESSED_BYTES = 100_000_000
+STORAGE_WRITE_DEPENDENCY_ALIAS = "storage-file-content-write"
+STORAGE_PROVIDER_APP_ID = "storage"
 REQUIRED_DEPENDENCIES = (
     {
         "alias": "storage-file-content-write",
@@ -890,11 +919,35 @@ def storage_write_completed(data_root: Path, workspace_id: str, payload: dict[st
     capture_id = text_or_none(payload.get("capture_id"))
     if not capture_id:
         return error_payload(400, "invalid_capture", "storage_write.completed requires capture_id.")
-    if text_or_none(payload.get("dependency_alias")) != "storage-file-content-write":
+    if text_or_none(payload.get("dependency_alias")) != STORAGE_WRITE_DEPENDENCY_ALIAS:
         return error_payload(
             400,
             "invalid_dependency_callback",
             "Senses storage callback must come from the storage-file-content-write dependency.",
+        )
+    expected_request_id = f"write-{capture_id}"
+    if text_or_none(payload.get("request_id")) != expected_request_id:
+        return error_payload(
+            400,
+            "invalid_dependency_callback",
+            "Senses storage callback request_id did not match the pending Storage write request.",
+        )
+    request_payload = payload.get("request") if isinstance(payload.get("request"), dict) else None
+    if request_payload is None:
+        return error_payload(
+            400,
+            "invalid_dependency_callback",
+            "Senses storage callback did not include the original dependency request.",
+        )
+    original_request_id = text_or_none(request_payload.get("request_id"))
+    original_dependency_alias = text_or_none(
+        request_payload.get("dependency_alias") or request_payload.get("alias")
+    )
+    if original_request_id != expected_request_id or original_dependency_alias != STORAGE_WRITE_DEPENDENCY_ALIAS:
+        return error_payload(
+            400,
+            "invalid_dependency_callback",
+            "Senses storage callback original request did not match the pending Storage write request.",
         )
 
     timestamp = now_timestamp()
@@ -906,6 +959,13 @@ def storage_write_completed(data_root: Path, workspace_id: str, payload: dict[st
         if capture is None:
             db.rollback()
             return error_payload(404, "capture_not_found", "No matching Senses capture was found.")
+        if str(capture["status"]) != "storage_pending":
+            db.rollback()
+            return error_payload(
+                409,
+                "invalid_capture_state",
+                "Senses storage callbacks are accepted only while the capture is storage_pending.",
+            )
         if str(payload.get("dependency_backend_status") or "") != "completed":
             updated = mark_capture_storage_failed(
                 db,
@@ -918,7 +978,15 @@ def storage_write_completed(data_root: Path, workspace_id: str, payload: dict[st
             db.commit()
             return 200, {"ok": True, "status": "storage_failed", "capture": capture_payload(updated), "error": None}
 
-        storage_result = storage_result_payload(payload.get("dependency_backend_result"))
+        dependency_backend_result = payload.get("dependency_backend_result")
+        if storage_result_provider_app_id(dependency_backend_result) != STORAGE_PROVIDER_APP_ID:
+            db.rollback()
+            return error_payload(
+                400,
+                "invalid_dependency_callback",
+                "Senses storage callback result did not come from the selected Storage provider.",
+            )
+        storage_result = storage_result_payload(dependency_backend_result)
         storage_error = validate_storage_result(capture, storage_result)
         if storage_error is not None:
             updated = mark_capture_storage_failed(
@@ -1238,7 +1306,6 @@ def rate_limit_error(
             SELECT COUNT(*) FROM ingestion_requests
             WHERE workspace_id = ?
               AND device_id = ?
-              AND status IN ('storage_pending', 'stored')
               AND created_at >= ?
             """,
             (workspace_id, device_id, cutoff),
@@ -1283,7 +1350,7 @@ def storage_write_dependency_request(
     capture_id = str(capture["capture_id"])
     return {
         "request_id": f"write-{capture_id}",
-        "dependency_alias": "storage-file-content-write",
+        "dependency_alias": STORAGE_WRITE_DEPENDENCY_ALIAS,
         "body": {
             "action": "file.content.write",
             "mode": "create",
@@ -1395,6 +1462,22 @@ def storage_result_payload(value: object) -> dict[str, object]:
     }
 
 
+def storage_result_provider_app_id(value: object) -> str:
+    if not isinstance(value, dict):
+        return ""
+    provider_app_id = text_or_none(
+        value.get("dependency_provider_app_id") or value.get("provider_app_id")
+    )
+    if provider_app_id:
+        return provider_app_id
+    result_json = value.get("json") if isinstance(value.get("json"), dict) else {}
+    if not isinstance(result_json, dict):
+        return ""
+    return text_or_none(
+        result_json.get("dependency_provider_app_id") or result_json.get("provider_app_id")
+    )
+
+
 def validate_storage_result(capture: sqlite3.Row, storage_result: dict[str, object]) -> str | None:
     if not storage_result.get("storage_file_id"):
         return "Storage result did not include a file id."
@@ -1502,7 +1585,7 @@ def sanitized_frame_bytes(decoded: bytes, content_type: str) -> tuple[bytes, tup
         except ValueError as exc:
             return b"", error_payload(400, "invalid_content_type", str(exc))
     if content_type == "image/png":
-        if not decoded.startswith(b"\x89PNG\r\n\x1a\n"):
+        if not decoded.startswith(PNG_SIGNATURE):
             return b"", error_payload(400, "invalid_content_type", "content_type image/png does not match PNG bytes.")
         try:
             return strip_png_exif(decoded), None
@@ -1512,28 +1595,34 @@ def sanitized_frame_bytes(decoded: bytes, content_type: str) -> tuple[bytes, tup
 
 
 def strip_jpeg_exif(data: bytes) -> bytes:
+    if len(data) < 4 or not data.startswith(b"\xff\xd8"):
+        raise ValueError("JPEG payload is truncated.")
     output = bytearray(data[:2])
     index = 2
     length = len(data)
+    seen_sof = False
+    seen_sos = False
+    seen_eoi = False
     while index < length:
         if data[index] != 0xFF:
-            output.extend(data[index:])
-            break
+            raise ValueError("JPEG marker is missing before scan data.")
         marker_start = index
         while index < length and data[index] == 0xFF:
             index += 1
         if index >= length:
-            output.extend(data[marker_start:])
-            break
+            raise ValueError("JPEG marker is truncated.")
         marker = data[index]
         index += 1
         if marker == 0x00:
-            output.extend(data[marker_start:index])
-            continue
+            raise ValueError("JPEG marker is invalid before scan data.")
+        if marker == 0xD8:
+            raise ValueError("JPEG payload contains an unexpected SOI marker.")
         if marker == 0xD9 or 0xD0 <= marker <= 0xD7 or marker == 0x01:
             output.extend(data[marker_start:index])
             if marker == 0xD9:
-                output.extend(data[index:])
+                seen_eoi = True
+                if index != length:
+                    raise ValueError("JPEG payload has trailing bytes after EOI.")
                 break
             continue
         if index + 2 > length:
@@ -1545,37 +1634,159 @@ def strip_jpeg_exif(data: bytes) -> bytes:
         if segment_end > length:
             raise ValueError("JPEG segment extends beyond payload.")
         segment_payload = data[index + 2:segment_end]
+        if marker in JPEG_START_OF_FRAME_MARKERS:
+            seen_sof = True
         if marker == 0xDA:
-            output.extend(data[marker_start:])
-            break
-        if marker == 0xE1 and segment_payload.startswith(b"Exif\x00\x00"):
+            if not seen_sof:
+                raise ValueError("JPEG start of frame is missing.")
+            seen_sos = True
+            output.extend(data[marker_start:segment_end])
+            index = segment_end
+            scan_end = jpeg_scan_end(data, index)
+            output.extend(data[index:scan_end])
+            index = scan_end
+            continue
+        if marker in JPEG_METADATA_MARKERS and (
+            marker != 0xE1
+            or segment_payload.startswith(b"Exif\x00\x00")
+            or segment_payload.startswith(b"http://ns.adobe.com/xap/1.0/\x00")
+        ):
             index = segment_end
             continue
         output.extend(data[marker_start:segment_end])
         index = segment_end
+    if not seen_sof:
+        raise ValueError("JPEG start of frame is missing.")
+    if not seen_sos:
+        raise ValueError("JPEG start of scan is missing.")
+    if not seen_eoi:
+        raise ValueError("JPEG end marker is missing.")
     return bytes(output)
+
+
+def jpeg_scan_end(data: bytes, index: int) -> int:
+    length = len(data)
+    while index < length:
+        if data[index] != 0xFF:
+            index += 1
+            continue
+        marker_start = index
+        while index < length and data[index] == 0xFF:
+            index += 1
+        if index >= length:
+            raise ValueError("JPEG scan marker is truncated.")
+        marker = data[index]
+        if marker == 0x00 or 0xD0 <= marker <= 0xD7:
+            index += 1
+            continue
+        return marker_start
+    raise ValueError("JPEG end marker is missing.")
 
 
 def strip_png_exif(data: bytes) -> bytes:
-    signature = b"\x89PNG\r\n\x1a\n"
-    output = bytearray(signature)
-    index = len(signature)
+    output = bytearray(PNG_SIGNATURE)
+    index = len(PNG_SIGNATURE)
     length = len(data)
+    seen_ihdr = False
+    seen_idat = False
+    seen_iend = False
+    ihdr_payload = b""
+    idat_payload = bytearray()
     while index < length:
-        if index + 8 > length:
+        if index + 12 > length:
             raise ValueError("PNG chunk header is truncated.")
+        chunk_start = index
         chunk_length = int.from_bytes(data[index:index + 4], "big")
         chunk_type = data[index + 4:index + 8]
-        chunk_end = index + 12 + chunk_length
+        if not valid_png_chunk_type(chunk_type):
+            raise ValueError("PNG chunk type is invalid.")
+        chunk_data_start = index + 8
+        chunk_data_end = chunk_data_start + chunk_length
+        chunk_end = chunk_data_end + 4
         if chunk_end > length:
             raise ValueError("PNG chunk extends beyond payload.")
-        if chunk_type != b"eXIf":
+        chunk_payload = data[chunk_data_start:chunk_data_end]
+        expected_crc = int.from_bytes(data[chunk_data_end:chunk_end], "big")
+        actual_crc = binascii.crc32(chunk_type + chunk_payload) & 0xFFFFFFFF
+        if actual_crc != expected_crc:
+            raise ValueError("PNG chunk CRC is invalid.")
+        if chunk_type == b"IHDR":
+            if seen_ihdr or chunk_start != len(PNG_SIGNATURE):
+                raise ValueError("PNG IHDR chunk must be first.")
+            if chunk_length != 13:
+                raise ValueError("PNG IHDR chunk length is invalid.")
+            seen_ihdr = True
+            ihdr_payload = chunk_payload
+        elif not seen_ihdr:
+            raise ValueError("PNG IHDR chunk is missing.")
+        if chunk_type == b"IDAT":
+            seen_idat = True
+            idat_payload.extend(chunk_payload)
+        if chunk_type == b"IEND":
+            if chunk_length != 0:
+                raise ValueError("PNG IEND chunk length is invalid.")
+            seen_iend = True
+        if not png_chunk_is_ancillary(chunk_type):
             output.extend(data[index:chunk_end])
         index = chunk_end
         if chunk_type == b"IEND":
-            output.extend(data[index:])
+            if index != length:
+                raise ValueError("PNG payload has trailing bytes after IEND.")
             break
+    if not seen_ihdr:
+        raise ValueError("PNG IHDR chunk is missing.")
+    if not seen_idat:
+        raise ValueError("PNG IDAT chunk is missing.")
+    if not seen_iend:
+        raise ValueError("PNG IEND chunk is missing.")
+    validate_png_idat_payload(ihdr_payload, bytes(idat_payload))
     return bytes(output)
+
+
+def valid_png_chunk_type(chunk_type: bytes) -> bool:
+    return len(chunk_type) == 4 and all(
+        65 <= byte <= 90 or 97 <= byte <= 122
+        for byte in chunk_type
+    )
+
+
+def png_chunk_is_ancillary(chunk_type: bytes) -> bool:
+    return bool(chunk_type[0] & 0x20)
+
+
+def validate_png_idat_payload(ihdr_payload: bytes, idat_payload: bytes) -> None:
+    width = int.from_bytes(ihdr_payload[0:4], "big")
+    height = int.from_bytes(ihdr_payload[4:8], "big")
+    bit_depth = ihdr_payload[8]
+    color_type = ihdr_payload[9]
+    compression_method = ihdr_payload[10]
+    filter_method = ihdr_payload[11]
+    interlace_method = ihdr_payload[12]
+    if width < 1 or height < 1:
+        raise ValueError("PNG dimensions are invalid.")
+    if color_type not in PNG_COLOR_TYPE_SAMPLES or bit_depth not in PNG_ALLOWED_BIT_DEPTHS[color_type]:
+        raise ValueError("PNG color type or bit depth is unsupported.")
+    if compression_method != 0 or filter_method != 0:
+        raise ValueError("PNG compression or filter method is unsupported.")
+    if interlace_method != 0:
+        raise ValueError("PNG interlace method is unsupported.")
+    bits_per_pixel = PNG_COLOR_TYPE_SAMPLES[color_type] * bit_depth
+    row_bytes = (width * bits_per_pixel + 7) // 8
+    expected_size = height * (1 + row_bytes)
+    if expected_size > PNG_MAX_DECOMPRESSED_BYTES:
+        raise ValueError("PNG decoded image is too large.")
+    try:
+        decompressor = zlib.decompressobj()
+        decoded = decompressor.decompress(idat_payload, expected_size + 1)
+        if decompressor.unconsumed_tail:
+            raise ValueError("PNG IDAT payload exceeds declared image dimensions.")
+        decoded += decompressor.flush()
+    except zlib.error as exc:
+        raise ValueError("PNG IDAT payload is invalid.") from exc
+    if not decompressor.eof or decompressor.unused_data:
+        raise ValueError("PNG IDAT payload is invalid.")
+    if len(decoded) != expected_size:
+        raise ValueError("PNG IDAT payload does not match declared image dimensions.")
 
 
 def capture_request_hash(value: dict[str, object]) -> str:

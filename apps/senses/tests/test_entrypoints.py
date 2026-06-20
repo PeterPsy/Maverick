@@ -13,6 +13,7 @@ import subprocess
 import sys
 import tempfile
 import unittest
+import zlib
 
 MAVERICK_ROOT = next(parent for parent in Path(__file__).resolve().parents if (parent / "core").is_dir())
 APP_ROOT = Path(__file__).resolve().parents[1]
@@ -114,8 +115,36 @@ def jpeg_with_exif() -> bytes:
     app1 = b"\xff\xe1" + (len(exif_payload) + 2).to_bytes(2, "big") + exif_payload
     jfif_payload = b"JFIF\x00"
     app0 = b"\xff\xe0" + (len(jfif_payload) + 2).to_bytes(2, "big") + jfif_payload
-    scan = b"\xff\xda\x00\x08\x01\x01\x00\x00?\x00" + b"\x11\x22\xff\xd9"
-    return b"\xff\xd8" + app1 + app0 + scan
+    dqt_payload = b"\x00" + bytes([1] * 64)
+    dqt = b"\xff\xdb" + (len(dqt_payload) + 2).to_bytes(2, "big") + dqt_payload
+    sof0_payload = b"\x08\x00\x01\x00\x01\x03\x01\x11\x00\x02\x11\x00\x03\x11\x00"
+    sof0 = b"\xff\xc0" + (len(sof0_payload) + 2).to_bytes(2, "big") + sof0_payload
+    sos_payload = b"\x03\x01\x00\x02\x00\x03\x00\x00\x3f\x00"
+    sos = b"\xff\xda" + (len(sos_payload) + 2).to_bytes(2, "big") + sos_payload
+    return b"\xff\xd8" + app1 + app0 + dqt + sof0 + sos + b"\x11\x22\xff\xd9"
+
+
+def png_chunk(chunk_type: bytes, payload: bytes = b"") -> bytes:
+    crc = zlib.crc32(chunk_type + payload) & 0xFFFFFFFF
+    return len(payload).to_bytes(4, "big") + chunk_type + payload + crc.to_bytes(4, "big")
+
+
+def png_with_text_metadata() -> bytes:
+    signature = b"\x89PNG\r\n\x1a\n"
+    ihdr = (
+        (1).to_bytes(4, "big")
+        + (1).to_bytes(4, "big")
+        + b"\x08\x06\x00\x00\x00"
+    )
+    idat = zlib.compress(b"\x00\x00\x00\x00\x00")
+    return (
+        signature
+        + png_chunk(b"IHDR", ihdr)
+        + png_chunk(b"tEXt", b"GPS=secret")
+        + png_chunk(b"eXIf", b"Exif\x00\x00GPSSECRET")
+        + png_chunk(b"IDAT", idat)
+        + png_chunk(b"IEND")
+    )
 
 
 def capture_request(
@@ -146,6 +175,48 @@ def capture_request(
         "content_sha256": hashlib.sha256(body).hexdigest(),
         "captured_at": datetime.now(tz=UTC).isoformat().replace("+00:00", "Z"),
         "metadata": {"adapter_id": "meta_glasses", "width": 1600, "height": 1200},
+    }
+
+
+def storage_callback_payload(
+    accepted: dict[str, object],
+    *,
+    request_id: str | None = None,
+    provider_app_id: str = "storage",
+    dependency_status: str = "completed",
+    file_id: str | None = None,
+) -> dict[str, object]:
+    capture_id = str(accepted["capture_id"])
+    storage = accepted["storage"]
+    expected_request_id = request_id or f"write-{capture_id}"
+    result: dict[str, object] = {}
+    if dependency_status == "completed":
+        result = {
+            "status_code": 200,
+            "dependency_provider_app_id": provider_app_id,
+            "json": {
+                "file": {
+                    "file_id": file_id or f"generated:senses/{capture_id}",
+                    "workspace_relative_path": storage["workspace_relative_path"],
+                    "sha256": storage["sha256"],
+                    "size_bytes": storage["size_bytes"],
+                },
+                "bytes_written": storage["size_bytes"],
+            },
+        }
+    return {
+        "action": "storage_write.completed",
+        "_workspace_id": "default",
+        "_app_surface": "dependency_backend_request_callback",
+        "capture_id": capture_id,
+        "request_id": expected_request_id,
+        "dependency_alias": "storage-file-content-write",
+        "dependency_backend_status": dependency_status,
+        "dependency_backend_result": result,
+        "request": {
+            "request_id": expected_request_id,
+            "dependency_alias": "storage-file-content-write",
+        },
     }
 
 
@@ -398,6 +469,59 @@ class SensesPhase2EntrypointTest(unittest.TestCase):
             self.assertEqual(capture[3], accepted["storage"]["sha256"])
             self.assertEqual(capture[4], accepted["storage"]["size_bytes"])
 
+    def test_ingest_frame_rejects_invalid_media_payloads(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            data_root = Path(tmp)
+            completed = start_and_complete_device(data_root)
+
+            invalid_jpeg = capture_request(
+                completed,
+                request_id="invalid-jpeg",
+                idempotency_key="invalid-jpeg",
+                content=b"\xff\xd8not-a-real-image",
+            )
+            status, jpeg_error = handle_action(data_root, invalid_jpeg)
+            self.assertEqual(status, 400)
+            self.assertEqual(jpeg_error["error"], "invalid_content_type")
+
+            invalid_png = capture_request(
+                completed,
+                request_id="invalid-png",
+                idempotency_key="invalid-png",
+                content=b"\x89PNG\r\n\x1a\n",
+                content_type="image/png",
+            )
+            status, png_error = handle_action(data_root, invalid_png)
+            self.assertEqual(status, 400)
+            self.assertEqual(png_error["error"], "invalid_content_type")
+
+    def test_ingest_frame_strips_png_metadata_before_storage_write(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            data_root = Path(tmp)
+            completed = start_and_complete_device(data_root)
+
+            status, accepted = handle_action(
+                data_root,
+                capture_request(
+                    completed,
+                    request_id="png-meta",
+                    idempotency_key="png-meta",
+                    content=png_with_text_metadata(),
+                    content_type="image/png",
+                ),
+            )
+
+            self.assertEqual(status, 202)
+            storage_request = accepted["dependency_backend_requests"][0]
+            sanitized = b64decode(storage_request["body"]["content_base64"])
+            self.assertTrue(sanitized.startswith(b"\x89PNG\r\n\x1a\n"))
+            self.assertNotIn(b"tEXt", sanitized)
+            self.assertNotIn(b"eXIf", sanitized)
+            self.assertNotIn(b"GPS=secret", sanitized)
+            self.assertNotIn(b"GPSSECRET", sanitized)
+            self.assertEqual(hashlib.sha256(sanitized).hexdigest(), accepted["storage"]["sha256"])
+            self.assertEqual(len(sanitized), accepted["storage"]["size_bytes"])
+
     def test_ingest_frame_idempotency_success_and_conflict(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             data_root = Path(tmp)
@@ -425,32 +549,10 @@ class SensesPhase2EntrypointTest(unittest.TestCase):
             status, accepted = handle_action(data_root, dict(request))
             self.assertEqual(status, 202)
 
-            storage = accepted["storage"]
             file_id = f"generated:senses/{accepted['capture_id']}"
             status, callback = handle_action(
                 data_root,
-                {
-                    "action": "storage_write.completed",
-                    "_workspace_id": "default",
-                    "_app_surface": "dependency_backend_request_callback",
-                    "capture_id": accepted["capture_id"],
-                    "request_id": f"write-{accepted['capture_id']}",
-                    "dependency_alias": "storage-file-content-write",
-                    "dependency_backend_status": "completed",
-                    "dependency_backend_result": {
-                        "status_code": 200,
-                        "dependency_provider_app_id": "storage",
-                        "json": {
-                            "file": {
-                                "file_id": file_id,
-                                "workspace_relative_path": storage["workspace_relative_path"],
-                                "sha256": storage["sha256"],
-                                "size_bytes": storage["size_bytes"],
-                            },
-                            "bytes_written": storage["size_bytes"],
-                        },
-                    },
-                },
+                storage_callback_payload(accepted, file_id=file_id),
             )
 
             self.assertEqual(status, 200)
@@ -487,6 +589,46 @@ class SensesPhase2EntrypointTest(unittest.TestCase):
             )
             self.assertEqual(status, 403)
             self.assertEqual(public_callback["error"], "senses_permission_forbidden")
+
+    def test_storage_write_callback_rejects_wrong_request_provider_and_stale_replays(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            data_root = Path(tmp)
+            completed = start_and_complete_device(data_root)
+            status, accepted = handle_action(data_root, capture_request(completed))
+            self.assertEqual(status, 202)
+
+            status, wrong_request = handle_action(
+                data_root,
+                storage_callback_payload(accepted, request_id="write-other-capture"),
+            )
+            self.assertEqual(status, 400)
+            self.assertEqual(wrong_request["error"], "invalid_dependency_callback")
+
+            status, wrong_provider = handle_action(
+                data_root,
+                storage_callback_payload(accepted, provider_app_id="mail"),
+            )
+            self.assertEqual(status, 400)
+            self.assertEqual(wrong_provider["error"], "invalid_dependency_callback")
+
+            file_id = f"generated:senses/{accepted['capture_id']}"
+            status, stored = handle_action(data_root, storage_callback_payload(accepted, file_id=file_id))
+            self.assertEqual(status, 200)
+            self.assertEqual(stored["status"], "stored")
+
+            status, stale = handle_action(
+                data_root,
+                storage_callback_payload(accepted, file_id=f"generated:senses/{accepted['capture_id']}-replacement"),
+            )
+            self.assertEqual(status, 409)
+            self.assertEqual(stale["error"], "invalid_capture_state")
+
+            with sqlite3.connect(db_path(data_root)) as db:
+                storage_file_id = db.execute(
+                    "SELECT storage_file_id FROM captures WHERE capture_id = ?",
+                    (accepted["capture_id"],),
+                ).fetchone()[0]
+            self.assertEqual(storage_file_id, file_id)
 
     def test_ingest_frame_validation_and_authorization_fail_closed(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -556,6 +698,34 @@ class SensesPhase2EntrypointTest(unittest.TestCase):
                 status, limited = handle_action(
                     data_root,
                     capture_request(completed, request_id="rate-2", idempotency_key="rate-2"),
+                )
+            finally:
+                service.FRAME_RATE_LIMIT_MAX = previous_limit
+            self.assertEqual(status, 429)
+            self.assertEqual(limited["error"], "rate_limited")
+
+    def test_ingest_frame_rate_limit_counts_storage_failures(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            data_root = Path(tmp)
+            completed = start_and_complete_device(data_root)
+            previous_limit = service.FRAME_RATE_LIMIT_MAX
+            service.FRAME_RATE_LIMIT_MAX = 1
+            try:
+                status, first = handle_action(
+                    data_root,
+                    capture_request(completed, request_id="failed-rate-1", idempotency_key="failed-rate-1"),
+                )
+                self.assertEqual(status, 202)
+                status, failed = handle_action(
+                    data_root,
+                    storage_callback_payload(first, dependency_status="failed"),
+                )
+                self.assertEqual(status, 200)
+                self.assertEqual(failed["status"], "storage_failed")
+
+                status, limited = handle_action(
+                    data_root,
+                    capture_request(completed, request_id="failed-rate-2", idempotency_key="failed-rate-2"),
                 )
             finally:
                 service.FRAME_RATE_LIMIT_MAX = previous_limit

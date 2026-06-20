@@ -1,4 +1,4 @@
-"""MCP entrypoint for Senses Phase 0."""
+"""MCP entrypoint for Senses."""
 
 from __future__ import annotations
 
@@ -14,6 +14,8 @@ from service import app_events_for_action, handle_action
 TOOL_ACTIONS = {
     "senses_operations_manifest": "manifest",
     "senses_reference_manifest": "reference_manifest",
+    "senses_device_registry": "devices.list",
+    "senses_pairing_start": "pairing.start",
 }
 
 
@@ -34,6 +36,12 @@ if action is None:
 arguments["_workspace_id"] = payload.workspace_id
 arguments["_app_id"] = payload.app_id
 arguments["_app_dependencies"] = payload.raw.get("app_dependencies", {})
+arguments["_app_actor"] = {
+    "user_id": payload.user_id,
+    "workspace_role": payload.workspace_role,
+    "platform_role": payload.platform_role,
+    "effective_mode": payload.effective_mode,
+}
 arguments.setdefault("action", action)
 status_code, result = handle_action(Path(payload.data_root), arguments)
 if status_code < 400:

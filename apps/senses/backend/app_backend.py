@@ -1,4 +1,4 @@
-"""Mounted backend entrypoint for Senses Phase 0."""
+"""Mounted backend entrypoint for Senses."""
 
 from __future__ import annotations
 
@@ -16,6 +16,12 @@ body = dict(payload.body)
 body["_app_dependencies"] = payload.raw.get("app_dependencies", {})
 body["_workspace_id"] = payload.workspace_id
 body["_app_id"] = payload.app_id
+body["_app_actor"] = {
+    "user_id": payload.user_id,
+    "workspace_role": payload.workspace_role,
+    "platform_role": payload.platform_role,
+    "effective_mode": payload.effective_mode,
+}
 action = str(body.get("action") or "manifest")
 status_code, result = handle_action(Path(payload.data_root), body)
 response = backend_response(status_code, result)

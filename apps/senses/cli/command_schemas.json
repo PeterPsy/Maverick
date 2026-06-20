@@ -1,7 +1,7 @@
 {
   "commands": {
     "senses": {
-      "description": "Inspect the Senses Phase 0 manifest and health state.",
+      "description": "Inspect and operate the Senses Phase 1 pairing and device registry.",
       "argument_schema": {
         "type": "object",
         "properties": {
@@ -13,12 +13,55 @@
               "health",
               "health.check",
               "status",
+              "overview",
+              "pairing.start",
+              "pairing.complete",
+              "pairing.status",
+              "devices.list",
+              "devices.revoke",
+              "settings.get",
+              "settings.update",
               "reference_manifest",
               "references.manifest"
             ]
+          },
+          "code": {
+            "type": "string"
+          },
+          "pairing_id": {
+            "type": "string"
+          },
+          "device_id": {
+            "type": "string"
+          },
+          "device_display_name": {
+            "type": "string"
+          },
+          "device_kind": {
+            "type": "string"
+          },
+          "platform": {
+            "type": "string"
+          },
+          "include_all": {
+            "type": "boolean"
+          },
+          "status": {
+            "type": "string"
+          },
+          "allow_member_pairing": {
+            "type": "boolean"
+          },
+          "require_admin_for_settings": {
+            "type": "boolean"
+          },
+          "pairing_code_ttl_seconds": {
+            "type": "integer",
+            "minimum": 60,
+            "maximum": 3600
           }
         },
-        "additionalProperties": false
+        "additionalProperties": true
       }
     }
   }

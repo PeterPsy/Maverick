@@ -1,4 +1,4 @@
-"""CLI entrypoint for Senses Phase 0."""
+"""CLI entrypoint for Senses."""
 
 from __future__ import annotations
 
@@ -16,6 +16,12 @@ arguments = dict(payload.arguments)
 arguments["_workspace_id"] = payload.workspace_id
 arguments["_app_id"] = payload.app_id
 arguments["_app_dependencies"] = payload.raw.get("app_dependencies", {})
+arguments["_app_actor"] = {
+    "user_id": payload.user_id,
+    "workspace_role": payload.workspace_role,
+    "platform_role": payload.platform_role,
+    "effective_mode": payload.effective_mode,
+}
 arguments.setdefault("action", "manifest")
 status_code, result = handle_action(Path(payload.data_root), arguments)
 result["status_code"] = status_code

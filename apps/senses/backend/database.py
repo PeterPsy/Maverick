@@ -3,14 +3,22 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime
+import json
 from pathlib import Path
 import sqlite3
 
 
-SCHEMA_VERSION = "1"
+SCHEMA_VERSION = "2"
 DB_FILENAME = "senses.sqlite"
 PRIMARY_DB_PATH = f"data/senses/{DB_FILENAME}"
-WORKSPACE_TABLES = ("schema_migrations", "settings")
+WORKSPACE_TABLES = (
+    "schema_migrations",
+    "settings",
+    "devices",
+    "pairing_sessions",
+    "device_sessions",
+    "audit",
+)
 
 
 def now_timestamp() -> str:
@@ -25,6 +33,7 @@ def connect(data_root: Path) -> sqlite3.Connection:
     data_root.mkdir(parents=True, exist_ok=True)
     connection = sqlite3.connect(db_path(data_root))
     connection.row_factory = sqlite3.Row
+    connection.execute("PRAGMA foreign_keys = ON")
     return connection
 
 
@@ -45,6 +54,9 @@ def ensure_schema(data_root: Path, workspace_id: str) -> None:
               workspace_id TEXT PRIMARY KEY,
               auth_mode TEXT NOT NULL DEFAULT 'user_session_mvp',
               device_ingress_enabled INTEGER NOT NULL DEFAULT 0,
+              allow_member_pairing INTEGER NOT NULL DEFAULT 1,
+              require_admin_for_settings INTEGER NOT NULL DEFAULT 1,
+              pairing_code_ttl_seconds INTEGER NOT NULL DEFAULT 600,
               max_frame_bytes INTEGER NOT NULL DEFAULT 8388608,
               max_audio_bytes INTEGER NOT NULL DEFAULT 10485760,
               jpeg_quality_hint REAL NOT NULL DEFAULT 0.78,
@@ -54,7 +66,92 @@ def ensure_schema(data_root: Path, workspace_id: str) -> None:
               created_at TEXT NOT NULL,
               updated_at TEXT NOT NULL
             );
+
+            CREATE TABLE IF NOT EXISTS pairing_sessions (
+              workspace_id TEXT NOT NULL,
+              pairing_id TEXT NOT NULL,
+              code_hash TEXT NOT NULL,
+              status TEXT NOT NULL,
+              created_by_user_id TEXT NOT NULL,
+              completed_by_user_id TEXT,
+              device_id TEXT,
+              device_display_name TEXT,
+              device_kind TEXT,
+              platform TEXT,
+              metadata_json TEXT NOT NULL DEFAULT '{}',
+              expires_at TEXT NOT NULL,
+              created_at TEXT NOT NULL,
+              completed_at TEXT,
+              revoked_at TEXT,
+              revoked_by_user_id TEXT,
+              PRIMARY KEY (workspace_id, pairing_id)
+            );
+
+            CREATE UNIQUE INDEX IF NOT EXISTS idx_senses_pairing_code
+              ON pairing_sessions(workspace_id, code_hash)
+              WHERE status = 'pending';
+
+            CREATE INDEX IF NOT EXISTS idx_senses_pairing_status
+              ON pairing_sessions(workspace_id, status, expires_at);
+
+            CREATE TABLE IF NOT EXISTS devices (
+              workspace_id TEXT NOT NULL,
+              device_id TEXT NOT NULL,
+              owner_user_id TEXT NOT NULL,
+              display_name TEXT NOT NULL,
+              device_kind TEXT NOT NULL,
+              platform TEXT NOT NULL,
+              status TEXT NOT NULL,
+              pairing_id TEXT,
+              metadata_json TEXT NOT NULL DEFAULT '{}',
+              paired_at TEXT NOT NULL,
+              last_seen_at TEXT,
+              revoked_at TEXT,
+              revoked_by_user_id TEXT,
+              created_at TEXT NOT NULL,
+              updated_at TEXT NOT NULL,
+              PRIMARY KEY (workspace_id, device_id)
+            );
+
+            CREATE INDEX IF NOT EXISTS idx_senses_devices_owner_status
+              ON devices(workspace_id, owner_user_id, status, updated_at);
+
+            CREATE TABLE IF NOT EXISTS device_sessions (
+              workspace_id TEXT NOT NULL,
+              device_session_id TEXT NOT NULL,
+              device_id TEXT NOT NULL,
+              user_id TEXT NOT NULL,
+              auth_mode TEXT NOT NULL,
+              status TEXT NOT NULL,
+              created_at TEXT NOT NULL,
+              last_seen_at TEXT,
+              revoked_at TEXT,
+              revoked_by_user_id TEXT,
+              PRIMARY KEY (workspace_id, device_session_id),
+              FOREIGN KEY (workspace_id, device_id)
+                REFERENCES devices(workspace_id, device_id)
+                ON DELETE CASCADE
+            );
+
+            CREATE INDEX IF NOT EXISTS idx_senses_device_sessions_device
+              ON device_sessions(workspace_id, device_id, status);
+
+            CREATE TABLE IF NOT EXISTS audit (
+              workspace_id TEXT NOT NULL,
+              audit_id TEXT NOT NULL,
+              event_type TEXT NOT NULL,
+              actor_user_id TEXT,
+              device_id TEXT,
+              pairing_id TEXT,
+              details_json TEXT NOT NULL DEFAULT '{}',
+              created_at TEXT NOT NULL,
+              PRIMARY KEY (workspace_id, audit_id)
+            );
+
+            CREATE INDEX IF NOT EXISTS idx_senses_audit_created
+              ON audit(workspace_id, created_at);
         """)
+        _ensure_settings_columns(db)
         db.execute(
             "INSERT OR IGNORE INTO schema_migrations(workspace_id, version, applied_at) VALUES (?, ?, ?)",
             (workspace, SCHEMA_VERSION, timestamp),
@@ -86,6 +183,8 @@ def settings_payload(data_root: Path, workspace_id: str) -> dict[str, object]:
         raise RuntimeError(f"Senses settings were not initialized for workspace `{workspace}`.")
     payload = dict(row)
     payload["device_ingress_enabled"] = bool(payload["device_ingress_enabled"])
+    payload["allow_member_pairing"] = bool(payload["allow_member_pairing"])
+    payload["require_admin_for_settings"] = bool(payload["require_admin_for_settings"])
     return payload
 
 
@@ -101,6 +200,13 @@ def health_payload(data_root: Path, workspace_id: str) -> dict[str, object]:
                 (workspace,),
             ).fetchall()
         ]
+        counts = {
+            table: int(
+                db.execute(f"SELECT COUNT(*) FROM {table} WHERE workspace_id = ?", (workspace,)).fetchone()[0]
+            )
+            for table in WORKSPACE_TABLES
+            if table != "schema_migrations"
+        }
     finally:
         db.close()
     return {
@@ -109,6 +215,7 @@ def health_payload(data_root: Path, workspace_id: str) -> dict[str, object]:
             "schema_version": SCHEMA_VERSION,
             "migrations": migrations,
             "tables": list(WORKSPACE_TABLES),
+            "counts": counts,
         },
         "settings": settings_payload(data_root, workspace),
     }
@@ -122,6 +229,20 @@ def table_columns(data_root: Path, table_name: str) -> list[str]:
         db.close()
 
 
+def decode_json_object(value: str | None) -> dict[str, object]:
+    if not value:
+        return {}
+    try:
+        parsed = json.loads(value)
+    except json.JSONDecodeError:
+        return {}
+    return parsed if isinstance(parsed, dict) else {}
+
+
+def encode_json_object(value: object) -> str:
+    return json.dumps(value if isinstance(value, dict) else {}, ensure_ascii=True, sort_keys=True)
+
+
 def require_workspace_id(value: str | None) -> str:
     workspace = str(value or "").strip()
     if not workspace:
@@ -131,3 +252,19 @@ def require_workspace_id(value: str | None) -> str:
 
 def _workspace_id(value: str | None) -> str:
     return require_workspace_id(value)
+
+
+def _ensure_settings_columns(db: sqlite3.Connection) -> None:
+    columns = set(_table_column_names(db, "settings"))
+    additions = {
+        "allow_member_pairing": "allow_member_pairing INTEGER NOT NULL DEFAULT 1",
+        "require_admin_for_settings": "require_admin_for_settings INTEGER NOT NULL DEFAULT 1",
+        "pairing_code_ttl_seconds": "pairing_code_ttl_seconds INTEGER NOT NULL DEFAULT 600",
+    }
+    for name, definition in additions.items():
+        if name not in columns:
+            db.execute(f"ALTER TABLE settings ADD COLUMN {definition}")
+
+
+def _table_column_names(db: sqlite3.Connection, table_name: str) -> list[str]:
+    return [str(row["name"]) for row in db.execute(f"PRAGMA table_info({table_name})").fetchall()]

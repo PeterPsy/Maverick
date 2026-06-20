@@ -1,4 +1,4 @@
-"""Phase 0 backend tests for Senses."""
+"""Phase 1 backend tests for Senses."""
 
 from __future__ import annotations
 
@@ -53,6 +53,15 @@ def resolved_storage_dependencies() -> dict[str, object]:
     }
 
 
+def actor(user_id: str = "user-1", workspace_role: str = "member") -> dict[str, str | None]:
+    return {
+        "user_id": user_id,
+        "workspace_role": workspace_role,
+        "platform_role": "member",
+        "effective_mode": "sandbox",
+    }
+
+
 def run_hook(relative_path: str, payload: dict[str, object]) -> subprocess.CompletedProcess[str]:
     env = dict(os.environ)
     env["PYTHONPATH"] = (
@@ -71,7 +80,32 @@ def run_hook(relative_path: str, payload: dict[str, object]) -> subprocess.Compl
     )
 
 
-class SensesPhase0EntrypointTest(unittest.TestCase):
+def start_and_complete_device(data_root: Path, user_id: str = "user-1") -> dict[str, object]:
+    status, started = handle_action(
+        data_root,
+        {"action": "pairing.start", "_workspace_id": "default", "_app_actor": actor(user_id)},
+    )
+    if status != 201:
+        raise AssertionError(started)
+    status, completed = handle_action(
+        data_root,
+        {
+            "action": "pairing.complete",
+            "_workspace_id": "default",
+            "_app_actor": actor(user_id),
+            "code": started["pairing"]["code"],
+            "device_display_name": "Marco iPhone",
+            "device_kind": "ios",
+            "platform": "ios",
+            "client_device_id": "ios-client-1",
+        },
+    )
+    if status != 200:
+        raise AssertionError(completed)
+    return completed
+
+
+class SensesPhase1EntrypointTest(unittest.TestCase):
     def test_schema_is_workspace_scoped_and_idempotent(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             data_root = Path(tmp)
@@ -85,17 +119,30 @@ class SensesPhase0EntrypointTest(unittest.TestCase):
                     "SELECT COUNT(*) FROM settings WHERE workspace_id = ?",
                     ("default",),
                 ).fetchone()[0]
+                table_names = {
+                    row[0]
+                    for row in db.execute("SELECT name FROM sqlite_master WHERE type = 'table'").fetchall()
+                }
             self.assertEqual(settings_count, 1)
+            self.assertTrue(set(WORKSPACE_TABLES).issubset(table_names))
 
-    def test_manifest_reports_required_storage_dependencies(self) -> None:
+    def test_manifest_reports_phase_1_surfaces(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             status, manifest = handle_action(
                 Path(tmp),
-                {"action": "manifest", "_workspace_id": "default", "_app_dependencies": resolved_storage_dependencies()},
+                {
+                    "action": "manifest",
+                    "_workspace_id": "default",
+                    "_app_actor": actor(),
+                    "_app_dependencies": resolved_storage_dependencies(),
+                },
             )
             self.assertEqual(status, 200)
+            self.assertEqual(manifest["phase"], "phase-1")
             self.assertEqual(manifest["dependency_resolution"]["status"], "resolved")
-            self.assertEqual(manifest["declared_surfaces"]["frontend"], False)
+            self.assertEqual(manifest["declared_surfaces"]["frontend"], True)
+            self.assertIn("pairing.start", manifest["backend_actions"])
+            self.assertIn("devices.revoke", manifest["backend_actions"])
             self.assertIn("ingest.frame", manifest["deferred_to_later_phases"])
 
     def test_missing_workspace_id_is_rejected(self) -> None:
@@ -104,34 +151,157 @@ class SensesPhase0EntrypointTest(unittest.TestCase):
             self.assertEqual(status, 400)
             self.assertEqual(payload["error"], "missing_workspace_id")
 
-    def test_cli_and_mcp_use_host_dependency_payload(self) -> None:
+    def test_pairing_start_and_complete_registers_device_without_raw_token(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
-            cli_health = run_json_entrypoint(
+            data_root = Path(tmp)
+            status, started = handle_action(
+                data_root,
+                {"action": "pairing.start", "_workspace_id": "default", "_app_actor": actor()},
+            )
+            self.assertEqual(status, 201)
+            self.assertEqual(started["pairing"]["status"], "pending")
+            self.assertRegex(started["pairing"]["code"], r"^[A-Z2-9]{8}$")
+            self.assertEqual(started["pairing"]["qr_payload"]["backend_action"], "pairing.complete")
+
+            status, completed = handle_action(
+                data_root,
+                {
+                    "action": "pairing.complete",
+                    "_workspace_id": "default",
+                    "_app_actor": actor(),
+                    "code": started["pairing"]["code"],
+                    "device_display_name": "Marco iPhone",
+                    "client_device_id": "client-123",
+                },
+            )
+            self.assertEqual(status, 200)
+            self.assertEqual(completed["device"]["status"], "active")
+            self.assertEqual(completed["device"]["owner_user_id"], "user-1")
+            self.assertEqual(completed["device_session"]["auth_mode"], "user_session_mvp")
+            self.assertNotIn("device_token", json.dumps(completed))
+
+            status, listed = handle_action(
+                data_root,
+                {"action": "devices.list", "_workspace_id": "default", "_app_actor": actor()},
+            )
+            self.assertEqual(status, 200)
+            self.assertEqual(len(listed["devices"]), 1)
+            self.assertEqual(listed["devices"][0]["display_name"], "Marco iPhone")
+
+    def test_user_visibility_and_admin_include_all(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            data_root = Path(tmp)
+            start_and_complete_device(data_root, user_id="user-1")
+
+            status, member_list = handle_action(
+                data_root,
+                {"action": "devices.list", "_workspace_id": "default", "_app_actor": actor("user-2")},
+            )
+            self.assertEqual(status, 200)
+            self.assertEqual(member_list["devices"], [])
+
+            status, admin_list = handle_action(
+                data_root,
+                {
+                    "action": "devices.list",
+                    "_workspace_id": "default",
+                    "_app_actor": actor("admin-1", "admin"),
+                    "include_all": True,
+                },
+            )
+            self.assertEqual(status, 200)
+            self.assertEqual(len(admin_list["devices"]), 1)
+            self.assertTrue(admin_list["devices"][0]["can_revoke"])
+
+    def test_owner_can_revoke_device_and_sessions(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            data_root = Path(tmp)
+            completed = start_and_complete_device(data_root)
+            device_id = completed["device"]["device_id"]
+
+            status, revoked = handle_action(
+                data_root,
+                {
+                    "action": "devices.revoke",
+                    "_workspace_id": "default",
+                    "_app_actor": actor(),
+                    "device_id": device_id,
+                },
+            )
+            self.assertEqual(status, 200)
+            self.assertEqual(revoked["device"]["status"], "revoked")
+
+            with sqlite3.connect(db_path(data_root)) as db:
+                session_status = db.execute(
+                    "SELECT status FROM device_sessions WHERE device_id = ?",
+                    (device_id,),
+                ).fetchone()[0]
+            self.assertEqual(session_status, "revoked")
+
+    def test_settings_update_requires_admin(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            data_root = Path(tmp)
+            status, denied = handle_action(
+                data_root,
+                {
+                    "action": "settings.update",
+                    "_workspace_id": "default",
+                    "_app_actor": actor(),
+                    "allow_member_pairing": False,
+                },
+            )
+            self.assertEqual(status, 403)
+            self.assertEqual(denied["error"], "senses_permission_forbidden")
+
+            status, updated = handle_action(
+                data_root,
+                {
+                    "action": "settings.update",
+                    "_workspace_id": "default",
+                    "_app_actor": actor("admin-1", "admin"),
+                    "allow_member_pairing": False,
+                    "pairing_code_ttl_seconds": 120,
+                },
+            )
+            self.assertEqual(status, 200)
+            self.assertFalse(updated["settings"]["allow_member_pairing"])
+            self.assertEqual(updated["settings"]["pairing_code_ttl_seconds"], 120)
+
+    def test_cli_and_mcp_use_host_actor_payload(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            cli_overview = run_json_entrypoint(
                 APP_ROOT / "cli" / "app_cli.py",
                 cwd=APP_ROOT,
                 payload={
                     "app_id": "senses",
                     "workspace_id": "default",
                     "data_root": tmp,
+                    "user_id": "user-1",
+                    "workspace_role": "member",
+                    "platform_role": "member",
                     "app_dependencies": resolved_storage_dependencies(),
-                    "arguments": {"action": "health"},
+                    "arguments": {"action": "overview"},
                 },
             )
-            mcp_manifest = run_json_entrypoint(
+            mcp_pairing = run_json_entrypoint(
                 APP_ROOT / "mcp" / "server.py",
                 cwd=APP_ROOT,
                 payload={
                     "app_id": "senses",
                     "workspace_id": "default",
                     "data_root": tmp,
+                    "user_id": "user-1",
+                    "workspace_role": "member",
+                    "platform_role": "member",
                     "app_dependencies": resolved_storage_dependencies(),
-                    "tool_name": "senses_operations_manifest",
+                    "tool_name": "senses_pairing_start",
                     "arguments": {},
                 },
             )
-            self.assertTrue(cli_health["ok"])
-            self.assertEqual(cli_health["dependencies"]["status"], "resolved")
-            self.assertEqual(mcp_manifest["dependency_resolution"]["status"], "resolved")
+            self.assertTrue(cli_overview["ok"])
+            self.assertEqual(cli_overview["phase"], "phase-1")
+            self.assertTrue(mcp_pairing["ok"])
+            self.assertEqual(mcp_pairing["pairing"]["status"], "pending")
 
     def test_mcp_rejects_unknown_tool_name(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -196,11 +366,12 @@ class SensesPhase0EntrypointTest(unittest.TestCase):
             self.assertTrue(payload["ok"])
             self.assertNotIn("dependencies", payload)
 
-    def test_reference_manifest_is_empty_until_records_exist(self) -> None:
+    def test_reference_manifest_remains_capture_deferred(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             status, payload = handle_action(Path(tmp), {"action": "reference_manifest", "_workspace_id": "default"})
             self.assertEqual(status, 200)
             self.assertEqual(payload["entity_types"], [])
+            self.assertIn("capture", payload["notes"][0])
 
 
 if __name__ == "__main__":

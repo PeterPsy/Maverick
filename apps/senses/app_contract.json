@@ -2,11 +2,23 @@
   "app_id": "senses",
   "contract_version": "1.0",
   "name": "Senses",
-  "version": "0.1.0",
-  "description": "Device and sensor connector for Maverick workspace inputs.",
+  "version": "0.2.0",
+  "description": "Device and sensor connector for Maverick workspace inputs with user-session pairing and device registry.",
   "publisher": "maverick",
   "minimum_core_version": "0.1.0",
-  "provides": [],
+  "provides": [
+    {
+      "interface": "device.registry",
+      "version": "1",
+      "description": "Workspace-scoped Senses device registry and user-session pairing state.",
+      "surfaces": [
+        "backend",
+        "cli",
+        "mcp",
+        "view"
+      ]
+    }
+  ],
   "requires": [
     {
       "alias": "storage-file-content-write",
@@ -33,7 +45,7 @@
     "platform_roles": null
   },
   "presentation": {
-    "frontend_role": "none"
+    "frontend_role": "workspace"
   },
   "permissions": {
     "secrets": {
@@ -59,14 +71,31 @@
   "capabilities": {
     "mcp_tools": [
       "senses_reference_manifest",
-      "senses_operations_manifest"
+      "senses_operations_manifest",
+      "senses_device_registry",
+      "senses_pairing_start"
     ],
     "cli_commands": [
       "senses"
     ],
     "skills": [],
-    "views": [],
-    "data_events": [],
+    "views": [
+      "main"
+    ],
+    "data_events": [
+      {
+        "resource": "devices",
+        "description": "Senses device registry changed."
+      },
+      {
+        "resource": "pairing",
+        "description": "Senses pairing sessions changed."
+      },
+      {
+        "resource": "settings",
+        "description": "Senses settings changed."
+      }
+    ],
     "view_surfaces": [],
     "reference_entities": []
   },
@@ -75,7 +104,7 @@
     "mcp": "mcp/server.py",
     "cli": "cli/app_cli.py",
     "backend": "backend/app_backend.py",
-    "frontend": null,
+    "frontend": "frontend/dist",
     "skills_root": null,
     "hooks": {
       "install": "hooks/install.py",
@@ -85,7 +114,7 @@
   },
   "storage": {
     "storage_kind": "sqlite+files",
-    "data_schema_version": "1",
+    "data_schema_version": "2",
     "primary_paths": [
       "data/senses/senses.sqlite"
     ],

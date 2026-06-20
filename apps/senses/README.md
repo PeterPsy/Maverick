@@ -1,22 +1,23 @@
 # Senses
 
-Senses is a root Maverick app for future device and sensor inputs. Phase 0 only
-creates the app skeleton, data root, SQLite schema, and availability surfaces.
+Senses is a root Maverick app for device and sensor inputs. Phase 1 implements
+user-session pairing and the workspace-scoped device registry without adding a
+public bearer-token ingress.
 
-It intentionally does not implement pairing, `ingest.frame`,
-`routing.dispatch_capture`, device-token ingress, or frontend/reference views.
+## Phase 1 Surfaces
 
-## Phase 0 Surfaces
-
-- backend: `manifest`, `health`
+- frontend: `frontend/dist`
+- backend: `manifest`, `health`, `overview`, `pairing.start`,
+  `pairing.complete`, `pairing.status`, `devices.list`, `devices.revoke`,
+  `settings.get`, `settings.update`
 - CLI: `senses`
-- MCP: `senses_operations_manifest`, `senses_reference_manifest`
+- MCP: `senses_operations_manifest`, `senses_reference_manifest`,
+  `senses_device_registry`, `senses_pairing_start`
 - hooks: `install`, `migrate`, `health_check`
 
-The contract requires Storage interfaces:
-
-- `storage-file-content-write` -> `file.content.write`
-- `storage-file-catalog` -> `file.catalog`
+The MVP auth mode is `user_session_mvp`. Mounted backend calls use the Maverick
+user session supplied by `/api/apps/senses/backend`; Senses does not accept a raw
+device token in Phase 1.
 
 ## Data
 
@@ -26,33 +27,42 @@ Workspace data is owned by the app under:
 workspaces/<workspace_id>/data/senses/
 ```
 
-The Phase 0 SQLite file is:
+The SQLite file is:
 
 ```text
 workspaces/<workspace_id>/data/senses/senses.sqlite
 ```
 
-The initial schema creates `schema_migrations` and `settings`, both scoped by
-`workspace_id`.
+Phase 1 creates these workspace-scoped tables:
+
+- `schema_migrations`
+- `settings`
+- `devices`
+- `pairing_sessions`
+- `device_sessions`
+- `audit`
+
+## Pairing
+
+`pairing.start` creates a short code with a bounded TTL and returns a
+machine-readable QR payload. `pairing.complete` requires a Maverick user session
+and associates the completing iOS device with that user and workspace. The
+server stores only registry/session metadata; device-token ingress is deferred.
+
+Users can revoke their own devices. Workspace admins can list and revoke all
+workspace devices and update Senses settings.
 
 ## Verify
 
 ```bash
-maverick sdk templates
-maverick sdk docs
 maverick core cli run core.app-sdk.validate --app-root apps/senses --json
-maverick apps list --json
-maverick app senses cli list --json
-maverick app senses cli inspect senses --json
-maverick app senses mcp list --json
-maverick app senses mcp inspect senses_operations_manifest --json
-maverick app senses mcp call senses_operations_manifest --json
+maverick app senses frontend build --json
 python3 -m unittest discover -s apps/senses/tests -p 'test_*.py'
+python3 -m compileall apps/senses/backend apps/senses/cli apps/senses/mcp apps/senses/hooks
 ```
 
 After Senses and Storage are installed and enabled in the workspace, configure
-the required Storage providers from an authorized workspace-admin context
-through the core-owned app dependency commands:
+the required Storage providers from an authorized workspace-admin context:
 
 ```bash
 maverick core cli run app.senses.dependencies.set \
@@ -65,9 +75,5 @@ maverick core cli run app.senses.dependencies --json
 maverick app senses cli run senses --action health --json
 ```
 
-The install lifecycle prepares the app-owned schema before dependency selections
-can be configured. Runtime readiness is only true when `ok` is `true` and
-`dependencies.status` is `resolved`. If the host does not provide dependency
-resolution, or either required Storage provider is unset, Senses reports
-`ok: false` with `status: "dependency_resolution_pending"`; the platform
-health hook also fails health probes when dependency resolution is not resolved.
+Runtime readiness is true only when `ok` is `true` and
+`dependencies.status == "resolved"`.

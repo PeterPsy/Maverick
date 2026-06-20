@@ -69,11 +69,20 @@ export function InterAgentGraphView({
   const selectedParticipant =
     participants.find((participant) => participant.participant_id === selectedParticipantId) || null;
   const selectedParticipantArtifacts = useMemo(
-    () =>
-      selectedParticipantId
-        ? artifacts.filter((artifact) => artifact.participant_id === selectedParticipantId)
-        : [],
-    [artifacts, selectedParticipantId],
+    () => {
+      if (!selectedParticipantId) {
+        return [];
+      }
+      const participantArtifacts = artifacts.filter((artifact) => artifact.participant_id === selectedParticipantId);
+      const selectedIsOrchestrator =
+        selectedParticipantId === runDetail?.run.orchestrator_participant_id || selectedParticipant?.kind === "orchestrator";
+      if (!selectedIsOrchestrator) {
+        return participantArtifacts;
+      }
+      const runLevelArtifacts = artifacts.filter((artifact) => !stringArtifactField(artifact.participant_id));
+      return [...participantArtifacts, ...runLevelArtifacts];
+    },
+    [artifacts, runDetail?.run.orchestrator_participant_id, selectedParticipant?.kind, selectedParticipantId],
   );
   const pendingApprovals = approvals.filter((approval) => approval.status === "pending");
   const latestSummary = useMemo(() => latestRunSummary(events), [events]);
@@ -476,7 +485,7 @@ function ArtifactTitle({ artifact }: { artifact: InterAgentArtifactRecord }) {
 
 type ArtifactLinkTarget =
   | { href: string; kind: "app_page"; appId: string; appPage: string }
-  | { href: string; kind: "plain" }
+  | { href: string; kind: "external" }
   | { href: string; kind: "storage_page"; appPage: string }
   | { href: string; kind: "storage_path"; workspaceRelativePath: string };
 
@@ -500,13 +509,29 @@ function artifactLinkTarget(artifact: InterAgentArtifactRecord): ArtifactLinkTar
     }
     const appTarget = appRouteTargetFromDeepLink(deepLink);
     if (appTarget) {
-      return { href: deepLink, kind: "app_page", appId: appTarget.appId, appPage: appTarget.appPage };
+      return {
+        href: appRouteShellHref(appTarget.appId, appTarget.appPage),
+        kind: "app_page",
+        appId: appTarget.appId,
+        appPage: appTarget.appPage,
+      };
     }
-    return { href: deepLink, kind: "plain" };
+    const externalHref = externalArtifactHref(deepLink);
+    if (externalHref) {
+      return { href: externalHref, kind: "external" };
+    }
+    return null;
   }
   const workspacePath = stringArtifactField(artifact.workspace_relative_path);
   if (workspacePath) {
-    return { href: storageShellHref(workspacePath), kind: "storage_path", workspaceRelativePath: workspacePath };
+    const storageTarget = storageLinkTargetFromHref(workspacePath);
+    if (storageTarget?.kind === "workspace_path") {
+      return {
+        href: storageShellHref(storageTarget.workspaceRelativePath),
+        kind: "storage_path",
+        workspaceRelativePath: storageTarget.workspaceRelativePath,
+      };
+    }
   }
   const storageFileId =
     stringArtifactField(artifact.file_id) ||
@@ -550,6 +575,29 @@ function appRouteTargetFromDeepLink(deepLink: string): { appId: string; appPage:
     .filter(Boolean)
     .join("/");
   return appId ? { appId, appPage } : null;
+}
+
+function appRouteShellHref(appId: string, appPage: string): string {
+  const appIdSegment = encodeURIComponent(appId.trim());
+  const page = appPage
+    .split("/")
+    .map((segment) => segment.trim())
+    .filter(Boolean)
+    .map(encodeURIComponent)
+    .join("/");
+  return page ? `/app/${appIdSegment}/${page}` : `/app/${appIdSegment}`;
+}
+
+function externalArtifactHref(value: string): string {
+  try {
+    const url = new URL(value.trim());
+    if (url.protocol === "http:" || url.protocol === "https:") {
+      return url.toString();
+    }
+  } catch {
+    return "";
+  }
+  return "";
 }
 
 function decodePathSegment(value: string): string {

@@ -350,6 +350,63 @@ describe("InterAgentGraphView", () => {
     );
   });
 
+  it("renders unsafe artifact deep links as text instead of anchors", async () => {
+    const element = await renderGraph({
+      initialEvents: [
+        artifactEvent({
+          payload: {
+            artifact_refs: [
+              {
+                label: "Unsafe report",
+                deep_link: "javascript:alert(1)",
+              },
+            ],
+            status: "created",
+          },
+        }),
+      ],
+    });
+    const researcherNode = element.querySelector('[data-participant-id="researcher"]') as HTMLButtonElement | null;
+
+    await act(async () => {
+      researcherNode?.click();
+      await settle();
+    });
+
+    expect(element.textContent).toContain("Unsafe report");
+    expect(element.querySelector(".chatapp-inter-agent-graph__artifact-list a")).toBeNull();
+    expect(element.innerHTML).not.toContain("javascript:");
+  });
+
+  it("shows run-level artifacts on the orchestrator transcript fallback", async () => {
+    const element = await renderGraph({
+      initialEvents: [
+        artifactEvent({
+          participant_id: null,
+          payload: {
+            artifact_refs: [
+              {
+                label: "Run artifact",
+                workspace_relative_path: "storage/generated/reports/run-summary.md",
+              },
+            ],
+            status: "created",
+          },
+        }),
+      ],
+    });
+
+    await act(async () => {
+      await settle();
+    });
+
+    const artifactLink = element.querySelector(".chatapp-inter-agent-graph__artifact-list a") as HTMLAnchorElement | null;
+    expect(element.textContent).toContain("Run artifact");
+    expect(artifactLink?.getAttribute("href")).toBe(
+      "/app/storage?workspace_relative_path=storage%2Fgenerated%2Freports%2Frun-summary.md",
+    );
+  });
+
   it("keeps long labels visible inside the node map", async () => {
     const longLabel = "Researcher with a very long operational label that should wrap instead of overlapping adjacent node controls";
     const detail = runDetail({

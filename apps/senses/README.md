@@ -10,14 +10,15 @@ public bearer-token ingress.
 - backend: `manifest`, `health`, `overview`, `pairing.start`,
   `pairing.complete`, `pairing.status`, `devices.list`, `devices.revoke`,
   `settings.get`, `settings.update`
-- CLI: `senses`
-- MCP: `senses_operations_manifest`, `senses_reference_manifest`,
-  `senses_device_registry`, `senses_pairing_start`
+- CLI: `senses` for manifest, health, and reference discovery
+- MCP: `senses_operations_manifest`, `senses_reference_manifest`
 - hooks: `install`, `migrate`, `health_check`
 
 The MVP auth mode is `user_session_mvp`. Mounted backend calls use the Maverick
 user session supplied by `/api/apps/senses/backend`; Senses does not accept a raw
-device token in Phase 1.
+device token in Phase 1. Pairing, registry, and settings operations are
+backend/view-only in Phase 1 because standard CLI/MCP app contexts do not carry
+a Maverick user session.
 
 ## Data
 

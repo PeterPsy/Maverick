@@ -14,8 +14,6 @@ from service import app_events_for_action, handle_action
 TOOL_ACTIONS = {
     "senses_operations_manifest": "manifest",
     "senses_reference_manifest": "reference_manifest",
-    "senses_device_registry": "devices.list",
-    "senses_pairing_start": "pairing.start",
 }
 
 

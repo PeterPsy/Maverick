@@ -27,8 +27,6 @@ class SensesContractTest(unittest.TestCase):
             [
                 "senses_reference_manifest",
                 "senses_operations_manifest",
-                "senses_device_registry",
-                "senses_pairing_start",
             ],
         )
         self.assertEqual(parsed.contract.capabilities.views, ["main"])
@@ -50,6 +48,7 @@ class SensesContractTest(unittest.TestCase):
         self.assertEqual(contract["storage"]["data_schema_version"], "2")
         provided = {item["interface"]: item for item in contract["provides"]}
         self.assertEqual(provided["device.registry"]["version"], "1")
+        self.assertEqual(provided["device.registry"]["surfaces"], ["backend", "view"])
         event_resources = {item["resource"] for item in contract["capabilities"]["data_events"]}
         self.assertEqual(event_resources, {"devices", "pairing", "settings"})
 

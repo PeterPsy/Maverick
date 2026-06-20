@@ -13,8 +13,6 @@
       "description": "Workspace-scoped Senses device registry and user-session pairing state.",
       "surfaces": [
         "backend",
-        "cli",
-        "mcp",
         "view"
       ]
     }
@@ -71,9 +69,7 @@
   "capabilities": {
     "mcp_tools": [
       "senses_reference_manifest",
-      "senses_operations_manifest",
-      "senses_device_registry",
-      "senses_pairing_start"
+      "senses_operations_manifest"
     ],
     "cli_commands": [
       "senses"

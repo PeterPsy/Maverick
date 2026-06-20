@@ -18,7 +18,7 @@ sys.path.insert(0, str(APP_ROOT / "backend"))
 
 from core.shared.entrypoints import run_json_entrypoint
 from database import WORKSPACE_TABLES, db_path, ensure_schema, table_columns
-from service import handle_action
+from service import app_events_for_action, handle_action
 
 
 def resolved_storage_dependencies() -> dict[str, object]:
@@ -179,6 +179,44 @@ class SensesPhase1EntrypointTest(unittest.TestCase):
             self.assertEqual(completed["device"]["owner_user_id"], "user-1")
             self.assertEqual(completed["device_session"]["auth_mode"], "user_session_mvp")
             self.assertNotIn("device_token", json.dumps(completed))
+            self.assertEqual(
+                [event["resource"] for event in app_events_for_action("pairing.complete")],
+                ["pairing", "devices"],
+            )
+
+    def test_pairing_complete_is_one_time(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            data_root = Path(tmp)
+            status, started = handle_action(
+                data_root,
+                {"action": "pairing.start", "_workspace_id": "default", "_app_actor": actor()},
+            )
+            self.assertEqual(status, 201)
+
+            complete_payload = {
+                "action": "pairing.complete",
+                "_workspace_id": "default",
+                "_app_actor": actor(),
+                "code": started["pairing"]["code"],
+                "device_display_name": "Marco iPhone",
+            }
+            status, first = handle_action(data_root, dict(complete_payload))
+            self.assertEqual(status, 200)
+
+            status, second = handle_action(data_root, dict(complete_payload))
+            self.assertEqual(status, 404)
+            self.assertEqual(second["error"], "invalid_or_expired_pairing_code")
+
+            with sqlite3.connect(db_path(data_root)) as db:
+                device_count = db.execute("SELECT COUNT(*) FROM devices").fetchone()[0]
+                session_count = db.execute("SELECT COUNT(*) FROM device_sessions").fetchone()[0]
+                pairing = db.execute(
+                    "SELECT status, device_id FROM pairing_sessions WHERE pairing_id = ?",
+                    (started["pairing"]["pairing_id"],),
+                ).fetchone()
+            self.assertEqual(device_count, 1)
+            self.assertEqual(session_count, 1)
+            self.assertEqual(pairing, ("completed", first["device"]["device_id"]))
 
             status, listed = handle_action(
                 data_root,
@@ -267,8 +305,19 @@ class SensesPhase1EntrypointTest(unittest.TestCase):
             self.assertFalse(updated["settings"]["allow_member_pairing"])
             self.assertEqual(updated["settings"]["pairing_code_ttl_seconds"], 120)
 
-    def test_cli_and_mcp_use_host_actor_payload(self) -> None:
+    def test_cli_and_mcp_expose_only_non_user_session_surfaces(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
+            cli_manifest = run_json_entrypoint(
+                APP_ROOT / "cli" / "app_cli.py",
+                cwd=APP_ROOT,
+                payload={
+                    "app_id": "senses",
+                    "workspace_id": "default",
+                    "data_root": tmp,
+                    "app_dependencies": resolved_storage_dependencies(),
+                    "arguments": {"action": "manifest"},
+                },
+            )
             cli_overview = run_json_entrypoint(
                 APP_ROOT / "cli" / "app_cli.py",
                 cwd=APP_ROOT,
@@ -276,11 +325,20 @@ class SensesPhase1EntrypointTest(unittest.TestCase):
                     "app_id": "senses",
                     "workspace_id": "default",
                     "data_root": tmp,
-                    "user_id": "user-1",
-                    "workspace_role": "member",
-                    "platform_role": "member",
                     "app_dependencies": resolved_storage_dependencies(),
                     "arguments": {"action": "overview"},
+                },
+            )
+            mcp_manifest = run_json_entrypoint(
+                APP_ROOT / "mcp" / "server.py",
+                cwd=APP_ROOT,
+                payload={
+                    "app_id": "senses",
+                    "workspace_id": "default",
+                    "data_root": tmp,
+                    "app_dependencies": resolved_storage_dependencies(),
+                    "tool_name": "senses_operations_manifest",
+                    "arguments": {},
                 },
             )
             mcp_pairing = run_json_entrypoint(
@@ -290,18 +348,19 @@ class SensesPhase1EntrypointTest(unittest.TestCase):
                     "app_id": "senses",
                     "workspace_id": "default",
                     "data_root": tmp,
-                    "user_id": "user-1",
-                    "workspace_role": "member",
-                    "platform_role": "member",
                     "app_dependencies": resolved_storage_dependencies(),
                     "tool_name": "senses_pairing_start",
                     "arguments": {},
                 },
             )
-            self.assertTrue(cli_overview["ok"])
-            self.assertEqual(cli_overview["phase"], "phase-1")
-            self.assertTrue(mcp_pairing["ok"])
-            self.assertEqual(mcp_pairing["pairing"]["status"], "pending")
+            self.assertTrue(cli_manifest["ok"])
+            self.assertEqual(cli_manifest["phase"], "phase-1")
+            self.assertFalse(cli_overview["ok"])
+            self.assertEqual(cli_overview["error"], "unsupported_cli_action")
+            self.assertTrue(mcp_manifest["ok"])
+            self.assertEqual(mcp_manifest["phase"], "phase-1")
+            self.assertFalse(mcp_pairing["ok"])
+            self.assertEqual(mcp_pairing["error"], "unsupported_tool")
 
     def test_mcp_rejects_unknown_tool_name(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

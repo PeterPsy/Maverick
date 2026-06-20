@@ -1,7 +1,7 @@
 {
   "tools": {
     "senses_operations_manifest": {
-      "description": "Describe Senses Phase 1 surfaces, dependency requirements, pairing, and device-registry operations.",
+      "description": "Describe Senses Phase 1 backend surfaces, dependency requirements, and deferred ingestion work.",
       "input_schema": {
         "type": "object",
         "additionalProperties": false
@@ -11,44 +11,6 @@
       "description": "Report the Senses reference surface. Capture references remain deferred until ingestion exists.",
       "input_schema": {
         "type": "object",
-        "additionalProperties": false
-      }
-    },
-    "senses_device_registry": {
-      "description": "List Senses devices visible to the current Maverick user session.",
-      "input_schema": {
-        "type": "object",
-        "properties": {
-          "include_all": {
-            "type": "boolean"
-          },
-          "status": {
-            "type": "string"
-          }
-        },
-        "additionalProperties": false
-      }
-    },
-    "senses_pairing_start": {
-      "description": "Create one Senses user-session pairing code with a bounded TTL.",
-      "input_schema": {
-        "type": "object",
-        "properties": {
-          "device_display_name": {
-            "type": "string"
-          },
-          "device_kind": {
-            "type": "string"
-          },
-          "platform": {
-            "type": "string"
-          },
-          "ttl_seconds": {
-            "type": "integer",
-            "minimum": 60,
-            "maximum": 3600
-          }
-        },
         "additionalProperties": false
       }
     }

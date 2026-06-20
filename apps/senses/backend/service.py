@@ -201,8 +201,6 @@ def manifest_payload(
             "mcp": [
                 "senses_operations_manifest",
                 "senses_reference_manifest",
-                "senses_device_registry",
-                "senses_pairing_start",
             ],
             "frontend": True,
             "reference_entities": [],
@@ -356,6 +354,7 @@ def pairing_complete(
     ensure_schema(data_root, workspace_id)
     db = connect(data_root)
     try:
+        db.execute("BEGIN IMMEDIATE")
         expire_pairing_sessions(db, workspace_id)
         pairing = db.execute(
             """
@@ -365,6 +364,7 @@ def pairing_complete(
             (workspace_id, pairing_code_hash(workspace_id, code)),
         ).fetchone()
         if pairing is None:
+            db.commit()
             return error_payload(
                 404,
                 "invalid_or_expired_pairing_code",
@@ -385,6 +385,38 @@ def pairing_complete(
         device_id = prefixed_id("dev")
         device_session_id = prefixed_id("dvs")
         pairing_id = str(pairing["pairing_id"])
+        claim = db.execute(
+            """
+            UPDATE pairing_sessions
+            SET status = 'completed',
+                completed_by_user_id = ?,
+                device_id = ?,
+                device_display_name = ?,
+                device_kind = ?,
+                platform = ?,
+                metadata_json = ?,
+                completed_at = ?
+            WHERE workspace_id = ? AND pairing_id = ? AND status = 'pending'
+            """,
+            (
+                actor_user_id,
+                device_id,
+                display_name,
+                device_kind,
+                platform,
+                encode_json_object(metadata),
+                timestamp,
+                workspace_id,
+                pairing_id,
+            ),
+        )
+        if claim.rowcount != 1:
+            db.rollback()
+            return error_payload(
+                404,
+                "invalid_or_expired_pairing_code",
+                "The pairing code is invalid, expired, or already completed.",
+            )
         db.execute(
             """
             INSERT INTO devices(
@@ -405,31 +437,6 @@ def pairing_complete(
                 timestamp,
                 timestamp,
                 timestamp,
-            ),
-        )
-        db.execute(
-            """
-            UPDATE pairing_sessions
-            SET status = 'completed',
-                completed_by_user_id = ?,
-                device_id = ?,
-                device_display_name = ?,
-                device_kind = ?,
-                platform = ?,
-                metadata_json = ?,
-                completed_at = ?
-            WHERE workspace_id = ? AND pairing_id = ?
-            """,
-            (
-                actor_user_id,
-                device_id,
-                display_name,
-                device_kind,
-                platform,
-                encode_json_object(metadata),
-                timestamp,
-                workspace_id,
-                pairing_id,
             ),
         )
         db.execute(
@@ -463,6 +470,9 @@ def pairing_complete(
             "SELECT * FROM pairing_sessions WHERE workspace_id = ? AND pairing_id = ?",
             (workspace_id, pairing_id),
         ).fetchone()
+    except Exception:
+        db.rollback()
+        raise
     finally:
         db.close()
     return 200, {
@@ -920,7 +930,12 @@ def _compact_dependency(item: dict[str, Any]) -> dict[str, object]:
 
 def app_events_for_action(action: str) -> list[dict[str, str]]:
     normalized = normalize_action(action)
-    if normalized in {"pairing.start", "pairing.complete", "pairing.status"}:
+    if normalized == "pairing.complete":
+        return [
+            {"type": "maverick.app.data-changed", "owner_app_id": APP_ID, "resource": "pairing"},
+            {"type": "maverick.app.data-changed", "owner_app_id": APP_ID, "resource": "devices"},
+        ]
+    if normalized in {"pairing.start", "pairing.status"}:
         return [{"type": "maverick.app.data-changed", "owner_app_id": APP_ID, "resource": "pairing"}]
     if normalized in {"devices.revoke"}:
         return [{"type": "maverick.app.data-changed", "owner_app_id": APP_ID, "resource": "devices"}]

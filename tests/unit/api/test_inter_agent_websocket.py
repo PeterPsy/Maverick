@@ -209,6 +209,60 @@ class InterAgentWebSocketTestCase(AppReferenceApiTestSupport, unittest.IsolatedA
         live_frames = [frame for frame in frames if frame["type"] == "inter_agent.event"]
         self.assertTrue(any(frame["event"]["payload"].get("summary") == "Live update" for frame in live_frames))
 
+    async def test_inter_agent_websocket_returns_empty_history_page_for_missing_cursor(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            repo_root = self._repo_root(temp_dir)
+            state = self._bootstrap_state(repo_root)
+            _service, run = self._create_run(state, repo_root, run_id="run-ws-missing-history")
+            app = PlatformHost(state, start_path=repo_root)
+            cookie = self._login(app)
+            sent: list[dict] = []
+            incoming: asyncio.Queue[dict] = asyncio.Queue()
+            await incoming.put({"type": "websocket.connect"})
+
+            async def receive() -> dict:
+                return await incoming.get()
+
+            async def send(message: dict) -> None:
+                sent.append(message)
+
+            task = asyncio.create_task(
+                stream_inter_agent_run_events(
+                    state=state,
+                    scope={
+                        "type": "websocket",
+                        "path": f"/ws/inter-agent/runs/{run.run_id}",
+                        "query_string": b"visibility_plane=detail&initial_event_limit=50",
+                        "headers": [(b"cookie", cookie.encode("latin1"))],
+                    },
+                    receive=receive,
+                    send=send,
+                    heartbeat_interval_seconds=10,
+                    poll_interval_seconds=0.1,
+                )
+            )
+            await _wait_for_frame(sent, "inter_agent.snapshot")
+            await incoming.put(
+                {
+                    "type": "websocket.receive",
+                    "text": json.dumps(
+                        {
+                            "type": "inter_agent.history.before",
+                            "before_event_id": "missing-event",
+                            "limit": 50,
+                        }
+                    ),
+                }
+            )
+            history_frame = await _wait_for_frame(sent, "inter_agent.history.page")
+            await incoming.put({"type": "websocket.disconnect"})
+            await task
+
+        self.assertEqual(history_frame["events"], [])
+        self.assertEqual(history_frame["before_event_id"], "missing-event")
+        self.assertFalse(history_frame["has_more_before"])
+        self.assertFalse(history_frame["cursor_found"])
+
     async def test_inter_agent_websocket_ignores_ack_for_undelivered_event(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             repo_root = self._repo_root(temp_dir)

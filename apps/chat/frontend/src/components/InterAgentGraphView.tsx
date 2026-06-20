@@ -1,7 +1,8 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type PointerEvent, type WheelEvent } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type MouseEvent, type PointerEvent, type WheelEvent } from "react";
 import {
   getInterAgentParticipantTranscript,
   type InterAgentApprovalRecord,
+  type InterAgentArtifactRecord,
   type InterAgentEventRecord,
   type InterAgentParticipantTranscriptPayload,
   type InterAgentRunDetail,
@@ -9,6 +10,8 @@ import {
 } from "../api/client";
 import { useInterAgentGraph } from "../hooks/useInterAgentGraph";
 import { eventSummary, isTerminalRunStatus, participantIcon, runStatusLabel } from "../lib/interAgentGraph";
+import { openAppRouteInShell, openStoragePathInShell } from "../lib/shellNavigation";
+import { storageAppPageShellHref, storageLinkTargetFromHref, storageShellHref } from "../lib/storageLinks";
 
 type InterAgentGraphViewProps = {
   initialApprovals?: InterAgentApprovalRecord[];
@@ -42,6 +45,7 @@ export function InterAgentGraphView({
   const {
     actionPending,
     approvals,
+    artifacts,
     connectionState,
     error,
     events,
@@ -64,6 +68,13 @@ export function InterAgentGraphView({
   const paused = runDetail?.run.status === "paused" || runDetail?.run.status === "recovering";
   const selectedParticipant =
     participants.find((participant) => participant.participant_id === selectedParticipantId) || null;
+  const selectedParticipantArtifacts = useMemo(
+    () =>
+      selectedParticipantId
+        ? artifacts.filter((artifact) => artifact.participant_id === selectedParticipantId)
+        : [],
+    [artifacts, selectedParticipantId],
+  );
   const pendingApprovals = approvals.filter((approval) => approval.status === "pending");
   const latestSummary = useMemo(() => latestRunSummary(events), [events]);
 
@@ -189,6 +200,7 @@ export function InterAgentGraphView({
           selectedParticipantId={selectedParticipantId}
         />
         <ParticipantTranscript
+          artifacts={selectedParticipantArtifacts}
           error={transcriptError}
           isLoading={transcriptLoading}
           participant={selectedParticipant}
@@ -358,11 +370,13 @@ function GraphCanvas({
 }
 
 function ParticipantTranscript({
+  artifacts,
   error,
   isLoading,
   participant,
   transcript,
 }: {
+  artifacts: InterAgentArtifactRecord[];
   error: string | null;
   isLoading: boolean;
   participant: NonNullable<InterAgentRunDetail>["participants"][number] | null;
@@ -410,11 +424,153 @@ function ParticipantTranscript({
           ))}
         </ol>
       ) : null}
-      {!isLoading && !error && participant && !transcript?.items.length ? (
+      {!isLoading && !error && participant && artifacts.length ? <ParticipantArtifacts artifacts={artifacts} /> : null}
+      {!isLoading && !error && participant && !transcript?.items.length && !artifacts.length ? (
         <div className="chatapp-inter-agent-graph__empty is-compact">No transcript yet.</div>
       ) : null}
     </aside>
   );
+}
+
+function ParticipantArtifacts({ artifacts }: { artifacts: InterAgentArtifactRecord[] }) {
+  return (
+    <section className="chatapp-inter-agent-graph__artifacts" aria-label="Participant artifacts">
+      <div className="chatapp-inter-agent-graph__panel-title">
+        <span>Artifacts</span>
+        <small>{artifacts.length}</small>
+      </div>
+      <ul className="chatapp-inter-agent-graph__artifact-list">
+        {artifacts.map((artifact) => (
+          <li key={artifact.artifact_id || `${artifact.event_id}:${artifact.label}`}>
+            <span className="material-symbols-rounded" aria-hidden="true">attach_file</span>
+            <div>
+              <ArtifactTitle artifact={artifact} />
+              <small>{artifactMetadataLabel(artifact)}</small>
+              {stringArtifactField(artifact.partial_output) ? <p>{stringArtifactField(artifact.partial_output)}</p> : null}
+            </div>
+          </li>
+        ))}
+      </ul>
+    </section>
+  );
+}
+
+function ArtifactTitle({ artifact }: { artifact: InterAgentArtifactRecord }) {
+  const linkTarget = artifactLinkTarget(artifact);
+  const label = stringArtifactField(artifact.label) || "Artifact";
+  if (!linkTarget) {
+    return <strong>{label}</strong>;
+  }
+  const isExternal = /^https?:\/\//i.test(linkTarget.href);
+  return (
+    <a
+      href={linkTarget.href}
+      onClick={(event) => handleArtifactLinkClick(event, linkTarget)}
+      rel={isExternal ? "noopener noreferrer" : undefined}
+      target={isExternal ? "_blank" : undefined}
+    >
+      {label}
+    </a>
+  );
+}
+
+type ArtifactLinkTarget =
+  | { href: string; kind: "app_page"; appId: string; appPage: string }
+  | { href: string; kind: "plain" }
+  | { href: string; kind: "storage_page"; appPage: string }
+  | { href: string; kind: "storage_path"; workspaceRelativePath: string };
+
+function artifactLinkTarget(artifact: InterAgentArtifactRecord): ArtifactLinkTarget | null {
+  const deepLink = stringArtifactField(artifact.deep_link);
+  if (deepLink) {
+    const storageTarget = storageLinkTargetFromHref(deepLink);
+    if (storageTarget?.kind === "workspace_path") {
+      return {
+        href: storageShellHref(storageTarget.workspaceRelativePath),
+        kind: "storage_path",
+        workspaceRelativePath: storageTarget.workspaceRelativePath,
+      };
+    }
+    if (storageTarget?.kind === "app_page") {
+      return {
+        href: storageAppPageShellHref(storageTarget.appPage),
+        kind: "storage_page",
+        appPage: storageTarget.appPage,
+      };
+    }
+    const appTarget = appRouteTargetFromDeepLink(deepLink);
+    if (appTarget) {
+      return { href: deepLink, kind: "app_page", appId: appTarget.appId, appPage: appTarget.appPage };
+    }
+    return { href: deepLink, kind: "plain" };
+  }
+  const workspacePath = stringArtifactField(artifact.workspace_relative_path);
+  if (workspacePath) {
+    return { href: storageShellHref(workspacePath), kind: "storage_path", workspaceRelativePath: workspacePath };
+  }
+  const storageFileId =
+    stringArtifactField(artifact.file_id) ||
+    (stringArtifactField(artifact.app_id) === "storage" && stringArtifactField(artifact.entity_type) === "file"
+      ? stringArtifactField(artifact.entity_id)
+      : "");
+  if (storageFileId) {
+    return {
+      href: storageAppPageShellHref(`files/${storageFileId}`),
+      kind: "storage_page",
+      appPage: `files/${storageFileId}`,
+    };
+  }
+  return null;
+}
+
+function handleArtifactLinkClick(event: MouseEvent<HTMLAnchorElement>, target: ArtifactLinkTarget) {
+  if (event.defaultPrevented || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey || event.button !== 0) {
+    return;
+  }
+  if (target.kind === "storage_path" && openStoragePathInShell(target.workspaceRelativePath)) {
+    event.preventDefault();
+  }
+  if (target.kind === "storage_page" && openAppRouteInShell("storage", target.appPage)) {
+    event.preventDefault();
+  }
+  if (target.kind === "app_page" && openAppRouteInShell(target.appId, target.appPage)) {
+    event.preventDefault();
+  }
+}
+
+function appRouteTargetFromDeepLink(deepLink: string): { appId: string; appPage: string } | null {
+  const match = deepLink.trim().match(/^\/apps?\/([^/?#]+)\/?([^?#]*)/);
+  if (!match) {
+    return null;
+  }
+  const appId = decodePathSegment(match[1]);
+  const appPage = match[2]
+    .split("/")
+    .map(decodePathSegment)
+    .filter(Boolean)
+    .join("/");
+  return appId ? { appId, appPage } : null;
+}
+
+function decodePathSegment(value: string): string {
+  try {
+    return decodeURIComponent(value);
+  } catch {
+    return value;
+  }
+}
+
+function artifactMetadataLabel(artifact: InterAgentArtifactRecord): string {
+  const status = runStatusLabel(stringArtifactField(artifact.status) || "created");
+  const location =
+    stringArtifactField(artifact.workspace_relative_path) ||
+    stringArtifactField(artifact.relative_path) ||
+    stringArtifactField(artifact.file_id);
+  return location ? `${status} - ${location}` : status;
+}
+
+function stringArtifactField(value: unknown): string {
+  return typeof value === "string" ? value.trim() : "";
 }
 
 function ApprovalShelf({

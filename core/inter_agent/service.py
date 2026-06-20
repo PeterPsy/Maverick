@@ -697,7 +697,19 @@ class InterAgentService:
                 now=timestamp,
             )
             if participant.status not in TERMINAL_PARTICIPANT_STATUSES:
-                self.store.save_participant(replace(participant, status="cancelled", updated_at=timestamp))
+                cancelled_participant = replace(participant, status="cancelled", updated_at=timestamp)
+                self.store.save_participant(cancelled_participant)
+                self.record_event(
+                    run,
+                    event_type="inter_agent.participant.status_changed",
+                    participant_id=participant.participant_id,
+                    runtime_session_id=participant.runtime_session_id,
+                    visibility_plane="detail",
+                    idempotency_key=f"{run.run_id}:participant.closed_cancelled:{participant.participant_id}:{timestamp.isoformat()}",
+                    correlation_id=participant.participant_id,
+                    payload={"participant_id": participant.participant_id, "status": "cancelled", "reason": reason},
+                    now=timestamp,
+                )
         updated = replace(run, status=terminal_status, updated_at=timestamp, ended_at=timestamp)
         self.store.save_run(updated)
         event_type: InterAgentEventType = {

@@ -7,6 +7,7 @@ import type { Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type {
   InterAgentApprovalRecord,
+  InterAgentEventRecord,
   InterAgentParticipantTranscriptPayload,
   InterAgentRunDetail,
 } from "../api/client";
@@ -189,6 +190,37 @@ function approvalRecord(overrides: Partial<InterAgentApprovalRecord> = {}): Inte
   };
 }
 
+function artifactEvent(overrides: Partial<InterAgentEventRecord> = {}): InterAgentEventRecord {
+  return {
+    event_id: "event-artifact-1",
+    workspace_id: "default",
+    run_id: "run-1",
+    thread_id: "thread-1",
+    root_runtime_session_id: "session-1",
+    participant_id: "researcher",
+    runtime_session_id: "child-1",
+    runtime_turn_id: null,
+    runtime_event_id: null,
+    event_type: "inter_agent.artifact.created",
+    visibility_plane: "detail",
+    sequence: 3,
+    correlation_id: "artifact-1",
+    idempotency_key: "artifact-1",
+    payload: {
+      artifact_refs: [
+        {
+          label: "Research report",
+          workspace_relative_path: "storage/generated/reports/research.md",
+        },
+      ],
+      partial_output: "Draft report summary.",
+      status: "partial",
+    },
+    created_at: "2026-06-18T10:03:00Z",
+    ...overrides,
+  };
+}
+
 async function settle() {
   await Promise.resolve();
   await Promise.resolve();
@@ -297,6 +329,25 @@ describe("InterAgentGraphView", () => {
     expect(element.textContent).toContain("Find launch facts.");
     expect(element.textContent).toContain("Research complete.");
     expect(element.textContent).not.toContain("child-1");
+  });
+
+  it("renders participant artifacts as product-facing records with Storage links", async () => {
+    const element = await renderGraph({ initialEvents: [artifactEvent()] });
+    const researcherNode = element.querySelector('[data-participant-id="researcher"]') as HTMLButtonElement | null;
+
+    await act(async () => {
+      researcherNode?.click();
+      await settle();
+    });
+
+    const artifactLink = element.querySelector(".chatapp-inter-agent-graph__artifact-list a") as HTMLAnchorElement | null;
+    expect(element.textContent).toContain("Artifacts");
+    expect(element.textContent).toContain("Research report");
+    expect(element.textContent).toContain("Partial - storage/generated/reports/research.md");
+    expect(element.textContent).toContain("Draft report summary.");
+    expect(artifactLink?.getAttribute("href")).toBe(
+      "/app/storage?workspace_relative_path=storage%2Fgenerated%2Freports%2Fresearch.md",
+    );
   });
 
   it("keeps long labels visible inside the node map", async () => {

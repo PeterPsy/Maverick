@@ -52,7 +52,7 @@ def inter_agent_websocket_manifest() -> dict[str, object]:
         },
         "frames": {
             "inter_agent.snapshot": "run detail, approval, artifact, and persisted event replay",
-            "inter_agent.history.page": "older persisted inter-agent event page requested by the client",
+            "inter_agent.history.page": "older persisted inter-agent event page requested by the client; empty with cursor_found=false when the requested cursor no longer exists",
             "inter_agent.event": "one persisted inter-agent event",
             "inter_agent.heartbeat": "transport keepalive frame",
         },
@@ -132,7 +132,23 @@ def inter_agent_history_page_frame(page: InterAgentEventPage) -> dict[str, Any]:
         "oldest_event_id": page.oldest_event_id,
         "newest_event_id": page.newest_event_id,
         "has_more_before": page.has_more_before,
+        "cursor_found": True,
         "artifacts": artifact_items_payload(page.events),
+    }
+
+
+def inter_agent_missing_history_cursor_frame(*, before_event_id: str, visibility_plane: str) -> dict[str, Any]:
+    """Return an explicit empty history page for a cursor that is no longer retained."""
+    return {
+        "type": "inter_agent.history.page",
+        "events": [],
+        "visibility_plane": visibility_plane,
+        "before_event_id": before_event_id,
+        "oldest_event_id": None,
+        "newest_event_id": None,
+        "has_more_before": False,
+        "cursor_found": False,
+        "artifacts": [],
     }
 
 
@@ -277,7 +293,7 @@ async def stream_inter_agent_run_events(
                                 maximum=MAX_HISTORY_EVENT_LIMIT,
                             )
                             if isinstance(before_event_id, str) and before_event_id:
-                                with suppress(InterAgentEventNotFoundError):
+                                try:
                                     page = state.inter_agent_store.list_event_page(
                                         run.run_id,
                                         workspace_id=run.workspace_id,
@@ -286,6 +302,14 @@ async def stream_inter_agent_run_events(
                                         limit=page_limit,
                                     )
                                     await _send_json(send, inter_agent_history_page_frame(page))
+                                except InterAgentEventNotFoundError:
+                                    await _send_json(
+                                        send,
+                                        inter_agent_missing_history_cursor_frame(
+                                            before_event_id=before_event_id,
+                                            visibility_plane=visibility,
+                                        ),
+                                    )
 
             for event in _events_after_cursor(
                 state,

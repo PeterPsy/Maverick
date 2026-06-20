@@ -267,11 +267,25 @@ class InterAgentRuntimeServiceTest(unittest.TestCase):
         self.assertEqual(store.get_run(run.run_id, workspace_id="default").status, "cancelled")
         self.assertEqual(runtime_store.get_session("root-session").session_id, "root-session")
         ledger_after = store.get_budget_ledger(run.budget_ledger_id, workspace_id="default")
+        events = store.list_event_page(run.run_id, workspace_id="default", visibility_plane="debug", limit=50).events
+        event_types = [event.event_type for event in events]
+        cancelled_status_events = [
+            event
+            for event in events
+            if event.event_type == "inter_agent.participant.status_changed"
+            and event.participant_id == "researcher"
+            and event.payload.get("status") == "cancelled"
+        ]
         self.assertEqual(ledger_before.running_participants, 1)
         self.assertEqual(ledger_before.turns_used, 0)
         self.assertEqual(ledger_after.reserved_participants, 0)
         self.assertEqual(ledger_after.running_participants, 0)
         self.assertEqual(ledger_after.turns_used, 0)
+        self.assertEqual(len(cancelled_status_events), 1)
+        self.assertLess(
+            event_types.index("inter_agent.participant.status_changed"),
+            event_types.index("inter_agent.run.cancelled"),
+        )
 
     def test_interrupt_and_resume_run_cancel_active_child_turn(self) -> None:
         repo_root = make_temp_repo_root(self)

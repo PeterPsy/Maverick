@@ -147,7 +147,7 @@ test.describe("Chat app browser smoke", () => {
     await page.getByRole("button", { name: "Send message" }).click();
 
     await expect(page.getByText("Staged multi-agent run started.")).toBeVisible();
-    await expect(page.getByRole("button", { name: /Open graph/ })).toBeVisible();
+    await expect(page.getByRole("button", { name: /Agent nodes/ })).toBeVisible();
 
     expect(state.createSessionBodies).toHaveLength(1);
     expect(state.createRunBodies).toHaveLength(1);
@@ -203,8 +203,8 @@ test.describe("Chat app browser smoke", () => {
       async: true,
     });
 
-    await page.getByRole("button", { name: /Open graph/ }).click();
-    await expect(page.getByRole("region", { name: "Inter-agent graph" })).toBeVisible();
+    await page.getByRole("button", { name: /Agent nodes/ }).click();
+    await expect(page.getByRole("region", { name: "Agent nodes view" })).toBeVisible();
     await expect(page.getByText("3 nodes")).toBeVisible();
     await expect(page.getByText("Implementer")).toBeVisible();
     await expect(page.getByText("Reviewer")).toBeVisible();

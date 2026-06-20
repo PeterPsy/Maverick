@@ -571,6 +571,7 @@ export type InterAgentWebSocketFrame =
       oldest_event_id: string | null;
       newest_event_id: string | null;
       has_more_before: boolean;
+      cursor_found?: boolean;
     }
   | { type: "inter_agent.event"; event: InterAgentEventRecord }
   | { type: "inter_agent.heartbeat"; run_id: string; at: string };

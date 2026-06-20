@@ -5,6 +5,7 @@ import { MessageBubble } from "./MessageBubble";
 
 export function MessageList({
   expandedMessages,
+  interAgentRunStatusById,
   latestToolMessageId,
   mentionItems,
   messages,
@@ -19,6 +20,7 @@ export function MessageList({
   speechProviderQualityProfile,
 }: {
   expandedMessages: Set<string>;
+  interAgentRunStatusById?: Record<string, string>;
   latestToolMessageId: string | null;
   mentionItems: MentionItem[];
   messages: ChatMessage[];
@@ -37,6 +39,7 @@ export function MessageList({
       {messages.map((message) => (
         <MessageBubble
           expanded={expandedMessages.has(message.id)}
+          interAgentRunStatusById={interAgentRunStatusById}
           key={message.id}
           latestToolMessageId={latestToolMessageId}
           mentionItems={mentionItems}

@@ -1,14 +1,17 @@
 import type { RuntimeStepMessage as RuntimeStep } from "../api/client";
 
 export function RuntimeStepMessage({
+  interAgentRunStatusById = {},
   onOpenInterAgentGraph,
   step,
 }: {
+  interAgentRunStatusById?: Record<string, string>;
   onOpenInterAgentGraph?: (runId: string) => void;
   step: RuntimeStep;
 }) {
   const interAgentRunId = interAgentRunIdFromStep(step);
-  const isLive = !isTerminalInterAgentStep(step);
+  const runStatus = interAgentRunId ? interAgentRunStatusById[interAgentRunId] || null : null;
+  const isLive = !isTerminalInterAgentStep(step, runStatus);
   if (interAgentRunId) {
     return (
       <div className="chatapp-inter-agent-message">
@@ -50,8 +53,8 @@ function interAgentRunIdFromStep(step: RuntimeStep): string {
   return typeof step.detail.inter_agent_run_id === "string" ? step.detail.inter_agent_run_id : "";
 }
 
-function isTerminalInterAgentStep(step: RuntimeStep): boolean {
-  const candidates = [step.detail.summary_kind, step.detail.run_status, step.detail.status];
+function isTerminalInterAgentStep(step: RuntimeStep, runStatus?: string | null): boolean {
+  const candidates = [runStatus, step.detail.summary_kind, step.detail.run_status, step.detail.status];
   return candidates.some((value) => typeof value === "string" && ["completed", "failed", "cancelled"].includes(value));
 }
 

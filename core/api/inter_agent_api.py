@@ -459,11 +459,14 @@ def _send_message(
 
 def _participant_transcript_payload(state: PlatformState, run, participant, *, limit: int, visibility_plane: str) -> dict:
     """Project one participant into a product-facing transcript without hidden-session metadata."""
-    runtime_items, runtime_turn_ids_with_output = _runtime_participant_transcript_items(
-        state,
-        participant,
-        limit=limit,
-    )
+    if visibility_plane in {"detail", "debug"}:
+        runtime_items, runtime_turn_ids_with_output = _runtime_participant_transcript_items(
+            state,
+            participant,
+            limit=limit,
+        )
+    else:
+        runtime_items, runtime_turn_ids_with_output = [], set()
     event_items, event_truncated = _inter_agent_participant_transcript_items(
         state,
         run,

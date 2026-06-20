@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { ChatMessage } from "../api/client";
 import type { InterAgentApprovalRecord, InterAgentEventRecord, InterAgentRunDetail } from "../api/client";
 import type { MentionItem } from "../lib/mentions";
@@ -146,6 +146,10 @@ export function ChatTranscript({
     [...messages]
       .reverse()
       .find((message) => message.role === "tool" && (message.toolCalls?.length || message.toolCall))?.id || null;
+  const interAgentRunStatusById = useMemo(
+    () => Object.fromEntries(interAgentRuns.map((detail) => [detail.run.run_id, detail.run.status])),
+    [interAgentRuns],
+  );
 
   const hasInterAgentContent =
     interAgentRuns.length > 0 || Boolean(activeInterAgentGraphRunId) || Object.values(interAgentApprovalsByRunId).some((items) => items.length > 0);
@@ -186,6 +190,7 @@ export function ChatTranscript({
         />
         <MessageList
           expandedMessages={expandedMessages}
+          interAgentRunStatusById={interAgentRunStatusById}
           latestToolMessageId={latestToolMessageId}
           mentionItems={mentionItems}
           messages={messages}

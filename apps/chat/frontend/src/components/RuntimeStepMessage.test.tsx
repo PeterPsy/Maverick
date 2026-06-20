@@ -9,13 +9,14 @@ import { RuntimeStepMessage } from "./RuntimeStepMessage";
 let root: Root | null = null;
 let container: HTMLDivElement | null = null;
 
-function renderStep(summaryKind: string) {
+function renderStep(summaryKind: string, interAgentRunStatusById: Record<string, string> = {}) {
   container = document.createElement("div");
   document.body.append(container);
   root = createRoot(container);
   act(() => {
     root?.render(
       <RuntimeStepMessage
+        interAgentRunStatusById={interAgentRunStatusById}
         onOpenInterAgentGraph={vi.fn()}
         step={{
           label: "Multi-agent update",
@@ -47,6 +48,12 @@ describe("RuntimeStepMessage", () => {
     container?.remove();
 
     element = renderStep("completed");
+    expect(element.querySelector(".chatapp-inter-agent-message__graph")?.classList.contains("is-live")).toBe(false);
+  });
+
+  it("uses the current run status when an older step payload is still non-terminal", () => {
+    const element = renderStep("plan", { "run-1": "completed" });
+
     expect(element.querySelector(".chatapp-inter-agent-message__graph")?.classList.contains("is-live")).toBe(false);
   });
 });

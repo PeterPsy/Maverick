@@ -197,6 +197,63 @@ class InterAgentParticipantTranscriptApiTestCase(AppReferenceApiTestSupport, uni
         self.assertEqual(transcript_payload["item_count"], 0)
         self.assertNotIn("Detail output must not leak.", serialized)
 
+    def test_applies_run_visibility_cap_to_runtime_turn_projection(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            repo_root = self._repo_root(temp_dir)
+            state = self._bootstrap_state(repo_root)
+            self._create_root_session(state, repo_root)
+            app = PlatformHost(state, start_path=repo_root)
+            cookie = self._login(app)
+            now = datetime(2026, 6, 16, 12, 0, tzinfo=UTC)
+
+            create_status, _create_payload, _headers = self._invoke(
+                app,
+                path="/api/inter-agent/runs",
+                method="POST",
+                body={**_run_payload_without_snapshot(run_id="run-api-transcript-runtime-summary"), "visibility_level": "summary"},
+                cookie=cookie,
+            )
+            spawn_status, _spawn_payload, _headers = self._invoke(
+                app,
+                path="/api/inter-agent/runs/run-api-transcript-runtime-summary/participants",
+                method="POST",
+                body={"participant_id": "researcher", "child_session_id": "runtime-summary-child"},
+                cookie=cookie,
+            )
+            turn = queue_runtime_turn(
+                state.runtime_store,
+                turn_id="turn-runtime-summary",
+                session_id="runtime-summary-child",
+                input_text="DETAIL_RUNTIME_INPUT",
+                now=now,
+            )
+            transition_runtime_turn(state.runtime_store, turn_id=turn.turn_id, target_status="active", now=now)
+            transition_runtime_turn(state.runtime_store, turn_id=turn.turn_id, target_status="completed", now=now)
+            record_runtime_event(
+                state.runtime_store,
+                event_id="runtime-final-summary-cap",
+                session_id="runtime-summary-child",
+                turn_id=turn.turn_id,
+                plane="turn",
+                event_type="runtime.output.final",
+                payload={"complete_text": "DETAIL_RUNTIME_OUTPUT", "text": "DETAIL_RUNTIME_OUTPUT"},
+                now=now,
+            )
+            transcript_status, transcript_payload, _headers = self._invoke(
+                app,
+                path="/api/inter-agent/runs/run-api-transcript-runtime-summary/participants/researcher/transcript",
+                cookie=cookie,
+            )
+
+        serialized = json.dumps(transcript_payload)
+        self.assertEqual(create_status, 201)
+        self.assertEqual(spawn_status, 201)
+        self.assertEqual(transcript_status, 200)
+        self.assertEqual(transcript_payload["visibility_plane"], "summary")
+        self.assertEqual(transcript_payload["item_count"], 0)
+        self.assertNotIn("DETAIL_RUNTIME_INPUT", serialized)
+        self.assertNotIn("DETAIL_RUNTIME_OUTPUT", serialized)
+
     def test_pages_back_until_participant_transcript_items_are_found(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             repo_root = self._repo_root(temp_dir)

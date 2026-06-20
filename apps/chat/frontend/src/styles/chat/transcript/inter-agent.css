@@ -275,6 +275,8 @@
 
 .chatapp-inter-agent-graph {
   display: grid;
+  grid-template-rows: auto auto auto minmax(0, 1fr) auto;
+  grid-auto-rows: max-content;
   gap: 0.62rem;
   width: 100%;
   height: 100%;
@@ -471,6 +473,7 @@
 }
 
 .chatapp-inter-agent-graph__body {
+  grid-row: 4;
   display: grid;
   grid-template-columns: minmax(20rem, 1.25fr) minmax(18rem, 0.85fr);
   gap: 0.72rem;
@@ -895,6 +898,7 @@
 }
 
 .chatapp-inter-agent-graph__approvals {
+  grid-row: 5;
   display: grid;
   gap: 0.52rem;
   min-width: 0;

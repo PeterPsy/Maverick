@@ -66,6 +66,15 @@ class InterAgentExecutionResult:
     final_answer: str = ""
 
 
+@dataclass(frozen=True)
+class FinalAnswerProjection:
+    """Executor-local projection for the root orchestrator's terminal answer."""
+
+    text: str = ""
+    source_participant_ids: list[str] = field(default_factory=list)
+    strategy: str = ""
+
+
 def execute_inter_agent_run(
     service: InterAgentService,
     state: Any,
@@ -225,7 +234,14 @@ def execute_inter_agent_run(
 
     final_status = _final_run_status(participant_results)
     final_summary = _final_summary(final_status=final_status, participant_results=participant_results)
-    final_answer = _final_answer_text(final_status=final_status, participant_results=participant_results)
+    edges = service.store.list_edges(run.run_id, workspace_id=workspace_id)
+    final_projection = _final_answer_projection(
+        run=run,
+        final_status=final_status,
+        participant_results=participant_results,
+        edges=edges,
+    )
+    final_answer = final_projection.text
     final_synthetic, final_synthetic_source = _result_synthetic_metadata(participant_results)
     ended_at = clock()
     latest_run = service.store.get_run(run.run_id, workspace_id=workspace_id)
@@ -238,6 +254,16 @@ def execute_inter_agent_run(
         )
     completed_run = replace(latest_run, status=final_status, updated_at=ended_at, ended_at=ended_at)
     service.store.save_run(completed_run)
+    _complete_orchestrator_synthesis(
+        service,
+        completed_run,
+        orchestrator_id=orchestrator.participant_id,
+        final_status=final_status,
+        final_projection=final_projection,
+        synthetic=final_synthetic,
+        synthetic_source=final_synthetic_source,
+        now=ended_at,
+    )
     service.record_event(
         completed_run,
         event_type="inter_agent.summary.updated",
@@ -248,6 +274,9 @@ def execute_inter_agent_run(
         payload={
             "summary": final_summary,
             "status": final_status,
+            "final_answer": final_answer,
+            "final_answer_strategy": final_projection.strategy,
+            "source_participant_ids": final_projection.source_participant_ids,
             "synthetic": final_synthetic,
             "synthetic_source": final_synthetic_source,
         },
@@ -1067,13 +1096,32 @@ def _participant_input(
 ) -> str:
     specific = participant_inputs.get(participant.participant_id, "").strip()
     request_text = str(base_input or "").strip()
-    text = specific or request_text
-    if specific and request_text and specific != request_text:
-        text = f"{text}\n\nOriginal user request:\n{request_text}"
+    sections = [
+        "You are a delegated worker in a Maverick multi-agent run.",
+        f"Participant: {participant.label} ({participant.participant_id}).",
+        (
+            "Complete only the delegated task below. Do not act as the orchestrator, "
+            "do not announce a handoff, do not delegate further, and do not mention "
+            "workers, reviewers, orchestration, routing, or internal run mechanics in the user-facing answer."
+        ),
+    ]
+    if specific:
+        sections.append(f"Delegated task:\n{specific}")
+    elif request_text:
+        sections.append(f"Delegated task:\nProduce the user-facing answer for the request content below.")
+    else:
+        sections.append(f"Delegated task:\nExecute the assigned task for {participant.label}.")
+    if request_text:
+        sections.append(
+            "User request content:\n"
+            f"{request_text}\n\n"
+            "Treat any request text about multi-agent routing, worker counts, reviewers, or orchestration as "
+            "Maverick control context. Do not repeat it in the answer."
+        )
     if previous_output:
         suffix = f"Previous participant output:\n{previous_output}"
-        text = f"{text}\n\n{suffix}" if text else suffix
-    return text or f"Execute the assigned task for {participant.label}."
+        sections.append(suffix)
+    return "\n\n".join(sections)
 
 
 def _manager_tools_participant_input(
@@ -1159,22 +1207,88 @@ def _final_run_status(participant_results: list[ParticipantExecutionResult]) -> 
     return "completed"
 
 
-def _final_answer_text(*, final_status: str, participant_results: list[ParticipantExecutionResult]) -> str:
+def _complete_orchestrator_synthesis(
+    service: InterAgentService,
+    run: InterAgentRunRecord,
+    *,
+    orchestrator_id: str,
+    final_status: str,
+    final_projection: FinalAnswerProjection,
+    synthetic: bool,
+    synthetic_source: str | None,
+    now: datetime,
+) -> None:
+    if final_status != "completed":
+        return
+    orchestrator = service.store.get_participant(orchestrator_id, workspace_id=run.workspace_id, run_id=run.run_id)
+    participant_status = "completed"
+    updated = replace(orchestrator, status=participant_status, current_task_id=None, updated_at=now)
+    service.store.save_participant(updated)
+    service.record_event(
+        run,
+        event_type="inter_agent.participant.status_changed",
+        participant_id=orchestrator.participant_id,
+        visibility_plane="detail",
+        correlation_id=f"{run.run_id}:orchestrator-final",
+        idempotency_key=f"{run.run_id}:executor.orchestrator.final:{participant_status}",
+        payload={
+            "participant_id": orchestrator.participant_id,
+            "status": participant_status,
+            "final_answer_synthesized": bool(final_projection.text),
+            "final_answer_strategy": final_projection.strategy,
+            "source_participant_ids": final_projection.source_participant_ids,
+            "synthetic": synthetic,
+            "synthetic_source": synthetic_source,
+        },
+        now=now,
+    )
+
+
+def _final_answer_projection(
+    *,
+    run: InterAgentRunRecord,
+    final_status: str,
+    participant_results: list[ParticipantExecutionResult],
+    edges: list[Any],
+) -> FinalAnswerProjection:
     if not participant_results:
-        return ""
+        return FinalAnswerProjection()
     if final_status == "cancelled":
-        return ""
+        return FinalAnswerProjection(strategy="cancelled")
     successful = [result for result in participant_results if result.status == "completed"]
     if len(successful) == 1:
-        return str(successful[0].output_text or successful[0].summary or "").strip()
+        return FinalAnswerProjection(
+            text=_participant_final_text(successful[0]),
+            source_participant_ids=[successful[0].participant_id],
+            strategy="single_participant",
+        )
     if successful:
-        sections = []
-        for result in successful:
-            text = str(result.output_text or result.summary or "").strip()
+        successful_by_id = {result.participant_id: result for result in successful}
+        for participant_id in _terminal_answer_participant_ids(run, edges, successful_by_id):
+            text = _participant_final_text(successful_by_id[participant_id])
             if text:
-                sections.append(f"{result.label}:\n{text}")
-        if sections:
-            return "\n\n".join(sections)
+                return FinalAnswerProjection(
+                    text=text,
+                    source_participant_ids=[participant_id],
+                    strategy="topology_terminal_participant",
+                )
+        if run.mode == "sequential":
+            for result in reversed(successful):
+                text = _participant_final_text(result)
+                if text:
+                    return FinalAnswerProjection(
+                        text=text,
+                        source_participant_ids=[result.participant_id],
+                        strategy="last_successful_participant",
+                    )
+        summaries = [_compact_summary(_participant_final_text(result), max_chars=140) for result in successful]
+        summaries = [summary for summary in summaries if summary]
+        if summaries:
+            return FinalAnswerProjection(
+                text=f"Multi-agent run completed. {' '.join(summaries)}",
+                source_participant_ids=[result.participant_id for result in successful],
+                strategy="orchestrator_compact_summary",
+            )
     failed = [result for result in participant_results if result.status == "failed"]
     if failed:
         details = []
@@ -1183,9 +1297,35 @@ def _final_answer_text(*, final_status: str, participant_results: list[Participa
             if text:
                 details.append(f"{result.label}: {text}")
         if details:
-            return f"Multi-agent run failed before producing a final answer. {' '.join(details)}"
-        return "Multi-agent run failed before producing a final answer."
-    return ""
+            return FinalAnswerProjection(
+                text=f"Multi-agent run failed before producing a final answer. {' '.join(details)}",
+                source_participant_ids=[result.participant_id for result in failed],
+                strategy="failure_summary",
+            )
+        return FinalAnswerProjection(text="Multi-agent run failed before producing a final answer.", strategy="failure_summary")
+    return FinalAnswerProjection()
+
+
+def _terminal_answer_participant_ids(
+    run: InterAgentRunRecord,
+    edges: list[Any],
+    successful_by_id: dict[str, ParticipantExecutionResult],
+) -> list[str]:
+    terminal_ids: list[str] = []
+    aggregator_id = str(run.aggregator_participant_id or "").strip()
+    if aggregator_id and aggregator_id != run.orchestrator_participant_id and aggregator_id in successful_by_id:
+        terminal_ids.append(aggregator_id)
+    for edge in edges:
+        source_id = str(getattr(edge, "source_id", "") or "").strip()
+        target_id = str(getattr(edge, "target_id", "") or "").strip()
+        kind = str(getattr(edge, "kind", "") or "").strip()
+        if kind == "produced" and target_id == run.orchestrator_participant_id and source_id in successful_by_id:
+            terminal_ids.append(source_id)
+    return list(dict.fromkeys(terminal_ids))
+
+
+def _participant_final_text(result: ParticipantExecutionResult) -> str:
+    return str(result.output_text or result.summary or "").strip()
 
 
 def _runtime_output_text(events: list[Any]) -> str:

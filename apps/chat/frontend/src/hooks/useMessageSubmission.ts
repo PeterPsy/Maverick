@@ -857,6 +857,20 @@ export function interAgentRunPayload({
   return interAgentRunPlan({ agentRuntimeConfig, clientMessageId, mode, thread }).payload;
 }
 
+export function interAgentRunParticipantInputs({
+  agentRuntimeConfig,
+  clientMessageId,
+  mode,
+  thread,
+}: {
+  agentRuntimeConfig: AgentRuntimeConfig | null;
+  clientMessageId: string;
+  mode: MultiAgentComposerMode;
+  thread: ChatThread;
+}): Record<string, string> {
+  return interAgentRunPlan({ agentRuntimeConfig, clientMessageId, mode, thread }).participantInputs || {};
+}
+
 export function interAgentComposerBudgetLabel(mode: MultiAgentComposerMode): string {
   if (mode === "off") {
     return "";
@@ -953,14 +967,18 @@ function interAgentWorkerPlans(mode: MultiAgentComposerMode): InterAgentWorkerPl
       {
         participantId: "implementer",
         label: "Implementer",
-        task: "Act as the implementer. Produce the concrete answer or implementation plan for the user request.",
+        task:
+          "Produce the concrete user-facing answer or implementation plan for the request. " +
+          "Treat any wording about worker counts, reviewers, orchestrators, handoffs, routing, or multi-agent setup as Maverick control context. " +
+          "Do not mention internal workers or orchestration in the answer.",
       },
       {
         participantId: "reviewer",
         label: "Reviewer",
         task:
-          "Act as the reviewer. Check the implementer's output against the original user request, " +
-          "call out gaps, and provide the final review.",
+          "Review the implementer's output against the user request, then return one orchestrator-ready final answer. " +
+          "If the output is correct, return the polished answer. If it has gaps, return the corrected final answer. " +
+          "Do not narrate the review process or mention internal workers, reviewers, handoffs, routing, or orchestration.",
       },
     ];
   }

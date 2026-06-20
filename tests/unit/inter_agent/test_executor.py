@@ -169,7 +169,7 @@ class InterAgentExecutorTest(unittest.TestCase):
 
         self.assertEqual(len(message_events), 2)
         self.assertIn("Synthesize the prior evidence.", message_events[1].payload["input_text"])
-        self.assertIn("Original user request:\nResearch then synthesize.", message_events[1].payload["input_text"])
+        self.assertIn("User request content:\nResearch then synthesize.", message_events[1].payload["input_text"])
         self.assertIn("Primary evidence A.", message_events[1].payload["input_text"])
 
     def test_concurrent_runtime_participants_spawn_hidden_sessions_and_complete(self) -> None:

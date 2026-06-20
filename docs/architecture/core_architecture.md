@@ -352,6 +352,14 @@ session transcript as non-terminal runtime step updates. `runtime.output.final`
 remains reserved for real assistant final answers. `handoff` remains
 schema/event-only until F7.
 
+F5 root answer projection must publish one orchestrator-owned final answer, not
+a concatenation of worker logs or participant labels. When topology declares a
+terminal producer back to the orchestrator, such as a `produced` edge from a
+reviewer, the executor uses that participant output as the orchestrator final
+answer and records the source participant ids in the final summary payload.
+Fallback synthesis may compact participant summaries, but primary Chat must not
+show raw Implementer/Reviewer transcript blocks as the final assistant answer.
+
 Those surfaces must materialize prompt, skill ids, skill catalog, source app,
 owner, creator, and grants only from core policy or authorized materialized
 snapshots; public HTTP, CLI, and MCP payloads must not mint those

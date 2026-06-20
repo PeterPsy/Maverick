@@ -1,6 +1,11 @@
 import { describe, expect, it } from "vitest";
 import type { ChatThread } from "../api/client";
-import { interAgentComposerBudgetLabel, interAgentRunPayload, type AgentRuntimeConfig } from "./useMessageSubmission";
+import {
+  interAgentComposerBudgetLabel,
+  interAgentRunParticipantInputs,
+  interAgentRunPayload,
+  type AgentRuntimeConfig,
+} from "./useMessageSubmission";
 
 function thread(): ChatThread {
   return {
@@ -141,6 +146,20 @@ describe("interAgentRunPayload", () => {
       max_turns_per_participant: 1,
       max_tool_calls: 2,
     });
+  });
+
+  it("isolates multi-worker tasks from orchestration narration", () => {
+    const participantInputs = interAgentRunParticipantInputs({
+      agentRuntimeConfig: agentRuntimeConfig(),
+      clientMessageId: "client-1",
+      mode: "multi",
+      thread: thread(),
+    });
+
+    expect(participantInputs.implementer).toContain("Treat any wording about worker counts");
+    expect(participantInputs.implementer).toContain("Do not mention internal workers or orchestration");
+    expect(participantInputs.reviewer).toContain("return one orchestrator-ready final answer");
+    expect(participantInputs.reviewer).toContain("Do not narrate the review process");
   });
 
   it("uses budget copy that matches actual worker counts", () => {

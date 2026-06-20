@@ -5,6 +5,7 @@ from __future__ import annotations
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass, field, replace
 from datetime import UTC, datetime, timedelta
+import re
 from threading import Lock
 from typing import Any
 import time
@@ -233,7 +234,6 @@ def execute_inter_agent_run(
         raise InterAgentOperationError(str(error)) from error
 
     final_status = _final_run_status(participant_results)
-    final_summary = _final_summary(final_status=final_status, participant_results=participant_results)
     edges = service.store.list_edges(run.run_id, workspace_id=workspace_id)
     final_projection = _final_answer_projection(
         run=run,
@@ -242,6 +242,11 @@ def execute_inter_agent_run(
         edges=edges,
     )
     final_answer = final_projection.text
+    final_summary = _final_summary(
+        final_status=final_status,
+        participant_results=participant_results,
+        final_projection=final_projection,
+    )
     final_synthetic, final_synthetic_source = _result_synthetic_metadata(participant_results)
     ended_at = clock()
     latest_run = service.store.get_run(run.run_id, workspace_id=workspace_id)
@@ -297,6 +302,7 @@ def execute_inter_agent_run(
         payload={
             "summary": final_summary,
             "status": final_status,
+            "final_answer": final_answer,
             "synthetic": final_synthetic,
             "synthetic_source": final_synthetic_source,
         },
@@ -1087,6 +1093,48 @@ def _participant_by_id(
     return None
 
 
+_LEADING_WORKER_DIRECTIVE_RE = re.compile(
+    r"^\s*(?:please\s+)?(?:use|run|create|start|spawn)\s+"
+    r"(?:one|two|three|four|five|six|seven|eight|nine|ten|\d+)\s+"
+    r"(?:workers?|agents?)\b\s*(?::[^.!?]*?)?(?:,\s*(?:but|and)\s+|\s+to\s+)",
+    re.IGNORECASE,
+)
+_ROUTING_DIRECTIVE_TERM_RE = re.compile(
+    r"\b(?:workers?|implementers?|reviewers?|orchestrators?|orchestration|multi[- ]agent|handoffs?|routing)\b",
+    re.IGNORECASE,
+)
+_ROUTING_DIRECTIVE_VERB_RE = re.compile(
+    r"\b(?:assign|delegate|handoff|route|routing|orchestrate|spawn|must|should)\b"
+    r"|^\s*(?:please\s+)?(?:use|run|create|start)\b",
+    re.IGNORECASE,
+)
+
+
+def _worker_request_context(value: str) -> str:
+    """Return user task context with obvious Maverick routing instructions removed."""
+
+    text = " ".join(str(value or "").split())
+    if not text:
+        return ""
+    text = _LEADING_WORKER_DIRECTIVE_RE.sub("", text).strip()
+    fragments = [fragment.strip() for fragment in re.split(r"(?<=[.!?])\s+", text) if fragment.strip()]
+    kept = [fragment for fragment in fragments if not _looks_like_orchestration_directive(fragment)]
+    if not kept and fragments and not _looks_like_orchestration_directive(text):
+        kept = [text]
+    return " ".join(kept).strip()
+
+
+def _looks_like_orchestration_directive(value: str) -> bool:
+    text = str(value or "").strip().lower()
+    if not text:
+        return False
+    if not _ROUTING_DIRECTIVE_TERM_RE.search(text):
+        return False
+    if _ROUTING_DIRECTIVE_VERB_RE.search(text):
+        return True
+    return "implementer" in text and "reviewer" in text
+
+
 def _participant_input(
     participant: InterAgentParticipantRecord,
     *,
@@ -1095,7 +1143,7 @@ def _participant_input(
     previous_output: str = "",
 ) -> str:
     specific = participant_inputs.get(participant.participant_id, "").strip()
-    request_text = str(base_input or "").strip()
+    request_text = _worker_request_context(base_input)
     sections = [
         "You are a delegated worker in a Maverick multi-agent run.",
         f"Participant: {participant.label} ({participant.participant_id}).",
@@ -1115,8 +1163,7 @@ def _participant_input(
         sections.append(
             "User request content:\n"
             f"{request_text}\n\n"
-            "Treat any request text about multi-agent routing, worker counts, reviewers, or orchestration as "
-            "Maverick control context. Do not repeat it in the answer."
+            "Use this only as task context. Do not mention internal workers, reviewers, routing, or orchestration."
         )
     if previous_output:
         suffix = f"Previous participant output:\n{previous_output}"
@@ -1131,7 +1178,7 @@ def _manager_tools_participant_input(
     participant_inputs: dict[str, str],
 ) -> str:
     specific = participant_inputs.get(participant.participant_id, "").strip()
-    user_request = str(base_input or "").strip()
+    user_request = _worker_request_context(base_input)
     if specific:
         sections = [
             "You are a delegated worker in a Maverick multi-agent manager-tools run.",
@@ -1143,7 +1190,7 @@ def _manager_tools_participant_input(
             f"Delegated task:\n{specific}",
         ]
         if user_request and user_request != specific:
-            sections.append(f"Original user request for context:\n{user_request}")
+            sections.append(f"User request context:\n{user_request}")
         return "\n\n".join(sections)
     if user_request:
         return "\n\n".join(
@@ -1183,7 +1230,15 @@ def _plan_summary(run: InterAgentRunRecord, participants: list[InterAgentPartici
     return f"Orchestrator started a delegated multi-agent run with {worker_nodes}."
 
 
-def _final_summary(*, final_status: str, participant_results: list[ParticipantExecutionResult]) -> str:
+def _final_summary(
+    *,
+    final_status: str,
+    participant_results: list[ParticipantExecutionResult],
+    final_projection: FinalAnswerProjection | None = None,
+) -> str:
+    projected = _summary_from_final_projection(final_status=final_status, final_projection=final_projection)
+    if projected:
+        return projected
     if not participant_results:
         return "Multi-agent run completed without participant work."
     if final_status == "completed":
@@ -1197,6 +1252,29 @@ def _final_summary(*, final_status: str, participant_results: list[ParticipantEx
         text = result.summary or result.output_text or result.partial_output or result.error or result.status
         summaries.append(f"{result.label}: {_compact_summary(text)}")
     return f"{prefix} " + " ".join(summaries)
+
+
+def _summary_from_final_projection(
+    *,
+    final_status: str,
+    final_projection: FinalAnswerProjection | None,
+) -> str:
+    if final_projection is None:
+        return ""
+    text = str(final_projection.text or "").strip()
+    if not text:
+        return ""
+    if final_status == "completed":
+        if text.startswith("Multi-agent run completed."):
+            return text
+        return f"Multi-agent run completed. {text}"
+    if final_status == "cancelled":
+        if text.startswith("Multi-agent run cancelled."):
+            return text
+        return f"Multi-agent run cancelled. {text}"
+    if text.startswith("Multi-agent run failed"):
+        return text
+    return f"Multi-agent run failed. {text}"
 
 
 def _final_run_status(participant_results: list[ParticipantExecutionResult]) -> str:

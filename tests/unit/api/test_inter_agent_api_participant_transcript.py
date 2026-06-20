@@ -197,6 +197,52 @@ class InterAgentParticipantTranscriptApiTestCase(AppReferenceApiTestSupport, uni
         self.assertEqual(transcript_payload["item_count"], 0)
         self.assertNotIn("Detail output must not leak.", serialized)
 
+    def test_summary_transcript_prefers_final_answer_projection(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            repo_root = self._repo_root(temp_dir)
+            state = self._bootstrap_state(repo_root)
+            self._create_root_session(state, repo_root)
+            app = PlatformHost(state, start_path=repo_root)
+            cookie = self._login(app)
+            now = datetime(2026, 6, 16, 12, 0, tzinfo=UTC)
+
+            create_status, _create_payload, _headers = self._invoke(
+                app,
+                path="/api/inter-agent/runs",
+                method="POST",
+                body={**_run_payload_without_snapshot(run_id="run-api-transcript-final-answer"), "visibility_level": "summary"},
+                cookie=cookie,
+            )
+            run = state.inter_agent_store.get_run("run-api-transcript-final-answer", workspace_id="default")
+            service = InterAgentService(state.inter_agent_store)
+            service.record_event(
+                run,
+                event_type="inter_agent.summary.updated",
+                participant_id="orchestrator",
+                visibility_plane="summary",
+                correlation_id="orchestrator-final-summary",
+                idempotency_key="run-api-transcript-final-answer:orchestrator-final-summary",
+                payload={
+                    "summary": "Multi-agent run completed. Implementer: Draft answer. Reviewer: Final answer.",
+                    "final_answer": "Final answer ready for the user.",
+                    "status": "completed",
+                },
+                now=now,
+            )
+            transcript_status, transcript_payload, _headers = self._invoke(
+                app,
+                path="/api/inter-agent/runs/run-api-transcript-final-answer/participants/orchestrator/transcript",
+                cookie=cookie,
+            )
+
+        item_texts = [item["text"] for item in transcript_payload["items"]]
+        serialized = json.dumps(transcript_payload)
+        self.assertEqual(create_status, 201)
+        self.assertEqual(transcript_status, 200)
+        self.assertEqual(item_texts, ["Final answer ready for the user."])
+        self.assertNotIn("Implementer:", serialized)
+        self.assertNotIn("Reviewer:", serialized)
+
     def test_applies_run_visibility_cap_to_runtime_turn_projection(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             repo_root = self._repo_root(temp_dir)

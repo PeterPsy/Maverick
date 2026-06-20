@@ -68,6 +68,7 @@ class InterAgentExecutorFinalSynthesisTest(unittest.TestCase):
             for event in events
             if event.event_type == "inter_agent.summary.updated" and event.payload.get("final_answer")
         ][-1]
+        run_completed = next(event for event in events if event.event_type == "inter_agent.run.completed")
         orchestrator = store.get_participant("orchestrator", workspace_id="default", run_id=run.run_id)
 
         self.assertEqual(result.final_answer, "Final answer ready for the user.")
@@ -75,8 +76,14 @@ class InterAgentExecutorFinalSynthesisTest(unittest.TestCase):
         self.assertNotIn("Reviewer:", result.final_answer)
         self.assertNotIn("Draft answer", result.final_answer)
         self.assertEqual(final_summary.participant_id, "orchestrator")
+        self.assertEqual(final_summary.payload["summary"], "Multi-agent run completed. Final answer ready for the user.")
         self.assertEqual(final_summary.payload["final_answer"], "Final answer ready for the user.")
         self.assertEqual(final_summary.payload["source_participant_ids"], ["reviewer"])
+        self.assertNotIn("Implementer:", final_summary.payload["summary"])
+        self.assertNotIn("Reviewer:", final_summary.payload["summary"])
+        self.assertNotIn("Draft answer", final_summary.payload["summary"])
+        self.assertEqual(run_completed.payload["summary"], "Multi-agent run completed. Final answer ready for the user.")
+        self.assertEqual(run_completed.payload["final_answer"], "Final answer ready for the user.")
         self.assertEqual(orchestrator.status, "completed")
 
     def test_sequential_worker_prompt_is_delegated_instead_of_raw_orchestration_request(self) -> None:
@@ -124,7 +131,9 @@ class InterAgentExecutorFinalSynthesisTest(unittest.TestCase):
         self.assertIn("You are a delegated worker in a Maverick multi-agent run.", implementer_prompt)
         self.assertIn("Complete only the delegated task below.", implementer_prompt)
         self.assertIn("User request content:", implementer_prompt)
-        self.assertIn("Do not repeat it in the answer.", implementer_prompt)
+        self.assertIn("Answer the customer in 10 lines.", implementer_prompt)
+        self.assertNotIn("Use two workers", implementer_prompt)
+        self.assertNotIn("one reviewer", implementer_prompt)
 
 
 if __name__ == "__main__":

@@ -125,7 +125,8 @@ class InterAgentExecutorTest(unittest.TestCase):
         self.assertNotEqual(delegated_prompt, original_prompt)
         self.assertIn("delegated worker", delegated_prompt)
         self.assertIn("Do not act as the orchestrator", delegated_prompt)
-        self.assertIn(f"User request:\n{original_prompt}", delegated_prompt)
+        self.assertNotIn(original_prompt, delegated_prompt)
+        self.assertNotIn("orchestrator must assign", delegated_prompt)
 
     def test_sequential_controlled_run_passes_previous_output_to_next_participant(self) -> None:
         _repo_root, store, runtime_store = self._stores()

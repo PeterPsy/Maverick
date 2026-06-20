@@ -1,5 +1,6 @@
 import { useMemo, useState } from "react";
 import type { InterAgentApprovalRecord, InterAgentEventRecord, InterAgentRunDetail } from "../api/client";
+import { eventSummary } from "../lib/interAgentGraph";
 
 type InterAgentRunPanelProps = {
   approvalsByRunId: Record<string, InterAgentApprovalRecord[]>;
@@ -108,7 +109,7 @@ function InterAgentBanner({
 }) {
   const latestSummary = [...events]
     .reverse()
-    .map((event) => textPayload(event.payload.summary) || textPayload(event.payload.status))
+    .map((event) => eventSummary(event))
     .find(Boolean);
   const workerCount = runDetail.participants.filter((participant) => participant.kind !== "orchestrator").length;
   const hasOrchestrator = runDetail.participants.some((participant) => participant.kind === "orchestrator");
@@ -156,10 +157,6 @@ function runTopologyLabel(workerCount: number, hasOrchestrator: boolean): string
   }
   const workerLabel = `${workerCount} worker${workerCount === 1 ? "" : "s"}`;
   return hasOrchestrator ? `${workerLabel} + orchestrator` : workerLabel;
-}
-
-function textPayload(value: unknown): string {
-  return typeof value === "string" ? value.trim() : "";
 }
 
 function isLiveRunStatus(status: string): boolean {

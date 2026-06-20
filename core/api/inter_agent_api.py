@@ -649,7 +649,7 @@ def _transcript_item_from_inter_agent_event(event, *, runtime_turn_ids_with_outp
             sequence=event.sequence,
         )
     if event.event_type == "inter_agent.summary.updated":
-        text = _text(payload.get("summary"))
+        text = _text(payload.get("final_answer")) or _text(payload.get("summary"))
         if not text:
             return None
         return _safe_transcript_item(

@@ -91,7 +91,7 @@ export function eventDisplayLabel(event: InterAgentEventRecord): string {
 }
 
 export function eventSummary(event: InterAgentEventRecord): string {
-  for (const key of ["summary", "status", "reason", "message", "task", "label"]) {
+  for (const key of ["final_answer", "summary", "status", "reason", "message", "task", "label"]) {
     const value = event.payload[key];
     if (typeof value === "string" && value.trim()) {
       return value.trim();

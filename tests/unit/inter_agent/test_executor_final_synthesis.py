@@ -187,6 +187,60 @@ class InterAgentExecutorFinalSynthesisTest(unittest.TestCase):
         self.assertNotIn("Implementer: prepara la risposta", implementer_prompt)
         self.assertNotIn("Reviewer: controlla la risposta", implementer_prompt)
 
+    def test_sequential_worker_prompt_keeps_italian_modality_content_request(self) -> None:
+        _repo_root, store, runtime_store = self._stores()
+        service = InterAgentService(store)
+        cases = [
+            (
+                "scura",
+                "Usa la modalit\u00e0 scura per il PDF. Mantieni i campi principali.",
+                ["Usa la modalit\u00e0 scura per il PDF.", "Mantieni i campi principali."],
+            ),
+            (
+                "compatta",
+                "Utilizza la modalit\u00e0 compatta per il riepilogo. Conserva le date.",
+                ["Utilizza la modalit\u00e0 compatta per il riepilogo.", "Conserva le date."],
+            ),
+            (
+                "offline",
+                "Utilizza la modalit\u00e0 offline per consultare i dati. Riassumi i risultati.",
+                ["Utilizza la modalit\u00e0 offline per consultare i dati.", "Riassumi i risultati."],
+            ),
+        ]
+        for label, original_prompt, expected_fragments in cases:
+            with self.subTest(label=label):
+                run = service.create_run(
+                    _run_spec(
+                        mode="sequential",
+                        run_id=f"sequential-italian-modality-content-{label}",
+                        participants=[_participant("implementer", "Implementer")],
+                    ),
+                    now=NOW,
+                )
+
+                execute_inter_agent_run(
+                    service,
+                    _state(runtime_store),
+                    workspace_id="default",
+                    run_id=run.run_id,
+                    input_text=original_prompt,
+                    participant_inputs={"implementer": "Prepara il documento richiesto."},
+                    controlled_participants={"implementer": {"output_text": "Documento pronto.", "summary": "Documento pronto."}},
+                    allow_synthetic_participants=True,
+                    project_summaries=False,
+                    now=NOW,
+                )
+                message_event = next(
+                    event
+                    for event in store.list_event_page(run.run_id, workspace_id="default", visibility_plane="debug", limit=100).events
+                    if event.event_type == "inter_agent.message.sent"
+                )
+                implementer_prompt = message_event.payload["input_text"]
+
+                self.assertIn("User request content:", implementer_prompt)
+                for expected in expected_fragments:
+                    self.assertIn(expected, implementer_prompt)
+
 
 if __name__ == "__main__":
     unittest.main()

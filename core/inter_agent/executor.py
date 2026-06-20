@@ -1104,7 +1104,7 @@ _LEADING_WORKER_DIRECTIVE_RE = re.compile(
 )
 _ROUTING_DIRECTIVE_TERM_RE = re.compile(
     r"\b(?:workers?|implementers?|reviewers?|orchestrators?|orchestrator[ei]?|"
-    r"orchestration|orchestrazione|multi[- ]agent|handoffs?|routing|instradamento|modalit[a\u00e0])\b",
+    r"orchestration|orchestrazione|multi[- ]agent|handoffs?|routing|instradamento)\b",
     re.IGNORECASE,
 )
 _ROUTING_DIRECTIVE_VERB_RE = re.compile(

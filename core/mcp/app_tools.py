@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import Any
 
 from core.api.app_event_publication import declared_data_event_resources, publish_declared_app_events
+from core.apps.dependencies import resolve_app_dependencies
 from core.apps.runtime_requests import apply_app_runtime_requests
 from core.apps.surfaces import enabled_workspace_app_bindings, resolve_workspace_app_surface
 from core.apps.store import AppStore
@@ -163,6 +164,13 @@ def _workspace_app_tool_definitions(
                         "data_root": _data_root,
                         "uploaded_storage_root": _uploaded_storage_root,
                         "generated_storage_root": _generated_storage_root,
+                        "app_dependencies": _app_dependencies_payload(
+                            store,
+                            workspace_id=str(context.workspace_id),
+                            app_id=_app_id,
+                            workspace_store=_workspace_store,
+                            start_path=_start_path,
+                        ),
                         "app_secrets": app_secret_result.secrets,
                         "app_secret_errors": app_secret_result.errors,
                         "arguments": arguments,
@@ -221,6 +229,26 @@ def _workspace_app_tool_definitions(
                 )
             )
     return definitions
+
+
+def _app_dependencies_payload(
+    store: AppStore,
+    *,
+    workspace_id: str,
+    app_id: str,
+    workspace_store=None,
+    start_path: Path | None,
+) -> dict[str, object]:
+    try:
+        return resolve_app_dependencies(
+            store,
+            workspace_id=workspace_id,
+            consumer_app_id=app_id,
+            workspace_store=workspace_store,
+            start_path=start_path,
+        )
+    except Exception:
+        return {"workspace_id": workspace_id, "consumer_app_id": app_id, "status": "blocked", "dependencies": []}
 
 
 def _app_secret_resource_lookup(

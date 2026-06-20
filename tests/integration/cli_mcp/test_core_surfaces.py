@@ -839,6 +839,132 @@ class TestMcpCliSurfaces(SurfaceTestBase):
         self.assertTrue(result["data_root"].endswith("/workspaces/default/data/checklists"))
         self.assertEqual(result["python"], sys.executable)
 
+    def test_app_cli_and_mcp_receive_dependency_resolution_payload(self) -> None:
+        store = self.make_app_store()
+        workspace_store = self.make_workspace_store()
+        ensure_default_workspace_record(workspace_store)
+        now = datetime.now(tz=UTC)
+        repo_root = self.make_repo_root()
+        provider_root = repo_root / "apps" / "storage-provider"
+        write_app_contract_file(
+            provider_root,
+            build_parsed_app_contract(
+                app_id="storage-provider",
+                name="Storage Provider",
+                version="1.0.0",
+                description="Storage provider app.",
+                publisher="maverick",
+                contract=build_app_contract(
+                    provides=[
+                        build_provided_interface_declaration(
+                            interface="file.catalog",
+                            description="File catalog.",
+                            surfaces=["backend", "cli", "mcp"],
+                        )
+                    ],
+                ),
+            ),
+        )
+        consumer_root = repo_root / "apps" / "checklists"
+        self.write_app_contract(
+            consumer_root,
+            requires=[
+                build_required_interface_declaration(
+                    alias="files",
+                    interface="file.catalog",
+                    description="File catalog provider.",
+                )
+            ],
+        )
+        provider_source = register_app_source_from_contract(
+            store,
+            source_kind="platform",
+            source_path=str(provider_root),
+            now=now,
+        )
+        install_store_app(store, source_id=provider_source.source_id, workspace_id="default", start_path=repo_root, now=now)
+        consumer_source = register_app_source_from_contract(
+            store,
+            source_kind="platform",
+            source_path=str(consumer_root),
+            now=now,
+        )
+        install_store_app(store, source_id=consumer_source.source_id, workspace_id="default", start_path=repo_root, now=now)
+        state = SimpleNamespace(
+            repository_root=repo_root,
+            app_store=store,
+            identity_store=None,
+            workspace_store=workspace_store,
+            runtime_store=None,
+            provider_store=None,
+            secret_store=None,
+            recovery_store=None,
+            observability_store=None,
+            app_event_bus=None,
+        )
+        dependency_set = run_cli_json(
+            [
+                "core",
+                "cli",
+                "run",
+                "app.checklists.dependencies.set",
+                "--arguments-json",
+                '{"alias":"files","provider_app_ids":["storage-provider"]}',
+                "--json",
+            ],
+            state=state,
+            repository_root=repo_root,
+        )
+        dependency_status = run_cli_json(
+            ["core", "cli", "run", "app.checklists.dependencies", "--json"],
+            state=state,
+            repository_root=repo_root,
+        )
+        cli_context = CliInvocationContext(
+            caller_kind="sandbox_agent",
+            workspace_id="default",
+            agent_id="agent-1",
+            effective_mode="sandbox",
+        )
+        mcp_context = McpInvocationContext(
+            caller_kind="sandbox_agent",
+            workspace_id="default",
+            agent_id="agent-1",
+            effective_mode="sandbox",
+        )
+
+        cli_result = run_core_cli_command(
+            command_id="app.checklists.checklists",
+            context=cli_context,
+            app_store=store,
+            workspace_store=workspace_store,
+            workspace_id="default",
+            start_path=repo_root,
+            arguments={},
+        )
+        mcp_result = call_mcp_tool(
+            tool_name="app.checklists.checklists.list",
+            context=mcp_context,
+            app_store=store,
+            workspace_store=workspace_store,
+            workspace_id="default",
+            start_path=repo_root,
+            arguments={},
+        )
+
+        self.assertEqual(dependency_set["status"], "resolved")
+        self.assertEqual(dependency_status["status"], "resolved")
+        self.assertEqual(cli_result["app_dependencies"]["status"], "resolved")
+        self.assertEqual(mcp_result["app_dependencies"]["status"], "resolved")
+        self.assertEqual(
+            cli_result["app_dependencies"]["dependencies"][0]["selected_provider_app_ids"],
+            ["storage-provider"],
+        )
+        self.assertEqual(
+            mcp_result["app_dependencies"]["dependencies"][0]["selected_provider_app_ids"],
+            ["storage-provider"],
+        )
+
     def test_full_access_only_app_cli_and_mcp_discovery_uses_full_access_policy(self) -> None:
         store = self.make_app_store()
         repo_root = self.make_repo_root()

@@ -22,6 +22,7 @@ arguments = dict(payload.arguments)
 tool_name = str(payload.raw.get("tool_name") or "")
 arguments["_workspace_id"] = payload.workspace_id
 arguments["_app_id"] = payload.app_id
+arguments["_app_dependencies"] = payload.raw.get("app_dependencies", {})
 arguments.setdefault("action", TOOL_ACTIONS.get(tool_name, "manifest"))
 status_code, result = handle_action(Path(payload.data_root), arguments)
 if status_code < 400:

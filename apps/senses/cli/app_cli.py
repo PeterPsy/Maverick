@@ -15,6 +15,7 @@ payload = read_entrypoint_payload()
 arguments = dict(payload.arguments)
 arguments["_workspace_id"] = payload.workspace_id
 arguments["_app_id"] = payload.app_id
+arguments["_app_dependencies"] = payload.raw.get("app_dependencies", {})
 arguments.setdefault("action", "manifest")
 status_code, result = handle_action(Path(payload.data_root), arguments)
 result["status_code"] = status_code

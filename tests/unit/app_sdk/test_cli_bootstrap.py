@@ -211,6 +211,12 @@ class CliBootstrapTests(unittest.TestCase):
 
         self.assertIn("maverick app document-generator cli run document-generator --json", str(captured.exception))
 
+    def test_core_cli_allows_app_lifecycle_commands(self) -> None:
+        _reject_app_cli_command_in_core_scope(
+            "app.senses.dependencies",
+            allowed_command_ids={"app.senses.dependencies"},
+        )
+
     def test_app_cli_accepts_full_command_id_alias(self) -> None:
         self.assertEqual(
             _app_scoped_id("app.document-generator.", "app.document-generator.document-generator"),

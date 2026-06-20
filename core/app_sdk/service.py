@@ -183,12 +183,12 @@ def _status_source_root(
     app_id: str,
     start_path: Path | None = None,
 ) -> tuple[Path, str | None]:
-    workspace_root = workspace_apps_root(workspace_id=workspace_id, start_path=start_path) / app_id
-    if workspace_root.exists():
-        return workspace_root, "workspace_local_project"
     platform_root = installed_app_root(app_id=app_id, start_path=start_path)
     if platform_root.exists():
         return platform_root, "platform"
+    workspace_root = workspace_apps_root(workspace_id=workspace_id, start_path=start_path) / app_id
+    if workspace_root.exists():
+        return workspace_root, "workspace_local_project"
     return workspace_root, None
 
 

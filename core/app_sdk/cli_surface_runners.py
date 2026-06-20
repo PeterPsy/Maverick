@@ -41,12 +41,18 @@ def _run_core_cli(
         return {"workspace_id": workspace_id, "commands": [_command_summary(command) for command in commands]}
     if operation == "inspect":
         command_id = _single_id(tokens, "maverick core cli inspect <command_id> --json")
-        _reject_app_cli_command_in_core_scope(command_id)
+        _reject_app_cli_command_in_core_scope(
+            command_id,
+            allowed_command_ids={command.command_id for command in commands},
+        )
         command = _require_cli_command(commands, command_id)
         return {"workspace_id": workspace_id, "command": _command_detail(command)}
     if operation == "run":
         command_id, arguments = _run_target_and_arguments(tokens, options)
-        _reject_app_cli_command_in_core_scope(command_id)
+        _reject_app_cli_command_in_core_scope(
+            command_id,
+            allowed_command_ids={command.command_id for command in commands},
+        )
         command = _require_cli_command(commands, command_id)
         return run_core_cli_command(
             command_id=command.command_id,
@@ -70,7 +76,13 @@ def _run_core_cli(
     _die("core CLI operation must be list, inspect, or run")
 
 
-def _reject_app_cli_command_in_core_scope(command_id: str) -> None:
+def _reject_app_cli_command_in_core_scope(
+    command_id: str,
+    *,
+    allowed_command_ids: set[str] | None = None,
+) -> None:
+    if command_id in (allowed_command_ids or set()):
+        return
     parts = str(command_id or "").split(".")
     if len(parts) < 3 or parts[0] != "app":
         return

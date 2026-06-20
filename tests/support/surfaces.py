@@ -14,7 +14,9 @@ from core.apps.contracts import (
     build_app_contract,
     build_app_entrypoints,
     build_app_permissions,
+    build_provided_interface_declaration,
     build_parsed_app_contract,
+    build_required_interface_declaration,
     write_app_contract_file,
 )
 from core.apps.service import install_store_app, register_app_source_from_contract, transition_workspace_app_status
@@ -57,6 +59,8 @@ __all__ = [
     "build_app_entrypoints",
     "build_app_permissions",
     "build_parsed_app_contract",
+    "build_provided_interface_declaration",
+    "build_required_interface_declaration",
     "build_workspace_mcp_surface",
     "call_mcp_tool",
     "configure_workspace_provider",
@@ -143,6 +147,8 @@ class SurfaceTestBase(unittest.TestCase):
         skill_id: str = "task-helper",
         secret_read: list[str] | None = None,
         workspace_modes: list[str] | None = None,
+        provides: list | None = None,
+        requires: list | None = None,
     ) -> None:
         (app_root / "backend" / "mcp").mkdir(parents=True, exist_ok=True)
         (app_root / "backend" / "cli").mkdir(parents=True, exist_ok=True)
@@ -150,13 +156,13 @@ class SurfaceTestBase(unittest.TestCase):
         (app_root / "backend" / "mcp" / "server.py").write_text(
             "import json, sys\n"
             "payload = json.loads(sys.stdin.read() or '{}')\n"
-            "print(json.dumps({'surface': payload.get('surface'), 'tool_name': payload.get('tool_name'), 'workspace_id': payload.get('workspace_id'), 'agent_id': payload.get('agent_id'), 'effective_mode': payload.get('effective_mode'), 'runtime_session_id': payload.get('runtime_session_id'), 'workspace_root': payload.get('workspace_root'), 'data_root': payload.get('data_root'), 'uploaded_storage_root': payload.get('uploaded_storage_root'), 'generated_storage_root': payload.get('generated_storage_root'), 'app_secrets': payload.get('app_secrets'), 'app_secret_errors': payload.get('app_secret_errors'), 'arguments': payload.get('arguments'), 'python': sys.executable}))\n",
+            "print(json.dumps({'surface': payload.get('surface'), 'tool_name': payload.get('tool_name'), 'workspace_id': payload.get('workspace_id'), 'agent_id': payload.get('agent_id'), 'effective_mode': payload.get('effective_mode'), 'runtime_session_id': payload.get('runtime_session_id'), 'workspace_root': payload.get('workspace_root'), 'data_root': payload.get('data_root'), 'uploaded_storage_root': payload.get('uploaded_storage_root'), 'generated_storage_root': payload.get('generated_storage_root'), 'app_dependencies': payload.get('app_dependencies'), 'app_secrets': payload.get('app_secrets'), 'app_secret_errors': payload.get('app_secret_errors'), 'arguments': payload.get('arguments'), 'python': sys.executable}))\n",
             encoding="utf-8",
         )
         (app_root / "backend" / "cli" / "app_cli.py").write_text(
             "import json, sys\n"
             "payload = json.loads(sys.stdin.read() or '{}')\n"
-            "print(json.dumps({'surface': payload.get('surface'), 'command_id': payload.get('command_id'), 'workspace_id': payload.get('workspace_id'), 'agent_id': payload.get('agent_id'), 'effective_mode': payload.get('effective_mode'), 'runtime_session_id': payload.get('runtime_session_id'), 'workspace_root': payload.get('workspace_root'), 'data_root': payload.get('data_root'), 'uploaded_storage_root': payload.get('uploaded_storage_root'), 'generated_storage_root': payload.get('generated_storage_root'), 'app_secrets': payload.get('app_secrets'), 'app_secret_errors': payload.get('app_secret_errors'), 'arguments': payload.get('arguments'), 'python': sys.executable}))\n",
+            "print(json.dumps({'surface': payload.get('surface'), 'command_id': payload.get('command_id'), 'workspace_id': payload.get('workspace_id'), 'agent_id': payload.get('agent_id'), 'effective_mode': payload.get('effective_mode'), 'runtime_session_id': payload.get('runtime_session_id'), 'workspace_root': payload.get('workspace_root'), 'data_root': payload.get('data_root'), 'uploaded_storage_root': payload.get('uploaded_storage_root'), 'generated_storage_root': payload.get('generated_storage_root'), 'app_dependencies': payload.get('app_dependencies'), 'app_secrets': payload.get('app_secrets'), 'app_secret_errors': payload.get('app_secret_errors'), 'arguments': payload.get('arguments'), 'python': sys.executable}))\n",
             encoding="utf-8",
         )
         (app_root / "backend" / "skills" / skill_id / "SKILL.md").write_text("# Task Helper\n", encoding="utf-8")
@@ -167,6 +173,8 @@ class SurfaceTestBase(unittest.TestCase):
             description="Checklist app",
             publisher="maverick",
             contract=build_app_contract(
+                provides=provides,
+                requires=requires,
                 capabilities=build_app_capabilities(
                     mcp_tools=["checklists.list"],
                     cli_commands=["checklists"],

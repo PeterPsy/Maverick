@@ -284,6 +284,42 @@ class MaverickAppSdkTestCase(unittest.TestCase):
         self.assertEqual(installed.binding_status, "enabled")
         self.assertEqual(installed.project_root, str(repo_root / "apps" / "sdk-platform"))
 
+    def test_status_prefers_platform_source_over_workspace_local_collision(self) -> None:
+        repo_root = self.make_repo_root()
+        store = self.make_store()
+        create_app_source(
+            AppSdkCreateRequest(
+                app_id="sdk-collision",
+                template_id="minimal",
+                target_kind="platform",
+                publisher="maverick",
+            ),
+            start_path=repo_root,
+        )
+        create_app_source(
+            AppSdkCreateRequest(
+                app_id="sdk-collision",
+                template_id="minimal",
+                target_kind="workspace_local",
+                workspace_id="default",
+            ),
+            start_path=repo_root,
+        )
+        source = register_app_source_from_contract(
+            store,
+            source_kind="platform",
+            source_path=str(repo_root / "apps" / "sdk-collision"),
+        )
+        install_store_app(store, source_id=source.source_id, workspace_id="default", start_path=repo_root)
+
+        status = app_sdk_status(store, workspace_id="default", app_id="sdk-collision", start_path=repo_root)
+
+        self.assertTrue(status.source_exists)
+        self.assertTrue(status.registered)
+        self.assertTrue(status.installed)
+        self.assertEqual(status.binding_status, "enabled")
+        self.assertEqual(status.project_root, str(repo_root / "apps" / "sdk-collision"))
+
     def test_storage_helpers_reject_path_traversal(self) -> None:
         repo_root = self.make_repo_root()
         data_root = repo_root / "workspaces" / "default" / "data" / "sdk-data"

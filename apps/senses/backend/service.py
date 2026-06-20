@@ -42,7 +42,7 @@ def handle_action(data_root: Path, payload: dict[str, object]) -> tuple[int, dic
         return 200, manifest_payload(workspace_id=workspace_id, dependencies=dependencies)
     if action in {"health", "health.check", "status"}:
         return 200, {
-            "ok": dependencies["status"] in {"resolved", "unknown"},
+            "ok": dependencies["status"] == "resolved",
             "app_id": APP_ID,
             "phase": PHASE,
             "status": "ready" if dependencies["status"] == "resolved" else "dependency_resolution_pending",

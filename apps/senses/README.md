@@ -44,47 +44,27 @@ maverick core cli run core.app-sdk.validate --app-root apps/senses --json
 maverick apps list --json
 maverick app senses cli list --json
 maverick app senses cli inspect senses --json
-maverick app senses cli run senses --action health --json
 maverick app senses mcp list --json
 maverick app senses mcp inspect senses_operations_manifest --json
 maverick app senses mcp call senses_operations_manifest --json
 python3 -m unittest discover -s apps/senses/tests -p 'test_*.py'
 ```
 
-Configure the required Storage providers after the app is installed through the
-generic app-hosting dependency service. In the current CLI runtime the generated
-`app.senses.dependencies` commands are discoverable from the core list but are
-not invokable from either the core runner or the app-scoped runner unless the
-command is explicitly present in the Senses contract, so Phase 0 uses the
-generic service directly instead of declaring extra CLI commands.
+After Senses and Storage are installed and enabled in the workspace, configure
+the required Storage providers through the core-owned app dependency commands:
 
-```python
-from pathlib import Path
-from core.api.platform_state import bootstrap_platform_state
-from core.apps.service import resolve_app_dependencies, save_app_dependency_selection
-
-root = Path.cwd()
-state = bootstrap_platform_state(
-    start_path=root,
-    install_builtin_apps=False,
-    register_builtin_provider_definitions=False,
-    bootstrap_admin=False,
-)
-for alias in ("storage-file-content-write", "storage-file-catalog"):
-    save_app_dependency_selection(
-        state.app_store,
-        workspace_id="default",
-        consumer_app_id="senses",
-        alias=alias,
-        provider_app_ids=["storage"],
-        workspace_store=state.workspace_store,
-        start_path=root,
-    )
-print(resolve_app_dependencies(
-    state.app_store,
-    workspace_id="default",
-    consumer_app_id="senses",
-    workspace_store=state.workspace_store,
-    start_path=root,
-))
+```bash
+maverick core cli run app.senses.dependencies.set \
+  --arguments-json '{"alias":"storage-file-content-write","provider_app_ids":["storage"]}' \
+  --json
+maverick core cli run app.senses.dependencies.set \
+  --arguments-json '{"alias":"storage-file-catalog","provider_app_ids":["storage"]}' \
+  --json
+maverick core cli run app.senses.dependencies --json
+maverick app senses cli run senses --action health --json
 ```
+
+The health payload is only ready when `ok` is `true` and
+`dependencies.status` is `resolved`. If the host does not provide dependency
+resolution, or either required Storage provider is unset, Senses reports
+`ok: false` with `status: "dependency_resolution_pending"`.

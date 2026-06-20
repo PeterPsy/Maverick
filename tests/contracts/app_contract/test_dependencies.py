@@ -14,6 +14,7 @@ from core.apps.contracts import (
 )
 from core.apps.dependencies import resolve_app_dependencies, save_app_dependency_selection
 from core.apps.errors import AppHostingError
+from core.apps.hook_payloads import build_app_health_hook_payload
 from core.apps.service import install_store_app, register_app_source_from_contract, transition_workspace_app_status
 from core.cli.models import CliInvocationContext
 from core.cli.service import list_core_cli_commands, run_core_cli_command
@@ -113,6 +114,63 @@ class AppDependenciesTest(AppHostingTestBase):
                 start_path=repo_root,
             )
             self.assertEqual(cli_payload["status"], "resolved")
+
+    def test_health_hook_payload_includes_dependency_resolution(self) -> None:
+        with TemporaryDirectory() as temp_dir:
+            repo_root = self.make_repo_root(temp_dir)
+            store = self.make_store()
+            provider_root = self._write_app(
+                repo_root,
+                app_id="provider-one",
+                contract=build_app_contract(
+                    provides=[
+                        build_provided_interface_declaration(
+                            interface="agent.catalog",
+                            description="Agent catalog.",
+                            surfaces=[],
+                        )
+                    ],
+                    lifecycle=build_app_lifecycle(install=False),
+                ),
+            )
+            consumer_root = self._write_app(
+                repo_root,
+                app_id="consumer-one",
+                contract=build_app_contract(
+                    requires=[
+                        build_required_interface_declaration(
+                            alias="agent-provider",
+                            interface="agent.catalog",
+                            description="Agent provider.",
+                        )
+                    ],
+                    lifecycle=build_app_lifecycle(install=False),
+                ),
+            )
+            self._register_and_install(store, provider_root, workspace_id="default", start_path=repo_root)
+            self._register_and_install(store, consumer_root, workspace_id="default", start_path=repo_root)
+            save_app_dependency_selection(
+                store,
+                workspace_id="default",
+                consumer_app_id="consumer-one",
+                alias="agent-provider",
+                provider_app_ids=["provider-one"],
+                start_path=repo_root,
+            )
+
+            payload = build_app_health_hook_payload(
+                store,
+                workspace_id="default",
+                app_id="consumer-one",
+                start_path=repo_root,
+            )
+
+            self.assertEqual(payload["hook_name"], "health_check")
+            self.assertEqual(payload["app_dependencies"]["status"], "resolved")
+            self.assertEqual(
+                payload["app_dependencies"]["dependencies"][0]["selected_provider_app_ids"],
+                ["provider-one"],
+            )
 
     def test_crm_dependencies_resolve_provider_candidates_for_settings_app_links(self) -> None:
         with TemporaryDirectory() as temp_dir:

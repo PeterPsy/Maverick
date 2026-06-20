@@ -19,11 +19,22 @@ TOOL_ACTIONS = {
 
 payload = read_entrypoint_payload()
 arguments = dict(payload.arguments)
-tool_name = str(payload.raw.get("tool_name") or "")
+tool_name = str(payload.raw.get("tool_name") or "").strip()
+action = TOOL_ACTIONS.get(tool_name)
+if action is None:
+    emit_json(
+        {
+            "ok": False,
+            "error": "unsupported_tool",
+            "detail": f"Unsupported Senses MCP tool `{tool_name or '<missing>'}`.",
+            "allowed_tools": sorted(TOOL_ACTIONS),
+        }
+    )
+    raise SystemExit(0)
 arguments["_workspace_id"] = payload.workspace_id
 arguments["_app_id"] = payload.app_id
 arguments["_app_dependencies"] = payload.raw.get("app_dependencies", {})
-arguments.setdefault("action", TOOL_ACTIONS.get(tool_name, "manifest"))
+arguments.setdefault("action", action)
 status_code, result = handle_action(Path(payload.data_root), arguments)
 if status_code < 400:
     result["app_events"] = app_events_for_action(str(arguments.get("action") or "manifest"))

@@ -5,7 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
-from database import SCHEMA_VERSION, health_payload
+from database import SCHEMA_VERSION, health_payload, require_workspace_id
 
 
 APP_ID = "senses"
@@ -37,6 +37,11 @@ DEFERRED_ACTIONS = (
 def handle_action(data_root: Path, payload: dict[str, object]) -> tuple[int, dict[str, object]]:
     action = normalize_action(payload.get("action"))
     workspace_id = workspace_id_from_payload(payload)
+    if workspace_id is None:
+        return 400, {
+            "error": "missing_workspace_id",
+            "detail": "Senses requires a workspace_id from the Maverick host payload.",
+        }
     dependencies = dependency_resolution_payload(payload.get("_app_dependencies") or payload.get("app_dependencies"))
     if action in {"manifest", "operations.manifest"}:
         return 200, manifest_payload(workspace_id=workspace_id, dependencies=dependencies)
@@ -64,8 +69,12 @@ def normalize_action(value: object) -> str:
     return str(value or "manifest").strip() or "manifest"
 
 
-def workspace_id_from_payload(payload: dict[str, object]) -> str:
-    return str(payload.get("_workspace_id") or payload.get("workspace_id") or "default").strip() or "default"
+def workspace_id_from_payload(payload: dict[str, object]) -> str | None:
+    value = payload.get("_workspace_id") or payload.get("workspace_id")
+    try:
+        return require_workspace_id(str(value) if value is not None else None)
+    except ValueError:
+        return None
 
 
 def manifest_payload(*, workspace_id: str, dependencies: dict[str, object]) -> dict[str, object]:

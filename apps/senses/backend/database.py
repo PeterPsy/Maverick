@@ -9,6 +9,7 @@ import sqlite3
 
 SCHEMA_VERSION = "1"
 DB_FILENAME = "senses.sqlite"
+PRIMARY_DB_PATH = f"data/senses/{DB_FILENAME}"
 WORKSPACE_TABLES = ("schema_migrations", "settings")
 
 
@@ -104,7 +105,7 @@ def health_payload(data_root: Path, workspace_id: str) -> dict[str, object]:
         db.close()
     return {
         "database": {
-            "path": str(db_path(data_root)),
+            "primary_path": PRIMARY_DB_PATH,
             "schema_version": SCHEMA_VERSION,
             "migrations": migrations,
             "tables": list(WORKSPACE_TABLES),
@@ -121,6 +122,12 @@ def table_columns(data_root: Path, table_name: str) -> list[str]:
         db.close()
 
 
-def _workspace_id(value: str | None) -> str:
+def require_workspace_id(value: str | None) -> str:
     workspace = str(value or "").strip()
-    return workspace or "default"
+    if not workspace:
+        raise ValueError("Senses entrypoint payload requires workspace_id.")
+    return workspace
+
+
+def _workspace_id(value: str | None) -> str:
+    return require_workspace_id(value)

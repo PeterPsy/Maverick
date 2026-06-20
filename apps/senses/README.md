@@ -23,13 +23,13 @@ The contract requires Storage interfaces:
 Workspace data is owned by the app under:
 
 ```text
-workspaces/default/data/senses/
+workspaces/<workspace_id>/data/senses/
 ```
 
 The Phase 0 SQLite file is:
 
 ```text
-workspaces/default/data/senses/senses.sqlite
+workspaces/<workspace_id>/data/senses/senses.sqlite
 ```
 
 The initial schema creates `schema_migrations` and `settings`, both scoped by
@@ -65,7 +65,9 @@ maverick core cli run app.senses.dependencies --json
 maverick app senses cli run senses --action health --json
 ```
 
-The health payload is only ready when `ok` is `true` and
+The install lifecycle prepares the app-owned schema before dependency selections
+can be configured. Runtime readiness is only true when `ok` is `true` and
 `dependencies.status` is `resolved`. If the host does not provide dependency
 resolution, or either required Storage provider is unset, Senses reports
-`ok: false` with `status: "dependency_resolution_pending"`.
+`ok: false` with `status: "dependency_resolution_pending"`; the platform
+health hook also fails health probes when dependency resolution is not resolved.

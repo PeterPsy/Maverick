@@ -1,0 +1,18 @@
+{
+  "tools": {
+    "senses_operations_manifest": {
+      "description": "Describe Senses Phase 0 surfaces, dependency requirements, and deferred operations.",
+      "input_schema": {
+        "type": "object",
+        "additionalProperties": false
+      }
+    },
+    "senses_reference_manifest": {
+      "description": "Report the Senses reference surface. Phase 0 exposes no reference entities.",
+      "input_schema": {
+        "type": "object",
+        "additionalProperties": false
+      }
+    }
+  }
+}

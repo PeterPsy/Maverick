@@ -20,6 +20,7 @@ from core.app_sdk.packaging import package_app_source
 from core.app_sdk.service import app_sdk_status, create_app_source, register_local_app, validate_app_source
 from core.app_sdk.storage import ensure_json_state, safe_app_data_path
 from core.apps.contracts import parse_app_contract_file
+from core.apps.service import install_store_app, register_app_source_from_contract
 from core.shared.entrypoints import run_json_entrypoint
 from core.apps.store import AppCollections, AppDocumentStore
 from core.cli.models import CliInvocationContext
@@ -252,6 +253,36 @@ class MaverickAppSdkTestCase(unittest.TestCase):
         self.assertFalse(source_only.installed)
         self.assertIsNotNone(source_only.validation)
         self.assertTrue(source_only.validation.valid)
+
+    def test_status_reports_platform_app_source_and_binding(self) -> None:
+        repo_root = self.make_repo_root()
+        store = self.make_store()
+        create_app_source(
+            AppSdkCreateRequest(
+                app_id="sdk-platform",
+                template_id="minimal",
+                target_kind="platform",
+                publisher="maverick",
+            ),
+            start_path=repo_root,
+        )
+
+        source_only = app_sdk_status(store, workspace_id="default", app_id="sdk-platform", start_path=repo_root)
+        source = register_app_source_from_contract(
+            store,
+            source_kind="platform",
+            source_path=str(repo_root / "apps" / "sdk-platform"),
+        )
+        install_store_app(store, source_id=source.source_id, workspace_id="default", start_path=repo_root)
+        installed = app_sdk_status(store, workspace_id="default", app_id="sdk-platform", start_path=repo_root)
+
+        self.assertTrue(source_only.source_exists)
+        self.assertFalse(source_only.registered)
+        self.assertFalse(source_only.installed)
+        self.assertTrue(installed.registered)
+        self.assertTrue(installed.installed)
+        self.assertEqual(installed.binding_status, "enabled")
+        self.assertEqual(installed.project_root, str(repo_root / "apps" / "sdk-platform"))
 
     def test_storage_helpers_reject_path_traversal(self) -> None:
         repo_root = self.make_repo_root()

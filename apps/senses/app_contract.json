@@ -1,0 +1,140 @@
+{
+  "app_id": "senses",
+  "contract_version": "1.0",
+  "name": "Senses",
+  "version": "0.1.0",
+  "description": "Device and sensor connector for Maverick workspace inputs.",
+  "publisher": "maverick",
+  "minimum_core_version": "0.1.0",
+  "provides": [],
+  "requires": [
+    {
+      "alias": "storage-file-content-write",
+      "interface": "file.content.write",
+      "version": "^1",
+      "required": true,
+      "cardinality": "one",
+      "description": "Storage-owned creation of future Senses capture files under workspace Storage."
+    },
+    {
+      "alias": "storage-file-catalog",
+      "interface": "file.catalog",
+      "version": "^1",
+      "required": true,
+      "cardinality": "one",
+      "description": "Storage-owned file identity, metadata, and links for future Senses capture records."
+    }
+  ],
+  "distribution": {
+    "mode": "sealed",
+    "source_access": "none"
+  },
+  "visibility": {
+    "platform_roles": null
+  },
+  "presentation": {
+    "frontend_role": "none"
+  },
+  "permissions": {
+    "secrets": {
+      "read": [],
+      "write": []
+    },
+    "network": {
+      "outbound": []
+    },
+    "runtime": {
+      "create_sessions": false,
+      "cleanup_sessions": false
+    },
+    "host": {
+      "telemetry": false
+    },
+    "providers": {
+      "model_proxy": false,
+      "credential_source": "none",
+      "deliver_secrets_to_app": false
+    }
+  },
+  "capabilities": {
+    "mcp_tools": [
+      "senses_reference_manifest",
+      "senses_operations_manifest"
+    ],
+    "cli_commands": [
+      "senses"
+    ],
+    "skills": [],
+    "views": [],
+    "data_events": [],
+    "view_surfaces": [],
+    "reference_entities": []
+  },
+  "widgets": [],
+  "entrypoints": {
+    "mcp": "mcp/server.py",
+    "cli": "cli/app_cli.py",
+    "backend": "backend/app_backend.py",
+    "frontend": null,
+    "skills_root": null,
+    "hooks": {
+      "install": "hooks/install.py",
+      "migrate": "hooks/migrate.py",
+      "health_check": "hooks/health_check.py"
+    }
+  },
+  "storage": {
+    "storage_kind": "sqlite+files",
+    "data_schema_version": "1",
+    "primary_paths": [
+      "data/senses/senses.sqlite"
+    ],
+    "indices": {
+      "kind": "embedded"
+    },
+    "supports_export": false,
+    "supports_import": false,
+    "supports_migrations": true
+  },
+  "compatibility": {
+    "workspace_modes": [
+      "sandbox"
+    ]
+  },
+  "hook_timeouts": {
+    "backend_seconds": 30,
+    "install_seconds": 60,
+    "upgrade_seconds": 120,
+    "migrate_seconds": 300,
+    "export_seconds": 120,
+    "import_seconds": 120,
+    "validate_after_import_seconds": 60,
+    "repair_after_import_seconds": 180,
+    "health_check_seconds": 30
+  },
+  "lifecycle": {
+    "install": true,
+    "upgrade": true,
+    "uninstall": false,
+    "migrate": true,
+    "export": false,
+    "import": false,
+    "validate_after_import": false,
+    "repair_after_import": false,
+    "health_check": true
+  },
+  "health_contract": {
+    "mode": "hook",
+    "degraded_on_failure": true
+  },
+  "failure_semantics": {
+    "install_failure": "block_activation",
+    "migrate_failure": "preserve_data_mark_unhealthy",
+    "import_failure": "preserve_payload_mark_failed"
+  },
+  "rollback_support": {
+    "bundle": false,
+    "data": false,
+    "repair_only": false
+  }
+}

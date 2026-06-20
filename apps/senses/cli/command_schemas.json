@@ -1,0 +1,25 @@
+{
+  "commands": {
+    "senses": {
+      "description": "Inspect the Senses Phase 0 manifest and health state.",
+      "argument_schema": {
+        "type": "object",
+        "properties": {
+          "action": {
+            "type": "string",
+            "enum": [
+              "manifest",
+              "operations.manifest",
+              "health",
+              "health.check",
+              "status",
+              "reference_manifest",
+              "references.manifest"
+            ]
+          }
+        },
+        "additionalProperties": false
+      }
+    }
+  }
+}

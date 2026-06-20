@@ -133,20 +133,30 @@ def app_sdk_status(
     app_id: str,
     start_path: Path | None = None,
 ) -> AppSdkStatusResult:
-    """Return source, registration, installation, and validation state for one workspace-local app."""
+    """Return source, registration, installation, and validation state for one SDK app."""
     _validate_app_id(app_id)
-    project_root = workspace_apps_root(workspace_id=workspace_id, start_path=start_path) / app_id
+    project_root, source_kind = _status_source_root(
+        workspace_id=workspace_id,
+        app_id=app_id,
+        start_path=start_path,
+    )
     validation = validate_app_source(project_root) if project_root.exists() else None
     registered = False
     installed = False
     binding_status = None
     data_root = None
     if store is not None:
-        try:
-            store.get_workspace_local_app_project(workspace_id=workspace_id, app_id=app_id)
-            registered = True
-        except AppHostingError:
-            registered = False
+        if source_kind == "workspace_local_project":
+            try:
+                store.get_workspace_local_app_project(workspace_id=workspace_id, app_id=app_id)
+                registered = True
+            except AppHostingError:
+                registered = False
+        elif source_kind == "platform":
+            registered = any(
+                source.app_id == app_id and source.source_kind == "platform"
+                for source in store.list_app_sources()
+            )
         try:
             binding = store.get_workspace_app_binding(workspace_id=workspace_id, app_id=app_id)
             installed = True
@@ -165,6 +175,21 @@ def app_sdk_status(
         data_root=data_root,
         validation=validation,
     )
+
+
+def _status_source_root(
+    *,
+    workspace_id: str,
+    app_id: str,
+    start_path: Path | None = None,
+) -> tuple[Path, str | None]:
+    workspace_root = workspace_apps_root(workspace_id=workspace_id, start_path=start_path) / app_id
+    if workspace_root.exists():
+        return workspace_root, "workspace_local_project"
+    platform_root = installed_app_root(app_id=app_id, start_path=start_path)
+    if platform_root.exists():
+        return platform_root, "platform"
+    return workspace_root, None
 
 
 def _target_app_root(request: AppSdkCreateRequest, *, start_path: Path | None = None) -> Path:

@@ -5,6 +5,7 @@ import { describe, expect, it } from 'vitest';
 describe('work player presentation', () => {
   const styles = readFileSync(new URL('./styles.css', import.meta.url), 'utf8');
   const appSource = readFileSync(new URL('./App.tsx', import.meta.url), 'utf8');
+  const mediaPlaybackResolverSource = readFileSync(new URL('./mediaPlaybackResolver.ts', import.meta.url), 'utf8');
   const gradientBarsSource = readFileSync(new URL('./components/ui/gradient-bars-background.tsx', import.meta.url), 'utf8');
   const restIcon = readFileSync(new URL('../public/rest-icon.svg', import.meta.url), 'utf8');
 
@@ -26,6 +27,13 @@ describe('work player presentation', () => {
     expect(styles).toContain('.player-playback-control.is-showing-play .player-playback-icon-play');
     expect(styles).toContain('.player-playback-control.is-showing-pause .player-playback-icon-pause');
     expect(styles).toContain('@keyframes player-playback-control-pop');
+  });
+
+  it('keeps iOS video playback inline for player layers and previews', () => {
+    expect(appSource).toContain('const inlineVideoPlaybackProps = {');
+    expect(appSource).toContain("'webkit-playsinline': 'true'");
+    expect(appSource.match(/{\.\.\.inlineVideoPlaybackProps}/g)).toHaveLength(3);
+    expect(mediaPlaybackResolverSource).toContain("video.setAttribute('webkit-playsinline', 'true')");
   });
 
   it('opens the exercise player from workout and library previews without extra play badges', () => {

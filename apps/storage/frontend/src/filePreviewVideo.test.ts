@@ -19,6 +19,8 @@ describe('storage video preview playback', () => {
     expect(source).toContain('fitPreviewMediaToBox(videoSize, frameSize)');
     expect(source).toContain(": { width: '100%', height: '100%' };");
     expect(source).toContain('loop');
+    expect(source).toContain("'webkit-playsinline': 'true'");
+    expect(source).toContain('{...inlineVideoPlaybackProps}');
     expect(source).toContain('onLoadedMetadata={(event) => updateVideoSize(event.currentTarget)}');
     expect(source).toContain('video.play()');
     expect(source).toContain("setVideoOverlayMode('play')");
@@ -26,6 +28,10 @@ describe('storage video preview playback', () => {
     expect(source).toContain('storage-video-control is-');
     expect(source).toContain('M29.0019 14.4751L4.54632');
     expect(source).toContain('M11.1712 0H3.66753');
+
+    const videoStart = source.indexOf('<video');
+    const videoMarkup = source.slice(videoStart, source.indexOf('/>', videoStart));
+    expect(videoMarkup).not.toContain('controls');
   });
 
   it('styles the video overlay with the Loopino vform play and pause treatment', () => {

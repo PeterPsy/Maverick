@@ -4,6 +4,11 @@ import type { StorageFile } from './types';
 
 type VideoOverlayMode = 'idle' | 'play' | 'pause';
 
+const inlineVideoPlaybackProps = {
+  playsInline: true,
+  'webkit-playsinline': 'true'
+} as const;
+
 function VideoPlaybackIcon({ mode }: { mode: Exclude<VideoOverlayMode, 'idle'> }) {
   return (
     <svg className={`storage-video-control-icon storage-video-control-icon-${mode}`} width="32" height="32" viewBox="0 0 32 32" fill="none" aria-hidden="true">
@@ -169,9 +174,8 @@ export function VideoPreview({ file, src }: { file: StorageFile; src: string }) 
       <video
         ref={videoRef}
         src={src}
-        controls
         loop
-        playsInline
+        {...inlineVideoPlaybackProps}
         preload="auto"
         style={videoStyle}
         onLoadedMetadata={(event) => updateVideoSize(event.currentTarget)}

@@ -73,6 +73,11 @@ type PlayerSession = {
 const REST_ICON_SRC = 'rest-icon.svg';
 const COUNTDOWN_SOUND_SRC = '/apps/fitness-coach/count-down-fitness-coach.mp3';
 const COUNTDOWN_SOUND_LEAD_MS = 3800;
+const inlineVideoPlaybackProps = {
+  playsInline: true,
+  'webkit-playsinline': 'true'
+} as const;
+
 export function App() {
   const [workouts, setWorkouts] = useState<Workout[]>([]);
   const [exercises, setExercises] = useState<Exercise[]>([]);
@@ -1745,7 +1750,7 @@ function PlayerMediaLayer({
         muted
         autoPlay={role === 'current' && !paused}
         loop
-        playsInline
+        {...inlineVideoPlaybackProps}
         preload="auto"
         aria-hidden={role === 'preload' ? 'true' : undefined}
         onLoadedData={(event) => onVideoFrameLoaded(event.currentTarget, resolution.url)}
@@ -1779,7 +1784,7 @@ function NextPreviewMedia({ resolution, isLoaded, onLoaded }: { resolution: Medi
           muted
           autoPlay={isLoaded}
           loop
-          playsInline
+          {...inlineVideoPlaybackProps}
           preload="auto"
           onLoadedData={() => onLoaded(resolution.url)}
           onCanPlay={() => onLoaded(resolution.url)}
@@ -1908,7 +1913,7 @@ function MediaThumb({ media, variant = 'small' }: { media: ExerciseMediaRef | nu
           <video
             src={visiblePreviewUrl ? withVideoFrameHint(visiblePreviewUrl) : undefined}
             muted
-            playsInline
+            {...inlineVideoPlaybackProps}
             preload={isVisible ? 'metadata' : 'none'}
             aria-hidden="true"
             onLoadedMetadata={(event) => {

@@ -148,6 +148,7 @@ function preloadVideo(url: string, entry: AssetPreloadEntry): Promise<void> {
     };
     video.muted = true;
     video.playsInline = true;
+    video.setAttribute('webkit-playsinline', 'true');
     video.preload = 'auto';
     video.addEventListener('loadeddata', settle, { once: true });
     video.addEventListener('canplay', settle, { once: true });

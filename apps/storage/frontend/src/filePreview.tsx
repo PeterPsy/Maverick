@@ -8,6 +8,11 @@ import { fitPreviewMediaToBox, type PreviewMediaSize } from './previewSizing';
 import { VideoPreview } from './videoPreview';
 import type { StorageFile, PreviewTablePayload, TablePreviewSheet } from './types';
 
+const inlineVideoPlaybackProps = {
+  playsInline: true,
+  'webkit-playsinline': 'true'
+} as const;
+
 export function canTextPreview(file: StorageFile) {
   return ['text', 'markdown'].includes(file.preview_kind);
 }
@@ -224,7 +229,7 @@ export function FileCardPreview({ file }: { file: StorageFile }) {
     return <CardImagePreview src={previewUrl} />;
   }
   if (file.preview_kind === 'video' && previewUrl) {
-    return <video src={previewUrl} muted playsInline preload="metadata" />;
+    return <video src={previewUrl} muted {...inlineVideoPlaybackProps} preload="metadata" />;
   }
   return <FileTypeFallback file={file} loading={previewLoading} />;
 }

@@ -141,6 +141,7 @@ class SensesHostedE2ETest(unittest.TestCase):
         self.assertEqual(stored_capture["turn_id"], turn_id)
         self.assertEqual(stored_capture["chat"]["app_id"], "chat")
         self.assertEqual(stored_capture["chat"]["deep_link"], f"/app/chat/threads/{runtime_session_id}")
+        self._assert_chat_deep_link_mounts(stack, stored_capture["chat"]["deep_link"], runtime_session_id)
         self.assertEqual(after_callback["runtime_dispatch_attempts"][0]["status"], "submitted")
         self.assertEqual(after_callback["runtime_dispatch_attempts"][0]["turn_id"], turn_id)
 
@@ -228,13 +229,13 @@ class SensesHostedE2ETest(unittest.TestCase):
 
     def _hosted_stack(self) -> HostedSensesStack:
         repo_root = make_temp_repo_root(self, include_core=True)
-        link_app_sources(repo_root, ["storage", "senses"])
+        link_app_sources(repo_root, ["base-shell", "chat", "storage", "senses"])
         state = bootstrap_platform_state(
             start_path=repo_root,
             install_builtin_apps=False,
             register_builtin_provider_definitions=False,
         )
-        for app_id in ("storage", "senses"):
+        for app_id in ("base-shell", "chat", "storage", "senses"):
             source = register_app_source_from_contract(
                 state.app_store,
                 source_kind="platform",
@@ -267,6 +268,23 @@ class SensesHostedE2ETest(unittest.TestCase):
             cookie=cookie,
             senses_data_root=Path(binding.data_root),
         )
+
+    def _assert_chat_deep_link_mounts(
+        self,
+        stack: HostedSensesStack,
+        deep_link: object,
+        runtime_session_id: str,
+    ) -> None:
+        self.assertIsInstance(deep_link, str)
+        shell_status, shell_payload, _headers = self._invoke(stack.app, path=deep_link, cookie=stack.cookie)
+        self.assertEqual(shell_status, 200, shell_payload)
+
+        chat_status, chat_payload, _headers = self._invoke(
+            stack.app,
+            path=f"/apps/chat/threads/{runtime_session_id}",
+            cookie=stack.cookie,
+        )
+        self.assertEqual(chat_status, 200, chat_payload)
 
     def _pair_device(self, stack: HostedSensesStack) -> dict[str, object]:
         status, started = self._post_senses(stack, {"action": "pairing.start"})

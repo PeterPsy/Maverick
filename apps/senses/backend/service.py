@@ -72,6 +72,7 @@ PNG_ALLOWED_BIT_DEPTHS = {
     4: {8, 16},
     6: {8, 16},
 }
+PNG_CRITICAL_CHUNK_TYPES = {b"IHDR", b"PLTE", b"IDAT", b"IEND"}
 PNG_MAX_DIMENSION = 100_000
 PNG_MAX_DECOMPRESSED_BYTES = 100_000_000
 STORAGE_WRITE_DEPENDENCY_ALIAS = "storage-file-content-write"
@@ -1710,6 +1711,8 @@ def strip_png_exif(data: bytes) -> bytes:
         actual_crc = binascii.crc32(chunk_type + chunk_payload) & 0xFFFFFFFF
         if actual_crc != expected_crc:
             raise ValueError("PNG chunk CRC is invalid.")
+        if png_chunk_is_unknown_critical(chunk_type):
+            raise ValueError("PNG critical chunk type is unsupported.")
         if chunk_type == b"IHDR":
             if seen_ihdr or chunk_start != len(PNG_SIGNATURE):
                 raise ValueError("PNG IHDR chunk must be first.")
@@ -1756,6 +1759,10 @@ def valid_png_chunk_type(chunk_type: bytes) -> bool:
 
 def png_chunk_is_ancillary(chunk_type: bytes) -> bool:
     return bool(chunk_type[0] & 0x20)
+
+
+def png_chunk_is_unknown_critical(chunk_type: bytes) -> bool:
+    return not png_chunk_is_ancillary(chunk_type) and chunk_type not in PNG_CRITICAL_CHUNK_TYPES
 
 
 def png_chunk_reserved_bit_set(chunk_type: bytes) -> bool:

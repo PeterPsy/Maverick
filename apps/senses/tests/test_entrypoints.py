@@ -519,6 +519,17 @@ class SensesPhase2EntrypointTest(unittest.TestCase):
             self.assertEqual(status, 400)
             self.assertEqual(png_chunk_error["error"], "invalid_content_type")
 
+            unknown_critical_chunk = capture_request(
+                completed,
+                request_id="unknown-critical-png-chunk",
+                idempotency_key="unknown-critical-png-chunk",
+                content=png_with_text_metadata(extra_chunks=(png_chunk(b"ABCD"),)),
+                content_type="image/png",
+            )
+            status, unknown_critical_error = handle_action(data_root, unknown_critical_chunk)
+            self.assertEqual(status, 400)
+            self.assertEqual(unknown_critical_error["error"], "invalid_content_type")
+
     def test_ingest_frame_strips_png_metadata_before_storage_write(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             data_root = Path(tmp)

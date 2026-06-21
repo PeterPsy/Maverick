@@ -1,11 +1,14 @@
 from __future__ import annotations
 
 from pathlib import Path
+from threading import Event
 from types import SimpleNamespace
 import unittest
 from unittest.mock import patch
 
 import core.apps.runtime_requests as runtime_requests
+import core.runtime.turn_submission_service_runtime as runtime_submission_runtime
+from core.runtime.execution import RuntimeExecutionResult
 from core.runtime.store import RuntimeCollections, RuntimeDocumentStore
 from core.runtime.turn_submission_service_output import _queue_turn_with_event
 from core.workspaces.service import default_workspace_governance
@@ -40,6 +43,7 @@ class RuntimeRequestAttachmentsTestCase(unittest.TestCase):
     def _runtime_request_state(self) -> SimpleNamespace:
         return SimpleNamespace(
             app_store=SimpleNamespace(),
+            provider_store=SimpleNamespace(),
             runtime_store=self._runtime_store(),
             runtime_event_bus=None,
             app_event_bus=None,
@@ -168,6 +172,74 @@ class RuntimeRequestAttachmentsTestCase(unittest.TestCase):
         self.assertEqual(state.runtime_store.get_session(session_id).source_app_id, APP_ID)
         self.assertEqual(state.runtime_store.get_thread(session_id).source_app_id, APP_ID)
         self.assertEqual(queued_event.payload["attachments"], [expected_attachment])
+
+    def test_runtime_request_materializes_storage_attachment_link_for_provider(self) -> None:
+        repo_root = make_temp_repo_root(self)
+        relative_path = self._write_generated_storage_file(repo_root)
+        state = self._runtime_request_state()
+        result = {
+            "json": {"ok": True},
+            "runtime_launch_requests": [
+                {
+                    "request_id": "capture-1",
+                    "agent_id": "chat",
+                    "agent_label": "Maverick",
+                    "title": "Device visual input",
+                    "input_text": "Inspect this device frame.",
+                    "attachments": [self._attachment_request(relative_path)],
+                }
+            ],
+        }
+        captured: dict[str, object] = {}
+        executed = Event()
+        completed = Event()
+
+        def fake_resolve_runtime_backend_for_session(_provider_store, *, session, **_kwargs):
+            return SimpleNamespace(provider_id="test-provider"), SimpleNamespace(), SimpleNamespace()
+
+        def fake_execute_runtime_turn(**kwargs):
+            captured["input_text"] = kwargs["input_text"]
+            executed.set()
+            return RuntimeExecutionResult(output_text="done", exit_code=0)
+
+        def fake_dispatch_source_app_runtime_event(*_args, **_kwargs):
+            completed.set()
+
+        with (
+            patch.object(runtime_requests, "runtime_skill_catalog_app_id_for_request", lambda *_args, **_kwargs: None),
+            patch.object(runtime_submission_runtime, "resolve_runtime_backend_for_session", fake_resolve_runtime_backend_for_session),
+            patch.object(runtime_submission_runtime, "_build_launch_spec_for_execution", lambda *_args, **_kwargs: None),
+            patch.object(runtime_submission_runtime, "execute_runtime_turn", fake_execute_runtime_turn),
+            patch.object(runtime_submission_runtime, "dispatch_source_app_runtime_event", fake_dispatch_source_app_runtime_event),
+            patch.object(runtime_submission_runtime, "release_idle_runtime_processes", lambda *_args, **_kwargs: 0),
+        ):
+            runtime_results = runtime_requests.apply_app_runtime_requests(
+                state,
+                result=result,
+                workspace_id="default",
+                app_id=APP_ID,
+                source_root=Path(f"/apps/{APP_ID}"),
+                backend_entrypoint=None,
+                data_root=f"workspaces/default/data/{APP_ID}",
+                parsed=self._runtime_request_parsed(),
+                start_path=repo_root,
+            )
+            self.assertTrue(executed.wait(2), "runtime worker did not execute")
+            self.assertTrue(completed.wait(2), "runtime worker did not complete")
+
+        session_id = runtime_results[0]["runtime_session_id"]
+        turn_id = runtime_results[0]["turn_id"]
+        provider_input = captured["input_text"]
+        self.assertEqual(runtime_results[0]["status"], "submitted")
+        self.assertEqual(state.runtime_store.get_turn(turn_id).status, "completed")
+        self.assertIsInstance(provider_input, str)
+        self.assertIn("Inspect this device frame.", provider_input)
+        self.assertIn("Uploaded attachments:", provider_input)
+        self.assertIn("device-frame.jpg", provider_input)
+        self.assertIn("image/jpeg", provider_input)
+        self.assertIn(relative_path, provider_input)
+        self.assertIn(str(repo_root / "workspaces" / "default" / relative_path), provider_input)
+        self.assertEqual(state.runtime_store.get_session(session_id).source_app_id, APP_ID)
 
     def test_runtime_launch_requests_require_declared_create_sessions_permission(self) -> None:
         result = {

@@ -109,11 +109,23 @@ def map_maf_events_to_inter_agent_records(
     """Map controlled MAF handoff observations to safe Maverick event records."""
     visibility_plane = validate_visibility_plane(context.visibility_plane)
     records: list[InterAgentEventRecord] = []
-    for event in events:
+    pending_handoffs: dict[str, str | None] = {}
+    for source_index, event in enumerate(events, start=1):
         adapter_event_type = _adapter_event_type(event)
         event_type = _HANDOFF_EVENT_TYPES.get(adapter_event_type)
         if event_type is None:
-            continue
+            derived = _derived_handoff_event(event, adapter_event_type, pending_handoffs, source_index)
+            if derived is None:
+                continue
+            event, event_type, adapter_event_type = derived
+        source_participant_id = _clean_optional(
+            _value(event, "source_participant_id", "source", "from_agent", "from_participant")
+        )
+        target_participant_id = _clean_optional(
+            _value(event, "target_participant_id", "target", "to_agent", "to_participant")
+        )
+        if event_type == "inter_agent.handoff.requested" and target_participant_id:
+            pending_handoffs[target_participant_id] = source_participant_id
         records.append(
             _handoff_record(
                 context,
@@ -125,6 +137,54 @@ def map_maf_events_to_inter_agent_records(
             )
         )
     return records
+
+
+def _derived_handoff_event(
+    event: object,
+    adapter_event_type: str,
+    pending_handoffs: dict[str, str | None],
+    source_index: int,
+) -> tuple[dict[str, Any], InterAgentEventType, str] | None:
+    if adapter_event_type == "executor_invoked":
+        target_participant_id = _clean_optional(_value(event, "executor_id", "target_participant_id", "target"))
+        if not target_participant_id or target_participant_id not in pending_handoffs:
+            return None
+        if _value(event, "should_respond") is not True:
+            return None
+        return (
+            {
+                "source_event_id": _workflow_source_event_id(event, adapter_event_type, source_index),
+                "source_participant_id": pending_handoffs[target_participant_id],
+                "target_participant_id": target_participant_id,
+                "summary": "MAF invoked the handoff target participant.",
+                "correlation_id": _handoff_correlation_id(
+                    pending_handoffs[target_participant_id],
+                    target_participant_id,
+                ),
+            },
+            "inter_agent.handoff.accepted",
+            adapter_event_type,
+        )
+    if adapter_event_type == "output":
+        target_participant_id = _clean_optional(_value(event, "executor_id", "target_participant_id", "target"))
+        if not target_participant_id or target_participant_id not in pending_handoffs:
+            return None
+        return (
+            {
+                "source_event_id": _workflow_source_event_id(event, adapter_event_type, source_index),
+                "source_participant_id": pending_handoffs[target_participant_id],
+                "target_participant_id": target_participant_id,
+                "summary": _safe_output_summary(event)
+                or "MAF handoff target participant produced output.",
+                "correlation_id": _handoff_correlation_id(
+                    pending_handoffs[target_participant_id],
+                    target_participant_id,
+                ),
+            },
+            "inter_agent.handoff.completed",
+            adapter_event_type,
+        )
+    return None
 
 
 def _handoff_record(
@@ -257,15 +317,51 @@ def _created_at(context: AdapterEventMappingContext, event: object) -> datetime 
     return context.created_at
 
 
+def _workflow_source_event_id(event: object, adapter_event_type: str, source_index: int) -> str:
+    explicit = _clean_optional(_value(event, "source_event_id", "event_id", "id", "request_id"))
+    if explicit:
+        return explicit
+    executor_id = _clean_optional(_value(event, "executor_id")) or "workflow"
+    iteration = _clean_optional(_value(event, "iteration")) or "0"
+    return f"maf-workflow:{source_index}:{adapter_event_type}:{executor_id}:{iteration}"
+
+
+def _handoff_correlation_id(
+    source_participant_id: str | None,
+    target_participant_id: str,
+) -> str:
+    source = source_participant_id or "unknown"
+    return f"maf-handoff:{source}:{target_participant_id}"
+
+
+def _safe_output_summary(event: object) -> str | None:
+    data = _value(event, "data")
+    text = _clean_optional(_value(data, "text")) if data is not None else None
+    if text:
+        return text[:500]
+    return _clean_optional(_value(event, "summary", "message", "content", "description"))
+
+
 def _value(event: object, *names: str) -> Any:
     if isinstance(event, dict):
         for name in names:
             if name in event:
                 return event[name]
+        data = event.get("data")
+        if data is not None:
+            return _value(data, *names)
         return None
+    missing = object()
     for name in names:
-        if hasattr(event, name):
-            return getattr(event, name)
+        try:
+            value = getattr(event, name, missing)
+        except Exception:
+            continue
+        if value is not missing:
+            return value
+    data = getattr(event, "data", None)
+    if data is not None:
+        return _value(data, *names)
     return None
 
 

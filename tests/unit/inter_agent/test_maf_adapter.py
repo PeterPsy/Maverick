@@ -147,6 +147,51 @@ class MafAdapterTest(unittest.TestCase):
         self.assertNotIn("raw_payload", records[0].payload)
         self.assertNotIn("chain_of_thought", records[0].payload)
 
+    def test_maf_workflow_event_shape_derives_handoff_lifecycle(self) -> None:
+        context = AdapterEventMappingContext(
+            run=_run(),
+            visibility_plane="detail",
+            sequence_start=50,
+            event_id_prefix="iaevt-workflow",
+            created_at=NOW,
+        )
+        events = [
+            SimpleNamespace(
+                type="handoff_sent",
+                data=SimpleNamespace(source="triage", target="specialist"),
+            ),
+            SimpleNamespace(
+                type="executor_invoked",
+                executor_id="specialist",
+                data=SimpleNamespace(should_respond=True),
+            ),
+            SimpleNamespace(
+                type="output",
+                executor_id="specialist",
+                data=SimpleNamespace(text="accepted and completed"),
+            ),
+        ]
+
+        records = map_maf_events_to_inter_agent_records(context, events)
+
+        self.assertEqual(
+            [record.event_type for record in records],
+            [
+                "inter_agent.handoff.requested",
+                "inter_agent.handoff.accepted",
+                "inter_agent.handoff.completed",
+            ],
+        )
+        self.assertEqual([record.sequence for record in records], [51, 52, 53])
+        self.assertEqual([record.participant_id for record in records], ["triage", "specialist", "specialist"])
+        self.assertEqual(
+            [record.payload["adapter_event_type"] for record in records],
+            ["handoff_sent", "executor_invoked", "output"],
+        )
+        self.assertEqual(records[-1].payload["summary"], "accepted and completed")
+        self.assertTrue(records[1].idempotency_key.startswith("run-maf-handoff:maf:executor_invoked:"))
+        self.assertTrue(records[2].idempotency_key.startswith("run-maf-handoff:maf:output:"))
+
     def test_unknown_maf_events_are_not_projected(self) -> None:
         context = AdapterEventMappingContext(run=_run(), created_at=NOW)
 

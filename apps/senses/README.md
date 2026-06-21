@@ -76,9 +76,11 @@ Storage `file.content.write`.
 
 Idempotent retries return the existing capture. If that capture is still
 `storage_pending` after the Storage write lease has expired, Senses reissues the
-same Storage dependency request for the existing `capture_id` and path so a
-client retry can recover from a host crash between the Senses commit and Storage
-callback.
+same Storage dependency request for the existing `capture_id` and path with
+Storage `mode=upsert` and `confirm=true`. This lets a client retry recover when
+Storage already wrote the file but the callback to Senses was lost; the callback
+still has to match the persisted path, sha256 and size before the capture becomes
+`stored`.
 
 Storage writes use:
 
@@ -165,5 +167,7 @@ Senses is a sealed, sandbox-compatible root app. Its contract declares
 frontend/backend/CLI/MCP surfaces, install/migrate/health hooks, app-owned
 SQLite state under `data/senses`, required Storage dependency aliases for file
 creation and catalog metadata, runtime session creation for dispatch, and data
-events for devices, pairing, settings, captures, and routing. Device-token
+events for devices, pairing, settings, captures, and routing. The operations
+manifest reports separate booleans for user-session `ingest.frame` support and
+raw device auth support. Device-token
 ingress and capture reference entities remain deferred beyond Phase 4.

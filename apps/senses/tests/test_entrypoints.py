@@ -18,6 +18,7 @@ import zlib
 
 MAVERICK_ROOT = next(parent for parent in Path(__file__).resolve().parents if (parent / "core").is_dir())
 APP_ROOT = Path(__file__).resolve().parents[1]
+STORAGE_ROOT = MAVERICK_ROOT / "apps" / "storage"
 sys.path.insert(0, str(MAVERICK_ROOT))
 sys.path.insert(0, str(APP_ROOT / "backend"))
 
@@ -83,6 +84,28 @@ def run_hook(relative_path: str, payload: dict[str, object]) -> subprocess.Compl
         capture_output=True,
         env=env,
         check=False,
+    )
+
+
+def run_storage_backend(workspace_root: Path, body: dict[str, object]) -> dict[str, object]:
+    uploaded_root = workspace_root / "storage" / "uploaded"
+    generated_root = workspace_root / "storage" / "generated"
+    uploaded_root.mkdir(parents=True, exist_ok=True)
+    generated_root.mkdir(parents=True, exist_ok=True)
+    return run_json_entrypoint(
+        STORAGE_ROOT / "backend" / "app_backend.py",
+        cwd=STORAGE_ROOT,
+        payload={
+            "app_id": "storage",
+            "workspace_id": "default",
+            "consumer_app_id": "senses",
+            "dependency_alias": "storage-file-content-write",
+            "surface": "dependency_backend_request",
+            "data_root": str(workspace_root / "data" / "storage"),
+            "uploaded_storage_root": str(uploaded_root),
+            "generated_storage_root": str(generated_root),
+            "body": body,
+        },
     )
 
 
@@ -312,7 +335,9 @@ class SensesPhase4EntrypointTest(unittest.TestCase):
             )
             self.assertEqual(status, 200)
             self.assertEqual(manifest["phase"], "phase-4")
-            self.assertIs(manifest["auth"]["device_ingress_supported"], False)
+            self.assertIs(manifest["auth"]["user_session_ingest_supported"], True)
+            self.assertIs(manifest["auth"]["raw_device_auth_supported"], False)
+            self.assertNotIn("device_ingress_supported", manifest["auth"])
             self.assertNotIn("device_token_ingress", manifest["auth"])
             self.assertEqual(manifest["dependency_resolution"]["status"], "resolved")
             self.assertEqual(manifest["declared_surfaces"]["frontend"], True)
@@ -454,6 +479,43 @@ class SensesPhase4EntrypointTest(unittest.TestCase):
             )
             self.assertEqual(status, 200)
             self.assertEqual(completed["device"]["owner_user_id"], "admin-1")
+
+    def test_pairing_complete_allows_creator_member_after_policy_is_tightened(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            data_root = Path(tmp)
+            creator_actor = actor("user-1")
+            admin_actor = actor("admin-1", "admin")
+
+            status, started = handle_action(
+                data_root,
+                {"action": "pairing.start", "_workspace_id": "default", "_app_actor": creator_actor},
+            )
+            self.assertEqual(status, 201)
+
+            status, updated = handle_action(
+                data_root,
+                {
+                    "action": "settings.update",
+                    "_workspace_id": "default",
+                    "_app_actor": admin_actor,
+                    "allow_member_pairing": False,
+                },
+            )
+            self.assertEqual(status, 200)
+            self.assertFalse(updated["settings"]["allow_member_pairing"])
+
+            status, completed = handle_action(
+                data_root,
+                {
+                    "action": "pairing.complete",
+                    "_workspace_id": "default",
+                    "_app_actor": creator_actor,
+                    "code": started["pairing"]["code"],
+                    "device_display_name": "Creator iPhone",
+                },
+            )
+            self.assertEqual(status, 200)
+            self.assertEqual(completed["device"]["owner_user_id"], "user-1")
 
     def test_user_visibility_and_admin_include_all(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -686,15 +748,24 @@ class SensesPhase4EntrypointTest(unittest.TestCase):
             self.assertEqual(status, 409)
             self.assertEqual(conflict["error"], "idempotency_conflict")
 
-    def test_ingest_frame_reissues_storage_write_for_stale_pending_idempotency(self) -> None:
+    def test_ingest_frame_reissues_stale_pending_with_upsert_when_storage_file_exists(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             data_root = Path(tmp)
+            storage_workspace = Path(tmp) / "storage-workspace"
             completed = start_and_complete_device(data_root)
             request = capture_request(completed)
 
             status, first = handle_action(data_root, dict(request))
             self.assertEqual(status, 202)
             original_request = first["dependency_backend_requests"][0]
+            self.assertEqual(original_request["body"]["mode"], "create")
+            first_storage = run_storage_backend(storage_workspace, original_request["body"])
+            self.assertEqual(first_storage["status_code"], 200)
+            self.assertEqual(
+                first_storage["json"]["file"]["workspace_relative_path"],
+                first["storage"]["workspace_relative_path"],
+            )
+
             stale_at = (
                 datetime.now(tz=UTC)
                 - timedelta(seconds=service.STORAGE_PENDING_LEASE_SECONDS + 5)
@@ -717,11 +788,36 @@ class SensesPhase4EntrypointTest(unittest.TestCase):
             self.assertEqual(len(replay["dependency_backend_requests"]), 1)
             reissued = replay["dependency_backend_requests"][0]
             self.assertEqual(reissued["request_id"], original_request["request_id"])
+            self.assertEqual(reissued["body"]["mode"], "upsert")
+            self.assertIs(reissued["body"]["confirm"], True)
             self.assertEqual(
                 reissued["body"]["workspace_relative_path"],
                 original_request["body"]["workspace_relative_path"],
             )
             self.assertEqual(reissued["body"]["content_base64"], original_request["body"]["content_base64"])
+
+            second_storage = run_storage_backend(storage_workspace, reissued["body"])
+            self.assertEqual(second_storage["status_code"], 200)
+            self.assertEqual(
+                second_storage["json"]["file"]["workspace_relative_path"],
+                first["storage"]["workspace_relative_path"],
+            )
+            self.assertEqual(second_storage["json"]["file"]["sha256"], first["storage"]["sha256"])
+            self.assertEqual(
+                second_storage["json"]["audit"]["previous_sha256"],
+                first["storage"]["sha256"],
+            )
+
+            callback = storage_callback_payload(replay)
+            callback["dependency_backend_result"] = {
+                **second_storage,
+                "dependency_provider_app_id": "storage",
+            }
+            status, stored = handle_action(data_root, callback)
+            self.assertEqual(status, 200)
+            self.assertEqual(stored["status"], "stored")
+            self.assertEqual(stored["capture"]["storage"]["status"], "stored")
+            self.assertEqual(stored["capture"]["storage"]["sha256"], first["storage"]["sha256"])
 
     def test_storage_write_callback_marks_capture_stored_without_runtime_launch(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -1339,13 +1435,17 @@ class SensesPhase4EntrypointTest(unittest.TestCase):
             )
             self.assertTrue(cli_manifest["ok"])
             self.assertEqual(cli_manifest["phase"], "phase-4")
-            self.assertIs(cli_manifest["auth"]["device_ingress_supported"], False)
+            self.assertIs(cli_manifest["auth"]["user_session_ingest_supported"], True)
+            self.assertIs(cli_manifest["auth"]["raw_device_auth_supported"], False)
+            self.assertNotIn("device_ingress_supported", cli_manifest["auth"])
             self.assertNotIn("device_token_ingress", cli_manifest["auth"])
             self.assertFalse(cli_overview["ok"])
             self.assertEqual(cli_overview["error"], "unsupported_cli_action")
             self.assertTrue(mcp_manifest["ok"])
             self.assertEqual(mcp_manifest["phase"], "phase-4")
-            self.assertIs(mcp_manifest["auth"]["device_ingress_supported"], False)
+            self.assertIs(mcp_manifest["auth"]["user_session_ingest_supported"], True)
+            self.assertIs(mcp_manifest["auth"]["raw_device_auth_supported"], False)
+            self.assertNotIn("device_ingress_supported", mcp_manifest["auth"])
             self.assertNotIn("device_token_ingress", mcp_manifest["auth"])
             self.assertFalse(mcp_pairing["ok"])
             self.assertEqual(mcp_pairing["error"], "unsupported_tool")

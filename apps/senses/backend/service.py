@@ -276,7 +276,8 @@ def manifest_payload(
             "mode": "user_session_mvp",
             "authenticated": bool(actor.get("user_id")),
             "management_role": "workspace_admin",
-            "device_ingress_supported": False,
+            "user_session_ingest_supported": True,
+            "raw_device_auth_supported": False,
         },
         "declared_surfaces": {
             "backend": True,
@@ -296,9 +297,10 @@ def manifest_payload(
         "deferred_to_later_phases": list(DEFERRED_ACTIONS),
         "notes": [
             "Senses Phase 4 uses Maverick user sessions for pairing, device registry, frame ingestion, and routing.",
+            "ingest.frame is available with a Maverick user session and active device_session_id.",
             "ingest.frame stores captures through the declared Storage dependency and never launches runtime turns.",
             "routing.dispatch_capture emits runtime_launch_requests only after a capture is stored.",
-            "Device-token ingress remains deferred.",
+            "Raw device auth remains deferred.",
         ],
     }
 
@@ -838,7 +840,7 @@ def ingest_frame(
                     (workspace_id, existing["request_id"]),
                 )
                 capture = capture_by_id(db, workspace_id, str(capture["capture_id"]))
-                dependency_request = storage_write_dependency_request(capture, prepared)
+                dependency_request = storage_write_dependency_request(capture, prepared, reissue=True)
             elif capture_status == "storage_pending" and storage_pending_stale(capture, timestamp):
                 db.execute(
                     """
@@ -869,7 +871,7 @@ def ingest_frame(
                     },
                 )
                 capture = capture_by_id(db, workspace_id, str(capture["capture_id"]))
-                dependency_request = storage_write_dependency_request(capture, prepared)
+                dependency_request = storage_write_dependency_request(capture, prepared, reissue=True)
             db.commit()
             response = ingest_acceptance_response(existing, capture)
             if dependency_request is not None:
@@ -2333,19 +2335,24 @@ def capture_storage_path(
 def storage_write_dependency_request(
     capture: sqlite3.Row | None,
     prepared: dict[str, object],
+    *,
+    reissue: bool = False,
 ) -> dict[str, object]:
     if capture is None:
         raise RuntimeError("Cannot create Senses Storage dependency request without a capture row.")
     capture_id = str(capture["capture_id"])
+    body = {
+        "action": "file.content.write",
+        "mode": "upsert" if reissue else "create",
+        "workspace_relative_path": capture["workspace_relative_path"],
+        "content_base64": prepared["content_base64"],
+    }
+    if reissue:
+        body["confirm"] = True
     return {
         "request_id": f"write-{capture_id}",
         "dependency_alias": STORAGE_WRITE_DEPENDENCY_ALIAS,
-        "body": {
-            "action": "file.content.write",
-            "mode": "create",
-            "workspace_relative_path": capture["workspace_relative_path"],
-            "content_base64": prepared["content_base64"],
-        },
+        "body": body,
         "callback": {
             "action": "storage_write.completed",
             "payload": {"capture_id": capture_id},

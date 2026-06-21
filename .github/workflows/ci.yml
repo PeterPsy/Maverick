@@ -29,6 +29,22 @@ jobs:
       - name: Check unused imports
         run: python scripts/check_unused_imports.py
 
+  inter-agent-maf:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install package with MAF extra
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -e ".[inter-agent-maf]"
+      - name: MAF handoff fixture
+        env:
+          MAVERICK_EXPERIMENTAL_AGENT_FRAMEWORK: "1"
+        run: python -m unittest tests.unit.inter_agent.test_maf_adapter tests.integration.inter_agent.test_maf_handoff_fixture
+
   frontend-builds:
     runs-on: ubuntu-latest
     strategy:

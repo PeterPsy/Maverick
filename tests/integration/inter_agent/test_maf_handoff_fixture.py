@@ -44,7 +44,9 @@ class MafHandoffFixtureTest(unittest.IsolatedAsyncioTestCase):
 
     async def test_source_backed_handoff_events_map_append_and_replay(self) -> None:
         asyncio.get_running_loop().slow_callback_duration = 5.0
-        maf = _load_maf_symbols_or_skip(self)
+        if os.environ.get(MAVERICK_EXPERIMENTAL_AGENT_FRAMEWORK) != "1":
+            self.skipTest(f"Source-backed MAF fixture requires {MAVERICK_EXPERIMENTAL_AGENT_FRAMEWORK}=1.")
+        maf = _load_maf_symbols(self)
         repo_root = make_temp_repo_root(self)
         store = build_inter_agent_document_store(start_path=repo_root)
         service = InterAgentService(store)
@@ -87,11 +89,10 @@ class MafHandoffFixtureTest(unittest.IsolatedAsyncioTestCase):
             event_id_prefix=f"iaevt-{run.run_id}",
             created_at=NOW,
         )
-        with patch.dict(os.environ, {MAVERICK_EXPERIMENTAL_AGENT_FRAMEWORK: "1"}):
-            adapter = MafAdapter()
-            self.assertTrue(adapter.is_available())
-            mapped = adapter.map_events(context, raw_events)
-            mapped_retry = adapter.map_events(context, raw_events)
+        adapter = MafAdapter()
+        self.assertTrue(adapter.is_available())
+        mapped = adapter.map_events(context, raw_events)
+        mapped_retry = adapter.map_events(context, raw_events)
 
         self.assertEqual(
             [record.event_type for record in mapped],
@@ -192,7 +193,7 @@ def _handoff_run_spec() -> InterAgentRunSpec:
     )
 
 
-def _load_maf_symbols_or_skip(test_case: unittest.TestCase) -> SimpleNamespace:
+def _load_maf_symbols(test_case: unittest.TestCase) -> SimpleNamespace:
     try:
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
@@ -207,7 +208,10 @@ def _load_maf_symbols_or_skip(test_case: unittest.TestCase) -> SimpleNamespace:
             )
             from agent_framework_orchestrations import HandoffBuilder  # type: ignore[import-not-found]
     except (ImportError, ModuleNotFoundError) as exc:
-        test_case.skipTest(f"MAF optional dependency is unavailable: {exc}")
+        test_case.fail(
+            f"MAF optional dependency is unavailable while "
+            f"{MAVERICK_EXPERIMENTAL_AGENT_FRAMEWORK}=1: {exc}"
+        )
     return SimpleNamespace(
         Agent=Agent,
         BaseChatClient=BaseChatClient,

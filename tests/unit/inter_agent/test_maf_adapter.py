@@ -12,7 +12,10 @@ from core.inter_agent.adapters.maf import (
     MafAdapter,
     map_maf_events_to_inter_agent_records,
 )
+from core.inter_agent.events import EventRetentionPolicyRecord
 from core.inter_agent.models import InterAgentRunRecord
+from core.inter_agent.store import build_inter_agent_document_store
+from tests.support.repo import make_temp_repo_root
 
 
 NOW = datetime(2026, 6, 21, 12, 0, tzinfo=UTC)
@@ -37,6 +40,17 @@ def _run() -> InterAgentRunRecord:
         updated_at=NOW,
         ended_at=None,
         recovery_generation=0,
+    )
+
+
+def _retention() -> EventRetentionPolicyRecord:
+    return EventRetentionPolicyRecord(
+        retention_policy_id="retention-1",
+        workspace_id="default",
+        summary_max_events=100,
+        detail_max_events=100,
+        debug_max_events=100,
+        created_at=NOW,
     )
 
 
@@ -117,10 +131,10 @@ class MafAdapterTest(unittest.TestCase):
             ],
         )
         self.assertEqual([record.sequence for record in records], [41, 42, 43])
-        self.assertEqual(
-            [record.event_id for record in records],
-            ["iaevt-test-41", "iaevt-test-42", "iaevt-test-43"],
-        )
+        self.assertEqual(len({record.event_id for record in records}), 3)
+        self.assertTrue(records[0].event_id.startswith("iaevt-test-handoff_sent-"))
+        self.assertTrue(records[1].event_id.startswith("iaevt-test-handoff_accepted-"))
+        self.assertTrue(records[2].event_id.startswith("iaevt-test-handoff_completed-"))
         self.assertEqual(records[0].participant_id, "triage")
         self.assertEqual(records[1].participant_id, "specialist")
         self.assertEqual(records[2].participant_id, "specialist")
@@ -142,6 +156,29 @@ class MafAdapterTest(unittest.TestCase):
         )
 
         self.assertEqual(records, [])
+
+    def test_default_event_ids_do_not_collide_across_mapping_batches(self) -> None:
+        repo_root = make_temp_repo_root(self)
+        store = build_inter_agent_document_store(start_path=repo_root)
+        context = AdapterEventMappingContext(run=_run(), created_at=NOW)
+        retention = _retention()
+
+        first = map_maf_events_to_inter_agent_records(
+            context,
+            [{"event_type": "handoff_sent", "event_id": "maf-event-1", "message": "First handoff."}],
+        )[0]
+        second = map_maf_events_to_inter_agent_records(
+            context,
+            [{"event_type": "handoff_sent", "event_id": "maf-event-2", "message": "Second handoff."}],
+        )[0]
+
+        stored_first = store.append_event(first, retention_policy=retention)
+        stored_second = store.append_event(second, retention_policy=retention)
+
+        self.assertNotEqual(first.event_id, second.event_id)
+        self.assertEqual(first.idempotency_key, "run-maf-handoff:maf:handoff_sent:maf-event-1")
+        self.assertEqual(second.idempotency_key, "run-maf-handoff:maf:handoff_sent:maf-event-2")
+        self.assertEqual([stored_first.sequence, stored_second.sequence], [1, 2])
 
 
 if __name__ == "__main__":

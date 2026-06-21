@@ -26,10 +26,11 @@ class AdapterEventMappingContext:
     event_id_prefix: str = "iaevt-adapter"
     created_at: datetime | None = None
 
-    def event_id_for(self, index: int) -> str:
+    def event_id_for(self, key: int | str) -> str:
         """Return a deterministic local event id for a mapped adapter event."""
         prefix = self.event_id_prefix.strip() or "iaevt-adapter"
-        return f"{prefix}-{index}"
+        component = str(key).strip() or "event"
+        return f"{prefix}-{component}"
 
 
 class InterAgentAdapter(Protocol):

@@ -9,7 +9,9 @@ from __future__ import annotations
 from collections.abc import Iterable
 from dataclasses import dataclass
 from datetime import datetime
+import hashlib
 import importlib
+import json
 import os
 import re
 from types import ModuleType
@@ -145,15 +147,6 @@ def _handoff_record(
     participant_id = source_participant_id
     if event_type in {"inter_agent.handoff.accepted", "inter_agent.handoff.completed"}:
         participant_id = target_participant_id or source_participant_id
-    correlation_id = (
-        _clean_optional(_value(event, "correlation_id", "workflow_id", "run_id"))
-        or source_event_id
-        or f"{run.run_id}:maf:{adapter_event_type}:{mapped_index}"
-    )
-    idempotency_key = (
-        _clean_optional(_value(event, "idempotency_key"))
-        or f"{run.run_id}:maf:{adapter_event_type}:{source_event_id or mapped_index}"
-    )
     payload = _safe_handoff_payload(
         event,
         adapter_event_type=adapter_event_type,
@@ -161,8 +154,23 @@ def _handoff_record(
         source_participant_id=source_participant_id,
         target_participant_id=target_participant_id,
     )
+    identity_token = _adapter_event_identity_token(
+        event,
+        adapter_event_type=adapter_event_type,
+        source_event_id=source_event_id,
+        payload=payload,
+    )
+    correlation_id = (
+        _clean_optional(_value(event, "correlation_id", "workflow_id", "run_id"))
+        or source_event_id
+        or f"{run.run_id}:maf:{adapter_event_type}:{identity_token}"
+    )
+    idempotency_key = (
+        _clean_optional(_value(event, "idempotency_key"))
+        or f"{run.run_id}:maf:{adapter_event_type}:{source_event_id or identity_token}"
+    )
     record = InterAgentEventRecord(
-        event_id=context.event_id_for(context.sequence_start + mapped_index),
+        event_id=context.event_id_for(f"{adapter_event_type}-{identity_token}"),
         workspace_id=run.workspace_id,
         run_id=run.run_id,
         thread_id=run.thread_id,
@@ -207,6 +215,32 @@ def _safe_handoff_payload(
     if task_id:
         payload["task_id"] = task_id
     return payload
+
+
+def _adapter_event_identity_token(
+    event: object,
+    *,
+    adapter_event_type: str,
+    source_event_id: str | None,
+    payload: dict[str, Any],
+) -> str:
+    explicit_idempotency_key = _clean_optional(_value(event, "idempotency_key"))
+    if explicit_idempotency_key:
+        identity_payload: dict[str, Any] = {"idempotency_key": explicit_idempotency_key}
+    elif source_event_id:
+        identity_payload = {"source_event_id": source_event_id}
+    else:
+        identity_payload = {
+            "correlation_id": _clean_optional(_value(event, "correlation_id", "workflow_id", "run_id")),
+            "payload": payload,
+        }
+    encoded = json.dumps(
+        {"adapter_event_type": adapter_event_type, **identity_payload},
+        sort_keys=True,
+        separators=(",", ":"),
+        default=str,
+    )
+    return hashlib.sha256(encoded.encode("utf-8")).hexdigest()[:16]
 
 
 def _adapter_event_type(event: object) -> str:

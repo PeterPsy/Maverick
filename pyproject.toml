@@ -26,6 +26,10 @@ classifiers = [
 document-generator = [
     "docling>=2.93,<3",
 ]
+inter-agent-maf = [
+    "agent-framework-orchestrations==1.0.0",
+    "agent-framework-core==1.9.0",
+]
 speech = [
     "faster-whisper>=1.1,<2",
 ]

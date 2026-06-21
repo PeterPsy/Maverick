@@ -18,6 +18,10 @@
         "document-generator": [
           "docling>=2.93,<3"
         ],
+        "inter-agent-maf": [
+          "agent-framework-orchestrations==1.0.0",
+          "agent-framework-core==1.9.0"
+        ],
         "mongo": [
           "pymongo>=4.6"
         ],
@@ -323,6 +327,24 @@
         "typescript": "^5.9.3",
         "vite": "^7.3.0",
         "vitest": "^4.1.4"
+      }
+    },
+    {
+      "app_id": "senses",
+      "package_name": "@maverick/senses",
+      "version": "0.4.0",
+      "private": true,
+      "dependencies": {
+        "lucide-react": "^1.14.0",
+        "react": "^19.2.3",
+        "react-dom": "^19.2.3"
+      },
+      "dev_dependencies": {
+        "@types/react": "^19.2.7",
+        "@types/react-dom": "^19.2.3",
+        "@vitejs/plugin-react": "^5.1.1",
+        "typescript": "^5.9.3",
+        "vite": "^7.3.0"
       }
     },
     {

@@ -129,19 +129,20 @@ def png_chunk(chunk_type: bytes, payload: bytes = b"") -> bytes:
     return len(payload).to_bytes(4, "big") + chunk_type + payload + crc.to_bytes(4, "big")
 
 
-def png_with_text_metadata() -> bytes:
+def png_with_text_metadata(*, filter_byte: int = 0, extra_chunks: tuple[bytes, ...] = ()) -> bytes:
     signature = b"\x89PNG\r\n\x1a\n"
     ihdr = (
         (1).to_bytes(4, "big")
         + (1).to_bytes(4, "big")
         + b"\x08\x06\x00\x00\x00"
     )
-    idat = zlib.compress(b"\x00\x00\x00\x00\x00")
+    idat = zlib.compress(bytes([filter_byte, 0, 0, 0, 0]))
     return (
         signature
         + png_chunk(b"IHDR", ihdr)
         + png_chunk(b"tEXt", b"GPS=secret")
         + png_chunk(b"eXIf", b"Exif\x00\x00GPSSECRET")
+        + b"".join(extra_chunks)
         + png_chunk(b"IDAT", idat)
         + png_chunk(b"IEND")
     )
@@ -182,7 +183,7 @@ def storage_callback_payload(
     accepted: dict[str, object],
     *,
     request_id: str | None = None,
-    provider_app_id: str = "storage",
+    provider_app_id: str | None = "storage",
     dependency_status: str = "completed",
     file_id: str | None = None,
 ) -> dict[str, object]:
@@ -193,7 +194,6 @@ def storage_callback_payload(
     if dependency_status == "completed":
         result = {
             "status_code": 200,
-            "dependency_provider_app_id": provider_app_id,
             "json": {
                 "file": {
                     "file_id": file_id or f"generated:senses/{capture_id}",
@@ -204,6 +204,8 @@ def storage_callback_payload(
                 "bytes_written": storage["size_bytes"],
             },
         }
+        if provider_app_id is not None:
+            result["dependency_provider_app_id"] = provider_app_id
     return {
         "action": "storage_write.completed",
         "_workspace_id": "default",
@@ -495,6 +497,28 @@ class SensesPhase2EntrypointTest(unittest.TestCase):
             self.assertEqual(status, 400)
             self.assertEqual(png_error["error"], "invalid_content_type")
 
+            invalid_png_filter = capture_request(
+                completed,
+                request_id="invalid-png-filter",
+                idempotency_key="invalid-png-filter",
+                content=png_with_text_metadata(filter_byte=9),
+                content_type="image/png",
+            )
+            status, png_filter_error = handle_action(data_root, invalid_png_filter)
+            self.assertEqual(status, 400)
+            self.assertEqual(png_filter_error["error"], "invalid_content_type")
+
+            invalid_png_chunk = capture_request(
+                completed,
+                request_id="invalid-png-chunk",
+                idempotency_key="invalid-png-chunk",
+                content=png_with_text_metadata(extra_chunks=(png_chunk(b"IDaT"),)),
+                content_type="image/png",
+            )
+            status, png_chunk_error = handle_action(data_root, invalid_png_chunk)
+            self.assertEqual(status, 400)
+            self.assertEqual(png_chunk_error["error"], "invalid_content_type")
+
     def test_ingest_frame_strips_png_metadata_before_storage_write(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             data_root = Path(tmp)
@@ -590,7 +614,7 @@ class SensesPhase2EntrypointTest(unittest.TestCase):
             self.assertEqual(status, 403)
             self.assertEqual(public_callback["error"], "senses_permission_forbidden")
 
-    def test_storage_write_callback_rejects_wrong_request_provider_and_stale_replays(self) -> None:
+    def test_storage_write_callback_accepts_dependency_provider_and_rejects_stale_replays(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             data_root = Path(tmp)
             completed = start_and_complete_device(data_root)
@@ -604,15 +628,22 @@ class SensesPhase2EntrypointTest(unittest.TestCase):
             self.assertEqual(status, 400)
             self.assertEqual(wrong_request["error"], "invalid_dependency_callback")
 
-            status, wrong_provider = handle_action(
+            status, missing_provider = handle_action(
                 data_root,
-                storage_callback_payload(accepted, provider_app_id="mail"),
+                storage_callback_payload(accepted, provider_app_id=None),
             )
             self.assertEqual(status, 400)
-            self.assertEqual(wrong_provider["error"], "invalid_dependency_callback")
+            self.assertEqual(missing_provider["error"], "invalid_dependency_callback")
 
             file_id = f"generated:senses/{accepted['capture_id']}"
-            status, stored = handle_action(data_root, storage_callback_payload(accepted, file_id=file_id))
+            status, stored = handle_action(
+                data_root,
+                storage_callback_payload(
+                    accepted,
+                    provider_app_id="storage-compatible",
+                    file_id=file_id,
+                ),
+            )
             self.assertEqual(status, 200)
             self.assertEqual(stored["status"], "stored")
 

@@ -72,9 +72,9 @@ PNG_ALLOWED_BIT_DEPTHS = {
     4: {8, 16},
     6: {8, 16},
 }
+PNG_MAX_DIMENSION = 100_000
 PNG_MAX_DECOMPRESSED_BYTES = 100_000_000
 STORAGE_WRITE_DEPENDENCY_ALIAS = "storage-file-content-write"
-STORAGE_PROVIDER_APP_ID = "storage"
 REQUIRED_DEPENDENCIES = (
     {
         "alias": "storage-file-content-write",
@@ -979,12 +979,12 @@ def storage_write_completed(data_root: Path, workspace_id: str, payload: dict[st
             return 200, {"ok": True, "status": "storage_failed", "capture": capture_payload(updated), "error": None}
 
         dependency_backend_result = payload.get("dependency_backend_result")
-        if storage_result_provider_app_id(dependency_backend_result) != STORAGE_PROVIDER_APP_ID:
+        if not storage_result_provider_app_id(dependency_backend_result):
             db.rollback()
             return error_payload(
                 400,
                 "invalid_dependency_callback",
-                "Senses storage callback result did not come from the selected Storage provider.",
+                "Senses storage callback result did not include the dependency provider app id.",
             )
         storage_result = storage_result_payload(dependency_backend_result)
         storage_error = validate_storage_result(capture, storage_result)
@@ -1744,14 +1744,22 @@ def strip_png_exif(data: bytes) -> bytes:
 
 
 def valid_png_chunk_type(chunk_type: bytes) -> bool:
-    return len(chunk_type) == 4 and all(
-        65 <= byte <= 90 or 97 <= byte <= 122
-        for byte in chunk_type
+    return (
+        len(chunk_type) == 4
+        and all(
+            65 <= byte <= 90 or 97 <= byte <= 122
+            for byte in chunk_type
+        )
+        and not png_chunk_reserved_bit_set(chunk_type)
     )
 
 
 def png_chunk_is_ancillary(chunk_type: bytes) -> bool:
     return bool(chunk_type[0] & 0x20)
+
+
+def png_chunk_reserved_bit_set(chunk_type: bytes) -> bool:
+    return bool(chunk_type[2] & 0x20)
 
 
 def validate_png_idat_payload(ihdr_payload: bytes, idat_payload: bytes) -> None:
@@ -1762,7 +1770,7 @@ def validate_png_idat_payload(ihdr_payload: bytes, idat_payload: bytes) -> None:
     compression_method = ihdr_payload[10]
     filter_method = ihdr_payload[11]
     interlace_method = ihdr_payload[12]
-    if width < 1 or height < 1:
+    if width < 1 or height < 1 or width > PNG_MAX_DIMENSION or height > PNG_MAX_DIMENSION:
         raise ValueError("PNG dimensions are invalid.")
     if color_type not in PNG_COLOR_TYPE_SAMPLES or bit_depth not in PNG_ALLOWED_BIT_DEPTHS[color_type]:
         raise ValueError("PNG color type or bit depth is unsupported.")
@@ -1787,6 +1795,9 @@ def validate_png_idat_payload(ihdr_payload: bytes, idat_payload: bytes) -> None:
         raise ValueError("PNG IDAT payload is invalid.")
     if len(decoded) != expected_size:
         raise ValueError("PNG IDAT payload does not match declared image dimensions.")
+    row_stride = row_bytes + 1
+    if any(filter_byte > 4 for filter_byte in decoded[0:expected_size:row_stride]):
+        raise ValueError("PNG scanline filter is invalid.")
 
 
 def capture_request_hash(value: dict[str, object]) -> str:

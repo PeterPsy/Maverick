@@ -334,6 +334,9 @@ class SensesPhase4EntrypointTest(unittest.TestCase):
                 },
             )
             self.assertEqual(status, 200)
+            self.assertEqual(manifest["action"], "manifest")
+            self.assertIs(manifest["ok"], True)
+            self.assertIs(manifest["available"], True)
             self.assertEqual(manifest["phase"], "phase-4")
             self.assertIs(manifest["auth"]["user_session_ingest_supported"], True)
             self.assertIs(manifest["auth"]["raw_device_auth_supported"], False)
@@ -350,6 +353,23 @@ class SensesPhase4EntrypointTest(unittest.TestCase):
             self.assertIn("runtime_dispatch.completed", manifest["callback_actions"])
             self.assertNotIn("ingest.frame", manifest["deferred_to_later_phases"])
             self.assertNotIn("routing.dispatch_capture", manifest["deferred_to_later_phases"])
+
+    def test_manifest_reports_unavailable_when_dependencies_blocked(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            status, manifest = handle_action(
+                Path(tmp),
+                {
+                    "action": "manifest",
+                    "_workspace_id": "default",
+                    "_app_actor": actor(),
+                    "_app_dependencies": {"dependencies": []},
+                },
+            )
+            self.assertEqual(status, 200)
+            self.assertEqual(manifest["action"], "manifest")
+            self.assertIs(manifest["ok"], False)
+            self.assertIs(manifest["available"], False)
+            self.assertEqual(manifest["dependency_resolution"]["status"], "blocked")
 
     def test_missing_workspace_id_is_rejected(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

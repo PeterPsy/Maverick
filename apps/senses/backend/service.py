@@ -264,8 +264,11 @@ def manifest_payload(
     dependencies: dict[str, object],
     actor: dict[str, str | None],
 ) -> dict[str, object]:
+    available = dependencies["status"] == "resolved"
     return {
-        "ok": True,
+        "ok": available,
+        "action": "manifest",
+        "available": available,
         "app_id": APP_ID,
         "name": APP_NAME,
         "version": APP_VERSION,

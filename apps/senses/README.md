@@ -148,9 +148,9 @@ maverick core cli run app.senses.dependencies --json
 maverick app senses cli run senses --action health --json
 ```
 
-Runtime readiness is true only when `ok` is `true`,
-`dependencies.status == "resolved"`, and the contract runtime permission
-`create_sessions` is active.
+Runtime readiness is true only when the manifest reports
+`available == true`, `dependency_resolution.status == "resolved"`, and the
+contract runtime permission `create_sessions` is active.
 
 ## SDK Flow
 

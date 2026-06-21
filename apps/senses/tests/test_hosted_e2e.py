@@ -44,6 +44,17 @@ class SensesHostedE2ETest(unittest.TestCase):
     def setUp(self) -> None:
         apply_test_environment_defaults()
 
+    def test_hosted_manifest_matches_ios_preflight_contract(self) -> None:
+        stack = self._hosted_stack()
+
+        status, manifest = self._post_senses(stack, {"action": "manifest"})
+
+        self.assertEqual(status, 200)
+        self.assertEqual(manifest["action"], "manifest")
+        self.assertIs(manifest["available"], True)
+        self.assertIs(manifest["ok"], True)
+        self.assertEqual(manifest["dependency_resolution"]["status"], "resolved")
+
     def test_hosted_ingest_storage_dispatch_and_chat_deep_link_pipeline(self) -> None:
         stack = self._hosted_stack()
         completed = self._pair_device(stack)

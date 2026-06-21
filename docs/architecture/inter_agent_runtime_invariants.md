@@ -20,7 +20,14 @@ It started with names, visibility, legacy compatibility, and initial policy defa
 7. `thread_visibility="hidden"` sessions may have runtime turns, runtime events, runtime processes, provider state, and runtime roots, but they must not create, update, or appear as user-visible runtime threads.
 8. `session_kind="inter_agent_participant"` requires `thread_visibility="hidden"`; omitted visibility on an explicit participant is normalized to hidden, while explicit `user` visibility is invalid.
 9. Invalid persisted visibility values fail closed: they are rejected on direct session hydration and must not make an existing thread appear in user-facing thread catalogs.
-10. `handoff` is schema/event-only until F7. It is not executable MVP behavior unless a later ADR explicitly promotes it.
+10. `handoff` is schema/event-only until F7. It is not executable MVP
+    behavior unless a later ADR explicitly promotes it. The F6 MAF
+    source-backed adapter evaluation may execute `handoff`, `group_chat`, and
+    `magentic_like` fixtures only behind
+    `MAVERICK_EXPERIMENTAL_AGENT_FRAMEWORK=1`; that exception is not default-on,
+    not product-facing Chat behavior, and must still project only
+    Maverick-owned run, participant, edge, event, budget, approval, artifact,
+    and root transcript records.
 11. The F3 native executor may run deterministic synthetic participants only for tests or explicit operator-controlled execution, or real hidden child runtime sessions through the F2 service. It must not bypass inter-agent spawn, message, budget, or root-session authority checks.
 12. The root Chat transcript receives selected operational summaries from the executor as non-terminal `runtime.step.updated` projections. When Chat requests a persisted root turn projection, the final assistant answer must be projected as `runtime.output.final` on that root turn, while detailed participant work remains in `inter_agent` events.
 13. Full participant detail remains in `inter_agent` events for graph replay and audit, but event replay and run detail require creator, root-session owner, admin, operator, or explicit `inter_agent_root` grant authority and must cap `summary`/`detail`/`debug` server-side.

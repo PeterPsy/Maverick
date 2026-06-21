@@ -1,26 +1,29 @@
 # Senses
 
-Senses is a root Maverick app for device and sensor inputs. Phase 2 implements
-user-session pairing, the workspace-scoped device registry, and authenticated
-frame ingestion through Storage-backed capture records without adding a public
+Senses is a root Maverick app for device and sensor inputs. Phase 4 implements
+user-session pairing, the workspace-scoped device registry, authenticated frame
+ingestion through Storage-backed capture records, and explicit routing from
+stored captures into Maverick Chat runtime threads without adding a public
 bearer-token ingress.
 
-## Phase 2 Surfaces
+## Phase 4 Surfaces
 
 - frontend: `frontend/dist`
 - backend: `manifest`, `health`, `overview`, `pairing.start`,
   `pairing.complete`, `pairing.status`, `devices.list`, `devices.revoke`,
-  `settings.get`, `settings.update`, `ingest.frame`
+  `settings.get`, `settings.update`, `captures.get`, `ingest.frame`,
+  `routing.dispatch_capture`
 - dependency callback: `storage_write.completed`
+- runtime callback: `runtime_dispatch.completed`
 - CLI: `senses` for manifest, health, and reference discovery
 - MCP: `senses_operations_manifest`, `senses_reference_manifest`
 - hooks: `install`, `migrate`, `health_check`
 
 The MVP auth mode is `user_session_mvp`. Mounted backend calls use the Maverick
 user session supplied by `/api/apps/senses/backend`; Senses does not accept a raw
-device token in Phase 2. Pairing, registry, settings, and ingestion operations
-are backend/view-only because standard CLI/MCP app contexts do not carry a
-Maverick user session.
+device token in Phase 4. Pairing, registry, settings, ingestion, and routing
+operations are backend/view-only because standard CLI/MCP app contexts do not
+carry a Maverick user session.
 
 ## Data
 
@@ -36,7 +39,7 @@ The SQLite file is:
 workspaces/<workspace_id>/data/senses/senses.sqlite
 ```
 
-Phase 2 creates these workspace-scoped tables:
+Phase 4 creates these workspace-scoped tables:
 
 - `schema_migrations`
 - `settings`
@@ -45,6 +48,8 @@ Phase 2 creates these workspace-scoped tables:
 - `device_sessions`
 - `ingestion_requests`
 - `captures`
+- `routing_sessions`
+- `runtime_dispatch_attempts`
 - `audit`
 
 ## Pairing
@@ -75,8 +80,32 @@ storage/generated/senses/<device_id>/<yyyy-mm-dd>/<capture_id>.<jpg|png>
 
 The `storage_write.completed` dependency callback updates the capture to
 `stored` with Storage file id, workspace-relative path, sha256 and size. It does
-not return runtime launch requests; routing remains a later phase through
-`routing.dispatch_capture`.
+not return runtime launch requests.
+
+## Routing To Chat
+
+`routing.dispatch_capture` requires a stored capture owned by the authenticated
+user, or a workspace-admin session. It records a `runtime_dispatch_attempt`,
+chooses the routing target from `routing_sessions`, and returns one
+`runtime_launch_request` with the capture attached by Storage workspace-relative
+path. Senses does not call Chat directly; the Maverick core owns runtime session
+and thread creation.
+
+MVP routing rules are:
+
+- explicit `routing_hint=new_thread` or `force_new_thread=true` creates a new
+  thread;
+- close follow-up within `routing_followup_window_seconds` reuses the active
+  thread;
+- long task prompts or `routing_hint=task` use the active task thread, creating
+  one when needed;
+- otherwise short questions use the primary user/device thread.
+
+The `runtime_dispatch.completed` callback stores `runtime_session_id`, `turn_id`,
+and the Chat thread mapping. For newly created sessions, Senses records
+`thread_id = runtime_session_id`, matching the current core runtime thread
+creation behavior. `captures.get` returns the persisted capture and Chat deep
+link after the callback has completed.
 
 ## Verify
 
@@ -101,8 +130,9 @@ maverick core cli run app.senses.dependencies --json
 maverick app senses cli run senses --action health --json
 ```
 
-Runtime readiness is true only when `ok` is `true` and
-`dependencies.status == "resolved"`.
+Runtime readiness is true only when `ok` is `true`,
+`dependencies.status == "resolved"`, and the contract runtime permission
+`create_sessions` is active.
 
 ## SDK Flow
 
@@ -118,6 +148,6 @@ maverick app senses mcp list --json
 Senses is a sealed, sandbox-compatible root app. Its contract declares
 frontend/backend/CLI/MCP surfaces, install/migrate/health hooks, app-owned
 SQLite state under `data/senses`, required Storage dependency aliases for file
-creation and catalog metadata, and data events for devices, pairing, settings,
-and captures. Runtime session creation, device-token ingress, capture reference
-entities, and routing are intentionally deferred beyond Phase 2.
+creation and catalog metadata, runtime session creation for dispatch, and data
+events for devices, pairing, settings, captures, and routing. Device-token
+ingress and capture reference entities remain deferred beyond Phase 4.

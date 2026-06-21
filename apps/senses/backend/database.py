@@ -8,7 +8,7 @@ from pathlib import Path
 import sqlite3
 
 
-SCHEMA_VERSION = "3"
+SCHEMA_VERSION = "4"
 DB_FILENAME = "senses.sqlite"
 PRIMARY_DB_PATH = f"data/senses/{DB_FILENAME}"
 WORKSPACE_TABLES = (
@@ -19,6 +19,8 @@ WORKSPACE_TABLES = (
     "device_sessions",
     "ingestion_requests",
     "captures",
+    "routing_sessions",
+    "runtime_dispatch_attempts",
     "audit",
 )
 
@@ -199,6 +201,76 @@ def ensure_schema(data_root: Path, workspace_id: str) -> None:
 
             CREATE INDEX IF NOT EXISTS idx_senses_captures_runtime
               ON captures(workspace_id, runtime_session_id, turn_id);
+
+            CREATE TABLE IF NOT EXISTS routing_sessions (
+              workspace_id TEXT NOT NULL,
+              routing_session_id TEXT NOT NULL,
+              user_id TEXT NOT NULL,
+              device_id TEXT NOT NULL,
+              device_session_id TEXT,
+              primary_thread_id TEXT,
+              primary_runtime_session_id TEXT,
+              active_task_thread_id TEXT,
+              active_task_runtime_session_id TEXT,
+              active_task_capture_id TEXT,
+              active_task_started_at TEXT,
+              active_task_last_used_at TEXT,
+              last_capture_id TEXT,
+              last_runtime_session_id TEXT,
+              last_thread_id TEXT,
+              last_turn_id TEXT,
+              last_routing_kind TEXT,
+              created_at TEXT NOT NULL,
+              updated_at TEXT NOT NULL,
+              PRIMARY KEY (workspace_id, routing_session_id),
+              UNIQUE (workspace_id, user_id, device_id),
+              FOREIGN KEY (workspace_id, device_id)
+                REFERENCES devices(workspace_id, device_id)
+                ON DELETE CASCADE
+            );
+
+            CREATE INDEX IF NOT EXISTS idx_senses_routing_sessions_user_device
+              ON routing_sessions(workspace_id, user_id, device_id);
+
+            CREATE INDEX IF NOT EXISTS idx_senses_routing_sessions_last
+              ON routing_sessions(workspace_id, last_runtime_session_id, updated_at DESC);
+
+            CREATE TABLE IF NOT EXISTS runtime_dispatch_attempts (
+              workspace_id TEXT NOT NULL,
+              attempt_id TEXT NOT NULL,
+              capture_id TEXT NOT NULL,
+              routing_session_id TEXT,
+              request_id TEXT NOT NULL,
+              route_kind TEXT NOT NULL,
+              target_thread_kind TEXT NOT NULL,
+              status TEXT NOT NULL,
+              runtime_session_id TEXT,
+              thread_id TEXT,
+              turn_id TEXT,
+              retry_count INTEGER NOT NULL DEFAULT 0,
+              agent_id TEXT,
+              error_code TEXT,
+              error_detail TEXT,
+              runtime_request_json TEXT NOT NULL DEFAULT '{}',
+              callback_json TEXT NOT NULL DEFAULT '{}',
+              created_at TEXT NOT NULL,
+              updated_at TEXT NOT NULL,
+              completed_at TEXT,
+              PRIMARY KEY (workspace_id, attempt_id),
+              UNIQUE (workspace_id, request_id),
+              FOREIGN KEY (workspace_id, capture_id)
+                REFERENCES captures(workspace_id, capture_id)
+                ON DELETE CASCADE,
+              FOREIGN KEY (workspace_id, routing_session_id)
+                REFERENCES routing_sessions(workspace_id, routing_session_id)
+                ON DELETE CASCADE
+            );
+
+            CREATE INDEX IF NOT EXISTS idx_senses_dispatch_capture_time
+              ON runtime_dispatch_attempts(workspace_id, capture_id, created_at DESC);
+
+            CREATE INDEX IF NOT EXISTS idx_senses_dispatch_status_time
+              ON runtime_dispatch_attempts(workspace_id, status, updated_at DESC);
 
             CREATE TABLE IF NOT EXISTS audit (
               workspace_id TEXT NOT NULL,

@@ -2,8 +2,8 @@
   "app_id": "senses",
   "contract_version": "1.0",
   "name": "Senses",
-  "version": "0.3.0",
-  "description": "Device and sensor connector for Maverick workspace inputs with user-session pairing, frame ingestion, and Storage-backed captures.",
+  "version": "0.4.0",
+  "description": "Device and sensor connector for Maverick workspace inputs with user-session pairing, Storage-backed captures, and runtime routing to Chat.",
   "publisher": "maverick",
   "minimum_core_version": "0.1.0",
   "provides": [
@@ -54,7 +54,7 @@
       "outbound": []
     },
     "runtime": {
-      "create_sessions": false,
+      "create_sessions": true,
       "cleanup_sessions": false
     },
     "host": {
@@ -89,6 +89,10 @@
       {
         "resource": "captures",
         "description": "Senses capture metadata or Storage references changed."
+      },
+      {
+        "resource": "routing",
+        "description": "Senses runtime routing sessions or dispatch attempts changed."
       }
     ],
     "view_surfaces": [],
@@ -109,7 +113,7 @@
   },
   "storage": {
     "storage_kind": "sqlite+files",
-    "data_schema_version": "3",
+    "data_schema_version": "4",
     "primary_paths": [
       "data/senses/senses.sqlite"
     ],

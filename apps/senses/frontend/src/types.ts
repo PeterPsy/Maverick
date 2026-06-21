@@ -54,6 +54,72 @@ export interface SensesPairingSession {
   expires_in_seconds?: number;
 }
 
+export interface SensesChatLink {
+  available: boolean;
+  thread_id: string | null;
+  deep_link: string | null;
+  app_id: string;
+  app_page: string | null;
+}
+
+export interface SensesCapture {
+  workspace_id: string;
+  capture_id: string;
+  device_id: string;
+  device_session_id: string | null;
+  ingestion_request_id: string | null;
+  input_mode: string;
+  prompt: string;
+  content_type: string;
+  storage: {
+    status: string;
+    storage_file_id: string | null;
+    workspace_relative_path: string | null;
+    sha256: string | null;
+    size_bytes: number;
+  };
+  width: number | null;
+  height: number | null;
+  retention_class: string;
+  status: string;
+  error_code: string | null;
+  captured_at: string;
+  ingested_at: string | null;
+  runtime_session_id: string | null;
+  thread_id: string | null;
+  turn_id: string | null;
+  chat: SensesChatLink;
+  deleted_at: string | null;
+  metadata: Record<string, unknown>;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface SensesRoutingSession {
+  workspace_id: string;
+  routing_session_id: string;
+  user_id: string;
+  device_id: string;
+  device_session_id: string | null;
+  primary_thread_id: string | null;
+  primary_runtime_session_id: string | null;
+  active_task_thread_id: string | null;
+  active_task_runtime_session_id: string | null;
+  active_task_capture_id: string | null;
+  active_task_started_at: string | null;
+  active_task_last_used_at: string | null;
+  last_capture_id: string | null;
+  last_runtime_session_id: string | null;
+  last_thread_id: string | null;
+  last_turn_id: string | null;
+  last_routing_kind: string | null;
+  primary_chat: SensesChatLink;
+  active_task_chat: SensesChatLink;
+  last_chat: SensesChatLink;
+  created_at: string;
+  updated_at: string;
+}
+
 export interface SensesActor {
   authenticated: boolean;
   user_id: string | null;
@@ -74,6 +140,8 @@ export interface SensesOverview {
   settings: SensesSettings;
   devices: SensesDevice[];
   pairing_sessions: SensesPairingSession[];
+  captures: SensesCapture[];
+  routing_sessions: SensesRoutingSession[];
   dependencies: {
     status: string;
     blocked_reason?: string | null;
@@ -88,6 +156,9 @@ export interface SensesActionResult {
   settings?: SensesSettings;
   device?: SensesDevice;
   devices?: SensesDevice[];
+  capture?: SensesCapture;
+  captures?: SensesCapture[];
   pairing?: SensesPairingSession;
   pairing_sessions?: SensesPairingSession[];
+  routing_sessions?: SensesRoutingSession[];
 }

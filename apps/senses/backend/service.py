@@ -1,4 +1,4 @@
-"""Phase 2 service layer for Senses."""
+"""Phase 4 service layer for Senses."""
 
 from __future__ import annotations
 
@@ -30,8 +30,8 @@ from database import (
 
 APP_ID = "senses"
 APP_NAME = "Senses"
-APP_VERSION = "0.3.0"
-PHASE = "phase-2"
+APP_VERSION = "0.4.0"
+PHASE = "phase-4"
 PAIRING_CODE_ALPHABET = "".join(char for char in string.ascii_uppercase + string.digits if char not in {"0", "O", "I", "1"})
 PAIRING_CODE_LENGTH = 8
 PAIRING_TTL_MIN_SECONDS = 60
@@ -76,6 +76,25 @@ PNG_CRITICAL_CHUNK_TYPES = {b"IHDR", b"PLTE", b"IDAT", b"IEND"}
 PNG_MAX_DIMENSION = 100_000
 PNG_MAX_DECOMPRESSED_BYTES = 100_000_000
 STORAGE_WRITE_DEPENDENCY_ALIAS = "storage-file-content-write"
+DEFAULT_RUNTIME_AGENT_ID = "default"
+RUNTIME_DISPATCH_CALLBACK_ACTION = "runtime_dispatch.completed"
+FOLLOWUP_ROUTE_WINDOW_SECONDS_MIN = 15
+FOLLOWUP_ROUTE_WINDOW_SECONDS_MAX = 3600
+LONG_TASK_PROMPT_LENGTH = 180
+LONG_TASK_KEYWORDS = (
+    "analizza",
+    "analysis",
+    "approfondisci",
+    "cerca",
+    "confronta",
+    "debug",
+    "implementa",
+    "pianifica",
+    "prepara",
+    "ricerca",
+    "riassumi",
+    "scrivi",
+)
 REQUIRED_DEPENDENCIES = (
     {
         "alias": "storage-file-content-write",
@@ -101,11 +120,12 @@ DECLARED_BACKEND_ACTIONS = (
     "devices.revoke",
     "settings.get",
     "settings.update",
+    "captures.get",
     "ingest.frame",
-)
-CALLBACK_BACKEND_ACTIONS = ("storage_write.completed",)
-DEFERRED_ACTIONS = (
     "routing.dispatch_capture",
+)
+CALLBACK_BACKEND_ACTIONS = ("storage_write.completed", RUNTIME_DISPATCH_CALLBACK_ACTION)
+DEFERRED_ACTIONS = (
     "device-token ingress",
 )
 
@@ -130,6 +150,8 @@ def handle_action(data_root: Path, payload: dict[str, object]) -> tuple[int, dic
         return 200, reference_manifest()
     if action == "storage_write.completed":
         return storage_write_completed(data_root, workspace_id, payload)
+    if action == RUNTIME_DISPATCH_CALLBACK_ACTION:
+        return runtime_dispatch_completed(data_root, workspace_id, payload)
 
     if action == "overview":
         auth_error = require_authenticated(actor)
@@ -171,16 +193,26 @@ def handle_action(data_root: Path, payload: dict[str, object]) -> tuple[int, dic
         if auth_error is not None:
             return auth_error
         return settings_update(data_root, workspace_id, actor, payload)
+    if action == "captures.get":
+        auth_error = require_authenticated(actor)
+        if auth_error is not None:
+            return auth_error
+        return captures_get(data_root, workspace_id, actor, payload)
     if action == "ingest.frame":
         auth_error = require_authenticated(actor)
         if auth_error is not None:
             return auth_error
         return ingest_frame(data_root, workspace_id, actor, dependencies, payload)
+    if action == "routing.dispatch_capture":
+        auth_error = require_authenticated(actor)
+        if auth_error is not None:
+            return auth_error
+        return routing_dispatch_capture(data_root, workspace_id, actor, payload)
 
     return error_payload(
         400,
         "unsupported_action",
-        f"Unsupported Senses Phase 2 action `{action}`.",
+        f"Unsupported Senses Phase 4 action `{action}`.",
         allowed_actions=list(DECLARED_BACKEND_ACTIONS),
         deferred_actions=list(DEFERRED_ACTIONS),
     )
@@ -215,7 +247,7 @@ def require_authenticated(actor: dict[str, str | None]) -> tuple[int, dict[str, 
     return error_payload(
         401,
         "authentication_required",
-        "Senses Phase 2 actions require a Maverick user session.",
+        "Senses Phase 4 actions require a Maverick user session.",
     )
 
 
@@ -262,9 +294,10 @@ def manifest_payload(
         "dependency_resolution": dependencies,
         "deferred_to_later_phases": list(DEFERRED_ACTIONS),
         "notes": [
-            "Senses Phase 2 uses Maverick user sessions for pairing, device registry, and frame ingestion.",
-            "ingest.frame stores captures through the declared Storage dependency and does not launch runtime turns.",
-            "Device-token ingress and routing remain deferred.",
+            "Senses Phase 4 uses Maverick user sessions for pairing, device registry, frame ingestion, and routing.",
+            "ingest.frame stores captures through the declared Storage dependency and never launches runtime turns.",
+            "routing.dispatch_capture emits runtime_launch_requests only after a capture is stored.",
+            "Device-token ingress remains deferred.",
         ],
     }
 
@@ -298,6 +331,7 @@ def overview_payload(
         "devices": list_devices(data_root, workspace_id, actor, include_all=actor_is_manager(actor)),
         "pairing_sessions": list_pairing_sessions(data_root, workspace_id, actor),
         "captures": list_captures(data_root, workspace_id, actor, include_all=actor_is_manager(actor)),
+        "routing_sessions": list_routing_sessions(data_root, workspace_id, actor, include_all=actor_is_manager(actor)),
         "dependencies": dependencies,
     }
 
@@ -1055,6 +1089,422 @@ def storage_write_completed(data_root: Path, workspace_id: str, payload: dict[st
     return 200, {"ok": True, "status": "stored", "capture": capture_payload(updated), "error": None}
 
 
+def captures_get(
+    data_root: Path,
+    workspace_id: str,
+    actor: dict[str, str | None],
+    payload: dict[str, object],
+) -> tuple[int, dict[str, object]]:
+    capture_id = text_or_none(payload.get("capture_id"))
+    if not capture_id:
+        return error_payload(400, "missing_capture_id", "captures.get requires capture_id.")
+    ensure_schema(data_root, workspace_id)
+    db = connect(data_root)
+    try:
+        capture = capture_by_id(db, workspace_id, capture_id)
+        if capture is None:
+            return error_payload(404, "capture_not_found", "No matching Senses capture was found.")
+        if not actor_can_access_capture(db, workspace_id=workspace_id, actor=actor, capture=capture):
+            return error_payload(403, "senses_permission_forbidden", "You cannot inspect this Senses capture.")
+        attempts = db.execute(
+            """
+            SELECT * FROM runtime_dispatch_attempts
+            WHERE workspace_id = ? AND capture_id = ?
+            ORDER BY created_at DESC
+            LIMIT 25
+            """,
+            (workspace_id, capture_id),
+        ).fetchall()
+    finally:
+        db.close()
+    return 200, {
+        "ok": True,
+        "capture": capture_payload(capture),
+        "runtime_dispatch_attempts": [dispatch_attempt_payload(row) for row in attempts],
+        "chat": chat_link_payload(capture["thread_id"]),
+    }
+
+
+def routing_dispatch_capture(
+    data_root: Path,
+    workspace_id: str,
+    actor: dict[str, str | None],
+    payload: dict[str, object],
+) -> tuple[int, dict[str, object]]:
+    capture_id = text_or_none(payload.get("capture_id"))
+    if not capture_id:
+        return error_payload(400, "missing_capture_id", "routing.dispatch_capture requires capture_id.")
+    actor_user_id = str(actor["user_id"])
+    timestamp = now_timestamp()
+    agent_id = bounded_identifier(payload.get("agent_id") or payload.get("agent_type_id"), max_length=128)
+    if not agent_id:
+        agent_id = DEFAULT_RUNTIME_AGENT_ID
+
+    ensure_schema(data_root, workspace_id)
+    db = connect(data_root)
+    try:
+        db.execute("BEGIN IMMEDIATE")
+        capture = capture_by_id(db, workspace_id, capture_id)
+        if capture is None:
+            db.rollback()
+            return error_payload(404, "capture_not_found", "No matching Senses capture was found.")
+        if not actor_can_access_capture(db, workspace_id=workspace_id, actor=actor, capture=capture):
+            db.rollback()
+            return error_payload(403, "senses_permission_forbidden", "You cannot dispatch this Senses capture.")
+        if str(capture["status"]) != "stored":
+            db.rollback()
+            return error_payload(
+                409,
+                "invalid_capture_state",
+                "routing.dispatch_capture requires a capture whose Storage status is stored.",
+                capture_status=capture["status"],
+            )
+        if capture["runtime_session_id"] and capture["turn_id"]:
+            db.commit()
+            return 200, dispatch_existing_response(capture)
+
+        pending = latest_pending_dispatch_attempt(db, workspace_id=workspace_id, capture_id=capture_id)
+        if pending is not None:
+            db.rollback()
+            return error_payload(
+                409,
+                "dispatch_in_progress",
+                "A runtime dispatch attempt is already pending for this capture.",
+                attempt=dispatch_attempt_payload(pending),
+            )
+
+        device = db.execute(
+            "SELECT * FROM devices WHERE workspace_id = ? AND device_id = ?",
+            (workspace_id, capture["device_id"]),
+        ).fetchone()
+        if device is None:
+            db.rollback()
+            return error_payload(404, "device_not_found", "The capture device no longer exists.")
+
+        settings_row = db.execute("SELECT * FROM settings WHERE workspace_id = ?", (workspace_id,)).fetchone()
+        settings = dict(settings_row) if settings_row is not None else {}
+        routing_session = ensure_routing_session(
+            db,
+            workspace_id=workspace_id,
+            user_id=actor_user_id,
+            device_id=str(capture["device_id"]),
+            device_session_id=text_or_none(capture["device_session_id"]),
+            timestamp=timestamp,
+        )
+        route = select_capture_route(
+            capture=capture,
+            routing_session=routing_session,
+            settings=settings,
+            payload=payload,
+            timestamp=timestamp,
+        )
+        previous_attempts = int(
+            db.execute(
+                """
+                SELECT COUNT(*) FROM runtime_dispatch_attempts
+                WHERE workspace_id = ? AND capture_id = ?
+                """,
+                (workspace_id, capture_id),
+            ).fetchone()[0]
+        )
+        attempt_id = prefixed_id("rda")
+        request_id = f"dispatch-{attempt_id}"
+        runtime_request = runtime_launch_request_for_capture(
+            capture=capture,
+            device=device,
+            attempt_id=attempt_id,
+            request_id=request_id,
+            route=route,
+            agent_id=agent_id,
+        )
+        db.execute(
+            """
+            INSERT INTO runtime_dispatch_attempts(
+              workspace_id, attempt_id, capture_id, routing_session_id, request_id,
+              route_kind, target_thread_kind, status, runtime_session_id, thread_id, turn_id,
+              retry_count, agent_id, runtime_request_json, created_at, updated_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?, NULL, ?, ?, ?, ?, ?)
+            """,
+            (
+                workspace_id,
+                attempt_id,
+                capture_id,
+                routing_session["routing_session_id"],
+                request_id,
+                route["route_kind"],
+                route["target_thread_kind"],
+                route["runtime_session_id"],
+                route["thread_id"],
+                previous_attempts,
+                agent_id,
+                encode_json_object(runtime_request),
+                timestamp,
+                timestamp,
+            ),
+        )
+        db.execute(
+            """
+            UPDATE routing_sessions
+            SET device_session_id = ?,
+                last_capture_id = ?,
+                last_routing_kind = ?,
+                updated_at = ?
+            WHERE workspace_id = ? AND routing_session_id = ?
+            """,
+            (
+                capture["device_session_id"],
+                capture_id,
+                route["route_kind"],
+                timestamp,
+                workspace_id,
+                routing_session["routing_session_id"],
+            ),
+        )
+        write_audit(
+            db,
+            workspace_id=workspace_id,
+            event_type="capture.runtime_dispatch_requested",
+            actor_user_id=actor_user_id,
+            device_id=str(capture["device_id"]),
+            details={
+                "capture_id": capture_id,
+                "attempt_id": attempt_id,
+                "request_id": request_id,
+                "route_kind": route["route_kind"],
+                "target_thread_kind": route["target_thread_kind"],
+                "runtime_session_id": route["runtime_session_id"],
+                "thread_id": route["thread_id"],
+                "agent_id": agent_id,
+            },
+        )
+        db.commit()
+        attempt = db.execute(
+            "SELECT * FROM runtime_dispatch_attempts WHERE workspace_id = ? AND attempt_id = ?",
+            (workspace_id, attempt_id),
+        ).fetchone()
+        updated_session = db.execute(
+            "SELECT * FROM routing_sessions WHERE workspace_id = ? AND routing_session_id = ?",
+            (workspace_id, routing_session["routing_session_id"]),
+        ).fetchone()
+    except Exception:
+        db.rollback()
+        raise
+    finally:
+        db.close()
+
+    response = {
+        "ok": True,
+        "status": "dispatch_pending",
+        "capture_id": capture_id,
+        "routing": route,
+        "routing_session": routing_session_payload(updated_session),
+        "runtime_dispatch_attempt": dispatch_attempt_payload(attempt),
+        "runtime_launch_requests": [runtime_request],
+        "chat": chat_link_payload(route["thread_id"]),
+        "error": None,
+    }
+    return 202, response
+
+
+def runtime_dispatch_completed(
+    data_root: Path,
+    workspace_id: str,
+    payload: dict[str, object],
+) -> tuple[int, dict[str, object]]:
+    if text_or_none(payload.get("_app_surface")) != "runtime_request_callback":
+        return error_payload(
+            403,
+            "senses_permission_forbidden",
+            "Senses runtime dispatch callbacks may only run through the runtime request callback surface.",
+        )
+    capture_id = text_or_none(payload.get("capture_id"))
+    attempt_id = text_or_none(payload.get("attempt_id"))
+    request_id = text_or_none(payload.get("request_id"))
+    if not capture_id or not attempt_id or not request_id:
+        return error_payload(
+            400,
+            "invalid_runtime_callback",
+            "runtime_dispatch.completed requires capture_id, attempt_id, and request_id.",
+        )
+    status = text_or_none(payload.get("runtime_request_status")) or "failed"
+    runtime_session_id = text_or_none(payload.get("runtime_session_id"))
+    turn_id = text_or_none(payload.get("turn_id"))
+    error_detail = bounded_text(payload.get("error"), fallback="", max_length=500)
+    timestamp = now_timestamp()
+
+    ensure_schema(data_root, workspace_id)
+    db = connect(data_root)
+    try:
+        db.execute("BEGIN IMMEDIATE")
+        attempt = db.execute(
+            """
+            SELECT * FROM runtime_dispatch_attempts
+            WHERE workspace_id = ? AND attempt_id = ? AND capture_id = ?
+            """,
+            (workspace_id, attempt_id, capture_id),
+        ).fetchone()
+        if attempt is None:
+            db.rollback()
+            return error_payload(404, "dispatch_attempt_not_found", "No matching Senses runtime dispatch attempt was found.")
+        if str(attempt["request_id"]) != request_id:
+            db.rollback()
+            return error_payload(
+                400,
+                "invalid_runtime_callback",
+                "Senses runtime callback request_id did not match the pending dispatch attempt.",
+            )
+        capture = capture_by_id(db, workspace_id, capture_id)
+        if capture is None:
+            db.rollback()
+            return error_payload(404, "capture_not_found", "No matching Senses capture was found.")
+
+        callback_json = {
+            "runtime_request_status": status,
+            "runtime_session_id": runtime_session_id,
+            "turn_id": turn_id,
+            "error": error_detail,
+        }
+        if status != "submitted":
+            db.execute(
+                """
+                UPDATE runtime_dispatch_attempts
+                SET status = 'failed',
+                    error_code = 'runtime_dispatch_failed',
+                    error_detail = ?,
+                    callback_json = ?,
+                    updated_at = ?,
+                    completed_at = ?
+                WHERE workspace_id = ? AND attempt_id = ?
+                """,
+                (error_detail or "runtime request failed", encode_json_object(callback_json), timestamp, timestamp, workspace_id, attempt_id),
+            )
+            db.execute(
+                """
+                UPDATE captures
+                SET error_code = 'runtime_dispatch_failed', updated_at = ?
+                WHERE workspace_id = ? AND capture_id = ?
+                """,
+                (timestamp, workspace_id, capture_id),
+            )
+            write_audit(
+                db,
+                workspace_id=workspace_id,
+                event_type="capture.runtime_dispatch_failed",
+                actor_user_id=None,
+                device_id=str(capture["device_id"]),
+                details={"capture_id": capture_id, "attempt_id": attempt_id, "error": error_detail},
+            )
+            db.commit()
+            updated_attempt = db.execute(
+                "SELECT * FROM runtime_dispatch_attempts WHERE workspace_id = ? AND attempt_id = ?",
+                (workspace_id, attempt_id),
+            ).fetchone()
+            updated_capture = capture_by_id(db, workspace_id, capture_id)
+            return 200, {
+                "ok": True,
+                "status": "failed",
+                "capture": capture_payload(updated_capture),
+                "runtime_dispatch_attempt": dispatch_attempt_payload(updated_attempt),
+                "error": None,
+            }
+
+        if not runtime_session_id or not turn_id:
+            db.rollback()
+            return error_payload(
+                400,
+                "invalid_runtime_callback",
+                "A submitted Senses runtime callback requires runtime_session_id and turn_id.",
+            )
+        thread_id = text_or_none(attempt["thread_id"]) or runtime_session_id
+        db.execute(
+            """
+            UPDATE runtime_dispatch_attempts
+            SET status = 'submitted',
+                runtime_session_id = ?,
+                thread_id = ?,
+                turn_id = ?,
+                error_code = NULL,
+                error_detail = NULL,
+                callback_json = ?,
+                updated_at = ?,
+                completed_at = ?
+            WHERE workspace_id = ? AND attempt_id = ?
+            """,
+            (
+                runtime_session_id,
+                thread_id,
+                turn_id,
+                encode_json_object(callback_json),
+                timestamp,
+                timestamp,
+                workspace_id,
+                attempt_id,
+            ),
+        )
+        db.execute(
+            """
+            UPDATE captures
+            SET runtime_session_id = ?,
+                thread_id = ?,
+                turn_id = ?,
+                error_code = NULL,
+                updated_at = ?
+            WHERE workspace_id = ? AND capture_id = ?
+            """,
+            (runtime_session_id, thread_id, turn_id, timestamp, workspace_id, capture_id),
+        )
+        update_routing_session_after_runtime_callback(
+            db,
+            workspace_id=workspace_id,
+            attempt=attempt,
+            capture=capture,
+            runtime_session_id=runtime_session_id,
+            thread_id=thread_id,
+            turn_id=turn_id,
+            timestamp=timestamp,
+        )
+        write_audit(
+            db,
+            workspace_id=workspace_id,
+            event_type="capture.runtime_dispatched",
+            actor_user_id=None,
+            device_id=str(capture["device_id"]),
+            details={
+                "capture_id": capture_id,
+                "attempt_id": attempt_id,
+                "runtime_session_id": runtime_session_id,
+                "thread_id": thread_id,
+                "turn_id": turn_id,
+                "route_kind": attempt["route_kind"],
+            },
+        )
+        db.commit()
+        updated_capture = capture_by_id(db, workspace_id, capture_id)
+        updated_attempt = db.execute(
+            "SELECT * FROM runtime_dispatch_attempts WHERE workspace_id = ? AND attempt_id = ?",
+            (workspace_id, attempt_id),
+        ).fetchone()
+        routing_session = db.execute(
+            "SELECT * FROM routing_sessions WHERE workspace_id = ? AND routing_session_id = ?",
+            (workspace_id, attempt["routing_session_id"]),
+        ).fetchone()
+    except Exception:
+        db.rollback()
+        raise
+    finally:
+        db.close()
+
+    return 200, {
+        "ok": True,
+        "status": "submitted",
+        "capture": capture_payload(updated_capture),
+        "runtime_dispatch_attempt": dispatch_attempt_payload(updated_attempt),
+        "routing_session": routing_session_payload(routing_session),
+        "chat": chat_link_payload(updated_capture["thread_id"] if updated_capture is not None else None),
+        "error": None,
+    }
+
+
 def list_devices(
     data_root: Path,
     workspace_id: str,
@@ -1149,6 +1599,442 @@ def list_captures(
     finally:
         db.close()
     return [capture_payload(row) for row in rows]
+
+
+def list_routing_sessions(
+    data_root: Path,
+    workspace_id: str,
+    actor: dict[str, str | None],
+    *,
+    include_all: bool,
+    limit: int = 50,
+) -> list[dict[str, object]]:
+    ensure_schema(data_root, workspace_id)
+    db = connect(data_root)
+    try:
+        params: list[object] = [workspace_id]
+        where = ["workspace_id = ?"]
+        if not include_all:
+            where.append("user_id = ?")
+            params.append(actor["user_id"])
+        rows = db.execute(
+            f"""
+            SELECT * FROM routing_sessions
+            WHERE {" AND ".join(where)}
+            ORDER BY updated_at DESC
+            LIMIT ?
+            """,
+            [*params, max(1, min(250, int(limit)))],
+        ).fetchall()
+    finally:
+        db.close()
+    return [routing_session_payload(row) for row in rows]
+
+
+def actor_can_access_capture(
+    db: sqlite3.Connection,
+    *,
+    workspace_id: str,
+    actor: dict[str, str | None],
+    capture: sqlite3.Row,
+) -> bool:
+    if actor_is_manager(actor):
+        return True
+    owner = db.execute(
+        """
+        SELECT owner_user_id FROM devices
+        WHERE workspace_id = ? AND device_id = ?
+        """,
+        (workspace_id, capture["device_id"]),
+    ).fetchone()
+    return owner is not None and str(owner["owner_user_id"]) == str(actor.get("user_id") or "")
+
+
+def latest_pending_dispatch_attempt(
+    db: sqlite3.Connection,
+    *,
+    workspace_id: str,
+    capture_id: str,
+) -> sqlite3.Row | None:
+    return db.execute(
+        """
+        SELECT * FROM runtime_dispatch_attempts
+        WHERE workspace_id = ?
+          AND capture_id = ?
+          AND status IN ('pending', 'submitted')
+          AND completed_at IS NULL
+        ORDER BY created_at DESC
+        LIMIT 1
+        """,
+        (workspace_id, capture_id),
+    ).fetchone()
+
+
+def dispatch_existing_response(capture: sqlite3.Row) -> dict[str, object]:
+    return {
+        "ok": True,
+        "status": "dispatched",
+        "capture_id": capture["capture_id"],
+        "capture": capture_payload(capture),
+        "runtime_launch_requests": [],
+        "chat": chat_link_payload(capture["thread_id"]),
+        "error": None,
+    }
+
+
+def ensure_routing_session(
+    db: sqlite3.Connection,
+    *,
+    workspace_id: str,
+    user_id: str,
+    device_id: str,
+    device_session_id: str | None,
+    timestamp: str,
+) -> sqlite3.Row:
+    row = db.execute(
+        """
+        SELECT * FROM routing_sessions
+        WHERE workspace_id = ? AND user_id = ? AND device_id = ?
+        """,
+        (workspace_id, user_id, device_id),
+    ).fetchone()
+    if row is not None:
+        if device_session_id and row["device_session_id"] != device_session_id:
+            db.execute(
+                """
+                UPDATE routing_sessions
+                SET device_session_id = ?, updated_at = ?
+                WHERE workspace_id = ? AND routing_session_id = ?
+                """,
+                (device_session_id, timestamp, workspace_id, row["routing_session_id"]),
+            )
+            row = db.execute(
+                "SELECT * FROM routing_sessions WHERE workspace_id = ? AND routing_session_id = ?",
+                (workspace_id, row["routing_session_id"]),
+            ).fetchone()
+        return row
+    routing_session_id = prefixed_id("rts")
+    db.execute(
+        """
+        INSERT INTO routing_sessions(
+          workspace_id, routing_session_id, user_id, device_id, device_session_id,
+          created_at, updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?)
+        """,
+        (workspace_id, routing_session_id, user_id, device_id, device_session_id, timestamp, timestamp),
+    )
+    created = db.execute(
+        "SELECT * FROM routing_sessions WHERE workspace_id = ? AND routing_session_id = ?",
+        (workspace_id, routing_session_id),
+    ).fetchone()
+    if created is None:
+        raise RuntimeError("Senses failed to create a routing session.")
+    return created
+
+
+def select_capture_route(
+    *,
+    capture: sqlite3.Row,
+    routing_session: sqlite3.Row,
+    settings: dict[str, object],
+    payload: dict[str, object],
+    timestamp: str,
+) -> dict[str, object]:
+    prompt = str(capture["prompt"] or "")
+    metadata = decode_json_object(capture["metadata_json"])
+    hint = normalize_routing_hint(
+        payload.get("routing_hint")
+        or payload.get("route")
+        or payload.get("thread_policy")
+        or metadata.get("routing_hint")
+    )
+    followup_window = bounded_int(
+        settings.get("routing_followup_window_seconds"),
+        default=300,
+        minimum=FOLLOWUP_ROUTE_WINDOW_SECONDS_MIN,
+        maximum=FOLLOWUP_ROUTE_WINDOW_SECONDS_MAX,
+    )
+    if hint in {"new", "new_thread", "explicit_new_thread"} or bool(payload.get("force_new_thread")):
+        return route_payload(
+            route_kind="new_thread",
+            target_thread_kind="new",
+            reason="explicit_new_thread",
+        )
+    if hint in {"primary", "main"}:
+        return primary_route_payload(routing_session, reason="explicit_primary")
+    if hint in {"task", "task_thread", "long_task"}:
+        return task_route_payload(routing_session, timestamp=timestamp, followup_window=followup_window, reason="explicit_task")
+    if prompt_is_long_task(prompt):
+        return task_route_payload(routing_session, timestamp=timestamp, followup_window=followup_window, reason="long_task_prompt")
+    if route_is_close_followup(routing_session, timestamp=timestamp, followup_window=followup_window):
+        return route_payload(
+            route_kind="followup",
+            target_thread_kind=thread_role_for_existing_route(routing_session),
+            reason="recent_active_thread",
+            runtime_session_id=text_or_none(routing_session["last_runtime_session_id"]),
+            thread_id=text_or_none(routing_session["last_thread_id"]),
+        )
+    return primary_route_payload(routing_session, reason="short_question")
+
+
+def normalize_routing_hint(value: object) -> str:
+    return str(value or "").strip().lower().replace("-", "_").replace(" ", "_")
+
+
+def primary_route_payload(routing_session: sqlite3.Row, *, reason: str) -> dict[str, object]:
+    runtime_session_id = text_or_none(routing_session["primary_runtime_session_id"])
+    thread_id = text_or_none(routing_session["primary_thread_id"])
+    return route_payload(
+        route_kind="primary",
+        target_thread_kind="primary" if runtime_session_id else "new_primary",
+        reason=reason,
+        runtime_session_id=runtime_session_id,
+        thread_id=thread_id,
+    )
+
+
+def task_route_payload(
+    routing_session: sqlite3.Row,
+    *,
+    timestamp: str,
+    followup_window: int,
+    reason: str,
+) -> dict[str, object]:
+    runtime_session_id = text_or_none(routing_session["active_task_runtime_session_id"])
+    thread_id = text_or_none(routing_session["active_task_thread_id"])
+    if runtime_session_id and not active_task_is_recent(routing_session, timestamp=timestamp, followup_window=followup_window):
+        runtime_session_id = None
+        thread_id = None
+    return route_payload(
+        route_kind="task",
+        target_thread_kind="active_task" if runtime_session_id else "new_task",
+        reason=reason,
+        runtime_session_id=runtime_session_id,
+        thread_id=thread_id,
+    )
+
+
+def route_payload(
+    *,
+    route_kind: str,
+    target_thread_kind: str,
+    reason: str,
+    runtime_session_id: str | None = None,
+    thread_id: str | None = None,
+) -> dict[str, object]:
+    return {
+        "route_kind": route_kind,
+        "target_thread_kind": target_thread_kind,
+        "reason": reason,
+        "runtime_session_id": runtime_session_id,
+        "thread_id": thread_id,
+        "creates_new_thread": not bool(runtime_session_id),
+    }
+
+
+def route_is_close_followup(
+    routing_session: sqlite3.Row,
+    *,
+    timestamp: str,
+    followup_window: int,
+) -> bool:
+    if not routing_session["last_runtime_session_id"] or not routing_session["last_thread_id"]:
+        return False
+    updated_at = text_or_none(routing_session["updated_at"])
+    if not updated_at:
+        return False
+    return seconds_between(updated_at, timestamp) <= followup_window
+
+
+def active_task_is_recent(
+    routing_session: sqlite3.Row,
+    *,
+    timestamp: str,
+    followup_window: int,
+) -> bool:
+    last_used_at = text_or_none(routing_session["active_task_last_used_at"])
+    if not last_used_at:
+        return False
+    return seconds_between(last_used_at, timestamp) <= followup_window
+
+
+def seconds_between(start: str, end: str) -> int:
+    started = parse_iso_datetime(start)
+    ended = parse_iso_datetime(end)
+    if started is None or ended is None:
+        return 10**9
+    return max(0, int((ended - started).total_seconds()))
+
+
+def parse_iso_datetime(value: str) -> datetime | None:
+    try:
+        return datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except ValueError:
+        return None
+
+
+def thread_role_for_existing_route(routing_session: sqlite3.Row) -> str:
+    if routing_session["last_thread_id"] and routing_session["last_thread_id"] == routing_session["primary_thread_id"]:
+        return "primary"
+    if routing_session["last_thread_id"] and routing_session["last_thread_id"] == routing_session["active_task_thread_id"]:
+        return "active_task"
+    return "existing"
+
+
+def prompt_is_long_task(prompt: str) -> bool:
+    normalized = prompt.strip().lower()
+    if len(normalized) >= LONG_TASK_PROMPT_LENGTH:
+        return True
+    return any(keyword in normalized for keyword in LONG_TASK_KEYWORDS)
+
+
+def runtime_launch_request_for_capture(
+    *,
+    capture: sqlite3.Row,
+    device: sqlite3.Row,
+    attempt_id: str,
+    request_id: str,
+    route: dict[str, object],
+    agent_id: str,
+) -> dict[str, object]:
+    request: dict[str, object] = {
+        "request_id": request_id,
+        "client_message_id": f"senses:{capture['capture_id']}:{attempt_id}",
+        "input_text": runtime_input_text(capture=capture, device=device, route=route),
+        "attachments": [runtime_attachment_for_capture(capture)],
+        "app_references": [
+            {
+                "app_id": APP_ID,
+                "entity_type": "capture",
+                "entity_id": capture["capture_id"],
+                "label": "Senses capture",
+            }
+        ],
+        "callback": {
+            "action": RUNTIME_DISPATCH_CALLBACK_ACTION,
+            "payload": {
+                "capture_id": capture["capture_id"],
+                "attempt_id": attempt_id,
+            },
+        },
+    }
+    runtime_session_id = text_or_none(route.get("runtime_session_id"))
+    if runtime_session_id:
+        request["runtime_session_id"] = runtime_session_id
+    else:
+        request.update(
+            {
+                "agent_id": agent_id,
+                "agent_type_id": agent_id,
+                "agent_label": "Senses",
+                "title": runtime_thread_title(capture=capture, device=device, route=route),
+                "requested_mode": "sandbox",
+            }
+        )
+    return request
+
+
+def runtime_input_text(
+    *,
+    capture: sqlite3.Row,
+    device: sqlite3.Row,
+    route: dict[str, object],
+) -> str:
+    prompt = text_or_none(capture["prompt"]) or "Analizza questo frame e rispondi in modo utile."
+    details = [
+        f"Senses capture: {capture['capture_id']}",
+        f"Device: {device['display_name']} ({device['device_kind']}/{device['platform']})",
+        f"Input: {capture['input_mode']}",
+        f"Routing: {route['route_kind']} ({route['reason']})",
+    ]
+    if capture["width"] and capture["height"]:
+        details.append(f"Frame: {capture['width']}x{capture['height']}")
+    return f"{prompt}\n\n" + "\n".join(details)
+
+
+def runtime_thread_title(
+    *,
+    capture: sqlite3.Row,
+    device: sqlite3.Row,
+    route: dict[str, object],
+) -> str:
+    device_label = bounded_text(device["display_name"], fallback="Senses", max_length=48)
+    if route["route_kind"] == "task":
+        suffix = "task visivo"
+    elif route["route_kind"] == "new_thread":
+        suffix = "nuova domanda visiva"
+    else:
+        suffix = "domanda visiva"
+    return f"{device_label} - {suffix}"
+
+
+def runtime_attachment_for_capture(capture: sqlite3.Row) -> dict[str, object]:
+    path = text_or_none(capture["workspace_relative_path"])
+    if not path:
+        raise RuntimeError("Cannot dispatch a Senses capture without a Storage path.")
+    return {
+        "id": text_or_none(capture["storage_file_id"]) or capture["capture_id"],
+        "workspace_relative_path": path,
+        "name": Path(path).name,
+        "content_type": capture["content_type"],
+        "size_bytes": int(capture["size_bytes"] or 0),
+    }
+
+
+def update_routing_session_after_runtime_callback(
+    db: sqlite3.Connection,
+    *,
+    workspace_id: str,
+    attempt: sqlite3.Row,
+    capture: sqlite3.Row,
+    runtime_session_id: str,
+    thread_id: str,
+    turn_id: str,
+    timestamp: str,
+) -> None:
+    routing_session_id = text_or_none(attempt["routing_session_id"])
+    if not routing_session_id:
+        return
+    updates = [
+        "last_capture_id = ?",
+        "last_runtime_session_id = ?",
+        "last_thread_id = ?",
+        "last_turn_id = ?",
+        "last_routing_kind = ?",
+        "updated_at = ?",
+    ]
+    values: list[object] = [
+        capture["capture_id"],
+        runtime_session_id,
+        thread_id,
+        turn_id,
+        attempt["route_kind"],
+        timestamp,
+    ]
+    target_kind = str(attempt["target_thread_kind"] or "")
+    if target_kind in {"primary", "new_primary"}:
+        updates.extend(["primary_thread_id = ?", "primary_runtime_session_id = ?"])
+        values.extend([thread_id, runtime_session_id])
+    if target_kind in {"active_task", "new_task"} or str(attempt["route_kind"]) == "task":
+        updates.extend(
+            [
+                "active_task_thread_id = ?",
+                "active_task_runtime_session_id = ?",
+                "active_task_capture_id = ?",
+                "active_task_started_at = COALESCE(active_task_started_at, ?)",
+                "active_task_last_used_at = ?",
+            ]
+        )
+        values.extend([thread_id, runtime_session_id, capture["capture_id"], timestamp, timestamp])
+    values.extend([workspace_id, routing_session_id])
+    db.execute(
+        f"""
+        UPDATE routing_sessions
+        SET {", ".join(updates)}
+        WHERE workspace_id = ? AND routing_session_id = ?
+        """,
+        values,
+    )
 
 
 def prepare_capture_payload(
@@ -1411,6 +2297,7 @@ def storage_payload(capture: sqlite3.Row | None) -> dict[str, object]:
 def capture_payload(row: sqlite3.Row | None) -> dict[str, object]:
     if row is None:
         return {}
+    chat = chat_link_payload(row["thread_id"])
     return {
         "workspace_id": row["workspace_id"],
         "capture_id": row["capture_id"],
@@ -1431,10 +2318,86 @@ def capture_payload(row: sqlite3.Row | None) -> dict[str, object]:
         "runtime_session_id": row["runtime_session_id"],
         "thread_id": row["thread_id"],
         "turn_id": row["turn_id"],
+        "chat": chat,
         "deleted_at": row["deleted_at"],
         "metadata": decode_json_object(row["metadata_json"]),
         "created_at": row["created_at"],
         "updated_at": row["updated_at"],
+    }
+
+
+def routing_session_payload(row: sqlite3.Row | None) -> dict[str, object]:
+    if row is None:
+        return {}
+    return {
+        "workspace_id": row["workspace_id"],
+        "routing_session_id": row["routing_session_id"],
+        "user_id": row["user_id"],
+        "device_id": row["device_id"],
+        "device_session_id": row["device_session_id"],
+        "primary_thread_id": row["primary_thread_id"],
+        "primary_runtime_session_id": row["primary_runtime_session_id"],
+        "active_task_thread_id": row["active_task_thread_id"],
+        "active_task_runtime_session_id": row["active_task_runtime_session_id"],
+        "active_task_capture_id": row["active_task_capture_id"],
+        "active_task_started_at": row["active_task_started_at"],
+        "active_task_last_used_at": row["active_task_last_used_at"],
+        "last_capture_id": row["last_capture_id"],
+        "last_runtime_session_id": row["last_runtime_session_id"],
+        "last_thread_id": row["last_thread_id"],
+        "last_turn_id": row["last_turn_id"],
+        "last_routing_kind": row["last_routing_kind"],
+        "primary_chat": chat_link_payload(row["primary_thread_id"]),
+        "active_task_chat": chat_link_payload(row["active_task_thread_id"]),
+        "last_chat": chat_link_payload(row["last_thread_id"]),
+        "created_at": row["created_at"],
+        "updated_at": row["updated_at"],
+    }
+
+
+def dispatch_attempt_payload(row: sqlite3.Row | None) -> dict[str, object]:
+    if row is None:
+        return {}
+    return {
+        "workspace_id": row["workspace_id"],
+        "attempt_id": row["attempt_id"],
+        "capture_id": row["capture_id"],
+        "routing_session_id": row["routing_session_id"],
+        "request_id": row["request_id"],
+        "route_kind": row["route_kind"],
+        "target_thread_kind": row["target_thread_kind"],
+        "status": row["status"],
+        "runtime_session_id": row["runtime_session_id"],
+        "thread_id": row["thread_id"],
+        "turn_id": row["turn_id"],
+        "retry_count": row["retry_count"],
+        "agent_id": row["agent_id"],
+        "error_code": row["error_code"],
+        "error_detail": row["error_detail"],
+        "chat": chat_link_payload(row["thread_id"]),
+        "created_at": row["created_at"],
+        "updated_at": row["updated_at"],
+        "completed_at": row["completed_at"],
+    }
+
+
+def chat_link_payload(thread_id: object) -> dict[str, object]:
+    normalized = text_or_none(thread_id)
+    if not normalized:
+        return {
+            "available": False,
+            "thread_id": None,
+            "deep_link": None,
+            "app_id": "chat",
+            "app_page": None,
+        }
+    app_page = f"threads/{normalized}"
+    return {
+        "available": True,
+        "thread_id": normalized,
+        "deep_link": f"/app/chat/{app_page}",
+        "app_id": "chat",
+        "app_page": app_page,
     }
 
 
@@ -1987,7 +2950,7 @@ def reference_manifest() -> dict[str, object]:
         "app_id": APP_ID,
         "schema_version": "1",
         "entity_types": [],
-        "notes": ["Senses capture records exist in Phase 2; reference search and resolve remain deferred."],
+        "notes": ["Senses capture records exist in Phase 4; reference search and resolve remain deferred."],
     }
 
 
@@ -2062,6 +3025,11 @@ def app_events_for_action(action: str) -> list[dict[str, str]]:
         return [
             {"type": "maverick.app.data-changed", "owner_app_id": APP_ID, "resource": "captures"},
             {"type": "maverick.app.data-changed", "owner_app_id": APP_ID, "resource": "devices"},
+        ]
+    if normalized in {"routing.dispatch_capture", RUNTIME_DISPATCH_CALLBACK_ACTION}:
+        return [
+            {"type": "maverick.app.data-changed", "owner_app_id": APP_ID, "resource": "captures"},
+            {"type": "maverick.app.data-changed", "owner_app_id": APP_ID, "resource": "routing"},
         ]
     return []
 

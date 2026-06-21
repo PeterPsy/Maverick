@@ -1,14 +1,14 @@
 {
   "tools": {
     "senses_operations_manifest": {
-      "description": "Describe Senses Phase 2 backend surfaces, dependency requirements, and deferred routing work.",
+      "description": "Describe Senses Phase 4 backend surfaces, dependency requirements, and runtime routing work.",
       "input_schema": {
         "type": "object",
         "additionalProperties": false
       }
     },
     "senses_reference_manifest": {
-      "description": "Report the Senses reference surface. Capture reference search remains deferred after Phase 2 ingestion.",
+      "description": "Report the Senses reference surface. Capture reference search remains deferred after Phase 4 routing.",
       "input_schema": {
         "type": "object",
         "additionalProperties": false

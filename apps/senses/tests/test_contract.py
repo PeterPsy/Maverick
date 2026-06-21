@@ -1,4 +1,4 @@
-"""Contract tests for Senses Phase 2."""
+"""Contract tests for Senses Phase 4."""
 
 from __future__ import annotations
 
@@ -16,7 +16,7 @@ from core.apps.contracts import parse_app_contract_file
 
 
 class SensesContractTest(unittest.TestCase):
-    def test_contract_declares_phase_2_surfaces(self) -> None:
+    def test_contract_declares_phase_4_surfaces(self) -> None:
         parsed = parse_app_contract_file(APP_ROOT)
         self.assertEqual(parsed.app_id, "senses")
         self.assertEqual(parsed.contract.entrypoints.frontend, "frontend/dist")
@@ -33,7 +33,7 @@ class SensesContractTest(unittest.TestCase):
         self.assertEqual(parsed.contract.capabilities.reference_entities, [])
         self.assertEqual(parsed.contract.storage.primary_paths, ["data/senses/senses.sqlite"])
 
-    def test_contract_declares_phase_2_storage_dependencies(self) -> None:
+    def test_contract_declares_phase_4_storage_dependencies(self) -> None:
         parsed = parse_app_contract_file(APP_ROOT)
         requirements = {item.alias: item for item in parsed.contract.requires}
         self.assertEqual(requirements["storage-file-content-write"].interface, "file.content.write")
@@ -43,14 +43,15 @@ class SensesContractTest(unittest.TestCase):
 
     def test_contract_declares_device_registry_interface_and_events(self) -> None:
         contract = json.loads((APP_ROOT / "app_contract.json").read_text(encoding="utf-8"))
-        self.assertEqual(contract["version"], "0.3.0")
+        self.assertEqual(contract["version"], "0.4.0")
         self.assertEqual(contract["presentation"]["frontend_role"], "workspace")
-        self.assertEqual(contract["storage"]["data_schema_version"], "3")
+        self.assertEqual(contract["storage"]["data_schema_version"], "4")
+        self.assertTrue(contract["permissions"]["runtime"]["create_sessions"])
         provided = {item["interface"]: item for item in contract["provides"]}
         self.assertEqual(provided["device.registry"]["version"], "1")
         self.assertEqual(provided["device.registry"]["surfaces"], ["backend", "view"])
         event_resources = {item["resource"] for item in contract["capabilities"]["data_events"]}
-        self.assertEqual(event_resources, {"devices", "pairing", "settings", "captures"})
+        self.assertEqual(event_resources, {"devices", "pairing", "settings", "captures", "routing"})
 
     def test_sdk_validation_passes(self) -> None:
         validation = validate_app_source(APP_ROOT)

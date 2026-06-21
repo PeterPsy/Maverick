@@ -19,6 +19,7 @@ import { loadOverview, revokeDevice, startPairing } from './api';
 import type { SensesDevice, SensesOverview, SensesPairingSession } from './types';
 
 const APP_EVENTS_WS_PATH = '/api/apps/events/ws';
+const REFRESH_RESOURCES = new Set(['devices', 'pairing', 'settings', 'captures', 'routing', 'view-state']);
 
 export function App() {
   const [overview, setOverview] = useState<SensesOverview | null>(null);
@@ -128,7 +129,7 @@ export function App() {
       }
       const payload = event.data as { owner_app_id?: string; resource?: string; type?: string };
       if (payload.type === 'maverick.app.data-changed' && payload.owner_app_id === 'senses') {
-        if (!payload.resource || ['devices', 'pairing', 'settings'].includes(payload.resource)) {
+        if (!payload.resource || REFRESH_RESOURCES.has(payload.resource)) {
           void refresh({ silent: true });
         }
       }
@@ -151,7 +152,7 @@ export function App() {
         try {
           const payload = JSON.parse(message.data) as { type?: string; owner_app_id?: string; resource?: string };
           if (payload.type === 'maverick.app.data-changed' && payload.owner_app_id === 'senses') {
-            if (!payload.resource || ['devices', 'pairing', 'settings'].includes(payload.resource)) {
+            if (!payload.resource || REFRESH_RESOURCES.has(payload.resource)) {
               void refresh({ silent: true });
             }
           }

@@ -1,4 +1,4 @@
-"""Phase 2 backend tests for Senses."""
+"""Phase 4 backend tests for Senses."""
 
 from __future__ import annotations
 
@@ -222,7 +222,62 @@ def storage_callback_payload(
     }
 
 
-class SensesPhase2EntrypointTest(unittest.TestCase):
+def stored_capture(
+    data_root: Path,
+    completed: dict[str, object],
+    *,
+    request_id: str = "stored-1",
+    idempotency_key: str = "stored-1",
+    prompt: str = "Cosa sto guardando?",
+) -> dict[str, object]:
+    status, accepted = handle_action(
+        data_root,
+        capture_request(
+            completed,
+            request_id=request_id,
+            idempotency_key=idempotency_key,
+            prompt=prompt,
+        ),
+    )
+    if status != 202:
+        raise AssertionError(accepted)
+    status, stored = handle_action(
+        data_root,
+        storage_callback_payload(
+            accepted,
+            file_id=f"generated:senses/{accepted['capture_id']}",
+        ),
+    )
+    if status != 200:
+        raise AssertionError(stored)
+    return stored["capture"]
+
+
+def runtime_callback_payload(
+    dispatch: dict[str, object],
+    *,
+    runtime_session_id: str = "runtime-session-1",
+    turn_id: str = "turn-1",
+    runtime_status: str = "submitted",
+    error: str = "",
+) -> dict[str, object]:
+    attempt = dispatch["runtime_dispatch_attempt"]
+    return {
+        "action": "runtime_dispatch.completed",
+        "_workspace_id": "default",
+        "_app_surface": "runtime_request_callback",
+        "capture_id": dispatch["capture_id"],
+        "attempt_id": attempt["attempt_id"],
+        "request_id": attempt["request_id"],
+        "runtime_request_status": runtime_status,
+        "runtime_session_id": runtime_session_id,
+        "turn_id": turn_id,
+        "error": error,
+        "request": dispatch["runtime_launch_requests"][0],
+    }
+
+
+class SensesPhase4EntrypointTest(unittest.TestCase):
     def test_schema_is_workspace_scoped_and_idempotent(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             data_root = Path(tmp)
@@ -243,7 +298,7 @@ class SensesPhase2EntrypointTest(unittest.TestCase):
             self.assertEqual(settings_count, 1)
             self.assertTrue(set(WORKSPACE_TABLES).issubset(table_names))
 
-    def test_manifest_reports_phase_2_surfaces(self) -> None:
+    def test_manifest_reports_phase_4_surfaces(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             status, manifest = handle_action(
                 Path(tmp),
@@ -255,14 +310,18 @@ class SensesPhase2EntrypointTest(unittest.TestCase):
                 },
             )
             self.assertEqual(status, 200)
-            self.assertEqual(manifest["phase"], "phase-2")
+            self.assertEqual(manifest["phase"], "phase-4")
             self.assertEqual(manifest["dependency_resolution"]["status"], "resolved")
             self.assertEqual(manifest["declared_surfaces"]["frontend"], True)
             self.assertIn("pairing.start", manifest["backend_actions"])
             self.assertIn("devices.revoke", manifest["backend_actions"])
+            self.assertIn("captures.get", manifest["backend_actions"])
             self.assertIn("ingest.frame", manifest["backend_actions"])
+            self.assertIn("routing.dispatch_capture", manifest["backend_actions"])
             self.assertIn("storage_write.completed", manifest["callback_actions"])
+            self.assertIn("runtime_dispatch.completed", manifest["callback_actions"])
             self.assertNotIn("ingest.frame", manifest["deferred_to_later_phases"])
+            self.assertNotIn("routing.dispatch_capture", manifest["deferred_to_later_phases"])
 
     def test_missing_workspace_id_is_rejected(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -672,6 +731,255 @@ class SensesPhase2EntrypointTest(unittest.TestCase):
                 ).fetchone()[0]
             self.assertEqual(storage_file_id, file_id)
 
+    def test_routing_dispatch_capture_emits_runtime_launch_request_for_stored_capture(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            data_root = Path(tmp)
+            completed = start_and_complete_device(data_root)
+            capture = stored_capture(data_root, completed)
+
+            status, dispatch = handle_action(
+                data_root,
+                {
+                    "action": "routing.dispatch_capture",
+                    "_workspace_id": "default",
+                    "_app_actor": actor(),
+                    "capture_id": capture["capture_id"],
+                    "agent_id": "chat",
+                },
+            )
+
+            self.assertEqual(status, 202)
+            self.assertTrue(dispatch["ok"])
+            self.assertEqual(dispatch["status"], "dispatch_pending")
+            self.assertEqual(dispatch["routing"]["route_kind"], "primary")
+            self.assertEqual(dispatch["routing"]["target_thread_kind"], "new_primary")
+            self.assertEqual(dispatch["chat"]["available"], False)
+            self.assertEqual(len(dispatch["runtime_launch_requests"]), 1)
+            self.assertNotIn("dependency_backend_requests", dispatch)
+
+            runtime_request = dispatch["runtime_launch_requests"][0]
+            self.assertEqual(runtime_request["agent_id"], "chat")
+            self.assertEqual(runtime_request["agent_type_id"], "chat")
+            self.assertEqual(runtime_request["requested_mode"], "sandbox")
+            self.assertIn(capture["capture_id"], runtime_request["input_text"])
+            self.assertEqual(runtime_request["attachments"][0]["workspace_relative_path"], capture["storage"]["workspace_relative_path"])
+            self.assertEqual(runtime_request["attachments"][0]["content_type"], "image/jpeg")
+            self.assertEqual(runtime_request["callback"]["action"], "runtime_dispatch.completed")
+            self.assertEqual(runtime_request["callback"]["payload"]["capture_id"], capture["capture_id"])
+
+            with sqlite3.connect(db_path(data_root)) as db:
+                attempt = db.execute(
+                    """
+                    SELECT status, route_kind, target_thread_kind, retry_count
+                    FROM runtime_dispatch_attempts
+                    WHERE capture_id = ?
+                    """,
+                    (capture["capture_id"],),
+                ).fetchone()
+                routing_count = db.execute("SELECT COUNT(*) FROM routing_sessions").fetchone()[0]
+                capture_runtime = db.execute(
+                    "SELECT runtime_session_id, turn_id FROM captures WHERE capture_id = ?",
+                    (capture["capture_id"],),
+                ).fetchone()
+            self.assertEqual(attempt, ("pending", "primary", "new_primary", 0))
+            self.assertEqual(routing_count, 1)
+            self.assertEqual(capture_runtime, (None, None))
+            self.assertEqual(
+                [event["resource"] for event in app_events_for_action("routing.dispatch_capture")],
+                ["captures", "routing"],
+            )
+
+    def test_runtime_dispatch_callback_persists_chat_thread_and_followup_route(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            data_root = Path(tmp)
+            completed = start_and_complete_device(data_root)
+            first_capture = stored_capture(data_root, completed)
+            status, dispatch = handle_action(
+                data_root,
+                {
+                    "action": "routing.dispatch_capture",
+                    "_workspace_id": "default",
+                    "_app_actor": actor(),
+                    "capture_id": first_capture["capture_id"],
+                    "agent_id": "chat",
+                },
+            )
+            self.assertEqual(status, 202)
+
+            status, callback = handle_action(
+                data_root,
+                runtime_callback_payload(dispatch, runtime_session_id="runtime-session-1", turn_id="turn-1"),
+            )
+
+            self.assertEqual(status, 200)
+            self.assertTrue(callback["ok"])
+            self.assertEqual(callback["status"], "submitted")
+            self.assertEqual(callback["capture"]["runtime_session_id"], "runtime-session-1")
+            self.assertEqual(callback["capture"]["thread_id"], "runtime-session-1")
+            self.assertEqual(callback["capture"]["turn_id"], "turn-1")
+            self.assertEqual(callback["chat"]["deep_link"], "/app/chat/threads/runtime-session-1")
+            self.assertEqual(callback["routing_session"]["primary_runtime_session_id"], "runtime-session-1")
+
+            status, fetched = handle_action(
+                data_root,
+                {
+                    "action": "captures.get",
+                    "_workspace_id": "default",
+                    "_app_actor": actor(),
+                    "capture_id": first_capture["capture_id"],
+                },
+            )
+            self.assertEqual(status, 200)
+            self.assertEqual(fetched["capture"]["chat"]["deep_link"], "/app/chat/threads/runtime-session-1")
+            self.assertEqual(fetched["runtime_dispatch_attempts"][0]["status"], "submitted")
+
+            second_capture = stored_capture(
+                data_root,
+                completed,
+                request_id="stored-2",
+                idempotency_key="stored-2",
+                prompt="E questo?",
+            )
+            status, followup = handle_action(
+                data_root,
+                {
+                    "action": "routing.dispatch_capture",
+                    "_workspace_id": "default",
+                    "_app_actor": actor(),
+                    "capture_id": second_capture["capture_id"],
+                    "agent_id": "chat",
+                },
+            )
+            self.assertEqual(status, 202)
+            self.assertEqual(followup["routing"]["route_kind"], "followup")
+            self.assertEqual(followup["runtime_launch_requests"][0]["runtime_session_id"], "runtime-session-1")
+            self.assertNotIn("agent_id", followup["runtime_launch_requests"][0])
+
+            task_capture = stored_capture(
+                data_root,
+                completed,
+                request_id="stored-3",
+                idempotency_key="stored-3",
+                prompt="Analizza in dettaglio questa scena e prepara un piano operativo con rischi e priorita.",
+            )
+            status, task_dispatch = handle_action(
+                data_root,
+                {
+                    "action": "routing.dispatch_capture",
+                    "_workspace_id": "default",
+                    "_app_actor": actor(),
+                    "capture_id": task_capture["capture_id"],
+                    "agent_id": "chat",
+                },
+            )
+            self.assertEqual(status, 202)
+            self.assertEqual(task_dispatch["routing"]["route_kind"], "task")
+            self.assertEqual(task_dispatch["routing"]["target_thread_kind"], "new_task")
+            self.assertIn("agent_id", task_dispatch["runtime_launch_requests"][0])
+
+    def test_routing_dispatch_rejects_unstored_wrong_user_and_duplicate_pending_attempt(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            data_root = Path(tmp)
+            completed = start_and_complete_device(data_root)
+            status, accepted = handle_action(data_root, capture_request(completed))
+            self.assertEqual(status, 202)
+
+            status, unstored = handle_action(
+                data_root,
+                {
+                    "action": "routing.dispatch_capture",
+                    "_workspace_id": "default",
+                    "_app_actor": actor(),
+                    "capture_id": accepted["capture_id"],
+                },
+            )
+            self.assertEqual(status, 409)
+            self.assertEqual(unstored["error"], "invalid_capture_state")
+
+            status, stored = handle_action(data_root, storage_callback_payload(accepted))
+            self.assertEqual(status, 200)
+            capture_id = stored["capture"]["capture_id"]
+
+            status, forbidden = handle_action(
+                data_root,
+                {
+                    "action": "routing.dispatch_capture",
+                    "_workspace_id": "default",
+                    "_app_actor": actor("user-2"),
+                    "capture_id": capture_id,
+                },
+            )
+            self.assertEqual(status, 403)
+            self.assertEqual(forbidden["error"], "senses_permission_forbidden")
+
+            status, first = handle_action(
+                data_root,
+                {
+                    "action": "routing.dispatch_capture",
+                    "_workspace_id": "default",
+                    "_app_actor": actor(),
+                    "capture_id": capture_id,
+                },
+            )
+            self.assertEqual(status, 202)
+            status, duplicate = handle_action(
+                data_root,
+                {
+                    "action": "routing.dispatch_capture",
+                    "_workspace_id": "default",
+                    "_app_actor": actor(),
+                    "capture_id": capture_id,
+                },
+            )
+            self.assertEqual(status, 409)
+            self.assertEqual(duplicate["error"], "dispatch_in_progress")
+            self.assertEqual(duplicate["attempt"]["attempt_id"], first["runtime_dispatch_attempt"]["attempt_id"])
+
+    def test_runtime_dispatch_failure_is_recorded_and_can_retry(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            data_root = Path(tmp)
+            completed = start_and_complete_device(data_root)
+            capture = stored_capture(data_root, completed)
+            status, dispatch = handle_action(
+                data_root,
+                {
+                    "action": "routing.dispatch_capture",
+                    "_workspace_id": "default",
+                    "_app_actor": actor(),
+                    "capture_id": capture["capture_id"],
+                    "agent_id": "chat",
+                },
+            )
+            self.assertEqual(status, 202)
+
+            status, failed = handle_action(
+                data_root,
+                runtime_callback_payload(
+                    dispatch,
+                    runtime_status="failed",
+                    runtime_session_id="",
+                    turn_id="",
+                    error="provider unavailable",
+                ),
+            )
+            self.assertEqual(status, 200)
+            self.assertEqual(failed["status"], "failed")
+            self.assertEqual(failed["runtime_dispatch_attempt"]["status"], "failed")
+            self.assertEqual(failed["capture"]["error_code"], "runtime_dispatch_failed")
+
+            status, retry = handle_action(
+                data_root,
+                {
+                    "action": "routing.dispatch_capture",
+                    "_workspace_id": "default",
+                    "_app_actor": actor(),
+                    "capture_id": capture["capture_id"],
+                    "agent_id": "chat",
+                },
+            )
+            self.assertEqual(status, 202)
+            self.assertEqual(retry["runtime_dispatch_attempt"]["retry_count"], 1)
+
     def test_ingest_frame_validation_and_authorization_fail_closed(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             data_root = Path(tmp)
@@ -838,15 +1146,15 @@ class SensesPhase2EntrypointTest(unittest.TestCase):
                 },
             )
             self.assertTrue(cli_manifest["ok"])
-            self.assertEqual(cli_manifest["phase"], "phase-2")
+            self.assertEqual(cli_manifest["phase"], "phase-4")
             self.assertFalse(cli_overview["ok"])
             self.assertEqual(cli_overview["error"], "unsupported_cli_action")
             self.assertTrue(mcp_manifest["ok"])
-            self.assertEqual(mcp_manifest["phase"], "phase-2")
+            self.assertEqual(mcp_manifest["phase"], "phase-4")
             self.assertFalse(mcp_pairing["ok"])
             self.assertEqual(mcp_pairing["error"], "unsupported_tool")
             self.assertTrue(mcp_override["ok"])
-            self.assertEqual(mcp_override["phase"], "phase-2")
+            self.assertEqual(mcp_override["phase"], "phase-4")
             self.assertNotIn("pairing", mcp_override)
             self.assertFalse(db_path(Path(tmp)).exists())
 

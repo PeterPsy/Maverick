@@ -110,6 +110,10 @@ class MafHandoffFixtureTest(unittest.IsolatedAsyncioTestCase):
             [record.payload["adapter_event_type"] for record in mapped],
             ["handoff_sent", "executor_invoked", "output"],
         )
+        self.assertEqual(
+            [record.participant_id for record in mapped],
+            ["triage", "specialist", "specialist"],
+        )
 
         retention_policy = store.get_retention_policy(run.retention_policy_id, workspace_id=run.workspace_id)
         stored = [store.append_event(record, retention_policy=retention_policy) for record in mapped]

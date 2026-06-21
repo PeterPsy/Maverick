@@ -76,6 +76,7 @@ PNG_CRITICAL_CHUNK_TYPES = {b"IHDR", b"PLTE", b"IDAT", b"IEND"}
 PNG_MAX_DIMENSION = 100_000
 PNG_MAX_DECOMPRESSED_BYTES = 100_000_000
 STORAGE_WRITE_DEPENDENCY_ALIAS = "storage-file-content-write"
+STORAGE_PENDING_LEASE_SECONDS = 120
 DEFAULT_RUNTIME_AGENT_ID = "chat"
 RUNTIME_DISPATCH_CALLBACK_ACTION = "runtime_dispatch.completed"
 FOLLOWUP_ROUTE_WINDOW_SECONDS_MIN = 15
@@ -275,7 +276,7 @@ def manifest_payload(
             "mode": "user_session_mvp",
             "authenticated": bool(actor.get("user_id")),
             "management_role": "workspace_admin",
-            "device_token_ingress": False,
+            "device_ingress_supported": False,
         },
         "declared_surfaces": {
             "backend": True,
@@ -443,6 +444,11 @@ def pairing_complete(
     try:
         db.execute("BEGIN IMMEDIATE")
         expire_pairing_sessions(db, workspace_id)
+        settings_row = db.execute(
+            "SELECT allow_member_pairing FROM settings WHERE workspace_id = ?",
+            (workspace_id,),
+        ).fetchone()
+        allow_member_pairing = bool(settings_row["allow_member_pairing"]) if settings_row is not None else True
         pairing = db.execute(
             """
             SELECT * FROM pairing_sessions
@@ -468,6 +474,13 @@ def pairing_complete(
             )
             db.commit()
             return error_payload(410, "pairing_code_expired", "The pairing code has expired.")
+        if not pairing_completion_allowed(allow_member_pairing=allow_member_pairing, actor=actor, row=pairing):
+            db.commit()
+            return error_payload(
+                403,
+                "senses_permission_forbidden",
+                "Senses pairing completion is restricted to workspace admins or the user who created this code.",
+            )
 
         device_id = prefixed_id("dev")
         device_session_id = prefixed_id("dvs")
@@ -806,7 +819,8 @@ def ingest_frame(
                     "storage_write_failed",
                     "Senses ingestion state is missing the capture record for this idempotency key.",
                 )
-            if str(capture["status"]) == "storage_failed":
+            capture_status = str(capture["status"])
+            if capture_status == "storage_failed":
                 db.execute(
                     """
                     UPDATE captures
@@ -822,6 +836,37 @@ def ingest_frame(
                     WHERE workspace_id = ? AND request_id = ?
                     """,
                     (workspace_id, existing["request_id"]),
+                )
+                capture = capture_by_id(db, workspace_id, str(capture["capture_id"]))
+                dependency_request = storage_write_dependency_request(capture, prepared)
+            elif capture_status == "storage_pending" and storage_pending_stale(capture, timestamp):
+                db.execute(
+                    """
+                    UPDATE captures
+                    SET error_code = NULL, updated_at = ?
+                    WHERE workspace_id = ? AND capture_id = ?
+                    """,
+                    (timestamp, workspace_id, capture["capture_id"]),
+                )
+                db.execute(
+                    """
+                    UPDATE ingestion_requests
+                    SET status = 'storage_pending', error_code = NULL, completed_at = NULL
+                    WHERE workspace_id = ? AND request_id = ?
+                    """,
+                    (workspace_id, existing["request_id"]),
+                )
+                write_audit(
+                    db,
+                    workspace_id=workspace_id,
+                    event_type="capture.storage_write_reissued",
+                    actor_user_id=actor_user_id,
+                    device_id=device_id,
+                    details={
+                        "capture_id": capture["capture_id"],
+                        "request_id": existing["request_id"],
+                        "lease_seconds": STORAGE_PENDING_LEASE_SECONDS,
+                    },
                 )
                 capture = capture_by_id(db, workspace_id, str(capture["capture_id"]))
                 dependency_request = storage_write_dependency_request(capture, prepared)
@@ -3110,6 +3155,28 @@ def actor_can_access_pairing(actor: dict[str, str | None], row: sqlite3.Row) -> 
         return True
     user_id = str(actor.get("user_id") or "")
     return user_id in {str(row["created_by_user_id"] or ""), str(row["completed_by_user_id"] or "")}
+
+
+def pairing_completion_allowed(
+    *,
+    allow_member_pairing: bool,
+    actor: dict[str, str | None],
+    row: sqlite3.Row,
+) -> bool:
+    if allow_member_pairing:
+        return True
+    if actor_is_manager(actor):
+        return True
+    return str(actor.get("user_id") or "") == str(row["created_by_user_id"] or "")
+
+
+def storage_pending_stale(capture: sqlite3.Row | None, timestamp: str) -> bool:
+    if capture is None:
+        return False
+    updated_at = text_or_none(capture["updated_at"])
+    if not updated_at:
+        return True
+    return seconds_between(updated_at, timestamp) >= STORAGE_PENDING_LEASE_SECONDS
 
 
 def pairing_expired(row: sqlite3.Row) -> bool:

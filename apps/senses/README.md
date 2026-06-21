@@ -56,8 +56,10 @@ Phase 4 creates these workspace-scoped tables:
 
 `pairing.start` creates a short code with a bounded TTL and returns a
 machine-readable QR payload. `pairing.complete` requires a Maverick user session
-and associates the completing iOS device with that user and workspace. The
-server stores only registry/session metadata; device-token ingress is deferred.
+and associates the completing iOS device with that user and workspace. When
+member pairing is disabled, completion is limited to workspace admins or the
+user who created the code. The server stores only registry/session metadata;
+device-token ingress is deferred.
 
 Users can revoke their own devices. Workspace admins can list and revoke all
 workspace devices and update Senses settings.
@@ -71,6 +73,12 @@ Storage path, validates MIME, base64, decoded size, timestamp skew and optional
 client hash, strips JPEG EXIF APP1 metadata, then creates `ingestion_requests`
 and `captures` records before returning a declared dependency request to
 Storage `file.content.write`.
+
+Idempotent retries return the existing capture. If that capture is still
+`storage_pending` after the Storage write lease has expired, Senses reissues the
+same Storage dependency request for the existing `capture_id` and path so a
+client retry can recover from a host crash between the Senses commit and Storage
+callback.
 
 Storage writes use:
 

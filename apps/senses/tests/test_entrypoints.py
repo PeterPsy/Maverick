@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from base64 import b64decode, b64encode
+from contextlib import closing
 from datetime import UTC, datetime, timedelta
 import hashlib
 import json
@@ -286,7 +287,7 @@ class SensesPhase4EntrypointTest(unittest.TestCase):
             self.assertTrue(db_path(data_root).is_file())
             for table in WORKSPACE_TABLES:
                 self.assertIn("workspace_id", table_columns(data_root, table))
-            with sqlite3.connect(db_path(data_root)) as db:
+            with closing(sqlite3.connect(db_path(data_root))) as db:
                 settings_count = db.execute(
                     "SELECT COUNT(*) FROM settings WHERE workspace_id = ?",
                     ("default",),
@@ -311,6 +312,8 @@ class SensesPhase4EntrypointTest(unittest.TestCase):
             )
             self.assertEqual(status, 200)
             self.assertEqual(manifest["phase"], "phase-4")
+            self.assertIs(manifest["auth"]["device_ingress_supported"], False)
+            self.assertNotIn("device_token_ingress", manifest["auth"])
             self.assertEqual(manifest["dependency_resolution"]["status"], "resolved")
             self.assertEqual(manifest["declared_surfaces"]["frontend"], True)
             self.assertIn("pairing.start", manifest["backend_actions"])
@@ -385,7 +388,7 @@ class SensesPhase4EntrypointTest(unittest.TestCase):
             self.assertEqual(status, 404)
             self.assertEqual(second["error"], "invalid_or_expired_pairing_code")
 
-            with sqlite3.connect(db_path(data_root)) as db:
+            with closing(sqlite3.connect(db_path(data_root))) as db:
                 device_count = db.execute("SELECT COUNT(*) FROM devices").fetchone()[0]
                 session_count = db.execute("SELECT COUNT(*) FROM device_sessions").fetchone()[0]
                 pairing = db.execute(
@@ -403,6 +406,54 @@ class SensesPhase4EntrypointTest(unittest.TestCase):
             self.assertEqual(status, 200)
             self.assertEqual(len(listed["devices"]), 1)
             self.assertEqual(listed["devices"][0]["display_name"], "Marco iPhone")
+
+    def test_pairing_complete_respects_admin_only_pairing_policy(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            data_root = Path(tmp)
+            admin_actor = actor("admin-1", "admin")
+            status, updated = handle_action(
+                data_root,
+                {
+                    "action": "settings.update",
+                    "_workspace_id": "default",
+                    "_app_actor": admin_actor,
+                    "allow_member_pairing": False,
+                },
+            )
+            self.assertEqual(status, 200)
+            self.assertFalse(updated["settings"]["allow_member_pairing"])
+
+            status, started = handle_action(
+                data_root,
+                {"action": "pairing.start", "_workspace_id": "default", "_app_actor": admin_actor},
+            )
+            self.assertEqual(status, 201)
+
+            status, denied = handle_action(
+                data_root,
+                {
+                    "action": "pairing.complete",
+                    "_workspace_id": "default",
+                    "_app_actor": actor("user-2"),
+                    "code": started["pairing"]["code"],
+                    "device_display_name": "Unexpected iPhone",
+                },
+            )
+            self.assertEqual(status, 403)
+            self.assertEqual(denied["error"], "senses_permission_forbidden")
+
+            status, completed = handle_action(
+                data_root,
+                {
+                    "action": "pairing.complete",
+                    "_workspace_id": "default",
+                    "_app_actor": admin_actor,
+                    "code": started["pairing"]["code"],
+                    "device_display_name": "Admin iPhone",
+                },
+            )
+            self.assertEqual(status, 200)
+            self.assertEqual(completed["device"]["owner_user_id"], "admin-1")
 
     def test_user_visibility_and_admin_include_all(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -447,7 +498,7 @@ class SensesPhase4EntrypointTest(unittest.TestCase):
             self.assertEqual(status, 200)
             self.assertEqual(revoked["device"]["status"], "revoked")
 
-            with sqlite3.connect(db_path(data_root)) as db:
+            with closing(sqlite3.connect(db_path(data_root))) as db:
                 session_status = db.execute(
                     "SELECT status FROM device_sessions WHERE device_id = ?",
                     (device_id,),
@@ -514,7 +565,7 @@ class SensesPhase4EntrypointTest(unittest.TestCase):
             self.assertEqual(hashlib.sha256(sanitized).hexdigest(), accepted["storage"]["sha256"])
             self.assertEqual(len(sanitized), accepted["storage"]["size_bytes"])
 
-            with sqlite3.connect(db_path(data_root)) as db:
+            with closing(sqlite3.connect(db_path(data_root))) as db:
                 ingestion = db.execute(
                     "SELECT status, capture_id FROM ingestion_requests WHERE request_id = ?",
                     ("req-1",),
@@ -635,6 +686,43 @@ class SensesPhase4EntrypointTest(unittest.TestCase):
             self.assertEqual(status, 409)
             self.assertEqual(conflict["error"], "idempotency_conflict")
 
+    def test_ingest_frame_reissues_storage_write_for_stale_pending_idempotency(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            data_root = Path(tmp)
+            completed = start_and_complete_device(data_root)
+            request = capture_request(completed)
+
+            status, first = handle_action(data_root, dict(request))
+            self.assertEqual(status, 202)
+            original_request = first["dependency_backend_requests"][0]
+            stale_at = (
+                datetime.now(tz=UTC)
+                - timedelta(seconds=service.STORAGE_PENDING_LEASE_SECONDS + 5)
+            ).isoformat()
+            db = sqlite3.connect(db_path(data_root))
+            try:
+                db.execute(
+                    "UPDATE captures SET updated_at = ? WHERE capture_id = ?",
+                    (stale_at, first["capture_id"]),
+                )
+                db.commit()
+            finally:
+                db.close()
+
+            status, replay = handle_action(data_root, dict(request))
+            self.assertEqual(status, 200)
+            self.assertEqual(replay["capture_id"], first["capture_id"])
+            self.assertEqual(replay["storage"]["status"], "pending")
+            self.assertIn("dependency_backend_requests", replay)
+            self.assertEqual(len(replay["dependency_backend_requests"]), 1)
+            reissued = replay["dependency_backend_requests"][0]
+            self.assertEqual(reissued["request_id"], original_request["request_id"])
+            self.assertEqual(
+                reissued["body"]["workspace_relative_path"],
+                original_request["body"]["workspace_relative_path"],
+            )
+            self.assertEqual(reissued["body"]["content_base64"], original_request["body"]["content_base64"])
+
     def test_storage_write_callback_marks_capture_stored_without_runtime_launch(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             data_root = Path(tmp)
@@ -655,7 +743,7 @@ class SensesPhase4EntrypointTest(unittest.TestCase):
             self.assertEqual(callback["capture"]["storage"]["storage_file_id"], file_id)
             self.assertNotIn("runtime_launch_requests", callback)
 
-            with sqlite3.connect(db_path(data_root)) as db:
+            with closing(sqlite3.connect(db_path(data_root))) as db:
                 stored = db.execute(
                     "SELECT status, storage_file_id FROM captures WHERE capture_id = ?",
                     (accepted["capture_id"],),
@@ -724,7 +812,7 @@ class SensesPhase4EntrypointTest(unittest.TestCase):
             self.assertEqual(status, 409)
             self.assertEqual(stale["error"], "invalid_capture_state")
 
-            with sqlite3.connect(db_path(data_root)) as db:
+            with closing(sqlite3.connect(db_path(data_root))) as db:
                 storage_file_id = db.execute(
                     "SELECT storage_file_id FROM captures WHERE capture_id = ?",
                     (accepted["capture_id"],),
@@ -766,7 +854,7 @@ class SensesPhase4EntrypointTest(unittest.TestCase):
             self.assertEqual(runtime_request["callback"]["action"], "runtime_dispatch.completed")
             self.assertEqual(runtime_request["callback"]["payload"]["capture_id"], capture["capture_id"])
 
-            with sqlite3.connect(db_path(data_root)) as db:
+            with closing(sqlite3.connect(db_path(data_root))) as db:
                 attempt = db.execute(
                     """
                     SELECT status, route_kind, target_thread_kind, retry_count
@@ -1251,10 +1339,14 @@ class SensesPhase4EntrypointTest(unittest.TestCase):
             )
             self.assertTrue(cli_manifest["ok"])
             self.assertEqual(cli_manifest["phase"], "phase-4")
+            self.assertIs(cli_manifest["auth"]["device_ingress_supported"], False)
+            self.assertNotIn("device_token_ingress", cli_manifest["auth"])
             self.assertFalse(cli_overview["ok"])
             self.assertEqual(cli_overview["error"], "unsupported_cli_action")
             self.assertTrue(mcp_manifest["ok"])
             self.assertEqual(mcp_manifest["phase"], "phase-4")
+            self.assertIs(mcp_manifest["auth"]["device_ingress_supported"], False)
+            self.assertNotIn("device_token_ingress", mcp_manifest["auth"])
             self.assertFalse(mcp_pairing["ok"])
             self.assertEqual(mcp_pairing["error"], "unsupported_tool")
             self.assertTrue(mcp_override["ok"])

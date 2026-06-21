@@ -562,6 +562,8 @@ Reference search aggregation must remain app-agnostic but should not let one pro
 
 Runtime turn submissions treat client-supplied `app_references` as reference identities, not trusted provider context. Before the provider prompt is built, the core verifies that the app is enabled and visible in the workspace, resolves or summarizes entity references through the owning app's reference tools, and uses only owner-returned labels, summaries, and deep links. Unverified references are omitted rather than materialized from client-provided descriptive fields.
 
+App-owned runtime launch requests may include Storage-backed `attachments` for the submitted turn. The app-hosting boundary validates these attachments before runtime submission: the field must be a list of objects with no more than five entries, each entry must name a `workspace_relative_path` or `relative_path` under `storage/uploaded/` or `storage/generated/`, absolute paths and `..` segments are rejected, optional `size_bytes` values must be numeric non-negative integers, and the referenced file must already exist in the workspace Storage tree. The core normalizes accepted attachments to workspace-relative Storage paths and passes them to the runtime turn submission path.
+
 The common reference tool convention is:
 
 - `<app_id>_reference_manifest`

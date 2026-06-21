@@ -608,6 +608,8 @@ Mounted app frontends should use the platform host's generic `/api/app-reference
 
 When a mounted frontend sends runtime `app_references`, the client payload is only an identity hint. The runtime submit path must re-check the local workspace app id, entity type, and entity id against enabled visible providers, then refresh labels, summaries, and deep links by calling the owner app's reference tools. Apps should return local-route-neutral `app_page` values when possible; the core maps those pages onto the binding's `local_app_id` route namespace.
 
+Apps that declare `permissions.runtime.create_sessions` may return Storage-backed `attachments` in generic runtime launch requests. Attachments are platform-owned runtime input, not app-private file access: each item must point to an existing workspace Storage file using `workspace_relative_path` or `relative_path` under `storage/uploaded/` or `storage/generated/`. The core rejects malformed lists, non-object items, absolute or escaping paths, paths outside Storage, excessive attachment counts, and non-numeric sizes before creating the runtime turn.
+
 Reference lookup behavior belongs to the owning app's CLI and MCP surfaces. A common convention should be used so apps such as Memory can consume references without app-specific integrations:
 
 ```text

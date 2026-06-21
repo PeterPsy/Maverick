@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from typing import Any
 from uuid import uuid4
 
@@ -30,6 +30,8 @@ from core.workspaces.paths import workspace_paths
 RUNTIME_REQUEST_KEYS = ("runtime_session_requests", "runtime_launch_requests")
 RUNTIME_INTERRUPT_REQUEST_KEYS = ("runtime_turn_interrupt_requests", "runtime_interrupt_requests")
 DEPENDENCY_BACKEND_REQUEST_KEYS = ("dependency_backend_requests",)
+MAX_RUNTIME_REQUEST_ATTACHMENTS = 5
+ATTACHMENT_STORAGE_PREFIXES = (("storage", "uploaded"), ("storage", "generated"))
 
 
 def apply_app_runtime_requests(
@@ -271,6 +273,11 @@ def _apply_one_runtime_request(
     status = "submitted"
     error = ""
     try:
+        attachments = _validated_runtime_request_attachments(
+            request.get("attachments"),
+            workspace_id=workspace_id,
+            start_path=start_path,
+        )
         session = _runtime_session_for_request(
             state,
             request=request,
@@ -287,6 +294,7 @@ def _apply_one_runtime_request(
             session=session,
             input_text=input_text,
             client_message_id=_text(request.get("client_message_id")) or f"{app_id}:{request_id}",
+            attachments=attachments,
             app_references=_list_of_dicts(request.get("app_references")),
             on_queued=lambda queued_turn, _events: callback_result.update(
                 _invoke_runtime_request_callback(
@@ -424,6 +432,93 @@ def _runtime_session_for_request(
         now=session.started_at or session.updated_at,
     )
     return session
+
+
+def _validated_runtime_request_attachments(
+    value: object,
+    *,
+    workspace_id: str,
+    start_path: Path,
+) -> list[dict[str, object]]:
+    if value is None:
+        return []
+    if not isinstance(value, list):
+        raise AppHostingError("Runtime launch request attachments must be a list.")
+    if len(value) > MAX_RUNTIME_REQUEST_ATTACHMENTS:
+        raise AppHostingError(f"Runtime launch request attachments must contain at most {MAX_RUNTIME_REQUEST_ATTACHMENTS} items.")
+    paths = workspace_paths(workspace_id, start_path=start_path)
+    attachments: list[dict[str, object]] = []
+    for index, item in enumerate(value):
+        if not isinstance(item, dict):
+            raise AppHostingError(f"Runtime launch request attachment #{index + 1} must be an object.")
+        relative_path = _validated_attachment_storage_path(item)
+        candidate = (paths.root / PurePosixPath(relative_path)).resolve()
+        _require_attachment_inside_storage(candidate, paths=paths, relative_path=relative_path)
+        if not candidate.is_file():
+            raise AppHostingError(f"Runtime launch request attachment `{relative_path}` was not found in workspace storage.")
+        attachments.append(_runtime_attachment_payload(item, relative_path=relative_path))
+    return attachments
+
+
+def _validated_attachment_storage_path(item: dict[str, object]) -> str:
+    raw_path = item.get("workspace_relative_path") or item.get("relative_path")
+    if not isinstance(raw_path, str) or not raw_path.strip():
+        raise AppHostingError("Runtime launch request attachments require workspace_relative_path or relative_path.")
+    posix_path = PurePosixPath(raw_path.strip())
+    if posix_path.is_absolute() or ".." in posix_path.parts:
+        raise AppHostingError("Runtime launch request attachment paths must be workspace-relative Storage paths.")
+    parts = tuple(posix_path.parts)
+    if len(parts) < 3 or parts[:2] not in ATTACHMENT_STORAGE_PREFIXES:
+        raise AppHostingError("Runtime launch request attachment paths must be under storage/uploaded or storage/generated.")
+    return posix_path.as_posix()
+
+
+def _require_attachment_inside_storage(candidate: Path, *, paths, relative_path: str) -> None:
+    storage_roots = (paths.uploaded_storage.resolve(), paths.generated_storage.resolve())
+    for root in storage_roots:
+        try:
+            candidate.relative_to(root)
+            return
+        except ValueError:
+            continue
+    raise AppHostingError(f"Runtime launch request attachment `{relative_path}` is outside workspace storage.")
+
+
+def _runtime_attachment_payload(item: dict[str, object], *, relative_path: str) -> dict[str, object]:
+    payload: dict[str, object] = {
+        "relative_path": relative_path,
+        "workspace_relative_path": relative_path,
+    }
+    attachment_id = _text(item.get("id"))
+    if attachment_id:
+        payload["id"] = attachment_id
+    name = _text(item.get("name") or item.get("filename"))
+    if name:
+        payload["name"] = name
+    content_type = _text(item.get("content_type") or item.get("type"))
+    if content_type:
+        payload["content_type"] = content_type
+    size = _validated_attachment_size(item)
+    if size is not None:
+        payload["size_bytes"] = size
+    return payload
+
+
+def _validated_attachment_size(item: dict[str, object]) -> int | None:
+    value = item.get("size_bytes")
+    if value is None:
+        value = item.get("size")
+    if value is None:
+        return None
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        raise AppHostingError("Runtime launch request attachment size_bytes must be numeric.")
+    try:
+        size = int(value)
+    except (OverflowError, ValueError) as exc:
+        raise AppHostingError("Runtime launch request attachment size_bytes must be a non-negative integer.") from exc
+    if size < 0 or size != value:
+        raise AppHostingError("Runtime launch request attachment size_bytes must be a non-negative integer.")
+    return size
 
 
 def _apply_one_runtime_interrupt_request(

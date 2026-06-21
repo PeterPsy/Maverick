@@ -40,10 +40,10 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           python -m pip install -e ".[inter-agent-maf]"
-      - name: MAF handoff fixture
+      - name: MAF source-backed fixtures
         env:
           MAVERICK_EXPERIMENTAL_AGENT_FRAMEWORK: "1"
-        run: python -m unittest tests.unit.inter_agent.test_maf_adapter tests.integration.inter_agent.test_maf_handoff_fixture
+        run: python -m unittest tests.unit.inter_agent.test_maf_adapter tests.integration.inter_agent.test_maf_handoff_fixture tests.integration.inter_agent.test_maf_group_chat_fixture
 
   frontend-builds:
     runs-on: ubuntu-latest

@@ -370,6 +370,76 @@ class MafAdapterTest(unittest.TestCase):
         for record in records:
             _assert_group_chat_payload_is_safe(self, record.payload)
 
+    def test_group_chat_explicit_speaker_selection_stays_speaker_observation(self) -> None:
+        context = AdapterEventMappingContext(
+            run=_group_chat_run(),
+            visibility_plane="detail",
+            event_id_prefix="iaevt-speaker",
+            created_at=NOW,
+        )
+
+        records = map_maf_events_to_inter_agent_records(
+            context,
+            [
+                SimpleNamespace(
+                    type="group_chat_speaker_selection",
+                    round_index=2,
+                    selected_participant_id="writer",
+                    summary="speaker selector picked writer",
+                )
+            ],
+        )
+
+        self.assertEqual(len(records), 1)
+        self.assertEqual(records[0].event_type, "inter_agent.summary.updated")
+        self.assertEqual(records[0].participant_id, "selector")
+        self.assertEqual(records[0].payload["observation_kind"], "speaker_selection")
+        self.assertEqual(records[0].payload["decision_source"], "maf_group_chat")
+        self.assertEqual(records[0].payload["selected_participant_id"], "writer")
+        self.assertEqual(records[0].payload["summary"], "speaker selector picked writer")
+        self.assertNotEqual(records[0].payload["decision_source"], "manager_agent")
+        _assert_group_chat_payload_is_safe(self, records[0].payload)
+
+    def test_group_chat_split_terminal_output_namespaces_explicit_idempotency_key(self) -> None:
+        repo_root = make_temp_repo_root(self)
+        store = build_inter_agent_document_store(start_path=repo_root)
+        context = AdapterEventMappingContext(
+            run=_group_chat_run(),
+            visibility_plane="detail",
+            event_id_prefix="iaevt-terminal-explicit",
+            created_at=NOW,
+        )
+
+        records = map_maf_events_to_inter_agent_records(
+            context,
+            [
+                SimpleNamespace(
+                    type="output",
+                    idempotency_key="maf-terminal-output-1",
+                    executor_id="group_chat_orchestrator",
+                    data=SimpleNamespace(text="The group chat has reached its termination condition."),
+                )
+            ],
+        )
+
+        self.assertEqual(
+            [record.event_type for record in records],
+            ["inter_agent.summary.updated", "inter_agent.run.completed"],
+        )
+        self.assertEqual(
+            [record.idempotency_key for record in records],
+            [
+                "run-maf-group-chat:maf:output:inter_agent.summary.updated:maf-terminal-output-1",
+                "run-maf-group-chat:maf:output:inter_agent.run.completed:maf-terminal-output-1",
+            ],
+        )
+        self.assertEqual(len({record.idempotency_key for record in records}), 2)
+        retention = _retention()
+        stored = [store.append_event(record, retention_policy=retention) for record in records]
+        stored_retry = [store.append_event(record, retention_policy=retention) for record in records]
+        self.assertEqual([event.event_id for event in stored], [event.event_id for event in stored_retry])
+        self.assertEqual([event.sequence for event in stored], [event.sequence for event in stored_retry])
+
 
 class GroupChatRequestSentEvent:
     def __init__(self, *, round_index: int, participant_name: str) -> None:

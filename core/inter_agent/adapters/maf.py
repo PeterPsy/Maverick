@@ -45,10 +45,13 @@ _HANDOFF_EVENT_TYPES: dict[str, InterAgentEventType] = {
     "handoff_complete": "inter_agent.handoff.completed",
 }
 
-_GROUP_CHAT_DECISION_EVENT_TYPES = {
+_GROUP_CHAT_MANAGER_DECISION_EVENT_TYPES = {
     "group_chat_manager_decision",
-    "group_chat_speaker_selection",
     "manager_decision",
+}
+
+_GROUP_CHAT_SPEAKER_SELECTION_EVENT_TYPES = {
+    "group_chat_speaker_selection",
     "speaker_selection",
 }
 
@@ -264,7 +267,25 @@ def _group_chat_records(
                 payload_kind="terminal_output",
             ),
         ]
-    if group_chat_event_type in _GROUP_CHAT_DECISION_EVENT_TYPES:
+    if group_chat_event_type in _GROUP_CHAT_SPEAKER_SELECTION_EVENT_TYPES:
+        selected_participant_id = _clean_optional(
+            _value(event, "selected_participant_id", "participant_id", "participant_name", "next_speaker")
+        )
+        if not selected_participant_id:
+            return []
+        return [
+            _group_chat_record(
+                context,
+                event,
+                adapter_event_type=group_chat_event_type,
+                event_type="inter_agent.summary.updated",
+                visibility_plane=visibility_plane,
+                source_index=source_index,
+                mapped_index=mapped_index_start,
+                payload_kind="speaker_selection",
+            )
+        ]
+    if group_chat_event_type in _GROUP_CHAT_MANAGER_DECISION_EVENT_TYPES:
         selected_participant_id = _clean_optional(
             _value(event, "selected_participant_id", "participant_id", "participant_name", "next_speaker")
         )
@@ -474,9 +495,11 @@ def _group_chat_record(
             if part
         )
     )
+    explicit_idempotency_key = _clean_optional(_value(event, "idempotency_key"))
     idempotency_key = (
-        _clean_optional(_value(event, "idempotency_key"))
-        or f"{run.run_id}:maf:{adapter_event_type}:{event_type}:{source_event_id or identity_token}"
+        f"{run.run_id}:maf:{adapter_event_type}:{event_type}:{explicit_idempotency_key}"
+        if explicit_idempotency_key
+        else f"{run.run_id}:maf:{adapter_event_type}:{event_type}:{source_event_id or identity_token}"
     )
     record = InterAgentEventRecord(
         event_id=context.event_id_for(f"{adapter_event_type}-{event_type.split('.')[-1]}-{identity_token}"),

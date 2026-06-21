@@ -88,8 +88,9 @@ not return runtime launch requests.
 user, or a workspace-admin session. It records a `runtime_dispatch_attempt`,
 chooses the routing target from `routing_sessions`, and returns one
 `runtime_launch_request` with the capture attached by Storage workspace-relative
-path. Senses does not call Chat directly; the Maverick core owns runtime session
-and thread creation.
+path. When the request omits `agent_id` or `agent_type_id`, Senses targets the
+`chat` agent type. Senses does not call Chat directly; the Maverick core owns
+runtime session and thread creation.
 
 MVP routing rules are:
 
@@ -101,11 +102,18 @@ MVP routing rules are:
   one when needed;
 - otherwise short questions use the primary user/device thread.
 
+Primary and active-task thread creation is serialized per routing session while
+the matching attempt is pending, so two stored captures from the same user/device
+cannot race to create separate shared threads before the first runtime callback
+completes.
+
 The `runtime_dispatch.completed` callback stores `runtime_session_id`, `turn_id`,
 and the Chat thread mapping. For newly created sessions, Senses records
 `thread_id = runtime_session_id`, matching the current core runtime thread
-creation behavior. `captures.get` returns the persisted capture and Chat deep
-link after the callback has completed.
+creation behavior. Runtime callbacks are accepted only for pending attempts;
+duplicate or tardy callbacks for terminal attempts return the persisted terminal
+state without rewriting the capture. `captures.get` returns the persisted capture
+and Chat deep link after the callback has completed.
 
 ## Verify
 

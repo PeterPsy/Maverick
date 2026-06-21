@@ -76,7 +76,7 @@ PNG_CRITICAL_CHUNK_TYPES = {b"IHDR", b"PLTE", b"IDAT", b"IEND"}
 PNG_MAX_DIMENSION = 100_000
 PNG_MAX_DECOMPRESSED_BYTES = 100_000_000
 STORAGE_WRITE_DEPENDENCY_ALIAS = "storage-file-content-write"
-DEFAULT_RUNTIME_AGENT_ID = "default"
+DEFAULT_RUNTIME_AGENT_ID = "chat"
 RUNTIME_DISPATCH_CALLBACK_ACTION = "runtime_dispatch.completed"
 FOLLOWUP_ROUTE_WINDOW_SECONDS_MIN = 15
 FOLLOWUP_ROUTE_WINDOW_SECONDS_MAX = 3600
@@ -1198,6 +1198,23 @@ def routing_dispatch_capture(
             payload=payload,
             timestamp=timestamp,
         )
+        target_thread_kind = str(route["target_thread_kind"])
+        if target_thread_kind in {"new_primary", "new_task"}:
+            session_pending = latest_pending_dispatch_attempt_for_routing_session(
+                db,
+                workspace_id=workspace_id,
+                routing_session_id=str(routing_session["routing_session_id"]),
+                target_thread_kind=target_thread_kind,
+            )
+            if session_pending is not None:
+                db.rollback()
+                return error_payload(
+                    409,
+                    "dispatch_in_progress",
+                    "A runtime dispatch attempt is already pending for this routing session target.",
+                    attempt=dispatch_attempt_payload(session_pending),
+                    routing_session_id=routing_session["routing_session_id"],
+                )
         previous_attempts = int(
             db.execute(
                 """
@@ -1357,6 +1374,24 @@ def runtime_dispatch_completed(
         if capture is None:
             db.rollback()
             return error_payload(404, "capture_not_found", "No matching Senses capture was found.")
+        if str(attempt["status"]) != "pending" or attempt["completed_at"]:
+            routing_session = None
+            routing_session_id = text_or_none(attempt["routing_session_id"])
+            if routing_session_id:
+                routing_session = db.execute(
+                    "SELECT * FROM routing_sessions WHERE workspace_id = ? AND routing_session_id = ?",
+                    (workspace_id, routing_session_id),
+                ).fetchone()
+            db.commit()
+            return 200, {
+                "ok": True,
+                "status": attempt["status"],
+                "capture": capture_payload(capture),
+                "runtime_dispatch_attempt": dispatch_attempt_payload(attempt),
+                "routing_session": routing_session_payload(routing_session),
+                "chat": chat_link_payload(capture["thread_id"]),
+                "error": None,
+            }
 
         callback_json = {
             "runtime_request_status": status,
@@ -1667,6 +1702,28 @@ def latest_pending_dispatch_attempt(
         LIMIT 1
         """,
         (workspace_id, capture_id),
+    ).fetchone()
+
+
+def latest_pending_dispatch_attempt_for_routing_session(
+    db: sqlite3.Connection,
+    *,
+    workspace_id: str,
+    routing_session_id: str,
+    target_thread_kind: str,
+) -> sqlite3.Row | None:
+    return db.execute(
+        """
+        SELECT * FROM runtime_dispatch_attempts
+        WHERE workspace_id = ?
+          AND routing_session_id = ?
+          AND target_thread_kind = ?
+          AND status IN ('pending', 'submitted')
+          AND completed_at IS NULL
+        ORDER BY created_at DESC
+        LIMIT 1
+        """,
+        (workspace_id, routing_session_id, target_thread_kind),
     ).fetchone()
 
 

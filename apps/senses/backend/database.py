@@ -272,6 +272,9 @@ def ensure_schema(data_root: Path, workspace_id: str) -> None:
             CREATE INDEX IF NOT EXISTS idx_senses_dispatch_status_time
               ON runtime_dispatch_attempts(workspace_id, status, updated_at DESC);
 
+            CREATE INDEX IF NOT EXISTS idx_senses_dispatch_session_status_time
+              ON runtime_dispatch_attempts(workspace_id, routing_session_id, target_thread_kind, status, completed_at, created_at DESC);
+
             CREATE TABLE IF NOT EXISTS audit (
               workspace_id TEXT NOT NULL,
               audit_id TEXT NOT NULL,

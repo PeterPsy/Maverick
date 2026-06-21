@@ -744,7 +744,6 @@ class SensesPhase4EntrypointTest(unittest.TestCase):
                     "_workspace_id": "default",
                     "_app_actor": actor(),
                     "capture_id": capture["capture_id"],
-                    "agent_id": "chat",
                 },
             )
 
@@ -788,6 +787,70 @@ class SensesPhase4EntrypointTest(unittest.TestCase):
                 [event["resource"] for event in app_events_for_action("routing.dispatch_capture")],
                 ["captures", "routing"],
             )
+
+    def test_routing_dispatch_blocks_second_capture_while_session_thread_is_pending(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            data_root = Path(tmp)
+            completed = start_and_complete_device(data_root)
+            first_capture = stored_capture(data_root, completed)
+            second_capture = stored_capture(
+                data_root,
+                completed,
+                request_id="stored-2",
+                idempotency_key="stored-2",
+                prompt="E questo?",
+            )
+
+            status, first = handle_action(
+                data_root,
+                {
+                    "action": "routing.dispatch_capture",
+                    "_workspace_id": "default",
+                    "_app_actor": actor(),
+                    "capture_id": first_capture["capture_id"],
+                    "agent_id": "chat",
+                },
+            )
+            self.assertEqual(status, 202)
+
+            status, blocked = handle_action(
+                data_root,
+                {
+                    "action": "routing.dispatch_capture",
+                    "_workspace_id": "default",
+                    "_app_actor": actor(),
+                    "capture_id": second_capture["capture_id"],
+                    "agent_id": "chat",
+                },
+            )
+            self.assertEqual(status, 409)
+            self.assertEqual(blocked["error"], "dispatch_in_progress")
+            self.assertEqual(blocked["attempt"]["attempt_id"], first["runtime_dispatch_attempt"]["attempt_id"])
+            self.assertEqual(
+                blocked["attempt"]["routing_session_id"],
+                first["runtime_dispatch_attempt"]["routing_session_id"],
+            )
+
+            status, callback = handle_action(
+                data_root,
+                runtime_callback_payload(first, runtime_session_id="runtime-session-1", turn_id="turn-1"),
+            )
+            self.assertEqual(status, 200)
+            self.assertEqual(callback["status"], "submitted")
+
+            status, followup = handle_action(
+                data_root,
+                {
+                    "action": "routing.dispatch_capture",
+                    "_workspace_id": "default",
+                    "_app_actor": actor(),
+                    "capture_id": second_capture["capture_id"],
+                    "agent_id": "chat",
+                },
+            )
+            self.assertEqual(status, 202)
+            self.assertEqual(followup["routing"]["route_kind"], "followup")
+            self.assertEqual(followup["runtime_launch_requests"][0]["runtime_session_id"], "runtime-session-1")
 
     def test_runtime_dispatch_callback_persists_chat_thread_and_followup_route(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -876,6 +939,47 @@ class SensesPhase4EntrypointTest(unittest.TestCase):
             self.assertEqual(task_dispatch["routing"]["route_kind"], "task")
             self.assertEqual(task_dispatch["routing"]["target_thread_kind"], "new_task")
             self.assertIn("agent_id", task_dispatch["runtime_launch_requests"][0])
+
+    def test_runtime_dispatch_callback_ignores_terminal_attempt_with_different_outcome(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            data_root = Path(tmp)
+            completed = start_and_complete_device(data_root)
+            capture = stored_capture(data_root, completed)
+            status, dispatch = handle_action(
+                data_root,
+                {
+                    "action": "routing.dispatch_capture",
+                    "_workspace_id": "default",
+                    "_app_actor": actor(),
+                    "capture_id": capture["capture_id"],
+                    "agent_id": "chat",
+                },
+            )
+            self.assertEqual(status, 202)
+
+            status, submitted = handle_action(
+                data_root,
+                runtime_callback_payload(dispatch, runtime_session_id="runtime-session-1", turn_id="turn-1"),
+            )
+            self.assertEqual(status, 200)
+            self.assertEqual(submitted["status"], "submitted")
+
+            status, stale = handle_action(
+                data_root,
+                runtime_callback_payload(
+                    dispatch,
+                    runtime_status="failed",
+                    runtime_session_id="",
+                    turn_id="",
+                    error="late provider failure",
+                ),
+            )
+            self.assertEqual(status, 200)
+            self.assertEqual(stale["status"], "submitted")
+            self.assertEqual(stale["runtime_dispatch_attempt"]["status"], "submitted")
+            self.assertEqual(stale["runtime_dispatch_attempt"]["turn_id"], "turn-1")
+            self.assertEqual(stale["capture"]["runtime_session_id"], "runtime-session-1")
+            self.assertIsNone(stale["capture"]["error_code"])
 
     def test_routing_dispatch_rejects_unstored_wrong_user_and_duplicate_pending_attempt(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

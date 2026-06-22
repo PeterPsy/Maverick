@@ -183,6 +183,51 @@ function threadSender(thread: MailThread): MailAddress {
   return thread.participants[0] || { email: 'mail' };
 }
 
+function normalizeEmail(value?: string) {
+  return String(value || '').trim().toLowerCase();
+}
+
+function addressLabel(address?: MailAddress | null) {
+  const name = String(address?.name || '').trim();
+  const email = String(address?.email || '').trim();
+  return name || email || 'Mail';
+}
+
+function connectionLabel(connection?: MailConnection | null) {
+  return String(connection?.display_name || connection?.email_address || '').trim() || 'Mail account';
+}
+
+function isConnectionParticipant(participant: MailAddress, connection?: MailConnection | null) {
+  const participantEmail = normalizeEmail(participant.email);
+  const connectionEmail = normalizeEmail(connection?.email_address);
+  return Boolean(participantEmail && connectionEmail && participantEmail === connectionEmail);
+}
+
+function threadCounterparty(thread: MailThread, connection?: MailConnection | null): MailAddress {
+  return thread.participants.find((participant) => !isConnectionParticipant(participant, connection))
+    || thread.participants[0]
+    || { email: 'mail' };
+}
+
+function threadRoute(thread: MailThread, connection?: MailConnection | null, mailbox?: string) {
+  const account = connectionLabel(connection);
+  const counterparty = addressLabel(threadCounterparty(thread, connection));
+  const isSentOnlyThread = thread.labels.includes('sent') && !thread.labels.includes('inbox');
+  if (mailbox === 'sent' || isSentOnlyThread) {
+    return {
+      fromLabel: account,
+      toLabel: counterparty,
+      title: `${account} to ${counterparty}`
+    };
+  }
+  const sender = addressLabel(threadCounterparty(thread, connection));
+  return {
+    fromLabel: sender,
+    toLabel: account,
+    title: `${sender} to ${account}`
+  };
+}
+
 function avatarInitials(thread: MailThread) {
   const sender = threadSender(thread);
   const source = sender.name || sender.email || 'Mail';
@@ -1371,11 +1416,10 @@ export function App() {
               </div>
             ) : null}
             {!threadListLoading ? threads.map((thread) => {
-              const sender = threadSender(thread);
               const threadDate = formatThreadDate(thread.last_message_at);
               const canModifyThread = connectionById.get(thread.connection_id)?.status !== 'disconnected';
-              const recipient = connectionById.get(thread.connection_id);
-              const recipientLabel = recipient?.display_name || recipient?.email_address || 'Mail account';
+              const connection = connectionById.get(thread.connection_id);
+              const route = threadRoute(thread, connection, primaryScope.mailbox);
               return (
                 <article
                   key={thread.id}
@@ -1397,10 +1441,10 @@ export function App() {
                     </span>
                   </button>
                   <span className="thread-side" aria-label={`Actions for ${thread.subject}`}>
-                    <span className="thread-route" title={`${sender.name || sender.email} to ${recipientLabel}`}>
-                      <span>{sender.name || sender.email}</span>
+                    <span className="thread-route" title={route.title}>
+                      <span>{route.fromLabel}</span>
                       <span className="thread-route-arrow" aria-hidden="true" />
-                      <span>{recipientLabel}</span>
+                      <span>{route.toLabel}</span>
                     </span>
                     <span className="thread-action-row">
                       <button

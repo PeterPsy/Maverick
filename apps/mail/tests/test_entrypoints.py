@@ -3880,6 +3880,17 @@ class MailServiceTest(unittest.TestCase):
         self.assertIn(".thread-row.is-dragging", styles)
         self.assertIn(".mail-thread-drag-preview", styles)
 
+    def test_frontend_sent_threads_route_from_account_to_counterparty(self) -> None:
+        app_source = (APP_ROOT / "frontend" / "src" / "App.tsx").read_text(encoding="utf-8")
+
+        self.assertIn("function threadRoute(thread: MailThread, connection?: MailConnection | null, mailbox?: string)", app_source)
+        self.assertIn("if (mailbox === 'sent' || isSentOnlyThread)", app_source)
+        self.assertIn("fromLabel: account", app_source)
+        self.assertIn("toLabel: counterparty", app_source)
+        self.assertIn("const route = threadRoute(thread, connection, primaryScope.mailbox);", app_source)
+        self.assertIn("title={route.title}", app_source)
+        self.assertNotIn("title={`${sender.name || sender.email} to ${recipientLabel}`}", app_source)
+
     def test_frontend_add_account_lives_in_sidebar_and_opens_provider_modal(self) -> None:
         app_source = (APP_ROOT / "frontend" / "src" / "App.tsx").read_text(encoding="utf-8")
         styles = (APP_ROOT / "frontend" / "src" / "styles.css").read_text(encoding="utf-8")

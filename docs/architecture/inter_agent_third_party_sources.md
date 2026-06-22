@@ -243,6 +243,14 @@ F6 passes only if all of the following are true:
 - Provider-specific packages are absent unless a later provider-specific test
   plan explicitly pins and reviews them.
 
+## F6 Adapter Acceptance Matrix
+
+| Scenario | Source-backed fixture | Replay / idempotency | Cancel / failure coverage | Safe payload / no raw adapter state | No provider, secret, or session ownership | Feature flag |
+|---|---|---|---|---|---|---|
+| Handoff | `tests/integration/inter_agent/test_maf_handoff_fixture.py` runs `HandoffBuilder` with controlled fake chat clients. | Unit and integration tests remap and append retry batches with stable event ids and idempotency keys. | Handoff lifecycle covers requested, accepted, and completed events; cancellation remains covered by group chat fixture for F6 adapter terminal behavior. | Payload assertions reject raw payload, chain-of-thought, provider, secret, session, route, and edge material. | Participant assertions require empty provider/runtime session/grant ownership. | `MafAdapter.require_available()` and CI run behind `MAVERICK_EXPERIMENTAL_AGENT_FRAMEWORK=1`. |
+| Group chat | `tests/integration/inter_agent/test_maf_group_chat_fixture.py` runs selector, manager, max-rounds, and cancellation fixtures with controlled fake chat clients. | Unit and integration tests append original and retry batches and replay ordered event pages. | Max-rounds maps to budget exceeded plus run failed; cancellation maps to run cancelled while participant is running. | Payload assertions reject raw MAF state, transcripts, provider, secret, session, route, and edge material. | Participant assertions require empty provider/runtime session/grant ownership and no executable edges. | Included in the `inter-agent-maf` CI job under the explicit feature flag. |
+| Magentic / manager | `tests/integration/inter_agent/test_maf_magentic_fixture.py` runs `MagenticBuilder` with a controlled fake `manager_agent` and participant fake providers. | Unit and integration tests remap, append, retry, and replay plan/progress/dispatch/output/terminal records. | Stall observations map to safe summary fields; max-rounds maps to budget exceeded plus run failed. | Payload assertions reject raw progress ledger, raw payload, transcripts, provider, secret, session, checkpoint, task-write, route, and edge material. | Participant assertions require empty provider/runtime session/grant ownership and no executable edges. | Included in the `inter-agent-maf` CI job under the explicit feature flag. |
+
 ## Graph Delta Deferrals
 
 F6 must follow

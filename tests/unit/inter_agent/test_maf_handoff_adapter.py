@@ -80,7 +80,7 @@ class MafHandoffAdapterTest(unittest.TestCase):
             return ModuleType(name)
 
         with patch.dict(os.environ, {MAVERICK_EXPERIMENTAL_AGENT_FRAMEWORK: "1"}):
-            with patch("core.inter_agent.adapters.maf.importlib.import_module", side_effect=fake_import):
+            with patch("core.inter_agent.adapters.shared.importlib.import_module", side_effect=fake_import):
                 MafAdapter().require_available()
 
         self.assertEqual(imported, ["agent_framework_orchestrations", "agent_framework"])

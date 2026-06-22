@@ -120,6 +120,8 @@ tests/unit/inter_agent/test_maf_magentic_adapter.py
 tests/integration/inter_agent/test_maf_handoff_fixture.py
 tests/integration/inter_agent/test_maf_group_chat_fixture.py
 tests/integration/inter_agent/test_maf_magentic_fixture.py
+tests/support/maf_group_chat_fixture.py
+tests/support/maf_magentic_fixture.py
 ```
 
 F6 may also touch the narrowest supporting files needed for the declared

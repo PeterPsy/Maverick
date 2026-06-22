@@ -68,6 +68,7 @@ def _core_command_specs(
             runtime_store=runtime_store,
             provider_registry=provider_registry,
             secret_store=secret_store,
+            observability_store=observability_store,
         )
     )
     specs.extend(

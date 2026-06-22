@@ -381,14 +381,44 @@ class ProvidersTestCase(unittest.TestCase):
         binding = bind_provider_credential(
             provider_store,
             provider_id="openai-compatible",
-            secret_ref="platform:providers/openai-compatible",
+            secret_ref="platform:secret-alias/openai-compatible",
             workspace_id="default",
             label="default llm key",
         )
 
-        self.assertEqual(binding.secret_ref, "platform:providers/openai-compatible")
+        self.assertEqual(binding.secret_ref, "platform:secret-alias/openai-compatible")
         self.assertEqual(binding.label, "default llm key")
         self.assertFalse(hasattr(binding, "api_key"))
+
+    def test_provider_bindings_reject_non_core_secret_refs(self) -> None:
+        provider_store = self.make_provider_store()
+
+        with self.assertRaises(ProviderCredentialBindingError):
+            bind_provider_credential(
+                provider_store,
+                provider_id="openai-compatible",
+                secret_ref="platform:providers/openai-compatible",
+                workspace_id="default",
+            )
+
+    def test_provider_binding_id_collision_is_rejected(self) -> None:
+        provider_store = self.make_provider_store()
+        bind_provider_credential(
+            provider_store,
+            provider_id="openai-compatible",
+            secret_ref="platform:secret-alias/openai-compatible",
+            workspace_id="default",
+            binding_id="shared-binding",
+        )
+
+        with self.assertRaises(ProviderCredentialBindingError):
+            bind_provider_credential(
+                provider_store,
+                provider_id="other-provider",
+                secret_ref="platform:secret-alias/other-provider",
+                workspace_id="default",
+                binding_id="shared-binding",
+            )
 
     def test_selection_requires_binding_for_credentialed_runtime_provider(self) -> None:
         provider_store = self.make_provider_store()
@@ -896,7 +926,7 @@ class ProvidersTestCase(unittest.TestCase):
         binding = bind_provider_credential(
             provider_store,
             provider_id="future-hosted",
-            secret_ref="platform:providers/future-hosted",
+            secret_ref="platform:secret-alias/future-hosted",
         )
 
         disabled = disable_provider_binding(provider_store, binding.binding_id)

@@ -3,9 +3,10 @@
 from __future__ import annotations
 
 from dataclasses import replace
+from datetime import UTC, datetime
 import unittest
 
-from core.providers.models import WorkspaceProviderPolicy
+from core.providers.models import ProviderCredentialBinding, WorkspaceProviderPolicy
 from core.providers.provider_credentials import bind_provider_credential
 from core.providers.provider_registry import ProviderRegistry
 from core.providers.routing import ProviderRoutingContext, select_provider_for_profile
@@ -49,7 +50,7 @@ class ProviderRoutingTest(unittest.TestCase):
             store,
             provider_id="groq",
             workspace_id="default",
-            secret_ref="platform:providers/groq",
+            secret_ref="platform:secret-alias/groq",
         )
 
         decision = select_provider_for_profile(
@@ -70,7 +71,7 @@ class ProviderRoutingTest(unittest.TestCase):
         self.assertIsNotNone(decision.provider_credential_binding_id_optional)
         self.assertFalse(decision.fallback_used)
         self.assertIn("plain_hosted_text_selected", decision.reason_codes)
-        self.assertNotIn("platform:providers/groq", str(decision))
+        self.assertNotIn("platform:secret-alias/groq", str(decision))
 
     def test_effective_registry_uses_operator_activated_hosted_provider_from_store(self) -> None:
         store = self.make_provider_store()
@@ -124,6 +125,38 @@ class ProviderRoutingTest(unittest.TestCase):
         self.assertIn("fallback_no_credential_authorization", decision.reason_codes)
         self.assertIn("no_fast_model_available", decision.reason_codes)
 
+    def test_fast_model_does_not_select_legacy_provider_secret_ref_binding(self) -> None:
+        store = self.make_provider_store()
+        now = datetime(2026, 6, 22, 12, 0, tzinfo=UTC)
+        store.save_provider_binding(
+            ProviderCredentialBinding(
+                binding_id="legacy-groq",
+                provider_id="groq",
+                workspace_id="default",
+                secret_ref="platform:providers/groq",
+                label="Legacy Groq",
+                status="active",
+                created_at=now,
+                updated_at=now,
+            )
+        )
+
+        decision = select_provider_for_profile(
+            "fast_model",
+            ProviderRoutingContext(
+                workspace_id="default",
+                provider_store=store,
+                registry=self.active_fast_registry(),
+                request_id="req-legacy",
+            ),
+        )
+
+        self.assertIsNone(decision.selected_provider_id)
+        self.assertIsNone(decision.execution_path)
+        self.assertIn("provider_credential_binding_invalid_secret_ref", decision.reason_codes)
+        self.assertIn("fallback_no_credential_authorization", decision.reason_codes)
+        self.assertNotIn("platform:providers/groq", str(decision))
+
     def test_disabled_provider_is_not_selected(self) -> None:
         decision = select_provider_for_profile(
             "fast_model",
@@ -144,7 +177,7 @@ class ProviderRoutingTest(unittest.TestCase):
             store,
             provider_id="groq",
             workspace_id="default",
-            secret_ref="platform:providers/groq",
+            secret_ref="platform:secret-alias/groq",
         )
         policy = WorkspaceProviderPolicy(
             workspace_id="default",

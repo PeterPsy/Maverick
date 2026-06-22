@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import json
+
 from tests.support.observability import *
 
 
@@ -143,3 +145,9 @@ class TestCoreFlowObservability(ObservabilityTestBase):
         self.assertIn("app.installed", event_types)
         self.assertIn("runtime.session.created", event_types)
         self.assertIn("provider.launch_spec.built", event_types)
+        launch_audit = next(item for item in observability_store.list_audit(workspace_id="default") if item.action == "provider.launch_spec.build")
+        launch_event = next(item for item in observability_store.list_events(workspace_id="default") if item.event_type == "provider.launch_spec.built")
+        for payload in (launch_audit.payload, launch_event.payload):
+            self.assertNotIn("resolved_secret_refs", payload)
+            self.assertEqual(payload["resolved_secret_ref_count"], 1)
+            self.assertNotIn("platform:secret-alias/provider-secret", json.dumps(payload))

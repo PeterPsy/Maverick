@@ -135,6 +135,8 @@ def handle_provider_api(state: PlatformState, environ: dict, start_response: Sta
             return json_response(start_response, {"error": "missing_provider_id"}, status="400 Bad Request")
         if not secret_ref:
             return json_response(start_response, {"error": "missing_secret_ref"}, status="400 Bad Request")
+        if str(body.get("binding_id") or "").strip():
+            return json_response(start_response, {"error": "binding_id_not_supported"}, status="400 Bad Request")
         try:
             activation = activate_hosted_model_provider(
                 state.provider_store,
@@ -143,7 +145,6 @@ def handle_provider_api(state: PlatformState, environ: dict, start_response: Sta
                 provider_id=provider_id,
                 secret_ref=secret_ref,
                 label=str(body.get("label") or "").strip() or None,
-                binding_id=str(body.get("binding_id") or "").strip() or None,
                 observability_store=state.observability_store,
             )
         except Exception as error:

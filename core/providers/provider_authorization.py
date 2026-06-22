@@ -5,9 +5,9 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from datetime import datetime
 
-from core.providers.errors import ProviderDisabledError
+from core.providers.errors import ProviderCredentialBindingError, ProviderDisabledError
 from core.providers.models import ProviderCredentialRequirement, ProviderDefinition
-from core.providers.provider_credentials import resolve_provider_binding
+from core.providers.provider_credentials import normalize_provider_credential_secret_ref, resolve_provider_binding
 from core.providers.store import ProviderStore
 from core.secrets.errors import SecretPolicyError
 from core.secrets.models import SecretBindingRecord, SecretGrantRecord, SecretResolutionContext
@@ -82,15 +82,26 @@ def check_provider_credential_authorization(
                 reason_codes=[*reason_codes, "provider_credential_binding_disabled"],
             )
         if binding is not None:
-            return ProviderCredentialAuthorization(
-                provider_id=definition.provider_id,
-                workspace_id=workspace_id,
-                required=True,
-                authorized=True,
-                secret_alias_or_logical_name=secret_name,
-                provider_credential_binding_id_optional=binding.binding_id,
-                reason_codes=[*reason_codes, "provider_credential_binding_present"],
-            )
+            try:
+                normalize_provider_credential_secret_ref(binding.secret_ref)
+            except ProviderCredentialBindingError:
+                reason_codes.append("provider_credential_binding_invalid_secret_ref")
+            else:
+                return ProviderCredentialAuthorization(
+                    provider_id=definition.provider_id,
+                    workspace_id=workspace_id,
+                    required=True,
+                    authorized=True,
+                    secret_alias_or_logical_name=secret_name,
+                    provider_credential_binding_id_optional=binding.binding_id,
+                    reason_codes=[*reason_codes, "provider_credential_binding_present"],
+                )
+        elif _has_invalid_provider_credential_binding(
+            provider_store,
+            provider_id=definition.provider_id,
+            workspace_id=workspace_id,
+        ):
+            reason_codes.append("provider_credential_binding_invalid_secret_ref")
         secret_binding = _find_provider_secret_binding(
             secret_store,
             provider_id=definition.provider_id,
@@ -167,6 +178,30 @@ def _find_provider_secret_binding(
         if binding.status == "active" and binding.workspace_id in {workspace_id, None}:
             return binding
     return None
+
+
+def _has_invalid_provider_credential_binding(
+    provider_store: ProviderStore,
+    *,
+    provider_id: str,
+    workspace_id: str,
+) -> bool:
+    candidate_bindings = [
+        *provider_store.list_provider_bindings(workspace_id=workspace_id, provider_id=provider_id),
+        *(
+            binding
+            for binding in provider_store.list_provider_bindings(provider_id=provider_id)
+            if binding.workspace_id is None
+        ),
+    ]
+    for binding in candidate_bindings:
+        if binding.status != "active":
+            continue
+        try:
+            normalize_provider_credential_secret_ref(binding.secret_ref)
+        except ProviderCredentialBindingError:
+            return True
+    return False
 
 
 def _find_app_secret_grant(

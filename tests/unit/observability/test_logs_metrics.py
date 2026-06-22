@@ -17,7 +17,12 @@ class TestLogsMetrics(ObservabilityTestBase):
             event_plane="platform",
             source_domain="secrets",
             workspace_id="default",
-            payload={"secret_ref": "platform:secrets/openai", "result": "ok"},
+            payload={
+                "secret_ref": "platform:secrets/openai",
+                "resolved_secret_refs": ["platform:secret-alias/openai"],
+                "nested": {"provider_secret_refs": ["platform:secret-alias/provider"]},
+                "result": "ok",
+            },
         )
         audit = record_audit_event(
             store,
@@ -38,6 +43,8 @@ class TestLogsMetrics(ObservabilityTestBase):
         )
 
         self.assertEqual(event.payload["secret_ref"], "<redacted>")
+        self.assertEqual(event.payload["resolved_secret_refs"], "<redacted>")
+        self.assertEqual(event.payload["nested"]["provider_secret_refs"], "<redacted>")
         self.assertEqual(audit.payload["raw_value"], "<redacted>")
         self.assertEqual(metric.metric_name, "recovery.intent.count")
         self.assertEqual(len(store.list_events(workspace_id="default")), 1)

@@ -6,7 +6,7 @@ from dataclasses import replace
 from datetime import UTC, datetime
 import unittest
 
-from core.providers.models import ProviderCredentialRequirement
+from core.providers.models import ProviderCredentialBinding, ProviderCredentialRequirement
 from core.providers.provider_authorization import (
     check_provider_credential_authorization,
     provider_secret_target,
@@ -67,7 +67,7 @@ class ProviderAuthorizationTest(unittest.TestCase):
             provider_store,
             provider_id="groq",
             workspace_id="default",
-            secret_ref="platform:providers/groq",
+            secret_ref="platform:secret-alias/groq",
             label="Groq API key",
         )
 
@@ -80,6 +80,32 @@ class ProviderAuthorizationTest(unittest.TestCase):
         self.assertTrue(authorization.authorized)
         self.assertEqual(authorization.provider_credential_binding_id_optional, binding.binding_id)
         self.assertIn("provider_credential_binding_present", authorization.reason_codes)
+        self.assertNotIn("platform:secret-alias/groq", str(authorization))
+
+    def test_legacy_provider_credential_binding_does_not_authorize(self) -> None:
+        provider_store = self.make_provider_store()
+        now = datetime(2026, 6, 22, 12, 0, tzinfo=UTC)
+        provider_store.save_provider_binding(
+            ProviderCredentialBinding(
+                binding_id="legacy-groq",
+                provider_id="groq",
+                workspace_id="default",
+                secret_ref="platform:providers/groq",
+                label="Legacy Groq",
+                status="active",
+                created_at=now,
+                updated_at=now,
+            )
+        )
+
+        authorization = check_provider_credential_authorization(
+            provider_store,
+            definition=self.groq_definition(),
+            workspace_id="default",
+        )
+
+        self.assertFalse(authorization.authorized)
+        self.assertIn("provider_credential_binding_invalid_secret_ref", authorization.reason_codes)
         self.assertNotIn("platform:providers/groq", str(authorization))
 
     def test_provider_secret_binding_authorizes_without_reading_secret_value(self) -> None:

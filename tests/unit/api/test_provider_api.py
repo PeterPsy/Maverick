@@ -10,6 +10,7 @@ from unittest.mock import patch
 
 from core.api.provider_api import handle_provider_api
 from core.api.session_api import RequestSession
+from core.providers.provider_credentials import bind_provider_credential
 from core.providers.service import register_builtin_providers
 from core.providers.store import ProviderCollections, ProviderDocumentStore
 from core.runtime.service import create_runtime_session
@@ -115,6 +116,38 @@ class ProviderApiTest(unittest.TestCase):
         self.assertEqual(route_payload["decision"]["selected_provider_id"], "groq")
         self.assertNotIn("super-secret-token", json.dumps(payload))
         self.assertNotIn("secret_ref", json.dumps(payload))
+
+    def test_hosted_activation_rejects_caller_supplied_binding_id_collision(self) -> None:
+        state = self.make_state()
+        secret = create_platform_secret(
+            state.secret_store,
+            label="Shared API",
+            raw_value="super-secret-token",
+            alias="shared-api",
+            kind="api_key",
+        )
+        existing = bind_provider_credential(
+            state.provider_store,
+            provider_id="deepseek",
+            workspace_id="default",
+            secret_ref=build_secret_ref(alias=secret.alias or "shared-api"),
+            binding_id="shared-binding",
+        )
+
+        status, payload = self.invoke(
+            "/api/providers/hosted/active",
+            method="POST",
+            body={
+                "provider_id": "groq",
+                "secret_ref": build_secret_ref(alias=secret.alias or "shared-api"),
+                "binding_id": existing.binding_id,
+            },
+            state=state,
+        )
+
+        self.assertEqual(status, "400 Bad Request")
+        self.assertEqual(payload["error"], "binding_id_not_supported")
+        self.assertEqual(state.provider_store.get_provider_binding(existing.binding_id).provider_id, "deepseek")
 
     def test_runtime_status_exposes_runtime_mode(self) -> None:
         state = self.make_state()

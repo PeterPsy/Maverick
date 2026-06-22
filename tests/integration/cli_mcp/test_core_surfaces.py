@@ -14,6 +14,7 @@ from core.identity.store import IdentityCollections, IdentityDocumentStore
 from core.inter_agent.errors import InterAgentValidationError
 from core.inter_agent.store import build_inter_agent_document_store
 from core.api.app_events import AppEventBus
+from core.observability.store import ObservabilityCollections, ObservabilityDocumentStore
 from core.runtime.errors import RuntimeSessionNotFoundError
 from core.runtime.event_bus import RuntimeEventBus
 from core.runtime.runtime_session import RuntimeSessionGrantRecord
@@ -906,6 +907,13 @@ class TestMcpCliSurfaces(SurfaceTestBase):
     def test_cli_and_mcp_can_simulate_provider_routing(self) -> None:
         workspace_store = self.make_workspace_store()
         provider_store = self.make_provider_store()
+        observability_store = ObservabilityDocumentStore(
+            ObservabilityCollections(
+                events=FakeCollection(),
+                audit=FakeCollection(),
+                metrics=FakeCollection(),
+            )
+        )
         secret_store = SecretDocumentStore(
             SecretCollections(
                 secrets=FakeCollection(),
@@ -956,6 +964,7 @@ class TestMcpCliSurfaces(SurfaceTestBase):
             context=operator_context,
             provider_store=provider_store,
             secret_store=secret_store,
+            observability_store=observability_store,
             workspace_id="default",
             start_path=repo_root,
             arguments={"provider_id": "groq", "secret_ref": secret_ref},
@@ -964,6 +973,7 @@ class TestMcpCliSurfaces(SurfaceTestBase):
             workspace_store=workspace_store,
             provider_store=provider_store,
             secret_store=secret_store,
+            observability_store=observability_store,
             workspace_id="default",
             start_path=repo_root,
         )
@@ -999,6 +1009,25 @@ class TestMcpCliSurfaces(SurfaceTestBase):
         self.assertNotIn("super-secret-token", str(activation))
         self.assertNotIn("secret_ref", str(cli_result))
         self.assertNotIn("secret_ref", str(mcp_result))
+        activation_command = next(
+            command
+            for command in list_core_cli_commands(
+                provider_store=provider_store,
+                secret_store=secret_store,
+                observability_store=observability_store,
+                workspace_id="default",
+                context=operator_context,
+                start_path=repo_root,
+            )
+            if command.command_id == "core.providers.hosted.activate"
+        )
+        self.assertNotIn("binding_id", activation_command.argument_schema["properties"])
+        audit_actions = [item.action for item in observability_store.list_audit(workspace_id="default")]
+        event_types = [item.event_type for item in observability_store.list_events(workspace_id="default")]
+        self.assertGreaterEqual(audit_actions.count("provider.hosted.activate"), 2)
+        self.assertGreaterEqual(event_types.count("provider.hosted.activated"), 2)
+        self.assertNotIn("super-secret-token", str(observability_store.list_audit(workspace_id="default")))
+        self.assertNotIn(secret_ref, str(observability_store.list_events(workspace_id="default")))
 
     def test_app_cli_policy_rejects_operator_only_true(self) -> None:
         store = self.make_app_store()

@@ -3,7 +3,22 @@
 from __future__ import annotations
 
 
-SENSITIVE_KEYS = {"secret", "secret_ref", "token", "api_key", "password", "authorization", "raw_value", "env_overrides"}
+SENSITIVE_KEYS = {
+    "secret",
+    "secret_ref",
+    "secret_refs",
+    "token",
+    "api_key",
+    "password",
+    "authorization",
+    "raw_value",
+    "env_overrides",
+}
+
+
+def _is_sensitive_key(key: object) -> bool:
+    normalized = str(key).lower()
+    return normalized in SENSITIVE_KEYS or normalized.endswith("_secret_ref") or normalized.endswith("_secret_refs")
 
 
 def redact_payload(payload):
@@ -11,7 +26,7 @@ def redact_payload(payload):
     if isinstance(payload, dict):
         redacted = {}
         for key, value in payload.items():
-            if str(key).lower() in SENSITIVE_KEYS:
+            if _is_sensitive_key(key):
                 redacted[key] = "<redacted>"
             else:
                 redacted[key] = redact_payload(value)

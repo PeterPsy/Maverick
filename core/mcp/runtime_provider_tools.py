@@ -22,6 +22,7 @@ def runtime_provider_tool_specs(
     runtime_store: RuntimeStore | None = None,
     provider_registry: ProviderRegistry | None = None,
     secret_store: SecretStore | None = None,
+    observability_store=None,
 ) -> list[tuple[McpToolDefinition, Any]]:
     """Build runtime and provider MCP tool specs."""
     def _runtime_status_handler(arguments: dict[str, Any], context: McpInvocationContext) -> dict[str, Any]:
@@ -96,7 +97,7 @@ def runtime_provider_tool_specs(
                 provider_id=provider_id,
                 secret_ref=secret_ref,
                 label=str(arguments.get("label") or "").strip() or None,
-                binding_id=str(arguments.get("binding_id") or "").strip() or None,
+                observability_store=observability_store,
             )
         except Exception as error:
             return {
@@ -164,7 +165,6 @@ def runtime_provider_tool_specs(
                         "provider_id": {"type": "string"},
                         "secret_ref": {"type": "string"},
                         "label": {"type": "string"},
-                        "binding_id": {"type": "string"},
                     },
                     "required": ["provider_id", "secret_ref"],
                     "additionalProperties": False,

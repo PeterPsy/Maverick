@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from dataclasses import replace
 import unittest
+from unittest.mock import patch
 
 from core.providers.provider_credentials import bind_provider_credential
 from core.providers.routing import ProviderRoutingContext, select_provider_for_profile
@@ -12,6 +13,7 @@ from core.providers.store import ProviderCollections, ProviderDocumentStore
 from core.providers.text_generation import (
     FakeHostedTextTransport,
     HostedTextGenerationError,
+    OpenAICompatibleHttpTransport,
     OpenAICompatibleTextGenerationClient,
     TextGenerationMessage,
     TextGenerationRequest,
@@ -116,6 +118,38 @@ class HostedTextGenerationTest(unittest.TestCase):
                 with self.assertRaises(HostedTextGenerationError) as raised:
                     client.generate(self.request())
                 self.assertEqual(raised.exception.reason_code, reason_code)
+                self.assertNotIn("secret-token", str(raised.exception))
+
+    def test_http_transport_malformed_200_maps_to_provider_response_invalid(self) -> None:
+        class MalformedResponse:
+            status = 200
+
+            def __init__(self, payload: bytes) -> None:
+                self.payload = payload
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, exc_type, exc, tb) -> None:
+                return None
+
+            def read(self) -> bytes:
+                return self.payload
+
+        cases = [b"{not-json", b"\xff"]
+        for payload in cases:
+            with self.subTest(payload=payload):
+                client = OpenAICompatibleTextGenerationClient(
+                    provider_id="groq",
+                    api_key="secret-token",
+                    transport=OpenAICompatibleHttpTransport(),
+                )
+                with (
+                    patch("core.providers.text_generation.urllib_request.urlopen", return_value=MalformedResponse(payload)),
+                    self.assertRaises(HostedTextGenerationError) as raised,
+                ):
+                    client.generate(self.request())
+                self.assertEqual(raised.exception.reason_code, "provider_response_invalid")
                 self.assertNotIn("secret-token", str(raised.exception))
 
     def test_hosted_text_request_rejects_operational_references(self) -> None:

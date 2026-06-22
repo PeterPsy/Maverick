@@ -120,7 +120,6 @@ def activate_hosted_model_provider(
     provider_id: str,
     secret_ref: str,
     label: str | None = None,
-    binding_id: str | None = None,
     registry: ProviderRegistry | None = None,
     codex_command: str = "codex",
     observability_store=None,
@@ -139,7 +138,7 @@ def activate_hosted_model_provider(
         secret_ref=secret_ref,
         workspace_id=workspace_id,
         label=label,
-        binding_id=binding_id,
+        observability_store=observability_store,
         now=timestamp,
     )
     routing_registry = effective_provider_registry(store, registry=active_registry, codex_command=codex_command)
@@ -478,7 +477,7 @@ def build_runtime_backend_launch_spec(
                 "provider_id": definition.provider_id,
                 "execution_mode": spec.execution_mode,
                 "credential_binding_id": credential_binding_id,
-                "resolved_secret_refs": resolved_secret_refs,
+                "resolved_secret_ref_count": len(resolved_secret_refs),
             },
         )
         record_platform_event(
@@ -493,7 +492,7 @@ def build_runtime_backend_launch_spec(
                 "provider_id": definition.provider_id,
                 "execution_mode": spec.execution_mode,
                 "credential_binding_id": credential_binding_id,
-                "resolved_secret_refs": resolved_secret_refs,
+                "resolved_secret_ref_count": len(resolved_secret_refs),
             },
         )
     return spec

@@ -85,6 +85,7 @@ def primary_routing_failure_reason(decision: RoutingDecision) -> str:
         for code in (
             "provider_credential_binding_missing",
             "provider_credential_binding_disabled",
+            "provider_credential_binding_invalid_secret_ref",
             "provider_secret_binding_present_but_unusable",
             "app_secret_grant_missing",
             "fallback_no_credential_authorization",

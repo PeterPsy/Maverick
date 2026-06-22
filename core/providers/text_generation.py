@@ -13,6 +13,7 @@ from core.providers.errors import ProviderError
 from core.providers.models import RoutingDecision
 from core.providers.provider_authorization import provider_secret_target
 from core.providers.store import ProviderStore
+from core.secrets.errors import SecretError
 from core.secrets.models import SecretResolutionContext
 from core.secrets.secret_resolution import resolve_secret_for_runtime
 from core.secrets.service import resolve_app_secret_grant
@@ -190,7 +191,10 @@ class OpenAICompatibleHttpTransport:
                         status_code=response.status,
                         chunks=list(_iter_openai_sse_chunks(response)),
                     )
-                decoded = json.loads(response.read().decode("utf-8"))
+                try:
+                    decoded = json.loads(response.read().decode("utf-8"))
+                except (json.JSONDecodeError, UnicodeDecodeError):
+                    return HostedTextTransportResult(status_code=response.status, error="provider_response_invalid")
                 return HostedTextTransportResult(status_code=response.status, payload=decoded)
         except urllib_error.HTTPError as error:
             return HostedTextTransportResult(status_code=error.code, error=str(error))
@@ -294,40 +298,49 @@ def _resolve_hosted_text_api_key(
 ) -> str:
     if decision.provider_credential_binding_id_optional is not None:
         binding = provider_store.get_provider_binding(decision.provider_credential_binding_id_optional)
-        lease = resolve_secret_for_runtime(
-            secret_store,
-            context=SecretResolutionContext(
-                workspace_id=decision.workspace_id,
-                provider_id=decision.selected_provider_id,
-                runtime_session_id=runtime_session_id,
-                platform_delivery=True,
-                allow_unbound_secret_refs=True,
-            ),
-            secret_ref=binding.secret_ref,
-        )
+        try:
+            lease = resolve_secret_for_runtime(
+                secret_store,
+                context=SecretResolutionContext(
+                    workspace_id=decision.workspace_id,
+                    provider_id=decision.selected_provider_id,
+                    runtime_session_id=runtime_session_id,
+                    platform_delivery=True,
+                    allow_unbound_secret_refs=True,
+                ),
+                secret_ref=binding.secret_ref,
+            )
+        except SecretError as error:
+            raise HostedTextGenerationError("provider_credential_authorization_missing") from error
         return lease.value
     if decision.provider_secret_binding_id_optional is not None:
-        lease = resolve_secret_for_runtime(
-            secret_store,
-            context=SecretResolutionContext(
-                workspace_id=decision.workspace_id,
-                provider_id=decision.selected_provider_id,
-                runtime_session_id=runtime_session_id,
-                platform_delivery=True,
-            ),
-            binding_id=decision.provider_secret_binding_id_optional,
-        )
+        try:
+            lease = resolve_secret_for_runtime(
+                secret_store,
+                context=SecretResolutionContext(
+                    workspace_id=decision.workspace_id,
+                    provider_id=decision.selected_provider_id,
+                    runtime_session_id=runtime_session_id,
+                    platform_delivery=True,
+                ),
+                binding_id=decision.provider_secret_binding_id_optional,
+            )
+        except SecretError as error:
+            raise HostedTextGenerationError("provider_credential_authorization_missing") from error
         return lease.value
     if decision.app_secret_grant_id_optional is not None and app_id is not None:
-        lease = resolve_app_secret_grant(
-            secret_store,
-            workspace_id=decision.workspace_id,
-            app_id=app_id,
-            grant_id=decision.app_secret_grant_id_optional,
-            action="provider.hosted_text.execute",
-            target=provider_secret_target(decision.selected_provider_id or "", "plain_hosted_chat"),
-            runtime_session_id=runtime_session_id,
-        )
+        try:
+            lease = resolve_app_secret_grant(
+                secret_store,
+                workspace_id=decision.workspace_id,
+                app_id=app_id,
+                grant_id=decision.app_secret_grant_id_optional,
+                action="provider.hosted_text.execute",
+                target=provider_secret_target(decision.selected_provider_id or "", "plain_hosted_chat"),
+                runtime_session_id=runtime_session_id,
+            )
+        except SecretError as error:
+            raise HostedTextGenerationError("provider_credential_authorization_missing") from error
         return lease.value
     raise HostedTextGenerationError("provider_credential_authorization_missing")
 

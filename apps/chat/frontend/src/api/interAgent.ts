@@ -39,14 +39,16 @@ export type InterAgentEdgeSpecPayload = {
 export type CreateInterAgentRunPayload = {
   thread_id: string;
   root_runtime_session_id: string;
-  mode: "manager_tools" | "sequential" | "concurrent";
+  mode: "manager_tools" | "sequential" | "concurrent" | "group_chat";
   idempotency_key: string;
+  aggregator_participant_id?: string;
   visibility_level?: InterAgentVisibilityPlane;
   participants: InterAgentParticipantSpecPayload[];
   edges?: InterAgentEdgeSpecPayload[];
   budget: {
     max_participants: number;
     max_concurrent_participants: number;
+    max_rounds?: number;
     max_total_turns: number;
     max_turns_per_participant: number;
     max_tool_calls: number;

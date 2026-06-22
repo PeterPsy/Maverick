@@ -18,8 +18,8 @@ from core.runtime.runtime_events import RuntimeEventRecord
 from core.runtime.service import record_runtime_event
 
 
-EXECUTABLE_MODES = {"manager_tools", "sequential", "concurrent"}
-SCHEMA_ONLY_MODES = {"handoff", "group_chat", "magentic_like"}
+EXECUTABLE_MODES = {"manager_tools", "sequential", "concurrent", "group_chat"}
+SCHEMA_ONLY_MODES = {"handoff", "magentic_like"}
 TERMINAL_RUN_STATUSES = {"completed", "failed", "cancelled"}
 TERMINAL_PARTICIPANT_STATUSES = {"completed", "failed", "cancelled"}
 TERMINAL_RUNTIME_TURN_STATUSES = {"completed", "failed", "cancelled", "timed-out"}
@@ -98,7 +98,7 @@ def execute_inter_agent_run(
     if run.mode == "single_agent":
         raise InterAgentOperationError("single_agent runs execute through the normal runtime turn path.")
     if run.mode in SCHEMA_ONLY_MODES:
-        raise InterAgentOperationError(f"{run.mode} execution is schema/event-only before F7.")
+        raise InterAgentOperationError(f"{run.mode} execution is schema/event-only.")
     if run.mode not in EXECUTABLE_MODES:
         raise InterAgentOperationError(f"Unsupported inter-agent executor mode `{run.mode}`.")
 
@@ -171,6 +171,19 @@ def execute_inter_agent_run(
             )
         elif run.mode == "sequential":
             participant_results = _execute_sequential(
+                service,
+                state,
+                run=run,
+                participants=_work_participants(run, participants),
+                input_text=input_text,
+                participant_inputs=inputs,
+                controlled_participants=controlled,
+                allow_synthetic_participants=allow_synthetic_participants,
+                async_runtime_turns=async_runtime_turns,
+                clock=clock,
+            )
+        elif run.mode == "group_chat":
+            participant_results = _execute_group_chat(
                 service,
                 state,
                 run=run,
@@ -401,6 +414,47 @@ def _execute_sequential(
         if result.status == "failed":
             break
         previous_output = result.output_text or result.summary
+    return results
+
+
+def _execute_group_chat(
+    service: InterAgentService,
+    state: Any,
+    *,
+    run: InterAgentRunRecord,
+    participants: list[InterAgentParticipantRecord],
+    input_text: str,
+    participant_inputs: dict[str, str],
+    controlled_participants: dict[str, ControlledParticipantOutput],
+    allow_synthetic_participants: bool,
+    async_runtime_turns: bool,
+    clock,
+) -> list[ParticipantExecutionResult]:
+    """Execute the F7 group_chat MVP as one bounded shared-context round."""
+    results: list[ParticipantExecutionResult] = []
+    transcript: list[tuple[str, str]] = []
+    for index, participant in enumerate(participants):
+        result = _execute_one_participant(
+            service,
+            state,
+            run=run,
+            participant=participant,
+            task_index=index,
+            input_text=_group_chat_participant_input(
+                participant,
+                base_input=input_text,
+                participant_inputs=participant_inputs,
+                transcript=transcript,
+            ),
+            controlled=controlled_participants.get(participant.participant_id),
+            allow_synthetic_participants=allow_synthetic_participants,
+            async_runtime_turns=async_runtime_turns,
+            clock=clock,
+        )
+        results.append(result)
+        if result.status == "failed":
+            break
+        transcript.append((result.label, result.output_text or result.summary))
     return results
 
 
@@ -1183,6 +1237,39 @@ def _participant_input(
     return "\n\n".join(sections)
 
 
+def _group_chat_participant_input(
+    participant: InterAgentParticipantRecord,
+    *,
+    base_input: str,
+    participant_inputs: dict[str, str],
+    transcript: list[tuple[str, str]],
+) -> str:
+    specific = participant_inputs.get(participant.participant_id, "").strip()
+    request_text = _worker_request_context(base_input)
+    sections = [
+        "You are one participant in a Maverick group chat run.",
+        f"Participant: {participant.label} ({participant.participant_id}).",
+        (
+            "Contribute your bounded answer for this participant role. Do not act as the orchestrator, "
+            "do not announce speaker selection, do not delegate further, and do not mention internal "
+            "workers, routing, orchestration, or group-chat mechanics in the user-facing answer."
+        ),
+    ]
+    if specific:
+        sections.append(f"Participant focus:\n{specific}")
+    if request_text:
+        sections.append(f"Shared user request:\n{request_text}")
+    if transcript:
+        prior = "\n".join(f"- {label}: {_compact_summary(text, max_chars=300)}" for label, text in transcript if text)
+        if prior:
+            sections.append(
+                "Prior participant outputs in this group chat round:\n"
+                f"{prior}\n\n"
+                "Use these only as context; do not summarize the run mechanics."
+            )
+    return "\n\n".join(sections)
+
+
 def _manager_tools_participant_input(
     participant: InterAgentParticipantRecord,
     *,
@@ -1237,6 +1324,8 @@ def _plan_summary(run: InterAgentRunRecord, participants: list[InterAgentPartici
     worker_nodes = _plural(work_count, "worker node")
     if run.mode == "concurrent":
         return f"Orchestrator started a parallel multi-agent run with {worker_nodes}."
+    if run.mode == "group_chat":
+        return f"Orchestrator started a group chat run with {worker_nodes}."
     if run.mode == "sequential":
         return f"Orchestrator started a staged multi-agent run with {worker_nodes}."
     return f"Orchestrator started a delegated multi-agent run with {worker_nodes}."

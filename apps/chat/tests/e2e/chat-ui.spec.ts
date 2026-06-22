@@ -197,8 +197,8 @@ test.describe("Chat app browser smoke", () => {
     expect(state.executeRunBodies[0]).toMatchObject({
       input_text: "Research the launch risks and review the answer",
       participant_inputs: {
-        implementer: "Act as the implementer. Produce the concrete answer or implementation plan for the user request.",
-        reviewer: /Act as the reviewer/,
+        implementer: /Produce the concrete user-facing answer/,
+        reviewer: /Review the implementer's output/,
       },
       async: true,
     });
@@ -231,6 +231,57 @@ test.describe("Chat app browser smoke", () => {
     await expect
       .poll(() => state.runDetail.run.status)
       .toBe("cancelled");
+  });
+
+  test("exposes gated group chat mode and opens its graph", async ({ page }) => {
+    const state = await installChatMocks(page);
+
+    await page.goto("/apps/chat/");
+    await expect(page.getByRole("heading", { name: "How can I help today?" })).toBeVisible();
+
+    await page.getByRole("button", { name: "Agent runner: Default Chat" }).click();
+    await page.getByRole("option", { name: /Researcher/ }).click();
+    await page.getByRole("button", { name: "Multi-agent mode: Off" }).click();
+    await page.getByRole("menuitemradio", { name: "Group chat" }).click();
+    await expect(page.getByRole("button", { name: "Multi-agent mode: Group chat" })).toBeVisible();
+
+    await page.getByRole("textbox").fill("Compare the rollout options as a group");
+    await page.getByRole("button", { name: "Send message" }).click();
+
+    await expect(page.getByRole("button", { name: /Agent nodes/ })).toBeVisible();
+    expect(state.createRunBodies).toHaveLength(1);
+    expect(state.createRunBodies[0]).toMatchObject({
+      mode: "group_chat",
+      aggregator_participant_id: "synthesizer",
+      visibility_level: "detail",
+      budget: {
+        max_participants: 4,
+        max_concurrent_participants: 1,
+        max_rounds: 1,
+        max_total_turns: 3,
+        max_turns_per_participant: 1,
+        max_tool_calls: 3,
+      },
+    });
+    expect(state.createRunBodies[0].participants).toMatchObject([
+      { participant_id: "orchestrator", kind: "orchestrator" },
+      { participant_id: "analyst", kind: "agent", agent_snapshot: { label: "Analyst" } },
+      { participant_id: "reviewer", kind: "agent", agent_snapshot: { label: "Reviewer" } },
+      { participant_id: "synthesizer", kind: "agent", agent_snapshot: { label: "Synthesizer" } },
+    ]);
+    expect(state.createRunBodies[0].edges).toMatchObject([
+      { source_id: "orchestrator", target_id: "analyst", kind: "delegated" },
+      { source_id: "orchestrator", target_id: "reviewer", kind: "delegated" },
+      { source_id: "analyst", target_id: "synthesizer", kind: "depends_on" },
+      { source_id: "reviewer", target_id: "synthesizer", kind: "depends_on" },
+      { source_id: "synthesizer", target_id: "orchestrator", kind: "produced" },
+    ]);
+
+    await page.getByRole("button", { name: /Agent nodes/ }).click();
+    await expect(page.getByRole("region", { name: "Agent nodes view" })).toBeVisible();
+    await expect(page.getByText("4 nodes")).toBeVisible();
+    await expect(page.getByText("Analyst")).toBeVisible();
+    await expect(page.getByText("Synthesizer")).toBeVisible();
   });
 });
 
@@ -325,42 +376,55 @@ function createMockState(): MockState {
     threads: [],
     runCreated: false,
     runDetail: interAgentRunDetail(),
-    runEvents: [
-      interAgentEvent({
-        event_id: "event-plan",
-        event_type: "inter_agent.plan.summary_created",
-        visibility_plane: "summary",
-        payload: { summary: "Staged multi-agent run started." },
-        sequence: 1,
-      }),
-      interAgentEvent({
-        event_id: "event-artifact",
-        event_type: "inter_agent.artifact.created",
-        participant_id: "reviewer",
-        runtime_session_id: "child-reviewer",
-        runtime_turn_id: "turn-reviewer",
-        payload: {
-          artifact_refs: [{ artifact_id: "artifact-final", label: "Final brief", workspace_relative_path: "storage/generated/final.md" }],
-          partial_output: "Reviewer draft before final synthesis.",
-          status: "created",
-        },
-        sequence: 2,
-      }),
-    ],
-    runArtifacts: [
-      {
-        artifact_id: "artifact-final",
-        event_id: "event-artifact",
-        run_id: RUN_ID,
-        participant_id: "reviewer",
-        label: "Final brief",
-        status: "created",
-        created_at: NOW,
-        workspace_relative_path: "storage/generated/final.md",
-        partial_output: "Reviewer draft before final synthesis.",
-      },
-    ],
+    runEvents: interAgentEventsForMode("sequential"),
+    runArtifacts: interAgentArtifactsForMode("sequential"),
   };
+}
+
+function interAgentEventsForMode(mode: string): InterAgentEvent[] {
+  const groupChat = mode === "group_chat";
+  const artifactParticipantId = groupChat ? "synthesizer" : "reviewer";
+  const artifactSessionId = groupChat ? "child-synthesizer" : "child-reviewer";
+  const artifactTurnId = groupChat ? "turn-synthesizer" : "turn-reviewer";
+  return [
+    interAgentEvent({
+      event_id: "event-plan",
+      event_type: "inter_agent.plan.summary_created",
+      visibility_plane: "summary",
+      payload: { summary: groupChat ? "Group chat run started." : "Staged multi-agent run started." },
+      sequence: 1,
+    }),
+    interAgentEvent({
+      event_id: "event-artifact",
+      event_type: "inter_agent.artifact.created",
+      participant_id: artifactParticipantId,
+      runtime_session_id: artifactSessionId,
+      runtime_turn_id: artifactTurnId,
+      payload: {
+        artifact_refs: [{ artifact_id: "artifact-final", label: "Final brief", workspace_relative_path: "storage/generated/final.md" }],
+        partial_output: groupChat ? "Synthesizer draft before final answer." : "Reviewer draft before final synthesis.",
+        status: "created",
+      },
+      sequence: 2,
+    }),
+  ];
+}
+
+function interAgentArtifactsForMode(mode: string): JsonRecord[] {
+  const groupChat = mode === "group_chat";
+  return [
+    {
+      artifact_id: "artifact-final",
+      event_id: "event-artifact",
+      run_id: RUN_ID,
+      participant_id: groupChat ? "synthesizer" : "reviewer",
+      label: "Final brief",
+      status: "created",
+      created_at: NOW,
+      workspace_relative_path: "storage/generated/final.md",
+      partial_output: groupChat ? "Synthesizer draft before final answer." : "Reviewer draft before final synthesis.",
+    },
+  ];
 }
 
 async function handleChatBackend(route: Route) {
@@ -505,6 +569,8 @@ async function handleInterAgentApi(route: Route, state: MockState) {
     state.createRunBodies.push(body);
     state.runCreated = true;
     state.runDetail = interAgentRunDetail({ run: { status: "created", mode: body.mode || "sequential" } });
+    state.runEvents = interAgentEventsForMode(String(body.mode || "sequential"));
+    state.runArtifacts = interAgentArtifactsForMode(String(body.mode || "sequential"));
     await fulfillJson(route, state.runDetail);
     return;
   }
@@ -520,8 +586,9 @@ async function handleInterAgentApi(route: Route, state: MockState) {
       const body = postBody(route);
       state.executeRunBodies.push(body);
       state.runCreated = true;
+      const mode = String(state.runDetail.run.mode || "sequential");
       state.runDetail = interAgentRunDetail({
-        run: { status: "running", mode: "sequential" },
+        run: { status: "running", mode },
         root_runtime_turn: runtimeTurn("turn-root", RUNTIME_SESSION_ID, "active", typeof body.input_text === "string" ? body.input_text : ""),
         root_runtime_events: runtimeTranscriptEvents(
           RUNTIME_SESSION_ID,
@@ -784,28 +851,44 @@ function interAgentRunDetail(overrides: { run?: JsonRecord; root_runtime_events?
     ended_at: null,
     ...(overrides.run || {}),
   };
+  const groupChat = run.mode === "group_chat";
   return {
     run,
-    participants: [
-      interAgentParticipant("orchestrator", "orchestrator", "root_orchestrator", "Orchestrator", null, "running", 0),
-      interAgentParticipant("implementer", "agent", "child_runtime_session", "Implementer", "child-implementer", "completed", 1),
-      interAgentParticipant("reviewer", "agent", "child_runtime_session", "Reviewer", "child-reviewer", "running", 2),
-    ],
-    edges: [
-      interAgentEdge("edge-implementation", "orchestrator", "implementer", "delegated", "Implementation"),
-      interAgentEdge("edge-review", "implementer", "reviewer", "reviewed_by", "Review"),
-      interAgentEdge("edge-final-review", "reviewer", "orchestrator", "produced", "Final review"),
-    ],
+    participants: groupChat
+      ? [
+          interAgentParticipant("orchestrator", "orchestrator", "root_orchestrator", "Orchestrator", null, "running", 0),
+          interAgentParticipant("analyst", "agent", "child_runtime_session", "Analyst", "child-analyst", "completed", 1),
+          interAgentParticipant("reviewer", "agent", "child_runtime_session", "Reviewer", "child-reviewer", "completed", 2),
+          interAgentParticipant("synthesizer", "agent", "child_runtime_session", "Synthesizer", "child-synthesizer", "running", 3),
+        ]
+      : [
+          interAgentParticipant("orchestrator", "orchestrator", "root_orchestrator", "Orchestrator", null, "running", 0),
+          interAgentParticipant("implementer", "agent", "child_runtime_session", "Implementer", "child-implementer", "completed", 1),
+          interAgentParticipant("reviewer", "agent", "child_runtime_session", "Reviewer", "child-reviewer", "running", 2),
+        ],
+    edges: groupChat
+      ? [
+          interAgentEdge("edge-analysis", "orchestrator", "analyst", "delegated", "Analysis"),
+          interAgentEdge("edge-review", "orchestrator", "reviewer", "delegated", "Review"),
+          interAgentEdge("edge-analyst-synth", "analyst", "synthesizer", "depends_on", "Contribution"),
+          interAgentEdge("edge-reviewer-synth", "reviewer", "synthesizer", "depends_on", "Correction"),
+          interAgentEdge("edge-final-synthesis", "synthesizer", "orchestrator", "produced", "Final synthesis"),
+        ]
+      : [
+          interAgentEdge("edge-implementation", "orchestrator", "implementer", "delegated", "Implementation"),
+          interAgentEdge("edge-review", "implementer", "reviewer", "reviewed_by", "Review"),
+          interAgentEdge("edge-final-review", "reviewer", "orchestrator", "produced", "Final review"),
+        ],
     budget_policy: {
       budget_policy_id: "budget-chat-e2e",
       workspace_id: WORKSPACE_ID,
-      max_participants: 3,
+      max_participants: groupChat ? 4 : 3,
       max_concurrent_participants: 1,
       max_handoffs: 3,
       max_rounds: 1,
-      max_total_turns: 2,
+      max_total_turns: groupChat ? 3 : 2,
       max_turns_per_participant: 1,
-      max_tool_calls: 2,
+      max_tool_calls: groupChat ? 3 : 2,
       max_estimated_tokens: 0,
       max_estimated_cost: "0",
       max_idle_seconds: 60,

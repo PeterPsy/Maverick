@@ -351,7 +351,7 @@ export type RuntimeStepMessage = {
   detail: Record<string, unknown>;
 };
 
-export type MultiAgentComposerMode = "off" | "auto" | "multi";
+export type MultiAgentComposerMode = "off" | "auto" | "multi" | "group_chat";
 export type InterAgentVisibilityPlane = "summary" | "detail" | "debug";
 
 export type InterAgentRunStatus =

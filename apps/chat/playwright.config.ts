@@ -19,7 +19,7 @@ export default defineConfig({
     trace: "on-first-retry",
   },
   webServer: {
-    command: `npm run dev -- --host 127.0.0.1 --port ${PORT}`,
+    command: `VITE_MAVERICK_FEATURE_GROUP_CHAT=1 npm run dev -- --host 127.0.0.1 --port ${PORT}`,
     url: `http://127.0.0.1:${PORT}/apps/chat/`,
     reuseExistingServer: !process.env.CI,
     timeout: 30_000,

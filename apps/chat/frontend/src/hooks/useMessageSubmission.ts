@@ -918,16 +918,29 @@ function interAgentRunPlan({
     payload: {
       thread_id: thread.thread_id,
       root_runtime_session_id: thread.runtime_session_id,
-      mode: mode === "multi" ? "sequential" : "manager_tools",
+      mode: interAgentRunMode(mode),
       idempotency_key: `chat:${clientMessageId}:${mode}`,
+      ...(mode === "group_chat" ? { aggregator_participant_id: "synthesizer" } : {}),
       visibility_level: "detail",
       participants,
       edges: interAgentEdges(mode, participantLabel),
       budget: interAgentBudget(mode),
     },
     participantInputs:
-      mode === "multi" ? Object.fromEntries(workerPlans.map((worker) => [worker.participantId, worker.task])) : undefined,
+      mode === "multi" || mode === "group_chat"
+        ? Object.fromEntries(workerPlans.map((worker) => [worker.participantId, worker.task]))
+        : undefined,
   };
+}
+
+function interAgentRunMode(mode: MultiAgentComposerMode): CreateInterAgentRunPayload["mode"] {
+  if (mode === "multi") {
+    return "sequential";
+  }
+  if (mode === "group_chat") {
+    return "group_chat";
+  }
+  return "manager_tools";
 }
 
 function interAgentWorkerParticipant({
@@ -962,6 +975,31 @@ function interAgentWorkerParticipant({
 }
 
 function interAgentWorkerPlans(mode: MultiAgentComposerMode): InterAgentWorkerPlan[] {
+  if (mode === "group_chat") {
+    return [
+      {
+        participantId: "analyst",
+        label: "Analyst",
+        task:
+          "Analyze the request and contribute the strongest direct answer, evidence, or implementation direction. " +
+          "Do not mention internal workers, routing, orchestration, or group-chat mechanics.",
+      },
+      {
+        participantId: "reviewer",
+        label: "Reviewer",
+        task:
+          "Review the request and prior contribution for gaps, risks, or corrections. " +
+          "Return only user-facing improvements or corrections, without narrating internal review mechanics.",
+      },
+      {
+        participantId: "synthesizer",
+        label: "Synthesizer",
+        task:
+          "Synthesize the group chat contributions into the final user-facing answer. " +
+          "Do not mention participants, internal workers, routing, orchestration, or group-chat mechanics.",
+      },
+    ];
+  }
   if (mode === "multi") {
     return [
       {
@@ -992,6 +1030,40 @@ function interAgentWorkerPlans(mode: MultiAgentComposerMode): InterAgentWorkerPl
 }
 
 function interAgentEdges(mode: MultiAgentComposerMode, participantLabel: string): CreateInterAgentRunPayload["edges"] {
+  if (mode === "group_chat") {
+    return [
+      {
+        source_id: "orchestrator",
+        target_id: "analyst",
+        kind: "delegated",
+        label: "Analysis",
+      },
+      {
+        source_id: "orchestrator",
+        target_id: "reviewer",
+        kind: "delegated",
+        label: "Review",
+      },
+      {
+        source_id: "analyst",
+        target_id: "synthesizer",
+        kind: "depends_on",
+        label: "Contribution",
+      },
+      {
+        source_id: "reviewer",
+        target_id: "synthesizer",
+        kind: "depends_on",
+        label: "Correction",
+      },
+      {
+        source_id: "synthesizer",
+        target_id: "orchestrator",
+        kind: "produced",
+        label: "Final synthesis",
+      },
+    ];
+  }
   if (mode === "multi") {
     return [
       {
@@ -1025,6 +1097,16 @@ function interAgentEdges(mode: MultiAgentComposerMode, participantLabel: string)
 }
 
 function interAgentBudget(mode: MultiAgentComposerMode): CreateInterAgentRunPayload["budget"] {
+  if (mode === "group_chat") {
+    return {
+      max_participants: 4,
+      max_concurrent_participants: 1,
+      max_rounds: 1,
+      max_total_turns: 3,
+      max_turns_per_participant: 1,
+      max_tool_calls: 3,
+    };
+  }
   if (mode === "multi") {
     return {
       max_participants: 3,

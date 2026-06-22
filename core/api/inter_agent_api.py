@@ -36,6 +36,7 @@ from core.inter_agent.errors import (
 )
 from core.inter_agent.events import validate_visibility_plane
 from core.inter_agent.executor import execute_inter_agent_run
+from core.inter_agent.feature_flags import group_chat_mode_enabled
 from core.inter_agent.service import InterAgentService
 from core.inter_agent.store import DEFAULT_INTER_AGENT_EVENT_LIMIT, MAX_INTER_AGENT_EVENT_LIMIT
 from core.inter_agent.surfaces import (
@@ -67,6 +68,8 @@ CHAT_APP_ID = "chat"
 CHAT_AGENT_PROVIDER_ALIASES = ("agent-catalog", "agent-prompt-materializer")
 ACTIVE_APP_CONTEXT_HEADER = "Current shell context:"
 ACTIVE_APP_CONTEXT_KEYS = {"active_app_id", "active_app_name", "active_app_description"}
+PUBLIC_INTER_AGENT_RUN_MODES = {"manager_tools", "sequential", "concurrent"}
+FEATURE_GATED_INTER_AGENT_RUN_MODES = {"group_chat"}
 
 
 def handle_inter_agent_api(
@@ -375,6 +378,7 @@ def _create_run(
         source_app_id=root_session.source_app_id or "chat",
         allow_agent_snapshots=allow_agent_snapshots,
     )
+    _authorize_public_run_mode(spec.mode)
     run = service.create_run(spec)
     return json_response(start_response, run_detail_payload(state.inter_agent_store, run), status="201 Created")
 
@@ -772,6 +776,7 @@ def _execute_run(
     *,
     start_path,
 ) -> list[bytes]:
+    _authorize_public_run_mode(run.mode)
     try:
         root_session = state.runtime_store.get_session(run.root_runtime_session_id)
     except (RuntimeSessionNotFoundError, ValueError):
@@ -1285,6 +1290,16 @@ def _validate_agent_snapshot_skill_catalog(
         )
     except AppHostingError as error:
         raise InterAgentValidationError(str(error)) from error
+
+
+def _authorize_public_run_mode(mode: str) -> None:
+    if mode in PUBLIC_INTER_AGENT_RUN_MODES:
+        return
+    if mode in FEATURE_GATED_INTER_AGENT_RUN_MODES and group_chat_mode_enabled():
+        return
+    if mode == "group_chat":
+        raise InterAgentValidationError("Inter-agent group_chat mode requires MAVERICK_FEATURE_GROUP_CHAT=1.")
+    raise InterAgentValidationError(f"Inter-agent run mode `{mode}` is not product-facing.")
 
 
 def _start_inter_agent_execution_worker(

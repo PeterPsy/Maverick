@@ -160,6 +160,7 @@ async function renderComposer({
   onSearchReferences = async () => [],
   onSelectMultiAgentMode = () => undefined,
   onSelectAgent = () => undefined,
+  multiAgentGroupChatEnabled = false,
   multiAgentMode = "off",
   onSubmit = () => undefined,
   transcriptionChunkedDictationSupported = false,
@@ -173,6 +174,7 @@ async function renderComposer({
   onSearchReferences?: (query: string, signal: AbortSignal) => Promise<MentionItem[]>;
   onSelectMultiAgentMode?: (mode: MultiAgentComposerMode) => void;
   onSelectAgent?: (agentTypeId: string) => void;
+  multiAgentGroupChatEnabled?: boolean;
   multiAgentMode?: MultiAgentComposerMode;
   onSubmit?: () => void;
   transcriptionChunkedDictationSupported?: boolean;
@@ -199,6 +201,7 @@ async function renderComposer({
         isSending={false}
         mentionItems={mentionItems}
         multiAgentBudgetLabel="1 worker · 1 turn · 1 tool call"
+        multiAgentGroupChatEnabled={multiAgentGroupChatEnabled}
         multiAgentMode={multiAgentMode}
         onAddAttachments={onAddAttachments}
         onChange={(nextValue) => {
@@ -1270,6 +1273,7 @@ describe("ChatComposer reference search", () => {
     });
 
     expect(element.textContent).toContain("Auto");
+    expect(element.textContent).not.toContain("Group chat");
     expect(element.textContent).toContain("1 worker · 1 turn · 1 tool call");
 
     const autoButton = [...element.querySelectorAll('[role="menuitemradio"]')].find((item) => item.textContent?.includes("Auto")) as HTMLButtonElement;
@@ -1278,5 +1282,29 @@ describe("ChatComposer reference search", () => {
     });
 
     expect(onSelectMultiAgentMode).toHaveBeenCalledWith("auto");
+  });
+
+  it("shows group chat mode only when the feature flag is enabled", async () => {
+    const onSelectMultiAgentMode = vi.fn();
+    const { element } = await renderComposer({
+      multiAgentGroupChatEnabled: true,
+      multiAgentMode: "off",
+      onSelectMultiAgentMode,
+    });
+    const trigger = element.querySelector('button[aria-label="Multi-agent mode: Off"]') as HTMLButtonElement | null;
+
+    await act(async () => {
+      trigger?.click();
+    });
+
+    expect(element.textContent).toContain("Group chat");
+    const groupChatButton = [...element.querySelectorAll('[role="menuitemradio"]')].find((item) =>
+      item.textContent?.includes("Group chat"),
+    ) as HTMLButtonElement;
+    await act(async () => {
+      groupChatButton.click();
+    });
+
+    expect(onSelectMultiAgentMode).toHaveBeenCalledWith("group_chat");
   });
 });

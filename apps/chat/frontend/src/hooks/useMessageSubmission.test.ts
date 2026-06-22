@@ -148,6 +148,39 @@ describe("interAgentRunPayload", () => {
     });
   });
 
+  it("builds the gated group_chat product mode with a final synthesizer", () => {
+    const payload = interAgentRunPayload({
+      agentRuntimeConfig: agentRuntimeConfig(),
+      clientMessageId: "client-1",
+      mode: "group_chat",
+      thread: thread(),
+    });
+
+    expect(payload.mode).toBe("group_chat");
+    expect(payload.aggregator_participant_id).toBe("synthesizer");
+    expect(payload.participants.map((participant) => participant.participant_id)).toEqual([
+      "orchestrator",
+      "analyst",
+      "reviewer",
+      "synthesizer",
+    ]);
+    expect(payload.edges).toEqual([
+      { source_id: "orchestrator", target_id: "analyst", kind: "delegated", label: "Analysis" },
+      { source_id: "orchestrator", target_id: "reviewer", kind: "delegated", label: "Review" },
+      { source_id: "analyst", target_id: "synthesizer", kind: "depends_on", label: "Contribution" },
+      { source_id: "reviewer", target_id: "synthesizer", kind: "depends_on", label: "Correction" },
+      { source_id: "synthesizer", target_id: "orchestrator", kind: "produced", label: "Final synthesis" },
+    ]);
+    expect(payload.budget).toMatchObject({
+      max_participants: 4,
+      max_concurrent_participants: 1,
+      max_rounds: 1,
+      max_total_turns: 3,
+      max_turns_per_participant: 1,
+      max_tool_calls: 3,
+    });
+  });
+
   it("isolates multi-worker tasks from orchestration narration", () => {
     const participantInputs = interAgentRunParticipantInputs({
       agentRuntimeConfig: agentRuntimeConfig(),
@@ -162,9 +195,24 @@ describe("interAgentRunPayload", () => {
     expect(participantInputs.reviewer).toContain("Do not narrate the review process");
   });
 
+  it("isolates group chat role inputs from orchestration narration", () => {
+    const participantInputs = interAgentRunParticipantInputs({
+      agentRuntimeConfig: agentRuntimeConfig(),
+      clientMessageId: "client-1",
+      mode: "group_chat",
+      thread: thread(),
+    });
+
+    expect(participantInputs.analyst).toContain("strongest direct answer");
+    expect(participantInputs.reviewer).toContain("gaps, risks, or corrections");
+    expect(participantInputs.synthesizer).toContain("final user-facing answer");
+    expect(participantInputs.synthesizer).toContain("Do not mention participants");
+  });
+
   it("uses budget copy that matches actual worker counts", () => {
     expect(interAgentComposerBudgetLabel("off")).toBe("");
     expect(interAgentComposerBudgetLabel("auto")).toBe("1 worker · 1 turn · 1 tool call");
     expect(interAgentComposerBudgetLabel("multi")).toBe("2 workers · 2 turns · 2 tool calls");
+    expect(interAgentComposerBudgetLabel("group_chat")).toBe("3 workers · 3 turns · 3 tool calls");
   });
 });

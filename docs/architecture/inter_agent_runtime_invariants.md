@@ -1,13 +1,13 @@
 # Inter-Agent Runtime Invariants
 
 Date: 2026-06-17
-Status: Accepted through F5
+Status: Accepted through F7
 
 ## Purpose
 
 This ADR fixes the runtime invariants required before Maverick can create real multi-agent child sessions.
 
-It started with names, visibility, legacy compatibility, and initial policy defaults. F2 extends it with the first policy-aware participant spawn, message, wait, interrupt, resume, close, and recovery surfaces for hidden child runtime sessions. F3 adds the native MVP executor for `manager_tools`, `sequential`, and `concurrent` runs while keeping adapters and handoff execution out of scope. F4 adds the initial Chat UX wiring, inline approvals, and graph entry links while keeping runtime execution inside core-owned inter-agent APIs. F5 adds Chat graph mode backed by core-owned inter-agent replay and live stream surfaces.
+It started with names, visibility, legacy compatibility, and initial policy defaults. F2 extends it with the first policy-aware participant spawn, message, wait, interrupt, resume, close, and recovery surfaces for hidden child runtime sessions. F3 adds the native MVP executor for `manager_tools`, `sequential`, and `concurrent` runs while keeping adapters and handoff execution out of scope. F4 adds the initial Chat UX wiring, inline approvals, and graph entry links while keeping runtime execution inside core-owned inter-agent APIs. F5 adds Chat graph mode backed by core-owned inter-agent replay and live stream surfaces. F7 promotes `group_chat` as the first advanced product-facing mode behind explicit feature flags.
 
 ## Decisions
 
@@ -20,8 +20,13 @@ It started with names, visibility, legacy compatibility, and initial policy defa
 7. `thread_visibility="hidden"` sessions may have runtime turns, runtime events, runtime processes, provider state, and runtime roots, but they must not create, update, or appear as user-visible runtime threads.
 8. `session_kind="inter_agent_participant"` requires `thread_visibility="hidden"`; omitted visibility on an explicit participant is normalized to hidden, while explicit `user` visibility is invalid.
 9. Invalid persisted visibility values fail closed: they are rejected on direct session hydration and must not make an existing thread appear in user-facing thread catalogs.
-10. `handoff` is schema/event-only until F7. It is not executable MVP
-    behavior unless a later ADR explicitly promotes it. The F6 MAF
+10. `group_chat` is the first advanced mode promoted for F7 product use, but
+    only behind `MAVERICK_FEATURE_GROUP_CHAT=1` for the HTTP API and
+    `VITE_MAVERICK_FEATURE_GROUP_CHAT=1` for the Chat frontend build. The
+    accepted F7 decision is recorded in
+    [inter_agent_group_chat_f7.md](inter_agent_group_chat_f7.md). `handoff`
+    and `magentic_like` remain schema/event-only and are not executable product
+    behavior unless a later ADR explicitly promotes them. The F6 MAF
     source-backed adapter evaluation may execute `handoff`, `group_chat`, and
     `magentic_like` fixtures only behind
     `MAVERICK_EXPERIMENTAL_AGENT_FRAMEWORK=1`; that exception is not default-on,
@@ -163,6 +168,16 @@ Chat Agent nodes view renders graph nodes, edges, participant transcripts, appro
 If the visible root runtime turn for a Chat-projected inter-agent run is interrupted through the generic runtime turn API, the core must close the linked inter-agent run as `cancelled`, clean up active hidden child participant sessions through the inter-agent close path, and avoid any later `cancelled -> completed` root turn transition.
 
 The F5 WebSocket may poll the inter-agent event store for the MVP. A dedicated inter-agent event bus can be introduced later if run event volume requires fanout semantics comparable to runtime session events.
+
+## F7 Group Chat Policy
+
+F7 starts with `group_chat` and does not promote `handoff` or `magentic_like` as product modes.
+
+The `group_chat` MVP remains Maverick-native. Chat and the HTTP inter-agent API use the existing `InterAgentRun`, participants, edges, events, budget ledger, approvals, retention, replay, hidden participant sessions, and Agent nodes UI. MAF remains source-backed evaluation/reference material and does not own product runtime state.
+
+The Chat composer shows `Group chat` only when `VITE_MAVERICK_FEATURE_GROUP_CHAT=1`. Public HTTP creation and execution of `mode="group_chat"` require `MAVERICK_FEATURE_GROUP_CHAT=1`; public HTTP creation of `handoff` and `magentic_like` is rejected as not product-facing. Chat-created group chat runs request `visibility_level=detail`, set bounded one-round budget defaults, and rely on the existing Agent nodes view for run status, participant outputs, cancel/stop, replay, and history.
+
+The F7.1 executor semantics are intentionally narrow: one bounded shared-context round over declared group participants, with an explicit aggregator participant for final answer projection. Checkpointing, replay-fork, graph super-steps, task writes, native conditional routing, raw adapter payload UI, and MAF-owned sessions remain non-goals.
 
 ## Gate
 

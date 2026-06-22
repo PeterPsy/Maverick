@@ -3,6 +3,7 @@ import type { AgentTypeSummary, AppReference, ProviderItem } from "../api/client
 import type { MultiAgentComposerMode } from "../api/client";
 import type { ComposerAttachment } from "../lib/attachments";
 import { hasInvalidAttachments } from "../lib/attachments";
+import { isGroupChatComposerModeEnabled } from "../lib/interAgentFeatures";
 import type { MentionItem } from "../lib/mentions";
 import { useComposerEditor } from "../hooks/useComposerEditor";
 import { useMentionPicker } from "../hooks/useMentionPicker";
@@ -30,6 +31,7 @@ export type ChatComposerProps = {
   isSending: boolean;
   mentionItems: MentionItem[];
   multiAgentBudgetLabel?: string;
+  multiAgentGroupChatEnabled?: boolean;
   multiAgentMode?: MultiAgentComposerMode;
   onAddAttachments: (files: File[]) => void;
   onCapturePageArea?: () => void;
@@ -69,6 +71,7 @@ export function ChatComposer({
   isSending,
   mentionItems,
   multiAgentBudgetLabel = "",
+  multiAgentGroupChatEnabled = isGroupChatComposerModeEnabled(),
   multiAgentMode = "off",
   onAddAttachments,
   onCapturePageArea,
@@ -270,6 +273,7 @@ export function ChatComposer({
                 <MultiAgentModeControl
                   budgetLabel={multiAgentBudgetLabel}
                   disabled={disabled || isSending}
+                  groupChatEnabled={multiAgentGroupChatEnabled}
                   menuOpen={multiAgentMenuOpen}
                   mode={multiAgentMode}
                   onMenuOpenChange={setMultiAgentMenuOpen}
@@ -314,6 +318,7 @@ export function ChatComposer({
 function MultiAgentModeControl({
   budgetLabel,
   disabled,
+  groupChatEnabled,
   menuOpen,
   mode,
   onMenuOpenChange,
@@ -321,12 +326,14 @@ function MultiAgentModeControl({
 }: {
   budgetLabel: string;
   disabled: boolean;
+  groupChatEnabled: boolean;
   menuOpen: boolean;
   mode: MultiAgentComposerMode;
   onMenuOpenChange: (open: boolean) => void;
   onSelect: (mode: MultiAgentComposerMode) => void;
 }) {
   const label = multiAgentModeLabel(mode);
+  const modeItems: MultiAgentComposerMode[] = groupChatEnabled ? ["off", "auto", "multi", "group_chat"] : ["off", "auto", "multi"];
   return (
     <div className="chatapp-multi-agent-control">
       <button
@@ -346,7 +353,7 @@ function MultiAgentModeControl({
       </button>
       {menuOpen ? (
         <div className="chatapp-multi-agent-menu" role="menu">
-          {(["off", "auto", "multi"] as const).map((item) => (
+          {modeItems.map((item) => (
             <button
               aria-checked={mode === item}
               className="chatapp-multi-agent-menu__item"
@@ -374,6 +381,9 @@ function multiAgentModeLabel(mode: MultiAgentComposerMode): string {
   }
   if (mode === "multi") {
     return "Multi";
+  }
+  if (mode === "group_chat") {
+    return "Group chat";
   }
   return "Off";
 }

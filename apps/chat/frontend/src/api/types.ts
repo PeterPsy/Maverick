@@ -212,6 +212,7 @@ export type RuntimeSession = {
   agent_id: string;
   status: string;
   effective_mode: string;
+  runtime_mode?: "agentic" | "plain_hosted_chat" | string;
   skill_catalog_app_id?: string | null;
   provider_id?: string;
 };
@@ -223,6 +224,7 @@ export type RuntimeTurn = {
   status: string;
   input_text: string | null;
   failure_reason: string | null;
+  runtime_mode?: "agentic" | "plain_hosted_chat" | string;
   created_at: string;
   updated_at: string;
 };
@@ -619,5 +621,7 @@ export type RuntimeSessionOptions = {
   source_app_id?: string;
   skill_catalog_app_id?: string;
   skill_ids?: string[];
+  runtime_mode?: "agentic" | "plain_hosted_chat";
+  routing_profile?: "fast_model" | string;
   title?: string;
 };

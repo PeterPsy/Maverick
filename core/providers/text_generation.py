@@ -9,6 +9,7 @@ from typing import Iterable, Literal, Protocol
 from urllib import error as urllib_error
 from urllib import request as urllib_request
 
+from core.providers.errors import ProviderError
 from core.providers.models import RoutingDecision
 from core.providers.provider_authorization import provider_secret_target
 from core.providers.store import ProviderStore
@@ -32,7 +33,7 @@ BLOCKED_HOSTED_TEXT_MARKERS = (
 )
 
 
-class HostedTextGenerationError(RuntimeError):
+class HostedTextGenerationError(ProviderError):
     """Hosted text generation failure with a stable reason code."""
 
     def __init__(self, reason_code: str, message: str | None = None) -> None:

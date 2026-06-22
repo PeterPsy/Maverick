@@ -7,6 +7,7 @@ import type { Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { RuntimeEvent, RuntimeSession, RuntimeTurn } from "../api/client";
 import type { PendingMessage } from "../lib/messageState";
+import { eventsToMessages } from "../lib/transcript";
 import { useRuntimeEvents } from "./useRuntimeEvents";
 
 class MockWebSocket {
@@ -223,5 +224,83 @@ describe("useRuntimeEvents", () => {
     const state = latestState as RuntimeEventsHarnessState | null;
     expect((state?.events ?? []).map((item) => item.event_id)).toEqual([]);
     expect(state?.error ?? null).toBeNull();
+  });
+
+  it("carries plain hosted runtime events through WebSocket state into the transcript", async () => {
+    let latestState: RuntimeEventsHarnessState | null = null;
+    const onState = (state: RuntimeEventsHarnessState) => {
+      latestState = state;
+    };
+
+    await act(async () => {
+      root?.render(<RuntimeEventsHarness initialEvents={[]} onState={onState} />);
+    });
+
+    const plainSession: RuntimeSession = {
+      ...session,
+      runtime_mode: "plain_hosted_chat",
+      provider_id: "hosted-text-runtime",
+    };
+    const queued = {
+      ...event("plain-queued"),
+      event_type: "runtime.turn.queued",
+      payload: { input_text: "Hello hosted", client_message_id: "client-plain", provider_id: "hosted-text-runtime" },
+      created_at: "2026-04-19T10:00:00.000Z",
+    };
+
+    await act(async () => {
+      MockWebSocket.instances[0].onmessage?.({
+        data: JSON.stringify({
+          type: "runtime.snapshot",
+          session: plainSession,
+          events: [queued],
+          last_event_id: "plain-queued",
+          has_more_before: false,
+          oldest_event_id: "plain-queued",
+        }),
+      } as MessageEvent);
+    });
+
+    for (const runtimeEvent of [
+      {
+        ...event("plain-delta-1"),
+        event_type: "runtime.output.delta",
+        payload: { text: "Hosted ", provider_id: "groq", runtime_mode: "plain_hosted_chat" },
+        created_at: "2026-04-19T10:00:01.000Z",
+      },
+      {
+        ...event("plain-delta-2"),
+        event_type: "runtime.output.delta",
+        payload: { text: "answer", provider_id: "groq", runtime_mode: "plain_hosted_chat" },
+        created_at: "2026-04-19T10:00:02.000Z",
+      },
+      {
+        ...event("plain-final"),
+        event_type: "runtime.output.final",
+        payload: { text: "", complete_text: "Hosted answer", provider_id: "groq", exit_code: 0 },
+        created_at: "2026-04-19T10:00:03.000Z",
+      },
+      {
+        ...event("plain-completed"),
+        event_type: "runtime.turn.completed",
+        payload: { provider_id: "groq" },
+        created_at: "2026-04-19T10:00:04.000Z",
+      },
+    ] satisfies RuntimeEvent[]) {
+      await act(async () => {
+        MockWebSocket.instances[0].onmessage?.({
+          data: JSON.stringify({ type: "runtime.event", event: runtimeEvent }),
+        } as MessageEvent);
+      });
+    }
+
+    const state = latestState as RuntimeEventsHarnessState | null;
+    expect(state?.activeSession?.runtime_mode).toBe("plain_hosted_chat");
+    expect(state?.activeTurn).toBeNull();
+    expect((state?.events ?? []).map((item) => item.event_type)).toContain("runtime.turn.completed");
+    expect(eventsToMessages(state?.events ?? [])).toMatchObject([
+      { id: "client-plain", role: "human", content: "Hello hosted", status: "complete" },
+      { role: "agent", content: "Hosted answer", status: "complete" },
+    ]);
   });
 });

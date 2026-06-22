@@ -38,6 +38,8 @@ export type AgentRuntimeConfig = {
   agent_id: string;
   agent_role_id: string;
   agent_type_id: string;
+  runtime_mode?: "agentic" | "plain_hosted_chat";
+  routing_profile?: string;
   skill_catalog_app_id: string;
   skill_ids: string[];
   source_app_id: string;
@@ -535,6 +537,8 @@ export function useMessageSubmission({
             system_prompt: systemPrompt,
             skill_catalog_app_id: agentRuntimeConfig?.skill_catalog_app_id,
             skill_ids: agentRuntimeConfig?.skill_ids || [],
+            runtime_mode: agentRuntimeConfig?.runtime_mode,
+            routing_profile: agentRuntimeConfig?.routing_profile,
             title: "New chat",
           },
           signal: abortController.signal,
@@ -641,6 +645,8 @@ export function useMessageSubmission({
           system_prompt: systemPrompt,
           skill_catalog_app_id: agentRuntimeConfig?.skill_catalog_app_id,
           skill_ids: agentRuntimeConfig?.skill_ids || [],
+          runtime_mode: agentRuntimeConfig?.runtime_mode,
+          routing_profile: agentRuntimeConfig?.routing_profile,
           title: "New chat",
         },
         { signal },

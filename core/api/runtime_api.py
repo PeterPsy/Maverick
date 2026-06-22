@@ -46,7 +46,7 @@ from core.runtime.service import (
 )
 from core.runtime.runtime_events import RuntimeEventRecord
 from core.runtime.runtime_session import RuntimeSessionRecord, runtime_session_allows_user_thread
-from core.runtime.plain_hosted_text import runtime_session_is_plain_hosted_chat
+from core.runtime.plain_hosted_text import HOSTED_TEXT_RUNTIME_PROVIDER_ID, runtime_session_is_plain_hosted_chat
 from core.runtime.runtime_turns import RuntimeTurnRecord
 from core.runtime.turn_submission import (
     interrupt_runtime_provider_turn,
@@ -127,6 +127,8 @@ def _list_session_payloads(state: PlatformState, *, workspace_id: str, start_pat
 def _resolved_provider_id(state: PlatformState, session: RuntimeSessionRecord) -> str | None:
     if session.provider_id:
         return session.provider_id
+    if runtime_session_is_plain_hosted_chat(session):
+        return HOSTED_TEXT_RUNTIME_PROVIDER_ID
     try:
         provider, _selection = resolve_provider_for_runtime_session(state.provider_store, session=session)
     except ProviderError:
@@ -752,13 +754,14 @@ def _submit_runtime_turn_response(
             _provider_unavailable_response(state, session.workspace_id, error),
             status="409 Conflict",
         )
+    response_session = state.runtime_store.get_session(session.session_id)
     thread = find_runtime_thread_by_session(
         state.runtime_store,
         workspace_id=session.workspace_id,
         runtime_session_id=session.session_id,
     )
     payload = {
-        "session": _session_payload(session, provider_id=_resolved_provider_id(state, session)),
+        "session": _session_payload(response_session, provider_id=_resolved_provider_id(state, response_session)),
         "turn": _turn_payload(turn),
         "events": [_event_payload(event) for event in events],
     }

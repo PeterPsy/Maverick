@@ -38,6 +38,8 @@ export function createRuntimeSession(options: RuntimeSessionOptions = {}, reques
       system_prompt: options.system_prompt || undefined,
       skill_catalog_app_id: options.skill_catalog_app_id || undefined,
       skill_ids: options.skill_ids || [],
+      runtime_mode: options.runtime_mode || undefined,
+      routing_profile: options.routing_profile || undefined,
       title: options.title || "New chat",
     }),
   });
@@ -76,6 +78,8 @@ export function createRuntimeSessionWithTurn({
     system_prompt: options.system_prompt || undefined,
     skill_catalog_app_id: options.skill_catalog_app_id || undefined,
     skill_ids: options.skill_ids || [],
+    runtime_mode: options.runtime_mode || undefined,
+    routing_profile: options.routing_profile || undefined,
     title: options.title || "New chat",
     input_text: inputText,
     client_message_id: clientMessageId,

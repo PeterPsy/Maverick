@@ -16,9 +16,11 @@ RuntimeSessionGrantOperation = Literal["cleanup", "interrupt", "restart", "inter
 RuntimeSessionGrantPrincipalKind = Literal["user", "app", "runtime_session"]
 RuntimeSessionKind = Literal["chat_root", "inter_agent_participant", "system"]
 RuntimeThreadVisibility = Literal["user", "hidden"]
+RuntimeMode = Literal["agentic", "plain_hosted_chat"]
 
 RUNTIME_SESSION_KINDS = {"chat_root", "inter_agent_participant", "system"}
 RUNTIME_THREAD_VISIBILITIES = {"user", "hidden"}
+RUNTIME_MODES = {"agentic", "plain_hosted_chat"}
 
 
 @dataclass(frozen=True)
@@ -51,6 +53,7 @@ class RuntimeSessionRecord:
     last_progress_at: datetime | None
     session_kind: RuntimeSessionKind = "chat_root"
     thread_visibility: RuntimeThreadVisibility = "user"
+    runtime_mode: RuntimeMode = "agentic"
     system_prompt: str | None = None
     skill_ids: list[str] = field(default_factory=list)
     skill_catalog_app_id: str | None = None
@@ -97,6 +100,16 @@ def coerce_runtime_thread_visibility(value: object | None) -> RuntimeThreadVisib
     raise ValueError(f"Unsupported runtime thread visibility `{normalized}`.")
 
 
+def coerce_runtime_mode(value: object | None) -> RuntimeMode:
+    """Return a supported runtime mode, defaulting only for omitted legacy data."""
+    if value is None or value == "":
+        return "agentic"
+    normalized = str(value).strip()
+    if normalized in RUNTIME_MODES:
+        return normalized  # type: ignore[return-value]
+    raise ValueError(f"Unsupported runtime mode `{normalized}`.")
+
+
 def normalize_runtime_session_visibility(
     session_kind: object | None,
     thread_visibility: object | None,
@@ -125,6 +138,7 @@ def runtime_session_from_document(document: Mapping[str, object]) -> RuntimeSess
     )
     payload["session_kind"] = session_kind
     payload["thread_visibility"] = thread_visibility
+    payload["runtime_mode"] = coerce_runtime_mode(payload.get("runtime_mode"))
     return RuntimeSessionRecord(**payload)
 
 

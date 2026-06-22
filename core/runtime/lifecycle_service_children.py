@@ -167,6 +167,7 @@ def queue_runtime_turn(
             started_at=None,
             completed_at=None,
             failure_reason=None,
+            runtime_mode=session.runtime_mode,
         )
     )
 

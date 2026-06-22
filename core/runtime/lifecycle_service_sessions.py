@@ -15,6 +15,8 @@ from core.runtime.runtime_session import (
     RuntimeSessionRecord,
     RuntimeSessionKind,
     RuntimeThreadVisibility,
+    RuntimeMode,
+    coerce_runtime_mode,
     normalize_runtime_session_visibility,
 )
 from core.runtime.runtime_state import RuntimeStateRecord
@@ -53,6 +55,7 @@ def create_runtime_session(
     creator_runtime_session_id: str | None = None,
     session_kind: RuntimeSessionKind | str | None = None,
     thread_visibility: RuntimeThreadVisibility | str | None = None,
+    runtime_mode: RuntimeMode | str | None = None,
     grants: list[RuntimeSessionGrantRecord] | None = None,
     governance: WorkspaceGovernanceRecord | None = None,
     platform_allows_full_access: bool = False,
@@ -67,6 +70,7 @@ def create_runtime_session(
         session_kind,
         thread_visibility,
     )
+    normalized_runtime_mode = coerce_runtime_mode(runtime_mode)
     routing = build_runtime_routing(
         session_id=session_id,
         workspace_id=workspace_id,
@@ -92,6 +96,7 @@ def create_runtime_session(
         last_progress_at=None,
         session_kind=normalized_session_kind,
         thread_visibility=normalized_thread_visibility,
+        runtime_mode=normalized_runtime_mode,
         system_prompt=_optional_text(system_prompt),
         skill_ids=_skill_id_list(skill_ids),
         skill_catalog_app_id=_optional_text(skill_catalog_app_id),
@@ -124,6 +129,7 @@ def create_runtime_session(
             "effective_mode": routing.effective_mode,
             "session_kind": session.session_kind,
             "thread_visibility": session.thread_visibility,
+            "runtime_mode": session.runtime_mode,
         }
         record_platform_event(
             observability_store,

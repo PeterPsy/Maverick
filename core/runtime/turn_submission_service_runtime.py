@@ -3,12 +3,19 @@
 from __future__ import annotations
 
 from contextlib import suppress
+from dataclasses import replace
 from threading import Lock, Thread, Timer
 from typing import TYPE_CHECKING, Callable
 from uuid import uuid4
 
 from core.apps.runtime_event_hooks import dispatch_source_app_runtime_event
 from core.providers.service import resolve_runtime_backend_for_session
+from core.runtime.plain_hosted_text import (
+    HOSTED_TEXT_RUNTIME_PROVIDER_ID,
+    assert_plain_hosted_chat_input_allowed,
+    execute_plain_hosted_text_turn,
+    runtime_session_is_plain_hosted_chat,
+)
 from core.runtime.app_references import input_text_with_app_references
 from core.runtime.attachments import input_text_with_attachment_links
 from core.runtime.execution import execute_runtime_turn
@@ -42,12 +49,20 @@ def submit_runtime_turn_async(
     on_queued: Callable[[RuntimeTurnRecord, list[RuntimeEventRecord]], None] | None = None,
 ) -> tuple[RuntimeTurnRecord, list[RuntimeEventRecord]]:
     """Queue one runtime turn and execute it in a background worker."""
-    provider, _selection, runtime_adapter = resolve_runtime_backend_for_session(state.provider_store, session=session)
+    plain_hosted = runtime_session_is_plain_hosted_chat(session)
+    assert_plain_hosted_chat_input_allowed(session, attachments=attachments, app_references=app_references)
+    if plain_hosted:
+        provider = None
+        runtime_adapter = None
+        provider_id = HOSTED_TEXT_RUNTIME_PROVIDER_ID
+    else:
+        provider, _selection, runtime_adapter = resolve_runtime_backend_for_session(state.provider_store, session=session)
+        provider_id = provider.provider_id
     turn, events = _queue_turn_with_event(
         state,
         session=session,
         input_text=input_text,
-        provider_id=provider.provider_id,
+        provider_id=provider_id,
         client_message_id=client_message_id,
         attachments=attachments,
         app_references=app_references,
@@ -57,16 +72,17 @@ def submit_runtime_turn_async(
             on_queued(turn, events)
         except Exception as error:
             failed = transition_runtime_turn(state.runtime_store, turn_id=turn.turn_id, target_status="failed", failure_reason=str(error))
-            _record_turn_failed(state, session_id=session.session_id, turn_id=failed.turn_id, provider_id=provider.provider_id, error=str(error))
+            _record_turn_failed(state, session_id=session.session_id, turn_id=failed.turn_id, provider_id=provider_id, error=str(error))
             raise
 
     def worker() -> None:
         force_idle_reap = False
+        worker_provider_id = provider_id
         with _session_execution_lock(session.session_id):
             _debug_log_runtime_turn(
                 state,
                 session=session,
-                provider_id=provider.provider_id,
+                provider_id=worker_provider_id,
                 turn_id=turn.turn_id,
                 message="Runtime turn debug: async worker entered",
                 payload={"phase": "async_worker_entered"},
@@ -77,48 +93,59 @@ def submit_runtime_turn_async(
                     _debug_log_runtime_turn(
                         state,
                         session=session,
-                        provider_id=provider.provider_id,
+                        provider_id=worker_provider_id,
                         turn_id=turn.turn_id,
                         message="Runtime turn debug: async worker saw pre-cancelled turn",
                         payload={"phase": "async_worker_pre_cancelled"},
                     )
                     return
                 active = transition_runtime_turn(state.runtime_store, turn_id=turn.turn_id, target_status="active")
-                _record_turn_started(state, session_id=session.session_id, turn_id=active.turn_id, provider_id=provider.provider_id)
+                _record_turn_started(state, session_id=session.session_id, turn_id=active.turn_id, provider_id=worker_provider_id)
                 current_session = state.runtime_store.get_session(session.session_id)
                 _debug_log_runtime_turn(
                     state,
                     session=current_session,
-                    provider_id=provider.provider_id,
+                    provider_id=worker_provider_id,
                     turn_id=turn.turn_id,
                     message="Runtime turn debug: async execution started",
                     payload={"phase": "async_execution_started", "turn_status": active.status},
                 )
-                launch_spec = _build_launch_spec_for_execution(state, session=current_session, provider_id=provider.provider_id)
-                provider_input_text = input_text_with_attachment_links(
-                    input_text=input_text_with_app_references(input_text=input_text, app_references=app_references),
-                    attachments=attachments,
-                    workspace_root=current_session.workspace_root,
-                )
                 output_recorder = _RuntimeTurnOutputRecorder(state, session_id=session.session_id, turn_id=turn.turn_id)
-                result = execute_runtime_turn(
-                    session=current_session,
-                    provider=provider,
-                    input_text=provider_input_text,
-                    launch_spec=launch_spec,
-                    runtime_adapter=runtime_adapter,
-                    on_provider_thread_id=lambda provider_thread_id: _record_provider_thread_id(
+                if runtime_session_is_plain_hosted_chat(current_session):
+                    result, routing_decision = execute_plain_hosted_text_turn(
                         state,
                         session=current_session,
-                        provider_id=provider.provider_id,
-                        provider_thread_id=provider_thread_id,
-                    ),
-                    event_sink=output_recorder.record,
-                )
+                        input_text=input_text,
+                        event_sink=output_recorder.record,
+                    )
+                    worker_provider_id = routing_decision.selected_provider_id or worker_provider_id
+                    current_session = state.runtime_store.save_session(replace(current_session, provider_id=worker_provider_id))
+                else:
+                    assert provider is not None
+                    launch_spec = _build_launch_spec_for_execution(state, session=current_session, provider_id=worker_provider_id)
+                    provider_input_text = input_text_with_attachment_links(
+                        input_text=input_text_with_app_references(input_text=input_text, app_references=app_references),
+                        attachments=attachments,
+                        workspace_root=current_session.workspace_root,
+                    )
+                    result = execute_runtime_turn(
+                        session=current_session,
+                        provider=provider,
+                        input_text=provider_input_text,
+                        launch_spec=launch_spec,
+                        runtime_adapter=runtime_adapter,
+                        on_provider_thread_id=lambda provider_thread_id: _record_provider_thread_id(
+                            state,
+                            session=current_session,
+                            provider_id=worker_provider_id,
+                            provider_thread_id=provider_thread_id,
+                        ),
+                        event_sink=output_recorder.record,
+                    )
                 _debug_log_runtime_turn(
                     state,
                     session=current_session,
-                    provider_id=provider.provider_id,
+                    provider_id=worker_provider_id,
                     turn_id=turn.turn_id,
                     message="Runtime turn debug: async execution returned",
                     payload={"phase": "async_execution_returned", "exit_code": result.exit_code, "output_text_length": len(result.output_text)},
@@ -128,7 +155,7 @@ def submit_runtime_turn_async(
                     _debug_log_runtime_turn(
                         state,
                         session=current_session,
-                        provider_id=provider.provider_id,
+                        provider_id=worker_provider_id,
                         turn_id=turn.turn_id,
                         message="Runtime turn debug: async worker saw post-execution cancellation",
                         payload={"phase": "async_worker_post_execution_cancelled"},
@@ -140,12 +167,12 @@ def submit_runtime_turn_async(
                     state,
                     session_id=session.session_id,
                     turn_id=turn.turn_id,
-                    provider_id=provider.provider_id,
+                    provider_id=worker_provider_id,
                     output_text=final_output_text,
                     complete_text=app_output_text,
                     exit_code=result.exit_code,
                 )
-                completed_turn, terminal_event = _complete_turn_from_exit_code(state, session_id=session.session_id, turn_id=turn.turn_id, provider_id=provider.provider_id, exit_code=result.exit_code)
+                completed_turn, terminal_event = _complete_turn_from_exit_code(state, session_id=session.session_id, turn_id=turn.turn_id, provider_id=worker_provider_id, exit_code=result.exit_code)
                 dispatch_source_app_runtime_event(
                     state,
                     session=current_session,
@@ -157,7 +184,7 @@ def submit_runtime_turn_async(
                 _debug_log_runtime_turn(
                     state,
                     session=current_session,
-                    provider_id=provider.provider_id,
+                    provider_id=worker_provider_id,
                     turn_id=turn.turn_id,
                     message="Runtime turn debug: async terminal event recorded",
                     payload={"phase": "async_terminal_event_recorded", "turn_status": completed_turn.status, "terminal_event_type": terminal_event.event_type},
@@ -166,16 +193,16 @@ def submit_runtime_turn_async(
                 _debug_log_runtime_turn(
                     state,
                     session=session,
-                    provider_id=provider.provider_id,
+                    provider_id=worker_provider_id,
                     turn_id=turn.turn_id,
                     message="Runtime turn debug: async worker raised",
                     payload={"phase": "async_worker_raised", "error_type": type(error).__name__, "error": str(error)},
                 )
-                force_idle_reap = True
+                force_idle_reap = not plain_hosted
                 current = state.runtime_store.get_turn(turn.turn_id)
                 if current.status not in {"completed", "failed", "cancelled", "timed-out"}:
                     failed = transition_runtime_turn(state.runtime_store, turn_id=turn.turn_id, target_status="failed", failure_reason=str(error))
-                    _record_turn_failed(state, session_id=session.session_id, turn_id=failed.turn_id, provider_id=provider.provider_id, error=str(error))
+                    _record_turn_failed(state, session_id=session.session_id, turn_id=failed.turn_id, provider_id=worker_provider_id, error=str(error))
                     dispatch_source_app_runtime_event(
                         state,
                         session=session,
@@ -184,13 +211,14 @@ def submit_runtime_turn_async(
                         failure_reason=str(error),
                     )
             finally:
-                release_idle_runtime_processes(
-                    state,
-                    session_id=session.session_id,
-                    provider_id=provider.provider_id,
-                    reason="async_turn_failed" if force_idle_reap else "async_turn_idle",
-                    idle_ttl_seconds=0 if force_idle_reap else None,
-                )
+                if not plain_hosted:
+                    release_idle_runtime_processes(
+                        state,
+                        session_id=session.session_id,
+                        provider_id=worker_provider_id,
+                        reason="async_turn_failed" if force_idle_reap else "async_turn_idle",
+                        idle_ttl_seconds=0 if force_idle_reap else None,
+                    )
 
     Thread(target=worker, name=f"maverick-runtime-turn-{turn.turn_id}", daemon=True).start()
     return turn, events

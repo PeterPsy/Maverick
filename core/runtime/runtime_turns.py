@@ -6,6 +6,8 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Literal
 
+from core.runtime.runtime_session import RuntimeMode
+
 
 RuntimeTurnStatus = Literal["queued", "active", "completed", "failed", "cancelled", "timed-out"]
 
@@ -24,3 +26,4 @@ class RuntimeTurnRecord:
     started_at: datetime | None
     completed_at: datetime | None
     failure_reason: str | None
+    runtime_mode: RuntimeMode = "agentic"

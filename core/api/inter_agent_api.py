@@ -36,7 +36,7 @@ from core.inter_agent.errors import (
 )
 from core.inter_agent.events import validate_visibility_plane
 from core.inter_agent.executor import execute_inter_agent_run
-from core.inter_agent.feature_flags import group_chat_mode_enabled
+from core.inter_agent.feature_flags import validate_product_inter_agent_run_mode
 from core.inter_agent.service import InterAgentService
 from core.inter_agent.store import DEFAULT_INTER_AGENT_EVENT_LIMIT, MAX_INTER_AGENT_EVENT_LIMIT
 from core.inter_agent.surfaces import (
@@ -68,8 +68,6 @@ CHAT_APP_ID = "chat"
 CHAT_AGENT_PROVIDER_ALIASES = ("agent-catalog", "agent-prompt-materializer")
 ACTIVE_APP_CONTEXT_HEADER = "Current shell context:"
 ACTIVE_APP_CONTEXT_KEYS = {"active_app_id", "active_app_name", "active_app_description"}
-PUBLIC_INTER_AGENT_RUN_MODES = {"manager_tools", "sequential", "concurrent"}
-FEATURE_GATED_INTER_AGENT_RUN_MODES = {"group_chat"}
 
 
 def handle_inter_agent_api(
@@ -1293,13 +1291,7 @@ def _validate_agent_snapshot_skill_catalog(
 
 
 def _authorize_public_run_mode(mode: str) -> None:
-    if mode in PUBLIC_INTER_AGENT_RUN_MODES:
-        return
-    if mode in FEATURE_GATED_INTER_AGENT_RUN_MODES and group_chat_mode_enabled():
-        return
-    if mode == "group_chat":
-        raise InterAgentValidationError("Inter-agent group_chat mode requires MAVERICK_FEATURE_GROUP_CHAT=1.")
-    raise InterAgentValidationError(f"Inter-agent run mode `{mode}` is not product-facing.")
+    validate_product_inter_agent_run_mode(mode)
 
 
 def _start_inter_agent_execution_worker(

@@ -384,6 +384,14 @@ def validate_run_spec(spec: InterAgentRunSpec) -> InterAgentRunSpec:
             raise InterAgentValidationError("Concurrent inter-agent run specs require an aggregator_participant_id.")
         if spec.aggregator_participant_id not in set(participant_ids):
             raise InterAgentValidationError("aggregator_participant_id must reference an existing participant.")
+    if spec.mode == "group_chat":
+        if not str(spec.aggregator_participant_id or "").strip():
+            raise InterAgentValidationError("Group chat inter-agent run specs require an aggregator_participant_id.")
+        root_orchestrator_id = spec.orchestrator_participant_id or orchestrators[0].participant_id
+        if spec.aggregator_participant_id == root_orchestrator_id:
+            raise InterAgentValidationError("Group chat aggregator_participant_id must reference a non-orchestrator participant.")
+        if spec.aggregator_participant_id not in set(participant_ids):
+            raise InterAgentValidationError("aggregator_participant_id must reference an existing participant.")
     _validate_edge_specs(spec.edges, known_participant_ids=set(participant_ids))
     return replace(spec, participants=normalized_participants)
 

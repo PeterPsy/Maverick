@@ -86,6 +86,30 @@ class InterAgentModelValidationTest(unittest.TestCase):
         with self.assertRaisesRegex(InterAgentValidationError, "aggregator_participant_id"):
             validate_run_spec(invalid)
 
+    def test_group_chat_requires_non_orchestrator_aggregator(self) -> None:
+        spec = self.valid_spec()
+        no_aggregator = InterAgentRunSpec(**{**spec.__dict__, "mode": "group_chat"})
+        orchestrator_aggregator = InterAgentRunSpec(
+            **{
+                **spec.__dict__,
+                "mode": "group_chat",
+                "aggregator_participant_id": "orchestrator",
+            }
+        )
+        valid = InterAgentRunSpec(
+            **{
+                **spec.__dict__,
+                "mode": "group_chat",
+                "aggregator_participant_id": "researcher",
+            }
+        )
+
+        with self.assertRaisesRegex(InterAgentValidationError, "aggregator_participant_id"):
+            validate_run_spec(no_aggregator)
+        with self.assertRaisesRegex(InterAgentValidationError, "non-orchestrator"):
+            validate_run_spec(orchestrator_aggregator)
+        self.assertEqual(validate_run_spec(valid).aggregator_participant_id, "researcher")
+
     def test_handoff_edge_must_reference_existing_participants(self) -> None:
         spec = self.valid_spec()
         invalid = InterAgentRunSpec(

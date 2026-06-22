@@ -10,11 +10,12 @@ Maverick mode.
 
 The mode is not default-on. Product exposure requires both:
 
-- server flag: `MAVERICK_FEATURE_GROUP_CHAT=1`
+- server/public-surface flag: `MAVERICK_FEATURE_GROUP_CHAT=1`
 - Chat frontend build flag: `VITE_MAVERICK_FEATURE_GROUP_CHAT=1`
 
 When either flag is absent, Chat must not show the composer option and the HTTP
-inter-agent API must reject public `group_chat` run creation or execution.
+inter-agent API plus core CLI/MCP public inter-agent surfaces must reject
+`group_chat` run creation or execution.
 
 `handoff` and `magentic_like` remain adapter/evaluation or schema-only modes.
 They are not promoted as F7 product modes.
@@ -53,11 +54,11 @@ F7.1 exposes `group_chat` through Chat as a gated composer mode named
   artifacts, approvals, pause/resume, stop/cancel, WebSocket replay, and older
   history pages
 
-The core HTTP API allows public `group_chat` only when
-`MAVERICK_FEATURE_GROUP_CHAT=1`. The existing product-facing modes
-`manager_tools`, `sequential`, and `concurrent` remain available. Public HTTP
-creation of `handoff` and `magentic_like` is rejected because those modes are
-not product-facing.
+The core HTTP API and core CLI/MCP public inter-agent surfaces allow
+`group_chat` only when `MAVERICK_FEATURE_GROUP_CHAT=1`. The existing
+product-facing modes `manager_tools`, `sequential`, and `concurrent` remain
+available. Public creation of `handoff` and `magentic_like` is rejected because
+those modes are not product-facing.
 
 ## MVP Runtime Semantics
 

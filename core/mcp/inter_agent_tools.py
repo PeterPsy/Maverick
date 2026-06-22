@@ -14,6 +14,7 @@ from core.inter_agent.authorization import (
     authorize_inter_agent_run_operation,
 )
 from core.inter_agent.executor import execute_inter_agent_run
+from core.inter_agent.feature_flags import validate_product_inter_agent_run_mode
 from core.inter_agent.service import InterAgentService
 from core.inter_agent.store import InterAgentStore
 from core.inter_agent.surfaces import execution_result_payload, inter_agent_payload, run_detail_payload, run_spec_from_payload
@@ -102,6 +103,7 @@ def inter_agent_tool_specs(
             created_by_user_id=context.user_id or "mcp",
             source_app_id=root_session.source_app_id or "chat",
         )
+        validate_product_inter_agent_run_mode(spec.mode)
         run = _service().create_run(spec)
         return run_detail_payload(inter_agent_store, run)  # type: ignore[arg-type]
 
@@ -172,6 +174,7 @@ def inter_agent_tool_specs(
         if runtime_store is None:
             raise RuntimeError("runtime_store is required for inter-agent execution.")
         run = _authorized_run(arguments, context)
+        validate_product_inter_agent_run_mode(run.mode)
         root_session = _root_session_by_id(runtime_store, workspace_id=run.workspace_id, session_id=run.root_runtime_session_id)
         authorize_inter_agent_root_session_use(
             workspace_store=workspace_store,

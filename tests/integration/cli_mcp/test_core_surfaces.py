@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 from types import SimpleNamespace
+from unittest.mock import patch
 
 from core.app_sdk.cli import run_cli_json
 from core.apps.models import AppVisibilityDeclaration
@@ -61,6 +62,22 @@ def _inter_agent_run_payload(*, run_id: str, root_session_id: str) -> dict:
             "max_turns_per_participant": 2,
         },
     }
+
+
+def _group_chat_run_payload(*, run_id: str, root_session_id: str) -> dict:
+    payload = _inter_agent_run_payload(run_id=run_id, root_session_id=root_session_id)
+    payload["mode"] = "group_chat"
+    payload["aggregator_participant_id"] = "researcher"
+    payload["participants"][1]["execution_mode"] = "embedded_executor"
+    payload["participants"][1].pop("agent_snapshot", None)
+    payload["budget"] = {
+        "max_participants": 3,
+        "max_concurrent_participants": 1,
+        "max_rounds": 1,
+        "max_total_turns": 1,
+        "max_turns_per_participant": 1,
+    }
+    return payload
 
 
 class TestMcpCliSurfaces(SurfaceTestBase):
@@ -255,6 +272,110 @@ class TestMcpCliSurfaces(SurfaceTestBase):
             runtime_store.get_session("cli-child")
         with self.assertRaises(RuntimeSessionNotFoundError):
             runtime_store.get_session("mcp-child")
+
+    def test_inter_agent_cli_and_mcp_enforce_product_mode_gate(self) -> None:
+        repo_root = self.make_repo_root()
+        runtime_store = self.make_runtime_store()
+        inter_agent_store = build_inter_agent_document_store(start_path=repo_root)
+        create_runtime_session(
+            runtime_store,
+            session_id="root-cli-gated",
+            workspace_id="default",
+            agent_id="chat",
+            source_app_id="chat",
+            start_path=repo_root,
+        )
+        create_runtime_session(
+            runtime_store,
+            session_id="root-mcp-gated",
+            workspace_id="default",
+            agent_id="chat",
+            source_app_id="chat",
+            start_path=repo_root,
+        )
+        cli_context = CliInvocationContext(
+            caller_kind="operator",
+            workspace_id="default",
+            agent_id=None,
+            effective_mode="full-access",
+            user_id="operator",
+        )
+        mcp_context = McpInvocationContext(**cli_context.__dict__)
+
+        with self.assertRaisesRegex(InterAgentValidationError, "MAVERICK_FEATURE_GROUP_CHAT=1"):
+            run_core_cli_command(
+                command_id="inter-agent.runs.create",
+                context=cli_context,
+                runtime_store=runtime_store,
+                inter_agent_store=inter_agent_store,
+                workspace_id="default",
+                start_path=repo_root,
+                arguments=_group_chat_run_payload(run_id="cli-group-chat-disabled", root_session_id="root-cli-gated"),
+            )
+        with self.assertRaisesRegex(InterAgentValidationError, "MAVERICK_FEATURE_GROUP_CHAT=1"):
+            call_mcp_tool(
+                tool_name="inter_agent_run_create",
+                context=mcp_context,
+                runtime_store=runtime_store,
+                inter_agent_store=inter_agent_store,
+                workspace_id="default",
+                start_path=repo_root,
+                arguments=_group_chat_run_payload(run_id="mcp-group-chat-disabled", root_session_id="root-mcp-gated"),
+            )
+        for mode in ("handoff", "magentic_like"):
+            payload = _inter_agent_run_payload(run_id=f"cli-{mode}", root_session_id="root-cli-gated")
+            payload["mode"] = mode
+            with self.assertRaisesRegex(InterAgentValidationError, "not product-facing"):
+                run_core_cli_command(
+                    command_id="inter-agent.runs.create",
+                    context=cli_context,
+                    runtime_store=runtime_store,
+                    inter_agent_store=inter_agent_store,
+                    workspace_id="default",
+                    start_path=repo_root,
+                    arguments=payload,
+                )
+
+        with patch.dict("os.environ", {"MAVERICK_FEATURE_GROUP_CHAT": "1"}):
+            run_core_cli_command(
+                command_id="inter-agent.runs.create",
+                context=cli_context,
+                runtime_store=runtime_store,
+                inter_agent_store=inter_agent_store,
+                workspace_id="default",
+                start_path=repo_root,
+                arguments=_group_chat_run_payload(run_id="cli-group-chat-enabled", root_session_id="root-cli-gated"),
+            )
+            call_mcp_tool(
+                tool_name="inter_agent_run_create",
+                context=mcp_context,
+                runtime_store=runtime_store,
+                inter_agent_store=inter_agent_store,
+                workspace_id="default",
+                start_path=repo_root,
+                arguments=_group_chat_run_payload(run_id="mcp-group-chat-enabled", root_session_id="root-mcp-gated"),
+            )
+
+        with self.assertRaisesRegex(InterAgentValidationError, "MAVERICK_FEATURE_GROUP_CHAT=1"):
+            run_core_cli_command(
+                command_id="inter-agent.runs.execute",
+                context=cli_context,
+                runtime_store=runtime_store,
+                inter_agent_store=inter_agent_store,
+                workspace_id="default",
+                start_path=repo_root,
+                arguments={"run_id": "cli-group-chat-enabled", "input_text": "Run gated mode."},
+            )
+        with self.assertRaisesRegex(InterAgentValidationError, "MAVERICK_FEATURE_GROUP_CHAT=1"):
+            call_mcp_tool(
+                tool_name="inter_agent_execute",
+                context=mcp_context,
+                runtime_store=runtime_store,
+                inter_agent_store=inter_agent_store,
+                workspace_id="default",
+                start_path=repo_root,
+                arguments={"run_id": "mcp-group-chat-enabled", "input_text": "Run gated mode."},
+            )
 
     def test_inter_agent_cli_and_mcp_reject_unsafe_child_session_id_as_validation_error(self) -> None:
         repo_root = self.make_repo_root()

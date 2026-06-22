@@ -61,7 +61,7 @@ def _run_payload_without_snapshot(*, run_id: str = "run-api-1") -> dict:
     return payload
 
 
-class InterAgentApiTestCase(AppReferenceApiTestSupport, unittest.TestCase):
+class InterAgentApiSupport(AppReferenceApiTestSupport, unittest.TestCase):
     def _bootstrap_state(self, repo_root):
         with patch.dict(
             "os.environ",
@@ -96,6 +96,8 @@ class InterAgentApiTestCase(AppReferenceApiTestSupport, unittest.TestCase):
             start_path=repo_root,
         )
 
+
+class InterAgentApiTestCase(InterAgentApiSupport):
     def test_inter_agent_http_spawn_send_wait_and_close_hidden_child_session(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             repo_root = self._repo_root(temp_dir)
@@ -319,94 +321,6 @@ class InterAgentApiTestCase(AppReferenceApiTestSupport, unittest.TestCase):
         self.assertEqual(create_status, 201)
         self.assertEqual(events_status, 404)
         self.assertEqual(events_payload["error"], "inter_agent_event_not_found")
-
-    def test_inter_agent_http_group_chat_requires_feature_flag(self) -> None:
-        with tempfile.TemporaryDirectory() as temp_dir:
-            repo_root = self._repo_root(temp_dir)
-            state = self._bootstrap_state(repo_root)
-            self._create_root_session(state, repo_root)
-            app = PlatformHost(state, start_path=repo_root)
-            cookie = self._login(app)
-            payload = _run_payload_without_snapshot(run_id="run-api-group-chat-disabled")
-            payload["mode"] = "group_chat"
-
-            create_status, create_payload, _headers = self._invoke(
-                app,
-                path="/api/inter-agent/runs",
-                method="POST",
-                body=payload,
-                cookie=cookie,
-            )
-
-        self.assertEqual(create_status, 400)
-        self.assertEqual(create_payload["error"], "inter_agent_validation_failed")
-        self.assertIn("MAVERICK_FEATURE_GROUP_CHAT=1", create_payload["detail"])
-
-    def test_inter_agent_http_group_chat_create_and_execute_when_feature_flag_enabled(self) -> None:
-        with tempfile.TemporaryDirectory() as temp_dir:
-            repo_root = self._repo_root(temp_dir)
-            state = self._bootstrap_state(repo_root)
-            self._create_root_session(state, repo_root)
-            app = PlatformHost(state, start_path=repo_root)
-            cookie = self._login(app)
-            payload = _run_payload_without_snapshot(run_id="run-api-group-chat-enabled")
-            payload["mode"] = "group_chat"
-            payload["participants"][1]["execution_mode"] = "embedded_executor"
-            payload["budget"] = {
-                "max_participants": 3,
-                "max_concurrent_participants": 1,
-                "max_rounds": 1,
-                "max_total_turns": 1,
-                "max_turns_per_participant": 1,
-            }
-
-            with patch.dict("os.environ", {"MAVERICK_FEATURE_GROUP_CHAT": "1"}):
-                create_status, create_payload, _headers = self._invoke(
-                    app,
-                    path="/api/inter-agent/runs",
-                    method="POST",
-                    body=payload,
-                    cookie=cookie,
-                )
-                execute_status, execute_payload, _headers = self._invoke(
-                    app,
-                    path="/api/inter-agent/runs/run-api-group-chat-enabled/execute",
-                    method="POST",
-                    body={"input_text": "Compare the rollout options."},
-                    cookie=cookie,
-                )
-
-        self.assertEqual(create_status, 201)
-        self.assertEqual(create_payload["run"]["mode"], "group_chat")
-        self.assertEqual(execute_status, 409)
-        self.assertEqual(execute_payload["error"], "inter_agent_operation_failed")
-        self.assertIn("Synthetic inter-agent participant execution requires", execute_payload["detail"])
-
-    def test_inter_agent_http_handoff_and_magentic_are_not_product_facing(self) -> None:
-        with tempfile.TemporaryDirectory() as temp_dir:
-            repo_root = self._repo_root(temp_dir)
-            state = self._bootstrap_state(repo_root)
-            self._create_root_session(state, repo_root)
-            app = PlatformHost(state, start_path=repo_root)
-            cookie = self._login(app)
-
-            statuses = []
-            for mode in ("handoff", "magentic_like"):
-                payload = _run_payload_without_snapshot(run_id=f"run-api-{mode}")
-                payload["mode"] = mode
-                create_status, create_payload, _headers = self._invoke(
-                    app,
-                    path="/api/inter-agent/runs",
-                    method="POST",
-                    body=payload,
-                    cookie=cookie,
-                )
-                statuses.append((create_status, create_payload))
-
-        self.assertEqual([status for status, _payload in statuses], [400, 400])
-        for _status, payload in statuses:
-            self.assertEqual(payload["error"], "inter_agent_validation_failed")
-            self.assertIn("not product-facing", payload["detail"])
 
     def test_inter_agent_http_execute_rejects_controlled_participants(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:

@@ -10,7 +10,7 @@ from types import SimpleNamespace
 import unittest
 
 from core.inter_agent.adapters.maf import MAVERICK_EXPERIMENTAL_AGENT_FRAMEWORK
-from core.inter_agent.models import BudgetPolicySpec, InterAgentRunSpec, ParticipantSpec
+from core.inter_agent.models import BudgetPolicySpec, EdgeSpec, InterAgentRunSpec, ParticipantSpec
 
 
 NOW = datetime(2026, 6, 21, 13, 15, tzinfo=UTC)
@@ -64,6 +64,10 @@ def group_chat_run_spec(*, orchestrator_id: str, max_rounds: int = 3) -> InterAg
             max_tool_calls=0,
             max_estimated_cost=Decimal("0"),
         ),
+        aggregator_participant_id="writer",
+        edges=[
+            EdgeSpec(source_id="writer", target_id=orchestrator_id, kind="produced", label="Final group chat output"),
+        ],
         visibility_level="detail",
         idempotency_key=f"maf-group-chat-source-backed-{orchestrator_id}-{max_rounds}",
     )

@@ -21,8 +21,9 @@ It started with names, visibility, legacy compatibility, and initial policy defa
 8. `session_kind="inter_agent_participant"` requires `thread_visibility="hidden"`; omitted visibility on an explicit participant is normalized to hidden, while explicit `user` visibility is invalid.
 9. Invalid persisted visibility values fail closed: they are rejected on direct session hydration and must not make an existing thread appear in user-facing thread catalogs.
 10. `group_chat` is the first advanced mode promoted for F7 product use, but
-    only behind `MAVERICK_FEATURE_GROUP_CHAT=1` for the HTTP API and
-    `VITE_MAVERICK_FEATURE_GROUP_CHAT=1` for the Chat frontend build. The
+    only behind `MAVERICK_FEATURE_GROUP_CHAT=1` for public HTTP/CLI/MCP
+    inter-agent surfaces and `VITE_MAVERICK_FEATURE_GROUP_CHAT=1` for the Chat
+    frontend build. The
     accepted F7 decision is recorded in
     [inter_agent_group_chat_f7.md](inter_agent_group_chat_f7.md). `handoff`
     and `magentic_like` remain schema/event-only and are not executable product
@@ -175,7 +176,7 @@ F7 starts with `group_chat` and does not promote `handoff` or `magentic_like` as
 
 The `group_chat` MVP remains Maverick-native. Chat and the HTTP inter-agent API use the existing `InterAgentRun`, participants, edges, events, budget ledger, approvals, retention, replay, hidden participant sessions, and Agent nodes UI. MAF remains source-backed evaluation/reference material and does not own product runtime state.
 
-The Chat composer shows `Group chat` only when `VITE_MAVERICK_FEATURE_GROUP_CHAT=1`. Public HTTP creation and execution of `mode="group_chat"` require `MAVERICK_FEATURE_GROUP_CHAT=1`; public HTTP creation of `handoff` and `magentic_like` is rejected as not product-facing. Chat-created group chat runs request `visibility_level=detail`, set bounded one-round budget defaults, and rely on the existing Agent nodes view for run status, participant outputs, cancel/stop, replay, and history.
+The Chat composer shows `Group chat` only when `VITE_MAVERICK_FEATURE_GROUP_CHAT=1`. Public HTTP/CLI/MCP creation and execution of `mode="group_chat"` require `MAVERICK_FEATURE_GROUP_CHAT=1`; public creation of `handoff` and `magentic_like` is rejected as not product-facing. Chat-created group chat runs request `visibility_level=detail`, declare a non-orchestrator aggregator participant, set bounded one-round budget defaults, and rely on the existing Agent nodes view for run status, participant outputs, cancel/stop, replay, and history.
 
 The F7.1 executor semantics are intentionally narrow: one bounded shared-context round over declared group participants, with an explicit aggregator participant for final answer projection. Checkpointing, replay-fork, graph super-steps, task writes, native conditional routing, raw adapter payload UI, and MAF-owned sessions remain non-goals.
 

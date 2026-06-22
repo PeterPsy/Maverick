@@ -9,6 +9,7 @@ from core.observability.service import record_platform_audit, record_platform_ev
 from core.providers.errors import ProviderError, ProviderSelectionError
 from core.providers.models import ProviderDefinition, ProviderSelection, RuntimeBackendLaunchSpec, WorkspaceProviderStatus
 from core.providers.provider_codex import CodexProviderAdapter, build_codex_definition
+from core.providers.provider_hosted_metadata import build_hosted_provider_definitions
 from core.providers.provider_credentials import resolve_provider_binding
 from core.providers.provider_credentials import bind_provider_credential, disable_provider_binding
 from core.providers.provider_registry import ProviderRegistry, RuntimeBackendAdapter
@@ -32,6 +33,8 @@ def builtin_provider_registry(*, codex_command: str = "codex", refresh_model_cat
     registry = ProviderRegistry()
     adapter = CodexProviderAdapter(codex_command=codex_command)
     registry.register_runtime_adapter(adapter)
+    for definition in build_hosted_provider_definitions():
+        registry.register_provider_definition(definition)
     if refresh_model_catalog:
         options = adapter.model_options(refresh=True)
         registry.register_provider_definition(

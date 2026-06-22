@@ -8,6 +8,7 @@ from tests.support.cases import provider_cases as cases
 _SELECTED = {
     'test_builtin_registry_registers_codex_provider',
     'test_builtin_registry_does_not_probe_codex_model_catalog',
+    'test_builtin_registry_exposes_remote_providers_as_disabled_metadata',
     'test_provider_settings_can_refresh_codex_model_catalog',
     'test_provider_settings_refresh_bypasses_cached_codex_model_catalog',
     'test_codex_model_catalog_is_cached_after_first_probe',

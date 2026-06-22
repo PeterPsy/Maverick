@@ -46,6 +46,12 @@ from tests.support.collections import FakeCollection
 class ProvidersTestCase(unittest.TestCase):
     """Verify provider registry, selection, bindings, and Codex adapter behavior."""
 
+    def provider_by_id(self, definitions: list[ProviderDefinition], provider_id: str) -> ProviderDefinition:
+        for definition in definitions:
+            if definition.provider_id == provider_id:
+                return definition
+        self.fail(f"Provider `{provider_id}` not found.")
+
     def make_provider_store(self) -> ProviderDocumentStore:
         return ProviderDocumentStore(
             ProviderCollections(
@@ -93,20 +99,45 @@ class ProvidersTestCase(unittest.TestCase):
     def test_builtin_registry_registers_codex_provider(self) -> None:
         registry = builtin_provider_registry()
         definitions = registry.list_provider_definitions()
+        codex = self.provider_by_id(definitions, "codex")
 
-        self.assertEqual(len(definitions), 1)
-        self.assertEqual(definitions[0].provider_id, "codex")
-        self.assertEqual(definitions[0].kind, "runtime_backend")
-        self.assertEqual(definitions[0].default_model_family, "gpt-5.5")
-        self.assertTrue(definitions[0].capabilities.supports_interactive_runtime)
+        self.assertEqual(
+            {definition.provider_id for definition in definitions},
+            {"cartesia", "codex", "deepgram", "deepseek", "groq", "kokoro-hosted"},
+        )
+        self.assertEqual(codex.kind, "runtime_backend")
+        self.assertEqual(codex.provider_role, "runtime_engine")
+        self.assertEqual(codex.default_model_family, "gpt-5.5")
+        self.assertTrue(codex.capabilities.supports_interactive_runtime)
 
     def test_builtin_registry_does_not_probe_codex_model_catalog(self) -> None:
         with patch("core.providers.provider_codex_models.subprocess.run") as run:
             registry = builtin_provider_registry()
             definitions = registry.list_provider_definitions()
 
-        self.assertEqual([definition.provider_id for definition in definitions], ["codex"])
+        self.assertIn("codex", [definition.provider_id for definition in definitions])
         run.assert_not_called()
+
+    def test_builtin_registry_exposes_remote_providers_as_disabled_metadata(self) -> None:
+        definitions = builtin_provider_registry().list_provider_definitions()
+        groq = self.provider_by_id(definitions, "groq")
+        deepseek = self.provider_by_id(definitions, "deepseek")
+        deepgram = self.provider_by_id(definitions, "deepgram")
+        cartesia = self.provider_by_id(definitions, "cartesia")
+        kokoro_hosted = self.provider_by_id(definitions, "kokoro-hosted")
+
+        self.assertEqual(groq.provider_role, "model_provider")
+        self.assertEqual(groq.status, "disabled")
+        self.assertEqual(groq.capabilities.input_modalities, ["text"])
+        self.assertEqual(groq.capabilities.output_modalities, ["text"])
+        self.assertFalse(groq.capabilities.supports_tool_calling)
+        self.assertEqual(groq.execution_contract.adapter_type if groq.execution_contract else None, "hosted_text_generation")
+        self.assertEqual(deepseek.provider_role, "model_provider")
+        self.assertEqual(deepseek.status, "disabled")
+        self.assertEqual(deepgram.provider_role, "speech_provider")
+        self.assertEqual(cartesia.provider_role, "speech_provider")
+        self.assertEqual(kokoro_hosted.provider_role, "speech_provider")
+        self.assertEqual(kokoro_hosted.status, "disabled")
 
     def test_provider_settings_can_refresh_codex_model_catalog(self) -> None:
         provider_store = self.make_provider_store()
@@ -133,7 +164,7 @@ class ProvidersTestCase(unittest.TestCase):
             )
 
         self.assertEqual(run.call_count, 1)
-        self.assertEqual(providers[0].model_options[0].model_id, "gpt-settings")
+        self.assertEqual(self.provider_by_id(providers, "codex").model_options[0].model_id, "gpt-settings")
         self.assertEqual(provider_store.get_provider_definition("codex").model_options[0].model_id, "gpt-settings")
 
     def test_provider_settings_refresh_bypasses_cached_codex_model_catalog(self) -> None:
@@ -174,7 +205,7 @@ class ProvidersTestCase(unittest.TestCase):
             )
 
         self.assertEqual(run.call_count, 1)
-        self.assertEqual(providers[0].model_options[0].model_id, "gpt-refreshed")
+        self.assertEqual(self.provider_by_id(providers, "codex").model_options[0].model_id, "gpt-refreshed")
         self.assertEqual(provider_store.get_provider_definition("codex").model_options[0].model_id, "gpt-refreshed")
 
     def test_codex_model_catalog_is_cached_after_first_probe(self) -> None:

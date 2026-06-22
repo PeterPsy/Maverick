@@ -3847,6 +3847,13 @@ class MailServiceTest(unittest.TestCase):
         self.assertIn("from './App'", main_source)
         self.assertNotIn("New record", main_source)
 
+    def test_frontend_thread_date_includes_hour_and_minute(self) -> None:
+        app_source = (APP_ROOT / "frontend" / "src" / "App.tsx").read_text(encoding="utf-8")
+
+        self.assertIn("hour: '2-digit', minute: '2-digit'", app_source)
+        self.assertIn("return date.toLocaleString(undefined, options);", app_source)
+        self.assertNotIn("return date.toLocaleDateString(undefined, options);", app_source)
+
     def test_frontend_reader_uses_thread_toolbar_without_inline_composer(self) -> None:
         app_source = (APP_ROOT / "frontend" / "src" / "App.tsx").read_text(encoding="utf-8")
         self.assertIn("const [readerPlain, setReaderPlain] = useState(false);", app_source)

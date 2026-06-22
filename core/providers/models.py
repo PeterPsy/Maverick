@@ -10,10 +10,13 @@ from core.execution_policy.models import ExecutionMode
 
 
 ProviderKind = Literal["runtime_backend", "hosted_api"]
+ProviderRole = Literal["runtime_engine", "model_provider", "speech_provider"]
 ProviderStatus = Literal["active", "disabled", "experimental"]
 ProviderBindingStatus = Literal["active", "disabled"]
 ProviderSelectionScope = Literal["workspace_default"]
 ProviderBlockedReason = Literal["no_provider_configured", "provider_unavailable"]
+ProviderSecretBindingScope = Literal["provider", "app", "provider_or_app"]
+ProviderSecretResolutionStage = Literal["execution_only"]
 
 
 @dataclass(frozen=True)
@@ -49,6 +52,57 @@ class ProviderCapabilitySet:
     supports_remote_execution: bool
     supports_api_key_auth: bool
     supports_local_binary: bool
+    input_modalities: list[str] = field(default_factory=list)
+    output_modalities: list[str] = field(default_factory=list)
+    supports_streaming_input: bool = False
+    supports_streaming_output: bool = False
+    supports_realtime: bool = False
+    supports_tool_calling: bool = False
+    supports_structured_output: bool = False
+    supports_turn_detection: bool = False
+    supports_barge_in: bool = False
+    latency_class: str | None = None
+    future_only_supports_local_execution: bool = False
+    future_only_supports_offline_mode: bool = False
+
+
+@dataclass(frozen=True)
+class ProviderCredentialRequirement:
+    """Describe a provider secret requirement without carrying the secret value."""
+
+    secret_alias_or_logical_name: str
+    secret_kind: str
+    required_for_modes: list[str] = field(default_factory=list)
+    secret_binding_scope: ProviderSecretBindingScope = "provider"
+    provider_credential_binding_id_optional: str | None = None
+    app_secret_grant_id_optional: str | None = None
+    rotation_policy_optional: str | None = None
+    redaction_required: bool = True
+    resolution_stage: ProviderSecretResolutionStage = "execution_only"
+
+
+@dataclass(frozen=True)
+class ProviderNetworkRequirement:
+    """Describe a provider's outbound network needs as redaction-safe metadata."""
+
+    outbound_required: bool
+    allowed_hosts: list[str] = field(default_factory=list)
+    transport: str | None = None
+    description: str | None = None
+
+
+@dataclass(frozen=True)
+class ProviderExecutionContract:
+    """Describe how a model provider can be executed by a Maverick-owned adapter."""
+
+    adapter_type: str | None = None
+    request_shape: str | None = None
+    streaming_supported: bool = False
+    non_streaming_supported: bool = False
+    timeout_policy: str | None = None
+    error_mapping: dict[str, str] = field(default_factory=dict)
+    secret_alias_or_logical_name: str | None = None
+    transport_test_mode: str | None = None
 
 
 @dataclass(frozen=True)
@@ -67,6 +121,12 @@ class ProviderDefinition:
     created_at: datetime
     updated_at: datetime
     model_options: list[ProviderModelOption] = field(default_factory=list)
+    provider_role: ProviderRole = "runtime_engine"
+    credential_requirements: list[ProviderCredentialRequirement] = field(default_factory=list)
+    network_requirements: list[ProviderNetworkRequirement] = field(default_factory=list)
+    execution_contract: ProviderExecutionContract | None = None
+    cost_metadata: dict[str, object] = field(default_factory=dict)
+    latency_metadata: dict[str, object] = field(default_factory=dict)
 
 
 @dataclass(frozen=True)

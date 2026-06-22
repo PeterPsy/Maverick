@@ -9,8 +9,11 @@ from core.providers.errors import ProviderCredentialBindingError, ProviderNotFou
 from core.providers.models import (
     ProviderCapabilitySet,
     ProviderCredentialBinding,
+    ProviderCredentialRequirement,
     ProviderDefinition,
+    ProviderExecutionContract,
     ProviderModelOption,
+    ProviderNetworkRequirement,
     ProviderReasoningOption,
     ProviderSelection,
 )
@@ -79,12 +82,27 @@ class ProviderDocumentStore:
 
     def _provider_definition(self, document: dict[str, Any]) -> ProviderDefinition:
         payload = dict(document)
+        if "provider_role" not in payload:
+            payload["provider_role"] = "runtime_engine" if payload.get("kind") == "runtime_backend" else "model_provider"
         payload["capabilities"] = ProviderCapabilitySet(**payload["capabilities"])
         payload["model_options"] = [
             self._provider_model_option(item)
             for item in payload.get("model_options", [])
             if isinstance(item, dict)
         ]
+        payload["credential_requirements"] = [
+            ProviderCredentialRequirement(**item)
+            for item in payload.get("credential_requirements", [])
+            if isinstance(item, dict)
+        ]
+        payload["network_requirements"] = [
+            ProviderNetworkRequirement(**item)
+            for item in payload.get("network_requirements", [])
+            if isinstance(item, dict)
+        ]
+        execution_contract = payload.get("execution_contract")
+        if isinstance(execution_contract, dict):
+            payload["execution_contract"] = ProviderExecutionContract(**execution_contract)
         return ProviderDefinition(**payload)
 
     def _provider_model_option(self, document: dict[str, Any]) -> ProviderModelOption:

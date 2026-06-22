@@ -315,6 +315,7 @@ class ProvidersTestCase(unittest.TestCase):
                 label="Hosted Text Only",
                 description="Hosted model provider that must not own runtime execution.",
                 kind="hosted_api",
+                provider_role="model_provider",
                 status="active",
                 capabilities=ProviderCapabilitySet(
                     supports_interactive_runtime=False,

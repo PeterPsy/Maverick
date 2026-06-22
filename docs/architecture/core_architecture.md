@@ -434,7 +434,23 @@ This includes:
 
 `Codex` is one supported runtime backend, not the architectural definition of the core itself.
 
-The system must be designed so that other backends can be supported without changing the app model.
+Provider definitions distinguish the technical provider kind from the role that
+the provider plays in Maverick:
+
+- `runtime_engine` providers own a runtime or agent loop and may expose runtime
+  adapters.
+- `model_provider` providers expose hosted or remote inference capabilities such
+  as text generation without owning the runtime loop.
+- `speech_provider` providers expose remote speech capabilities as governable
+  metadata until a speech execution pipeline consumes them through official
+  core/app surfaces.
+
+The capability metadata must be modality-aware and conservative. Runtime
+selection remains separate from model routing: hosted model providers such as a
+low-latency text API must not be configured through the workspace runtime
+backend selection path unless they also implement a runtime engine contract.
+
+The system must be designed so that other backends and model providers can be supported without changing the app model.
 
 The core must also be installable and bootable with no AI provider configured or available.
 

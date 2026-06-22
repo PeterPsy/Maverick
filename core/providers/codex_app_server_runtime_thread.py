@@ -107,10 +107,12 @@ def _remove_generated_system_skills(*, launch_spec: RuntimeBackendLaunchSpec, se
 def _turn_sandbox_policy(launch_spec: RuntimeBackendLaunchSpec) -> dict[str, Any]:
     if launch_spec.execution_mode == "full-access":
         return {"type": "dangerFullAccess"}
-    policy: dict[str, Any] = {"type": "workspaceWrite", "networkAccess": True}
-    readable_roots = [root for root in launch_spec.readable_roots if root and root != "/"]
-    if readable_roots:
-        policy["readOnlyAccess"] = {"type": "restricted", "includePlatformDefaults": False, "readableRoots": readable_roots}
+    policy: dict[str, Any] = {
+        "type": "workspaceWrite",
+        "networkAccess": True,
+        "excludeTmpdirEnvVar": False,
+        "excludeSlashTmp": False,
+    }
     writable_roots = [root for root in launch_spec.writable_roots if root and root != "/"]
     if writable_roots:
         policy["writableRoots"] = writable_roots

@@ -38,13 +38,15 @@ class RuntimeExecutionCommandTest(unittest.TestCase):
         self.assertEqual(command, ["/usr/bin/codex", "app-server", "--listen", "stdio://"])
         self.assertNotIn("exec", command)
 
-    def test_turn_sandbox_policy_carries_readable_and_writable_roots(self) -> None:
+    def test_turn_sandbox_policy_uses_current_codex_workspace_write_shape(self) -> None:
         session = _session("sandbox")
         policy = _turn_sandbox_policy(_launch_spec(session))
 
         self.assertEqual(policy["type"], "workspaceWrite")
         self.assertTrue(policy["networkAccess"])
-        self.assertEqual(policy["readOnlyAccess"], {"type": "restricted", "includePlatformDefaults": False, "readableRoots": [session.workspace_root]})
+        self.assertFalse(policy["excludeTmpdirEnvVar"])
+        self.assertFalse(policy["excludeSlashTmp"])
+        self.assertNotIn("readOnlyAccess", policy)
         self.assertNotIn("readableRoots", policy)
         self.assertEqual(policy["writableRoots"], [session.workspace_root])
 

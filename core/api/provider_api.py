@@ -2,71 +2,22 @@
 
 from __future__ import annotations
 
-from dataclasses import asdict
-
-from core.api.http import StartResponse, json_response
+from core.api.http import StartResponse, json_response, query_params
 from core.api.platform_state import PlatformState
 from core.api.session_api import RequestSession, require_session
 from core.authorization.errors import AuthorizationError
 from core.authorization.service import require_provider_selection_authority
-from core.providers.models import ProviderDefinition, ProviderModelOption, ProviderReasoningOption, ProviderSelection
-from core.providers.service import configure_workspace_provider, resolve_workspace_provider_status
+from core.providers.models import ProviderDefinition, ProviderSelection
+from core.providers.payloads import (
+    provider_model_option_payload,
+    provider_payload,
+    provider_selection_payload,
+    routing_decision_payload,
+    sort_provider_definitions,
+)
+from core.providers.routing import ProviderRoutingContext, select_provider_for_profile
+from core.providers.service import builtin_provider_registry, configure_workspace_provider, resolve_workspace_provider_status
 from core.runtime.runtime_session import RuntimeSessionRecord
-
-
-def provider_payload(definition: ProviderDefinition) -> dict[str, object]:
-    """Return public provider metadata."""
-    return {
-        "provider_id": definition.provider_id,
-        "label": definition.label,
-        "description": definition.description,
-        "kind": definition.kind,
-        "status": definition.status,
-        "capabilities": asdict(definition.capabilities),
-        "default_model_family": definition.default_model_family,
-        "model_options": [provider_model_option_payload(option) for option in definition.model_options],
-        "requires_credentials": definition.requires_credentials,
-        "supported_execution_modes": list(definition.supported_execution_modes),
-    }
-
-
-def provider_reasoning_option_payload(option: ProviderReasoningOption) -> dict[str, object]:
-    """Return public reasoning-effort metadata."""
-    return {
-        "effort": option.effort,
-        "label": option.label,
-        "description": option.description,
-    }
-
-
-def provider_model_option_payload(option: ProviderModelOption) -> dict[str, object]:
-    """Return public provider model metadata."""
-    return {
-        "model_id": option.model_id,
-        "label": option.label,
-        "description": option.description,
-        "default_reasoning_effort": option.default_reasoning_effort,
-        "supported_reasoning_efforts": [
-            provider_reasoning_option_payload(reasoning)
-            for reasoning in option.supported_reasoning_efforts
-        ],
-    }
-
-
-def provider_selection_payload(selection: ProviderSelection | None) -> dict[str, object] | None:
-    """Return public provider-selection metadata."""
-    if selection is None:
-        return None
-    return {
-        "workspace_id": selection.workspace_id,
-        "provider_id": selection.provider_id,
-        "binding_id": selection.binding_id,
-        "selection_scope": selection.selection_scope,
-        "selection_reason": selection.selection_reason,
-        "updated_at": selection.updated_at,
-        "model_id": selection.model_id,
-        "model_reasoning_effort": selection.model_reasoning_effort,
-    }
 
 
 def provider_model_settings_payload(definition: ProviderDefinition, selection: ProviderSelection | None) -> dict[str, object]:
@@ -126,7 +77,7 @@ def workspace_provider_status(
         "model_settings": None if status.active_provider is None else provider_model_settings_payload(status.active_provider, status.selection),
         "blocked_reason": status.blocked_reason,
         "blocked_detail": status.blocked_detail,
-        "available_providers": [provider_payload(provider) for provider in status.available_providers],
+        "available_providers": [provider_payload(provider) for provider in sort_provider_definitions(status.available_providers)],
     }
 
 
@@ -145,7 +96,7 @@ def handle_provider_api(state: PlatformState, environ: dict, start_response: Sta
     """Handle provider and runtime routes."""
     path = environ.get("PATH_INFO", "/")
     method = environ.get("REQUEST_METHOD", "GET").upper()
-    if path not in {"/api/providers", "/api/providers/active", "/api/runtime/status"}:
+    if path not in {"/api/providers", "/api/providers/active", "/api/providers/route", "/api/runtime/status"}:
         return None
     context_or_response = require_session(state, environ, start_response)
     if not isinstance(context_or_response, RequestSession):
@@ -187,6 +138,22 @@ def handle_provider_api(state: PlatformState, environ: dict, start_response: Sta
                 **provider_status,
             },
         )
+    if path == "/api/providers/route":
+        params = query_params(environ)
+        decision = select_provider_for_profile(
+            params.get("profile") or "fast_model",
+            ProviderRoutingContext(
+                workspace_id=context.workspace_id,
+                provider_store=state.provider_store,
+                registry=builtin_provider_registry(),
+                secret_store=state.secret_store,
+                request_id=params.get("request_id"),
+                user_tier=params.get("user_tier"),
+                app_id=params.get("app_id"),
+                allow_fallback_codex=str(params.get("allow_fallback_codex") or "").lower() in {"1", "true", "yes"},
+            ),
+        )
+        return json_response(start_response, {"decision": routing_decision_payload(decision)})
     if path == "/api/providers/active":
         return json_response(start_response, workspace_provider_status(state, workspace_id=context.workspace_id))
     if path == "/api/runtime/status":

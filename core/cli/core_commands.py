@@ -62,7 +62,14 @@ def _core_command_specs(
             start_path=start_path,
         )
     )
-    specs.extend(runtime_provider_command_specs(provider_store=provider_store, runtime_store=runtime_store))
+    specs.extend(
+        runtime_provider_command_specs(
+            provider_store=provider_store,
+            runtime_store=runtime_store,
+            provider_registry=provider_registry,
+            secret_store=secret_store,
+        )
+    )
     specs.extend(
         inter_agent_command_specs(
             app_store=app_store,

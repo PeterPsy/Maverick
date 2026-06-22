@@ -46,7 +46,14 @@ def _core_tool_specs(
     specs.extend(workspace_tool_specs(workspace_store=workspace_store))
     specs.extend(persistence_tool_specs(start_path=start_path))
     specs.extend(developer_context_tool_specs(start_path=start_path))
-    specs.extend(runtime_provider_tool_specs(provider_store=provider_store, runtime_store=runtime_store))
+    specs.extend(
+        runtime_provider_tool_specs(
+            provider_store=provider_store,
+            runtime_store=runtime_store,
+            provider_registry=provider_registry,
+            secret_store=secret_store,
+        )
+    )
     specs.extend(
         inter_agent_tool_specs(
             app_store=app_store,

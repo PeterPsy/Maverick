@@ -899,6 +899,53 @@ class TestMcpCliSurfaces(SurfaceTestBase):
 
         self.assertEqual(["core.identity.reset-admin-password"], [command.command_id for command in commands if command.invocation_policy.operator_only])
         self.assertEqual(provider_result["providers"][0]["provider_id"], "codex")
+        self.assertEqual(provider_result["providers"][0]["provider_role"], "runtime_engine")
+
+    def test_cli_and_mcp_can_simulate_provider_routing(self) -> None:
+        workspace_store = self.make_workspace_store()
+        provider_store = self.make_provider_store()
+        ensure_default_workspace_record(workspace_store)
+        register_builtin_providers(provider_store)
+        repo_root = self.make_repo_root()
+        context = CliInvocationContext(
+            caller_kind="sandbox_agent",
+            workspace_id="default",
+            agent_id="agent-1",
+            effective_mode="sandbox",
+        )
+        mcp_context = McpInvocationContext(
+            caller_kind="sandbox_agent",
+            workspace_id="default",
+            agent_id="agent-1",
+            effective_mode="sandbox",
+        )
+
+        cli_result = run_core_cli_command(
+            command_id="core.providers.route",
+            context=context,
+            provider_store=provider_store,
+            workspace_id="default",
+            start_path=repo_root,
+            arguments={"profile": "fast_model", "request_id": "req-cli"},
+        )
+        surface = build_workspace_mcp_surface(
+            workspace_store=workspace_store,
+            provider_store=provider_store,
+            workspace_id="default",
+            start_path=repo_root,
+        )
+        mcp_result = surface.call_tool(
+            "core.providers.route",
+            {"profile": "fast_model", "request_id": "req-mcp"},
+            context=mcp_context,
+        )
+
+        self.assertEqual(cli_result["decision"]["request_id"], "req-cli")
+        self.assertEqual(mcp_result["decision"]["request_id"], "req-mcp")
+        self.assertEqual(cli_result["decision"]["candidate_provider_ids"], ["groq"])
+        self.assertIn("provider_disabled:groq", cli_result["decision"]["reason_codes"])
+        self.assertNotIn("secret_ref", str(cli_result))
+        self.assertNotIn("secret_ref", str(mcp_result))
 
     def test_app_cli_policy_rejects_operator_only_true(self) -> None:
         store = self.make_app_store()

@@ -15,6 +15,8 @@ _SELECTED = {
     'test_application_bootstrap_registers_builtin_providers',
     'test_workspace_selection_requires_explicit_provider_configuration',
     'test_configured_selection_is_persisted_per_workspace',
+    'test_runtime_resolution_uses_configured_codex_adapter',
+    'test_configure_workspace_provider_rejects_hosted_api_without_runtime_adapter',
     'test_bindings_store_secret_refs_without_raw_secret_values',
     'test_selection_requires_binding_for_credentialed_runtime_provider',
     'test_disable_binding_preserves_record_but_makes_it_inactive',

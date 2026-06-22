@@ -11,7 +11,7 @@ import unittest
 from unittest.mock import patch
 
 from core.api.application import create_application
-from core.providers.errors import ProviderCredentialBindingError, ProviderSelectionError
+from core.providers.errors import ProviderCredentialBindingError, ProviderNotFoundError, ProviderSelectionError
 from core.providers.models import ProviderCapabilitySet, ProviderDefinition, RuntimeBackendLaunchSpec
 from core.providers.provider_codex_config_policy import (
     CODEX_POST_TOOL_USE_SHELL_MATCHER,
@@ -30,6 +30,7 @@ from core.providers.service import (
     configure_workspace_provider,
     list_available_providers,
     register_builtin_providers,
+    resolve_runtime_backend_for_session,
     resolve_provider_for_runtime_session,
 )
 from core.workspaces.models import WorkspaceGovernanceRecord
@@ -283,6 +284,65 @@ class ProvidersTestCase(unittest.TestCase):
 
         self.assertEqual(selection.provider_id, "codex")
         self.assertEqual(provider_store.get_provider_selection("default").selection_reason, "default local runtime backend")
+
+    def test_runtime_resolution_uses_configured_codex_adapter(self) -> None:
+        provider_store = self.make_provider_store()
+        register_builtin_providers(provider_store)
+        runtime_store = self.make_runtime_store()
+        repo_root = self.make_repo_root()
+        session = create_runtime_session(
+            runtime_store,
+            session_id="sess-codex-runtime",
+            workspace_id="default",
+            agent_id="agent-1",
+            start_path=repo_root,
+        )
+        configure_workspace_provider(provider_store, workspace_id="default", provider_id="codex")
+
+        provider, selection, runtime_adapter = resolve_runtime_backend_for_session(provider_store, session=session)
+
+        self.assertEqual(provider.provider_id, "codex")
+        self.assertEqual(selection.provider_id if selection is not None else None, "codex")
+        self.assertEqual(runtime_adapter.provider_definition().provider_id, "codex")
+
+    def test_configure_workspace_provider_rejects_hosted_api_without_runtime_adapter(self) -> None:
+        provider_store = self.make_provider_store()
+        registry = builtin_provider_registry()
+        now = datetime.now(tz=UTC)
+        registry.register_provider_definition(
+            ProviderDefinition(
+                provider_id="hosted-text-only",
+                label="Hosted Text Only",
+                description="Hosted model provider that must not own runtime execution.",
+                kind="hosted_api",
+                status="active",
+                capabilities=ProviderCapabilitySet(
+                    supports_interactive_runtime=False,
+                    supports_streaming=True,
+                    supports_tools=False,
+                    supports_mcp=False,
+                    supports_skills=False,
+                    supports_filesystem_access=False,
+                    supports_remote_execution=True,
+                    supports_api_key_auth=True,
+                    supports_local_binary=False,
+                ),
+                default_model_family="fast-text",
+                requires_credentials=False,
+                supported_execution_modes=[],
+                created_at=now,
+                updated_at=now,
+            )
+        )
+
+        with self.assertRaisesRegex(ProviderNotFoundError, "Runtime backend adapter"):
+            configure_workspace_provider(
+                provider_store,
+                workspace_id="default",
+                provider_id="hosted-text-only",
+                registry=registry,
+            )
+        self.assertIsNone(provider_store.get_provider_selection("default"))
 
     def test_bindings_store_secret_refs_without_raw_secret_values(self) -> None:
         provider_store = self.make_provider_store()

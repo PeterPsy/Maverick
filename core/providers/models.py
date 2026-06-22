@@ -17,6 +17,7 @@ ProviderSelectionScope = Literal["workspace_default"]
 ProviderBlockedReason = Literal["no_provider_configured", "provider_unavailable"]
 ProviderSecretBindingScope = Literal["provider", "app", "provider_or_app"]
 ProviderSecretResolutionStage = Literal["execution_only"]
+ProviderRoutingProfile = Literal["fast_model", "plain_hosted_chat", "heavy_runtime"]
 
 
 @dataclass(frozen=True)
@@ -185,3 +186,40 @@ class RuntimeBackendLaunchSpec:
     execution_mode: ExecutionMode
     readable_roots: list[str]
     writable_roots: list[str]
+
+
+@dataclass(frozen=True)
+class WorkspaceProviderPolicy:
+    """Minimal workspace policy used by provider routing decisions."""
+
+    workspace_id: str
+    allowed_provider_ids: list[str] = field(default_factory=list)
+    allowed_model_ids: list[str] = field(default_factory=list)
+    plan_or_tier_rules: dict[str, dict[str, list[str]]] = field(default_factory=dict)
+    fallback_rules: dict[str, bool] = field(default_factory=dict)
+    default_profiles: dict[str, str] = field(default_factory=dict)
+    audit_enabled: bool = True
+    policy_id_or_version: str = "default"
+
+
+@dataclass(frozen=True)
+class RoutingDecision:
+    """Redaction-safe provider routing decision suitable for logs and APIs."""
+
+    request_id: str
+    workspace_id: str
+    profile: str
+    requested_capabilities: list[str]
+    candidate_provider_ids: list[str]
+    selected_provider_id: str | None
+    selected_model_id_or_voice_id: str | None
+    selected_runtime_engine_id: str | None
+    execution_path: str | None
+    policy_id_or_version: str
+    credential_authorization_required: bool
+    provider_credential_binding_id_optional: str | None
+    app_secret_grant_id_optional: str | None
+    fallback_used: bool
+    reason_codes: list[str]
+    created_at: datetime
+    provider_secret_binding_id_optional: str | None = None

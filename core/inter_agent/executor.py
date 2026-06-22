@@ -431,9 +431,16 @@ def _execute_group_chat(
     clock,
 ) -> list[ParticipantExecutionResult]:
     """Execute the F7 group_chat MVP as one bounded shared-context round."""
+    aggregator_id = str(run.aggregator_participant_id or "").strip()
+    aggregator = _participant_by_id(participants, aggregator_id)
+    contributors = [
+        participant
+        for participant in participants
+        if participant.participant_id != aggregator_id
+    ]
     results: list[ParticipantExecutionResult] = []
     transcript: list[tuple[str, str]] = []
-    for index, participant in enumerate(participants):
+    for index, participant in enumerate(contributors):
         result = _execute_one_participant(
             service,
             state,
@@ -455,6 +462,25 @@ def _execute_group_chat(
         if result.status == "failed":
             break
         transcript.append((result.label, result.output_text or result.summary))
+    if aggregator is not None and all(result.status != "failed" for result in results):
+        result = _execute_one_participant(
+            service,
+            state,
+            run=run,
+            participant=aggregator,
+            task_index=len(results),
+            input_text=_group_chat_participant_input(
+                aggregator,
+                base_input=input_text,
+                participant_inputs=participant_inputs,
+                transcript=transcript,
+            ),
+            controlled=controlled_participants.get(aggregator.participant_id),
+            allow_synthetic_participants=allow_synthetic_participants,
+            async_runtime_turns=async_runtime_turns,
+            clock=clock,
+        )
+        results.append(result)
     return results
 
 

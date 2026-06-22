@@ -6,10 +6,11 @@ import json
 import os
 from typing import Callable
 
+from core.observability.service import record_platform_event
 from core.providers.models import RoutingDecision
-from core.providers.provider_registry import ProviderRegistry
-from core.providers.routing import ProviderRoutingContext, select_provider_for_profile
-from core.providers.service import builtin_provider_registry
+from core.providers.payloads import routing_decision_payload
+from core.providers.routing import ProviderRoutingContext, primary_routing_failure_reason, select_provider_for_profile
+from core.providers.service import effective_provider_registry
 from core.providers.text_generation import (
     FakeHostedTextTransport,
     HostedTextGenerationError,
@@ -67,29 +68,39 @@ def execute_plain_hosted_text_turn(
         ProviderRoutingContext(
             workspace_id=session.workspace_id,
             provider_store=state.provider_store,
-            registry=_registry_from_provider_store(state.provider_store),
+            registry=effective_provider_registry(state.provider_store),
             secret_store=state.secret_store,
             request_id=None,
         ),
     )
+    _emit_routing_decision_event(event_sink, decision)
+    _record_platform_routing_decision(state, session=session, decision=decision)
     if decision.execution_path != "plain_hosted_text" or decision.selected_provider_id is None:
-        reason = decision.reason_codes[-1] if decision.reason_codes else "no_fast_model_available"
-        raise HostedTextGenerationError(reason)
+        reason = primary_routing_failure_reason(decision)
+        raise HostedTextGenerationError(reason, reason_codes=decision.reason_codes)
     request = TextGenerationRequest(
         model_id=decision.selected_model_id_or_voice_id or "",
         system_prompt=session.system_prompt,
         messages=[TextGenerationMessage(role="user", content=input_text)],
         stream=True,
         timeout_seconds=30,
+        workspace_id=session.workspace_id,
+        workspace_root=session.workspace_root,
     )
-    result = execute_hosted_text_generation(
-        state.provider_store,
-        state.secret_store,
-        decision=decision,
-        request=request,
-        runtime_session_id=session.session_id,
-        transport=_fake_transport_from_environment(),
-    )
+    try:
+        result = execute_hosted_text_generation(
+            state.provider_store,
+            state.secret_store,
+            decision=decision,
+            request=request,
+            runtime_session_id=session.session_id,
+            transport=_fake_transport_from_environment(),
+        )
+    except HostedTextGenerationError as error:
+        raise HostedTextGenerationError(
+            error.reason_code,
+            reason_codes=[*decision.reason_codes, error.reason_code],
+        ) from error
     if event_sink is not None:
         for delta in result.deltas:
             event_sink(
@@ -106,11 +117,34 @@ def execute_plain_hosted_text_turn(
     return RuntimeExecutionResult(output_text=result.output_text, exit_code=0), decision
 
 
-def _registry_from_provider_store(provider_store) -> ProviderRegistry:
-    registry = builtin_provider_registry()
-    for definition in provider_store.list_provider_definitions():
-        registry.register_provider_definition(definition)
-    return registry
+def _emit_routing_decision_event(
+    event_sink: Callable[[RuntimeExecutionEvent], object] | None,
+    decision: RoutingDecision,
+) -> None:
+    if event_sink is None:
+        return
+    event_sink(
+        RuntimeExecutionEvent(
+            event_type="provider.routing.decision",
+            payload=routing_decision_payload(decision),
+        )
+    )
+
+
+def _record_platform_routing_decision(state, *, session: RuntimeSessionRecord, decision: RoutingDecision) -> None:
+    observability_store = getattr(state, "observability_store", None)
+    if observability_store is None:
+        return
+    record_platform_event(
+        observability_store,
+        event_type="provider.routing.decision",
+        event_plane="runtime",
+        source_domain="providers",
+        workspace_id=session.workspace_id,
+        runtime_session_id=session.session_id,
+        provider_id=decision.selected_provider_id,
+        payload=routing_decision_payload(decision),
+    )
 
 
 def _fake_transport_from_environment() -> FakeHostedTextTransport | None:

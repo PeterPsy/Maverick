@@ -9,8 +9,10 @@ from core.providers.models import WorkspaceProviderPolicy
 from core.providers.provider_credentials import bind_provider_credential
 from core.providers.provider_registry import ProviderRegistry
 from core.providers.routing import ProviderRoutingContext, select_provider_for_profile
-from core.providers.service import builtin_provider_registry, configure_workspace_provider
+from core.providers.service import activate_hosted_model_provider, builtin_provider_registry, configure_workspace_provider, effective_provider_registry
 from core.providers.store import ProviderCollections, ProviderDocumentStore
+from core.secrets.service import build_secret_ref, create_platform_secret
+from core.secrets.store import SecretCollections, SecretDocumentStore
 from tests.support.collections import FakeCollection
 
 
@@ -22,6 +24,17 @@ class ProviderRoutingTest(unittest.TestCase):
                 bindings=FakeCollection(),
                 selections=FakeCollection(),
             )
+        )
+
+    def make_secret_store(self) -> SecretDocumentStore:
+        return SecretDocumentStore(
+            SecretCollections(
+                secrets=FakeCollection(),
+                values=FakeCollection(),
+                bindings=FakeCollection(),
+                grants=FakeCollection(),
+            ),
+            key_loader=lambda: b"0" * 32,
         )
 
     def active_fast_registry(self) -> ProviderRegistry:
@@ -58,6 +71,40 @@ class ProviderRoutingTest(unittest.TestCase):
         self.assertFalse(decision.fallback_used)
         self.assertIn("plain_hosted_text_selected", decision.reason_codes)
         self.assertNotIn("platform:providers/groq", str(decision))
+
+    def test_effective_registry_uses_operator_activated_hosted_provider_from_store(self) -> None:
+        store = self.make_provider_store()
+        secret_store = self.make_secret_store()
+        secret = create_platform_secret(
+            secret_store,
+            label="Groq",
+            raw_value="super-secret-token",
+            alias="groq-routing",
+            kind="api_key",
+        )
+
+        activation = activate_hosted_model_provider(
+            store,
+            secret_store=secret_store,
+            workspace_id="default",
+            provider_id="groq",
+            secret_ref=build_secret_ref(alias=secret.alias or "groq-routing"),
+        )
+        decision = select_provider_for_profile(
+            "fast_model",
+            ProviderRoutingContext(
+                workspace_id="default",
+                provider_store=store,
+                registry=effective_provider_registry(store),
+                request_id="req-store-active",
+            ),
+        )
+
+        self.assertEqual(activation.definition.status, "active")
+        self.assertEqual(activation.routing_decision.selected_provider_id, "groq")
+        self.assertEqual(decision.selected_provider_id, "groq")
+        self.assertEqual(decision.execution_path, "plain_hosted_text")
+        self.assertNotIn("super-secret-token", str(decision))
 
     def test_fast_model_missing_credential_returns_auditable_failure(self) -> None:
         decision = select_provider_for_profile(

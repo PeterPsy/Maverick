@@ -190,25 +190,34 @@ def submit_runtime_turn_async(
                     payload={"phase": "async_terminal_event_recorded", "turn_status": completed_turn.status, "terminal_event_type": terminal_event.event_type},
                 )
             except Exception as error:
+                failure_reason = str(getattr(error, "reason_code", None) or error)
+                reason_codes = getattr(error, "reason_codes", None)
                 _debug_log_runtime_turn(
                     state,
                     session=session,
                     provider_id=worker_provider_id,
                     turn_id=turn.turn_id,
                     message="Runtime turn debug: async worker raised",
-                    payload={"phase": "async_worker_raised", "error_type": type(error).__name__, "error": str(error)},
+                    payload={"phase": "async_worker_raised", "error_type": type(error).__name__, "error": failure_reason},
                 )
                 force_idle_reap = not plain_hosted
                 current = state.runtime_store.get_turn(turn.turn_id)
                 if current.status not in {"completed", "failed", "cancelled", "timed-out"}:
-                    failed = transition_runtime_turn(state.runtime_store, turn_id=turn.turn_id, target_status="failed", failure_reason=str(error))
-                    _record_turn_failed(state, session_id=session.session_id, turn_id=failed.turn_id, provider_id=worker_provider_id, error=str(error))
+                    failed = transition_runtime_turn(state.runtime_store, turn_id=turn.turn_id, target_status="failed", failure_reason=failure_reason)
+                    _record_turn_failed(
+                        state,
+                        session_id=session.session_id,
+                        turn_id=failed.turn_id,
+                        provider_id=worker_provider_id,
+                        error=failure_reason,
+                        reason_codes=reason_codes if isinstance(reason_codes, list) else None,
+                    )
                     dispatch_source_app_runtime_event(
                         state,
                         session=session,
                         turn=failed,
                         event_type="runtime.turn.failed",
-                        failure_reason=str(error),
+                        failure_reason=failure_reason,
                     )
             finally:
                 if not plain_hosted:

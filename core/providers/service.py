@@ -2,25 +2,44 @@
 
 from __future__ import annotations
 
+from dataclasses import dataclass, replace
 from datetime import UTC, datetime
 from inspect import signature
 
 from core.observability.service import record_platform_audit, record_platform_event
-from core.providers.errors import ProviderError, ProviderSelectionError
-from core.providers.models import ProviderDefinition, ProviderSelection, RuntimeBackendLaunchSpec, WorkspaceProviderStatus
+from core.providers.errors import ProviderCapabilityError, ProviderError, ProviderNotFoundError, ProviderSelectionError
+from core.providers.models import (
+    ProviderCredentialBinding,
+    ProviderDefinition,
+    ProviderSelection,
+    RoutingDecision,
+    RuntimeBackendLaunchSpec,
+    WorkspaceProviderStatus,
+)
 from core.providers.provider_codex import CodexProviderAdapter, build_codex_definition
 from core.providers.provider_hosted_metadata import build_hosted_provider_definitions
 from core.providers.provider_credentials import resolve_provider_binding
 from core.providers.provider_credentials import bind_provider_credential, disable_provider_binding
 from core.providers.provider_registry import ProviderRegistry, RuntimeBackendAdapter
+from core.providers.routing import ProviderRoutingContext, select_provider_for_profile
 from core.providers.provider_selection import ProviderSelectionService
 from core.providers.store import ProviderStore
 from core.runtime.runtime_session import RuntimeSessionRecord
 from core.secrets.errors import SecretBindingError
 from core.secrets.models import SecretResolutionContext
+from core.secrets.secret_resolution import parse_secret_ref
 from core.secrets.secret_resolution import resolve_secret_for_runtime
 from core.secrets.store import SecretStore
 from core.skills.models import SkillDefinition, SkillMaterialization
+
+
+@dataclass(frozen=True)
+class HostedModelProviderActivation:
+    """Result of operator activation for a hosted model provider."""
+
+    definition: ProviderDefinition
+    credential_binding: ProviderCredentialBinding | None
+    routing_decision: RoutingDecision
 
 
 def utcnow() -> datetime:
@@ -60,8 +79,131 @@ def register_builtin_providers(
     )
     definitions = active_registry.list_provider_definitions()
     for definition in definitions:
-        store.save_provider_definition(definition)
+        try:
+            store.get_provider_definition(definition.provider_id)
+        except ProviderNotFoundError:
+            store.save_provider_definition(definition)
+            continue
+        if definition.provider_id == "codex":
+            store.save_provider_definition(definition)
     return definitions
+
+
+def effective_provider_registry(
+    store: ProviderStore,
+    *,
+    registry: ProviderRegistry | None = None,
+    codex_command: str = "codex",
+    refresh_model_catalog: bool = False,
+) -> ProviderRegistry:
+    """Return builtin provider metadata overlaid with persisted store definitions."""
+    active_registry = registry or builtin_provider_registry(
+        codex_command=codex_command,
+        refresh_model_catalog=refresh_model_catalog,
+    )
+    register_builtin_providers(
+        store,
+        registry=active_registry,
+        codex_command=codex_command,
+        refresh_model_catalog=refresh_model_catalog,
+    )
+    for definition in store.list_provider_definitions():
+        active_registry.register_provider_definition(definition)
+    return active_registry
+
+
+def activate_hosted_model_provider(
+    store: ProviderStore,
+    *,
+    secret_store: SecretStore,
+    workspace_id: str,
+    provider_id: str,
+    secret_ref: str,
+    label: str | None = None,
+    binding_id: str | None = None,
+    registry: ProviderRegistry | None = None,
+    codex_command: str = "codex",
+    observability_store=None,
+    now: datetime | None = None,
+) -> HostedModelProviderActivation:
+    """Activate one hosted text model provider and bind its credential metadata."""
+    active_registry = effective_provider_registry(store, registry=registry, codex_command=codex_command)
+    definition = active_registry.get_provider_definition(provider_id)
+    _validate_hosted_model_provider(definition)
+    _assert_secret_ref_exists(secret_store, secret_ref)
+    timestamp = now or utcnow()
+    active_definition = store.save_provider_definition(replace(definition, status="active", updated_at=timestamp))
+    binding = bind_provider_credential(
+        store,
+        provider_id=provider_id,
+        secret_ref=secret_ref,
+        workspace_id=workspace_id,
+        label=label,
+        binding_id=binding_id,
+        now=timestamp,
+    )
+    routing_registry = effective_provider_registry(store, registry=active_registry, codex_command=codex_command)
+    decision = select_provider_for_profile(
+        "fast_model",
+        ProviderRoutingContext(
+            workspace_id=workspace_id,
+            provider_store=store,
+            registry=routing_registry,
+            secret_store=secret_store,
+        ),
+    )
+    if observability_store is not None:
+        payload = {
+            "workspace_id": workspace_id,
+            "provider_id": provider_id,
+            "binding_id": binding.binding_id,
+            "preflight_selected_provider_id": decision.selected_provider_id,
+            "preflight_execution_path": decision.execution_path,
+            "preflight_reason_codes": decision.reason_codes,
+        }
+        record_platform_audit(
+            observability_store,
+            action="provider.hosted.activate",
+            status="succeeded",
+            source_domain="providers",
+            detail=f"Activated hosted provider `{provider_id}` for workspace `{workspace_id}`.",
+            workspace_id=workspace_id,
+            provider_id=provider_id,
+            payload=payload,
+            now=timestamp,
+        )
+        record_platform_event(
+            observability_store,
+            event_type="provider.hosted.activated",
+            event_plane="platform",
+            source_domain="providers",
+            workspace_id=workspace_id,
+            provider_id=provider_id,
+            payload=payload,
+            now=timestamp,
+        )
+    return HostedModelProviderActivation(
+        definition=active_definition,
+        credential_binding=binding,
+        routing_decision=decision,
+    )
+
+
+def _validate_hosted_model_provider(definition: ProviderDefinition) -> None:
+    if definition.kind != "hosted_api":
+        raise ProviderCapabilityError(f"Provider `{definition.provider_id}` is not a hosted API provider.")
+    if definition.provider_role != "model_provider":
+        raise ProviderCapabilityError(f"Provider `{definition.provider_id}` is not a hosted model provider.")
+    if definition.execution_contract is None or definition.execution_contract.adapter_type != "hosted_text_generation":
+        raise ProviderCapabilityError(f"Provider `{definition.provider_id}` does not support hosted text generation.")
+
+
+def _assert_secret_ref_exists(secret_store: SecretStore, secret_ref: str) -> None:
+    parsed = parse_secret_ref(secret_ref)
+    if parsed.kind == "secret_id":
+        secret_store.get_secret(parsed.value)
+    else:
+        secret_store.get_secret_by_alias(parsed.value)
 
 
 def list_available_providers(
@@ -72,13 +214,9 @@ def list_available_providers(
     refresh_model_catalog: bool = False,
 ) -> list[ProviderDefinition]:
     """List provider definitions from the authoritative registry."""
-    active_registry = registry or builtin_provider_registry(
-        codex_command=codex_command,
-        refresh_model_catalog=refresh_model_catalog,
-    )
-    register_builtin_providers(
+    active_registry = effective_provider_registry(
         store,
-        registry=active_registry,
+        registry=registry,
         codex_command=codex_command,
         refresh_model_catalog=refresh_model_catalog,
     )
@@ -216,13 +354,9 @@ def resolve_workspace_provider_status(
     refresh_model_catalog: bool = False,
 ) -> WorkspaceProviderStatus:
     """Return provider selection state without falling back to an implicit backend."""
-    active_registry = registry or builtin_provider_registry(
-        codex_command=codex_command,
-        refresh_model_catalog=refresh_model_catalog,
-    )
-    register_builtin_providers(
+    active_registry = effective_provider_registry(
         store,
-        registry=active_registry,
+        registry=registry,
         codex_command=codex_command,
         refresh_model_catalog=refresh_model_catalog,
     )
@@ -386,11 +520,14 @@ def prepare_runtime_skills(
 
 
 __all__ = [
+    "HostedModelProviderActivation",
+    "activate_hosted_model_provider",
     "bind_provider_credential",
     "builtin_provider_registry",
     "build_runtime_backend_launch_spec",
     "configure_workspace_provider",
     "disable_provider_binding",
+    "effective_provider_registry",
     "list_available_providers",
     "prepare_runtime_skills",
     "register_builtin_providers",

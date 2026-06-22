@@ -16,7 +16,12 @@ from core.providers.payloads import (
     sort_provider_definitions,
 )
 from core.providers.routing import ProviderRoutingContext, select_provider_for_profile
-from core.providers.service import builtin_provider_registry, configure_workspace_provider, resolve_workspace_provider_status
+from core.providers.service import (
+    activate_hosted_model_provider,
+    configure_workspace_provider,
+    effective_provider_registry,
+    resolve_workspace_provider_status,
+)
 from core.runtime.runtime_session import RuntimeSessionRecord
 
 
@@ -49,6 +54,7 @@ def runtime_session_payload(session: RuntimeSessionRecord) -> dict[str, object]:
         "status": session.status,
         "requested_mode": session.requested_mode,
         "effective_mode": session.effective_mode,
+        "runtime_mode": session.runtime_mode,
         "started_at": session.started_at,
         "updated_at": session.updated_at,
         "ended_at": session.ended_at,
@@ -92,16 +98,69 @@ def workspace_runtime_status(state: PlatformState, *, workspace_id: str) -> dict
     }
 
 
+def provider_credential_binding_payload(binding) -> dict[str, object] | None:
+    """Return public provider binding metadata without secret references."""
+    if binding is None:
+        return None
+    return {
+        "binding_id": binding.binding_id,
+        "provider_id": binding.provider_id,
+        "workspace_id": binding.workspace_id,
+        "label": binding.label,
+        "status": binding.status,
+        "created_at": binding.created_at,
+        "updated_at": binding.updated_at,
+    }
+
+
 def handle_provider_api(state: PlatformState, environ: dict, start_response: StartResponse) -> list[bytes] | None:
     """Handle provider and runtime routes."""
     path = environ.get("PATH_INFO", "/")
     method = environ.get("REQUEST_METHOD", "GET").upper()
-    if path not in {"/api/providers", "/api/providers/active", "/api/providers/route", "/api/runtime/status"}:
+    if path not in {"/api/providers", "/api/providers/active", "/api/providers/hosted/active", "/api/providers/route", "/api/runtime/status"}:
         return None
     context_or_response = require_session(state, environ, start_response)
     if not isinstance(context_or_response, RequestSession):
         return context_or_response
     context = context_or_response
+    if path == "/api/providers/hosted/active" and method == "POST":
+        from core.api.http import read_json_body
+
+        if getattr(context.user, "platform_role", None) != "admin":
+            return json_response(start_response, {"error": "provider_hosted_activation_forbidden"}, status="403 Forbidden")
+        body = read_json_body(environ)
+        provider_id = str(body.get("provider_id") or "").strip()
+        secret_ref = str(body.get("secret_ref") or "").strip()
+        if not provider_id:
+            return json_response(start_response, {"error": "missing_provider_id"}, status="400 Bad Request")
+        if not secret_ref:
+            return json_response(start_response, {"error": "missing_secret_ref"}, status="400 Bad Request")
+        try:
+            activation = activate_hosted_model_provider(
+                state.provider_store,
+                secret_store=state.secret_store,
+                workspace_id=context.workspace_id,
+                provider_id=provider_id,
+                secret_ref=secret_ref,
+                label=str(body.get("label") or "").strip() or None,
+                binding_id=str(body.get("binding_id") or "").strip() or None,
+                observability_store=state.observability_store,
+            )
+        except Exception as error:
+            return json_response(
+                start_response,
+                {"error": "hosted_provider_activation_failed", "error_type": type(error).__name__},
+                status="400 Bad Request",
+            )
+        return json_response(
+            start_response,
+            {
+                "workspace_id": context.workspace_id,
+                "provider": provider_payload(activation.definition),
+                "credential_binding": provider_credential_binding_payload(activation.credential_binding),
+                "preflight": routing_decision_payload(activation.routing_decision),
+            },
+        )
     if path == "/api/providers/active" and method == "POST":
         from core.api.http import read_json_body
 
@@ -145,7 +204,7 @@ def handle_provider_api(state: PlatformState, environ: dict, start_response: Sta
             ProviderRoutingContext(
                 workspace_id=context.workspace_id,
                 provider_store=state.provider_store,
-                registry=builtin_provider_registry(),
+                registry=effective_provider_registry(state.provider_store),
                 secret_store=state.secret_store,
                 request_id=params.get("request_id"),
                 user_tier=params.get("user_tier"),

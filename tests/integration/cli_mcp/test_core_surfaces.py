@@ -897,15 +897,34 @@ class TestMcpCliSurfaces(SurfaceTestBase):
             start_path=repo_root,
         )
 
-        self.assertEqual(["core.identity.reset-admin-password"], [command.command_id for command in commands if command.invocation_policy.operator_only])
+        operator_only_commands = [command.command_id for command in commands if command.invocation_policy.operator_only]
+        self.assertIn("core.identity.reset-admin-password", operator_only_commands)
+        self.assertIn("core.providers.hosted.activate", operator_only_commands)
         self.assertEqual(provider_result["providers"][0]["provider_id"], "codex")
         self.assertEqual(provider_result["providers"][0]["provider_role"], "runtime_engine")
 
     def test_cli_and_mcp_can_simulate_provider_routing(self) -> None:
         workspace_store = self.make_workspace_store()
         provider_store = self.make_provider_store()
+        secret_store = SecretDocumentStore(
+            SecretCollections(
+                secrets=FakeCollection(),
+                values=FakeCollection(),
+                bindings=FakeCollection(),
+                grants=FakeCollection(),
+            ),
+            key_loader=lambda: b"0" * 32,
+        )
         ensure_default_workspace_record(workspace_store)
         register_builtin_providers(provider_store)
+        secret = create_platform_secret(
+            secret_store,
+            label="Groq CLI MCP",
+            raw_value="super-secret-token",
+            alias="groq-cli-mcp",
+            kind="api_key",
+        )
+        secret_ref = build_secret_ref(alias=secret.alias or "groq-cli-mcp")
         repo_root = self.make_repo_root()
         context = CliInvocationContext(
             caller_kind="sandbox_agent",
@@ -913,26 +932,55 @@ class TestMcpCliSurfaces(SurfaceTestBase):
             agent_id="agent-1",
             effective_mode="sandbox",
         )
+        operator_context = CliInvocationContext(
+            caller_kind="operator",
+            workspace_id="default",
+            agent_id=None,
+            effective_mode="full-access",
+        )
         mcp_context = McpInvocationContext(
             caller_kind="sandbox_agent",
             workspace_id="default",
             agent_id="agent-1",
             effective_mode="sandbox",
         )
+        mcp_operator_context = McpInvocationContext(
+            caller_kind="operator",
+            workspace_id="default",
+            agent_id=None,
+            effective_mode="full-access",
+        )
+
+        activation = run_core_cli_command(
+            command_id="core.providers.hosted.activate",
+            context=operator_context,
+            provider_store=provider_store,
+            secret_store=secret_store,
+            workspace_id="default",
+            start_path=repo_root,
+            arguments={"provider_id": "groq", "secret_ref": secret_ref},
+        )
+        surface = build_workspace_mcp_surface(
+            workspace_store=workspace_store,
+            provider_store=provider_store,
+            secret_store=secret_store,
+            workspace_id="default",
+            start_path=repo_root,
+        )
+        mcp_activation = surface.call_tool(
+            "core.providers.hosted.activate",
+            {"provider_id": "groq", "secret_ref": secret_ref},
+            context=mcp_operator_context,
+        )
 
         cli_result = run_core_cli_command(
             command_id="core.providers.route",
             context=context,
             provider_store=provider_store,
+            secret_store=secret_store,
             workspace_id="default",
             start_path=repo_root,
             arguments={"profile": "fast_model", "request_id": "req-cli"},
-        )
-        surface = build_workspace_mcp_surface(
-            workspace_store=workspace_store,
-            provider_store=provider_store,
-            workspace_id="default",
-            start_path=repo_root,
         )
         mcp_result = surface.call_tool(
             "core.providers.route",
@@ -940,10 +988,15 @@ class TestMcpCliSurfaces(SurfaceTestBase):
             context=mcp_context,
         )
 
+        self.assertEqual(activation["provider"]["status"], "active")
+        self.assertEqual(mcp_activation["provider"]["status"], "active")
         self.assertEqual(cli_result["decision"]["request_id"], "req-cli")
         self.assertEqual(mcp_result["decision"]["request_id"], "req-mcp")
         self.assertEqual(cli_result["decision"]["candidate_provider_ids"], ["groq"])
-        self.assertIn("provider_disabled:groq", cli_result["decision"]["reason_codes"])
+        self.assertEqual(cli_result["decision"]["selected_provider_id"], "groq")
+        self.assertEqual(mcp_result["decision"]["selected_provider_id"], "groq")
+        self.assertNotIn("provider_disabled:groq", cli_result["decision"]["reason_codes"])
+        self.assertNotIn("super-secret-token", str(activation))
         self.assertNotIn("secret_ref", str(cli_result))
         self.assertNotIn("secret_ref", str(mcp_result))
 
@@ -1629,6 +1682,7 @@ class TestMcpCliSurfaces(SurfaceTestBase):
             workspace_id="default",
             agent_id="agent-1",
             now=now,
+            runtime_mode="plain_hosted_chat",
             start_path=repo_root,
         )
         operator_context = CliInvocationContext(
@@ -1655,7 +1709,26 @@ class TestMcpCliSurfaces(SurfaceTestBase):
             context=operator_context,
             provider_store=provider_store,
         )
+        surface = build_workspace_mcp_surface(
+            workspace_store=workspace_store,
+            provider_store=provider_store,
+            runtime_store=runtime_store,
+            workspace_id="default",
+            start_path=repo_root,
+        )
+        mcp_result = surface.call_tool(
+            "core.runtime.status",
+            {"workspace_id": "default"},
+            context=McpInvocationContext(
+                caller_kind="operator",
+                workspace_id="default",
+                agent_id=None,
+                effective_mode="full-access",
+            ),
+        )
 
         self.assertEqual(workspace_result["workspace"]["workspace_id"], "default")
         self.assertEqual(runtime_result["sessions"][0]["session_id"], "sess-1")
+        self.assertEqual(runtime_result["sessions"][0]["runtime_mode"], "plain_hosted_chat")
+        self.assertEqual(mcp_result["sessions"][0]["runtime_mode"], "plain_hosted_chat")
         self.assertEqual(provider_result["providers"][0]["provider_id"], "codex")

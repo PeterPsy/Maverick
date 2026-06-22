@@ -108,22 +108,33 @@ def submit_runtime_turn(
                     event_sink=output_recorder.record,
                 )
         except Exception as error:
+            failure_reason = str(getattr(error, "reason_code", None) or error)
+            reason_codes = getattr(error, "reason_codes", None)
             _debug_log_runtime_turn(
                 state,
                 session=session,
                 provider_id=provider_id,
                 turn_id=turn.turn_id,
                 message="Runtime turn debug: sync execution raised",
-                payload={"phase": "sync_execution_raised", "error_type": type(error).__name__, "error": str(error)},
+                payload={"phase": "sync_execution_raised", "error_type": type(error).__name__, "error": failure_reason},
             )
-            turn = transition_runtime_turn(state.runtime_store, turn_id=turn.turn_id, target_status="failed", failure_reason=str(error))
-            events.append(_record_turn_failed(state, session_id=session.session_id, turn_id=turn.turn_id, provider_id=provider_id, error=str(error)))
+            turn = transition_runtime_turn(state.runtime_store, turn_id=turn.turn_id, target_status="failed", failure_reason=failure_reason)
+            events.append(
+                _record_turn_failed(
+                    state,
+                    session_id=session.session_id,
+                    turn_id=turn.turn_id,
+                    provider_id=provider_id,
+                    error=failure_reason,
+                    reason_codes=reason_codes if isinstance(reason_codes, list) else None,
+                )
+            )
             dispatch_source_app_runtime_event(
                 state,
                 session=session,
                 turn=turn,
                 event_type="runtime.turn.failed",
-                failure_reason=str(error),
+                failure_reason=failure_reason,
             )
             if not plain_hosted:
                 release_idle_runtime_processes(state, session_id=session.session_id, provider_id=provider_id, reason="sync_turn_failed", idle_ttl_seconds=0)

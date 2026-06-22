@@ -73,6 +73,37 @@ def select_provider_for_profile(profile: str, context: ProviderRoutingContext) -
     )
 
 
+def primary_routing_failure_reason(decision: RoutingDecision) -> str:
+    """Return the stable primary failure reason for an unsuccessful decision."""
+    if decision.execution_path is not None and (
+        decision.selected_provider_id is not None or decision.selected_runtime_engine_id is not None
+    ):
+        return "provider_routing_succeeded"
+    reason_codes = list(decision.reason_codes)
+    if any(
+        code in reason_codes
+        for code in (
+            "provider_credential_binding_missing",
+            "provider_credential_binding_disabled",
+            "provider_secret_binding_present_but_unusable",
+            "app_secret_grant_missing",
+            "fallback_no_credential_authorization",
+        )
+    ):
+        return "provider_credential_authorization_missing"
+    if any(code.startswith("provider_disabled:") for code in reason_codes):
+        return "provider_disabled"
+    if any(code.startswith("workspace_policy_denied_model:") for code in reason_codes):
+        return "provider_model_unavailable"
+    if any(code.startswith("workspace_policy_denied:") for code in reason_codes):
+        return "workspace_policy_denied"
+    if "routing_profile_unknown" in reason_codes:
+        return "routing_profile_unknown"
+    if reason_codes:
+        return reason_codes[-1]
+    return "no_fast_model_available"
+
+
 def _select_fast_model(context: ProviderRoutingContext) -> RoutingDecision:
     requested_capabilities = context.requested_capabilities or ["text_generation", "low_latency"]
     candidates = _fast_model_candidates(context.registry.list_provider_definitions())

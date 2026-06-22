@@ -41,14 +41,38 @@ DeepSeek are `model_provider` records for hosted text generation; they are not
 runtime backends and must not be configured through the workspace runtime
 provider selection path.
 
+Hosted text providers are enabled through an operator-only hosted activation
+path, not through `/api/providers/active`. The activation path stores an active
+provider definition, binds a Core Secrets `secret_ref` as provider credential
+metadata, and returns a redaction-safe routing preflight decision:
+
+- HTTP: `POST /api/providers/hosted/active`
+- CLI: `core.providers.hosted.activate`
+- MCP: `core.providers.hosted.activate`
+
+The activation responses expose provider ids, binding ids, model ids, and
+reason codes. They do not expose raw secret values or secret refs.
+
 `plain_hosted_chat` is the current non-agentic text bridge. A Chat/runtime
 session using that mode routes the `fast_model` profile through the provider
 router, resolves credentials only through Core Secrets/provider bindings, calls
 the hosted text adapter, and maps output back into normal runtime events:
 
+- `provider.routing.decision`
 - `runtime.output.delta`
 - `runtime.output.final`
 - `runtime.turn.completed` or `runtime.turn.failed`
+
+The same effective provider registry is used for route preview and real
+`plain_hosted_chat` execution: builtin metadata is overlaid by persisted
+provider-store definitions. Runtime failure payloads keep bounded router reason
+codes so missing credentials, disabled providers, model/policy failures, and
+provider transport failures remain distinguishable.
+
+The only supported Chat routing profile for this bridge is `fast_model`.
+Runtime HTTP requests may omit `routing_profile` or pass `fast_model`; any other
+provided value is rejected with `unsupported_routing_profile` instead of being
+silently ignored.
 
 The bridge is deliberately narrower than an agentic runtime. Before prompt
 materialization it rejects skills, tool/MCP use, workspace filesystem access,

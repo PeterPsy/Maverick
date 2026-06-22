@@ -101,7 +101,18 @@ def _complete_turn_from_exit_code(
 
 
 
-def _record_turn_failed(state: PlatformState, *, session_id: str, turn_id: str, provider_id: str, error: str) -> RuntimeEventRecord:
+def _record_turn_failed(
+    state: PlatformState,
+    *,
+    session_id: str,
+    turn_id: str,
+    provider_id: str,
+    error: str,
+    reason_codes: list[str] | None = None,
+) -> RuntimeEventRecord:
+    payload = {"error": error, "provider_id": provider_id}
+    if reason_codes:
+        payload["reason_codes"] = list(dict.fromkeys(reason_codes))
     event = record_runtime_event(
         state.runtime_store,
         event_id=str(uuid4()),
@@ -109,7 +120,7 @@ def _record_turn_failed(state: PlatformState, *, session_id: str, turn_id: str, 
         turn_id=turn_id,
         plane="turn",
         event_type="runtime.turn.failed",
-        payload={"error": error, "provider_id": provider_id},
+        payload=payload,
         event_bus=state.runtime_event_bus,
     )
     turn = state.runtime_store.get_turn(turn_id)

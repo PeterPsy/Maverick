@@ -21,6 +21,7 @@ Primary control-plane routes include:
 - `/api/app-store/install-local`
 - `/api/app-store/uninstall`
 - `/api/runtime/status`
+- `/api/providers/hosted/active`
 - `/api/inter-agent/runs`
 - `/api/inter-agent/runs/<run_id>/events`
 - `/api/inter-agent/runs/<run_id>/artifacts`
@@ -56,6 +57,8 @@ Important current core commands include:
 - `core.workspaces.current`
 - `core.runtime.status`
 - `core.providers.list`
+- `core.providers.route`
+- `core.providers.hosted.activate`
 - `developer-context.list`
 - `developer-context.read`
 
@@ -72,6 +75,8 @@ Important current tools include:
 - `core.workspaces.list`
 - `core.runtime.status`
 - `core.providers.list`
+- `core.providers.route`
+- `core.providers.hosted.activate`
 - `developer-context.list`
 - `developer-context.read`
 

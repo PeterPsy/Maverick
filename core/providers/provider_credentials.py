@@ -70,7 +70,7 @@ def bind_provider_credential(
     )
     saved = store.save_provider_binding(record)
     if observability_store is not None:
-        payload = {"provider_id": provider_id, "workspace_id": workspace_id, "binding_id": saved.binding_id, "secret_ref": saved.secret_ref}
+        payload = {"provider_id": provider_id, "workspace_id": workspace_id, "binding_id": saved.binding_id}
         record_platform_audit(
             observability_store,
             action="provider.binding.create",

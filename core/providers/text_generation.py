@@ -36,9 +36,10 @@ BLOCKED_HOSTED_TEXT_MARKERS = (
 class HostedTextGenerationError(ProviderError):
     """Hosted text generation failure with a stable reason code."""
 
-    def __init__(self, reason_code: str, message: str | None = None) -> None:
+    def __init__(self, reason_code: str, message: str | None = None, *, reason_codes: list[str] | None = None) -> None:
         super().__init__(message or reason_code)
         self.reason_code = reason_code
+        self.reason_codes = list(reason_codes or [reason_code])
 
 
 @dataclass(frozen=True)
@@ -59,6 +60,8 @@ class TextGenerationRequest:
     max_output_tokens: int | None = None
     timeout_seconds: int | None = None
     stream: bool = False
+    workspace_id: str | None = None
+    workspace_root: str | None = None
 
 
 @dataclass(frozen=True)
@@ -348,9 +351,21 @@ def _validate_hosted_text_request(request: TextGenerationRequest) -> None:
     content_parts = [request.system_prompt or ""]
     content_parts.extend(message.content for message in request.messages)
     combined = "\n".join(content_parts)
-    for marker in BLOCKED_HOSTED_TEXT_MARKERS:
-        if marker in combined:
+    normalized = combined.lower()
+    for marker in _blocked_hosted_text_markers(request):
+        if marker.lower() in normalized:
             raise HostedTextGenerationError("hosted_text_request_contains_operational_reference")
+
+
+def _blocked_hosted_text_markers(request: TextGenerationRequest) -> tuple[str, ...]:
+    markers = list(BLOCKED_HOSTED_TEXT_MARKERS)
+    workspace_root = str(request.workspace_root or "").strip()
+    if workspace_root:
+        markers.append(workspace_root.rstrip("/") + "/")
+    workspace_id = str(request.workspace_id or "").strip()
+    if workspace_id:
+        markers.append(f"workspaces/{workspace_id}/")
+    return tuple(marker for marker in markers if marker)
 
 
 def _extract_message_content(payload: dict[str, object] | None) -> str:

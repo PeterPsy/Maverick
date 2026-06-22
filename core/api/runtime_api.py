@@ -299,6 +299,9 @@ def _handle_session_collection(state: PlatformState, context: RequestSession, me
         agent_id = str(body.get("agent_id") or "").strip()
         if not agent_id:
             return json_response(start_response, {"error": "agent_id_required"}, status="400 Bad Request")
+        routing_profile_error = _routing_profile_error(body)
+        if routing_profile_error is not None:
+            return json_response(start_response, {"error": routing_profile_error}, status="400 Bad Request")
         try:
             session = _create_session(state, context, body, agent_id=agent_id, start_path=start_path)
         except AuthorizationError as error:
@@ -685,6 +688,15 @@ def _runtime_turn_requested(body: dict) -> bool:
     return bool(str(body.get("input_text") or body.get("message") or "").strip() or attachments)
 
 
+def _routing_profile_error(body: dict) -> str | None:
+    if "routing_profile" not in body:
+        return None
+    routing_profile = str(body.get("routing_profile") or "").strip()
+    if routing_profile in {"", "fast_model"}:
+        return None
+    return "unsupported_routing_profile"
+
+
 def _submit_runtime_turn_response(
     state: PlatformState,
     context: RequestSession,
@@ -694,6 +706,9 @@ def _submit_runtime_turn_response(
     *,
     start_path,
 ):
+    routing_profile_error = _routing_profile_error(body)
+    if routing_profile_error is not None:
+        return json_response(start_response, {"error": routing_profile_error}, status="400 Bad Request")
     client_message_id = str(body.get("client_message_id") or "").strip() or None
     attachments = body.get("attachments") if isinstance(body.get("attachments"), list) else []
     attachment_items = [item for item in attachments if isinstance(item, dict)]

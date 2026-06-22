@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-from dataclasses import replace
 from io import BytesIO
 import json
 import os
@@ -10,8 +9,7 @@ from unittest.mock import patch
 from core.api.platform_host import PlatformHost
 from core.api.platform_state import bootstrap_platform_state
 from core.api.runtime_websocket import stream_runtime_session_events
-from core.providers.provider_credentials import bind_provider_credential
-from core.providers.service import builtin_provider_registry
+from core.providers.service import activate_hosted_model_provider, disable_provider_binding
 from core.secrets.service import build_secret_ref, create_platform_secret
 from tests.support.repo import make_temp_repo_root
 
@@ -19,22 +17,24 @@ from tests.support.repo import make_temp_repo_root
 class ChatPlainHostedRuntimeTest(unittest.IsolatedAsyncioTestCase):
     def make_state(self, *, bind_groq: bool = True):
         state = bootstrap_platform_state(start_path=make_temp_repo_root(self))
-        groq = builtin_provider_registry().get_provider_definition("groq")
-        state.provider_store.save_provider_definition(replace(groq, status="active"))
+        secret = create_platform_secret(
+            state.secret_store,
+            label="Groq chat test",
+            raw_value="super-secret-token",
+            alias="groq-chat-hosted",
+            kind="api_key",
+        )
+        activation = activate_hosted_model_provider(
+            state.provider_store,
+            secret_store=state.secret_store,
+            workspace_id="default",
+            provider_id="groq",
+            secret_ref=build_secret_ref(alias=secret.alias or "groq-chat-hosted"),
+        )
         if bind_groq:
-            secret = create_platform_secret(
-                state.secret_store,
-                label="Groq chat test",
-                raw_value="super-secret-token",
-                alias="groq-chat-hosted",
-                kind="api_key",
-            )
-            bind_provider_credential(
-                state.provider_store,
-                provider_id="groq",
-                workspace_id="default",
-                secret_ref=build_secret_ref(alias=secret.alias or "groq-chat-hosted"),
-            )
+            return state
+        if activation.credential_binding is not None:
+            disable_provider_binding(state.provider_store, activation.credential_binding.binding_id)
         return state
 
     def invoke(self, state, *, path: str, method: str = "GET", body: dict | None = None, cookie: str = "") -> tuple[int, dict, dict[str, str]]:
@@ -139,7 +139,12 @@ class ChatPlainHostedRuntimeTest(unittest.IsolatedAsyncioTestCase):
         snapshot_events = snapshot["events"]
         self.assertEqual(snapshot["session"]["runtime_mode"], "plain_hosted_chat")
         self.assertEqual(snapshot["session"]["provider_id"], "groq")
-        self.assertIn("runtime.output.delta", [event["event_type"] for event in snapshot_events])
+        snapshot_event_types = [event["event_type"] for event in snapshot_events]
+        self.assertIn("provider.routing.decision", snapshot_event_types)
+        self.assertIn("runtime.output.delta", snapshot_event_types)
+        routing_event = next(event for event in snapshot_events if event["event_type"] == "provider.routing.decision")
+        self.assertEqual(routing_event["payload"]["selected_provider_id"], "groq")
+        self.assertNotIn("secret_ref", json.dumps(routing_event))
         final_event = next(event for event in snapshot_events if event["event_type"] == "runtime.output.final")
         self.assertEqual(final_event["payload"]["complete_text"], "Hosted answer")
         self.assertNotIn("super-secret-token", json.dumps(snapshot))
@@ -170,9 +175,36 @@ class ChatPlainHostedRuntimeTest(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(status, 201)
         self.assertEqual(payload["session"]["provider_id"], "hosted-text-runtime")
         self.assertEqual(payload["turn"]["status"], "failed")
-        self.assertEqual(payload["turn"]["failure_reason"], "no_fast_model_available")
-        self.assertIn("runtime.turn.failed", [event["event_type"] for event in payload["events"]])
+        self.assertEqual(payload["turn"]["failure_reason"], "provider_credential_authorization_missing")
+        failed_event = next(event for event in payload["events"] if event["event_type"] == "runtime.turn.failed")
+        self.assertEqual(failed_event["payload"]["error"], "provider_credential_authorization_missing")
+        self.assertIn("provider_credential_binding_missing", failed_event["payload"]["reason_codes"])
+        stored_event_types = [event.event_type for event in state.runtime_store.list_events(payload["session"]["session_id"])]
+        self.assertIn("provider.routing.decision", stored_event_types)
         self.assertNotIn("super-secret-token", json.dumps(payload))
+
+    async def test_chat_plain_hosted_rejects_unknown_routing_profile(self) -> None:
+        state = self.make_state()
+        cookie = self.login_cookie(state)
+
+        status, payload, _headers = self.invoke(
+            state,
+            path="/api/runtime/sessions",
+            method="POST",
+            cookie=cookie,
+            body={
+                "agent_id": "chat",
+                "source_app_id": "chat",
+                "runtime_mode": "plain_hosted_chat",
+                "routing_profile": "slow_model",
+                "input_text": "Hello hosted",
+                "async": False,
+            },
+        )
+
+        self.assertEqual(status, 400)
+        self.assertEqual(payload["error"], "unsupported_routing_profile")
+        self.assertEqual(state.runtime_store.list_sessions("default"), [])
 
 
 if __name__ == "__main__":

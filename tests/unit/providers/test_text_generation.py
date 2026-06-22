@@ -49,7 +49,14 @@ class HostedTextGenerationTest(unittest.TestCase):
         registry.register_provider_definition(replace(groq, status="active"))
         return registry
 
-    def request(self, *, stream: bool = False, content: str = "Hello") -> TextGenerationRequest:
+    def request(
+        self,
+        *,
+        stream: bool = False,
+        content: str = "Hello",
+        workspace_id: str | None = None,
+        workspace_root: str | None = None,
+    ) -> TextGenerationRequest:
         return TextGenerationRequest(
             model_id="llama-3.3-70b-versatile",
             messages=[TextGenerationMessage(role="user", content=content)],
@@ -57,6 +64,8 @@ class HostedTextGenerationTest(unittest.TestCase):
             max_output_tokens=64,
             timeout_seconds=10,
             stream=stream,
+            workspace_id=workspace_id,
+            workspace_root=workspace_root,
         )
 
     def test_fake_transport_non_streaming_normalizes_response(self) -> None:
@@ -116,10 +125,25 @@ class HostedTextGenerationTest(unittest.TestCase):
             transport=FakeHostedTextTransport(),
         )
 
-        with self.assertRaises(HostedTextGenerationError) as raised:
-            client.generate(self.request(content="local path: /tmp/file.txt"))
+        cases = [
+            self.request(content="Local path: /tmp/file.txt"),
+            self.request(content="Referenced app-owned records:\n- record-1"),
+            self.request(
+                content="See /tmp/maverick/workspaces/acme/data/mail/message.json",
+                workspace_id="acme",
+                workspace_root="/tmp/maverick/workspaces/acme",
+            ),
+            self.request(
+                content="See workspaces/acme/data/mail/message.json",
+                workspace_id="acme",
+                workspace_root="/tmp/maverick/workspaces/acme",
+            ),
+        ]
 
-        self.assertEqual(raised.exception.reason_code, "hosted_text_request_contains_operational_reference")
+        for request in cases:
+            with self.subTest(content=request.messages[0].content), self.assertRaises(HostedTextGenerationError) as raised:
+                client.generate(request)
+            self.assertEqual(raised.exception.reason_code, "hosted_text_request_contains_operational_reference")
 
     def test_executor_resolves_provider_binding_inside_controlled_path(self) -> None:
         provider_store = self.make_provider_store()

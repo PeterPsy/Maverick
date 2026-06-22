@@ -114,7 +114,12 @@ targets:
 core/inter_agent/adapters/__init__.py
 core/inter_agent/adapters/base.py
 core/inter_agent/adapters/maf.py
-tests/unit/inter_agent/test_maf_adapter.py
+tests/unit/inter_agent/test_maf_handoff_adapter.py
+tests/unit/inter_agent/test_maf_group_chat_adapter.py
+tests/unit/inter_agent/test_maf_magentic_adapter.py
+tests/integration/inter_agent/test_maf_handoff_fixture.py
+tests/integration/inter_agent/test_maf_group_chat_fixture.py
+tests/integration/inter_agent/test_maf_magentic_fixture.py
 ```
 
 F6 may also touch the narrowest supporting files needed for the declared

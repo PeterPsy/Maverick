@@ -33,6 +33,56 @@ Important implications:
 - network access for providers is not equivalent to unconstrained filesystem access
 - shell settings can list runtime sessions across workspaces visible to the authenticated user, terminate individual sessions, and clear visible session records in batch through controlled settings runtime-session endpoints
 
+## Hosted Model Providers And Plain Hosted Chat
+
+Provider records distinguish `provider_role` from the lower-level provider `kind`.
+Codex is a `runtime_engine` and remains the default agentic runtime. Groq and
+DeepSeek are `model_provider` records for hosted text generation; they are not
+runtime backends and must not be configured through the workspace runtime
+provider selection path.
+
+`plain_hosted_chat` is the current non-agentic text bridge. A Chat/runtime
+session using that mode routes the `fast_model` profile through the provider
+router, resolves credentials only through Core Secrets/provider bindings, calls
+the hosted text adapter, and maps output back into normal runtime events:
+
+- `runtime.output.delta`
+- `runtime.output.final`
+- `runtime.turn.completed` or `runtime.turn.failed`
+
+The bridge is deliberately narrower than an agentic runtime. Before prompt
+materialization it rejects skills, tool/MCP use, workspace filesystem access,
+operative attachments, and operative app references. Hosted text requests must
+not contain local workspace paths, `local path:` labels, or materialized
+app-owned record blocks. Routing decisions, runtime events, logs, transcripts,
+Storage artifacts, CLI/MCP payloads, and HTTP responses may expose provider ids,
+model ids, binding ids, grants, and reason codes, but never raw secret values.
+
+## Deferred Speech Provider Boundary
+
+Deepgram, Cartesia, and Kokoro-hosted are metadata-only `speech_provider`
+records until a later realtime audio slice implements governed STT/TTS
+execution. They declare future remote capability and credential shape, but they
+do not create a voice runtime path in this slice.
+
+The next speech integration must reuse the same registry, policy, routing, and
+Core Secrets boundary proven by hosted text:
+
+- Speech consumes routed provider decisions through official core/app surfaces.
+- Speech must not import core internals or read raw provider secrets from app
+  data.
+- Chat asks the provider/router layer for speech capability instead of silently
+  choosing a remote provider.
+- Senses may open live audio sessions only after STT/TTS provider routing and
+  audit decisions exist.
+- Any future audio WebSocket must carry an already-audited router decision and
+  must not expose secret values.
+
+Kokoro-local, `local_process`, Piper/espeak provider governance, local STT/TTS
+provider execution, and bidirectional voice realtime are explicitly outside this
+hosted text slice. Existing local Speech app engines remain app-local behavior,
+not governed remote provider execution.
+
 ## What External Reviewers Should Know
 
 - provider abstraction is a real architectural boundary, not only an internal naming trick

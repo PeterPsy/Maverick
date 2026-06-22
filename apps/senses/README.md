@@ -125,6 +125,13 @@ duplicate or tardy callbacks for terminal attempts return the persisted terminal
 state without rewriting the capture. `captures.get` returns the persisted capture
 and Chat deep link after the callback has completed.
 
+Live audio capture and bidirectional voice routing remain deferred. Senses must
+not open raw device-token audio ingress, STT/TTS WebSockets, or remote speech
+provider sessions until the core provider registry, router, audit trail, and
+Core Secrets delivery path can supply an explicit governed decision for each
+audio stream. Future audio dispatch should reference that decision rather than
+choosing Deepgram, Cartesia, Kokoro-hosted, or any local engine inside Senses.
+
 ## Verify
 
 ```bash

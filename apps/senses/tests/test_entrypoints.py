@@ -1,4 +1,4 @@
-"""Phase 4 backend tests for Senses."""
+"""Phase 6 backend tests for Senses."""
 
 from __future__ import annotations
 
@@ -322,7 +322,7 @@ class SensesPhase4EntrypointTest(unittest.TestCase):
             self.assertEqual(settings_count, 1)
             self.assertTrue(set(WORKSPACE_TABLES).issubset(table_names))
 
-    def test_manifest_reports_phase_4_surfaces(self) -> None:
+    def test_manifest_reports_phase_6_surfaces(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             status, manifest = handle_action(
                 Path(tmp),
@@ -337,7 +337,7 @@ class SensesPhase4EntrypointTest(unittest.TestCase):
             self.assertEqual(manifest["action"], "manifest")
             self.assertIs(manifest["ok"], True)
             self.assertIs(manifest["available"], True)
-            self.assertEqual(manifest["phase"], "phase-4")
+            self.assertEqual(manifest["phase"], "phase-6")
             self.assertIs(manifest["auth"]["user_session_ingest_supported"], True)
             self.assertIs(manifest["auth"]["raw_device_auth_supported"], False)
             self.assertNotIn("device_ingress_supported", manifest["auth"])
@@ -349,6 +349,7 @@ class SensesPhase4EntrypointTest(unittest.TestCase):
             self.assertIn("captures.get", manifest["backend_actions"])
             self.assertIn("ingest.frame", manifest["backend_actions"])
             self.assertIn("routing.dispatch_capture", manifest["backend_actions"])
+            self.assertIn("routing.reset", manifest["backend_actions"])
             self.assertIn("storage_write.completed", manifest["callback_actions"])
             self.assertIn("runtime_dispatch.completed", manifest["callback_actions"])
             self.assertNotIn("ingest.frame", manifest["deferred_to_later_phases"])
@@ -610,11 +611,17 @@ class SensesPhase4EntrypointTest(unittest.TestCase):
                     "_app_actor": actor("admin-1", "admin"),
                     "allow_member_pairing": False,
                     "pairing_code_ttl_seconds": 120,
+                    "routing_followup_window_seconds": 180,
+                    "default_retention_class": "diagnostic",
+                    "failed_capture_ttl_seconds": 900,
                 },
             )
             self.assertEqual(status, 200)
             self.assertFalse(updated["settings"]["allow_member_pairing"])
             self.assertEqual(updated["settings"]["pairing_code_ttl_seconds"], 120)
+            self.assertEqual(updated["settings"]["routing_followup_window_seconds"], 180)
+            self.assertEqual(updated["settings"]["default_retention_class"], "diagnostic")
+            self.assertEqual(updated["settings"]["failed_capture_ttl_seconds"], 900)
 
     def test_ingest_frame_persists_capture_and_requests_storage_write(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -989,6 +996,61 @@ class SensesPhase4EntrypointTest(unittest.TestCase):
             self.assertEqual(capture_runtime, (None, None))
             self.assertEqual(
                 [event["resource"] for event in app_events_for_action("routing.dispatch_capture")],
+                ["captures", "routing"],
+            )
+
+    def test_routing_reset_clears_user_routing_session(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            data_root = Path(tmp)
+            completed = start_and_complete_device(data_root)
+            capture = stored_capture(data_root, completed)
+
+            status, dispatch = handle_action(
+                data_root,
+                {
+                    "action": "routing.dispatch_capture",
+                    "_workspace_id": "default",
+                    "_app_actor": actor(),
+                    "capture_id": capture["capture_id"],
+                },
+            )
+            self.assertEqual(status, 202)
+            routing_session_id = dispatch["routing_session"]["routing_session_id"]
+
+            with closing(sqlite3.connect(db_path(data_root))) as db:
+                db.execute(
+                    """
+                    UPDATE routing_sessions
+                    SET primary_thread_id = 'thread_one',
+                        primary_runtime_session_id = 'runtime_one',
+                        active_task_thread_id = 'thread_task',
+                        active_task_runtime_session_id = 'runtime_task',
+                        last_capture_id = ?,
+                        last_thread_id = 'thread_one',
+                        last_turn_id = 'turn_one',
+                        last_routing_kind = 'primary'
+                    WHERE routing_session_id = ?
+                    """,
+                    (capture["capture_id"], routing_session_id),
+                )
+                db.commit()
+
+            status, reset = handle_action(
+                data_root,
+                {
+                    "action": "routing.reset",
+                    "_workspace_id": "default",
+                    "_app_actor": actor(),
+                    "routing_session_id": routing_session_id,
+                },
+            )
+            self.assertEqual(status, 200)
+            session = reset["routing_session"]
+            self.assertIsNone(session["primary_thread_id"])
+            self.assertIsNone(session["active_task_thread_id"])
+            self.assertIsNone(session["last_turn_id"])
+            self.assertEqual(
+                [event["resource"] for event in app_events_for_action("routing.reset")],
                 ["captures", "routing"],
             )
 
@@ -1454,7 +1516,7 @@ class SensesPhase4EntrypointTest(unittest.TestCase):
                 },
             )
             self.assertTrue(cli_manifest["ok"])
-            self.assertEqual(cli_manifest["phase"], "phase-4")
+            self.assertEqual(cli_manifest["phase"], "phase-6")
             self.assertIs(cli_manifest["auth"]["user_session_ingest_supported"], True)
             self.assertIs(cli_manifest["auth"]["raw_device_auth_supported"], False)
             self.assertNotIn("device_ingress_supported", cli_manifest["auth"])
@@ -1462,7 +1524,7 @@ class SensesPhase4EntrypointTest(unittest.TestCase):
             self.assertFalse(cli_overview["ok"])
             self.assertEqual(cli_overview["error"], "unsupported_cli_action")
             self.assertTrue(mcp_manifest["ok"])
-            self.assertEqual(mcp_manifest["phase"], "phase-4")
+            self.assertEqual(mcp_manifest["phase"], "phase-6")
             self.assertIs(mcp_manifest["auth"]["user_session_ingest_supported"], True)
             self.assertIs(mcp_manifest["auth"]["raw_device_auth_supported"], False)
             self.assertNotIn("device_ingress_supported", mcp_manifest["auth"])
@@ -1470,7 +1532,7 @@ class SensesPhase4EntrypointTest(unittest.TestCase):
             self.assertFalse(mcp_pairing["ok"])
             self.assertEqual(mcp_pairing["error"], "unsupported_tool")
             self.assertTrue(mcp_override["ok"])
-            self.assertEqual(mcp_override["phase"], "phase-4")
+            self.assertEqual(mcp_override["phase"], "phase-6")
             self.assertNotIn("pairing", mcp_override)
             self.assertFalse(db_path(Path(tmp)).exists())
 

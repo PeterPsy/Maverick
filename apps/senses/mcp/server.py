@@ -14,6 +14,10 @@ from service import app_events_for_action, handle_action
 TOOL_ACTIONS = {
     "senses_operations_manifest": "manifest",
     "senses_reference_manifest": "reference_manifest",
+    "senses_view_filter": "view_filter",
+    "senses_set_view_filter": "set_view_filter",
+    "senses_set_custom_view": "set_custom_view",
+    "senses_clear_custom_view": "clear_custom_view",
 }
 
 

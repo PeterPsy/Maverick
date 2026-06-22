@@ -1,33 +1,128 @@
 import {
   Activity,
   AlertTriangle,
+  Camera,
   CheckCircle2,
   Clock3,
   Copy,
+  Database,
   Glasses,
+  HardDrive,
+  KeyRound,
   Laptop,
+  Link2,
+  ListChecks,
+  LogIn,
+  MessageSquare,
   Plus,
+  Radio,
   RefreshCw,
+  RotateCcw,
+  Route,
   Search,
+  Send,
+  Settings as SettingsIcon,
   ShieldCheck,
+  SlidersHorizontal,
   Smartphone,
   Unplug,
+  WifiOff,
+  Wrench,
   X,
 } from 'lucide-react';
-import { useEffect, useMemo, useState } from 'react';
-import { loadOverview, revokeDevice, startPairing } from './api';
-import type { SensesDevice, SensesOverview, SensesPairingSession } from './types';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { loadOverview, resetRoutingSession, revokeDevice, startPairing, updateSettings } from './api';
+import type {
+  SensesCapture,
+  SensesDevice,
+  SensesOverview,
+  SensesPairingSession,
+  SensesRoutingSession,
+  SensesSettings,
+} from './types';
 
 const APP_EVENTS_WS_PATH = '/api/apps/events/ws';
 const REFRESH_RESOURCES = new Set(['devices', 'pairing', 'settings', 'captures', 'routing', 'view-state']);
+const TAB_ITEMS = [
+  { id: 'devices', label: 'Devices', icon: Glasses },
+  { id: 'pairing', label: 'Pairing', icon: KeyRound },
+  { id: 'captures', label: 'Captures', icon: Camera },
+  { id: 'routing', label: 'Routing', icon: Route },
+  { id: 'settings', label: 'Settings', icon: SettingsIcon },
+] as const;
+
+type TabId = (typeof TAB_ITEMS)[number]['id'];
+type NativeCommand = 'refreshNativeStatus' | 'pairGlasses' | 'ask' | 'openLogin';
+
+interface SensesNativeStatus {
+  bridge_version?: number;
+  host?: string;
+  available?: boolean;
+  workspace_id?: string;
+  base_url?: string;
+  updated_at?: string;
+  maverick?: {
+    status?: string;
+    label?: string;
+    can_use_senses?: boolean;
+  };
+  ios?: {
+    app?: string;
+    auth_mode?: string;
+    queue_count?: number;
+    last_error?: string | null;
+  };
+  glasses?: {
+    connection?: string;
+    label?: string;
+    authorization?: string;
+    capture?: string;
+    is_mock_feed?: boolean;
+  };
+  capture?: {
+    busy?: boolean;
+    last_frame_id?: string | null;
+    last_frame_summary?: string | null;
+    senses_status?: string | null;
+  };
+  actions?: {
+    can_pair?: boolean;
+    can_ask?: boolean;
+    can_refresh?: boolean;
+    can_open_login?: boolean;
+  };
+}
+
+interface SettingsDraft {
+  allow_member_pairing: boolean;
+  require_admin_for_settings: boolean;
+  pairing_code_ttl_seconds: number;
+  max_frame_bytes: number;
+  max_audio_bytes: number;
+  routing_followup_window_seconds: number;
+  default_retention_class: string;
+  failed_capture_ttl_seconds: number;
+}
+
+declare global {
+  interface Window {
+    webkit?: {
+      messageHandlers?: Record<string, { postMessage: (message: unknown) => void } | undefined>;
+    };
+    __maverickSensesNativeStatus?: SensesNativeStatus;
+  }
+}
 
 export function App() {
   const [overview, setOverview] = useState<SensesOverview | null>(null);
   const [pairing, setPairing] = useState<SensesPairingSession | null>(null);
   const [query, setQuery] = useState('');
+  const [activeTab, setActiveTab] = useState<TabId>('devices');
   const [notice, setNotice] = useState('');
   const [error, setError] = useState('');
   const [busyAction, setBusyAction] = useState('');
+  const [settingsDraft, setSettingsDraft] = useState<SettingsDraft | null>(null);
+  const nativeHost = useNativeHost();
 
   const devices = useMemo(() => {
     const normalized = query.trim().toLowerCase();
@@ -42,19 +137,25 @@ export function App() {
         device.platform,
         device.status,
         device.owner_user_id,
+        metadataValue(device.metadata, 'adapter_id'),
       ].some((value) => value.toLowerCase().includes(normalized));
     });
   }, [overview, query]);
 
+  const latestCapture = useMemo(() => newestCapture(overview?.captures || []), [overview]);
   const stats = useMemo(() => {
     const items = overview?.devices || [];
+    const captures = overview?.captures || [];
     return {
       total: items.length,
       active: items.filter((device) => device.status === 'active').length,
       revoked: items.filter((device) => device.status === 'revoked').length,
-      pending: overview?.pairing_sessions?.length || 0,
+      pendingPairing: overview?.pairing_sessions?.filter((session) => session.status === 'pending').length || 0,
+      captures: captures.length,
+      routing: overview?.routing_sessions?.length || 0,
+      queue: nativeHost.status?.ios?.queue_count ?? 0,
     };
-  }, [overview]);
+  }, [overview, nativeHost.status]);
 
   async function refresh(options: { silent?: boolean } = {}) {
     if (!options.silent) {
@@ -76,6 +177,8 @@ export function App() {
     try {
       const created = await startPairing({ deviceKind: 'ios', platform: 'ios' });
       setPairing(created);
+      setActiveTab('pairing');
+      emitViewStateChanged('pairing');
       setNotice('Pairing creato.');
       await refresh({ silent: true });
     } catch (err) {
@@ -98,12 +201,65 @@ export function App() {
     }
   }
 
+  async function saveSettings() {
+    if (!settingsDraft) {
+      return;
+    }
+    setBusyAction('settings');
+    try {
+      await updateSettings(settingsDraft as Partial<SensesSettings>);
+      setNotice('Settings aggiornate.');
+      await refresh({ silent: true });
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Aggiornamento settings non riuscito.');
+    } finally {
+      setBusyAction((current) => (current === 'settings' ? '' : current));
+    }
+  }
+
+  async function resetRouting(session: SensesRoutingSession) {
+    setBusyAction(session.routing_session_id);
+    try {
+      await resetRoutingSession(session.routing_session_id);
+      setNotice('Routing resettato.');
+      await refresh({ silent: true });
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Reset routing non riuscito.');
+    } finally {
+      setBusyAction((current) => (current === session.routing_session_id ? '' : current));
+    }
+  }
+
   async function copyPairingCode() {
     if (!pairing?.code) {
       return;
     }
     await navigator.clipboard?.writeText(pairing.code);
     setNotice('Codice copiato.');
+  }
+
+  function runNativeCommand(command: NativeCommand) {
+    const labels: Record<NativeCommand, string> = {
+      refreshNativeStatus: 'native-refresh',
+      pairGlasses: 'native-pair',
+      ask: 'native-ask',
+      openLogin: 'native-login',
+    };
+    const accepted = nativeHost.send(command);
+    if (!accepted) {
+      setError('Host iOS non disponibile.');
+      return;
+    }
+    setBusyAction(labels[command]);
+    setNotice('Comando inviato all app iOS.');
+    window.setTimeout(() => {
+      setBusyAction((current) => (current === labels[command] ? '' : current));
+    }, 1800);
+  }
+
+  function selectTab(tab: TabId) {
+    setActiveTab(tab);
+    emitViewStateChanged(tab);
   }
 
   useEffect(() => {
@@ -117,6 +273,29 @@ export function App() {
     const timer = window.setTimeout(() => setNotice(''), 2600);
     return () => window.clearTimeout(timer);
   }, [notice]);
+
+  useEffect(() => {
+    if (!overview?.settings) {
+      return;
+    }
+    setSettingsDraft({
+      allow_member_pairing: overview.settings.allow_member_pairing,
+      require_admin_for_settings: overview.settings.require_admin_for_settings,
+      pairing_code_ttl_seconds: overview.settings.pairing_code_ttl_seconds,
+      max_frame_bytes: overview.settings.max_frame_bytes,
+      max_audio_bytes: overview.settings.max_audio_bytes,
+      routing_followup_window_seconds: overview.settings.routing_followup_window_seconds,
+      default_retention_class: overview.settings.default_retention_class,
+      failed_capture_ttl_seconds: overview.settings.failed_capture_ttl_seconds,
+    });
+  }, [overview?.settings]);
+
+  useEffect(() => {
+    if (!nativeHost.status?.updated_at) {
+      return;
+    }
+    void refresh({ silent: true });
+  }, [nativeHost.status?.updated_at]);
 
   useEffect(() => {
     window.parent?.postMessage({ type: 'maverick.app.ready', app_id: 'senses' }, window.location.origin);
@@ -177,6 +356,7 @@ export function App() {
 
   const dependencyStatus = overview?.dependencies.status || 'unknown';
   const loading = !overview && !error;
+  const nativeLastError = nativeHost.status?.ios?.last_error;
 
   return (
     <main className="senses-shell">
@@ -187,11 +367,16 @@ export function App() {
           </span>
           <div>
             <h1>Senses</h1>
-            <p>{overview?.workspace_id || 'default'}</p>
+            <p>{overview?.workspace_id || nativeHost.status?.workspace_id || 'default'}</p>
           </div>
         </div>
         <div className="senses-actions">
-          <StatusBadge status={dependencyStatus} />
+          <StatusBadge status={dependencyStatus} label="Storage" />
+          <HostBadge available={nativeHost.available} />
+          <button className="primary-button" type="button" onClick={() => void createPairing()} disabled={busyAction === 'pairing'}>
+            <Plus size={16} />
+            <span>Pair device</span>
+          </button>
           <button className="icon-button" type="button" onClick={() => void refresh()} title="Aggiorna" aria-label="Aggiorna">
             <RefreshCw size={17} className={busyAction === 'refresh' ? 'spin' : ''} />
           </button>
@@ -208,107 +393,227 @@ export function App() {
         </div>
       )}
 
-      <section className="senses-stats" aria-label="Stato device">
+      <section className="live-dashboard" aria-label="Dashboard live">
+        <StatusTile
+          icon={Radio}
+          label="Maverick"
+          value={nativeHost.status?.maverick?.label || nativeHost.status?.maverick?.status || dependencyStatus}
+          detail={overview?.actor.authenticated ? overview.actor.workspace_role || 'sessione' : 'sessione non verificata'}
+          tone={dependencyStatus === 'resolved' ? 'good' : 'warn'}
+        />
+        <StatusTile
+          icon={Smartphone}
+          label="App iOS"
+          value={nativeHost.available ? nativeHost.status?.ios?.app || 'Maverick iOS' : 'Browser/PWA'}
+          detail={nativeHost.available ? nativeHost.status?.ios?.auth_mode || 'web session' : 'host non disponibile'}
+          tone={nativeHost.available ? 'good' : 'muted'}
+        />
+        <StatusTile
+          icon={Glasses}
+          label="Glasses"
+          value={nativeHost.status?.glasses?.label || nativeHost.status?.glasses?.connection || 'remote'}
+          detail={nativeHost.status?.glasses?.authorization || 'nessun driver locale'}
+          tone={nativeHost.status?.actions?.can_ask ? 'good' : nativeHost.available ? 'warn' : 'muted'}
+        />
+        <StatusTile
+          icon={Camera}
+          label="Capture"
+          value={nativeHost.status?.glasses?.capture || nativeHost.status?.capture?.senses_status || latestCapture?.status || 'idle'}
+          detail={nativeHost.status?.capture?.last_frame_summary || latestCapture?.capture_id || 'nessun frame'}
+          tone={nativeHost.status?.capture?.busy ? 'warn' : latestCapture ? 'good' : 'muted'}
+        />
+        <StatusTile
+          icon={ListChecks}
+          label="Coda Senses"
+          value={String(stats.queue)}
+          detail={nativeHost.status?.capture?.senses_status || `${stats.captures} captures`}
+          tone={stats.queue > 0 ? 'warn' : 'good'}
+        />
+        <StatusTile
+          icon={AlertTriangle}
+          label="Ultimo errore"
+          value={nativeLastError ? 'presente' : overview?.dependencies.blocked_reason ? 'dependency' : 'none'}
+          detail={nativeLastError || overview?.dependencies.blocked_reason || latestCapture?.error_code || 'nessun errore'}
+          tone={nativeLastError || overview?.dependencies.blocked_reason ? 'danger' : 'muted'}
+        />
+      </section>
+
+      <section className="native-actions" aria-label="Azioni native">
+        <button
+          className="tool-button"
+          type="button"
+          onClick={() => runNativeCommand('pairGlasses')}
+          disabled={!nativeHost.available || nativeHost.status?.actions?.can_pair === false || busyAction === 'native-pair'}
+        >
+          <Glasses size={16} />
+          <span>Pair glasses</span>
+        </button>
+        <button
+          className="tool-button primary-tool"
+          type="button"
+          onClick={() => runNativeCommand('ask')}
+          disabled={!nativeHost.available || nativeHost.status?.actions?.can_ask === false || busyAction === 'native-ask'}
+        >
+          <Send size={16} />
+          <span>Ask</span>
+        </button>
+        <button
+          className="tool-button"
+          type="button"
+          onClick={() => runNativeCommand('refreshNativeStatus')}
+          disabled={!nativeHost.available || busyAction === 'native-refresh'}
+        >
+          <RefreshCw size={16} />
+          <span>Native refresh</span>
+        </button>
+        <button
+          className="tool-button"
+          type="button"
+          onClick={() => runNativeCommand('openLogin')}
+          disabled={!nativeHost.available || busyAction === 'native-login'}
+        >
+          <LogIn size={16} />
+          <span>Login</span>
+        </button>
+      </section>
+
+      <section className="senses-metrics" aria-label="Metriche Senses">
         <Metric label="Device" value={stats.total} />
         <Metric label="Attivi" value={stats.active} tone="good" />
         <Metric label="Revocati" value={stats.revoked} tone="muted" />
-        <Metric label="Pairing" value={stats.pending} tone="pending" />
+        <Metric label="Pairing" value={stats.pendingPairing} tone="pending" />
+        <Metric label="Captures" value={stats.captures} />
+        <Metric label="Routing" value={stats.routing} />
       </section>
 
-      <div className="senses-grid">
-        <section className="senses-panel devices-panel">
-          <div className="panel-heading">
-            <div>
-              <h2>Device</h2>
-              <p>{overview?.actor.can_manage_workspace_devices ? 'Workspace' : 'Personali'}</p>
-            </div>
-            <label className="senses-search">
-              <Search size={16} />
-              <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Cerca" />
-            </label>
-          </div>
+      <nav className="senses-tabs" aria-label="Sezioni Senses">
+        {TAB_ITEMS.map((tab) => {
+          const Icon = tab.icon;
+          return (
+            <button
+              key={tab.id}
+              className={activeTab === tab.id ? 'is-active' : ''}
+              type="button"
+              onClick={() => selectTab(tab.id)}
+            >
+              <Icon size={16} />
+              <span>{tab.label}</span>
+            </button>
+          );
+        })}
+      </nav>
 
-          {loading ? (
-            <DeviceSkeleton />
-          ) : devices.length ? (
-            <div className="device-list">
-              {devices.map((device) => (
-                <DeviceRow
-                  key={device.device_id}
-                  device={device}
-                  busy={busyAction === device.device_id}
-                  onRevoke={() => void revoke(device)}
-                />
-              ))}
-            </div>
-          ) : (
-            <div className="empty-state">
-              <Unplug size={22} />
-              <span>Nessun device registrato</span>
-            </div>
-          )}
-        </section>
-
-        <aside className="senses-side">
-          <section className="senses-panel pairing-panel">
-            <div className="panel-heading compact">
-              <div>
-                <h2>Pairing</h2>
-                <p>{overview?.settings.auth_mode || 'user_session_mvp'}</p>
-              </div>
-              <button className="primary-button" type="button" onClick={() => void createPairing()} disabled={busyAction === 'pairing'}>
-                <Plus size={16} />
-                <span>Nuovo</span>
-              </button>
-            </div>
-
-            {pairing?.code ? (
-              <div className="pairing-code-box">
-                <span className="code-label">Codice</span>
-                <button className="pairing-code" type="button" onClick={() => void copyPairingCode()} title="Copia codice">
-                  <span>{pairing.code}</span>
-                  <Copy size={16} />
-                </button>
-                <span className="pairing-expiry">
-                  <Clock3 size={14} />
-                  {formatDate(pairing.expires_at)}
-                </span>
-              </div>
-            ) : (
-              <PendingPairings sessions={overview?.pairing_sessions || []} />
-            )}
-          </section>
-
-          <section className="senses-panel policy-panel">
-            <div className="panel-heading compact">
-              <div>
-                <h2>Policy</h2>
-                <p>{overview?.actor.workspace_role || overview?.actor.platform_role || 'sessione'}</p>
-              </div>
-              <ShieldCheck size={18} />
-            </div>
-            <dl className="policy-list">
-              <div>
-                <dt>Auth</dt>
-                <dd>{overview?.settings.auth_mode || 'user_session_mvp'}</dd>
-              </div>
-              <div>
-                <dt>Pairing member</dt>
-                <dd>{overview?.settings.allow_member_pairing ? 'on' : 'off'}</dd>
-              </div>
-              <div>
-                <dt>Device ingress</dt>
-                <dd>{overview?.settings.device_ingress_enabled ? 'on' : 'off'}</dd>
-              </div>
-              <div>
-                <dt>Storage</dt>
-                <dd>{dependencyStatus}</dd>
-              </div>
-            </dl>
-          </section>
-        </aside>
+      <div className="senses-content">
+        {activeTab === 'devices' && (
+          <DevicesTab
+            devices={devices}
+            loading={loading}
+            query={query}
+            setQuery={setQuery}
+            canManage={Boolean(overview?.actor.can_manage_workspace_devices)}
+            busyAction={busyAction}
+            onRevoke={(device) => void revoke(device)}
+          />
+        )}
+        {activeTab === 'pairing' && (
+          <PairingTab
+            pairing={pairing}
+            sessions={overview?.pairing_sessions || []}
+            nativeAvailable={nativeHost.available}
+            busy={busyAction === 'pairing'}
+            onCreate={() => void createPairing()}
+            onCopy={() => void copyPairingCode()}
+            onNativePair={() => runNativeCommand('pairGlasses')}
+          />
+        )}
+        {activeTab === 'captures' && (
+          <CapturesTab captures={overview?.captures || []} loading={loading} />
+        )}
+        {activeTab === 'routing' && (
+          <RoutingTab
+            sessions={overview?.routing_sessions || []}
+            loading={loading}
+            busyAction={busyAction}
+            onReset={(session) => void resetRouting(session)}
+          />
+        )}
+        {activeTab === 'settings' && (
+          <SettingsDiagnosticsTab
+            overview={overview}
+            draft={settingsDraft}
+            setDraft={setSettingsDraft}
+            nativeStatus={nativeHost.status}
+            nativeAvailable={nativeHost.available}
+            busy={busyAction === 'settings'}
+            onSave={() => void saveSettings()}
+          />
+        )}
       </div>
     </main>
+  );
+}
+
+function useNativeHost() {
+  const [available, setAvailable] = useState(false);
+  const [status, setStatus] = useState<SensesNativeStatus | null>(() => window.__maverickSensesNativeStatus || null);
+
+  useEffect(() => {
+    function refreshAvailability() {
+      setAvailable(hasNativeHost());
+    }
+    function handleStatus(event: Event) {
+      const detail = (event as CustomEvent<SensesNativeStatus>).detail;
+      if (detail && typeof detail === 'object') {
+        window.__maverickSensesNativeStatus = detail;
+        setStatus(detail);
+      }
+      refreshAvailability();
+    }
+    window.addEventListener('maverick.senses.native-status', handleStatus);
+    refreshAvailability();
+    if (window.__maverickSensesNativeStatus) {
+      setStatus(window.__maverickSensesNativeStatus);
+    }
+    if (hasNativeHost()) {
+      postNativeCommand('refreshNativeStatus');
+    }
+    return () => window.removeEventListener('maverick.senses.native-status', handleStatus);
+  }, []);
+
+  const send = useCallback((command: NativeCommand) => {
+    if (!hasNativeHost()) {
+      setAvailable(false);
+      return false;
+    }
+    setAvailable(true);
+    postNativeCommand(command);
+    return true;
+  }, []);
+
+  return { available, status, send };
+}
+
+function hasNativeHost() {
+  return Boolean(window.webkit?.messageHandlers?.sensesHost?.postMessage);
+}
+
+function postNativeCommand(command: NativeCommand) {
+  window.webkit?.messageHandlers?.sensesHost?.postMessage({
+    command,
+    request_id: makeRequestId(),
+    source: 'senses.frontend',
+  });
+}
+
+function emitViewStateChanged(tab: TabId) {
+  window.parent?.postMessage(
+    {
+      type: 'maverick.app.data-changed',
+      owner_app_id: 'senses',
+      resource: 'view-state',
+      view_state: { tab },
+    },
+    window.location.origin,
   );
 }
 
@@ -321,22 +626,105 @@ function Metric({ label, value, tone }: { label: string; value: number; tone?: '
   );
 }
 
+function StatusTile({
+  icon: Icon,
+  label,
+  value,
+  detail,
+  tone,
+}: {
+  icon: typeof Activity;
+  label: string;
+  value: string;
+  detail: string;
+  tone?: 'good' | 'warn' | 'danger' | 'muted';
+}) {
+  return (
+    <article className={`status-tile ${tone ? `tone-${tone}` : ''}`}>
+      <div className="tile-icon" aria-hidden="true">
+        <Icon size={17} />
+      </div>
+      <div>
+        <span>{label}</span>
+        <strong>{value}</strong>
+        <p>{detail}</p>
+      </div>
+    </article>
+  );
+}
+
+function DevicesTab({
+  devices,
+  loading,
+  query,
+  setQuery,
+  canManage,
+  busyAction,
+  onRevoke,
+}: {
+  devices: SensesDevice[];
+  loading: boolean;
+  query: string;
+  setQuery: (value: string) => void;
+  canManage: boolean;
+  busyAction: string;
+  onRevoke: (device: SensesDevice) => void;
+}) {
+  return (
+    <section className="senses-panel devices-panel">
+      <div className="panel-heading">
+        <div>
+          <h2>Devices</h2>
+          <p>{canManage ? 'Workspace' : 'Personali'}</p>
+        </div>
+        <label className="senses-search">
+          <Search size={16} />
+          <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Cerca" />
+        </label>
+      </div>
+
+      {loading ? (
+        <DeviceSkeleton />
+      ) : devices.length ? (
+        <div className="device-list">
+          {devices.map((device) => (
+            <DeviceRow
+              key={device.device_id}
+              device={device}
+              busy={busyAction === device.device_id}
+              onRevoke={() => onRevoke(device)}
+            />
+          ))}
+        </div>
+      ) : (
+        <EmptyState icon={Unplug} label="Nessun device registrato" />
+      )}
+    </section>
+  );
+}
+
 function DeviceRow({ device, busy, onRevoke }: { device: SensesDevice; busy: boolean; onRevoke: () => void }) {
   const Icon = deviceIcon(device);
+  const adapter = metadataValue(device.metadata, 'adapter_id') || metadataValue(device.metadata, 'adapter') || 'default';
+  const scopes = metadataList(device.metadata, ['scopes', 'capabilities']);
   return (
-    <article className={`device-row is-${device.status}`}>
+    <article className={`data-row device-row is-${device.status}`}>
       <div className="device-icon" aria-hidden="true">
         <Icon size={19} />
       </div>
-      <div className="device-main">
-        <div className="device-title">
+      <div className="row-main">
+        <div className="row-title">
           <h3>{device.display_name}</h3>
           <span className={`status-pill is-${device.status}`}>{device.status}</span>
         </div>
-        <div className="device-meta">
+        <div className="row-meta">
           <span>{device.platform}</span>
           <span>{device.device_kind}</span>
+          <span>{adapter}</span>
           <span>{formatDate(device.last_seen_at || device.paired_at)}</span>
+        </div>
+        <div className="capability-list">
+          {scopes.length ? scopes.slice(0, 5).map((scope) => <span key={scope}>{scope}</span>) : <span>registry</span>}
         </div>
       </div>
       <button
@@ -353,20 +741,84 @@ function DeviceRow({ device, busy, onRevoke }: { device: SensesDevice; busy: boo
   );
 }
 
+function PairingTab({
+  pairing,
+  sessions,
+  nativeAvailable,
+  busy,
+  onCreate,
+  onCopy,
+  onNativePair,
+}: {
+  pairing: SensesPairingSession | null;
+  sessions: SensesPairingSession[];
+  nativeAvailable: boolean;
+  busy: boolean;
+  onCreate: () => void;
+  onCopy: () => void;
+  onNativePair: () => void;
+}) {
+  const visiblePairing = pairing || sessions.find((session) => session.status === 'pending') || null;
+  return (
+    <section className="senses-panel pairing-workspace">
+      <div className="panel-heading">
+        <div>
+          <h2>Pairing</h2>
+          <p>{visiblePairing ? `${visiblePairing.status} - ${formatDuration(secondsUntil(visiblePairing.expires_at))}` : 'nessuna sessione aperta'}</p>
+        </div>
+        <div className="panel-actions">
+          <button className="tool-button" type="button" onClick={onNativePair} disabled={!nativeAvailable}>
+            <Glasses size={16} />
+            <span>Glasses</span>
+          </button>
+          <button className="primary-button" type="button" onClick={onCreate} disabled={busy}>
+            <Plus size={16} />
+            <span>Nuovo</span>
+          </button>
+        </div>
+      </div>
+
+      <div className="pairing-layout">
+        {visiblePairing ? (
+          <div className="pairing-code-box large">
+            <span className="code-label">Codice</span>
+            <button className="pairing-code" type="button" onClick={onCopy} title="Copia codice">
+              <span>{visiblePairing.code || 'hidden'}</span>
+              <Copy size={16} />
+            </button>
+            <span className="pairing-expiry">
+              <Clock3 size={14} />
+              {formatDate(visiblePairing.expires_at)}
+            </span>
+          </div>
+        ) : (
+          <EmptyState icon={Clock3} label="Nessun pairing aperto" compact />
+        )}
+
+        <div className="qr-payload" aria-label="Payload pairing">
+          <div className="qr-mark">
+            <KeyRound size={26} />
+          </div>
+          <pre>{visiblePairing ? JSON.stringify(visiblePairing.qr_payload || {}, null, 2) : '{}'}</pre>
+        </div>
+      </div>
+
+      <PendingPairings sessions={sessions} />
+    </section>
+  );
+}
+
 function PendingPairings({ sessions }: { sessions: SensesPairingSession[] }) {
   if (!sessions.length) {
-    return (
-      <div className="empty-state compact-empty">
-        <Clock3 size={20} />
-        <span>Nessun pairing aperto</span>
-      </div>
-    );
+    return null;
   }
   return (
     <div className="pending-list">
-      {sessions.slice(0, 3).map((session) => (
+      {sessions.slice(0, 8).map((session) => (
         <div className="pending-row" key={session.pairing_id}>
+          <span>{compactId(session.pairing_id)}</span>
           <span>{session.device_kind || 'ios'}</span>
+          <span className={`status-pill is-${session.status}`}>{session.status}</span>
           <time>{formatDate(session.expires_at)}</time>
         </div>
       ))}
@@ -374,13 +826,323 @@ function PendingPairings({ sessions }: { sessions: SensesPairingSession[] }) {
   );
 }
 
-function StatusBadge({ status }: { status: string }) {
-  const ok = status === 'resolved';
+function CapturesTab({ captures, loading }: { captures: SensesCapture[]; loading: boolean }) {
+  return (
+    <section className="senses-panel table-panel">
+      <div className="panel-heading">
+        <div>
+          <h2>Captures</h2>
+          <p>{captures.length} record</p>
+        </div>
+        <Camera size={18} />
+      </div>
+      {loading ? (
+        <TableSkeleton />
+      ) : captures.length ? (
+        <div className="table-list capture-list">
+          {captures.map((capture) => (
+            <article className="table-row capture-row" key={capture.capture_id}>
+              <div>
+                <strong>{compactId(capture.capture_id)}</strong>
+                <span>{capture.device_id}</span>
+              </div>
+              <div>
+                <span className={`status-pill is-${capture.status}`}>{capture.status}</span>
+                <span>{capture.retention_class}</span>
+              </div>
+              <div>
+                <span>{capture.content_type}</span>
+                <span>{formatBytes(capture.storage.size_bytes)}</span>
+              </div>
+              <div className="link-stack">
+                {capture.storage.workspace_relative_path ? (
+                  <a href={`/app/storage/files/${encodeURIComponent(capture.storage.workspace_relative_path)}`}>
+                    <HardDrive size={14} />
+                    <span>Storage</span>
+                  </a>
+                ) : (
+                  <span>Storage pending</span>
+                )}
+                {capture.chat.deep_link ? (
+                  <a href={capture.chat.deep_link}>
+                    <MessageSquare size={14} />
+                    <span>Chat</span>
+                  </a>
+                ) : (
+                  <span>Chat pending</span>
+                )}
+              </div>
+              <time>{formatDate(capture.captured_at)}</time>
+            </article>
+          ))}
+        </div>
+      ) : (
+        <EmptyState icon={Camera} label="Nessuna capture" />
+      )}
+    </section>
+  );
+}
+
+function RoutingTab({
+  sessions,
+  loading,
+  busyAction,
+  onReset,
+}: {
+  sessions: SensesRoutingSession[];
+  loading: boolean;
+  busyAction: string;
+  onReset: (session: SensesRoutingSession) => void;
+}) {
+  return (
+    <section className="senses-panel table-panel">
+      <div className="panel-heading">
+        <div>
+          <h2>Routing</h2>
+          <p>{sessions.length} sessioni</p>
+        </div>
+        <Route size={18} />
+      </div>
+      {loading ? (
+        <TableSkeleton />
+      ) : sessions.length ? (
+        <div className="table-list routing-list">
+          {sessions.map((session) => (
+            <article className="routing-card" key={session.routing_session_id}>
+              <div className="routing-header">
+                <div>
+                  <strong>{compactId(session.routing_session_id)}</strong>
+                  <span>{session.device_id}</span>
+                </div>
+                <button
+                  className="tool-button"
+                  type="button"
+                  onClick={() => onReset(session)}
+                  disabled={busyAction === session.routing_session_id}
+                >
+                  <RotateCcw size={15} />
+                  <span>Reset</span>
+                </button>
+              </div>
+              <dl className="detail-grid">
+                <div>
+                  <dt>Primary thread</dt>
+                  <dd>{linkOrEmpty(session.primary_chat.deep_link, session.primary_thread_id)}</dd>
+                </div>
+                <div>
+                  <dt>Active task</dt>
+                  <dd>{linkOrEmpty(session.active_task_chat.deep_link, session.active_task_thread_id)}</dd>
+                </div>
+                <div>
+                  <dt>Ultimo turn</dt>
+                  <dd>{session.last_turn_id ? compactId(session.last_turn_id) : 'none'}</dd>
+                </div>
+                <div>
+                  <dt>Routing</dt>
+                  <dd>{session.last_routing_kind || 'none'}</dd>
+                </div>
+              </dl>
+            </article>
+          ))}
+        </div>
+      ) : (
+        <EmptyState icon={Route} label="Nessuna sessione routing" />
+      )}
+    </section>
+  );
+}
+
+function SettingsDiagnosticsTab({
+  overview,
+  draft,
+  setDraft,
+  nativeStatus,
+  nativeAvailable,
+  busy,
+  onSave,
+}: {
+  overview: SensesOverview | null;
+  draft: SettingsDraft | null;
+  setDraft: (draft: SettingsDraft) => void;
+  nativeStatus: SensesNativeStatus | null;
+  nativeAvailable: boolean;
+  busy: boolean;
+  onSave: () => void;
+}) {
+  const canSave = Boolean(overview?.actor.can_manage_workspace_devices);
+  return (
+    <div className="settings-grid">
+      <section className="senses-panel settings-panel">
+        <div className="panel-heading">
+          <div>
+            <h2>Settings</h2>
+            <p>{overview?.settings.auth_mode || 'user_session_mvp'}</p>
+          </div>
+          <SlidersHorizontal size={18} />
+        </div>
+        {draft ? (
+          <div className="settings-form">
+            <label className="toggle-row">
+              <input
+                type="checkbox"
+                checked={draft.allow_member_pairing}
+                onChange={(event) => setDraft({ ...draft, allow_member_pairing: event.target.checked })}
+              />
+              <span>Member pairing</span>
+            </label>
+            <label className="toggle-row">
+              <input
+                type="checkbox"
+                checked={draft.require_admin_for_settings}
+                onChange={(event) => setDraft({ ...draft, require_admin_for_settings: event.target.checked })}
+              />
+              <span>Admin settings</span>
+            </label>
+            <NumberField
+              label="Pairing TTL"
+              value={draft.pairing_code_ttl_seconds}
+              suffix="s"
+              onChange={(value) => setDraft({ ...draft, pairing_code_ttl_seconds: value })}
+            />
+            <NumberField
+              label="Max frame"
+              value={draft.max_frame_bytes}
+              suffix="bytes"
+              onChange={(value) => setDraft({ ...draft, max_frame_bytes: value })}
+            />
+            <NumberField
+              label="Max audio"
+              value={draft.max_audio_bytes}
+              suffix="bytes"
+              onChange={(value) => setDraft({ ...draft, max_audio_bytes: value })}
+            />
+            <NumberField
+              label="Routing window"
+              value={draft.routing_followup_window_seconds}
+              suffix="s"
+              onChange={(value) => setDraft({ ...draft, routing_followup_window_seconds: value })}
+            />
+            <label className="field-row">
+              <span>Retention</span>
+              <input
+                value={draft.default_retention_class}
+                onChange={(event) => setDraft({ ...draft, default_retention_class: event.target.value })}
+              />
+            </label>
+            <NumberField
+              label="Failed capture TTL"
+              value={draft.failed_capture_ttl_seconds}
+              suffix="s"
+              onChange={(value) => setDraft({ ...draft, failed_capture_ttl_seconds: value })}
+            />
+            <button className="primary-button save-button" type="button" onClick={onSave} disabled={!canSave || busy}>
+              <ShieldCheck size={16} />
+              <span>Salva</span>
+            </button>
+          </div>
+        ) : (
+          <EmptyState icon={SettingsIcon} label="Settings non caricate" compact />
+        )}
+      </section>
+
+      <section className="senses-panel diagnostics-panel">
+        <div className="panel-heading">
+          <div>
+            <h2>Diagnostics</h2>
+            <p>{nativeAvailable ? 'iOS host' : 'browser/PWA'}</p>
+          </div>
+          <Wrench size={18} />
+        </div>
+        <dl className="policy-list">
+          <div>
+            <dt>Backend</dt>
+            <dd>{overview?.ok ? 'ok' : 'unknown'}</dd>
+          </div>
+          <div>
+            <dt>Storage</dt>
+            <dd>{overview?.dependencies.status || 'unknown'}</dd>
+          </div>
+          <div>
+            <dt>Runtime</dt>
+            <dd>{overview?.routing_sessions.length ? 'mapped' : 'idle'}</dd>
+          </div>
+          <div>
+            <dt>Auth mode</dt>
+            <dd>{overview?.settings.auth_mode || 'unknown'}</dd>
+          </div>
+          <div>
+            <dt>Device ingress</dt>
+            <dd>{overview?.settings.device_ingress_enabled ? 'on' : 'off'}</dd>
+          </div>
+          <div>
+            <dt>iOS bridge</dt>
+            <dd>{nativeAvailable ? `v${nativeStatus?.bridge_version || 1}` : 'none'}</dd>
+          </div>
+          <div>
+            <dt>Last native</dt>
+            <dd>{nativeStatus?.updated_at ? formatDate(nativeStatus.updated_at) : 'never'}</dd>
+          </div>
+          <div>
+            <dt>Privacy</dt>
+            <dd>no secret</dd>
+          </div>
+        </dl>
+      </section>
+    </div>
+  );
+}
+
+function NumberField({
+  label,
+  value,
+  suffix,
+  onChange,
+}: {
+  label: string;
+  value: number;
+  suffix: string;
+  onChange: (value: number) => void;
+}) {
+  return (
+    <label className="field-row">
+      <span>{label}</span>
+      <input
+        type="number"
+        min={0}
+        value={value}
+        onChange={(event) => onChange(Number(event.target.value || 0))}
+      />
+      <small>{suffix}</small>
+    </label>
+  );
+}
+
+function StatusBadge({ status, label }: { status: string; label?: string }) {
+  const ok = status === 'resolved' || status === 'ready' || status === 'ok';
   return (
     <span className={`status-badge ${ok ? 'is-ready' : 'is-blocked'}`}>
       {ok ? <CheckCircle2 size={15} /> : <AlertTriangle size={15} />}
+      {label ? `${label}: ` : ''}
       {ok ? 'ready' : status}
     </span>
+  );
+}
+
+function HostBadge({ available }: { available: boolean }) {
+  return (
+    <span className={`status-badge ${available ? 'is-ready' : 'is-muted'}`}>
+      {available ? <Smartphone size={15} /> : <WifiOff size={15} />}
+      {available ? 'iOS host' : 'browser'}
+    </span>
+  );
+}
+
+function EmptyState({ icon: Icon, label, compact }: { icon: typeof Activity; label: string; compact?: boolean }) {
+  return (
+    <div className={`empty-state ${compact ? 'compact-empty' : ''}`}>
+      <Icon size={22} />
+      <span>{label}</span>
+    </div>
   );
 }
 
@@ -388,8 +1150,22 @@ function DeviceSkeleton() {
   return (
     <div className="device-list">
       {[0, 1, 2].map((item) => (
-        <div className="device-row skeleton" key={item}>
+        <div className="data-row device-row skeleton" key={item}>
           <span className="device-icon" />
+          <span className="skeleton-lines" />
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function TableSkeleton() {
+  return (
+    <div className="table-list">
+      {[0, 1, 2, 3].map((item) => (
+        <div className="table-row skeleton" key={item}>
+          <span className="skeleton-lines" />
+          <span className="skeleton-lines" />
           <span className="skeleton-lines" />
         </div>
       ))}
@@ -408,6 +1184,46 @@ function deviceIcon(device: SensesDevice) {
   return Smartphone;
 }
 
+function newestCapture(captures: SensesCapture[]) {
+  return captures.slice().sort((left, right) => Date.parse(right.captured_at) - Date.parse(left.captured_at))[0] || null;
+}
+
+function metadataValue(metadata: Record<string, unknown>, key: string) {
+  const value = metadata[key];
+  if (typeof value === 'string') {
+    return value;
+  }
+  if (typeof value === 'number' || typeof value === 'boolean') {
+    return String(value);
+  }
+  return '';
+}
+
+function metadataList(metadata: Record<string, unknown>, keys: string[]) {
+  const values: string[] = [];
+  for (const key of keys) {
+    const value = metadata[key];
+    if (Array.isArray(value)) {
+      values.push(...value.map(String));
+    } else if (typeof value === 'string') {
+      values.push(...value.split(',').map((item) => item.trim()).filter(Boolean));
+    }
+  }
+  return Array.from(new Set(values));
+}
+
+function linkOrEmpty(deepLink: string | null, label: string | null) {
+  if (!deepLink || !label) {
+    return 'none';
+  }
+  return (
+    <a href={deepLink}>
+      <Link2 size={13} />
+      <span>{compactId(label)}</span>
+    </a>
+  );
+}
+
 function formatDate(value: string | null | undefined) {
   if (!value) {
     return 'mai';
@@ -422,4 +1238,49 @@ function formatDate(value: string | null | undefined) {
     hour: '2-digit',
     minute: '2-digit',
   }).format(date);
+}
+
+function formatBytes(value: number | null | undefined) {
+  const bytes = Number(value || 0);
+  if (bytes < 1024) {
+    return `${bytes} B`;
+  }
+  if (bytes < 1024 * 1024) {
+    return `${(bytes / 1024).toFixed(1)} KB`;
+  }
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+function secondsUntil(value: string | null | undefined) {
+  if (!value) {
+    return 0;
+  }
+  const ms = Date.parse(value) - Date.now();
+  return Math.max(0, Math.floor(ms / 1000));
+}
+
+function formatDuration(seconds: number) {
+  if (seconds <= 0) {
+    return 'scaduto';
+  }
+  const minutes = Math.floor(seconds / 60);
+  const remainder = seconds % 60;
+  return minutes > 0 ? `${minutes}m ${remainder}s` : `${remainder}s`;
+}
+
+function compactId(value: string | null | undefined) {
+  if (!value) {
+    return 'none';
+  }
+  if (value.length <= 18) {
+    return value;
+  }
+  return `${value.slice(0, 10)}...${value.slice(-6)}`;
+}
+
+function makeRequestId() {
+  if (typeof crypto !== 'undefined' && 'randomUUID' in crypto) {
+    return crypto.randomUUID();
+  }
+  return `req-${Date.now()}-${Math.random().toString(16).slice(2)}`;
 }

@@ -1,14 +1,70 @@
 {
   "tools": {
     "senses_operations_manifest": {
-      "description": "Describe Senses Phase 4 backend surfaces, dependency requirements, and runtime routing work.",
+      "description": "Describe Senses Phase 6 backend surfaces, dependency requirements, frontend, and runtime routing work.",
       "input_schema": {
         "type": "object",
         "additionalProperties": false
       }
     },
     "senses_reference_manifest": {
-      "description": "Report the Senses reference surface. Capture reference search remains deferred after Phase 4 routing.",
+      "description": "Report the Senses reference surface. Capture reference search remains deferred after Phase 6 routing.",
+      "input_schema": {
+        "type": "object",
+        "additionalProperties": false
+      }
+    },
+    "senses_view_filter": {
+      "description": "Read the current Senses frontend view state.",
+      "input_schema": {
+        "type": "object",
+        "additionalProperties": false
+      }
+    },
+    "senses_set_view_filter": {
+      "description": "Set Senses tab, query, and status filters.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "view_filter": {
+            "type": "object"
+          },
+          "tab": {
+            "type": "string"
+          },
+          "query": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
+          },
+          "device_id": {
+            "type": "string"
+          },
+          "capture_id": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    "senses_set_custom_view": {
+      "description": "Set a curated Senses custom view.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "title": {
+            "type": "string"
+          },
+          "refs": {
+            "type": "array"
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    "senses_clear_custom_view": {
+      "description": "Return Senses to normal browsing.",
       "input_schema": {
         "type": "object",
         "additionalProperties": false

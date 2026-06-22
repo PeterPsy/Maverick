@@ -1,4 +1,4 @@
-"""Contract tests for Senses Phase 4."""
+"""Contract tests for Senses Phase 6."""
 
 from __future__ import annotations
 
@@ -27,10 +27,15 @@ class SensesContractTest(unittest.TestCase):
             [
                 "senses_reference_manifest",
                 "senses_operations_manifest",
+                "senses_view_filter",
+                "senses_set_view_filter",
+                "senses_set_custom_view",
+                "senses_clear_custom_view",
             ],
         )
         self.assertEqual(parsed.contract.capabilities.views, ["main"])
         self.assertEqual(parsed.contract.capabilities.reference_entities, [])
+        self.assertEqual(parsed.contract.capabilities.view_surfaces[0].view_id, "main")
         self.assertEqual(parsed.contract.storage.primary_paths, ["data/senses/senses.sqlite"])
 
     def test_contract_declares_phase_4_storage_dependencies(self) -> None:
@@ -43,7 +48,7 @@ class SensesContractTest(unittest.TestCase):
 
     def test_contract_declares_device_registry_interface_and_events(self) -> None:
         contract = json.loads((APP_ROOT / "app_contract.json").read_text(encoding="utf-8"))
-        self.assertEqual(contract["version"], "0.4.0")
+        self.assertEqual(contract["version"], "0.6.0")
         self.assertEqual(contract["presentation"]["frontend_role"], "workspace")
         self.assertEqual(contract["storage"]["data_schema_version"], "4")
         self.assertTrue(contract["permissions"]["runtime"]["create_sessions"])
@@ -51,7 +56,7 @@ class SensesContractTest(unittest.TestCase):
         self.assertEqual(provided["device.registry"]["version"], "1")
         self.assertEqual(provided["device.registry"]["surfaces"], ["backend", "view"])
         event_resources = {item["resource"] for item in contract["capabilities"]["data_events"]}
-        self.assertEqual(event_resources, {"devices", "pairing", "settings", "captures", "routing"})
+        self.assertEqual(event_resources, {"devices", "pairing", "settings", "captures", "routing", "view-state"})
 
     def test_sdk_validation_passes(self) -> None:
         validation = validate_app_source(APP_ROOT)

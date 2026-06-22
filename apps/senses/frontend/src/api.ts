@@ -1,4 +1,11 @@
-import type { SensesActionResult, SensesDevice, SensesOverview, SensesPairingSession } from './types';
+import type {
+  SensesActionResult,
+  SensesDevice,
+  SensesOverview,
+  SensesPairingSession,
+  SensesRoutingSession,
+  SensesSettings,
+} from './types';
 
 export class SensesApiError extends Error {
   code: string;
@@ -60,4 +67,20 @@ export async function revokeDevice(deviceId: string): Promise<SensesDevice> {
     throw new SensesApiError('invalid_device_response', 'Senses did not return the revoked device.', 500);
   }
   return payload.device;
+}
+
+export async function updateSettings(settings: Partial<SensesSettings>): Promise<SensesSettings> {
+  const payload = await request({ action: 'settings.update', ...settings });
+  if (!payload.settings) {
+    throw new SensesApiError('invalid_settings_response', 'Senses did not return updated settings.', 500);
+  }
+  return payload.settings;
+}
+
+export async function resetRoutingSession(routingSessionId: string): Promise<SensesRoutingSession[]> {
+  const payload = await request({ action: 'routing.reset', routing_session_id: routingSessionId });
+  if (!payload.routing_sessions) {
+    throw new SensesApiError('invalid_routing_response', 'Senses did not return routing sessions.', 500);
+  }
+  return payload.routing_sessions;
 }

@@ -1,4 +1,4 @@
-"""Phase 4 service layer for Senses."""
+"""Phase 6 service layer for Senses."""
 
 from __future__ import annotations
 
@@ -30,8 +30,9 @@ from database import (
 
 APP_ID = "senses"
 APP_NAME = "Senses"
-APP_VERSION = "0.4.0"
-PHASE = "phase-4"
+APP_VERSION = "0.6.0"
+PHASE = "phase-6"
+VIEW_STATE_FILENAME = "view_state.json"
 PAIRING_CODE_ALPHABET = "".join(char for char in string.ascii_uppercase + string.digits if char not in {"0", "O", "I", "1"})
 PAIRING_CODE_LENGTH = 8
 PAIRING_TTL_MIN_SECONDS = 60
@@ -124,6 +125,11 @@ DECLARED_BACKEND_ACTIONS = (
     "captures.get",
     "ingest.frame",
     "routing.dispatch_capture",
+    "routing.reset",
+    "view_filter",
+    "set_view_filter",
+    "set_custom_view",
+    "clear_custom_view",
 )
 CALLBACK_BACKEND_ACTIONS = ("storage_write.completed", RUNTIME_DISPATCH_CALLBACK_ACTION)
 DEFERRED_ACTIONS = (
@@ -149,6 +155,8 @@ def handle_action(data_root: Path, payload: dict[str, object]) -> tuple[int, dic
         return 200, health_action_payload(data_root, workspace_id, dependencies)
     if action in {"reference_manifest", "references.manifest"}:
         return 200, reference_manifest()
+    if action in {"view_filter", "set_view_filter", "set_custom_view", "clear_custom_view"}:
+        return view_state_action(data_root, workspace_id, action, payload)
     if action == "storage_write.completed":
         return storage_write_completed(data_root, workspace_id, payload)
     if action == RUNTIME_DISPATCH_CALLBACK_ACTION:
@@ -209,11 +217,16 @@ def handle_action(data_root: Path, payload: dict[str, object]) -> tuple[int, dic
         if auth_error is not None:
             return auth_error
         return routing_dispatch_capture(data_root, workspace_id, actor, payload)
+    if action == "routing.reset":
+        auth_error = require_authenticated(actor)
+        if auth_error is not None:
+            return auth_error
+        return routing_reset(data_root, workspace_id, actor, payload)
 
     return error_payload(
         400,
         "unsupported_action",
-        f"Unsupported Senses Phase 4 action `{action}`.",
+        f"Unsupported Senses Phase 6 action `{action}`.",
         allowed_actions=list(DECLARED_BACKEND_ACTIONS),
         deferred_actions=list(DEFERRED_ACTIONS),
     )
@@ -248,7 +261,7 @@ def require_authenticated(actor: dict[str, str | None]) -> tuple[int, dict[str, 
     return error_payload(
         401,
         "authentication_required",
-        "Senses Phase 4 actions require a Maverick user session.",
+        "Senses Phase 6 actions require a Maverick user session.",
     )
 
 
@@ -299,7 +312,7 @@ def manifest_payload(
         "dependency_resolution": dependencies,
         "deferred_to_later_phases": list(DEFERRED_ACTIONS),
         "notes": [
-            "Senses Phase 4 uses Maverick user sessions for pairing, device registry, frame ingestion, and routing.",
+            "Senses Phase 6 uses Maverick user sessions for pairing, device registry, frame ingestion, routing, and the workspace frontend.",
             "ingest.frame is available with a Maverick user session and active device_session_id.",
             "ingest.frame stores captures through the declared Storage dependency and never launches runtime turns.",
             "routing.dispatch_capture emits runtime_launch_requests only after a capture is stored.",
@@ -339,6 +352,112 @@ def overview_payload(
         "captures": list_captures(data_root, workspace_id, actor, include_all=actor_is_manager(actor)),
         "routing_sessions": list_routing_sessions(data_root, workspace_id, actor, include_all=actor_is_manager(actor)),
         "dependencies": dependencies,
+    }
+
+
+def view_state_action(
+    data_root: Path,
+    workspace_id: str,
+    action: str,
+    payload: dict[str, object],
+) -> tuple[int, dict[str, object]]:
+    state = load_view_state(data_root, workspace_id)
+    if action == "view_filter":
+        return 200, {"ok": True, "state": state}
+
+    if action == "set_view_filter":
+        current = state.get("view_filter") if isinstance(state.get("view_filter"), dict) else {}
+        updates = payload.get("view_filter") if isinstance(payload.get("view_filter"), dict) else payload
+        state["view_filter"] = {
+            **current,
+            **compact_view_filter(updates),
+            "updated_at": now_timestamp(),
+        }
+    elif action == "set_custom_view":
+        state["custom_view"] = compact_custom_view(payload)
+        state["view_filter"] = {
+            **(state.get("view_filter") if isinstance(state.get("view_filter"), dict) else {}),
+            "updated_at": now_timestamp(),
+        }
+    elif action == "clear_custom_view":
+        state["custom_view"] = None
+        state["view_filter"] = {
+            **(state.get("view_filter") if isinstance(state.get("view_filter"), dict) else {}),
+            "updated_at": now_timestamp(),
+        }
+    else:
+        return error_payload(400, "unsupported_action", f"Unsupported Senses view-state action `{action}`.")
+
+    save_view_state(data_root, workspace_id, state)
+    return 200, {"ok": True, "state": state}
+
+
+def load_view_state(data_root: Path, workspace_id: str) -> dict[str, object]:
+    path = view_state_path(data_root)
+    if path.is_file():
+        try:
+            payload = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            payload = {}
+    else:
+        payload = {}
+    if not isinstance(payload, dict) or payload.get("workspace_id") != workspace_id:
+        return default_view_state(workspace_id)
+    return {
+        **default_view_state(workspace_id),
+        **payload,
+    }
+
+
+def save_view_state(data_root: Path, workspace_id: str, state: dict[str, object]) -> None:
+    data_root.mkdir(parents=True, exist_ok=True)
+    path = view_state_path(data_root)
+    payload = {
+        **default_view_state(workspace_id),
+        **state,
+        "workspace_id": workspace_id,
+        "schema_version": "1",
+    }
+    path.write_text(json.dumps(payload, sort_keys=True), encoding="utf-8")
+
+
+def default_view_state(workspace_id: str) -> dict[str, object]:
+    return {
+        "schema_version": "1",
+        "workspace_id": workspace_id,
+        "view_filter": {
+            "tab": "devices",
+            "query": "",
+            "updated_at": None,
+        },
+        "custom_view": None,
+    }
+
+
+def view_state_path(data_root: Path) -> Path:
+    return data_root / VIEW_STATE_FILENAME
+
+
+def compact_view_filter(payload: object) -> dict[str, object]:
+    if not isinstance(payload, dict):
+        return {}
+    result: dict[str, object] = {}
+    for key in ("tab", "query", "status", "device_id", "capture_id"):
+        value = text_or_none(payload.get(key))
+        if value is not None:
+            result[key] = bounded_text(value, fallback="", max_length=128)
+    return result
+
+
+def compact_custom_view(payload: dict[str, object]) -> dict[str, object]:
+    refs = payload.get("refs")
+    compact_refs: list[object] = []
+    if isinstance(refs, list):
+        compact_refs = refs[:100]
+    return {
+        "title": bounded_text(payload.get("title"), fallback="Custom view", max_length=120),
+        "refs": compact_refs,
+        "updated_at": now_timestamp(),
     }
 
 
@@ -736,6 +855,26 @@ def settings_update(
         updates["max_frame_bytes"] = bounded_int(payload.get("max_frame_bytes"), default=8388608, minimum=1, maximum=52428800)
     if "max_audio_bytes" in payload:
         updates["max_audio_bytes"] = bounded_int(payload.get("max_audio_bytes"), default=10485760, minimum=1, maximum=52428800)
+    if "routing_followup_window_seconds" in payload:
+        updates["routing_followup_window_seconds"] = bounded_int(
+            payload.get("routing_followup_window_seconds"),
+            default=int(current.get("routing_followup_window_seconds") or 300),
+            minimum=FOLLOWUP_ROUTE_WINDOW_SECONDS_MIN,
+            maximum=FOLLOWUP_ROUTE_WINDOW_SECONDS_MAX,
+        )
+    if "default_retention_class" in payload:
+        updates["default_retention_class"] = bounded_text(
+            payload.get("default_retention_class"),
+            fallback=str(current.get("default_retention_class") or "chat_attachment"),
+            max_length=64,
+        )
+    if "failed_capture_ttl_seconds" in payload:
+        updates["failed_capture_ttl_seconds"] = bounded_int(
+            payload.get("failed_capture_ttl_seconds"),
+            default=int(current.get("failed_capture_ttl_seconds") or 86400),
+            minimum=60,
+            maximum=2_592_000,
+        )
     if not updates:
         return 200, settings_get(data_root, workspace_id, actor)
 
@@ -1371,6 +1510,87 @@ def routing_dispatch_capture(
         "error": None,
     }
     return 202, response
+
+
+def routing_reset(
+    data_root: Path,
+    workspace_id: str,
+    actor: dict[str, str | None],
+    payload: dict[str, object],
+) -> tuple[int, dict[str, object]]:
+    routing_session_id = text_or_none(payload.get("routing_session_id"))
+    if not routing_session_id:
+        return error_payload(400, "missing_routing_session_id", "routing.reset requires routing_session_id.")
+
+    actor_user_id = str(actor["user_id"])
+    timestamp = now_timestamp()
+    ensure_schema(data_root, workspace_id)
+    db = connect(data_root)
+    try:
+        db.execute("BEGIN IMMEDIATE")
+        row = db.execute(
+            """
+            SELECT * FROM routing_sessions
+            WHERE workspace_id = ? AND routing_session_id = ?
+            """,
+            (workspace_id, routing_session_id),
+        ).fetchone()
+        if row is None:
+            db.rollback()
+            return error_payload(404, "routing_session_not_found", "No matching Senses routing session was found.")
+        if str(row["user_id"]) != actor_user_id and not actor_is_manager(actor):
+            db.rollback()
+            return error_payload(403, "senses_permission_forbidden", "You cannot reset this Senses routing session.")
+
+        db.execute(
+            """
+            UPDATE routing_sessions
+            SET primary_thread_id = NULL,
+                primary_runtime_session_id = NULL,
+                active_task_thread_id = NULL,
+                active_task_runtime_session_id = NULL,
+                active_task_capture_id = NULL,
+                active_task_started_at = NULL,
+                active_task_last_used_at = NULL,
+                last_capture_id = NULL,
+                last_runtime_session_id = NULL,
+                last_thread_id = NULL,
+                last_turn_id = NULL,
+                last_routing_kind = NULL,
+                updated_at = ?
+            WHERE workspace_id = ? AND routing_session_id = ?
+            """,
+            (timestamp, workspace_id, routing_session_id),
+        )
+        write_audit(
+            db,
+            workspace_id=workspace_id,
+            event_type="routing.reset",
+            actor_user_id=actor_user_id,
+            device_id=text_or_none(row["device_id"]),
+            details={"routing_session_id": routing_session_id},
+        )
+        db.commit()
+        updated = db.execute(
+            "SELECT * FROM routing_sessions WHERE workspace_id = ? AND routing_session_id = ?",
+            (workspace_id, routing_session_id),
+        ).fetchone()
+    except Exception:
+        db.rollback()
+        raise
+    finally:
+        db.close()
+
+    return 200, {
+        "ok": True,
+        "routing_session": routing_session_payload(updated),
+        "routing_sessions": list_routing_sessions(
+            data_root,
+            workspace_id,
+            actor,
+            include_all=actor_is_manager(actor),
+        ),
+    }
 
 
 def runtime_dispatch_completed(
@@ -3062,7 +3282,7 @@ def reference_manifest() -> dict[str, object]:
         "app_id": APP_ID,
         "schema_version": "1",
         "entity_types": [],
-        "notes": ["Senses capture records exist in Phase 4; reference search and resolve remain deferred."],
+        "notes": ["Senses capture records exist in Phase 6; reference search and resolve remain deferred."],
     }
 
 
@@ -3138,11 +3358,13 @@ def app_events_for_action(action: str) -> list[dict[str, str]]:
             {"type": "maverick.app.data-changed", "owner_app_id": APP_ID, "resource": "captures"},
             {"type": "maverick.app.data-changed", "owner_app_id": APP_ID, "resource": "devices"},
         ]
-    if normalized in {"routing.dispatch_capture", RUNTIME_DISPATCH_CALLBACK_ACTION}:
+    if normalized in {"routing.dispatch_capture", "routing.reset", RUNTIME_DISPATCH_CALLBACK_ACTION}:
         return [
             {"type": "maverick.app.data-changed", "owner_app_id": APP_ID, "resource": "captures"},
             {"type": "maverick.app.data-changed", "owner_app_id": APP_ID, "resource": "routing"},
         ]
+    if normalized in {"set_view_filter", "set_custom_view", "clear_custom_view", "view-state.changed"}:
+        return [{"type": "maverick.app.data-changed", "owner_app_id": APP_ID, "resource": "view-state"}]
     return []
 
 

@@ -160,5 +160,6 @@ export interface SensesActionResult {
   captures?: SensesCapture[];
   pairing?: SensesPairingSession;
   pairing_sessions?: SensesPairingSession[];
+  routing_session?: SensesRoutingSession;
   routing_sessions?: SensesRoutingSession[];
 }

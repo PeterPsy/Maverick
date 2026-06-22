@@ -1,27 +1,31 @@
 # Senses
 
-Senses is a root Maverick app for device and sensor inputs. Phase 4 implements
-user-session pairing, the workspace-scoped device registry, authenticated frame
-ingestion through Storage-backed capture records, and explicit routing from
-stored captures into Maverick Chat runtime threads without adding a public
-bearer-token ingress.
+Senses is a root Maverick app for device and sensor inputs. Phase 6 keeps the
+Phase 4 backend contract for user-session pairing, the workspace-scoped device
+registry, authenticated frame ingestion through Storage-backed capture records,
+and explicit routing from stored captures into Maverick Chat runtime threads
+without adding a public bearer-token ingress. It adds the primary workspace UI
+for device, pairing, capture, routing, settings, diagnostics, and iOS host
+control.
 
-## Phase 4 Surfaces
+## Phase 6 Surfaces
 
 - frontend: `frontend/dist`
 - backend: `manifest`, `health`, `overview`, `pairing.start`,
   `pairing.complete`, `pairing.status`, `devices.list`, `devices.revoke`,
   `settings.get`, `settings.update`, `captures.get`, `ingest.frame`,
-  `routing.dispatch_capture`
+  `routing.dispatch_capture`, `routing.reset`
 - dependency callback: `storage_write.completed`
 - runtime callback: `runtime_dispatch.completed`
 - CLI: `senses` for manifest, health, and reference discovery
-- MCP: `senses_operations_manifest`, `senses_reference_manifest`
+- MCP: `senses_operations_manifest`, `senses_reference_manifest`,
+  `senses_view_filter`, `senses_set_view_filter`,
+  `senses_set_custom_view`, `senses_clear_custom_view`
 - hooks: `install`, `migrate`, `health_check`
 
 The MVP auth mode is `user_session_mvp`. Mounted backend calls use the Maverick
 user session supplied by `/api/apps/senses/backend`; Senses does not accept a raw
-device token in Phase 4. Pairing, registry, settings, ingestion, and routing
+device token in Phase 6. Pairing, registry, settings, ingestion, and routing
 operations are backend/view-only because standard CLI/MCP app contexts do not
 carry a Maverick user session.
 
@@ -39,7 +43,7 @@ The SQLite file is:
 workspaces/<workspace_id>/data/senses/senses.sqlite
 ```
 
-Phase 4 creates these workspace-scoped tables:
+Phase 6 creates these workspace-scoped tables:
 
 - `schema_migrations`
 - `settings`
@@ -132,6 +136,33 @@ Core Secrets delivery path can supply an explicit governed decision for each
 audio stream. Future audio dispatch should reference that decision rather than
 choosing Deepgram, Cartesia, Kokoro-hosted, or any local engine inside Senses.
 
+## Frontend And iOS Host Bridge
+
+The Senses frontend is the primary visual surface for Maverick status, iOS host
+status, glasses connection, capture state, local Senses queue, last frame/error,
+pairing, captures, routing, settings, and diagnostics. When the app is opened
+inside Maverick iOS, the WebView exposes a minimal `sensesHost` message handler
+that accepts controlled commands:
+
+- `refreshNativeStatus`
+- `pairGlasses`
+- `ask`
+- `openLogin`
+
+The native app pushes sanitized status into the page with the
+`maverick.senses.native-status` browser event. No cookies, bearer tokens, raw
+DAT handles, or Meta DAT logic are exposed to the frontend. When Senses runs in
+a normal browser or PWA without the iOS host, backend-owned device, pairing,
+capture, routing, and settings views still work, while physical glasses actions
+show as unavailable.
+
+Maverick iOS remains responsible for Meta DAT SDK configuration, iOS
+permissions, Meta glasses pairing, physical snapshot capture, local retry queue,
+user-session HTTPS submission to Senses, and opening Maverick login when the
+session expires. Senses remains responsible for the registry, pairing sessions,
+capture records, Storage write requests, routing state, settings, audit, and the
+user-facing diagnostic UI.
+
 ## Verify
 
 ```bash
@@ -174,7 +205,8 @@ Senses is a sealed, sandbox-compatible root app. Its contract declares
 frontend/backend/CLI/MCP surfaces, install/migrate/health hooks, app-owned
 SQLite state under `data/senses`, required Storage dependency aliases for file
 creation and catalog metadata, runtime session creation for dispatch, and data
-events for devices, pairing, settings, captures, and routing. The operations
+events for devices, pairing, settings, captures, routing, and frontend
+view-state. The operations
 manifest reports separate booleans for user-session `ingest.frame` support and
 raw device auth support. Device-token
-ingress and capture reference entities remain deferred beyond Phase 4.
+ingress and capture reference entities remain deferred beyond Phase 6.

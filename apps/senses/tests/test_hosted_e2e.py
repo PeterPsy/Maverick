@@ -1,4 +1,4 @@
-"""Hosted/core end-to-end coverage for the Senses Phase 4 pipeline."""
+"""Hosted/core end-to-end coverage for the Senses Phase 6 pipeline."""
 
 from __future__ import annotations
 

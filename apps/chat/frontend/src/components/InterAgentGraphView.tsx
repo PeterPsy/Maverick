@@ -1,4 +1,19 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type MouseEvent, type PointerEvent, type WheelEvent } from "react";
+import { useCallback, useEffect, useMemo, useState, type CSSProperties, type MouseEvent } from "react";
+import {
+  Background,
+  BackgroundVariant,
+  Handle,
+  MarkerType,
+  Position,
+  ReactFlow,
+  ReactFlowProvider,
+  useReactFlow,
+  type Edge as ReactFlowEdge,
+  type Node as ReactFlowNode,
+  type NodeProps,
+  type OnSelectionChangeParams,
+} from "@xyflow/react";
+import "@xyflow/react/dist/style.css";
 import {
   getInterAgentParticipantTranscript,
   type InterAgentApprovalRecord,
@@ -243,131 +258,27 @@ function GraphCanvas({
     participants,
     runDetail?.run.orchestrator_participant_id,
   ]);
-  const edgeLinks = useMemo(() => graphEdgeLinks(edges, layout.nodesById), [edges, layout.nodesById]);
-  const markerId = useMemo(() => svgFragmentId("chatapp-inter-agent-arrow", runDetail?.run.run_id || "run"), [
-    runDetail?.run.run_id,
-  ]);
-  const {
-    boardRef,
-    fitToView,
-    isPanning,
-    onPointerDown,
-    onPointerMove,
-    onPointerUp,
-    onWheel,
-    transform,
-    zoomBy,
-  } = useGraphViewport(layout);
+  const flowNodes = useMemo(
+    () => graphFlowNodes(layout, selectedParticipantId, onSelectParticipant),
+    [layout, onSelectParticipant, selectedParticipantId],
+  );
+  const flowEdges = useMemo(() => graphFlowEdges(edges, layout.nodesById), [edges, layout.nodesById]);
+  const missingConnectionCount = Math.max(0, edges.length - flowEdges.length);
   const boardHeightRem = Math.min(38, Math.max(21, layout.height / 16 + 3));
+
   return (
     <div className="chatapp-inter-agent-graph__canvas" aria-label="Agent node map">
       {participants.length ? (
-        <div
-          className={`chatapp-inter-agent-graph__board ${isPanning ? "is-panning" : ""}`}
-          onPointerDown={onPointerDown}
-          onPointerMove={onPointerMove}
-          onPointerUp={onPointerUp}
-          onPointerCancel={onPointerUp}
-          onWheel={onWheel}
-          ref={boardRef}
-          style={{ "--graph-board-min-height": `${boardHeightRem}rem` } as CSSProperties}
-        >
-          <div className="chatapp-inter-agent-graph__canvas-controls" aria-label="Canvas controls">
-            <button aria-label="Zoom out" onClick={() => zoomBy(0.86)} title="Zoom out" type="button">
-              <span className="material-symbols-rounded" aria-hidden="true">remove</span>
-            </button>
-            <button aria-label="Fit graph" onClick={fitToView} title="Fit graph" type="button">
-              <span className="material-symbols-rounded" aria-hidden="true">fit_screen</span>
-            </button>
-            <button aria-label="Zoom in" onClick={() => zoomBy(1.14)} title="Zoom in" type="button">
-              <span className="material-symbols-rounded" aria-hidden="true">add</span>
-            </button>
-          </div>
-          <div
-            className="chatapp-inter-agent-graph__surface"
-            style={
-              {
-                "--graph-pan-x": `${transform.x}px`,
-                "--graph-pan-y": `${transform.y}px`,
-                "--graph-surface-height": `${layout.height}px`,
-                "--graph-surface-width": `${layout.width}px`,
-                "--graph-zoom": transform.zoom,
-              } as CSSProperties
-            }
-          >
-            <svg
-              className="chatapp-inter-agent-graph__edge-layer"
-              viewBox={`0 0 ${layout.width} ${layout.height}`}
-              preserveAspectRatio="none"
-              aria-hidden="true"
-            >
-              <defs>
-                <marker
-                  id={markerId}
-                  markerHeight="6"
-                  markerWidth="6"
-                  orient="auto"
-                  refX="5"
-                  refY="3"
-                  viewBox="0 0 6 6"
-                >
-                  <path d="M0,0 L6,3 L0,6 Z" />
-                </marker>
-              </defs>
-              {edgeLinks.map((link) => (
-                <path
-                  className="chatapp-inter-agent-graph__edge-path"
-                  d={edgePath(link)}
-                  data-edge-id={link.edge.edge_id}
-                  key={link.edge.edge_id}
-                  markerEnd={`url(#${markerId})`}
-                  vectorEffect="non-scaling-stroke"
-                />
-              ))}
-            </svg>
-            {edgeLinks.map((link) => (
-              <div
-                className="chatapp-inter-agent-graph__edge-chip"
-                key={link.edge.edge_id}
-                style={
-                  { "--graph-edge-x": `${link.midpoint.x}px`, "--graph-edge-y": `${link.midpoint.y}px` } as CSSProperties
-                }
-                title={`${link.source.participant.label} -> ${link.target.participant.label}`}
-              >
-                <span className="material-symbols-rounded" aria-hidden="true">arrow_forward</span>
-                <span>{edgeDisplayLabel(link.edge)}</span>
-              </div>
-            ))}
-            {layout.nodes.map((node) => (
-              <button
-                className={`chatapp-inter-agent-graph__node is-${node.participant.status} ${
-                  selectedParticipantId === node.participant.participant_id ? "is-selected" : ""
-                }`}
-                data-participant-id={node.participant.participant_id}
-                key={node.participant.participant_id}
-                onClick={() => onSelectParticipant(node.participant.participant_id)}
-                style={
-                  {
-                    "--graph-node-width": `${GRAPH_NODE_WIDTH}px`,
-                    "--graph-node-x": `${node.x}px`,
-                    "--graph-node-y": `${node.y}px`,
-                  } as CSSProperties
-                }
-                type="button"
-              >
-                <span className="material-symbols-rounded" aria-hidden="true">{participantIcon(node.participant.kind)}</span>
-                <span className="chatapp-inter-agent-graph__node-copy">
-                  <strong>{node.participant.label}</strong>
-                  <span>{participantStatusLabel(node.participant.kind, node.participant.status)}</span>
-                </span>
-              </button>
-            ))}
-            {!edgeLinks.length && edges.length ? (
-              <div className="chatapp-inter-agent-graph__edge-empty">Some connections are unavailable.</div>
-            ) : null}
-            {!edges.length ? <div className="chatapp-inter-agent-graph__edge-empty">No connections recorded.</div> : null}
-          </div>
-        </div>
+        <ReactFlowProvider initialWidth={760} initialHeight={420}>
+          <GraphFlowCanvas
+            boardHeightRem={boardHeightRem}
+            edges={flowEdges}
+            missingConnectionCount={missingConnectionCount}
+            nodes={flowNodes}
+            onSelectParticipant={onSelectParticipant}
+            rawEdgeCount={edges.length}
+          />
+        </ReactFlowProvider>
       ) : (
         <div className="chatapp-inter-agent-graph__empty">
           <span className="material-symbols-rounded" aria-hidden="true">account_tree</span>
@@ -684,6 +595,15 @@ function ApprovalShelf({
 
 type GraphParticipant = NonNullable<InterAgentRunDetail>["participants"][number];
 type GraphEdge = NonNullable<InterAgentRunDetail>["edges"][number];
+type AgentNodeData = Record<string, unknown> & {
+  onSelect: (participantId: string) => void;
+  participant: GraphParticipant;
+};
+type AgentEdgeData = Record<string, unknown> & {
+  edge: GraphEdge;
+};
+type AgentFlowNode = ReactFlowNode<AgentNodeData, "agentParticipant">;
+type AgentFlowEdge = ReactFlowEdge<AgentEdgeData, "smoothstep">;
 
 type GraphBoardNode = {
   participant: GraphParticipant;
@@ -698,129 +618,185 @@ type GraphBoardLayout = {
   width: number;
 };
 
-type GraphEdgeLink = {
-  edge: GraphEdge;
-  midpoint: { x: number; y: number };
-  source: GraphBoardNode;
-  target: GraphBoardNode;
+const AGENT_NODE_TYPES = {
+  agentParticipant: AgentParticipantNode,
 };
 
-type GraphTransform = {
-  x: number;
-  y: number;
-  zoom: number;
-};
-
-function useGraphViewport(layout: GraphBoardLayout) {
-  const boardRef = useRef<HTMLDivElement | null>(null);
-  const dragRef = useRef<{ pointerId: number; startClientX: number; startClientY: number; startX: number; startY: number } | null>(null);
-  const [isPanning, setIsPanning] = useState(false);
-  const [transform, setTransform] = useState<GraphTransform>({ x: 24, y: 24, zoom: 1 });
-
+function GraphFlowCanvas({
+  boardHeightRem,
+  edges,
+  missingConnectionCount,
+  nodes,
+  onSelectParticipant,
+  rawEdgeCount,
+}: {
+  boardHeightRem: number;
+  edges: AgentFlowEdge[];
+  missingConnectionCount: number;
+  nodes: AgentFlowNode[];
+  onSelectParticipant: (participantId: string) => void;
+  rawEdgeCount: number;
+}) {
+  const reactFlow = useReactFlow<AgentFlowNode, AgentFlowEdge>();
   const fitToView = useCallback(() => {
-    const board = boardRef.current;
-    const rect = board?.getBoundingClientRect();
-    const viewportWidth = rect?.width || board?.clientWidth || 720;
-    const viewportHeight = rect?.height || board?.clientHeight || 420;
-    const zoom = clamp(
-      Math.min((viewportWidth - 32) / layout.width, (viewportHeight - 32) / layout.height),
-      GRAPH_MIN_ZOOM,
-      Math.min(1.2, GRAPH_MAX_ZOOM),
-    );
-    setTransform({
-      x: Math.round((viewportWidth - layout.width * zoom) / 2),
-      y: Math.round((viewportHeight - layout.height * zoom) / 2),
-      zoom,
-    });
-  }, [layout.height, layout.width]);
+    void reactFlow.fitView({ duration: 140, padding: 0.18 });
+  }, [reactFlow]);
+  const onNodeClick = useCallback(
+    (_event: MouseEvent, node: AgentFlowNode) => {
+      onSelectParticipant(node.data.participant.participant_id);
+    },
+    [onSelectParticipant],
+  );
+  const onSelectionChange = useCallback(
+    ({ nodes: selectedNodes }: OnSelectionChangeParams<AgentFlowNode, AgentFlowEdge>) => {
+      const participantId = selectedNodes[0]?.data.participant.participant_id || "";
+      if (participantId) {
+        onSelectParticipant(participantId);
+      }
+    },
+    [onSelectParticipant],
+  );
 
   useEffect(() => {
-    fitToView();
-  }, [fitToView]);
-
-  useEffect(() => {
-    const board = boardRef.current;
-    const ResizeObserverConstructor = typeof ResizeObserver === "undefined" ? null : ResizeObserver;
-    if (!board || !ResizeObserverConstructor) {
-      return;
+    if (!nodes.length) {
+      return undefined;
     }
-    const observer = new ResizeObserverConstructor(() => fitToView());
-    observer.observe(board);
-    return () => observer.disconnect();
-  }, [fitToView]);
+    const timeout = window.setTimeout(fitToView, 0);
+    return () => window.clearTimeout(timeout);
+  }, [edges.length, fitToView, nodes.length]);
 
-  const zoomBy = useCallback((factor: number, origin?: { x: number; y: number }) => {
-    setTransform((current) => {
-      const nextZoom = clamp(current.zoom * factor, GRAPH_MIN_ZOOM, GRAPH_MAX_ZOOM);
-      const anchor = origin || {
-        x: (boardRef.current?.getBoundingClientRect().width || 720) / 2,
-        y: (boardRef.current?.getBoundingClientRect().height || 420) / 2,
-      };
-      const graphX = (anchor.x - current.x) / current.zoom;
-      const graphY = (anchor.y - current.y) / current.zoom;
-      return {
-        x: anchor.x - graphX * nextZoom,
-        y: anchor.y - graphY * nextZoom,
-        zoom: nextZoom,
-      };
-    });
-  }, []);
+  return (
+    <div
+      className="chatapp-inter-agent-graph__board"
+      data-react-flow-agent-graph="true"
+      style={{ "--graph-board-min-height": `${boardHeightRem}rem` } as CSSProperties}
+    >
+      <ReactFlow<AgentFlowNode, AgentFlowEdge>
+        className="chatapp-inter-agent-graph__flow"
+        colorMode="system"
+        edges={edges}
+        edgesFocusable={false}
+        fitView
+        fitViewOptions={{ padding: 0.18 }}
+        maxZoom={GRAPH_MAX_ZOOM}
+        minZoom={GRAPH_MIN_ZOOM}
+        nodes={nodes}
+        nodesConnectable={false}
+        nodesDraggable={false}
+        nodeTypes={AGENT_NODE_TYPES}
+        onNodeClick={onNodeClick}
+        onSelectionChange={onSelectionChange}
+        panOnDrag
+        panOnScroll
+        preventScrolling
+        proOptions={{ hideAttribution: true }}
+        selectionOnDrag={false}
+        zoomOnDoubleClick
+        zoomOnPinch
+        zoomOnScroll
+      >
+        <Background color="rgba(var(--maverick-contrast-rgb), 0.12)" gap={42} lineWidth={1} variant={BackgroundVariant.Lines} />
+        <GraphFlowControls />
+      </ReactFlow>
+      {missingConnectionCount ? (
+        <div className="chatapp-inter-agent-graph__edge-empty">Some connections are unavailable.</div>
+      ) : null}
+      {!rawEdgeCount ? <div className="chatapp-inter-agent-graph__edge-empty">No connections recorded.</div> : null}
+    </div>
+  );
+}
 
-  const onPointerDown = useCallback((event: PointerEvent<HTMLDivElement>) => {
-    const target = event.target instanceof Element ? event.target : null;
-    if (target?.closest("button")) {
-      return;
+function GraphFlowControls() {
+  const reactFlow = useReactFlow<AgentFlowNode, AgentFlowEdge>();
+  return (
+    <div className="chatapp-inter-agent-graph__canvas-controls" aria-label="Canvas controls">
+      <button aria-label="Zoom out" onClick={() => void reactFlow.zoomOut({ duration: 120 })} title="Zoom out" type="button">
+        <span className="material-symbols-rounded" aria-hidden="true">remove</span>
+      </button>
+      <button aria-label="Fit graph" onClick={() => void reactFlow.fitView({ duration: 140, padding: 0.18 })} title="Fit graph" type="button">
+        <span className="material-symbols-rounded" aria-hidden="true">fit_screen</span>
+      </button>
+      <button aria-label="Zoom in" onClick={() => void reactFlow.zoomIn({ duration: 120 })} title="Zoom in" type="button">
+        <span className="material-symbols-rounded" aria-hidden="true">add</span>
+      </button>
+    </div>
+  );
+}
+
+function AgentParticipantNode({ data, selected }: NodeProps) {
+  const nodeData = data as AgentNodeData;
+  const participant = nodeData.participant;
+  return (
+    <button
+      className={`chatapp-inter-agent-graph__node is-${participant.status} ${selected ? "is-selected" : ""}`}
+      data-participant-id={participant.participant_id}
+      onClick={(event) => {
+        event.stopPropagation();
+        nodeData.onSelect(participant.participant_id);
+      }}
+      type="button"
+    >
+      <Handle className="chatapp-inter-agent-graph__handle" position={Position.Top} type="target" />
+      <span className="material-symbols-rounded" aria-hidden="true">{participantIcon(participant.kind)}</span>
+      <span className="chatapp-inter-agent-graph__node-copy">
+        <strong>{participant.label}</strong>
+        <span>{participantStatusLabel(participant.kind, participant.status)}</span>
+      </span>
+      <Handle className="chatapp-inter-agent-graph__handle" position={Position.Bottom} type="source" />
+    </button>
+  );
+}
+
+function graphFlowNodes(
+  layout: GraphBoardLayout,
+  selectedParticipantId: string | null,
+  onSelectParticipant: (participantId: string) => void,
+): AgentFlowNode[] {
+  return layout.nodes.map((node) => ({
+    data: {
+      onSelect: onSelectParticipant,
+      participant: node.participant,
+    },
+    draggable: false,
+    id: node.participant.participant_id,
+    position: {
+      x: node.x - GRAPH_NODE_WIDTH / 2,
+      y: node.y - GRAPH_NODE_HEIGHT / 2,
+    },
+    selectable: true,
+    selected: selectedParticipantId === node.participant.participant_id,
+    style: {
+      height: GRAPH_NODE_HEIGHT,
+      width: GRAPH_NODE_WIDTH,
+    },
+    type: "agentParticipant",
+  }));
+}
+
+function graphFlowEdges(edges: GraphEdge[], nodesById: Map<string, GraphBoardNode>): AgentFlowEdge[] {
+  return edges.flatMap((edge) => {
+    const source = nodesById.get(edge.source_id);
+    const target = nodesById.get(edge.target_id);
+    if (!source || !target) {
+      return [];
     }
-    event.currentTarget.setPointerCapture(event.pointerId);
-    dragRef.current = {
-      pointerId: event.pointerId,
-      startClientX: event.clientX,
-      startClientY: event.clientY,
-      startX: transform.x,
-      startY: transform.y,
-    };
-    setIsPanning(true);
-  }, [transform.x, transform.y]);
-
-  const onPointerMove = useCallback((event: PointerEvent<HTMLDivElement>) => {
-    const drag = dragRef.current;
-    if (!drag || drag.pointerId !== event.pointerId) {
-      return;
-    }
-    setTransform((current) => ({
-      ...current,
-      x: drag.startX + event.clientX - drag.startClientX,
-      y: drag.startY + event.clientY - drag.startClientY,
-    }));
-  }, []);
-
-  const onPointerUp = useCallback((event: PointerEvent<HTMLDivElement>) => {
-    if (dragRef.current?.pointerId === event.pointerId) {
-      dragRef.current = null;
-      setIsPanning(false);
-    }
-  }, []);
-
-  const onWheel = useCallback((event: WheelEvent<HTMLDivElement>) => {
-    event.preventDefault();
-    const rect = event.currentTarget.getBoundingClientRect();
-    zoomBy(event.deltaY > 0 ? 0.9 : 1.1, {
-      x: event.clientX - rect.left,
-      y: event.clientY - rect.top,
-    });
-  }, [zoomBy]);
-
-  return {
-    boardRef,
-    fitToView,
-    isPanning,
-    onPointerDown,
-    onPointerMove,
-    onPointerUp,
-    onWheel,
-    transform,
-    zoomBy,
-  };
+    return [
+      {
+        animated: edge.status === "active" || edge.status === "running",
+        className: "chatapp-inter-agent-graph__flow-edge",
+        data: { edge },
+        id: edge.edge_id,
+        label: edgeDisplayLabel(edge),
+        labelBgBorderRadius: 7,
+        labelBgPadding: [7, 4],
+        labelShowBg: true,
+        markerEnd: { color: "var(--maverick-accent)", type: MarkerType.ArrowClosed },
+        source: source.participant.participant_id,
+        target: target.participant.participant_id,
+        type: "smoothstep",
+      } satisfies AgentFlowEdge,
+    ];
+  });
 }
 
 function graphBoardLayout(
@@ -863,40 +839,6 @@ function graphBoardLayout(
   };
 }
 
-function graphEdgeLinks(edges: GraphEdge[], nodesById: Map<string, GraphBoardNode>): GraphEdgeLink[] {
-  return edges.flatMap((edge) => {
-    const source = nodesById.get(edge.source_id);
-    const target = nodesById.get(edge.target_id);
-    if (!source || !target) {
-      return [];
-    }
-    return [
-      {
-        edge,
-        midpoint: {
-          x: (source.x + target.x) / 2,
-          y: (source.y + target.y) / 2,
-        },
-        source,
-        target,
-      },
-    ];
-  });
-}
-
-function edgePath(link: GraphEdgeLink): string {
-  const verticalDirection = link.target.y >= link.source.y ? 1 : -1;
-  const startY = link.source.y + (GRAPH_NODE_HEIGHT / 2 + 10) * verticalDirection;
-  const endY = link.target.y - (GRAPH_NODE_HEIGHT / 2 + 10) * verticalDirection;
-  const verticalOffset = Math.min(96, Math.max(42, Math.abs(endY - startY) / 2)) * verticalDirection;
-  return [
-    `M ${link.source.x} ${startY}`,
-    `C ${link.source.x} ${startY + verticalOffset}`,
-    `${link.target.x} ${endY - verticalOffset}`,
-    `${link.target.x} ${endY}`,
-  ].join(" ");
-}
-
 function edgeDisplayLabel(edge: GraphEdge): string {
   return edge.label || edge.kind.replace(/_/g, " ");
 }
@@ -916,14 +858,6 @@ function chunk<T>(items: T[], size: number): T[][] {
     chunks.push(items.slice(index, index + size));
   }
   return chunks;
-}
-
-function clamp(value: number, min: number, max: number): number {
-  return Math.min(max, Math.max(min, value));
-}
-
-function svgFragmentId(prefix: string, value: string): string {
-  return `${prefix}-${String(value || "run").replace(/[^A-Za-z0-9_-]/g, "-")}`;
 }
 
 function latestRunSummary(events: InterAgentEventRecord[]): string {

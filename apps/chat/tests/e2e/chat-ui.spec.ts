@@ -208,7 +208,9 @@ test.describe("Chat app browser smoke", () => {
     await expect(page.getByText("3 nodes")).toBeVisible();
     await expect(page.getByText("Implementer")).toBeVisible();
     await expect(page.getByText("Reviewer")).toBeVisible();
-    await expect(page.locator(".chatapp-inter-agent-graph__edge-path")).toHaveCount(3);
+    await expectReactFlowGraphRendered(page, 3);
+    await page.getByLabel("Zoom in").click();
+    await page.getByLabel("Fit graph").click();
 
     await expect.poll(() => state.interAgentSockets.length).toBeGreaterThan(0);
     state.interAgentSockets.at(-1)?.send(
@@ -283,7 +285,60 @@ test.describe("Chat app browser smoke", () => {
     await expect(page.getByText("Analyst")).toBeVisible();
     await expect(page.getByText("Synthesizer")).toBeVisible();
   });
+
+  test("renders React Flow Agent nodes on mobile and loads transcript on node click", async ({ page }) => {
+    const state = await installChatMocks(page);
+    state.runCreated = true;
+    state.runDetail = interAgentRunDetail({ run: { status: "running", mode: "sequential" } });
+    state.runEvents = interAgentEventsForMode("sequential");
+    state.runArtifacts = interAgentArtifactsForMode("sequential");
+
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.goto("/apps/chat/");
+    await expect(page.getByRole("heading", { name: "How can I help today?" })).toBeVisible();
+    await page.evaluate((runId) => {
+      window.postMessage(
+        {
+          type: "maverick.app.navigate",
+          app_id: "chat",
+          params: { app_page: `graph/${runId}` },
+        },
+        window.location.origin,
+      );
+    }, RUN_ID);
+
+    await expect(page.getByRole("region", { name: "Agent nodes view" })).toBeVisible();
+    await expect(page.locator('[data-react-flow-agent-graph="true"]')).toBeVisible();
+    await expect(page.getByText("3 nodes")).toBeVisible();
+    await expectReactFlowGraphRendered(page, 3);
+
+    await page.locator('[data-participant-id="implementer"]').click();
+    await expect(page.getByText("Implementer accepted browser-observed task.")).toBeVisible();
+    await expect(page.getByText("Implementer produced a safe participant summary.")).toBeVisible();
+    await expect(page.getByText("child-implementer")).toHaveCount(0);
+    await page.getByLabel("Zoom out").click();
+    await page.getByLabel("Fit graph").click();
+  });
 });
+
+async function expectReactFlowGraphRendered(page: Page, expectedEdges: number) {
+  const board = page.locator('[data-react-flow-agent-graph="true"]');
+  await expect(board).toBeVisible();
+  await expect(page.locator(".react-flow")).toBeVisible();
+  await expect(page.locator(".react-flow__edge-path")).toHaveCount(expectedEdges);
+  const boardBox = await board.boundingBox();
+  expect(boardBox?.width || 0).toBeGreaterThan(250);
+  expect(boardBox?.height || 0).toBeGreaterThan(250);
+
+  const nodeBoxes = await page.locator("[data-participant-id]").evaluateAll((nodes) =>
+    nodes.map((node) => {
+      const rect = node.getBoundingClientRect();
+      return { height: rect.height, width: rect.width };
+    }),
+  );
+  expect(nodeBoxes.length).toBeGreaterThan(0);
+  expect(nodeBoxes.every((box) => box.width > 70 && box.height > 24)).toBe(true);
+}
 
 async function installChatMocks(page: Page): Promise<MockState> {
   const state = createMockState();
@@ -631,6 +686,11 @@ async function handleInterAgentApi(route: Route, state: MockState) {
       await fulfillJson(route, { items: [] });
       return;
     }
+    if (action === "participants" && parts[6] === "transcript" && request.method() === "GET") {
+      const participantId = decodeURIComponent(parts[5] || "orchestrator");
+      await fulfillJson(route, participantTranscriptPayload(state, participantId));
+      return;
+    }
     if (action === "interrupt" && request.method() === "POST") {
       state.runDetail = interAgentRunDetail({ run: { status: "paused" } });
       await fulfillJson(route, { run: state.runDetail.run, interrupted_sessions: [] });
@@ -952,6 +1012,43 @@ function interAgentEdge(edgeId: string, sourceId: string, targetId: string, kind
     label,
     status: "active",
     created_at: NOW,
+  };
+}
+
+function participantTranscriptPayload(state: MockState, participantId: string) {
+  const participant =
+    state.runDetail.participants.find((item) => item.participant_id === participantId) ||
+    interAgentParticipant(participantId, "agent", "child_runtime_session", participantId, null, "running", 99);
+  const label = String(participant.label || participantId);
+  return {
+    run_id: RUN_ID,
+    participant: {
+      participant_id: participantId,
+      kind: participant.kind,
+      label,
+      status: participant.status,
+    },
+    visibility_plane: "detail",
+    items: [
+      {
+        message_id: `${participantId}:input`,
+        kind: "input",
+        role: "user",
+        text: `${label} accepted browser-observed task.`,
+        status: "completed",
+        created_at: NOW,
+      },
+      {
+        message_id: `${participantId}:output`,
+        kind: "output",
+        role: "participant",
+        text: `${label} produced a safe participant summary.`,
+        status: "completed",
+        created_at: NOW,
+      },
+    ],
+    item_count: 2,
+    truncated: false,
   };
 }
 

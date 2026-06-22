@@ -62,8 +62,15 @@ class FakeWebSocket {
   }
 }
 
+class FakeResizeObserver {
+  disconnect() {}
+  observe() {}
+  unobserve() {}
+}
+
 let root: Root | null = null;
 let container: HTMLDivElement | null = null;
+let getBoundingClientRectSpy: ReturnType<typeof vi.spyOn> | null = null;
 
 function runDetail(overrides: Partial<InterAgentRunDetail> = {}): InterAgentRunDetail {
   const detail: InterAgentRunDetail = {
@@ -246,6 +253,34 @@ async function renderGraph(props: Partial<Parameters<typeof InterAgentGraphView>
 
 beforeEach(() => {
   FakeWebSocket.instances = [];
+  getBoundingClientRectSpy = vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(function (this: HTMLElement) {
+    const element = this;
+    if (element.classList.contains("chatapp-inter-agent-graph__board")) {
+      return {
+        bottom: 420,
+        height: 420,
+        left: 0,
+        right: 760,
+        top: 0,
+        width: 760,
+        x: 0,
+        y: 0,
+        toJSON: () => undefined,
+      };
+    }
+    return {
+      bottom: 72,
+      height: 72,
+      left: 0,
+      right: 220,
+      top: 0,
+      width: 220,
+      x: 0,
+      y: 0,
+      toJSON: () => undefined,
+    };
+  });
+  vi.stubGlobal("ResizeObserver", FakeResizeObserver);
   vi.stubGlobal("WebSocket", FakeWebSocket);
   vi.mocked(getInterAgentRun).mockResolvedValue(runDetail());
   vi.mocked(getInterAgentParticipantTranscript).mockImplementation(async (_runId, participantId) => transcriptPayload(participantId));
@@ -277,6 +312,8 @@ afterEach(() => {
   root = null;
   container?.remove();
   container = null;
+  getBoundingClientRectSpy?.mockRestore();
+  getBoundingClientRectSpy = null;
   vi.clearAllMocks();
   vi.unstubAllGlobals();
 });
@@ -420,7 +457,7 @@ describe("InterAgentGraphView", () => {
     expect(element.querySelector(".chatapp-inter-agent-graph__node-copy")).not.toBeNull();
   });
 
-  it("uses a navigable graph surface with separated node coordinates", async () => {
+  it("uses a navigable React Flow surface with selectable nodes and controls", async () => {
     const base = runDetail();
     const detail = runDetail({
       participants: [
@@ -451,15 +488,26 @@ describe("InterAgentGraphView", () => {
     });
     vi.mocked(getInterAgentRun).mockResolvedValue(detail);
     const element = await renderGraph({ initialRunDetail: detail });
-    const surface = element.querySelector(".chatapp-inter-agent-graph__surface") as HTMLElement | null;
-    const nodeStyles = Array.from(element.querySelectorAll<HTMLElement>("[data-participant-id]")).map((node) =>
-      node.getAttribute("style") || "",
+    const board = element.querySelector('[data-react-flow-agent-graph="true"]') as HTMLElement | null;
+    const flow = element.querySelector(".react-flow") as HTMLElement | null;
+    const nodeIds = Array.from(element.querySelectorAll<HTMLElement>("[data-participant-id]")).map((node) =>
+      node.getAttribute("data-participant-id") || "",
     );
 
-    expect(surface?.getAttribute("style")).toContain("--graph-zoom");
-    expect(nodeStyles.length).toBe(4);
-    expect(new Set(nodeStyles).size).toBe(4);
-    expect(nodeStyles.every((style) => style.includes("--graph-node-width: 220px"))).toBe(true);
+    expect(board?.getAttribute("style")).toContain("--graph-board-min-height");
+    expect(flow).not.toBeNull();
+    expect(nodeIds.length).toBe(4);
+    expect(new Set(nodeIds).size).toBe(4);
+    expect(element.querySelector(".react-flow__viewport")).not.toBeNull();
+
+    await act(async () => {
+      (element.querySelector('[aria-label="Zoom out"]') as HTMLButtonElement | null)?.click();
+      (element.querySelector('[aria-label="Fit graph"]') as HTMLButtonElement | null)?.click();
+      (element.querySelector('[aria-label="Zoom in"]') as HTMLButtonElement | null)?.click();
+      await settle();
+    });
+
+    expect(element.textContent).toContain("Reviewer with a long label");
   });
 
   it("sends pause and stop requests through the inter-agent API", async () => {

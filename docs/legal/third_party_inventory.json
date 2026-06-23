@@ -142,6 +142,7 @@
       "version": "0.2.0",
       "private": true,
       "dependencies": {
+        "@xyflow/react": "^12.11.1",
         "react": "^19.2.3",
         "react-dom": "^19.2.3",
         "react-markdown": "^10.1.0",
@@ -332,7 +333,7 @@
     {
       "app_id": "senses",
       "package_name": "@maverick/senses",
-      "version": "0.4.0",
+      "version": "0.6.0",
       "private": true,
       "dependencies": {
         "lucide-react": "^1.14.0",

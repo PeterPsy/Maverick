@@ -209,6 +209,7 @@ test.describe("Chat app browser smoke", () => {
     await expect(page.getByText("Implementer")).toBeVisible();
     await expect(page.getByText("Reviewer")).toBeVisible();
     await expectReactFlowGraphRendered(page, 3);
+    await expectReactFlowPanMovesViewport(page);
     await page.getByLabel("Zoom in").click();
     await page.getByLabel("Fit graph").click();
 
@@ -338,6 +339,27 @@ async function expectReactFlowGraphRendered(page: Page, expectedEdges: number) {
   );
   expect(nodeBoxes.length).toBeGreaterThan(0);
   expect(nodeBoxes.every((box) => box.width > 70 && box.height > 24)).toBe(true);
+}
+
+async function expectReactFlowPanMovesViewport(page: Page) {
+  const board = page.locator('[data-react-flow-agent-graph="true"]');
+  const viewport = page.locator(".react-flow__viewport");
+  const boardBox = await board.boundingBox();
+  expect(boardBox).not.toBeNull();
+  if (!boardBox) {
+    return;
+  }
+
+  const before = await viewport.evaluate((element) => getComputedStyle(element).transform);
+  const startX = boardBox.x + 42;
+  const startY = boardBox.y + boardBox.height - 52;
+
+  await page.mouse.move(startX, startY);
+  await page.mouse.down();
+  await page.mouse.move(startX + 78, startY + 34, { steps: 6 });
+  await page.mouse.up();
+
+  await expect.poll(() => viewport.evaluate((element) => getComputedStyle(element).transform)).not.toBe(before);
 }
 
 async function installChatMocks(page: Page): Promise<MockState> {

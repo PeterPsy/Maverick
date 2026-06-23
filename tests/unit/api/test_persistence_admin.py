@@ -149,7 +149,9 @@ class PersistenceAdminTestCase(unittest.TestCase):
             self.assertEqual(unauthenticated["error"], "authentication_required")
             self.assertEqual(status, 200)
             self.assertEqual(payload["active_adapter"]["kind"], "json")
-            self.assertIn("provider_credential_bindings", {item["name"] for item in payload["collections"]})
+            collection_names = {item["name"] for item in payload["collections"]}
+            self.assertIn("provider_definitions", collection_names)
+            self.assertIn("provider_credential_bindings", collection_names)
 
     def test_source_deletion_requires_backend_restart_cutover(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:

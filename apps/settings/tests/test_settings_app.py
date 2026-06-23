@@ -253,6 +253,8 @@ assert.ok((html.match(/auto default/g) || []).length >= 5);
         self.assertIn("saveHostedProviderSettingsFromPanel", main_source)
         self.assertIn("settings-hosted-provider-model", settings_source)
         self.assertIn("Hosted chat fast model", settings_source)
+        self.assertIn("Hosted text providers govern", settings_source)
+        self.assertNotIn("OpenRouter governs", settings_source)
         self.assertIn("runtime engine remains Codex", settings_source)
         self.assertIn("/api/settings/runtime-sessions/clear", api_source)
 
@@ -599,7 +601,7 @@ function makeController() {
         app_root = Path(__file__).resolve().parents[1]
         main_source = (app_root / "frontend" / "src" / "main.ts").read_text(encoding="utf-8")
 
-        for module_name in ("userPages.ts", "workspaceAppsPage.ts", "persistencePage.ts", "adminActions.ts", "persistenceController.ts", "bindEvents.ts"):
+        for module_name in ("userPages.ts", "workspaceAppsPage.ts", "persistencePage.ts", "adminActions.ts", "persistenceController.ts", "providerSettingsActions.ts", "bindEvents.ts"):
             self.assertTrue((app_root / "frontend" / "src" / module_name).is_file())
         self.assertLess(len(main_source.splitlines()), 600)
         self.assertNotIn("function persistenceHtml(", main_source)

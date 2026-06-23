@@ -5,6 +5,8 @@ from __future__ import annotations
 from dataclasses import replace
 from datetime import UTC, datetime
 import json
+from pathlib import Path
+import tempfile
 import unittest
 
 from core.providers.models import ProviderCredentialBinding, WorkspaceProviderPolicy
@@ -22,6 +24,7 @@ from core.providers.service import (
 from core.providers.store import ProviderCollections, ProviderDocumentStore
 from core.secrets.service import build_secret_ref, create_platform_secret
 from core.secrets.store import SecretCollections, SecretDocumentStore
+from core.shared.json_file_collection import JsonFileCollection
 from tests.support.collections import FakeCollection
 
 
@@ -32,6 +35,16 @@ class ProviderRoutingTest(unittest.TestCase):
                 definitions=FakeCollection(),
                 bindings=FakeCollection(),
                 selections=FakeCollection(),
+            )
+        )
+
+    def make_json_provider_store(self, root: Path) -> ProviderDocumentStore:
+        return ProviderDocumentStore(
+            ProviderCollections(
+                definitions=JsonFileCollection(root / "definitions.json"),
+                bindings=JsonFileCollection(root / "bindings.json"),
+                selections=JsonFileCollection(root / "selections.json"),
+                hosted_selections=JsonFileCollection(root / "hosted_selections.json"),
             )
         )
 
@@ -121,6 +134,48 @@ class ProviderRoutingTest(unittest.TestCase):
         self.assertEqual(decision.selected_provider_id, "groq")
         self.assertEqual(decision.execution_path, "plain_hosted_text")
         self.assertNotIn("super-secret-token", str(decision))
+
+    def test_hosted_provider_activation_survives_json_store_restart(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            store_root = Path(temp_dir) / "providers"
+            store = self.make_json_provider_store(store_root)
+            secret_store = self.make_secret_store()
+            secret = create_platform_secret(
+                secret_store,
+                label="OpenRouter",
+                raw_value="super-secret-token",
+                alias="openrouter-restart",
+                kind="api_key",
+            )
+
+            activation = activate_hosted_model_provider(
+                store,
+                secret_store=secret_store,
+                workspace_id="default",
+                provider_id="openrouter",
+                secret_ref=build_secret_ref(alias=secret.alias or "openrouter-restart"),
+            )
+            restarted_store = self.make_json_provider_store(store_root)
+            decision = select_provider_for_profile(
+                "fast_model",
+                ProviderRoutingContext(
+                    workspace_id="default",
+                    provider_store=restarted_store,
+                    registry=effective_provider_registry(restarted_store),
+                    request_id="req-openrouter-restart",
+                ),
+            )
+
+            self.assertEqual(activation.routing_decision.selected_provider_id, "openrouter")
+            self.assertEqual(restarted_store.get_provider_definition("openrouter").status, "active")
+            self.assertEqual(
+                restarted_store.get_hosted_provider_selection(workspace_id="default", profile="fast_model").provider_id,
+                "openrouter",
+            )
+            self.assertEqual(decision.selected_provider_id, "openrouter")
+            self.assertEqual(decision.execution_path, "plain_hosted_text")
+            self.assertNotIn("provider_disabled:openrouter", decision.reason_codes)
+            self.assertNotIn("super-secret-token", str(decision))
 
     def test_fast_model_routes_to_selected_openrouter_model_after_activation(self) -> None:
         store = self.make_provider_store()

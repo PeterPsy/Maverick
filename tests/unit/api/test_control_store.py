@@ -23,6 +23,7 @@ class ControlStoreSettingsTestCase(unittest.TestCase):
             self.assertEqual(settings.kind, "json")
             self.assertEqual(settings.json_root, repository_root / "data" / "control-plane" / "json")
             self.assertIsInstance(collections.workspace.workspaces, JsonFileCollection)
+            self.assertIsInstance(collections.provider.definitions, JsonFileCollection)
             self.assertIsInstance(collections.provider.bindings, JsonFileCollection)
 
     def test_mongo_uri_selects_mongo_when_kind_is_omitted(self) -> None:
@@ -50,6 +51,7 @@ class ControlStoreSettingsTestCase(unittest.TestCase):
             self.assertEqual(settings.kind, "json")
             self.assertEqual(settings.json_root, repository_root / "control-db")
             self.assertIsInstance(collections.workspace.workspaces, JsonFileCollection)
+            self.assertIsInstance(collections.provider.definitions, JsonFileCollection)
             self.assertIsInstance(collections.provider.bindings, JsonFileCollection)
 
     def test_mongo_settings_accept_legacy_uri_env_and_uri_database(self) -> None:

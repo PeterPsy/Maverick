@@ -92,8 +92,15 @@ def workspace_hosted_text_status(state: PlatformState, *, workspace_id: str) -> 
             secret_store=getattr(state, "secret_store", None),
         ),
     )
-    selected_provider_id = selection.provider_id if selection is not None else decision.selected_provider_id
+    selected_provider_id = decision.selected_provider_id
     active_provider = next((provider for provider in available_providers if provider.provider_id == selected_provider_id), None)
+    active_selection = (
+        selection
+        if active_provider is not None
+        and selection is not None
+        and selection.provider_id == active_provider.provider_id
+        else None
+    )
     return {
         "profile": "fast_model",
         "active_provider": None if active_provider is None else provider_payload(active_provider),
@@ -101,7 +108,7 @@ def workspace_hosted_text_status(state: PlatformState, *, workspace_id: str) -> 
         "model_settings": (
             None
             if active_provider is None
-            else hosted_provider_model_settings_payload(active_provider, selection)
+            else hosted_provider_model_settings_payload(active_provider, active_selection)
         ),
         "available_providers": [provider_payload(provider) for provider in sort_provider_definitions(available_providers)],
         "route_preview": routing_decision_payload(decision),

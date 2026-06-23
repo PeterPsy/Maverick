@@ -10,7 +10,7 @@ from unittest.mock import patch
 
 from core.api.provider_api import handle_provider_api
 from core.api.session_api import RequestSession
-from core.providers.provider_credentials import bind_provider_credential
+from core.providers.provider_credentials import bind_provider_credential, disable_provider_binding
 from core.providers.service import register_builtin_providers
 from core.providers.store import ProviderCollections, ProviderDocumentStore
 from core.runtime.service import create_runtime_session
@@ -175,6 +175,43 @@ class ProviderApiTest(unittest.TestCase):
         self.assertNotIn("super-secret-token", json.dumps(save_payload))
         self.assertNotIn("platform:secret-alias/openrouter_api_key", json.dumps(payload))
         self.assertNotIn("secret_ref", json.dumps(save_payload))
+
+    def test_hosted_text_status_only_marks_routable_provider_active(self) -> None:
+        state = self.make_state()
+        secret = create_platform_secret(
+            state.secret_store,
+            label="OpenRouter API",
+            raw_value="super-secret-token",
+            alias="openrouter_api_key",
+            kind="api_key",
+        )
+        status, payload = self.invoke(
+            "/api/providers/hosted/active",
+            method="POST",
+            body={
+                "provider_id": "openrouter",
+                "secret_ref": build_secret_ref(alias=secret.alias or "openrouter_api_key"),
+                "label": "OpenRouter hosted text",
+            },
+            state=state,
+        )
+        disable_provider_binding(state.provider_store, payload["credential_binding"]["binding_id"])
+
+        status_after_disable, payload_after_disable = self.invoke(
+            "/api/providers/active",
+            state=state,
+        )
+
+        self.assertEqual(status, "200 OK")
+        self.assertEqual(status_after_disable, "200 OK")
+        hosted_text = payload_after_disable["hosted_text"]
+        self.assertIsNone(hosted_text["active_provider"])
+        self.assertIsNone(hosted_text["model_settings"])
+        self.assertEqual(hosted_text["selection"]["provider_id"], "openrouter")
+        self.assertIsNone(hosted_text["route_preview"]["selected_provider_id"])
+        self.assertIn("provider_credential_binding_missing", hosted_text["route_preview"]["reason_codes"])
+        self.assertNotIn("super-secret-token", json.dumps(payload_after_disable))
+        self.assertNotIn("secret_ref", json.dumps(payload_after_disable))
 
     def test_hosted_activation_rejects_caller_supplied_binding_id_collision(self) -> None:
         state = self.make_state()

@@ -11,8 +11,6 @@ import {
 } from './adminActions';
 import {
   clearRuntimeSessions,
-  configureActiveProvider,
-  configureHostedProvider,
   getPlatformSettings,
   loadUsers,
   loadWorkspaces,
@@ -49,6 +47,7 @@ import { escapeHtml } from './html';
 import { pageSettingsBlockHtml } from './pageFrame';
 import { createPersistenceController } from './persistenceController';
 import { persistenceMigrationModalHtml, persistencePageHtml } from './persistencePage';
+import { saveActiveProviderSettings, saveHostedProviderSettings } from './providerSettingsActions';
 import { usersPageHtml, workspaceAccessPageHtml } from './userPages';
 import { workspaceAppsPageHtml } from './workspaceAppsPage';
 
@@ -340,59 +339,6 @@ async function saveDependencySelection(consumerAppId: string, alias: string, pro
   await appLinksController.saveDependencySelection(consumerAppId, alias, providerAppIds);
 }
 
-async function saveProviderSettingsFromPanel() {
-  const providerId = platformSettings?.provider.active_provider?.provider_id;
-  if (!providerId || !settingsPanelState.draftModelId) {
-    settingsPanelState.providerError = 'Provider not loaded.';
-    render();
-    return;
-  }
-  settingsPanelState.isSavingProvider = true;
-  settingsPanelState.providerError = '';
-  render();
-  try {
-    await configureActiveProvider({
-      provider_id: providerId,
-      model_id: settingsPanelState.draftModelId,
-      model_reasoning_effort: settingsPanelState.draftReasoningEffort || null
-    });
-    platformSettings = await getPlatformSettings();
-    syncSettingsPanelDraft(settingsPanelState, platformSettings);
-    notice = { tone: 'success', message: 'Provider settings updated.' };
-  } catch (error) {
-    settingsPanelState.providerError = error instanceof Error ? error.message : 'Unable to update provider settings.';
-  } finally {
-    settingsPanelState.isSavingProvider = false;
-    render();
-  }
-}
-
-async function saveHostedProviderSettingsFromPanel() {
-  const providerId = platformSettings?.provider.hosted_text?.active_provider?.provider_id;
-  if (!providerId || !settingsPanelState.hostedDraftModelId) {
-    settingsPanelState.hostedProviderError = 'Hosted provider not loaded.';
-    render();
-    return;
-  }
-  settingsPanelState.isSavingHostedProvider = true;
-  settingsPanelState.hostedProviderError = '';
-  render();
-  try {
-    await configureHostedProvider({
-      provider_id: providerId,
-      model_id: settingsPanelState.hostedDraftModelId
-    });
-    platformSettings = await getPlatformSettings();
-    syncSettingsPanelDraft(settingsPanelState, platformSettings);
-    notice = { tone: 'success', message: 'Hosted model settings updated.' };
-  } catch (error) {
-    settingsPanelState.hostedProviderError = error instanceof Error ? error.message : 'Unable to update hosted model settings.';
-  } finally {
-    settingsPanelState.isSavingHostedProvider = false;
-    render();
-  }
-}
-
 async function clearRuntimeSessionsFromPanel(sessionIds?: string[]) {
   const scopedIds = (sessionIds || []).filter(Boolean);
   settingsPanelState.cleanupError = '';
@@ -562,8 +508,8 @@ function bindEvents() {
     render,
     resetSelectedUserPassword,
     saveDependencySelection,
-    saveHostedProviderSettingsFromPanel,
-    saveProviderSettingsFromPanel,
+    saveHostedProviderSettingsFromPanel: () => saveHostedProviderSettings(providerSettingsActionContext()),
+    saveProviderSettingsFromPanel: () => saveActiveProviderSettings(providerSettingsActionContext()),
     selectedUser,
     selectUser: (userId) => {
       selectedUserId = userId;
@@ -578,6 +524,20 @@ function bindEvents() {
     workspaceApps: () => workspaceApps,
     appDependencies: () => appLinksController.viewState().dependencies,
   });
+}
+
+function providerSettingsActionContext() {
+  return {
+    render,
+    setNotice: (nextNotice: { tone: 'info' | 'success' | 'error'; message: string }) => {
+      notice = nextNotice;
+    },
+    setSettings: (nextSettings: PlatformSettings) => {
+      platformSettings = nextSettings;
+    },
+    settings: platformSettings,
+    state: settingsPanelState
+  };
 }
 
 function showError(error: unknown) {

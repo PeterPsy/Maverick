@@ -216,7 +216,7 @@ function hostedProviderSettingsFormHtml(
       <span class="material-symbols-rounded" aria-hidden="true">route</span>
       <span>
         <strong>Hosted chat fast model</strong>
-        <small>OpenRouter governs plain_hosted_chat and fast_model only</small>
+        <small>Hosted text providers govern plain_hosted_chat and fast_model only</small>
       </span>
     </div>
     <label class="settings-platform-field settings-platform-field-wide">

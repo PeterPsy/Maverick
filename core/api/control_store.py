@@ -14,7 +14,6 @@ from core.identity.store import IdentityCollections
 from core.providers.store import ProviderCollections
 from core.secrets.bootstrap import resolve_bootstrap_secret
 from core.secrets.store import SecretCollections
-from core.shared.in_memory_collection import InMemoryCollection
 from core.shared.json_file_collection import JsonFileCollection
 from core.shared.mongo_document_collection import MongoDocumentCollection
 from core.workspaces.store import WorkspaceCollections
@@ -36,6 +35,7 @@ MONGO_COLLECTION_UNIQUE_INDEXES: dict[str, tuple[tuple[str, ...], ...]] = {
     "workspace_local_app_projects": (("workspace_id", "app_id"),),
     "workspace_app_bindings": (("workspace_id", "app_id"),),
     "workspace_app_dependency_selections": (("workspace_id", "consumer_app_id", "alias"),),
+    "provider_definitions": (("provider_id",),),
     "provider_credential_bindings": (("binding_id",),),
     "provider_selections": (("workspace_id",),),
     "provider_hosted_selections": (("workspace_id", "profile"),),
@@ -134,6 +134,7 @@ def control_plane_collection_specs(collections: ControlPlaneCollections) -> list
             "workspace_app_dependency_selections",
             collections.apps.workspace_app_dependency_selections,
         ),
+        ControlPlaneCollectionSpec("provider_definitions", collections.provider.definitions),
         ControlPlaneCollectionSpec("provider_credential_bindings", collections.provider.bindings),
         ControlPlaneCollectionSpec("provider_selections", collections.provider.selections),
         ControlPlaneCollectionSpec("provider_hosted_selections", collections.provider.hosted_selections),
@@ -176,7 +177,7 @@ def _build_json_collections(json_root: Path) -> ControlPlaneCollections:
             ),
         ),
         provider=ProviderCollections(
-            definitions=InMemoryCollection(),
+            definitions=JsonFileCollection(provider_state_root / "definitions.json"),
             bindings=JsonFileCollection(provider_state_root / "bindings.json"),
             selections=JsonFileCollection(provider_state_root / "selections.json"),
             hosted_selections=JsonFileCollection(provider_state_root / "hosted_selections.json"),
@@ -216,7 +217,7 @@ def _build_mongo_collections(settings: ControlStoreSettings) -> ControlPlaneColl
             workspace_app_dependency_selections=collection("workspace_app_dependency_selections"),
         ),
         provider=ProviderCollections(
-            definitions=InMemoryCollection(),
+            definitions=collection("provider_definitions"),
             bindings=collection("provider_credential_bindings"),
             selections=collection("provider_selections"),
             hosted_selections=collection("provider_hosted_selections"),

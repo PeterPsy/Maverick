@@ -82,12 +82,18 @@ def register_builtin_providers(
     definitions = active_registry.list_provider_definitions()
     for definition in definitions:
         try:
-            store.get_provider_definition(definition.provider_id)
+            existing = store.get_provider_definition(definition.provider_id)
         except ProviderNotFoundError:
             store.save_provider_definition(definition)
             continue
-        if definition.provider_id == "codex":
-            store.save_provider_definition(definition)
+        refreshed_definition = replace(
+            definition,
+            status=existing.status,
+            created_at=existing.created_at,
+            updated_at=existing.updated_at,
+        )
+        if refreshed_definition != existing:
+            store.save_provider_definition(refreshed_definition)
     return definitions
 
 

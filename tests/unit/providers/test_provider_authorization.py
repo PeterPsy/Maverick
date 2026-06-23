@@ -82,6 +82,27 @@ class ProviderAuthorizationTest(unittest.TestCase):
         self.assertIn("provider_credential_binding_present", authorization.reason_codes)
         self.assertNotIn("platform:secret-alias/groq", str(authorization))
 
+    def test_provider_credential_binding_requires_existing_secret_when_store_available(self) -> None:
+        provider_store = self.make_provider_store()
+        bind_provider_credential(
+            provider_store,
+            provider_id="groq",
+            workspace_id="default",
+            secret_ref="platform:secret-alias/missing-groq",
+            label="Missing Groq API key",
+        )
+
+        authorization = check_provider_credential_authorization(
+            provider_store,
+            definition=self.groq_definition(),
+            workspace_id="default",
+            secret_store=self.make_secret_store(),
+        )
+
+        self.assertFalse(authorization.authorized)
+        self.assertIn("provider_credential_binding_secret_missing", authorization.reason_codes)
+        self.assertNotIn("platform:secret-alias/missing-groq", str(authorization))
+
     def test_legacy_provider_credential_binding_does_not_authorize(self) -> None:
         provider_store = self.make_provider_store()
         now = datetime(2026, 6, 22, 12, 0, tzinfo=UTC)

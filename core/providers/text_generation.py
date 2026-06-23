@@ -401,7 +401,10 @@ def _extract_message_content(payload: dict[str, object] | None) -> str:
 
 def _iter_openai_sse_chunks(response) -> Iterable[str]:
     for raw_line in response:
-        line = raw_line.decode("utf-8").strip()
+        try:
+            line = raw_line.decode("utf-8").strip()
+        except UnicodeDecodeError as error:
+            raise HostedTextGenerationError("provider_response_invalid") from error
         if not line.startswith("data:"):
             continue
         data = line.removeprefix("data:").strip()

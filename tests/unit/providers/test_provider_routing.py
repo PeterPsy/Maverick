@@ -157,6 +157,32 @@ class ProviderRoutingTest(unittest.TestCase):
         self.assertIn("fallback_no_credential_authorization", decision.reason_codes)
         self.assertNotIn("platform:providers/groq", str(decision))
 
+    def test_fast_model_does_not_select_missing_core_secret_binding_when_store_available(self) -> None:
+        store = self.make_provider_store()
+        bind_provider_credential(
+            store,
+            provider_id="groq",
+            workspace_id="default",
+            secret_ref="platform:secret-alias/missing-groq",
+        )
+
+        decision = select_provider_for_profile(
+            "fast_model",
+            ProviderRoutingContext(
+                workspace_id="default",
+                provider_store=store,
+                registry=self.active_fast_registry(),
+                secret_store=self.make_secret_store(),
+                request_id="req-missing-secret",
+            ),
+        )
+
+        self.assertIsNone(decision.selected_provider_id)
+        self.assertIsNone(decision.execution_path)
+        self.assertIn("provider_credential_binding_secret_missing", decision.reason_codes)
+        self.assertIn("fallback_no_credential_authorization", decision.reason_codes)
+        self.assertNotIn("platform:secret-alias/missing-groq", str(decision))
+
     def test_disabled_provider_is_not_selected(self) -> None:
         decision = select_provider_for_profile(
             "fast_model",

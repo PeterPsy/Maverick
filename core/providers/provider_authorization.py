@@ -9,9 +9,10 @@ from core.providers.errors import ProviderCredentialBindingError, ProviderDisabl
 from core.providers.models import ProviderCredentialRequirement, ProviderDefinition
 from core.providers.provider_credentials import normalize_provider_credential_secret_ref, resolve_provider_binding
 from core.providers.store import ProviderStore
-from core.secrets.errors import SecretPolicyError
+from core.secrets.errors import SecretError, SecretPolicyError
 from core.secrets.models import SecretBindingRecord, SecretGrantRecord, SecretResolutionContext
 from core.secrets.policy import assert_grant_allows_context
+from core.secrets.secret_resolution import parse_secret_ref
 from core.secrets.store import SecretStore
 
 
@@ -66,6 +67,7 @@ def check_provider_credential_authorization(
     default_target = target or provider_secret_target(definition.provider_id, "plain_hosted_chat")
 
     if scope in {"provider", "provider_or_app"}:
+        provider_binding_blocked = False
         try:
             binding = resolve_provider_binding(
                 provider_store,
@@ -86,22 +88,28 @@ def check_provider_credential_authorization(
                 normalize_provider_credential_secret_ref(binding.secret_ref)
             except ProviderCredentialBindingError:
                 reason_codes.append("provider_credential_binding_invalid_secret_ref")
+                provider_binding_blocked = True
             else:
-                return ProviderCredentialAuthorization(
-                    provider_id=definition.provider_id,
-                    workspace_id=workspace_id,
-                    required=True,
-                    authorized=True,
-                    secret_alias_or_logical_name=secret_name,
-                    provider_credential_binding_id_optional=binding.binding_id,
-                    reason_codes=[*reason_codes, "provider_credential_binding_present"],
-                )
+                if secret_store is not None and not _provider_credential_binding_secret_exists(secret_store, binding.secret_ref):
+                    reason_codes.append("provider_credential_binding_secret_missing")
+                    provider_binding_blocked = True
+                else:
+                    return ProviderCredentialAuthorization(
+                        provider_id=definition.provider_id,
+                        workspace_id=workspace_id,
+                        required=True,
+                        authorized=True,
+                        secret_alias_or_logical_name=secret_name,
+                        provider_credential_binding_id_optional=binding.binding_id,
+                        reason_codes=[*reason_codes, "provider_credential_binding_present"],
+                    )
         elif _has_invalid_provider_credential_binding(
             provider_store,
             provider_id=definition.provider_id,
             workspace_id=workspace_id,
         ):
             reason_codes.append("provider_credential_binding_invalid_secret_ref")
+            provider_binding_blocked = True
         secret_binding = _find_provider_secret_binding(
             secret_store,
             provider_id=definition.provider_id,
@@ -118,7 +126,8 @@ def check_provider_credential_authorization(
                 provider_secret_binding_id_optional=secret_binding.binding_id,
                 reason_codes=[*reason_codes, "provider_secret_binding_present"],
             )
-        reason_codes.append("provider_credential_binding_missing")
+        if not provider_binding_blocked:
+            reason_codes.append("provider_credential_binding_missing")
 
     if scope in {"app", "provider_or_app"} and app_id and secret_store is not None:
         grant = _find_app_secret_grant(
@@ -202,6 +211,19 @@ def _has_invalid_provider_credential_binding(
         except ProviderCredentialBindingError:
             return True
     return False
+
+
+def _provider_credential_binding_secret_exists(secret_store: SecretStore, secret_ref: str) -> bool:
+    try:
+        normalized_ref = normalize_provider_credential_secret_ref(secret_ref)
+        parsed_ref = parse_secret_ref(normalized_ref)
+        if parsed_ref.kind == "secret_id":
+            secret = secret_store.get_secret(parsed_ref.value)
+        else:
+            secret = secret_store.get_secret_by_alias(parsed_ref.value)
+    except (ProviderCredentialBindingError, SecretError):
+        return False
+    return secret.status == "active"
 
 
 def _find_app_secret_grant(

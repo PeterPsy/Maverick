@@ -152,6 +152,34 @@ class HostedTextGenerationTest(unittest.TestCase):
                 self.assertEqual(raised.exception.reason_code, "provider_response_invalid")
                 self.assertNotIn("secret-token", str(raised.exception))
 
+    def test_http_transport_malformed_stream_maps_to_provider_response_invalid(self) -> None:
+        class MalformedStreamResponse:
+            status = 200
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, exc_type, exc, tb) -> None:
+                return None
+
+            def __iter__(self):
+                yield b"\xff\n"
+
+        client = OpenAICompatibleTextGenerationClient(
+            provider_id="groq",
+            api_key="secret-token",
+            transport=OpenAICompatibleHttpTransport(),
+        )
+
+        with (
+            patch("core.providers.text_generation.urllib_request.urlopen", return_value=MalformedStreamResponse()),
+            self.assertRaises(HostedTextGenerationError) as raised,
+        ):
+            client.generate(self.request(stream=True))
+
+        self.assertEqual(raised.exception.reason_code, "provider_response_invalid")
+        self.assertNotIn("secret-token", str(raised.exception))
+
     def test_hosted_text_request_rejects_operational_references(self) -> None:
         client = OpenAICompatibleTextGenerationClient(
             provider_id="groq",

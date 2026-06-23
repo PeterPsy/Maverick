@@ -12,6 +12,7 @@ from core.api.platform_host import PlatformHost
 from core.api.platform_state import bootstrap_platform_state
 from core.api.runtime_websocket import stream_runtime_session_events
 from core.providers.models import ProviderCredentialBinding
+from core.providers.provider_credentials import bind_provider_credential
 from core.providers.service import activate_hosted_model_provider, disable_provider_binding
 from core.secrets.service import build_secret_ref, create_platform_secret
 from tests.support.repo import make_temp_repo_root
@@ -231,6 +232,47 @@ class ChatPlainHostedRuntimeTest(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(failed_event["payload"]["error"], "provider_credential_authorization_missing")
         self.assertIn("provider_credential_binding_invalid_secret_ref", failed_event["payload"]["reason_codes"])
         self.assertNotIn("platform:providers/groq", json.dumps(payload))
+        self.assertNotIn('"secret_ref":', json.dumps(payload))
+
+    async def test_chat_plain_hosted_missing_bound_core_secret_is_not_selected_or_leaked(self) -> None:
+        state = bootstrap_platform_state(start_path=make_temp_repo_root(self))
+        groq = state.provider_store.get_provider_definition("groq")
+        state.provider_store.save_provider_definition(replace(groq, status="active"))
+        bind_provider_credential(
+            state.provider_store,
+            provider_id="groq",
+            workspace_id="default",
+            secret_ref="platform:secret-alias/missing-groq",
+            label="Missing Groq",
+        )
+        cookie = self.login_cookie(state)
+
+        with patch(
+            "core.runtime.turn_submission_service_submit.resolve_runtime_backend_for_session",
+            side_effect=AssertionError("plain hosted chat must not resolve Codex runtime"),
+        ):
+            status, payload, _headers = self.invoke(
+                state,
+                path="/api/runtime/sessions",
+                method="POST",
+                cookie=cookie,
+                body={
+                    "agent_id": "chat",
+                    "source_app_id": "chat",
+                    "runtime_mode": "plain_hosted_chat",
+                    "routing_profile": "fast_model",
+                    "input_text": "Hello hosted",
+                    "async": False,
+                },
+            )
+
+        self.assertEqual(status, 201)
+        self.assertEqual(payload["turn"]["status"], "failed")
+        self.assertEqual(payload["turn"]["failure_reason"], "provider_credential_authorization_missing")
+        failed_event = next(event for event in payload["events"] if event["event_type"] == "runtime.turn.failed")
+        self.assertEqual(failed_event["payload"]["error"], "provider_credential_authorization_missing")
+        self.assertIn("provider_credential_binding_secret_missing", failed_event["payload"]["reason_codes"])
+        self.assertNotIn("platform:secret-alias/missing-groq", json.dumps(payload))
         self.assertNotIn('"secret_ref":', json.dumps(payload))
 
     async def test_chat_plain_hosted_rejects_unknown_routing_profile(self) -> None:

@@ -87,6 +87,26 @@ class HostedTextGenerationTest(unittest.TestCase):
         self.assertNotIn("secret-token", str(result))
         self.assertNotIn("secret-token", str(transport.requests))
 
+    def test_openrouter_uses_openai_compatible_chat_completions_endpoint(self) -> None:
+        transport = FakeHostedTextTransport(response_text="hello from openrouter")
+        client = OpenAICompatibleTextGenerationClient(
+            provider_id="openrouter",
+            api_key="secret-token",
+            transport=transport,
+        )
+
+        result = client.generate(
+            TextGenerationRequest(
+                model_id="google/gemma-4-31b-it:free",
+                messages=[TextGenerationMessage(role="user", content="Hello")],
+            )
+        )
+
+        self.assertEqual(result.output_text, "hello from openrouter")
+        self.assertEqual(transport.requests[0]["endpoint_url"], "https://openrouter.ai/api/v1/chat/completions")
+        self.assertEqual(transport.requests[0]["payload"]["model"], "google/gemma-4-31b-it:free")
+        self.assertNotIn("secret-token", str(transport.requests))
+
     def test_fake_transport_streaming_normalizes_deltas(self) -> None:
         transport = FakeHostedTextTransport(chunks=["hel", "lo"])
         client = OpenAICompatibleTextGenerationClient(

@@ -36,10 +36,20 @@ Important implications:
 ## Hosted Model Providers And Plain Hosted Chat
 
 Provider records distinguish `provider_role` from the lower-level provider `kind`.
-Codex is a `runtime_engine` and remains the default agentic runtime. Groq and
-DeepSeek are `model_provider` records for hosted text generation; they are not
-runtime backends and must not be configured through the workspace runtime
-provider selection path.
+Codex is a `runtime_engine` and remains the default agentic runtime. Groq,
+DeepSeek, and OpenRouter are `model_provider` records for hosted text
+generation; they are not runtime backends and must not be configured through
+the workspace runtime provider selection path.
+
+OpenRouter is the hosted provider used for selectable `fast_model` and
+`plain_hosted_chat` text routing when activated by an operator. It uses the
+Core Secrets alias `openrouter_api_key`, the public secret reference
+`platform:secret-alias/openrouter_api_key`, and the OpenAI-compatible chat
+completions endpoint `https://openrouter.ai/api/v1/chat/completions`.
+Maverick exposes these OpenRouter model options:
+
+- `google/gemma-4-31b-it:free` as `Gemma 4 31B (free)`
+- `nvidia/nemotron-3-ultra-550b-a55b:free` as `Nemotron 3 Ultra (free)`
 
 Hosted text providers are enabled through an operator-only hosted activation
 path, not through `/api/providers/active`. The activation path stores an active
@@ -52,6 +62,11 @@ metadata, and returns a redaction-safe routing preflight decision:
 
 The activation responses expose provider ids, binding ids, model ids, and
 reason codes. They do not expose raw secret values or secret refs.
+
+The hosted provider/model choice is persisted separately from the Codex runtime
+`ProviderSelection`. Settings saves it through `/api/providers/hosted/selection`
+so a workspace can choose an OpenRouter hosted model for `fast_model` while
+leaving Codex as the agentic runtime for tools, filesystem, MCP, and skills.
 
 `plain_hosted_chat` is the current non-agentic text bridge. A Chat/runtime
 session using that mode routes the `fast_model` profile through the provider

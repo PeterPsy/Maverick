@@ -25,6 +25,7 @@ def build_hosted_provider_definitions(now: datetime | None = None) -> list[Provi
     return [
         _groq_definition(timestamp),
         _deepseek_definition(timestamp),
+        _openrouter_definition(timestamp),
         _deepgram_definition(timestamp),
         _cartesia_definition(timestamp),
         _kokoro_hosted_definition(timestamp),
@@ -142,6 +143,41 @@ def _deepseek_definition(timestamp: datetime) -> ProviderDefinition:
         network_requirements=[_network("api.deepseek.com")],
         execution_contract=_hosted_text_contract("deepseek_api_key"),
         latency_metadata={"latency_class": "standard"},
+    )
+
+
+def _openrouter_definition(timestamp: datetime) -> ProviderDefinition:
+    return ProviderDefinition(
+        provider_id="openrouter",
+        label="OpenRouter",
+        description="Hosted OpenAI-compatible text generation provider metadata.",
+        kind="hosted_api",
+        provider_role="model_provider",
+        status="disabled",
+        capabilities=_hosted_text_capabilities(latency_class="low"),
+        default_model_family="google/gemma-4-31b-it:free",
+        requires_credentials=True,
+        supported_execution_modes=[],
+        created_at=timestamp,
+        updated_at=timestamp,
+        model_options=[
+            ProviderModelOption(
+                model_id="google/gemma-4-31b-it:free",
+                label="Gemma 4 31B (free)",
+                description="OpenRouter hosted text model candidate for fast_model routing.",
+                default_reasoning_effort=None,
+            ),
+            ProviderModelOption(
+                model_id="nvidia/nemotron-3-ultra-550b-a55b:free",
+                label="Nemotron 3 Ultra (free)",
+                description="OpenRouter hosted text model candidate for fast_model routing.",
+                default_reasoning_effort=None,
+            ),
+        ],
+        credential_requirements=[_credential("openrouter_api_key", modes=["plain_hosted_chat", "fast_model"])],
+        network_requirements=[_network("openrouter.ai")],
+        execution_contract=_hosted_text_contract("openrouter_api_key"),
+        latency_metadata={"latency_class": "low", "router": "openrouter"},
     )
 
 

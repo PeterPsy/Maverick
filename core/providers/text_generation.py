@@ -25,6 +25,7 @@ MessageRole = Literal["system", "user", "assistant"]
 OPENAI_COMPATIBLE_ENDPOINTS = {
     "groq": "https://api.groq.com/openai/v1/chat/completions",
     "deepseek": "https://api.deepseek.com/chat/completions",
+    "openrouter": "https://openrouter.ai/api/v1/chat/completions",
 }
 BLOCKED_HOSTED_TEXT_MARKERS = (
     "local path:",

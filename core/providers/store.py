@@ -12,11 +12,13 @@ from core.providers.models import (
     ProviderCredentialRequirement,
     ProviderDefinition,
     ProviderExecutionContract,
+    ProviderHostedSelection,
     ProviderModelOption,
     ProviderNetworkRequirement,
     ProviderReasoningOption,
     ProviderSelection,
 )
+from core.shared.in_memory_collection import InMemoryCollection
 
 
 class DocumentCollection(Protocol):
@@ -64,6 +66,12 @@ class ProviderStore(Protocol):
     def get_provider_selection(self, workspace_id: str) -> ProviderSelection | None:
         ...
 
+    def save_hosted_provider_selection(self, record: ProviderHostedSelection) -> ProviderHostedSelection:
+        ...
+
+    def get_hosted_provider_selection(self, *, workspace_id: str, profile: str) -> ProviderHostedSelection | None:
+        ...
+
 
 @dataclass(frozen=True)
 class ProviderCollections:
@@ -72,6 +80,7 @@ class ProviderCollections:
     definitions: DocumentCollection
     bindings: DocumentCollection
     selections: DocumentCollection
+    hosted_selections: DocumentCollection | None = None
 
 
 class ProviderDocumentStore:
@@ -79,6 +88,7 @@ class ProviderDocumentStore:
 
     def __init__(self, collections: ProviderCollections) -> None:
         self.collections = collections
+        self._hosted_selections = collections.hosted_selections or InMemoryCollection()
 
     def _provider_definition(self, document: dict[str, Any]) -> ProviderDefinition:
         payload = dict(document)
@@ -171,3 +181,17 @@ class ProviderDocumentStore:
         if document is None:
             return None
         return ProviderSelection(**document)
+
+    def save_hosted_provider_selection(self, record: ProviderHostedSelection) -> ProviderHostedSelection:
+        self._hosted_selections.update_one(
+            {"workspace_id": record.workspace_id, "profile": record.profile},
+            {"$set": asdict(record)},
+            upsert=True,
+        )
+        return record
+
+    def get_hosted_provider_selection(self, *, workspace_id: str, profile: str) -> ProviderHostedSelection | None:
+        document = self._hosted_selections.find_one({"workspace_id": workspace_id, "profile": profile})
+        if document is None:
+            return None
+        return ProviderHostedSelection(**document)

@@ -103,7 +103,7 @@ class ProvidersTestCase(unittest.TestCase):
 
         self.assertEqual(
             {definition.provider_id for definition in definitions},
-            {"cartesia", "codex", "deepgram", "deepseek", "groq", "kokoro-hosted"},
+            {"cartesia", "codex", "deepgram", "deepseek", "groq", "kokoro-hosted", "openrouter"},
         )
         self.assertEqual(codex.kind, "runtime_backend")
         self.assertEqual(codex.provider_role, "runtime_engine")
@@ -122,6 +122,7 @@ class ProvidersTestCase(unittest.TestCase):
         definitions = builtin_provider_registry().list_provider_definitions()
         groq = self.provider_by_id(definitions, "groq")
         deepseek = self.provider_by_id(definitions, "deepseek")
+        openrouter = self.provider_by_id(definitions, "openrouter")
         deepgram = self.provider_by_id(definitions, "deepgram")
         cartesia = self.provider_by_id(definitions, "cartesia")
         kokoro_hosted = self.provider_by_id(definitions, "kokoro-hosted")
@@ -134,6 +135,19 @@ class ProvidersTestCase(unittest.TestCase):
         self.assertEqual(groq.execution_contract.adapter_type if groq.execution_contract else None, "hosted_text_generation")
         self.assertEqual(deepseek.provider_role, "model_provider")
         self.assertEqual(deepseek.status, "disabled")
+        self.assertEqual(openrouter.provider_role, "model_provider")
+        self.assertEqual(openrouter.status, "disabled")
+        self.assertEqual(openrouter.default_model_family, "google/gemma-4-31b-it:free")
+        self.assertEqual([option.model_id for option in openrouter.model_options], [
+            "google/gemma-4-31b-it:free",
+            "nvidia/nemotron-3-ultra-550b-a55b:free",
+        ])
+        self.assertEqual(openrouter.network_requirements[0].allowed_hosts, ["openrouter.ai"])
+        self.assertEqual(openrouter.execution_contract.adapter_type if openrouter.execution_contract else None, "hosted_text_generation")
+        self.assertEqual(
+            openrouter.execution_contract.secret_alias_or_logical_name if openrouter.execution_contract else None,
+            "openrouter_api_key",
+        )
         self.assertEqual(deepgram.provider_role, "speech_provider")
         self.assertEqual(cartesia.provider_role, "speech_provider")
         self.assertEqual(kokoro_hosted.provider_role, "speech_provider")

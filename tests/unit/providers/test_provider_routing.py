@@ -4,13 +4,21 @@ from __future__ import annotations
 
 from dataclasses import replace
 from datetime import UTC, datetime
+import json
 import unittest
 
 from core.providers.models import ProviderCredentialBinding, WorkspaceProviderPolicy
+from core.providers.payloads import routing_decision_payload
 from core.providers.provider_credentials import bind_provider_credential
 from core.providers.provider_registry import ProviderRegistry
 from core.providers.routing import ProviderRoutingContext, select_provider_for_profile
-from core.providers.service import activate_hosted_model_provider, builtin_provider_registry, configure_workspace_provider, effective_provider_registry
+from core.providers.service import (
+    activate_hosted_model_provider,
+    builtin_provider_registry,
+    configure_hosted_model_provider,
+    configure_workspace_provider,
+    effective_provider_registry,
+)
 from core.providers.store import ProviderCollections, ProviderDocumentStore
 from core.secrets.service import build_secret_ref, create_platform_secret
 from core.secrets.store import SecretCollections, SecretDocumentStore
@@ -44,6 +52,12 @@ class ProviderRoutingTest(unittest.TestCase):
         registry.register_provider_definition(replace(groq, status="active"))
         return registry
 
+    def active_openrouter_registry(self) -> ProviderRegistry:
+        registry = builtin_provider_registry()
+        openrouter = registry.get_provider_definition("openrouter")
+        registry.register_provider_definition(replace(openrouter, status="active"))
+        return registry
+
     def test_fast_model_selects_active_provider_with_binding(self) -> None:
         store = self.make_provider_store()
         bind_provider_credential(
@@ -72,6 +86,7 @@ class ProviderRoutingTest(unittest.TestCase):
         self.assertFalse(decision.fallback_used)
         self.assertIn("plain_hosted_text_selected", decision.reason_codes)
         self.assertNotIn("platform:secret-alias/groq", str(decision))
+        json.dumps(routing_decision_payload(decision))
 
     def test_effective_registry_uses_operator_activated_hosted_provider_from_store(self) -> None:
         store = self.make_provider_store()
@@ -106,6 +121,51 @@ class ProviderRoutingTest(unittest.TestCase):
         self.assertEqual(decision.selected_provider_id, "groq")
         self.assertEqual(decision.execution_path, "plain_hosted_text")
         self.assertNotIn("super-secret-token", str(decision))
+
+    def test_fast_model_routes_to_selected_openrouter_model_after_activation(self) -> None:
+        store = self.make_provider_store()
+        secret_store = self.make_secret_store()
+        secret = create_platform_secret(
+            secret_store,
+            label="OpenRouter",
+            raw_value="super-secret-token",
+            alias="openrouter-api-key",
+            kind="api_key",
+        )
+
+        activation = activate_hosted_model_provider(
+            store,
+            secret_store=secret_store,
+            workspace_id="default",
+            provider_id="openrouter",
+            secret_ref=build_secret_ref(alias=secret.alias or "openrouter-api-key"),
+        )
+        selection = configure_hosted_model_provider(
+            store,
+            workspace_id="default",
+            provider_id="openrouter",
+            model_id="nvidia/nemotron-3-ultra-550b-a55b:free",
+        )
+        decision = select_provider_for_profile(
+            "fast_model",
+            ProviderRoutingContext(
+                workspace_id="default",
+                provider_store=store,
+                registry=effective_provider_registry(store),
+                secret_store=secret_store,
+                request_id="req-openrouter",
+            ),
+        )
+
+        self.assertEqual(activation.hosted_selection.provider_id if activation.hosted_selection else None, "openrouter")
+        self.assertEqual(selection.model_id, "nvidia/nemotron-3-ultra-550b-a55b:free")
+        self.assertEqual(decision.selected_provider_id, "openrouter")
+        self.assertEqual(decision.selected_model_id_or_voice_id, "nvidia/nemotron-3-ultra-550b-a55b:free")
+        self.assertEqual(decision.selected_runtime_engine_id, None)
+        self.assertEqual(decision.execution_path, "plain_hosted_text")
+        self.assertIn("hosted_model_selection_present:openrouter", decision.reason_codes)
+        self.assertNotIn("super-secret-token", str(decision))
+        self.assertNotIn("platform:secret-alias/openrouter-api-key", str(decision))
 
     def test_fast_model_missing_credential_returns_auditable_failure(self) -> None:
         decision = select_provider_for_profile(
@@ -193,9 +253,10 @@ class ProviderRoutingTest(unittest.TestCase):
             ),
         )
 
-        self.assertEqual(decision.candidate_provider_ids, ["groq"])
+        self.assertEqual(decision.candidate_provider_ids, ["groq", "openrouter"])
         self.assertIsNone(decision.selected_provider_id)
         self.assertIn("provider_disabled:groq", decision.reason_codes)
+        self.assertIn("provider_disabled:openrouter", decision.reason_codes)
 
     def test_tier_policy_can_deny_free_and_allow_premium(self) -> None:
         store = self.make_provider_store()

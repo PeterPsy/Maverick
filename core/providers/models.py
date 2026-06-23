@@ -14,6 +14,7 @@ ProviderRole = Literal["runtime_engine", "model_provider", "speech_provider"]
 ProviderStatus = Literal["active", "disabled", "experimental"]
 ProviderBindingStatus = Literal["active", "disabled"]
 ProviderSelectionScope = Literal["workspace_default"]
+ProviderHostedSelectionProfile = Literal["fast_model"]
 ProviderBlockedReason = Literal["no_provider_configured", "provider_unavailable"]
 ProviderSecretBindingScope = Literal["provider", "app", "provider_or_app"]
 ProviderSecretResolutionStage = Literal["execution_only"]
@@ -158,6 +159,20 @@ class ProviderSelection:
     updated_at: datetime
     model_id: str | None = None
     model_reasoning_effort: str | None = None
+
+
+@dataclass(frozen=True)
+class ProviderHostedSelection:
+    """Persist the hosted text provider/model selection for one workspace profile."""
+
+    selection_id: str
+    workspace_id: str
+    profile: ProviderHostedSelectionProfile
+    provider_id: str
+    selection_reason: str
+    created_at: datetime
+    updated_at: datetime
+    model_id: str | None = None
 
 
 @dataclass(frozen=True)

@@ -60,6 +60,7 @@ class ProviderApiTest(unittest.TestCase):
             provider_store=self.make_provider_store(),
             secret_store=self.make_secret_store(),
             runtime_store=self.make_runtime_store(),
+            workspace_store=SimpleNamespace(),
             observability_store=None,
         )
 
@@ -78,8 +79,9 @@ class ProviderApiTest(unittest.TestCase):
         self.assertEqual(status, "200 OK")
         decision = payload["decision"]
         self.assertEqual(decision["request_id"], "req-api")
-        self.assertEqual(decision["candidate_provider_ids"], ["groq"])
+        self.assertEqual(decision["candidate_provider_ids"], ["groq", "openrouter"])
         self.assertIn("provider_disabled:groq", decision["reason_codes"])
+        self.assertIn("provider_disabled:openrouter", decision["reason_codes"])
         self.assertNotIn("secret_ref", str(payload))
 
     def test_operator_can_activate_hosted_provider_and_route_preview_uses_it(self) -> None:
@@ -116,6 +118,63 @@ class ProviderApiTest(unittest.TestCase):
         self.assertEqual(route_payload["decision"]["selected_provider_id"], "groq")
         self.assertNotIn("super-secret-token", json.dumps(payload))
         self.assertNotIn("secret_ref", json.dumps(payload))
+
+    def test_operator_can_activate_openrouter_and_save_hosted_model(self) -> None:
+        state = self.make_state()
+        secret = create_platform_secret(
+            state.secret_store,
+            label="OpenRouter API",
+            raw_value="super-secret-token",
+            alias="openrouter_api_key",
+            kind="api_key",
+        )
+
+        status, payload = self.invoke(
+            "/api/providers/hosted/active",
+            method="POST",
+            body={
+                "provider_id": "openrouter",
+                "secret_ref": build_secret_ref(alias=secret.alias or "openrouter_api_key"),
+                "label": "OpenRouter hosted text",
+            },
+            state=state,
+        )
+        with patch("core.api.provider_api.require_provider_selection_authority", return_value=None):
+            save_status, save_payload = self.invoke(
+                "/api/providers/hosted/selection",
+                method="POST",
+                body={
+                    "provider_id": "openrouter",
+                    "model_id": "nvidia/nemotron-3-ultra-550b-a55b:free",
+                },
+                state=state,
+            )
+        route_status, route_payload = self.invoke(
+            "/api/providers/route",
+            query="profile=fast_model&request_id=req-openrouter-api",
+            state=state,
+        )
+
+        self.assertEqual(status, "200 OK")
+        self.assertEqual(payload["provider"]["provider_id"], "openrouter")
+        self.assertEqual(payload["hosted_selection"]["provider_id"], "openrouter")
+        self.assertEqual(payload["hosted_selection"]["model_id"], "google/gemma-4-31b-it:free")
+        self.assertEqual(payload["preflight"]["selected_provider_id"], "openrouter")
+        self.assertEqual(save_status, "200 OK")
+        self.assertIsNone(save_payload["active_provider"])
+        self.assertEqual(save_payload["hosted_text"]["active_provider"]["provider_id"], "openrouter")
+        self.assertEqual(
+            save_payload["hosted_text"]["model_settings"]["selected_model_id"],
+            "nvidia/nemotron-3-ultra-550b-a55b:free",
+        )
+        self.assertEqual(route_status, "200 OK")
+        self.assertEqual(route_payload["decision"]["selected_provider_id"], "openrouter")
+        self.assertEqual(route_payload["decision"]["selected_model_id_or_voice_id"], "nvidia/nemotron-3-ultra-550b-a55b:free")
+        self.assertIsNone(route_payload["decision"]["selected_runtime_engine_id"])
+        self.assertNotIn("super-secret-token", json.dumps(payload))
+        self.assertNotIn("super-secret-token", json.dumps(save_payload))
+        self.assertNotIn("platform:secret-alias/openrouter_api_key", json.dumps(payload))
+        self.assertNotIn("secret_ref", json.dumps(save_payload))
 
     def test_hosted_activation_rejects_caller_supplied_binding_id_collision(self) -> None:
         state = self.make_state()

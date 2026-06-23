@@ -93,7 +93,7 @@ For local service installs, hosted evaluation, MongoDB, nginx, certbot, systemd,
 - **Apps:** product behavior packaged under `apps/<app_id>/` with an `app_contract.json`.
 - **Widgets:** small app-owned surfaces that can render inside other apps without source imports.
 - **Runtime agents and skills:** provider-backed agent sessions that use workspace-owned skills and runtime roots.
-- **Provider abstraction:** Codex is the default concrete runtime backend today; future providers should fit behind the same provider/runtime boundary.
+- **Provider abstraction:** Codex is the default concrete runtime backend today. Hosted model providers such as OpenRouter are separate text-generation providers for fast/plain hosted chat and do not replace the agentic Codex runtime.
 - **Persistence abstraction:** JSON is the default local control-plane adapter; MongoDB is optional for hosted evaluation.
 
 ## Apps Are The Integration Layer

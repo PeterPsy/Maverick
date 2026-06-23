@@ -9,6 +9,7 @@ from uuid import uuid4
 from core.providers.errors import ProviderError
 from core.providers.models import (
     ProviderDefinition,
+    ProviderHostedSelection,
     ProviderModelOption,
     RoutingDecision,
     WorkspaceProviderPolicy,
@@ -109,12 +110,21 @@ def primary_routing_failure_reason(decision: RoutingDecision) -> str:
 def _select_fast_model(context: ProviderRoutingContext) -> RoutingDecision:
     requested_capabilities = context.requested_capabilities or ["text_generation", "low_latency"]
     candidates = _fast_model_candidates(context.registry.list_provider_definitions())
+    hosted_selection = _hosted_selection_for_context(context)
+    candidates = _prioritize_hosted_selection(candidates, hosted_selection)
     candidate_ids = [candidate.provider_id for candidate in candidates]
     reason_codes = ["routing_profile_fast_model"]
+    if hosted_selection is not None:
+        reason_codes.append(f"hosted_model_selection_present:{hosted_selection.provider_id}")
     policy = _policy_for_context(context)
 
     for candidate in candidates:
-        model = _select_model(candidate, policy=policy, user_tier=context.user_tier)
+        preferred_model_id = (
+            hosted_selection.model_id
+            if hosted_selection is not None and hosted_selection.provider_id == candidate.provider_id
+            else None
+        )
+        model = _select_model(candidate, policy=policy, user_tier=context.user_tier, preferred_model_id=preferred_model_id)
         if candidate.status != "active":
             reason_codes.append(f"provider_disabled:{candidate.provider_id}")
             continue
@@ -249,11 +259,34 @@ def _fast_model_candidates(definitions: list[ProviderDefinition]) -> list[Provid
     return sorted(candidates, key=lambda definition: definition.provider_id)
 
 
+def _hosted_selection_for_context(context: ProviderRoutingContext) -> ProviderHostedSelection | None:
+    get_selection = getattr(context.provider_store, "get_hosted_provider_selection", None)
+    if not callable(get_selection):
+        return None
+    return get_selection(workspace_id=context.workspace_id, profile="fast_model")
+
+
+def _prioritize_hosted_selection(
+    candidates: list[ProviderDefinition],
+    selection: ProviderHostedSelection | None,
+) -> list[ProviderDefinition]:
+    if selection is None:
+        return candidates
+    return sorted(
+        candidates,
+        key=lambda definition: (
+            definition.provider_id != selection.provider_id,
+            definition.provider_id,
+        ),
+    )
+
+
 def _select_model(
     definition: ProviderDefinition,
     *,
     policy: WorkspaceProviderPolicy,
     user_tier: str | None,
+    preferred_model_id: str | None = None,
 ) -> ProviderModelOption | None:
     models = list(definition.model_options)
     if not models:
@@ -263,6 +296,10 @@ def _select_model(
         models = [model for model in models if model.model_id in allowed_model_ids]
     if not models:
         return None
+    if preferred_model_id:
+        for model in models:
+            if model.model_id == preferred_model_id:
+                return model
     for model in models:
         if model.model_id == definition.default_model_family:
             return model

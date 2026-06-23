@@ -1002,7 +1002,7 @@ class TestMcpCliSurfaces(SurfaceTestBase):
         self.assertEqual(mcp_activation["provider"]["status"], "active")
         self.assertEqual(cli_result["decision"]["request_id"], "req-cli")
         self.assertEqual(mcp_result["decision"]["request_id"], "req-mcp")
-        self.assertEqual(cli_result["decision"]["candidate_provider_ids"], ["groq"])
+        self.assertEqual(cli_result["decision"]["candidate_provider_ids"], ["groq", "openrouter"])
         self.assertEqual(cli_result["decision"]["selected_provider_id"], "groq")
         self.assertEqual(mcp_result["decision"]["selected_provider_id"], "groq")
         self.assertNotIn("provider_disabled:groq", cli_result["decision"]["reason_codes"])

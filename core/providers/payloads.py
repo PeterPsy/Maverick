@@ -6,6 +6,7 @@ from dataclasses import asdict
 
 from core.providers.models import (
     ProviderDefinition,
+    ProviderHostedSelection,
     ProviderModelOption,
     ProviderReasoningOption,
     ProviderSelection,
@@ -79,6 +80,22 @@ def provider_selection_payload(selection: ProviderSelection | None) -> dict[str,
     }
 
 
+def hosted_provider_selection_payload(selection: ProviderHostedSelection | None) -> dict[str, object] | None:
+    """Return public hosted-provider selection metadata."""
+    if selection is None:
+        return None
+    return {
+        "workspace_id": selection.workspace_id,
+        "profile": selection.profile,
+        "provider_id": selection.provider_id,
+        "selection_reason": selection.selection_reason,
+        "updated_at": selection.updated_at,
+        "model_id": selection.model_id,
+    }
+
+
 def routing_decision_payload(decision: RoutingDecision) -> dict[str, object]:
     """Return a redaction-safe routing decision payload."""
-    return asdict(decision)
+    payload = asdict(decision)
+    payload["created_at"] = decision.created_at.isoformat()
+    return payload

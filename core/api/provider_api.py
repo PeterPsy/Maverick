@@ -7,8 +7,9 @@ from core.api.platform_state import PlatformState
 from core.api.session_api import RequestSession, require_session
 from core.authorization.errors import AuthorizationError
 from core.authorization.service import require_provider_selection_authority
-from core.providers.models import ProviderDefinition, ProviderSelection
+from core.providers.models import ProviderDefinition, ProviderHostedSelection, ProviderSelection
 from core.providers.payloads import (
+    hosted_provider_selection_payload,
     provider_model_option_payload,
     provider_payload,
     provider_selection_payload,
@@ -18,6 +19,7 @@ from core.providers.payloads import (
 from core.providers.routing import ProviderRoutingContext, select_provider_for_profile
 from core.providers.service import (
     activate_hosted_model_provider,
+    configure_hosted_model_provider,
     configure_workspace_provider,
     effective_provider_registry,
     resolve_workspace_provider_status,
@@ -42,6 +44,67 @@ def provider_model_settings_payload(definition: ProviderDefinition, selection: P
         "selected_model_id": selected_model_id,
         "selected_reasoning_effort": selected_reasoning,
         "available_models": [provider_model_option_payload(option) for option in definition.model_options],
+    }
+
+
+def hosted_provider_model_settings_payload(
+    definition: ProviderDefinition,
+    selection: ProviderHostedSelection | None,
+) -> dict[str, object]:
+    """Return effective hosted text model settings for a provider."""
+    selected_model_id = (None if selection is None else selection.model_id) or definition.default_model_family
+    model_option = next((option for option in definition.model_options if option.model_id == selected_model_id), None)
+    if model_option is None and definition.model_options:
+        model_option = next(
+            (option for option in definition.model_options if option.model_id == definition.default_model_family),
+            definition.model_options[0],
+        )
+        selected_model_id = model_option.model_id
+    return {
+        "selected_model_id": selected_model_id,
+        "selected_reasoning_effort": None if model_option is None else model_option.default_reasoning_effort,
+        "available_models": [provider_model_option_payload(option) for option in definition.model_options],
+    }
+
+
+def workspace_hosted_text_status(state: PlatformState, *, workspace_id: str) -> dict[str, object]:
+    """Return workspace-scoped hosted text provider status without secret refs."""
+    registry = effective_provider_registry(state.provider_store)
+    available_providers = [
+        provider
+        for provider in registry.list_provider_definitions()
+        if provider.provider_role == "model_provider"
+        and provider.execution_contract is not None
+        and provider.execution_contract.adapter_type == "hosted_text_generation"
+    ]
+    get_hosted_selection = getattr(state.provider_store, "get_hosted_provider_selection", None)
+    selection = (
+        get_hosted_selection(workspace_id=workspace_id, profile="fast_model")
+        if callable(get_hosted_selection)
+        else None
+    )
+    decision = select_provider_for_profile(
+        "fast_model",
+        ProviderRoutingContext(
+            workspace_id=workspace_id,
+            provider_store=state.provider_store,
+            registry=registry,
+            secret_store=getattr(state, "secret_store", None),
+        ),
+    )
+    selected_provider_id = selection.provider_id if selection is not None else decision.selected_provider_id
+    active_provider = next((provider for provider in available_providers if provider.provider_id == selected_provider_id), None)
+    return {
+        "profile": "fast_model",
+        "active_provider": None if active_provider is None else provider_payload(active_provider),
+        "selection": hosted_provider_selection_payload(selection),
+        "model_settings": (
+            None
+            if active_provider is None
+            else hosted_provider_model_settings_payload(active_provider, selection)
+        ),
+        "available_providers": [provider_payload(provider) for provider in sort_provider_definitions(available_providers)],
+        "route_preview": routing_decision_payload(decision),
     }
 
 
@@ -81,6 +144,7 @@ def workspace_provider_status(
         "active_provider": active_provider,
         "selection": provider_selection_payload(status.selection),
         "model_settings": None if status.active_provider is None else provider_model_settings_payload(status.active_provider, status.selection),
+        "hosted_text": workspace_hosted_text_status(state, workspace_id=workspace_id),
         "blocked_reason": status.blocked_reason,
         "blocked_detail": status.blocked_detail,
         "available_providers": [provider_payload(provider) for provider in sort_provider_definitions(status.available_providers)],
@@ -117,7 +181,14 @@ def handle_provider_api(state: PlatformState, environ: dict, start_response: Sta
     """Handle provider and runtime routes."""
     path = environ.get("PATH_INFO", "/")
     method = environ.get("REQUEST_METHOD", "GET").upper()
-    if path not in {"/api/providers", "/api/providers/active", "/api/providers/hosted/active", "/api/providers/route", "/api/runtime/status"}:
+    if path not in {
+        "/api/providers",
+        "/api/providers/active",
+        "/api/providers/hosted/active",
+        "/api/providers/hosted/selection",
+        "/api/providers/route",
+        "/api/runtime/status",
+    }:
         return None
     context_or_response = require_session(state, environ, start_response)
     if not isinstance(context_or_response, RequestSession):
@@ -159,9 +230,33 @@ def handle_provider_api(state: PlatformState, environ: dict, start_response: Sta
                 "workspace_id": context.workspace_id,
                 "provider": provider_payload(activation.definition),
                 "credential_binding": provider_credential_binding_payload(activation.credential_binding),
+                "hosted_selection": hosted_provider_selection_payload(activation.hosted_selection),
                 "preflight": routing_decision_payload(activation.routing_decision),
             },
         )
+    if path == "/api/providers/hosted/selection" and method == "POST":
+        from core.api.http import read_json_body
+
+        body = read_json_body(environ)
+        provider_id = str(body.get("provider_id") or "").strip()
+        if not provider_id:
+            return json_response(start_response, {"error": "missing_provider_id"}, status="400 Bad Request")
+        try:
+            require_provider_selection_authority(state.workspace_store, user=context.user, workspace_id=context.workspace_id)
+        except AuthorizationError as error:
+            return json_response(start_response, {"error": error.reason}, status="403 Forbidden")
+        model_id = str(body.get("model_id") or "").strip() or None
+        try:
+            configure_hosted_model_provider(
+                state.provider_store,
+                workspace_id=context.workspace_id,
+                provider_id=provider_id,
+                model_id=model_id,
+                observability_store=state.observability_store,
+            )
+        except Exception as error:
+            return json_response(start_response, {"error": str(error)}, status="400 Bad Request")
+        return json_response(start_response, workspace_provider_status(state, workspace_id=context.workspace_id))
     if path == "/api/providers/active" and method == "POST":
         from core.api.http import read_json_body
 

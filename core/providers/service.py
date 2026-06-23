@@ -11,6 +11,7 @@ from core.providers.errors import ProviderCapabilityError, ProviderError, Provid
 from core.providers.models import (
     ProviderCredentialBinding,
     ProviderDefinition,
+    ProviderHostedSelection,
     ProviderSelection,
     RoutingDecision,
     RuntimeBackendLaunchSpec,
@@ -39,6 +40,7 @@ class HostedModelProviderActivation:
 
     definition: ProviderDefinition
     credential_binding: ProviderCredentialBinding | None
+    hosted_selection: ProviderHostedSelection | None
     routing_decision: RoutingDecision
 
 
@@ -141,6 +143,17 @@ def activate_hosted_model_provider(
         observability_store=observability_store,
         now=timestamp,
     )
+    hosted_selection = configure_hosted_model_provider(
+        store,
+        workspace_id=workspace_id,
+        provider_id=provider_id,
+        model_id=definition.default_model_family,
+        selection_reason="activated by hosted provider operator",
+        registry=active_registry,
+        codex_command=codex_command,
+        observability_store=observability_store,
+        now=timestamp,
+    )
     routing_registry = effective_provider_registry(store, registry=active_registry, codex_command=codex_command)
     decision = select_provider_for_profile(
         "fast_model",
@@ -184,8 +197,74 @@ def activate_hosted_model_provider(
     return HostedModelProviderActivation(
         definition=active_definition,
         credential_binding=binding,
+        hosted_selection=hosted_selection,
         routing_decision=decision,
     )
+
+
+def configure_hosted_model_provider(
+    store: ProviderStore,
+    *,
+    workspace_id: str,
+    provider_id: str,
+    model_id: str | None = None,
+    profile: str = "fast_model",
+    selection_reason: str = "configured by hosted model settings",
+    registry: ProviderRegistry | None = None,
+    codex_command: str = "codex",
+    observability_store=None,
+    now: datetime | None = None,
+) -> ProviderHostedSelection:
+    """Persist the selected hosted text provider/model for one workspace profile."""
+    if profile != "fast_model":
+        raise ProviderCapabilityError(f"Hosted provider profile `{profile}` is not supported.")
+    active_registry = effective_provider_registry(store, registry=registry, codex_command=codex_command)
+    definition = active_registry.get_provider_definition(provider_id)
+    _validate_hosted_model_provider(definition)
+    if definition.status != "active":
+        raise ProviderCapabilityError(f"Hosted provider `{provider_id}` is not active.")
+    normalized_model_id = _validate_hosted_model_id(definition, model_id)
+    timestamp = now or utcnow()
+    selection = ProviderHostedSelection(
+        selection_id=f"{workspace_id}:{profile}",
+        workspace_id=workspace_id,
+        profile="fast_model",
+        provider_id=provider_id,
+        selection_reason=selection_reason,
+        created_at=timestamp,
+        updated_at=timestamp,
+        model_id=normalized_model_id,
+    )
+    saved = store.save_hosted_provider_selection(selection)
+    if observability_store is not None:
+        payload = {
+            "workspace_id": workspace_id,
+            "profile": profile,
+            "provider_id": provider_id,
+            "model_id": saved.model_id,
+        }
+        record_platform_audit(
+            observability_store,
+            action="provider.hosted.selection.configure",
+            status="succeeded",
+            source_domain="providers",
+            detail=f"Configured hosted provider `{provider_id}` for workspace `{workspace_id}`.",
+            workspace_id=workspace_id,
+            provider_id=provider_id,
+            payload=payload,
+            now=timestamp,
+        )
+        record_platform_event(
+            observability_store,
+            event_type="provider.hosted.selection.configured",
+            event_plane="platform",
+            source_domain="providers",
+            workspace_id=workspace_id,
+            provider_id=provider_id,
+            payload=payload,
+            now=timestamp,
+        )
+    return saved
 
 
 def _validate_hosted_model_provider(definition: ProviderDefinition) -> None:
@@ -195,6 +274,18 @@ def _validate_hosted_model_provider(definition: ProviderDefinition) -> None:
         raise ProviderCapabilityError(f"Provider `{definition.provider_id}` is not a hosted model provider.")
     if definition.execution_contract is None or definition.execution_contract.adapter_type != "hosted_text_generation":
         raise ProviderCapabilityError(f"Provider `{definition.provider_id}` does not support hosted text generation.")
+
+
+def _validate_hosted_model_id(definition: ProviderDefinition, model_id: str | None) -> str | None:
+    normalized_model_id = str(model_id or "").strip() or definition.default_model_family
+    if normalized_model_id is None:
+        return None
+    model_ids = {option.model_id for option in definition.model_options}
+    if model_ids and normalized_model_id not in model_ids:
+        raise ProviderCapabilityError(
+            f"Model `{normalized_model_id}` is not declared by hosted provider `{definition.provider_id}`."
+        )
+    return normalized_model_id
 
 
 def _assert_secret_ref_exists(secret_store: SecretStore, secret_ref: str) -> None:

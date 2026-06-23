@@ -38,6 +38,7 @@ MONGO_COLLECTION_UNIQUE_INDEXES: dict[str, tuple[tuple[str, ...], ...]] = {
     "workspace_app_dependency_selections": (("workspace_id", "consumer_app_id", "alias"),),
     "provider_credential_bindings": (("binding_id",),),
     "provider_selections": (("workspace_id",),),
+    "provider_hosted_selections": (("workspace_id", "profile"),),
     "runtime_api_tokens": (("token_id",),),
     "secrets": (("secret_id",), ("alias",)),
     "secret_values": (("secret_id",),),
@@ -135,6 +136,7 @@ def control_plane_collection_specs(collections: ControlPlaneCollections) -> list
         ),
         ControlPlaneCollectionSpec("provider_credential_bindings", collections.provider.bindings),
         ControlPlaneCollectionSpec("provider_selections", collections.provider.selections),
+        ControlPlaneCollectionSpec("provider_hosted_selections", collections.provider.hosted_selections),
         ControlPlaneCollectionSpec("runtime_api_tokens", collections.runtime_api_tokens),
         ControlPlaneCollectionSpec("secrets", collections.secrets.secrets),
         ControlPlaneCollectionSpec("secret_values", collections.secrets.values),
@@ -177,6 +179,7 @@ def _build_json_collections(json_root: Path) -> ControlPlaneCollections:
             definitions=InMemoryCollection(),
             bindings=JsonFileCollection(provider_state_root / "bindings.json"),
             selections=JsonFileCollection(provider_state_root / "selections.json"),
+            hosted_selections=JsonFileCollection(provider_state_root / "hosted_selections.json"),
         ),
         runtime_api_tokens=JsonFileCollection(json_root / "runtime" / "api_tokens.json"),
         secrets=SecretCollections(
@@ -216,6 +219,7 @@ def _build_mongo_collections(settings: ControlStoreSettings) -> ControlPlaneColl
             definitions=InMemoryCollection(),
             bindings=collection("provider_credential_bindings"),
             selections=collection("provider_selections"),
+            hosted_selections=collection("provider_hosted_selections"),
         ),
         runtime_api_tokens=collection("runtime_api_tokens"),
         secrets=SecretCollections(

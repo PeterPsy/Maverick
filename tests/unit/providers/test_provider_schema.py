@@ -13,7 +13,9 @@ from core.providers.models import (
     ProviderModelOption,
     ProviderNetworkRequirement,
 )
+from core.providers.payloads import provider_payload
 from core.providers.provider_codex import build_codex_definition
+from core.providers.provider_hosted_metadata import build_hosted_provider_definitions
 from core.providers.store import ProviderCollections, ProviderDocumentStore
 from tests.support.collections import FakeCollection
 
@@ -151,6 +153,33 @@ class ProviderSchemaTest(unittest.TestCase):
         self.assertIsNotNone(reloaded.execution_contract)
         self.assertEqual(reloaded.execution_contract.adapter_type, "hosted_text_generation")
         self.assertFalse(hasattr(reloaded.credential_requirements[0], "secret_value"))
+
+    def test_openrouter_metadata_exposes_requested_models_without_secret_refs(self) -> None:
+        definitions = build_hosted_provider_definitions(datetime(2026, 6, 23, 12, 0, tzinfo=UTC))
+        openrouter = next(definition for definition in definitions if definition.provider_id == "openrouter")
+        payload = provider_payload(openrouter)
+
+        self.assertEqual(openrouter.label, "OpenRouter")
+        self.assertEqual(openrouter.kind, "hosted_api")
+        self.assertEqual(openrouter.provider_role, "model_provider")
+        self.assertEqual(openrouter.default_model_family, "google/gemma-4-31b-it:free")
+        self.assertEqual([option.model_id for option in openrouter.model_options], [
+            "google/gemma-4-31b-it:free",
+            "nvidia/nemotron-3-ultra-550b-a55b:free",
+        ])
+        self.assertEqual([option.label for option in openrouter.model_options], [
+            "Gemma 4 31B (free)",
+            "Nemotron 3 Ultra (free)",
+        ])
+        self.assertEqual(openrouter.credential_requirements[0].secret_alias_or_logical_name, "openrouter_api_key")
+        self.assertEqual(openrouter.network_requirements[0].allowed_hosts, ["openrouter.ai"])
+        self.assertEqual(openrouter.execution_contract.adapter_type if openrouter.execution_contract else None, "hosted_text_generation")
+        self.assertEqual(
+            openrouter.execution_contract.secret_alias_or_logical_name if openrouter.execution_contract else None,
+            "openrouter_api_key",
+        )
+        self.assertNotIn("platform:secret-alias/openrouter_api_key", str(payload))
+        self.assertNotIn("secret_ref", str(payload))
 
 
 if __name__ == "__main__":

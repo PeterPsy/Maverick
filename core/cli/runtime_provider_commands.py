@@ -6,7 +6,12 @@ from typing import Any
 
 from core.cli.core_command_helpers import OPERATOR_ONLY, WORKSPACE_SAFE, core_cli_command
 from core.cli.models import CliCommandDefinition, CliInvocationContext
-from core.providers.payloads import provider_payload, routing_decision_payload, sort_provider_definitions
+from core.providers.payloads import (
+    hosted_provider_selection_payload,
+    provider_payload,
+    routing_decision_payload,
+    sort_provider_definitions,
+)
 from core.providers.provider_registry import ProviderRegistry
 from core.providers.routing import ProviderRoutingContext, select_provider_for_profile
 from core.providers.service import activate_hosted_model_provider, effective_provider_registry
@@ -109,6 +114,7 @@ def runtime_provider_command_specs(
             "workspace_id": workspace_id,
             "provider": provider_payload(activation.definition),
             "credential_binding": _provider_credential_binding_payload(activation.credential_binding),
+            "hosted_selection": hosted_provider_selection_payload(activation.hosted_selection),
             "preflight": routing_decision_payload(activation.routing_decision),
         }
 

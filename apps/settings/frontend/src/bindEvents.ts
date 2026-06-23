@@ -11,12 +11,14 @@ export function bindSettingsEvents(context: {
   dismissNotice: () => void;
   installWorkspaceApp: (app: WorkspaceApp) => Promise<void>;
   logoutFromSettings: () => Promise<void>;
+  onHostedProviderModelChanged: (modelId: string) => void;
   onProviderModelChanged: (modelId: string) => void;
   onProviderReasoningChanged: (reasoningEffort: string) => void;
   persistenceController: PersistenceController;
   render: () => void;
   resetSelectedUserPassword: (form: HTMLFormElement, user: User) => Promise<void>;
   saveDependencySelection: (consumerAppId: string, alias: string, providerAppIds: string[]) => Promise<void>;
+  saveHostedProviderSettingsFromPanel: () => Promise<void>;
   saveProviderSettingsFromPanel: () => Promise<void>;
   selectedUser: () => User | undefined;
   selectUser: (userId: string) => void;
@@ -66,8 +68,12 @@ export function bindSettingsEvents(context: {
     onLogout: () => {
       context.logoutFromSettings().catch(context.showError);
     },
+    onHostedProviderModelChanged: context.onHostedProviderModelChanged,
     onProviderModelChanged: context.onProviderModelChanged,
     onProviderReasoningChanged: context.onProviderReasoningChanged,
+    onSaveHostedProviderSettings: () => {
+      context.saveHostedProviderSettingsFromPanel().catch(context.showError);
+    },
     onSaveProviderSettings: () => {
       context.saveProviderSettingsFromPanel().catch(context.showError);
     },

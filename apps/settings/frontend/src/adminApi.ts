@@ -164,10 +164,36 @@ export type ProviderItem = {
   provider_id: string;
   label: string;
   description: string;
+  kind?: string;
+  provider_role?: string;
   status: string;
   default_model_family: string | null;
   model_options: ProviderModelOption[];
   capabilities: Record<string, boolean>;
+};
+
+export type HostedProviderSelection = {
+  workspace_id: string;
+  profile: string;
+  provider_id: string;
+  selection_reason: string;
+  updated_at: string;
+  model_id: string | null;
+};
+
+export type HostedTextProviderStatus = {
+  profile: string;
+  active_provider: ProviderItem | null;
+  selection: HostedProviderSelection | null;
+  model_settings: ProviderModelSettings | null;
+  available_providers: ProviderItem[];
+  route_preview?: {
+    selected_provider_id: string | null;
+    selected_model_id_or_voice_id: string | null;
+    selected_runtime_engine_id: string | null;
+    execution_path: string | null;
+    reason_codes: string[];
+  } | null;
 };
 
 export type ProviderStatus = {
@@ -185,6 +211,7 @@ export type ProviderStatus = {
     model_reasoning_effort: string | null;
   } | null;
   model_settings: ProviderModelSettings | null;
+  hosted_text?: HostedTextProviderStatus | null;
   blocked_reason?: string | null;
   blocked_detail?: string | null;
   available_providers?: ProviderItem[];
@@ -338,6 +365,16 @@ export function configureActiveProvider(payload: {
   model_reasoning_effort?: string | null;
 }): Promise<ProviderStatus> {
   return requestJson<ProviderStatus>('/api/providers/active', {
+    method: 'POST',
+    body: JSON.stringify(payload)
+  });
+}
+
+export function configureHostedProvider(payload: {
+  provider_id: string;
+  model_id?: string | null;
+}): Promise<ProviderStatus> {
+  return requestJson<ProviderStatus>('/api/providers/hosted/selection', {
     method: 'POST',
     body: JSON.stringify(payload)
   });

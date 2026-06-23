@@ -796,6 +796,44 @@ button.settings-adapter-card {
   gap: 12px;
 }
 
+.settings-platform-provider-forms {
+  display: grid;
+  gap: 14px;
+}
+
+.settings-platform-form-heading {
+  display: grid;
+  grid-column: 1 / -1;
+  grid-template-columns: 2.1rem minmax(0, 1fr);
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  border-top: 1px solid var(--maverick-border);
+  padding-top: 14px;
+}
+
+.settings-platform-form-heading > .material-symbols-rounded {
+  color: var(--maverick-accent);
+}
+
+.settings-platform-form-heading span:not(.material-symbols-rounded) {
+  display: grid;
+  min-width: 0;
+  gap: 0.16rem;
+}
+
+.settings-platform-form-heading strong {
+  color: var(--maverick-text);
+  font-size: 0.88rem;
+  line-height: 1.2;
+}
+
+.settings-platform-form-heading small {
+  color: var(--maverick-text-muted);
+  font-size: 0.75rem;
+  line-height: 1.35;
+}
+
 .settings-platform-provider-form > button {
   grid-column: 1;
 }
@@ -806,6 +844,11 @@ button.settings-adapter-card {
   min-width: 0;
   color: var(--maverick-text-muted);
   font-size: 0.76rem;
+}
+
+.settings-platform-field-wide,
+.settings-platform-note {
+  grid-column: 1 / -1;
 }
 
 .settings-platform-error {

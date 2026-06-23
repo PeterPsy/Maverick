@@ -1,5 +1,11 @@
 import type { PlatformSettings, ProviderModelOption, RuntimeSessionItem } from './adminApi';
-import { defaultReasoningForOption, modelOptionsForSettings, selectedProviderDraft } from './providerModelOptions';
+import {
+  defaultReasoningForOption,
+  hostedModelOptionsForSettings,
+  modelOptionsForSettings,
+  selectedHostedProviderDraft,
+  selectedProviderDraft
+} from './providerModelOptions';
 
 const ACTIVE_RUNTIME_STATUSES = new Set(['created', 'running', 'stopping']);
 
@@ -9,6 +15,9 @@ export type SettingsPanelState = {
   cleaningSessionIds: Set<string>;
   draftModelId: string;
   draftReasoningEffort: string;
+  hostedDraftModelId: string;
+  hostedProviderError: string;
+  isSavingHostedProvider: boolean;
   isSavingProvider: boolean;
   providerError: string;
 };
@@ -17,6 +26,8 @@ export type SettingsPanelActions = {
   onClearAllRuntimeSessions: () => void;
   onClearRuntimeSession: (sessionId: string) => void;
   onLogout: () => void;
+  onHostedProviderModelChanged: (modelId: string) => void;
+  onSaveHostedProviderSettings: () => void;
   onProviderModelChanged: (modelId: string) => void;
   onProviderReasoningChanged: (reasoningEffort: string) => void;
   onSaveProviderSettings: () => void;
@@ -29,6 +40,9 @@ export function createSettingsPanelState(): SettingsPanelState {
     cleaningSessionIds: new Set(),
     draftModelId: '',
     draftReasoningEffort: '',
+    hostedDraftModelId: '',
+    hostedProviderError: '',
+    isSavingHostedProvider: false,
     isSavingProvider: false,
     providerError: ''
   };
@@ -36,8 +50,10 @@ export function createSettingsPanelState(): SettingsPanelState {
 
 export function syncSettingsPanelDraft(state: SettingsPanelState, settings: PlatformSettings | null) {
   const { modelId, reasoningEffort } = selectedProviderDraft(settings);
+  const { modelId: hostedModelId } = selectedHostedProviderDraft(settings);
   state.draftModelId = modelId;
   state.draftReasoningEffort = reasoningEffort;
+  state.hostedDraftModelId = hostedModelId;
 }
 
 export function updateDraftModel(state: SettingsPanelState, settings: PlatformSettings | null, modelId: string) {
@@ -45,6 +61,11 @@ export function updateDraftModel(state: SettingsPanelState, settings: PlatformSe
   state.draftModelId = modelId;
   state.draftReasoningEffort = defaultReasoningForOption(option);
   state.providerError = '';
+}
+
+export function updateHostedDraftModel(state: SettingsPanelState, modelId: string) {
+  state.hostedDraftModelId = modelId;
+  state.hostedProviderError = '';
 }
 
 export function settingsPanelHtml(settings: PlatformSettings | null, state: SettingsPanelState) {
@@ -61,13 +82,16 @@ export function settingsPanelHtml(settings: PlatformSettings | null, state: Sett
   }
 
   const provider = settings.provider.active_provider;
+  const hostedProvider = settings.provider.hosted_text?.active_provider || null;
   const runtimeSessions = scopedRuntimeSessions(settings);
   const activeRuntimeSessions = runtimeSessions.filter((session) => ACTIVE_RUNTIME_STATUSES.has(session.status));
   const cleanupAllowed = settings.runtime.cleanup_allowed ?? false;
   const cleanupScope = settings.runtime.cleanup_scope || 'none';
   const modelOptions = modelOptionsForSettings(settings);
+  const hostedModelOptions = hostedModelOptionsForSettings(settings);
   const selectedModel = selectedProviderDraft(settings).modelId;
   const selectedReasoning = selectedProviderDraft(settings).reasoningEffort;
+  const selectedHostedModel = selectedHostedProviderDraft(settings).modelId;
   const selectedOption = modelOptions.find((option) => option.model_id === state.draftModelId) || modelOptions[0] || null;
   const reasoningOptions = selectedOption?.supported_reasoning_efforts || [];
   const canSaveProvider = Boolean(
@@ -75,6 +99,12 @@ export function settingsPanelHtml(settings: PlatformSettings | null, state: Sett
       state.draftModelId &&
       !state.isSavingProvider &&
       (state.draftModelId !== selectedModel || state.draftReasoningEffort !== selectedReasoning)
+  );
+  const canSaveHostedProvider = Boolean(
+    hostedProvider &&
+      state.hostedDraftModelId &&
+      !state.isSavingHostedProvider &&
+      state.hostedDraftModelId !== selectedHostedModel
   );
 
   return `<section class="settings-card settings-platform">
@@ -100,13 +130,24 @@ export function settingsPanelHtml(settings: PlatformSettings | null, state: Sett
       <article class="settings-platform-tile settings-platform-provider">
         <span class="settings-platform-icon material-symbols-rounded" aria-hidden="true">memory</span>
         <div>
-          <p class="settings-kicker">Provider</p>
+          <p class="settings-kicker">Agentic provider</p>
           <h3>${escapeHtml(provider?.label || 'Provider not loaded')}</h3>
-          <p>${escapeHtml(selectedModel || 'model')} · ${escapeHtml(selectedReasoning || 'reasoning')} · ${activeRuntimeSessions.length} active / ${runtimeSessions.length} in scope</p>
+          <p>${escapeHtml(selectedModel || 'model')} · ${escapeHtml(selectedReasoning || 'reasoning')} · Codex tools/filesystem/MCP · ${activeRuntimeSessions.length} active / ${runtimeSessions.length} in scope</p>
+        </div>
+      </article>
+      <article class="settings-platform-tile settings-platform-provider">
+        <span class="settings-platform-icon material-symbols-rounded" aria-hidden="true">bolt</span>
+        <div>
+          <p class="settings-kicker">Hosted chat / fast model</p>
+          <h3>${escapeHtml(hostedProvider?.label || 'No hosted text provider')}</h3>
+          <p>${escapeHtml(selectedHostedModel || 'model not selected')} · plain hosted chat only · runtime engine remains Codex</p>
         </div>
       </article>
     </div>
-    ${providerSettingsFormHtml(modelOptions, reasoningOptions, canSaveProvider, state)}
+    <div class="settings-platform-provider-forms">
+      ${providerSettingsFormHtml(modelOptions, reasoningOptions, canSaveProvider, state)}
+      ${hostedProviderSettingsFormHtml(hostedModelOptions, canSaveHostedProvider, state, Boolean(hostedProvider))}
+    </div>
     ${runtimeSessionsHtml(runtimeSessions, cleanupAllowed, cleanupScope, state)}
   </section>`;
 }
@@ -118,7 +159,11 @@ export function bindSettingsPanelEvents(actions: SettingsPanelActions) {
   document.getElementById('settings-provider-reasoning')?.addEventListener('change', (event) => {
     actions.onProviderReasoningChanged((event.currentTarget as HTMLSelectElement).value);
   });
+  document.getElementById('settings-hosted-provider-model')?.addEventListener('change', (event) => {
+    actions.onHostedProviderModelChanged((event.currentTarget as HTMLSelectElement).value);
+  });
   document.getElementById('settings-save-provider')?.addEventListener('click', actions.onSaveProviderSettings);
+  document.getElementById('settings-save-hosted-provider')?.addEventListener('click', actions.onSaveHostedProviderSettings);
   document.getElementById('settings-logout')?.addEventListener('click', actions.onLogout);
   document.getElementById('settings-clear-all-runtime')?.addEventListener('click', actions.onClearAllRuntimeSessions);
   document.querySelectorAll<HTMLButtonElement>('[data-runtime-clear]').forEach((button) => {
@@ -133,6 +178,13 @@ function providerSettingsFormHtml(
   state: SettingsPanelState
 ) {
   return `<div class="settings-platform-provider-form">
+    <div class="settings-platform-form-heading">
+      <span class="material-symbols-rounded" aria-hidden="true">terminal</span>
+      <span>
+        <strong>Codex agent model</strong>
+        <small>Agentic sessions, tools, filesystem, MCP and skills</small>
+      </span>
+    </div>
     <label class="settings-platform-field">
       <span>Model</span>
       <select id="settings-provider-model" ${!modelOptions.length || state.isSavingProvider ? 'disabled' : ''}>
@@ -150,6 +202,35 @@ function providerSettingsFormHtml(
       ${state.isSavingProvider ? 'Saving' : 'Save model'}
     </button>
     ${state.providerError ? `<p class="settings-platform-error">${escapeHtml(state.providerError)}</p>` : ''}
+  </div>`;
+}
+
+function hostedProviderSettingsFormHtml(
+  modelOptions: ProviderModelOption[],
+  canSaveProvider: boolean,
+  state: SettingsPanelState,
+  hasHostedProvider: boolean
+) {
+  return `<div class="settings-platform-provider-form">
+    <div class="settings-platform-form-heading">
+      <span class="material-symbols-rounded" aria-hidden="true">route</span>
+      <span>
+        <strong>Hosted chat fast model</strong>
+        <small>OpenRouter governs plain_hosted_chat and fast_model only</small>
+      </span>
+    </div>
+    <label class="settings-platform-field settings-platform-field-wide">
+      <span>Model</span>
+      <select id="settings-hosted-provider-model" ${!hasHostedProvider || !modelOptions.length || state.isSavingHostedProvider ? 'disabled' : ''}>
+        ${modelOptions.map((option) => `<option value="${escapeAttr(option.model_id)}" ${option.model_id === state.hostedDraftModelId ? 'selected' : ''}>${escapeHtml(option.label || option.model_id)}</option>`).join('')}
+      </select>
+    </label>
+    <button type="button" id="settings-save-hosted-provider" ${canSaveProvider ? '' : 'disabled'}>
+      <span class="material-symbols-rounded" aria-hidden="true">${state.isSavingHostedProvider ? 'sync' : 'save'}</span>
+      ${state.isSavingHostedProvider ? 'Saving' : 'Save hosted model'}
+    </button>
+    ${!hasHostedProvider ? '<p class="settings-card-copy settings-platform-note">Activate a hosted text provider before selecting a fast model.</p>' : ''}
+    ${state.hostedProviderError ? `<p class="settings-platform-error">${escapeHtml(state.hostedProviderError)}</p>` : ''}
   </div>`;
 }
 

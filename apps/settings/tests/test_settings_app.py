@@ -248,7 +248,148 @@ assert.ok((html.match(/auto default/g) || []).length >= 5);
         self.assertIn("settingsPanelHtml(platformSettings, settingsPanelState)", main_source)
         self.assertIn("Platform settings", settings_source)
         self.assertIn("configureActiveProvider", api_source)
+        self.assertIn("configureHostedProvider", api_source)
+        self.assertIn("/api/providers/hosted/selection", api_source)
+        self.assertIn("saveHostedProviderSettingsFromPanel", main_source)
+        self.assertIn("settings-hosted-provider-model", settings_source)
+        self.assertIn("Hosted chat fast model", settings_source)
+        self.assertIn("runtime engine remains Codex", settings_source)
         self.assertIn("/api/settings/runtime-sessions/clear", api_source)
+
+    def test_settings_panel_renders_openrouter_hosted_models_separately_from_codex(self) -> None:
+        app_root = Path(__file__).resolve().parents[1]
+        typescript_root = app_root / "node_modules" / "typescript"
+        if not typescript_root.exists():
+            self.skipTest("settings frontend dependencies are not installed")
+        node_script = r"""
+const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const path = require('node:path');
+const ts = require(process.argv[2]);
+
+const appRoot = process.argv[3];
+const outDir = process.argv[4];
+
+function transpile(relativePath) {
+  const sourcePath = path.join(appRoot, relativePath);
+  const outputPath = path.join(outDir, path.basename(relativePath).replace(/\.ts$/, '.js'));
+  const source = fs.readFileSync(sourcePath, 'utf8');
+  const result = ts.transpileModule(source, {
+    fileName: sourcePath,
+    compilerOptions: {
+      target: ts.ScriptTarget.ES2022,
+      module: ts.ModuleKind.CommonJS,
+      moduleResolution: ts.ModuleResolutionKind.Node10,
+      esModuleInterop: true,
+      strict: true,
+      skipLibCheck: true
+    }
+  });
+  fs.writeFileSync(outputPath, result.outputText);
+}
+
+transpile('frontend/src/adminApi.ts');
+transpile('frontend/src/providerModelOptions.ts');
+transpile('frontend/src/settingsPanel.ts');
+
+const { createSettingsPanelState, settingsPanelHtml, syncSettingsPanelDraft } = require(path.join(outDir, 'settingsPanel.js'));
+
+const openrouterModels = [
+  {
+    model_id: 'google/gemma-4-31b-it:free',
+    label: 'Gemma 4 31B (free)',
+    description: null,
+    default_reasoning_effort: null,
+    supported_reasoning_efforts: []
+  },
+  {
+    model_id: 'nvidia/nemotron-3-ultra-550b-a55b:free',
+    label: 'Nemotron 3 Ultra (free)',
+    description: null,
+    default_reasoning_effort: null,
+    supported_reasoning_efforts: []
+  }
+];
+
+const settings = {
+  user: { username: 'admin', display_name: 'Admin', platform_role: 'admin' },
+  workspace: { workspace_id: 'default', name: 'Default' },
+  provider: {
+    active_provider: {
+      provider_id: 'codex',
+      label: 'Codex',
+      default_model_family: 'gpt-5.5',
+      model_options: [{
+        model_id: 'gpt-5.5',
+        label: 'GPT-5.5',
+        description: null,
+        default_reasoning_effort: 'medium',
+        supported_reasoning_efforts: [{ effort: 'medium', label: 'medium', description: null }]
+      }]
+    },
+    model_settings: {
+      selected_model_id: 'gpt-5.5',
+      selected_reasoning_effort: 'medium',
+      available_models: []
+    },
+    hosted_text: {
+      profile: 'fast_model',
+      active_provider: {
+        provider_id: 'openrouter',
+        label: 'OpenRouter',
+        default_model_family: 'google/gemma-4-31b-it:free',
+        model_options: openrouterModels
+      },
+      selection: {
+        workspace_id: 'default',
+        profile: 'fast_model',
+        provider_id: 'openrouter',
+        selection_reason: 'configured by hosted model settings',
+        updated_at: '2026-06-23T00:00:00Z',
+        model_id: 'nvidia/nemotron-3-ultra-550b-a55b:free'
+      },
+      model_settings: {
+        selected_model_id: 'nvidia/nemotron-3-ultra-550b-a55b:free',
+        selected_reasoning_effort: null,
+        available_models: openrouterModels
+      },
+      available_providers: []
+    }
+  },
+  runtime: { cleanup_allowed: false, cleanup_scope: 'none', sessions: [], all_sessions: [] },
+  recovery: {}
+};
+
+const state = createSettingsPanelState();
+syncSettingsPanelDraft(state, settings);
+const html = settingsPanelHtml(settings, state);
+
+assert.ok(html.includes('Agentic provider'));
+assert.ok(html.includes('Codex tools/filesystem/MCP'));
+assert.ok(html.includes('Hosted chat / fast model'));
+assert.ok(html.includes('OpenRouter'));
+assert.ok(html.includes('Gemma 4 31B (free)'));
+assert.ok(html.includes('Nemotron 3 Ultra (free)'));
+assert.ok(html.includes('settings-hosted-provider-model'));
+assert.ok(html.includes('runtime engine remains Codex'));
+"""
+        with tempfile.TemporaryDirectory() as temp_dir:
+            script_path = Path(temp_dir) / "settings_openrouter_render_test.cjs"
+            script_path.write_text(node_script, encoding="utf-8")
+            result = subprocess.run(
+                [
+                    "node",
+                    str(script_path),
+                    str(typescript_root),
+                    str(app_root),
+                    temp_dir,
+                ],
+                cwd=app_root,
+                text=True,
+                capture_output=True,
+                check=False,
+            )
+        self.assertEqual(result.returncode, 0, result.stderr or result.stdout)
 
     def test_persistence_migration_requires_dry_run_and_explicit_cleanup(self) -> None:
         app_root = Path(__file__).resolve().parents[1]

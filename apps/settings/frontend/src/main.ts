@@ -12,6 +12,7 @@ import {
 import {
   clearRuntimeSessions,
   configureActiveProvider,
+  configureHostedProvider,
   getPlatformSettings,
   loadUsers,
   loadWorkspaces,
@@ -30,6 +31,7 @@ import {
   createSettingsPanelState,
   settingsPanelHtml,
   syncSettingsPanelDraft,
+  updateHostedDraftModel,
   updateDraftModel
 } from './settingsPanel';
 import {
@@ -365,6 +367,32 @@ async function saveProviderSettingsFromPanel() {
   }
 }
 
+async function saveHostedProviderSettingsFromPanel() {
+  const providerId = platformSettings?.provider.hosted_text?.active_provider?.provider_id;
+  if (!providerId || !settingsPanelState.hostedDraftModelId) {
+    settingsPanelState.hostedProviderError = 'Hosted provider not loaded.';
+    render();
+    return;
+  }
+  settingsPanelState.isSavingHostedProvider = true;
+  settingsPanelState.hostedProviderError = '';
+  render();
+  try {
+    await configureHostedProvider({
+      provider_id: providerId,
+      model_id: settingsPanelState.hostedDraftModelId
+    });
+    platformSettings = await getPlatformSettings();
+    syncSettingsPanelDraft(settingsPanelState, platformSettings);
+    notice = { tone: 'success', message: 'Hosted model settings updated.' };
+  } catch (error) {
+    settingsPanelState.hostedProviderError = error instanceof Error ? error.message : 'Unable to update hosted model settings.';
+  } finally {
+    settingsPanelState.isSavingHostedProvider = false;
+    render();
+  }
+}
+
 async function clearRuntimeSessionsFromPanel(sessionIds?: string[]) {
   const scopedIds = (sessionIds || []).filter(Boolean);
   settingsPanelState.cleanupError = '';
@@ -517,6 +545,10 @@ function bindEvents() {
     },
     installWorkspaceApp,
     logoutFromSettings,
+    onHostedProviderModelChanged: (modelId) => {
+      updateHostedDraftModel(settingsPanelState, modelId);
+      render();
+    },
     onProviderModelChanged: (modelId) => {
       updateDraftModel(settingsPanelState, platformSettings, modelId);
       render();
@@ -530,6 +562,7 @@ function bindEvents() {
     render,
     resetSelectedUserPassword,
     saveDependencySelection,
+    saveHostedProviderSettingsFromPanel,
     saveProviderSettingsFromPanel,
     selectedUser,
     selectUser: (userId) => {

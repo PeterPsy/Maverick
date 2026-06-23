@@ -855,14 +855,7 @@ function CapturesTab({ captures, loading }: { captures: SensesCapture[]; loading
                 <span>{formatBytes(capture.storage.size_bytes)}</span>
               </div>
               <div className="link-stack">
-                {capture.storage.workspace_relative_path ? (
-                  <a href={`/app/storage/files/${encodeURIComponent(capture.storage.workspace_relative_path)}`}>
-                    <HardDrive size={14} />
-                    <span>Storage</span>
-                  </a>
-                ) : (
-                  <span>Storage pending</span>
-                )}
+                <CaptureStorageLink capture={capture} />
                 {capture.chat.deep_link ? (
                   <a href={capture.chat.deep_link}>
                     <MessageSquare size={14} />
@@ -881,6 +874,31 @@ function CapturesTab({ captures, loading }: { captures: SensesCapture[]; loading
       )}
     </section>
   );
+}
+
+function CaptureStorageLink({ capture }: { capture: SensesCapture }) {
+  const href = storageHrefForCapture(capture);
+  if (!href) {
+    return <span>Storage pending</span>;
+  }
+  return (
+    <a href={href}>
+      <HardDrive size={14} />
+      <span>Storage</span>
+    </a>
+  );
+}
+
+function storageHrefForCapture(capture: SensesCapture) {
+  const fileId = capture.storage.storage_file_id?.trim();
+  if (fileId) {
+    return `/app/storage/files/${encodeURIComponent(fileId)}`;
+  }
+  const workspaceRelativePath = capture.storage.workspace_relative_path?.trim();
+  if (workspaceRelativePath) {
+    return `/app/storage?workspace_relative_path=${encodeURIComponent(workspaceRelativePath)}`;
+  }
+  return '';
 }
 
 function RoutingTab({

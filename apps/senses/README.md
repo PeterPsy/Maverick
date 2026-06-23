@@ -29,6 +29,11 @@ device token in Phase 6. Pairing, registry, settings, ingestion, and routing
 operations are backend/view-only because standard CLI/MCP app contexts do not
 carry a Maverick user session.
 
+The standard view-state tools read and write a workspace-shared UI state file.
+`view_filter` requires an authenticated Maverick actor. `set_view_filter`,
+`set_custom_view`, and `clear_custom_view` additionally require workspace-admin
+or platform-admin authority, including when invoked through MCP.
+
 ## Data
 
 Workspace data is owned by the app under:
@@ -142,7 +147,8 @@ The Senses frontend is the primary visual surface for Maverick status, iOS host
 status, glasses connection, capture state, local Senses queue, last frame/error,
 pairing, captures, routing, settings, and diagnostics. When the app is opened
 inside Maverick iOS, the WebView exposes a minimal `sensesHost` message handler
-that accepts controlled commands:
+only while the main WebView is on the same-origin `/app/senses` route. The
+handler accepts controlled commands:
 
 - `refreshNativeStatus`
 - `pairGlasses`

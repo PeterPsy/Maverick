@@ -15,14 +15,14 @@
       }
     },
     "senses_view_filter": {
-      "description": "Read the current Senses frontend view state.",
+      "description": "Read the current Senses workspace-shared frontend view state. Requires an authenticated Maverick actor.",
       "input_schema": {
         "type": "object",
         "additionalProperties": false
       }
     },
     "senses_set_view_filter": {
-      "description": "Set Senses tab, query, and status filters.",
+      "description": "Set Senses tab, query, and status filters. Requires workspace-admin authority because the state is workspace-shared.",
       "input_schema": {
         "type": "object",
         "properties": {
@@ -49,7 +49,7 @@
       }
     },
     "senses_set_custom_view": {
-      "description": "Set a curated Senses custom view.",
+      "description": "Set a curated Senses custom view. Requires workspace-admin authority because the state is workspace-shared.",
       "input_schema": {
         "type": "object",
         "properties": {
@@ -64,7 +64,7 @@
       }
     },
     "senses_clear_custom_view": {
-      "description": "Return Senses to normal browsing.",
+      "description": "Return Senses to normal browsing. Requires workspace-admin authority because the state is workspace-shared.",
       "input_schema": {
         "type": "object",
         "additionalProperties": false

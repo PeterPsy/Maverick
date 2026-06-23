@@ -344,6 +344,8 @@ class SensesPhase4EntrypointTest(unittest.TestCase):
             self.assertNotIn("device_token_ingress", manifest["auth"])
             self.assertEqual(manifest["dependency_resolution"]["status"], "resolved")
             self.assertEqual(manifest["declared_surfaces"]["frontend"], True)
+            self.assertEqual(manifest["declared_surfaces"]["mcp"], list(service.DECLARED_MCP_TOOLS))
+            self.assertEqual(manifest["auth"]["view_state_policy"]["mutate"], "workspace_admin")
             self.assertIn("pairing.start", manifest["backend_actions"])
             self.assertIn("devices.revoke", manifest["backend_actions"])
             self.assertIn("captures.get", manifest["backend_actions"])
@@ -377,6 +379,53 @@ class SensesPhase4EntrypointTest(unittest.TestCase):
             status, payload = handle_action(Path(tmp), {"action": "health"})
             self.assertEqual(status, 400)
             self.assertEqual(payload["error"], "missing_workspace_id")
+
+    def test_view_state_requires_authenticated_actor_and_admin_for_mutation(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            data_root = Path(tmp)
+            status, unauthenticated = handle_action(
+                data_root,
+                {"action": "view_filter", "_workspace_id": "default"},
+            )
+            self.assertEqual(status, 401)
+            self.assertEqual(unauthenticated["error"], "authentication_required")
+
+            status, forbidden = handle_action(
+                data_root,
+                {
+                    "action": "set_view_filter",
+                    "_workspace_id": "default",
+                    "_app_actor": actor("member-1", "member"),
+                    "tab": "captures",
+                },
+            )
+            self.assertEqual(status, 403)
+            self.assertEqual(forbidden["error"], "senses_permission_forbidden")
+
+            status, default_state = handle_action(
+                data_root,
+                {
+                    "action": "view_filter",
+                    "_workspace_id": "default",
+                    "_app_actor": actor("member-1", "member"),
+                },
+            )
+            self.assertEqual(status, 200)
+            self.assertEqual(default_state["state"]["view_filter"]["tab"], "devices")
+
+            status, updated = handle_action(
+                data_root,
+                {
+                    "action": "set_view_filter",
+                    "_workspace_id": "default",
+                    "_app_actor": actor("admin-1", "admin"),
+                    "tab": "captures",
+                    "query": "receipt",
+                },
+            )
+            self.assertEqual(status, 200)
+            self.assertEqual(updated["state"]["view_filter"]["tab"], "captures")
+            self.assertEqual(updated["state"]["view_filter"]["query"], "receipt")
 
     def test_pairing_start_and_complete_registers_device_without_raw_token(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -1551,6 +1600,41 @@ class SensesPhase4EntrypointTest(unittest.TestCase):
             )
             self.assertFalse(result["ok"])
             self.assertEqual(result["error"], "unsupported_tool")
+
+    def test_mcp_view_state_mutation_requires_admin_actor(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            member_result = run_json_entrypoint(
+                APP_ROOT / "mcp" / "server.py",
+                cwd=APP_ROOT,
+                payload={
+                    "app_id": "senses",
+                    "workspace_id": "default",
+                    "data_root": tmp,
+                    "user_id": "member-1",
+                    "workspace_role": "member",
+                    "platform_role": "member",
+                    "tool_name": "senses_set_view_filter",
+                    "arguments": {"tab": "captures"},
+                },
+            )
+            admin_result = run_json_entrypoint(
+                APP_ROOT / "mcp" / "server.py",
+                cwd=APP_ROOT,
+                payload={
+                    "app_id": "senses",
+                    "workspace_id": "default",
+                    "data_root": tmp,
+                    "user_id": "admin-1",
+                    "workspace_role": "admin",
+                    "platform_role": "member",
+                    "tool_name": "senses_set_view_filter",
+                    "arguments": {"tab": "captures"},
+                },
+            )
+            self.assertFalse(member_result["ok"])
+            self.assertEqual(member_result["error"], "senses_permission_forbidden")
+            self.assertTrue(admin_result["ok"])
+            self.assertEqual(admin_result["state"]["view_filter"]["tab"], "captures")
 
     def test_health_documents_missing_dependency_context(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

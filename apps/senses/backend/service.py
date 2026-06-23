@@ -131,6 +131,16 @@ DECLARED_BACKEND_ACTIONS = (
     "set_custom_view",
     "clear_custom_view",
 )
+DECLARED_MCP_TOOLS = (
+    "senses_reference_manifest",
+    "senses_operations_manifest",
+    "senses_view_filter",
+    "senses_set_view_filter",
+    "senses_set_custom_view",
+    "senses_clear_custom_view",
+)
+VIEW_STATE_ACTIONS = ("view_filter", "set_view_filter", "set_custom_view", "clear_custom_view")
+VIEW_STATE_MUTATION_ACTIONS = ("set_view_filter", "set_custom_view", "clear_custom_view")
 CALLBACK_BACKEND_ACTIONS = ("storage_write.completed", RUNTIME_DISPATCH_CALLBACK_ACTION)
 DEFERRED_ACTIONS = (
     "device-token ingress",
@@ -155,7 +165,10 @@ def handle_action(data_root: Path, payload: dict[str, object]) -> tuple[int, dic
         return 200, health_action_payload(data_root, workspace_id, dependencies)
     if action in {"reference_manifest", "references.manifest"}:
         return 200, reference_manifest()
-    if action in {"view_filter", "set_view_filter", "set_custom_view", "clear_custom_view"}:
+    if action in VIEW_STATE_ACTIONS:
+        auth_error = require_view_state_authority(actor, action)
+        if auth_error is not None:
+            return auth_error
         return view_state_action(data_root, workspace_id, action, payload)
     if action == "storage_write.completed":
         return storage_write_completed(data_root, workspace_id, payload)
@@ -265,6 +278,22 @@ def require_authenticated(actor: dict[str, str | None]) -> tuple[int, dict[str, 
     )
 
 
+def require_view_state_authority(
+    actor: dict[str, str | None],
+    action: str,
+) -> tuple[int, dict[str, object]] | None:
+    auth_error = require_authenticated(actor)
+    if auth_error is not None:
+        return auth_error
+    if action in VIEW_STATE_MUTATION_ACTIONS and not actor_is_manager(actor):
+        return error_payload(
+            403,
+            "senses_permission_forbidden",
+            "Mutating Senses shared view state requires workspace admin authority.",
+        )
+    return None
+
+
 def actor_is_manager(actor: dict[str, str | None]) -> bool:
     return str(actor.get("platform_role") or "").lower() in ADMIN_PLATFORM_ROLES or str(
         actor.get("workspace_role") or ""
@@ -294,14 +323,16 @@ def manifest_payload(
             "management_role": "workspace_admin",
             "user_session_ingest_supported": True,
             "raw_device_auth_supported": False,
+            "view_state_policy": {
+                "scope": "workspace_shared",
+                "read": "authenticated_user",
+                "mutate": "workspace_admin",
+            },
         },
         "declared_surfaces": {
             "backend": True,
             "cli": ["senses"],
-            "mcp": [
-                "senses_operations_manifest",
-                "senses_reference_manifest",
-            ],
+            "mcp": list(DECLARED_MCP_TOOLS),
             "frontend": True,
             "reference_entities": [],
             "skills": [],

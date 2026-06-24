@@ -40,6 +40,8 @@ from models import (
 
 DEEPGRAM_MODEL = "nova-2"
 KOKORO_OPENROUTER_MODEL = "hexgrad/kokoro-82m"
+KOKORO_OPENROUTER_RESPONSE_FORMAT = "mp3"
+KOKORO_OPENROUTER_CONTENT_TYPE = "audio/mpeg"
 REMOTE_PROVIDER_TIMEOUT_SECONDS = 45
 
 LOCAL_TTS_ENGINE_CANDIDATES = ("piper", "espeak-ng", "espeak")
@@ -186,7 +188,7 @@ def run_kokoro_openrouter(*, text: str, voice: str, settings: dict) -> bytes:
         "model": KOKORO_OPENROUTER_MODEL,
         "input": text,
         "voice": voice or "af_heart",
-        "response_format": "wav",
+        "response_format": KOKORO_OPENROUTER_RESPONSE_FORMAT,
     }
     request = urllib_request.Request(
         "https://openrouter.ai/api/v1/audio/speech",
@@ -653,7 +655,7 @@ def _remote_kokoro_status(settings: dict) -> dict:
         "model": KOKORO_OPENROUTER_MODEL,
         "quality_profile": "natural",
         "latency_profile": "remote",
-        "supported_formats": ["audio/wav", "audio/mp3"],
+        "supported_formats": [KOKORO_OPENROUTER_CONTENT_TYPE],
         "voices": [{"voice_id": "af_heart", "name": "Kokoro default", "language": "en"}],
     }
 
@@ -957,6 +959,8 @@ def _transcribe_with_deepgram(audio_path: Path, *, settings: dict, language: str
     query = f"model={DEEPGRAM_MODEL}&smart_format=true&punctuate=true"
     if language:
         query += f"&language={language}"
+    else:
+        query += "&detect_language=true"
     request = urllib_request.Request(
         f"https://api.deepgram.com/v1/listen?{query}",
         data=audio_path.read_bytes(),

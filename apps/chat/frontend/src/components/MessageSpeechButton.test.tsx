@@ -101,7 +101,32 @@ describe("MessageSpeechButton", () => {
 
     expect(button?.getAttribute("aria-label")).toBe("Read response aloud");
     expect(button?.title).toBe("Speech playback failed: decode failed");
+    expect(container.querySelector('[role="alert"]')?.textContent).toBe("Speech playback failed: decode failed");
     expect(button?.textContent?.trim()).toBe("volume_up");
+  });
+
+  it("shows backend synthesis failures inline with provider detail", async () => {
+    const error = new Error("Kokoro OpenRouter synthesis failed with HTTP 400.");
+    error.name = "ApiError";
+    vi.mocked(synthesizeSpeech).mockRejectedValue(error);
+    container = document.createElement("div");
+    document.body.appendChild(container);
+    root = createRoot(container);
+
+    await act(async () => {
+      root?.render(<SpeechButtonHost />);
+    });
+
+    const button = container.querySelector("button");
+    await act(async () => {
+      button?.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
+      await Promise.resolve();
+    });
+
+    expect(button?.title).toBe("Speech synthesis failed: Kokoro OpenRouter synthesis failed with HTTP 400.");
+    expect(container.querySelector('[role="alert"]')?.textContent).toBe(
+      "Speech synthesis failed: Kokoro OpenRouter synthesis failed with HTTP 400.",
+    );
   });
 
   it("stops the first message when a second message starts playback", async () => {

@@ -235,20 +235,27 @@ function SupportedMessageSpeechButton({
   }
 
   return (
-    <button
-      aria-label={isReading ? "Stop reading response" : "Read response aloud"}
-      aria-pressed={isReading}
-      className={`chatapp-message-action chatapp-message-action--icon chatapp-message-action--speech ${
-        isReading ? "is-speaking" : ""
-      } ${status === "loading" ? "is-loading" : ""} ${status === "error" ? "is-error" : ""}`}
-      onClick={toggleSpeech}
-      title={status === "error" ? errorMessage || "Speech unavailable" : isReading ? "Stop reading" : "Read aloud"}
-      type="button"
-    >
-      <span aria-hidden="true" className="material-symbols-rounded">
-        {status === "loading" ? "hourglass_empty" : isReading ? "stop_circle" : "volume_up"}
-      </span>
-    </button>
+    <>
+      <button
+        aria-label={isReading ? "Stop reading response" : "Read response aloud"}
+        aria-pressed={isReading}
+        className={`chatapp-message-action chatapp-message-action--icon chatapp-message-action--speech ${
+          isReading ? "is-speaking" : ""
+        } ${status === "loading" ? "is-loading" : ""} ${status === "error" ? "is-error" : ""}`}
+        onClick={toggleSpeech}
+        title={status === "error" ? errorMessage || "Speech unavailable" : isReading ? "Stop reading" : "Read aloud"}
+        type="button"
+      >
+        <span aria-hidden="true" className="material-symbols-rounded">
+          {status === "loading" ? "hourglass_empty" : isReading ? "stop_circle" : "volume_up"}
+        </span>
+      </button>
+      {status === "error" && errorMessage ? (
+        <span className="chatapp-message-speech-error" role="alert">
+          {errorMessage}
+        </span>
+      ) : null}
+    </>
   );
 }
 
@@ -317,6 +324,9 @@ function speechPlaybackErrorMessage(error: unknown): string {
   if (error instanceof Error && error.message) {
     if (error.name === "NotAllowedError") {
       return "Browser blocked speech playback. Click read aloud again.";
+    }
+    if (error.name === "ApiError") {
+      return `Speech synthesis failed: ${error.message}`;
     }
     return `Speech playback failed: ${error.message}`;
   }

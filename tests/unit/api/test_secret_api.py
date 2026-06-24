@@ -744,7 +744,7 @@ class SecretApiTestCase(SecretApiTestSupport):
         self.assertEqual(need["grant_state"], "missing")
         self.assertEqual(need["user_action"], "add_value")
 
-    def test_secret_grant_needs_treat_legacy_backend_scoped_grant_as_active(self) -> None:
+    def test_secret_grant_needs_treat_legacy_backend_scoped_grant_as_stale(self) -> None:
         app = self.make_app()
         cookie = self.login(app)
         self.enable_workspace_app(app, secret_read=["api-token"], backend=True, cli_commands=["sync"])
@@ -770,8 +770,8 @@ class SecretApiTestCase(SecretApiTestSupport):
         self.assertEqual(status, 200)
         need = next(item for item in payload["items"] if item["app_id"] == "browser" and item["logical_name"] == "api-token")
         self.assertEqual(need["value_state"], "active")
-        self.assertEqual(need["grant_state"], "active")
-        self.assertEqual(need["user_action"], "none")
+        self.assertEqual(need["grant_state"], "stale_target_mismatch")
+        self.assertEqual(need["user_action"], "review_grant")
 
     def test_secret_grant_targets_include_issue_needs_for_existing_endpoint(self) -> None:
         app = self.make_app()

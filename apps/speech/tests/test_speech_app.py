@@ -14,6 +14,7 @@ from tempfile import TemporaryDirectory
 import threading
 from types import SimpleNamespace
 import unittest
+from urllib.parse import parse_qs, urlparse
 import wave
 from unittest.mock import patch
 
@@ -185,6 +186,7 @@ class SpeechAppTests(unittest.TestCase):
         self.assertEqual(synthesis["engine"], "kokoro-openrouter")
         self.assertEqual(synthesis["default_voice"], "af_heart")
         self.assertEqual(synthesis["quality_profile"], "natural")
+        self.assertEqual(synthesis["content_types"], ["audio/mpeg"])
         self.assertTrue(transcription["available"])
         self.assertEqual(transcription["engine"], "deepgram")
         self.assertTrue(transcription["inline_default_profile_available"])
@@ -417,6 +419,7 @@ class SpeechAppTests(unittest.TestCase):
         self.assertEqual(transcription["deepgram"]["model"], "nova-2")
         self.assertTrue(synthesis["kokoro-openrouter"]["available"])
         self.assertEqual(synthesis["kokoro-openrouter"]["model"], "hexgrad/kokoro-82m")
+        self.assertEqual(synthesis["kokoro-openrouter"]["supported_formats"], ["audio/mpeg"])
 
     def test_deepgram_transcription_engine_is_explicit_remote_choice(self) -> None:
         settings = {
@@ -425,6 +428,81 @@ class SpeechAppTests(unittest.TestCase):
         }
 
         self.assertEqual(engines.resolve_transcription_engine(settings), "deepgram")
+
+    def test_deepgram_transcription_enables_language_detection_without_hint(self) -> None:
+        class FakeResponse:
+            def __enter__(self) -> "FakeResponse":
+                return self
+
+            def __exit__(self, *args: object) -> None:
+                return None
+
+            def read(self) -> bytes:
+                return json.dumps(
+                    {
+                        "metadata": {"duration": 1.0},
+                        "results": {"channels": [{"alternatives": [{"transcript": "ciao", "words": []}]}]},
+                    }
+                ).encode("utf-8")
+
+        captured: dict[str, object] = {}
+
+        def fake_urlopen(request, timeout: float):
+            captured["url"] = request.full_url
+            captured["timeout"] = timeout
+            return FakeResponse()
+
+        with TemporaryDirectory() as temp_dir:
+            audio_path = Path(temp_dir) / "speech.wav"
+            audio_path.write_bytes(b"RIFFaudio")
+            with patch("engines.urllib_request.urlopen", side_effect=fake_urlopen):
+                payload = engines._transcribe_with_deepgram(
+                    audio_path,
+                    settings={"_app_secrets": {"deepgram-api-key": "deepgram-token"}},
+                )
+
+        query = parse_qs(urlparse(str(captured["url"])).query)
+        self.assertEqual(payload["text"], "ciao")
+        self.assertEqual(query["model"], ["nova-2"])
+        self.assertEqual(query["detect_language"], ["true"])
+        self.assertNotIn("language", query)
+
+    def test_deepgram_transcription_uses_language_hint_when_present(self) -> None:
+        class FakeResponse:
+            def __enter__(self) -> "FakeResponse":
+                return self
+
+            def __exit__(self, *args: object) -> None:
+                return None
+
+            def read(self) -> bytes:
+                return json.dumps(
+                    {
+                        "metadata": {"duration": 1.0},
+                        "results": {"channels": [{"alternatives": [{"transcript": "hello", "words": []}]}]},
+                    }
+                ).encode("utf-8")
+
+        captured: dict[str, object] = {}
+
+        def fake_urlopen(request, timeout: float):
+            captured["url"] = request.full_url
+            captured["timeout"] = timeout
+            return FakeResponse()
+
+        with TemporaryDirectory() as temp_dir:
+            audio_path = Path(temp_dir) / "speech.wav"
+            audio_path.write_bytes(b"RIFFaudio")
+            with patch("engines.urllib_request.urlopen", side_effect=fake_urlopen):
+                engines._transcribe_with_deepgram(
+                    audio_path,
+                    settings={"_app_secrets": {"deepgram-api-key": "deepgram-token"}},
+                    language="en",
+                )
+
+        query = parse_qs(urlparse(str(captured["url"])).query)
+        self.assertEqual(query["language"], ["en"])
+        self.assertNotIn("detect_language", query)
 
     def test_kokoro_openrouter_synthesis_uses_delivered_openrouter_secret(self) -> None:
         class FakeResponse:
@@ -435,7 +513,7 @@ class SpeechAppTests(unittest.TestCase):
                 return None
 
             def read(self) -> bytes:
-                return b"RIFFkokoro"
+                return b"ID3kokoro"
 
         captured: dict[str, object] = {}
 
@@ -453,13 +531,36 @@ class SpeechAppTests(unittest.TestCase):
                 settings={"_app_secrets": {"openrouter-api-key": "openrouter-token"}},
             )
 
-        self.assertEqual(audio, b"RIFFkokoro")
+        self.assertEqual(audio, b"ID3kokoro")
         self.assertEqual(captured["url"], "https://openrouter.ai/api/v1/audio/speech")
         self.assertEqual(captured["body"]["model"], "hexgrad/kokoro-82m")
         self.assertEqual(captured["body"]["input"], "hello")
         self.assertEqual(captured["body"]["voice"], "af_heart")
-        self.assertEqual(captured["body"]["response_format"], "wav")
+        self.assertEqual(captured["body"]["response_format"], "mp3")
         self.assertEqual(captured["headers"]["Authorization"], "Bearer openrouter-token")
+
+    def test_kokoro_openrouter_synthesis_returns_mpeg_payload(self) -> None:
+        with TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            write_settings(root / "data", {"synthesis_engine": "kokoro-openrouter"})
+            with patch("synthesis.run_kokoro_openrouter", return_value=b"ID3kokoro"):
+                status_code, payload = handle_action(
+                    root / "data",
+                    root / "generated",
+                    {
+                        "action": "synthesize",
+                        "text": "hello",
+                        "_app_secrets": {"openrouter-api-key": "openrouter-token"},
+                    },
+                )
+
+            jobs = json.loads((root / "data" / "jobs.json").read_text(encoding="utf-8"))["jobs"]
+
+        self.assertEqual(status_code, 200)
+        self.assertEqual(payload["content_type"], "audio/mpeg")
+        self.assertEqual(payload["format"], "audio/mpeg")
+        self.assertEqual(payload["retention"], "provider_response")
+        self.assertEqual(jobs[0]["content_type"], "audio/mpeg")
 
     def test_entrypoint_payload_delivers_app_secrets_to_speech_body(self) -> None:
         body = app_backend.body_from_payload(

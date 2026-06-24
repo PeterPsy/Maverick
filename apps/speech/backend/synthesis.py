@@ -15,6 +15,7 @@ import uuid
 import wave
 
 from engines import resolve_local_tts_engine as resolve_local_engine
+from engines import KOKORO_OPENROUTER_CONTENT_TYPE
 from engines import run_kokoro_openrouter
 from engines import run_local_tts_engine as run_local_engine
 from engines import tts_engine_cache_fingerprint
@@ -45,6 +46,7 @@ def synthesize_payload(*, data_root: Path, generated_storage_root: Path, body: d
     requested_engine = str(settings.get("synthesis_engine") or "auto")
     if requested_engine == "kokoro-openrouter":
         audio = run_kokoro_openrouter(text=text, voice=requested_voice or "af_heart", settings=settings)
+        content_type = KOKORO_OPENROUTER_CONTENT_TYPE
         validate_audio_size(audio)
         job_id = f"tts_{uuid.uuid4().hex}"
         created_at = datetime.now(tz=UTC).isoformat()
@@ -59,7 +61,7 @@ def synthesize_payload(*, data_root: Path, generated_storage_root: Path, body: d
                 "engine": "kokoro-openrouter",
                 "quality_profile": "natural",
                 "latency_profile": "remote",
-                "content_type": "audio/wav",
+                "content_type": content_type,
                 "size_bytes": len(audio),
                 "cache_hit": False,
                 "retention": "provider_response",
@@ -68,14 +70,14 @@ def synthesize_payload(*, data_root: Path, generated_storage_root: Path, body: d
         return {
             "job_id": job_id,
             "created_at": created_at,
-            "content_type": "audio/wav",
+            "content_type": content_type,
             "audio_base64": base64.b64encode(audio).decode("ascii"),
             "size_bytes": len(audio),
             "text_chars": len(text),
             "engine": "kokoro-openrouter",
             "voice": requested_voice or "af_heart",
             "rate": rate,
-            "format": output_format,
+            "format": content_type,
             "quality_profile": "natural",
             "latency_profile": "remote",
             "cache_hit": False,

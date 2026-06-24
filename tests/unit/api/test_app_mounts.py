@@ -490,7 +490,7 @@ class AppMountsTestCase(unittest.TestCase):
         self.assertEqual(result.secrets, {"api_token": "backend-secret"})
         self.assertEqual(result.errors, [])
 
-    def test_app_secret_payload_accepts_legacy_backend_scoped_action(self) -> None:
+    def test_app_secret_payload_rejects_legacy_backend_scoped_action(self) -> None:
         secret_store = _secret_store()
         state = _state(secret_store)
         secret = create_platform_secret(secret_store, label="Backend", raw_value="backend-secret", alias="backend-secret")
@@ -504,15 +504,13 @@ class AppMountsTestCase(unittest.TestCase):
             target_patterns=["maverick://app.backend/*"],
         )
 
-        result = _resolve_app_secret_payload(
-            state,  # type: ignore[arg-type]
-            workspace_id="default",
-            app_id="browser",
-            allowed_logical_names=["api_token"],
-        )
-
-        self.assertEqual(result.secrets, {"api_token": "backend-secret"})
-        self.assertEqual(result.errors, [])
+        with self.assertRaises(SecretPolicyError):
+            _resolve_app_secret_payload(
+                state,  # type: ignore[arg-type]
+                workspace_id="default",
+                app_id="browser",
+                allowed_logical_names=["api_token"],
+            )
 
     def test_app_secret_payload_rejects_legacy_action_without_backend_target(self) -> None:
         secret_store = _secret_store()

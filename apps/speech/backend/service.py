@@ -192,6 +192,7 @@ def capabilities_payload(data_root: Path, app_secrets: dict | None = None) -> di
     synthesis_engine = str((synthesis_status or {}).get("engine") or "")
     synthesis_available = bool(synthesis_selection["available"])
     synthesis_voices = public_voice_profiles_from_status(synthesis_status) if synthesis_available else []
+    synthesis_content_types = public_supported_formats_from_status(synthesis_status)
     transcription_selection = engine_selection_summary(
         transcription_engine_statuses(settings),
         requested_engine=str(settings.get("transcription_engine") or "auto"),
@@ -208,7 +209,7 @@ def capabilities_payload(data_root: Path, app_secrets: dict | None = None) -> di
                 "available": synthesis_available,
                 "provider_available": synthesis_available,
                 "engine": synthesis_engine if synthesis_available else "",
-                "content_types": SUPPORTED_CONTENT_TYPES,
+                "content_types": synthesis_content_types,
                 "max_text_chars": MAX_TEXT_CHARS,
                 "voices": synthesis_voices,
                 "default_voice": default_tts_voice_id(synthesis_engine, synthesis_voices) if synthesis_available else "",
@@ -283,6 +284,17 @@ def public_voice_profiles_from_status(status: dict | None) -> list[dict]:
             continue
         profiles.append({key: value for key, value in item.items() if not str(key).startswith("_")})
     return profiles
+
+
+def public_supported_formats_from_status(status: dict | None) -> list[str]:
+    formats = (status or {}).get("supported_formats")
+    if not isinstance(formats, list):
+        return list(SUPPORTED_CONTENT_TYPES)
+    supported: list[str] = []
+    for item in formats:
+        if isinstance(item, str) and item and item not in supported:
+            supported.append(item)
+    return supported or list(SUPPORTED_CONTENT_TYPES)
 
 
 def status_for_effective_engine(statuses: list[dict], selection: dict) -> dict | None:

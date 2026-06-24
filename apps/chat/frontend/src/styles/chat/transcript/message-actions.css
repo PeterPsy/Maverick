@@ -84,6 +84,14 @@
   pointer-events: auto;
 }
 
+.chatapp-message-speech-error {
+  max-width: min(18rem, 62vw);
+  color: #be123c;
+  font-size: 0.72rem;
+  line-height: 1.25;
+  overflow-wrap: anywhere;
+}
+
 .chatapp-message-action--copy-meta {
   display: none;
 }

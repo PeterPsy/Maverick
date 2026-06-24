@@ -1,17 +1,4 @@
-:root {
-  color-scheme: dark;
-  --maverick-text: #f1f1f1;
-  --maverick-text-muted: rgba(241, 241, 241, 0.66);
-  --maverick-text-soft: rgba(241, 241, 241, 0.42);
-  --maverick-surface-hover: rgba(255, 255, 255, 0.105);
-  --maverick-surface-active: rgba(255, 255, 255, 0.14);
-  --maverick-border-strong: rgba(255, 255, 255, 0.14);
-  --maverick-glass-surface: rgba(12, 12, 14, 0.58);
-  --maverick-inner-edge: inset 0 0 0 1px rgba(255, 255, 255, 0.075), inset 0 1px 0 rgba(255, 255, 255, 0.14);
-  --senses-focus: rgba(125, 183, 255, 0.42);
-  --senses-focus-soft: rgba(125, 183, 255, 0.14);
-  --senses-font: "Avenir Next", "Sohne", "Segoe UI", Inter, ui-sans-serif, system-ui, sans-serif;
-}
+@import '../../styles/tokens.css';
 
 * {
   box-sizing: border-box;
@@ -29,8 +16,8 @@ body,
 
 body {
   background: transparent;
-  color: var(--maverick-text);
-  font-family: var(--senses-font);
+  color: var(--senses-text);
+  font-family: var(--maverick-font);
 }
 
 button,
@@ -85,16 +72,16 @@ button {
   height: var(--senses-sidebar-search-height);
   min-height: var(--senses-sidebar-search-height);
   border: 1px solid rgba(255, 255, 255, 0.05);
-  border-radius: 22px;
-  background: var(--maverick-glass-surface);
-  box-shadow: var(--maverick-inner-edge);
+  border-radius: var(--senses-radius-card);
+  background: var(--senses-surface);
+  box-shadow: var(--senses-shadow);
   backdrop-filter: blur(26px);
   -webkit-backdrop-filter: blur(26px);
   padding: 0 0.72rem;
 }
 
 .senses-sidebar-search-frame .material-symbols-rounded {
-  color: var(--maverick-text-muted);
+  color: var(--senses-muted);
   font-size: 1.05rem;
 }
 
@@ -102,12 +89,12 @@ button {
   width: 100%;
   min-width: 0;
   background: transparent;
-  color: var(--maverick-text);
+  color: var(--senses-text);
   outline: none;
 }
 
 .senses-sidebar-search::placeholder {
-  color: var(--maverick-text-soft);
+  color: var(--senses-soft);
 }
 
 .senses-sidebar-search-frame:focus-within {
@@ -144,9 +131,9 @@ button {
   width: 100%;
   min-height: 3.05rem;
   border: 1px solid transparent;
-  border-radius: 22px;
+  border-radius: var(--senses-radius-card);
   background: transparent;
-  box-shadow: var(--maverick-inner-edge);
+  box-shadow: var(--senses-shadow);
   padding: 0 0.7rem;
   text-align: left;
   transition: background 150ms ease, border-color 150ms ease, transform 150ms ease;
@@ -154,15 +141,15 @@ button {
 
 .senses-sidebar-row:hover,
 .senses-sidebar-row.is-active {
-  border-color: var(--maverick-border-strong);
+  border-color: var(--senses-border-strong);
 }
 
 .senses-sidebar-row:hover {
-  background: var(--maverick-surface-hover);
+  background: var(--senses-surface-hover);
 }
 
 .senses-sidebar-row.is-active {
-  background: var(--maverick-surface-active);
+  background: var(--senses-surface-active);
 }
 
 .senses-sidebar-row:active {
@@ -174,12 +161,12 @@ button {
   place-items: center;
   width: 2rem;
   height: 2rem;
-  border-radius: 15px;
-  color: var(--maverick-text-muted);
+  border-radius: min(var(--senses-radius-control), 15px);
+  color: var(--senses-muted);
 }
 
 .senses-sidebar-row.is-active .senses-sidebar-row__icon {
-  color: var(--maverick-text);
+  color: var(--senses-text);
 }
 
 .senses-sidebar-row__copy {
@@ -200,13 +187,13 @@ button {
 }
 
 .senses-sidebar-row__copy span {
-  color: var(--maverick-text-muted);
+  color: var(--senses-muted);
   font-size: 0.72rem;
 }
 
 .senses-sidebar-empty {
   margin: 0;
-  color: var(--maverick-text-muted);
+  color: var(--senses-muted);
   font-size: 0.78rem;
   line-height: 1.35;
 }

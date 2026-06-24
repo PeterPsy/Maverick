@@ -367,6 +367,8 @@ export function App() {
       <header className={`senses-app-header ${nativeHost.available ? 'has-native-actions' : ''}`}>
         <div className="senses-app-title">
           <h1>Senses</h1>
+          <span className="senses-title-separator" aria-hidden="true" />
+          <p>Device pairing, captures, and routing for the active workspace.</p>
         </div>
         {nativeHost.available ? (
           <NativeHeaderActions

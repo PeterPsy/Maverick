@@ -1818,6 +1818,109 @@ class SpeechAppTests(unittest.TestCase):
         self.assertTrue(all("voices" in item for item in payload["synthesis"]))
         self.assertTrue(all("voice_count" not in item for item in payload["synthesis"]))
 
+    def test_cli_engine_inspection_receives_delivered_app_secrets(self) -> None:
+        with TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            write_settings(root / "data", {"synthesis_engine": "kokoro-openrouter", "transcription_engine": "deepgram"})
+            result = subprocess.run(
+                [sys.executable, str(APP_ROOT / "cli" / "app_cli.py")],
+                input=json.dumps(
+                    {
+                        "workspace_id": "default",
+                        "app_id": "speech",
+                        "data_root": str(root / "data"),
+                        "generated_storage_root": str(root / "storage" / "generated"),
+                        "uploaded_storage_root": str(root / "storage" / "uploaded"),
+                        "app_secrets": {
+                            "deepgram-api-key": "deepgram-token",
+                            "openrouter-api-key": "openrouter-token",
+                        },
+                        "arguments": {"action": "list_engines"},
+                    }
+                ),
+                text=True,
+                capture_output=True,
+                check=True,
+            )
+
+        payload = json.loads(result.stdout)
+        synthesis = {item["engine"]: item for item in payload["synthesis"]}
+        transcription = {item["engine"]: item for item in payload["transcription"]}
+        self.assertEqual(payload["status_code"], 200)
+        self.assertTrue(synthesis["kokoro-openrouter"]["available"])
+        self.assertTrue(transcription["deepgram"]["available"])
+
+    def test_mcp_transcribe_file_receives_delivered_app_secrets(self) -> None:
+        with TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            write_settings(root / "data", {"transcription_engine": "deepgram"})
+            uploaded = root / "storage" / "uploaded"
+            uploaded.mkdir(parents=True)
+            audio_path = uploaded / "sample.wav"
+            with wave.open(str(audio_path), "wb") as wav_file:
+                wav_file.setnchannels(1)
+                wav_file.setsampwidth(2)
+                wav_file.setframerate(8000)
+                wav_file.writeframes(b"\0\0" * 8000)
+            stub_dir = root / "stub"
+            stub_dir.mkdir()
+            (stub_dir / "sitecustomize.py").write_text(
+                "import json\n"
+                "import urllib.request\n"
+                "\n"
+                "class _Response:\n"
+                "    def __enter__(self):\n"
+                "        return self\n"
+                "    def __exit__(self, *args):\n"
+                "        return False\n"
+                "    def read(self):\n"
+                "        return json.dumps({\n"
+                "            'results': {\n"
+                "                'channels': [{\n"
+                "                    'alternatives': [{\n"
+                "                        'transcript': 'MCP deepgram transcript',\n"
+                "                        'words': [],\n"
+                "                    }]\n"
+                "                }]\n"
+                "            }\n"
+                "        }).encode('utf-8')\n"
+                "\n"
+                "def _urlopen(request, timeout=None):\n"
+                "    return _Response()\n"
+                "\n"
+                "urllib.request.urlopen = _urlopen\n",
+                encoding="utf-8",
+            )
+            env = dict(os.environ)
+            env["PYTHONPATH"] = f"{stub_dir}{os.pathsep}{env.get('PYTHONPATH', '')}"
+            result = subprocess.run(
+                [sys.executable, str(APP_ROOT / "mcp" / "server.py")],
+                input=json.dumps(
+                    {
+                        "workspace_id": "default",
+                        "app_id": "speech",
+                        "data_root": str(root / "data"),
+                        "generated_storage_root": str(root / "storage" / "generated"),
+                        "uploaded_storage_root": str(uploaded),
+                        "tool_name": "speech_transcribe_file",
+                        "app_secrets": {"deepgram-api-key": "deepgram-token"},
+                        "arguments": {
+                            "workspace_relative_path": "storage/uploaded/sample.wav",
+                            "content_type": "audio/wav",
+                        },
+                    }
+                ),
+                text=True,
+                capture_output=True,
+                check=True,
+                env=env,
+            )
+
+        payload = json.loads(result.stdout)
+        self.assertEqual(payload["status_code"], 200)
+        self.assertEqual(payload["engine"], "deepgram")
+        self.assertEqual(payload["text"], "MCP deepgram transcript")
+
     def test_cli_schema_lists_only_supported_operations(self) -> None:
         payload = json.loads((APP_ROOT / "cli" / "command_schemas.json").read_text(encoding="utf-8"))
         command = payload["commands"]["speech"]

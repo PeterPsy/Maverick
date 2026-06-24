@@ -9,7 +9,7 @@ import re
 
 from core.api.platform_state import PlatformState
 from core.api.secret_grant_targets import SecretConsumer, consumer_requires_secret, secret_grant_target_items
-from core.secrets.app_delivery import APP_SECRET_ACTION, app_secret_target
+from core.secrets.app_delivery import APP_SECRET_ACTION, app_secret_grant_covers_targets, app_secret_target
 from core.secrets.errors import SecretError
 from core.secrets.models import SecretGrantRecord, SecretRecord
 from core.secrets.secret_resolution import parse_secret_ref
@@ -354,10 +354,8 @@ def _user_action(*, value_state: str, grant_state: str, app_managed: bool) -> st
 
 
 def _grant_covers_recommendation(grant: SecretGrantRecord, recommended_grant: dict[str, object]) -> bool:
-    if APP_SECRET_ACTION not in grant.actions:
-        return False
     recommended_targets = _string_list(recommended_grant.get("target_patterns"))
-    return all(_target_covered(target, grant.target_patterns) for target in recommended_targets)
+    return app_secret_grant_covers_targets(grant, recommended_targets)
 
 
 def _target_covered(target: str, patterns: list[str]) -> bool:

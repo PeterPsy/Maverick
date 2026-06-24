@@ -75,6 +75,8 @@ payload = json.loads(sys.stdin.read() or "{}")
 arguments = payload.get("arguments") if isinstance(payload.get("arguments"), dict) else {}
 action = str(arguments.get("action") or "operations.manifest").strip()
 body = {"action": action, **arguments}
+if isinstance(payload.get("app_secrets"), dict):
+    body["_app_secrets"] = dict(payload["app_secrets"])
 if action in {"engine_health", "list_engines"} and "include_voices" not in body:
     body["include_voices"] = False
 unexpected_fields = _unexpected_fields(action, arguments)

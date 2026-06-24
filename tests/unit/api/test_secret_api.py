@@ -744,6 +744,35 @@ class SecretApiTestCase(SecretApiTestSupport):
         self.assertEqual(need["grant_state"], "missing")
         self.assertEqual(need["user_action"], "add_value")
 
+    def test_secret_grant_needs_treat_legacy_backend_scoped_grant_as_active(self) -> None:
+        app = self.make_app()
+        cookie = self.login(app)
+        self.enable_workspace_app(app, secret_read=["api-token"], backend=True, cli_commands=["sync"])
+        app_root = app.state.repository_root / "apps" / "browser"
+        (app_root / "cli").mkdir(parents=True, exist_ok=True)
+        (app_root / "cli" / "command_schemas.json").write_text(
+            json.dumps({"commands": {"sync": {"required_secrets": ["api-token"]}}}),
+            encoding="utf-8",
+        )
+        secret = create_platform_secret(app.state.secret_store, label="Api Token", raw_value="api-secret", alias="api-token")
+        grant_app_secret_use(
+            app.state.secret_store,
+            workspace_id="default",
+            app_id="browser",
+            logical_name="api-token",
+            secret_ref=build_secret_ref(alias=secret.alias),
+            actions=["app.secret.read"],
+            target_patterns=["maverick://app.backend/*"],
+        )
+
+        status, payload, _ = self.invoke(app, path="/api/secret-grant-needs", cookie=cookie)
+
+        self.assertEqual(status, 200)
+        need = next(item for item in payload["items"] if item["app_id"] == "browser" and item["logical_name"] == "api-token")
+        self.assertEqual(need["value_state"], "active")
+        self.assertEqual(need["grant_state"], "active")
+        self.assertEqual(need["user_action"], "none")
+
     def test_secret_grant_targets_include_issue_needs_for_existing_endpoint(self) -> None:
         app = self.make_app()
         cookie = self.login(app)

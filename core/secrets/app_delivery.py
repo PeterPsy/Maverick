@@ -18,6 +18,7 @@ from core.secrets.target_policy import (
 
 
 APP_SECRET_ACTION = "app.backend"
+LEGACY_APP_SECRET_ACTION = "app.secret.read"
 APP_SECRET_TARGET_PREFIX = "maverick://app.backend"
 
 
@@ -122,12 +123,13 @@ def resolve_app_secret_payload(
         grant = candidates[0]
         try:
             grant_target = _grant_delivery_target(grant, target=target, base_target=base_target, now=now) or target
+            grant_action = app_secret_delivery_action_for_grant(grant) or APP_SECRET_ACTION
             lease = resolve_app_secret_grant(
                 secret_store,
                 workspace_id=workspace_id,
                 app_id=app_id,
                 grant_id=grant.grant_id,
-                action=APP_SECRET_ACTION,
+                action=grant_action,
                 target=grant_target,
                 runtime_session_id=runtime_session_id,
                 actor_user_id=actor_user_id,
@@ -222,7 +224,7 @@ def _grant_is_current(grant: SecretGrantRecord, *, now: datetime) -> bool:
 def _grant_deliverable(grant: SecretGrantRecord, *, target: str, now: datetime) -> bool:
     if not _grant_is_current(grant, now=now):
         return False
-    if APP_SECRET_ACTION not in grant.actions:
+    if app_secret_delivery_action_for_grant(grant) is None:
         return False
     try:
         return target_allowed(target, grant.target_patterns)
@@ -236,6 +238,38 @@ def _grant_delivery_target(grant: SecretGrantRecord, *, target: str, base_target
     if target != base_target and _grant_deliverable(grant, target=base_target, now=now):
         return base_target
     return None
+
+
+def app_secret_delivery_action_for_grant(grant: SecretGrantRecord) -> str | None:
+    """Return the grant action that can authorize app backend delivery."""
+    actions = {str(action).strip().lower() for action in grant.actions}
+    if APP_SECRET_ACTION in actions:
+        return APP_SECRET_ACTION
+    if LEGACY_APP_SECRET_ACTION in actions and _has_app_backend_target_pattern(grant.target_patterns):
+        return LEGACY_APP_SECRET_ACTION
+    return None
+
+
+def app_secret_grant_covers_targets(grant: SecretGrantRecord, targets: list[str]) -> bool:
+    """Return whether one current or legacy app grant covers all app backend targets."""
+    if app_secret_delivery_action_for_grant(grant) is None:
+        return False
+    return all(_target_covered_by_grant(target, grant.target_patterns) for target in targets)
+
+
+def _has_app_backend_target_pattern(target_patterns: list[str]) -> bool:
+    normalized_targets = normalize_target_patterns_or_wildcard(target_patterns)
+    return any(
+        target != "*" and (target == APP_SECRET_TARGET_PREFIX or target.startswith(f"{APP_SECRET_TARGET_PREFIX}/"))
+        for target in normalized_targets
+    )
+
+
+def _target_covered_by_grant(target: str, patterns: list[str]) -> bool:
+    try:
+        return target_allowed(target, patterns)
+    except SecretError:
+        return target in patterns
 
 
 def _record_delivery_denial(

@@ -77,6 +77,8 @@ else:
         }
     else:
         body = {"action": action, **arguments}
+        if isinstance(payload.get("app_secrets"), dict):
+            body["_app_secrets"] = dict(payload["app_secrets"])
         try:
             uploaded_root = Path(payload["uploaded_storage_root"]) if payload.get("uploaded_storage_root") else None
             status_code, result = handle_action(

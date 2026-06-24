@@ -490,6 +490,52 @@ class AppMountsTestCase(unittest.TestCase):
         self.assertEqual(result.secrets, {"api_token": "backend-secret"})
         self.assertEqual(result.errors, [])
 
+    def test_app_secret_payload_accepts_legacy_backend_scoped_action(self) -> None:
+        secret_store = _secret_store()
+        state = _state(secret_store)
+        secret = create_platform_secret(secret_store, label="Backend", raw_value="backend-secret", alias="backend-secret")
+        grant_app_secret_use(
+            secret_store,
+            workspace_id="default",
+            app_id="browser",
+            logical_name="api_token",
+            secret_ref=build_secret_ref(alias=secret.alias),
+            actions=["app.secret.read"],
+            target_patterns=["maverick://app.backend/*"],
+        )
+
+        result = _resolve_app_secret_payload(
+            state,  # type: ignore[arg-type]
+            workspace_id="default",
+            app_id="browser",
+            allowed_logical_names=["api_token"],
+        )
+
+        self.assertEqual(result.secrets, {"api_token": "backend-secret"})
+        self.assertEqual(result.errors, [])
+
+    def test_app_secret_payload_rejects_legacy_action_without_backend_target(self) -> None:
+        secret_store = _secret_store()
+        state = _state(secret_store)
+        secret = create_platform_secret(secret_store, label="Backend", raw_value="backend-secret", alias="backend-secret")
+        grant_app_secret_use(
+            secret_store,
+            workspace_id="default",
+            app_id="browser",
+            logical_name="api_token",
+            secret_ref=build_secret_ref(alias=secret.alias),
+            actions=["app.secret.read"],
+            target_patterns=["https://example.com/*"],
+        )
+
+        with self.assertRaises(SecretPolicyError):
+            _resolve_app_secret_payload(
+                state,  # type: ignore[arg-type]
+                workspace_id="default",
+                app_id="browser",
+                allowed_logical_names=["api_token"],
+            )
+
     def test_app_secret_payload_fails_closed_when_backend_grant_is_denied(self) -> None:
         secret_store = _secret_store()
         state = _state(secret_store)

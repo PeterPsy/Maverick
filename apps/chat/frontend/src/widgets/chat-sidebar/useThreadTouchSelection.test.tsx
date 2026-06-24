@@ -123,4 +123,47 @@ describe("useThreadTouchSelection", () => {
 
     expect(onSelect).toHaveBeenCalledTimes(1);
   });
+
+  it("does not select a thread when a mobile scroll gesture moves beyond tolerance", async () => {
+    vi.useFakeTimers();
+    const onSelect = vi.fn();
+    const button = await renderProbe(onSelect);
+
+    await act(async () => {
+      button.dispatchEvent(pointerEvent("pointerdown", { clientY: 20 }));
+      button.dispatchEvent(pointerEvent("pointermove", { clientY: 44 }));
+      button.dispatchEvent(pointerEvent("pointerup", { clientY: 44 }));
+      button.click();
+    });
+
+    expect(onSelect).not.toHaveBeenCalled();
+  });
+
+  it("does not select a thread when pointerup itself crosses the movement tolerance", async () => {
+    vi.useFakeTimers();
+    const onSelect = vi.fn();
+    const button = await renderProbe(onSelect);
+
+    await act(async () => {
+      button.dispatchEvent(pointerEvent("pointerdown", { clientY: 20 }));
+      button.dispatchEvent(pointerEvent("pointerup", { clientY: 44 }));
+      button.click();
+    });
+
+    expect(onSelect).not.toHaveBeenCalled();
+  });
+
+  it("does not select a thread after a mobile pointer cancel", async () => {
+    vi.useFakeTimers();
+    const onSelect = vi.fn();
+    const button = await renderProbe(onSelect);
+
+    await act(async () => {
+      button.dispatchEvent(pointerEvent("pointerdown"));
+      button.dispatchEvent(pointerEvent("pointercancel"));
+      button.click();
+    });
+
+    expect(onSelect).not.toHaveBeenCalled();
+  });
 });

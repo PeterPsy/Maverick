@@ -21,15 +21,15 @@ export function useThreadTouchSelection({ isShellMobileLayout, selectThread }: U
     x: number;
     y: number;
   } | null>(null);
-  const touchSelectedThreadIdRef = useRef<string | null>(null);
-  const touchSelectedThreadResetRef = useRef<number | null>(null);
+  const suppressedTouchClickThreadIdRef = useRef<string | null>(null);
+  const suppressedTouchClickResetRef = useRef<number | null>(null);
   const threadActionsRevealResetRef = useRef<number | null>(null);
 
   useEffect(
     () => () => {
       clearTrackedTouch();
-      if (touchSelectedThreadResetRef.current !== null) {
-        window.clearTimeout(touchSelectedThreadResetRef.current);
+      if (suppressedTouchClickResetRef.current !== null) {
+        window.clearTimeout(suppressedTouchClickResetRef.current);
       }
       if (threadActionsRevealResetRef.current !== null) {
         window.clearTimeout(threadActionsRevealResetRef.current);
@@ -64,15 +64,27 @@ export function useThreadTouchSelection({ isShellMobileLayout, selectThread }: U
     touchThreadPointerStartRef.current = null;
   }
 
-  function markTouchThreadSelection(threadId: string) {
-    touchSelectedThreadIdRef.current = threadId;
-    if (touchSelectedThreadResetRef.current !== null) {
-      window.clearTimeout(touchSelectedThreadResetRef.current);
+  function suppressNextTouchClick(threadId: string) {
+    suppressedTouchClickThreadIdRef.current = threadId;
+    if (suppressedTouchClickResetRef.current !== null) {
+      window.clearTimeout(suppressedTouchClickResetRef.current);
     }
-    touchSelectedThreadResetRef.current = window.setTimeout(() => {
-      touchSelectedThreadIdRef.current = null;
-      touchSelectedThreadResetRef.current = null;
+    suppressedTouchClickResetRef.current = window.setTimeout(() => {
+      suppressedTouchClickThreadIdRef.current = null;
+      suppressedTouchClickResetRef.current = null;
     }, 450);
+  }
+
+  function consumeSuppressedTouchClick(threadId: string): boolean {
+    if (suppressedTouchClickThreadIdRef.current !== threadId) {
+      return false;
+    }
+    suppressedTouchClickThreadIdRef.current = null;
+    if (suppressedTouchClickResetRef.current !== null) {
+      window.clearTimeout(suppressedTouchClickResetRef.current);
+      suppressedTouchClickResetRef.current = null;
+    }
+    return true;
   }
 
   function trackThreadTouchStart(event: ReactPointerEvent<HTMLButtonElement>, thread: ChatThread) {
@@ -110,6 +122,7 @@ export function useThreadTouchSelection({ isShellMobileLayout, selectThread }: U
     const movedX = Math.abs(event.clientX - start.x);
     const movedY = Math.abs(event.clientY - start.y);
     if (movedX > TOUCH_MOVE_TOLERANCE_PX || movedY > TOUCH_MOVE_TOLERANCE_PX) {
+      suppressNextTouchClick(thread.thread_id);
       clearTrackedTouch();
     }
   }
@@ -120,8 +133,10 @@ export function useThreadTouchSelection({ isShellMobileLayout, selectThread }: U
     }
     const start = touchThreadPointerStartRef.current;
     if (!start || start.threadId !== thread.thread_id || start.pointerId !== event.pointerId) {
+      suppressNextTouchClick(thread.thread_id);
       return;
     }
+    suppressNextTouchClick(thread.thread_id);
     clearTrackedTouch();
   }
 
@@ -131,32 +146,32 @@ export function useThreadTouchSelection({ isShellMobileLayout, selectThread }: U
     }
     const start = touchThreadPointerStartRef.current;
     clearTrackedTouch();
-    if (start?.threadId === thread.thread_id) {
-      if (start.longPressTriggered) {
-        event.preventDefault();
-        event.stopPropagation();
-        markTouchThreadSelection(thread.thread_id);
-        return;
-      }
-      const movedX = Math.abs(event.clientX - start.x);
-      const movedY = Math.abs(event.clientY - start.y);
-      if (movedX > TOUCH_MOVE_TOLERANCE_PX || movedY > TOUCH_MOVE_TOLERANCE_PX) {
-        return;
-      }
+    if (!start || start.threadId !== thread.thread_id || start.pointerId !== event.pointerId) {
+      suppressNextTouchClick(thread.thread_id);
+      return;
+    }
+    if (start.longPressTriggered) {
+      event.preventDefault();
+      event.stopPropagation();
+      suppressNextTouchClick(thread.thread_id);
+      return;
+    }
+    const movedX = Math.abs(event.clientX - start.x);
+    const movedY = Math.abs(event.clientY - start.y);
+    if (movedX > TOUCH_MOVE_TOLERANCE_PX || movedY > TOUCH_MOVE_TOLERANCE_PX) {
+      event.preventDefault();
+      event.stopPropagation();
+      suppressNextTouchClick(thread.thread_id);
+      return;
     }
     event.preventDefault();
     event.stopPropagation();
-    markTouchThreadSelection(thread.thread_id);
+    suppressNextTouchClick(thread.thread_id);
     selectThread(thread);
   }
 
   function selectThreadFromClick(thread: ChatThread) {
-    if (touchSelectedThreadIdRef.current === thread.thread_id) {
-      touchSelectedThreadIdRef.current = null;
-      if (touchSelectedThreadResetRef.current !== null) {
-        window.clearTimeout(touchSelectedThreadResetRef.current);
-        touchSelectedThreadResetRef.current = null;
-      }
+    if (consumeSuppressedTouchClick(thread.thread_id)) {
       return;
     }
     selectThread(thread);

@@ -16,9 +16,11 @@ from core.providers.payloads import (
     routing_decision_payload,
     sort_provider_definitions,
 )
+from core.providers.provider_credentials import resolve_provider_binding
 from core.providers.routing import ProviderRoutingContext, select_provider_for_profile
 from core.providers.service import (
     activate_hosted_model_provider,
+    activate_speech_provider,
     configure_hosted_model_provider,
     configure_workspace_provider,
     effective_provider_registry,
@@ -141,6 +143,45 @@ def workspace_hosted_text_status(state: PlatformState, *, workspace_id: str) -> 
     }
 
 
+def workspace_speech_stt_status(state: PlatformState, *, workspace_id: str) -> dict[str, object]:
+    """Return workspace-scoped speech-to-text provider status without secret refs."""
+    registry = effective_provider_registry(state.provider_store)
+    available_providers = [
+        provider
+        for provider in registry.list_provider_definitions()
+        if provider.provider_role == "speech_provider"
+        and "audio" in provider.capabilities.input_modalities
+        and "text" in provider.capabilities.output_modalities
+    ]
+    active_provider = None
+    active_binding = None
+    for provider in sort_provider_definitions(available_providers):
+        binding = resolve_provider_binding(
+            state.provider_store,
+            provider_id=provider.provider_id,
+            workspace_id=workspace_id,
+        )
+        if provider.status == "active" and binding is not None:
+            active_provider = provider
+            active_binding = binding
+            break
+    return {
+        "profile": "speech_stt",
+        "active_provider": None if active_provider is None else provider_payload(active_provider),
+        "credential_binding": provider_credential_binding_payload(active_binding),
+        "model_settings": (
+            None
+            if active_provider is None
+            else {
+                "selected_model_id": active_provider.default_model_family,
+                "selected_reasoning_effort": None,
+                "available_models": [provider_model_option_payload(option) for option in active_provider.model_options],
+            }
+        ),
+        "available_providers": [provider_payload(provider) for provider in sort_provider_definitions(available_providers)],
+    }
+
+
 def runtime_session_payload(session: RuntimeSessionRecord) -> dict[str, object]:
     """Return public runtime session metadata."""
     return {
@@ -178,6 +219,7 @@ def workspace_provider_status(
         "selection": provider_selection_payload(status.selection),
         "model_settings": None if status.active_provider is None else provider_model_settings_payload(status.active_provider, status.selection),
         "hosted_text": workspace_hosted_text_status(state, workspace_id=workspace_id),
+        "speech_stt": workspace_speech_stt_status(state, workspace_id=workspace_id),
         "blocked_reason": status.blocked_reason,
         "blocked_detail": status.blocked_detail,
         "available_providers": [provider_payload(provider) for provider in sort_provider_definitions(status.available_providers)],
@@ -219,6 +261,7 @@ def handle_provider_api(state: PlatformState, environ: dict, start_response: Sta
         "/api/providers/active",
         "/api/providers/hosted/active",
         "/api/providers/hosted/selection",
+        "/api/providers/speech/active",
         "/api/providers/route",
         "/api/runtime/status",
     }:
@@ -265,6 +308,43 @@ def handle_provider_api(state: PlatformState, environ: dict, start_response: Sta
                 "credential_binding": provider_credential_binding_payload(activation.credential_binding),
                 "hosted_selection": hosted_provider_selection_payload(activation.hosted_selection),
                 "preflight": routing_decision_payload(activation.routing_decision),
+            },
+        )
+    if path == "/api/providers/speech/active" and method == "POST":
+        from core.api.http import read_json_body
+
+        if getattr(context.user, "platform_role", None) != "admin":
+            return json_response(start_response, {"error": "provider_speech_activation_forbidden"}, status="403 Forbidden")
+        body = read_json_body(environ)
+        provider_id = str(body.get("provider_id") or "").strip()
+        secret_ref = str(body.get("secret_ref") or "").strip()
+        if not provider_id:
+            return json_response(start_response, {"error": "missing_provider_id"}, status="400 Bad Request")
+        if not secret_ref:
+            return json_response(start_response, {"error": "missing_secret_ref"}, status="400 Bad Request")
+        try:
+            activation = activate_speech_provider(
+                state.provider_store,
+                secret_store=state.secret_store,
+                workspace_id=context.workspace_id,
+                provider_id=provider_id,
+                secret_ref=secret_ref,
+                label=str(body.get("label") or "").strip() or None,
+                observability_store=state.observability_store,
+            )
+        except Exception as error:
+            return json_response(
+                start_response,
+                {"error": "speech_provider_activation_failed", "error_type": type(error).__name__},
+                status="400 Bad Request",
+            )
+        return json_response(
+            start_response,
+            {
+                "workspace_id": context.workspace_id,
+                "provider": provider_payload(activation.definition),
+                "credential_binding": provider_credential_binding_payload(activation.credential_binding),
+                "speech_stt": workspace_speech_stt_status(state, workspace_id=context.workspace_id),
             },
         )
     if path == "/api/providers/hosted/selection" and method == "POST":

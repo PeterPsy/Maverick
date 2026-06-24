@@ -136,12 +136,24 @@ Routing decisions, runtime events, logs, transcripts, Storage artifacts,
 CLI/MCP payloads, and HTTP responses may expose provider ids, model ids, binding
 ids, grants, and reason codes, but never raw secret values.
 
-## Deferred Speech Provider Boundary
+## Speech Provider Boundary
 
-Deepgram, Cartesia, and Kokoro-hosted are metadata-only `speech_provider`
-records until a later realtime audio slice implements governed STT/TTS
-execution. They declare future remote capability and credential shape, but they
-do not create a voice runtime path in this slice.
+Deepgram is exposed as a governed `speech_provider` for speech-to-text settings
+and credential binding. The built-in Deepgram model catalog starts with
+`nova-2`, using the public Deepgram listen endpoints:
+
+- prerecorded HTTPS: `https://api.deepgram.com/v1/listen?model=nova-2`
+- streaming WebSocket: `wss://api.deepgram.com/v1/listen?model=nova-2`
+
+Settings surfaces these under `Deepgram models` and reads only redaction-safe
+provider and binding metadata. The API key remains in Core Secrets/Vault and is
+referenced through a provider credential binding such as
+`platform:secrets/deepgram-api-key`; raw secret values are never returned.
+
+Cartesia and Kokoro-hosted remain metadata-only `speech_provider` records until
+a later realtime audio slice implements governed STT/TTS execution. OpenRouter
+Kokoro (`hexgrad/kokoro-82m`) is cataloged under OpenRouter model metadata, but
+is not a `plain_hosted_chat` text model.
 
 The next speech integration must reuse the same registry, policy, routing, and
 Core Secrets boundary proven by hosted text:

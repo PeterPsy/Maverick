@@ -44,6 +44,14 @@ class HostedModelProviderActivation:
     routing_decision: RoutingDecision
 
 
+@dataclass(frozen=True)
+class SpeechProviderActivation:
+    """Result of operator activation for a speech provider."""
+
+    definition: ProviderDefinition
+    credential_binding: ProviderCredentialBinding
+
+
 def utcnow() -> datetime:
     """Return the current UTC timestamp."""
     return datetime.now(tz=UTC)
@@ -134,7 +142,12 @@ def activate_hosted_model_provider(
     now: datetime | None = None,
 ) -> HostedModelProviderActivation:
     """Activate one hosted text model provider and bind its credential metadata."""
-    active_registry = effective_provider_registry(store, registry=registry, codex_command=codex_command)
+    active_registry = effective_provider_registry(
+        store,
+        registry=registry,
+        codex_command=codex_command,
+        refresh_model_catalog=True,
+    )
     definition = active_registry.get_provider_definition(provider_id)
     _validate_hosted_model_provider(definition)
     _assert_secret_ref_exists(secret_store, secret_ref)
@@ -206,6 +219,66 @@ def activate_hosted_model_provider(
         hosted_selection=hosted_selection,
         routing_decision=decision,
     )
+
+
+def activate_speech_provider(
+    store: ProviderStore,
+    *,
+    secret_store: SecretStore,
+    workspace_id: str,
+    provider_id: str,
+    secret_ref: str,
+    label: str | None = None,
+    registry: ProviderRegistry | None = None,
+    codex_command: str = "codex",
+    observability_store=None,
+    now: datetime | None = None,
+) -> SpeechProviderActivation:
+    """Activate one remote speech provider and bind its credential metadata."""
+    active_registry = effective_provider_registry(
+        store,
+        registry=registry,
+        codex_command=codex_command,
+        refresh_model_catalog=True,
+    )
+    definition = active_registry.get_provider_definition(provider_id)
+    _validate_speech_provider(definition)
+    _assert_secret_ref_exists(secret_store, secret_ref)
+    timestamp = now or utcnow()
+    active_definition = store.save_provider_definition(replace(definition, status="active", updated_at=timestamp))
+    binding = bind_provider_credential(
+        store,
+        provider_id=provider_id,
+        secret_ref=secret_ref,
+        workspace_id=workspace_id,
+        label=label,
+        observability_store=observability_store,
+        now=timestamp,
+    )
+    if observability_store is not None:
+        payload = {"workspace_id": workspace_id, "provider_id": provider_id, "binding_id": binding.binding_id}
+        record_platform_audit(
+            observability_store,
+            action="provider.speech.activate",
+            status="succeeded",
+            source_domain="providers",
+            detail=f"Activated speech provider `{provider_id}` for workspace `{workspace_id}`.",
+            workspace_id=workspace_id,
+            provider_id=provider_id,
+            payload=payload,
+            now=timestamp,
+        )
+        record_platform_event(
+            observability_store,
+            event_type="provider.speech.activated",
+            event_plane="platform",
+            source_domain="providers",
+            workspace_id=workspace_id,
+            provider_id=provider_id,
+            payload=payload,
+            now=timestamp,
+        )
+    return SpeechProviderActivation(definition=active_definition, credential_binding=binding)
 
 
 def configure_hosted_model_provider(
@@ -328,6 +401,15 @@ def _validate_hosted_model_provider(definition: ProviderDefinition) -> None:
         raise ProviderCapabilityError(f"Provider `{definition.provider_id}` is not a hosted model provider.")
     if definition.execution_contract is None or definition.execution_contract.adapter_type != "hosted_text_generation":
         raise ProviderCapabilityError(f"Provider `{definition.provider_id}` does not support hosted text generation.")
+
+
+def _validate_speech_provider(definition: ProviderDefinition) -> None:
+    if definition.kind != "hosted_api":
+        raise ProviderCapabilityError(f"Provider `{definition.provider_id}` is not a hosted API provider.")
+    if definition.provider_role != "speech_provider":
+        raise ProviderCapabilityError(f"Provider `{definition.provider_id}` is not a speech provider.")
+    if "audio" not in definition.capabilities.input_modalities or "text" not in definition.capabilities.output_modalities:
+        raise ProviderCapabilityError(f"Provider `{definition.provider_id}` does not support speech-to-text.")
 
 
 def _validate_hosted_model_id(definition: ProviderDefinition, model_id: str | None) -> str | None:

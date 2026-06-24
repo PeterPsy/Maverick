@@ -396,14 +396,34 @@ def _deepgram_definition(timestamp: datetime) -> ProviderDefinition:
             supports_realtime=True,
             supports_turn_detection=True,
         ),
-        default_model_family="speech-to-text",
+        default_model_family="nova-2",
         requires_credentials=True,
         supported_execution_modes=[],
         created_at=timestamp,
         updated_at=timestamp,
+        model_options=[
+            ProviderModelOption(
+                model_id="nova-2",
+                label="Nova-2",
+                description=(
+                    "Deepgram speech-to-text model for prerecorded and streaming transcription, "
+                    "including languages and filler-word workflows not covered by newer defaults."
+                ),
+                default_reasoning_effort=None,
+                input_modalities=["audio"],
+                output_modalities=["text", "events"],
+            )
+        ],
         credential_requirements=[_credential("deepgram_api_key", modes=["speech_stt"])],
-        network_requirements=[_network("api.deepgram.com", transport="websocket")],
-        latency_metadata={"speech_profile": "stt_realtime_deferred"},
+        network_requirements=[
+            _network("api.deepgram.com", transport="https"),
+            _network("api.deepgram.com", transport="websocket"),
+        ],
+        latency_metadata={
+            "speech_profile": "stt_realtime_deferred",
+            "prerecorded_endpoint": "https://api.deepgram.com/v1/listen?model=nova-2",
+            "streaming_endpoint": "wss://api.deepgram.com/v1/listen?model=nova-2",
+        },
     )
 
 

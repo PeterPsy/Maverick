@@ -252,6 +252,8 @@ assert.ok((html.match(/auto default/g) || []).length >= 5);
         self.assertIn("configureActiveProvider", api_source)
         self.assertIn("configureHostedProvider", api_source)
         self.assertIn("/api/providers/hosted/selection", api_source)
+        self.assertIn("speech_stt", api_source)
+        self.assertIn("Deepgram models", settings_source)
         self.assertIn("saveHostedProviderSettingsFromPanel", main_source)
         self.assertIn("data-agentic-provider-accordion", settings_source)
         self.assertIn("data-settings-model-accordion", settings_source)
@@ -404,6 +406,46 @@ const settings = {
         available_models: openrouterModels
       },
       available_providers: []
+    },
+    speech_stt: {
+      profile: 'speech_stt',
+      active_provider: {
+        provider_id: 'deepgram',
+        label: 'Deepgram',
+        default_model_family: 'nova-2',
+        model_options: [{
+          model_id: 'nova-2',
+          label: 'Nova-2',
+          description: 'Deepgram speech-to-text model.',
+          default_reasoning_effort: null,
+          supported_reasoning_efforts: [],
+          input_modalities: ['audio'],
+          output_modalities: ['text', 'events']
+        }]
+      },
+      credential_binding: {
+        binding_id: 'deepgram:default',
+        provider_id: 'deepgram',
+        workspace_id: 'default',
+        label: 'Deepgram speech-to-text',
+        status: 'active',
+        created_at: '2026-06-24T00:00:00Z',
+        updated_at: '2026-06-24T00:00:00Z'
+      },
+      model_settings: {
+        selected_model_id: 'nova-2',
+        selected_reasoning_effort: null,
+        available_models: [{
+          model_id: 'nova-2',
+          label: 'Nova-2',
+          description: 'Deepgram speech-to-text model.',
+          default_reasoning_effort: null,
+          supported_reasoning_efforts: [],
+          input_modalities: ['audio'],
+          output_modalities: ['text', 'events']
+        }]
+      },
+      available_providers: []
     }
   },
   runtime: { cleanup_allowed: false, cleanup_scope: 'none', sessions: [], all_sessions: [] },
@@ -430,9 +472,12 @@ assert.ok(html.includes('DeepSeek V4 Flash'));
 assert.ok(html.includes('Kokoro 82M'));
 assert.ok(html.includes('Hosted speech model'));
 assert.ok(html.includes('speech synthesis metadata · not used by plain hosted chat'));
-assert.equal((html.match(/data-settings-model-accordion=/g) || []).length, 5);
+assert.ok(html.includes('Deepgram models'));
+assert.ok(html.includes('Nova-2'));
+assert.ok(html.includes('https://api.deepgram.com/v1/listen?model=nova-2'));
+assert.equal((html.match(/data-settings-model-accordion=/g) || []).length, 6);
 assert.equal((html.match(/data-hosted-model-accordion=/g) || []).length, 4);
-assert.equal((html.match(/<span class="settings-pill">Active<\/span>/g) || []).length, 4);
+assert.equal((html.match(/<span class="settings-pill">Active<\/span>/g) || []).length, 5);
 assert.ok(html.includes('data-hosted-provider-save="google/gemma-4-31b-it:free"'));
 assert.ok(html.includes('data-hosted-provider-save="nvidia/nemotron-3-ultra-550b-a55b:free"'));
 assert.ok(html.includes('data-hosted-provider-save="deepseek/deepseek-v4-flash"'));

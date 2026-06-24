@@ -150,6 +150,7 @@ export function settingsPanelHtml(settings: PlatformSettings | null, state: Sett
 
   const provider = settings.provider.active_provider;
   const hostedProvider = settings.provider.hosted_text?.active_provider || null;
+  const speechStt = settings.provider.speech_stt || null;
   const runtimeSessions = scopedRuntimeSessions(settings);
   const activeRuntimeSessions = runtimeSessions.filter((session) => ACTIVE_RUNTIME_STATUSES.has(session.status));
   const cleanupAllowed = settings.runtime.cleanup_allowed ?? false;
@@ -179,6 +180,7 @@ export function settingsPanelHtml(settings: PlatformSettings | null, state: Sett
       openHostedModel,
       hostedModelOptions,
       hostedProvider,
+      speechStt,
       settings,
       state
     )}
@@ -218,6 +220,7 @@ function modelSettingsCardHtml(
   openHostedModel: string,
   hostedModelOptions: ProviderModelOption[],
   hostedProvider: PlatformSettings['provider']['active_provider'] | null,
+  speechStt: PlatformSettings['provider']['speech_stt'] | null,
   settings: PlatformSettings,
   state: SettingsPanelState
 ) {
@@ -231,6 +234,7 @@ function modelSettingsCardHtml(
     <div class="settings-platform-provider-forms">
       ${providerSettingsFormHtml(provider, modelOptions, reasoningOptions, canSaveProvider, activeRuntimeSessionCount, runtimeSessionCount, !openHostedModel, state)}
       ${hostedProviderSettingsListHtml(hostedModelOptions, openHostedModel, hostedProvider, settings, state)}
+      ${speechSttSettingsListHtml(speechStt)}
     </div>
   </section>`;
 }
@@ -370,11 +374,12 @@ function hostedProviderModelAccordionHtml(
   const modelRuntimeLabel = isTextOutputModel
     ? 'plain hosted chat capable · runtime engine remains Codex'
     : 'speech synthesis metadata · not used by plain hosted chat';
+  const modelIcon = isTextOutputModel ? 'bolt' : 'record_voice_over';
   const isOpen = modelId === openHostedModel;
   const providerLabel = hostedProvider?.label || hostedProvider?.provider_id || 'Hosted provider';
   return `<details class="settings-model-accordion settings-hosted-model-accordion" data-settings-model-accordion="hosted:${escapeAttr(modelId)}" data-hosted-model-accordion="${escapeAttr(modelId)}" ${isOpen ? 'open' : ''}>
     <summary class="settings-model-trigger">
-      <span class="settings-platform-icon material-symbols-rounded" aria-hidden="true">bolt</span>
+      <span class="settings-platform-icon material-symbols-rounded" aria-hidden="true">${modelIcon}</span>
       <span class="settings-model-copy">
         <span class="settings-model-kicker">
           <span class="settings-kicker">${modelKindLabel}</span>
@@ -452,6 +457,63 @@ function hostedProviderModelAccordionHtml(
 function modelSupportsTextOutput(option: ProviderModelOption): boolean {
   const outputs = option.output_modalities || [];
   return !outputs.length || outputs.includes('text');
+}
+
+function speechSttSettingsListHtml(status: PlatformSettings['provider']['speech_stt'] | null) {
+  const provider = status?.active_provider || status?.available_providers?.find((item) => item.provider_id === 'deepgram') || null;
+  const modelOptions = status?.model_settings?.available_models?.length ? status.model_settings.available_models : provider?.model_options || [];
+  const selectedModelId = status?.model_settings?.selected_model_id || provider?.default_model_family || 'nova-2';
+  const active = Boolean(status?.active_provider && status?.credential_binding);
+  return `<div class="settings-hosted-models settings-speech-models">
+    <div class="settings-platform-form-heading settings-hosted-models-heading">
+      <span class="material-symbols-rounded" aria-hidden="true">graphic_eq</span>
+      <span>
+        <strong>Deepgram models</strong>
+        <small>Speech-to-text uses Deepgram Nova-2 through Core Secrets; audio input returns transcript text/events.</small>
+      </span>
+    </div>
+    ${
+      modelOptions.length
+        ? modelOptions.map((option) => speechSttModelAccordionHtml(option, provider, selectedModelId, active)).join('')
+        : '<p class="settings-card-copy settings-platform-note">No Deepgram speech-to-text models are available.</p>'
+    }
+    ${active ? '' : '<p class="settings-card-copy settings-platform-note">Activate Deepgram with a Core Secrets binding before using speech-to-text.</p>'}
+  </div>`;
+}
+
+function speechSttModelAccordionHtml(
+  option: ProviderModelOption,
+  provider: PlatformSettings['provider']['active_provider'] | null,
+  selectedModelId: string,
+  active: boolean
+) {
+  const modelId = option.model_id;
+  const providerLabel = provider?.label || provider?.provider_id || 'Deepgram';
+  return `<details class="settings-model-accordion settings-speech-model-accordion" data-settings-model-accordion="speech:${escapeAttr(modelId)}">
+    <summary class="settings-model-trigger">
+      <span class="settings-platform-icon material-symbols-rounded" aria-hidden="true">hearing</span>
+      <span class="settings-model-copy">
+        <span class="settings-model-kicker">
+          <span class="settings-kicker">Speech-to-text model</span>
+          <span class="settings-pill">${active && modelId === selectedModelId ? 'Active' : 'Available'}</span>
+        </span>
+        <strong>${escapeHtml(option.label || modelId)} - ${escapeHtml(providerLabel)}</strong>
+        <small>${escapeHtml(modelId)} · audio input · transcript text/events · API key via Vault/Core Secrets</small>
+      </span>
+      <span class="settings-model-chevron material-symbols-rounded" aria-hidden="true">expand_more</span>
+    </summary>
+    <div class="settings-model-content settings-hosted-model-content">
+      <div class="settings-platform-field settings-platform-field-wide">
+        <span>Model</span>
+        <code class="settings-model-code">${escapeHtml(modelId)}</code>
+      </div>
+      <div class="settings-platform-field settings-platform-field-wide">
+        <span>Endpoint</span>
+        <code class="settings-model-code">https://api.deepgram.com/v1/listen?model=${escapeHtml(modelId)}</code>
+      </div>
+      <p class="settings-card-copy">${escapeHtml(option.description || 'Deepgram speech-to-text model.')}</p>
+    </div>
+  </details>`;
 }
 
 function runtimeSessionsHtml(

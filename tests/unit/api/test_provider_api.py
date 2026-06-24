@@ -239,6 +239,40 @@ class ProviderApiTest(unittest.TestCase):
         self.assertEqual(route_payload["decision"]["selected_provider_id"], "openrouter")
         self.assertEqual(route_payload["decision"]["selected_model_id_or_voice_id"], "google/gemma-4-31b-it:free")
 
+    def test_operator_can_activate_deepgram_speech_provider(self) -> None:
+        state = self.make_state()
+        secret = create_platform_secret(
+            state.secret_store,
+            label="Deepgram API",
+            raw_value="super-secret-token",
+            alias="deepgram_api_key",
+            kind="api_key",
+        )
+
+        status, payload = self.invoke(
+            "/api/providers/speech/active",
+            method="POST",
+            body={
+                "provider_id": "deepgram",
+                "secret_ref": build_secret_ref(alias=secret.alias or "deepgram_api_key"),
+                "label": "Deepgram speech-to-text",
+            },
+            state=state,
+        )
+        provider_status, provider_payload = self.invoke("/api/providers/active", state=state)
+
+        self.assertEqual(status, "200 OK")
+        self.assertEqual(payload["provider"]["provider_id"], "deepgram")
+        self.assertEqual(payload["provider"]["status"], "active")
+        self.assertEqual(payload["credential_binding"]["provider_id"], "deepgram")
+        self.assertEqual(payload["speech_stt"]["active_provider"]["provider_id"], "deepgram")
+        self.assertEqual(payload["speech_stt"]["model_settings"]["selected_model_id"], "nova-2")
+        self.assertEqual(provider_status, "200 OK")
+        self.assertEqual(provider_payload["speech_stt"]["active_provider"]["provider_id"], "deepgram")
+        self.assertEqual(provider_payload["speech_stt"]["model_settings"]["available_models"][0]["model_id"], "nova-2")
+        self.assertNotIn("super-secret-token", json.dumps(payload))
+        self.assertNotIn("secret_ref", json.dumps(payload))
+
     def test_hosted_text_status_only_marks_routable_provider_active(self) -> None:
         state = self.make_state()
         secret = create_platform_secret(

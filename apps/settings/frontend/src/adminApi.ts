@@ -217,6 +217,22 @@ export type HostedTextProviderStatus = {
   } | null;
 };
 
+export type SpeechProviderStatus = {
+  profile: string;
+  active_provider: ProviderItem | null;
+  credential_binding: {
+    binding_id: string;
+    provider_id: string;
+    workspace_id: string | null;
+    label: string | null;
+    status: string;
+    created_at: string;
+    updated_at: string;
+  } | null;
+  model_settings: ProviderModelSettings | null;
+  available_providers: ProviderItem[];
+};
+
 export type ProviderStatus = {
   workspace_id: string;
   configured?: boolean;
@@ -233,6 +249,7 @@ export type ProviderStatus = {
   } | null;
   model_settings: ProviderModelSettings | null;
   hosted_text?: HostedTextProviderStatus | null;
+  speech_stt?: SpeechProviderStatus | null;
   blocked_reason?: string | null;
   blocked_detail?: string | null;
   available_providers?: ProviderItem[];

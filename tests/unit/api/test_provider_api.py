@@ -265,13 +265,69 @@ class ProviderApiTest(unittest.TestCase):
         self.assertEqual(payload["provider"]["provider_id"], "deepgram")
         self.assertEqual(payload["provider"]["status"], "active")
         self.assertEqual(payload["credential_binding"]["provider_id"], "deepgram")
+        self.assertEqual(payload["speech_selection"]["audio_transcription_model_id"], "nova-3")
+        self.assertEqual(payload["speech_selection"]["conversation_model_id"], "flux-general-multi")
         self.assertEqual(payload["speech_stt"]["active_provider"]["provider_id"], "deepgram")
-        self.assertEqual(payload["speech_stt"]["model_settings"]["selected_model_id"], "nova-2")
+        self.assertEqual(payload["speech_stt"]["model_settings"]["audio_transcription_model_id"], "nova-3")
+        self.assertEqual(payload["speech_stt"]["model_settings"]["conversation_model_id"], "flux-general-multi")
         self.assertEqual(provider_status, "200 OK")
         self.assertEqual(provider_payload["speech_stt"]["active_provider"]["provider_id"], "deepgram")
-        self.assertEqual(provider_payload["speech_stt"]["model_settings"]["available_models"][0]["model_id"], "nova-2")
+        self.assertEqual(
+            [item["model_id"] for item in provider_payload["speech_stt"]["model_settings"]["available_audio_transcription_models"]],
+            ["nova-3", "nova-3-general", "nova-3-medical"],
+        )
+        self.assertEqual(
+            [item["model_id"] for item in provider_payload["speech_stt"]["model_settings"]["available_conversation_models"]],
+            ["flux-general-multi", "flux-general-en"],
+        )
         self.assertNotIn("super-secret-token", json.dumps(payload))
         self.assertNotIn("secret_ref", json.dumps(payload))
+
+    def test_admin_can_configure_deepgram_speech_models_by_purpose(self) -> None:
+        state = self.make_state()
+        secret = create_platform_secret(
+            state.secret_store,
+            label="Deepgram API",
+            raw_value="super-secret-token",
+            alias="deepgram_api_key",
+            kind="api_key",
+        )
+        self.invoke(
+            "/api/providers/speech/active",
+            method="POST",
+            body={
+                "provider_id": "deepgram",
+                "secret_ref": build_secret_ref(alias=secret.alias or "deepgram_api_key"),
+            },
+            state=state,
+        )
+
+        with patch("core.api.provider_api.require_provider_selection_authority", return_value=None):
+            status, payload = self.invoke(
+                "/api/providers/speech/selection",
+                method="POST",
+                body={
+                    "provider_id": "deepgram",
+                    "audio_transcription_model_id": "nova-3-general",
+                    "conversation_model_id": "flux-general-en",
+                },
+                state=state,
+            )
+
+        self.assertEqual(status, "200 OK")
+        speech = payload["speech_stt"]
+        self.assertEqual(speech["selection"]["audio_transcription_model_id"], "nova-3-general")
+        self.assertEqual(speech["selection"]["conversation_model_id"], "flux-general-en")
+        self.assertEqual(speech["model_settings"]["audio_transcription_model_id"], "nova-3-general")
+        self.assertEqual(speech["model_settings"]["conversation_model_id"], "flux-general-en")
+        self.assertEqual(
+            speech["model_settings"]["endpoints"]["audio_transcription"],
+            "https://api.deepgram.com/v1/listen?model=nova-3-general",
+        )
+        self.assertEqual(
+            speech["model_settings"]["endpoints"]["conversation"],
+            "wss://api.deepgram.com/v2/listen?model=flux-general-en",
+        )
 
     def test_hosted_text_status_only_marks_routable_provider_active(self) -> None:
         state = self.make_state()

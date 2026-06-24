@@ -10,6 +10,7 @@ from core.providers.models import (
     ProviderModelOption,
     ProviderReasoningOption,
     ProviderSelection,
+    ProviderSpeechSelection,
     RoutingDecision,
 )
 
@@ -64,6 +65,7 @@ def provider_model_option_payload(option: ProviderModelOption) -> dict[str, obje
         "input_modalities": list(option.input_modalities),
         "output_modalities": list(option.output_modalities),
         "upstream_provider_options": [dict(item) for item in option.upstream_provider_options],
+        "metadata": dict(option.metadata),
     }
 
 
@@ -99,6 +101,21 @@ def hosted_provider_selection_payload(selection: ProviderHostedSelection | None)
             for model_id, routing in selection.openrouter_provider_routing_by_model.items()
             if isinstance(routing, dict)
         },
+    }
+
+
+def speech_provider_selection_payload(selection: ProviderSpeechSelection | None) -> dict[str, object] | None:
+    """Return public speech-provider selection metadata."""
+    if selection is None:
+        return None
+    return {
+        "workspace_id": selection.workspace_id,
+        "profile": selection.profile,
+        "provider_id": selection.provider_id,
+        "selection_reason": selection.selection_reason,
+        "updated_at": selection.updated_at,
+        "audio_transcription_model_id": selection.audio_transcription_model_id,
+        "conversation_model_id": selection.conversation_model_id,
     }
 
 

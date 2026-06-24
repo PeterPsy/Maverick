@@ -29,9 +29,11 @@ import {
   createSettingsPanelState,
   settingsPanelHtml,
   syncSettingsPanelDraft,
-  updateHostedProviderRoutingDraft,
+  updateDraftModel,
   updateHostedDraftModel,
-  updateDraftModel
+  updateHostedProviderRoutingDraft,
+  updateSpeechAudioModel,
+  updateSpeechConversationModel
 } from './settingsPanel';
 import {
   DEFAULT_SETTINGS_PAGE_ID,
@@ -47,7 +49,7 @@ import { bindSettingsEvents } from './bindEvents';
 import { escapeHtml } from './html';
 import { createPersistenceController } from './persistenceController';
 import { persistenceMigrationModalHtml, persistencePageHtml } from './persistencePage';
-import { saveActiveProviderSettings, saveHostedProviderSettings } from './providerSettingsActions';
+import { saveActiveProviderSettings, saveHostedProviderSettings, saveSpeechProviderSettings } from './providerSettingsActions';
 import { usersPageHtml, workspaceAccessPageHtml } from './userPages';
 import { workspaceAppsPageHtml } from './workspaceAppsPage';
 
@@ -502,6 +504,14 @@ function bindEvents() {
       settingsPanelState.providerError = '';
       render();
     },
+    onSpeechAudioModelChanged: (modelId) => {
+      updateSpeechAudioModel(settingsPanelState, modelId);
+      render();
+    },
+    onSpeechConversationModelChanged: (modelId) => {
+      updateSpeechConversationModel(settingsPanelState, modelId);
+      render();
+    },
     persistenceController,
     render,
     resetSelectedUserPassword,
@@ -513,6 +523,7 @@ function bindEvents() {
       return saveHostedProviderSettings(providerSettingsActionContext());
     },
     saveProviderSettingsFromPanel: () => saveActiveProviderSettings(providerSettingsActionContext()),
+    saveSpeechProviderSettingsFromPanel: () => saveSpeechProviderSettings(providerSettingsActionContext()),
     selectedUser,
     selectUser: (userId) => {
       selectedUserId = userId;

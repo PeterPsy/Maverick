@@ -412,16 +412,29 @@ const settings = {
       active_provider: {
         provider_id: 'deepgram',
         label: 'Deepgram',
-        default_model_family: 'nova-2',
-        model_options: [{
-          model_id: 'nova-2',
-          label: 'Nova-2',
-          description: 'Deepgram speech-to-text model.',
-          default_reasoning_effort: null,
-          supported_reasoning_efforts: [],
-          input_modalities: ['audio'],
-          output_modalities: ['text', 'events']
-        }]
+        default_model_family: 'nova-3',
+        model_options: [
+          {
+            model_id: 'nova-3',
+            label: 'Nova-3',
+            description: 'Deepgram transcription model.',
+            default_reasoning_effort: null,
+            supported_reasoning_efforts: [],
+            input_modalities: ['audio'],
+            output_modalities: ['text', 'events'],
+            metadata: { purpose: 'prerecorded_transcription', endpoint: 'https://api.deepgram.com/v1/listen?model=nova-3' }
+          },
+          {
+            model_id: 'flux-general-multi',
+            label: 'Flux General Multilingual',
+            description: 'Deepgram realtime conversation model.',
+            default_reasoning_effort: null,
+            supported_reasoning_efforts: [],
+            input_modalities: ['audio'],
+            output_modalities: ['text', 'events'],
+            metadata: { purpose: 'conversational_streaming', endpoint: 'wss://api.deepgram.com/v2/listen?model=flux-general-multi' }
+          }
+        ]
       },
       credential_binding: {
         binding_id: 'deepgram:default',
@@ -432,18 +445,43 @@ const settings = {
         created_at: '2026-06-24T00:00:00Z',
         updated_at: '2026-06-24T00:00:00Z'
       },
+      selection: {
+        workspace_id: 'default',
+        profile: 'speech_stt',
+        provider_id: 'deepgram',
+        selection_reason: 'configured by speech provider settings',
+        updated_at: '2026-06-24T00:00:00Z',
+        audio_transcription_model_id: 'nova-3',
+        conversation_model_id: 'flux-general-multi'
+      },
       model_settings: {
-        selected_model_id: 'nova-2',
-        selected_reasoning_effort: null,
-        available_models: [{
-          model_id: 'nova-2',
-          label: 'Nova-2',
-          description: 'Deepgram speech-to-text model.',
+        audio_transcription_model_id: 'nova-3',
+        conversation_model_id: 'flux-general-multi',
+        available_audio_transcription_models: [{
+          model_id: 'nova-3',
+          label: 'Nova-3',
+          description: 'Deepgram transcription model.',
           default_reasoning_effort: null,
           supported_reasoning_efforts: [],
           input_modalities: ['audio'],
-          output_modalities: ['text', 'events']
-        }]
+          output_modalities: ['text', 'events'],
+          metadata: { purpose: 'prerecorded_transcription', endpoint: 'https://api.deepgram.com/v1/listen?model=nova-3' }
+        }],
+        available_conversation_models: [{
+          model_id: 'flux-general-multi',
+          label: 'Flux General Multilingual',
+          description: 'Deepgram realtime conversation model.',
+          default_reasoning_effort: null,
+          supported_reasoning_efforts: [],
+          input_modalities: ['audio'],
+          output_modalities: ['text', 'events'],
+          metadata: { purpose: 'conversational_streaming', endpoint: 'wss://api.deepgram.com/v2/listen?model=flux-general-multi' }
+        }],
+        available_models: [],
+        endpoints: {
+          audio_transcription: 'https://api.deepgram.com/v1/listen?model=nova-3',
+          conversation: 'wss://api.deepgram.com/v2/listen?model=flux-general-multi'
+        }
       },
       available_providers: []
     }
@@ -473,11 +511,14 @@ assert.ok(html.includes('Kokoro 82M'));
 assert.ok(html.includes('Hosted speech model'));
 assert.ok(html.includes('speech synthesis metadata · not used by plain hosted chat'));
 assert.ok(html.includes('Deepgram models'));
-assert.ok(html.includes('Nova-2'));
-assert.ok(html.includes('https://api.deepgram.com/v1/listen?model=nova-2'));
-assert.equal((html.match(/data-settings-model-accordion=/g) || []).length, 6);
+assert.ok(html.includes('Nova-3'));
+assert.ok(html.includes('Flux General Multilingual'));
+assert.ok(html.includes('https://api.deepgram.com/v1/listen?model=nova-3'));
+assert.ok(html.includes('wss://api.deepgram.com/v2/listen?model=flux-general-multi'));
+assert.ok(html.includes('settings-speech-save'));
+assert.equal((html.match(/data-settings-model-accordion=/g) || []).length, 5);
 assert.equal((html.match(/data-hosted-model-accordion=/g) || []).length, 4);
-assert.equal((html.match(/<span class="settings-pill">Active<\/span>/g) || []).length, 5);
+assert.equal((html.match(/<span class="settings-pill">Active<\/span>/g) || []).length, 6);
 assert.ok(html.includes('data-hosted-provider-save="google/gemma-4-31b-it:free"'));
 assert.ok(html.includes('data-hosted-provider-save="nvidia/nemotron-3-ultra-550b-a55b:free"'));
 assert.ok(html.includes('data-hosted-provider-save="deepseek/deepseek-v4-flash"'));

@@ -195,20 +195,26 @@ class ProviderSchemaTest(unittest.TestCase):
         self.assertNotIn("platform:secret-alias/openrouter_api_key", str(payload))
         self.assertNotIn("secret_ref", str(payload))
 
-    def test_deepgram_metadata_exposes_nova_2_speech_to_text_model(self) -> None:
+    def test_deepgram_metadata_exposes_separate_transcription_and_conversation_models(self) -> None:
         definitions = build_hosted_provider_definitions(datetime(2026, 6, 24, 12, 0, tzinfo=UTC))
         deepgram = next(definition for definition in definitions if definition.provider_id == "deepgram")
         payload = provider_payload(deepgram)
 
         self.assertEqual(deepgram.label, "Deepgram")
         self.assertEqual(deepgram.provider_role, "speech_provider")
-        self.assertEqual(deepgram.default_model_family, "nova-2")
-        self.assertEqual([option.model_id for option in deepgram.model_options], ["nova-2"])
+        self.assertEqual(deepgram.default_model_family, "nova-3")
+        self.assertEqual(
+            [option.model_id for option in deepgram.model_options],
+            ["nova-3", "nova-3-general", "nova-3-medical", "flux-general-multi", "flux-general-en"],
+        )
         self.assertEqual(deepgram.model_options[0].input_modalities, ["audio"])
         self.assertEqual(deepgram.model_options[0].output_modalities, ["text", "events"])
+        self.assertEqual(deepgram.model_options[0].metadata["purpose"], "prerecorded_transcription")
+        self.assertEqual(deepgram.model_options[3].metadata["purpose"], "conversational_streaming")
         self.assertEqual(deepgram.credential_requirements[0].secret_alias_or_logical_name, "deepgram_api_key")
         self.assertEqual([requirement.transport for requirement in deepgram.network_requirements], ["https", "websocket"])
-        self.assertEqual(payload["model_options"][0]["label"], "Nova-2")
+        self.assertEqual(payload["model_options"][0]["label"], "Nova-3")
+        self.assertEqual(payload["model_options"][3]["metadata"]["endpoint"], "wss://api.deepgram.com/v2/listen?model=flux-general-multi")
         self.assertNotIn("secret_ref", str(payload))
 
 

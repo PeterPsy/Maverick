@@ -31,7 +31,11 @@ export type SettingsPanelState = {
   hostedRoutingDraftsByModel: Record<string, HostedRoutingDraft>;
   isSavingHostedProvider: boolean;
   isSavingProvider: boolean;
+  isSavingSpeechProvider: boolean;
   providerError: string;
+  speechAudioModelId: string;
+  speechConversationModelId: string;
+  speechProviderError: string;
 };
 
 export type SettingsPanelActions = {
@@ -43,6 +47,9 @@ export type SettingsPanelActions = {
   onProviderModelChanged: (modelId: string) => void;
   onProviderReasoningChanged: (reasoningEffort: string) => void;
   onSaveProviderSettings: () => void;
+  onSaveSpeechProviderSettings: () => void;
+  onSpeechAudioModelChanged: (modelId: string) => void;
+  onSpeechConversationModelChanged: (modelId: string) => void;
 };
 
 export function createSettingsPanelState(): SettingsPanelState {
@@ -58,13 +65,18 @@ export function createSettingsPanelState(): SettingsPanelState {
     hostedRoutingDraftsByModel: {},
     isSavingHostedProvider: false,
     isSavingProvider: false,
-    providerError: ''
+    isSavingSpeechProvider: false,
+    providerError: '',
+    speechAudioModelId: '',
+    speechConversationModelId: '',
+    speechProviderError: ''
   };
 }
 
 export function syncSettingsPanelDraft(state: SettingsPanelState, settings: PlatformSettings | null) {
   const { modelId, reasoningEffort } = selectedProviderDraft(settings);
   const { modelId: hostedModelId } = selectedHostedProviderDraft(settings);
+  const speechDraft = selectedSpeechProviderDraft(settings);
   const hostedModelIds = new Set(hostedModelOptionsForSettings(settings).map((option) => option.model_id).filter(Boolean));
   if (hostedModelId) {
     hostedModelIds.add(hostedModelId);
@@ -72,6 +84,8 @@ export function syncSettingsPanelDraft(state: SettingsPanelState, settings: Plat
   state.draftModelId = modelId;
   state.draftReasoningEffort = reasoningEffort;
   state.hostedDraftModelId = hostedModelId;
+  state.speechAudioModelId = speechDraft.audioModelId;
+  state.speechConversationModelId = speechDraft.conversationModelId;
   state.hostedRoutingDraftsByModel = Object.fromEntries(
     Array.from(hostedModelIds).map((modelId) => [modelId, routingDraftFromRouting(openRouterRoutingForModel(settings, modelId))])
   );
@@ -89,6 +103,16 @@ export function updateHostedDraftModel(state: SettingsPanelState, settings: Plat
   ensureHostedRoutingDraft(state, settings, modelId);
   state.hostedProviderError = '';
   state.hostedProviderErrorModelId = '';
+}
+
+export function updateSpeechAudioModel(state: SettingsPanelState, modelId: string) {
+  state.speechAudioModelId = modelId;
+  state.speechProviderError = '';
+}
+
+export function updateSpeechConversationModel(state: SettingsPanelState, modelId: string) {
+  state.speechConversationModelId = modelId;
+  state.speechProviderError = '';
 }
 
 export function updateHostedProviderRoutingDraft(
@@ -132,6 +156,25 @@ export function hostedProviderRoutingDraft(state: SettingsPanelState, modelId = 
     sort: draft.sort,
     data_collection: draft.dataCollection,
     quantizations: draft.quantization ? [draft.quantization] : []
+  };
+}
+
+function selectedSpeechProviderDraft(settings: PlatformSettings | null | undefined) {
+  const status = settings?.provider.speech_stt || null;
+  const provider = status?.active_provider || status?.available_providers?.find((item) => item.provider_id === 'deepgram') || null;
+  const audioOptions = speechModelOptions(status, provider, 'prerecorded_transcription');
+  const conversationOptions = speechModelOptions(status, provider, 'conversational_streaming');
+  return {
+    audioModelId:
+      status?.model_settings?.audio_transcription_model_id ||
+      audioOptions.find((option) => option.model_id === 'nova-3')?.model_id ||
+      audioOptions[0]?.model_id ||
+      'nova-3',
+    conversationModelId:
+      status?.model_settings?.conversation_model_id ||
+      conversationOptions.find((option) => option.model_id === 'flux-general-multi')?.model_id ||
+      conversationOptions[0]?.model_id ||
+      'flux-general-multi'
   };
 }
 
@@ -234,7 +277,7 @@ function modelSettingsCardHtml(
     <div class="settings-platform-provider-forms">
       ${providerSettingsFormHtml(provider, modelOptions, reasoningOptions, canSaveProvider, activeRuntimeSessionCount, runtimeSessionCount, !openHostedModel, state)}
       ${hostedProviderSettingsListHtml(hostedModelOptions, openHostedModel, hostedProvider, settings, state)}
-      ${speechSttSettingsListHtml(speechStt)}
+      ${speechSttSettingsListHtml(speechStt, state)}
     </div>
   </section>`;
 }
@@ -245,6 +288,15 @@ export function bindSettingsPanelEvents(actions: SettingsPanelActions) {
   });
   document.getElementById('settings-provider-reasoning')?.addEventListener('change', (event) => {
     actions.onProviderReasoningChanged((event.currentTarget as HTMLSelectElement).value);
+  });
+  document.getElementById('settings-speech-audio-model')?.addEventListener('change', (event) => {
+    actions.onSpeechAudioModelChanged((event.currentTarget as HTMLSelectElement).value);
+  });
+  document.getElementById('settings-speech-conversation-model')?.addEventListener('change', (event) => {
+    actions.onSpeechConversationModelChanged((event.currentTarget as HTMLSelectElement).value);
+  });
+  document.getElementById('settings-speech-save')?.addEventListener('click', () => {
+    actions.onSaveSpeechProviderSettings();
   });
   document.querySelectorAll<HTMLDetailsElement>('[data-settings-model-accordion]').forEach((details) => {
     details.addEventListener('toggle', () => {
@@ -459,61 +511,132 @@ function modelSupportsTextOutput(option: ProviderModelOption): boolean {
   return !outputs.length || outputs.includes('text');
 }
 
-function speechSttSettingsListHtml(status: PlatformSettings['provider']['speech_stt'] | null) {
+function speechSttSettingsListHtml(status: PlatformSettings['provider']['speech_stt'] | null, state: SettingsPanelState) {
   const provider = status?.active_provider || status?.available_providers?.find((item) => item.provider_id === 'deepgram') || null;
-  const modelOptions = status?.model_settings?.available_models?.length ? status.model_settings.available_models : provider?.model_options || [];
-  const selectedModelId = status?.model_settings?.selected_model_id || provider?.default_model_family || 'nova-2';
+  const audioOptions = speechModelOptions(status, provider, 'prerecorded_transcription');
+  const conversationOptions = speechModelOptions(status, provider, 'conversational_streaming');
+  const selectedAudioModelId = status?.model_settings?.audio_transcription_model_id || audioOptions[0]?.model_id || 'nova-3';
+  const selectedConversationModelId = status?.model_settings?.conversation_model_id || conversationOptions[0]?.model_id || 'flux-general-multi';
+  const audioDraft = state.speechAudioModelId || selectedAudioModelId;
+  const conversationDraft = state.speechConversationModelId || selectedConversationModelId;
+  const audioOption = audioOptions.find((option) => option.model_id === audioDraft) || audioOptions[0] || null;
+  const conversationOption = conversationOptions.find((option) => option.model_id === conversationDraft) || conversationOptions[0] || null;
+  const audioEndpoint = speechModelEndpoint(audioOption, status?.model_settings?.endpoints?.audio_transcription || `https://api.deepgram.com/v1/listen?model=${audioDraft || 'nova-3'}`);
+  const conversationEndpoint = speechModelEndpoint(conversationOption, status?.model_settings?.endpoints?.conversation || `wss://api.deepgram.com/v2/listen?model=${conversationDraft || 'flux-general-multi'}`);
   const active = Boolean(status?.active_provider && status?.credential_binding);
+  const canSave = Boolean(
+    active &&
+      audioDraft &&
+      conversationDraft &&
+      !state.isSavingSpeechProvider &&
+      (audioDraft !== selectedAudioModelId || conversationDraft !== selectedConversationModelId)
+  );
   return `<div class="settings-hosted-models settings-speech-models">
     <div class="settings-platform-form-heading settings-hosted-models-heading">
       <span class="material-symbols-rounded" aria-hidden="true">graphic_eq</span>
       <span>
         <strong>Deepgram models</strong>
-        <small>Speech-to-text uses Deepgram Nova-2 through Core Secrets; audio input returns transcript text/events.</small>
+        <small>Audio transcription uses Nova-3; realtime conversation uses Flux turn-taking models.</small>
       </span>
     </div>
-    ${
-      modelOptions.length
-        ? modelOptions.map((option) => speechSttModelAccordionHtml(option, provider, selectedModelId, active)).join('')
-        : '<p class="settings-card-copy settings-platform-note">No Deepgram speech-to-text models are available.</p>'
-    }
+    ${speechModelSelectHtml({
+      id: 'settings-speech-audio-model',
+      label: 'Audio transcription model',
+      icon: 'hearing',
+      value: audioDraft,
+      options: audioOptions,
+      endpoint: audioEndpoint,
+      description: audioOption?.description || 'Deepgram model for prerecorded audio, files, and one-shot microphone transcription.',
+      disabled: !active || state.isSavingSpeechProvider
+    })}
+    ${speechModelSelectHtml({
+      id: 'settings-speech-conversation-model',
+      label: 'Conversation model',
+      icon: 'forum',
+      value: conversationDraft,
+      options: conversationOptions,
+      endpoint: conversationEndpoint,
+      description: conversationOption?.description || 'Deepgram Flux model for realtime voice conversation and turn detection.',
+      disabled: !active || state.isSavingSpeechProvider
+    })}
+    <button type="button" id="settings-speech-save" ${canSave ? '' : 'disabled'}>
+      <span class="material-symbols-rounded" aria-hidden="true">${state.isSavingSpeechProvider ? 'sync' : 'save'}</span>
+      ${state.isSavingSpeechProvider ? 'Saving' : 'Save speech models'}
+    </button>
+    ${state.speechProviderError ? `<p class="settings-platform-error">${escapeHtml(state.speechProviderError)}</p>` : ''}
     ${active ? '' : '<p class="settings-card-copy settings-platform-note">Activate Deepgram with a Core Secrets binding before using speech-to-text.</p>'}
   </div>`;
 }
 
-function speechSttModelAccordionHtml(
-  option: ProviderModelOption,
-  provider: PlatformSettings['provider']['active_provider'] | null,
-  selectedModelId: string,
-  active: boolean
-) {
-  const modelId = option.model_id;
-  const providerLabel = provider?.label || provider?.provider_id || 'Deepgram';
-  return `<details class="settings-model-accordion settings-speech-model-accordion" data-settings-model-accordion="speech:${escapeAttr(modelId)}">
-    <summary class="settings-model-trigger">
-      <span class="settings-platform-icon material-symbols-rounded" aria-hidden="true">hearing</span>
+function speechModelSelectHtml({
+  id,
+  label,
+  icon,
+  value,
+  options,
+  endpoint,
+  description,
+  disabled
+}: {
+  id: string;
+  label: string;
+  icon: string;
+  value: string;
+  options: ProviderModelOption[];
+  endpoint: string;
+  description: string;
+  disabled: boolean;
+}) {
+  if (!options.length) {
+    return `<p class="settings-card-copy settings-platform-note">No ${escapeHtml(label.toLowerCase())} options are available.</p>`;
+  }
+  return `<article class="settings-model-accordion settings-speech-model-accordion">
+    <div class="settings-model-trigger">
+      <span class="settings-platform-icon material-symbols-rounded" aria-hidden="true">${escapeHtml(icon)}</span>
       <span class="settings-model-copy">
         <span class="settings-model-kicker">
-          <span class="settings-kicker">Speech-to-text model</span>
-          <span class="settings-pill">${active && modelId === selectedModelId ? 'Active' : 'Available'}</span>
+          <span class="settings-kicker">${escapeHtml(label)}</span>
+          <span class="settings-pill">Active</span>
         </span>
-        <strong>${escapeHtml(option.label || modelId)} - ${escapeHtml(providerLabel)}</strong>
-        <small>${escapeHtml(modelId)} · audio input · transcript text/events · API key via Vault/Core Secrets</small>
+        <strong>${escapeHtml(options.find((option) => option.model_id === value)?.label || value)}</strong>
+        <small>${escapeHtml(value)} · ${escapeHtml(endpoint)}</small>
       </span>
-      <span class="settings-model-chevron material-symbols-rounded" aria-hidden="true">expand_more</span>
-    </summary>
+    </div>
     <div class="settings-model-content settings-hosted-model-content">
-      <div class="settings-platform-field settings-platform-field-wide">
-        <span>Model</span>
-        <code class="settings-model-code">${escapeHtml(modelId)}</code>
-      </div>
+      <label class="settings-platform-field settings-platform-field-wide">
+        <span>${escapeHtml(label)}</span>
+        <select id="${escapeAttr(id)}" ${disabled ? 'disabled' : ''}>
+          ${options.map((option) => `<option value="${escapeAttr(option.model_id)}" ${option.model_id === value ? 'selected' : ''}>${escapeHtml(option.label || option.model_id)}</option>`).join('')}
+        </select>
+      </label>
       <div class="settings-platform-field settings-platform-field-wide">
         <span>Endpoint</span>
-        <code class="settings-model-code">https://api.deepgram.com/v1/listen?model=${escapeHtml(modelId)}</code>
+        <code class="settings-model-code">${escapeHtml(endpoint)}</code>
       </div>
-      <p class="settings-card-copy">${escapeHtml(option.description || 'Deepgram speech-to-text model.')}</p>
+      <p class="settings-card-copy">${escapeHtml(description)}</p>
     </div>
-  </details>`;
+  </article>`;
+}
+
+function speechModelOptions(
+  status: PlatformSettings['provider']['speech_stt'] | null,
+  provider: PlatformSettings['provider']['active_provider'] | null,
+  purpose: 'prerecorded_transcription' | 'conversational_streaming'
+) {
+  const settingsOptions =
+    purpose === 'prerecorded_transcription'
+      ? status?.model_settings?.available_audio_transcription_models
+      : status?.model_settings?.available_conversation_models;
+  if (settingsOptions?.length) {
+    return settingsOptions;
+  }
+  const allOptions = status?.model_settings?.available_models?.length ? status.model_settings.available_models : provider?.model_options || [];
+  return allOptions.filter((option) => option.metadata?.purpose === purpose);
+}
+
+function speechModelEndpoint(option: ProviderModelOption | null, fallback: string) {
+  const endpoint = option?.metadata?.endpoint;
+  return typeof endpoint === 'string' && endpoint ? endpoint : fallback;
 }
 
 function runtimeSessionsHtml(

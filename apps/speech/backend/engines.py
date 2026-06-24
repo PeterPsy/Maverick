@@ -38,7 +38,8 @@ from models import (
     TTS_CACHE_HASH_MAX_BYTES,
 )
 
-DEEPGRAM_MODEL = "nova-2"
+DEEPGRAM_AUDIO_TRANSCRIPTION_MODEL = "nova-3"
+DEEPGRAM_CONVERSATION_MODEL = "flux-general-multi"
 KOKORO_OPENROUTER_MODEL = "hexgrad/kokoro-82m"
 KOKORO_OPENROUTER_RESPONSE_FORMAT = "mp3"
 KOKORO_OPENROUTER_CONTENT_TYPE = "audio/mpeg"
@@ -612,10 +613,11 @@ def transcription_engine_statuses(settings: dict) -> list[dict]:
             "kind": "stt",
             "available": bool(_runtime_secret(settings, "deepgram_api_key")),
             "configured": bool(_runtime_secret(settings, "deepgram_api_key")),
-            "detail": "Deepgram Nova-2 API key was delivered by Core Secrets."
+            "detail": "Deepgram Nova-3 API key was delivered by Core Secrets."
             if _runtime_secret(settings, "deepgram_api_key")
             else "Grant logical secret deepgram-api-key to the Speech backend.",
-            "model": DEEPGRAM_MODEL,
+            "model": deepgram_model_for("transcribe_audio", "one_shot", settings=settings),
+            "conversation_model": deepgram_model_for("conversation_stream", "conversation", settings=settings),
             "model_source": "deepgram",
             "profile": "remote",
             "streaming_supported": True,
@@ -951,22 +953,79 @@ def resolve_transcription_engine(settings: dict) -> str:
     return requested if statuses.get(requested, {}).get("available") else ""
 
 
-def transcribe_audio_file(audio_path: Path, *, settings: dict, language: str = "") -> dict:
+def transcribe_audio_file(
+    audio_path: Path,
+    *,
+    settings: dict,
+    language: str = "",
+    operation: str = "transcribe_file",
+    mode: str = "one_shot",
+) -> dict:
     engine = resolve_transcription_engine(settings)
     if engine == "faster-whisper":
         return _transcribe_with_faster_whisper(audio_path, settings=settings, language=language)
     if engine == "whisper.cpp":
         return _transcribe_with_whisper_cpp(audio_path, settings=settings, language=language)
     if engine == "deepgram":
-        return _transcribe_with_deepgram(audio_path, settings=settings, language=language)
+        return _transcribe_with_deepgram(audio_path, settings=settings, language=language, operation=operation, mode=mode)
     raise SpeechProviderUnavailableError("No configured speech-to-text engine is available.")
 
 
-def _transcribe_with_deepgram(audio_path: Path, *, settings: dict, language: str = "") -> dict:
+def deepgram_model_for(operation: str, mode: str = "one_shot", *, settings: dict | None = None) -> str:
+    """Return the Deepgram model for one Speech operation."""
+    normalized_operation = str(operation or "").strip()
+    normalized_mode = str(mode or "").strip()
+    if normalized_operation == "conversation_stream" or normalized_mode in {"conversation", "realtime_conversation"}:
+        return _configured_deepgram_model(
+            settings,
+            "conversation_model_id",
+            "deepgram_conversation_model_id",
+            DEEPGRAM_CONVERSATION_MODEL,
+        )
+    return _configured_deepgram_model(
+        settings,
+        "audio_transcription_model_id",
+        "deepgram_audio_transcription_model_id",
+        DEEPGRAM_AUDIO_TRANSCRIPTION_MODEL,
+    )
+
+
+def _configured_deepgram_model(
+    settings: dict | None,
+    selection_key: str,
+    settings_key: str,
+    default_model_id: str,
+) -> str:
+    if isinstance(settings, dict):
+        direct = str(settings.get(settings_key) or "").strip()
+        if direct:
+            return direct
+        provider_config = settings.get("_provider_config") if isinstance(settings.get("_provider_config"), dict) else {}
+        speech_config = provider_config.get("speech_stt") if isinstance(provider_config.get("speech_stt"), dict) else {}
+        selection = speech_config.get("selection") if isinstance(speech_config.get("selection"), dict) else {}
+        selected = str(selection.get(selection_key) or "").strip()
+        if selected:
+            return selected
+        model_settings = speech_config.get("model_settings") if isinstance(speech_config.get("model_settings"), dict) else {}
+        selected = str(model_settings.get(selection_key) or "").strip()
+        if selected:
+            return selected
+    return default_model_id
+
+
+def _transcribe_with_deepgram(
+    audio_path: Path,
+    *,
+    settings: dict,
+    language: str = "",
+    operation: str = "transcribe_file",
+    mode: str = "one_shot",
+) -> dict:
     api_key = _runtime_secret(settings, "deepgram_api_key")
     if not api_key:
         raise SpeechProviderUnavailableError("Deepgram API key was not delivered to Speech.")
-    query = f"model={DEEPGRAM_MODEL}&smart_format=true&punctuate=true"
+    model = deepgram_model_for(operation, mode, settings=settings)
+    query = f"model={model}&smart_format=true&punctuate=true"
     if language:
         query += f"&language={language}"
     else:
@@ -998,7 +1057,7 @@ def _transcribe_with_deepgram(audio_path: Path, *, settings: dict, language: str
         if isinstance(payload.get("metadata"), dict)
         else 0.0,
         "engine": "deepgram",
-        "model": DEEPGRAM_MODEL,
+        "model": model,
         "language": _deepgram_detected_language(channel, fallback=language),
         "language_probability": _deepgram_language_confidence(channel),
     }

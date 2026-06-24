@@ -39,6 +39,7 @@ MONGO_COLLECTION_UNIQUE_INDEXES: dict[str, tuple[tuple[str, ...], ...]] = {
     "provider_credential_bindings": (("binding_id",),),
     "provider_selections": (("workspace_id",),),
     "provider_hosted_selections": (("workspace_id", "profile"),),
+    "provider_speech_selections": (("workspace_id", "profile"),),
     "runtime_api_tokens": (("token_id",),),
     "secrets": (("secret_id",), ("alias",)),
     "secret_values": (("secret_id",),),
@@ -181,6 +182,7 @@ def _build_json_collections(json_root: Path) -> ControlPlaneCollections:
             bindings=JsonFileCollection(provider_state_root / "bindings.json"),
             selections=JsonFileCollection(provider_state_root / "selections.json"),
             hosted_selections=JsonFileCollection(provider_state_root / "hosted_selections.json"),
+            speech_selections=JsonFileCollection(provider_state_root / "speech_selections.json"),
         ),
         runtime_api_tokens=JsonFileCollection(json_root / "runtime" / "api_tokens.json"),
         secrets=SecretCollections(
@@ -221,6 +223,7 @@ def _build_mongo_collections(settings: ControlStoreSettings) -> ControlPlaneColl
             bindings=collection("provider_credential_bindings"),
             selections=collection("provider_selections"),
             hosted_selections=collection("provider_hosted_selections"),
+            speech_selections=collection("provider_speech_selections"),
         ),
         runtime_api_tokens=collection("runtime_api_tokens"),
         secrets=SecretCollections(

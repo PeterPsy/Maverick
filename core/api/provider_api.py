@@ -7,7 +7,7 @@ from core.api.platform_state import PlatformState
 from core.api.session_api import RequestSession, require_session
 from core.authorization.errors import AuthorizationError
 from core.authorization.service import require_provider_selection_authority
-from core.providers.models import ProviderDefinition, ProviderHostedSelection, ProviderSelection
+from core.providers.models import ProviderDefinition, ProviderHostedSelection, ProviderSelection, ProviderSpeechSelection
 from core.providers.payloads import (
     hosted_provider_selection_payload,
     provider_model_option_payload,
@@ -15,6 +15,7 @@ from core.providers.payloads import (
     provider_selection_payload,
     routing_decision_payload,
     sort_provider_definitions,
+    speech_provider_selection_payload,
 )
 from core.providers.provider_credentials import resolve_provider_binding
 from core.providers.routing import ProviderRoutingContext, select_provider_for_profile
@@ -22,6 +23,7 @@ from core.providers.service import (
     activate_hosted_model_provider,
     activate_speech_provider,
     configure_hosted_model_provider,
+    configure_speech_provider,
     configure_workspace_provider,
     effective_provider_registry,
     resolve_workspace_provider_status,
@@ -153,9 +155,34 @@ def workspace_speech_stt_status(state: PlatformState, *, workspace_id: str) -> d
         and "audio" in provider.capabilities.input_modalities
         and "text" in provider.capabilities.output_modalities
     ]
+    get_speech_selection = getattr(state.provider_store, "get_speech_provider_selection", None)
+    selection = (
+        get_speech_selection(workspace_id=workspace_id, profile="speech_stt")
+        if callable(get_speech_selection)
+        else None
+    )
     active_provider = None
     active_binding = None
+    if selection is not None:
+        selected_provider = next(
+            (provider for provider in available_providers if provider.provider_id == selection.provider_id),
+            None,
+        )
+        selected_binding = (
+            None
+            if selected_provider is None
+            else resolve_provider_binding(
+                state.provider_store,
+                provider_id=selected_provider.provider_id,
+                workspace_id=workspace_id,
+            )
+        )
+        if selected_provider is not None and selected_provider.status == "active" and selected_binding is not None:
+            active_provider = selected_provider
+            active_binding = selected_binding
     for provider in sort_provider_definitions(available_providers):
+        if active_provider is not None:
+            break
         binding = resolve_provider_binding(
             state.provider_store,
             provider_id=provider.provider_id,
@@ -165,21 +192,88 @@ def workspace_speech_stt_status(state: PlatformState, *, workspace_id: str) -> d
             active_provider = provider
             active_binding = binding
             break
+    active_selection = (
+        selection
+        if active_provider is not None
+        and selection is not None
+        and selection.provider_id == active_provider.provider_id
+        else None
+    )
     return {
         "profile": "speech_stt",
         "active_provider": None if active_provider is None else provider_payload(active_provider),
         "credential_binding": provider_credential_binding_payload(active_binding),
+        "selection": speech_provider_selection_payload(selection),
         "model_settings": (
             None
             if active_provider is None
-            else {
-                "selected_model_id": active_provider.default_model_family,
-                "selected_reasoning_effort": None,
-                "available_models": [provider_model_option_payload(option) for option in active_provider.model_options],
-            }
+            else speech_provider_model_settings_payload(active_provider, active_selection)
         ),
         "available_providers": [provider_payload(provider) for provider in sort_provider_definitions(available_providers)],
     }
+
+
+def speech_provider_model_settings_payload(
+    definition: ProviderDefinition,
+    selection: ProviderSpeechSelection | None,
+) -> dict[str, object]:
+    """Return effective speech provider model settings separated by use case."""
+    audio_options = _speech_model_options_for_purpose(definition, "prerecorded_transcription")
+    conversation_options = _speech_model_options_for_purpose(definition, "conversational_streaming")
+    audio_model_id = _selected_speech_model_id(
+        audio_options,
+        selected_model_id=None if selection is None else selection.audio_transcription_model_id,
+        preferred_model_id=str(definition.latency_metadata.get("default_audio_transcription_model_id") or ""),
+        fallback_model_id=definition.default_model_family,
+    )
+    conversation_model_id = _selected_speech_model_id(
+        conversation_options,
+        selected_model_id=None if selection is None else selection.conversation_model_id,
+        preferred_model_id=str(definition.latency_metadata.get("default_conversation_model_id") or ""),
+        fallback_model_id="flux-general-multi",
+    )
+    return {
+        "audio_transcription_model_id": audio_model_id,
+        "conversation_model_id": conversation_model_id,
+        "available_audio_transcription_models": [provider_model_option_payload(option) for option in audio_options],
+        "available_conversation_models": [provider_model_option_payload(option) for option in conversation_options],
+        "available_models": [provider_model_option_payload(option) for option in definition.model_options],
+        "endpoints": {
+            "audio_transcription": _speech_model_endpoint(audio_options, audio_model_id),
+            "conversation": _speech_model_endpoint(conversation_options, conversation_model_id),
+        },
+    }
+
+
+def _speech_model_options_for_purpose(definition: ProviderDefinition, purpose: str):
+    return [
+        option
+        for option in definition.model_options
+        if isinstance(option.metadata, dict) and option.metadata.get("purpose") == purpose
+    ]
+
+
+def _selected_speech_model_id(
+    options,
+    *,
+    selected_model_id: str | None,
+    preferred_model_id: str,
+    fallback_model_id: str | None,
+) -> str | None:
+    model_ids = {option.model_id for option in options}
+    for model_id in (selected_model_id, preferred_model_id, fallback_model_id):
+        normalized = str(model_id or "").strip()
+        if normalized and normalized in model_ids:
+            return normalized
+    return options[0].model_id if options else None
+
+
+def _speech_model_endpoint(options, model_id: str | None) -> str | None:
+    option = next((item for item in options if item.model_id == model_id), None)
+    if option is None or not isinstance(option.metadata, dict):
+        return None
+    endpoint = option.metadata.get("endpoint")
+    return str(endpoint) if endpoint else None
 
 
 def runtime_session_payload(session: RuntimeSessionRecord) -> dict[str, object]:
@@ -262,6 +356,7 @@ def handle_provider_api(state: PlatformState, environ: dict, start_response: Sta
         "/api/providers/hosted/active",
         "/api/providers/hosted/selection",
         "/api/providers/speech/active",
+        "/api/providers/speech/selection",
         "/api/providers/route",
         "/api/runtime/status",
     }:
@@ -344,9 +439,33 @@ def handle_provider_api(state: PlatformState, environ: dict, start_response: Sta
                 "workspace_id": context.workspace_id,
                 "provider": provider_payload(activation.definition),
                 "credential_binding": provider_credential_binding_payload(activation.credential_binding),
+                "speech_selection": speech_provider_selection_payload(activation.speech_selection),
                 "speech_stt": workspace_speech_stt_status(state, workspace_id=context.workspace_id),
             },
         )
+    if path == "/api/providers/speech/selection" and method == "POST":
+        from core.api.http import read_json_body
+
+        body = read_json_body(environ)
+        provider_id = str(body.get("provider_id") or "").strip()
+        if not provider_id:
+            return json_response(start_response, {"error": "missing_provider_id"}, status="400 Bad Request")
+        try:
+            require_provider_selection_authority(state.workspace_store, user=context.user, workspace_id=context.workspace_id)
+        except AuthorizationError as error:
+            return json_response(start_response, {"error": error.reason}, status="403 Forbidden")
+        try:
+            configure_speech_provider(
+                state.provider_store,
+                workspace_id=context.workspace_id,
+                provider_id=provider_id,
+                audio_transcription_model_id=str(body.get("audio_transcription_model_id") or "").strip() or None,
+                conversation_model_id=str(body.get("conversation_model_id") or "").strip() or None,
+                observability_store=state.observability_store,
+            )
+        except Exception as error:
+            return json_response(start_response, {"error": str(error)}, status="400 Bad Request")
+        return json_response(start_response, workspace_provider_status(state, workspace_id=context.workspace_id))
     if path == "/api/providers/hosted/selection" and method == "POST":
         from core.api.http import read_json_body
 

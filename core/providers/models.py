@@ -15,6 +15,7 @@ ProviderStatus = Literal["active", "disabled", "experimental"]
 ProviderBindingStatus = Literal["active", "disabled"]
 ProviderSelectionScope = Literal["workspace_default"]
 ProviderHostedSelectionProfile = Literal["fast_model"]
+ProviderSpeechSelectionProfile = Literal["speech_stt"]
 ProviderBlockedReason = Literal["no_provider_configured", "provider_unavailable"]
 ProviderSecretBindingScope = Literal["provider", "app", "provider_or_app"]
 ProviderSecretResolutionStage = Literal["execution_only"]
@@ -42,6 +43,7 @@ class ProviderModelOption:
     input_modalities: list[str] = field(default_factory=list)
     output_modalities: list[str] = field(default_factory=list)
     upstream_provider_options: list[dict[str, object]] = field(default_factory=list)
+    metadata: dict[str, object] = field(default_factory=dict)
 
 
 @dataclass(frozen=True)
@@ -177,6 +179,21 @@ class ProviderHostedSelection:
     updated_at: datetime
     model_id: str | None = None
     openrouter_provider_routing_by_model: dict[str, dict[str, object]] = field(default_factory=dict)
+
+
+@dataclass(frozen=True)
+class ProviderSpeechSelection:
+    """Persist speech provider model choices for one workspace profile."""
+
+    selection_id: str
+    workspace_id: str
+    profile: ProviderSpeechSelectionProfile
+    provider_id: str
+    selection_reason: str
+    created_at: datetime
+    updated_at: datetime
+    audio_transcription_model_id: str | None = None
+    conversation_model_id: str | None = None
 
 
 @dataclass(frozen=True)

@@ -1,6 +1,7 @@
 import {
   configureActiveProvider,
   configureHostedProvider,
+  configureSpeechProvider,
   getPlatformSettings,
   type PlatformSettings
 } from './adminApi';
@@ -74,6 +75,34 @@ export async function saveHostedProviderSettings(context: ProviderSettingsAction
     context.state.hostedProviderError = error instanceof Error ? error.message : 'Unable to update hosted model settings.';
   } finally {
     context.state.isSavingHostedProvider = false;
+    context.render();
+  }
+}
+
+export async function saveSpeechProviderSettings(context: ProviderSettingsActionContext) {
+  const providerId = context.settings?.provider.speech_stt?.active_provider?.provider_id;
+  if (!providerId || !context.state.speechAudioModelId || !context.state.speechConversationModelId) {
+    context.state.speechProviderError = 'Speech provider not loaded.';
+    context.render();
+    return;
+  }
+  context.state.isSavingSpeechProvider = true;
+  context.state.speechProviderError = '';
+  context.render();
+  try {
+    await configureSpeechProvider({
+      provider_id: providerId,
+      audio_transcription_model_id: context.state.speechAudioModelId,
+      conversation_model_id: context.state.speechConversationModelId
+    });
+    const settings = await getPlatformSettings();
+    context.setSettings(settings);
+    syncSettingsPanelDraft(context.state, settings);
+    context.setNotice({ tone: 'success', message: 'Speech model settings updated.' });
+  } catch (error) {
+    context.state.speechProviderError = error instanceof Error ? error.message : 'Unable to update speech model settings.';
+  } finally {
+    context.state.isSavingSpeechProvider = false;
     context.render();
   }
 }

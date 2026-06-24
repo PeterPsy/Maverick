@@ -375,7 +375,7 @@ def _deepgram_definition(timestamp: datetime) -> ProviderDefinition:
     return ProviderDefinition(
         provider_id="deepgram",
         label="Deepgram",
-        description="Remote speech-to-text provider metadata for future speech routing.",
+        description="Remote speech-to-text provider metadata with separate transcription and conversation profiles.",
         kind="hosted_api",
         provider_role="speech_provider",
         status="disabled",
@@ -396,23 +396,75 @@ def _deepgram_definition(timestamp: datetime) -> ProviderDefinition:
             supports_realtime=True,
             supports_turn_detection=True,
         ),
-        default_model_family="nova-2",
+        default_model_family="nova-3",
         requires_credentials=True,
         supported_execution_modes=[],
         created_at=timestamp,
         updated_at=timestamp,
         model_options=[
             ProviderModelOption(
-                model_id="nova-2",
-                label="Nova-2",
+                model_id="nova-3",
+                label="Nova-3",
                 description=(
-                    "Deepgram speech-to-text model for prerecorded and streaming transcription, "
-                    "including languages and filler-word workflows not covered by newer defaults."
+                    "Default Deepgram speech-to-text model for prerecorded audio, file transcription, "
+                    "and one-shot microphone dictation."
                 ),
                 default_reasoning_effort=None,
                 input_modalities=["audio"],
                 output_modalities=["text", "events"],
-            )
+                metadata={
+                    "purpose": "prerecorded_transcription",
+                    "endpoint": "https://api.deepgram.com/v1/listen?model=nova-3",
+                },
+            ),
+            ProviderModelOption(
+                model_id="nova-3-general",
+                label="Nova-3 General",
+                description="Deepgram Nova-3 general transcription profile for prerecorded audio.",
+                default_reasoning_effort=None,
+                input_modalities=["audio"],
+                output_modalities=["text", "events"],
+                metadata={
+                    "purpose": "prerecorded_transcription",
+                    "endpoint": "https://api.deepgram.com/v1/listen?model=nova-3-general",
+                },
+            ),
+            ProviderModelOption(
+                model_id="nova-3-medical",
+                label="Nova-3 Medical",
+                description="Deepgram Nova-3 medical transcription profile for prerecorded clinical audio.",
+                default_reasoning_effort=None,
+                input_modalities=["audio"],
+                output_modalities=["text", "events"],
+                metadata={
+                    "purpose": "prerecorded_transcription",
+                    "endpoint": "https://api.deepgram.com/v1/listen?model=nova-3-medical",
+                },
+            ),
+            ProviderModelOption(
+                model_id="flux-general-multi",
+                label="Flux General Multilingual",
+                description="Deepgram Flux realtime conversation model with multilingual turn detection.",
+                default_reasoning_effort=None,
+                input_modalities=["audio"],
+                output_modalities=["text", "events"],
+                metadata={
+                    "purpose": "conversational_streaming",
+                    "endpoint": "wss://api.deepgram.com/v2/listen?model=flux-general-multi",
+                },
+            ),
+            ProviderModelOption(
+                model_id="flux-general-en",
+                label="Flux General English",
+                description="Deepgram Flux realtime conversation model for English turn-taking.",
+                default_reasoning_effort=None,
+                input_modalities=["audio"],
+                output_modalities=["text", "events"],
+                metadata={
+                    "purpose": "conversational_streaming",
+                    "endpoint": "wss://api.deepgram.com/v2/listen?model=flux-general-en",
+                },
+            ),
         ],
         credential_requirements=[_credential("deepgram_api_key", modes=["speech_stt"])],
         network_requirements=[
@@ -421,8 +473,10 @@ def _deepgram_definition(timestamp: datetime) -> ProviderDefinition:
         ],
         latency_metadata={
             "speech_profile": "stt_realtime_deferred",
-            "prerecorded_endpoint": "https://api.deepgram.com/v1/listen?model=nova-2",
-            "streaming_endpoint": "wss://api.deepgram.com/v1/listen?model=nova-2",
+            "default_audio_transcription_model_id": "nova-3",
+            "default_conversation_model_id": "flux-general-multi",
+            "prerecorded_endpoint": "https://api.deepgram.com/v1/listen?model=nova-3",
+            "conversation_endpoint": "wss://api.deepgram.com/v2/listen?model=flux-general-multi",
         },
     )
 

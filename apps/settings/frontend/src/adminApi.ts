@@ -162,6 +162,7 @@ export type ProviderModelOption = {
     context_length?: number;
     max_completion_tokens?: number;
   }>;
+  metadata?: Record<string, unknown>;
 };
 
 export type OpenRouterProviderRouting = {
@@ -178,6 +179,28 @@ export type ProviderModelSettings = {
   selected_model_id: string | null;
   selected_reasoning_effort: string | null;
   available_models: ProviderModelOption[];
+};
+
+export type SpeechModelSettings = {
+  audio_transcription_model_id: string | null;
+  conversation_model_id: string | null;
+  available_audio_transcription_models: ProviderModelOption[];
+  available_conversation_models: ProviderModelOption[];
+  available_models: ProviderModelOption[];
+  endpoints?: {
+    audio_transcription?: string | null;
+    conversation?: string | null;
+  };
+};
+
+export type SpeechProviderSelection = {
+  workspace_id: string;
+  profile: string;
+  provider_id: string;
+  selection_reason: string;
+  updated_at: string;
+  audio_transcription_model_id: string | null;
+  conversation_model_id: string | null;
 };
 
 export type ProviderItem = {
@@ -229,7 +252,8 @@ export type SpeechProviderStatus = {
     created_at: string;
     updated_at: string;
   } | null;
-  model_settings: ProviderModelSettings | null;
+  selection?: SpeechProviderSelection | null;
+  model_settings: SpeechModelSettings | null;
   available_providers: ProviderItem[];
 };
 
@@ -414,6 +438,17 @@ export function configureHostedProvider(payload: {
   openrouter_provider_routing?: OpenRouterProviderRouting | null;
 }): Promise<ProviderStatus> {
   return requestJson<ProviderStatus>('/api/providers/hosted/selection', {
+    method: 'POST',
+    body: JSON.stringify(payload)
+  });
+}
+
+export function configureSpeechProvider(payload: {
+  provider_id: string;
+  audio_transcription_model_id?: string | null;
+  conversation_model_id?: string | null;
+}): Promise<ProviderStatus> {
+  return requestJson<ProviderStatus>('/api/providers/speech/selection', {
     method: 'POST',
     body: JSON.stringify(payload)
   });

@@ -13,6 +13,7 @@ from core.providers.models import (
     ProviderDefinition,
     ProviderHostedSelection,
     ProviderSelection,
+    ProviderSpeechSelection,
     RoutingDecision,
     RuntimeBackendLaunchSpec,
     WorkspaceProviderStatus,
@@ -50,6 +51,7 @@ class SpeechProviderActivation:
 
     definition: ProviderDefinition
     credential_binding: ProviderCredentialBinding
+    speech_selection: ProviderSpeechSelection | None
 
 
 def utcnow() -> datetime:
@@ -255,6 +257,18 @@ def activate_speech_provider(
         observability_store=observability_store,
         now=timestamp,
     )
+    speech_selection = configure_speech_provider(
+        store,
+        workspace_id=workspace_id,
+        provider_id=provider_id,
+        audio_transcription_model_id=str(definition.latency_metadata.get("default_audio_transcription_model_id") or ""),
+        conversation_model_id=str(definition.latency_metadata.get("default_conversation_model_id") or ""),
+        selection_reason="activated by speech provider operator",
+        registry=active_registry,
+        codex_command=codex_command,
+        observability_store=observability_store,
+        now=timestamp,
+    )
     if observability_store is not None:
         payload = {"workspace_id": workspace_id, "provider_id": provider_id, "binding_id": binding.binding_id}
         record_platform_audit(
@@ -278,7 +292,93 @@ def activate_speech_provider(
             payload=payload,
             now=timestamp,
         )
-    return SpeechProviderActivation(definition=active_definition, credential_binding=binding)
+    return SpeechProviderActivation(
+        definition=active_definition,
+        credential_binding=binding,
+        speech_selection=speech_selection,
+    )
+
+
+def configure_speech_provider(
+    store: ProviderStore,
+    *,
+    workspace_id: str,
+    provider_id: str,
+    audio_transcription_model_id: str | None = None,
+    conversation_model_id: str | None = None,
+    profile: str = "speech_stt",
+    selection_reason: str = "configured by speech provider settings",
+    registry: ProviderRegistry | None = None,
+    codex_command: str = "codex",
+    observability_store=None,
+    now: datetime | None = None,
+) -> ProviderSpeechSelection:
+    """Persist speech provider model choices for one workspace profile."""
+    if profile != "speech_stt":
+        raise ProviderCapabilityError(f"Speech provider profile `{profile}` is not supported.")
+    active_registry = effective_provider_registry(store, registry=registry, codex_command=codex_command)
+    definition = active_registry.get_provider_definition(provider_id)
+    _validate_speech_provider(definition)
+    if definition.status != "active":
+        raise ProviderCapabilityError(f"Speech provider `{provider_id}` is not active.")
+    timestamp = now or utcnow()
+    previous = store.get_speech_provider_selection(workspace_id=workspace_id, profile="speech_stt")
+    audio_model_id = _speech_selection_model_id(
+        definition,
+        requested_model_id=audio_transcription_model_id,
+        previous_model_id=None if previous is None else previous.audio_transcription_model_id,
+        purpose="prerecorded_transcription",
+        preferred_model_id=str(definition.latency_metadata.get("default_audio_transcription_model_id") or ""),
+    )
+    conversation_model = _speech_selection_model_id(
+        definition,
+        requested_model_id=conversation_model_id,
+        previous_model_id=None if previous is None else previous.conversation_model_id,
+        purpose="conversational_streaming",
+        preferred_model_id=str(definition.latency_metadata.get("default_conversation_model_id") or ""),
+    )
+    selection = ProviderSpeechSelection(
+        selection_id=f"{workspace_id}:{profile}",
+        workspace_id=workspace_id,
+        profile="speech_stt",
+        provider_id=provider_id,
+        selection_reason=selection_reason,
+        created_at=timestamp,
+        updated_at=timestamp,
+        audio_transcription_model_id=audio_model_id,
+        conversation_model_id=conversation_model,
+    )
+    saved = store.save_speech_provider_selection(selection)
+    if observability_store is not None:
+        payload = {
+            "workspace_id": workspace_id,
+            "profile": profile,
+            "provider_id": provider_id,
+            "audio_transcription_model_id": saved.audio_transcription_model_id,
+            "conversation_model_id": saved.conversation_model_id,
+        }
+        record_platform_audit(
+            observability_store,
+            action="provider.speech.selection.configure",
+            status="succeeded",
+            source_domain="providers",
+            detail=f"Configured speech provider `{provider_id}` for workspace `{workspace_id}`.",
+            workspace_id=workspace_id,
+            provider_id=provider_id,
+            payload=payload,
+            now=timestamp,
+        )
+        record_platform_event(
+            observability_store,
+            event_type="provider.speech.selection.configured",
+            event_plane="platform",
+            source_domain="providers",
+            workspace_id=workspace_id,
+            provider_id=provider_id,
+            payload=payload,
+            now=timestamp,
+        )
+    return saved
 
 
 def configure_hosted_model_provider(
@@ -422,6 +522,45 @@ def _validate_hosted_model_id(definition: ProviderDefinition, model_id: str | No
             f"Model `{normalized_model_id}` is not declared by hosted provider `{definition.provider_id}`."
         )
     return normalized_model_id
+
+
+def _speech_selection_model_id(
+    definition: ProviderDefinition,
+    *,
+    requested_model_id: str | None,
+    previous_model_id: str | None,
+    purpose: str,
+    preferred_model_id: str,
+) -> str | None:
+    requested = str(requested_model_id or "").strip()
+    if _speech_model_supports_purpose(definition, requested, purpose=purpose):
+        return requested
+    if requested:
+        raise ProviderCapabilityError(
+            f"Model `{requested}` is not declared by speech provider `{definition.provider_id}` for `{purpose}`."
+        )
+    previous = str(previous_model_id or "").strip()
+    if _speech_model_supports_purpose(definition, previous, purpose=purpose):
+        return previous
+    preferred = str(preferred_model_id or "").strip()
+    if _speech_model_supports_purpose(definition, preferred, purpose=purpose):
+        return preferred
+    for option in definition.model_options:
+        if _model_option_supports_purpose(option, purpose=purpose):
+            return option.model_id
+    return None
+
+
+def _speech_model_supports_purpose(definition: ProviderDefinition, model_id: str, *, purpose: str) -> bool:
+    if not model_id:
+        return False
+    option = next((option for option in definition.model_options if option.model_id == model_id), None)
+    return option is not None and _model_option_supports_purpose(option, purpose=purpose)
+
+
+def _model_option_supports_purpose(option, *, purpose: str) -> bool:
+    metadata = getattr(option, "metadata", {})
+    return isinstance(metadata, dict) and metadata.get("purpose") == purpose
 
 
 def _hosted_text_selection_model_id(

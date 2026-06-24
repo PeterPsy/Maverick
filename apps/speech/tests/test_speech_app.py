@@ -440,7 +440,8 @@ class SpeechAppTests(unittest.TestCase):
         synthesis = {item["engine"]: item for item in engines.synthesis_engine_statuses(settings)}
 
         self.assertTrue(transcription["deepgram"]["available"])
-        self.assertEqual(transcription["deepgram"]["model"], "nova-2")
+        self.assertEqual(transcription["deepgram"]["model"], "nova-3")
+        self.assertEqual(transcription["deepgram"]["conversation_model"], "flux-general-multi")
         self.assertTrue(synthesis["kokoro-openrouter"]["available"])
         self.assertEqual(synthesis["kokoro-openrouter"]["model"], "hexgrad/kokoro-82m")
         self.assertEqual(synthesis["kokoro-openrouter"]["supported_formats"], ["audio/mpeg"])
@@ -454,6 +455,22 @@ class SpeechAppTests(unittest.TestCase):
         }
 
         self.assertEqual(engines.resolve_transcription_engine(settings), "deepgram")
+
+    def test_deepgram_model_resolver_separates_audio_and_conversation_profiles(self) -> None:
+        settings = {
+            "_provider_config": {
+                "speech_stt": {
+                    "selection": {
+                        "audio_transcription_model_id": "nova-3-general",
+                        "conversation_model_id": "flux-general-en",
+                    }
+                }
+            }
+        }
+
+        self.assertEqual(engines.deepgram_model_for("transcribe_file", settings=settings), "nova-3-general")
+        self.assertEqual(engines.deepgram_model_for("transcribe_audio", "one_shot", settings=settings), "nova-3-general")
+        self.assertEqual(engines.deepgram_model_for("conversation_stream", "conversation", settings=settings), "flux-general-en")
 
     def test_deepgram_transcription_enables_language_detection_without_hint(self) -> None:
         class FakeResponse:
@@ -499,7 +516,7 @@ class SpeechAppTests(unittest.TestCase):
         self.assertEqual(payload["text"], "ciao")
         self.assertEqual(payload["language"], "it")
         self.assertEqual(payload["language_probability"], 0.94)
-        self.assertEqual(query["model"], ["nova-2"])
+        self.assertEqual(query["model"], ["nova-3"])
         self.assertEqual(query["detect_language"], ["true"])
         self.assertNotIn("language", query)
 

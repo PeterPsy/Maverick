@@ -14,12 +14,15 @@ export function bindSettingsEvents(context: {
   onHostedProviderRoutingChanged: (modelId: string, field: string, value: string | boolean) => void;
   onProviderModelChanged: (modelId: string) => void;
   onProviderReasoningChanged: (reasoningEffort: string) => void;
+  onSpeechAudioModelChanged: (modelId: string) => void;
+  onSpeechConversationModelChanged: (modelId: string) => void;
   persistenceController: PersistenceController;
   render: () => void;
   resetSelectedUserPassword: (form: HTMLFormElement, user: User) => Promise<void>;
   saveDependencySelection: (consumerAppId: string, alias: string, providerAppIds: string[]) => Promise<void>;
   saveHostedProviderSettingsFromPanel: (modelId?: string) => Promise<void>;
   saveProviderSettingsFromPanel: () => Promise<void>;
+  saveSpeechProviderSettingsFromPanel: () => Promise<void>;
   selectedUser: () => User | undefined;
   selectUser: (userId: string) => void;
   setWorkspaceAppStatus: (app: WorkspaceApp, enabled: boolean) => Promise<void>;
@@ -71,11 +74,16 @@ export function bindSettingsEvents(context: {
     onHostedProviderRoutingChanged: context.onHostedProviderRoutingChanged,
     onProviderModelChanged: context.onProviderModelChanged,
     onProviderReasoningChanged: context.onProviderReasoningChanged,
+    onSpeechAudioModelChanged: context.onSpeechAudioModelChanged,
+    onSpeechConversationModelChanged: context.onSpeechConversationModelChanged,
     onSaveHostedProviderSettings: (modelId) => {
       context.saveHostedProviderSettingsFromPanel(modelId).catch(context.showError);
     },
     onSaveProviderSettings: () => {
       context.saveProviderSettingsFromPanel().catch(context.showError);
+    },
+    onSaveSpeechProviderSettings: () => {
+      context.saveSpeechProviderSettingsFromPanel().catch(context.showError);
     },
   });
 }

@@ -58,7 +58,7 @@ export interface SensesChatLink {
   available: boolean;
   thread_id: string | null;
   deep_link: string | null;
-  app_id: string;
+  app_id: string | null;
   app_page: string | null;
   status: 'linked' | 'pending' | string;
   label: string;

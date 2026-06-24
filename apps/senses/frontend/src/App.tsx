@@ -30,7 +30,7 @@ import {
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { loadOverview, resetRoutingSession, revokeDevice, startPairing, updateSettings } from './api';
+import { loadOverview, loadViewFilter, resetRoutingSession, revokeDevice, startPairing, updateSettings } from './api';
 import type {
   SensesCapture,
   SensesDevice,
@@ -56,6 +56,12 @@ type CaptureFilter = 'all' | 'stored' | 'chat-linked' | 'chat-pending' | 'errors
 type RoutingFilter = 'all' | 'mapped' | 'pending' | 'task';
 type NativeCommand = 'refreshNativeStatus' | 'pairGlasses' | 'ask' | 'openLogin';
 type NavigationParams = Record<string, string | boolean | null>;
+type ViewFilterState = {
+  tab: TabId;
+  query: string;
+  capture_filter: CaptureFilter;
+  routing_filter: RoutingFilter;
+};
 
 interface SensesNativeStatus {
   bridge_version?: number;
@@ -117,17 +123,70 @@ declare global {
 }
 
 export function App() {
+  const [initialViewFilter] = useState(() => viewFilterFromParams(Object.fromEntries(new URLSearchParams(window.location.search).entries())));
   const [overview, setOverview] = useState<SensesOverview | null>(null);
   const [pairing, setPairing] = useState<SensesPairingSession | null>(null);
-  const [query, setQuery] = useState('');
-  const [activeTab, setActiveTab] = useState<TabId>(() => tabFromParams(Object.fromEntries(new URLSearchParams(window.location.search).entries())) || 'devices');
-  const [captureFilter, setCaptureFilter] = useState<CaptureFilter>('all');
-  const [routingFilter, setRoutingFilter] = useState<RoutingFilter>('all');
+  const [query, setQuery] = useState(initialViewFilter.query ?? '');
+  const [activeTab, setActiveTab] = useState<TabId>(initialViewFilter.tab || 'devices');
+  const [captureFilter, setCaptureFilter] = useState<CaptureFilter>(initialViewFilter.capture_filter || 'all');
+  const [routingFilter, setRoutingFilter] = useState<RoutingFilter>(initialViewFilter.routing_filter || 'all');
   const [notice, setNotice] = useState('');
   const [error, setError] = useState('');
   const [busyAction, setBusyAction] = useState('');
   const [settingsDraft, setSettingsDraft] = useState<SettingsDraft | null>(null);
   const nativeHost = useNativeHost();
+
+  const applyRemoteViewFilter = useCallback((filter: Partial<ViewFilterState>) => {
+    if (filter.tab) {
+      setActiveTab(filter.tab);
+    }
+    if (filter.query !== undefined) {
+      setQuery(filter.query);
+    }
+    if (filter.capture_filter) {
+      setCaptureFilter(filter.capture_filter);
+    }
+    if (filter.routing_filter) {
+      setRoutingFilter(filter.routing_filter);
+    }
+  }, []);
+
+  const emitCurrentViewState = useCallback((overrides: Partial<ViewFilterState> = {}) => {
+    emitViewStateChanged({
+      tab: overrides.tab ?? activeTab,
+      query: overrides.query ?? query,
+      capture_filter: overrides.capture_filter ?? captureFilter,
+      routing_filter: overrides.routing_filter ?? routingFilter,
+    });
+  }, [activeTab, captureFilter, query, routingFilter]);
+
+  const updateActiveTab = useCallback((tab: TabId) => {
+    setActiveTab(tab);
+    emitCurrentViewState({ tab });
+  }, [emitCurrentViewState]);
+
+  const updateQuery = useCallback((value: string) => {
+    setQuery(value);
+    emitCurrentViewState({ query: value });
+  }, [emitCurrentViewState]);
+
+  const updateCaptureFilter = useCallback((filter: CaptureFilter) => {
+    setCaptureFilter(filter);
+    emitCurrentViewState({ capture_filter: filter });
+  }, [emitCurrentViewState]);
+
+  const updateRoutingFilter = useCallback((filter: RoutingFilter) => {
+    setRoutingFilter(filter);
+    emitCurrentViewState({ routing_filter: filter });
+  }, [emitCurrentViewState]);
+
+  const syncRemoteViewFilter = useCallback(async () => {
+    try {
+      applyRemoteViewFilter(viewFilterFromParams(await loadViewFilter()));
+    } catch {
+      return;
+    }
+  }, [applyRemoteViewFilter]);
 
   const devices = useMemo(() => {
     const normalized = query.trim().toLowerCase();
@@ -190,8 +249,7 @@ export function App() {
     try {
       const created = await startPairing({ deviceKind: 'ios', platform: 'ios' });
       setPairing(created);
-      setActiveTab('pairing');
-      emitViewStateChanged('pairing');
+      updateActiveTab('pairing');
       setNotice('Pairing created.');
       await refresh({ silent: true });
     } catch (err) {
@@ -272,6 +330,9 @@ export function App() {
 
   useEffect(() => {
     void refresh();
+    if (!hasViewFilterValues(initialViewFilter)) {
+      void syncRemoteViewFilter();
+    }
   }, []);
 
   useEffect(() => {
@@ -314,12 +375,19 @@ export function App() {
       if (event.origin !== window.location.origin || !event.data || typeof event.data !== 'object') {
         return;
       }
-      const payload = event.data as { app_id?: string; owner_app_id?: string; params?: NavigationParams; resource?: string; type?: string };
+      const payload = event.data as {
+        app_id?: string;
+        owner_app_id?: string;
+        params?: NavigationParams;
+        resource?: string;
+        type?: string;
+        view_state?: Record<string, unknown>;
+      };
       if (payload.type === 'maverick.app.navigate' && (!payload.app_id || payload.app_id === 'senses')) {
-        const requestedTab = tabFromParams(payload.params || {});
-        if (requestedTab) {
-          setActiveTab(requestedTab);
-          emitViewStateChanged(requestedTab);
+        const requestedFilter = viewFilterFromParams(payload.params || {});
+        if (hasViewFilterValues(requestedFilter)) {
+          applyRemoteViewFilter(requestedFilter);
+          emitCurrentViewState(requestedFilter);
         }
         return;
       }
@@ -327,11 +395,18 @@ export function App() {
         if (!payload.resource || REFRESH_RESOURCES.has(payload.resource)) {
           void refresh({ silent: true });
         }
+        if (payload.resource === 'view-state') {
+          if (payload.view_state && typeof payload.view_state === 'object') {
+            applyRemoteViewFilter(viewFilterFromParams(payload.view_state));
+          } else {
+            void syncRemoteViewFilter();
+          }
+        }
       }
     }
     window.addEventListener('message', handleShellMessage);
     return () => window.removeEventListener('message', handleShellMessage);
-  }, []);
+  }, [applyRemoteViewFilter, emitCurrentViewState, syncRemoteViewFilter]);
 
   useEffect(() => {
     if (typeof WebSocket === 'undefined') {
@@ -349,6 +424,9 @@ export function App() {
           if (payload.type === 'maverick.app.data-changed' && payload.owner_app_id === 'senses') {
             if (!payload.resource || REFRESH_RESOURCES.has(payload.resource)) {
               void refresh({ silent: true });
+            }
+            if (payload.resource === 'view-state') {
+              void syncRemoteViewFilter();
             }
           }
         } catch {
@@ -368,7 +446,7 @@ export function App() {
       window.clearTimeout(reconnectTimer);
       socket?.close();
     };
-  }, []);
+  }, [syncRemoteViewFilter]);
 
   const dependencyStatus = overview?.dependencies.status || 'unknown';
   const loading = !overview && !error;
@@ -407,7 +485,7 @@ export function App() {
             devices={devices}
             loading={loading}
             query={query}
-            setQuery={setQuery}
+            setQuery={updateQuery}
             canManage={Boolean(overview?.actor.can_manage_workspace_devices)}
             busyAction={busyAction}
             onRevoke={(device) => void revoke(device)}
@@ -430,7 +508,7 @@ export function App() {
             totalCount={overview?.captures.length || 0}
             loading={loading}
             filter={captureFilter}
-            onFilterChange={setCaptureFilter}
+            onFilterChange={updateCaptureFilter}
           />
         )}
         {activeTab === 'routing' && (
@@ -440,7 +518,7 @@ export function App() {
             loading={loading}
             busyAction={busyAction}
             filter={routingFilter}
-            onFilterChange={setRoutingFilter}
+            onFilterChange={updateRoutingFilter}
             onReset={(session) => void resetRouting(session)}
           />
         )}
@@ -521,12 +599,12 @@ function postNativeCommand(command: NativeCommand) {
   });
 }
 
-function emitViewStateChanged(tab: TabId) {
+function emitViewStateChanged(viewFilter: ViewFilterState) {
   window.parent?.postMessage(
     {
       type: 'maverick.app.selection-changed',
       owner_app_id: 'senses',
-      selection: { tab, app_page: tab },
+      selection: { tab: viewFilter.tab, app_page: viewFilter.tab, view_filter: viewFilter },
     },
     window.location.origin,
   );
@@ -535,10 +613,35 @@ function emitViewStateChanged(tab: TabId) {
       type: 'maverick.app.data-changed',
       owner_app_id: 'senses',
       resource: 'view-state',
-      view_state: { tab },
+      view_state: viewFilter,
     },
     window.location.origin,
   );
+}
+
+function viewFilterFromParams(params: Record<string, unknown>): Partial<ViewFilterState> {
+  const filter: Partial<ViewFilterState> = {};
+  const tab = tabFromParams(params);
+  const query = queryFromParams(params);
+  const captureFilter = captureFilterFromParams(params);
+  const routingFilter = routingFilterFromParams(params);
+  if (tab) {
+    filter.tab = tab;
+  }
+  if (query !== null) {
+    filter.query = query;
+  }
+  if (captureFilter) {
+    filter.capture_filter = captureFilter;
+  }
+  if (routingFilter) {
+    filter.routing_filter = routingFilter;
+  }
+  return filter;
+}
+
+function hasViewFilterValues(filter: Partial<ViewFilterState>) {
+  return Boolean(filter.tab || filter.query !== undefined || filter.capture_filter || filter.routing_filter);
 }
 
 function tabFromParams(params: Record<string, unknown>): TabId | null {
@@ -554,8 +657,46 @@ function tabFromParams(params: Record<string, unknown>): TabId | null {
   return isTabId(firstSegment) ? firstSegment : null;
 }
 
+function queryFromParams(params: Record<string, unknown>): string | null {
+  const value = params.query ?? params.search ?? params.q;
+  if (value === undefined || value === null) {
+    return null;
+  }
+  return scalarString(value);
+}
+
+function captureFilterFromParams(params: Record<string, unknown>): CaptureFilter | null {
+  const direct = scalarString(
+    params.capture_filter || params.captureFilter || params.capture_status || params.captureStatus,
+  );
+  if (isCaptureFilter(direct)) {
+    return direct;
+  }
+  const status = scalarString(params.status);
+  return isCaptureFilter(status) ? status : null;
+}
+
+function routingFilterFromParams(params: Record<string, unknown>): RoutingFilter | null {
+  const direct = scalarString(
+    params.routing_filter || params.routingFilter || params.routing_status || params.routingStatus,
+  );
+  if (isRoutingFilter(direct)) {
+    return direct;
+  }
+  const status = scalarString(params.status);
+  return isRoutingFilter(status) ? status : null;
+}
+
 function isTabId(value: string): value is TabId {
   return TAB_ITEMS.some((tab) => tab.id === value);
+}
+
+function isCaptureFilter(value: string): value is CaptureFilter {
+  return ['all', 'stored', 'chat-linked', 'chat-pending', 'errors'].includes(value);
+}
+
+function isRoutingFilter(value: string): value is RoutingFilter {
+  return ['all', 'mapped', 'pending', 'task'].includes(value);
 }
 
 function scalarString(value: unknown): string {

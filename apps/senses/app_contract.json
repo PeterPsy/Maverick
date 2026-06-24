@@ -34,6 +34,14 @@
       "required": true,
       "cardinality": "one",
       "description": "Storage-owned file identity, metadata, and links for future Senses capture records."
+    },
+    {
+      "alias": "chat-communication",
+      "interface": "communication.chat",
+      "version": "^1",
+      "required": false,
+      "cardinality": "one",
+      "description": "Optional workspace Chat provider used to expose verified runtime thread deep links for routed Senses captures."
     }
   ],
   "distribution": {
@@ -118,7 +126,7 @@
           {
             "action": "set_view_filter",
             "standard": true,
-            "description": "Set Senses tab, search, and status filters."
+            "description": "Set Senses tab, search, capture, and routing filters."
           },
           {
             "action": "set_custom_view",

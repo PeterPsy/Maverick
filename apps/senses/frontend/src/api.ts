@@ -44,6 +44,11 @@ export async function loadOverview(): Promise<SensesOverview> {
   return payload;
 }
 
+export async function loadViewFilter(): Promise<Record<string, unknown>> {
+  const payload = await request<SensesActionResult & { state?: { view_filter?: Record<string, unknown> } }>({ action: 'view_filter' });
+  return payload.state?.view_filter || {};
+}
+
 export async function startPairing(input: {
   deviceDisplayName?: string;
   deviceKind?: string;

@@ -77,6 +77,7 @@ PNG_CRITICAL_CHUNK_TYPES = {b"IHDR", b"PLTE", b"IDAT", b"IEND"}
 PNG_MAX_DIMENSION = 100_000
 PNG_MAX_DECOMPRESSED_BYTES = 100_000_000
 STORAGE_WRITE_DEPENDENCY_ALIAS = "storage-file-content-write"
+CHAT_COMMUNICATION_DEPENDENCY_ALIAS = "chat-communication"
 STORAGE_PENDING_LEASE_SECONDS = 120
 DEFAULT_RUNTIME_AGENT_ID = "chat"
 RUNTIME_DISPATCH_CALLBACK_ACTION = "runtime_dispatch.completed"
@@ -111,6 +112,15 @@ REQUIRED_DEPENDENCIES = (
         "required": True,
     },
 )
+OPTIONAL_DEPENDENCIES = (
+    {
+        "alias": CHAT_COMMUNICATION_DEPENDENCY_ALIAS,
+        "interface": "communication.chat",
+        "version": "^1",
+        "required": False,
+    },
+)
+DECLARED_DEPENDENCIES = (*REQUIRED_DEPENDENCIES, *OPTIONAL_DEPENDENCIES)
 DECLARED_BACKEND_ACTIONS = (
     "manifest",
     "health",
@@ -171,9 +181,9 @@ def handle_action(data_root: Path, payload: dict[str, object]) -> tuple[int, dic
             return auth_error
         return view_state_action(data_root, workspace_id, action, payload)
     if action == "storage_write.completed":
-        return storage_write_completed(data_root, workspace_id, payload)
+        return storage_write_completed(data_root, workspace_id, dependencies, payload)
     if action == RUNTIME_DISPATCH_CALLBACK_ACTION:
-        return runtime_dispatch_completed(data_root, workspace_id, payload)
+        return runtime_dispatch_completed(data_root, workspace_id, dependencies, payload)
 
     if action == "overview":
         auth_error = require_authenticated(actor)
@@ -219,7 +229,7 @@ def handle_action(data_root: Path, payload: dict[str, object]) -> tuple[int, dic
         auth_error = require_authenticated(actor)
         if auth_error is not None:
             return auth_error
-        return captures_get(data_root, workspace_id, actor, payload)
+        return captures_get(data_root, workspace_id, actor, dependencies, payload)
     if action == "ingest.frame":
         auth_error = require_authenticated(actor)
         if auth_error is not None:
@@ -229,12 +239,12 @@ def handle_action(data_root: Path, payload: dict[str, object]) -> tuple[int, dic
         auth_error = require_authenticated(actor)
         if auth_error is not None:
             return auth_error
-        return routing_dispatch_capture(data_root, workspace_id, actor, payload)
+        return routing_dispatch_capture(data_root, workspace_id, actor, dependencies, payload)
     if action == "routing.reset":
         auth_error = require_authenticated(actor)
         if auth_error is not None:
             return auth_error
-        return routing_reset(data_root, workspace_id, actor, payload)
+        return routing_reset(data_root, workspace_id, actor, dependencies, payload)
 
     return error_payload(
         400,
@@ -340,6 +350,7 @@ def manifest_payload(
         "backend_actions": list(DECLARED_BACKEND_ACTIONS),
         "callback_actions": list(CALLBACK_BACKEND_ACTIONS),
         "required_dependencies": list(REQUIRED_DEPENDENCIES),
+        "optional_dependencies": list(OPTIONAL_DEPENDENCIES),
         "dependency_resolution": dependencies,
         "deferred_to_later_phases": list(DEFERRED_ACTIONS),
         "notes": [
@@ -370,6 +381,7 @@ def overview_payload(
     actor: dict[str, str | None],
     dependencies: dict[str, object],
 ) -> dict[str, object]:
+    chat_provider_app_id = chat_provider_app_id_from_dependencies(dependencies)
     return {
         "ok": True,
         "app_id": APP_ID,
@@ -380,8 +392,20 @@ def overview_payload(
         "settings": settings_payload(data_root, workspace_id),
         "devices": list_devices(data_root, workspace_id, actor, include_all=actor_is_manager(actor)),
         "pairing_sessions": list_pairing_sessions(data_root, workspace_id, actor),
-        "captures": list_captures(data_root, workspace_id, actor, include_all=actor_is_manager(actor)),
-        "routing_sessions": list_routing_sessions(data_root, workspace_id, actor, include_all=actor_is_manager(actor)),
+        "captures": list_captures(
+            data_root,
+            workspace_id,
+            actor,
+            include_all=actor_is_manager(actor),
+            chat_provider_app_id=chat_provider_app_id,
+        ),
+        "routing_sessions": list_routing_sessions(
+            data_root,
+            workspace_id,
+            actor,
+            include_all=actor_is_manager(actor),
+            chat_provider_app_id=chat_provider_app_id,
+        ),
         "dependencies": dependencies,
     }
 
@@ -459,6 +483,8 @@ def default_view_state(workspace_id: str) -> dict[str, object]:
         "view_filter": {
             "tab": "devices",
             "query": "",
+            "capture_filter": "all",
+            "routing_filter": "all",
             "updated_at": None,
         },
         "custom_view": None,
@@ -473,7 +499,7 @@ def compact_view_filter(payload: object) -> dict[str, object]:
     if not isinstance(payload, dict):
         return {}
     result: dict[str, object] = {}
-    for key in ("tab", "query", "status", "device_id", "capture_id"):
+    for key in ("tab", "query", "status", "capture_filter", "routing_filter", "device_id", "capture_id"):
         value = text_or_none(payload.get(key))
         if value is not None:
             result[key] = bounded_text(value, fallback="", max_length=128)
@@ -1164,7 +1190,13 @@ def ingest_frame(
     return 202, response
 
 
-def storage_write_completed(data_root: Path, workspace_id: str, payload: dict[str, object]) -> tuple[int, dict[str, object]]:
+def storage_write_completed(
+    data_root: Path,
+    workspace_id: str,
+    dependencies: dict[str, object],
+    payload: dict[str, object],
+) -> tuple[int, dict[str, object]]:
+    chat_provider_app_id = chat_provider_app_id_from_dependencies(dependencies)
     if text_or_none(payload.get("_app_surface")) != "dependency_backend_request_callback":
         return error_payload(
             403,
@@ -1231,7 +1263,12 @@ def storage_write_completed(data_root: Path, workspace_id: str, payload: dict[st
                 timestamp=timestamp,
             )
             db.commit()
-            return 200, {"ok": True, "status": "storage_failed", "capture": capture_payload(updated), "error": None}
+            return 200, {
+                "ok": True,
+                "status": "storage_failed",
+                "capture": capture_payload(updated, chat_provider_app_id=chat_provider_app_id),
+                "error": None,
+            }
 
         dependency_backend_result = payload.get("dependency_backend_result")
         if not storage_result_provider_app_id(dependency_backend_result):
@@ -1253,7 +1290,12 @@ def storage_write_completed(data_root: Path, workspace_id: str, payload: dict[st
                 timestamp=timestamp,
             )
             db.commit()
-            return 200, {"ok": True, "status": "storage_failed", "capture": capture_payload(updated), "error": None}
+            return 200, {
+                "ok": True,
+                "status": "storage_failed",
+                "capture": capture_payload(updated, chat_provider_app_id=chat_provider_app_id),
+                "error": None,
+            }
 
         db.execute(
             """
@@ -1306,15 +1348,22 @@ def storage_write_completed(data_root: Path, workspace_id: str, payload: dict[st
         raise
     finally:
         db.close()
-    return 200, {"ok": True, "status": "stored", "capture": capture_payload(updated), "error": None}
+    return 200, {
+        "ok": True,
+        "status": "stored",
+        "capture": capture_payload(updated, chat_provider_app_id=chat_provider_app_id),
+        "error": None,
+    }
 
 
 def captures_get(
     data_root: Path,
     workspace_id: str,
     actor: dict[str, str | None],
+    dependencies: dict[str, object],
     payload: dict[str, object],
 ) -> tuple[int, dict[str, object]]:
+    chat_provider_app_id = chat_provider_app_id_from_dependencies(dependencies)
     capture_id = text_or_none(payload.get("capture_id"))
     if not capture_id:
         return error_payload(400, "missing_capture_id", "captures.get requires capture_id.")
@@ -1339,9 +1388,11 @@ def captures_get(
         db.close()
     return 200, {
         "ok": True,
-        "capture": capture_payload(capture),
-        "runtime_dispatch_attempts": [dispatch_attempt_payload(row) for row in attempts],
-        "chat": chat_link_payload(capture["thread_id"]),
+        "capture": capture_payload(capture, chat_provider_app_id=chat_provider_app_id),
+        "runtime_dispatch_attempts": [
+            dispatch_attempt_payload(row, chat_provider_app_id=chat_provider_app_id) for row in attempts
+        ],
+        "chat": chat_link_payload(capture["thread_id"], provider_app_id=chat_provider_app_id),
     }
 
 
@@ -1349,8 +1400,10 @@ def routing_dispatch_capture(
     data_root: Path,
     workspace_id: str,
     actor: dict[str, str | None],
+    dependencies: dict[str, object],
     payload: dict[str, object],
 ) -> tuple[int, dict[str, object]]:
+    chat_provider_app_id = chat_provider_app_id_from_dependencies(dependencies)
     capture_id = text_or_none(payload.get("capture_id"))
     if not capture_id:
         return error_payload(400, "missing_capture_id", "routing.dispatch_capture requires capture_id.")
@@ -1381,7 +1434,7 @@ def routing_dispatch_capture(
             )
         if capture["runtime_session_id"] and capture["turn_id"]:
             db.commit()
-            return 200, dispatch_existing_response(capture)
+            return 200, dispatch_existing_response(capture, chat_provider_app_id=chat_provider_app_id)
 
         pending = latest_pending_dispatch_attempt(db, workspace_id=workspace_id, capture_id=capture_id)
         if pending is not None:
@@ -1390,7 +1443,7 @@ def routing_dispatch_capture(
                 409,
                 "dispatch_in_progress",
                 "A runtime dispatch attempt is already pending for this capture.",
-                attempt=dispatch_attempt_payload(pending),
+                attempt=dispatch_attempt_payload(pending, chat_provider_app_id=chat_provider_app_id),
             )
 
         device = db.execute(
@@ -1432,7 +1485,7 @@ def routing_dispatch_capture(
                     409,
                     "dispatch_in_progress",
                     "A runtime dispatch attempt is already pending for this routing session target.",
-                    attempt=dispatch_attempt_payload(session_pending),
+                    attempt=dispatch_attempt_payload(session_pending, chat_provider_app_id=chat_provider_app_id),
                     routing_session_id=routing_session["routing_session_id"],
                 )
         previous_attempts = int(
@@ -1534,10 +1587,10 @@ def routing_dispatch_capture(
         "status": "dispatch_pending",
         "capture_id": capture_id,
         "routing": route,
-        "routing_session": routing_session_payload(updated_session),
-        "runtime_dispatch_attempt": dispatch_attempt_payload(attempt),
+        "routing_session": routing_session_payload(updated_session, chat_provider_app_id=chat_provider_app_id),
+        "runtime_dispatch_attempt": dispatch_attempt_payload(attempt, chat_provider_app_id=chat_provider_app_id),
         "runtime_launch_requests": [runtime_request],
-        "chat": chat_link_payload(route["thread_id"]),
+        "chat": chat_link_payload(route["thread_id"], provider_app_id=chat_provider_app_id),
         "error": None,
     }
     return 202, response
@@ -1547,8 +1600,10 @@ def routing_reset(
     data_root: Path,
     workspace_id: str,
     actor: dict[str, str | None],
+    dependencies: dict[str, object],
     payload: dict[str, object],
 ) -> tuple[int, dict[str, object]]:
+    chat_provider_app_id = chat_provider_app_id_from_dependencies(dependencies)
     routing_session_id = text_or_none(payload.get("routing_session_id"))
     if not routing_session_id:
         return error_payload(400, "missing_routing_session_id", "routing.reset requires routing_session_id.")
@@ -1614,12 +1669,13 @@ def routing_reset(
 
     return 200, {
         "ok": True,
-        "routing_session": routing_session_payload(updated),
+        "routing_session": routing_session_payload(updated, chat_provider_app_id=chat_provider_app_id),
         "routing_sessions": list_routing_sessions(
             data_root,
             workspace_id,
             actor,
             include_all=actor_is_manager(actor),
+            chat_provider_app_id=chat_provider_app_id,
         ),
     }
 
@@ -1627,8 +1683,10 @@ def routing_reset(
 def runtime_dispatch_completed(
     data_root: Path,
     workspace_id: str,
+    dependencies: dict[str, object],
     payload: dict[str, object],
 ) -> tuple[int, dict[str, object]]:
+    chat_provider_app_id = chat_provider_app_id_from_dependencies(dependencies)
     if text_or_none(payload.get("_app_surface")) != "runtime_request_callback":
         return error_payload(
             403,
@@ -1687,10 +1745,10 @@ def runtime_dispatch_completed(
             return 200, {
                 "ok": True,
                 "status": attempt["status"],
-                "capture": capture_payload(capture),
-                "runtime_dispatch_attempt": dispatch_attempt_payload(attempt),
-                "routing_session": routing_session_payload(routing_session),
-                "chat": chat_link_payload(capture["thread_id"]),
+                "capture": capture_payload(capture, chat_provider_app_id=chat_provider_app_id),
+                "runtime_dispatch_attempt": dispatch_attempt_payload(attempt, chat_provider_app_id=chat_provider_app_id),
+                "routing_session": routing_session_payload(routing_session, chat_provider_app_id=chat_provider_app_id),
+                "chat": chat_link_payload(capture["thread_id"], provider_app_id=chat_provider_app_id),
                 "error": None,
             }
 
@@ -1739,8 +1797,11 @@ def runtime_dispatch_completed(
             return 200, {
                 "ok": True,
                 "status": "failed",
-                "capture": capture_payload(updated_capture),
-                "runtime_dispatch_attempt": dispatch_attempt_payload(updated_attempt),
+                "capture": capture_payload(updated_capture, chat_provider_app_id=chat_provider_app_id),
+                "runtime_dispatch_attempt": dispatch_attempt_payload(
+                    updated_attempt,
+                    chat_provider_app_id=chat_provider_app_id,
+                ),
                 "error": None,
             }
 
@@ -1833,10 +1894,16 @@ def runtime_dispatch_completed(
     return 200, {
         "ok": True,
         "status": "submitted",
-        "capture": capture_payload(updated_capture),
-        "runtime_dispatch_attempt": dispatch_attempt_payload(updated_attempt),
-        "routing_session": routing_session_payload(routing_session),
-        "chat": chat_link_payload(updated_capture["thread_id"] if updated_capture is not None else None),
+        "capture": capture_payload(updated_capture, chat_provider_app_id=chat_provider_app_id),
+        "runtime_dispatch_attempt": dispatch_attempt_payload(
+            updated_attempt,
+            chat_provider_app_id=chat_provider_app_id,
+        ),
+        "routing_session": routing_session_payload(routing_session, chat_provider_app_id=chat_provider_app_id),
+        "chat": chat_link_payload(
+            updated_capture["thread_id"] if updated_capture is not None else None,
+            provider_app_id=chat_provider_app_id,
+        ),
         "error": None,
     }
 
@@ -1912,6 +1979,7 @@ def list_captures(
     *,
     include_all: bool,
     limit: int = 50,
+    chat_provider_app_id: str | None = None,
 ) -> list[dict[str, object]]:
     ensure_schema(data_root, workspace_id)
     db = connect(data_root)
@@ -1934,7 +2002,7 @@ def list_captures(
         ).fetchall()
     finally:
         db.close()
-    return [capture_payload(row) for row in rows]
+    return [capture_payload(row, chat_provider_app_id=chat_provider_app_id) for row in rows]
 
 
 def list_routing_sessions(
@@ -1944,6 +2012,7 @@ def list_routing_sessions(
     *,
     include_all: bool,
     limit: int = 50,
+    chat_provider_app_id: str | None = None,
 ) -> list[dict[str, object]]:
     ensure_schema(data_root, workspace_id)
     db = connect(data_root)
@@ -1964,7 +2033,7 @@ def list_routing_sessions(
         ).fetchall()
     finally:
         db.close()
-    return [routing_session_payload(row) for row in rows]
+    return [routing_session_payload(row, chat_provider_app_id=chat_provider_app_id) for row in rows]
 
 
 def actor_can_access_capture(
@@ -2028,14 +2097,14 @@ def latest_pending_dispatch_attempt_for_routing_session(
     ).fetchone()
 
 
-def dispatch_existing_response(capture: sqlite3.Row) -> dict[str, object]:
+def dispatch_existing_response(capture: sqlite3.Row, *, chat_provider_app_id: str | None = None) -> dict[str, object]:
     return {
         "ok": True,
         "status": "dispatched",
         "capture_id": capture["capture_id"],
-        "capture": capture_payload(capture),
+        "capture": capture_payload(capture, chat_provider_app_id=chat_provider_app_id),
         "runtime_launch_requests": [],
-        "chat": chat_link_payload(capture["thread_id"]),
+        "chat": chat_link_payload(capture["thread_id"], provider_app_id=chat_provider_app_id),
         "error": None,
     }
 
@@ -2702,10 +2771,10 @@ def storage_payload(capture: sqlite3.Row | None) -> dict[str, object]:
     }
 
 
-def capture_payload(row: sqlite3.Row | None) -> dict[str, object]:
+def capture_payload(row: sqlite3.Row | None, *, chat_provider_app_id: str | None = None) -> dict[str, object]:
     if row is None:
         return {}
-    chat = chat_link_payload(row["thread_id"])
+    chat = chat_link_payload(row["thread_id"], provider_app_id=chat_provider_app_id)
     return {
         "workspace_id": row["workspace_id"],
         "capture_id": row["capture_id"],
@@ -2735,7 +2804,7 @@ def capture_payload(row: sqlite3.Row | None) -> dict[str, object]:
     }
 
 
-def routing_session_payload(row: sqlite3.Row | None) -> dict[str, object]:
+def routing_session_payload(row: sqlite3.Row | None, *, chat_provider_app_id: str | None = None) -> dict[str, object]:
     if row is None:
         return {}
     return {
@@ -2756,15 +2825,15 @@ def routing_session_payload(row: sqlite3.Row | None) -> dict[str, object]:
         "last_thread_id": row["last_thread_id"],
         "last_turn_id": row["last_turn_id"],
         "last_routing_kind": row["last_routing_kind"],
-        "primary_chat": chat_link_payload(row["primary_thread_id"]),
-        "active_task_chat": chat_link_payload(row["active_task_thread_id"]),
-        "last_chat": chat_link_payload(row["last_thread_id"]),
+        "primary_chat": chat_link_payload(row["primary_thread_id"], provider_app_id=chat_provider_app_id),
+        "active_task_chat": chat_link_payload(row["active_task_thread_id"], provider_app_id=chat_provider_app_id),
+        "last_chat": chat_link_payload(row["last_thread_id"], provider_app_id=chat_provider_app_id),
         "created_at": row["created_at"],
         "updated_at": row["updated_at"],
     }
 
 
-def dispatch_attempt_payload(row: sqlite3.Row | None) -> dict[str, object]:
+def dispatch_attempt_payload(row: sqlite3.Row | None, *, chat_provider_app_id: str | None = None) -> dict[str, object]:
     if row is None:
         return {}
     return {
@@ -2783,31 +2852,42 @@ def dispatch_attempt_payload(row: sqlite3.Row | None) -> dict[str, object]:
         "agent_id": row["agent_id"],
         "error_code": row["error_code"],
         "error_detail": row["error_detail"],
-        "chat": chat_link_payload(row["thread_id"]),
+        "chat": chat_link_payload(row["thread_id"], provider_app_id=chat_provider_app_id),
         "created_at": row["created_at"],
         "updated_at": row["updated_at"],
         "completed_at": row["completed_at"],
     }
 
 
-def chat_link_payload(thread_id: object) -> dict[str, object]:
+def chat_link_payload(thread_id: object, *, provider_app_id: str | None = None) -> dict[str, object]:
     normalized = text_or_none(thread_id)
+    provider = text_or_none(provider_app_id)
     if not normalized:
         return {
             "available": False,
             "thread_id": None,
             "deep_link": None,
-            "app_id": "chat",
+            "app_id": provider,
             "app_page": None,
             "status": "pending",
             "label": "Chat pending",
+        }
+    if not provider:
+        return {
+            "available": False,
+            "thread_id": normalized,
+            "deep_link": None,
+            "app_id": None,
+            "app_page": None,
+            "status": "unavailable",
+            "label": "Chat unavailable",
         }
     app_page = f"threads/{normalized}"
     return {
         "available": True,
         "thread_id": normalized,
-        "deep_link": f"/app/chat/{app_page}",
-        "app_id": "chat",
+        "deep_link": f"/app/{provider}/{app_page}",
+        "app_id": provider,
         "app_page": app_page,
         "status": "linked",
         "label": "Chat linked",
@@ -3386,7 +3466,7 @@ def dependency_resolution_payload(raw_dependencies: object) -> dict[str, object]
             "blocked_reason": "dependency_resolution_not_provided_by_host",
             "dependencies": [
                 {**dependency, "status": "unknown", "selected_provider_app_ids": []}
-                for dependency in REQUIRED_DEPENDENCIES
+                for dependency in DECLARED_DEPENDENCIES
             ],
         }
     dependencies_by_alias = {
@@ -3401,12 +3481,21 @@ def dependency_resolution_payload(raw_dependencies: object) -> dict[str, object]
             required.append(_compact_dependency(resolved))
         else:
             required.append({**dependency, "status": "missing_declaration", "selected_provider_app_ids": []})
+    optional = []
+    for dependency in OPTIONAL_DEPENDENCIES:
+        resolved = dependencies_by_alias.get(str(dependency["alias"]))
+        if isinstance(resolved, dict):
+            optional.append(_compact_dependency(resolved))
+        else:
+            optional.append({**dependency, "status": "missing_declaration", "selected_provider_app_ids": []})
     blocked = [item for item in required if str(item.get("status")) not in {"resolved"}]
     return {
         "status": "blocked" if blocked else "resolved",
         "workspace_id": raw_dependencies.get("workspace_id"),
         "consumer_app_id": raw_dependencies.get("consumer_app_id"),
-        "dependencies": required,
+        "dependencies": [*required, *optional],
+        "required_dependencies": required,
+        "optional_dependencies": optional,
         "blocked_reason": "; ".join(
             str(item.get("blocked_reason") or item.get("status") or "")
             for item in blocked
@@ -3424,13 +3513,72 @@ def _compact_dependency(item: dict[str, Any]) -> dict[str, object]:
         "cardinality": item.get("cardinality"),
         "status": item.get("status"),
         "selected_provider_app_ids": item.get("selected_provider_app_ids") or [],
+        "stale_provider_app_ids": item.get("stale_provider_app_ids") or [],
         "candidate_provider_app_ids": [
             candidate.get("app_id")
             for candidate in item.get("candidates", [])
             if isinstance(candidate, dict) and candidate.get("app_id")
         ],
+        "candidates": [
+            {
+                "app_id": candidate.get("app_id"),
+                "surfaces": candidate.get("surfaces") if isinstance(candidate.get("surfaces"), list) else [],
+            }
+            for candidate in item.get("candidates", [])
+            if isinstance(candidate, dict) and candidate.get("app_id")
+        ],
         "blocked_reason": item.get("blocked_reason"),
     }
+
+
+def chat_provider_app_id_from_dependencies(dependencies: dict[str, object]) -> str | None:
+    dependency = dependency_by_alias(dependencies, CHAT_COMMUNICATION_DEPENDENCY_ALIAS)
+    if dependency is None:
+        return None
+    selected = string_items(dependency.get("selected_provider_app_ids"))
+    candidates = dependency_candidate_provider_app_ids(dependency, required_surface="view")
+    if selected and str(dependency.get("status") or "") == "resolved":
+        return next((app_id for app_id in selected if app_id in candidates), None)
+    if (
+        str(dependency.get("status") or "") == "optional_unset"
+        and str(dependency.get("cardinality") or "") == "one"
+        and not string_items(dependency.get("stale_provider_app_ids"))
+        and not text_or_none(dependency.get("blocked_reason"))
+        and len(candidates) == 1
+    ):
+        return candidates[0]
+    return None
+
+
+def dependency_by_alias(dependencies: dict[str, object], alias: str) -> dict[str, object] | None:
+    items = dependencies.get("dependencies")
+    if not isinstance(items, list):
+        return None
+    for item in items:
+        if isinstance(item, dict) and str(item.get("alias") or "") == alias:
+            return item
+    return None
+
+
+def string_items(value: object) -> list[str]:
+    if not isinstance(value, list):
+        return []
+    return [item for item in (text_or_none(item) for item in value) if item]
+
+
+def dependency_candidate_provider_app_ids(dependency: dict[str, object], *, required_surface: str) -> list[str]:
+    candidates = dependency.get("candidates")
+    if not isinstance(candidates, list):
+        return []
+    ids: list[str] = []
+    for candidate in candidates:
+        if not isinstance(candidate, dict):
+            continue
+        app_id = text_or_none(candidate.get("app_id"))
+        surfaces = set(string_items(candidate.get("surfaces")))
+        if app_id and required_surface in surfaces:
+            ids.append(app_id)
+    return ids
 
 
 def app_events_for_action(action: str) -> list[dict[str, str]]:

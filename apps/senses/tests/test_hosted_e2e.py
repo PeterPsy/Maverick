@@ -271,6 +271,15 @@ class SensesHostedE2ETest(unittest.TestCase):
                 workspace_store=state.workspace_store,
                 start_path=repo_root,
             )
+        save_app_dependency_selection(
+            state.app_store,
+            workspace_id="default",
+            consumer_app_id="senses",
+            alias="chat-communication",
+            provider_app_ids=["chat"],
+            workspace_store=state.workspace_store,
+            start_path=repo_root,
+        )
         app = PlatformHost(state, start_path=repo_root)
         cookie = self._login(app)
         binding = state.app_store.get_workspace_app_binding(workspace_id="default", app_id="senses")

@@ -43,8 +43,10 @@ class SensesContractTest(unittest.TestCase):
         requirements = {item.alias: item for item in parsed.contract.requires}
         self.assertEqual(requirements["storage-file-content-write"].interface, "file.content.write")
         self.assertEqual(requirements["storage-file-catalog"].interface, "file.catalog")
+        self.assertEqual(requirements["chat-communication"].interface, "communication.chat")
         self.assertTrue(requirements["storage-file-content-write"].required)
         self.assertTrue(requirements["storage-file-catalog"].required)
+        self.assertFalse(requirements["chat-communication"].required)
 
     def test_contract_declares_device_registry_interface_and_events(self) -> None:
         contract = json.loads((APP_ROOT / "app_contract.json").read_text(encoding="utf-8"))

@@ -28,7 +28,17 @@ import service
 from service import app_events_for_action, handle_action
 
 
-def resolved_storage_dependencies() -> dict[str, object]:
+def resolved_storage_dependencies(
+    *,
+    chat_provider_app_id: str | None = "chat",
+    chat_status: str = "resolved",
+    chat_candidates: list[str] | None = None,
+) -> dict[str, object]:
+    effective_chat_candidates = (
+        chat_candidates
+        if chat_candidates is not None
+        else ([chat_provider_app_id] if chat_provider_app_id else [])
+    )
     return {
         "workspace_id": "default",
         "consumer_app_id": "senses",
@@ -42,7 +52,7 @@ def resolved_storage_dependencies() -> dict[str, object]:
                 "cardinality": "one",
                 "status": "resolved",
                 "selected_provider_app_ids": ["storage"],
-                "candidates": [{"app_id": "storage"}],
+                "candidates": [{"app_id": "storage", "surfaces": ["backend", "view"]}],
                 "blocked_reason": None,
             },
             {
@@ -53,7 +63,22 @@ def resolved_storage_dependencies() -> dict[str, object]:
                 "cardinality": "one",
                 "status": "resolved",
                 "selected_provider_app_ids": ["storage"],
-                "candidates": [{"app_id": "storage"}],
+                "candidates": [{"app_id": "storage", "surfaces": ["backend", "view"]}],
+                "blocked_reason": None,
+            },
+            {
+                "alias": "chat-communication",
+                "interface": "communication.chat",
+                "version": "^1",
+                "required": False,
+                "cardinality": "one",
+                "status": chat_status,
+                "selected_provider_app_ids": [chat_provider_app_id] if chat_provider_app_id and chat_status == "resolved" else [],
+                "stale_provider_app_ids": [],
+                "candidates": [
+                    {"app_id": app_id, "surfaces": ["backend", "view"]}
+                    for app_id in effective_chat_candidates
+                ],
                 "blocked_reason": None,
             },
         ],
@@ -290,6 +315,7 @@ def runtime_callback_payload(
         "action": "runtime_dispatch.completed",
         "_workspace_id": "default",
         "_app_surface": "runtime_request_callback",
+        "_app_dependencies": resolved_storage_dependencies(),
         "capture_id": dispatch["capture_id"],
         "attempt_id": attempt["attempt_id"],
         "request_id": attempt["request_id"],
@@ -421,11 +447,49 @@ class SensesPhase7EntrypointTest(unittest.TestCase):
                     "_app_actor": actor("admin-1", "admin"),
                     "tab": "captures",
                     "query": "receipt",
+                    "capture_filter": "chat-linked",
+                    "routing_filter": "task",
                 },
             )
             self.assertEqual(status, 200)
             self.assertEqual(updated["state"]["view_filter"]["tab"], "captures")
             self.assertEqual(updated["state"]["view_filter"]["query"], "receipt")
+            self.assertEqual(updated["state"]["view_filter"]["capture_filter"], "chat-linked")
+            self.assertEqual(updated["state"]["view_filter"]["routing_filter"], "task")
+
+    def test_chat_link_uses_declared_optional_dependency(self) -> None:
+        resolved = service.dependency_resolution_payload(resolved_storage_dependencies(chat_provider_app_id="chat"))
+        provider_app_id = service.chat_provider_app_id_from_dependencies(resolved)
+        linked = service.chat_link_payload("thread-1", provider_app_id=provider_app_id)
+
+        self.assertEqual(provider_app_id, "chat")
+        self.assertTrue(linked["available"])
+        self.assertEqual(linked["deep_link"], "/app/chat/threads/thread-1")
+
+        missing = service.dependency_resolution_payload(
+            resolved_storage_dependencies(chat_provider_app_id=None, chat_status="optional_unset", chat_candidates=[])
+        )
+        unavailable = service.chat_link_payload(
+            "thread-1",
+            provider_app_id=service.chat_provider_app_id_from_dependencies(missing),
+        )
+        self.assertFalse(unavailable["available"])
+        self.assertEqual(unavailable["status"], "unavailable")
+        self.assertIsNone(unavailable["deep_link"])
+
+        automatic = service.dependency_resolution_payload(
+            resolved_storage_dependencies(
+                chat_provider_app_id=None,
+                chat_status="optional_unset",
+                chat_candidates=["workspace-chat"],
+            )
+        )
+        automatic_link = service.chat_link_payload(
+            "thread-1",
+            provider_app_id=service.chat_provider_app_id_from_dependencies(automatic),
+        )
+        self.assertEqual(automatic_link["app_id"], "workspace-chat")
+        self.assertEqual(automatic_link["deep_link"], "/app/workspace-chat/threads/thread-1")
 
     def test_pairing_start_and_complete_registers_device_without_raw_token(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -1213,6 +1277,7 @@ class SensesPhase7EntrypointTest(unittest.TestCase):
                     "action": "captures.get",
                     "_workspace_id": "default",
                     "_app_actor": actor(),
+                    "_app_dependencies": resolved_storage_dependencies(),
                     "capture_id": first_capture["capture_id"],
                 },
             )

@@ -132,17 +132,18 @@ and the Chat thread mapping. For newly created sessions, Senses records
 creation behavior. Runtime callbacks are accepted only for pending attempts;
 duplicate or tardy callbacks for terminal attempts return the persisted terminal
 state without rewriting the capture. `captures.get` returns the persisted capture
-and Chat deep link after the callback has completed.
+and a Chat deep link after the callback has completed only when the optional
+`chat-communication` dependency resolves a `communication.chat` provider.
 
 Phase 7 keeps Chat/Core ownership unchanged and does not add core thread
 metadata. Runtime requests created by Senses still produce runtime threads with
 `source_app_id=senses` through the generic app-hosting runtime request path.
-Senses stores the device/thread mapping in `routing_sessions`, exposes pending
-or linked Chat state in capture and dispatch payloads, and titles Meta glasses
-visual threads as `Occhiali - domanda visiva` or the matching task variant. The
-frontend Captures and Routing tabs provide local filters for stored captures,
-Chat-linked captures, Chat-pending captures, mapped routing sessions, pending
-mapping sessions, and task threads.
+Senses stores the device/thread mapping in `routing_sessions`, exposes pending,
+unavailable, or linked Chat state in capture and dispatch payloads, and titles
+Meta glasses visual threads as `Occhiali - domanda visiva` or the matching task
+variant. The frontend Captures and Routing tabs publish shared view-state for
+stored captures, Chat-linked captures, Chat-pending captures, mapped routing
+sessions, pending mapping sessions, and task threads.
 
 Live audio capture and bidirectional voice routing remain deferred. Senses must
 not open raw device-token audio ingress, STT/TTS WebSockets, or remote speech
@@ -198,6 +199,9 @@ maverick core cli run app.senses.dependencies.set \
 maverick core cli run app.senses.dependencies.set \
   --arguments-json '{"alias":"storage-file-catalog","provider_app_ids":["storage"]}' \
   --json
+maverick core cli run app.senses.dependencies.set \
+  --arguments-json '{"alias":"chat-communication","provider_app_ids":["chat"]}' \
+  --json
 maverick core cli run app.senses.dependencies --json
 maverick app senses cli run senses --action health --json
 ```
@@ -220,9 +224,9 @@ maverick app senses mcp list --json
 Senses is a sealed, sandbox-compatible root app. Its contract declares
 frontend/backend/CLI/MCP surfaces, install/migrate/health hooks, app-owned
 SQLite state under `data/senses`, required Storage dependency aliases for file
-creation and catalog metadata, runtime session creation for dispatch, and data
-events for devices, pairing, settings, captures, routing, and frontend
-view-state. The operations
+creation and catalog metadata, optional `chat-communication` for verified Chat
+deep links, runtime session creation for dispatch, and data events for devices,
+pairing, settings, captures, routing, and frontend view-state. The operations
 manifest reports separate booleans for user-session `ingest.frame` support and
-raw device auth support. Device-token
-ingress and capture reference entities remain deferred beyond Phase 7.
+raw device auth support. Device-token ingress and capture reference entities
+remain deferred beyond Phase 7.

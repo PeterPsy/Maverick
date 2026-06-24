@@ -99,6 +99,8 @@ CHAT_COMMUNICATION_DEPENDENCY_ALIAS = "chat-communication"
 SPEECH_TRANSCRIPTION_DEPENDENCY_ALIAS = "speech-to-text"
 SPEECH_SYNTHESIS_DEPENDENCY_ALIAS = "text-to-speech"
 STORAGE_PENDING_LEASE_SECONDS = 120
+TRANSCRIPTION_SUBMITTED_LEASE_SECONDS = 180
+BACKGROUND_TRANSCRIPTION_BATCH_SIZE = 3
 DEFAULT_RUNTIME_AGENT_ID = "chat"
 RUNTIME_DISPATCH_CALLBACK_ACTION = "runtime_dispatch.completed"
 SPEECH_TRANSCRIPTION_CALLBACK_ACTION = "speech_transcription.completed"
@@ -1278,18 +1280,6 @@ def ingest_audio(
                 "error": None,
             }
         )
-        storage_request = first_dependency_request(response, STORAGE_WRITE_DEPENDENCY_ALIAS)
-        if storage_request is not None:
-            dependency_requests = response.setdefault("dependency_backend_requests", [])
-            if isinstance(dependency_requests, list):
-                dependency_requests.append(
-                    speech_transcription_dependency_request(
-                        capture_id=capture_id,
-                        request_id=transcription_request_id,
-                        storage_request=storage_request,
-                        payload=payload,
-                    )
-                )
     elif speech_provider_app_id:
         capture = capture_by_id_from_root(data_root, workspace_id, capture_id)
         transcription = transcription_payload(capture)
@@ -1575,6 +1565,46 @@ def speech_transcription_completed(
         "transcription": transcription_payload(updated),
         "error": None,
     }
+
+
+def background_tick(
+    data_root: Path,
+    workspace_id: str,
+    dependencies: dict[str, object],
+    payload: dict[str, object] | None = None,
+) -> tuple[int, dict[str, object]]:
+    """Claim stored audio captures that need non-blocking Speech transcription."""
+
+    speech_provider_app_id = speech_provider_app_id_from_dependencies(dependencies, alias=SPEECH_TRANSCRIPTION_DEPENDENCY_ALIAS)
+    if not speech_provider_app_id:
+        return 200, {
+            "ok": True,
+            "status": "idle",
+            "transcription_requests": [],
+            "error": None,
+        }
+    claimed = claim_background_transcription_requests(
+        data_root,
+        workspace_id=workspace_id,
+        provider_app_id=speech_provider_app_id,
+        limit=BACKGROUND_TRANSCRIPTION_BATCH_SIZE,
+    )
+    response: dict[str, object] = {
+        "ok": True,
+        "status": "queued" if claimed else "idle",
+        "transcription_requests": [
+            {
+                "capture_id": item["capture_id"],
+                "request_id": item["request_id"],
+                "provider_app_id": speech_provider_app_id,
+            }
+            for item in claimed
+        ],
+        "error": None,
+    }
+    if claimed:
+        response["dependency_backend_requests"] = [item["request"] for item in claimed]
+    return 200, response
 
 
 def captures_get(
@@ -2996,32 +3026,19 @@ def storage_write_dependency_request(
     }
 
 
-def first_dependency_request(response: dict[str, object], alias: str) -> dict[str, object] | None:
-    requests = response.get("dependency_backend_requests")
-    if not isinstance(requests, list):
-        return None
-    for request in requests:
-        if isinstance(request, dict) and text_or_none(request.get("dependency_alias")) == alias:
-            return request
-    return None
-
-
 def speech_transcription_dependency_request(
     *,
-    capture_id: str,
+    capture: sqlite3.Row,
     request_id: str,
-    storage_request: dict[str, object],
-    payload: dict[str, object],
 ) -> dict[str, object]:
-    body = storage_request.get("body") if isinstance(storage_request.get("body"), dict) else {}
-    audio_base64 = text_or_none(body.get("content_base64")) or text_or_none(payload.get("content_base64")) or ""
+    capture_id = str(capture["capture_id"])
     request_body: dict[str, object] = {
-        "action": "transcribe_audio",
-        "audio_base64": audio_base64,
-        "content_type": normalize_content_type(payload.get("content_type")),
-        "profile": bounded_text(payload.get("transcription_profile") or payload.get("profile"), fallback="fast", max_length=32),
+        "action": "transcribe_file",
+        "workspace_relative_path": str(capture["workspace_relative_path"] or ""),
+        "content_type": normalize_content_type(capture["content_type"]),
     }
-    language = text_or_none(payload.get("language") or payload.get("language_hint"))
+    metadata = decode_json_object(capture["metadata_json"])
+    language = text_or_none(metadata.get("language") or metadata.get("language_hint"))
     if language:
         request_body["language"] = language
     return {
@@ -3070,6 +3087,90 @@ def mark_capture_transcription_requested(
         db.commit()
     finally:
         db.close()
+
+
+def claim_background_transcription_requests(
+    data_root: Path,
+    *,
+    workspace_id: str,
+    provider_app_id: str,
+    limit: int,
+) -> list[dict[str, object]]:
+    timestamp = now_timestamp()
+    ensure_schema(data_root, workspace_id)
+    db = connect(data_root)
+    claimed: list[dict[str, object]] = []
+    try:
+        db.execute("BEGIN IMMEDIATE")
+        candidates = db.execute(
+            """
+            SELECT * FROM captures
+            WHERE workspace_id = ?
+              AND status = 'stored'
+              AND deleted_at IS NULL
+              AND input_mode LIKE 'audio.%'
+            ORDER BY captured_at ASC
+            LIMIT 50
+            """,
+            (workspace_id,),
+        ).fetchall()
+        for capture in candidates:
+            if len(claimed) >= limit:
+                break
+            metadata = decode_json_object(capture["metadata_json"])
+            transcription = metadata.get("transcription") if isinstance(metadata.get("transcription"), dict) else {}
+            if not transcription_needs_background_submit(transcription, timestamp=timestamp):
+                continue
+            request_id = text_or_none(transcription.get("request_id")) or f"transcribe-{capture['capture_id']}"
+            attempt_count = bounded_int(transcription.get("attempt_count"), default=0, minimum=0, maximum=1000) + 1
+            metadata["transcription"] = {
+                **transcription,
+                "status": "submitted",
+                "request_id": request_id,
+                "provider_app_id": provider_app_id,
+                "text": bounded_text(transcription.get("text"), fallback="", max_length=12000),
+                "error": None,
+                "attempt_count": attempt_count,
+                "submitted_at": timestamp,
+                "updated_at": timestamp,
+            }
+            db.execute(
+                """
+                UPDATE captures
+                SET metadata_json = ?, updated_at = ?
+                WHERE workspace_id = ? AND capture_id = ?
+                """,
+                (encode_json_object(metadata), timestamp, workspace_id, capture["capture_id"]),
+            )
+            request = speech_transcription_dependency_request(capture=capture, request_id=request_id)
+            claimed.append(
+                {
+                    "capture_id": str(capture["capture_id"]),
+                    "request_id": request_id,
+                    "request": request,
+                }
+            )
+        db.commit()
+    except Exception:
+        db.rollback()
+        raise
+    finally:
+        db.close()
+    return claimed
+
+
+def transcription_needs_background_submit(transcription: object, *, timestamp: str) -> bool:
+    if not isinstance(transcription, dict):
+        return False
+    status = text_or_none(transcription.get("status")) or ""
+    if status == "pending":
+        return True
+    if status != "submitted":
+        return False
+    submitted_at = text_or_none(transcription.get("submitted_at") or transcription.get("updated_at"))
+    if not submitted_at:
+        return True
+    return seconds_between(submitted_at, timestamp) >= TRANSCRIPTION_SUBMITTED_LEASE_SECONDS
 
 
 def ingest_acceptance_response(
@@ -4052,6 +4153,8 @@ def app_events_for_action(action: str) -> list[dict[str, str]]:
             {"type": "maverick.app.data-changed", "owner_app_id": APP_ID, "resource": "captures"},
             {"type": "maverick.app.data-changed", "owner_app_id": APP_ID, "resource": "devices"},
         ]
+    if normalized == "background.tick":
+        return [{"type": "maverick.app.data-changed", "owner_app_id": APP_ID, "resource": "captures"}]
     if normalized in {"routing.dispatch_capture", "routing.reset", RUNTIME_DISPATCH_CALLBACK_ACTION}:
         return [
             {"type": "maverick.app.data-changed", "owner_app_id": APP_ID, "resource": "captures"},

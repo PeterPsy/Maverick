@@ -988,7 +988,7 @@ class SensesPhase8EntrypointTest(unittest.TestCase):
             self.assertEqual(metadata["duration_seconds"], 1.2)
             self.assertNotIn("transcription", metadata)
 
-    def test_ingest_audio_uses_speech_dependency_and_dispatches_transcript(self) -> None:
+    def test_ingest_audio_claims_speech_dependency_after_storage_and_dispatches_transcript(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             data_root = Path(tmp)
             completed = start_and_complete_device(data_root)
@@ -1011,10 +1011,27 @@ class SensesPhase8EntrypointTest(unittest.TestCase):
             self.assertEqual(accepted["transcription"]["provider_app_id"], "speech")
             self.assertEqual(
                 [request["dependency_alias"] for request in accepted["dependency_backend_requests"]],
-                ["storage-file-content-write", "speech-to-text"],
+                ["storage-file-content-write"],
             )
-            speech_request = accepted["dependency_backend_requests"][1]
-            self.assertEqual(speech_request["body"]["action"], "transcribe_audio")
+
+            status, stored = handle_action(
+                data_root,
+                storage_callback_payload(
+                    accepted,
+                    file_id=f"generated:senses/{accepted['capture_id']}",
+                ),
+            )
+            self.assertEqual(status, 200)
+            self.assertEqual(stored["capture"]["status"], "stored")
+
+            status, tick = service.background_tick(data_root, "default", dependencies)
+            self.assertEqual(status, 200)
+            self.assertEqual(tick["status"], "queued")
+            self.assertEqual(len(tick["dependency_backend_requests"]), 1)
+            speech_request = tick["dependency_backend_requests"][0]
+            self.assertEqual(speech_request["dependency_alias"], "speech-to-text")
+            self.assertEqual(speech_request["body"]["action"], "transcribe_file")
+            self.assertEqual(speech_request["body"]["workspace_relative_path"], accepted["storage"]["workspace_relative_path"])
             self.assertEqual(speech_request["body"]["content_type"], "audio/wav")
             self.assertEqual(speech_request["callback"]["action"], "speech_transcription.completed")
 
@@ -1045,16 +1062,6 @@ class SensesPhase8EntrypointTest(unittest.TestCase):
             self.assertEqual(status, 200)
             self.assertEqual(transcribed["transcription"]["status"], "completed")
             self.assertEqual(transcribed["transcription"]["text"], "ciao Maverick")
-
-            status, stored = handle_action(
-                data_root,
-                storage_callback_payload(
-                    accepted,
-                    file_id=f"generated:senses/{accepted['capture_id']}",
-                ),
-            )
-            self.assertEqual(status, 200)
-            self.assertEqual(stored["capture"]["status"], "stored")
 
             status, dispatch = handle_action(
                 data_root,

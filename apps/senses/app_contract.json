@@ -189,6 +189,7 @@
     "hooks": {
       "install": "hooks/install.py",
       "migrate": "hooks/migrate.py",
+      "background_tick": "hooks/background_tick.py",
       "health_check": "hooks/health_check.py"
     }
   },

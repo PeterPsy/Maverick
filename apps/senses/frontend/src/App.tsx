@@ -340,9 +340,12 @@ export function App() {
     }
     setBusyAction(labels[command]);
     setNotice('Command sent to the iOS app.');
+    if (command === 'ask' || command === 'askAudio') {
+      return;
+    }
     window.setTimeout(() => {
       setBusyAction((current) => (current === labels[command] ? '' : current));
-    }, command === 'askAudio' ? 12_000 : 1800);
+    }, 1800);
   }
 
   useEffect(() => {
@@ -382,6 +385,13 @@ export function App() {
     }
     void refresh({ silent: true });
   }, [nativeHost.status?.updated_at]);
+
+  useEffect(() => {
+    if (!nativeHost.status?.updated_at || nativeHost.status.capture?.busy) {
+      return;
+    }
+    setBusyAction((current) => (current === 'native-ask' || current === 'native-ask-audio' ? '' : current));
+  }, [nativeHost.status?.capture?.busy, nativeHost.status?.updated_at]);
 
   useEffect(() => {
     window.parent?.postMessage({ type: 'maverick.app.ready', app_id: 'senses' }, window.location.origin);
@@ -771,13 +781,14 @@ function NativeHeaderActions({
   nativeHostStatus: SensesNativeStatus | null;
   onCommand: (command: NativeCommand) => void;
 }) {
+  const nativeCaptureBusy = nativeHostStatus?.capture?.busy === true;
   return (
     <div className="native-header-actions" aria-label="iOS controls">
       <button
         className="tool-button"
         type="button"
         onClick={() => onCommand('pairGlasses')}
-        disabled={nativeHostStatus?.actions?.can_pair === false || busyAction === 'native-pair'}
+        disabled={nativeCaptureBusy || nativeHostStatus?.actions?.can_pair === false || busyAction === 'native-pair'}
       >
         <Glasses size={16} />
         <span>Pair glasses</span>
@@ -786,7 +797,7 @@ function NativeHeaderActions({
         className="tool-button primary-tool"
         type="button"
         onClick={() => onCommand('ask')}
-        disabled={nativeHostStatus?.actions?.can_ask === false || busyAction === 'native-ask'}
+        disabled={nativeCaptureBusy || nativeHostStatus?.actions?.can_ask === false || busyAction === 'native-ask'}
       >
         <Send size={16} />
         <span>Ask</span>
@@ -795,7 +806,7 @@ function NativeHeaderActions({
         className="tool-button"
         type="button"
         onClick={() => onCommand('askAudio')}
-        disabled={nativeHostStatus?.actions?.can_ask_audio === false || busyAction === 'native-ask-audio'}
+        disabled={nativeCaptureBusy || nativeHostStatus?.actions?.can_ask_audio === false || busyAction === 'native-ask-audio'}
       >
         <Mic size={16} />
         <span>Voice</span>

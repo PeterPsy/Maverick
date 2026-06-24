@@ -15,6 +15,7 @@ import sys
 import unittest
 from unittest.mock import patch
 
+from core.api.background_hooks import run_background_hook_tick
 from core.api.platform_host import PlatformHost
 from core.api.platform_state import PlatformState, bootstrap_platform_state
 from core.apps.dependencies import save_app_dependency_selection
@@ -158,6 +159,100 @@ class SensesHostedE2ETest(unittest.TestCase):
         self.assertEqual(after_callback["runtime_dispatch_attempts"][0]["status"], "submitted")
         self.assertEqual(after_callback["runtime_dispatch_attempts"][0]["turn_id"], turn_id)
 
+    def test_hosted_audio_ingest_storage_background_speech_and_chat_pipeline(self) -> None:
+        stack = self._hosted_stack()
+        completed = self._pair_device(stack)
+
+        status, accepted = self._post_senses(
+            stack,
+            self._audio_request(
+                completed,
+                request_id="hosted-audio-1",
+                idempotency_key="hosted-audio-1",
+            ),
+        )
+
+        self.assertEqual(status, 202)
+        self.assertEqual(accepted["schema_version"], "senses.audio.accepted.v1")
+        self.assertEqual(accepted["storage"]["status"], "pending")
+        self.assertEqual(accepted["transcription"]["status"], "pending")
+        self.assertEqual(accepted["transcription"]["provider_app_id"], "speech")
+        self.assertNotIn("dependency_backend_requests", accepted)
+        self.assertEqual(
+            accepted["dependency_backend_request_results"],
+            [
+                {
+                    "request_id": f"write-{accepted['capture_id']}",
+                    "dependency_alias": "storage-file-content-write",
+                    "provider_app_id": "storage",
+                    "status": "completed",
+                    "status_code": 200,
+                    "callback_status_code": 200,
+                }
+            ],
+        )
+
+        capture_id = str(accepted["capture_id"])
+        status, stored = self._post_senses(stack, {"action": "captures.get", "capture_id": capture_id})
+        self.assertEqual(status, 200)
+        self.assertEqual(stored["capture"]["status"], "stored")
+        self.assertEqual(stored["capture"]["transcription"]["status"], "pending")
+        storage_path = self._workspace_path(stack, str(stored["capture"]["storage"]["workspace_relative_path"]))
+        self.assertTrue(storage_path.is_file())
+
+        speech_bodies: list[dict[str, object]] = []
+        original_invoke_dependency_backend = runtime_requests._invoke_dependency_backend
+
+        def fake_speech_dependency(*args, **kwargs):
+            if kwargs.get("dependency_alias") == "speech-to-text":
+                body = dict(kwargs.get("body") or {})
+                speech_bodies.append(body)
+                return {
+                    "status_code": 200,
+                    "dependency_provider_app_id": "speech",
+                    "json": {
+                        "job_id": "hosted-stt-1",
+                        "text": "ciao Maverick",
+                        "language": "it",
+                        "duration_seconds": 1.2,
+                    },
+                }
+            return original_invoke_dependency_backend(*args, **kwargs)
+
+        with patch.object(runtime_requests, "_invoke_dependency_backend", fake_speech_dependency):
+            tick = run_background_hook_tick(stack.state)
+
+        self.assertEqual(tick["workspaces"][0]["workspace_id"], "default")
+        self.assertEqual(len(speech_bodies), 1)
+        self.assertEqual(speech_bodies[0]["action"], "transcribe_file")
+        self.assertEqual(speech_bodies[0]["workspace_relative_path"], stored["capture"]["storage"]["workspace_relative_path"])
+        self.assertEqual(speech_bodies[0]["content_type"], "audio/wav")
+
+        status, transcribed = self._post_senses(stack, {"action": "captures.get", "capture_id": capture_id})
+        self.assertEqual(status, 200)
+        self.assertEqual(transcribed["capture"]["transcription"]["status"], "completed")
+        self.assertEqual(transcribed["capture"]["transcription"]["text"], "ciao Maverick")
+
+        runtime_results: list[dict[str, object]] = []
+        with (
+            patch.object(runtime_requests, "submit_runtime_turn_async", self._fake_submit_runtime_turn(runtime_results)),
+            patch(
+                "core.runtime.turn_submission_service_output.schedule_runtime_thread_title_generation",
+                lambda *_args, **_kwargs: None,
+            ),
+        ):
+            status, dispatch = self._post_senses(
+                stack,
+                {"action": "routing.dispatch_capture", "capture_id": capture_id},
+            )
+
+        self.assertEqual(status, 202)
+        self.assertEqual(dispatch["runtime_request_results"][0]["status"], "submitted")
+        runtime_request = self._stored_runtime_request(stack, capture_id)
+        self.assertIn("Transcript: ciao Maverick", runtime_request["input_text"])
+        self.assertEqual(runtime_request["attachments"][0]["content_type"], "audio/wav")
+        self.assertEqual(len(runtime_results), 1)
+
     def test_hosted_storage_recovery_reissues_upsert_and_recovers_lost_callback(self) -> None:
         stack = self._hosted_stack()
         completed = self._pair_device(stack)
@@ -242,13 +337,13 @@ class SensesHostedE2ETest(unittest.TestCase):
 
     def _hosted_stack(self) -> HostedSensesStack:
         repo_root = make_temp_repo_root(self, include_core=True)
-        link_app_sources(repo_root, ["base-shell", "chat", "storage", "senses"])
+        link_app_sources(repo_root, ["base-shell", "chat", "storage", "speech", "senses"])
         state = bootstrap_platform_state(
             start_path=repo_root,
             install_builtin_apps=False,
             register_builtin_provider_definitions=False,
         )
-        for app_id in ("base-shell", "chat", "storage", "senses"):
+        for app_id in ("base-shell", "chat", "storage", "speech", "senses"):
             source = register_app_source_from_contract(
                 state.app_store,
                 source_kind="platform",
@@ -277,6 +372,15 @@ class SensesHostedE2ETest(unittest.TestCase):
             consumer_app_id="senses",
             alias="chat-communication",
             provider_app_ids=["chat"],
+            workspace_store=state.workspace_store,
+            start_path=repo_root,
+        )
+        save_app_dependency_selection(
+            state.app_store,
+            workspace_id="default",
+            consumer_app_id="senses",
+            alias="speech-to-text",
+            provider_app_ids=["speech"],
             workspace_store=state.workspace_store,
             start_path=repo_root,
         )
@@ -404,6 +508,32 @@ class SensesHostedE2ETest(unittest.TestCase):
             "metadata": {"adapter_id": "hosted-ios", "width": 1600, "height": 1200},
         }
 
+    def _audio_request(
+        self,
+        completed: dict[str, object],
+        *,
+        request_id: str,
+        idempotency_key: str,
+    ) -> dict[str, object]:
+        body = self._wav_audio()
+        return {
+            "action": "ingest.audio",
+            "schema_version": "senses.audio.v1",
+            "request_id": request_id,
+            "device_id": completed["device"]["device_id"],
+            "device_session_id": completed["device_session"]["device_session_id"],
+            "idempotency_key": idempotency_key,
+            "client_capture_id": f"local-{request_id}",
+            "input_mode": "audio.push_to_talk",
+            "prompt": "Cosa ho appena chiesto?",
+            "content_type": "audio/wav",
+            "content_base64": b64encode(body).decode("ascii"),
+            "content_sha256": hashlib.sha256(body).hexdigest(),
+            "duration_seconds": 1.2,
+            "captured_at": datetime.now(tz=UTC).isoformat().replace("+00:00", "Z"),
+            "metadata": {"adapter_id": "hosted-ios", "origin_label": "iPhone"},
+        }
+
     def _fake_submit_runtime_turn(self, captured: list[dict[str, object]]):
         def fake_submit_runtime_turn_async(
             submit_state,
@@ -472,6 +602,18 @@ class SensesHostedE2ETest(unittest.TestCase):
         sos_payload = b"\x03\x01\x00\x02\x00\x03\x00\x00\x3f\x00"
         sos = b"\xff\xda" + (len(sos_payload) + 2).to_bytes(2, "big") + sos_payload
         return b"\xff\xd8" + app1 + app0 + dqt + sof0 + sos + b"\x11\x22\xff\xd9"
+
+    def _wav_audio(self) -> bytes:
+        payload = bytes([0] * 160)
+        return (
+            b"RIFF"
+            + (len(payload) + 36).to_bytes(4, "little")
+            + b"WAVEfmt "
+            + bytes([0] * 28)
+            + b"data"
+            + len(payload).to_bytes(4, "little")
+            + payload
+        )
 
 
 if __name__ == "__main__":

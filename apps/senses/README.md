@@ -22,7 +22,7 @@ routing even when Speech/TTS is unavailable.
 - MCP: `senses_operations_manifest`, `senses_reference_manifest`,
   `senses_view_filter`, `senses_set_view_filter`,
   `senses_set_custom_view`, `senses_clear_custom_view`
-- hooks: `install`, `migrate`, `health_check`
+- hooks: `install`, `migrate`, `background_tick`, `health_check`
 
 The MVP auth mode is `user_session_mvp`. Mounted backend calls use the Maverick
 user session supplied by `/api/apps/senses/backend`; Senses does not accept a raw
@@ -121,10 +121,14 @@ storage/generated/senses/<device_id>/<yyyy-mm-dd>/<capture_id>.<audio-ext>
 ```
 
 When the optional `speech-to-text` dependency resolves to a backend provider,
-Senses emits a `transcribe_audio` dependency request with the same bounded audio
-bytes. The `speech_transcription.completed` callback stores transcript metadata
-on the capture. If Speech is unset, unavailable, or fails, the capture remains
-dispatchable and Chat receives a textual fallback plus the audio attachment.
+`ingest.audio` records transcription metadata as `pending` but does not emit a
+Speech dependency in the submit response. After Storage marks the audio capture
+`stored`, the declared `background_tick` hook claims pending audio captures and
+emits a non-blocking `transcribe_file` dependency against the stored
+`storage/generated/...` path. The `speech_transcription.completed` callback
+stores transcript metadata on the capture. If Speech is unset, unavailable, or
+fails, the capture remains dispatchable and Chat receives a textual fallback
+plus the audio attachment.
 `text-to-speech` is declared for non-blocking client playback, but Senses does
 not require it for routing or response visibility.
 
@@ -193,14 +197,18 @@ handler accepts controlled commands:
 - `refreshNativeStatus`
 - `pairGlasses`
 - `ask`
+- `askAudio`
 - `openLogin`
 
 The native app pushes sanitized status into the page with the
-`maverick.senses.native-status` browser event. No cookies, bearer tokens, raw
-DAT handles, or Meta DAT logic are exposed to the frontend. When Senses runs in
-a normal browser or PWA without the iOS host, backend-owned device, pairing,
-capture, routing, and settings views still work, while physical glasses actions
-show as unavailable.
+`maverick.senses.native-status` browser event. For native Ask and Voice
+commands, the iOS bridge publishes a busy capture status as soon as the command
+starts and publishes the final status after recording, submit, Storage/STT
+scheduling, and queue drain finish. No cookies, bearer tokens, raw DAT handles,
+or Meta DAT logic are exposed to the frontend. When Senses runs in a normal
+browser or PWA without the iOS host, backend-owned device, pairing, capture,
+routing, and settings views still work, while physical glasses actions show as
+unavailable.
 
 Maverick iOS remains responsible for Meta DAT SDK configuration, iOS
 permissions, Meta glasses pairing, physical snapshot capture, local retry queue,

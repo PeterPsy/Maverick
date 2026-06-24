@@ -15,7 +15,14 @@ from threading import Thread
 from typing import TYPE_CHECKING, Any
 
 from core.providers.errors import ProviderError
-from core.providers.service import resolve_provider_for_workspace
+from core.providers.routing import ProviderRoutingContext, primary_routing_failure_reason, select_provider_for_profile
+from core.providers.service import effective_provider_registry, resolve_provider_for_workspace
+from core.providers.text_generation import (
+    HostedTextGenerationError,
+    TextGenerationMessage,
+    TextGenerationRequest,
+    execute_hosted_text_generation,
+)
 from core.runtime.runtime_threads import complete_runtime_thread_title_generation
 from core.runtime.thread_title_generation import DEFAULT_THREAD_TITLE, MAX_THREAD_TITLE_CHARS, derive_thread_title
 
@@ -24,8 +31,9 @@ if TYPE_CHECKING:
     from core.runtime.runtime_thread import RuntimeThreadRecord
 
 
-MIN_AI_THREAD_TITLE_WORDS = 4
+MIN_AI_THREAD_TITLE_WORDS = 2
 MAX_AI_THREAD_TITLE_WORDS = 8
+_HOSTED_TITLE_MAX_OUTPUT_TOKENS = 80
 _DEFAULT_TITLE_TIMEOUT_SECONDS = 20
 _TITLE_PROCESS_SHUTDOWN_SECONDS = 1.0
 _TITLE_TOKEN = re.compile(r"[^\W_]+(?:[.+][^\W_]+)*", re.UNICODE)
@@ -140,6 +148,86 @@ def run_runtime_thread_title_generation(
 
 
 def generate_ai_thread_title(
+    *,
+    state: "PlatformState",
+    workspace_id: str,
+    input_text: object,
+    attachments: list[dict[str, object]] | None = None,
+    app_references: list[dict[str, object]] | None = None,
+) -> str:
+    """Generate one thread title through the routed hosted micro-task model, falling back to Codex."""
+    try:
+        return generate_hosted_thread_title(
+            state=state,
+            workspace_id=workspace_id,
+            input_text=input_text,
+            attachments=attachments,
+            app_references=app_references,
+        )
+    except ThreadTitleGenerationError:
+        return generate_codex_thread_title(
+            state=state,
+            workspace_id=workspace_id,
+            input_text=input_text,
+            attachments=attachments,
+            app_references=app_references,
+        )
+
+
+def generate_hosted_thread_title(
+    *,
+    state: "PlatformState",
+    workspace_id: str,
+    input_text: object,
+    attachments: list[dict[str, object]] | None = None,
+    app_references: list[dict[str, object]] | None = None,
+) -> str:
+    """Generate one thread title through the fast hosted text provider profile."""
+    decision = select_provider_for_profile(
+        "fast_model",
+        ProviderRoutingContext(
+            workspace_id=workspace_id,
+            provider_store=state.provider_store,
+            registry=effective_provider_registry(state.provider_store),
+            secret_store=getattr(state, "secret_store", None),
+            app_id="chat",
+            requested_capabilities=["text_generation", "low_latency", "thread_title"],
+        ),
+    )
+    if decision.execution_path != "plain_hosted_text" or decision.selected_provider_id is None:
+        raise ThreadTitleGenerationError(primary_routing_failure_reason(decision))
+    prompt = _title_prompt(input_text=input_text, attachments=attachments, app_references=app_references)
+    request = TextGenerationRequest(
+        model_id=decision.selected_model_id_or_voice_id or "",
+        system_prompt="You generate only concise Maverick chat thread titles as JSON.",
+        messages=[TextGenerationMessage(role="user", content=prompt)],
+        max_output_tokens=_HOSTED_TITLE_MAX_OUTPUT_TOKENS,
+        timeout_seconds=_title_timeout_seconds(),
+        stream=False,
+        workspace_id=workspace_id,
+        workspace_root=str(getattr(state, "workspace_root", "") or ""),
+    )
+    try:
+        result = execute_hosted_text_generation(
+            state.provider_store,
+            state.secret_store,
+            decision=decision,
+            request=request,
+            app_id="chat",
+        )
+    except HostedTextGenerationError as error:
+        raise ThreadTitleGenerationError(error.reason_code) from error
+    try:
+        payload = _json_object(result.output_text)
+    except (json.JSONDecodeError, ThreadTitleGenerationError) as error:
+        raise ThreadTitleGenerationError("hosted_title_output_invalid") from error
+    title = str(payload.get("title") or "").strip()
+    if not title:
+        raise ThreadTitleGenerationError("hosted title generation returned an empty title.")
+    return title
+
+
+def generate_codex_thread_title(
     *,
     state: "PlatformState",
     workspace_id: str,
@@ -326,7 +414,8 @@ def _title_prompt(
     return (
         "You generate only concise Maverick chat thread titles.\n"
         "Return a JSON object matching the schema exactly.\n"
-        "Title rules: use the same language as the user message; use 4 to 8 words; "
+        "Title rules: use the same language as the user message; prefer 4 to 8 words, "
+        "but use 2 or 3 words when the first message is too short for a specific longer title; "
         "describe the concrete topic; do not use quotes, trailing punctuation, emojis, "
         "or generic words like request/user/chat unless they are the actual topic.\n"
         "Use only the first user message, attachment labels, and app reference labels. "
@@ -362,12 +451,22 @@ def _title_timeout_seconds() -> int:
 
 
 def _json_object(text: str) -> dict[str, Any]:
+    text = _strip_json_fence(text)
     payload = json.loads(text)
     if isinstance(payload, str):
         payload = json.loads(payload)
     if not isinstance(payload, dict):
         raise ThreadTitleGenerationError("title_output_not_object")
     return payload
+
+
+def _strip_json_fence(text: str) -> str:
+    stripped = str(text or "").strip()
+    if not stripped.startswith("```"):
+        return stripped
+    stripped = re.sub(r"^```(?:json)?\s*", "", stripped, flags=re.IGNORECASE)
+    stripped = re.sub(r"\s*```$", "", stripped)
+    return stripped.strip()
 
 
 def _stable_items(items: Iterable[Mapping[str, object]] | None) -> list[dict[str, object]]:

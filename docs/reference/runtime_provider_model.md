@@ -89,6 +89,14 @@ Runtime HTTP requests may omit `routing_profile` or pass `fast_model`; any other
 provided value is rejected with `unsupported_routing_profile` instead of being
 silently ignored.
 
+Runtime thread-title generation also uses `fast_model` as a bounded hosted
+micro-task. The title worker asks the routed hosted text model for a short JSON
+title from the first user message, attachment labels, and app-reference labels.
+If hosted routing or hosted generation is unavailable, the worker falls back to
+the configured Codex runtime model and then to the deterministic title fallback.
+This keeps title generation independent from the active chat runtime while using
+the low-cost hosted model path when it is configured.
+
 The bridge is deliberately narrower than an agentic runtime. Before prompt
 materialization it rejects skills, tool/MCP use, workspace filesystem access,
 operative attachments, and operative app references. Hosted text requests must

@@ -67,12 +67,19 @@ describe("mobile chat composer layout", () => {
     expect(composerStyles).not.toContain("chatapp-agent-menu__search-label");
   });
 
-  it("pushes the execution badge to the right of the runtime controls", () => {
+  it("keeps the execution badge adjacent to the model selector", () => {
     const composerStyles = readStyle("composer.css");
     const runtimeBadgesBlock = cssBlock(composerStyles, ".chatapp-composer__runtime-badges");
 
-    expect(runtimeBadgesBlock).toContain("flex: 1 1 auto;");
-    expect(composerStyles).toContain("margin-left: auto;");
+    expect(runtimeBadgesBlock).toContain("flex: 0 1 auto;");
+    expect(composerStyles).not.toContain("margin-left: auto;");
+  });
+
+  it("keeps the compact composer open while voice dictation is active", () => {
+    const responsiveStyles = readStyle("responsive.css");
+
+    expect(responsiveStyles).toContain(".chatapp-composer:has(.chatapp-composer__dictation.is-recording) .chatapp-composer__input-shell");
+    expect(responsiveStyles).toContain(".chatapp-composer:has(.chatapp-composer__dictation.is-transcribing) .chatapp-composer__input-shell");
   });
 
   it("keeps the send button as an explicit click action", () => {

@@ -993,11 +993,30 @@ describe("ChatComposer reference search", () => {
     const { element } = await renderComposer({ executionMode: "full-access" });
 
     const executionBadge = element.querySelector(".chatapp-execution-chip");
+    const runtimeControls = element.querySelector(".chatapp-composer__runtime-badges");
 
     expect(executionBadge).toBeInstanceOf(HTMLSpanElement);
     expect(executionBadge?.getAttribute("aria-label")).toBe("Full access runtime");
     expect(executionBadge?.textContent).toContain("admin_panel_settings");
     expect(executionBadge?.textContent).not.toContain("full-access");
+    expect(runtimeControls?.firstElementChild).toBe(executionBadge);
+    expect(runtimeControls?.lastElementChild?.classList.contains("chatapp-provider-selector")).toBe(true);
+  });
+
+  it("places dictation next to the send action", async () => {
+    const { element } = await renderComposer();
+
+    const actions = element.querySelector(".chatapp-composer__actions");
+    const dictation = element.querySelector(".chatapp-composer__dictation");
+    const send = element.querySelector(".chatapp-composer__icon-action.is-send");
+
+    expect(actions).toBeInstanceOf(HTMLDivElement);
+    expect(dictation).toBeInstanceOf(HTMLDivElement);
+    expect(send).toBeInstanceOf(HTMLButtonElement);
+    expect(element.querySelector(".chatapp-composer__tools .chatapp-composer__dictation")).toBeNull();
+    expect(Array.from(actions?.children || []).indexOf(dictation as Element)).toBeLessThan(
+      Array.from(actions?.children || []).indexOf(send as Element),
+    );
   });
 
   it("renders checklist entity search results after typing an @ query", async () => {

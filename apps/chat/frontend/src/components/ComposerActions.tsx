@@ -1,12 +1,16 @@
+import type { ReactNode } from "react";
+
 export function ComposerActions({
   canSend,
   canStopTurn,
+  dictationControl,
   isSending,
   onStopTurn,
   onSubmit,
 }: {
   canSend: boolean;
   canStopTurn: boolean;
+  dictationControl?: ReactNode;
   isSending: boolean;
   onStopTurn: () => void;
   onSubmit: () => void;
@@ -21,6 +25,7 @@ export function ComposerActions({
           <span className="chatapp-composer__stop-label">Stop chat</span>
         </button>
       ) : null}
+      {dictationControl}
       <button
         aria-label={isSending ? "Queue message" : "Send message"}
         className="chatapp-composer__icon-action is-send"

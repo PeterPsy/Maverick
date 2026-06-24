@@ -261,17 +261,6 @@ export function ChatComposer({
                     apps
                   </span>
                 </button>
-                <ComposerDictationButton
-                  chunkedDictationSupported={transcriptionChunkedDictationSupported}
-                  disabled={disabled || isSending}
-                  maxAudioBytes={transcriptionMaxAudioBytes}
-                  maxDurationSeconds={transcriptionMaxDurationSeconds}
-                  onError={setDictationError}
-                  onTranscript={insertDictationTranscript}
-                  providerAppId={transcriptionProviderAppId}
-                  providerAvailable={transcriptionProviderAvailable}
-                  supportedContentTypes={transcriptionContentTypes}
-                />
                 <MultiAgentModeControl
                   budgetLabel={multiAgentBudgetLabel}
                   disabled={disabled || isSending}
@@ -302,6 +291,19 @@ export function ChatComposer({
               <ComposerActions
                 canSend={!disabled && !hasInvalidAttachments(attachments) && Boolean(value.trim() || attachments.length)}
                 canStopTurn={canStopTurn}
+                dictationControl={
+                  <ComposerDictationButton
+                    chunkedDictationSupported={transcriptionChunkedDictationSupported}
+                    disabled={disabled || isSending}
+                    maxAudioBytes={transcriptionMaxAudioBytes}
+                    maxDurationSeconds={transcriptionMaxDurationSeconds}
+                    onError={setDictationError}
+                    onTranscript={insertDictationTranscript}
+                    providerAppId={transcriptionProviderAppId}
+                    providerAvailable={transcriptionProviderAvailable}
+                    supportedContentTypes={transcriptionContentTypes}
+                  />
+                }
                 isSending={isSending}
                 onStopTurn={onStopTurn}
                 onSubmit={onSubmit}

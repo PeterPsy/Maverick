@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { ApiError, transcribeSpeechBlob, type SpeechTranscribePayload } from "../api/client";
+import { VoiceInput } from "./ui/voice-input";
 
 const DEFAULT_MAX_DICTATION_MS = 180000;
 const DEFAULT_MAX_DICTATION_AUDIO_BYTES = 20_000_000;
@@ -288,21 +289,20 @@ export function ComposerDictationButton({
   }
 
   return (
-    <button
-      aria-label={title}
-      aria-pressed={isRecording}
-      className={`chatapp-composer__tool-button chatapp-composer__dictation ${isRecording ? "is-recording" : ""} ${
-        isTranscribing ? "is-transcribing" : ""
-      }`}
-      disabled={disabled || providerDisabled || isTranscribing}
-      onClick={toggleDictation}
+    <VoiceInput
+      active={isRecording || isTranscribing}
+      ariaLabel={title}
+      busy={isTranscribing}
+      className={`chatapp-composer__dictation ${isRecording ? "is-recording" : ""} ${isTranscribing ? "is-transcribing" : ""}`}
+      disabled={disabled || providerDisabled}
+      onStart={() => {
+        void toggleDictation();
+      }}
+      onStop={() => {
+        void toggleDictation();
+      }}
       title={disabled || providerDisabled ? disabledTitle : title}
-      type="button"
-    >
-      <span aria-hidden="true" className="material-symbols-rounded">
-        {isTranscribing ? "hourglass_empty" : isRecording ? "stop_circle" : "mic"}
-      </span>
-    </button>
+    />
   );
 }
 

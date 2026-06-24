@@ -31,6 +31,7 @@ export function VoiceInput({
   const [_time, _setTime] = React.useState<number>(0);
   const isControlled = typeof active === "boolean";
   const listening = isControlled ? active : _listening;
+  const showStopIndicator = listening || busy;
 
   React.useEffect(() => {
     if (!listening) {
@@ -89,7 +90,7 @@ export function VoiceInput({
         type="button"
       >
         <div className="chatapp-voice-input__icon">
-          {listening ? (
+          {showStopIndicator ? (
             <motion.div
               className="chatapp-voice-input__stop-shape"
               animate={{
@@ -105,39 +106,41 @@ export function VoiceInput({
             <Mic />
           )}
         </div>
-        <AnimatePresence mode="wait">
-          {listening && (
-            <motion.div
-              initial={{ opacity: 0, width: 0, marginLeft: 0 }}
-              animate={{ opacity: 1, width: "auto", marginLeft: 8 }}
-              exit={{ opacity: 0, width: 0, marginLeft: 0 }}
-              transition={{
-                duration: 0.4,
-              }}
-              className="chatapp-voice-input__meter"
-            >
-              <div className="chatapp-voice-input__frequency" aria-hidden="true">
-                {[...Array(12)].map((_, i) => (
-                  <motion.div
-                    key={i}
-                    className="chatapp-voice-input__bar"
-                    initial={{ height: 2 }}
-                    animate={{
-                      height: listening ? [2, 3 + Math.random() * 10, 3 + Math.random() * 5, 2] : 2,
-                    }}
-                    transition={{
-                      duration: listening ? 1 : 0.3,
-                      repeat: listening ? Infinity : 0,
-                      delay: listening ? i * 0.05 : 0,
-                      ease: "easeInOut",
-                    }}
-                  />
-                ))}
-              </div>
-              <div className="chatapp-voice-input__timer">{formatTime(_time)}</div>
-            </motion.div>
-          )}
-        </AnimatePresence>
+        {busy ? null : (
+          <AnimatePresence mode="wait">
+            {listening && (
+              <motion.div
+                initial={{ opacity: 0, width: 0, marginLeft: 0 }}
+                animate={{ opacity: 1, width: "auto", marginLeft: 8 }}
+                exit={{ opacity: 0, width: 0, marginLeft: 0 }}
+                transition={{
+                  duration: 0.4,
+                }}
+                className="chatapp-voice-input__meter"
+              >
+                <div className="chatapp-voice-input__frequency" aria-hidden="true">
+                  {[...Array(12)].map((_, i) => (
+                    <motion.div
+                      key={i}
+                      className="chatapp-voice-input__bar"
+                      initial={{ height: 2 }}
+                      animate={{
+                        height: listening ? [2, 3 + Math.random() * 10, 3 + Math.random() * 5, 2] : 2,
+                      }}
+                      transition={{
+                        duration: listening ? 1 : 0.3,
+                        repeat: listening ? Infinity : 0,
+                        delay: listening ? i * 0.05 : 0,
+                        ease: "easeInOut",
+                      }}
+                    />
+                  ))}
+                </div>
+                <div className="chatapp-voice-input__timer">{formatTime(_time)}</div>
+              </motion.div>
+            )}
+          </AnimatePresence>
+        )}
       </motion.button>
     </div>
   );

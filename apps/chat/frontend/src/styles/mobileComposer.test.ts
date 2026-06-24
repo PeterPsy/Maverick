@@ -75,11 +75,11 @@ describe("mobile chat composer layout", () => {
     expect(composerStyles).not.toContain("margin-left: auto;");
   });
 
-  it("keeps the compact composer open while voice dictation is active", () => {
+  it("keeps the compact composer open only while voice dictation is recording", () => {
     const responsiveStyles = readStyle("responsive.css");
 
     expect(responsiveStyles).toContain(".chatapp-composer:has(.chatapp-composer__dictation.is-recording) .chatapp-composer__input-shell");
-    expect(responsiveStyles).toContain(".chatapp-composer:has(.chatapp-composer__dictation.is-transcribing) .chatapp-composer__input-shell");
+    expect(responsiveStyles).not.toContain(".chatapp-composer:has(.chatapp-composer__dictation.is-transcribing) .chatapp-composer__input-shell");
   });
 
   it("keeps the send button as an explicit click action", () => {

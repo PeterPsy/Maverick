@@ -290,7 +290,7 @@ export function ComposerDictationButton({
 
   return (
     <VoiceInput
-      active={isRecording || isTranscribing}
+      active={isRecording}
       ariaLabel={title}
       busy={isTranscribing}
       className={`chatapp-composer__dictation ${isRecording ? "is-recording" : ""} ${isTranscribing ? "is-transcribing" : ""}`}

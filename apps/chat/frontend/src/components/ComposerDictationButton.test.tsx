@@ -179,6 +179,62 @@ describe("ComposerDictationButton", () => {
     expect(onTranscript).toHaveBeenCalledWith("second", expect.objectContaining({ chunk_text: "second" }));
   });
 
+  it("collapses the voice meter while showing the animated stop indicator during transcription", async () => {
+    const onError = vi.fn();
+    const onTranscript = vi.fn();
+    let resolveTranscription: ((value: { language: string; language_probability: number; text: string }) => void) | null = null;
+    vi.mocked(transcribeSpeechBlob).mockReturnValue(
+      new Promise((resolve) => {
+        resolveTranscription = resolve;
+      }),
+    );
+
+    await act(async () => {
+      root.render(
+        <ComposerDictationButton
+          disabled={false}
+          onError={onError}
+          onTranscript={onTranscript}
+          providerAppId="speech"
+          providerAvailable
+          supportedContentTypes={["audio/webm"]}
+        />,
+      );
+    });
+
+    const button = container.querySelector("button");
+    await act(async () => {
+      button?.click();
+      await Promise.resolve();
+    });
+
+    expect(container.querySelector(".chatapp-voice-input__meter")).not.toBeNull();
+    expect(container.querySelector(".chatapp-voice-input__stop-shape")).not.toBeNull();
+
+    await act(async () => {
+      button?.click();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    const transcribingButton = container.querySelector("button");
+    expect(transcribingButton?.getAttribute("aria-label")).toBe("Transcribing");
+    expect(transcribingButton?.getAttribute("aria-busy")).toBe("true");
+    expect(transcribingButton?.getAttribute("aria-pressed")).toBe("false");
+    expect(container.querySelector(".chatapp-voice-input__meter")).toBeNull();
+    expect(container.querySelector(".chatapp-voice-input__stop-shape")).not.toBeNull();
+
+    await act(async () => {
+      resolveTranscription?.({ language: "en", language_probability: 0.9, text: "done" });
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(container.querySelector("button")?.getAttribute("aria-label")).toBe("Dictate");
+    expect(onTranscript).toHaveBeenCalledWith("done", expect.objectContaining({ text: "done" }));
+    expect(onError).not.toHaveBeenCalledWith(expect.any(String));
+  });
+
   it("falls back to one-shot dictation when chunked sessions are not supported", async () => {
     const onError = vi.fn();
     const onTranscript = vi.fn();

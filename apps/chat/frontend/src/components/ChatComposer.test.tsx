@@ -999,8 +999,8 @@ describe("ChatComposer reference search", () => {
     expect(executionBadge?.getAttribute("aria-label")).toBe("Full access runtime");
     expect(executionBadge?.textContent).toContain("admin_panel_settings");
     expect(executionBadge?.textContent).not.toContain("full-access");
-    expect(runtimeControls?.firstElementChild).toBe(executionBadge);
-    expect(runtimeControls?.lastElementChild?.classList.contains("chatapp-provider-selector")).toBe(true);
+    expect(runtimeControls?.firstElementChild?.classList.contains("chatapp-provider-selector")).toBe(true);
+    expect(runtimeControls?.lastElementChild).toBe(executionBadge);
   });
 
   it("places dictation next to the send action", async () => {

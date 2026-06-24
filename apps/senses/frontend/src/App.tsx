@@ -729,17 +729,30 @@ function useNativeHost() {
 
   useEffect(() => {
     function refreshAvailability() {
-      setAvailable(hasNativeHost());
+      setAvailable(hasNativeHost() || window.__maverickSensesNativeStatus?.available === true);
     }
-    function handleStatus(event: Event) {
-      const detail = (event as CustomEvent<SensesNativeStatus>).detail;
+    function applyStatus(detail: unknown) {
       if (detail && typeof detail === 'object') {
-        window.__maverickSensesNativeStatus = detail;
-        setStatus(detail);
+        window.__maverickSensesNativeStatus = detail as SensesNativeStatus;
+        setStatus(detail as SensesNativeStatus);
       }
       refreshAvailability();
     }
+    function handleStatus(event: Event) {
+      applyStatus((event as CustomEvent<SensesNativeStatus>).detail);
+    }
+    function handleMessage(event: MessageEvent) {
+      if (event.origin !== window.location.origin || !event.data || typeof event.data !== 'object') {
+        return;
+      }
+      const payload = event.data as { type?: string; status?: unknown; detail?: unknown };
+      if (payload.type !== 'maverick.senses.native-status') {
+        return;
+      }
+      applyStatus(payload.status ?? payload.detail);
+    }
     window.addEventListener('maverick.senses.native-status', handleStatus);
+    window.addEventListener('message', handleMessage);
     refreshAvailability();
     if (window.__maverickSensesNativeStatus) {
       setStatus(window.__maverickSensesNativeStatus);
@@ -747,7 +760,10 @@ function useNativeHost() {
     if (hasNativeHost()) {
       postNativeCommand('refreshNativeStatus');
     }
-    return () => window.removeEventListener('maverick.senses.native-status', handleStatus);
+    return () => {
+      window.removeEventListener('maverick.senses.native-status', handleStatus);
+      window.removeEventListener('message', handleMessage);
+    };
   }, []);
 
   const send = useCallback((command: NativeCommand) => {

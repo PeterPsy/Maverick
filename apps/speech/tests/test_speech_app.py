@@ -2290,6 +2290,20 @@ class SpeechAppTests(unittest.TestCase):
         self.assertTrue(all("voices" in item for item in payload["synthesis"]))
         self.assertTrue(all("voice_count" not in item for item in payload["synthesis"]))
 
+    def test_deepgram_benchmark_script_dry_run_reports_nova_and_flux_plan(self) -> None:
+        result = subprocess.run(
+            [sys.executable, str(APP_ROOT / "scripts" / "benchmark_deepgram.py"), "--dry-run"],
+            text=True,
+            capture_output=True,
+            check=True,
+        )
+
+        payload = json.loads(result.stdout)
+        self.assertEqual(payload["mode"], "dry_run")
+        self.assertEqual([item["model"] for item in payload["prerecorded"]], ["nova-2", "nova-3"])
+        self.assertEqual(payload["flux"]["model"], "flux-general-multi")
+        self.assertIn("time_to_first_partial_seconds", payload["flux"]["metrics"])
+
     def test_cli_engine_inspection_receives_delivered_app_secrets(self) -> None:
         with TemporaryDirectory() as temp_dir:
             root = Path(temp_dir)

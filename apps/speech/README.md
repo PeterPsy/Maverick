@@ -61,6 +61,22 @@ The exact wrapper flag spelling is discoverable through `maverick app speech cli
 
 `synthesize` and `transcribe_audio` are backend consumer operations only. They are intentionally not CLI operations because they require generated audio bytes or inline audio payloads.
 
+## Deepgram Benchmark Harness
+
+Use the app-owned benchmark script to compare prerecorded Nova models and Flux realtime behavior with the same local audio sample. The dry run prints the planned models, endpoints, and metrics without network calls:
+
+```bash
+python3 apps/speech/scripts/benchmark_deepgram.py --dry-run
+```
+
+Real runs require `DEEPGRAM_API_KEY` and an audio file:
+
+```bash
+DEEPGRAM_API_KEY=... python3 apps/speech/scripts/benchmark_deepgram.py --audio sample.webm --language it
+```
+
+The prerecorded section compares `nova-2` and `nova-3` HTTP `/v1/listen` latency, duration, and transcript length. The Flux section opens `wss://api.deepgram.com/v2/listen`, sends chunks, and reports time-to-first-partial, end-of-turn latency, and optional early-close interruption latency via `--interrupt-after-chunks`.
+
 ## Operational Runbook
 
 Use one-shot shell commands to prepare packages and local models. Persist `MAVERICK_SPEECH_*` values in the backend service environment, then restart the Maverick backend. Exporting variables in an interactive shell affects only commands started from that shell; it does not reconfigure an already-running backend process.

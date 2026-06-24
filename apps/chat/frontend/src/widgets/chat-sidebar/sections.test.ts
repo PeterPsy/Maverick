@@ -64,7 +64,7 @@ describe("chat sidebar runtime status", () => {
     expect(sections[0].items.map((item) => item.thread_id)).toEqual(["assigned"]);
   });
 
-  it("filters Senses threads for the Occhiali view", () => {
+  it("filters Senses threads for the Senses view", () => {
     const chatThread = thread({ thread_id: "chat-thread", source_app_id: "chat" });
     const sensesThread = thread({ thread_id: "senses-thread", source_app_id: "senses" });
 
@@ -72,8 +72,8 @@ describe("chat sidebar runtime status", () => {
     expect(buildSections([], [chatThread, sensesThread], "senses")[0].items.map((item) => item.thread_id)).toEqual(["senses-thread"]);
   });
 
-  it("labels Senses threads as Occhiali", () => {
-    expect(threadSourceBadgeLabel(thread({ source_app_id: "senses" }))).toBe("Occhiali");
+  it("labels Senses threads as Senses", () => {
+    expect(threadSourceBadgeLabel(thread({ source_app_id: "senses" }))).toBe("Senses");
     expect(threadSourceBadgeLabel(thread({ source_app_id: "chat" }))).toBeNull();
   });
 

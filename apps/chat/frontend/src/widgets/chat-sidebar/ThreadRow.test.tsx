@@ -106,11 +106,11 @@ describe("ThreadRow", () => {
     expect(timestamp?.textContent).not.toMatch(/\d{2}:\d{2}:\d{2}/);
   });
 
-  it("shows an Occhiali badge for Senses threads", async () => {
-    await renderThreadRow(thread({ source_app_id: "senses", title: "Occhiali - domanda visiva" }));
+  it("shows a Senses badge for Senses threads", async () => {
+    await renderThreadRow(thread({ source_app_id: "senses", title: "Senses - visual question" }));
 
     const badge = container?.querySelector(".bs-chat-list__source-badge");
-    expect(badge?.textContent).toContain("Occhiali");
+    expect(badge?.textContent).toContain("Senses");
   });
 
   it("does not show a source badge for ordinary chat threads", async () => {

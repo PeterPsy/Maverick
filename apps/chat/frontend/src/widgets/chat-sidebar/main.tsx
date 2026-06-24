@@ -1,4 +1,5 @@
 import { createRoot } from "react-dom/client";
+import { Search } from "lucide-react";
 import { applyInitialMaverickTheme, listenForMaverickThemeMessages } from "../../lib/shellTheme";
 import { ChatSidebarSkeleton } from "./ChatSidebarSkeleton";
 import { ProjectSection } from "./ProjectSection";
@@ -20,9 +21,7 @@ function ChatSidebarWidget() {
       {sidebar.error ? <p className="bs-chat-folder__empty">{sidebar.error}</p> : null}
 
       <div className="bs-chat-sidebar-search-frame">
-        <span aria-hidden="true" className="material-symbols-rounded">
-          search
-        </span>
+        <Search size={17} aria-hidden="true" />
         <input
           aria-label="Search chats"
           className="bs-chat-sidebar-search"
@@ -39,7 +38,7 @@ function ChatSidebarWidget() {
           onClick={() => sidebar.setSourceFilter("all")}
           type="button"
         >
-          <span className="bs-chat-sidebar-source-filter__label">Tutte</span>
+          <span className="bs-chat-sidebar-source-filter__label">All</span>
           <span className="bs-chat-sidebar-source-filter__count">{sidebar.sourceFilterCounts.all}</span>
         </button>
         <button
@@ -49,9 +48,9 @@ function ChatSidebarWidget() {
           type="button"
         >
           <span aria-hidden="true" className="material-symbols-rounded">
-            eyeglasses
+            sensors
           </span>
-          <span className="bs-chat-sidebar-source-filter__label">Occhiali</span>
+          <span className="bs-chat-sidebar-source-filter__label">Senses</span>
           <span className="bs-chat-sidebar-source-filter__count">{sidebar.sourceFilterCounts.senses}</span>
         </button>
       </div>

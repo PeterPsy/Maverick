@@ -22,6 +22,7 @@ describe("chat sidebar search", () => {
   it("uses the compact glass search frame copied from the Skills sidebar pattern", () => {
     const styles = readStyle("styles.css");
 
+    expect(styles).toContain("--chat-sidebar-scroll-under-top: 3.12rem;");
     expect(styles).toContain("--chat-sidebar-search-height: 2.65rem;");
     expect(styles).toContain(".bs-chat-sidebar-search-frame");
     expect(styles).toContain("grid-template-columns: auto minmax(0, 1fr);");
@@ -31,6 +32,14 @@ describe("chat sidebar search", () => {
     expect(styles).toMatch(
       /padding: calc\(var\(--chat-sidebar-(?:scroll-under-top\) \+ var\(--chat-sidebar-search-height|source-filter-top\) \+ var\(--chat-sidebar-source-filter-height)\) \+ 0\.72rem\) 0 var\(--chat-sidebar-scroll-under-bottom\);/,
     );
+  });
+
+  it("keeps the source filter buttons on blurred glass surfaces", () => {
+    const styles = readStyle("styles.css");
+
+    expect(styles).toMatch(/\.bs-chat-sidebar-source-filter__button\s*{[\s\S]*background:\s*var\(--chat-sidebar-glass-surface\);/);
+    expect(styles).toMatch(/\.bs-chat-sidebar-source-filter__button\s*{[\s\S]*backdrop-filter:\s*blur\(26px\);/);
+    expect(styles).toMatch(/\.bs-chat-sidebar-source-filter__button\s*{[\s\S]*-webkit-backdrop-filter:\s*blur\(26px\);/);
   });
 });
 

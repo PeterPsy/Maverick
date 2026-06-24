@@ -130,7 +130,7 @@ input {
 
 .bs-widget-root {
   --chat-sidebar-scroll-under-bottom: 6.8rem;
-  --chat-sidebar-scroll-under-top: calc(3rem + 0.75rem);
+  --chat-sidebar-scroll-under-top: 3.12rem;
   --chat-sidebar-search-height: 2.65rem;
   --chat-sidebar-source-filter-height: 2.1rem;
   --chat-sidebar-source-filter-top: calc(var(--chat-sidebar-scroll-under-top) + var(--chat-sidebar-search-height) + 0.44rem);
@@ -144,7 +144,7 @@ input {
 
 .bs-widget-root.is-shell-mobile {
   --chat-sidebar-scroll-under-bottom: 3.9rem;
-  --chat-sidebar-scroll-under-top: calc(3rem + 0.75rem);
+  --chat-sidebar-scroll-under-top: 3.12rem;
   overscroll-behavior: contain;
   touch-action: pan-y;
 }
@@ -178,12 +178,12 @@ input {
   -webkit-backdrop-filter: blur(26px);
 }
 
-.bs-chat-sidebar-search-frame .material-symbols-rounded {
+.bs-chat-sidebar-search-frame svg {
   width: 1.08rem;
   height: 1.08rem;
   color: var(--maverick-text-muted);
-  font-size: 1.08rem;
   flex: none;
+  stroke: currentColor;
 }
 
 .bs-chat-sidebar-search {
@@ -228,6 +228,8 @@ input {
   border-radius: var(--chat-sidebar-control-radius);
   background: var(--chat-sidebar-glass-surface);
   box-shadow: var(--chat-sidebar-inner-edge);
+  backdrop-filter: blur(26px);
+  -webkit-backdrop-filter: blur(26px);
   color: var(--maverick-text-muted);
   font-size: 0.72rem;
   line-height: 1;

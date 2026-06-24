@@ -83,7 +83,7 @@ export function isSensesThread(thread: ChatThread): boolean {
 }
 
 export function threadSourceBadgeLabel(thread: ChatThread): string | null {
-  return isSensesThread(thread) ? "Occhiali" : null;
+  return isSensesThread(thread) ? "Senses" : null;
 }
 
 export function isThreadBusy(thread: ChatThread): boolean {

@@ -53,7 +53,11 @@ function hostedModelProviderItems(status: HostedTextProviderStatus | null | unde
   }
   const selectedModelId = status?.model_settings?.selected_model_id || provider.default_model_family || "";
   const models = status?.model_settings?.available_models?.length ? status.model_settings.available_models : provider.model_options || [];
-  const sortedModels = [...models].sort((left, right) => {
+  const textModels = models.filter(modelSupportsPlainHostedChat);
+  if (models.length && !textModels.length) {
+    return [];
+  }
+  const sortedModels = [...textModels].sort((left, right) => {
     if (left.model_id === selectedModelId) {
       return -1;
     }
@@ -84,6 +88,11 @@ function hostedModelProviderItems(status: HostedTextProviderStatus | null | unde
     input_modalities: model.input_modalities || [],
     output_modalities: model.output_modalities || [],
   }));
+}
+
+function modelSupportsPlainHostedChat(model: { output_modalities?: string[] | null }): boolean {
+  const outputs = model.output_modalities || [];
+  return !outputs.length || outputs.includes("text");
 }
 
 function hostedRuntimeOptionId(providerId: string, modelId: string): string {

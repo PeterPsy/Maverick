@@ -154,6 +154,9 @@ def _select_fast_model(context: ProviderRoutingContext) -> RoutingDecision:
             else:
                 reason_codes.append(f"workspace_policy_denied_model:{candidate.provider_id}")
             continue
+        if not _model_supports_plain_hosted_text(model):
+            reason_codes.append(f"hosted_model_output_unsupported:{model.model_id}")
+            continue
 
         authorization = check_provider_credential_authorization(
             context.provider_store,
@@ -326,6 +329,11 @@ def _select_model(
         if model.model_id == definition.default_model_family:
             return model
     return models[0]
+
+
+def _model_supports_plain_hosted_text(model: ProviderModelOption) -> bool:
+    outputs = list(model.output_modalities)
+    return not outputs or "text" in outputs
 
 
 def _provider_allowed(provider_id: str, *, policy: WorkspaceProviderPolicy, user_tier: str | None) -> bool:

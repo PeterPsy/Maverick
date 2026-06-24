@@ -42,6 +42,15 @@ const payload: ProviderPayload = {
           input_modalities: ["text"],
           output_modalities: ["text"],
         },
+        {
+          model_id: "hexgrad/kokoro-82m",
+          label: "Kokoro 82M",
+          description: null,
+          default_reasoning_effort: null,
+          supported_reasoning_efforts: [],
+          input_modalities: ["text"],
+          output_modalities: ["speech"],
+        },
       ],
     },
     selection: null,
@@ -67,6 +76,15 @@ const payload: ProviderPayload = {
           input_modalities: ["text"],
           output_modalities: ["text"],
         },
+        {
+          model_id: "hexgrad/kokoro-82m",
+          label: "Kokoro 82M",
+          description: null,
+          default_reasoning_effort: null,
+          supported_reasoning_efforts: [],
+          input_modalities: ["text"],
+          output_modalities: ["speech"],
+        },
       ],
     },
     available_providers: [],
@@ -80,6 +98,10 @@ describe("provider runtime options", () => {
       "Gemma 4 31B (free) - OpenRouter",
       "Nemotron 3 Ultra (free) - OpenRouter",
     ]);
+  });
+
+  it("does not expose speech-only OpenRouter models as plain hosted chat choices", () => {
+    expect(providerItemsFromPayload(payload).map((provider) => provider.hosted_model_id)).not.toContain("hexgrad/kokoro-82m");
   });
 
   it("maps hosted text provider choices to plain hosted chat runtime config", () => {

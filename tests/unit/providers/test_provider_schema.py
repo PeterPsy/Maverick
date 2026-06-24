@@ -167,19 +167,24 @@ class ProviderSchemaTest(unittest.TestCase):
             "google/gemma-4-31b-it:free",
             "nvidia/nemotron-3-ultra-550b-a55b:free",
             "deepseek/deepseek-v4-flash",
+            "hexgrad/kokoro-82m",
         ])
         self.assertEqual([option.label for option in openrouter.model_options], [
             "Gemma 4 31B (free)",
             "Nemotron 3 Ultra (free)",
             "DeepSeek V4 Flash",
+            "Kokoro 82M",
         ])
         self.assertEqual(openrouter.model_options[0].input_modalities, ["text", "image", "video"])
         self.assertEqual(openrouter.model_options[1].input_modalities, ["text"])
         self.assertEqual(openrouter.model_options[2].input_modalities, ["text"])
+        self.assertEqual(openrouter.model_options[3].input_modalities, ["text"])
+        self.assertEqual(openrouter.model_options[3].output_modalities, ["speech"])
         self.assertEqual(payload["model_options"][0]["input_modalities"], ["text", "image", "video"])
         self.assertEqual(payload["model_options"][0]["upstream_provider_options"][0]["provider_id"], "google-ai-studio")
         self.assertEqual(payload["model_options"][1]["upstream_provider_options"][0]["provider_id"], "nvidia")
         self.assertEqual(payload["model_options"][2]["upstream_provider_options"][0]["provider_id"], "wafer/fp4")
+        self.assertEqual(payload["model_options"][3]["upstream_provider_options"][0]["provider_id"], "deepinfra")
         self.assertEqual(openrouter.credential_requirements[0].secret_alias_or_logical_name, "openrouter_api_key")
         self.assertEqual(openrouter.network_requirements[0].allowed_hosts, ["openrouter.ai"])
         self.assertEqual(openrouter.execution_contract.adapter_type if openrouter.execution_contract else None, "hosted_text_generation")

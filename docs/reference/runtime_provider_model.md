@@ -51,6 +51,7 @@ Maverick exposes these OpenRouter model options:
 - `google/gemma-4-31b-it:free` as `Gemma 4 31B (free)`, with text, image, and video input metadata
 - `nvidia/nemotron-3-ultra-550b-a55b:free` as `Nemotron 3 Ultra (free)`, with text-only input metadata
 - `deepseek/deepseek-v4-flash` as `DeepSeek V4 Flash`, with text-only input metadata and paid OpenRouter pricing
+- `hexgrad/kokoro-82m` as `Kokoro 82M`, with text-to-speech metadata and paid OpenRouter pricing
 
 Hosted text providers are enabled through an operator-only hosted activation
 path, not through `/api/providers/active`. The activation path stores an active
@@ -83,6 +84,13 @@ collection preference, and quantization filter. Chat does not expose these
 controls; it only selects the model. During OpenRouter execution, Maverick
 translates the saved per-model preference into the OpenRouter `provider`
 request object.
+
+Speech-output OpenRouter models such as `hexgrad/kokoro-82m` are cataloged in
+Settings for provider routing metadata, but the current `plain_hosted_chat`
+bridge only executes models whose output modality includes `text`. Kokoro uses
+OpenRouter's `/api/v1/audio/speech` TTS endpoint and is intentionally not routed
+through the text chat completions bridge until Maverick has a speech synthesis
+runtime path.
 
 `plain_hosted_chat` is the current non-agentic text bridge. A Chat/runtime
 session using that mode routes the `fast_model` profile through the provider

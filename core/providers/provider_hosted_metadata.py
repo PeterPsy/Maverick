@@ -347,6 +347,22 @@ def _openrouter_definition(timestamp: datetime) -> ProviderDefinition:
                     ),
                 ],
             ),
+            ProviderModelOption(
+                model_id="hexgrad/kokoro-82m",
+                label="Kokoro 82M",
+                description="OpenRouter paid text-to-speech model for speech synthesis workflows.",
+                default_reasoning_effort=None,
+                input_modalities=["text"],
+                output_modalities=["speech"],
+                upstream_provider_options=[
+                    _openrouter_upstream(
+                        "deepinfra",
+                        "DeepInfra",
+                        quantization="unknown",
+                        context_length=4096,
+                    )
+                ],
+            ),
         ],
         credential_requirements=[_credential("openrouter_api_key", modes=["plain_hosted_chat", "fast_model"])],
         network_requirements=[_network("openrouter.ai")],

@@ -329,6 +329,28 @@ const openrouterModels = [
     upstream_provider_options: [
       { provider_id: 'nvidia', label: 'Nvidia', tag: 'nvidia', quantization: 'unknown' }
     ]
+  },
+  {
+    model_id: 'deepseek/deepseek-v4-flash',
+    label: 'DeepSeek V4 Flash',
+    description: null,
+    default_reasoning_effort: null,
+    supported_reasoning_efforts: [],
+    upstream_provider_options: [
+      { provider_id: 'wafer/fp4', label: 'Wafer', tag: 'wafer/fp4', quantization: 'fp4' }
+    ]
+  },
+  {
+    model_id: 'hexgrad/kokoro-82m',
+    label: 'Kokoro 82M',
+    description: null,
+    default_reasoning_effort: null,
+    supported_reasoning_efforts: [],
+    input_modalities: ['text'],
+    output_modalities: ['speech'],
+    upstream_provider_options: [
+      { provider_id: 'deepinfra', label: 'DeepInfra', tag: 'deepinfra', quantization: 'unknown' }
+    ]
   }
 ];
 
@@ -403,11 +425,15 @@ assert.ok(html.includes('Hosted chat fast models'));
 assert.ok(html.includes('OpenRouter'));
 assert.ok(html.includes('Gemma 4 31B (free)'));
 assert.ok(html.includes('Nemotron 3 Ultra (free)'));
-assert.equal((html.match(/data-settings-model-accordion=/g) || []).length, 3);
-assert.equal((html.match(/data-hosted-model-accordion=/g) || []).length, 2);
-assert.equal((html.match(/<span class="settings-pill">Active<\/span>/g) || []).length, 2);
+assert.ok(html.includes('DeepSeek V4 Flash'));
+assert.ok(html.includes('Kokoro 82M'));
+assert.equal((html.match(/data-settings-model-accordion=/g) || []).length, 5);
+assert.equal((html.match(/data-hosted-model-accordion=/g) || []).length, 4);
+assert.equal((html.match(/<span class="settings-pill">Active<\/span>/g) || []).length, 4);
 assert.ok(html.includes('data-hosted-provider-save="google/gemma-4-31b-it:free"'));
 assert.ok(html.includes('data-hosted-provider-save="nvidia/nemotron-3-ultra-550b-a55b:free"'));
+assert.ok(html.includes('data-hosted-provider-save="deepseek/deepseek-v4-flash"'));
+assert.ok(html.includes('data-hosted-provider-save="hexgrad/kokoro-82m"'));
 assert.ok(!html.includes('settings-hosted-provider-model'));
 assert.ok(html.includes('OpenRouter upstream'));
 assert.ok(html.includes('data-openrouter-routing="mode"'));

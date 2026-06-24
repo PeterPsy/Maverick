@@ -299,6 +299,41 @@ class ProviderRoutingTest(unittest.TestCase):
         self.assertIsNone(decision.execution_path)
         self.assertIn("hosted_model_override_unavailable:openrouter", decision.reason_codes)
 
+    def test_fast_model_speech_output_model_override_fails_closed(self) -> None:
+        store = self.make_provider_store()
+        secret_store = self.make_secret_store()
+        create_platform_secret(
+            secret_store,
+            label="OpenRouter",
+            raw_value="super-secret-token",
+            alias="openrouter-api-key",
+            kind="api_key",
+        )
+        activate_hosted_model_provider(
+            store,
+            secret_store=secret_store,
+            workspace_id="default",
+            provider_id="openrouter",
+            secret_ref=build_secret_ref(alias="openrouter-api-key"),
+        )
+
+        decision = select_provider_for_profile(
+            "fast_model",
+            ProviderRoutingContext(
+                workspace_id="default",
+                provider_store=store,
+                registry=effective_provider_registry(store),
+                secret_store=secret_store,
+                request_id="req-openrouter-speech-override",
+                hosted_provider_id="openrouter",
+                hosted_model_id="hexgrad/kokoro-82m",
+            ),
+        )
+
+        self.assertIsNone(decision.selected_provider_id)
+        self.assertIsNone(decision.execution_path)
+        self.assertIn("hosted_model_output_unsupported:hexgrad/kokoro-82m", decision.reason_codes)
+
     def test_hosted_selection_preserves_openrouter_routing_by_model(self) -> None:
         store = self.make_provider_store()
         secret_store = self.make_secret_store()

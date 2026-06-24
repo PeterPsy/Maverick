@@ -109,7 +109,10 @@ def operations_manifest() -> dict:
                 "required_fields": [],
             },
             "synthesize": {
-                "description": "Synthesize plain text into bounded cached WAV audio.",
+                "description": (
+                    "Synthesize plain text into bounded inline audio using the configured provider; "
+                    "inspect capabilities for content type, cache, and retention behavior."
+                ),
                 "required_fields": ["text"],
             },
             "transcribe_audio": {

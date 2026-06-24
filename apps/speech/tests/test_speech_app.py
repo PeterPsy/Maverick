@@ -783,6 +783,9 @@ class SpeechAppTests(unittest.TestCase):
     def test_backend_manifest_exposes_only_read_only_worker_status(self) -> None:
         manifest = operations_manifest()
 
+        synthesize_description = manifest["operations"]["synthesize"]["description"]
+        self.assertIn("content type, cache, and retention", synthesize_description)
+        self.assertNotIn("cached WAV", synthesize_description)
         self.assertIn("worker_status", manifest["operations"])
         self.assertNotIn("worker_stop", manifest["operations"])
         self.assertNotIn("worker_reload", manifest["operations"])

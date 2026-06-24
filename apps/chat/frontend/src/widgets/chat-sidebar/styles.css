@@ -844,19 +844,32 @@ input {
   display: grid;
   align-items: center;
   justify-items: end;
-  width: 4.9rem;
-  min-width: 4.9rem;
+  width: 6.55rem;
+  min-width: 6.55rem;
   min-height: 28px;
 }
 
-.bs-chat-list__timestamp,
+.bs-chat-list__meta,
 .bs-chat-list__actions {
   grid-area: 1 / 1;
   justify-self: end;
 }
 
+.bs-chat-list__meta {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.28rem;
+  max-width: 100%;
+  min-width: 0;
+  overflow: hidden;
+  opacity: 1;
+  transition: opacity 140ms ease;
+}
+
 .bs-chat-list__timestamp {
   display: block;
+  flex: none;
   max-width: 100%;
   overflow: hidden;
   color: var(--maverick-text-soft);
@@ -864,12 +877,10 @@ input {
   font-weight: 400;
   letter-spacing: 0;
   line-height: 1;
-  opacity: 1;
   pointer-events: none;
   text-align: right;
   text-overflow: ellipsis;
   white-space: nowrap;
-  transition: opacity 140ms ease;
 }
 
 .bs-chat-list__copy {
@@ -1212,11 +1223,11 @@ input {
   pointer-events: auto;
 }
 
-.bs-chat-list__item:hover .bs-chat-list__timestamp,
-.bs-chat-list__item:focus-within .bs-chat-list__timestamp,
-.bs-chat-list__item.is-selected .bs-chat-list__timestamp,
-.bs-chat-list__item.is-expanded .bs-chat-list__timestamp,
-.bs-widget-root.is-shell-mobile.has-thread-actions-revealed .bs-chat-list__item .bs-chat-list__timestamp {
+.bs-chat-list__item:hover .bs-chat-list__meta,
+.bs-chat-list__item:focus-within .bs-chat-list__meta,
+.bs-chat-list__item.is-selected .bs-chat-list__meta,
+.bs-chat-list__item.is-expanded .bs-chat-list__meta,
+.bs-widget-root.is-shell-mobile.has-thread-actions-revealed .bs-chat-list__item .bs-chat-list__meta {
   opacity: 0;
 }
 

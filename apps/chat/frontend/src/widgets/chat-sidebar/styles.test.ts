@@ -46,6 +46,8 @@ describe("chat sidebar search", () => {
   it("keeps source badges compact as icon-only pills", () => {
     const styles = readStyle("styles.css");
 
+    expect(styles).toContain(".bs-chat-list__meta");
+    expect(styles).toMatch(/\.bs-chat-list__trailing\s*{[\s\S]*width:\s*6\.55rem;/);
     expect(styles).toMatch(/\.bs-chat-list__source-badge\s*{[\s\S]*width:\s*1\.32rem;/);
     expect(styles).toMatch(/\.bs-chat-list__source-badge\s*{[\s\S]*padding:\s*0;/);
     expect(styles).toContain(".bs-chat-list__source-badges");
@@ -82,10 +84,10 @@ describe("chat sidebar multi-select affordance", () => {
     expect(styles).toContain(".bs-chat-list__selection-ring");
     expect(styles).toContain(".bs-chat-list__item.is-selected .bs-chat-list__selection-toggle");
     expect(styles).toContain(".bs-chat-list__item:hover .bs-chat-list__selection-toggle");
-    expect(styles).toContain(".bs-chat-list__item:hover .bs-chat-list__timestamp");
+    expect(styles).toContain(".bs-chat-list__item:hover .bs-chat-list__meta");
     expect(styles).toContain(".bs-widget-root.has-thread-selection");
     expect(styles).toContain(".bs-widget-root.is-shell-mobile.has-thread-actions-revealed .bs-chat-list__item .bs-instance-menu__trigger");
-    expect(styles).toContain(".bs-widget-root.is-shell-mobile.has-thread-actions-revealed .bs-chat-list__item .bs-chat-list__timestamp");
+    expect(styles).toContain(".bs-widget-root.is-shell-mobile.has-thread-actions-revealed .bs-chat-list__item .bs-chat-list__meta");
     expect(styles).toContain("--chat-sidebar-scroll-under-bottom: 9.8rem;");
   });
 });

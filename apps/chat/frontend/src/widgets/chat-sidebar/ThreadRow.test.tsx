@@ -113,6 +113,8 @@ describe("ThreadRow", () => {
     const badge = container?.querySelector(".bs-chat-list__source-badge");
     expect(badge?.getAttribute("title")).toBe("Senses");
     expect(badge?.textContent?.trim()).toBe("sensors");
+    expect(container?.querySelector(".bs-chat-list__trailing .bs-chat-list__source-badge")).toBe(badge);
+    expect(container?.querySelector(".bs-chat-list__copy .bs-chat-list__source-badge")).toBeNull();
     expect(container?.textContent).not.toContain("Senses");
   });
 
@@ -122,6 +124,8 @@ describe("ThreadRow", () => {
     const badge = container?.querySelector(".bs-chat-list__source-badge");
     expect(badge?.getAttribute("title")).toBe("Multi-agent");
     expect(badge?.textContent?.trim()).toBe("account_tree");
+    expect(container?.querySelector(".bs-chat-list__trailing .bs-chat-list__source-badge")).toBe(badge);
+    expect(container?.querySelector(".bs-chat-list__copy .bs-chat-list__source-badge")).toBeNull();
     expect(container?.textContent).not.toContain("Multi-agent");
   });
 

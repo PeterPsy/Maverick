@@ -42,6 +42,16 @@ DEEPGRAM_MODEL = "nova-2"
 KOKORO_OPENROUTER_MODEL = "hexgrad/kokoro-82m"
 KOKORO_OPENROUTER_RESPONSE_FORMAT = "mp3"
 KOKORO_OPENROUTER_CONTENT_TYPE = "audio/mpeg"
+KOKORO_OPENROUTER_DEFAULT_VOICE = "af_heart"
+KOKORO_OPENROUTER_LANGUAGE_DEFAULT_VOICES = {
+    "en": KOKORO_OPENROUTER_DEFAULT_VOICE,
+    "it": "if_sara",
+}
+KOKORO_OPENROUTER_VOICES = (
+    {"voice_id": "af_heart", "name": "Heart", "language": "en", "gender": "female"},
+    {"voice_id": "if_sara", "name": "Sara", "language": "it", "gender": "female"},
+    {"voice_id": "im_nicola", "name": "Nicola", "language": "it", "gender": "male"},
+)
 REMOTE_PROVIDER_TIMEOUT_SECONDS = 45
 
 LOCAL_TTS_ENGINE_CANDIDATES = ("piper", "espeak-ng", "espeak")
@@ -187,7 +197,7 @@ def run_kokoro_openrouter(*, text: str, voice: str, settings: dict) -> bytes:
     payload = {
         "model": KOKORO_OPENROUTER_MODEL,
         "input": text,
-        "voice": voice or "af_heart",
+        "voice": voice or KOKORO_OPENROUTER_DEFAULT_VOICE,
         "response_format": KOKORO_OPENROUTER_RESPONSE_FORMAT,
     }
     request = urllib_request.Request(
@@ -656,7 +666,7 @@ def _remote_kokoro_status(settings: dict) -> dict:
         "quality_profile": "natural",
         "latency_profile": "remote",
         "supported_formats": [KOKORO_OPENROUTER_CONTENT_TYPE],
-        "voices": [{"voice_id": "af_heart", "name": "Kokoro default", "language": "en"}],
+        "voices": [dict(voice) for voice in KOKORO_OPENROUTER_VOICES],
     }
 
 

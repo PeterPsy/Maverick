@@ -185,6 +185,8 @@ class SpeechAppTests(unittest.TestCase):
         self.assertTrue(synthesis["available"])
         self.assertEqual(synthesis["engine"], "kokoro-openrouter")
         self.assertEqual(synthesis["default_voice"], "af_heart")
+        self.assertIn({"voice_id": "if_sara", "name": "Sara", "language": "it", "gender": "female"}, synthesis["voices"])
+        self.assertIn({"voice_id": "im_nicola", "name": "Nicola", "language": "it", "gender": "male"}, synthesis["voices"])
         self.assertEqual(synthesis["quality_profile"], "natural")
         self.assertEqual(synthesis["content_types"], ["audio/mpeg"])
         self.assertEqual(synthesis["cache"], {"enabled": False, "scope": "none"})
@@ -442,6 +444,8 @@ class SpeechAppTests(unittest.TestCase):
         self.assertTrue(synthesis["kokoro-openrouter"]["available"])
         self.assertEqual(synthesis["kokoro-openrouter"]["model"], "hexgrad/kokoro-82m")
         self.assertEqual(synthesis["kokoro-openrouter"]["supported_formats"], ["audio/mpeg"])
+        self.assertIn({"voice_id": "if_sara", "name": "Sara", "language": "it", "gender": "female"}, synthesis["kokoro-openrouter"]["voices"])
+        self.assertIn({"voice_id": "im_nicola", "name": "Nicola", "language": "it", "gender": "male"}, synthesis["kokoro-openrouter"]["voices"])
 
     def test_deepgram_transcription_engine_is_explicit_remote_choice(self) -> None:
         settings = {
@@ -574,10 +578,17 @@ class SpeechAppTests(unittest.TestCase):
         self.assertEqual(captured["headers"]["Authorization"], "Bearer openrouter-token")
 
     def test_kokoro_openrouter_synthesis_returns_mpeg_payload(self) -> None:
+        captured: dict[str, object] = {}
+
+        def fake_synthesis(*, text: str, voice: str, settings: dict) -> bytes:
+            captured["text"] = text
+            captured["voice"] = voice
+            return b"ID3kokoro"
+
         with TemporaryDirectory() as temp_dir:
             root = Path(temp_dir)
             write_settings(root / "data", {"synthesis_engine": "kokoro-openrouter"})
-            with patch("synthesis.run_kokoro_openrouter", return_value=b"ID3kokoro"):
+            with patch("synthesis.run_kokoro_openrouter", side_effect=fake_synthesis):
                 status_code, payload = handle_action(
                     root / "data",
                     root / "generated",
@@ -592,10 +603,94 @@ class SpeechAppTests(unittest.TestCase):
             jobs = json.loads((root / "data" / "jobs.json").read_text(encoding="utf-8"))["jobs"]
 
         self.assertEqual(status_code, 200)
+        self.assertEqual(captured["voice"], "af_heart")
         self.assertEqual(payload["content_type"], "audio/mpeg")
         self.assertEqual(payload["format"], "audio/mpeg")
+        self.assertEqual(payload["voice"], "af_heart")
         self.assertEqual(payload["retention"], "provider_response")
         self.assertEqual(jobs[0]["content_type"], "audio/mpeg")
+        self.assertEqual(jobs[0]["voice"], "af_heart")
+
+    def test_kokoro_openrouter_synthesis_selects_italian_voice_from_text(self) -> None:
+        captured: dict[str, object] = {}
+
+        def fake_synthesis(*, text: str, voice: str, settings: dict) -> bytes:
+            captured["text"] = text
+            captured["voice"] = voice
+            return b"ID3kokoro"
+
+        with TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            write_settings(root / "data", {"synthesis_engine": "kokoro-openrouter"})
+            with patch("synthesis.run_kokoro_openrouter", side_effect=fake_synthesis):
+                status_code, payload = handle_action(
+                    root / "data",
+                    root / "generated",
+                    {
+                        "action": "synthesize",
+                        "text": "Certo, posso aiutarti con questa risposta in italiano.",
+                        "_app_secrets": {"openrouter-api-key": "openrouter-token"},
+                    },
+                )
+
+            jobs = json.loads((root / "data" / "jobs.json").read_text(encoding="utf-8"))["jobs"]
+
+        self.assertEqual(status_code, 200)
+        self.assertEqual(captured["voice"], "if_sara")
+        self.assertEqual(payload["voice"], "if_sara")
+        self.assertEqual(jobs[0]["voice"], "if_sara")
+
+    def test_kokoro_openrouter_synthesis_uses_italian_language_hint(self) -> None:
+        captured: dict[str, object] = {}
+
+        def fake_synthesis(*, text: str, voice: str, settings: dict) -> bytes:
+            captured["voice"] = voice
+            return b"ID3kokoro"
+
+        with TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            write_settings(root / "data", {"synthesis_engine": "kokoro-openrouter"})
+            with patch("synthesis.run_kokoro_openrouter", side_effect=fake_synthesis):
+                status_code, payload = handle_action(
+                    root / "data",
+                    root / "generated",
+                    {
+                        "action": "synthesize",
+                        "text": "Ok.",
+                        "language": "it-IT",
+                        "_app_secrets": {"openrouter-api-key": "openrouter-token"},
+                    },
+                )
+
+        self.assertEqual(status_code, 200)
+        self.assertEqual(captured["voice"], "if_sara")
+        self.assertEqual(payload["voice"], "if_sara")
+
+    def test_kokoro_openrouter_synthesis_honors_explicit_voice(self) -> None:
+        captured: dict[str, object] = {}
+
+        def fake_synthesis(*, text: str, voice: str, settings: dict) -> bytes:
+            captured["voice"] = voice
+            return b"ID3kokoro"
+
+        with TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            write_settings(root / "data", {"synthesis_engine": "kokoro-openrouter"})
+            with patch("synthesis.run_kokoro_openrouter", side_effect=fake_synthesis):
+                status_code, payload = handle_action(
+                    root / "data",
+                    root / "generated",
+                    {
+                        "action": "synthesize",
+                        "text": "Certo, posso aiutarti.",
+                        "voice": "im_nicola",
+                        "_app_secrets": {"openrouter-api-key": "openrouter-token"},
+                    },
+                )
+
+        self.assertEqual(status_code, 200)
+        self.assertEqual(captured["voice"], "im_nicola")
+        self.assertEqual(payload["voice"], "im_nicola")
 
     def test_entrypoint_payload_delivers_app_secrets_to_speech_body(self) -> None:
         body = app_backend.body_from_payload(

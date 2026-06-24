@@ -9,6 +9,7 @@ import io
 import json
 import os
 from pathlib import Path
+import re
 import tempfile
 import time
 import uuid
@@ -16,6 +17,9 @@ import wave
 
 from engines import resolve_local_tts_engine as resolve_local_engine
 from engines import KOKORO_OPENROUTER_CONTENT_TYPE
+from engines import KOKORO_OPENROUTER_DEFAULT_VOICE
+from engines import KOKORO_OPENROUTER_LANGUAGE_DEFAULT_VOICES
+from engines import KOKORO_OPENROUTER_VOICES
 from engines import run_kokoro_openrouter
 from engines import run_local_tts_engine as run_local_engine
 from engines import tts_engine_cache_fingerprint
@@ -44,6 +48,11 @@ def synthesize_payload(*, data_root: Path, generated_storage_root: Path, body: d
         settings = {**settings, "_app_secrets": dict(body["_app_secrets"])}
     requested_engine = str(settings.get("synthesis_engine") or "auto")
     if requested_engine == "kokoro-openrouter":
+        voice = selected_kokoro_voice_id(
+            requested_voice,
+            text=text,
+            language=body.get("language"),
+        )
         output_format = normalized_output_format(
             body.get("format"),
             default=KOKORO_OPENROUTER_CONTENT_TYPE,
@@ -53,7 +62,7 @@ def synthesize_payload(*, data_root: Path, generated_storage_root: Path, body: d
                 "mp3": KOKORO_OPENROUTER_CONTENT_TYPE,
             },
         )
-        audio = run_kokoro_openrouter(text=text, voice=requested_voice or "af_heart", settings=settings)
+        audio = run_kokoro_openrouter(text=text, voice=voice, settings=settings)
         content_type = output_format
         validate_audio_size(audio)
         job_id = f"tts_{uuid.uuid4().hex}"
@@ -65,7 +74,7 @@ def synthesize_payload(*, data_root: Path, generated_storage_root: Path, body: d
                 "kind": "tts",
                 "created_at": created_at,
                 "text_chars": len(text),
-                "voice": requested_voice or "af_heart",
+                "voice": voice,
                 "engine": "kokoro-openrouter",
                 "quality_profile": "natural",
                 "latency_profile": "remote",
@@ -83,7 +92,7 @@ def synthesize_payload(*, data_root: Path, generated_storage_root: Path, body: d
             "size_bytes": len(audio),
             "text_chars": len(text),
             "engine": "kokoro-openrouter",
-            "voice": requested_voice or "af_heart",
+            "voice": voice,
             "rate": rate,
             "format": output_format,
             "quality_profile": "natural",
@@ -207,6 +216,130 @@ def selected_voice_id(engine: object, requested_voice: str) -> str:
             )
         return requested_voice
     return str(getattr(engine, "voice_id", "") or DEFAULT_VOICE)
+
+
+WORD_RE = re.compile(r"[A-Za-z\u00c0-\u00ff']+")
+ITALIAN_ACCENT_CHARS = frozenset("\u00e0\u00e8\u00e9\u00ec\u00f2\u00f9")
+ITALIAN_TTS_MARKERS = frozenset(
+    {
+        "abbiamo",
+        "adesso",
+        "aiutarti",
+        "anche",
+        "certo",
+        "che",
+        "come",
+        "con",
+        "cosa",
+        "della",
+        "delle",
+        "degli",
+        "del",
+        "di",
+        "dove",
+        "fai",
+        "fatto",
+        "funziona",
+        "grazie",
+        "italiana",
+        "italiano",
+        "messaggio",
+        "modifica",
+        "nel",
+        "non",
+        "parlare",
+        "per",
+        "perche",
+        "posso",
+        "questa",
+        "queste",
+        "questi",
+        "questo",
+        "risposta",
+        "sono",
+        "tutto",
+        "una",
+        "voce",
+        "vocale",
+    }
+)
+ITALIAN_STRONG_TTS_MARKERS = frozenset(
+    {
+        "adesso",
+        "aiutarti",
+        "certo",
+        "ciao",
+        "fatto",
+        "funziona",
+        "grazie",
+        "italiana",
+        "italiano",
+        "perche",
+        "posso",
+    }
+)
+ENGLISH_TTS_MARKERS = frozenset(
+    {
+        "about",
+        "and",
+        "because",
+        "can",
+        "done",
+        "for",
+        "from",
+        "hello",
+        "message",
+        "not",
+        "please",
+        "response",
+        "speech",
+        "that",
+        "the",
+        "this",
+        "voice",
+        "with",
+        "you",
+    }
+)
+
+
+def selected_kokoro_voice_id(requested_voice: str, *, text: str, language: object = "") -> str:
+    if requested_voice:
+        requested = requested_voice.strip()
+        requested_key = requested.lower()
+        for profile in KOKORO_OPENROUTER_VOICES:
+            aliases = {
+                str(profile.get("voice_id") or "").lower(),
+                str(profile.get("language") or "").lower(),
+                str(profile.get("name") or "").lower(),
+            }
+            if requested_key in aliases:
+                return str(profile.get("voice_id") or requested)
+        return requested
+    language_code = normalized_language_code(language) or inferred_tts_language(text)
+    return KOKORO_OPENROUTER_LANGUAGE_DEFAULT_VOICES.get(language_code, KOKORO_OPENROUTER_DEFAULT_VOICE)
+
+
+def normalized_language_code(value: object) -> str:
+    language = str(value or "").strip().lower().replace("_", "-")
+    if not language:
+        return ""
+    return language.split("-", 1)[0]
+
+
+def inferred_tts_language(text: str) -> str:
+    normalized = text.lower()
+    tokens = {token.strip("'") for token in WORD_RE.findall(normalized)}
+    tokens.discard("")
+    italian_score = sum(1 for token in tokens if token in ITALIAN_TTS_MARKERS)
+    english_score = sum(1 for token in tokens if token in ENGLISH_TTS_MARKERS)
+    if any(char in normalized for char in ITALIAN_ACCENT_CHARS):
+        italian_score += 2
+    if english_score == 0 and tokens.intersection(ITALIAN_STRONG_TTS_MARKERS):
+        return "it"
+    if italian_score >= 2 and italian_score > english_score:
+        return "it"
+    return ""
 
 
 def normalized_rate(value: object) -> int:

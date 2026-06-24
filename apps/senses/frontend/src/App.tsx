@@ -44,7 +44,7 @@ import type {
 const APP_EVENTS_WS_PATH = '/api/apps/events/ws';
 const REFRESH_RESOURCES = new Set(['devices', 'pairing', 'settings', 'captures', 'routing', 'view-state']);
 const NATIVE_STATUS_ACK_TIMEOUT_MS = 4500;
-const NATIVE_COMMAND_FINAL_TIMEOUT_MS = 45000;
+const NATIVE_COMMAND_FINAL_TIMEOUT_MS = 75000;
 const NATIVE_AUDIO_RECORDING_SECONDS = 8;
 const NATIVE_AUDIO_RECORDING_MS = NATIVE_AUDIO_RECORDING_SECONDS * 1000;
 const TAB_ITEMS = [
@@ -776,7 +776,11 @@ function postNativeCommand(command: NativeCommand) {
     source: 'senses.frontend',
     type: 'maverick.senses.native-command',
   };
-  window.webkit?.messageHandlers?.sensesHost?.postMessage(message);
+  const directHost = window.webkit?.messageHandlers?.sensesHost;
+  if (directHost) {
+    directHost.postMessage(message);
+    return requestId;
+  }
   window.postMessage(message, window.location.origin);
   if (window.parent && window.parent !== window) {
     window.parent.postMessage(message, window.location.origin);

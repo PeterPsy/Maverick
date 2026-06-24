@@ -14,10 +14,13 @@ from engines import (
 from errors import SpeechValidationError
 from store import read_settings, write_settings
 
+SYNTHESIS_AUTO_ENGINES = ("piper", "espeak-ng", "espeak")
+TRANSCRIPTION_AUTO_ENGINES = ("faster-whisper", "whisper.cpp")
 
-def list_engines_payload(data_root: Path, *, include_voices: bool = True) -> dict:
-    settings = read_settings(data_root)
-    synthesis = synthesis_engine_statuses()
+
+def list_engines_payload(data_root: Path, *, include_voices: bool = True, app_secrets: dict | None = None) -> dict:
+    settings = settings_with_app_secrets(data_root, app_secrets)
+    synthesis = synthesis_engine_statuses(settings)
     if not include_voices:
         synthesis = compact_voice_statuses(synthesis)
     return {
@@ -28,20 +31,42 @@ def list_engines_payload(data_root: Path, *, include_voices: bool = True) -> dic
     }
 
 
-def engine_health_payload(data_root: Path, *, include_voices: bool = True) -> dict:
-    payload = list_engines_payload(data_root, include_voices=include_voices)
-    synthesis_available = any(item["available"] for item in payload["synthesis"])
-    transcription_available = any(item["available"] for item in payload["transcription"])
+def engine_health_payload(data_root: Path, *, include_voices: bool = True, app_secrets: dict | None = None) -> dict:
+    payload = list_engines_payload(data_root, include_voices=include_voices, app_secrets=app_secrets)
+    settings = settings_with_app_secrets(data_root, app_secrets)
+    synthesis_selection = engine_selection_summary(
+        payload["synthesis"],
+        requested_engine=str(settings.get("synthesis_engine") or "auto"),
+        auto_candidates=SYNTHESIS_AUTO_ENGINES,
+    )
+    transcription_selection = engine_selection_summary(
+        payload["transcription"],
+        requested_engine=str(settings.get("transcription_engine") or "auto"),
+        auto_candidates=TRANSCRIPTION_AUTO_ENGINES,
+    )
+    synthesis_available = bool(synthesis_selection["available"])
+    transcription_available = bool(transcription_selection["available"])
     payload["status"] = combined_interface_status(synthesis_available=synthesis_available, transcription_available=transcription_available)
+    payload["selected"] = {
+        "synthesis": synthesis_selection,
+        "transcription": transcription_selection,
+    }
     payload["interfaces"] = {
-        "speech.synthesis": {"available": synthesis_available},
-        "speech.transcription": {"available": transcription_available},
+        "speech.synthesis": interface_health_summary(synthesis_selection),
+        "speech.transcription": interface_health_summary(transcription_selection),
     }
     return payload
 
 
 def get_settings_payload(data_root: Path) -> dict:
     return {"settings": public_settings(read_settings(data_root))}
+
+
+def settings_with_app_secrets(data_root: Path, app_secrets: dict | None = None) -> dict:
+    settings = read_settings(data_root)
+    if isinstance(app_secrets, dict):
+        return {**settings, "_app_secrets": dict(app_secrets)}
+    return settings
 
 
 def compact_voice_statuses(statuses: list[dict]) -> list[dict]:
@@ -55,8 +80,47 @@ def compact_voice_statuses(statuses: list[dict]) -> list[dict]:
     return compacted
 
 
+def engine_selection_summary(statuses: list[dict], *, requested_engine: str, auto_candidates: tuple[str, ...]) -> dict:
+    requested = requested_engine.strip() or "auto"
+    by_engine = {str(item.get("engine") or ""): item for item in statuses if isinstance(item, dict)}
+    selected_status = selected_engine_status(by_engine, requested_engine=requested, auto_candidates=auto_candidates)
+    selected_engine = str((selected_status or {}).get("engine") or "")
+    available_engines = [str(item.get("engine") or "") for item in statuses if isinstance(item, dict) and item.get("available")]
+    fallback_engines = [engine for engine in available_engines if engine and engine != selected_engine]
+    return {
+        "requested_engine": requested,
+        "effective_engine": selected_engine if selected_status and selected_status.get("available") else "",
+        "available": bool(selected_status and selected_status.get("available")),
+        "selected_engine_known": bool(selected_status),
+        "fallback_available": bool(fallback_engines),
+        "fallback_engines": fallback_engines,
+        "available_engine_count": len([engine for engine in available_engines if engine]),
+    }
+
+
+def selected_engine_status(by_engine: dict[str, dict], *, requested_engine: str, auto_candidates: tuple[str, ...]) -> dict | None:
+    if requested_engine == "auto":
+        for engine in auto_candidates:
+            status = by_engine.get(engine)
+            if status and status.get("available"):
+                return status
+        return None
+    return by_engine.get(requested_engine)
+
+
+def interface_health_summary(selection: dict) -> dict:
+    return {
+        "available": bool(selection.get("available")),
+        "selected_available": bool(selection.get("available")),
+        "selected_engine": selection.get("requested_engine", ""),
+        "effective_engine": selection.get("effective_engine", ""),
+        "fallback_available": bool(selection.get("fallback_available")),
+        "fallback_engines": list(selection.get("fallback_engines") or []),
+    }
+
+
 def set_engine_payload(data_root: Path, body: dict) -> dict:
-    allowed_fields = {"action", "synthesis_engine", "transcription_engine", "transcription_profile"}
+    allowed_fields = {"action", "synthesis_engine", "transcription_engine", "transcription_profile", "_app_secrets"}
     unexpected_fields = sorted(set(body) - allowed_fields)
     if unexpected_fields:
         raise SpeechValidationError(
@@ -73,7 +137,8 @@ def set_engine_payload(data_root: Path, body: dict) -> dict:
         if key in body:
             updates[key] = normalized_setting(key, body.get(key))
     settings = write_settings(data_root, updates)
-    return {"settings": public_settings(settings), "engines": list_engines_payload(data_root)}
+    app_secrets = body.get("_app_secrets") if isinstance(body.get("_app_secrets"), dict) else None
+    return {"settings": public_settings(settings), "engines": list_engines_payload(data_root, app_secrets=app_secrets)}
 
 
 def public_settings(settings: dict) -> dict:
@@ -90,17 +155,17 @@ def public_settings(settings: dict) -> dict:
 
 def normalized_setting(key: str, value: object) -> str:
     text = str(value or "").strip()
-    if key == "synthesis_engine" and text not in {"auto", "piper", "espeak", "espeak-ng"}:
+    if key == "synthesis_engine" and text not in {"auto", "piper", "espeak", "espeak-ng", "kokoro-openrouter"}:
         raise SpeechValidationError(
             "Unsupported synthesis_engine.",
             operation="set_engine",
-            allowed_values={key: ["auto", "piper", "espeak", "espeak-ng"]},
+            allowed_values={key: ["auto", "piper", "espeak", "espeak-ng", "kokoro-openrouter"]},
         )
-    if key == "transcription_engine" and text not in {"auto", "faster-whisper", "whisper.cpp"}:
+    if key == "transcription_engine" and text not in {"auto", "faster-whisper", "whisper.cpp", "deepgram"}:
         raise SpeechValidationError(
             "Unsupported transcription_engine.",
             operation="set_engine",
-            allowed_values={key: ["auto", "faster-whisper", "whisper.cpp"]},
+            allowed_values={key: ["auto", "faster-whisper", "whisper.cpp", "deepgram"]},
         )
     if key == "transcription_profile" and text not in {"fast", "balanced", "accurate"}:
         raise SpeechValidationError(

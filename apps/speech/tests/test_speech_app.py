@@ -118,8 +118,10 @@ class SpeechAppTests(unittest.TestCase):
         self.assertEqual(parsed.contract.entrypoints.mcp, "mcp/server.py")
 
     def test_capabilities_report_unavailable_without_local_engine(self) -> None:
-        with patch("service.resolve_local_engine", return_value=None), patch("service.resolve_transcription_engine", return_value=""):
-            status_code, payload = handle_action(Path("data"), Path("generated"), {"action": "capabilities"})
+        with patch("service.synthesis_engine_statuses", return_value=[{"engine": "piper", "kind": "tts", "available": False, "voices": []}]):
+            with patch("service.transcription_engine_statuses", return_value=[{"engine": "faster-whisper", "kind": "stt", "available": False}]):
+                with patch("service.resolve_transcription_engine", return_value=""):
+                    status_code, payload = handle_action(Path("data"), Path("generated"), {"action": "capabilities"})
 
         self.assertEqual(status_code, 200)
         self.assertFalse(payload["interfaces"]["speech.synthesis"]["provider_available"])
@@ -147,8 +149,10 @@ class SpeechAppTests(unittest.TestCase):
         with TemporaryDirectory() as temp_dir:
             root = Path(temp_dir)
             write_settings(root / "data", {"transcription_profile": "balanced"})
-            with patch("service.resolve_local_engine", return_value=None), patch("service.resolve_transcription_engine", side_effect=resolve_transcription):
-                status_code, payload = handle_action(root / "data", root / "generated", {"action": "capabilities"})
+            with patch("service.synthesis_engine_statuses", return_value=[{"engine": "piper", "kind": "tts", "available": False, "voices": []}]):
+                with patch("service.transcription_engine_statuses", return_value=[{"engine": "faster-whisper", "kind": "stt", "available": True}]):
+                    with patch("service.resolve_transcription_engine", side_effect=resolve_transcription):
+                        status_code, payload = handle_action(root / "data", root / "generated", {"action": "capabilities"})
 
         transcription = payload["interfaces"]["speech.transcription"]
         self.assertEqual(status_code, 200)
@@ -157,6 +161,33 @@ class SpeechAppTests(unittest.TestCase):
         self.assertEqual(transcription["inline_default_profile"], "fast")
         self.assertFalse(transcription["inline_default_profile_available"])
         self.assertEqual(transcription["inline_default_profile_engine"], "")
+
+    def test_capabilities_use_delivered_secrets_for_selected_remote_engines(self) -> None:
+        with TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            write_settings(root / "data", {"synthesis_engine": "kokoro-openrouter", "transcription_engine": "deepgram"})
+            status_code, payload = handle_action(
+                root / "data",
+                root / "generated",
+                {
+                    "action": "capabilities",
+                    "_app_secrets": {
+                        "deepgram-api-key": "deepgram-token",
+                        "openrouter-api-key": "openrouter-token",
+                    },
+                },
+            )
+
+        synthesis = payload["interfaces"]["speech.synthesis"]
+        transcription = payload["interfaces"]["speech.transcription"]
+        self.assertEqual(status_code, 200)
+        self.assertTrue(synthesis["available"])
+        self.assertEqual(synthesis["engine"], "kokoro-openrouter")
+        self.assertEqual(synthesis["default_voice"], "af_heart")
+        self.assertEqual(synthesis["quality_profile"], "natural")
+        self.assertTrue(transcription["available"])
+        self.assertEqual(transcription["engine"], "deepgram")
+        self.assertTrue(transcription["inline_default_profile_available"])
 
     def test_synthesize_rejects_empty_or_too_long_text(self) -> None:
         with self.assertRaises(SpeechValidationError):
@@ -370,6 +401,126 @@ class SpeechAppTests(unittest.TestCase):
         self.assertEqual(payload["settings"]["transcription_profile"], "balanced")
         self.assertIn("faster_whisper_model_configured", payload["settings"])
         self.assertIn("whisper_cpp_model_configured", payload["settings"])
+
+    def test_remote_speech_engines_are_available_with_delivered_secrets(self) -> None:
+        settings = {
+            "_app_secrets": {
+                "deepgram-api-key": "deepgram-token",
+                "openrouter-api-key": "openrouter-token",
+            }
+        }
+
+        transcription = {item["engine"]: item for item in engines.transcription_engine_statuses(settings)}
+        synthesis = {item["engine"]: item for item in engines.synthesis_engine_statuses(settings)}
+
+        self.assertTrue(transcription["deepgram"]["available"])
+        self.assertEqual(transcription["deepgram"]["model"], "nova-2")
+        self.assertTrue(synthesis["kokoro-openrouter"]["available"])
+        self.assertEqual(synthesis["kokoro-openrouter"]["model"], "hexgrad/kokoro-82m")
+
+    def test_deepgram_transcription_engine_is_explicit_remote_choice(self) -> None:
+        settings = {
+            "transcription_engine": "deepgram",
+            "_app_secrets": {"deepgram-api-key": "deepgram-token"},
+        }
+
+        self.assertEqual(engines.resolve_transcription_engine(settings), "deepgram")
+
+    def test_kokoro_openrouter_synthesis_uses_delivered_openrouter_secret(self) -> None:
+        class FakeResponse:
+            def __enter__(self) -> "FakeResponse":
+                return self
+
+            def __exit__(self, *args: object) -> None:
+                return None
+
+            def read(self) -> bytes:
+                return b"RIFFkokoro"
+
+        captured: dict[str, object] = {}
+
+        def fake_urlopen(request, timeout: float):
+            captured["url"] = request.full_url
+            captured["headers"] = dict(request.header_items())
+            captured["body"] = json.loads(request.data.decode("utf-8"))
+            captured["timeout"] = timeout
+            return FakeResponse()
+
+        with patch("engines.urllib_request.urlopen", side_effect=fake_urlopen):
+            audio = engines.run_kokoro_openrouter(
+                text="hello",
+                voice="af_heart",
+                settings={"_app_secrets": {"openrouter-api-key": "openrouter-token"}},
+            )
+
+        self.assertEqual(audio, b"RIFFkokoro")
+        self.assertEqual(captured["url"], "https://openrouter.ai/api/v1/audio/speech")
+        self.assertEqual(captured["body"]["model"], "hexgrad/kokoro-82m")
+        self.assertEqual(captured["body"]["input"], "hello")
+        self.assertEqual(captured["body"]["voice"], "af_heart")
+        self.assertEqual(captured["body"]["response_format"], "wav")
+        self.assertEqual(captured["headers"]["Authorization"], "Bearer openrouter-token")
+
+    def test_entrypoint_payload_delivers_app_secrets_to_speech_body(self) -> None:
+        body = app_backend.body_from_payload(
+            {
+                "body": {"action": "list_engines"},
+                "app_secrets": {"deepgram-api-key": "deepgram-token", "openrouter-api-key": "openrouter-token"},
+            }
+        )
+
+        self.assertEqual(body["_app_secrets"]["deepgram-api-key"], "deepgram-token")
+        self.assertEqual(body["_app_secrets"]["openrouter-api-key"], "openrouter-token")
+
+    def test_engine_health_uses_delivered_app_secrets(self) -> None:
+        with TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            write_settings(root / "data", {"synthesis_engine": "kokoro-openrouter", "transcription_engine": "deepgram"})
+            status_code, payload = handle_action(
+                root / "data",
+                root / "generated",
+                {
+                    "action": "engine_health",
+                    "_app_secrets": {
+                        "deepgram-api-key": "deepgram-token",
+                        "openrouter-api-key": "openrouter-token",
+                    },
+                },
+            )
+
+        self.assertEqual(status_code, 200)
+        transcription = {item["engine"]: item for item in payload["transcription"]}
+        synthesis = {item["engine"]: item for item in payload["synthesis"]}
+        self.assertTrue(transcription["deepgram"]["available"])
+        self.assertTrue(synthesis["kokoro-openrouter"]["available"])
+        self.assertEqual(payload["status"], "ok")
+        self.assertTrue(payload["interfaces"]["speech.synthesis"]["selected_available"])
+        self.assertTrue(payload["interfaces"]["speech.transcription"]["selected_available"])
+
+    def test_engine_health_does_not_mask_broken_selected_engines_with_fallbacks(self) -> None:
+        synthesis_statuses = [
+            {"engine": "piper", "kind": "tts", "available": True, "voices": []},
+            {"engine": "kokoro-openrouter", "kind": "tts", "available": False, "voices": []},
+        ]
+        transcription_statuses = [
+            {"engine": "faster-whisper", "kind": "stt", "available": True},
+            {"engine": "deepgram", "kind": "stt", "available": False},
+        ]
+        with TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            write_settings(root / "data", {"synthesis_engine": "kokoro-openrouter", "transcription_engine": "deepgram"})
+            with patch("settings.synthesis_engine_statuses", return_value=synthesis_statuses):
+                with patch("settings.transcription_engine_statuses", return_value=transcription_statuses):
+                    status_code, payload = handle_action(root / "data", root / "generated", {"action": "engine_health"})
+
+        self.assertEqual(status_code, 200)
+        self.assertEqual(payload["status"], "degraded")
+        self.assertFalse(payload["interfaces"]["speech.synthesis"]["available"])
+        self.assertFalse(payload["interfaces"]["speech.transcription"]["available"])
+        self.assertTrue(payload["interfaces"]["speech.synthesis"]["fallback_available"])
+        self.assertEqual(payload["interfaces"]["speech.synthesis"]["fallback_engines"], ["piper"])
+        self.assertTrue(payload["interfaces"]["speech.transcription"]["fallback_available"])
+        self.assertEqual(payload["interfaces"]["speech.transcription"]["fallback_engines"], ["faster-whisper"])
 
     def test_faster_whisper_model_can_be_overridden_per_profile(self) -> None:
         old_global = os.environ.get("MAVERICK_SPEECH_FASTER_WHISPER_MODEL")
@@ -1669,7 +1820,8 @@ class SpeechAppTests(unittest.TestCase):
 
     def test_cli_schema_lists_only_supported_operations(self) -> None:
         payload = json.loads((APP_ROOT / "cli" / "command_schemas.json").read_text(encoding="utf-8"))
-        properties = payload["commands"]["speech"]["argument_schema"]["properties"]
+        command = payload["commands"]["speech"]
+        properties = command["argument_schema"]["properties"]
         actions = properties["action"]["enum"]
 
         self.assertEqual(
@@ -1687,6 +1839,16 @@ class SpeechAppTests(unittest.TestCase):
         self.assertEqual(properties["include_voices"]["type"], "boolean")
         self.assertNotIn("synthesize", actions)
         self.assertNotIn("transcribe_audio", actions)
+        selectors = command["secret_selectors"]
+        self.assertIn({"when": {"action": "list_engines"}, "required_secrets": ["deepgram-api-key", "openrouter-api-key"]}, selectors)
+        self.assertIn({"when": {"action": "engine_health"}, "required_secrets": ["deepgram-api-key", "openrouter-api-key"]}, selectors)
+        self.assertIn({"when": {"action": "transcribe_file"}, "required_secrets": ["deepgram-api-key"]}, selectors)
+
+    def test_mcp_transcribe_file_declares_deepgram_secret(self) -> None:
+        payload = json.loads((APP_ROOT / "mcp" / "tool_schemas.json").read_text(encoding="utf-8"))
+
+        self.assertEqual(payload["tools"]["speech_transcribe_file"]["required_secrets"], ["deepgram-api-key"])
+        self.assertNotIn("required_secrets", payload["tools"]["speech_operations_manifest"])
 
 
 if __name__ == "__main__":

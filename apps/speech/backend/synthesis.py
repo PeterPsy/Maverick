@@ -15,6 +15,7 @@ import uuid
 import wave
 
 from engines import resolve_local_tts_engine as resolve_local_engine
+from engines import run_kokoro_openrouter
 from engines import run_local_tts_engine as run_local_engine
 from engines import tts_engine_cache_fingerprint
 from errors import SpeechProviderUnavailableError, SpeechValidationError
@@ -39,10 +40,51 @@ def synthesize_payload(*, data_root: Path, generated_storage_root: Path, body: d
     rate = normalized_rate(body.get("rate"))
     output_format = normalized_output_format(body.get("format"))
     settings = read_settings(data_root)
+    if isinstance(body.get("_app_secrets"), dict):
+        settings = {**settings, "_app_secrets": dict(body["_app_secrets"])}
+    requested_engine = str(settings.get("synthesis_engine") or "auto")
+    if requested_engine == "kokoro-openrouter":
+        audio = run_kokoro_openrouter(text=text, voice=requested_voice or "af_heart", settings=settings)
+        validate_audio_size(audio)
+        job_id = f"tts_{uuid.uuid4().hex}"
+        created_at = datetime.now(tz=UTC).isoformat()
+        append_job(
+            data_root,
+            {
+                "job_id": job_id,
+                "kind": "tts",
+                "created_at": created_at,
+                "text_chars": len(text),
+                "voice": requested_voice or "af_heart",
+                "engine": "kokoro-openrouter",
+                "quality_profile": "natural",
+                "latency_profile": "remote",
+                "content_type": "audio/wav",
+                "size_bytes": len(audio),
+                "cache_hit": False,
+                "retention": "provider_response",
+            },
+        )
+        return {
+            "job_id": job_id,
+            "created_at": created_at,
+            "content_type": "audio/wav",
+            "audio_base64": base64.b64encode(audio).decode("ascii"),
+            "size_bytes": len(audio),
+            "text_chars": len(text),
+            "engine": "kokoro-openrouter",
+            "voice": requested_voice or "af_heart",
+            "rate": rate,
+            "format": output_format,
+            "quality_profile": "natural",
+            "latency_profile": "remote",
+            "cache_hit": False,
+            "cache": {"enabled": False, "retention": "provider_response", "exportable": False},
+            "retention": "provider_response",
+        }
     engine = resolve_local_engine(settings)
     if engine is None:
-        requested = str(settings.get("synthesis_engine") or "auto")
-        raise SpeechProviderUnavailableError(f"No local TTS engine is available for Speech synthesis. Requested engine: {requested}.")
+        raise SpeechProviderUnavailableError(f"No local TTS engine is available for Speech synthesis. Requested engine: {requested_engine}.")
 
     voice = selected_voice_id(engine, requested_voice)
     cache_fingerprint = tts_engine_cache_fingerprint(engine, voice=voice)

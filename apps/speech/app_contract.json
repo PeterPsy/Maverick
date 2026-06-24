@@ -39,11 +39,17 @@
   },
   "permissions": {
     "secrets": {
-      "read": [],
+      "read": [
+        "deepgram-api-key",
+        "openrouter-api-key"
+      ],
       "write": []
     },
     "network": {
-      "outbound": []
+      "outbound": [
+        "api.deepgram.com",
+        "openrouter.ai"
+      ]
     },
     "runtime": {
       "create_sessions": false,
@@ -51,6 +57,11 @@
     },
     "host": {
       "telemetry": false
+    },
+    "providers": {
+      "model_proxy": false,
+      "credential_source": "core-vault",
+      "deliver_secrets_to_app": true
     }
   },
   "capabilities": {

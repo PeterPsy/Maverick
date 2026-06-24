@@ -85,6 +85,7 @@ def transcribe_audio_payload(*, data_root: Path, body: dict) -> dict:
             profile=profile,
             session=session,
             dictation_mode=dictation_mode,
+            app_secrets=body.get("_app_secrets") if isinstance(body.get("_app_secrets"), dict) else {},
         )
     audio = decoded_audio(body.get("audio_base64"))
     return transcribe_bytes(
@@ -96,6 +97,7 @@ def transcribe_audio_payload(*, data_root: Path, body: dict) -> dict:
         source={"kind": "inline"},
         session=session,
         dictation_mode=dictation_mode,
+        app_secrets=body.get("_app_secrets") if isinstance(body.get("_app_secrets"), dict) else {},
     )
 
 
@@ -109,6 +111,7 @@ def transcribe_inline_body_file(
     profile: str,
     session: dict | None = None,
     dictation_mode: bool = False,
+    app_secrets: dict | None = None,
 ) -> dict:
     if not audio_path.exists() or not audio_path.is_file():
         raise SpeechValidationError("inline audio upload is unavailable.", operation="transcribe_audio")
@@ -127,6 +130,7 @@ def transcribe_inline_body_file(
         source={"kind": "inline", "transport": "binary"},
         session=session,
         dictation_mode=dictation_mode,
+        app_secrets=app_secrets,
     )
 
 
@@ -164,6 +168,7 @@ def transcribe_file_payload(
         language=language,
         operation="transcribe_file",
         source={"kind": "storage", "workspace_relative_path": normalized_workspace_relative_path(body)},
+        app_secrets=body.get("_app_secrets") if isinstance(body.get("_app_secrets"), dict) else {},
     )
 
 
@@ -177,6 +182,7 @@ def transcribe_bytes(
     source: dict,
     session: dict | None = None,
     dictation_mode: bool = False,
+    app_secrets: dict | None = None,
 ) -> dict:
     extension = CONTENT_TYPE_EXTENSIONS[content_type]
     with tempfile.TemporaryDirectory(prefix="maverick-speech-stt-") as temp_dir:
@@ -193,6 +199,7 @@ def transcribe_bytes(
             source=source,
             session=session,
             dictation_mode=dictation_mode,
+            app_secrets=app_secrets,
         )
 
 
@@ -208,12 +215,15 @@ def transcribe_path(
     profile: str = "",
     session: dict | None = None,
     dictation_mode: bool = False,
+    app_secrets: dict | None = None,
 ) -> dict:
     preflight_duration_seconds = probe_audio_duration_seconds(audio_path, content_type=content_type)
     validate_audio_duration(preflight_duration_seconds, operation=operation)
     settings = read_settings(data_root)
     if profile:
         settings = {**settings, "transcription_profile": profile}
+    if app_secrets:
+        settings = {**settings, "_app_secrets": dict(app_secrets)}
     settings["_data_root"] = str(data_root)
     transcription_started = time.monotonic()
     result = transcribe_audio_file(audio_path, settings=settings, language=language)

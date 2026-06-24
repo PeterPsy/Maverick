@@ -2,6 +2,20 @@
   "commands": {
     "speech": {
       "description": "Inspect Speech engine health/settings, report or explicitly prewarm persistent STT worker status, and transcribe bounded workspace Storage audio files. Live microphone streaming, inline audio payloads, and worker stop/reload are not exposed through CLI.",
+      "secret_selectors": [
+        {
+          "when": {"action": "list_engines"},
+          "required_secrets": ["deepgram-api-key", "openrouter-api-key"]
+        },
+        {
+          "when": {"action": "engine_health"},
+          "required_secrets": ["deepgram-api-key", "openrouter-api-key"]
+        },
+        {
+          "when": {"action": "transcribe_file"},
+          "required_secrets": ["deepgram-api-key"]
+        }
+      ],
       "argument_schema": {
         "type": "object",
         "properties": {

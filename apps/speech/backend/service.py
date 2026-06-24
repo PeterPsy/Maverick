@@ -4,8 +4,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from engines import faster_whisper_worker_status, resolve_local_tts_engine as resolve_local_engine
-from engines import resolve_transcription_engine
+from engines import default_tts_voice_id, faster_whisper_worker_status, resolve_transcription_engine
+from engines import synthesis_engine_statuses, transcription_engine_statuses
 from models import (
     DEFAULT_INLINE_TRANSCRIPTION_PROFILE,
     MAX_INLINE_TRANSCRIPTION_AUDIO_BYTES,
@@ -17,7 +17,18 @@ from models import (
     SUPPORTED_CONTENT_TYPES,
     SUPPORTED_TRANSCRIPTION_CONTENT_TYPES,
 )
-from settings import combined_interface_status, engine_health_payload, get_settings_payload, list_engines_payload, set_engine_payload
+from settings import (
+    SYNTHESIS_AUTO_ENGINES,
+    TRANSCRIPTION_AUTO_ENGINES,
+    combined_interface_status,
+    engine_health_payload,
+    engine_selection_summary,
+    get_settings_payload,
+    interface_health_summary,
+    list_engines_payload,
+    set_engine_payload,
+    settings_with_app_secrets,
+)
 from store import read_jobs, read_settings
 from synthesis import synthesize_payload
 from transcription import transcribe_audio_payload, transcribe_file_payload
@@ -41,13 +52,21 @@ def handle_action(
     if action == "operations.manifest":
         return 200, operations_manifest()
     if action == "health.check":
-        return 200, health_payload(data_root)
+        return 200, health_payload(data_root, app_secrets=app_secrets_setting(body))
     if action == "capabilities":
-        return 200, capabilities_payload(data_root)
+        return 200, capabilities_payload(data_root, app_secrets=app_secrets_setting(body))
     if action == "list_engines":
-        return 200, list_engines_payload(data_root, include_voices=include_voices_setting(body))
+        return 200, list_engines_payload(
+            data_root,
+            include_voices=include_voices_setting(body),
+            app_secrets=app_secrets_setting(body),
+        )
     if action == "engine_health":
-        return 200, engine_health_payload(data_root, include_voices=include_voices_setting(body))
+        return 200, engine_health_payload(
+            data_root,
+            include_voices=include_voices_setting(body),
+            app_secrets=app_secrets_setting(body),
+        )
     if action == "get_settings":
         return 200, get_settings_payload(data_root)
     if action == "set_engine":
@@ -147,6 +166,10 @@ def include_voices_setting(body: dict) -> bool:
     return True
 
 
+def app_secrets_setting(body: dict) -> dict | None:
+    return body.get("_app_secrets") if isinstance(body.get("_app_secrets"), dict) else None
+
+
 def ensure_warm_setting(body: dict) -> bool:
     value = body.get("ensure_warm")
     if value is None:
@@ -157,10 +180,24 @@ def ensure_warm_setting(body: dict) -> bool:
     return text in {"1", "true", "yes", "on"}
 
 
-def capabilities_payload(data_root: Path) -> dict:
-    settings = read_settings(data_root)
-    engine = resolve_local_engine(settings)
-    transcription_engine = resolve_transcription_engine(settings)
+def capabilities_payload(data_root: Path, app_secrets: dict | None = None) -> dict:
+    settings = settings_with_app_secrets(data_root, app_secrets)
+    synthesis_statuses = synthesis_engine_statuses(settings)
+    synthesis_selection = engine_selection_summary(
+        synthesis_statuses,
+        requested_engine=str(settings.get("synthesis_engine") or "auto"),
+        auto_candidates=SYNTHESIS_AUTO_ENGINES,
+    )
+    synthesis_status = status_for_effective_engine(synthesis_statuses, synthesis_selection)
+    synthesis_engine = str((synthesis_status or {}).get("engine") or "")
+    synthesis_available = bool(synthesis_selection["available"])
+    synthesis_voices = public_voice_profiles_from_status(synthesis_status) if synthesis_available else []
+    transcription_selection = engine_selection_summary(
+        transcription_engine_statuses(settings),
+        requested_engine=str(settings.get("transcription_engine") or "auto"),
+        auto_candidates=TRANSCRIPTION_AUTO_ENGINES,
+    )
+    transcription_engine = str(transcription_selection["effective_engine"])
     inline_transcription_settings = {**settings, "transcription_profile": DEFAULT_INLINE_TRANSCRIPTION_PROFILE}
     inline_transcription_engine = resolve_transcription_engine(inline_transcription_settings)
     return {
@@ -168,16 +205,20 @@ def capabilities_payload(data_root: Path) -> dict:
         "interfaces": {
             "speech.synthesis": {
                 "version": "1",
-                "available": engine is not None,
-                "provider_available": engine is not None,
-                "engine": engine.name if engine else "",
+                "available": synthesis_available,
+                "provider_available": synthesis_available,
+                "engine": synthesis_engine if synthesis_available else "",
                 "content_types": SUPPORTED_CONTENT_TYPES,
                 "max_text_chars": MAX_TEXT_CHARS,
-                "voices": public_voice_profiles(engine) if engine else [],
-                "default_voice": engine.voice_id if engine else "",
+                "voices": synthesis_voices,
+                "default_voice": default_tts_voice_id(synthesis_engine, synthesis_voices) if synthesis_available else "",
                 "selected_engine": settings.get("synthesis_engine", "auto"),
-                "quality_profile": engine.quality_profile if engine else "",
-                "latency_profile": engine.latency_profile if engine else "",
+                "effective_engine": synthesis_selection["effective_engine"],
+                "selected_available": synthesis_available,
+                "fallback_available": synthesis_selection["fallback_available"],
+                "fallback_engines": synthesis_selection["fallback_engines"],
+                "quality_profile": str((synthesis_status or {}).get("quality_profile") or ""),
+                "latency_profile": str((synthesis_status or {}).get("latency_profile") or ""),
                 "cache": {"enabled": True, "scope": "workspace"},
                 "output": {
                     "audio_base64": True,
@@ -192,6 +233,10 @@ def capabilities_payload(data_root: Path) -> dict:
                 "provider_available": bool(transcription_engine),
                 "engine": transcription_engine,
                 "selected_engine": settings.get("transcription_engine", "auto"),
+                "effective_engine": transcription_engine,
+                "selected_available": bool(transcription_selection["available"]),
+                "fallback_available": transcription_selection["fallback_available"],
+                "fallback_engines": transcription_selection["fallback_engines"],
                 "profile": settings.get("transcription_profile", "balanced"),
                 "content_types": SUPPORTED_TRANSCRIPTION_CONTENT_TYPES,
                 "max_audio_bytes": MAX_INLINE_TRANSCRIPTION_AUDIO_BYTES,
@@ -228,26 +273,60 @@ def public_voice_profiles(engine: object) -> list[dict]:
     return profiles
 
 
+def public_voice_profiles_from_status(status: dict | None) -> list[dict]:
+    voices = (status or {}).get("voices")
+    if not isinstance(voices, list):
+        return []
+    profiles: list[dict] = []
+    for item in voices:
+        if not isinstance(item, dict):
+            continue
+        profiles.append({key: value for key, value in item.items() if not str(key).startswith("_")})
+    return profiles
+
+
+def status_for_effective_engine(statuses: list[dict], selection: dict) -> dict | None:
+    effective_engine = str(selection.get("effective_engine") or "")
+    if not effective_engine:
+        return None
+    for status in statuses:
+        if isinstance(status, dict) and status.get("engine") == effective_engine:
+            return status
+    return None
+
+
 def worker_status_payload(data_root: Path, *, ensure_warm: bool = False) -> dict:
     settings = read_settings(data_root)
     return {"worker_status": faster_whisper_worker_status(data_root, settings, ensure_warm=ensure_warm)}
 
 
-def health_payload(data_root: Path) -> dict:
-    settings = read_settings(data_root)
-    engine = resolve_local_engine(settings)
-    transcription_engine = resolve_transcription_engine(settings)
+def health_payload(data_root: Path, app_secrets: dict | None = None) -> dict:
+    settings = settings_with_app_secrets(data_root, app_secrets)
+    synthesis_selection = engine_selection_summary(
+        synthesis_engine_statuses(settings),
+        requested_engine=str(settings.get("synthesis_engine") or "auto"),
+        auto_candidates=SYNTHESIS_AUTO_ENGINES,
+    )
+    transcription_selection = engine_selection_summary(
+        transcription_engine_statuses(settings),
+        requested_engine=str(settings.get("transcription_engine") or "auto"),
+        auto_candidates=TRANSCRIPTION_AUTO_ENGINES,
+    )
     jobs = read_jobs(data_root)
-    synthesis_available = bool(engine)
-    transcription_available = bool(transcription_engine)
+    synthesis_available = bool(synthesis_selection["available"])
+    transcription_available = bool(transcription_selection["available"])
     return {
         "status": combined_interface_status(synthesis_available=synthesis_available, transcription_available=transcription_available),
         "provider_available": synthesis_available or transcription_available,
         "interfaces": {
-            "speech.synthesis": {"available": synthesis_available},
-            "speech.transcription": {"available": transcription_available},
+            "speech.synthesis": interface_health_summary(synthesis_selection),
+            "speech.transcription": interface_health_summary(transcription_selection),
         },
-        "synthesis_engine": engine.name if engine else "",
-        "transcription_engine": transcription_engine,
+        "selected": {
+            "synthesis": synthesis_selection,
+            "transcription": transcription_selection,
+        },
+        "synthesis_engine": synthesis_selection["effective_engine"],
+        "transcription_engine": transcription_selection["effective_engine"],
         "job_count": len(jobs.get("jobs", [])),
     }

@@ -38,6 +38,7 @@
     },
     "speech_transcribe_file": {
       "description": "Transcribe a bounded workspace Storage audio file. This tool does not accept live microphone streams or absolute host paths.",
+      "required_secrets": ["deepgram-api-key"],
       "input_schema": {
         "type": "object",
         "properties": {

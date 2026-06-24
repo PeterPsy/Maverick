@@ -21,6 +21,8 @@ import threading
 import time
 import uuid
 from dataclasses import dataclass
+from urllib import error as urllib_error
+from urllib import request as urllib_request
 
 from errors import SpeechProviderUnavailableError, SpeechTranscriptionError
 from models import (
@@ -35,6 +37,10 @@ from models import (
     TRANSCRIPTION_PROFILE_MODELS,
     TTS_CACHE_HASH_MAX_BYTES,
 )
+
+DEEPGRAM_MODEL = "nova-2"
+KOKORO_OPENROUTER_MODEL = "hexgrad/kokoro-82m"
+REMOTE_PROVIDER_TIMEOUT_SECONDS = 45
 
 LOCAL_TTS_ENGINE_CANDIDATES = ("piper", "espeak-ng", "espeak")
 WHISPER_CPP_BINARY_CANDIDATES = ("whisper-cli", "main")
@@ -170,6 +176,31 @@ def run_local_tts_engine(engine: LocalEngine, *, text: str, voice: str, rate: in
     if engine.name == "piper":
         return _run_piper_tts_engine(engine, text=text, voice=voice, data_root=data_root)
     return _run_espeak_tts_engine(engine, text=text, voice=voice, rate=rate)
+
+
+def run_kokoro_openrouter(*, text: str, voice: str, settings: dict) -> bytes:
+    api_key = _runtime_secret(settings, "openrouter_api_key")
+    if not api_key:
+        raise SpeechProviderUnavailableError("OpenRouter API key was not delivered to Speech.")
+    payload = {
+        "model": KOKORO_OPENROUTER_MODEL,
+        "input": text,
+        "voice": voice or "af_heart",
+        "response_format": "wav",
+    }
+    request = urllib_request.Request(
+        "https://openrouter.ai/api/v1/audio/speech",
+        data=json.dumps(payload).encode("utf-8"),
+        headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
+        method="POST",
+    )
+    try:
+        with urllib_request.urlopen(request, timeout=REMOTE_PROVIDER_TIMEOUT_SECONDS) as response:
+            return response.read()
+    except urllib_error.HTTPError as error:
+        raise SpeechProviderUnavailableError(f"Kokoro OpenRouter synthesis failed with HTTP {error.code}.") from error
+    except (urllib_error.URLError, TimeoutError) as error:
+        raise SpeechProviderUnavailableError("Kokoro OpenRouter synthesis failed.") from error
 
 
 def _run_espeak_tts_engine(engine: LocalEngine, *, text: str, voice: str, rate: int) -> bytes:
@@ -564,21 +595,37 @@ def transcription_engine_statuses(settings: dict) -> list[dict]:
             "binary_configured": bool(whisper_cpp_binary),
             "model_configured": bool(whisper_cpp_model and Path(whisper_cpp_model).exists()),
         },
+        {
+            "engine": "deepgram",
+            "kind": "stt",
+            "available": bool(_runtime_secret(settings, "deepgram_api_key")),
+            "configured": bool(_runtime_secret(settings, "deepgram_api_key")),
+            "detail": "Deepgram Nova-2 API key was delivered by Core Secrets."
+            if _runtime_secret(settings, "deepgram_api_key")
+            else "Grant logical secret deepgram-api-key to the Speech backend.",
+            "model": DEEPGRAM_MODEL,
+            "model_source": "deepgram",
+            "profile": "remote",
+            "streaming_supported": True,
+        },
     ]
 
 
-def synthesis_engine_statuses(*, include_paths: bool = False) -> list[dict]:
-    key = _synthesis_status_cache_key(include_paths=include_paths)
+def synthesis_engine_statuses(settings: dict | None = None, *, include_paths: bool = False) -> list[dict]:
+    key = _synthesis_status_cache_key(include_paths=include_paths, settings=settings)
     now = time.monotonic()
     cached = _SYNTHESIS_STATUS_CACHE.get(key)
     if cached and now - cached[0] <= SYNTHESIS_DISCOVERY_CACHE_SECONDS:
         return copy.deepcopy(cached[1])
-    statuses = [_synthesis_engine_status(candidate, include_path=include_paths) for candidate in LOCAL_TTS_ENGINE_CANDIDATES]
+    statuses = [
+        *[_synthesis_engine_status(candidate, include_path=include_paths) for candidate in LOCAL_TTS_ENGINE_CANDIDATES],
+        _remote_kokoro_status(settings or {}),
+    ]
     _SYNTHESIS_STATUS_CACHE[key] = (now, copy.deepcopy(statuses))
     return statuses
 
 
-def _synthesis_status_cache_key(*, include_paths: bool) -> tuple[object, ...]:
+def _synthesis_status_cache_key(*, include_paths: bool, settings: dict | None = None) -> tuple[object, ...]:
     return (
         include_paths,
         os.environ.get("PATH", ""),
@@ -589,7 +636,26 @@ def _synthesis_status_cache_key(*, include_paths: bool) -> tuple[object, ...]:
         os.environ.get("MAVERICK_SPEECH_PIPER_VOICE_ID", ""),
         os.environ.get("MAVERICK_SPEECH_PIPER_LANGUAGE", ""),
         os.environ.get("MAVERICK_SPEECH_PIPER_VOICES_JSON", ""),
+        bool(_runtime_secret(settings or {}, "openrouter_api_key")),
     )
+
+
+def _remote_kokoro_status(settings: dict) -> dict:
+    configured = bool(_runtime_secret(settings, "openrouter_api_key"))
+    return {
+        "engine": "kokoro-openrouter",
+        "kind": "tts",
+        "available": configured,
+        "configured": configured,
+        "detail": "OpenRouter API key was delivered by Core Secrets."
+        if configured
+        else "Grant logical secret openrouter-api-key to the Speech backend.",
+        "model": KOKORO_OPENROUTER_MODEL,
+        "quality_profile": "natural",
+        "latency_profile": "remote",
+        "supported_formats": ["audio/wav", "audio/mp3"],
+        "voices": [{"voice_id": "af_heart", "name": "Kokoro default", "language": "en"}],
+    }
 
 
 def _synthesis_engine_status(candidate: str, *, include_path: bool) -> dict:
@@ -850,6 +916,18 @@ def _sha256_file(path: Path) -> str:
     return digest.hexdigest()
 
 
+def _runtime_secret(settings: dict, logical_name: str) -> str:
+    secrets = settings.get("_app_secrets") if isinstance(settings.get("_app_secrets"), dict) else {}
+    value = None
+    if isinstance(secrets, dict):
+        value = secrets.get(logical_name)
+        if value is None:
+            value = secrets.get(logical_name.replace("_", "-"))
+        if value is None:
+            value = secrets.get(logical_name.replace("-", "_"))
+    return str(value or "").strip()
+
+
 def resolve_transcription_engine(settings: dict) -> str:
     requested = str(settings.get("transcription_engine") or "auto").strip()
     statuses = {item["engine"]: item for item in transcription_engine_statuses(settings)}
@@ -867,7 +945,78 @@ def transcribe_audio_file(audio_path: Path, *, settings: dict, language: str = "
         return _transcribe_with_faster_whisper(audio_path, settings=settings, language=language)
     if engine == "whisper.cpp":
         return _transcribe_with_whisper_cpp(audio_path, settings=settings, language=language)
+    if engine == "deepgram":
+        return _transcribe_with_deepgram(audio_path, settings=settings, language=language)
     raise SpeechProviderUnavailableError("No configured speech-to-text engine is available.")
+
+
+def _transcribe_with_deepgram(audio_path: Path, *, settings: dict, language: str = "") -> dict:
+    api_key = _runtime_secret(settings, "deepgram_api_key")
+    if not api_key:
+        raise SpeechProviderUnavailableError("Deepgram API key was not delivered to Speech.")
+    query = f"model={DEEPGRAM_MODEL}&smart_format=true&punctuate=true"
+    if language:
+        query += f"&language={language}"
+    request = urllib_request.Request(
+        f"https://api.deepgram.com/v1/listen?{query}",
+        data=audio_path.read_bytes(),
+        headers={
+            "Authorization": f"Token {api_key}",
+            "Content-Type": _audio_content_type_for_path(audio_path),
+        },
+        method="POST",
+    )
+    try:
+        with urllib_request.urlopen(request, timeout=REMOTE_PROVIDER_TIMEOUT_SECONDS) as response:
+            payload = json.loads(response.read().decode("utf-8"))
+    except urllib_error.HTTPError as error:
+        raise SpeechTranscriptionError(f"Deepgram transcription failed with HTTP {error.code}.") from error
+    except (urllib_error.URLError, TimeoutError, json.JSONDecodeError, UnicodeDecodeError) as error:
+        raise SpeechTranscriptionError("Deepgram transcription failed.") from error
+    alternative = _deepgram_best_alternative(payload)
+    text = str(alternative.get("transcript") or "")
+    words = alternative.get("words") if isinstance(alternative.get("words"), list) else []
+    return {
+        "text": text,
+        "segments": _deepgram_segments(words, fallback_text=text),
+        "duration_seconds": float(payload.get("metadata", {}).get("duration") or 0.0)
+        if isinstance(payload.get("metadata"), dict)
+        else 0.0,
+        "engine": "deepgram",
+        "model": DEEPGRAM_MODEL,
+    }
+
+
+def _deepgram_best_alternative(payload: dict) -> dict:
+    channels = payload.get("results", {}).get("channels", []) if isinstance(payload.get("results"), dict) else []
+    if not channels or not isinstance(channels[0], dict):
+        return {}
+    alternatives = channels[0].get("alternatives", [])
+    if not alternatives or not isinstance(alternatives[0], dict):
+        return {}
+    return alternatives[0]
+
+
+def _deepgram_segments(words: list, *, fallback_text: str) -> list[dict]:
+    if not words:
+        return [{"start": 0.0, "end": 0.0, "text": fallback_text}] if fallback_text else []
+    text = " ".join(str(item.get("word") or "").strip() for item in words if isinstance(item, dict)).strip()
+    start = float(words[0].get("start") or 0.0) if isinstance(words[0], dict) else 0.0
+    end = float(words[-1].get("end") or start) if isinstance(words[-1], dict) else start
+    return [{"start": start, "end": end, "text": text or fallback_text}]
+
+
+def _audio_content_type_for_path(path: Path) -> str:
+    suffix = path.suffix.lower()
+    return {
+        ".flac": "audio/flac",
+        ".m4a": "audio/mp4",
+        ".mp3": "audio/mpeg",
+        ".mp4": "video/mp4",
+        ".ogg": "audio/ogg",
+        ".webm": "audio/webm",
+        ".wav": "audio/wav",
+    }.get(suffix, "application/octet-stream")
 
 
 def _transcribe_with_faster_whisper(audio_path: Path, *, settings: dict, language: str = "") -> dict:

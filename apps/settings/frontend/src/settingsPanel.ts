@@ -92,6 +92,10 @@ export function settingsPanelHtml(settings: PlatformSettings | null, state: Sett
   const selectedModel = selectedProviderDraft(settings).modelId;
   const selectedReasoning = selectedProviderDraft(settings).reasoningEffort;
   const selectedHostedModel = selectedHostedProviderDraft(settings).modelId;
+  const selectedHostedOption = hostedModelOptions.find((option) => option.model_id === selectedHostedModel) || null;
+  const hostedProviderLabel = hostedProvider
+    ? `${selectedHostedOption?.label || selectedHostedModel || 'Hosted model'} - ${hostedProvider.label || hostedProvider.provider_id}`
+    : 'No hosted text provider';
   const selectedOption = modelOptions.find((option) => option.model_id === state.draftModelId) || modelOptions[0] || null;
   const reasoningOptions = selectedOption?.supported_reasoning_efforts || [];
   const canSaveProvider = Boolean(
@@ -139,7 +143,7 @@ export function settingsPanelHtml(settings: PlatformSettings | null, state: Sett
         <span class="settings-platform-icon material-symbols-rounded" aria-hidden="true">bolt</span>
         <div>
           <p class="settings-kicker">Hosted chat / fast model</p>
-          <h3>${escapeHtml(hostedProvider?.label || 'No hosted text provider')}</h3>
+          <h3>${escapeHtml(hostedProviderLabel)}</h3>
           <p>${escapeHtml(selectedHostedModel || 'model not selected')} · plain hosted chat only · runtime engine remains Codex</p>
         </div>
       </article>

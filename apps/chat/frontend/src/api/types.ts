@@ -2,14 +2,63 @@ export type ProviderItem = {
   provider_id: string;
   label: string;
   description: string;
+  kind?: string;
+  provider_role?: string;
   status: string;
   default_model_family: string | null;
+  model_options?: ProviderModelOption[];
+  capabilities?: Record<string, boolean>;
+};
+
+export type ProviderReasoningOption = {
+  effort: string;
+  label: string;
+  description: string | null;
+};
+
+export type ProviderModelOption = {
+  model_id: string;
+  label: string;
+  description: string | null;
+  default_reasoning_effort: string | null;
+  supported_reasoning_efforts: ProviderReasoningOption[];
+};
+
+export type ProviderModelSettings = {
+  selected_model_id: string | null;
+  selected_reasoning_effort: string | null;
+  available_models: ProviderModelOption[];
+};
+
+export type HostedProviderSelection = {
+  workspace_id: string;
+  profile: string;
+  provider_id: string;
+  selection_reason: string;
+  updated_at: string;
+  model_id: string | null;
+};
+
+export type HostedTextProviderStatus = {
+  profile: string;
+  active_provider: ProviderItem | null;
+  selection: HostedProviderSelection | null;
+  model_settings: ProviderModelSettings | null;
+  available_providers: ProviderItem[];
+  route_preview?: {
+    selected_provider_id: string | null;
+    selected_model_id_or_voice_id: string | null;
+    selected_runtime_engine_id: string | null;
+    execution_path: string | null;
+    reason_codes: string[];
+  } | null;
 };
 
 export type ProviderPayload = {
   workspace_id: string;
   configured?: boolean;
   active_provider: ProviderItem | null;
+  hosted_text?: HostedTextProviderStatus | null;
   blocked_reason?: string | null;
   blocked_detail?: string | null;
   items?: ProviderItem[];

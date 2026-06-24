@@ -154,8 +154,10 @@ export function useChatAppController({
   const runtimeControls = useChatRuntimeControls({
     activeThread,
     activeTurn,
+    activeProviderId,
     agentCatalogAppId,
     canStopTurn: runtimeCanStopTurn,
+    providers,
     selectedAgentTypeId,
     workspaceId,
     setActiveProviderId,

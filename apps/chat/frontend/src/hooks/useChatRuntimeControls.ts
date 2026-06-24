@@ -1,6 +1,7 @@
 import { Dispatch, SetStateAction, useEffect } from "react";
 import {
   ChatThread,
+  ProviderItem,
   RuntimeEvent,
   RuntimeTurn,
   getAgentDefinition,
@@ -10,13 +11,16 @@ import {
 } from "../api/client";
 import { ActiveAppContext, promptWithActiveAppContext } from "../lib/activeAppContext";
 import { mergeRuntimeEvents } from "../lib/runtimeEvents";
+import { hostedProviderRuntimeConfig, providerUsesPlainHostedRuntime } from "../lib/providerRuntimeOptions";
 import type { AgentRuntimeConfig } from "./useMessageSubmission";
 
 type UseChatRuntimeControlsParams = {
   activeThread: ChatThread | null;
   activeTurn: RuntimeTurn | null;
+  activeProviderId: string;
   agentCatalogAppId: string;
   canStopTurn: boolean;
+  providers: ProviderItem[];
   selectedAgentTypeId: string;
   workspaceId: string;
   setActiveProviderId: (providerId: string) => void;
@@ -82,8 +86,10 @@ function preloadAgentRuntimeConfig(workspaceId: string, agentCatalogAppId: strin
 export function useChatRuntimeControls({
   activeThread,
   activeTurn,
+  activeProviderId,
   agentCatalogAppId,
   canStopTurn,
+  providers,
   selectedAgentTypeId,
   workspaceId,
   setActiveProviderId,
@@ -99,6 +105,11 @@ export function useChatRuntimeControls({
 
   async function handleSelectProvider(providerId: string) {
     setActiveProviderId(providerId);
+    const provider = providers.find((item) => item.provider_id === providerId) || null;
+    if (providerUsesPlainHostedRuntime(provider)) {
+      setError(null);
+      return;
+    }
     try {
       const payload = await selectProvider(providerId);
       setActiveProviderId(payload.active_provider?.provider_id || providerId);
@@ -118,6 +129,11 @@ export function useChatRuntimeControls({
   }
 
   async function selectedAgentRuntimeConfig(activeApp: ActiveAppContext | null): Promise<AgentRuntimeConfig | null> {
+    const selectedProvider = providers.find((provider) => provider.provider_id === activeProviderId) || null;
+    const hostedConfig = hostedProviderRuntimeConfig(selectedProvider);
+    if (hostedConfig) {
+      return hostedConfig;
+    }
     if (!selectedAgentTypeId || !agentCatalogAppId || !workspaceId) {
       return null;
     }

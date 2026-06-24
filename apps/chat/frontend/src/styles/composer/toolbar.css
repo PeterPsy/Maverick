@@ -211,8 +211,8 @@
 
 .chatapp-composer__runtime-badges .chatapp-provider-selector select {
   min-height: 2rem;
-  min-width: 7.2rem;
-  max-width: 9.4rem;
+  min-width: 15.5rem;
+  max-width: min(24rem, 48vw);
   padding: 0.12rem 1.75rem 0.12rem 1.82rem;
   color: rgba(var(--maverick-contrast-rgb), 0.78);
   font-size: 0.74rem;

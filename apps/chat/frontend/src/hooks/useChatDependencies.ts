@@ -11,16 +11,13 @@ import {
   selectedDependencyProviderAppId,
   selectedSharedDependencyProviderAppId,
 } from "../api/client";
+import { providerItemsFromPayload } from "../lib/providerRuntimeOptions";
 import { clearAgentRuntimeConfigCache } from "./useChatRuntimeControls";
 
 const AGENT_CATALOG_DEPENDENCY_ALIAS = "agent-catalog";
 const AGENT_PROMPT_MATERIALIZER_DEPENDENCY_ALIAS = "agent-prompt-materializer";
 const TEXT_TO_SPEECH_DEPENDENCY_ALIAS = "text-to-speech";
 const SPEECH_TO_TEXT_DEPENDENCY_ALIAS = "speech-to-text";
-
-function providerItemsFromPayload(payload: Awaited<ReturnType<typeof listProviders>>): ProviderItem[] {
-  return payload.items || payload.available_providers || (payload.active_provider ? [payload.active_provider] : []);
-}
 
 export function useChatDependencies() {
   const [providers, setProviders] = useState<ProviderItem[]>([]);
@@ -196,9 +193,10 @@ export function useChatDependencies() {
 
   const loadInitialChatDependencies = useCallback(async () => {
     const [providerPayload, dependencies] = await Promise.all([listProviders(), getAppDependencies("chat").catch(() => null)]);
+    const providerOptions = providerItemsFromPayload(providerPayload);
     setWorkspaceId(providerPayload.workspace_id || dependencies?.workspace_id || "");
-    setProviders(providerItemsFromPayload(providerPayload));
-    setActiveProviderId(providerPayload.active_provider?.provider_id || "");
+    setProviders(providerOptions);
+    setActiveProviderId(providerPayload.active_provider?.provider_id || providerOptions[0]?.provider_id || "");
     if (!dependencies) {
       clearAgentOptions();
       clearSpeechProvider();

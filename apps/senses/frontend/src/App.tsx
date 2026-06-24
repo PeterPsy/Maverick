@@ -1,5 +1,4 @@
 import {
-  Activity,
   AlertTriangle,
   Camera,
   CheckCircle2,
@@ -26,10 +25,10 @@ import {
   SlidersHorizontal,
   Smartphone,
   Unplug,
-  WifiOff,
   Wrench,
   X,
 } from 'lucide-react';
+import type { LucideIcon } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { loadOverview, resetRoutingSession, revokeDevice, startPairing, updateSettings } from './api';
 import type {
@@ -365,26 +364,9 @@ export function App() {
 
   return (
     <main className="senses-shell">
-      <header className="senses-topbar">
-        <div className="senses-title">
-          <span className="senses-mark" aria-hidden="true">
-            <Activity size={18} />
-          </span>
-          <div>
-            <h1>Senses</h1>
-            <p>{overview?.workspace_id || nativeHost.status?.workspace_id || 'default'}</p>
-          </div>
-        </div>
-        <div className="senses-actions">
-          <StatusBadge status={dependencyStatus} label="Storage" />
-          {nativeHost.available ? <HostBadge available={nativeHost.available} /> : null}
-          <button className="primary-button" type="button" onClick={() => void createPairing()} disabled={busyAction === 'pairing'}>
-            <Plus size={16} />
-            <span>Pair device</span>
-          </button>
-          <button className="icon-button" type="button" onClick={() => void refresh()} title="Refresh" aria-label="Refresh">
-            <RefreshCw size={17} className={busyAction === 'refresh' ? 'spin' : ''} />
-          </button>
+      <header className={`senses-app-header ${nativeHost.available ? 'has-native-actions' : ''}`}>
+        <div className="senses-app-title">
+          <h1>Senses</h1>
         </div>
         {nativeHost.available ? (
           <NativeHeaderActions
@@ -579,7 +561,7 @@ function StatusTile({
   detail,
   tone,
 }: {
-  icon: typeof Activity;
+  icon: LucideIcon;
   label: string;
   value: string;
   detail: string;
@@ -1212,27 +1194,7 @@ function NumberField({
   );
 }
 
-function StatusBadge({ status, label }: { status: string; label?: string }) {
-  const ok = status === 'resolved' || status === 'ready' || status === 'ok';
-  return (
-    <span className={`status-badge ${ok ? 'is-ready' : 'is-blocked'}`}>
-      {ok ? <CheckCircle2 size={15} /> : <AlertTriangle size={15} />}
-      {label ? `${label}: ` : ''}
-      {ok ? 'ready' : status}
-    </span>
-  );
-}
-
-function HostBadge({ available }: { available: boolean }) {
-  return (
-    <span className={`status-badge ${available ? 'is-ready' : 'is-muted'}`}>
-      {available ? <Smartphone size={15} /> : <WifiOff size={15} />}
-      {available ? 'iOS host' : 'browser'}
-    </span>
-  );
-}
-
-function EmptyState({ icon: Icon, label, compact }: { icon: typeof Activity; label: string; compact?: boolean }) {
+function EmptyState({ icon: Icon, label, compact }: { icon: LucideIcon; label: string; compact?: boolean }) {
   return (
     <div className={`empty-state ${compact ? 'compact-empty' : ''}`}>
       <Icon size={22} />

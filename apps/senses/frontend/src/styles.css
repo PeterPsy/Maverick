@@ -67,7 +67,6 @@ a {
   overflow: hidden;
 }
 
-.senses-topbar,
 .live-dashboard,
 .senses-metrics,
 .senses-panel,
@@ -79,25 +78,33 @@ a {
   -webkit-backdrop-filter: blur(22px);
 }
 
-.senses-topbar {
+.senses-app-header {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  align-items: center;
+  justify-items: center;
   gap: 14px;
-  min-height: 58px;
-  border-radius: 8px;
-  padding: 10px 12px;
+  padding-bottom: 2px;
+  text-align: center;
 }
 
-.senses-title {
+.senses-app-header.has-native-actions {
   display: grid;
-  grid-template-columns: auto minmax(0, 1fr);
-  align-items: center;
-  gap: 11px;
+  justify-items: stretch;
+  text-align: left;
+}
+
+.senses-app-title {
+  display: grid;
+  justify-items: center;
+  gap: 8px;
+  max-width: 840px;
   min-width: 0;
 }
 
-.senses-mark,
+.senses-app-header.has-native-actions .senses-app-title {
+  justify-items: start;
+  max-width: none;
+}
+
 .device-icon,
 .tile-icon,
 .qr-mark {
@@ -108,7 +115,6 @@ a {
   background: var(--maverick-surface);
 }
 
-.senses-mark,
 .device-icon {
   width: 36px;
   height: 36px;
@@ -119,19 +125,21 @@ a {
   height: 34px;
 }
 
-.senses-title h1,
+.senses-app-title h1,
 .panel-heading h2,
 .row-title h3 {
   margin: 0;
   letter-spacing: 0;
 }
 
-.senses-title h1 {
-  font-size: 1rem;
-  font-weight: 680;
+.senses-app-title h1 {
+  max-width: 100%;
+  font-size: 2.35rem;
+  font-weight: 850;
+  line-height: 1.05;
+  overflow-wrap: anywhere;
 }
 
-.senses-title p,
 .panel-heading p,
 .row-meta,
 .code-label,
@@ -150,17 +158,11 @@ a {
   font-size: 0.76rem;
 }
 
-.senses-actions,
 .panel-actions,
 .native-header-actions {
   display: flex;
   align-items: center;
   gap: 8px;
-}
-
-.senses-actions {
-  flex-wrap: wrap;
-  justify-content: flex-end;
 }
 
 .icon-button,
@@ -228,7 +230,6 @@ a {
   color: var(--senses-danger);
 }
 
-.status-badge,
 .status-pill {
   display: inline-flex;
   align-items: center;
@@ -246,21 +247,18 @@ a {
   white-space: nowrap;
 }
 
-.status-badge.is-ready,
 .status-pill.is-active,
 .status-pill.is-stored,
 .status-pill.is-completed {
   color: var(--senses-good);
 }
 
-.status-badge.is-blocked,
 .status-pill.is-pending,
 .status-pill.is-storage_pending,
 .status-pill.is-dispatching {
   color: var(--senses-warn);
 }
 
-.status-badge.is-muted,
 .status-pill.is-revoked {
   color: var(--maverick-text-muted);
 }
@@ -377,8 +375,8 @@ a {
 }
 
 .native-header-actions {
-  grid-column: 1 / -1;
   flex-wrap: wrap;
+  width: 100%;
   min-width: 0;
   border-top: 1px solid var(--maverick-border);
   padding-top: 10px;
@@ -864,15 +862,6 @@ a {
     overflow: visible;
     padding-right: 12px;
     padding-left: 12px;
-  }
-
-  .senses-topbar {
-    align-items: stretch;
-    grid-template-columns: 1fr;
-  }
-
-  .senses-actions {
-    justify-content: flex-start;
   }
 
   .live-dashboard,

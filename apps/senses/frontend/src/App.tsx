@@ -751,7 +751,7 @@ function useNativeHost() {
   }, []);
 
   const send = useCallback((command: NativeCommand) => {
-    if (!hasNativeHost()) {
+    if (!hasNativeHost() && window.__maverickSensesNativeStatus?.available !== true) {
       setAvailable(false);
       return null;
     }
@@ -768,13 +768,22 @@ function hasNativeHost() {
 
 function postNativeCommand(command: NativeCommand) {
   const requestId = makeRequestId();
-  window.webkit?.messageHandlers?.sensesHost?.postMessage({
+  const message = {
     app_id: 'senses',
     command,
     location_href: window.location.href,
     request_id: requestId,
     source: 'senses.frontend',
-  });
+    type: 'maverick.senses.native-command',
+  };
+  window.webkit?.messageHandlers?.sensesHost?.postMessage(message);
+  window.postMessage(message, window.location.origin);
+  if (window.parent && window.parent !== window) {
+    window.parent.postMessage(message, window.location.origin);
+  }
+  if (window.top && window.top !== window && window.top !== window.parent) {
+    window.top.postMessage(message, window.location.origin);
+  }
   return requestId;
 }
 

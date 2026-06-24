@@ -2,7 +2,7 @@
   "app_id": "senses",
   "contract_version": "1.0",
   "name": "Senses",
-  "version": "0.6.0",
+  "version": "0.7.0",
   "description": "Device and sensor connector for Maverick workspace inputs with user-session pairing, Storage-backed captures, and runtime routing to Chat.",
   "publisher": "maverick",
   "minimum_core_version": "0.1.0",

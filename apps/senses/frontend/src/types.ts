@@ -60,6 +60,15 @@ export interface SensesChatLink {
   deep_link: string | null;
   app_id: string;
   app_page: string | null;
+  status: 'linked' | 'pending' | string;
+  label: string;
+}
+
+export interface SensesCaptureOrigin {
+  label: string;
+  kind: 'meta_glasses' | 'vision' | 'audio' | 'device' | string;
+  adapter_id: string | null;
+  input_modes: string[];
 }
 
 export interface SensesCapture {
@@ -89,6 +98,7 @@ export interface SensesCapture {
   thread_id: string | null;
   turn_id: string | null;
   chat: SensesChatLink;
+  origin: SensesCaptureOrigin;
   deleted_at: string | null;
   metadata: Record<string, unknown>;
   created_at: string;

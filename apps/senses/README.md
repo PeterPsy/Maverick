@@ -1,14 +1,14 @@
 # Senses
 
-Senses is a root Maverick app for device and sensor inputs. Phase 6 keeps the
+Senses is a root Maverick app for device and sensor inputs. Phase 7 keeps the
 Phase 4 backend contract for user-session pairing, the workspace-scoped device
 registry, authenticated frame ingestion through Storage-backed capture records,
 and explicit routing from stored captures into Maverick Chat runtime threads
-without adding a public bearer-token ingress. It adds the primary workspace UI
-for device, pairing, capture, routing, settings, diagnostics, and iOS host
-control.
+without adding a public bearer-token ingress. It keeps the existing workspace UI
+as the primary device surface and adds Chat mapping visibility, Chat status
+filters, and clearer visual-origin thread titles for the Senses MVP.
 
-## Phase 6 Surfaces
+## Phase 7 Surfaces
 
 - frontend: `frontend/dist`
 - backend: `manifest`, `health`, `overview`, `pairing.start`,
@@ -25,7 +25,7 @@ control.
 
 The MVP auth mode is `user_session_mvp`. Mounted backend calls use the Maverick
 user session supplied by `/api/apps/senses/backend`; Senses does not accept a raw
-device token in Phase 6. Pairing, registry, settings, ingestion, and routing
+device token in Phase 7. Pairing, registry, settings, ingestion, and routing
 operations are backend/view-only because standard CLI/MCP app contexts do not
 carry a Maverick user session.
 
@@ -48,7 +48,7 @@ The SQLite file is:
 workspaces/<workspace_id>/data/senses/senses.sqlite
 ```
 
-Phase 6 creates these workspace-scoped tables:
+The current schema creates these workspace-scoped tables:
 
 - `schema_migrations`
 - `settings`
@@ -134,6 +134,16 @@ duplicate or tardy callbacks for terminal attempts return the persisted terminal
 state without rewriting the capture. `captures.get` returns the persisted capture
 and Chat deep link after the callback has completed.
 
+Phase 7 keeps Chat/Core ownership unchanged and does not add core thread
+metadata. Runtime requests created by Senses still produce runtime threads with
+`source_app_id=senses` through the generic app-hosting runtime request path.
+Senses stores the device/thread mapping in `routing_sessions`, exposes pending
+or linked Chat state in capture and dispatch payloads, and titles Meta glasses
+visual threads as `Occhiali - domanda visiva` or the matching task variant. The
+frontend Captures and Routing tabs provide local filters for stored captures,
+Chat-linked captures, Chat-pending captures, mapped routing sessions, pending
+mapping sessions, and task threads.
+
 Live audio capture and bidirectional voice routing remain deferred. Senses must
 not open raw device-token audio ingress, STT/TTS WebSockets, or remote speech
 provider sessions until the core provider registry, router, audit trail, and
@@ -215,4 +225,4 @@ events for devices, pairing, settings, captures, routing, and frontend
 view-state. The operations
 manifest reports separate booleans for user-session `ingest.frame` support and
 raw device auth support. Device-token
-ingress and capture reference entities remain deferred beyond Phase 6.
+ingress and capture reference entities remain deferred beyond Phase 7.

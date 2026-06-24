@@ -1,4 +1,4 @@
-"""Phase 6 service layer for Senses."""
+"""Phase 7 service layer for Senses."""
 
 from __future__ import annotations
 
@@ -30,8 +30,8 @@ from database import (
 
 APP_ID = "senses"
 APP_NAME = "Senses"
-APP_VERSION = "0.6.0"
-PHASE = "phase-6"
+APP_VERSION = "0.7.0"
+PHASE = "phase-7"
 VIEW_STATE_FILENAME = "view_state.json"
 PAIRING_CODE_ALPHABET = "".join(char for char in string.ascii_uppercase + string.digits if char not in {"0", "O", "I", "1"})
 PAIRING_CODE_LENGTH = 8
@@ -239,7 +239,7 @@ def handle_action(data_root: Path, payload: dict[str, object]) -> tuple[int, dic
     return error_payload(
         400,
         "unsupported_action",
-        f"Unsupported Senses Phase 6 action `{action}`.",
+        f"Unsupported Senses Phase 7 action `{action}`.",
         allowed_actions=list(DECLARED_BACKEND_ACTIONS),
         deferred_actions=list(DEFERRED_ACTIONS),
     )
@@ -274,7 +274,7 @@ def require_authenticated(actor: dict[str, str | None]) -> tuple[int, dict[str, 
     return error_payload(
         401,
         "authentication_required",
-        "Senses Phase 6 actions require a Maverick user session.",
+        "Senses Phase 7 actions require a Maverick user session.",
     )
 
 
@@ -343,7 +343,7 @@ def manifest_payload(
         "dependency_resolution": dependencies,
         "deferred_to_later_phases": list(DEFERRED_ACTIONS),
         "notes": [
-            "Senses Phase 6 uses Maverick user sessions for pairing, device registry, frame ingestion, routing, and the workspace frontend.",
+            "Senses Phase 7 uses Maverick user sessions for pairing, device registry, frame ingestion, routing, and the workspace frontend.",
             "ingest.frame is available with a Maverick user session and active device_session_id.",
             "ingest.frame stores captures through the declared Storage dependency and never launches runtime turns.",
             "routing.dispatch_capture emits runtime_launch_requests only after a capture is stored.",
@@ -2299,9 +2299,11 @@ def runtime_input_text(
     route: dict[str, object],
 ) -> str:
     prompt = text_or_none(capture["prompt"]) or "Analizza questo frame e rispondi in modo utile."
+    origin_label = capture_origin_label(capture=capture, device=device)
     details = [
         f"Senses capture: {capture['capture_id']}",
         f"Device: {device['display_name']} ({device['device_kind']}/{device['platform']})",
+        f"Origin: {origin_label}",
         f"Input: {capture['input_mode']}",
         f"Routing: {route['route_kind']} ({route['reason']})",
     ]
@@ -2316,7 +2318,7 @@ def runtime_thread_title(
     device: sqlite3.Row,
     route: dict[str, object],
 ) -> str:
-    device_label = bounded_text(device["display_name"], fallback="Senses", max_length=48)
+    device_label = capture_origin_label(capture=capture, device=device)
     if route["route_kind"] == "task":
         suffix = "task visivo"
     elif route["route_kind"] == "new_thread":
@@ -2324,6 +2326,49 @@ def runtime_thread_title(
     else:
         suffix = "domanda visiva"
     return f"{device_label} - {suffix}"
+
+
+def capture_origin_label(
+    *,
+    capture: sqlite3.Row,
+    device: sqlite3.Row | None = None,
+) -> str:
+    metadata = decode_json_object(capture["metadata_json"])
+    for key in ("origin_label", "source_label", "sensor_label", "adapter_label"):
+        label = text_or_none(metadata.get(key))
+        if label:
+            return bounded_text(label, fallback="Senses", max_length=48)
+    if capture_origin_kind(capture=capture, device=device) == "meta_glasses":
+        return "Occhiali"
+    if device is not None:
+        return bounded_text(device["display_name"], fallback="Senses", max_length=48)
+    return "Senses"
+
+
+def capture_origin_kind(
+    *,
+    capture: sqlite3.Row,
+    device: sqlite3.Row | None = None,
+) -> str:
+    metadata = decode_json_object(capture["metadata_json"])
+    values = [
+        metadata.get("origin_kind"),
+        metadata.get("source_kind"),
+        metadata.get("adapter_id"),
+        metadata.get("adapter"),
+        metadata.get("sensor"),
+        capture["input_mode"],
+    ]
+    if device is not None:
+        values.extend([device["device_kind"], device["platform"], device["display_name"]])
+    normalized = " ".join(str(value or "").lower().replace("-", "_") for value in values)
+    if "meta_glasses" in normalized or ("meta" in normalized and ("glass" in normalized or "occhiali" in normalized)):
+        return "meta_glasses"
+    if "vision" in normalized:
+        return "vision"
+    if "audio" in normalized:
+        return "audio"
+    return "device"
 
 
 def runtime_attachment_for_capture(capture: sqlite3.Row) -> dict[str, object]:
@@ -2682,6 +2727,7 @@ def capture_payload(row: sqlite3.Row | None) -> dict[str, object]:
         "thread_id": row["thread_id"],
         "turn_id": row["turn_id"],
         "chat": chat,
+        "origin": capture_origin_payload(row),
         "deleted_at": row["deleted_at"],
         "metadata": decode_json_object(row["metadata_json"]),
         "created_at": row["created_at"],
@@ -2753,6 +2799,8 @@ def chat_link_payload(thread_id: object) -> dict[str, object]:
             "deep_link": None,
             "app_id": "chat",
             "app_page": None,
+            "status": "pending",
+            "label": "Chat pending",
         }
     app_page = f"threads/{normalized}"
     return {
@@ -2761,6 +2809,20 @@ def chat_link_payload(thread_id: object) -> dict[str, object]:
         "deep_link": f"/app/chat/{app_page}",
         "app_id": "chat",
         "app_page": app_page,
+        "status": "linked",
+        "label": "Chat linked",
+    }
+
+
+def capture_origin_payload(row: sqlite3.Row | None) -> dict[str, object]:
+    if row is None:
+        return {}
+    metadata = decode_json_object(row["metadata_json"])
+    return {
+        "label": capture_origin_label(capture=row),
+        "kind": capture_origin_kind(capture=row),
+        "adapter_id": text_or_none(metadata.get("adapter_id") or metadata.get("adapter")),
+        "input_modes": [row["input_mode"]] if text_or_none(row["input_mode"]) else [],
     }
 
 
@@ -3313,7 +3375,7 @@ def reference_manifest() -> dict[str, object]:
         "app_id": APP_ID,
         "schema_version": "1",
         "entity_types": [],
-        "notes": ["Senses capture records exist in Phase 6; reference search and resolve remain deferred."],
+        "notes": ["Senses capture records exist in Phase 7; reference search and resolve remain deferred."],
     }
 
 

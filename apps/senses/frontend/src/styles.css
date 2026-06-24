@@ -188,6 +188,49 @@ a {
   white-space: nowrap;
 }
 
+.segmented-control {
+  display: inline-grid;
+  grid-auto-flow: column;
+  grid-auto-columns: minmax(68px, auto);
+  align-items: center;
+  max-width: 100%;
+  min-height: 36px;
+  overflow-x: auto;
+  border: 1px solid var(--senses-border);
+  border-radius: min(var(--senses-radius-control), 18px);
+  background: var(--senses-surface-muted);
+  padding: 3px;
+}
+
+.segmented-control button {
+  display: inline-grid;
+  place-items: center;
+  min-width: 0;
+  min-height: 28px;
+  border: 0;
+  border-radius: 14px;
+  background: transparent;
+  color: var(--senses-muted);
+  cursor: pointer;
+  font-size: 0.75rem;
+  white-space: nowrap;
+}
+
+.segmented-control button:hover {
+  background: var(--senses-surface-hover);
+  color: var(--senses-text);
+}
+
+.segmented-control button:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px var(--senses-focus-soft);
+}
+
+.segmented-control button.is-active {
+  background: var(--senses-accent);
+  color: var(--senses-text-on-accent);
+}
+
 .primary-button,
 .primary-tool {
   border-color: var(--senses-border-strong);
@@ -250,7 +293,10 @@ a {
 
 .status-pill.is-active,
 .status-pill.is-stored,
-.status-pill.is-completed {
+.status-pill.is-completed,
+.status-pill.is-linked,
+.status-pill.is-mapped,
+.status-pill.is-task {
   color: var(--senses-good);
 }
 
@@ -673,11 +719,36 @@ a {
 }
 
 .link-stack a,
-.detail-grid a {
+.detail-grid a,
+.chat-status-link {
   display: inline-flex;
   align-items: center;
   gap: 5px;
   color: var(--senses-accent);
+}
+
+.capture-origin,
+.chat-status-link {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.capture-origin {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  color: var(--senses-good);
+  font-size: 0.74rem;
+}
+
+.chat-status-link.is-pending {
+  color: var(--senses-warn);
+}
+
+.chat-status-link.is-linked {
+  color: var(--senses-good);
 }
 
 .routing-list {
@@ -695,7 +766,15 @@ a {
   gap: 12px;
 }
 
-.routing-header > div {
+.routing-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+  min-width: 0;
+}
+
+.routing-header > div:first-child {
   display: grid;
   gap: 4px;
   min-width: 0;

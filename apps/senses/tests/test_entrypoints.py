@@ -1,4 +1,4 @@
-"""Phase 6 backend tests for Senses."""
+"""Phase 7 backend tests for Senses."""
 
 from __future__ import annotations
 
@@ -301,7 +301,7 @@ def runtime_callback_payload(
     }
 
 
-class SensesPhase4EntrypointTest(unittest.TestCase):
+class SensesPhase7EntrypointTest(unittest.TestCase):
     def test_schema_is_workspace_scoped_and_idempotent(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             data_root = Path(tmp)
@@ -322,7 +322,7 @@ class SensesPhase4EntrypointTest(unittest.TestCase):
             self.assertEqual(settings_count, 1)
             self.assertTrue(set(WORKSPACE_TABLES).issubset(table_names))
 
-    def test_manifest_reports_phase_6_surfaces(self) -> None:
+    def test_manifest_reports_phase_7_surfaces(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             status, manifest = handle_action(
                 Path(tmp),
@@ -337,7 +337,7 @@ class SensesPhase4EntrypointTest(unittest.TestCase):
             self.assertEqual(manifest["action"], "manifest")
             self.assertIs(manifest["ok"], True)
             self.assertIs(manifest["available"], True)
-            self.assertEqual(manifest["phase"], "phase-6")
+            self.assertEqual(manifest["phase"], "phase-7")
             self.assertIs(manifest["auth"]["user_session_ingest_supported"], True)
             self.assertIs(manifest["auth"]["raw_device_auth_supported"], False)
             self.assertNotIn("device_ingress_supported", manifest["auth"])
@@ -1013,6 +1013,7 @@ class SensesPhase4EntrypointTest(unittest.TestCase):
             self.assertEqual(dispatch["routing"]["route_kind"], "primary")
             self.assertEqual(dispatch["routing"]["target_thread_kind"], "new_primary")
             self.assertEqual(dispatch["chat"]["available"], False)
+            self.assertEqual(dispatch["chat"]["status"], "pending")
             self.assertEqual(len(dispatch["runtime_launch_requests"]), 1)
             self.assertNotIn("dependency_backend_requests", dispatch)
 
@@ -1020,6 +1021,8 @@ class SensesPhase4EntrypointTest(unittest.TestCase):
             self.assertEqual(runtime_request["agent_id"], "chat")
             self.assertEqual(runtime_request["agent_type_id"], "chat")
             self.assertEqual(runtime_request["requested_mode"], "sandbox")
+            self.assertEqual(runtime_request["title"], "Occhiali - domanda visiva")
+            self.assertIn("Origin: Occhiali", runtime_request["input_text"])
             self.assertIn(capture["capture_id"], runtime_request["input_text"])
             self.assertEqual(runtime_request["attachments"][0]["workspace_relative_path"], capture["storage"]["workspace_relative_path"])
             self.assertEqual(runtime_request["attachments"][0]["content_type"], "image/jpeg")
@@ -1195,8 +1198,14 @@ class SensesPhase4EntrypointTest(unittest.TestCase):
             self.assertEqual(callback["capture"]["runtime_session_id"], "runtime-session-1")
             self.assertEqual(callback["capture"]["thread_id"], "runtime-session-1")
             self.assertEqual(callback["capture"]["turn_id"], "turn-1")
+            self.assertEqual(callback["capture"]["origin"]["kind"], "meta_glasses")
+            self.assertEqual(callback["capture"]["origin"]["label"], "Occhiali")
+            self.assertEqual(callback["chat"]["status"], "linked")
             self.assertEqual(callback["chat"]["deep_link"], "/app/chat/threads/runtime-session-1")
             self.assertEqual(callback["routing_session"]["primary_runtime_session_id"], "runtime-session-1")
+            self.assertEqual(callback["routing_session"]["primary_chat"]["status"], "linked")
+            self.assertEqual(callback["routing_session"]["last_thread_id"], "runtime-session-1")
+            self.assertEqual(callback["routing_session"]["last_turn_id"], "turn-1")
 
             status, fetched = handle_action(
                 data_root,
@@ -1565,7 +1574,7 @@ class SensesPhase4EntrypointTest(unittest.TestCase):
                 },
             )
             self.assertTrue(cli_manifest["ok"])
-            self.assertEqual(cli_manifest["phase"], "phase-6")
+            self.assertEqual(cli_manifest["phase"], "phase-7")
             self.assertIs(cli_manifest["auth"]["user_session_ingest_supported"], True)
             self.assertIs(cli_manifest["auth"]["raw_device_auth_supported"], False)
             self.assertNotIn("device_ingress_supported", cli_manifest["auth"])
@@ -1573,7 +1582,7 @@ class SensesPhase4EntrypointTest(unittest.TestCase):
             self.assertFalse(cli_overview["ok"])
             self.assertEqual(cli_overview["error"], "unsupported_cli_action")
             self.assertTrue(mcp_manifest["ok"])
-            self.assertEqual(mcp_manifest["phase"], "phase-6")
+            self.assertEqual(mcp_manifest["phase"], "phase-7")
             self.assertIs(mcp_manifest["auth"]["user_session_ingest_supported"], True)
             self.assertIs(mcp_manifest["auth"]["raw_device_auth_supported"], False)
             self.assertNotIn("device_ingress_supported", mcp_manifest["auth"])
@@ -1581,7 +1590,7 @@ class SensesPhase4EntrypointTest(unittest.TestCase):
             self.assertFalse(mcp_pairing["ok"])
             self.assertEqual(mcp_pairing["error"], "unsupported_tool")
             self.assertTrue(mcp_override["ok"])
-            self.assertEqual(mcp_override["phase"], "phase-6")
+            self.assertEqual(mcp_override["phase"], "phase-7")
             self.assertNotIn("pairing", mcp_override)
             self.assertFalse(db_path(Path(tmp)).exists())
 

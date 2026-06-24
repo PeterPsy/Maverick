@@ -1,7 +1,7 @@
 {
   "commands": {
     "senses": {
-      "description": "Inspect Senses Phase 6 manifest, health, and reference metadata.",
+      "description": "Inspect Senses Phase 7 manifest, health, and reference metadata.",
       "argument_schema": {
         "type": "object",
         "properties": {

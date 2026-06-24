@@ -1,4 +1,4 @@
-"""Hosted/core end-to-end coverage for the Senses Phase 6 pipeline."""
+"""Hosted/core end-to-end coverage for the Senses Phase 7 pipeline."""
 
 from __future__ import annotations
 
@@ -123,6 +123,7 @@ class SensesHostedE2ETest(unittest.TestCase):
         self.assertEqual(runtime_request["agent_id"], "chat")
         self.assertEqual(runtime_request["agent_type_id"], "chat")
         self.assertEqual(runtime_request["requested_mode"], "sandbox")
+        self.assertEqual(runtime_request["title"], "Hosted iPhone - domanda visiva")
         self.assertEqual(runtime_request["app_references"][0]["app_id"], "senses")
         self.assertEqual(runtime_request["app_references"][0]["entity_type"], "capture")
         self.assertEqual(runtime_request["app_references"][0]["entity_id"], capture_id)
@@ -151,6 +152,7 @@ class SensesHostedE2ETest(unittest.TestCase):
         self.assertEqual(stored_capture["thread_id"], runtime_session_id)
         self.assertEqual(stored_capture["turn_id"], turn_id)
         self.assertEqual(stored_capture["chat"]["app_id"], "chat")
+        self.assertEqual(stored_capture["chat"]["status"], "linked")
         self.assertEqual(stored_capture["chat"]["deep_link"], f"/app/chat/threads/{runtime_session_id}")
         self._assert_chat_deep_link_mounts(stack, stored_capture["chat"]["deep_link"], runtime_session_id)
         self.assertEqual(after_callback["runtime_dispatch_attempts"][0]["status"], "submitted")

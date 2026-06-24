@@ -52,6 +52,8 @@ const TAB_ITEMS = [
 ] as const;
 
 type TabId = (typeof TAB_ITEMS)[number]['id'];
+type CaptureFilter = 'all' | 'stored' | 'chat-linked' | 'chat-pending' | 'errors';
+type RoutingFilter = 'all' | 'mapped' | 'pending' | 'task';
 type NativeCommand = 'refreshNativeStatus' | 'pairGlasses' | 'ask' | 'openLogin';
 type NavigationParams = Record<string, string | boolean | null>;
 
@@ -119,6 +121,8 @@ export function App() {
   const [pairing, setPairing] = useState<SensesPairingSession | null>(null);
   const [query, setQuery] = useState('');
   const [activeTab, setActiveTab] = useState<TabId>(() => tabFromParams(Object.fromEntries(new URLSearchParams(window.location.search).entries())) || 'devices');
+  const [captureFilter, setCaptureFilter] = useState<CaptureFilter>('all');
+  const [routingFilter, setRoutingFilter] = useState<RoutingFilter>('all');
   const [notice, setNotice] = useState('');
   const [error, setError] = useState('');
   const [busyAction, setBusyAction] = useState('');
@@ -142,6 +146,14 @@ export function App() {
       ].some((value) => value.toLowerCase().includes(normalized));
     });
   }, [overview, query]);
+
+  const filteredCaptures = useMemo(() => {
+    return filterCaptures(overview?.captures || [], captureFilter);
+  }, [overview, captureFilter]);
+
+  const filteredRoutingSessions = useMemo(() => {
+    return filterRoutingSessions(overview?.routing_sessions || [], routingFilter);
+  }, [overview, routingFilter]);
 
   const latestCapture = useMemo(() => newestCapture(overview?.captures || []), [overview]);
   const stats = useMemo(() => {
@@ -413,13 +425,22 @@ export function App() {
           />
         )}
         {activeTab === 'captures' && (
-          <CapturesTab captures={overview?.captures || []} loading={loading} />
+          <CapturesTab
+            captures={filteredCaptures}
+            totalCount={overview?.captures.length || 0}
+            loading={loading}
+            filter={captureFilter}
+            onFilterChange={setCaptureFilter}
+          />
         )}
         {activeTab === 'routing' && (
           <RoutingTab
-            sessions={overview?.routing_sessions || []}
+            sessions={filteredRoutingSessions}
+            totalCount={overview?.routing_sessions.length || 0}
             loading={loading}
             busyAction={busyAction}
+            filter={routingFilter}
+            onFilterChange={setRoutingFilter}
             onReset={(session) => void resetRouting(session)}
           />
         )}
@@ -809,15 +830,37 @@ function PendingPairings({ sessions }: { sessions: SensesPairingSession[] }) {
   );
 }
 
-function CapturesTab({ captures, loading }: { captures: SensesCapture[]; loading: boolean }) {
+function CapturesTab({
+  captures,
+  totalCount,
+  loading,
+  filter,
+  onFilterChange,
+}: {
+  captures: SensesCapture[];
+  totalCount: number;
+  loading: boolean;
+  filter: CaptureFilter;
+  onFilterChange: (filter: CaptureFilter) => void;
+}) {
   return (
     <section className="senses-panel table-panel">
       <div className="panel-heading">
         <div>
           <h2>Captures</h2>
-          <p>{captures.length} record</p>
+          <p>{captures.length}/{totalCount} record</p>
         </div>
-        <Camera size={18} />
+        <SegmentedControl<CaptureFilter>
+          value={filter}
+          onChange={onFilterChange}
+          options={[
+            { id: 'all', label: 'All' },
+            { id: 'stored', label: 'Stored' },
+            { id: 'chat-linked', label: 'Chat' },
+            { id: 'chat-pending', label: 'Pending' },
+            { id: 'errors', label: 'Errors' },
+          ]}
+        />
       </div>
       {loading ? (
         <TableSkeleton />
@@ -828,6 +871,12 @@ function CapturesTab({ captures, loading }: { captures: SensesCapture[]; loading
               <div>
                 <strong>{compactId(capture.capture_id)}</strong>
                 <span>{capture.device_id}</span>
+                {capture.origin?.kind === 'meta_glasses' ? (
+                  <span className="capture-origin">
+                    <Glasses size={12} />
+                    {capture.origin.label}
+                  </span>
+                ) : null}
               </div>
               <div>
                 <span className={`status-pill is-${capture.status}`}>{capture.status}</span>
@@ -839,14 +888,7 @@ function CapturesTab({ captures, loading }: { captures: SensesCapture[]; loading
               </div>
               <div className="link-stack">
                 <CaptureStorageLink capture={capture} />
-                {capture.chat.deep_link ? (
-                  <a href={capture.chat.deep_link}>
-                    <MessageSquare size={14} />
-                    <span>Chat</span>
-                  </a>
-                ) : (
-                  <span>Chat pending</span>
-                )}
+                <CaptureChatLink capture={capture} />
               </div>
               <time>{formatDate(capture.captured_at)}</time>
             </article>
@@ -856,6 +898,24 @@ function CapturesTab({ captures, loading }: { captures: SensesCapture[]; loading
         <EmptyState icon={Camera} label="No captures" />
       )}
     </section>
+  );
+}
+
+function CaptureChatLink({ capture }: { capture: SensesCapture }) {
+  const label = capture.chat.label || (capture.chat.deep_link ? 'Chat linked' : 'Chat pending');
+  if (capture.chat.deep_link) {
+    return (
+      <a className="chat-status-link is-linked" href={capture.chat.deep_link}>
+        <MessageSquare size={14} />
+        <span>{label}</span>
+      </a>
+    );
+  }
+  return (
+    <span className="chat-status-link is-pending">
+      <MessageSquare size={14} />
+      <span>{label}</span>
+    </span>
   );
 }
 
@@ -886,13 +946,19 @@ function storageHrefForCapture(capture: SensesCapture) {
 
 function RoutingTab({
   sessions,
+  totalCount,
   loading,
   busyAction,
+  filter,
+  onFilterChange,
   onReset,
 }: {
   sessions: SensesRoutingSession[];
+  totalCount: number;
   loading: boolean;
   busyAction: string;
+  filter: RoutingFilter;
+  onFilterChange: (filter: RoutingFilter) => void;
   onReset: (session: SensesRoutingSession) => void;
 }) {
   return (
@@ -900,51 +966,70 @@ function RoutingTab({
       <div className="panel-heading">
         <div>
           <h2>Routing</h2>
-          <p>{sessions.length} sessions</p>
+          <p>{sessions.length}/{totalCount} sessions</p>
         </div>
-        <Route size={18} />
+        <SegmentedControl<RoutingFilter>
+          value={filter}
+          onChange={onFilterChange}
+          options={[
+            { id: 'all', label: 'All' },
+            { id: 'mapped', label: 'Mapped' },
+            { id: 'pending', label: 'Pending' },
+            { id: 'task', label: 'Task' },
+          ]}
+        />
       </div>
       {loading ? (
         <TableSkeleton />
       ) : sessions.length ? (
         <div className="table-list routing-list">
-          {sessions.map((session) => (
-            <article className="routing-card" key={session.routing_session_id}>
-              <div className="routing-header">
-                <div>
-                  <strong>{compactId(session.routing_session_id)}</strong>
-                  <span>{session.device_id}</span>
+          {sessions.map((session) => {
+            const mappingStatus = routingMappingStatus(session);
+            return (
+              <article className="routing-card" key={session.routing_session_id}>
+                <div className="routing-header">
+                  <div>
+                    <strong>{compactId(session.routing_session_id)}</strong>
+                    <span>{session.device_id}</span>
+                  </div>
+                  <div className="routing-actions">
+                    <span className={`status-pill is-${mappingStatus}`}>{routingMappingLabel(session)}</span>
+                    <button
+                      className="tool-button"
+                      type="button"
+                      onClick={() => onReset(session)}
+                      disabled={busyAction === session.routing_session_id}
+                    >
+                      <RotateCcw size={15} />
+                      <span>Reset</span>
+                    </button>
+                  </div>
                 </div>
-                <button
-                  className="tool-button"
-                  type="button"
-                  onClick={() => onReset(session)}
-                  disabled={busyAction === session.routing_session_id}
-                >
-                  <RotateCcw size={15} />
-                  <span>Reset</span>
-                </button>
-              </div>
-              <dl className="detail-grid">
-                <div>
-                  <dt>Primary thread</dt>
-                  <dd>{linkOrEmpty(session.primary_chat.deep_link, session.primary_thread_id)}</dd>
-                </div>
-                <div>
-                  <dt>Active task</dt>
-                  <dd>{linkOrEmpty(session.active_task_chat.deep_link, session.active_task_thread_id)}</dd>
-                </div>
-                <div>
-                  <dt>Last turn</dt>
-                  <dd>{session.last_turn_id ? compactId(session.last_turn_id) : 'none'}</dd>
-                </div>
-                <div>
-                  <dt>Routing</dt>
-                  <dd>{session.last_routing_kind || 'none'}</dd>
-                </div>
-              </dl>
-            </article>
-          ))}
+                <dl className="detail-grid">
+                  <div>
+                    <dt>Primary thread</dt>
+                    <dd>{linkOrEmpty(session.primary_chat.deep_link, session.primary_thread_id)}</dd>
+                  </div>
+                  <div>
+                    <dt>Active task</dt>
+                    <dd>{linkOrEmpty(session.active_task_chat.deep_link, session.active_task_thread_id)}</dd>
+                  </div>
+                  <div>
+                    <dt>Last thread</dt>
+                    <dd>{linkOrEmpty(session.last_chat.deep_link, session.last_thread_id)}</dd>
+                  </div>
+                  <div>
+                    <dt>Last turn</dt>
+                    <dd>{session.last_turn_id ? compactId(session.last_turn_id) : 'none'}</dd>
+                  </div>
+                  <div>
+                    <dt>Routing</dt>
+                    <dd>{session.last_routing_kind || 'none'}</dd>
+                  </div>
+                </dl>
+              </article>
+            );
+          })}
         </div>
       ) : (
         <EmptyState icon={Route} label="No routing sessions" />
@@ -1040,6 +1125,31 @@ function SettingsTab({
         <EmptyState icon={SettingsIcon} label="Settings not loaded" compact />
       )}
     </section>
+  );
+}
+
+function SegmentedControl<T extends string>({
+  options,
+  value,
+  onChange,
+}: {
+  options: Array<{ id: T; label: string }>;
+  value: T;
+  onChange: (value: T) => void;
+}) {
+  return (
+    <div className="segmented-control" role="group" aria-label="Filter">
+      {options.map((option) => (
+        <button
+          key={option.id}
+          type="button"
+          className={option.id === value ? 'is-active' : ''}
+          onClick={() => onChange(option.id)}
+        >
+          {option.label}
+        </button>
+      ))}
+    </div>
   );
 }
 
@@ -1269,6 +1379,61 @@ function metadataList(metadata: Record<string, unknown>, keys: string[]) {
     }
   }
   return Array.from(new Set(values));
+}
+
+function filterCaptures(captures: SensesCapture[], filter: CaptureFilter) {
+  return captures.filter((capture) => {
+    if (filter === 'stored') {
+      return capture.storage.status === 'stored';
+    }
+    if (filter === 'chat-linked') {
+      return Boolean(capture.chat.deep_link);
+    }
+    if (filter === 'chat-pending') {
+      return !capture.chat.deep_link;
+    }
+    if (filter === 'errors') {
+      return Boolean(capture.error_code) || capture.status.includes('failed') || capture.status.includes('error');
+    }
+    return true;
+  });
+}
+
+function filterRoutingSessions(sessions: SensesRoutingSession[], filter: RoutingFilter) {
+  return sessions.filter((session) => {
+    const status = routingMappingStatus(session);
+    if (filter === 'mapped') {
+      return status === 'mapped' || status === 'task';
+    }
+    if (filter === 'pending') {
+      return status === 'pending';
+    }
+    if (filter === 'task') {
+      return status === 'task';
+    }
+    return true;
+  });
+}
+
+function routingMappingStatus(session: SensesRoutingSession): 'mapped' | 'pending' | 'task' {
+  if (session.active_task_thread_id) {
+    return 'task';
+  }
+  if (session.primary_thread_id || session.last_thread_id) {
+    return 'mapped';
+  }
+  return 'pending';
+}
+
+function routingMappingLabel(session: SensesRoutingSession) {
+  const status = routingMappingStatus(session);
+  if (status === 'task') {
+    return 'Task mapped';
+  }
+  if (status === 'mapped') {
+    return 'Chat mapped';
+  }
+  return 'Chat pending';
 }
 
 function linkOrEmpty(deepLink: string | null, label: string | null) {

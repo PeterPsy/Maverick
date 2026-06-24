@@ -20,6 +20,7 @@
     "maverick-monitor": "monitoring",
     "memory": "neurology",
     "skills": "school",
+    "senses": "sensors",
     "speech": "record_voice_over",
     "storage": "cloud",
     "settings": "admin_panel_settings",

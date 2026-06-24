@@ -49,4 +49,8 @@ describe("AppLogo", () => {
   it("uses the fitness glyph for Fitness Coach", () => {
     expect(renderedLogo("fitness-coach")).toContain(">fitness_center<");
   });
+
+  it("uses the sensors glyph for Senses", () => {
+    expect(renderedLogo("senses")).toContain(">sensors<");
+  });
 });

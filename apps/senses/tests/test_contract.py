@@ -54,9 +54,23 @@ class SensesContractTest(unittest.TestCase):
         self.assertTrue(contract["permissions"]["runtime"]["create_sessions"])
         provided = {item["interface"]: item for item in contract["provides"]}
         self.assertEqual(provided["device.registry"]["version"], "1")
-        self.assertEqual(provided["device.registry"]["surfaces"], ["backend", "view"])
+        self.assertEqual(provided["device.registry"]["surfaces"], ["backend", "view", "widget"])
         event_resources = {item["resource"] for item in contract["capabilities"]["data_events"]}
         self.assertEqual(event_resources, {"devices", "pairing", "settings", "captures", "routing", "view-state"})
+
+    def test_contract_declares_base_shell_sidebar_widget(self) -> None:
+        parsed = parse_app_contract_file(APP_ROOT)
+        widgets = {widget.widget_id: widget for widget in parsed.contract.widgets}
+        sidebar_widget = widgets["senses-sidebar"]
+        vite_source = (APP_ROOT / "vite.config.ts").read_text(encoding="utf-8")
+        sidebar_source = (APP_ROOT / "frontend" / "src" / "widgets" / "senses-sidebar" / "main.tsx").read_text(encoding="utf-8")
+
+        self.assertEqual(sidebar_widget.host, "base-shell")
+        self.assertEqual(sidebar_widget.content_kinds, ["shell.sidebar.primary"])
+        self.assertEqual(sidebar_widget.frontend.mount, "frontend/dist/widgets/senses-sidebar")
+        self.assertIn("'widgets/senses-sidebar/index': 'frontend/widgets/senses-sidebar/index.html'", vite_source)
+        self.assertIn("maverick.widget.open-app", sidebar_source)
+        self.assertIn("maverick.shell.sidebar.close", sidebar_source)
 
     def test_sdk_validation_passes(self) -> None:
         validation = validate_app_source(APP_ROOT)

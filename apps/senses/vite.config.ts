@@ -16,7 +16,8 @@ export default defineConfig({
     emptyOutDir: true,
     rollupOptions: {
       input: {
-        app: 'frontend/index.html'
+        app: 'frontend/index.html',
+        'widgets/senses-sidebar/index': 'frontend/widgets/senses-sidebar/index.html'
       },
       output: {
         entryFileNames: 'assets/app-[hash].js',

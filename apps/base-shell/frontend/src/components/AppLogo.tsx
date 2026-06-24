@@ -36,6 +36,7 @@ function defaultIcon(app: AppRegistryItem): string {
     "maverick-monitor": "monitor_heart",
     memory: "database",
     skills: "school",
+    senses: "sensors",
     speech: "record_voice_over",
     "settings": "admin_panel_settings",
     vault: "key",

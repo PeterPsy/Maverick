@@ -13,7 +13,8 @@
       "description": "Workspace-scoped Senses device registry and user-session pairing state.",
       "surfaces": [
         "backend",
-        "view"
+        "view",
+        "widget"
       ]
     }
   ],
@@ -136,7 +137,25 @@
     ],
     "reference_entities": []
   },
-  "widgets": [],
+  "widgets": [
+    {
+      "widget_id": "senses-sidebar",
+      "host": "base-shell",
+      "content_kinds": [
+        "shell.sidebar.primary"
+      ],
+      "frontend": {
+        "kind": "iframe",
+        "mount": "frontend/dist/widgets/senses-sidebar",
+        "spa_fallback": true
+      },
+      "actions": {
+        "backend": false,
+        "mcp": false,
+        "cli": false
+      }
+    }
+  ],
   "entrypoints": {
     "mcp": "mcp/server.py",
     "cli": "cli/app_cli.py",

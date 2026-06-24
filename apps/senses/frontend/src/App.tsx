@@ -49,10 +49,12 @@ const TAB_ITEMS = [
   { id: 'captures', label: 'Captures', icon: Camera },
   { id: 'routing', label: 'Routing', icon: Route },
   { id: 'settings', label: 'Settings', icon: SettingsIcon },
+  { id: 'debug', label: 'Debug', icon: Wrench },
 ] as const;
 
 type TabId = (typeof TAB_ITEMS)[number]['id'];
 type NativeCommand = 'refreshNativeStatus' | 'pairGlasses' | 'ask' | 'openLogin';
+type NavigationParams = Record<string, string | boolean | null>;
 
 interface SensesNativeStatus {
   bridge_version?: number;
@@ -117,7 +119,7 @@ export function App() {
   const [overview, setOverview] = useState<SensesOverview | null>(null);
   const [pairing, setPairing] = useState<SensesPairingSession | null>(null);
   const [query, setQuery] = useState('');
-  const [activeTab, setActiveTab] = useState<TabId>('devices');
+  const [activeTab, setActiveTab] = useState<TabId>(() => tabFromParams(Object.fromEntries(new URLSearchParams(window.location.search).entries())) || 'devices');
   const [notice, setNotice] = useState('');
   const [error, setError] = useState('');
   const [busyAction, setBusyAction] = useState('');
@@ -166,7 +168,7 @@ export function App() {
       setOverview(loaded);
       setError('');
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Senses non disponibile.');
+      setError(err instanceof Error ? err.message : 'Senses is unavailable.');
     } finally {
       setBusyAction((current) => (current === 'refresh' ? '' : current));
     }
@@ -179,10 +181,10 @@ export function App() {
       setPairing(created);
       setActiveTab('pairing');
       emitViewStateChanged('pairing');
-      setNotice('Pairing creato.');
+      setNotice('Pairing created.');
       await refresh({ silent: true });
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Pairing non riuscito.');
+      setError(err instanceof Error ? err.message : 'Pairing failed.');
     } finally {
       setBusyAction((current) => (current === 'pairing' ? '' : current));
     }
@@ -192,10 +194,10 @@ export function App() {
     setBusyAction(device.device_id);
     try {
       await revokeDevice(device.device_id);
-      setNotice('Device revocato.');
+      setNotice('Device revoked.');
       await refresh({ silent: true });
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Revoca non riuscita.');
+      setError(err instanceof Error ? err.message : 'Revocation failed.');
     } finally {
       setBusyAction((current) => (current === device.device_id ? '' : current));
     }
@@ -208,10 +210,10 @@ export function App() {
     setBusyAction('settings');
     try {
       await updateSettings(settingsDraft as Partial<SensesSettings>);
-      setNotice('Settings aggiornate.');
+      setNotice('Settings updated.');
       await refresh({ silent: true });
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Aggiornamento settings non riuscito.');
+      setError(err instanceof Error ? err.message : 'Settings update failed.');
     } finally {
       setBusyAction((current) => (current === 'settings' ? '' : current));
     }
@@ -221,10 +223,10 @@ export function App() {
     setBusyAction(session.routing_session_id);
     try {
       await resetRoutingSession(session.routing_session_id);
-      setNotice('Routing resettato.');
+      setNotice('Routing reset.');
       await refresh({ silent: true });
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Reset routing non riuscito.');
+      setError(err instanceof Error ? err.message : 'Routing reset failed.');
     } finally {
       setBusyAction((current) => (current === session.routing_session_id ? '' : current));
     }
@@ -235,7 +237,7 @@ export function App() {
       return;
     }
     await navigator.clipboard?.writeText(pairing.code);
-    setNotice('Codice copiato.');
+    setNotice('Code copied.');
   }
 
   function runNativeCommand(command: NativeCommand) {
@@ -247,19 +249,14 @@ export function App() {
     };
     const accepted = nativeHost.send(command);
     if (!accepted) {
-      setError('Host iOS non disponibile.');
+      setError('iOS host is unavailable.');
       return;
     }
     setBusyAction(labels[command]);
-    setNotice('Comando inviato all app iOS.');
+    setNotice('Command sent to the iOS app.');
     window.setTimeout(() => {
       setBusyAction((current) => (current === labels[command] ? '' : current));
     }, 1800);
-  }
-
-  function selectTab(tab: TabId) {
-    setActiveTab(tab);
-    emitViewStateChanged(tab);
   }
 
   useEffect(() => {
@@ -306,7 +303,15 @@ export function App() {
       if (event.origin !== window.location.origin || !event.data || typeof event.data !== 'object') {
         return;
       }
-      const payload = event.data as { owner_app_id?: string; resource?: string; type?: string };
+      const payload = event.data as { app_id?: string; owner_app_id?: string; params?: NavigationParams; resource?: string; type?: string };
+      if (payload.type === 'maverick.app.navigate' && (!payload.app_id || payload.app_id === 'senses')) {
+        const requestedTab = tabFromParams(payload.params || {});
+        if (requestedTab) {
+          setActiveTab(requestedTab);
+          emitViewStateChanged(requestedTab);
+        }
+        return;
+      }
       if (payload.type === 'maverick.app.data-changed' && payload.owner_app_id === 'senses') {
         if (!payload.resource || REFRESH_RESOURCES.has(payload.resource)) {
           void refresh({ silent: true });
@@ -372,136 +377,33 @@ export function App() {
         </div>
         <div className="senses-actions">
           <StatusBadge status={dependencyStatus} label="Storage" />
-          <HostBadge available={nativeHost.available} />
+          {nativeHost.available ? <HostBadge available={nativeHost.available} /> : null}
           <button className="primary-button" type="button" onClick={() => void createPairing()} disabled={busyAction === 'pairing'}>
             <Plus size={16} />
             <span>Pair device</span>
           </button>
-          <button className="icon-button" type="button" onClick={() => void refresh()} title="Aggiorna" aria-label="Aggiorna">
+          <button className="icon-button" type="button" onClick={() => void refresh()} title="Refresh" aria-label="Refresh">
             <RefreshCw size={17} className={busyAction === 'refresh' ? 'spin' : ''} />
           </button>
         </div>
+        {nativeHost.available ? (
+          <NativeHeaderActions
+            busyAction={busyAction}
+            nativeHostStatus={nativeHost.status}
+            onCommand={(command) => runNativeCommand(command)}
+          />
+        ) : null}
       </header>
 
       {(notice || error) && (
         <div className={`senses-toast ${error ? 'is-error' : ''}`} role="status">
           {error ? <AlertTriangle size={16} /> : <CheckCircle2 size={16} />}
           <span>{error || notice}</span>
-          <button type="button" onClick={() => { setError(''); setNotice(''); }} aria-label="Chiudi">
+          <button type="button" onClick={() => { setError(''); setNotice(''); }} aria-label="Close">
             <X size={15} />
           </button>
         </div>
       )}
-
-      <section className="live-dashboard" aria-label="Dashboard live">
-        <StatusTile
-          icon={Radio}
-          label="Maverick"
-          value={nativeHost.status?.maverick?.label || nativeHost.status?.maverick?.status || dependencyStatus}
-          detail={overview?.actor.authenticated ? overview.actor.workspace_role || 'sessione' : 'sessione non verificata'}
-          tone={dependencyStatus === 'resolved' ? 'good' : 'warn'}
-        />
-        <StatusTile
-          icon={Smartphone}
-          label="App iOS"
-          value={nativeHost.available ? nativeHost.status?.ios?.app || 'Maverick iOS' : 'Browser/PWA'}
-          detail={nativeHost.available ? nativeHost.status?.ios?.auth_mode || 'web session' : 'host non disponibile'}
-          tone={nativeHost.available ? 'good' : 'muted'}
-        />
-        <StatusTile
-          icon={Glasses}
-          label="Glasses"
-          value={nativeHost.status?.glasses?.label || nativeHost.status?.glasses?.connection || 'remote'}
-          detail={nativeHost.status?.glasses?.authorization || 'nessun driver locale'}
-          tone={nativeHost.status?.actions?.can_ask ? 'good' : nativeHost.available ? 'warn' : 'muted'}
-        />
-        <StatusTile
-          icon={Camera}
-          label="Capture"
-          value={nativeHost.status?.glasses?.capture || nativeHost.status?.capture?.senses_status || latestCapture?.status || 'idle'}
-          detail={nativeHost.status?.capture?.last_frame_summary || latestCapture?.capture_id || 'nessun frame'}
-          tone={nativeHost.status?.capture?.busy ? 'warn' : latestCapture ? 'good' : 'muted'}
-        />
-        <StatusTile
-          icon={ListChecks}
-          label="Coda Senses"
-          value={String(stats.queue)}
-          detail={nativeHost.status?.capture?.senses_status || `${stats.captures} captures`}
-          tone={stats.queue > 0 ? 'warn' : 'good'}
-        />
-        <StatusTile
-          icon={AlertTriangle}
-          label="Ultimo errore"
-          value={nativeLastError ? 'presente' : overview?.dependencies.blocked_reason ? 'dependency' : 'none'}
-          detail={nativeLastError || overview?.dependencies.blocked_reason || latestCapture?.error_code || 'nessun errore'}
-          tone={nativeLastError || overview?.dependencies.blocked_reason ? 'danger' : 'muted'}
-        />
-      </section>
-
-      <section className="native-actions" aria-label="Azioni native">
-        <button
-          className="tool-button"
-          type="button"
-          onClick={() => runNativeCommand('pairGlasses')}
-          disabled={!nativeHost.available || nativeHost.status?.actions?.can_pair === false || busyAction === 'native-pair'}
-        >
-          <Glasses size={16} />
-          <span>Pair glasses</span>
-        </button>
-        <button
-          className="tool-button primary-tool"
-          type="button"
-          onClick={() => runNativeCommand('ask')}
-          disabled={!nativeHost.available || nativeHost.status?.actions?.can_ask === false || busyAction === 'native-ask'}
-        >
-          <Send size={16} />
-          <span>Ask</span>
-        </button>
-        <button
-          className="tool-button"
-          type="button"
-          onClick={() => runNativeCommand('refreshNativeStatus')}
-          disabled={!nativeHost.available || busyAction === 'native-refresh'}
-        >
-          <RefreshCw size={16} />
-          <span>Native refresh</span>
-        </button>
-        <button
-          className="tool-button"
-          type="button"
-          onClick={() => runNativeCommand('openLogin')}
-          disabled={!nativeHost.available || busyAction === 'native-login'}
-        >
-          <LogIn size={16} />
-          <span>Login</span>
-        </button>
-      </section>
-
-      <section className="senses-metrics" aria-label="Metriche Senses">
-        <Metric label="Device" value={stats.total} />
-        <Metric label="Attivi" value={stats.active} tone="good" />
-        <Metric label="Revocati" value={stats.revoked} tone="muted" />
-        <Metric label="Pairing" value={stats.pendingPairing} tone="pending" />
-        <Metric label="Captures" value={stats.captures} />
-        <Metric label="Routing" value={stats.routing} />
-      </section>
-
-      <nav className="senses-tabs" aria-label="Sezioni Senses">
-        {TAB_ITEMS.map((tab) => {
-          const Icon = tab.icon;
-          return (
-            <button
-              key={tab.id}
-              className={activeTab === tab.id ? 'is-active' : ''}
-              type="button"
-              onClick={() => selectTab(tab.id)}
-            >
-              <Icon size={16} />
-              <span>{tab.label}</span>
-            </button>
-          );
-        })}
-      </nav>
 
       <div className="senses-content">
         {activeTab === 'devices' && (
@@ -538,14 +440,23 @@ export function App() {
           />
         )}
         {activeTab === 'settings' && (
-          <SettingsDiagnosticsTab
+          <SettingsTab
             overview={overview}
             draft={settingsDraft}
             setDraft={setSettingsDraft}
-            nativeStatus={nativeHost.status}
-            nativeAvailable={nativeHost.available}
             busy={busyAction === 'settings'}
             onSave={() => void saveSettings()}
+          />
+        )}
+        {activeTab === 'debug' && (
+          <DebugTab
+            dependencyStatus={dependencyStatus}
+            latestCapture={latestCapture}
+            nativeAvailable={nativeHost.available}
+            nativeLastError={nativeLastError}
+            nativeStatus={nativeHost.status}
+            overview={overview}
+            stats={stats}
           />
         )}
       </div>
@@ -608,6 +519,14 @@ function postNativeCommand(command: NativeCommand) {
 function emitViewStateChanged(tab: TabId) {
   window.parent?.postMessage(
     {
+      type: 'maverick.app.selection-changed',
+      owner_app_id: 'senses',
+      selection: { tab, app_page: tab },
+    },
+    window.location.origin,
+  );
+  window.parent?.postMessage(
+    {
       type: 'maverick.app.data-changed',
       owner_app_id: 'senses',
       resource: 'view-state',
@@ -615,6 +534,33 @@ function emitViewStateChanged(tab: TabId) {
     },
     window.location.origin,
   );
+}
+
+function tabFromParams(params: Record<string, unknown>): TabId | null {
+  const directTab = scalarString(params.tab || params.page_id || params.view || params.section);
+  if (isTabId(directTab)) {
+    return directTab;
+  }
+  const appPage = scalarString(params.app_page);
+  if (!appPage) {
+    return null;
+  }
+  const firstSegment = appPage.split('/')[0]?.trim();
+  return isTabId(firstSegment) ? firstSegment : null;
+}
+
+function isTabId(value: string): value is TabId {
+  return TAB_ITEMS.some((tab) => tab.id === value);
+}
+
+function scalarString(value: unknown): string {
+  if (typeof value === 'string') {
+    return value.trim();
+  }
+  if (typeof value === 'number' || typeof value === 'boolean') {
+    return String(value).trim();
+  }
+  return '';
 }
 
 function Metric({ label, value, tone }: { label: string; value: number; tone?: 'good' | 'muted' | 'pending' }) {
@@ -653,6 +599,57 @@ function StatusTile({
   );
 }
 
+function NativeHeaderActions({
+  busyAction,
+  nativeHostStatus,
+  onCommand,
+}: {
+  busyAction: string;
+  nativeHostStatus: SensesNativeStatus | null;
+  onCommand: (command: NativeCommand) => void;
+}) {
+  return (
+    <div className="native-header-actions" aria-label="iOS controls">
+      <button
+        className="tool-button"
+        type="button"
+        onClick={() => onCommand('pairGlasses')}
+        disabled={nativeHostStatus?.actions?.can_pair === false || busyAction === 'native-pair'}
+      >
+        <Glasses size={16} />
+        <span>Pair glasses</span>
+      </button>
+      <button
+        className="tool-button primary-tool"
+        type="button"
+        onClick={() => onCommand('ask')}
+        disabled={nativeHostStatus?.actions?.can_ask === false || busyAction === 'native-ask'}
+      >
+        <Send size={16} />
+        <span>Ask</span>
+      </button>
+      <button
+        className="tool-button"
+        type="button"
+        onClick={() => onCommand('refreshNativeStatus')}
+        disabled={busyAction === 'native-refresh'}
+      >
+        <RefreshCw size={16} />
+        <span>Native refresh</span>
+      </button>
+      <button
+        className="tool-button"
+        type="button"
+        onClick={() => onCommand('openLogin')}
+        disabled={busyAction === 'native-login'}
+      >
+        <LogIn size={16} />
+        <span>Login</span>
+      </button>
+    </div>
+  );
+}
+
 function DevicesTab({
   devices,
   loading,
@@ -675,11 +672,11 @@ function DevicesTab({
       <div className="panel-heading">
         <div>
           <h2>Devices</h2>
-          <p>{canManage ? 'Workspace' : 'Personali'}</p>
+          <p>{canManage ? 'Workspace' : 'Personal'}</p>
         </div>
         <label className="senses-search">
           <Search size={16} />
-          <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Cerca" />
+          <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search" />
         </label>
       </div>
 
@@ -697,7 +694,7 @@ function DevicesTab({
           ))}
         </div>
       ) : (
-        <EmptyState icon={Unplug} label="Nessun device registrato" />
+        <EmptyState icon={Unplug} label="No registered devices" />
       )}
     </section>
   );
@@ -731,8 +728,8 @@ function DeviceRow({ device, busy, onRevoke }: { device: SensesDevice; busy: boo
         className="icon-button danger"
         type="button"
         onClick={onRevoke}
-        title="Revoca"
-        aria-label={`Revoca ${device.display_name}`}
+        title="Revoke"
+        aria-label={`Revoke ${device.display_name}`}
         disabled={!device.can_revoke || busy}
       >
         <X size={16} />
@@ -764,16 +761,18 @@ function PairingTab({
       <div className="panel-heading">
         <div>
           <h2>Pairing</h2>
-          <p>{visiblePairing ? `${visiblePairing.status} - ${formatDuration(secondsUntil(visiblePairing.expires_at))}` : 'nessuna sessione aperta'}</p>
+          <p>{visiblePairing ? `${visiblePairing.status} - ${formatDuration(secondsUntil(visiblePairing.expires_at))}` : 'no open session'}</p>
         </div>
         <div className="panel-actions">
-          <button className="tool-button" type="button" onClick={onNativePair} disabled={!nativeAvailable}>
-            <Glasses size={16} />
-            <span>Glasses</span>
-          </button>
+          {nativeAvailable ? (
+            <button className="tool-button" type="button" onClick={onNativePair}>
+              <Glasses size={16} />
+              <span>Glasses</span>
+            </button>
+          ) : null}
           <button className="primary-button" type="button" onClick={onCreate} disabled={busy}>
             <Plus size={16} />
-            <span>Nuovo</span>
+            <span>New</span>
           </button>
         </div>
       </div>
@@ -781,8 +780,8 @@ function PairingTab({
       <div className="pairing-layout">
         {visiblePairing ? (
           <div className="pairing-code-box large">
-            <span className="code-label">Codice</span>
-            <button className="pairing-code" type="button" onClick={onCopy} title="Copia codice">
+            <span className="code-label">Code</span>
+            <button className="pairing-code" type="button" onClick={onCopy} title="Copy code">
               <span>{visiblePairing.code || 'hidden'}</span>
               <Copy size={16} />
             </button>
@@ -792,7 +791,7 @@ function PairingTab({
             </span>
           </div>
         ) : (
-          <EmptyState icon={Clock3} label="Nessun pairing aperto" compact />
+          <EmptyState icon={Clock3} label="No open pairing" compact />
         )}
 
         <div className="qr-payload" aria-label="Payload pairing">
@@ -870,7 +869,7 @@ function CapturesTab({ captures, loading }: { captures: SensesCapture[]; loading
           ))}
         </div>
       ) : (
-        <EmptyState icon={Camera} label="Nessuna capture" />
+        <EmptyState icon={Camera} label="No captures" />
       )}
     </section>
   );
@@ -917,7 +916,7 @@ function RoutingTab({
       <div className="panel-heading">
         <div>
           <h2>Routing</h2>
-          <p>{sessions.length} sessioni</p>
+          <p>{sessions.length} sessions</p>
         </div>
         <Route size={18} />
       </div>
@@ -952,7 +951,7 @@ function RoutingTab({
                   <dd>{linkOrEmpty(session.active_task_chat.deep_link, session.active_task_thread_id)}</dd>
                 </div>
                 <div>
-                  <dt>Ultimo turn</dt>
+                  <dt>Last turn</dt>
                   <dd>{session.last_turn_id ? compactId(session.last_turn_id) : 'none'}</dd>
                 </div>
                 <div>
@@ -964,103 +963,181 @@ function RoutingTab({
           ))}
         </div>
       ) : (
-        <EmptyState icon={Route} label="Nessuna sessione routing" />
+        <EmptyState icon={Route} label="No routing sessions" />
       )}
     </section>
   );
 }
 
-function SettingsDiagnosticsTab({
+function SettingsTab({
   overview,
   draft,
   setDraft,
-  nativeStatus,
-  nativeAvailable,
   busy,
   onSave,
 }: {
   overview: SensesOverview | null;
   draft: SettingsDraft | null;
   setDraft: (draft: SettingsDraft) => void;
-  nativeStatus: SensesNativeStatus | null;
-  nativeAvailable: boolean;
   busy: boolean;
   onSave: () => void;
 }) {
   const canSave = Boolean(overview?.actor.can_manage_workspace_devices);
   return (
-    <div className="settings-grid">
-      <section className="senses-panel settings-panel">
-        <div className="panel-heading">
-          <div>
-            <h2>Settings</h2>
-            <p>{overview?.settings.auth_mode || 'user_session_mvp'}</p>
-          </div>
-          <SlidersHorizontal size={18} />
+    <section className="senses-panel settings-panel">
+      <div className="panel-heading">
+        <div>
+          <h2>Settings</h2>
+          <p>{overview?.settings.auth_mode || 'user_session_mvp'}</p>
         </div>
-        {draft ? (
-          <div className="settings-form">
-            <label className="toggle-row">
-              <input
-                type="checkbox"
-                checked={draft.allow_member_pairing}
-                onChange={(event) => setDraft({ ...draft, allow_member_pairing: event.target.checked })}
-              />
-              <span>Member pairing</span>
-            </label>
-            <label className="toggle-row">
-              <input
-                type="checkbox"
-                checked={draft.require_admin_for_settings}
-                onChange={(event) => setDraft({ ...draft, require_admin_for_settings: event.target.checked })}
-              />
-              <span>Admin settings</span>
-            </label>
-            <NumberField
-              label="Pairing TTL"
-              value={draft.pairing_code_ttl_seconds}
-              suffix="s"
-              onChange={(value) => setDraft({ ...draft, pairing_code_ttl_seconds: value })}
+        <SlidersHorizontal size={18} />
+      </div>
+      {draft ? (
+        <div className="settings-form">
+          <label className="toggle-row">
+            <input
+              type="checkbox"
+              checked={draft.allow_member_pairing}
+              onChange={(event) => setDraft({ ...draft, allow_member_pairing: event.target.checked })}
             />
-            <NumberField
-              label="Max frame"
-              value={draft.max_frame_bytes}
-              suffix="bytes"
-              onChange={(value) => setDraft({ ...draft, max_frame_bytes: value })}
+            <span>Member pairing</span>
+          </label>
+          <label className="toggle-row">
+            <input
+              type="checkbox"
+              checked={draft.require_admin_for_settings}
+              onChange={(event) => setDraft({ ...draft, require_admin_for_settings: event.target.checked })}
             />
-            <NumberField
-              label="Max audio"
-              value={draft.max_audio_bytes}
-              suffix="bytes"
-              onChange={(value) => setDraft({ ...draft, max_audio_bytes: value })}
+            <span>Admin settings</span>
+          </label>
+          <NumberField
+            label="Pairing TTL"
+            value={draft.pairing_code_ttl_seconds}
+            suffix="s"
+            onChange={(value) => setDraft({ ...draft, pairing_code_ttl_seconds: value })}
+          />
+          <NumberField
+            label="Max frame"
+            value={draft.max_frame_bytes}
+            suffix="bytes"
+            onChange={(value) => setDraft({ ...draft, max_frame_bytes: value })}
+          />
+          <NumberField
+            label="Max audio"
+            value={draft.max_audio_bytes}
+            suffix="bytes"
+            onChange={(value) => setDraft({ ...draft, max_audio_bytes: value })}
+          />
+          <NumberField
+            label="Routing window"
+            value={draft.routing_followup_window_seconds}
+            suffix="s"
+            onChange={(value) => setDraft({ ...draft, routing_followup_window_seconds: value })}
+          />
+          <label className="field-row">
+            <span>Retention</span>
+            <input
+              value={draft.default_retention_class}
+              onChange={(event) => setDraft({ ...draft, default_retention_class: event.target.value })}
             />
-            <NumberField
-              label="Routing window"
-              value={draft.routing_followup_window_seconds}
-              suffix="s"
-              onChange={(value) => setDraft({ ...draft, routing_followup_window_seconds: value })}
-            />
-            <label className="field-row">
-              <span>Retention</span>
-              <input
-                value={draft.default_retention_class}
-                onChange={(event) => setDraft({ ...draft, default_retention_class: event.target.value })}
-              />
-            </label>
-            <NumberField
-              label="Failed capture TTL"
-              value={draft.failed_capture_ttl_seconds}
-              suffix="s"
-              onChange={(value) => setDraft({ ...draft, failed_capture_ttl_seconds: value })}
-            />
-            <button className="primary-button save-button" type="button" onClick={onSave} disabled={!canSave || busy}>
-              <ShieldCheck size={16} />
-              <span>Salva</span>
-            </button>
-          </div>
-        ) : (
-          <EmptyState icon={SettingsIcon} label="Settings non caricate" compact />
-        )}
+          </label>
+          <NumberField
+            label="Failed capture TTL"
+            value={draft.failed_capture_ttl_seconds}
+            suffix="s"
+            onChange={(value) => setDraft({ ...draft, failed_capture_ttl_seconds: value })}
+          />
+          <button className="primary-button save-button" type="button" onClick={onSave} disabled={!canSave || busy}>
+            <ShieldCheck size={16} />
+            <span>Save</span>
+          </button>
+        </div>
+      ) : (
+        <EmptyState icon={SettingsIcon} label="Settings not loaded" compact />
+      )}
+    </section>
+  );
+}
+
+function DebugTab({
+  dependencyStatus,
+  latestCapture,
+  nativeAvailable,
+  nativeLastError,
+  nativeStatus,
+  overview,
+  stats,
+}: {
+  dependencyStatus: string;
+  latestCapture: SensesCapture | null;
+  nativeAvailable: boolean;
+  nativeLastError?: string | null;
+  nativeStatus: SensesNativeStatus | null;
+  overview: SensesOverview | null;
+  stats: {
+    total: number;
+    active: number;
+    revoked: number;
+    pendingPairing: number;
+    captures: number;
+    routing: number;
+    queue: number;
+  };
+}) {
+  return (
+    <div className="debug-grid">
+      <section className="live-dashboard" aria-label="Live dashboard">
+        <StatusTile
+          icon={Radio}
+          label="Maverick"
+          value={nativeStatus?.maverick?.label || nativeStatus?.maverick?.status || dependencyStatus}
+          detail={overview?.actor.authenticated ? overview.actor.workspace_role || 'session' : 'session not verified'}
+          tone={dependencyStatus === 'resolved' ? 'good' : 'warn'}
+        />
+        <StatusTile
+          icon={Smartphone}
+          label="iOS app"
+          value={nativeAvailable ? nativeStatus?.ios?.app || 'Maverick iOS' : 'Browser/PWA'}
+          detail={nativeAvailable ? nativeStatus?.ios?.auth_mode || 'web session' : 'host unavailable'}
+          tone={nativeAvailable ? 'good' : 'muted'}
+        />
+        <StatusTile
+          icon={Glasses}
+          label="Glasses"
+          value={nativeStatus?.glasses?.label || nativeStatus?.glasses?.connection || 'remote'}
+          detail={nativeStatus?.glasses?.authorization || 'no local driver'}
+          tone={nativeStatus?.actions?.can_ask ? 'good' : nativeAvailable ? 'warn' : 'muted'}
+        />
+        <StatusTile
+          icon={Camera}
+          label="Capture"
+          value={nativeStatus?.glasses?.capture || nativeStatus?.capture?.senses_status || latestCapture?.status || 'idle'}
+          detail={nativeStatus?.capture?.last_frame_summary || latestCapture?.capture_id || 'no frame'}
+          tone={nativeStatus?.capture?.busy ? 'warn' : latestCapture ? 'good' : 'muted'}
+        />
+        <StatusTile
+          icon={ListChecks}
+          label="Senses queue"
+          value={String(stats.queue)}
+          detail={nativeStatus?.capture?.senses_status || `${stats.captures} captures`}
+          tone={stats.queue > 0 ? 'warn' : 'good'}
+        />
+        <StatusTile
+          icon={AlertTriangle}
+          label="Last error"
+          value={nativeLastError ? 'present' : overview?.dependencies.blocked_reason ? 'dependency' : 'none'}
+          detail={nativeLastError || overview?.dependencies.blocked_reason || latestCapture?.error_code || 'no error'}
+          tone={nativeLastError || overview?.dependencies.blocked_reason ? 'danger' : 'muted'}
+        />
+      </section>
+
+      <section className="senses-metrics" aria-label="Senses metrics">
+        <Metric label="Devices" value={stats.total} />
+        <Metric label="Active" value={stats.active} tone="good" />
+        <Metric label="Revoked" value={stats.revoked} tone="muted" />
+        <Metric label="Pairing" value={stats.pendingPairing} tone="pending" />
+        <Metric label="Captures" value={stats.captures} />
+        <Metric label="Routing" value={stats.routing} />
       </section>
 
       <section className="senses-panel diagnostics-panel">
@@ -1102,7 +1179,7 @@ function SettingsDiagnosticsTab({
           </div>
           <div>
             <dt>Privacy</dt>
-            <dd>no secret</dd>
+            <dd>no secrets</dd>
           </div>
         </dl>
       </section>
@@ -1244,13 +1321,13 @@ function linkOrEmpty(deepLink: string | null, label: string | null) {
 
 function formatDate(value: string | null | undefined) {
   if (!value) {
-    return 'mai';
+    return 'never';
   }
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) {
     return value;
   }
-  return new Intl.DateTimeFormat('it', {
+  return new Intl.DateTimeFormat('en', {
     month: 'short',
     day: '2-digit',
     hour: '2-digit',
@@ -1279,7 +1356,7 @@ function secondsUntil(value: string | null | undefined) {
 
 function formatDuration(seconds: number) {
   if (seconds <= 0) {
-    return 'scaduto';
+    return 'expired';
   }
   const minutes = Math.floor(seconds / 60);
   const remainder = seconds % 60;

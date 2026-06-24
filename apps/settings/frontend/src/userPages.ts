@@ -1,21 +1,16 @@
 import type { User, Workspace } from './adminApi';
 import { escapeAttr, escapeHtml } from './html';
-import { pageSettingsBlockHtml } from './pageFrame';
-import type { SettingsPage } from './pages';
 
 export function usersPageHtml({
-  page,
   pendingDeleteUserId,
   selectedUser,
   users,
 }: {
-  page: SettingsPage;
   pendingDeleteUserId: string;
   selectedUser: User | undefined;
   users: User[];
 }) {
-  return `${pageSettingsBlockHtml(page)}
-    <form class="settings-card settings-create" id="create-user">
+  return `<form class="settings-card settings-create" id="create-user">
       <div>
         <p class="settings-kicker">New user</p>
         <h2>Create access</h2>
@@ -91,18 +86,15 @@ export function usersPageHtml({
 }
 
 export function workspaceAccessPageHtml({
-  page,
   selectedUser,
   users,
   workspaces,
 }: {
-  page: SettingsPage;
   selectedUser: User | undefined;
   users: User[];
   workspaces: Workspace[];
 }) {
-  return `${pageSettingsBlockHtml(page)}
-    ${userPickerHtml(users, selectedUser)}
+  return `${userPickerHtml(users, selectedUser)}
     ${
       selectedUser
         ? `<section class="settings-card">

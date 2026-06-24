@@ -11,15 +11,14 @@ export function bindSettingsEvents(context: {
   dismissNotice: () => void;
   installWorkspaceApp: (app: WorkspaceApp) => Promise<void>;
   logoutFromSettings: () => Promise<void>;
-  onHostedProviderModelChanged: (modelId: string) => void;
-  onHostedProviderRoutingChanged: (field: string, value: string | boolean) => void;
+  onHostedProviderRoutingChanged: (modelId: string, field: string, value: string | boolean) => void;
   onProviderModelChanged: (modelId: string) => void;
   onProviderReasoningChanged: (reasoningEffort: string) => void;
   persistenceController: PersistenceController;
   render: () => void;
   resetSelectedUserPassword: (form: HTMLFormElement, user: User) => Promise<void>;
   saveDependencySelection: (consumerAppId: string, alias: string, providerAppIds: string[]) => Promise<void>;
-  saveHostedProviderSettingsFromPanel: () => Promise<void>;
+  saveHostedProviderSettingsFromPanel: (modelId?: string) => Promise<void>;
   saveProviderSettingsFromPanel: () => Promise<void>;
   selectedUser: () => User | undefined;
   selectUser: (userId: string) => void;
@@ -69,12 +68,11 @@ export function bindSettingsEvents(context: {
     onLogout: () => {
       context.logoutFromSettings().catch(context.showError);
     },
-    onHostedProviderModelChanged: context.onHostedProviderModelChanged,
     onHostedProviderRoutingChanged: context.onHostedProviderRoutingChanged,
     onProviderModelChanged: context.onProviderModelChanged,
     onProviderReasoningChanged: context.onProviderReasoningChanged,
-    onSaveHostedProviderSettings: () => {
-      context.saveHostedProviderSettingsFromPanel().catch(context.showError);
+    onSaveHostedProviderSettings: (modelId) => {
+      context.saveHostedProviderSettingsFromPanel(modelId).catch(context.showError);
     },
     onSaveProviderSettings: () => {
       context.saveProviderSettingsFromPanel().catch(context.showError);

@@ -1,7 +1,5 @@
 import type { AppDependenciesPayload, AppRegistryItem, DependencyResolutionItem, WorkspaceApp } from './adminApi';
 import { escapeAttr, escapeHtml } from './html';
-import { pageSettingsBlockHtml } from './pageFrame';
-import type { SettingsPage } from './pages';
 
 export function appLinksPageHtml({
   appRegistry,
@@ -9,7 +7,6 @@ export function appLinksPageHtml({
   error,
   isLoading,
   loadErrors,
-  page,
   savingKeys,
   workspaceApps,
 }: {
@@ -18,12 +15,10 @@ export function appLinksPageHtml({
   error: string;
   isLoading: boolean;
   loadErrors: Array<{ app_id: string; message: string; name: string }>;
-  page: SettingsPage;
   savingKeys: Set<string>;
   workspaceApps: WorkspaceApp[];
 }) {
-  return `${pageSettingsBlockHtml(page)}
-    <section class="settings-card settings-app-links">
+  return `<section class="settings-card settings-app-links">
       <div class="settings-heading">
         <div>
           <p class="settings-kicker">App links</p>

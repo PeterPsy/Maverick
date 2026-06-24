@@ -116,7 +116,6 @@ function transpile(sourcePath, outFile) {
 }
 
 transpile(path.join(appRoot, 'frontend/src/html.ts'), path.join(outDir, 'html.js'));
-transpile(path.join(appRoot, 'frontend/src/pageFrame.ts'), path.join(outDir, 'pageFrame.js'));
 transpile(path.join(appRoot, 'frontend/src/appLinksPage.ts'), path.join(outDir, 'appLinksPage.js'));
 
 const { appLinksPageHtml } = require(path.join(outDir, 'appLinksPage.js'));
@@ -247,11 +246,18 @@ assert.ok((html.match(/auto default/g) || []).length >= 5);
 
         self.assertIn("settingsPanelHtml(platformSettings, settingsPanelState)", main_source)
         self.assertIn("Platform settings", settings_source)
+        self.assertIn("settings-user-settings-card", settings_source)
+        self.assertIn("settings-model-settings-card", settings_source)
+        self.assertIn("settings-runtime-settings-card", settings_source)
         self.assertIn("configureActiveProvider", api_source)
         self.assertIn("configureHostedProvider", api_source)
         self.assertIn("/api/providers/hosted/selection", api_source)
         self.assertIn("saveHostedProviderSettingsFromPanel", main_source)
-        self.assertIn("settings-hosted-provider-model", settings_source)
+        self.assertIn("data-agentic-provider-accordion", settings_source)
+        self.assertIn("data-settings-model-accordion", settings_source)
+        self.assertIn("data-hosted-model-accordion", settings_source)
+        self.assertIn("data-hosted-provider-save", settings_source)
+        self.assertNotIn("settings-hosted-provider-model", settings_source)
         self.assertIn("Hosted chat fast model", settings_source)
         self.assertIn("Hosted text providers govern", settings_source)
         self.assertNotIn("OpenRouter governs", settings_source)
@@ -294,7 +300,13 @@ transpile('frontend/src/adminApi.ts');
 transpile('frontend/src/providerModelOptions.ts');
 transpile('frontend/src/settingsPanel.ts');
 
-const { createSettingsPanelState, settingsPanelHtml, syncSettingsPanelDraft } = require(path.join(outDir, 'settingsPanel.js'));
+const {
+  createSettingsPanelState,
+  hostedProviderRoutingDraft,
+  settingsPanelHtml,
+  syncSettingsPanelDraft,
+  updateHostedProviderRoutingDraft
+} = require(path.join(outDir, 'settingsPanel.js'));
 
 const openrouterModels = [
   {
@@ -380,17 +392,35 @@ const state = createSettingsPanelState();
 syncSettingsPanelDraft(state, settings);
 const html = settingsPanelHtml(settings, state);
 
+assert.ok(html.includes('settings-user-settings-card'));
+assert.ok(html.includes('settings-model-settings-card'));
+assert.ok(html.includes('settings-runtime-settings-card'));
 assert.ok(html.includes('Agentic provider'));
+assert.ok(html.includes('data-agentic-provider-accordion'));
 assert.ok(html.includes('Codex tools/filesystem/MCP'));
 assert.ok(html.includes('Hosted chat / fast model'));
+assert.ok(html.includes('Hosted chat fast models'));
 assert.ok(html.includes('OpenRouter'));
 assert.ok(html.includes('Gemma 4 31B (free)'));
 assert.ok(html.includes('Nemotron 3 Ultra (free)'));
-assert.ok(html.includes('settings-hosted-provider-model'));
+assert.equal((html.match(/data-settings-model-accordion=/g) || []).length, 3);
+assert.equal((html.match(/data-hosted-model-accordion=/g) || []).length, 2);
+assert.equal((html.match(/<span class="settings-pill">Active<\/span>/g) || []).length, 2);
+assert.ok(html.includes('data-hosted-provider-save="google/gemma-4-31b-it:free"'));
+assert.ok(html.includes('data-hosted-provider-save="nvidia/nemotron-3-ultra-550b-a55b:free"'));
+assert.ok(!html.includes('settings-hosted-provider-model'));
 assert.ok(html.includes('OpenRouter upstream'));
 assert.ok(html.includes('data-openrouter-routing="mode"'));
+assert.ok(html.includes('data-hosted-model-id="nvidia/nemotron-3-ultra-550b-a55b:free"'));
 assert.ok(html.includes('Nvidia'));
 assert.ok(html.includes('runtime engine remains Codex'));
+
+updateHostedProviderRoutingDraft(state, settings, 'google/gemma-4-31b-it:free', 'mode', 'only');
+updateHostedProviderRoutingDraft(state, settings, 'google/gemma-4-31b-it:free', 'provider_id', 'open-inference');
+assert.equal(hostedProviderRoutingDraft(state, 'google/gemma-4-31b-it:free').mode, 'only');
+assert.equal(hostedProviderRoutingDraft(state, 'google/gemma-4-31b-it:free').provider_id, 'open-inference');
+assert.equal(hostedProviderRoutingDraft(state, 'nvidia/nemotron-3-ultra-550b-a55b:free').mode, 'prefer');
+assert.equal(hostedProviderRoutingDraft(state, 'nvidia/nemotron-3-ultra-550b-a55b:free').provider_id, 'nvidia');
 """
         with tempfile.TemporaryDirectory() as temp_dir:
             script_path = Path(temp_dir) / "settings_openrouter_render_test.cjs"

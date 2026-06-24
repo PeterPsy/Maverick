@@ -1,12 +1,9 @@
 import type { MigrationPlan, MigrationResult } from './adminApi';
 import { escapeAttr, escapeHtml } from './html';
-import { pageSettingsBlockHtml } from './pageFrame';
-import type { SettingsPage } from './pages';
 import type { MigrationProgress, PersistenceMigrationViewState } from './persistenceController';
 
-export function persistencePageHtml(page: SettingsPage, state: PersistenceMigrationViewState) {
-  return `${pageSettingsBlockHtml(page)}
-    ${persistenceHtml(state)}`;
+export function persistencePageHtml(state: PersistenceMigrationViewState) {
+  return persistenceHtml(state);
 }
 
 export function persistenceMigrationModalHtml(state: PersistenceMigrationViewState) {

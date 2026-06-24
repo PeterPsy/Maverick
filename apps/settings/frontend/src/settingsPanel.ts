@@ -9,6 +9,16 @@ import {
 
 const ACTIVE_RUNTIME_STATUSES = new Set(['created', 'running', 'stopping']);
 
+type HostedRoutingDraft = {
+  allowFallbacks: boolean;
+  dataCollection: '' | 'allow' | 'deny';
+  mode: 'auto' | 'prefer' | 'only' | 'ignore';
+  providerId: string;
+  quantization: string;
+  requireParameters: boolean;
+  sort: '' | 'price' | 'throughput' | 'latency';
+};
+
 export type SettingsPanelState = {
   cleanupError: string;
   clearingAllRuntime: boolean;
@@ -16,14 +26,9 @@ export type SettingsPanelState = {
   draftModelId: string;
   draftReasoningEffort: string;
   hostedDraftModelId: string;
-  hostedRoutingAllowFallbacks: boolean;
-  hostedRoutingDataCollection: '' | 'allow' | 'deny';
-  hostedRoutingMode: 'auto' | 'prefer' | 'only' | 'ignore';
-  hostedRoutingProviderId: string;
-  hostedRoutingQuantization: string;
-  hostedRoutingRequireParameters: boolean;
-  hostedRoutingSort: '' | 'price' | 'throughput' | 'latency';
   hostedProviderError: string;
+  hostedProviderErrorModelId: string;
+  hostedRoutingDraftsByModel: Record<string, HostedRoutingDraft>;
   isSavingHostedProvider: boolean;
   isSavingProvider: boolean;
   providerError: string;
@@ -33,9 +38,8 @@ export type SettingsPanelActions = {
   onClearAllRuntimeSessions: () => void;
   onClearRuntimeSession: (sessionId: string) => void;
   onLogout: () => void;
-  onHostedProviderModelChanged: (modelId: string) => void;
-  onHostedProviderRoutingChanged: (field: string, value: string | boolean) => void;
-  onSaveHostedProviderSettings: () => void;
+  onHostedProviderRoutingChanged: (modelId: string, field: string, value: string | boolean) => void;
+  onSaveHostedProviderSettings: (modelId?: string) => void;
   onProviderModelChanged: (modelId: string) => void;
   onProviderReasoningChanged: (reasoningEffort: string) => void;
   onSaveProviderSettings: () => void;
@@ -49,14 +53,9 @@ export function createSettingsPanelState(): SettingsPanelState {
     draftModelId: '',
     draftReasoningEffort: '',
     hostedDraftModelId: '',
-    hostedRoutingAllowFallbacks: true,
-    hostedRoutingDataCollection: '',
-    hostedRoutingMode: 'auto',
-    hostedRoutingProviderId: '',
-    hostedRoutingQuantization: '',
-    hostedRoutingRequireParameters: false,
-    hostedRoutingSort: '',
     hostedProviderError: '',
+    hostedProviderErrorModelId: '',
+    hostedRoutingDraftsByModel: {},
     isSavingHostedProvider: false,
     isSavingProvider: false,
     providerError: ''
@@ -66,17 +65,16 @@ export function createSettingsPanelState(): SettingsPanelState {
 export function syncSettingsPanelDraft(state: SettingsPanelState, settings: PlatformSettings | null) {
   const { modelId, reasoningEffort } = selectedProviderDraft(settings);
   const { modelId: hostedModelId } = selectedHostedProviderDraft(settings);
-  const routing = openRouterRoutingForModel(settings, hostedModelId);
+  const hostedModelIds = new Set(hostedModelOptionsForSettings(settings).map((option) => option.model_id).filter(Boolean));
+  if (hostedModelId) {
+    hostedModelIds.add(hostedModelId);
+  }
   state.draftModelId = modelId;
   state.draftReasoningEffort = reasoningEffort;
   state.hostedDraftModelId = hostedModelId;
-  state.hostedRoutingMode = routing.mode || 'auto';
-  state.hostedRoutingProviderId = routing.provider_id || '';
-  state.hostedRoutingAllowFallbacks = routing.allow_fallbacks !== false;
-  state.hostedRoutingRequireParameters = routing.require_parameters === true;
-  state.hostedRoutingSort = routing.sort || '';
-  state.hostedRoutingDataCollection = routing.data_collection || '';
-  state.hostedRoutingQuantization = routing.quantizations?.[0] || '';
+  state.hostedRoutingDraftsByModel = Object.fromEntries(
+    Array.from(hostedModelIds).map((modelId) => [modelId, routingDraftFromRouting(openRouterRoutingForModel(settings, modelId))])
+  );
 }
 
 export function updateDraftModel(state: SettingsPanelState, settings: PlatformSettings | null, modelId: string) {
@@ -88,45 +86,52 @@ export function updateDraftModel(state: SettingsPanelState, settings: PlatformSe
 
 export function updateHostedDraftModel(state: SettingsPanelState, settings: PlatformSettings | null, modelId: string) {
   state.hostedDraftModelId = modelId;
-  const routing = openRouterRoutingForModel(settings, modelId);
-  state.hostedRoutingMode = routing.mode || 'auto';
-  state.hostedRoutingProviderId = routing.provider_id || '';
-  state.hostedRoutingAllowFallbacks = routing.allow_fallbacks !== false;
-  state.hostedRoutingRequireParameters = routing.require_parameters === true;
-  state.hostedRoutingSort = routing.sort || '';
-  state.hostedRoutingDataCollection = routing.data_collection || '';
-  state.hostedRoutingQuantization = routing.quantizations?.[0] || '';
+  ensureHostedRoutingDraft(state, settings, modelId);
   state.hostedProviderError = '';
+  state.hostedProviderErrorModelId = '';
 }
 
-export function updateHostedProviderRoutingDraft(state: SettingsPanelState, field: string, value: string | boolean) {
+export function updateHostedProviderRoutingDraft(
+  state: SettingsPanelState,
+  settings: PlatformSettings | null,
+  modelId: string,
+  field: string,
+  value: string | boolean
+) {
+  if (!modelId) {
+    return;
+  }
+  const draft = ensureHostedRoutingDraft(state, settings, modelId);
+  state.hostedDraftModelId = modelId;
   if (field === 'mode' && typeof value === 'string' && ['auto', 'prefer', 'only', 'ignore'].includes(value)) {
-    state.hostedRoutingMode = value as SettingsPanelState['hostedRoutingMode'];
+    draft.mode = value as HostedRoutingDraft['mode'];
   } else if (field === 'provider_id' && typeof value === 'string') {
-    state.hostedRoutingProviderId = value;
+    draft.providerId = value;
   } else if (field === 'allow_fallbacks' && typeof value === 'boolean') {
-    state.hostedRoutingAllowFallbacks = value;
+    draft.allowFallbacks = value;
   } else if (field === 'require_parameters' && typeof value === 'boolean') {
-    state.hostedRoutingRequireParameters = value;
+    draft.requireParameters = value;
   } else if (field === 'sort' && typeof value === 'string' && ['', 'price', 'throughput', 'latency'].includes(value)) {
-    state.hostedRoutingSort = value as SettingsPanelState['hostedRoutingSort'];
+    draft.sort = value as HostedRoutingDraft['sort'];
   } else if (field === 'data_collection' && typeof value === 'string' && ['', 'allow', 'deny'].includes(value)) {
-    state.hostedRoutingDataCollection = value as SettingsPanelState['hostedRoutingDataCollection'];
+    draft.dataCollection = value as HostedRoutingDraft['dataCollection'];
   } else if (field === 'quantization' && typeof value === 'string') {
-    state.hostedRoutingQuantization = value;
+    draft.quantization = value;
   }
   state.hostedProviderError = '';
+  state.hostedProviderErrorModelId = '';
 }
 
-export function hostedProviderRoutingDraft(state: SettingsPanelState): OpenRouterProviderRouting {
+export function hostedProviderRoutingDraft(state: SettingsPanelState, modelId = state.hostedDraftModelId): OpenRouterProviderRouting {
+  const draft = state.hostedRoutingDraftsByModel[modelId] || defaultHostedRoutingDraft();
   return {
-    mode: state.hostedRoutingMode,
-    provider_id: state.hostedRoutingProviderId || undefined,
-    allow_fallbacks: state.hostedRoutingAllowFallbacks,
-    require_parameters: state.hostedRoutingRequireParameters,
-    sort: state.hostedRoutingSort,
-    data_collection: state.hostedRoutingDataCollection,
-    quantizations: state.hostedRoutingQuantization ? [state.hostedRoutingQuantization] : []
+    mode: draft.mode,
+    provider_id: draft.providerId || undefined,
+    allow_fallbacks: draft.allowFallbacks,
+    require_parameters: draft.requireParameters,
+    sort: draft.sort,
+    data_collection: draft.dataCollection,
+    quantizations: draft.quantization ? [draft.quantization] : []
   };
 }
 
@@ -153,69 +158,80 @@ export function settingsPanelHtml(settings: PlatformSettings | null, state: Sett
   const hostedModelOptions = hostedModelOptionsForSettings(settings);
   const selectedModel = selectedProviderDraft(settings).modelId;
   const selectedReasoning = selectedProviderDraft(settings).reasoningEffort;
-  const selectedHostedModel = selectedHostedProviderDraft(settings).modelId;
-  const selectedHostedOption = hostedModelOptions.find((option) => option.model_id === selectedHostedModel) || null;
-  const hostedDraftOption = hostedModelOptions.find((option) => option.model_id === state.hostedDraftModelId) || selectedHostedOption || null;
-  const hostedProviderLabel = hostedProvider
-    ? `${selectedHostedOption?.label || selectedHostedModel || 'Hosted model'} - ${hostedProvider.label || hostedProvider.provider_id}`
-    : 'No hosted text provider';
   const selectedOption = modelOptions.find((option) => option.model_id === state.draftModelId) || modelOptions[0] || null;
   const reasoningOptions = selectedOption?.supported_reasoning_efforts || [];
+  const openHostedModel = openHostedModelId(settings, state);
   const canSaveProvider = Boolean(
     provider &&
       state.draftModelId &&
       !state.isSavingProvider &&
       (state.draftModelId !== selectedModel || state.draftReasoningEffort !== selectedReasoning)
   );
-  const canSaveHostedProvider = Boolean(
-    hostedProvider &&
-      state.hostedDraftModelId &&
-      !state.isSavingHostedProvider &&
-      (state.hostedDraftModelId !== selectedHostedModel || hostedRoutingChanged(state, settings))
-  );
 
-  return `<section class="settings-card settings-platform">
+  return `${userSettingsCardHtml(settings)}
+    ${modelSettingsCardHtml(
+      provider,
+      modelOptions,
+      reasoningOptions,
+      canSaveProvider,
+      activeRuntimeSessions.length,
+      runtimeSessions.length,
+      openHostedModel,
+      hostedModelOptions,
+      hostedProvider,
+      settings,
+      state
+    )}
+    ${runtimeSessionsHtml(runtimeSessions, cleanupAllowed, cleanupScope, state)}`;
+}
+
+function userSettingsCardHtml(settings: PlatformSettings) {
+  return `<section class="settings-card settings-platform settings-user-settings-card">
     <div class="settings-heading settings-platform-heading">
       <div>
-        <p class="settings-kicker">Settings</p>
-        <h2>Platform settings</h2>
+        <p class="settings-kicker">Account</p>
+        <h2>User settings</h2>
       </div>
     </div>
-    <div class="settings-platform-grid">
-      <article class="settings-platform-tile settings-platform-user">
-        <span class="settings-platform-icon material-symbols-rounded" aria-hidden="true">manage_accounts</span>
-        <div>
-          <p class="settings-kicker">Current user</p>
-          <h3>${escapeHtml(settings.user.display_name || settings.user.username || 'Unavailable')}</h3>
-          <p>${escapeHtml(settings.user.platform_role || 'member')} · ${escapeHtml(settings.workspace.name || settings.workspace.workspace_id)}</p>
-          <button type="button" class="settings-secondary settings-platform-logout" id="settings-logout">
-            <span class="material-symbols-rounded" aria-hidden="true">logout</span>
-            Logout
-          </button>
-        </div>
-      </article>
-      <article class="settings-platform-tile settings-platform-provider">
-        <span class="settings-platform-icon material-symbols-rounded" aria-hidden="true">memory</span>
-        <div>
-          <p class="settings-kicker">Agentic provider</p>
-          <h3>${escapeHtml(provider?.label || 'Provider not loaded')}</h3>
-          <p>${escapeHtml(selectedModel || 'model')} · ${escapeHtml(selectedReasoning || 'reasoning')} · Codex tools/filesystem/MCP · ${activeRuntimeSessions.length} active / ${runtimeSessions.length} in scope</p>
-        </div>
-      </article>
-      <article class="settings-platform-tile settings-platform-provider">
-        <span class="settings-platform-icon material-symbols-rounded" aria-hidden="true">bolt</span>
-        <div>
-          <p class="settings-kicker">Hosted chat / fast model</p>
-          <h3>${escapeHtml(hostedProviderLabel)}</h3>
-          <p>${escapeHtml(selectedHostedModel || 'model not selected')} · plain hosted chat only · runtime engine remains Codex</p>
-        </div>
-      </article>
+    <article class="settings-platform-tile settings-platform-user">
+      <span class="settings-platform-icon material-symbols-rounded" aria-hidden="true">manage_accounts</span>
+      <div>
+        <p class="settings-kicker">Current user</p>
+        <h3>${escapeHtml(settings.user.display_name || settings.user.username || 'Unavailable')}</h3>
+        <p>${escapeHtml(settings.user.platform_role || 'member')} · ${escapeHtml(settings.workspace.name || settings.workspace.workspace_id)}</p>
+        <button type="button" class="settings-secondary settings-platform-logout" id="settings-logout">
+          <span class="material-symbols-rounded" aria-hidden="true">logout</span>
+          Logout
+        </button>
+      </div>
+    </article>
+  </section>`;
+}
+
+function modelSettingsCardHtml(
+  provider: PlatformSettings['provider']['active_provider'] | null,
+  modelOptions: ProviderModelOption[],
+  reasoningOptions: ProviderModelOption['supported_reasoning_efforts'],
+  canSaveProvider: boolean,
+  activeRuntimeSessionCount: number,
+  runtimeSessionCount: number,
+  openHostedModel: string,
+  hostedModelOptions: ProviderModelOption[],
+  hostedProvider: PlatformSettings['provider']['active_provider'] | null,
+  settings: PlatformSettings,
+  state: SettingsPanelState
+) {
+  return `<section class="settings-card settings-platform settings-model-settings-card">
+    <div class="settings-heading settings-platform-heading">
+      <div>
+        <p class="settings-kicker">Models</p>
+        <h2>Model settings</h2>
+      </div>
     </div>
     <div class="settings-platform-provider-forms">
-      ${providerSettingsFormHtml(modelOptions, reasoningOptions, canSaveProvider, state)}
-      ${hostedProviderSettingsFormHtml(hostedModelOptions, hostedDraftOption, canSaveHostedProvider, state, Boolean(hostedProvider))}
+      ${providerSettingsFormHtml(provider, modelOptions, reasoningOptions, canSaveProvider, activeRuntimeSessionCount, runtimeSessionCount, !openHostedModel, state)}
+      ${hostedProviderSettingsListHtml(hostedModelOptions, openHostedModel, hostedProvider, settings, state)}
     </div>
-    ${runtimeSessionsHtml(runtimeSessions, cleanupAllowed, cleanupScope, state)}
   </section>`;
 }
 
@@ -226,20 +242,34 @@ export function bindSettingsPanelEvents(actions: SettingsPanelActions) {
   document.getElementById('settings-provider-reasoning')?.addEventListener('change', (event) => {
     actions.onProviderReasoningChanged((event.currentTarget as HTMLSelectElement).value);
   });
-  document.getElementById('settings-hosted-provider-model')?.addEventListener('change', (event) => {
-    actions.onHostedProviderModelChanged((event.currentTarget as HTMLSelectElement).value);
+  document.querySelectorAll<HTMLDetailsElement>('[data-settings-model-accordion]').forEach((details) => {
+    details.addEventListener('toggle', () => {
+      if (!details.open) return;
+      document.querySelectorAll<HTMLDetailsElement>('[data-settings-model-accordion]').forEach((otherDetails) => {
+        if (otherDetails !== details) {
+          otherDetails.open = false;
+        }
+      });
+    });
   });
   document.querySelectorAll<HTMLElement>('[data-openrouter-routing]').forEach((element) => {
     element.addEventListener('change', (event) => {
       const target = event.currentTarget as HTMLInputElement | HTMLSelectElement;
+      const modelId =
+        target.dataset.hostedModelId ||
+        target.closest<HTMLElement>('[data-hosted-model-accordion]')?.dataset.hostedModelAccordion ||
+        '';
       actions.onHostedProviderRoutingChanged(
+        modelId,
         target.dataset.openrouterRouting || '',
         target instanceof HTMLInputElement && target.type === 'checkbox' ? target.checked : target.value
       );
     });
   });
   document.getElementById('settings-save-provider')?.addEventListener('click', actions.onSaveProviderSettings);
-  document.getElementById('settings-save-hosted-provider')?.addEventListener('click', actions.onSaveHostedProviderSettings);
+  document.querySelectorAll<HTMLButtonElement>('[data-hosted-provider-save]').forEach((button) => {
+    button.addEventListener('click', () => actions.onSaveHostedProviderSettings(button.dataset.hostedProviderSave || ''));
+  });
   document.getElementById('settings-logout')?.addEventListener('click', actions.onLogout);
   document.getElementById('settings-clear-all-runtime')?.addEventListener('click', actions.onClearAllRuntimeSessions);
   document.querySelectorAll<HTMLButtonElement>('[data-runtime-clear]').forEach((button) => {
@@ -248,19 +278,28 @@ export function bindSettingsPanelEvents(actions: SettingsPanelActions) {
 }
 
 function providerSettingsFormHtml(
+  provider: PlatformSettings['provider']['active_provider'] | null,
   modelOptions: ProviderModelOption[],
   reasoningOptions: ProviderModelOption['supported_reasoning_efforts'],
   canSaveProvider: boolean,
+  activeRuntimeSessionCount: number,
+  runtimeSessionCount: number,
+  isOpen: boolean,
   state: SettingsPanelState
 ) {
-  return `<div class="settings-platform-provider-form">
-    <div class="settings-platform-form-heading">
-      <span class="material-symbols-rounded" aria-hidden="true">terminal</span>
-      <span>
-        <strong>Codex agent model</strong>
-        <small>Agentic sessions, tools, filesystem, MCP and skills</small>
+  return `<details class="settings-model-accordion settings-agentic-provider-accordion" data-settings-model-accordion="agentic-provider" data-agentic-provider-accordion ${isOpen ? 'open' : ''}>
+    <summary class="settings-model-trigger">
+      <span class="settings-platform-icon material-symbols-rounded" aria-hidden="true">memory</span>
+      <span class="settings-model-copy">
+        <span class="settings-model-kicker">
+          <span class="settings-kicker">Agentic provider</span>
+        </span>
+        <strong>${escapeHtml(provider?.label || 'Provider not loaded')}</strong>
+        <small>${escapeHtml(state.draftModelId || 'model')} · ${escapeHtml(state.draftReasoningEffort || 'reasoning')} · Codex tools/filesystem/MCP · ${activeRuntimeSessionCount} active / ${runtimeSessionCount} in scope</small>
       </span>
-    </div>
+      <span class="settings-model-chevron material-symbols-rounded" aria-hidden="true">expand_more</span>
+    </summary>
+    <div class="settings-model-content settings-agentic-provider-content">
     <label class="settings-platform-field">
       <span>Model</span>
       <select id="settings-provider-model" ${!modelOptions.length || state.isSavingProvider ? 'disabled' : ''}>
@@ -278,89 +317,131 @@ function providerSettingsFormHtml(
       ${state.isSavingProvider ? 'Saving' : 'Save model'}
     </button>
     ${state.providerError ? `<p class="settings-platform-error">${escapeHtml(state.providerError)}</p>` : ''}
+    </div>
+  </details>`;
+}
+
+function hostedProviderSettingsListHtml(
+  modelOptions: ProviderModelOption[],
+  openHostedModel: string,
+  hostedProvider: PlatformSettings['provider']['active_provider'] | null,
+  settings: PlatformSettings,
+  state: SettingsPanelState
+) {
+  const hasHostedProvider = Boolean(hostedProvider);
+  return `<div class="settings-hosted-models">
+    <div class="settings-platform-form-heading settings-hosted-models-heading">
+      <span class="material-symbols-rounded" aria-hidden="true">route</span>
+      <span>
+        <strong>Hosted chat fast models</strong>
+        <small>Hosted text providers govern plain_hosted_chat and fast_model per configured model.</small>
+      </span>
+    </div>
+    ${
+      modelOptions.length
+        ? modelOptions.map((option) => hostedProviderModelAccordionHtml(option, openHostedModel, hostedProvider, settings, state)).join('')
+        : '<p class="settings-card-copy settings-platform-note">No hosted text models are available from the active hosted provider.</p>'
+    }
+    ${!hasHostedProvider ? '<p class="settings-card-copy settings-platform-note">Activate a hosted text provider before selecting a fast model.</p>' : ''}
   </div>`;
 }
 
-function hostedProviderSettingsFormHtml(
-  modelOptions: ProviderModelOption[],
-  selectedOption: ProviderModelOption | null,
-  canSaveProvider: boolean,
-  state: SettingsPanelState,
-  hasHostedProvider: boolean
+function hostedProviderModelAccordionHtml(
+  option: ProviderModelOption,
+  openHostedModel: string,
+  hostedProvider: PlatformSettings['provider']['active_provider'] | null,
+  settings: PlatformSettings,
+  state: SettingsPanelState
 ) {
-  const upstreamOptions = selectedOption?.upstream_provider_options || [];
+  const modelId = option.model_id;
+  const draft = hostedRoutingDraftForModel(state, settings, modelId);
+  const upstreamOptions = option.upstream_provider_options || [];
   const quantizations = Array.from(new Set(upstreamOptions.map((option) => option.quantization || '').filter(Boolean)));
-  return `<div class="settings-platform-provider-form">
-    <div class="settings-platform-form-heading">
-      <span class="material-symbols-rounded" aria-hidden="true">route</span>
-      <span>
-        <strong>Hosted chat fast model</strong>
-        <small>Hosted text providers govern plain_hosted_chat and fast_model only</small>
+  const hasHostedProvider = Boolean(hostedProvider);
+  const isSavingThisModel = state.isSavingHostedProvider && state.hostedDraftModelId === modelId;
+  const canSaveProvider = Boolean(
+    hasHostedProvider &&
+      modelId &&
+      !state.isSavingHostedProvider &&
+      hostedRoutingChanged(state, settings, modelId)
+  );
+  const isOpen = modelId === openHostedModel;
+  const providerLabel = hostedProvider?.label || hostedProvider?.provider_id || 'Hosted provider';
+  return `<details class="settings-model-accordion settings-hosted-model-accordion" data-settings-model-accordion="hosted:${escapeAttr(modelId)}" data-hosted-model-accordion="${escapeAttr(modelId)}" ${isOpen ? 'open' : ''}>
+    <summary class="settings-model-trigger">
+      <span class="settings-platform-icon material-symbols-rounded" aria-hidden="true">bolt</span>
+      <span class="settings-model-copy">
+        <span class="settings-model-kicker">
+          <span class="settings-kicker">Hosted chat / fast model</span>
+          <span class="settings-pill">Active</span>
+        </span>
+        <strong>${escapeHtml(option.label || modelId)} - ${escapeHtml(providerLabel)}</strong>
+        <small>${escapeHtml(modelId || 'model not selected')} · plain hosted chat only · runtime engine remains Codex</small>
       </span>
-    </div>
-    <label class="settings-platform-field settings-platform-field-wide">
-      <span>Model</span>
-      <select id="settings-hosted-provider-model" ${!hasHostedProvider || !modelOptions.length || state.isSavingHostedProvider ? 'disabled' : ''}>
-        ${modelOptions.map((option) => `<option value="${escapeAttr(option.model_id)}" ${option.model_id === state.hostedDraftModelId ? 'selected' : ''}>${escapeHtml(option.label || option.model_id)}</option>`).join('')}
-      </select>
-    </label>
+      <span class="settings-model-chevron material-symbols-rounded" aria-hidden="true">expand_more</span>
+    </summary>
+    <div class="settings-model-content settings-hosted-model-content">
+      <div class="settings-platform-field settings-platform-field-wide">
+        <span>Model</span>
+        <code class="settings-model-code">${escapeHtml(modelId || 'model not selected')}</code>
+      </div>
     <label class="settings-platform-field">
       <span>OpenRouter upstream</span>
-      <select data-openrouter-routing="mode" ${!hasHostedProvider || !upstreamOptions.length || state.isSavingHostedProvider ? 'disabled' : ''}>
+      <select data-openrouter-routing="mode" data-hosted-model-id="${escapeAttr(modelId)}" ${!hasHostedProvider || !upstreamOptions.length || state.isSavingHostedProvider ? 'disabled' : ''}>
         ${[
           ['auto', 'Auto'],
           ['prefer', 'Prefer selected'],
           ['only', 'Only selected'],
           ['ignore', 'Ignore selected']
-        ].map(([value, label]) => `<option value="${escapeAttr(value)}" ${value === state.hostedRoutingMode ? 'selected' : ''}>${escapeHtml(label)}</option>`).join('')}
+        ].map(([value, label]) => `<option value="${escapeAttr(value)}" ${value === draft.mode ? 'selected' : ''}>${escapeHtml(label)}</option>`).join('')}
       </select>
     </label>
     <label class="settings-platform-field">
       <span>Upstream provider</span>
-      <select data-openrouter-routing="provider_id" ${!hasHostedProvider || !upstreamOptions.length || state.hostedRoutingMode === 'auto' || state.isSavingHostedProvider ? 'disabled' : ''}>
+      <select data-openrouter-routing="provider_id" data-hosted-model-id="${escapeAttr(modelId)}" ${!hasHostedProvider || !upstreamOptions.length || draft.mode === 'auto' || state.isSavingHostedProvider ? 'disabled' : ''}>
         <option value="">Select provider</option>
-        ${upstreamOptions.map((option) => `<option value="${escapeAttr(String(option.provider_id || option.tag || ''))}" ${(option.provider_id || option.tag) === state.hostedRoutingProviderId ? 'selected' : ''}>${escapeHtml(option.label || option.provider_id || option.tag || 'Provider')}</option>`).join('')}
+        ${upstreamOptions.map((option) => `<option value="${escapeAttr(String(option.provider_id || option.tag || ''))}" ${(option.provider_id || option.tag) === draft.providerId ? 'selected' : ''}>${escapeHtml(option.label || option.provider_id || option.tag || 'Provider')}</option>`).join('')}
       </select>
     </label>
     <label class="settings-platform-field">
       <span>Sort</span>
-      <select data-openrouter-routing="sort" ${!hasHostedProvider || state.isSavingHostedProvider ? 'disabled' : ''}>
+      <select data-openrouter-routing="sort" data-hosted-model-id="${escapeAttr(modelId)}" ${!hasHostedProvider || state.isSavingHostedProvider ? 'disabled' : ''}>
         ${[
           ['', 'OpenRouter default'],
           ['price', 'Price'],
           ['throughput', 'Throughput'],
           ['latency', 'Latency']
-        ].map(([value, label]) => `<option value="${escapeAttr(value)}" ${value === state.hostedRoutingSort ? 'selected' : ''}>${escapeHtml(label)}</option>`).join('')}
+        ].map(([value, label]) => `<option value="${escapeAttr(value)}" ${value === draft.sort ? 'selected' : ''}>${escapeHtml(label)}</option>`).join('')}
       </select>
     </label>
     <label class="settings-platform-field">
       <span>Data collection</span>
-      <select data-openrouter-routing="data_collection" ${!hasHostedProvider || state.isSavingHostedProvider ? 'disabled' : ''}>
+      <select data-openrouter-routing="data_collection" data-hosted-model-id="${escapeAttr(modelId)}" ${!hasHostedProvider || state.isSavingHostedProvider ? 'disabled' : ''}>
         ${[
           ['', 'OpenRouter default'],
           ['allow', 'Allow'],
           ['deny', 'Deny']
-        ].map(([value, label]) => `<option value="${escapeAttr(value)}" ${value === state.hostedRoutingDataCollection ? 'selected' : ''}>${escapeHtml(label)}</option>`).join('')}
+        ].map(([value, label]) => `<option value="${escapeAttr(value)}" ${value === draft.dataCollection ? 'selected' : ''}>${escapeHtml(label)}</option>`).join('')}
       </select>
     </label>
     <label class="settings-platform-field">
       <span>Quantization</span>
-      <select data-openrouter-routing="quantization" ${!hasHostedProvider || !quantizations.length || state.isSavingHostedProvider ? 'disabled' : ''}>
+      <select data-openrouter-routing="quantization" data-hosted-model-id="${escapeAttr(modelId)}" ${!hasHostedProvider || !quantizations.length || state.isSavingHostedProvider ? 'disabled' : ''}>
         <option value="">Any</option>
-        ${quantizations.map((value) => `<option value="${escapeAttr(value)}" ${value === state.hostedRoutingQuantization ? 'selected' : ''}>${escapeHtml(value)}</option>`).join('')}
+        ${quantizations.map((value) => `<option value="${escapeAttr(value)}" ${value === draft.quantization ? 'selected' : ''}>${escapeHtml(value)}</option>`).join('')}
       </select>
     </label>
     <div class="settings-platform-checks">
-      <label><input type="checkbox" data-openrouter-routing="allow_fallbacks" ${state.hostedRoutingAllowFallbacks ? 'checked' : ''} ${!hasHostedProvider || state.isSavingHostedProvider ? 'disabled' : ''}> Allow OpenRouter fallback</label>
-      <label><input type="checkbox" data-openrouter-routing="require_parameters" ${state.hostedRoutingRequireParameters ? 'checked' : ''} ${!hasHostedProvider || state.isSavingHostedProvider ? 'disabled' : ''}> Require supported parameters</label>
+      <label><input type="checkbox" data-openrouter-routing="allow_fallbacks" data-hosted-model-id="${escapeAttr(modelId)}" ${draft.allowFallbacks ? 'checked' : ''} ${!hasHostedProvider || state.isSavingHostedProvider ? 'disabled' : ''}> Allow OpenRouter fallback</label>
+      <label><input type="checkbox" data-openrouter-routing="require_parameters" data-hosted-model-id="${escapeAttr(modelId)}" ${draft.requireParameters ? 'checked' : ''} ${!hasHostedProvider || state.isSavingHostedProvider ? 'disabled' : ''}> Require supported parameters</label>
     </div>
-    <button type="button" id="settings-save-hosted-provider" ${canSaveProvider ? '' : 'disabled'}>
-      <span class="material-symbols-rounded" aria-hidden="true">${state.isSavingHostedProvider ? 'sync' : 'save'}</span>
-      ${state.isSavingHostedProvider ? 'Saving' : 'Save hosted model'}
+    <button type="button" data-hosted-provider-save="${escapeAttr(modelId)}" ${canSaveProvider ? '' : 'disabled'}>
+      <span class="material-symbols-rounded" aria-hidden="true">${isSavingThisModel ? 'sync' : 'save'}</span>
+      ${isSavingThisModel ? 'Saving' : 'Save hosted model'}
     </button>
-    ${!hasHostedProvider ? '<p class="settings-card-copy settings-platform-note">Activate a hosted text provider before selecting a fast model.</p>' : ''}
-    ${state.hostedProviderError ? `<p class="settings-platform-error">${escapeHtml(state.hostedProviderError)}</p>` : ''}
-  </div>`;
+    ${state.hostedProviderError && state.hostedProviderErrorModelId === modelId ? `<p class="settings-platform-error">${escapeHtml(state.hostedProviderError)}</p>` : ''}
+    </div>
+  </details>`;
 }
 
 function runtimeSessionsHtml(
@@ -375,7 +456,8 @@ function runtimeSessionsHtml(
       : cleanupScope === 'workspace'
         ? 'Scope: active workspace'
         : 'Runtime cleanup is not allowed in this workspace';
-  return `<details class="settings-platform-runtime" open>
+  return `<section class="settings-card settings-platform settings-runtime-settings-card">
+    <details class="settings-platform-runtime" open>
     <summary class="settings-heading settings-collapsible-heading">
       <div>
         <p class="settings-kicker">Runtime</p>
@@ -397,7 +479,8 @@ function runtimeSessionsHtml(
       ${sessions.length ? sessions.map((session) => runtimeSessionRowHtml(session, cleanupAllowed, state)).join('') : '<p class="settings-card-copy">No runtime sessions.</p>'}
     </div>
     ${state.cleanupError ? `<p class="settings-platform-error">${escapeHtml(state.cleanupError)}</p>` : ''}
-  </details>`;
+  </details>
+  </section>`;
 }
 
 function runtimeSessionRowHtml(session: RuntimeSessionItem, cleanupAllowed: boolean, state: SettingsPanelState) {
@@ -435,9 +518,9 @@ function openRouterRoutingForModel(settings: PlatformSettings | null, modelId: s
   };
 }
 
-function hostedRoutingChanged(state: SettingsPanelState, settings: PlatformSettings): boolean {
-  const saved = openRouterRoutingForModel(settings, state.hostedDraftModelId);
-  const draft = hostedProviderRoutingDraft(state);
+function hostedRoutingChanged(state: SettingsPanelState, settings: PlatformSettings, modelId: string): boolean {
+  const saved = openRouterRoutingForModel(settings, modelId);
+  const draft = hostedProviderRoutingDraft(state, modelId);
   return (
     saved.mode !== draft.mode ||
     (saved.provider_id || '') !== (draft.provider_id || '') ||
@@ -447,6 +530,50 @@ function hostedRoutingChanged(state: SettingsPanelState, settings: PlatformSetti
     (saved.data_collection || '') !== (draft.data_collection || '') ||
     (saved.quantizations?.[0] || '') !== (draft.quantizations?.[0] || '')
   );
+}
+
+function openHostedModelId(settings: PlatformSettings, state: SettingsPanelState): string {
+  if (state.hostedProviderErrorModelId) {
+    return state.hostedProviderErrorModelId;
+  }
+  if (!state.hostedDraftModelId || !hostedRoutingChanged(state, settings, state.hostedDraftModelId)) {
+    return '';
+  }
+  return state.hostedDraftModelId;
+}
+
+function hostedRoutingDraftForModel(state: SettingsPanelState, settings: PlatformSettings | null, modelId: string): HostedRoutingDraft {
+  return state.hostedRoutingDraftsByModel[modelId] || routingDraftFromRouting(openRouterRoutingForModel(settings, modelId));
+}
+
+function ensureHostedRoutingDraft(state: SettingsPanelState, settings: PlatformSettings | null, modelId: string): HostedRoutingDraft {
+  if (!state.hostedRoutingDraftsByModel[modelId]) {
+    state.hostedRoutingDraftsByModel[modelId] = routingDraftFromRouting(openRouterRoutingForModel(settings, modelId));
+  }
+  return state.hostedRoutingDraftsByModel[modelId];
+}
+
+function routingDraftFromRouting(routing: OpenRouterProviderRouting): HostedRoutingDraft {
+  return {
+    allowFallbacks: routing.allow_fallbacks !== false,
+    dataCollection: routing.data_collection || '',
+    mode: routing.mode || 'auto',
+    providerId: routing.provider_id || '',
+    quantization: routing.quantizations?.[0] || '',
+    requireParameters: routing.require_parameters === true,
+    sort: routing.sort || ''
+  };
+}
+
+function defaultHostedRoutingDraft(): HostedRoutingDraft {
+  return routingDraftFromRouting({
+    mode: 'auto',
+    allow_fallbacks: true,
+    require_parameters: false,
+    sort: '',
+    data_collection: '',
+    quantizations: []
+  });
 }
 
 function escapeHtml(value: string) {

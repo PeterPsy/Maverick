@@ -45,7 +45,6 @@ import { createAppLinksController } from './appLinksController';
 import { appLinksPageHtml } from './appLinksPage';
 import { bindSettingsEvents } from './bindEvents';
 import { escapeHtml } from './html';
-import { pageSettingsBlockHtml } from './pageFrame';
 import { createPersistenceController } from './persistenceController';
 import { persistenceMigrationModalHtml, persistencePageHtml } from './persistencePage';
 import { saveActiveProviderSettings, saveHostedProviderSettings } from './providerSettingsActions';
@@ -417,13 +416,13 @@ async function logoutFromSettings() {
 
 function activePageHtml(page: SettingsPage, user: User | undefined) {
   if (page.id === 'users') {
-    return usersPageHtml({ page, pendingDeleteUserId, selectedUser: user, users });
+    return usersPageHtml({ pendingDeleteUserId, selectedUser: user, users });
   }
   if (page.id === 'workspace-access') {
-    return workspaceAccessPageHtml({ page, selectedUser: user, users, workspaces });
+    return workspaceAccessPageHtml({ selectedUser: user, users, workspaces });
   }
   if (page.id === 'workspace-apps') {
-    return workspaceAppsPageHtml({ page, workspaceApps, workspaces });
+    return workspaceAppsPageHtml({ workspaceApps, workspaces });
   }
   if (page.id === 'app-links') {
     const appLinks = appLinksController.viewState();
@@ -433,20 +432,18 @@ function activePageHtml(page: SettingsPage, user: User | undefined) {
       error: appLinks.error,
       isLoading: appLinks.isLoading,
       loadErrors: appLinks.loadErrors,
-      page,
       savingKeys: appLinks.savingKeys,
       workspaceApps
     });
   }
   if (page.id === 'platform-settings') {
-    return platformSettingsPageHtml(page);
+    return platformSettingsPageHtml();
   }
-  return persistencePageHtml(page, persistenceController.viewState());
+  return persistencePageHtml(persistenceController.viewState());
 }
 
-function platformSettingsPageHtml(page: SettingsPage) {
-  return `${pageSettingsBlockHtml(page)}
-    ${settingsPanelHtml(platformSettings, settingsPanelState)}`;
+function platformSettingsPageHtml() {
+  return settingsPanelHtml(platformSettings, settingsPanelState);
 }
 
 function render() {
@@ -492,12 +489,8 @@ function bindEvents() {
     },
     installWorkspaceApp,
     logoutFromSettings,
-    onHostedProviderModelChanged: (modelId) => {
-      updateHostedDraftModel(settingsPanelState, platformSettings, modelId);
-      render();
-    },
-    onHostedProviderRoutingChanged: (field, value) => {
-      updateHostedProviderRoutingDraft(settingsPanelState, field, value);
+    onHostedProviderRoutingChanged: (modelId, field, value) => {
+      updateHostedProviderRoutingDraft(settingsPanelState, platformSettings, modelId, field, value);
       render();
     },
     onProviderModelChanged: (modelId) => {
@@ -513,7 +506,12 @@ function bindEvents() {
     render,
     resetSelectedUserPassword,
     saveDependencySelection,
-    saveHostedProviderSettingsFromPanel: () => saveHostedProviderSettings(providerSettingsActionContext()),
+    saveHostedProviderSettingsFromPanel: (modelId) => {
+      if (modelId) {
+        updateHostedDraftModel(settingsPanelState, platformSettings, modelId);
+      }
+      return saveHostedProviderSettings(providerSettingsActionContext());
+    },
     saveProviderSettingsFromPanel: () => saveActiveProviderSettings(providerSettingsActionContext()),
     selectedUser,
     selectUser: (userId) => {

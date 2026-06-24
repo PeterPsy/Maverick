@@ -4,7 +4,6 @@ const USER_FORM_FIELD_COUNT = 5;
 const PROFILE_FIELD_COUNT = 4;
 const MEMBERSHIP_ROW_COUNT = 4;
 const WORKSPACE_APP_ROW_COUNT = 3;
-const SETTINGS_TILE_COUNT = 2;
 const RUNTIME_ROW_COUNT = 4;
 
 export function settingsAppSkeletonHtml(page: SettingsPage): string {
@@ -37,8 +36,7 @@ function activePageSkeletonHtml(page: SettingsPage): string {
 }
 
 function usersSkeletonHtml(): string {
-  return `${pageSettingsSkeletonHtml()}
-    <section class="settings-card settings-loading-skeleton__create" aria-hidden="true">
+  return `<section class="settings-card settings-loading-skeleton__create" aria-hidden="true">
       ${stackHtml('short-title')}
       ${repeatHtml(USER_FORM_FIELD_COUNT, () => blockHtml('field'))}
       ${blockHtml('button')}
@@ -66,8 +64,7 @@ function usersSkeletonHtml(): string {
 }
 
 function workspaceAccessSkeletonHtml(): string {
-  return `${pageSettingsSkeletonHtml()}
-    ${userPickerSkeletonHtml()}
+  return `${userPickerSkeletonHtml()}
     <section class="settings-card" aria-hidden="true">
       ${headingSkeletonHtml(true)}
       <div class="settings-loading-skeleton__rows">
@@ -77,8 +74,7 @@ function workspaceAccessSkeletonHtml(): string {
 }
 
 function workspaceAppsSkeletonHtml(): string {
-  return `${pageSettingsSkeletonHtml()}
-    <section class="settings-card" aria-hidden="true">
+  return `<section class="settings-card" aria-hidden="true">
       ${headingSkeletonHtml(false)}
       ${lineHtml('copy-wide')}
       <div class="settings-loading-skeleton__rows">
@@ -88,14 +84,20 @@ function workspaceAppsSkeletonHtml(): string {
 }
 
 function platformSettingsSkeletonHtml(): string {
-  return `${pageSettingsSkeletonHtml()}
+  return `<section class="settings-card settings-loading-skeleton__settings" aria-hidden="true">
+      ${settingsTileSkeletonHtml()}
+    </section>
     <section class="settings-card settings-loading-skeleton__settings" aria-hidden="true">
-      ${headingSkeletonHtml(false)}
-      <div class="settings-loading-skeleton__settings-grid">
-        ${repeatHtml(SETTINGS_TILE_COUNT, () => settingsTileSkeletonHtml())}
-      </div>
+      ${settingsTileSkeletonHtml()}
       <div class="settings-loading-skeleton__provider-form">
         ${repeatHtml(2, () => labelFieldSkeletonHtml())}
+        ${blockHtml('button')}
+      </div>
+      ${settingsTileSkeletonHtml()}
+    </section>
+    <section class="settings-card settings-loading-skeleton__settings" aria-hidden="true">
+      <div class="settings-loading-skeleton__runtime-toolbar">
+        ${lineHtml('copy-wide')}
         ${blockHtml('button')}
       </div>
       <div class="settings-loading-skeleton__runtime-list">
@@ -105,25 +107,13 @@ function platformSettingsSkeletonHtml(): string {
 }
 
 function persistenceSkeletonHtml(): string {
-  return `${pageSettingsSkeletonHtml()}
-    <section class="settings-card settings-loading-skeleton__persistence" aria-hidden="true">
+  return `<section class="settings-card settings-loading-skeleton__persistence" aria-hidden="true">
       ${headingSkeletonHtml(true)}
       <div class="settings-loading-skeleton__adapter-cards">
         ${repeatHtml(2, () => adapterCardSkeletonHtml())}
       </div>
       ${resultSkeletonHtml()}
     </section>`;
-}
-
-function pageSettingsSkeletonHtml(): string {
-  return `<section class="settings-card settings-page-settings" aria-hidden="true">
-    ${iconHtml('page')}
-    <span class="settings-loading-skeleton__copy-stack">
-      ${lineHtml('kicker')}
-      ${lineHtml('card-title')}
-      ${lineHtml('copy')}
-    </span>
-  </section>`;
 }
 
 function userPickerSkeletonHtml(): string {

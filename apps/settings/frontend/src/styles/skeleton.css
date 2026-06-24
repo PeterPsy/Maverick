@@ -19,8 +19,8 @@
 }
 
 .settings-loading-skeleton__field-grid,
-.settings-loading-skeleton__settings-grid,
 .settings-loading-skeleton__provider-form,
+.settings-loading-skeleton__runtime-toolbar,
 .settings-loading-skeleton__runtime-list,
 .settings-loading-skeleton__rows,
 .settings-loading-skeleton__copy-stack,
@@ -40,7 +40,12 @@
   gap: 12px;
 }
 
-.settings-loading-skeleton__settings-grid,
+.settings-loading-skeleton__runtime-toolbar {
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+}
+
 .settings-loading-skeleton__runtime-list,
 .settings-loading-skeleton__rows {
   gap: 10px;
@@ -253,12 +258,6 @@
 .settings-loading-skeleton__block--checkbox {
   width: 1rem;
   height: 1rem;
-}
-
-.settings-loading-skeleton__icon--page {
-  width: 2.45rem;
-  height: 2.45rem;
-  border-radius: 0.86rem;
 }
 
 .settings-loading-skeleton__icon--row {

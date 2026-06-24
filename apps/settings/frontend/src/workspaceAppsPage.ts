@@ -1,19 +1,14 @@
 import type { Workspace, WorkspaceApp } from './adminApi';
 import { escapeAttr, escapeHtml } from './html';
-import { pageSettingsBlockHtml } from './pageFrame';
-import type { SettingsPage } from './pages';
 
 export function workspaceAppsPageHtml({
-  page,
   workspaceApps,
   workspaces,
 }: {
-  page: SettingsPage;
   workspaceApps: WorkspaceApp[];
   workspaces: Workspace[];
 }) {
-  return `${pageSettingsBlockHtml(page)}
-    <section class="settings-card">
+  return `<section class="settings-card">
       <div class="settings-heading">
         <div>
           <p class="settings-kicker">Workspace apps</p>
@@ -99,6 +94,7 @@ function appIcon(app: WorkspaceApp): string {
     memory: 'database',
     'maverick-monitor': 'monitor_heart',
     settings: 'admin_panel_settings',
+    senses: 'sensors',
     skills: 'school',
     speech: 'record_voice_over',
     storage: 'cloud',

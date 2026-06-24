@@ -50,24 +50,27 @@ export async function saveActiveProviderSettings(context: ProviderSettingsAction
 export async function saveHostedProviderSettings(context: ProviderSettingsActionContext) {
   const providerId = context.settings?.provider.hosted_text?.active_provider?.provider_id;
   if (!providerId || !context.state.hostedDraftModelId) {
+    context.state.hostedProviderErrorModelId = context.state.hostedDraftModelId;
     context.state.hostedProviderError = 'Hosted provider not loaded.';
     context.render();
     return;
   }
   context.state.isSavingHostedProvider = true;
   context.state.hostedProviderError = '';
+  context.state.hostedProviderErrorModelId = context.state.hostedDraftModelId;
   context.render();
   try {
     await configureHostedProvider({
       provider_id: providerId,
       model_id: context.state.hostedDraftModelId,
-      openrouter_provider_routing: hostedProviderRoutingDraft(context.state)
+      openrouter_provider_routing: hostedProviderRoutingDraft(context.state, context.state.hostedDraftModelId)
     });
     const settings = await getPlatformSettings();
     context.setSettings(settings);
     syncSettingsPanelDraft(context.state, settings);
     context.setNotice({ tone: 'success', message: 'Hosted model settings updated.' });
   } catch (error) {
+    context.state.hostedProviderErrorModelId = context.state.hostedDraftModelId;
     context.state.hostedProviderError = error instanceof Error ? error.message : 'Unable to update hosted model settings.';
   } finally {
     context.state.isSavingHostedProvider = false;

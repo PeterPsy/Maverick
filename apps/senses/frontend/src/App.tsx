@@ -497,8 +497,8 @@ export function App() {
     if (isFreshLegacyStatus && pendingNativeCommand.phase === 'accepted' && status.capture?.busy === false) {
       setBusyAction((busy) => (busy === pendingNativeCommand.busyLabel ? '' : busy));
       setPendingNativeCommand(null);
-      setError(status.ios?.last_error || '');
-      setNotice(status.ios?.last_error ? '' : nativeCompletedNotice(pendingNativeCommand.command, status));
+      setError('');
+      setNotice(nativeCompletedNotice(pendingNativeCommand.command, status));
     }
   }, [
     nativeHost.status?.bridge_request?.message,

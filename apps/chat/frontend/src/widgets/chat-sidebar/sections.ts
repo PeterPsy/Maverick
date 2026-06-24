@@ -11,10 +11,21 @@ export type FolderSection = {
   emptyLabel: string;
 };
 
-export type ThreadSourceFilter = "all" | "senses";
+export type ThreadSourceFilter = "all" | "senses" | "multi_agent";
 
-export function buildSections(projects: ChatProject[], threads: ChatThread[], sourceFilter: ThreadSourceFilter = "all"): FolderSection[] {
-  const visibleThreads = filterThreadsBySource(threads, sourceFilter);
+export type ThreadSourceBadge = {
+  icon: string;
+  kind: "senses" | "multi_agent";
+  label: string;
+};
+
+export function buildSections(
+  projects: ChatProject[],
+  threads: ChatThread[],
+  sourceFilter: ThreadSourceFilter = "all",
+  multiAgentThreadIds: ReadonlySet<string> = new Set(),
+): FolderSection[] {
+  const visibleThreads = filterThreadsBySource(threads, sourceFilter, multiAgentThreadIds);
   const projectSections: FolderSection[] = projects
     .slice()
     .sort((left, right) => left.name.localeCompare(right.name, "en", { sensitivity: "base" }))
@@ -71,19 +82,37 @@ export function buildSections(projects: ChatProject[], threads: ChatThread[], so
   return sections;
 }
 
-export function filterThreadsBySource(threads: ChatThread[], sourceFilter: ThreadSourceFilter): ChatThread[] {
-  if (sourceFilter !== "senses") {
-    return threads;
+export function filterThreadsBySource(
+  threads: ChatThread[],
+  sourceFilter: ThreadSourceFilter,
+  multiAgentThreadIds: ReadonlySet<string> = new Set(),
+): ChatThread[] {
+  if (sourceFilter === "senses") {
+    return threads.filter(isSensesThread);
   }
-  return threads.filter(isSensesThread);
+  if (sourceFilter === "multi_agent") {
+    return threads.filter((thread) => isMultiAgentThread(thread, multiAgentThreadIds));
+  }
+  return threads;
 }
 
 export function isSensesThread(thread: ChatThread): boolean {
   return thread.source_app_id === "senses";
 }
 
-export function threadSourceBadgeLabel(thread: ChatThread): string | null {
-  return isSensesThread(thread) ? "Senses" : null;
+export function isMultiAgentThread(thread: ChatThread, multiAgentThreadIds: ReadonlySet<string>): boolean {
+  return multiAgentThreadIds.has(thread.thread_id) || multiAgentThreadIds.has(thread.runtime_session_id);
+}
+
+export function threadSourceBadges(thread: ChatThread, multiAgentThreadIds: ReadonlySet<string> = new Set()): ThreadSourceBadge[] {
+  const badges: ThreadSourceBadge[] = [];
+  if (isSensesThread(thread)) {
+    badges.push({ icon: "sensors", kind: "senses", label: "Senses" });
+  }
+  if (isMultiAgentThread(thread, multiAgentThreadIds)) {
+    badges.push({ icon: "account_tree", kind: "multi_agent", label: "Multi-agent" });
+  }
+  return badges;
 }
 
 export function isThreadBusy(thread: ChatThread): boolean {

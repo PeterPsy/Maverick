@@ -1,7 +1,7 @@
 import type { PointerEvent as ReactPointerEvent } from "react";
 import type { ChatProject, ChatThread } from "../../api/client";
 import { BusyChatGlow } from "../BusyChatGlow";
-import { isThreadBusy, isThreadTitlePending, isThreadUnread, threadSourceBadgeLabel } from "./sections";
+import { isThreadBusy, isThreadTitlePending, isThreadUnread, threadSourceBadges } from "./sections";
 import { ThreadInlineActions } from "./ThreadInlineActions";
 import { formatThreadLastMessageTimestamp, threadLastMessageIso } from "./threadTimestamps";
 
@@ -10,6 +10,7 @@ export function ThreadRow({
   expandedThreadId,
   expandedThreadTitle,
   isSelected,
+  multiAgentThreadIds,
   onCloseExpandedThread,
   onMoveThread,
   onRemoveThread,
@@ -32,6 +33,7 @@ export function ThreadRow({
   expandedThreadId: string | null;
   expandedThreadTitle: string;
   isSelected: boolean;
+  multiAgentThreadIds: ReadonlySet<string>;
   onCloseExpandedThread: () => void;
   onMoveThread: (thread: ChatThread, projectId: string | null) => Promise<void>;
   onRemoveThread: (threadId: string) => Promise<void>;
@@ -57,7 +59,7 @@ export function ThreadRow({
   const threadLabel = isTitlePending ? "chat" : thread.title || "chat";
   const lastMessageTimestamp = formatThreadLastMessageTimestamp(thread);
   const lastMessageIso = threadLastMessageIso(thread);
-  const sourceBadgeLabel = threadSourceBadgeLabel(thread);
+  const sourceBadges = threadSourceBadges(thread, multiAgentThreadIds);
 
   return (
     <div
@@ -102,12 +104,15 @@ export function ThreadRow({
                     {thread.title}
                   </p>
                 )}
-                {sourceBadgeLabel ? (
-                  <span className="bs-chat-list__source-badge" title={sourceBadgeLabel}>
-                    <span aria-hidden="true" className="material-symbols-rounded">
-                      eyeglasses
-                    </span>
-                    {sourceBadgeLabel}
+                {sourceBadges.length ? (
+                  <span className="bs-chat-list__source-badges">
+                    {sourceBadges.map((badge) => (
+                      <span className="bs-chat-list__source-badge" key={badge.kind} title={badge.label}>
+                        <span aria-hidden="true" className="material-symbols-rounded">
+                          {badge.icon}
+                        </span>
+                      </span>
+                    ))}
                   </span>
                 ) : null}
               </div>

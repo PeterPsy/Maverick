@@ -13,6 +13,7 @@ export function ProjectSection({
   expandedThreadId,
   expandedThreadTitle,
   isPending,
+  multiAgentThreadIds,
   onAddProject,
   onCancelProjectDeletion,
   onCancelProjectEdit,
@@ -47,6 +48,7 @@ export function ProjectSection({
   expandedThreadId: string | null;
   expandedThreadTitle: string;
   isPending: boolean;
+  multiAgentThreadIds: ReadonlySet<string>;
   onAddProject: () => Promise<void>;
   onCancelProjectDeletion: () => void;
   onCancelProjectEdit: () => void;
@@ -206,6 +208,7 @@ export function ProjectSection({
                 expandedThreadTitle={expandedThreadTitle}
                 isSelected={selectedThreadIds.has(thread.thread_id)}
                 key={thread.thread_id}
+                multiAgentThreadIds={multiAgentThreadIds}
                 onCloseExpandedThread={onCloseExpandedThread}
                 onMoveThread={onMoveThread}
                 onRemoveThread={onRemoveThread}

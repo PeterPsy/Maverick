@@ -9,6 +9,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 const mocks = vi.hoisted(() => ({
   deleteThread: vi.fn(),
   getChatViewFilter: vi.fn(),
+  listInterAgentRuns: vi.fn(),
   listChatProjects: vi.fn(),
   listRuntimeSessionEvents: vi.fn(),
   markThreadRead: vi.fn(),
@@ -20,6 +21,7 @@ const mocks = vi.hoisted(() => ({
 vi.mock("../../api/client", () => ({
   deleteThread: mocks.deleteThread,
   getChatViewFilter: mocks.getChatViewFilter,
+  listInterAgentRuns: mocks.listInterAgentRuns,
   listChatProjects: mocks.listChatProjects,
   listRuntimeSessionEvents: mocks.listRuntimeSessionEvents,
   markThreadRead: mocks.markThreadRead,
@@ -58,6 +60,7 @@ describe("useChatSidebarState search persistence", () => {
     vi.useFakeTimers();
     vi.clearAllMocks();
     mocks.listChatProjects.mockResolvedValue({ projects: [] });
+    mocks.listInterAgentRuns.mockResolvedValue({ items: [] });
     mocks.listRuntimeSessionEvents.mockResolvedValue({ items: [] });
     mocks.setChatViewFilter.mockResolvedValue({ state: { view_filter: { query: "local search" } } });
     container = document.createElement("div");

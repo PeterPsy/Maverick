@@ -37,9 +37,18 @@ describe("chat sidebar search", () => {
   it("keeps the source filter buttons on blurred glass surfaces", () => {
     const styles = readStyle("styles.css");
 
+    expect(styles).toMatch(/\.bs-chat-sidebar-source-filter\s*{[\s\S]*grid-template-columns:\s*repeat\(3, minmax\(0, 1fr\)\);/);
     expect(styles).toMatch(/\.bs-chat-sidebar-source-filter__button\s*{[\s\S]*background:\s*var\(--chat-sidebar-glass-surface\);/);
     expect(styles).toMatch(/\.bs-chat-sidebar-source-filter__button\s*{[\s\S]*backdrop-filter:\s*blur\(26px\);/);
     expect(styles).toMatch(/\.bs-chat-sidebar-source-filter__button\s*{[\s\S]*-webkit-backdrop-filter:\s*blur\(26px\);/);
+  });
+
+  it("keeps source badges compact as icon-only pills", () => {
+    const styles = readStyle("styles.css");
+
+    expect(styles).toMatch(/\.bs-chat-list__source-badge\s*{[\s\S]*width:\s*1\.32rem;/);
+    expect(styles).toMatch(/\.bs-chat-list__source-badge\s*{[\s\S]*padding:\s*0;/);
+    expect(styles).toContain(".bs-chat-list__source-badges");
   });
 });
 

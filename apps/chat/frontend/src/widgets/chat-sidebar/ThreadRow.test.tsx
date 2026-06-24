@@ -52,6 +52,7 @@ describe("ThreadRow", () => {
           expandedThreadId={null}
           expandedThreadTitle=""
           isSelected={false}
+          multiAgentThreadIds={new Set(["multi-thread"])}
           onCloseExpandedThread={vi.fn()}
           onMoveThread={vi.fn()}
           onRemoveThread={vi.fn()}
@@ -107,10 +108,21 @@ describe("ThreadRow", () => {
   });
 
   it("shows a Senses badge for Senses threads", async () => {
-    await renderThreadRow(thread({ source_app_id: "senses", title: "Senses - visual question" }));
+    await renderThreadRow(thread({ source_app_id: "senses", title: "Visual question" }));
 
     const badge = container?.querySelector(".bs-chat-list__source-badge");
-    expect(badge?.textContent).toContain("Senses");
+    expect(badge?.getAttribute("title")).toBe("Senses");
+    expect(badge?.textContent?.trim()).toBe("sensors");
+    expect(container?.textContent).not.toContain("Senses");
+  });
+
+  it("shows an icon-only multi-agent badge for multi-agent threads", async () => {
+    await renderThreadRow(thread({ thread_id: "multi-thread", title: "Coordinated research" }));
+
+    const badge = container?.querySelector(".bs-chat-list__source-badge");
+    expect(badge?.getAttribute("title")).toBe("Multi-agent");
+    expect(badge?.textContent?.trim()).toBe("account_tree");
+    expect(container?.textContent).not.toContain("Multi-agent");
   });
 
   it("does not show a source badge for ordinary chat threads", async () => {

@@ -3,6 +3,7 @@ import type { ChatProject, ChatThread } from "../../api/client";
 import {
   deleteThread,
   getChatViewFilter,
+  listInterAgentRuns,
   listRuntimeSessionEvents,
   listChatProjects,
   markThreadRead,
@@ -44,11 +45,12 @@ import { useThreadTouchSelection } from "./useThreadTouchSelection";
 const CHAT_APP_ID = "chat";
 const TRANSCRIPT_SEARCH_EVENT_LIMIT = 500;
 const TRANSCRIPT_SEARCH_MAX_CONCURRENT = 4;
-const THREAD_SOURCE_FILTERS: ThreadSourceFilter[] = ["all", "senses"];
+const THREAD_SOURCE_FILTERS: ThreadSourceFilter[] = ["all", "senses", "multi_agent"];
 
 export function useChatSidebarState() {
   const [projects, setProjects] = useState<ChatProject[]>([]);
   const [threads, setThreads] = useState<ChatThread[]>([]);
+  const [multiAgentThreadIds, setMultiAgentThreadIds] = useState<Set<string>>(() => new Set());
   const [searchQuery, setSearchQuery] = useState("");
   const [sourceFilter, setSourceFilter] = useState<ThreadSourceFilter>("all");
   const [transcriptSearchTextByThreadId, setTranscriptSearchTextByThreadId] = useState<TranscriptSearchTextByThreadId>({});
@@ -78,13 +80,21 @@ export function useChatSidebarState() {
   const isBulkDeletePendingRef = useRef(isBulkDeletePending);
   const confirmSelectedThreadDeletionRef = useRef<() => Promise<void>>(async () => {});
   const searchTerm = searchQuery.trim();
-  const sourceFilteredThreads = useMemo(() => filterThreadsBySource(threads, sourceFilter), [sourceFilter, threads]);
+  const threadRefreshKey = useMemo(
+    () => threads.map((thread) => `${thread.thread_id}:${thread.runtime_session_id}:${thread.updated_at}:${thread.availability}`).sort().join("|"),
+    [threads],
+  );
+  const sourceFilteredThreads = useMemo(
+    () => filterThreadsBySource(threads, sourceFilter, multiAgentThreadIds),
+    [multiAgentThreadIds, sourceFilter, threads],
+  );
   const sourceFilterCounts = useMemo(
     () => ({
       all: threads.length,
       senses: filterThreadsBySource(threads, "senses").length,
+      multi_agent: filterThreadsBySource(threads, "multi_agent", multiAgentThreadIds).length,
     }),
-    [threads],
+    [multiAgentThreadIds, threads],
   );
   const sections = useMemo(
     () =>
@@ -208,6 +218,25 @@ export function useChatSidebarState() {
     void refreshProjects();
     void refreshViewFilter();
   }, []);
+
+  useEffect(() => {
+    let disposed = false;
+    listInterAgentRuns()
+      .then((payload) => {
+        if (disposed) {
+          return;
+        }
+        setMultiAgentThreadIds(new Set(payload.items.map((item) => item.run.thread_id).filter(Boolean)));
+      })
+      .catch(() => {
+        if (!disposed) {
+          setMultiAgentThreadIds(new Set());
+        }
+      });
+    return () => {
+      disposed = true;
+    };
+  }, [threadRefreshKey]);
 
   useEffect(() => {
     if (!hasLoadedViewFilter) {
@@ -543,6 +572,7 @@ export function useChatSidebarState() {
     isPending,
     isShellMobileLayout,
     moveThread,
+    multiAgentThreadIds,
     pendingProjectDeletion: projectActions.pendingProjectDeletion,
     projects,
     removeEditingProject: projectActions.removeEditingProject,

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { ChatProject, ChatThread } from "../../api/client";
-import { buildSections, filterThreadsBySource, isThreadBusy, isThreadUnread, threadSourceBadgeLabel } from "./sections";
+import { buildSections, filterThreadsBySource, isThreadBusy, isThreadUnread, threadSourceBadges } from "./sections";
 
 function thread(overrides: Partial<ChatThread> = {}): ChatThread {
   return {
@@ -72,9 +72,27 @@ describe("chat sidebar runtime status", () => {
     expect(buildSections([], [chatThread, sensesThread], "senses")[0].items.map((item) => item.thread_id)).toEqual(["senses-thread"]);
   });
 
-  it("labels Senses threads as Senses", () => {
-    expect(threadSourceBadgeLabel(thread({ source_app_id: "senses" }))).toBe("Senses");
-    expect(threadSourceBadgeLabel(thread({ source_app_id: "chat" }))).toBeNull();
+  it("filters multi-agent threads for the Multi view", () => {
+    const chatThread = thread({ thread_id: "chat-thread", runtime_session_id: "chat-session" });
+    const multiThread = thread({ thread_id: "multi-thread", runtime_session_id: "multi-session" });
+    const multiAgentThreadIds = new Set(["multi-thread"]);
+
+    expect(filterThreadsBySource([chatThread, multiThread], "multi_agent", multiAgentThreadIds).map((item) => item.thread_id)).toEqual([
+      "multi-thread",
+    ]);
+    expect(buildSections([], [chatThread, multiThread], "multi_agent", multiAgentThreadIds)[0].items.map((item) => item.thread_id)).toEqual([
+      "multi-thread",
+    ]);
+  });
+
+  it("returns icon-only badge metadata for Senses and multi-agent threads", () => {
+    const multiAgentThreadIds = new Set(["multi-thread"]);
+
+    expect(threadSourceBadges(thread({ source_app_id: "senses" }))).toEqual([{ icon: "sensors", kind: "senses", label: "Senses" }]);
+    expect(threadSourceBadges(thread({ thread_id: "multi-thread" }), multiAgentThreadIds)).toEqual([
+      { icon: "account_tree", kind: "multi_agent", label: "Multi-agent" },
+    ]);
+    expect(threadSourceBadges(thread({ source_app_id: "chat" }))).toEqual([]);
   });
 
   it("uses the runtime thread availability supplied over websocket", () => {

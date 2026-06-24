@@ -53,6 +53,19 @@ function ChatSidebarWidget() {
           <span className="bs-chat-sidebar-source-filter__label">Senses</span>
           <span className="bs-chat-sidebar-source-filter__count">{sidebar.sourceFilterCounts.senses}</span>
         </button>
+        <button
+          aria-label="Multi-agent chats"
+          aria-pressed={sidebar.sourceFilter === "multi_agent"}
+          className={`bs-chat-sidebar-source-filter__button ${sidebar.sourceFilter === "multi_agent" ? "is-active" : ""}`}
+          onClick={() => sidebar.setSourceFilter("multi_agent")}
+          type="button"
+        >
+          <span aria-hidden="true" className="material-symbols-rounded">
+            account_tree
+          </span>
+          <span className="bs-chat-sidebar-source-filter__label">Multi</span>
+          <span className="bs-chat-sidebar-source-filter__count">{sidebar.sourceFilterCounts.multi_agent}</span>
+        </button>
       </div>
 
       <div className="bs-chat-list">
@@ -69,6 +82,7 @@ function ChatSidebarWidget() {
               expandedThreadTitle={sidebar.expandedThreadTitle}
               isPending={sidebar.isPending}
               key={section.id}
+              multiAgentThreadIds={sidebar.multiAgentThreadIds}
               onAddProject={sidebar.addProject}
               onCancelProjectDeletion={sidebar.cancelProjectDeletion}
               onCancelProjectEdit={sidebar.cancelProjectEdit}

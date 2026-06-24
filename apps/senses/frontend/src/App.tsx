@@ -348,6 +348,14 @@ export function App() {
   }
 
   function runNativeCommand(command: NativeCommand) {
+    if (command === 'askAudio' && nativeHost.status?.actions?.can_ask_audio !== true) {
+      setBusyAction('');
+      setPendingNativeCommand(null);
+      setError('');
+      setNotice('Voice is disabled until glasses microphone capture is available.');
+      return;
+    }
+
     const labels: Record<NativeCommand, string> = {
       refreshNativeStatus: 'native-refresh',
       pairGlasses: 'native-pair',
@@ -1002,7 +1010,7 @@ function NativeHeaderActions({
         className="tool-button"
         type="button"
         onClick={() => onCommand('askAudio')}
-        disabled={captureControlsBusy || nativeHostStatus?.actions?.can_ask_audio === false}
+        disabled={captureControlsBusy || nativeHostStatus?.actions?.can_ask_audio !== true}
       >
         <Mic size={16} />
         <span>{voiceLabel}</span>

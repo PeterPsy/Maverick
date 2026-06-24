@@ -134,6 +134,8 @@ def body_from_payload(payload: dict) -> dict:
     body = dict(payload.get("body")) if isinstance(payload.get("body"), dict) else {}
     if isinstance(payload.get("app_secrets"), dict):
         body["_app_secrets"] = dict(payload["app_secrets"])
+    if isinstance(payload.get("provider_config"), dict):
+        body["_provider_config"] = dict(payload["provider_config"])
     body_file = payload.get("body_file") if isinstance(payload.get("body_file"), dict) else {}
     if not body_file:
         return body

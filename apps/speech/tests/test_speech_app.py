@@ -559,6 +559,112 @@ class SpeechAppTests(unittest.TestCase):
         self.assertEqual(query["language"], ["en"])
         self.assertNotIn("detect_language", query)
 
+    def test_transcribe_file_uses_configured_deepgram_audio_model(self) -> None:
+        class FakeResponse:
+            def __enter__(self) -> "FakeResponse":
+                return self
+
+            def __exit__(self, *args: object) -> None:
+                return None
+
+            def read(self) -> bytes:
+                return json.dumps(
+                    {
+                        "metadata": {"duration": 1.0},
+                        "results": {"channels": [{"alternatives": [{"transcript": "file transcript", "words": []}]}]},
+                    }
+                ).encode("utf-8")
+
+        captured: dict[str, object] = {}
+
+        def fake_urlopen(request, timeout: float):
+            captured["url"] = request.full_url
+            return FakeResponse()
+
+        with TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            write_settings(root / "data", {"transcription_engine": "deepgram"})
+            uploaded = root / "storage" / "uploaded"
+            uploaded.mkdir(parents=True)
+            audio_path = uploaded / "sample.wav"
+            audio_path.write_bytes(b"RIFF" + b"\0" * 512)
+            with patch("engines.urllib_request.urlopen", side_effect=fake_urlopen):
+                status_code, payload = handle_action(
+                    root / "data",
+                    root / "storage" / "generated",
+                    {
+                        "action": "transcribe_file",
+                        "workspace_relative_path": "storage/uploaded/sample.wav",
+                        "_app_secrets": {"deepgram-api-key": "deepgram-token"},
+                        "_provider_config": {
+                            "speech_stt": {
+                                "selection": {
+                                    "audio_transcription_model_id": "nova-3-general",
+                                    "conversation_model_id": "flux-general-en",
+                                }
+                            }
+                        },
+                    },
+                    uploaded,
+                )
+
+        query = parse_qs(urlparse(str(captured["url"])).query)
+        self.assertEqual(status_code, 200)
+        self.assertEqual(payload["text"], "file transcript")
+        self.assertEqual(payload["model"], "nova-3-general")
+        self.assertEqual(query["model"], ["nova-3-general"])
+
+    def test_transcribe_audio_one_shot_uses_configured_deepgram_audio_model(self) -> None:
+        class FakeResponse:
+            def __enter__(self) -> "FakeResponse":
+                return self
+
+            def __exit__(self, *args: object) -> None:
+                return None
+
+            def read(self) -> bytes:
+                return json.dumps(
+                    {
+                        "metadata": {"duration": 1.0},
+                        "results": {"channels": [{"alternatives": [{"transcript": "inline transcript", "words": []}]}]},
+                    }
+                ).encode("utf-8")
+
+        captured: dict[str, object] = {}
+
+        def fake_urlopen(request, timeout: float):
+            captured["url"] = request.full_url
+            return FakeResponse()
+
+        with TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            write_settings(root / "data", {"transcription_engine": "deepgram"})
+            with patch("engines.urllib_request.urlopen", side_effect=fake_urlopen):
+                status_code, payload = handle_action(
+                    root / "data",
+                    root / "storage" / "generated",
+                    {
+                        "action": "transcribe_audio",
+                        "content_type": "audio/wav",
+                        "audio_base64": base64.b64encode(b"RIFF" + b"\0" * 512).decode("ascii"),
+                        "_app_secrets": {"deepgram-api-key": "deepgram-token"},
+                        "_provider_config": {
+                            "speech_stt": {
+                                "model_settings": {
+                                    "audio_transcription_model_id": "nova-3-general",
+                                    "conversation_model_id": "flux-general-en",
+                                }
+                            }
+                        },
+                    },
+                )
+
+        query = parse_qs(urlparse(str(captured["url"])).query)
+        self.assertEqual(status_code, 200)
+        self.assertEqual(payload["text"], "inline transcript")
+        self.assertEqual(payload["model"], "nova-3-general")
+        self.assertEqual(query["model"], ["nova-3-general"])
+
     def test_kokoro_openrouter_synthesis_uses_delivered_openrouter_secret(self) -> None:
         class FakeResponse:
             def __enter__(self) -> "FakeResponse":
@@ -714,11 +820,20 @@ class SpeechAppTests(unittest.TestCase):
             {
                 "body": {"action": "list_engines"},
                 "app_secrets": {"deepgram-api-key": "deepgram-token", "openrouter-api-key": "openrouter-token"},
+                "provider_config": {
+                    "speech_stt": {
+                        "selection": {
+                            "audio_transcription_model_id": "nova-3",
+                            "conversation_model_id": "flux-general-multi",
+                        }
+                    }
+                },
             }
         )
 
         self.assertEqual(body["_app_secrets"]["deepgram-api-key"], "deepgram-token")
         self.assertEqual(body["_app_secrets"]["openrouter-api-key"], "openrouter-token")
+        self.assertEqual(body["_provider_config"]["speech_stt"]["selection"]["audio_transcription_model_id"], "nova-3")
 
     def test_engine_health_uses_delivered_app_secrets(self) -> None:
         with TemporaryDirectory() as temp_dir:

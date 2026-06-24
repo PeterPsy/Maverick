@@ -735,6 +735,12 @@ def _invoke_dependency_backend(
             "generated_storage_root": str(paths.generated_storage),
             "app_secrets": app_secret_result.secrets,
             "app_secret_errors": app_secret_result.errors,
+            "provider_config": _dependency_provider_config(
+                state,
+                workspace_id=workspace_id,
+                provider_id=provider_id,
+                interface=str(dependency.get("interface") or ""),
+            ),
             "effective_mode": "full-access",
             "body": body,
             "runtime_session_id": "",
@@ -765,6 +771,20 @@ def _dependency_candidate_surfaces(candidate: dict[str, Any]) -> set[str]:
     if not isinstance(raw_surfaces, list):
         return set()
     return {str(item).strip() for item in raw_surfaces if str(item).strip()}
+
+
+def _dependency_provider_config(
+    state,
+    *,
+    workspace_id: str,
+    provider_id: str,
+    interface: str,
+) -> dict[str, Any]:
+    if provider_id != "speech" or interface != "speech.transcription":
+        return {}
+    from core.api.provider_api import workspace_speech_stt_status
+
+    return {"speech_stt": workspace_speech_stt_status(state, workspace_id=workspace_id)}
 
 
 def _dependency_backend_provider_secret_requests(

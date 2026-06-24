@@ -102,6 +102,68 @@ class RuntimeRequestsTestCase(unittest.TestCase):
         self.assertTrue(str(payload["uploaded_storage_root"]).endswith("workspaces/default/storage/uploaded"))
         self.assertTrue(str(payload["generated_storage_root"]).endswith("workspaces/default/storage/generated"))
 
+    def test_dependency_backend_passes_speech_provider_config(self) -> None:
+        captured_payloads: list[dict[str, object]] = []
+        speech_status = {
+            "profile": "speech_stt",
+            "selection": {
+                "provider_id": "deepgram",
+                "audio_transcription_model_id": "nova-3",
+                "conversation_model_id": "flux-general-multi",
+            },
+            "model_settings": {
+                "audio_transcription_model_id": "nova-3",
+                "conversation_model_id": "flux-general-multi",
+            },
+        }
+
+        def fake_resolve_dependencies(*_args, **_kwargs):
+            return {
+                "status": "resolved",
+                "dependencies": [
+                    {
+                        "alias": "speech-to-text",
+                        "interface": "speech.transcription",
+                        "status": "resolved",
+                        "selected_provider_app_ids": ["speech"],
+                        "candidates": [{"app_id": "speech", "surfaces": ["backend"]}],
+                    }
+                ],
+            }
+
+        def fake_resolve_surface(*_args, **_kwargs):
+            return Path("/provider/speech"), self._provider_parsed(read_secrets=["deepgram-api-key"])
+
+        def fake_run_entrypoint(_entrypoint, *, payload, **_kwargs):
+            captured_payloads.append(payload)
+            if payload.get("surface") == "secret_selector":
+                return {"requires_secrets": False}
+            return {"status_code": 200, "json": {"ok": True}}
+
+        def fake_secret_delivery(*_args, **_kwargs):
+            return SimpleNamespace(secrets={"deepgram-api-key": "token"}, errors=[])
+
+        with (
+            patch.object(runtime_requests, "resolve_app_dependencies", fake_resolve_dependencies),
+            patch.object(runtime_requests, "resolve_workspace_app_surface", fake_resolve_surface),
+            patch.object(runtime_requests, "run_json_entrypoint", fake_run_entrypoint),
+            patch.object(runtime_requests, "resolve_app_secret_payload_requests", fake_secret_delivery),
+            patch("core.api.provider_api.workspace_speech_stt_status", return_value=speech_status),
+        ):
+            result = runtime_requests._invoke_dependency_backend(
+                self._state(),
+                workspace_id="default",
+                app_id="chat",
+                dependency_alias="speech-to-text",
+                body={"action": "transcribe_audio"},
+                start_path=Path(__file__).resolve().parents[3],
+            )
+
+        payload = captured_payloads[-1]
+        self.assertEqual(result["json"], {"ok": True})
+        self.assertEqual(payload["app_id"], "speech")
+        self.assertEqual(payload["provider_config"], {"speech_stt": speech_status})
+
     def test_dependency_backend_requires_selected_provider_backend_surface(self) -> None:
         def fake_resolve_dependencies(*_args, **_kwargs):
             return self._resolved_dependencies(surfaces=["mcp"])

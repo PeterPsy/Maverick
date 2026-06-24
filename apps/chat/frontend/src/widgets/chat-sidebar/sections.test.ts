@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { ChatProject, ChatThread } from "../../api/client";
-import { buildSections, isThreadBusy, isThreadUnread } from "./sections";
+import { buildSections, filterThreadsBySource, isThreadBusy, isThreadUnread, threadSourceBadgeLabel } from "./sections";
 
 function thread(overrides: Partial<ChatThread> = {}): ChatThread {
   return {
@@ -62,6 +62,19 @@ describe("chat sidebar runtime status", () => {
     expect(sections).toHaveLength(1);
     expect(sections[0]).toMatchObject({ id: "project-1", title: "Client", canManage: true });
     expect(sections[0].items.map((item) => item.thread_id)).toEqual(["assigned"]);
+  });
+
+  it("filters Senses threads for the Occhiali view", () => {
+    const chatThread = thread({ thread_id: "chat-thread", source_app_id: "chat" });
+    const sensesThread = thread({ thread_id: "senses-thread", source_app_id: "senses" });
+
+    expect(filterThreadsBySource([chatThread, sensesThread], "senses").map((item) => item.thread_id)).toEqual(["senses-thread"]);
+    expect(buildSections([], [chatThread, sensesThread], "senses")[0].items.map((item) => item.thread_id)).toEqual(["senses-thread"]);
+  });
+
+  it("labels Senses threads as Occhiali", () => {
+    expect(threadSourceBadgeLabel(thread({ source_app_id: "senses" }))).toBe("Occhiali");
+    expect(threadSourceBadgeLabel(thread({ source_app_id: "chat" }))).toBeNull();
   });
 
   it("uses the runtime thread availability supplied over websocket", () => {

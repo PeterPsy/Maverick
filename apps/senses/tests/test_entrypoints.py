@@ -1,4 +1,4 @@
-"""Phase 7 backend tests for Senses."""
+"""Phase 8 backend tests for Senses."""
 
 from __future__ import annotations
 
@@ -33,11 +33,27 @@ def resolved_storage_dependencies(
     chat_provider_app_id: str | None = "chat",
     chat_status: str = "resolved",
     chat_candidates: list[str] | None = None,
+    speech_provider_app_id: str | None = None,
+    speech_status: str = "optional_unset",
+    speech_candidates: list[str] | None = None,
+    tts_provider_app_id: str | None = None,
+    tts_status: str = "optional_unset",
+    tts_candidates: list[str] | None = None,
 ) -> dict[str, object]:
     effective_chat_candidates = (
         chat_candidates
         if chat_candidates is not None
         else ([chat_provider_app_id] if chat_provider_app_id else [])
+    )
+    effective_speech_candidates = (
+        speech_candidates
+        if speech_candidates is not None
+        else ([speech_provider_app_id] if speech_provider_app_id else [])
+    )
+    effective_tts_candidates = (
+        tts_candidates
+        if tts_candidates is not None
+        else ([tts_provider_app_id] if tts_provider_app_id else [])
     )
     return {
         "workspace_id": "default",
@@ -78,6 +94,36 @@ def resolved_storage_dependencies(
                 "candidates": [
                     {"app_id": app_id, "surfaces": ["backend", "view"]}
                     for app_id in effective_chat_candidates
+                ],
+                "blocked_reason": None,
+            },
+            {
+                "alias": "speech-to-text",
+                "interface": "speech.transcription",
+                "version": "^1",
+                "required": False,
+                "cardinality": "one",
+                "status": speech_status,
+                "selected_provider_app_ids": [speech_provider_app_id] if speech_provider_app_id and speech_status == "resolved" else [],
+                "stale_provider_app_ids": [],
+                "candidates": [
+                    {"app_id": app_id, "surfaces": ["backend", "cli", "mcp"]}
+                    for app_id in effective_speech_candidates
+                ],
+                "blocked_reason": None,
+            },
+            {
+                "alias": "text-to-speech",
+                "interface": "speech.synthesis",
+                "version": "^1",
+                "required": False,
+                "cardinality": "one",
+                "status": tts_status,
+                "selected_provider_app_ids": [tts_provider_app_id] if tts_provider_app_id and tts_status == "resolved" else [],
+                "stale_provider_app_ids": [],
+                "candidates": [
+                    {"app_id": app_id, "surfaces": ["backend"]}
+                    for app_id in effective_tts_candidates
                 ],
                 "blocked_reason": None,
             },
@@ -197,6 +243,11 @@ def png_with_text_metadata(*, filter_byte: int = 0, extra_chunks: tuple[bytes, .
     )
 
 
+def wav_audio() -> bytes:
+    payload = bytes([0] * 160)
+    return b"RIFF" + (len(payload) + 36).to_bytes(4, "little") + b"WAVEfmt " + bytes([0] * 28) + b"data" + len(payload).to_bytes(4, "little") + payload
+
+
 def capture_request(
     completed: dict[str, object],
     *,
@@ -226,6 +277,42 @@ def capture_request(
         "captured_at": datetime.now(tz=UTC).isoformat().replace("+00:00", "Z"),
         "metadata": {"adapter_id": "meta_glasses", "width": 1600, "height": 1200},
     }
+
+
+def audio_request(
+    completed: dict[str, object],
+    *,
+    request_id: str = "audio-req-1",
+    idempotency_key: str = "audio-idem-1",
+    content: bytes | None = None,
+    content_type: str = "audio/wav",
+    prompt: str = "Cosa ho appena chiesto?",
+    dependencies: dict[str, object] | None = None,
+    duration_seconds: float | None = 1.2,
+) -> dict[str, object]:
+    body = content if content is not None else wav_audio()
+    payload: dict[str, object] = {
+        "action": "ingest.audio",
+        "_workspace_id": "default",
+        "_app_actor": actor(),
+        "_app_dependencies": dependencies or resolved_storage_dependencies(),
+        "schema_version": "senses.audio.v1",
+        "request_id": request_id,
+        "device_id": completed["device"]["device_id"],
+        "device_session_id": completed["device_session"]["device_session_id"],
+        "idempotency_key": idempotency_key,
+        "client_capture_id": "ios-audio-local-1",
+        "input_mode": "audio.push_to_talk",
+        "prompt": prompt,
+        "content_type": content_type,
+        "content_base64": b64encode(body).decode("ascii"),
+        "content_sha256": hashlib.sha256(body).hexdigest(),
+        "captured_at": datetime.now(tz=UTC).isoformat().replace("+00:00", "Z"),
+        "metadata": {"adapter_id": "meta_glasses", "origin_label": "Occhiali"},
+    }
+    if duration_seconds is not None:
+        payload["duration_seconds"] = duration_seconds
+    return payload
 
 
 def storage_callback_payload(
@@ -327,7 +414,7 @@ def runtime_callback_payload(
     }
 
 
-class SensesPhase7EntrypointTest(unittest.TestCase):
+class SensesPhase8EntrypointTest(unittest.TestCase):
     def test_schema_is_workspace_scoped_and_idempotent(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             data_root = Path(tmp)
@@ -363,7 +450,7 @@ class SensesPhase7EntrypointTest(unittest.TestCase):
             self.assertEqual(manifest["action"], "manifest")
             self.assertIs(manifest["ok"], True)
             self.assertIs(manifest["available"], True)
-            self.assertEqual(manifest["phase"], "phase-7")
+            self.assertEqual(manifest["phase"], "phase-8")
             self.assertIs(manifest["auth"]["user_session_ingest_supported"], True)
             self.assertIs(manifest["auth"]["raw_device_auth_supported"], False)
             self.assertNotIn("device_ingress_supported", manifest["auth"])
@@ -376,6 +463,7 @@ class SensesPhase7EntrypointTest(unittest.TestCase):
             self.assertIn("devices.revoke", manifest["backend_actions"])
             self.assertIn("captures.get", manifest["backend_actions"])
             self.assertIn("ingest.frame", manifest["backend_actions"])
+            self.assertIn("ingest.audio", manifest["backend_actions"])
             self.assertIn("routing.dispatch_capture", manifest["backend_actions"])
             self.assertIn("routing.reset", manifest["backend_actions"])
             self.assertIn("storage_write.completed", manifest["callback_actions"])
@@ -869,6 +957,140 @@ class SensesPhase7EntrypointTest(unittest.TestCase):
             self.assertNotIn(b"GPSSECRET", sanitized)
             self.assertEqual(hashlib.sha256(sanitized).hexdigest(), accepted["storage"]["sha256"])
             self.assertEqual(len(sanitized), accepted["storage"]["size_bytes"])
+
+    def test_ingest_audio_accepts_bounded_audio_without_speech_provider(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            data_root = Path(tmp)
+            completed = start_and_complete_device(data_root)
+
+            status, accepted = handle_action(data_root, audio_request(completed))
+
+            self.assertEqual(status, 202)
+            self.assertEqual(accepted["schema_version"], "senses.audio.accepted.v1")
+            self.assertEqual(accepted["status"], "accepted")
+            self.assertEqual(accepted["transcription"]["status"], "unavailable")
+            self.assertEqual(len(accepted["dependency_backend_requests"]), 1)
+            storage_request = accepted["dependency_backend_requests"][0]
+            self.assertEqual(storage_request["dependency_alias"], "storage-file-content-write")
+            self.assertTrue(accepted["storage"]["workspace_relative_path"].endswith(".wav"))
+            stored_audio = b64decode(storage_request["body"]["content_base64"])
+            self.assertTrue(stored_audio.startswith(b"RIFF"))
+            self.assertEqual(hashlib.sha256(stored_audio).hexdigest(), accepted["storage"]["sha256"])
+
+            with closing(sqlite3.connect(db_path(data_root))) as db:
+                capture = db.execute(
+                    "SELECT input_mode, content_type, metadata_json FROM captures WHERE capture_id = ?",
+                    (accepted["capture_id"],),
+                ).fetchone()
+            self.assertEqual(capture[0], "audio.push_to_talk")
+            self.assertEqual(capture[1], "audio/wav")
+            metadata = json.loads(capture[2])
+            self.assertEqual(metadata["duration_seconds"], 1.2)
+            self.assertNotIn("transcription", metadata)
+
+    def test_ingest_audio_uses_speech_dependency_and_dispatches_transcript(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            data_root = Path(tmp)
+            completed = start_and_complete_device(data_root)
+            dependencies = resolved_storage_dependencies(
+                speech_provider_app_id="speech",
+                speech_status="resolved",
+            )
+
+            status, accepted = handle_action(
+                data_root,
+                audio_request(
+                    completed,
+                    request_id="audio-with-speech",
+                    idempotency_key="audio-with-speech",
+                    dependencies=dependencies,
+                ),
+            )
+            self.assertEqual(status, 202)
+            self.assertEqual(accepted["transcription"]["status"], "pending")
+            self.assertEqual(accepted["transcription"]["provider_app_id"], "speech")
+            self.assertEqual(
+                [request["dependency_alias"] for request in accepted["dependency_backend_requests"]],
+                ["storage-file-content-write", "speech-to-text"],
+            )
+            speech_request = accepted["dependency_backend_requests"][1]
+            self.assertEqual(speech_request["body"]["action"], "transcribe_audio")
+            self.assertEqual(speech_request["body"]["content_type"], "audio/wav")
+            self.assertEqual(speech_request["callback"]["action"], "speech_transcription.completed")
+
+            status, transcribed = handle_action(
+                data_root,
+                {
+                    "action": "speech_transcription.completed",
+                    "_workspace_id": "default",
+                    "_app_surface": "dependency_backend_request_callback",
+                    "_app_dependencies": dependencies,
+                    "capture_id": accepted["capture_id"],
+                    "request_id": speech_request["request_id"],
+                    "dependency_alias": "speech-to-text",
+                    "dependency_backend_status": "completed",
+                    "dependency_backend_result": {
+                        "status_code": 200,
+                        "dependency_provider_app_id": "speech",
+                        "json": {
+                            "job_id": "stt_test",
+                            "text": "ciao Maverick",
+                            "language": "it",
+                            "duration_seconds": 1.2,
+                        },
+                    },
+                    "request": speech_request,
+                },
+            )
+            self.assertEqual(status, 200)
+            self.assertEqual(transcribed["transcription"]["status"], "completed")
+            self.assertEqual(transcribed["transcription"]["text"], "ciao Maverick")
+
+            status, stored = handle_action(
+                data_root,
+                storage_callback_payload(
+                    accepted,
+                    file_id=f"generated:senses/{accepted['capture_id']}",
+                ),
+            )
+            self.assertEqual(status, 200)
+            self.assertEqual(stored["capture"]["status"], "stored")
+
+            status, dispatch = handle_action(
+                data_root,
+                {
+                    "action": "routing.dispatch_capture",
+                    "_workspace_id": "default",
+                    "_app_actor": actor(),
+                    "_app_dependencies": dependencies,
+                    "capture_id": accepted["capture_id"],
+                    "agent_id": "chat",
+                },
+            )
+            self.assertEqual(status, 202)
+            runtime_request = dispatch["runtime_launch_requests"][0]
+            self.assertIn("Transcript: ciao Maverick", runtime_request["input_text"])
+            self.assertEqual(runtime_request["attachments"][0]["content_type"], "audio/wav")
+            self.assertIn("domanda vocale", runtime_request["title"])
+
+    def test_ingest_audio_requires_bounded_duration(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            data_root = Path(tmp)
+            completed = start_and_complete_device(data_root)
+
+            status, missing = handle_action(
+                data_root,
+                audio_request(completed, request_id="audio-no-duration", idempotency_key="audio-no-duration", duration_seconds=None),
+            )
+            self.assertEqual(status, 400)
+            self.assertEqual(missing["error"], "invalid_audio_duration")
+
+            status, too_long = handle_action(
+                data_root,
+                audio_request(completed, request_id="audio-too-long", idempotency_key="audio-too-long", duration_seconds=61),
+            )
+            self.assertEqual(status, 413)
+            self.assertEqual(too_long["error"], "audio_duration_too_long")
 
     def test_ingest_frame_idempotency_success_and_conflict(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -1640,7 +1862,7 @@ class SensesPhase7EntrypointTest(unittest.TestCase):
                 },
             )
             self.assertTrue(cli_manifest["ok"])
-            self.assertEqual(cli_manifest["phase"], "phase-7")
+            self.assertEqual(cli_manifest["phase"], "phase-8")
             self.assertIs(cli_manifest["auth"]["user_session_ingest_supported"], True)
             self.assertIs(cli_manifest["auth"]["raw_device_auth_supported"], False)
             self.assertNotIn("device_ingress_supported", cli_manifest["auth"])
@@ -1648,7 +1870,7 @@ class SensesPhase7EntrypointTest(unittest.TestCase):
             self.assertFalse(cli_overview["ok"])
             self.assertEqual(cli_overview["error"], "unsupported_cli_action")
             self.assertTrue(mcp_manifest["ok"])
-            self.assertEqual(mcp_manifest["phase"], "phase-7")
+            self.assertEqual(mcp_manifest["phase"], "phase-8")
             self.assertIs(mcp_manifest["auth"]["user_session_ingest_supported"], True)
             self.assertIs(mcp_manifest["auth"]["raw_device_auth_supported"], False)
             self.assertNotIn("device_ingress_supported", mcp_manifest["auth"])
@@ -1656,7 +1878,7 @@ class SensesPhase7EntrypointTest(unittest.TestCase):
             self.assertFalse(mcp_pairing["ok"])
             self.assertEqual(mcp_pairing["error"], "unsupported_tool")
             self.assertTrue(mcp_override["ok"])
-            self.assertEqual(mcp_override["phase"], "phase-7")
+            self.assertEqual(mcp_override["phase"], "phase-8")
             self.assertNotIn("pairing", mcp_override)
             self.assertFalse(db_path(Path(tmp)).exists())
 

@@ -105,4 +105,17 @@ describe("ThreadRow", () => {
     expect(timestamp?.textContent).toMatch(/^\d{2} \S+ \d{2}:\d{2}$/);
     expect(timestamp?.textContent).not.toMatch(/\d{2}:\d{2}:\d{2}/);
   });
+
+  it("shows an Occhiali badge for Senses threads", async () => {
+    await renderThreadRow(thread({ source_app_id: "senses", title: "Occhiali - domanda visiva" }));
+
+    const badge = container?.querySelector(".bs-chat-list__source-badge");
+    expect(badge?.textContent).toContain("Occhiali");
+  });
+
+  it("does not show a source badge for ordinary chat threads", async () => {
+    await renderThreadRow(thread({ source_app_id: "chat" }));
+
+    expect(container?.querySelector(".bs-chat-list__source-badge")).toBeNull();
+  });
 });

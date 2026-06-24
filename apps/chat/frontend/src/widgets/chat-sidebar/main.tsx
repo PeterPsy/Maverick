@@ -32,6 +32,30 @@ function ChatSidebarWidget() {
         />
       </div>
 
+      <div aria-label="Chat source filters" className="bs-chat-sidebar-source-filter" role="group">
+        <button
+          aria-pressed={sidebar.sourceFilter === "all"}
+          className={`bs-chat-sidebar-source-filter__button ${sidebar.sourceFilter === "all" ? "is-active" : ""}`}
+          onClick={() => sidebar.setSourceFilter("all")}
+          type="button"
+        >
+          <span className="bs-chat-sidebar-source-filter__label">Tutte</span>
+          <span className="bs-chat-sidebar-source-filter__count">{sidebar.sourceFilterCounts.all}</span>
+        </button>
+        <button
+          aria-pressed={sidebar.sourceFilter === "senses"}
+          className={`bs-chat-sidebar-source-filter__button ${sidebar.sourceFilter === "senses" ? "is-active" : ""}`}
+          onClick={() => sidebar.setSourceFilter("senses")}
+          type="button"
+        >
+          <span aria-hidden="true" className="material-symbols-rounded">
+            eyeglasses
+          </span>
+          <span className="bs-chat-sidebar-source-filter__label">Occhiali</span>
+          <span className="bs-chat-sidebar-source-filter__count">{sidebar.sourceFilterCounts.senses}</span>
+        </button>
+      </div>
+
       <div className="bs-chat-list">
         {sidebar.isInitialLoading ? (
           <ChatSidebarSkeleton />

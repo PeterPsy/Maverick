@@ -132,6 +132,8 @@ input {
   --chat-sidebar-scroll-under-bottom: 6.8rem;
   --chat-sidebar-scroll-under-top: calc(3rem + 0.75rem);
   --chat-sidebar-search-height: 2.65rem;
+  --chat-sidebar-source-filter-height: 2.1rem;
+  --chat-sidebar-source-filter-top: calc(var(--chat-sidebar-scroll-under-top) + var(--chat-sidebar-search-height) + 0.44rem);
   position: relative;
   display: block;
   width: 100%;
@@ -199,6 +201,77 @@ input {
 .bs-chat-sidebar-search-frame:focus-within {
   border-color: var(--maverick-accent);
   box-shadow: 0 0 0 3px rgba(var(--maverick-contrast-rgb), 0.18);
+}
+
+.bs-chat-sidebar-source-filter {
+  position: absolute;
+  top: var(--chat-sidebar-source-filter-top);
+  left: 0;
+  right: 0;
+  z-index: 3;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.38rem;
+  height: var(--chat-sidebar-source-filter-height);
+  min-height: var(--chat-sidebar-source-filter-height);
+}
+
+.bs-chat-sidebar-source-filter__button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.34rem;
+  min-width: 0;
+  height: var(--chat-sidebar-source-filter-height);
+  padding: 0 0.58rem;
+  border: 1px solid transparent;
+  border-radius: var(--chat-sidebar-control-radius);
+  background: var(--chat-sidebar-glass-surface);
+  box-shadow: var(--chat-sidebar-inner-edge);
+  color: var(--maverick-text-muted);
+  font-size: 0.72rem;
+  line-height: 1;
+  transition:
+    background 140ms ease,
+    border-color 140ms ease,
+    color 140ms ease;
+}
+
+.bs-chat-sidebar-source-filter__button:hover,
+.bs-chat-sidebar-source-filter__button:focus-visible {
+  border-color: var(--chat-sidebar-soft-border);
+  background: var(--chat-sidebar-soft-surface-hover);
+  color: var(--maverick-text);
+  outline: none;
+}
+
+.bs-chat-sidebar-source-filter__button.is-active {
+  border-color: rgba(var(--maverick-contrast-rgb), 0.14);
+  background: var(--chat-sidebar-soft-surface-active);
+  color: var(--maverick-text);
+}
+
+.bs-chat-sidebar-source-filter__button .material-symbols-rounded {
+  width: 0.92rem;
+  height: 0.92rem;
+  font-size: 0.92rem;
+}
+
+.bs-chat-sidebar-source-filter__label,
+.bs-chat-sidebar-source-filter__count {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.bs-chat-sidebar-source-filter__count {
+  min-width: 1.18rem;
+  padding: 0.08rem 0.3rem;
+  border-radius: 999px;
+  background: var(--chat-sidebar-soft-surface);
+  color: var(--maverick-text-muted);
+  text-align: center;
 }
 
 @media (max-width: 979px) {
@@ -272,7 +345,7 @@ input {
   overflow-y: auto;
   overscroll-behavior: contain;
   -webkit-overflow-scrolling: touch;
-  padding: calc(var(--chat-sidebar-scroll-under-top) + var(--chat-sidebar-search-height) + 0.72rem) 0 var(--chat-sidebar-scroll-under-bottom);
+  padding: calc(var(--chat-sidebar-source-filter-top) + var(--chat-sidebar-source-filter-height) + 0.72rem) 0 var(--chat-sidebar-scroll-under-bottom);
   scrollbar-width: none;
 }
 
@@ -798,8 +871,9 @@ input {
 }
 
 .bs-chat-list__copy {
-  display: grid;
-  justify-items: start;
+  display: flex;
+  align-items: center;
+  gap: 0.42rem;
   min-width: 0;
   overflow: hidden;
   text-align: left;
@@ -827,7 +901,8 @@ input {
 .bs-chat-list__title {
   display: block;
   margin: 0;
-  width: 100%;
+  flex: 0 1 auto;
+  width: auto;
   min-width: 0;
   overflow: hidden;
   font-size: 0.76rem;
@@ -836,6 +911,32 @@ input {
   line-height: 1.25;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.bs-chat-list__source-badge {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: 0.18rem;
+  max-width: 5.4rem;
+  height: 1.32rem;
+  padding: 0 0.42rem;
+  border: 1px solid rgba(var(--maverick-contrast-rgb), 0.11);
+  border-radius: 999px;
+  background: var(--chat-sidebar-soft-surface);
+  color: var(--maverick-text-muted);
+  box-shadow: var(--chat-sidebar-inner-edge);
+  font-size: 0.62rem;
+  line-height: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.bs-chat-list__source-badge .material-symbols-rounded {
+  width: 0.82rem;
+  height: 0.82rem;
+  font-size: 0.82rem;
 }
 
 .bs-chat-list__title-skeleton {

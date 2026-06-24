@@ -39,7 +39,7 @@ if action not in CLI_ACTIONS:
         {
             "ok": False,
             "error": "unsupported_cli_action",
-            "detail": f"Senses CLI action `{action}` is not available in Phase 7 CLI context.",
+            "detail": f"Senses CLI action `{action}` is not available in Phase 8 CLI context.",
             "allowed_actions": sorted(CLI_ACTIONS),
             "status_code": 400,
         }

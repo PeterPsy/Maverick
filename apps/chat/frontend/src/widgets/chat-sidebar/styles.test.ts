@@ -28,7 +28,9 @@ describe("chat sidebar search", () => {
     expect(styles).toContain("border-radius: 22px;");
     expect(styles).toContain("backdrop-filter: blur(26px);");
     expect(styles).toContain(".bs-chat-sidebar-search-frame:focus-within");
-    expect(styles).toContain("padding: calc(var(--chat-sidebar-scroll-under-top) + var(--chat-sidebar-search-height) + 0.72rem) 0 var(--chat-sidebar-scroll-under-bottom);");
+    expect(styles).toMatch(
+      /padding: calc\(var\(--chat-sidebar-(?:scroll-under-top\) \+ var\(--chat-sidebar-search-height|source-filter-top\) \+ var\(--chat-sidebar-source-filter-height)\) \+ 0\.72rem\) 0 var\(--chat-sidebar-scroll-under-bottom\);/,
+    );
   });
 });
 

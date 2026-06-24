@@ -1,4 +1,4 @@
-"""Contract tests for Senses Phase 7."""
+"""Contract tests for Senses Phase 8."""
 
 from __future__ import annotations
 
@@ -44,13 +44,17 @@ class SensesContractTest(unittest.TestCase):
         self.assertEqual(requirements["storage-file-content-write"].interface, "file.content.write")
         self.assertEqual(requirements["storage-file-catalog"].interface, "file.catalog")
         self.assertEqual(requirements["chat-communication"].interface, "communication.chat")
+        self.assertEqual(requirements["speech-to-text"].interface, "speech.transcription")
+        self.assertEqual(requirements["text-to-speech"].interface, "speech.synthesis")
         self.assertTrue(requirements["storage-file-content-write"].required)
         self.assertTrue(requirements["storage-file-catalog"].required)
         self.assertFalse(requirements["chat-communication"].required)
+        self.assertFalse(requirements["speech-to-text"].required)
+        self.assertFalse(requirements["text-to-speech"].required)
 
     def test_contract_declares_device_registry_interface_and_events(self) -> None:
         contract = json.loads((APP_ROOT / "app_contract.json").read_text(encoding="utf-8"))
-        self.assertEqual(contract["version"], "0.7.0")
+        self.assertEqual(contract["version"], "0.8.0")
         self.assertEqual(contract["presentation"]["frontend_role"], "workspace")
         self.assertEqual(contract["storage"]["data_schema_version"], "4")
         self.assertTrue(contract["permissions"]["runtime"]["create_sessions"])

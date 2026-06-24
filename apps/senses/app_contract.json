@@ -2,8 +2,8 @@
   "app_id": "senses",
   "contract_version": "1.0",
   "name": "Senses",
-  "version": "0.7.0",
-  "description": "Device and sensor connector for Maverick workspace inputs with user-session pairing, Storage-backed captures, and runtime routing to Chat.",
+  "version": "0.8.0",
+  "description": "Device and sensor connector for Maverick workspace inputs with user-session pairing, Storage-backed frame/audio captures, and runtime routing to Chat.",
   "publisher": "maverick",
   "minimum_core_version": "0.1.0",
   "provides": [
@@ -42,6 +42,22 @@
       "required": false,
       "cardinality": "one",
       "description": "Optional workspace Chat provider used to expose verified runtime thread deep links for routed Senses captures."
+    },
+    {
+      "alias": "speech-to-text",
+      "interface": "speech.transcription",
+      "version": "^1",
+      "required": false,
+      "cardinality": "one",
+      "description": "Optional Speech provider used to transcribe bounded push-to-talk audio captures before Chat routing."
+    },
+    {
+      "alias": "text-to-speech",
+      "interface": "speech.synthesis",
+      "version": "^1",
+      "required": false,
+      "cardinality": "one",
+      "description": "Optional Speech provider reserved for non-blocking spoken response playback when clients request it."
     }
   ],
   "distribution": {

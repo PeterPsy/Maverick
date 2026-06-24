@@ -1,7 +1,7 @@
 import type { PointerEvent as ReactPointerEvent } from "react";
 import type { ChatProject, ChatThread } from "../../api/client";
 import { BusyChatGlow } from "../BusyChatGlow";
-import { isThreadBusy, isThreadTitlePending, isThreadUnread } from "./sections";
+import { isThreadBusy, isThreadTitlePending, isThreadUnread, threadSourceBadgeLabel } from "./sections";
 import { ThreadInlineActions } from "./ThreadInlineActions";
 import { formatThreadLastMessageTimestamp, threadLastMessageIso } from "./threadTimestamps";
 
@@ -57,6 +57,7 @@ export function ThreadRow({
   const threadLabel = isTitlePending ? "chat" : thread.title || "chat";
   const lastMessageTimestamp = formatThreadLastMessageTimestamp(thread);
   const lastMessageIso = threadLastMessageIso(thread);
+  const sourceBadgeLabel = threadSourceBadgeLabel(thread);
 
   return (
     <div
@@ -101,6 +102,14 @@ export function ThreadRow({
                     {thread.title}
                   </p>
                 )}
+                {sourceBadgeLabel ? (
+                  <span className="bs-chat-list__source-badge" title={sourceBadgeLabel}>
+                    <span aria-hidden="true" className="material-symbols-rounded">
+                      eyeglasses
+                    </span>
+                    {sourceBadgeLabel}
+                  </span>
+                ) : null}
               </div>
             </div>
           </button>

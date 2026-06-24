@@ -1,21 +1,22 @@
 # Senses
 
-Senses is a root Maverick app for device and sensor inputs. Phase 7 keeps the
-Phase 4 backend contract for user-session pairing, the workspace-scoped device
-registry, authenticated frame ingestion through Storage-backed capture records,
-and explicit routing from stored captures into Maverick Chat runtime threads
-without adding a public bearer-token ingress. It keeps the existing workspace UI
-as the primary device surface and adds Chat mapping visibility, Chat status
-filters, and clearer visual-origin thread titles for the Senses MVP.
+Senses is a root Maverick app for device and sensor inputs. Phase 8 keeps the
+user-session pairing, workspace-scoped device registry, authenticated frame
+ingestion, and explicit routing from stored captures into Maverick Chat runtime
+threads without adding a public bearer-token ingress. It adds the Audio MVP:
+bounded push-to-talk audio ingestion, Storage-backed audio captures, optional
+Speech transcription through a declared provider dependency, and textual Chat
+routing even when Speech/TTS is unavailable.
 
-## Phase 7 Surfaces
+## Phase 8 Surfaces
 
 - frontend: `frontend/dist`
 - backend: `manifest`, `health`, `overview`, `pairing.start`,
   `pairing.complete`, `pairing.status`, `devices.list`, `devices.revoke`,
   `settings.get`, `settings.update`, `captures.get`, `ingest.frame`,
+  `ingest.audio`,
   `routing.dispatch_capture`, `routing.reset`
-- dependency callback: `storage_write.completed`
+- dependency callbacks: `storage_write.completed`, `speech_transcription.completed`
 - runtime callback: `runtime_dispatch.completed`
 - CLI: `senses` for manifest, health, and reference discovery
 - MCP: `senses_operations_manifest`, `senses_reference_manifest`,
@@ -25,7 +26,7 @@ filters, and clearer visual-origin thread titles for the Senses MVP.
 
 The MVP auth mode is `user_session_mvp`. Mounted backend calls use the Maverick
 user session supplied by `/api/apps/senses/backend`; Senses does not accept a raw
-device token in Phase 7. Pairing, registry, settings, ingestion, and routing
+device token in Phase 8. Pairing, registry, settings, ingestion, and routing
 operations are backend/view-only because standard CLI/MCP app contexts do not
 carry a Maverick user session.
 
@@ -101,6 +102,32 @@ The `storage_write.completed` dependency callback updates the capture to
 `stored` with Storage file id, workspace-relative path, sha256 and size. It does
 not return runtime launch requests.
 
+## Audio Ingestion
+
+`ingest.audio` uses the same user-session and paired-device policy as
+`ingest.frame`. It requires `schema_version=senses.audio.v1`, `request_id`,
+`idempotency_key`, `content_base64`, a supported audio MIME type, and a bounded
+duration supplied as `duration_seconds` or `duration_ms`. The MVP limit is
+`MAX_AUDIO_DURATION_SECONDS=60`; decoded bytes are capped by workspace
+`max_audio_bytes`.
+
+Supported MVP content types are `audio/aac`, `audio/m4a`, `audio/mp3`,
+`audio/mp4`, `audio/mpeg`, `audio/ogg`, `audio/wav`, and `audio/webm`.
+Senses validates base64, optional client sha256, size, declared duration, and a
+light container signature before writing the audio under:
+
+```text
+storage/generated/senses/<device_id>/<yyyy-mm-dd>/<capture_id>.<audio-ext>
+```
+
+When the optional `speech-to-text` dependency resolves to a backend provider,
+Senses emits a `transcribe_audio` dependency request with the same bounded audio
+bytes. The `speech_transcription.completed` callback stores transcript metadata
+on the capture. If Speech is unset, unavailable, or fails, the capture remains
+dispatchable and Chat receives a textual fallback plus the audio attachment.
+`text-to-speech` is declared for non-blocking client playback, but Senses does
+not require it for routing or response visibility.
+
 ## Routing To Chat
 
 `routing.dispatch_capture` requires a stored capture owned by the authenticated
@@ -135,25 +162,24 @@ state without rewriting the capture. `captures.get` returns the persisted captur
 and a Chat deep link after the callback has completed only when the optional
 `chat-communication` dependency resolves a `communication.chat` provider.
 
-Phase 7 keeps Chat/Core ownership unchanged and does not add core thread
+Phase 8 keeps Chat/Core ownership unchanged and does not add core thread
 metadata. Runtime requests created by Senses still produce runtime threads with
 `source_app_id=senses` through the generic app-hosting runtime request path.
 Senses stores the device/thread mapping in `routing_sessions`, exposes pending,
 unavailable, or linked Chat state in capture and dispatch payloads, and titles
-Meta glasses visual threads as `Occhiali - domanda visiva` or the matching task
-variant. The frontend Captures and Routing tabs publish shell selection events
+Meta glasses visual/audio threads as `Occhiali - domanda visiva`,
+`Occhiali - domanda vocale`, or the matching task variants. The frontend
+Captures and Routing tabs publish shell selection events
 for stored captures, Chat-linked captures, Chat-pending captures, mapped routing
 sessions, pending mapping sessions, and task threads. When the actor has
 workspace-admin or platform-admin authority, the frontend also persists those
 filters through the standard Senses `set_view_filter` backend action; non-admin
 sessions keep the filters local to the shell event stream.
 
-Live audio capture and bidirectional voice routing remain deferred. Senses must
-not open raw device-token audio ingress, STT/TTS WebSockets, or remote speech
-provider sessions until the core provider registry, router, audit trail, and
-Core Secrets delivery path can supply an explicit governed decision for each
-audio stream. Future audio dispatch should reference that decision rather than
-choosing Deepgram, Cartesia, Kokoro-hosted, or any local engine inside Senses.
+Device-token audio ingress, continuous background recording, streaming STT/TTS
+WebSockets, and provider-specific engine selection remain deferred. Senses uses
+declared Speech dependencies and never chooses Deepgram, Cartesia, Kokoro, or a
+local engine directly.
 
 ## Frontend And iOS Host Bridge
 
@@ -228,8 +254,9 @@ Senses is a sealed, sandbox-compatible root app. Its contract declares
 frontend/backend/CLI/MCP surfaces, install/migrate/health hooks, app-owned
 SQLite state under `data/senses`, required Storage dependency aliases for file
 creation and catalog metadata, optional `chat-communication` for verified Chat
-deep links, runtime session creation for dispatch, and data events for devices,
-pairing, settings, captures, routing, and frontend view-state. The operations
-manifest reports separate booleans for user-session `ingest.frame` support and
-raw device auth support. Device-token ingress and capture reference entities
-remain deferred beyond Phase 7.
+deep links, optional Speech dependencies for audio transcription/synthesis,
+runtime session creation for dispatch, and data events for devices, pairing,
+settings, captures, routing, and frontend view-state. The operations manifest
+reports separate booleans for user-session frame/audio ingest support and raw
+device auth support. Device-token ingress and capture reference entities remain
+deferred beyond Phase 8.

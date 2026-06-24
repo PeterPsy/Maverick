@@ -11,7 +11,10 @@ export type FolderSection = {
   emptyLabel: string;
 };
 
-export function buildSections(projects: ChatProject[], threads: ChatThread[]): FolderSection[] {
+export type ThreadSourceFilter = "all" | "senses";
+
+export function buildSections(projects: ChatProject[], threads: ChatThread[], sourceFilter: ThreadSourceFilter = "all"): FolderSection[] {
+  const visibleThreads = filterThreadsBySource(threads, sourceFilter);
   const projectSections: FolderSection[] = projects
     .slice()
     .sort((left, right) => left.name.localeCompare(right.name, "en", { sensitivity: "base" }))
@@ -29,7 +32,7 @@ export function buildSections(projects: ChatProject[], threads: ChatThread[]): F
   const placeholderSections: FolderSection[] = [];
   const unassigned: ChatThread[] = [];
 
-  for (const thread of threads) {
+  for (const thread of visibleThreads) {
     if (!thread.project_id) {
       unassigned.push(thread);
       continue;
@@ -66,6 +69,21 @@ export function buildSections(projects: ChatProject[], threads: ChatThread[]): F
     });
   }
   return sections;
+}
+
+export function filterThreadsBySource(threads: ChatThread[], sourceFilter: ThreadSourceFilter): ChatThread[] {
+  if (sourceFilter !== "senses") {
+    return threads;
+  }
+  return threads.filter(isSensesThread);
+}
+
+export function isSensesThread(thread: ChatThread): boolean {
+  return thread.source_app_id === "senses";
+}
+
+export function threadSourceBadgeLabel(thread: ChatThread): string | null {
+  return isSensesThread(thread) ? "Occhiali" : null;
 }
 
 export function isThreadBusy(thread: ChatThread): boolean {

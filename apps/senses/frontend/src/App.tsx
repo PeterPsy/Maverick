@@ -13,6 +13,7 @@ import {
   ListChecks,
   LogIn,
   MessageSquare,
+  Mic,
   Plus,
   Radio,
   RefreshCw,
@@ -54,7 +55,7 @@ const TAB_ITEMS = [
 type TabId = (typeof TAB_ITEMS)[number]['id'];
 type CaptureFilter = 'all' | 'stored' | 'chat-linked' | 'chat-pending' | 'errors';
 type RoutingFilter = 'all' | 'mapped' | 'pending' | 'task';
-type NativeCommand = 'refreshNativeStatus' | 'pairGlasses' | 'ask' | 'openLogin';
+type NativeCommand = 'refreshNativeStatus' | 'pairGlasses' | 'ask' | 'askAudio' | 'openLogin';
 type NavigationParams = Record<string, string | boolean | null>;
 type ViewFilterState = {
   tab: TabId;
@@ -92,11 +93,14 @@ interface SensesNativeStatus {
     busy?: boolean;
     last_frame_id?: string | null;
     last_frame_summary?: string | null;
+    last_audio_id?: string | null;
+    last_audio_summary?: string | null;
     senses_status?: string | null;
   };
   actions?: {
     can_pair?: boolean;
     can_ask?: boolean;
+    can_ask_audio?: boolean;
     can_refresh?: boolean;
     can_open_login?: boolean;
   };
@@ -326,6 +330,7 @@ export function App() {
       refreshNativeStatus: 'native-refresh',
       pairGlasses: 'native-pair',
       ask: 'native-ask',
+      askAudio: 'native-ask-audio',
       openLogin: 'native-login',
     };
     const accepted = nativeHost.send(command);
@@ -337,7 +342,7 @@ export function App() {
     setNotice('Command sent to the iOS app.');
     window.setTimeout(() => {
       setBusyAction((current) => (current === labels[command] ? '' : current));
-    }, 1800);
+    }, command === 'askAudio' ? 12_000 : 1800);
   }
 
   useEffect(() => {
@@ -785,6 +790,15 @@ function NativeHeaderActions({
       >
         <Send size={16} />
         <span>Ask</span>
+      </button>
+      <button
+        className="tool-button"
+        type="button"
+        onClick={() => onCommand('askAudio')}
+        disabled={nativeHostStatus?.actions?.can_ask_audio === false || busyAction === 'native-ask-audio'}
+      >
+        <Mic size={16} />
+        <span>Voice</span>
       </button>
       <button
         className="tool-button"
@@ -1359,7 +1373,7 @@ function DebugTab({
           icon={Camera}
           label="Capture"
           value={nativeStatus?.glasses?.capture || nativeStatus?.capture?.senses_status || latestCapture?.status || 'idle'}
-          detail={nativeStatus?.capture?.last_frame_summary || latestCapture?.capture_id || 'no frame'}
+          detail={nativeStatus?.capture?.last_frame_summary || nativeStatus?.capture?.last_audio_summary || latestCapture?.capture_id || 'no capture'}
           tone={nativeStatus?.capture?.busy ? 'warn' : latestCapture ? 'good' : 'muted'}
         />
         <StatusTile

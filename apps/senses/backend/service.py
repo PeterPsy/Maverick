@@ -1,4 +1,4 @@
-"""Phase 7 service layer for Senses."""
+"""Phase 8 service layer for Senses."""
 
 from __future__ import annotations
 
@@ -30,8 +30,8 @@ from database import (
 
 APP_ID = "senses"
 APP_NAME = "Senses"
-APP_VERSION = "0.7.0"
-PHASE = "phase-7"
+APP_VERSION = "0.8.0"
+PHASE = "phase-8"
 VIEW_STATE_FILENAME = "view_state.json"
 PAIRING_CODE_ALPHABET = "".join(char for char in string.ascii_uppercase + string.digits if char not in {"0", "O", "I", "1"})
 PAIRING_CODE_LENGTH = 8
@@ -41,12 +41,30 @@ ADMIN_WORKSPACE_ROLES = {"admin"}
 ADMIN_PLATFORM_ROLES = {"admin"}
 CAPTURE_REQUEST_SCHEMA_VERSION = "senses.capture.v1"
 CAPTURE_ACCEPTED_SCHEMA_VERSION = "senses.capture.accepted.v1"
+AUDIO_CAPTURE_REQUEST_SCHEMA_VERSION = "senses.audio.v1"
+AUDIO_ACCEPTED_SCHEMA_VERSION = "senses.audio.accepted.v1"
 CAPTURE_CLOCK_SKEW_SECONDS = 600
 FRAME_RATE_LIMIT_WINDOW_SECONDS = 60
 FRAME_RATE_LIMIT_MAX = 30
+MAX_AUDIO_DURATION_SECONDS = 60
+MIN_AUDIO_BYTES = 128
 SUPPORTED_FRAME_CONTENT_TYPES = {
     "image/jpeg": ".jpg",
     "image/png": ".png",
+}
+SUPPORTED_AUDIO_CONTENT_TYPES = {
+    "audio/aac": ".aac",
+    "audio/m4a": ".m4a",
+    "audio/mp3": ".mp3",
+    "audio/mp4": ".m4a",
+    "audio/mpeg": ".mp3",
+    "audio/ogg": ".ogg",
+    "audio/wav": ".wav",
+    "audio/webm": ".webm",
+}
+CAPTURE_CONTENT_TYPE_EXTENSIONS = {
+    **SUPPORTED_FRAME_CONTENT_TYPES,
+    **SUPPORTED_AUDIO_CONTENT_TYPES,
 }
 PNG_SIGNATURE = b"\x89PNG\r\n\x1a\n"
 JPEG_START_OF_FRAME_MARKERS = {
@@ -78,9 +96,12 @@ PNG_MAX_DIMENSION = 100_000
 PNG_MAX_DECOMPRESSED_BYTES = 100_000_000
 STORAGE_WRITE_DEPENDENCY_ALIAS = "storage-file-content-write"
 CHAT_COMMUNICATION_DEPENDENCY_ALIAS = "chat-communication"
+SPEECH_TRANSCRIPTION_DEPENDENCY_ALIAS = "speech-to-text"
+SPEECH_SYNTHESIS_DEPENDENCY_ALIAS = "text-to-speech"
 STORAGE_PENDING_LEASE_SECONDS = 120
 DEFAULT_RUNTIME_AGENT_ID = "chat"
 RUNTIME_DISPATCH_CALLBACK_ACTION = "runtime_dispatch.completed"
+SPEECH_TRANSCRIPTION_CALLBACK_ACTION = "speech_transcription.completed"
 FOLLOWUP_ROUTE_WINDOW_SECONDS_MIN = 15
 FOLLOWUP_ROUTE_WINDOW_SECONDS_MAX = 3600
 LONG_TASK_PROMPT_LENGTH = 180
@@ -119,6 +140,18 @@ OPTIONAL_DEPENDENCIES = (
         "version": "^1",
         "required": False,
     },
+    {
+        "alias": SPEECH_TRANSCRIPTION_DEPENDENCY_ALIAS,
+        "interface": "speech.transcription",
+        "version": "^1",
+        "required": False,
+    },
+    {
+        "alias": SPEECH_SYNTHESIS_DEPENDENCY_ALIAS,
+        "interface": "speech.synthesis",
+        "version": "^1",
+        "required": False,
+    },
 )
 DECLARED_DEPENDENCIES = (*REQUIRED_DEPENDENCIES, *OPTIONAL_DEPENDENCIES)
 DECLARED_BACKEND_ACTIONS = (
@@ -134,6 +167,7 @@ DECLARED_BACKEND_ACTIONS = (
     "settings.update",
     "captures.get",
     "ingest.frame",
+    "ingest.audio",
     "routing.dispatch_capture",
     "routing.reset",
     "view_filter",
@@ -151,7 +185,7 @@ DECLARED_MCP_TOOLS = (
 )
 VIEW_STATE_ACTIONS = ("view_filter", "set_view_filter", "set_custom_view", "clear_custom_view")
 VIEW_STATE_MUTATION_ACTIONS = ("set_view_filter", "set_custom_view", "clear_custom_view")
-CALLBACK_BACKEND_ACTIONS = ("storage_write.completed", RUNTIME_DISPATCH_CALLBACK_ACTION)
+CALLBACK_BACKEND_ACTIONS = ("storage_write.completed", SPEECH_TRANSCRIPTION_CALLBACK_ACTION, RUNTIME_DISPATCH_CALLBACK_ACTION)
 DEFERRED_ACTIONS = (
     "device-token ingress",
 )
@@ -182,6 +216,8 @@ def handle_action(data_root: Path, payload: dict[str, object]) -> tuple[int, dic
         return view_state_action(data_root, workspace_id, action, payload)
     if action == "storage_write.completed":
         return storage_write_completed(data_root, workspace_id, dependencies, payload)
+    if action == SPEECH_TRANSCRIPTION_CALLBACK_ACTION:
+        return speech_transcription_completed(data_root, workspace_id, dependencies, payload)
     if action == RUNTIME_DISPATCH_CALLBACK_ACTION:
         return runtime_dispatch_completed(data_root, workspace_id, dependencies, payload)
 
@@ -235,6 +271,11 @@ def handle_action(data_root: Path, payload: dict[str, object]) -> tuple[int, dic
         if auth_error is not None:
             return auth_error
         return ingest_frame(data_root, workspace_id, actor, dependencies, payload)
+    if action == "ingest.audio":
+        auth_error = require_authenticated(actor)
+        if auth_error is not None:
+            return auth_error
+        return ingest_audio(data_root, workspace_id, actor, dependencies, payload)
     if action == "routing.dispatch_capture":
         auth_error = require_authenticated(actor)
         if auth_error is not None:
@@ -249,7 +290,7 @@ def handle_action(data_root: Path, payload: dict[str, object]) -> tuple[int, dic
     return error_payload(
         400,
         "unsupported_action",
-        f"Unsupported Senses Phase 7 action `{action}`.",
+        f"Unsupported Senses Phase 8 action `{action}`.",
         allowed_actions=list(DECLARED_BACKEND_ACTIONS),
         deferred_actions=list(DEFERRED_ACTIONS),
     )
@@ -284,7 +325,7 @@ def require_authenticated(actor: dict[str, str | None]) -> tuple[int, dict[str, 
     return error_payload(
         401,
         "authentication_required",
-        "Senses Phase 7 actions require a Maverick user session.",
+        "Senses Phase 8 actions require a Maverick user session.",
     )
 
 
@@ -332,6 +373,7 @@ def manifest_payload(
             "authenticated": bool(actor.get("user_id")),
             "management_role": "workspace_admin",
             "user_session_ingest_supported": True,
+            "user_session_audio_ingest_supported": True,
             "raw_device_auth_supported": False,
             "view_state_policy": {
                 "scope": "workspace_shared",
@@ -349,13 +391,22 @@ def manifest_payload(
         },
         "backend_actions": list(DECLARED_BACKEND_ACTIONS),
         "callback_actions": list(CALLBACK_BACKEND_ACTIONS),
+        "audio_mvp": {
+            "push_to_talk": True,
+            "continuous_streaming": False,
+            "max_duration_seconds": MAX_AUDIO_DURATION_SECONDS,
+            "supported_content_types": sorted(SUPPORTED_AUDIO_CONTENT_TYPES),
+            "speech_to_text_dependency_alias": SPEECH_TRANSCRIPTION_DEPENDENCY_ALIAS,
+            "text_to_speech_dependency_alias": SPEECH_SYNTHESIS_DEPENDENCY_ALIAS,
+        },
         "required_dependencies": list(REQUIRED_DEPENDENCIES),
         "optional_dependencies": list(OPTIONAL_DEPENDENCIES),
         "dependency_resolution": dependencies,
         "deferred_to_later_phases": list(DEFERRED_ACTIONS),
         "notes": [
-            "Senses Phase 7 uses Maverick user sessions for pairing, device registry, frame ingestion, routing, and the workspace frontend.",
+            "Senses Phase 8 uses Maverick user sessions for pairing, device registry, frame/audio ingestion, routing, and the workspace frontend.",
             "ingest.frame is available with a Maverick user session and active device_session_id.",
+            "ingest.audio accepts bounded push-to-talk audio, writes Storage, and uses Speech transcription when the optional dependency is resolved.",
             "ingest.frame stores captures through the declared Storage dependency and never launches runtime turns.",
             "routing.dispatch_capture emits runtime_launch_requests only after a capture is stored.",
             "Raw device auth remains deferred.",
@@ -1190,6 +1241,64 @@ def ingest_frame(
     return 202, response
 
 
+def ingest_audio(
+    data_root: Path,
+    workspace_id: str,
+    actor: dict[str, str | None],
+    dependencies: dict[str, object],
+    payload: dict[str, object],
+) -> tuple[int, dict[str, object]]:
+    status_code, response = ingest_frame(data_root, workspace_id, actor, dependencies, payload)
+    if status_code >= 400 or not response.get("ok"):
+        return status_code, response
+
+    capture_id = text_or_none(response.get("capture_id"))
+    if not capture_id:
+        return status_code, response
+
+    speech_provider_app_id = speech_provider_app_id_from_dependencies(dependencies, alias=SPEECH_TRANSCRIPTION_DEPENDENCY_ALIAS)
+    transcription = transcription_response_payload(
+        {"status": "unavailable", "provider_app_id": None, "text": "", "error": None}
+    )
+    if speech_provider_app_id and status_code == 202:
+        transcription_request_id = f"transcribe-{capture_id}"
+        mark_capture_transcription_requested(
+            data_root,
+            workspace_id=workspace_id,
+            capture_id=capture_id,
+            request_id=transcription_request_id,
+            provider_app_id=speech_provider_app_id,
+        )
+        transcription = transcription_response_payload(
+            {
+                "status": "pending",
+                "request_id": transcription_request_id,
+                "provider_app_id": speech_provider_app_id,
+                "text": "",
+                "error": None,
+            }
+        )
+        storage_request = first_dependency_request(response, STORAGE_WRITE_DEPENDENCY_ALIAS)
+        if storage_request is not None:
+            dependency_requests = response.setdefault("dependency_backend_requests", [])
+            if isinstance(dependency_requests, list):
+                dependency_requests.append(
+                    speech_transcription_dependency_request(
+                        capture_id=capture_id,
+                        request_id=transcription_request_id,
+                        storage_request=storage_request,
+                        payload=payload,
+                    )
+                )
+    elif speech_provider_app_id:
+        capture = capture_by_id_from_root(data_root, workspace_id, capture_id)
+        transcription = transcription_payload(capture)
+
+    response["schema_version"] = AUDIO_ACCEPTED_SCHEMA_VERSION
+    response["transcription"] = transcription
+    return status_code, response
+
+
 def storage_write_completed(
     data_root: Path,
     workspace_id: str,
@@ -1352,6 +1461,118 @@ def storage_write_completed(
         "ok": True,
         "status": "stored",
         "capture": capture_payload(updated, chat_provider_app_id=chat_provider_app_id),
+        "error": None,
+    }
+
+
+def speech_transcription_completed(
+    data_root: Path,
+    workspace_id: str,
+    dependencies: dict[str, object],
+    payload: dict[str, object],
+) -> tuple[int, dict[str, object]]:
+    chat_provider_app_id = chat_provider_app_id_from_dependencies(dependencies)
+    if text_or_none(payload.get("_app_surface")) != "dependency_backend_request_callback":
+        return error_payload(
+            403,
+            "senses_permission_forbidden",
+            "Senses speech callbacks may only run through the dependency backend callback surface.",
+        )
+    capture_id = text_or_none(payload.get("capture_id"))
+    if not capture_id:
+        return error_payload(400, "invalid_capture", "speech_transcription.completed requires capture_id.")
+    if text_or_none(payload.get("dependency_alias")) != SPEECH_TRANSCRIPTION_DEPENDENCY_ALIAS:
+        return error_payload(
+            400,
+            "invalid_dependency_callback",
+            "Senses speech callback must come from the speech-to-text dependency.",
+        )
+    expected_request_id = f"transcribe-{capture_id}"
+    if text_or_none(payload.get("request_id")) != expected_request_id:
+        return error_payload(
+            400,
+            "invalid_dependency_callback",
+            "Senses speech callback request_id did not match the pending transcription request.",
+        )
+
+    timestamp = now_timestamp()
+    ensure_schema(data_root, workspace_id)
+    db = connect(data_root)
+    try:
+        db.execute("BEGIN IMMEDIATE")
+        capture = capture_by_id(db, workspace_id, capture_id)
+        if capture is None:
+            db.rollback()
+            return error_payload(404, "capture_not_found", "No matching Senses capture was found.")
+        metadata = decode_json_object(capture["metadata_json"])
+        current = metadata.get("transcription") if isinstance(metadata.get("transcription"), dict) else {}
+        if text_or_none(current.get("request_id")) not in {None, expected_request_id}:
+            db.rollback()
+            return error_payload(
+                400,
+                "invalid_dependency_callback",
+                "Senses speech callback did not match the capture transcription request.",
+            )
+        provider_result = payload.get("dependency_backend_result")
+        provider_app_id = storage_result_provider_app_id(provider_result) or text_or_none(current.get("provider_app_id"))
+        dependency_status = text_or_none(payload.get("dependency_backend_status")) or "failed"
+        if dependency_status == "completed":
+            result_json = provider_result.get("json") if isinstance(provider_result, dict) and isinstance(provider_result.get("json"), dict) else {}
+            text = bounded_text(result_json.get("text"), fallback="", max_length=12000)
+            transcript_payload = {
+                "status": "completed" if text else "empty",
+                "request_id": expected_request_id,
+                "provider_app_id": provider_app_id,
+                "text": text,
+                "language": text_or_none(result_json.get("language")),
+                "duration_seconds": optional_float(result_json.get("duration_seconds"), minimum=0.0, maximum=MAX_AUDIO_DURATION_SECONDS),
+                "job_id": text_or_none(result_json.get("job_id")),
+                "error": None,
+                "updated_at": timestamp,
+            }
+        else:
+            transcript_payload = {
+                "status": "failed",
+                "request_id": expected_request_id,
+                "provider_app_id": provider_app_id,
+                "text": "",
+                "error": bounded_text(payload.get("error"), fallback="speech transcription dependency failed", max_length=500),
+                "updated_at": timestamp,
+            }
+        metadata["transcription"] = transcript_payload
+        db.execute(
+            """
+            UPDATE captures
+            SET metadata_json = ?, updated_at = ?
+            WHERE workspace_id = ? AND capture_id = ?
+            """,
+            (encode_json_object(metadata), timestamp, workspace_id, capture_id),
+        )
+        write_audit(
+            db,
+            workspace_id=workspace_id,
+            event_type="capture.transcribed",
+            actor_user_id=None,
+            device_id=str(capture["device_id"]),
+            details={
+                "capture_id": capture_id,
+                "request_id": expected_request_id,
+                "status": transcript_payload["status"],
+                "provider_app_id": provider_app_id,
+            },
+        )
+        db.commit()
+        updated = capture_by_id(db, workspace_id, capture_id)
+    except Exception:
+        db.rollback()
+        raise
+    finally:
+        db.close()
+    return 200, {
+        "ok": True,
+        "status": "transcribed",
+        "capture": capture_payload(updated, chat_provider_app_id=chat_provider_app_id),
+        "transcription": transcription_payload(updated),
         "error": None,
     }
 
@@ -2367,7 +2588,13 @@ def runtime_input_text(
     device: sqlite3.Row,
     route: dict[str, object],
 ) -> str:
-    prompt = text_or_none(capture["prompt"]) or "Analizza questo frame e rispondi in modo utile."
+    input_mode = text_or_none(capture["input_mode"]) or ""
+    is_audio = input_mode.startswith("audio.")
+    prompt = text_or_none(capture["prompt"]) or (
+        "Rispondi alla richiesta vocale in modo utile."
+        if is_audio
+        else "Analizza questo frame e rispondi in modo utile."
+    )
     origin_label = capture_origin_label(capture=capture, device=device)
     details = [
         f"Senses capture: {capture['capture_id']}",
@@ -2376,6 +2603,15 @@ def runtime_input_text(
         f"Input: {capture['input_mode']}",
         f"Routing: {route['route_kind']} ({route['reason']})",
     ]
+    if is_audio:
+        transcription = transcription_payload(capture)
+        transcript = text_or_none(transcription.get("text"))
+        if transcript:
+            details.append(f"Transcript: {transcript}")
+        else:
+            details.append(
+                "Transcript: unavailable; the original audio is attached if the runtime provider can inspect audio files."
+            )
     if capture["width"] and capture["height"]:
         details.append(f"Frame: {capture['width']}x{capture['height']}")
     return f"{prompt}\n\n" + "\n".join(details)
@@ -2388,12 +2624,14 @@ def runtime_thread_title(
     route: dict[str, object],
 ) -> str:
     device_label = capture_origin_label(capture=capture, device=device)
+    is_audio = str(capture["input_mode"] or "").startswith("audio.")
+    modality = "vocale" if is_audio else "visiva"
     if route["route_kind"] == "task":
-        suffix = "task visivo"
+        suffix = f"task {modality}"
     elif route["route_kind"] == "new_thread":
-        suffix = "nuova domanda visiva"
+        suffix = f"nuova domanda {modality}"
     else:
-        suffix = "domanda visiva"
+        suffix = f"domanda {modality}"
     return f"{device_label} - {suffix}"
 
 
@@ -2513,6 +2751,11 @@ def prepare_capture_payload(
     payload: dict[str, object],
     settings: dict[str, object],
 ) -> tuple[dict[str, object], tuple[int, dict[str, object]] | None]:
+    action = normalize_action(payload.get("action"))
+    is_audio = action == "ingest.audio"
+    operation = "ingest.audio" if is_audio else "ingest.frame"
+    expected_schema_version = AUDIO_CAPTURE_REQUEST_SCHEMA_VERSION if is_audio else CAPTURE_REQUEST_SCHEMA_VERSION
+    supported_content_types = SUPPORTED_AUDIO_CONTENT_TYPES if is_audio else SUPPORTED_FRAME_CONTENT_TYPES
     if text_or_none(payload.get("capture_id")):
         return {}, error_payload(
             400,
@@ -2520,57 +2763,68 @@ def prepare_capture_payload(
             "capture_id is generated by Senses and must not be supplied by the client.",
         )
     schema_version = text_or_none(payload.get("schema_version"))
-    if schema_version != CAPTURE_REQUEST_SCHEMA_VERSION:
+    if schema_version != expected_schema_version:
         return {}, error_payload(
             400,
             "invalid_schema_version",
-            f"ingest.frame requires schema_version `{CAPTURE_REQUEST_SCHEMA_VERSION}`.",
+            f"{operation} requires schema_version `{expected_schema_version}`.",
         )
     request_id = bounded_identifier(payload.get("request_id"), max_length=128)
     if not request_id:
-        return {}, error_payload(400, "invalid_request_id", "ingest.frame requires request_id.")
+        return {}, error_payload(400, "invalid_request_id", f"{operation} requires request_id.")
     idempotency_key = bounded_identifier(payload.get("idempotency_key"), max_length=160)
     if not idempotency_key:
-        return {}, error_payload(400, "invalid_idempotency_key", "ingest.frame requires idempotency_key.")
+        return {}, error_payload(400, "invalid_idempotency_key", f"{operation} requires idempotency_key.")
     device_id = bounded_identifier(payload.get("device_id"), max_length=128)
     device_session_id = bounded_identifier(payload.get("device_session_id"), max_length=128)
     if not device_id or not device_session_id:
-        return {}, error_payload(400, "invalid_device", "ingest.frame requires device_id and device_session_id.")
+        return {}, error_payload(400, "invalid_device", f"{operation} requires device_id and device_session_id.")
 
     content_type = normalize_content_type(payload.get("content_type"))
-    if content_type not in SUPPORTED_FRAME_CONTENT_TYPES:
+    if content_type not in supported_content_types:
         return {}, error_payload(
             415,
             "unsupported_media_type",
-            "Senses frame ingestion supports image/jpeg and diagnostic image/png payloads.",
+            "Senses audio ingestion supports audio/aac, audio/m4a, audio/mp3, audio/mp4, audio/mpeg, audio/ogg, audio/wav, and audio/webm payloads."
+            if is_audio
+            else "Senses frame ingestion supports image/jpeg and diagnostic image/png payloads.",
         )
     raw_content_base64 = payload.get("content_base64")
     if not isinstance(raw_content_base64, str) or not raw_content_base64.strip():
-        return {}, error_payload(400, "invalid_base64", "ingest.frame requires content_base64.")
+        return {}, error_payload(400, "invalid_base64", f"{operation} requires content_base64.")
     try:
         decoded = b64decode(raw_content_base64, validate=True)
     except (ValueError, binascii.Error):
         return {}, error_payload(400, "invalid_base64", "content_base64 must be valid base64.")
-    max_frame_bytes = bounded_int(settings.get("max_frame_bytes"), default=8388608, minimum=1, maximum=52428800)
-    if len(decoded) > max_frame_bytes:
+    max_bytes = bounded_int(
+        settings.get("max_audio_bytes" if is_audio else "max_frame_bytes"),
+        default=10485760 if is_audio else 8388608,
+        minimum=1,
+        maximum=52428800,
+    )
+    if len(decoded) > max_bytes:
         return {}, error_payload(
             413,
             "capture_too_large",
-            "Decoded frame bytes exceed the configured Senses max_frame_bytes limit.",
-            max_frame_bytes=max_frame_bytes,
+            "Decoded audio bytes exceed the configured Senses max_audio_bytes limit."
+            if is_audio
+            else "Decoded frame bytes exceed the configured Senses max_frame_bytes limit.",
+            **({"max_audio_bytes": max_bytes} if is_audio else {"max_frame_bytes": max_bytes}),
         )
     hash_error = validate_client_content_hash(payload, decoded)
     if hash_error is not None:
         return {}, hash_error
-    sanitized, media_error = sanitized_frame_bytes(decoded, content_type)
+    sanitized, media_error = sanitized_audio_bytes(decoded, content_type) if is_audio else sanitized_frame_bytes(decoded, content_type)
     if media_error is not None:
         return {}, media_error
-    if len(sanitized) > max_frame_bytes:
+    if len(sanitized) > max_bytes:
         return {}, error_payload(
             413,
             "capture_too_large",
-            "Sanitized frame bytes exceed the configured Senses max_frame_bytes limit.",
-            max_frame_bytes=max_frame_bytes,
+            "Sanitized audio bytes exceed the configured Senses max_audio_bytes limit."
+            if is_audio
+            else "Sanitized frame bytes exceed the configured Senses max_frame_bytes limit.",
+            **({"max_audio_bytes": max_bytes} if is_audio else {"max_frame_bytes": max_bytes}),
         )
 
     captured_at, timestamp_error = parse_capture_timestamp(payload.get("captured_at"))
@@ -2580,8 +2834,13 @@ def prepare_capture_payload(
     metadata = metadata_payload(payload.get("metadata"))
     width = optional_bounded_int(metadata.get("width"), minimum=1, maximum=100000)
     height = optional_bounded_int(metadata.get("height"), minimum=1, maximum=100000)
+    duration_seconds = normalized_audio_duration_seconds(payload, metadata) if is_audio else None
+    if isinstance(duration_seconds, tuple):
+        return {}, duration_seconds
+    if duration_seconds is not None:
+        metadata["duration_seconds"] = duration_seconds
     prompt = bounded_text(payload.get("prompt"), fallback="", max_length=2048)
-    input_mode = bounded_text(payload.get("input_mode"), fallback="vision.snapshot", max_length=80)
+    input_mode = bounded_text(payload.get("input_mode"), fallback="audio.push_to_talk" if is_audio else "vision.snapshot", max_length=80)
     client_capture_id = bounded_identifier(payload.get("client_capture_id"), max_length=160)
     sha256 = hashlib.sha256(sanitized).hexdigest()
     request_hash = capture_request_hash(
@@ -2689,6 +2948,15 @@ def capture_by_id(db: sqlite3.Connection, workspace_id: str, capture_id: str) ->
     ).fetchone()
 
 
+def capture_by_id_from_root(data_root: Path, workspace_id: str, capture_id: str) -> sqlite3.Row | None:
+    ensure_schema(data_root, workspace_id)
+    db = connect(data_root)
+    try:
+        return capture_by_id(db, workspace_id, capture_id)
+    finally:
+        db.close()
+
+
 def capture_storage_path(
     *,
     device_id: str,
@@ -2696,7 +2964,7 @@ def capture_storage_path(
     captured_at: datetime,
     content_type: str,
 ) -> str:
-    extension = SUPPORTED_FRAME_CONTENT_TYPES[content_type]
+    extension = CAPTURE_CONTENT_TYPE_EXTENSIONS[content_type]
     return f"storage/generated/senses/{device_id}/{captured_at.date().isoformat()}/{capture_id}{extension}"
 
 
@@ -2728,6 +2996,82 @@ def storage_write_dependency_request(
     }
 
 
+def first_dependency_request(response: dict[str, object], alias: str) -> dict[str, object] | None:
+    requests = response.get("dependency_backend_requests")
+    if not isinstance(requests, list):
+        return None
+    for request in requests:
+        if isinstance(request, dict) and text_or_none(request.get("dependency_alias")) == alias:
+            return request
+    return None
+
+
+def speech_transcription_dependency_request(
+    *,
+    capture_id: str,
+    request_id: str,
+    storage_request: dict[str, object],
+    payload: dict[str, object],
+) -> dict[str, object]:
+    body = storage_request.get("body") if isinstance(storage_request.get("body"), dict) else {}
+    audio_base64 = text_or_none(body.get("content_base64")) or text_or_none(payload.get("content_base64")) or ""
+    request_body: dict[str, object] = {
+        "action": "transcribe_audio",
+        "audio_base64": audio_base64,
+        "content_type": normalize_content_type(payload.get("content_type")),
+        "profile": bounded_text(payload.get("transcription_profile") or payload.get("profile"), fallback="fast", max_length=32),
+    }
+    language = text_or_none(payload.get("language") or payload.get("language_hint"))
+    if language:
+        request_body["language"] = language
+    return {
+        "request_id": request_id,
+        "dependency_alias": SPEECH_TRANSCRIPTION_DEPENDENCY_ALIAS,
+        "body": request_body,
+        "callback": {
+            "action": SPEECH_TRANSCRIPTION_CALLBACK_ACTION,
+            "payload": {"capture_id": capture_id},
+        },
+    }
+
+
+def mark_capture_transcription_requested(
+    data_root: Path,
+    *,
+    workspace_id: str,
+    capture_id: str,
+    request_id: str,
+    provider_app_id: str,
+) -> None:
+    timestamp = now_timestamp()
+    ensure_schema(data_root, workspace_id)
+    db = connect(data_root)
+    try:
+        capture = capture_by_id(db, workspace_id, capture_id)
+        if capture is None:
+            return
+        metadata = decode_json_object(capture["metadata_json"])
+        metadata["transcription"] = {
+            "status": "pending",
+            "request_id": request_id,
+            "provider_app_id": provider_app_id,
+            "text": "",
+            "error": None,
+            "updated_at": timestamp,
+        }
+        db.execute(
+            """
+            UPDATE captures
+            SET metadata_json = ?, updated_at = ?
+            WHERE workspace_id = ? AND capture_id = ?
+            """,
+            (encode_json_object(metadata), timestamp, workspace_id, capture_id),
+        )
+        db.commit()
+    finally:
+        db.close()
+
+
 def ingest_acceptance_response(
     ingestion_request: sqlite3.Row | None,
     capture: sqlite3.Row | None,
@@ -2748,6 +3092,7 @@ def ingest_acceptance_response(
             "action": "routing.dispatch_capture",
             "ready_status": "stored",
         },
+        "transcription": transcription_payload(capture),
         "error": None,
     }
 
@@ -2797,10 +3142,43 @@ def capture_payload(row: sqlite3.Row | None, *, chat_provider_app_id: str | None
         "turn_id": row["turn_id"],
         "chat": chat,
         "origin": capture_origin_payload(row),
+        "transcription": transcription_payload(row),
         "deleted_at": row["deleted_at"],
         "metadata": decode_json_object(row["metadata_json"]),
         "created_at": row["created_at"],
         "updated_at": row["updated_at"],
+    }
+
+
+def transcription_payload(row: sqlite3.Row | None) -> dict[str, object]:
+    if row is None:
+        return transcription_response_payload(None)
+    metadata = decode_json_object(row["metadata_json"])
+    transcription = metadata.get("transcription") if isinstance(metadata.get("transcription"), dict) else None
+    return transcription_response_payload(transcription)
+
+
+def transcription_response_payload(value: object) -> dict[str, object]:
+    if not isinstance(value, dict):
+        return {
+            "status": "not_requested",
+            "request_id": None,
+            "provider_app_id": None,
+            "text": "",
+            "language": None,
+            "duration_seconds": None,
+            "job_id": None,
+            "error": None,
+        }
+    return {
+        "status": text_or_none(value.get("status")) or "not_requested",
+        "request_id": text_or_none(value.get("request_id")),
+        "provider_app_id": text_or_none(value.get("provider_app_id")),
+        "text": bounded_text(value.get("text"), fallback="", max_length=12000),
+        "language": text_or_none(value.get("language")),
+        "duration_seconds": optional_float(value.get("duration_seconds"), minimum=0.0, maximum=MAX_AUDIO_DURATION_SECONDS),
+        "job_id": text_or_none(value.get("job_id")),
+        "error": text_or_none(value.get("error")),
     }
 
 
@@ -3063,6 +3441,66 @@ def sanitized_frame_bytes(decoded: bytes, content_type: str) -> tuple[bytes, tup
     return b"", error_payload(415, "unsupported_media_type", "Unsupported Senses frame content type.")
 
 
+def sanitized_audio_bytes(decoded: bytes, content_type: str) -> tuple[bytes, tuple[int, dict[str, object]] | None]:
+    if len(decoded) < MIN_AUDIO_BYTES:
+        return b"", error_payload(
+            400,
+            "invalid_audio",
+            f"Audio payload must contain at least {MIN_AUDIO_BYTES} decoded bytes.",
+            min_audio_bytes=MIN_AUDIO_BYTES,
+        )
+    if content_type == "audio/wav" and not (decoded.startswith(b"RIFF") and decoded[8:12] == b"WAVE"):
+        return b"", error_payload(400, "invalid_audio", "content_type audio/wav does not match WAV bytes.")
+    if content_type == "audio/webm" and not decoded.startswith(b"\x1a\x45\xdf\xa3"):
+        return b"", error_payload(400, "invalid_audio", "content_type audio/webm does not match WebM bytes.")
+    if content_type == "audio/ogg" and not decoded.startswith(b"OggS"):
+        return b"", error_payload(400, "invalid_audio", "content_type audio/ogg does not match Ogg bytes.")
+    if content_type in {"audio/m4a", "audio/mp4"} and b"ftyp" not in decoded[:32]:
+        return b"", error_payload(400, "invalid_audio", "content_type audio/mp4 audio does not match ISO-BMFF bytes.")
+    if content_type in {"audio/mp3", "audio/mpeg"} and not (
+        decoded.startswith(b"ID3") or (len(decoded) >= 2 and decoded[0] == 0xFF and decoded[1] & 0xE0 == 0xE0)
+    ):
+        return b"", error_payload(400, "invalid_audio", "content_type audio/mpeg does not match MP3 bytes.")
+    if content_type == "audio/aac" and not (len(decoded) >= 2 and decoded[0] == 0xFF and decoded[1] & 0xF0 == 0xF0):
+        return b"", error_payload(400, "invalid_audio", "content_type audio/aac does not match AAC ADTS bytes.")
+    return decoded, None
+
+
+def normalized_audio_duration_seconds(
+    payload: dict[str, object],
+    metadata: dict[str, object],
+) -> float | tuple[int, dict[str, object]] | None:
+    value = payload.get("duration_seconds")
+    if value is None:
+        duration_ms = payload.get("duration_ms") or metadata.get("duration_ms")
+        if duration_ms is not None:
+            try:
+                value = float(duration_ms) / 1000.0
+            except (TypeError, ValueError):
+                value = None
+    if value is None:
+        value = metadata.get("duration_seconds")
+    if value is None:
+        return error_payload(
+            400,
+            "invalid_audio_duration",
+            "ingest.audio requires duration_seconds or duration_ms so Senses can enforce bounded capture.",
+            max_duration_seconds=MAX_AUDIO_DURATION_SECONDS,
+        )
+    try:
+        parsed = float(value)
+    except (TypeError, ValueError):
+        return error_payload(400, "invalid_audio_duration", "Audio duration must be numeric.")
+    if parsed <= 0 or parsed > MAX_AUDIO_DURATION_SECONDS:
+        return error_payload(
+            413,
+            "audio_duration_too_long",
+            f"Audio duration must be greater than 0 and at most {MAX_AUDIO_DURATION_SECONDS} seconds.",
+            max_duration_seconds=MAX_AUDIO_DURATION_SECONDS,
+        )
+    return round(parsed, 3)
+
+
 def strip_jpeg_exif(data: bytes) -> bytes:
     if len(data) < 4 or not data.startswith(b"\xff\xd8"):
         raise ValueError("JPEG payload is truncated.")
@@ -3305,6 +3743,18 @@ def optional_bounded_int(value: object, *, minimum: int, maximum: int) -> int | 
     return parsed
 
 
+def optional_float(value: object, *, minimum: float, maximum: float) -> float | None:
+    if value is None or value == "":
+        return None
+    try:
+        parsed = float(value)
+    except (TypeError, ValueError):
+        return None
+    if parsed < minimum or parsed > maximum:
+        return None
+    return round(parsed, 3)
+
+
 def insert_pairing_session(
     db: sqlite3.Connection,
     *,
@@ -3455,7 +3905,7 @@ def reference_manifest() -> dict[str, object]:
         "app_id": APP_ID,
         "schema_version": "1",
         "entity_types": [],
-        "notes": ["Senses capture records exist in Phase 7; reference search and resolve remain deferred."],
+        "notes": ["Senses capture records exist in Phase 8; reference search and resolve remain deferred."],
     }
 
 
@@ -3542,6 +3992,17 @@ def chat_provider_app_id_from_dependencies(dependencies: dict[str, object]) -> s
     return None
 
 
+def speech_provider_app_id_from_dependencies(dependencies: dict[str, object], *, alias: str) -> str | None:
+    dependency = dependency_by_alias(dependencies, alias)
+    if dependency is None:
+        return None
+    selected = string_items(dependency.get("selected_provider_app_ids"))
+    candidates = dependency_candidate_provider_app_ids(dependency, required_surface="backend")
+    if selected and str(dependency.get("status") or "") == "resolved":
+        return next((app_id for app_id in selected if app_id in candidates), None)
+    return None
+
+
 def dependency_by_alias(dependencies: dict[str, object], alias: str) -> dict[str, object] | None:
     items = dependencies.get("dependencies")
     if not isinstance(items, list):
@@ -3586,7 +4047,7 @@ def app_events_for_action(action: str) -> list[dict[str, str]]:
         return [{"type": "maverick.app.data-changed", "owner_app_id": APP_ID, "resource": "devices"}]
     if normalized == "settings.update":
         return [{"type": "maverick.app.data-changed", "owner_app_id": APP_ID, "resource": "settings"}]
-    if normalized in {"ingest.frame", "storage_write.completed"}:
+    if normalized in {"ingest.frame", "ingest.audio", "storage_write.completed", SPEECH_TRANSCRIPTION_CALLBACK_ACTION}:
         return [
             {"type": "maverick.app.data-changed", "owner_app_id": APP_ID, "resource": "captures"},
             {"type": "maverick.app.data-changed", "owner_app_id": APP_ID, "resource": "devices"},

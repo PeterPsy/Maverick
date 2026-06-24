@@ -27,7 +27,7 @@ import {
   type ChatSidebarSelectionChannel,
 } from "../chatSidebarSelectionChannel";
 export type { PendingProjectDeletion } from "./chatSidebarStateUtils";
-import { buildSections } from "./sections";
+import { buildSections, filterThreadsBySource, type ThreadSourceFilter } from "./sections";
 import {
   buildSearchSections,
   type TranscriptSearchTextByThreadId,
@@ -44,11 +44,13 @@ import { useThreadTouchSelection } from "./useThreadTouchSelection";
 const CHAT_APP_ID = "chat";
 const TRANSCRIPT_SEARCH_EVENT_LIMIT = 500;
 const TRANSCRIPT_SEARCH_MAX_CONCURRENT = 4;
+const THREAD_SOURCE_FILTERS: ThreadSourceFilter[] = ["all", "senses"];
 
 export function useChatSidebarState() {
   const [projects, setProjects] = useState<ChatProject[]>([]);
   const [threads, setThreads] = useState<ChatThread[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
+  const [sourceFilter, setSourceFilter] = useState<ThreadSourceFilter>("all");
   const [transcriptSearchTextByThreadId, setTranscriptSearchTextByThreadId] = useState<TranscriptSearchTextByThreadId>({});
   const [isTranscriptSearchLoading, setIsTranscriptSearchLoading] = useState(false);
   const [workspaceId, setWorkspaceId] = useState("");
@@ -76,6 +78,14 @@ export function useChatSidebarState() {
   const isBulkDeletePendingRef = useRef(isBulkDeletePending);
   const confirmSelectedThreadDeletionRef = useRef<() => Promise<void>>(async () => {});
   const searchTerm = searchQuery.trim();
+  const sourceFilteredThreads = useMemo(() => filterThreadsBySource(threads, sourceFilter), [sourceFilter, threads]);
+  const sourceFilterCounts = useMemo(
+    () => ({
+      all: threads.length,
+      senses: filterThreadsBySource(threads, "senses").length,
+    }),
+    [threads],
+  );
   const sections = useMemo(
     () =>
       searchTerm
@@ -83,11 +93,11 @@ export function useChatSidebarState() {
             emptyLabel: isTranscriptSearchLoading ? "Searching messages..." : "No chats found.",
             projects,
             query: searchTerm,
-            threads,
+            threads: sourceFilteredThreads,
             transcriptTextByThreadId: transcriptSearchTextByThreadId,
           })
-        : buildSections(projects, threads),
-    [isTranscriptSearchLoading, projects, searchTerm, threads, transcriptSearchTextByThreadId],
+        : buildSections(projects, sourceFilteredThreads),
+    [isTranscriptSearchLoading, projects, searchTerm, sourceFilteredThreads, transcriptSearchTextByThreadId],
   );
   function applyProjects(nextProjects: ChatProject[]) {
     setProjects(nextProjects);
@@ -154,6 +164,13 @@ export function useChatSidebarState() {
   function updateSearchQuery(nextQuery: string) {
     localSearchRevisionRef.current += 1;
     setSearchQuery(nextQuery);
+  }
+
+  function updateSourceFilter(nextFilter: ThreadSourceFilter) {
+    if (!THREAD_SOURCE_FILTERS.includes(nextFilter)) {
+      return;
+    }
+    setSourceFilter(nextFilter);
   }
 
   useEffect(() => {
@@ -540,7 +557,10 @@ export function useChatSidebarState() {
     setExpandedThreadTitle,
     searchQuery,
     setSearchQuery: updateSearchQuery,
+    setSourceFilter: updateSourceFilter,
     startProjectEdit: projectActions.startProjectEdit,
+    sourceFilter,
+    sourceFilterCounts,
     toggleSection,
     toggleThreadEdit,
     toggleThreadSelection,

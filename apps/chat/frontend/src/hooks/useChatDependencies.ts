@@ -83,10 +83,18 @@ export function useChatDependencies() {
     setSpeechMaxTextChars(0);
   }, []);
 
+  const markSpeechProviderUnavailable = useCallback((providerAppId: string) => {
+    setSpeechProviderAppId(providerAppId);
+    setSpeechProviderAvailable(false);
+    setSpeechProviderQualityProfile("");
+    setSpeechMaxTextChars(0);
+  }, []);
+
   const loadSpeechProviderFromDependencies = useCallback(
     async (dependencies: AppDependenciesPayload) => {
+      let providerAppId = "";
       try {
-        const providerAppId = selectedDependencyProviderAppId(dependencies, TEXT_TO_SPEECH_DEPENDENCY_ALIAS);
+        providerAppId = selectedDependencyProviderAppId(dependencies, TEXT_TO_SPEECH_DEPENDENCY_ALIAS);
         if (!providerAppId) {
           clearSpeechProvider();
           return;
@@ -94,7 +102,7 @@ export function useChatDependencies() {
         const capabilities = await getSpeechCapabilities(providerAppId);
         const synthesis = capabilities.interfaces?.["speech.synthesis"];
         if (!synthesis) {
-          clearSpeechProvider();
+          markSpeechProviderUnavailable(providerAppId);
           return;
         }
         const maxTextChars = typeof synthesis.max_text_chars === "number" && synthesis.max_text_chars > 0 ? synthesis.max_text_chars : 0;
@@ -104,10 +112,14 @@ export function useChatDependencies() {
         setSpeechProviderQualityProfile(qualityProfile);
         setSpeechMaxTextChars(maxTextChars);
       } catch {
-        clearSpeechProvider();
+        if (providerAppId) {
+          markSpeechProviderUnavailable(providerAppId);
+        } else {
+          clearSpeechProvider();
+        }
       }
     },
-    [clearSpeechProvider],
+    [clearSpeechProvider, markSpeechProviderUnavailable],
   );
 
   const clearTranscriptionProvider = useCallback(() => {
@@ -120,10 +132,21 @@ export function useChatDependencies() {
     prewarmedTranscriptionProviderRef.current = "";
   }, []);
 
+  const markTranscriptionProviderUnavailable = useCallback((providerAppId: string) => {
+    setTranscriptionProviderAppId(providerAppId);
+    setTranscriptionProviderAvailable(false);
+    setTranscriptionMaxAudioBytes(0);
+    setTranscriptionMaxDurationSeconds(0);
+    setTranscriptionContentTypes([]);
+    setTranscriptionChunkedDictationSupported(false);
+    prewarmedTranscriptionProviderRef.current = "";
+  }, []);
+
   const loadTranscriptionProviderFromDependencies = useCallback(
     async (dependencies: AppDependenciesPayload) => {
+      let providerAppId = "";
       try {
-        const providerAppId = selectedDependencyProviderAppId(dependencies, SPEECH_TO_TEXT_DEPENDENCY_ALIAS);
+        providerAppId = selectedDependencyProviderAppId(dependencies, SPEECH_TO_TEXT_DEPENDENCY_ALIAS);
         if (!providerAppId) {
           clearTranscriptionProvider();
           return;
@@ -131,7 +154,7 @@ export function useChatDependencies() {
         const capabilities = await getSpeechCapabilities(providerAppId);
         const transcription = capabilities.interfaces?.["speech.transcription"];
         if (!transcription) {
-          clearTranscriptionProvider();
+          markTranscriptionProviderUnavailable(providerAppId);
           return;
         }
         const providerAvailable = Boolean(
@@ -162,10 +185,14 @@ export function useChatDependencies() {
           });
         }
       } catch {
-        clearTranscriptionProvider();
+        if (providerAppId) {
+          markTranscriptionProviderUnavailable(providerAppId);
+        } else {
+          clearTranscriptionProvider();
+        }
       }
     },
-    [clearTranscriptionProvider],
+    [clearTranscriptionProvider, markTranscriptionProviderUnavailable],
   );
 
   const loadAppDependencies = useCallback(async () => {

@@ -258,8 +258,8 @@ assert.ok((html.match(/auto default/g) || []).length >= 5);
         self.assertIn("data-hosted-model-accordion", settings_source)
         self.assertIn("data-hosted-provider-save", settings_source)
         self.assertNotIn("settings-hosted-provider-model", settings_source)
-        self.assertIn("Hosted chat fast model", settings_source)
-        self.assertIn("Hosted text providers govern", settings_source)
+        self.assertIn("Hosted OpenRouter models", settings_source)
+        self.assertIn("Chat only uses text-output fast models", settings_source)
         self.assertNotIn("OpenRouter governs", settings_source)
         self.assertIn("runtime engine remains Codex", settings_source)
         self.assertIn("/api/settings/runtime-sessions/clear", api_source)
@@ -421,12 +421,15 @@ assert.ok(html.includes('Agentic provider'));
 assert.ok(html.includes('data-agentic-provider-accordion'));
 assert.ok(html.includes('Codex tools/filesystem/MCP'));
 assert.ok(html.includes('Hosted chat / fast model'));
-assert.ok(html.includes('Hosted chat fast models'));
+assert.ok(html.includes('Hosted OpenRouter models'));
+assert.ok(html.includes('Chat only uses text-output fast models'));
 assert.ok(html.includes('OpenRouter'));
 assert.ok(html.includes('Gemma 4 31B (free)'));
 assert.ok(html.includes('Nemotron 3 Ultra (free)'));
 assert.ok(html.includes('DeepSeek V4 Flash'));
 assert.ok(html.includes('Kokoro 82M'));
+assert.ok(html.includes('Hosted speech model'));
+assert.ok(html.includes('speech synthesis metadata · not used by plain hosted chat'));
 assert.equal((html.match(/data-settings-model-accordion=/g) || []).length, 5);
 assert.equal((html.match(/data-hosted-model-accordion=/g) || []).length, 4);
 assert.equal((html.match(/<span class="settings-pill">Active<\/span>/g) || []).length, 4);

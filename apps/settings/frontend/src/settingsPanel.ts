@@ -333,14 +333,14 @@ function hostedProviderSettingsListHtml(
     <div class="settings-platform-form-heading settings-hosted-models-heading">
       <span class="material-symbols-rounded" aria-hidden="true">route</span>
       <span>
-        <strong>Hosted chat fast models</strong>
-        <small>Hosted text providers govern plain_hosted_chat and fast_model per configured model.</small>
+        <strong>Hosted OpenRouter models</strong>
+        <small>Settings manages model defaults and upstream routing; Chat only uses text-output fast models.</small>
       </span>
     </div>
     ${
       modelOptions.length
         ? modelOptions.map((option) => hostedProviderModelAccordionHtml(option, openHostedModel, hostedProvider, settings, state)).join('')
-        : '<p class="settings-card-copy settings-platform-note">No hosted text models are available from the active hosted provider.</p>'
+        : '<p class="settings-card-copy settings-platform-note">No hosted models are available from the active hosted provider.</p>'
     }
     ${!hasHostedProvider ? '<p class="settings-card-copy settings-platform-note">Activate a hosted text provider before selecting a fast model.</p>' : ''}
   </div>`;
@@ -365,6 +365,11 @@ function hostedProviderModelAccordionHtml(
       !state.isSavingHostedProvider &&
       hostedRoutingChanged(state, settings, modelId)
   );
+  const isTextOutputModel = modelSupportsTextOutput(option);
+  const modelKindLabel = isTextOutputModel ? 'Hosted chat / fast model' : 'Hosted speech model';
+  const modelRuntimeLabel = isTextOutputModel
+    ? 'plain hosted chat capable · runtime engine remains Codex'
+    : 'speech synthesis metadata · not used by plain hosted chat';
   const isOpen = modelId === openHostedModel;
   const providerLabel = hostedProvider?.label || hostedProvider?.provider_id || 'Hosted provider';
   return `<details class="settings-model-accordion settings-hosted-model-accordion" data-settings-model-accordion="hosted:${escapeAttr(modelId)}" data-hosted-model-accordion="${escapeAttr(modelId)}" ${isOpen ? 'open' : ''}>
@@ -372,11 +377,11 @@ function hostedProviderModelAccordionHtml(
       <span class="settings-platform-icon material-symbols-rounded" aria-hidden="true">bolt</span>
       <span class="settings-model-copy">
         <span class="settings-model-kicker">
-          <span class="settings-kicker">Hosted chat / fast model</span>
+          <span class="settings-kicker">${modelKindLabel}</span>
           <span class="settings-pill">Active</span>
         </span>
         <strong>${escapeHtml(option.label || modelId)} - ${escapeHtml(providerLabel)}</strong>
-        <small>${escapeHtml(modelId || 'model not selected')} · plain hosted chat only · runtime engine remains Codex</small>
+        <small>${escapeHtml(modelId || 'model not selected')} · ${modelRuntimeLabel}</small>
       </span>
       <span class="settings-model-chevron material-symbols-rounded" aria-hidden="true">expand_more</span>
     </summary>
@@ -442,6 +447,11 @@ function hostedProviderModelAccordionHtml(
     ${state.hostedProviderError && state.hostedProviderErrorModelId === modelId ? `<p class="settings-platform-error">${escapeHtml(state.hostedProviderError)}</p>` : ''}
     </div>
   </details>`;
+}
+
+function modelSupportsTextOutput(option: ProviderModelOption): boolean {
+  const outputs = option.output_modalities || [];
+  return !outputs.length || outputs.includes('text');
 }
 
 function runtimeSessionsHtml(

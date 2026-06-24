@@ -54,10 +54,20 @@ def hosted_provider_model_settings_payload(
     """Return effective hosted text model settings for a provider."""
     selected_model_id = (None if selection is None else selection.model_id) or definition.default_model_family
     model_option = next((option for option in definition.model_options if option.model_id == selected_model_id), None)
+    if model_option is not None and not _provider_model_option_supports_text_output(model_option):
+        model_option = None
     if model_option is None and definition.model_options:
         model_option = next(
-            (option for option in definition.model_options if option.model_id == definition.default_model_family),
-            definition.model_options[0],
+            (
+                option
+                for option in definition.model_options
+                if option.model_id == definition.default_model_family
+                and _provider_model_option_supports_text_output(option)
+            ),
+            next(
+                (option for option in definition.model_options if _provider_model_option_supports_text_output(option)),
+                definition.model_options[0],
+            ),
         )
         selected_model_id = model_option.model_id
     return {
@@ -65,6 +75,15 @@ def hosted_provider_model_settings_payload(
         "selected_reasoning_effort": None if model_option is None else model_option.default_reasoning_effort,
         "available_models": [provider_model_option_payload(option) for option in definition.model_options],
     }
+
+
+def _provider_model_option_supports_text_output(option) -> bool:
+    outputs = list(option.output_modalities)
+    return not outputs or "text" in outputs
+
+
+def _decision_failed_on_unsupported_hosted_model(decision) -> bool:
+    return any(str(code).startswith("hosted_model_output_unsupported:") for code in decision.reason_codes)
 
 
 def workspace_hosted_text_status(state: PlatformState, *, workspace_id: str) -> dict[str, object]:
@@ -94,6 +113,13 @@ def workspace_hosted_text_status(state: PlatformState, *, workspace_id: str) -> 
     )
     selected_provider_id = decision.selected_provider_id
     active_provider = next((provider for provider in available_providers if provider.provider_id == selected_provider_id), None)
+    if active_provider is None and selection is not None and _decision_failed_on_unsupported_hosted_model(decision):
+        configured_provider = next(
+            (provider for provider in available_providers if provider.provider_id == selection.provider_id),
+            None,
+        )
+        if configured_provider is not None and configured_provider.status == "active":
+            active_provider = configured_provider
     active_selection = (
         selection
         if active_provider is not None

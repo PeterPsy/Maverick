@@ -236,6 +236,11 @@ def configure_hosted_model_provider(
     routing_by_model = dict(previous.openrouter_provider_routing_by_model) if previous is not None else {}
     if normalized_model_id:
         routing_by_model[normalized_model_id] = _normalize_openrouter_provider_routing(openrouter_provider_routing)
+    selected_model_id = _hosted_text_selection_model_id(
+        definition,
+        requested_model_id=normalized_model_id,
+        previous_model_id=None if previous is None else previous.model_id,
+    )
     selection = ProviderHostedSelection(
         selection_id=f"{workspace_id}:{profile}",
         workspace_id=workspace_id,
@@ -244,7 +249,7 @@ def configure_hosted_model_provider(
         selection_reason=selection_reason,
         created_at=timestamp,
         updated_at=timestamp,
-        model_id=normalized_model_id,
+        model_id=selected_model_id,
         openrouter_provider_routing_by_model=routing_by_model,
     )
     saved = store.save_hosted_provider_selection(selection)
@@ -335,6 +340,36 @@ def _validate_hosted_model_id(definition: ProviderDefinition, model_id: str | No
             f"Model `{normalized_model_id}` is not declared by hosted provider `{definition.provider_id}`."
         )
     return normalized_model_id
+
+
+def _hosted_text_selection_model_id(
+    definition: ProviderDefinition,
+    *,
+    requested_model_id: str | None,
+    previous_model_id: str | None,
+) -> str | None:
+    if _hosted_model_supports_text_output(definition, requested_model_id):
+        return requested_model_id
+    if _hosted_model_supports_text_output(definition, previous_model_id):
+        return previous_model_id
+    if _hosted_model_supports_text_output(definition, definition.default_model_family):
+        return definition.default_model_family
+    for option in definition.model_options:
+        if _model_option_supports_text_output(option):
+            return option.model_id
+    return requested_model_id
+
+
+def _hosted_model_supports_text_output(definition: ProviderDefinition, model_id: str | None) -> bool:
+    if not model_id:
+        return False
+    option = next((option for option in definition.model_options if option.model_id == model_id), None)
+    return option is not None and _model_option_supports_text_output(option)
+
+
+def _model_option_supports_text_output(option) -> bool:
+    outputs = list(option.output_modalities)
+    return not outputs or "text" in outputs
 
 
 def _assert_secret_ref_exists(secret_store: SecretStore, secret_ref: str) -> None:

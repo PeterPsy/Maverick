@@ -176,6 +176,69 @@ class ProviderApiTest(unittest.TestCase):
         self.assertNotIn("platform:secret-alias/openrouter_api_key", json.dumps(payload))
         self.assertNotIn("secret_ref", json.dumps(save_payload))
 
+    def test_saving_openrouter_speech_model_routing_does_not_replace_fast_model(self) -> None:
+        state = self.make_state()
+        secret = create_platform_secret(
+            state.secret_store,
+            label="OpenRouter API",
+            raw_value="super-secret-token",
+            alias="openrouter_api_key",
+            kind="api_key",
+        )
+
+        status, payload = self.invoke(
+            "/api/providers/hosted/active",
+            method="POST",
+            body={
+                "provider_id": "openrouter",
+                "secret_ref": build_secret_ref(alias=secret.alias or "openrouter_api_key"),
+                "label": "OpenRouter hosted text",
+            },
+            state=state,
+        )
+        with patch("core.api.provider_api.require_provider_selection_authority", return_value=None):
+            save_status, save_payload = self.invoke(
+                "/api/providers/hosted/selection",
+                method="POST",
+                body={
+                    "provider_id": "openrouter",
+                    "model_id": "hexgrad/kokoro-82m",
+                    "openrouter_provider_routing": {
+                        "mode": "only",
+                        "provider_id": "deepinfra",
+                        "allow_fallbacks": False,
+                    },
+                },
+                state=state,
+            )
+        route_status, route_payload = self.invoke(
+            "/api/providers/route",
+            query="profile=fast_model&request_id=req-openrouter-kokoro-api",
+            state=state,
+        )
+
+        self.assertEqual(status, "200 OK")
+        self.assertEqual(payload["hosted_selection"]["model_id"], "google/gemma-4-31b-it:free")
+        self.assertEqual(save_status, "200 OK")
+        self.assertEqual(save_payload["hosted_text"]["active_provider"]["provider_id"], "openrouter")
+        self.assertEqual(
+            save_payload["hosted_text"]["selection"]["model_id"],
+            "google/gemma-4-31b-it:free",
+        )
+        self.assertEqual(
+            save_payload["hosted_text"]["selection"]["openrouter_provider_routing_by_model"]["hexgrad/kokoro-82m"][
+                "provider_id"
+            ],
+            "deepinfra",
+        )
+        self.assertEqual(
+            save_payload["hosted_text"]["model_settings"]["selected_model_id"],
+            "google/gemma-4-31b-it:free",
+        )
+        self.assertEqual(route_status, "200 OK")
+        self.assertEqual(route_payload["decision"]["selected_provider_id"], "openrouter")
+        self.assertEqual(route_payload["decision"]["selected_model_id_or_voice_id"], "google/gemma-4-31b-it:free")
+
     def test_hosted_text_status_only_marks_routable_provider_active(self) -> None:
         state = self.make_state()
         secret = create_platform_secret(

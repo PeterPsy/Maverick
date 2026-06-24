@@ -20,11 +20,15 @@ export function ComposerRuntimeBadges({
     <div className="chatapp-composer__runtime-badges">
       <ProviderSelector activeProviderId={activeProviderId} disabled={disabled} onSelect={onSelectProvider} providers={providers} />
       {executionMode ? (
-        <span className={`chatapp-execution-chip ${executionMode === "full-access" ? "is-full-access" : "is-sandbox"}`}>
+        <span
+          aria-label={executionMode === "full-access" ? "Full access runtime" : "Sandbox runtime"}
+          className={`chatapp-execution-chip ${executionMode === "full-access" ? "is-full-access" : "is-sandbox"}`}
+          role="img"
+          title={executionMode === "full-access" ? "Full access runtime" : "Sandbox runtime"}
+        >
           <span aria-hidden="true" className="material-symbols-rounded">
             {executionMode === "full-access" ? "admin_panel_settings" : "lock"}
           </span>
-          {executionMode}
         </span>
       ) : null}
     </div>

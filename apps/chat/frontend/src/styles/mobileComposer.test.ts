@@ -35,8 +35,32 @@ describe("mobile chat composer layout", () => {
     expect(responsiveStyles).not.toContain(".chatapp-composer:has(.chatapp-composer__icon-action:active)");
     expect(responsiveStyles).toContain(".chatapp-composer:has(.chatapp-composer__tool-button:active) .chatapp-composer__input-shell");
     expect(responsiveStyles).toContain(".chatapp-composer:has(.chatapp-attachment-picker__trigger:active) .chatapp-composer__input-shell");
+    expect(responsiveStyles).toContain(".chatapp-composer:has(.chatapp-provider-menu) .chatapp-composer__input-shell");
     expect(responsiveStyles).toContain("min-height: 2.48rem;");
     expect(desktopComposerStyles).not.toContain('grid-template-areas: "tools field actions";');
+  });
+
+  it("keeps the selected model label on one truncated line", () => {
+    const composerStyles = readStyle("composer.css");
+    const labelBlock = cssBlock(composerStyles, ".chatapp-provider-selector__label");
+    const triggerBlock = cssBlock(composerStyles, ".chatapp-provider-selector__trigger");
+
+    expect(triggerBlock).toContain("max-width: min(24rem, 48vw);");
+    expect(labelBlock).toContain("overflow: hidden;");
+    expect(labelBlock).toContain("text-overflow: ellipsis;");
+    expect(labelBlock).toContain("white-space: nowrap;");
+  });
+
+  it("positions model and agent menus as composer-wide citation panels", () => {
+    const composerStyles = readStyle("composer.css");
+
+    expect(composerStyles).toContain(".chatapp-provider-menu,\n.chatapp-agent-menu");
+    expect(composerStyles).toContain("right: 1rem;");
+    expect(composerStyles).toContain("left: 1rem;");
+    expect(composerStyles).toContain("bottom: calc(100% + 0.6rem);");
+    expect(composerStyles).toContain("background: var(--maverick-popover-surface-strong);");
+    expect(composerStyles).toContain(".chatapp-provider-menu__header,\n.chatapp-agent-menu__header");
+    expect(composerStyles).toContain(".chatapp-provider-menu__search-label,\n.chatapp-agent-menu__search-label");
   });
 
   it("keeps the send button as an explicit click action", () => {

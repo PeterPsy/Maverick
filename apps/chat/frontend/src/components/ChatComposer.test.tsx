@@ -8,7 +8,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { ApiError, transcribeSpeechBlob } from "../api/client";
 import type { AgentTypeSummary, AppReference, MultiAgentComposerMode, ProviderItem } from "../api/client";
 import type { MentionItem } from "../lib/mentions";
-import { ChatComposer } from "./ChatComposer";
+import { ChatComposer, type ExecutionMode } from "./ChatComposer";
 
 vi.mock("../api/client", async () => {
   const actual = await vi.importActual<typeof import("../api/client")>("../api/client");
@@ -160,6 +160,7 @@ async function renderComposer({
   onSearchReferences = async () => [],
   onSelectMultiAgentMode = () => undefined,
   onSelectAgent = () => undefined,
+  executionMode = null,
   multiAgentGroupChatEnabled = false,
   multiAgentMode = "off",
   onSubmit = () => undefined,
@@ -174,6 +175,7 @@ async function renderComposer({
   onSearchReferences?: (query: string, signal: AbortSignal) => Promise<MentionItem[]>;
   onSelectMultiAgentMode?: (mode: MultiAgentComposerMode) => void;
   onSelectAgent?: (agentTypeId: string) => void;
+  executionMode?: ExecutionMode | null;
   multiAgentGroupChatEnabled?: boolean;
   multiAgentMode?: MultiAgentComposerMode;
   onSubmit?: () => void;
@@ -197,7 +199,7 @@ async function renderComposer({
         canStopTurn={false}
         disabled={false}
         error={null}
-        executionMode={null}
+        executionMode={executionMode}
         isSending={false}
         mentionItems={mentionItems}
         multiAgentBudgetLabel="1 worker · 1 turn · 1 tool call"
@@ -981,6 +983,17 @@ describe("ChatComposer reference search", () => {
 
     expect(agentButton?.getAttribute("aria-expanded")).toBe("true");
     expect(element.textContent).toContain("Social Video Content Strategist");
+  });
+
+  it("renders the execution mode badge as an icon-only control", async () => {
+    const { element } = await renderComposer({ executionMode: "full-access" });
+
+    const executionBadge = element.querySelector(".chatapp-execution-chip");
+
+    expect(executionBadge).toBeInstanceOf(HTMLSpanElement);
+    expect(executionBadge?.getAttribute("aria-label")).toBe("Full access runtime");
+    expect(executionBadge?.textContent).toContain("admin_panel_settings");
+    expect(executionBadge?.textContent).not.toContain("full-access");
   });
 
   it("renders checklist entity search results after typing an @ query", async () => {

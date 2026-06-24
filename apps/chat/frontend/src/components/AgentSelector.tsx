@@ -290,7 +290,9 @@ export function AgentSelector({
           ref={panelRef}
           role="listbox"
         >
-          <div className="chatapp-agent-menu__search">
+          <div className="chatapp-agent-menu__header">Agents</div>
+          <label className="chatapp-agent-menu__search">
+            <span className="chatapp-agent-menu__search-label">Search</span>
             <input
               aria-activedescendant={activeOptionId}
               aria-controls={menuId}
@@ -305,7 +307,7 @@ export function AgentSelector({
               type="search"
               value={query}
             />
-          </div>
+          </label>
           {menuOptions.map((option, optionIndex) => (
             <button
               aria-selected={option.agentTypeId === selectedAgentTypeId}

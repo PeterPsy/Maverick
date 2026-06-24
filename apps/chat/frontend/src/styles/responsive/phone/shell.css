@@ -49,13 +49,9 @@
   }
 
   .chatapp-provider-selector,
-  .chatapp-provider-selector__control,
-  .chatapp-provider-selector select {
+  .chatapp-provider-selector__trigger {
     width: 100%;
     min-width: 0;
-  }
-
-  .chatapp-provider-selector select {
     max-width: 100%;
   }
 
@@ -69,8 +65,9 @@
   }
 
   .chatapp-execution-chip {
+    width: 2.35rem;
     min-width: 2.35rem;
-    padding-inline: 0.62rem;
+    padding-inline: 0;
     white-space: nowrap;
   }
 

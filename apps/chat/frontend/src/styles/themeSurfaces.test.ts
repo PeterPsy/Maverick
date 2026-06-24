@@ -24,7 +24,8 @@ describe("chat light theme surfaces", () => {
     installStyles(resolve(currentDir, "main.css"));
     applyRootTheme("light");
 
-    expect(computedBackgroundColor(element("div", "chatapp-agent-menu"))).toBe("rgba(255, 255, 255, 0.94)");
+    expect(computedBackgroundColor(element("div", "chatapp-agent-menu"))).toBe("rgba(255, 255, 255, 0.96)");
+    expect(computedBackgroundColor(element("div", "chatapp-provider-menu"))).toBe("rgba(255, 255, 255, 0.96)");
     expect(computedBackgroundColor(element("div", "chatapp-mention-panel"))).toBe("rgba(255, 255, 255, 0.94)");
 
     const markdownHost = element("div", "chatapp-agent-block__body");

@@ -30,7 +30,7 @@ import {
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { loadOverview, loadViewFilter, resetRoutingSession, revokeDevice, startPairing, updateSettings } from './api';
+import { loadOverview, loadViewFilter, resetRoutingSession, revokeDevice, setViewFilter, startPairing, updateSettings } from './api';
 import type {
   SensesCapture,
   SensesDevice,
@@ -135,6 +135,9 @@ export function App() {
   const [busyAction, setBusyAction] = useState('');
   const [settingsDraft, setSettingsDraft] = useState<SettingsDraft | null>(null);
   const nativeHost = useNativeHost();
+  const canPersistViewFilter = Boolean(
+    overview?.management.can_manage_workspace_devices || overview?.actor.can_manage_workspace_devices,
+  );
 
   const applyRemoteViewFilter = useCallback((filter: Partial<ViewFilterState>) => {
     if (filter.tab) {
@@ -151,14 +154,23 @@ export function App() {
     }
   }, []);
 
+  const persistViewFilter = useCallback((viewFilter: ViewFilterState) => {
+    if (!canPersistViewFilter) {
+      return;
+    }
+    void setViewFilter(viewFilter).catch(() => undefined);
+  }, [canPersistViewFilter]);
+
   const emitCurrentViewState = useCallback((overrides: Partial<ViewFilterState> = {}) => {
-    emitViewStateChanged({
+    const nextViewFilter = {
       tab: overrides.tab ?? activeTab,
       query: overrides.query ?? query,
       capture_filter: overrides.capture_filter ?? captureFilter,
       routing_filter: overrides.routing_filter ?? routingFilter,
-    });
-  }, [activeTab, captureFilter, query, routingFilter]);
+    };
+    emitViewStateChanged(nextViewFilter);
+    persistViewFilter(nextViewFilter);
+  }, [activeTab, captureFilter, persistViewFilter, query, routingFilter]);
 
   const updateActiveTab = useCallback((tab: TabId) => {
     setActiveTab(tab);

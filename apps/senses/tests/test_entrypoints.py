@@ -457,7 +457,7 @@ class SensesPhase7EntrypointTest(unittest.TestCase):
             self.assertEqual(updated["state"]["view_filter"]["capture_filter"], "chat-linked")
             self.assertEqual(updated["state"]["view_filter"]["routing_filter"], "task")
 
-    def test_chat_link_uses_declared_optional_dependency(self) -> None:
+    def test_chat_link_requires_resolved_selected_dependency(self) -> None:
         resolved = service.dependency_resolution_payload(resolved_storage_dependencies(chat_provider_app_id="chat"))
         provider_app_id = service.chat_provider_app_id_from_dependencies(resolved)
         linked = service.chat_link_payload("thread-1", provider_app_id=provider_app_id)
@@ -477,19 +477,20 @@ class SensesPhase7EntrypointTest(unittest.TestCase):
         self.assertEqual(unavailable["status"], "unavailable")
         self.assertIsNone(unavailable["deep_link"])
 
-        automatic = service.dependency_resolution_payload(
+        optional_unset = service.dependency_resolution_payload(
             resolved_storage_dependencies(
                 chat_provider_app_id=None,
                 chat_status="optional_unset",
                 chat_candidates=["workspace-chat"],
             )
         )
-        automatic_link = service.chat_link_payload(
+        optional_unset_link = service.chat_link_payload(
             "thread-1",
-            provider_app_id=service.chat_provider_app_id_from_dependencies(automatic),
+            provider_app_id=service.chat_provider_app_id_from_dependencies(optional_unset),
         )
-        self.assertEqual(automatic_link["app_id"], "workspace-chat")
-        self.assertEqual(automatic_link["deep_link"], "/app/workspace-chat/threads/thread-1")
+        self.assertFalse(optional_unset_link["available"])
+        self.assertEqual(optional_unset_link["status"], "unavailable")
+        self.assertIsNone(optional_unset_link["deep_link"])
 
     def test_pairing_start_and_complete_registers_device_without_raw_token(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

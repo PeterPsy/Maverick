@@ -49,6 +49,14 @@ export async function loadViewFilter(): Promise<Record<string, unknown>> {
   return payload.state?.view_filter || {};
 }
 
+export async function setViewFilter(viewFilter: Record<string, unknown>): Promise<Record<string, unknown>> {
+  const payload = await request<SensesActionResult & { state?: { view_filter?: Record<string, unknown> } }>({
+    action: 'set_view_filter',
+    view_filter: viewFilter,
+  });
+  return payload.state?.view_filter || {};
+}
+
 export async function startPairing(input: {
   deviceDisplayName?: string;
   deviceKind?: string;

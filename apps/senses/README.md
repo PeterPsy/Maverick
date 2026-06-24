@@ -141,9 +141,12 @@ metadata. Runtime requests created by Senses still produce runtime threads with
 Senses stores the device/thread mapping in `routing_sessions`, exposes pending,
 unavailable, or linked Chat state in capture and dispatch payloads, and titles
 Meta glasses visual threads as `Occhiali - domanda visiva` or the matching task
-variant. The frontend Captures and Routing tabs publish shared view-state for
-stored captures, Chat-linked captures, Chat-pending captures, mapped routing
-sessions, pending mapping sessions, and task threads.
+variant. The frontend Captures and Routing tabs publish shell selection events
+for stored captures, Chat-linked captures, Chat-pending captures, mapped routing
+sessions, pending mapping sessions, and task threads. When the actor has
+workspace-admin or platform-admin authority, the frontend also persists those
+filters through the standard Senses `set_view_filter` backend action; non-admin
+sessions keep the filters local to the shell event stream.
 
 Live audio capture and bidirectional voice routing remain deferred. Senses must
 not open raw device-token audio ingress, STT/TTS WebSockets, or remote speech

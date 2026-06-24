@@ -3539,14 +3539,6 @@ def chat_provider_app_id_from_dependencies(dependencies: dict[str, object]) -> s
     candidates = dependency_candidate_provider_app_ids(dependency, required_surface="view")
     if selected and str(dependency.get("status") or "") == "resolved":
         return next((app_id for app_id in selected if app_id in candidates), None)
-    if (
-        str(dependency.get("status") or "") == "optional_unset"
-        and str(dependency.get("cardinality") or "") == "one"
-        and not string_items(dependency.get("stale_provider_app_ids"))
-        and not text_or_none(dependency.get("blocked_reason"))
-        and len(candidates) == 1
-    ):
-        return candidates[0]
     return None
 
 

@@ -187,6 +187,8 @@ class SpeechAppTests(unittest.TestCase):
         self.assertEqual(synthesis["default_voice"], "af_heart")
         self.assertEqual(synthesis["quality_profile"], "natural")
         self.assertEqual(synthesis["content_types"], ["audio/mpeg"])
+        self.assertEqual(synthesis["cache"], {"enabled": False, "scope": "none"})
+        self.assertEqual(synthesis["output"]["retention"], "provider_response")
         self.assertTrue(transcription["available"])
         self.assertEqual(transcription["engine"], "deepgram")
         self.assertTrue(transcription["inline_default_profile_available"])
@@ -238,6 +240,26 @@ class SpeechAppTests(unittest.TestCase):
             self.assertIn(payload["job_id"], jobs)
             self.assertIn('"retention": "derived_cache"', jobs)
             self.assertNotIn("workspace_relative_path", jobs)
+
+    def test_local_synthesize_rejects_mpeg_format(self) -> None:
+        engine = SimpleNamespace(
+            name="espeak",
+            voice_id="en",
+            voices=(),
+            quality_profile="diagnostic",
+            latency_profile="low",
+        )
+        with TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            with patch("synthesis.resolve_local_engine", return_value=engine):
+                with self.assertRaises(SpeechValidationError) as error:
+                    handle_action(
+                        root / "data",
+                        root / "generated",
+                        {"action": "synthesize", "text": "Hello", "format": "audio/mpeg"},
+                    )
+
+        self.assertEqual(error.exception.allowed_values, {"format": ["audio/wav"]})
 
     def test_synthesize_honors_selected_engine_and_reuses_cache(self) -> None:
         with TemporaryDirectory() as temp_dir:
@@ -441,7 +463,15 @@ class SpeechAppTests(unittest.TestCase):
                 return json.dumps(
                     {
                         "metadata": {"duration": 1.0},
-                        "results": {"channels": [{"alternatives": [{"transcript": "ciao", "words": []}]}]},
+                        "results": {
+                            "channels": [
+                                {
+                                    "detected_language": "it",
+                                    "language_confidence": 0.94,
+                                    "alternatives": [{"transcript": "ciao", "words": []}],
+                                }
+                            ]
+                        },
                     }
                 ).encode("utf-8")
 
@@ -463,6 +493,8 @@ class SpeechAppTests(unittest.TestCase):
 
         query = parse_qs(urlparse(str(captured["url"])).query)
         self.assertEqual(payload["text"], "ciao")
+        self.assertEqual(payload["language"], "it")
+        self.assertEqual(payload["language_probability"], 0.94)
         self.assertEqual(query["model"], ["nova-2"])
         self.assertEqual(query["detect_language"], ["true"])
         self.assertNotIn("language", query)
@@ -494,13 +526,15 @@ class SpeechAppTests(unittest.TestCase):
             audio_path = Path(temp_dir) / "speech.wav"
             audio_path.write_bytes(b"RIFFaudio")
             with patch("engines.urllib_request.urlopen", side_effect=fake_urlopen):
-                engines._transcribe_with_deepgram(
+                payload = engines._transcribe_with_deepgram(
                     audio_path,
                     settings={"_app_secrets": {"deepgram-api-key": "deepgram-token"}},
                     language="en",
                 )
 
         query = parse_qs(urlparse(str(captured["url"])).query)
+        self.assertEqual(payload["language"], "en")
+        self.assertEqual(payload["language_probability"], 0.0)
         self.assertEqual(query["language"], ["en"])
         self.assertNotIn("detect_language", query)
 
@@ -550,6 +584,7 @@ class SpeechAppTests(unittest.TestCase):
                     {
                         "action": "synthesize",
                         "text": "hello",
+                        "format": "audio/mpeg",
                         "_app_secrets": {"openrouter-api-key": "openrouter-token"},
                     },
                 )

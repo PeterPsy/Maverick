@@ -193,6 +193,8 @@ def capabilities_payload(data_root: Path, app_secrets: dict | None = None) -> di
     synthesis_available = bool(synthesis_selection["available"])
     synthesis_voices = public_voice_profiles_from_status(synthesis_status) if synthesis_available else []
     synthesis_content_types = public_supported_formats_from_status(synthesis_status)
+    synthesis_cache = public_synthesis_cache_from_status(synthesis_status)
+    synthesis_retention = public_synthesis_retention_from_status(synthesis_status)
     transcription_selection = engine_selection_summary(
         transcription_engine_statuses(settings),
         requested_engine=str(settings.get("transcription_engine") or "auto"),
@@ -220,12 +222,12 @@ def capabilities_payload(data_root: Path, app_secrets: dict | None = None) -> di
                 "fallback_engines": synthesis_selection["fallback_engines"],
                 "quality_profile": str((synthesis_status or {}).get("quality_profile") or ""),
                 "latency_profile": str((synthesis_status or {}).get("latency_profile") or ""),
-                "cache": {"enabled": True, "scope": "workspace"},
+                "cache": synthesis_cache,
                 "output": {
                     "audio_base64": True,
                     "workspace_relative_path": False,
                     "absolute_paths": False,
-                    "retention": "derived_cache",
+                    "retention": synthesis_retention,
                 },
             },
             "speech.transcription": {
@@ -295,6 +297,18 @@ def public_supported_formats_from_status(status: dict | None) -> list[str]:
         if isinstance(item, str) and item and item not in supported:
             supported.append(item)
     return supported or list(SUPPORTED_CONTENT_TYPES)
+
+
+def public_synthesis_cache_from_status(status: dict | None) -> dict[str, object]:
+    if (status or {}).get("engine") == "kokoro-openrouter":
+        return {"enabled": False, "scope": "none"}
+    return {"enabled": True, "scope": "workspace"}
+
+
+def public_synthesis_retention_from_status(status: dict | None) -> str:
+    if (status or {}).get("engine") == "kokoro-openrouter":
+        return "provider_response"
+    return "derived_cache"
 
 
 def status_for_effective_engine(statuses: list[dict], selection: dict) -> dict | None:

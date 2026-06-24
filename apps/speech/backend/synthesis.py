@@ -39,14 +39,22 @@ def synthesize_payload(*, data_root: Path, generated_storage_root: Path, body: d
     text = normalized_text(body.get("text"))
     requested_voice = normalized_voice(body.get("voice"), default="")
     rate = normalized_rate(body.get("rate"))
-    output_format = normalized_output_format(body.get("format"))
     settings = read_settings(data_root)
     if isinstance(body.get("_app_secrets"), dict):
         settings = {**settings, "_app_secrets": dict(body["_app_secrets"])}
     requested_engine = str(settings.get("synthesis_engine") or "auto")
     if requested_engine == "kokoro-openrouter":
+        output_format = normalized_output_format(
+            body.get("format"),
+            default=KOKORO_OPENROUTER_CONTENT_TYPE,
+            formats={
+                "audio/mpeg": KOKORO_OPENROUTER_CONTENT_TYPE,
+                "audio/mp3": KOKORO_OPENROUTER_CONTENT_TYPE,
+                "mp3": KOKORO_OPENROUTER_CONTENT_TYPE,
+            },
+        )
         audio = run_kokoro_openrouter(text=text, voice=requested_voice or "af_heart", settings=settings)
-        content_type = KOKORO_OPENROUTER_CONTENT_TYPE
+        content_type = output_format
         validate_audio_size(audio)
         job_id = f"tts_{uuid.uuid4().hex}"
         created_at = datetime.now(tz=UTC).isoformat()
@@ -77,7 +85,7 @@ def synthesize_payload(*, data_root: Path, generated_storage_root: Path, body: d
             "engine": "kokoro-openrouter",
             "voice": requested_voice or "af_heart",
             "rate": rate,
-            "format": content_type,
+            "format": output_format,
             "quality_profile": "natural",
             "latency_profile": "remote",
             "cache_hit": False,
@@ -88,6 +96,11 @@ def synthesize_payload(*, data_root: Path, generated_storage_root: Path, body: d
     if engine is None:
         raise SpeechProviderUnavailableError(f"No local TTS engine is available for Speech synthesis. Requested engine: {requested_engine}.")
 
+    output_format = normalized_output_format(
+        body.get("format"),
+        default="audio/wav",
+        formats={"audio/wav": "audio/wav", "wav": "audio/wav"},
+    )
     voice = selected_voice_id(engine, requested_voice)
     cache_fingerprint = tts_engine_cache_fingerprint(engine, voice=voice)
     cache_key = synthesis_cache_key(
@@ -211,14 +224,16 @@ def normalized_rate(value: object) -> int:
     return rate
 
 
-def normalized_output_format(value: object) -> str:
-    output_format = str(value or "audio/wav").strip().lower()
-    if output_format in {"wav", "audio/wav", ""}:
-        return "audio/wav"
+def normalized_output_format(value: object, *, default: str, formats: dict[str, str]) -> str:
+    output_format = str(value or default).strip().lower()
+    if output_format in {"", "default"}:
+        return default
+    if output_format in formats:
+        return formats[output_format]
     raise SpeechValidationError(
         "Unsupported synthesis format.",
         operation="synthesize",
-        allowed_values={"format": ["audio/wav"]},
+        allowed_values={"format": sorted(set(formats.values()))},
     )
 
 

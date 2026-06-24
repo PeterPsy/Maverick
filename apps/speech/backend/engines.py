@@ -978,6 +978,7 @@ def _transcribe_with_deepgram(audio_path: Path, *, settings: dict, language: str
     except (urllib_error.URLError, TimeoutError, json.JSONDecodeError, UnicodeDecodeError) as error:
         raise SpeechTranscriptionError("Deepgram transcription failed.") from error
     alternative = _deepgram_best_alternative(payload)
+    channel = _deepgram_first_channel(payload)
     text = str(alternative.get("transcript") or "")
     words = alternative.get("words") if isinstance(alternative.get("words"), list) else []
     return {
@@ -988,17 +989,40 @@ def _transcribe_with_deepgram(audio_path: Path, *, settings: dict, language: str
         else 0.0,
         "engine": "deepgram",
         "model": DEEPGRAM_MODEL,
+        "language": _deepgram_detected_language(channel, fallback=language),
+        "language_probability": _deepgram_language_confidence(channel),
     }
 
 
-def _deepgram_best_alternative(payload: dict) -> dict:
+def _deepgram_first_channel(payload: dict) -> dict:
     channels = payload.get("results", {}).get("channels", []) if isinstance(payload.get("results"), dict) else []
     if not channels or not isinstance(channels[0], dict):
         return {}
-    alternatives = channels[0].get("alternatives", [])
+    return channels[0]
+
+
+def _deepgram_best_alternative(payload: dict) -> dict:
+    channel = _deepgram_first_channel(payload)
+    if not channel:
+        return {}
+    alternatives = channel.get("alternatives", [])
     if not alternatives or not isinstance(alternatives[0], dict):
         return {}
     return alternatives[0]
+
+
+def _deepgram_detected_language(channel: dict, *, fallback: str = "") -> str:
+    language = str(channel.get("detected_language") or fallback or "").strip().lower().replace("_", "-")
+    if not language:
+        return ""
+    return language.split("-", 1)[0]
+
+
+def _deepgram_language_confidence(channel: dict) -> float:
+    try:
+        return float(channel.get("language_confidence") or 0.0)
+    except (TypeError, ValueError):
+        return 0.0
 
 
 def _deepgram_segments(words: list, *, fallback_text: str) -> list[dict]:

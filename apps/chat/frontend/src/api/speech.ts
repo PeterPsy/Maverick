@@ -48,6 +48,9 @@ export function transcribeSpeech(
   if (typeof options.final === "boolean") {
     body.final = options.final ? "true" : "false";
   }
+  if (typeof options.conversation === "boolean") {
+    body.conversation = options.conversation ? "true" : "false";
+  }
   if (typeof options.dictation === "boolean") {
     body.dictation = options.dictation ? "true" : "false";
   }
@@ -79,6 +82,9 @@ export function transcribeSpeechBlob(
   }
   if (typeof options.final === "boolean") {
     params.set("final", options.final ? "true" : "false");
+  }
+  if (typeof options.conversation === "boolean") {
+    params.set("conversation", options.conversation ? "true" : "false");
   }
   if (typeof options.dictation === "boolean") {
     params.set("dictation", options.dictation ? "true" : "false");

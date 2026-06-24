@@ -26,6 +26,7 @@ BACKEND_ROOT = APP_ROOT / "backend"
 sys.path.insert(0, str(BACKEND_ROOT))
 
 import engines
+import flux_streaming
 import app_backend
 import backend_worker
 import stt_worker
@@ -194,6 +195,35 @@ class SpeechAppTests(unittest.TestCase):
         self.assertTrue(transcription["available"])
         self.assertEqual(transcription["engine"], "deepgram")
         self.assertTrue(transcription["inline_default_profile_available"])
+        self.assertTrue(transcription["streaming_supported"])
+        self.assertTrue(transcription["conversation_streaming_supported"])
+        self.assertTrue(transcription["chunked_dictation_supported"])
+        self.assertFalse(transcription["dictation_streaming_supported"])
+
+    def test_capabilities_do_not_advertise_flux_streaming_without_persistent_worker(self) -> None:
+        old_mode = os.environ.get("MAVERICK_SPEECH_BACKEND_WORKER")
+        os.environ["MAVERICK_SPEECH_BACKEND_WORKER"] = "entrypoint"
+        try:
+            with TemporaryDirectory() as temp_dir:
+                root = Path(temp_dir)
+                write_settings(root / "data", {"transcription_engine": "deepgram"})
+                status_code, payload = handle_action(
+                    root / "data",
+                    root / "generated",
+                    {
+                        "action": "capabilities",
+                        "_app_secrets": {"deepgram-api-key": "deepgram-token"},
+                    },
+                )
+        finally:
+            _restore_env("MAVERICK_SPEECH_BACKEND_WORKER", old_mode)
+
+        transcription = payload["interfaces"]["speech.transcription"]
+        self.assertEqual(status_code, 200)
+        self.assertTrue(transcription["available"])
+        self.assertFalse(transcription["streaming_supported"])
+        self.assertFalse(transcription["conversation_streaming_supported"])
+        self.assertFalse(transcription["chunked_dictation_supported"])
 
     def test_synthesize_rejects_empty_or_too_long_text(self) -> None:
         with self.assertRaises(SpeechValidationError):
@@ -664,6 +694,82 @@ class SpeechAppTests(unittest.TestCase):
         self.assertEqual(payload["text"], "inline transcript")
         self.assertEqual(payload["model"], "nova-3-general")
         self.assertEqual(query["model"], ["nova-3-general"])
+
+    def test_transcribe_audio_conversation_uses_flux_session_manager(self) -> None:
+        class FakeFluxClient:
+            instances: list["FakeFluxClient"] = []
+
+            def __init__(self, url: str, *, headers: dict[str, str], timeout: float) -> None:
+                self.url = url
+                self.headers = headers
+                self.timeout = timeout
+                self.connected = False
+                self.binary_chunks: list[bytes] = []
+                self.json_messages: list[dict] = []
+                self.events: list[dict] = []
+                FakeFluxClient.instances.append(self)
+
+            def connect(self) -> None:
+                self.connected = True
+
+            def send_binary(self, data: bytes) -> None:
+                self.binary_chunks.append(data)
+                if len(self.binary_chunks) == 1:
+                    self.events.extend([
+                        {"type": "StartOfTurn"},
+                        {"type": "Results", "channel": {"alternatives": [{"transcript": "hel"}]}},
+                    ])
+                else:
+                    self.events.append({"type": "Results", "is_final": True, "channel": {"alternatives": [{"transcript": "hello"}]}})
+
+            def send_json(self, payload: dict) -> None:
+                self.json_messages.append(payload)
+                self.events.append({"type": "EndOfTurn"})
+
+            def receive_json(self, timeout: float) -> dict | None:
+                if not self.events:
+                    raise TimeoutError()
+                return self.events.pop(0)
+
+            def close(self) -> None:
+                self.connected = False
+
+        manager = flux_streaming.DeepgramFluxSessionManager(client_factory=FakeFluxClient)
+        with TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            write_settings(root / "data", {"transcription_engine": "deepgram"})
+            body = {
+                "action": "transcribe_audio",
+                "content_type": "audio/wav",
+                "audio_base64": base64.b64encode(b"RIFF" + b"\0" * 512).decode("ascii"),
+                "conversation": True,
+                "session_id": "voice-session",
+                "_app_secrets": {"deepgram-api-key": "deepgram-token"},
+                "_provider_config": {
+                    "speech_stt": {
+                        "selection": {
+                            "audio_transcription_model_id": "nova-3",
+                            "conversation_model_id": "flux-general-en",
+                        }
+                    }
+                },
+            }
+            with patch.object(flux_streaming, "_FLUX_MANAGER", manager):
+                first_status, first_payload = handle_action(root / "data", root / "generated", {**body, "chunk_index": 0})
+                final_status, final_payload = handle_action(root / "data", root / "generated", {**body, "chunk_index": 1, "final": True})
+
+        self.assertEqual(first_status, 200)
+        self.assertEqual(final_status, 200)
+        self.assertEqual(first_payload["model"], "flux-general-en")
+        self.assertEqual(first_payload["chunk_text"], "hel")
+        self.assertTrue(first_payload["partial"])
+        self.assertEqual(final_payload["model"], "flux-general-en")
+        self.assertEqual(final_payload["text"], "hello")
+        self.assertTrue(final_payload["final"])
+        self.assertIn({"type": "EndOfTurn", "text": ""}, final_payload["turn_events"])
+        self.assertEqual(len(FakeFluxClient.instances), 1)
+        self.assertEqual(flux_streaming.parse_flux_url_query(FakeFluxClient.instances[0].url)["model"], "flux-general-en")
+        self.assertEqual(FakeFluxClient.instances[0].json_messages, [{"type": "CloseStream"}])
 
     def test_kokoro_openrouter_synthesis_uses_delivered_openrouter_secret(self) -> None:
         class FakeResponse:

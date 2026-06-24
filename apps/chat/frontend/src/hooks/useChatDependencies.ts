@@ -177,7 +177,9 @@ export function useChatDependencies() {
               : 0,
         );
         setTranscriptionContentTypes(Array.isArray(transcription.content_types) ? transcription.content_types.filter((item) => typeof item === "string") : []);
-        setTranscriptionChunkedDictationSupported(transcription.chunked_dictation_supported === true);
+        setTranscriptionChunkedDictationSupported(
+          transcription.chunked_dictation_supported === true && transcription.dictation_streaming_supported === true,
+        );
         if (providerAvailable && prewarmedTranscriptionProviderRef.current !== providerAppId) {
           prewarmedTranscriptionProviderRef.current = providerAppId;
           void prewarmSpeechWorker(providerAppId).catch(() => {

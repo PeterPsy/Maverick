@@ -6,6 +6,7 @@ from pathlib import Path
 
 from engines import default_tts_voice_id, faster_whisper_worker_status, resolve_transcription_engine
 from engines import synthesis_engine_statuses, transcription_engine_statuses
+from flux_streaming import flux_streaming_supported
 from models import (
     DEFAULT_INLINE_TRANSCRIPTION_PROFILE,
     MAX_INLINE_TRANSCRIPTION_AUDIO_BYTES,
@@ -206,6 +207,7 @@ def capabilities_payload(data_root: Path, app_secrets: dict | None = None) -> di
     transcription_engine = str(transcription_selection["effective_engine"])
     inline_transcription_settings = {**settings, "transcription_profile": DEFAULT_INLINE_TRANSCRIPTION_PROFILE}
     inline_transcription_engine = resolve_transcription_engine(inline_transcription_settings)
+    flux_supported = transcription_engine == "deepgram" and flux_streaming_supported(settings)
     return {
         "app_id": "speech",
         "interfaces": {
@@ -250,8 +252,10 @@ def capabilities_payload(data_root: Path, app_secrets: dict | None = None) -> di
                 "max_file_audio_bytes": MAX_TRANSCRIPTION_FILE_AUDIO_BYTES,
                 "max_duration_seconds": MAX_TRANSCRIPTION_SECONDS,
                 "max_inline_duration_seconds": MAX_INLINE_TRANSCRIPTION_SECONDS,
-                "streaming_supported": False,
-                "chunked_dictation_supported": False,
+                "streaming_supported": flux_supported,
+                "conversation_streaming_supported": flux_supported,
+                "chunked_dictation_supported": flux_supported,
+                "dictation_streaming_supported": False,
                 "language_detection": "auto",
                 "language_hint_supported": True,
                 "profiles": ["fast", "balanced", "accurate"],

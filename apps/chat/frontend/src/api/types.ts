@@ -154,7 +154,9 @@ export type SpeechCapabilitiesPayload = {
       max_duration_seconds?: number;
       max_inline_duration_seconds?: number;
       streaming_supported?: boolean;
+      conversation_streaming_supported?: boolean;
       chunked_dictation_supported?: boolean;
+      dictation_streaming_supported?: boolean;
       language_detection?: string;
       language_hint_supported?: boolean;
       profiles?: string[];
@@ -202,6 +204,7 @@ export type SpeechTranscribeOptions = {
   profile?: string;
   sessionId?: string;
   chunkIndex?: number;
+  conversation?: boolean;
   final?: boolean;
   dictation?: boolean;
 };

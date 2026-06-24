@@ -311,8 +311,12 @@ describe("speech provider client calls", () => {
     await expect(transcribeSpeech("speech", "UklGRg==", "audio/wav", { profile: "fast" })).resolves.toMatchObject({
       text: "Hello transcript",
     });
+    await expect(transcribeSpeech("speech", "UklGRg==", "audio/wav", { conversation: true, sessionId: "voice-session" })).resolves.toMatchObject({
+      text: "Hello transcript",
+    });
 
     expect(fetchMock.mock.calls.map((call) => call[0])).toEqual([
+      "/api/apps/speech/backend",
       "/api/apps/speech/backend",
       "/api/apps/speech/backend",
       "/api/apps/speech/backend",
@@ -325,6 +329,13 @@ describe("speech provider client calls", () => {
       audio_base64: "UklGRg==",
       content_type: "audio/wav",
       profile: "fast",
+    });
+    expect(JSON.parse(String(fetchMock.mock.calls[4]?.[1]?.body || "{}"))).toEqual({
+      action: "transcribe_audio",
+      audio_base64: "UklGRg==",
+      content_type: "audio/wav",
+      conversation: "true",
+      session_id: "voice-session",
     });
   });
 

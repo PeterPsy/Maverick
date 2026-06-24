@@ -17,6 +17,7 @@ import wave
 
 from engines import transcribe_audio_file
 from errors import SpeechProviderUnavailableError, SpeechValidationError
+from flux_streaming import transcribe_deepgram_flux_audio_chunk
 from models import (
     DEFAULT_INLINE_TRANSCRIPTION_PROFILE,
     MAX_INLINE_TRANSCRIPTION_AUDIO_BYTES,
@@ -73,6 +74,9 @@ def transcribe_audio_payload(*, data_root: Path, body: dict) -> dict:
     language = normalized_language(body.get("language"))
     profile = normalized_transcription_profile(body.get("profile"), operation="transcribe_audio")
     session = normalized_transcription_session(body)
+    conversation_mode = conversation_mode_enabled(body)
+    if conversation_mode and not session:
+        raise SpeechValidationError("conversation stream requires session_id.", operation="transcribe_audio")
     dictation_mode = bool(session) or dictation_mode_enabled(body)
     body_file_path = str(body.get("_body_file_path") or "")
     if body_file_path:
@@ -87,6 +91,7 @@ def transcribe_audio_payload(*, data_root: Path, body: dict) -> dict:
             dictation_mode=dictation_mode,
             app_secrets=body.get("_app_secrets") if isinstance(body.get("_app_secrets"), dict) else {},
             provider_config=body.get("_provider_config") if isinstance(body.get("_provider_config"), dict) else {},
+            conversation_mode=conversation_mode,
         )
     audio = decoded_audio(body.get("audio_base64"))
     return transcribe_bytes(
@@ -100,6 +105,7 @@ def transcribe_audio_payload(*, data_root: Path, body: dict) -> dict:
         dictation_mode=dictation_mode,
         app_secrets=body.get("_app_secrets") if isinstance(body.get("_app_secrets"), dict) else {},
         provider_config=body.get("_provider_config") if isinstance(body.get("_provider_config"), dict) else {},
+        conversation_mode=conversation_mode,
     )
 
 
@@ -115,6 +121,7 @@ def transcribe_inline_body_file(
     dictation_mode: bool = False,
     app_secrets: dict | None = None,
     provider_config: dict | None = None,
+    conversation_mode: bool = False,
 ) -> dict:
     if not audio_path.exists() or not audio_path.is_file():
         raise SpeechValidationError("inline audio upload is unavailable.", operation="transcribe_audio")
@@ -135,6 +142,7 @@ def transcribe_inline_body_file(
         dictation_mode=dictation_mode,
         app_secrets=app_secrets,
         provider_config=provider_config,
+        conversation_mode=conversation_mode,
     )
 
 
@@ -189,6 +197,7 @@ def transcribe_bytes(
     dictation_mode: bool = False,
     app_secrets: dict | None = None,
     provider_config: dict | None = None,
+    conversation_mode: bool = False,
 ) -> dict:
     extension = CONTENT_TYPE_EXTENSIONS[content_type]
     with tempfile.TemporaryDirectory(prefix="maverick-speech-stt-") as temp_dir:
@@ -207,6 +216,7 @@ def transcribe_bytes(
             dictation_mode=dictation_mode,
             app_secrets=app_secrets,
             provider_config=provider_config,
+            conversation_mode=conversation_mode,
         )
 
 
@@ -224,6 +234,7 @@ def transcribe_path(
     dictation_mode: bool = False,
     app_secrets: dict | None = None,
     provider_config: dict | None = None,
+    conversation_mode: bool = False,
 ) -> dict:
     preflight_duration_seconds = probe_audio_duration_seconds(audio_path, content_type=content_type)
     validate_audio_duration(preflight_duration_seconds, operation=operation)
@@ -236,14 +247,28 @@ def transcribe_path(
         settings = {**settings, "_provider_config": dict(provider_config)}
     settings["_data_root"] = str(data_root)
     transcription_started = time.monotonic()
-    result = transcribe_audio_file(
-        audio_path,
-        settings=settings,
-        language=language,
-        operation=operation,
-        mode="chunked_dictation" if session else "one_shot",
-    )
+    if conversation_mode:
+        result = transcribe_deepgram_flux_audio_chunk(audio_path, settings=settings, language=language, session=session or {})
+    else:
+        result = transcribe_audio_file(
+            audio_path,
+            settings=settings,
+            language=language,
+            operation=operation,
+            mode="chunked_dictation" if session else "one_shot",
+        )
     transcription_seconds = time.monotonic() - transcription_started
+    if conversation_mode:
+        return conversation_stream_response(
+            data_root=data_root,
+            result=result,
+            transcription_seconds=transcription_seconds,
+            duration_seconds=float(result.get("duration_seconds") or preflight_duration_seconds or 0.0),
+            content_type=content_type,
+            size_bytes=size_bytes,
+            session=session or {},
+            source=source,
+        )
     post_processed = post_process_transcript(str(result.get("text") or ""), enable_commands=dictation_mode)
     cleaned_text = str(post_processed.get("text") or "")
     commands = [item for item in post_processed.get("commands", []) if isinstance(item, dict)]
@@ -301,6 +326,77 @@ def transcribe_path(
         "worker": result.get("worker") if isinstance(result.get("worker"), dict) else {},
         "metrics": metrics,
         **session_payload,
+        "content_type": content_type,
+        "size_bytes": size_bytes,
+        "retention": "metadata_only",
+    }
+
+
+def conversation_stream_response(
+    *,
+    data_root: Path,
+    result: dict,
+    transcription_seconds: float,
+    duration_seconds: float,
+    content_type: str,
+    size_bytes: int,
+    session: dict,
+    source: dict,
+) -> dict:
+    session_id = str(session.get("session_id") or "")
+    chunk_index = int(session.get("chunk_index") or 0)
+    final = bool(session.get("final"))
+    public_text = str(result.get("text") or "")
+    chunk_text = str(result.get("chunk_text") or public_text)
+    segments = normalized_segments(result.get("segments", []), enable_commands=False)
+    metrics = transcription_metrics(result=result, transcription_seconds=transcription_seconds, duration_seconds=duration_seconds)
+    job_id = f"stt_{uuid.uuid4().hex}"
+    created_at = datetime.now(tz=UTC).isoformat()
+    append_job(
+        data_root,
+        {
+            "job_id": job_id,
+            "kind": "stt",
+            "created_at": created_at,
+            "engine": str(result.get("engine") or ""),
+            "model": str(result.get("model") or ""),
+            "language": str(result.get("language") or ""),
+            "content_type": content_type,
+            "size_bytes": size_bytes,
+            "duration_seconds": duration_seconds,
+            "transcript_chars": len(public_text),
+            "chunk_transcript_chars": len(chunk_text),
+            "profile": str(result.get("profile") or ""),
+            "beam_size": 0,
+            "worker": {},
+            "metrics": metrics,
+            "session": {"session_id": session_id, "chunk_index": chunk_index, "partial": not final, "final": final},
+            "source": source,
+            "retention": "metadata_only",
+        },
+    )
+    return {
+        "job_id": job_id,
+        "created_at": created_at,
+        "text": public_text,
+        "chunk_text": chunk_text,
+        "commands": [],
+        "segments": segments,
+        "language": str(result.get("language") or ""),
+        "language_probability": float(result.get("language_probability") or 0.0),
+        "duration_seconds": duration_seconds,
+        "engine": str(result.get("engine") or ""),
+        "model": str(result.get("model") or ""),
+        "profile": str(result.get("profile") or ""),
+        "beam_size": 0,
+        "worker": {},
+        "metrics": metrics,
+        "session_id": session_id,
+        "chunk_index": chunk_index,
+        "partial": not final,
+        "final": final,
+        "events": result.get("events") if isinstance(result.get("events"), list) else [],
+        "turn_events": result.get("turn_events") if isinstance(result.get("turn_events"), list) else [],
         "content_type": content_type,
         "size_bytes": size_bytes,
         "retention": "metadata_only",
@@ -496,6 +592,10 @@ def truthy(value: object) -> bool:
     if isinstance(value, bool):
         return value
     return str(value or "").strip().lower() in {"1", "true", "yes", "on", "final"}
+
+
+def conversation_mode_enabled(body: dict) -> bool:
+    return truthy(body.get("conversation", body.get("conversation_mode", False)))
 
 
 def dictation_mode_enabled(body: dict) -> bool:

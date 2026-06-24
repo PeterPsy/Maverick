@@ -77,6 +77,59 @@ describe("useChatDependencies", () => {
     });
     expect(prewarmSpeechWorker).not.toHaveBeenCalled();
   });
+
+  it("does not enable composer chunked dictation for conversation-only streaming", async () => {
+    const snapshots: Array<ReturnType<typeof useChatDependencies>> = [];
+    vi.mocked(getSpeechCapabilities).mockResolvedValue({
+      interfaces: {
+        "speech.transcription": {
+          available: true,
+          provider_available: true,
+          chunked_dictation_supported: true,
+          conversation_streaming_supported: true,
+          dictation_streaming_supported: false,
+        },
+      },
+    });
+
+    container = document.createElement("div");
+    document.body.append(container);
+    root = createRoot(container);
+    await act(async () => {
+      root?.render(<DependencyProbe onSnapshot={(snapshot) => snapshots.push(snapshot)} />);
+    });
+
+    await waitForAssertion(() => {
+      expect(snapshots.at(-1)?.transcriptionProviderAvailable).toBe(true);
+      expect(snapshots.at(-1)?.transcriptionChunkedDictationSupported).toBe(false);
+    });
+  });
+
+  it("enables composer chunked dictation only when explicitly supported", async () => {
+    const snapshots: Array<ReturnType<typeof useChatDependencies>> = [];
+    vi.mocked(getSpeechCapabilities).mockResolvedValue({
+      interfaces: {
+        "speech.transcription": {
+          available: true,
+          provider_available: true,
+          chunked_dictation_supported: true,
+          dictation_streaming_supported: true,
+        },
+      },
+    });
+
+    container = document.createElement("div");
+    document.body.append(container);
+    root = createRoot(container);
+    await act(async () => {
+      root?.render(<DependencyProbe onSnapshot={(snapshot) => snapshots.push(snapshot)} />);
+    });
+
+    await waitForAssertion(() => {
+      expect(snapshots.at(-1)?.transcriptionProviderAvailable).toBe(true);
+      expect(snapshots.at(-1)?.transcriptionChunkedDictationSupported).toBe(true);
+    });
+  });
 });
 
 function DependencyProbe({ onSnapshot }: { onSnapshot: (snapshot: ReturnType<typeof useChatDependencies>) => void }) {

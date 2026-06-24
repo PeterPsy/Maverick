@@ -769,7 +769,9 @@ function hasNativeHost() {
 function postNativeCommand(command: NativeCommand) {
   const requestId = makeRequestId();
   window.webkit?.messageHandlers?.sensesHost?.postMessage({
+    app_id: 'senses',
     command,
+    location_href: window.location.href,
     request_id: requestId,
     source: 'senses.frontend',
   });

@@ -730,6 +730,20 @@
   min-height: 0;
 }
 
+.bs-sidebar__mobile-chat-footer-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: end;
+  gap: 0.55rem;
+  width: 100%;
+  min-width: 0;
+}
+
+.bs-sidebar__mobile-chat-footer-row > .bs-widget-slot--compact {
+  width: 100%;
+  min-width: 0;
+}
+
 .bs-sidebar__shell-controls {
   display: flex;
   align-items: center;
@@ -781,6 +795,13 @@
   border-radius: var(--bs-sidebar-cell-radius);
   background: var(--bs-sidebar-composer-surface);
   box-shadow: var(--bs-sidebar-inner-edge);
+}
+
+.bs-sidebar__mobile-chat-theme-switcher {
+  align-items: center;
+  align-self: end;
+  height: 2.65rem;
+  min-height: 2.65rem;
 }
 
 .bs-sidebar__mode-button {

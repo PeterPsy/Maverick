@@ -36,6 +36,24 @@ describe("Sidebar mobile layout contract", () => {
     expect(mobileDetailsRule).toContain("background: var(--maverick-bg);");
     expect(mobileDetailsRule).not.toContain("rgb(12, 12, 14)");
   });
+
+  it("places the theme switcher inline with the chat footer only on mobile chat", () => {
+    const sidebarSource = readSource("components/Sidebar.tsx");
+    const sidebarStyles = readStyle("sidebar.css");
+    const mobileChatFooterRule = sidebarStyles.match(/\.bs-sidebar__mobile-chat-footer-row \{[\s\S]*?\n\}/)?.[0] ?? "";
+    const mobileChatThemeRule = sidebarStyles.match(/\.bs-sidebar__mobile-chat-theme-switcher \{[\s\S]*?\n\}/)?.[0] ?? "";
+
+    expect(sidebarSource).toContain("const showMobileChatThemeSwitcher = isMobileLayout && activeAppId === CHAT_APP_ID;");
+    expect(sidebarSource).toContain("bs-sidebar__mobile-chat-footer-row");
+    expect(sidebarSource).toContain("bs-sidebar__mobile-chat-theme-switcher");
+    expect(sidebarSource).toContain("{!isMobileLayout ? (");
+    expect(sidebarSource).toContain('label="Dark mode"');
+    expect(sidebarSource).toContain('label="Light mode"');
+    expect(sidebarSource).toContain('label="System mode"');
+    expect(mobileChatFooterRule).toContain("grid-template-columns: minmax(0, 1fr) auto;");
+    expect(mobileChatFooterRule).toContain("align-items: end;");
+    expect(mobileChatThemeRule).toContain("height: 2.65rem;");
+  });
 });
 
 describe("Sidebar desktop layout contract", () => {

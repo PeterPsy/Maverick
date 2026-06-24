@@ -9,7 +9,7 @@ import type {
 } from "react";
 import { AppRegistryItem, SessionUser, WorkspaceItem } from "../api";
 import { isHorizontalIntent, isSidebarCloseSwipe, type SidebarSwipePoint } from "../lib/sidebarSwipe";
-import { SETTINGS_APP_ID, shellAppRailApps, shellVisibleApps } from "../navigation";
+import { CHAT_APP_ID, SETTINGS_APP_ID, shellAppRailApps, shellVisibleApps } from "../navigation";
 import { clampSidebarDetailsWidth, DEFAULT_SIDEBAR_DETAILS_WIDTH_PX } from "../session";
 import type { SidebarMode } from "../session";
 import type { ShellThemeMode, ShellThemeState } from "../theme";
@@ -97,6 +97,24 @@ export function Sidebar({
   const settingsApp = visibleAppsById.get(SETTINGS_APP_ID) || null;
   const isInitialLoading = isLoading && railApps.length === 0;
   const isDetailLayerOpen = isOpen || isPinned;
+  const showMobileChatThemeSwitcher = isMobileLayout && activeAppId === CHAT_APP_ID;
+  const sidebarFooterSlot = (
+    <WidgetSlot
+      activeWorkspaceId={activeWorkspaceId}
+      content={{ active_app_id: activeAppId, active_app_params: activeAppParams, is_mobile_layout: isMobileLayout, placement: "sidebar-footer", user: user?.username || null }}
+      contentKind="shell.sidebar.footer"
+      hostAppId="base-shell"
+      label="App sidebar footer"
+      onCloseSidebar={onClose}
+      onOpenApp={onOpenApp}
+      onOpenSidebar={onOpenSidebar}
+      onPrimaryActionStateChange={onPrimaryActionStateChange}
+      preferredOwnerAppId={activeAppId}
+      primaryActionRequestId={mobilePrimaryActionRequestId}
+      shellTheme={shellTheme}
+      size="compact"
+    />
+  );
 
   function handlePointerEnter() {
     if (isMobileLayout) {
@@ -310,83 +328,54 @@ export function Sidebar({
         />
 
         <div className="bs-sidebar__bottom-fixed">
-          <WidgetSlot
-            activeWorkspaceId={activeWorkspaceId}
-            content={{ active_app_id: activeAppId, active_app_params: activeAppParams, is_mobile_layout: isMobileLayout, placement: "sidebar-footer", user: user?.username || null }}
-            contentKind="shell.sidebar.footer"
-            hostAppId="base-shell"
-            label="App sidebar footer"
-            onCloseSidebar={onClose}
-            onOpenApp={onOpenApp}
-            onOpenSidebar={onOpenSidebar}
-            onPrimaryActionStateChange={onPrimaryActionStateChange}
-            preferredOwnerAppId={activeAppId}
-            primaryActionRequestId={mobilePrimaryActionRequestId}
-            shellTheme={shellTheme}
-            size="compact"
-          />
-
-          <div className="bs-sidebar__shell-controls">
-            {!isMobileLayout ? (
-              <img alt="" aria-hidden="true" className="bs-sidebar__desktop-logo" src={logoSrc} />
-            ) : null}
-            <div className="bs-sidebar__control-cluster">
-              <div className="bs-sidebar__theme-switcher" aria-label="Theme mode">
-                <ThemeModeButton
-                  active={themeMode === "dark"}
-                  icon="dark_mode"
-                  label="Tema scuro"
-                  mode="dark"
-                  onThemeModeChange={onThemeModeChange}
-                />
-                <ThemeModeButton
-                  active={themeMode === "light"}
-                  icon="light_mode"
-                  label="Tema chiaro"
-                  mode="light"
-                  onThemeModeChange={onThemeModeChange}
-                />
-                <ThemeModeButton
-                  active={themeMode === "system"}
-                  icon="desktop_windows"
-                  label="Tema di sistema"
-                  mode="system"
-                  onThemeModeChange={onThemeModeChange}
-                />
-              </div>
-              {!isMobileLayout ? (
-                <>
-                  <div className="bs-sidebar__mode-switcher" aria-label="Sidebar mode">
-                    <button
-                      aria-label="Solo app in overlay"
-                      aria-pressed={mode === "rail"}
-                      className={`bs-sidebar__mode-button ${mode === "rail" ? "is-active" : ""}`}
-                      onClick={() => onModeChange("rail")}
-                      title="Solo app in overlay"
-                      type="button"
-                    >
-                      <span aria-hidden="true" className="material-symbols-rounded">dock_to_left</span>
-                    </button>
-                    <button
-                      aria-label="Sidebar fissa"
-                      aria-pressed={mode === "fixed"}
-                      className={`bs-sidebar__mode-button ${mode === "fixed" ? "is-active" : ""}`}
-                      onClick={() => onModeChange("fixed")}
-                      title="Sidebar fissa"
-                      type="button"
-                    >
-                      <span aria-hidden="true" className="material-symbols-rounded">left_panel_close</span>
-                    </button>
-                  </div>
-                  {!isPinned ? (
-                    <button aria-label="Chiudi pannello laterale" className="bs-panel-minimize" onClick={onClose} title="Chiudi pannello laterale" type="button">
-                      <span aria-hidden="true" className="material-symbols-rounded">chevron_left</span>
-                    </button>
-                  ) : null}
-                </>
-              ) : null}
+          {showMobileChatThemeSwitcher ? (
+            <div className="bs-sidebar__mobile-chat-footer-row">
+              {sidebarFooterSlot}
+              <ThemeModeSwitcher
+                className="bs-sidebar__mobile-chat-theme-switcher"
+                onThemeModeChange={onThemeModeChange}
+                themeMode={themeMode}
+              />
             </div>
-          </div>
+          ) : (
+            sidebarFooterSlot
+          )}
+
+          {!isMobileLayout ? (
+            <div className="bs-sidebar__shell-controls">
+              <img alt="" aria-hidden="true" className="bs-sidebar__desktop-logo" src={logoSrc} />
+              <div className="bs-sidebar__control-cluster">
+                <ThemeModeSwitcher onThemeModeChange={onThemeModeChange} themeMode={themeMode} />
+                <div className="bs-sidebar__mode-switcher" aria-label="Sidebar mode">
+                  <button
+                    aria-label="Solo app in overlay"
+                    aria-pressed={mode === "rail"}
+                    className={`bs-sidebar__mode-button ${mode === "rail" ? "is-active" : ""}`}
+                    onClick={() => onModeChange("rail")}
+                    title="Solo app in overlay"
+                    type="button"
+                  >
+                    <span aria-hidden="true" className="material-symbols-rounded">dock_to_left</span>
+                  </button>
+                  <button
+                    aria-label="Sidebar fissa"
+                    aria-pressed={mode === "fixed"}
+                    className={`bs-sidebar__mode-button ${mode === "fixed" ? "is-active" : ""}`}
+                    onClick={() => onModeChange("fixed")}
+                    title="Sidebar fissa"
+                    type="button"
+                  >
+                    <span aria-hidden="true" className="material-symbols-rounded">left_panel_close</span>
+                  </button>
+                </div>
+                {!isPinned ? (
+                  <button aria-label="Chiudi pannello laterale" className="bs-panel-minimize" onClick={onClose} title="Chiudi pannello laterale" type="button">
+                    <span aria-hidden="true" className="material-symbols-rounded">chevron_left</span>
+                  </button>
+                ) : null}
+              </div>
+            </div>
+          ) : null}
         </div>
       </div>
       {!isMobileLayout && isDetailLayerOpen ? (
@@ -406,6 +395,43 @@ export function Sidebar({
         </button>
       ) : null}
     </aside>
+  );
+}
+
+function ThemeModeSwitcher({
+  className = "",
+  onThemeModeChange,
+  themeMode,
+}: {
+  className?: string;
+  onThemeModeChange: (mode: ShellThemeMode) => void;
+  themeMode: ShellThemeMode;
+}) {
+  const classNames = ["bs-sidebar__theme-switcher", className].filter(Boolean).join(" ");
+  return (
+    <div className={classNames} aria-label="Theme mode">
+      <ThemeModeButton
+        active={themeMode === "dark"}
+        icon="dark_mode"
+        label="Dark mode"
+        mode="dark"
+        onThemeModeChange={onThemeModeChange}
+      />
+      <ThemeModeButton
+        active={themeMode === "light"}
+        icon="light_mode"
+        label="Light mode"
+        mode="light"
+        onThemeModeChange={onThemeModeChange}
+      />
+      <ThemeModeButton
+        active={themeMode === "system"}
+        icon="desktop_windows"
+        label="System mode"
+        mode="system"
+        onThemeModeChange={onThemeModeChange}
+      />
+    </div>
   );
 }
 

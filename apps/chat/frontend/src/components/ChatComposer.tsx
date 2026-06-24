@@ -207,6 +207,8 @@ export function ChatComposer({
                 searchInputRef={appPickerSearchRef}
                 searchPlaceholder="Search apps and references"
                 searchQuery={appMentionPickerQuery}
+                showHeader={false}
+                showSearchLabel={false}
                 isLoading={appPickerSearchPending}
                 statusMessage={appPickerSearchError}
                 ref={appPickerPanelRef}

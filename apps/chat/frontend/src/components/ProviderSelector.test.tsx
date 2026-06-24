@@ -101,6 +101,8 @@ describe("ProviderSelector", () => {
     const searchInput = element.querySelector<HTMLInputElement>('[aria-label="Search models"]');
     expect(searchInput).toBeInstanceOf(HTMLInputElement);
     expect(element.querySelector('[role="listbox"]')).toBeInstanceOf(HTMLDivElement);
+    expect(element.querySelector(".chatapp-provider-menu__header")).toBeNull();
+    expect(element.querySelector(".chatapp-provider-menu__search-label")).toBeNull();
 
     await act(async () => {
       changeInputValue(searchInput as HTMLInputElement, "nemotron");

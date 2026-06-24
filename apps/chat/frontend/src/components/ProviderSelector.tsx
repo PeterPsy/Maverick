@@ -259,9 +259,7 @@ export function ProviderSelector({
           ref={panelRef}
           role="listbox"
         >
-          <div className="chatapp-provider-menu__header">Models</div>
           <label className="chatapp-provider-menu__search">
-            <span className="chatapp-provider-menu__search-label">Search</span>
             <input
               aria-activedescendant={activeProviderOptionId}
               aria-controls={menuId}

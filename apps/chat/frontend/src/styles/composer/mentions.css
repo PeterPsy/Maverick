@@ -116,6 +116,10 @@
   padding: 0 0.72rem 0.62rem;
 }
 
+.chatapp-mention-panel--app-picker .chatapp-mention-panel__search {
+  padding-top: 0.68rem;
+}
+
 .chatapp-mention-panel__search-label {
   color: var(--maverick-text-soft);
   font-size: 0.72rem;

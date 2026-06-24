@@ -749,6 +749,8 @@ describe("ChatComposer reference search", () => {
     await typeInEditor("@");
 
     expect(element.querySelector('[aria-label="Search apps and references"]')).toBeInstanceOf(HTMLInputElement);
+    expect(element.querySelector(".chatapp-mention-panel__header")).toBeNull();
+    expect(element.querySelector(".chatapp-mention-panel__search-label")).toBeNull();
     expect(document.activeElement).toBe(editorElement());
   });
 
@@ -848,6 +850,8 @@ describe("ChatComposer reference search", () => {
       (agentButton as HTMLButtonElement).click();
     });
 
+    expect(element.querySelector(".chatapp-agent-menu__header")).toBeNull();
+    expect(element.querySelector(".chatapp-agent-menu__search-label")).toBeNull();
     expect(element.textContent).toContain("Social Video Content Strategist");
     const socialAgent = Array.from(element.querySelectorAll(".chatapp-agent-menu__item")).find((button) =>
       button.textContent?.includes("Social Video Content Strategist"),

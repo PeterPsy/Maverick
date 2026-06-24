@@ -16,6 +16,8 @@ export function MentionPanel({
   isLoading = false,
   searchPlaceholder,
   searchQuery,
+  showHeader = true,
+  showSearchLabel = true,
   statusMessage,
 }: {
   activeIndex: number;
@@ -31,6 +33,8 @@ export function MentionPanel({
   isLoading?: boolean;
   searchPlaceholder?: string;
   searchQuery?: string;
+  showHeader?: boolean;
+  showSearchLabel?: boolean;
   statusMessage?: string | null;
 }) {
   const activeItemRef = useRef<HTMLButtonElement | null>(null);
@@ -44,10 +48,10 @@ export function MentionPanel({
 
   return (
     <div className={`chatapp-mention-panel ${className}`} ref={ref} role="listbox" aria-label={panelLabel}>
-      <div className="chatapp-mention-panel__header">{panelTitle}</div>
+      {showHeader ? <div className="chatapp-mention-panel__header">{panelTitle}</div> : null}
       {onSearchQueryChange ? (
         <label className="chatapp-mention-panel__search">
-          <span className="chatapp-mention-panel__search-label">Search</span>
+          {showSearchLabel ? <span className="chatapp-mention-panel__search-label">Search</span> : null}
           <input
             aria-label="Search apps and references"
             className="chatapp-mention-panel__search-input"

@@ -143,9 +143,9 @@
   }
 
   .chatapp-provider-selector__trigger {
-    flex: 1 1 8rem;
-    width: auto;
-    min-width: 8rem;
+    flex: 0 1 auto;
+    width: fit-content;
+    min-width: 0;
     max-width: min(13rem, 42vw);
     padding-inline: 0.48rem;
   }

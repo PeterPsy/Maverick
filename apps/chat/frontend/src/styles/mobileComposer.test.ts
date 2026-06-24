@@ -45,6 +45,8 @@ describe("mobile chat composer layout", () => {
     const labelBlock = cssBlock(composerStyles, ".chatapp-provider-selector__label");
     const triggerBlock = cssBlock(composerStyles, ".chatapp-provider-selector__trigger");
 
+    expect(triggerBlock).toContain("width: fit-content;");
+    expect(triggerBlock).toContain("min-width: 0;");
     expect(triggerBlock).toContain("max-width: min(24rem, 48vw);");
     expect(labelBlock).toContain("overflow: hidden;");
     expect(labelBlock).toContain("text-overflow: ellipsis;");
@@ -59,8 +61,18 @@ describe("mobile chat composer layout", () => {
     expect(composerStyles).toContain("left: 1rem;");
     expect(composerStyles).toContain("bottom: calc(100% + 0.6rem);");
     expect(composerStyles).toContain("background: var(--maverick-popover-surface-strong);");
-    expect(composerStyles).toContain(".chatapp-provider-menu__header,\n.chatapp-agent-menu__header");
-    expect(composerStyles).toContain(".chatapp-provider-menu__search-label,\n.chatapp-agent-menu__search-label");
+    expect(composerStyles).not.toContain("chatapp-provider-menu__header");
+    expect(composerStyles).not.toContain("chatapp-agent-menu__header");
+    expect(composerStyles).not.toContain("chatapp-provider-menu__search-label");
+    expect(composerStyles).not.toContain("chatapp-agent-menu__search-label");
+  });
+
+  it("pushes the execution badge to the right of the runtime controls", () => {
+    const composerStyles = readStyle("composer.css");
+    const runtimeBadgesBlock = cssBlock(composerStyles, ".chatapp-composer__runtime-badges");
+
+    expect(runtimeBadgesBlock).toContain("flex: 1 1 auto;");
+    expect(composerStyles).toContain("margin-left: auto;");
   });
 
   it("keeps the send button as an explicit click action", () => {

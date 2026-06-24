@@ -141,6 +141,7 @@ class ProvidersTestCase(unittest.TestCase):
         self.assertEqual([option.model_id for option in openrouter.model_options], [
             "google/gemma-4-31b-it:free",
             "nvidia/nemotron-3-ultra-550b-a55b:free",
+            "deepseek/deepseek-v4-flash",
         ])
         self.assertEqual(openrouter.network_requirements[0].allowed_hosts, ["openrouter.ai"])
         self.assertEqual(openrouter.execution_contract.adapter_type if openrouter.execution_contract else None, "hosted_text_generation")

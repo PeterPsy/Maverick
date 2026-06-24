@@ -2,18 +2,22 @@
 
 from __future__ import annotations
 
+import base64
 import json
+import mimetypes
 import os
+from pathlib import Path, PurePosixPath
 from typing import Callable
 
 from core.observability.service import record_platform_event
-from core.providers.models import RoutingDecision
+from core.providers.models import ProviderDefinition, ProviderModelOption, RoutingDecision
 from core.providers.payloads import routing_decision_payload
 from core.providers.routing import ProviderRoutingContext, primary_routing_failure_reason, select_provider_for_profile
 from core.providers.service import effective_provider_registry
 from core.providers.text_generation import (
     FakeHostedTextTransport,
     HostedTextGenerationError,
+    TextGenerationContentPart,
     TextGenerationMessage,
     TextGenerationRequest,
     execute_hosted_text_generation,
@@ -49,8 +53,6 @@ def assert_plain_hosted_chat_input_allowed(
         return
     if session.skill_ids:
         raise HostedTextGenerationError("plain_hosted_chat_blocks_skills")
-    if attachments:
-        raise HostedTextGenerationError("plain_hosted_chat_blocks_attachments")
     if app_references:
         raise HostedTextGenerationError("plain_hosted_chat_blocks_app_references")
 
@@ -60,6 +62,7 @@ def execute_plain_hosted_text_turn(
     *,
     session: RuntimeSessionRecord,
     input_text: str,
+    attachments: list[dict[str, object]] | None = None,
     event_sink: Callable[[RuntimeExecutionEvent], object] | None = None,
 ) -> tuple[RuntimeExecutionResult, RoutingDecision]:
     """Execute one plain hosted chat turn through a routed hosted text provider."""
@@ -71,6 +74,8 @@ def execute_plain_hosted_text_turn(
             registry=effective_provider_registry(state.provider_store),
             secret_store=state.secret_store,
             request_id=None,
+            hosted_provider_id=session.hosted_provider_id,
+            hosted_model_id=session.hosted_model_id,
         ),
     )
     _emit_routing_decision_event(event_sink, decision)
@@ -78,14 +83,29 @@ def execute_plain_hosted_text_turn(
     if decision.execution_path != "plain_hosted_text" or decision.selected_provider_id is None:
         reason = primary_routing_failure_reason(decision)
         raise HostedTextGenerationError(reason, reason_codes=decision.reason_codes)
+    model_option = _selected_model_option(
+        effective_provider_registry(state.provider_store).get_provider_definition(decision.selected_provider_id),
+        decision.selected_model_id_or_voice_id,
+    )
     request = TextGenerationRequest(
         model_id=decision.selected_model_id_or_voice_id or "",
         system_prompt=session.system_prompt,
-        messages=[TextGenerationMessage(role="user", content=input_text)],
+        messages=[
+            TextGenerationMessage(
+                role="user",
+                content=_hosted_message_content(
+                    input_text=input_text,
+                    attachments=attachments,
+                    session=session,
+                    model_option=model_option,
+                ),
+            )
+        ],
         stream=True,
         timeout_seconds=30,
         workspace_id=session.workspace_id,
         workspace_root=session.workspace_root,
+        provider_routing=_openrouter_provider_routing_for_decision(state, session=session, decision=decision),
     )
     try:
         result = execute_hosted_text_generation(
@@ -115,6 +135,90 @@ def execute_plain_hosted_text_turn(
                 )
             )
     return RuntimeExecutionResult(output_text=result.output_text, exit_code=0), decision
+
+
+def _openrouter_provider_routing_for_decision(
+    state,
+    *,
+    session: RuntimeSessionRecord,
+    decision: RoutingDecision,
+) -> dict[str, object] | None:
+    if decision.selected_provider_id != "openrouter" or not decision.selected_model_id_or_voice_id:
+        return None
+    get_selection = getattr(state.provider_store, "get_hosted_provider_selection", None)
+    if not callable(get_selection):
+        return None
+    selection = get_selection(workspace_id=session.workspace_id, profile="fast_model")
+    if selection is None:
+        return None
+    routing = selection.openrouter_provider_routing_by_model.get(decision.selected_model_id_or_voice_id)
+    return dict(routing) if isinstance(routing, dict) else None
+
+
+def _selected_model_option(definition: ProviderDefinition, model_id: str | None) -> ProviderModelOption | None:
+    if not model_id:
+        return None
+    return next((option for option in definition.model_options if option.model_id == model_id), None)
+
+
+def _hosted_message_content(
+    *,
+    input_text: str,
+    attachments: list[dict[str, object]] | None,
+    session: RuntimeSessionRecord,
+    model_option: ProviderModelOption | None,
+) -> str | list[TextGenerationContentPart]:
+    attachment_items = [item for item in attachments or [] if isinstance(item, dict)]
+    if not attachment_items:
+        return input_text
+    input_modalities = set(model_option.input_modalities if model_option is not None else [])
+    if "image" not in input_modalities:
+        raise HostedTextGenerationError("plain_hosted_chat_model_blocks_attachments")
+    parts = [TextGenerationContentPart(type="text", text=input_text.strip() or "Please inspect the uploaded image(s).")]
+    for attachment in attachment_items:
+        parts.append(_image_attachment_part(attachment=attachment, workspace_root=session.workspace_root))
+    return parts
+
+
+def _image_attachment_part(*, attachment: dict[str, object], workspace_root: str) -> TextGenerationContentPart:
+    content_type = _string_value(attachment.get("type") or attachment.get("content_type"))
+    if not (content_type.startswith("image/") or bool(attachment.get("isImage"))):
+        raise HostedTextGenerationError("plain_hosted_chat_blocks_attachments")
+    relative_path = _safe_workspace_relative_path(_string_value(attachment.get("relativePath") or attachment.get("relative_path")))
+    if not relative_path:
+        raise HostedTextGenerationError("plain_hosted_chat_attachment_unavailable")
+    path = _local_attachment_path(workspace_root=workspace_root, relative_path=relative_path)
+    if not path.is_file():
+        raise HostedTextGenerationError("plain_hosted_chat_attachment_unavailable")
+    raw = path.read_bytes()
+    mime_type = content_type or mimetypes.guess_type(path.name)[0] or "image/png"
+    data_url = f"data:{mime_type};base64,{base64.b64encode(raw).decode('ascii')}"
+    return TextGenerationContentPart(type="image_url", image_url=data_url)
+
+
+def _safe_workspace_relative_path(value: str) -> str:
+    if not value:
+        return ""
+    path = PurePosixPath(value)
+    if path.is_absolute() or ".." in path.parts:
+        return ""
+    if len(path.parts) < 3 or path.parts[0] != "storage" or path.parts[1] not in {"uploaded", "generated"}:
+        return ""
+    return path.as_posix()
+
+
+def _local_attachment_path(*, workspace_root: str, relative_path: str) -> Path:
+    root = Path(workspace_root).resolve()
+    candidate = (root / PurePosixPath(relative_path)).resolve()
+    try:
+        candidate.relative_to(root)
+    except ValueError as error:
+        raise HostedTextGenerationError("plain_hosted_chat_attachment_unavailable") from error
+    return candidate
+
+
+def _string_value(value: object) -> str:
+    return value.strip() if isinstance(value, str) else ""
 
 
 def _emit_routing_decision_event(

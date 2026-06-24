@@ -86,6 +86,7 @@ def submit_runtime_turn(
                     state,
                     session=session,
                     input_text=input_text,
+                    attachments=attachments,
                     event_sink=output_recorder.record,
                 )
                 provider_id = routing_decision.selected_provider_id or provider_id

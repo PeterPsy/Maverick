@@ -152,6 +152,26 @@ export type ProviderModelOption = {
   description: string | null;
   default_reasoning_effort: string | null;
   supported_reasoning_efforts: ProviderReasoningOption[];
+  input_modalities?: string[];
+  output_modalities?: string[];
+  upstream_provider_options?: Array<{
+    provider_id?: string;
+    label?: string;
+    tag?: string;
+    quantization?: string;
+    context_length?: number;
+    max_completion_tokens?: number;
+  }>;
+};
+
+export type OpenRouterProviderRouting = {
+  mode: 'auto' | 'prefer' | 'only' | 'ignore';
+  provider_id?: string;
+  allow_fallbacks?: boolean;
+  require_parameters?: boolean;
+  sort?: '' | 'price' | 'throughput' | 'latency';
+  data_collection?: '' | 'allow' | 'deny';
+  quantizations?: string[];
 };
 
 export type ProviderModelSettings = {
@@ -179,6 +199,7 @@ export type HostedProviderSelection = {
   selection_reason: string;
   updated_at: string;
   model_id: string | null;
+  openrouter_provider_routing_by_model?: Record<string, OpenRouterProviderRouting>;
 };
 
 export type HostedTextProviderStatus = {
@@ -373,6 +394,7 @@ export function configureActiveProvider(payload: {
 export function configureHostedProvider(payload: {
   provider_id: string;
   model_id?: string | null;
+  openrouter_provider_routing?: OpenRouterProviderRouting | null;
 }): Promise<ProviderStatus> {
   return requestJson<ProviderStatus>('/api/providers/hosted/selection', {
     method: 'POST',

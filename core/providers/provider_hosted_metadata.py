@@ -88,6 +88,27 @@ def _network(host: str, *, transport: str = "https") -> ProviderNetworkRequireme
     )
 
 
+def _openrouter_upstream(
+    provider_id: str,
+    label: str,
+    *,
+    quantization: str,
+    context_length: int,
+    max_completion_tokens: int | None = None,
+    tag: str | None = None,
+) -> dict[str, object]:
+    payload: dict[str, object] = {
+        "provider_id": provider_id,
+        "label": label,
+        "tag": tag or provider_id,
+        "quantization": quantization,
+        "context_length": context_length,
+    }
+    if max_completion_tokens is not None:
+        payload["max_completion_tokens"] = max_completion_tokens
+    return payload
+
+
 def _groq_definition(timestamp: datetime) -> ProviderDefinition:
     return ProviderDefinition(
         provider_id="groq",
@@ -164,14 +185,167 @@ def _openrouter_definition(timestamp: datetime) -> ProviderDefinition:
             ProviderModelOption(
                 model_id="google/gemma-4-31b-it:free",
                 label="Gemma 4 31B (free)",
-                description="OpenRouter hosted text model candidate for fast_model routing.",
+                description="OpenRouter hosted multimodal model candidate for fast_model routing.",
                 default_reasoning_effort=None,
+                input_modalities=["text", "image", "video"],
+                output_modalities=["text"],
+                upstream_provider_options=[
+                    _openrouter_upstream(
+                        "google-ai-studio",
+                        "Google AI Studio",
+                        quantization="unknown",
+                        context_length=262144,
+                        max_completion_tokens=32768,
+                    ),
+                    _openrouter_upstream(
+                        "open-inference",
+                        "OpenInference",
+                        quantization="bf16",
+                        context_length=262144,
+                        max_completion_tokens=8192,
+                        tag="open-inference/bf16",
+                    ),
+                ],
             ),
             ProviderModelOption(
                 model_id="nvidia/nemotron-3-ultra-550b-a55b:free",
                 label="Nemotron 3 Ultra (free)",
                 description="OpenRouter hosted text model candidate for fast_model routing.",
                 default_reasoning_effort=None,
+                input_modalities=["text"],
+                output_modalities=["text"],
+                upstream_provider_options=[
+                    _openrouter_upstream(
+                        "nvidia",
+                        "Nvidia",
+                        quantization="unknown",
+                        context_length=1000000,
+                        max_completion_tokens=65536,
+                    )
+                ],
+            ),
+            ProviderModelOption(
+                model_id="deepseek/deepseek-v4-flash",
+                label="DeepSeek V4 Flash",
+                description="OpenRouter paid text model candidate for high-throughput fast_model routing.",
+                default_reasoning_effort=None,
+                input_modalities=["text"],
+                output_modalities=["text"],
+                upstream_provider_options=[
+                    _openrouter_upstream(
+                        "wafer/fp4",
+                        "Wafer",
+                        quantization="fp4",
+                        context_length=1000000,
+                        max_completion_tokens=65536,
+                    ),
+                    _openrouter_upstream("gmicloud/fp8", "GMICloud", quantization="fp8", context_length=1048575),
+                    _openrouter_upstream(
+                        "baidu/fp8",
+                        "Baidu",
+                        quantization="fp8",
+                        context_length=1048576,
+                        max_completion_tokens=131072,
+                    ),
+                    _openrouter_upstream(
+                        "deepinfra/fp4",
+                        "DeepInfra",
+                        quantization="fp4",
+                        context_length=1048576,
+                        max_completion_tokens=16384,
+                    ),
+                    _openrouter_upstream(
+                        "digitalocean",
+                        "DigitalOcean",
+                        quantization="unknown",
+                        context_length=65536,
+                    ),
+                    _openrouter_upstream(
+                        "siliconflow/fp8",
+                        "SiliconFlow",
+                        quantization="fp8",
+                        context_length=1048576,
+                        max_completion_tokens=393216,
+                    ),
+                    _openrouter_upstream(
+                        "streamlake/fp8",
+                        "StreamLake",
+                        quantization="fp8",
+                        context_length=1024000,
+                        max_completion_tokens=384000,
+                    ),
+                    _openrouter_upstream(
+                        "alibaba",
+                        "Alibaba",
+                        quantization="unknown",
+                        context_length=1000000,
+                        max_completion_tokens=393216,
+                    ),
+                    _openrouter_upstream(
+                        "morph",
+                        "Morph",
+                        quantization="unknown",
+                        context_length=1048576,
+                        max_completion_tokens=1048576,
+                    ),
+                    _openrouter_upstream(
+                        "parasail/fp8",
+                        "Parasail",
+                        quantization="fp8",
+                        context_length=1048576,
+                        max_completion_tokens=1048576,
+                    ),
+                    _openrouter_upstream(
+                        "atlas-cloud/fp8",
+                        "AtlasCloud",
+                        quantization="fp8",
+                        context_length=1048576,
+                        max_completion_tokens=393216,
+                    ),
+                    _openrouter_upstream(
+                        "akashml/fp8",
+                        "AkashML",
+                        quantization="fp8",
+                        context_length=1048576,
+                        max_completion_tokens=1048576,
+                    ),
+                    _openrouter_upstream("fireworks", "Fireworks", quantization="unknown", context_length=1048576),
+                    _openrouter_upstream(
+                        "novita/fp8",
+                        "Novita",
+                        quantization="fp8",
+                        context_length=1048576,
+                        max_completion_tokens=393216,
+                    ),
+                    _openrouter_upstream(
+                        "wandb/fp8",
+                        "WandB",
+                        quantization="fp8",
+                        context_length=1048576,
+                        max_completion_tokens=1048576,
+                    ),
+                    _openrouter_upstream(
+                        "cloudflare",
+                        "Cloudflare",
+                        quantization="unknown",
+                        context_length=384000,
+                        max_completion_tokens=384000,
+                    ),
+                    _openrouter_upstream(
+                        "deepseek",
+                        "DeepSeek",
+                        quantization="unknown",
+                        context_length=1048576,
+                        max_completion_tokens=384000,
+                    ),
+                    _openrouter_upstream(
+                        "venice",
+                        "Venice",
+                        quantization="unknown",
+                        context_length=1000000,
+                        max_completion_tokens=32768,
+                    ),
+                ],
             ),
         ],
         credential_requirements=[_credential("openrouter_api_key", modes=["plain_hosted_chat", "fast_model"])],

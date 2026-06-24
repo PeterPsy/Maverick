@@ -48,8 +48,9 @@ Core Secrets alias `openrouter_api_key`, the public secret reference
 completions endpoint `https://openrouter.ai/api/v1/chat/completions`.
 Maverick exposes these OpenRouter model options:
 
-- `google/gemma-4-31b-it:free` as `Gemma 4 31B (free)`
-- `nvidia/nemotron-3-ultra-550b-a55b:free` as `Nemotron 3 Ultra (free)`
+- `google/gemma-4-31b-it:free` as `Gemma 4 31B (free)`, with text, image, and video input metadata
+- `nvidia/nemotron-3-ultra-550b-a55b:free` as `Nemotron 3 Ultra (free)`, with text-only input metadata
+- `deepseek/deepseek-v4-flash` as `DeepSeek V4 Flash`, with text-only input metadata and paid OpenRouter pricing
 
 Hosted text providers are enabled through an operator-only hosted activation
 path, not through `/api/providers/active`. The activation path stores an active
@@ -67,6 +68,21 @@ The hosted provider/model choice is persisted separately from the Codex runtime
 `ProviderSelection`. Settings saves it through `/api/providers/hosted/selection`
 so a workspace can choose an OpenRouter hosted model for `fast_model` while
 leaving Codex as the agentic runtime for tools, filesystem, MCP, and skills.
+Chat treats that Settings selection as a default/fallback. When a user chooses a
+hosted model in the Chat provider picker, each provider model option is exposed
+as a separate selectable runtime option and the runtime session persists
+`hosted_provider_id` plus `hosted_model_id`. The provider router honors those
+session fields as an explicit override without mutating the workspace Settings
+selection.
+
+Settings owns OpenRouter upstream-provider preferences. Each OpenRouter model
+can store its own routing preference, such as automatic routing, preferring one
+upstream provider, allowing only one upstream provider, ignoring one upstream
+provider, fallback behavior, sorting preference, parameter requirements, data
+collection preference, and quantization filter. Chat does not expose these
+controls; it only selects the model. During OpenRouter execution, Maverick
+translates the saved per-model preference into the OpenRouter `provider`
+request object.
 
 `plain_hosted_chat` is the current non-agentic text bridge. A Chat/runtime
 session using that mode routes the `fast_model` profile through the provider
@@ -99,11 +115,16 @@ the low-cost hosted model path when it is configured.
 
 The bridge is deliberately narrower than an agentic runtime. Before prompt
 materialization it rejects skills, tool/MCP use, workspace filesystem access,
-operative attachments, and operative app references. Hosted text requests must
-not contain local workspace paths, `local path:` labels, or materialized
-app-owned record blocks. Routing decisions, runtime events, logs, transcripts,
-Storage artifacts, CLI/MCP payloads, and HTTP responses may expose provider ids,
-model ids, binding ids, grants, and reason codes, but never raw secret values.
+and operative app references. Attachments are allowed only when the selected
+hosted model advertises compatible input modalities. The first supported path is
+OpenRouter image input: Chat-uploaded workspace images are read by the platform
+and sent as OpenAI-compatible `image_url` data URL content parts, without
+including local workspace paths in the provider prompt. Non-image files and
+text-only models fail closed. Hosted text requests must not contain local
+workspace paths, `local path:` labels, or materialized app-owned record blocks.
+Routing decisions, runtime events, logs, transcripts, Storage artifacts,
+CLI/MCP payloads, and HTTP responses may expose provider ids, model ids, binding
+ids, grants, and reason codes, but never raw secret values.
 
 ## Deferred Speech Provider Boundary
 

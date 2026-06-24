@@ -40,6 +40,8 @@ export function createRuntimeSession(options: RuntimeSessionOptions = {}, reques
       skill_ids: options.skill_ids || [],
       runtime_mode: options.runtime_mode || undefined,
       routing_profile: options.routing_profile || undefined,
+      hosted_provider_id: options.hosted_provider_id || undefined,
+      hosted_model_id: options.hosted_model_id || undefined,
       title: options.title || "New chat",
     }),
   });
@@ -80,6 +82,8 @@ export function createRuntimeSessionWithTurn({
     skill_ids: options.skill_ids || [],
     runtime_mode: options.runtime_mode || undefined,
     routing_profile: options.routing_profile || undefined,
+    hosted_provider_id: options.hosted_provider_id || undefined,
+    hosted_model_id: options.hosted_model_id || undefined,
     title: options.title || "New chat",
     input_text: inputText,
     client_message_id: clientMessageId,

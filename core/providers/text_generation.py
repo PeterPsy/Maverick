@@ -21,6 +21,7 @@ from core.secrets.store import SecretStore
 
 
 MessageRole = Literal["system", "user", "assistant"]
+MessageContentPartType = Literal["text", "image_url"]
 
 OPENAI_COMPATIBLE_ENDPOINTS = {
     "groq": "https://api.groq.com/openai/v1/chat/completions",
@@ -45,11 +46,20 @@ class HostedTextGenerationError(ProviderError):
 
 
 @dataclass(frozen=True)
+class TextGenerationContentPart:
+    """One multimodal hosted chat content part."""
+
+    type: MessageContentPartType
+    text: str | None = None
+    image_url: str | None = None
+
+
+@dataclass(frozen=True)
 class TextGenerationMessage:
     """One hosted chat message."""
 
     role: MessageRole
-    content: str
+    content: str | list[TextGenerationContentPart]
 
 
 @dataclass(frozen=True)
@@ -64,6 +74,7 @@ class TextGenerationRequest:
     stream: bool = False
     workspace_id: str | None = None
     workspace_root: str | None = None
+    provider_routing: dict[str, object] | None = None
 
 
 @dataclass(frozen=True)
@@ -350,7 +361,7 @@ def _openai_payload(request: TextGenerationRequest) -> dict[str, object]:
     messages = []
     if request.system_prompt:
         messages.append({"role": "system", "content": request.system_prompt})
-    messages.extend({"role": message.role, "content": message.content} for message in request.messages)
+    messages.extend({"role": message.role, "content": _message_content_payload(message.content)} for message in request.messages)
     payload: dict[str, object] = {
         "model": request.model_id,
         "messages": messages,
@@ -358,12 +369,63 @@ def _openai_payload(request: TextGenerationRequest) -> dict[str, object]:
     }
     if request.max_output_tokens is not None:
         payload["max_tokens"] = request.max_output_tokens
+    provider_routing = _openrouter_provider_payload(request.provider_routing)
+    if provider_routing:
+        payload["provider"] = provider_routing
     return payload
+
+
+def _openrouter_provider_payload(value: dict[str, object] | None) -> dict[str, object]:
+    if not isinstance(value, dict):
+        return {}
+    mode = str(value.get("mode") or "auto").strip()
+    provider_id = str(value.get("provider_id") or "").strip()
+    payload: dict[str, object] = {}
+    if mode == "prefer" and provider_id:
+        payload["order"] = [provider_id]
+    elif mode == "only" and provider_id:
+        payload["only"] = [provider_id]
+    elif mode == "ignore" and provider_id:
+        payload["ignore"] = [provider_id]
+    if "allow_fallbacks" in value:
+        payload["allow_fallbacks"] = bool(value.get("allow_fallbacks"))
+    if value.get("require_parameters") is not None:
+        payload["require_parameters"] = bool(value.get("require_parameters"))
+    sort = str(value.get("sort") or "").strip()
+    if sort in {"price", "throughput", "latency"}:
+        payload["sort"] = sort
+    data_collection = str(value.get("data_collection") or "").strip()
+    if data_collection in {"allow", "deny"}:
+        payload["data_collection"] = data_collection
+    quantizations = [
+        str(item).strip()
+        for item in (value.get("quantizations") if isinstance(value.get("quantizations"), list) else [])
+        if str(item).strip()
+    ]
+    if quantizations:
+        payload["quantizations"] = quantizations
+    return payload
+
+
+def _message_content_payload(content: str | list[TextGenerationContentPart]) -> str | list[dict[str, object]]:
+    if isinstance(content, str):
+        return content
+    parts: list[dict[str, object]] = []
+    for part in content:
+        if part.type == "text":
+            parts.append({"type": "text", "text": part.text or ""})
+        elif part.type == "image_url" and part.image_url:
+            parts.append({"type": "image_url", "image_url": {"url": part.image_url}})
+    return parts
 
 
 def _validate_hosted_text_request(request: TextGenerationRequest) -> None:
     content_parts = [request.system_prompt or ""]
-    content_parts.extend(message.content for message in request.messages)
+    for message in request.messages:
+        if isinstance(message.content, str):
+            content_parts.append(message.content)
+        else:
+            content_parts.extend(part.text or "" for part in message.content if part.type == "text")
     combined = "\n".join(content_parts)
     normalized = combined.lower()
     for marker in _blocked_hosted_text_markers(request):

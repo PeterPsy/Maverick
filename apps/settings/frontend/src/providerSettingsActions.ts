@@ -4,7 +4,7 @@ import {
   getPlatformSettings,
   type PlatformSettings
 } from './adminApi';
-import { syncSettingsPanelDraft, type SettingsPanelState } from './settingsPanel';
+import { hostedProviderRoutingDraft, syncSettingsPanelDraft, type SettingsPanelState } from './settingsPanel';
 
 type SettingsNotice = {
   message: string;
@@ -60,7 +60,8 @@ export async function saveHostedProviderSettings(context: ProviderSettingsAction
   try {
     await configureHostedProvider({
       provider_id: providerId,
-      model_id: context.state.hostedDraftModelId
+      model_id: context.state.hostedDraftModelId,
+      openrouter_provider_routing: hostedProviderRoutingDraft(context.state)
     });
     const settings = await getPlatformSettings();
     context.setSettings(settings);

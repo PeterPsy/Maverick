@@ -39,6 +39,8 @@ class PlainHostedRuntimeTest(unittest.TestCase):
         register_builtin_providers(store)
         groq = builtin_provider_registry().get_provider_definition("groq")
         store.save_provider_definition(replace(groq, status="active"))
+        openrouter = builtin_provider_registry().get_provider_definition("openrouter")
+        store.save_provider_definition(replace(openrouter, status="active"))
         return store
 
     def make_secret_store(self) -> SecretDocumentStore:
@@ -89,6 +91,12 @@ class PlainHostedRuntimeTest(unittest.TestCase):
             provider_id="groq",
             workspace_id="default",
             secret_ref=build_secret_ref(secret_id=secret.secret_id),
+        )
+        bind_provider_credential(
+            provider_store,
+            provider_id="openrouter",
+            workspace_id="default",
+            secret_ref=build_secret_ref(alias="groq-runtime-key"),
         )
         return SimpleNamespace(
             provider_store=provider_store,
@@ -145,6 +153,23 @@ class PlainHostedRuntimeTest(unittest.TestCase):
         self.assertEqual(state.runtime_store.get_session("sess-plain").runtime_mode, "plain_hosted_chat")
         self.assertEqual(_session_payload(plain)["runtime_mode"], "plain_hosted_chat")
 
+    def test_create_runtime_session_persists_hosted_model_override(self) -> None:
+        state = self.make_state()
+        plain = create_runtime_session(
+            state.runtime_store,
+            session_id="sess-openrouter",
+            workspace_id="default",
+            agent_id="chat",
+            runtime_mode="plain_hosted_chat",
+            hosted_provider_id="openrouter",
+            hosted_model_id="google/gemma-4-31b-it:free",
+            start_path=state.repository_root,
+        )
+
+        self.assertEqual(plain.hosted_provider_id, "openrouter")
+        self.assertEqual(plain.hosted_model_id, "google/gemma-4-31b-it:free")
+        self.assertEqual(_session_payload(plain)["hosted_model_id"], "google/gemma-4-31b-it:free")
+
     def test_plain_hosted_sync_turn_emits_delta_final_and_completes(self) -> None:
         state = self.make_state()
         session = create_runtime_session(
@@ -177,6 +202,83 @@ class PlainHostedRuntimeTest(unittest.TestCase):
         self.assertIn("runtime.turn.completed", event_types)
         self.assertEqual(final_events[-1].payload["complete_text"], "hello")
         self.assertNotIn("super-secret-token", str(state.runtime_store.list_events(session.session_id)))
+
+    def test_plain_hosted_turn_with_image_uses_multimodal_openrouter_model(self) -> None:
+        state = self.make_state()
+        session = create_runtime_session(
+            state.runtime_store,
+            session_id="sess-openrouter-image",
+            workspace_id="default",
+            agent_id="chat",
+            runtime_mode="plain_hosted_chat",
+            hosted_provider_id="openrouter",
+            hosted_model_id="google/gemma-4-31b-it:free",
+            start_path=state.repository_root,
+        )
+        image_path = Path(session.workspace_root) / "storage" / "uploaded" / "image-1" / "pixel.png"
+        image_path.parent.mkdir(parents=True, exist_ok=True)
+        image_path.write_bytes(b"png-bytes")
+
+        with (
+            patch.dict("os.environ", {"MAVERICK_HOSTED_TEXT_FAKE_RESPONSE": "image response"}, clear=False),
+            patch("core.runtime.turn_submission_service_output.schedule_runtime_thread_title_generation"),
+            patch(
+                "core.runtime.turn_submission_service_submit.resolve_runtime_backend_for_session",
+                side_effect=AssertionError("agentic runtime should not be resolved"),
+            ),
+        ):
+            turn, _events = submit_runtime_turn(
+                state,
+                session=session,
+                input_text="Describe it",
+                attachments=[
+                    {
+                        "name": "pixel.png",
+                        "type": "image/png",
+                        "isImage": True,
+                        "relativePath": "storage/uploaded/image-1/pixel.png",
+                    }
+                ],
+            )
+
+        self.assertEqual(turn.status, "completed")
+        saved_session = state.runtime_store.get_session(session.session_id)
+        self.assertEqual(saved_session.provider_id, "openrouter")
+        self.assertEqual(saved_session.hosted_model_id, "google/gemma-4-31b-it:free")
+
+    def test_plain_hosted_text_only_model_blocks_image_attachments(self) -> None:
+        state = self.make_state()
+        session = create_runtime_session(
+            state.runtime_store,
+            session_id="sess-openrouter-text-only",
+            workspace_id="default",
+            agent_id="chat",
+            runtime_mode="plain_hosted_chat",
+            hosted_provider_id="openrouter",
+            hosted_model_id="nvidia/nemotron-3-ultra-550b-a55b:free",
+            start_path=state.repository_root,
+        )
+        image_path = Path(session.workspace_root) / "storage" / "uploaded" / "image-1" / "pixel.png"
+        image_path.parent.mkdir(parents=True, exist_ok=True)
+        image_path.write_bytes(b"png-bytes")
+
+        with patch("core.runtime.turn_submission_service_output.schedule_runtime_thread_title_generation"):
+            turn, _events = submit_runtime_turn(
+                state,
+                session=session,
+                input_text="Describe it",
+                attachments=[
+                    {
+                        "name": "pixel.png",
+                        "type": "image/png",
+                        "isImage": True,
+                        "relativePath": "storage/uploaded/image-1/pixel.png",
+                    }
+                ],
+            )
+
+        self.assertEqual(turn.status, "failed")
+        self.assertEqual(turn.failure_reason, "plain_hosted_chat_model_blocks_attachments")
 
     def test_plain_hosted_async_turn_completes_without_codex(self) -> None:
         state = self.make_state()

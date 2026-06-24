@@ -8,6 +8,10 @@ export type ProviderItem = {
   default_model_family: string | null;
   model_options?: ProviderModelOption[];
   capabilities?: Record<string, boolean>;
+  hosted_provider_id?: string;
+  hosted_model_id?: string;
+  input_modalities?: string[];
+  output_modalities?: string[];
 };
 
 export type ProviderReasoningOption = {
@@ -22,6 +26,9 @@ export type ProviderModelOption = {
   description: string | null;
   default_reasoning_effort: string | null;
   supported_reasoning_efforts: ProviderReasoningOption[];
+  input_modalities?: string[];
+  output_modalities?: string[];
+  upstream_provider_options?: Array<Record<string, unknown>>;
 };
 
 export type ProviderModelSettings = {
@@ -672,5 +679,7 @@ export type RuntimeSessionOptions = {
   skill_ids?: string[];
   runtime_mode?: "agentic" | "plain_hosted_chat";
   routing_profile?: "fast_model" | string;
+  hosted_provider_id?: string;
+  hosted_model_id?: string;
   title?: string;
 };

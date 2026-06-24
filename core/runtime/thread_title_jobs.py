@@ -206,6 +206,7 @@ def generate_hosted_thread_title(
         stream=False,
         workspace_id=workspace_id,
         workspace_root=str(getattr(state, "workspace_root", "") or ""),
+        provider_routing=_openrouter_provider_routing_for_title(state, workspace_id=workspace_id, decision=decision),
     )
     try:
         result = execute_hosted_text_generation(
@@ -377,6 +378,24 @@ def _codex_model_settings(state: "PlatformState", *, workspace_id: str) -> tuple
     if option is not None and option.default_reasoning_effort:
         return model_id, option.default_reasoning_effort
     return model_id, None if selection is None else selection.model_reasoning_effort
+
+
+def _openrouter_provider_routing_for_title(
+    state: "PlatformState",
+    *,
+    workspace_id: str,
+    decision,
+) -> dict[str, object] | None:
+    if decision.selected_provider_id != "openrouter" or not decision.selected_model_id_or_voice_id:
+        return None
+    get_selection = getattr(state.provider_store, "get_hosted_provider_selection", None)
+    if not callable(get_selection):
+        return None
+    selection = get_selection(workspace_id=workspace_id, profile="fast_model")
+    if selection is None:
+        return None
+    routing = selection.openrouter_provider_routing_by_model.get(decision.selected_model_id_or_voice_id)
+    return dict(routing) if isinstance(routing, dict) else None
 
 
 def _codex_title_command(*, repository_root: Path, model_id: str, reasoning_effort: str | None) -> list[str]:

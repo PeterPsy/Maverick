@@ -29,6 +29,7 @@ import {
   createSettingsPanelState,
   settingsPanelHtml,
   syncSettingsPanelDraft,
+  updateHostedProviderRoutingDraft,
   updateHostedDraftModel,
   updateDraftModel
 } from './settingsPanel';
@@ -492,7 +493,11 @@ function bindEvents() {
     installWorkspaceApp,
     logoutFromSettings,
     onHostedProviderModelChanged: (modelId) => {
-      updateHostedDraftModel(settingsPanelState, modelId);
+      updateHostedDraftModel(settingsPanelState, platformSettings, modelId);
+      render();
+    },
+    onHostedProviderRoutingChanged: (field, value) => {
+      updateHostedProviderRoutingDraft(settingsPanelState, field, value);
       render();
     },
     onProviderModelChanged: (modelId) => {

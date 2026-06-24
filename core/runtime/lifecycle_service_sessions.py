@@ -56,6 +56,8 @@ def create_runtime_session(
     session_kind: RuntimeSessionKind | str | None = None,
     thread_visibility: RuntimeThreadVisibility | str | None = None,
     runtime_mode: RuntimeMode | str | None = None,
+    hosted_provider_id: str | None = None,
+    hosted_model_id: str | None = None,
     grants: list[RuntimeSessionGrantRecord] | None = None,
     governance: WorkspaceGovernanceRecord | None = None,
     platform_allows_full_access: bool = False,
@@ -105,6 +107,8 @@ def create_runtime_session(
         created_by_user_id=_optional_text(created_by_user_id),
         creator_runtime_session_id=_optional_text(creator_runtime_session_id),
         grants=_platform_runtime_grants(grants),
+        hosted_provider_id=_optional_text(hosted_provider_id),
+        hosted_model_id=_optional_text(hosted_model_id),
     )
     state = RuntimeStateRecord(
         session_id=session_id,
@@ -130,6 +134,8 @@ def create_runtime_session(
             "session_kind": session.session_kind,
             "thread_visibility": session.thread_visibility,
             "runtime_mode": session.runtime_mode,
+            "hosted_provider_id": session.hosted_provider_id,
+            "hosted_model_id": session.hosted_model_id,
         }
         record_platform_event(
             observability_store,

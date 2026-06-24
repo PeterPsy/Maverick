@@ -35,6 +35,8 @@ class ProviderRoutingContext:
     app_id: str | None = None
     allow_fallback_codex: bool = False
     requested_capabilities: list[str] | None = None
+    hosted_provider_id: str | None = None
+    hosted_model_id: str | None = None
 
 
 def utcnow() -> datetime:
@@ -109,22 +111,37 @@ def primary_routing_failure_reason(decision: RoutingDecision) -> str:
 
 def _select_fast_model(context: ProviderRoutingContext) -> RoutingDecision:
     requested_capabilities = context.requested_capabilities or ["text_generation", "low_latency"]
+    requested_provider_id = str(context.hosted_provider_id or "").strip() or None
+    requested_model_id = str(context.hosted_model_id or "").strip() or None
     candidates = _fast_model_candidates(context.registry.list_provider_definitions())
     hosted_selection = _hosted_selection_for_context(context)
+    if requested_provider_id:
+        candidates = [candidate for candidate in candidates if candidate.provider_id == requested_provider_id]
+        hosted_selection = None
     candidates = _prioritize_hosted_selection(candidates, hosted_selection)
     candidate_ids = [candidate.provider_id for candidate in candidates]
     reason_codes = ["routing_profile_fast_model"]
+    if requested_provider_id:
+        reason_codes.append(f"hosted_provider_override_present:{requested_provider_id}")
+    if requested_model_id:
+        reason_codes.append(f"hosted_model_override_present:{requested_model_id}")
     if hosted_selection is not None:
         reason_codes.append(f"hosted_model_selection_present:{hosted_selection.provider_id}")
     policy = _policy_for_context(context)
 
     for candidate in candidates:
         preferred_model_id = (
+            requested_model_id
+            if requested_model_id is not None
+            else
             hosted_selection.model_id
             if hosted_selection is not None and hosted_selection.provider_id == candidate.provider_id
             else None
         )
         model = _select_model(candidate, policy=policy, user_tier=context.user_tier, preferred_model_id=preferred_model_id)
+        if requested_model_id and (model is None or model.model_id != requested_model_id):
+            reason_codes.append(f"hosted_model_override_unavailable:{candidate.provider_id}")
+            continue
         if candidate.status != "active":
             reason_codes.append(f"provider_disabled:{candidate.provider_id}")
             continue
@@ -132,7 +149,10 @@ def _select_fast_model(context: ProviderRoutingContext) -> RoutingDecision:
             reason_codes.append(f"workspace_policy_denied:{candidate.provider_id}")
             continue
         if model is None:
-            reason_codes.append(f"workspace_policy_denied_model:{candidate.provider_id}")
+            if requested_model_id:
+                reason_codes.append(f"hosted_model_override_unavailable:{candidate.provider_id}")
+            else:
+                reason_codes.append(f"workspace_policy_denied_model:{candidate.provider_id}")
             continue
 
         authorization = check_provider_credential_authorization(
@@ -186,6 +206,8 @@ def _select_fast_model(context: ProviderRoutingContext) -> RoutingDecision:
             reason_codes=[*reason_codes, "fallback_codex_explicit", "runtime_engine_remains_codex"],
         )
 
+    if requested_provider_id:
+        reason_codes.append(f"hosted_provider_override_unavailable:{requested_provider_id}")
     return _decision(
         context,
         profile="fast_model",

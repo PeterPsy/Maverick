@@ -302,14 +302,21 @@ const openrouterModels = [
     label: 'Gemma 4 31B (free)',
     description: null,
     default_reasoning_effort: null,
-    supported_reasoning_efforts: []
+    supported_reasoning_efforts: [],
+    upstream_provider_options: [
+      { provider_id: 'google-ai-studio', label: 'Google AI Studio', tag: 'google-ai-studio', quantization: 'unknown' },
+      { provider_id: 'open-inference', label: 'OpenInference', tag: 'open-inference/bf16', quantization: 'bf16' }
+    ]
   },
   {
     model_id: 'nvidia/nemotron-3-ultra-550b-a55b:free',
     label: 'Nemotron 3 Ultra (free)',
     description: null,
     default_reasoning_effort: null,
-    supported_reasoning_efforts: []
+    supported_reasoning_efforts: [],
+    upstream_provider_options: [
+      { provider_id: 'nvidia', label: 'Nvidia', tag: 'nvidia', quantization: 'unknown' }
+    ]
   }
 ];
 
@@ -348,7 +355,14 @@ const settings = {
         provider_id: 'openrouter',
         selection_reason: 'configured by hosted model settings',
         updated_at: '2026-06-23T00:00:00Z',
-        model_id: 'nvidia/nemotron-3-ultra-550b-a55b:free'
+        model_id: 'nvidia/nemotron-3-ultra-550b-a55b:free',
+        openrouter_provider_routing_by_model: {
+          'nvidia/nemotron-3-ultra-550b-a55b:free': {
+            mode: 'prefer',
+            provider_id: 'nvidia',
+            allow_fallbacks: true
+          }
+        }
       },
       model_settings: {
         selected_model_id: 'nvidia/nemotron-3-ultra-550b-a55b:free',
@@ -373,6 +387,9 @@ assert.ok(html.includes('OpenRouter'));
 assert.ok(html.includes('Gemma 4 31B (free)'));
 assert.ok(html.includes('Nemotron 3 Ultra (free)'));
 assert.ok(html.includes('settings-hosted-provider-model'));
+assert.ok(html.includes('OpenRouter upstream'));
+assert.ok(html.includes('data-openrouter-routing="mode"'));
+assert.ok(html.includes('Nvidia'));
 assert.ok(html.includes('runtime engine remains Codex'));
 """
         with tempfile.TemporaryDirectory() as temp_dir:

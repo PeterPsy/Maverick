@@ -64,6 +64,8 @@ class RuntimeSessionRecord:
     grants: list[RuntimeSessionGrantRecord | dict[str, str | None]] = field(default_factory=list)
     provider_id: str | None = None
     provider_thread_id: str | None = None
+    hosted_provider_id: str | None = None
+    hosted_model_id: str | None = None
 
 
 @dataclass(frozen=True)

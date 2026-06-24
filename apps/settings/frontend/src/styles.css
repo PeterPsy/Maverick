@@ -846,6 +846,26 @@ button.settings-adapter-card {
   font-size: 0.76rem;
 }
 
+.settings-platform-checks {
+  display: grid;
+  grid-column: 1 / -1;
+  gap: 0.42rem;
+  color: var(--maverick-text-muted);
+  font-size: 0.76rem;
+}
+
+.settings-platform-checks label {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.settings-platform-checks input {
+  width: auto;
+  min-height: auto;
+  accent-color: var(--maverick-accent);
+}
+
 .settings-platform-field-wide,
 .settings-platform-note {
   grid-column: 1 / -1;

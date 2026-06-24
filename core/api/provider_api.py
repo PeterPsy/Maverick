@@ -253,12 +253,18 @@ def handle_provider_api(state: PlatformState, environ: dict, start_response: Sta
         except AuthorizationError as error:
             return json_response(start_response, {"error": error.reason}, status="403 Forbidden")
         model_id = str(body.get("model_id") or "").strip() or None
+        openrouter_provider_routing = (
+            body.get("openrouter_provider_routing")
+            if isinstance(body.get("openrouter_provider_routing"), dict)
+            else None
+        )
         try:
             configure_hosted_model_provider(
                 state.provider_store,
                 workspace_id=context.workspace_id,
                 provider_id=provider_id,
                 model_id=model_id,
+                openrouter_provider_routing=openrouter_provider_routing,
                 observability_store=state.observability_store,
             )
         except Exception as error:

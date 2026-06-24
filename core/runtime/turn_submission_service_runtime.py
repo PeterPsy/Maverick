@@ -116,6 +116,7 @@ def submit_runtime_turn_async(
                         state,
                         session=current_session,
                         input_text=input_text,
+                        attachments=attachments,
                         event_sink=output_recorder.record,
                     )
                     worker_provider_id = routing_decision.selected_provider_id or worker_provider_id

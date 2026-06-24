@@ -12,6 +12,7 @@ export function bindSettingsEvents(context: {
   installWorkspaceApp: (app: WorkspaceApp) => Promise<void>;
   logoutFromSettings: () => Promise<void>;
   onHostedProviderModelChanged: (modelId: string) => void;
+  onHostedProviderRoutingChanged: (field: string, value: string | boolean) => void;
   onProviderModelChanged: (modelId: string) => void;
   onProviderReasoningChanged: (reasoningEffort: string) => void;
   persistenceController: PersistenceController;
@@ -69,6 +70,7 @@ export function bindSettingsEvents(context: {
       context.logoutFromSettings().catch(context.showError);
     },
     onHostedProviderModelChanged: context.onHostedProviderModelChanged,
+    onHostedProviderRoutingChanged: context.onHostedProviderRoutingChanged,
     onProviderModelChanged: context.onProviderModelChanged,
     onProviderReasoningChanged: context.onProviderReasoningChanged,
     onSaveHostedProviderSettings: () => {

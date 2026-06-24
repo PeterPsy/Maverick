@@ -61,6 +61,9 @@ def provider_model_option_payload(option: ProviderModelOption) -> dict[str, obje
             provider_reasoning_option_payload(reasoning)
             for reasoning in option.supported_reasoning_efforts
         ],
+        "input_modalities": list(option.input_modalities),
+        "output_modalities": list(option.output_modalities),
+        "upstream_provider_options": [dict(item) for item in option.upstream_provider_options],
     }
 
 
@@ -91,6 +94,11 @@ def hosted_provider_selection_payload(selection: ProviderHostedSelection | None)
         "selection_reason": selection.selection_reason,
         "updated_at": selection.updated_at,
         "model_id": selection.model_id,
+        "openrouter_provider_routing_by_model": {
+            str(model_id): dict(routing)
+            for model_id, routing in selection.openrouter_provider_routing_by_model.items()
+            if isinstance(routing, dict)
+        },
     }
 
 

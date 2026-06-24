@@ -9,10 +9,7 @@ export function providerItemsFromPayload(payload: ProviderPayload): ProviderItem
 
   const hostedProvider = payload.hosted_text?.active_provider || null;
   if (hostedProvider && providerIsActive(hostedProvider)) {
-    options.push({
-      ...hostedProvider,
-      label: hostedProviderLabel(payload.hosted_text),
-    });
+    options.push(...hostedModelProviderItems(payload.hosted_text));
   }
 
   if (!options.length) {
@@ -30,12 +27,17 @@ export function hostedProviderRuntimeConfig(provider: ProviderItem | null | unde
   if (!providerUsesPlainHostedRuntime(provider)) {
     return null;
   }
+  if (!provider) {
+    return null;
+  }
   return {
     agent_id: "chat",
     agent_role_id: "",
     agent_type_id: "",
     runtime_mode: "plain_hosted_chat",
     routing_profile: "fast_model",
+    hosted_provider_id: provider.hosted_provider_id || provider.provider_id,
+    hosted_model_id: provider.hosted_model_id || provider.default_model_family || "",
     skill_catalog_app_id: "",
     skill_ids: [],
     source_app_id: "chat",
@@ -44,17 +46,48 @@ export function hostedProviderRuntimeConfig(provider: ProviderItem | null | unde
   };
 }
 
-function hostedProviderLabel(status: HostedTextProviderStatus | null | undefined): string {
+function hostedModelProviderItems(status: HostedTextProviderStatus | null | undefined): ProviderItem[] {
   const provider = status?.active_provider;
   if (!provider) {
-    return "Hosted model";
+    return [];
   }
   const selectedModelId = status?.model_settings?.selected_model_id || provider.default_model_family || "";
-  const model =
-    status?.model_settings?.available_models?.find((option) => option.model_id === selectedModelId) ||
-    provider.model_options?.find((option) => option.model_id === selectedModelId) ||
-    null;
-  return `${model?.label || selectedModelId || "Hosted model"} - ${provider.label || provider.provider_id}`;
+  const models = status?.model_settings?.available_models?.length ? status.model_settings.available_models : provider.model_options || [];
+  const sortedModels = [...models].sort((left, right) => {
+    if (left.model_id === selectedModelId) {
+      return -1;
+    }
+    if (right.model_id === selectedModelId) {
+      return 1;
+    }
+    return left.label.localeCompare(right.label);
+  });
+  if (!sortedModels.length) {
+    return [
+      {
+        ...provider,
+        provider_id: hostedRuntimeOptionId(provider.provider_id, selectedModelId || provider.default_model_family || "default"),
+        hosted_provider_id: provider.provider_id,
+        hosted_model_id: selectedModelId || provider.default_model_family || "",
+        label: `${selectedModelId || "Hosted model"} - ${provider.label || provider.provider_id}`,
+      },
+    ];
+  }
+  return sortedModels.map((model) => ({
+    ...provider,
+    provider_id: hostedRuntimeOptionId(provider.provider_id, model.model_id),
+    hosted_provider_id: provider.provider_id,
+    hosted_model_id: model.model_id,
+    default_model_family: model.model_id,
+    label: `${model.label || model.model_id} - ${provider.label || provider.provider_id}`,
+    description: model.description || provider.description,
+    input_modalities: model.input_modalities || [],
+    output_modalities: model.output_modalities || [],
+  }));
+}
+
+function hostedRuntimeOptionId(providerId: string, modelId: string): string {
+  return `hosted:${providerId}:${encodeURIComponent(modelId)}`;
 }
 
 function providerIsActive(provider: ProviderItem): boolean {

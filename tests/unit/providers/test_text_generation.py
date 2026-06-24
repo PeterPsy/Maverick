@@ -15,6 +15,7 @@ from core.providers.text_generation import (
     HostedTextGenerationError,
     OpenAICompatibleHttpTransport,
     OpenAICompatibleTextGenerationClient,
+    TextGenerationContentPart,
     TextGenerationMessage,
     TextGenerationRequest,
     execute_hosted_text_generation,
@@ -106,6 +107,70 @@ class HostedTextGenerationTest(unittest.TestCase):
         self.assertEqual(transport.requests[0]["endpoint_url"], "https://openrouter.ai/api/v1/chat/completions")
         self.assertEqual(transport.requests[0]["payload"]["model"], "google/gemma-4-31b-it:free")
         self.assertNotIn("secret-token", str(transport.requests))
+
+    def test_openrouter_serializes_multimodal_image_content_parts(self) -> None:
+        transport = FakeHostedTextTransport(response_text="image answer")
+        client = OpenAICompatibleTextGenerationClient(
+            provider_id="openrouter",
+            api_key="secret-token",
+            transport=transport,
+        )
+
+        result = client.generate(
+            TextGenerationRequest(
+                model_id="google/gemma-4-31b-it:free",
+                messages=[
+                    TextGenerationMessage(
+                        role="user",
+                        content=[
+                            TextGenerationContentPart(type="text", text="Describe this image."),
+                            TextGenerationContentPart(type="image_url", image_url="data:image/png;base64,aGVsbG8="),
+                        ],
+                    )
+                ],
+            )
+        )
+
+        message = transport.requests[0]["payload"]["messages"][0]
+        self.assertEqual(result.output_text, "image answer")
+        self.assertEqual(message["content"][0], {"type": "text", "text": "Describe this image."})
+        self.assertEqual(message["content"][1], {"type": "image_url", "image_url": {"url": "data:image/png;base64,aGVsbG8="}})
+
+    def test_openrouter_serializes_provider_routing_preferences(self) -> None:
+        transport = FakeHostedTextTransport(response_text="routed")
+        client = OpenAICompatibleTextGenerationClient(
+            provider_id="openrouter",
+            api_key="secret-token",
+            transport=transport,
+        )
+
+        client.generate(
+            TextGenerationRequest(
+                model_id="google/gemma-4-31b-it:free",
+                messages=[TextGenerationMessage(role="user", content="Hello")],
+                provider_routing={
+                    "mode": "only",
+                    "provider_id": "google-ai-studio",
+                    "allow_fallbacks": False,
+                    "require_parameters": True,
+                    "sort": "latency",
+                    "data_collection": "deny",
+                    "quantizations": ["bf16"],
+                },
+            )
+        )
+
+        self.assertEqual(
+            transport.requests[0]["payload"]["provider"],
+            {
+                "only": ["google-ai-studio"],
+                "allow_fallbacks": False,
+                "require_parameters": True,
+                "sort": "latency",
+                "data_collection": "deny",
+                "quantizations": ["bf16"],
+            },
+        )
 
     def test_fake_transport_streaming_normalizes_deltas(self) -> None:
         transport = FakeHostedTextTransport(chunks=["hel", "lo"])

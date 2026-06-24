@@ -214,6 +214,7 @@ def configure_hosted_model_provider(
     workspace_id: str,
     provider_id: str,
     model_id: str | None = None,
+    openrouter_provider_routing: dict[str, object] | None = None,
     profile: str = "fast_model",
     selection_reason: str = "configured by hosted model settings",
     registry: ProviderRegistry | None = None,
@@ -231,6 +232,10 @@ def configure_hosted_model_provider(
         raise ProviderCapabilityError(f"Hosted provider `{provider_id}` is not active.")
     normalized_model_id = _validate_hosted_model_id(definition, model_id)
     timestamp = now or utcnow()
+    previous = store.get_hosted_provider_selection(workspace_id=workspace_id, profile="fast_model")
+    routing_by_model = dict(previous.openrouter_provider_routing_by_model) if previous is not None else {}
+    if normalized_model_id:
+        routing_by_model[normalized_model_id] = _normalize_openrouter_provider_routing(openrouter_provider_routing)
     selection = ProviderHostedSelection(
         selection_id=f"{workspace_id}:{profile}",
         workspace_id=workspace_id,
@@ -240,6 +245,7 @@ def configure_hosted_model_provider(
         created_at=timestamp,
         updated_at=timestamp,
         model_id=normalized_model_id,
+        openrouter_provider_routing_by_model=routing_by_model,
     )
     saved = store.save_hosted_provider_selection(selection)
     if observability_store is not None:
@@ -248,6 +254,11 @@ def configure_hosted_model_provider(
             "profile": profile,
             "provider_id": provider_id,
             "model_id": saved.model_id,
+            "openrouter_provider_routing": (
+                saved.openrouter_provider_routing_by_model.get(saved.model_id or "")
+                if saved.model_id
+                else None
+            ),
         }
         record_platform_audit(
             observability_store,
@@ -271,6 +282,38 @@ def configure_hosted_model_provider(
             now=timestamp,
         )
     return saved
+
+
+def _normalize_openrouter_provider_routing(value: dict[str, object] | None) -> dict[str, object]:
+    if not isinstance(value, dict):
+        return {"mode": "auto"}
+    mode = str(value.get("mode") or "auto").strip()
+    if mode not in {"auto", "prefer", "only", "ignore"}:
+        mode = "auto"
+    provider_id = str(value.get("provider_id") or "").strip()
+    sort = str(value.get("sort") or "").strip()
+    if sort not in {"", "price", "throughput", "latency"}:
+        sort = ""
+    data_collection = str(value.get("data_collection") or "").strip()
+    if data_collection not in {"", "allow", "deny"}:
+        data_collection = ""
+    quantizations = [
+        str(item).strip()
+        for item in (value.get("quantizations") if isinstance(value.get("quantizations"), list) else [])
+        if str(item).strip()
+    ]
+    normalized: dict[str, object] = {"mode": mode}
+    if mode != "auto" and provider_id:
+        normalized["provider_id"] = provider_id
+    normalized["allow_fallbacks"] = bool(value.get("allow_fallbacks", True))
+    normalized["require_parameters"] = bool(value.get("require_parameters", False))
+    if sort:
+        normalized["sort"] = sort
+    if data_collection:
+        normalized["data_collection"] = data_collection
+    if quantizations:
+        normalized["quantizations"] = quantizations[:4]
+    return normalized
 
 
 def _validate_hosted_model_provider(definition: ProviderDefinition) -> None:

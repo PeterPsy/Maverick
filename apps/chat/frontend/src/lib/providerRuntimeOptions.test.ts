@@ -30,6 +30,17 @@ const payload: ProviderPayload = {
           description: null,
           default_reasoning_effort: null,
           supported_reasoning_efforts: [],
+          input_modalities: ["text", "image"],
+          output_modalities: ["text"],
+        },
+        {
+          model_id: "nvidia/nemotron-3-ultra-550b-a55b:free",
+          label: "Nemotron 3 Ultra (free)",
+          description: null,
+          default_reasoning_effort: null,
+          supported_reasoning_efforts: [],
+          input_modalities: ["text"],
+          output_modalities: ["text"],
         },
       ],
     },
@@ -44,6 +55,17 @@ const payload: ProviderPayload = {
           description: null,
           default_reasoning_effort: null,
           supported_reasoning_efforts: [],
+          input_modalities: ["text", "image"],
+          output_modalities: ["text"],
+        },
+        {
+          model_id: "nvidia/nemotron-3-ultra-550b-a55b:free",
+          label: "Nemotron 3 Ultra (free)",
+          description: null,
+          default_reasoning_effort: null,
+          supported_reasoning_efforts: [],
+          input_modalities: ["text"],
+          output_modalities: ["text"],
         },
       ],
     },
@@ -56,18 +78,31 @@ describe("provider runtime options", () => {
     expect(providerItemsFromPayload(payload).map((provider) => provider.label)).toEqual([
       "Codex",
       "Gemma 4 31B (free) - OpenRouter",
+      "Nemotron 3 Ultra (free) - OpenRouter",
     ]);
   });
 
   it("maps hosted text provider choices to plain hosted chat runtime config", () => {
-    const openRouter = providerItemsFromPayload(payload).find((provider) => provider.provider_id === "openrouter");
+    const openRouter = providerItemsFromPayload(payload).find((provider) => provider.hosted_model_id === "google/gemma-4-31b-it:free");
 
     expect(hostedProviderRuntimeConfig(openRouter)).toMatchObject({
       agent_id: "chat",
       runtime_mode: "plain_hosted_chat",
       routing_profile: "fast_model",
+      hosted_provider_id: "openrouter",
+      hosted_model_id: "google/gemma-4-31b-it:free",
       skill_ids: [],
       source_app_id: "chat",
+    });
+  });
+
+  it("keeps the selected hosted model id for non-default hosted choices", () => {
+    const nemotron = providerItemsFromPayload(payload).find((provider) => provider.hosted_model_id === "nvidia/nemotron-3-ultra-550b-a55b:free");
+
+    expect(hostedProviderRuntimeConfig(nemotron)).toMatchObject({
+      hosted_provider_id: "openrouter",
+      hosted_model_id: "nvidia/nemotron-3-ultra-550b-a55b:free",
+      runtime_mode: "plain_hosted_chat",
     });
   });
 });

@@ -1,4 +1,4 @@
-import type { PlatformSettings, ProviderModelOption, RuntimeSessionItem } from './adminApi';
+import type { OpenRouterProviderRouting, PlatformSettings, ProviderModelOption, RuntimeSessionItem } from './adminApi';
 import {
   defaultReasoningForOption,
   hostedModelOptionsForSettings,
@@ -16,6 +16,13 @@ export type SettingsPanelState = {
   draftModelId: string;
   draftReasoningEffort: string;
   hostedDraftModelId: string;
+  hostedRoutingAllowFallbacks: boolean;
+  hostedRoutingDataCollection: '' | 'allow' | 'deny';
+  hostedRoutingMode: 'auto' | 'prefer' | 'only' | 'ignore';
+  hostedRoutingProviderId: string;
+  hostedRoutingQuantization: string;
+  hostedRoutingRequireParameters: boolean;
+  hostedRoutingSort: '' | 'price' | 'throughput' | 'latency';
   hostedProviderError: string;
   isSavingHostedProvider: boolean;
   isSavingProvider: boolean;
@@ -27,6 +34,7 @@ export type SettingsPanelActions = {
   onClearRuntimeSession: (sessionId: string) => void;
   onLogout: () => void;
   onHostedProviderModelChanged: (modelId: string) => void;
+  onHostedProviderRoutingChanged: (field: string, value: string | boolean) => void;
   onSaveHostedProviderSettings: () => void;
   onProviderModelChanged: (modelId: string) => void;
   onProviderReasoningChanged: (reasoningEffort: string) => void;
@@ -41,6 +49,13 @@ export function createSettingsPanelState(): SettingsPanelState {
     draftModelId: '',
     draftReasoningEffort: '',
     hostedDraftModelId: '',
+    hostedRoutingAllowFallbacks: true,
+    hostedRoutingDataCollection: '',
+    hostedRoutingMode: 'auto',
+    hostedRoutingProviderId: '',
+    hostedRoutingQuantization: '',
+    hostedRoutingRequireParameters: false,
+    hostedRoutingSort: '',
     hostedProviderError: '',
     isSavingHostedProvider: false,
     isSavingProvider: false,
@@ -51,9 +66,17 @@ export function createSettingsPanelState(): SettingsPanelState {
 export function syncSettingsPanelDraft(state: SettingsPanelState, settings: PlatformSettings | null) {
   const { modelId, reasoningEffort } = selectedProviderDraft(settings);
   const { modelId: hostedModelId } = selectedHostedProviderDraft(settings);
+  const routing = openRouterRoutingForModel(settings, hostedModelId);
   state.draftModelId = modelId;
   state.draftReasoningEffort = reasoningEffort;
   state.hostedDraftModelId = hostedModelId;
+  state.hostedRoutingMode = routing.mode || 'auto';
+  state.hostedRoutingProviderId = routing.provider_id || '';
+  state.hostedRoutingAllowFallbacks = routing.allow_fallbacks !== false;
+  state.hostedRoutingRequireParameters = routing.require_parameters === true;
+  state.hostedRoutingSort = routing.sort || '';
+  state.hostedRoutingDataCollection = routing.data_collection || '';
+  state.hostedRoutingQuantization = routing.quantizations?.[0] || '';
 }
 
 export function updateDraftModel(state: SettingsPanelState, settings: PlatformSettings | null, modelId: string) {
@@ -63,9 +86,48 @@ export function updateDraftModel(state: SettingsPanelState, settings: PlatformSe
   state.providerError = '';
 }
 
-export function updateHostedDraftModel(state: SettingsPanelState, modelId: string) {
+export function updateHostedDraftModel(state: SettingsPanelState, settings: PlatformSettings | null, modelId: string) {
   state.hostedDraftModelId = modelId;
+  const routing = openRouterRoutingForModel(settings, modelId);
+  state.hostedRoutingMode = routing.mode || 'auto';
+  state.hostedRoutingProviderId = routing.provider_id || '';
+  state.hostedRoutingAllowFallbacks = routing.allow_fallbacks !== false;
+  state.hostedRoutingRequireParameters = routing.require_parameters === true;
+  state.hostedRoutingSort = routing.sort || '';
+  state.hostedRoutingDataCollection = routing.data_collection || '';
+  state.hostedRoutingQuantization = routing.quantizations?.[0] || '';
   state.hostedProviderError = '';
+}
+
+export function updateHostedProviderRoutingDraft(state: SettingsPanelState, field: string, value: string | boolean) {
+  if (field === 'mode' && typeof value === 'string' && ['auto', 'prefer', 'only', 'ignore'].includes(value)) {
+    state.hostedRoutingMode = value as SettingsPanelState['hostedRoutingMode'];
+  } else if (field === 'provider_id' && typeof value === 'string') {
+    state.hostedRoutingProviderId = value;
+  } else if (field === 'allow_fallbacks' && typeof value === 'boolean') {
+    state.hostedRoutingAllowFallbacks = value;
+  } else if (field === 'require_parameters' && typeof value === 'boolean') {
+    state.hostedRoutingRequireParameters = value;
+  } else if (field === 'sort' && typeof value === 'string' && ['', 'price', 'throughput', 'latency'].includes(value)) {
+    state.hostedRoutingSort = value as SettingsPanelState['hostedRoutingSort'];
+  } else if (field === 'data_collection' && typeof value === 'string' && ['', 'allow', 'deny'].includes(value)) {
+    state.hostedRoutingDataCollection = value as SettingsPanelState['hostedRoutingDataCollection'];
+  } else if (field === 'quantization' && typeof value === 'string') {
+    state.hostedRoutingQuantization = value;
+  }
+  state.hostedProviderError = '';
+}
+
+export function hostedProviderRoutingDraft(state: SettingsPanelState): OpenRouterProviderRouting {
+  return {
+    mode: state.hostedRoutingMode,
+    provider_id: state.hostedRoutingProviderId || undefined,
+    allow_fallbacks: state.hostedRoutingAllowFallbacks,
+    require_parameters: state.hostedRoutingRequireParameters,
+    sort: state.hostedRoutingSort,
+    data_collection: state.hostedRoutingDataCollection,
+    quantizations: state.hostedRoutingQuantization ? [state.hostedRoutingQuantization] : []
+  };
 }
 
 export function settingsPanelHtml(settings: PlatformSettings | null, state: SettingsPanelState) {
@@ -93,6 +155,7 @@ export function settingsPanelHtml(settings: PlatformSettings | null, state: Sett
   const selectedReasoning = selectedProviderDraft(settings).reasoningEffort;
   const selectedHostedModel = selectedHostedProviderDraft(settings).modelId;
   const selectedHostedOption = hostedModelOptions.find((option) => option.model_id === selectedHostedModel) || null;
+  const hostedDraftOption = hostedModelOptions.find((option) => option.model_id === state.hostedDraftModelId) || selectedHostedOption || null;
   const hostedProviderLabel = hostedProvider
     ? `${selectedHostedOption?.label || selectedHostedModel || 'Hosted model'} - ${hostedProvider.label || hostedProvider.provider_id}`
     : 'No hosted text provider';
@@ -108,7 +171,7 @@ export function settingsPanelHtml(settings: PlatformSettings | null, state: Sett
     hostedProvider &&
       state.hostedDraftModelId &&
       !state.isSavingHostedProvider &&
-      state.hostedDraftModelId !== selectedHostedModel
+      (state.hostedDraftModelId !== selectedHostedModel || hostedRoutingChanged(state, settings))
   );
 
   return `<section class="settings-card settings-platform">
@@ -150,7 +213,7 @@ export function settingsPanelHtml(settings: PlatformSettings | null, state: Sett
     </div>
     <div class="settings-platform-provider-forms">
       ${providerSettingsFormHtml(modelOptions, reasoningOptions, canSaveProvider, state)}
-      ${hostedProviderSettingsFormHtml(hostedModelOptions, canSaveHostedProvider, state, Boolean(hostedProvider))}
+      ${hostedProviderSettingsFormHtml(hostedModelOptions, hostedDraftOption, canSaveHostedProvider, state, Boolean(hostedProvider))}
     </div>
     ${runtimeSessionsHtml(runtimeSessions, cleanupAllowed, cleanupScope, state)}
   </section>`;
@@ -165,6 +228,15 @@ export function bindSettingsPanelEvents(actions: SettingsPanelActions) {
   });
   document.getElementById('settings-hosted-provider-model')?.addEventListener('change', (event) => {
     actions.onHostedProviderModelChanged((event.currentTarget as HTMLSelectElement).value);
+  });
+  document.querySelectorAll<HTMLElement>('[data-openrouter-routing]').forEach((element) => {
+    element.addEventListener('change', (event) => {
+      const target = event.currentTarget as HTMLInputElement | HTMLSelectElement;
+      actions.onHostedProviderRoutingChanged(
+        target.dataset.openrouterRouting || '',
+        target instanceof HTMLInputElement && target.type === 'checkbox' ? target.checked : target.value
+      );
+    });
   });
   document.getElementById('settings-save-provider')?.addEventListener('click', actions.onSaveProviderSettings);
   document.getElementById('settings-save-hosted-provider')?.addEventListener('click', actions.onSaveHostedProviderSettings);
@@ -211,10 +283,13 @@ function providerSettingsFormHtml(
 
 function hostedProviderSettingsFormHtml(
   modelOptions: ProviderModelOption[],
+  selectedOption: ProviderModelOption | null,
   canSaveProvider: boolean,
   state: SettingsPanelState,
   hasHostedProvider: boolean
 ) {
+  const upstreamOptions = selectedOption?.upstream_provider_options || [];
+  const quantizations = Array.from(new Set(upstreamOptions.map((option) => option.quantization || '').filter(Boolean)));
   return `<div class="settings-platform-provider-form">
     <div class="settings-platform-form-heading">
       <span class="material-symbols-rounded" aria-hidden="true">route</span>
@@ -229,6 +304,56 @@ function hostedProviderSettingsFormHtml(
         ${modelOptions.map((option) => `<option value="${escapeAttr(option.model_id)}" ${option.model_id === state.hostedDraftModelId ? 'selected' : ''}>${escapeHtml(option.label || option.model_id)}</option>`).join('')}
       </select>
     </label>
+    <label class="settings-platform-field">
+      <span>OpenRouter upstream</span>
+      <select data-openrouter-routing="mode" ${!hasHostedProvider || !upstreamOptions.length || state.isSavingHostedProvider ? 'disabled' : ''}>
+        ${[
+          ['auto', 'Auto'],
+          ['prefer', 'Prefer selected'],
+          ['only', 'Only selected'],
+          ['ignore', 'Ignore selected']
+        ].map(([value, label]) => `<option value="${escapeAttr(value)}" ${value === state.hostedRoutingMode ? 'selected' : ''}>${escapeHtml(label)}</option>`).join('')}
+      </select>
+    </label>
+    <label class="settings-platform-field">
+      <span>Upstream provider</span>
+      <select data-openrouter-routing="provider_id" ${!hasHostedProvider || !upstreamOptions.length || state.hostedRoutingMode === 'auto' || state.isSavingHostedProvider ? 'disabled' : ''}>
+        <option value="">Select provider</option>
+        ${upstreamOptions.map((option) => `<option value="${escapeAttr(String(option.provider_id || option.tag || ''))}" ${(option.provider_id || option.tag) === state.hostedRoutingProviderId ? 'selected' : ''}>${escapeHtml(option.label || option.provider_id || option.tag || 'Provider')}</option>`).join('')}
+      </select>
+    </label>
+    <label class="settings-platform-field">
+      <span>Sort</span>
+      <select data-openrouter-routing="sort" ${!hasHostedProvider || state.isSavingHostedProvider ? 'disabled' : ''}>
+        ${[
+          ['', 'OpenRouter default'],
+          ['price', 'Price'],
+          ['throughput', 'Throughput'],
+          ['latency', 'Latency']
+        ].map(([value, label]) => `<option value="${escapeAttr(value)}" ${value === state.hostedRoutingSort ? 'selected' : ''}>${escapeHtml(label)}</option>`).join('')}
+      </select>
+    </label>
+    <label class="settings-platform-field">
+      <span>Data collection</span>
+      <select data-openrouter-routing="data_collection" ${!hasHostedProvider || state.isSavingHostedProvider ? 'disabled' : ''}>
+        ${[
+          ['', 'OpenRouter default'],
+          ['allow', 'Allow'],
+          ['deny', 'Deny']
+        ].map(([value, label]) => `<option value="${escapeAttr(value)}" ${value === state.hostedRoutingDataCollection ? 'selected' : ''}>${escapeHtml(label)}</option>`).join('')}
+      </select>
+    </label>
+    <label class="settings-platform-field">
+      <span>Quantization</span>
+      <select data-openrouter-routing="quantization" ${!hasHostedProvider || !quantizations.length || state.isSavingHostedProvider ? 'disabled' : ''}>
+        <option value="">Any</option>
+        ${quantizations.map((value) => `<option value="${escapeAttr(value)}" ${value === state.hostedRoutingQuantization ? 'selected' : ''}>${escapeHtml(value)}</option>`).join('')}
+      </select>
+    </label>
+    <div class="settings-platform-checks">
+      <label><input type="checkbox" data-openrouter-routing="allow_fallbacks" ${state.hostedRoutingAllowFallbacks ? 'checked' : ''} ${!hasHostedProvider || state.isSavingHostedProvider ? 'disabled' : ''}> Allow OpenRouter fallback</label>
+      <label><input type="checkbox" data-openrouter-routing="require_parameters" ${state.hostedRoutingRequireParameters ? 'checked' : ''} ${!hasHostedProvider || state.isSavingHostedProvider ? 'disabled' : ''}> Require supported parameters</label>
+    </div>
     <button type="button" id="settings-save-hosted-provider" ${canSaveProvider ? '' : 'disabled'}>
       <span class="material-symbols-rounded" aria-hidden="true">${state.isSavingHostedProvider ? 'sync' : 'save'}</span>
       ${state.isSavingHostedProvider ? 'Saving' : 'Save hosted model'}
@@ -295,6 +420,33 @@ function runtimeSessionRowHtml(session: RuntimeSessionItem, cleanupAllowed: bool
 
 function scopedRuntimeSessions(settings: PlatformSettings) {
   return settings.runtime.all_sessions || settings.runtime.sessions || [];
+}
+
+function openRouterRoutingForModel(settings: PlatformSettings | null, modelId: string): OpenRouterProviderRouting {
+  const routing = settings?.provider.hosted_text?.selection?.openrouter_provider_routing_by_model?.[modelId];
+  return {
+    mode: routing?.mode || 'auto',
+    provider_id: routing?.provider_id || '',
+    allow_fallbacks: routing?.allow_fallbacks !== false,
+    require_parameters: routing?.require_parameters === true,
+    sort: routing?.sort || '',
+    data_collection: routing?.data_collection || '',
+    quantizations: routing?.quantizations || []
+  };
+}
+
+function hostedRoutingChanged(state: SettingsPanelState, settings: PlatformSettings): boolean {
+  const saved = openRouterRoutingForModel(settings, state.hostedDraftModelId);
+  const draft = hostedProviderRoutingDraft(state);
+  return (
+    saved.mode !== draft.mode ||
+    (saved.provider_id || '') !== (draft.provider_id || '') ||
+    (saved.allow_fallbacks !== false) !== (draft.allow_fallbacks !== false) ||
+    (saved.require_parameters === true) !== (draft.require_parameters === true) ||
+    (saved.sort || '') !== (draft.sort || '') ||
+    (saved.data_collection || '') !== (draft.data_collection || '') ||
+    (saved.quantizations?.[0] || '') !== (draft.quantizations?.[0] || '')
+  );
 }
 
 function escapeHtml(value: string) {

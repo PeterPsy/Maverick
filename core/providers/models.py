@@ -39,6 +39,9 @@ class ProviderModelOption:
     description: str | None
     default_reasoning_effort: str | None
     supported_reasoning_efforts: list[ProviderReasoningOption] = field(default_factory=list)
+    input_modalities: list[str] = field(default_factory=list)
+    output_modalities: list[str] = field(default_factory=list)
+    upstream_provider_options: list[dict[str, object]] = field(default_factory=list)
 
 
 @dataclass(frozen=True)
@@ -173,6 +176,7 @@ class ProviderHostedSelection:
     created_at: datetime
     updated_at: datetime
     model_id: str | None = None
+    openrouter_provider_routing_by_model: dict[str, dict[str, object]] = field(default_factory=dict)
 
 
 @dataclass(frozen=True)

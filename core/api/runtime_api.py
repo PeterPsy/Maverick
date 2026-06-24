@@ -243,6 +243,8 @@ def _create_session(state: PlatformState, context: RequestSession, body: dict, *
         agent_id=agent_id,
         requested_mode=body.get("requested_mode"),
         runtime_mode=body.get("runtime_mode"),
+        hosted_provider_id=body.get("hosted_provider_id"),
+        hosted_model_id=body.get("hosted_model_id"),
         system_prompt=str(body.get("system_prompt") or "").strip() or None,
         skill_ids=body.get("skill_ids") if isinstance(body.get("skill_ids"), list) else [],
         skill_catalog_app_id=runtime_skill_catalog_app_id_for_request(
@@ -719,8 +721,6 @@ def _submit_runtime_turn_response(
     if runtime_session_is_plain_hosted_chat(session):
         if session.skill_ids:
             return json_response(start_response, {"error": "plain_hosted_chat_blocks_skills"}, status="400 Bad Request")
-        if attachment_items:
-            return json_response(start_response, {"error": "plain_hosted_chat_blocks_attachments"}, status="400 Bad Request")
         if app_references:
             return json_response(start_response, {"error": "plain_hosted_chat_blocks_app_references"}, status="400 Bad Request")
     app_reference_items = materialize_runtime_app_references(

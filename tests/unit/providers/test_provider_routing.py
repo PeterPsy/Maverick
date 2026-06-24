@@ -222,6 +222,130 @@ class ProviderRoutingTest(unittest.TestCase):
         self.assertNotIn("super-secret-token", str(decision))
         self.assertNotIn("platform:secret-alias/openrouter-api-key", str(decision))
 
+    def test_fast_model_honors_session_hosted_model_override(self) -> None:
+        store = self.make_provider_store()
+        secret_store = self.make_secret_store()
+        create_platform_secret(
+            secret_store,
+            label="OpenRouter",
+            raw_value="super-secret-token",
+            alias="openrouter-api-key",
+            kind="api_key",
+        )
+        activate_hosted_model_provider(
+            store,
+            secret_store=secret_store,
+            workspace_id="default",
+            provider_id="openrouter",
+            secret_ref=build_secret_ref(alias="openrouter-api-key"),
+        )
+        configure_hosted_model_provider(
+            store,
+            workspace_id="default",
+            provider_id="openrouter",
+            model_id="nvidia/nemotron-3-ultra-550b-a55b:free",
+        )
+
+        decision = select_provider_for_profile(
+            "fast_model",
+            ProviderRoutingContext(
+                workspace_id="default",
+                provider_store=store,
+                registry=effective_provider_registry(store),
+                secret_store=secret_store,
+                request_id="req-openrouter-override",
+                hosted_provider_id="openrouter",
+                hosted_model_id="google/gemma-4-31b-it:free",
+            ),
+        )
+
+        self.assertEqual(decision.selected_provider_id, "openrouter")
+        self.assertEqual(decision.selected_model_id_or_voice_id, "google/gemma-4-31b-it:free")
+        self.assertIn("hosted_provider_override_present:openrouter", decision.reason_codes)
+        self.assertIn("hosted_model_override_present:google/gemma-4-31b-it:free", decision.reason_codes)
+
+    def test_fast_model_invalid_session_model_override_fails_closed(self) -> None:
+        store = self.make_provider_store()
+        secret_store = self.make_secret_store()
+        create_platform_secret(
+            secret_store,
+            label="OpenRouter",
+            raw_value="super-secret-token",
+            alias="openrouter-api-key",
+            kind="api_key",
+        )
+        activate_hosted_model_provider(
+            store,
+            secret_store=secret_store,
+            workspace_id="default",
+            provider_id="openrouter",
+            secret_ref=build_secret_ref(alias="openrouter-api-key"),
+        )
+
+        decision = select_provider_for_profile(
+            "fast_model",
+            ProviderRoutingContext(
+                workspace_id="default",
+                provider_store=store,
+                registry=effective_provider_registry(store),
+                secret_store=secret_store,
+                request_id="req-openrouter-invalid-override",
+                hosted_provider_id="openrouter",
+                hosted_model_id="openrouter/not-real",
+            ),
+        )
+
+        self.assertIsNone(decision.selected_provider_id)
+        self.assertIsNone(decision.execution_path)
+        self.assertIn("hosted_model_override_unavailable:openrouter", decision.reason_codes)
+
+    def test_hosted_selection_preserves_openrouter_routing_by_model(self) -> None:
+        store = self.make_provider_store()
+        secret_store = self.make_secret_store()
+        create_platform_secret(
+            secret_store,
+            label="OpenRouter",
+            raw_value="super-secret-token",
+            alias="openrouter-api-key",
+            kind="api_key",
+        )
+        activate_hosted_model_provider(
+            store,
+            secret_store=secret_store,
+            workspace_id="default",
+            provider_id="openrouter",
+            secret_ref=build_secret_ref(alias="openrouter-api-key"),
+        )
+
+        configure_hosted_model_provider(
+            store,
+            workspace_id="default",
+            provider_id="openrouter",
+            model_id="google/gemma-4-31b-it:free",
+            openrouter_provider_routing={
+                "mode": "only",
+                "provider_id": "google-ai-studio",
+                "allow_fallbacks": False,
+                "sort": "latency",
+            },
+        )
+        selection = configure_hosted_model_provider(
+            store,
+            workspace_id="default",
+            provider_id="openrouter",
+            model_id="nvidia/nemotron-3-ultra-550b-a55b:free",
+            openrouter_provider_routing={"mode": "prefer", "provider_id": "nvidia"},
+        )
+
+        self.assertEqual(
+            selection.openrouter_provider_routing_by_model["google/gemma-4-31b-it:free"]["provider_id"],
+            "google-ai-studio",
+        )
+        self.assertEqual(
+            selection.openrouter_provider_routing_by_model["nvidia/nemotron-3-ultra-550b-a55b:free"]["provider_id"],
+            "nvidia",
+        )
+
     def test_fast_model_missing_credential_returns_auditable_failure(self) -> None:
         decision = select_provider_for_profile(
             "fast_model",

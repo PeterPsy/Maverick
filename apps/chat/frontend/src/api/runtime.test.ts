@@ -80,6 +80,8 @@ describe("runtime API client", () => {
       options: {
         runtime_mode: "plain_hosted_chat",
         routing_profile: "fast_model",
+        hosted_provider_id: "openrouter",
+        hosted_model_id: "google/gemma-4-31b-it:free",
       },
     });
 
@@ -88,6 +90,8 @@ describe("runtime API client", () => {
       input_text: "hello",
       runtime_mode: "plain_hosted_chat",
       routing_profile: "fast_model",
+      hosted_provider_id: "openrouter",
+      hosted_model_id: "google/gemma-4-31b-it:free",
       async: true,
     });
   });

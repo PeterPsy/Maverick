@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Callable, Iterable, Mapping
+from dataclasses import dataclass
 import hashlib
 import json
 import os
@@ -38,7 +39,16 @@ _DEFAULT_TITLE_TIMEOUT_SECONDS = 20
 _TITLE_PROCESS_SHUTDOWN_SECONDS = 1.0
 _TITLE_TOKEN = re.compile(r"[^\W_]+(?:[.+][^\W_]+)*", re.UNICODE)
 
-ThreadTitleGenerator = Callable[..., str]
+@dataclass(frozen=True)
+class ThreadTitleGenerationResult:
+    """Generated title plus redaction-safe provider metadata."""
+
+    title: str
+    provider_id: str = ""
+    model_id: str = ""
+
+
+ThreadTitleGenerator = Callable[..., str | ThreadTitleGenerationResult]
 
 
 class ThreadTitleGenerationError(RuntimeError):
@@ -110,9 +120,11 @@ def run_runtime_thread_title_generation(
     """Generate and persist a title for one pending runtime thread."""
     source = "ai"
     failure = None
+    provider_id = ""
+    model_id = ""
     try:
         generator = title_generator or generate_ai_thread_title
-        title = normalize_ai_thread_title(
+        generated = _normalize_title_generation_result(
             generator(
                 state=state,
                 workspace_id=workspace_id,
@@ -121,6 +133,9 @@ def run_runtime_thread_title_generation(
                 app_references=app_references,
             )
         )
+        title = normalize_ai_thread_title(generated.title)
+        provider_id = generated.provider_id
+        model_id = generated.model_id
     except Exception as error:
         source = "deterministic"
         failure = str(error)[:240]
@@ -134,6 +149,8 @@ def run_runtime_thread_title_generation(
         title=title,
         title_source=source,
         failure=failure,
+        title_generation_provider_id=provider_id,
+        title_generation_model_id=model_id,
     )
     if updated is not None and not updated.title_pending:
         from core.runtime.thread_catalog_events import publish_runtime_thread_catalog_change
@@ -154,7 +171,7 @@ def generate_ai_thread_title(
     input_text: object,
     attachments: list[dict[str, object]] | None = None,
     app_references: list[dict[str, object]] | None = None,
-) -> str:
+) -> ThreadTitleGenerationResult:
     """Generate one thread title through the routed hosted micro-task model, falling back to Codex."""
     try:
         return generate_hosted_thread_title(
@@ -181,7 +198,7 @@ def generate_hosted_thread_title(
     input_text: object,
     attachments: list[dict[str, object]] | None = None,
     app_references: list[dict[str, object]] | None = None,
-) -> str:
+) -> ThreadTitleGenerationResult:
     """Generate one thread title through the fast hosted text provider profile."""
     decision = select_provider_for_profile(
         "fast_model",
@@ -225,7 +242,11 @@ def generate_hosted_thread_title(
     title = str(payload.get("title") or "").strip()
     if not title:
         raise ThreadTitleGenerationError("hosted title generation returned an empty title.")
-    return title
+    return ThreadTitleGenerationResult(
+        title=title,
+        provider_id=result.provider_id or decision.selected_provider_id or "",
+        model_id=result.model_id or decision.selected_model_id_or_voice_id or "",
+    )
 
 
 def generate_codex_thread_title(
@@ -235,7 +256,7 @@ def generate_codex_thread_title(
     input_text: object,
     attachments: list[dict[str, object]] | None = None,
     app_references: list[dict[str, object]] | None = None,
-) -> str:
+) -> ThreadTitleGenerationResult:
     """Generate one thread title through the configured Codex model."""
     model_id, reasoning_effort = _codex_model_settings(state, workspace_id=workspace_id)
     prompt = _title_prompt(input_text=input_text, attachments=attachments, app_references=app_references)
@@ -261,7 +282,13 @@ def generate_codex_thread_title(
     title = str(payload.get("title") or "").strip()
     if not title:
         raise ThreadTitleGenerationError("Codex title generation returned an empty title.")
-    return title
+    return ThreadTitleGenerationResult(title=title, provider_id="codex", model_id=model_id)
+
+
+def _normalize_title_generation_result(value: str | ThreadTitleGenerationResult) -> ThreadTitleGenerationResult:
+    if isinstance(value, ThreadTitleGenerationResult):
+        return value
+    return ThreadTitleGenerationResult(title=str(value or ""))
 
 
 def _run_codex_title_command(

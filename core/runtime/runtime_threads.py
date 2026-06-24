@@ -121,6 +121,8 @@ def create_runtime_thread(
     title_source: str = "",
     title_generation_input_hash: str = "",
     title_generation_failure: str | None = None,
+    title_generation_provider_id: str = "",
+    title_generation_model_id: str = "",
     now: datetime | None = None,
 ) -> RuntimeThreadRecord:
     normalized_session_id = runtime_session_id.strip()
@@ -153,6 +155,8 @@ def create_runtime_thread(
             patch["title_source"] = _thread_title_source(title.strip(), title_source=normalized_title_source, title_pending=title_pending)
             patch["title_generation_input_hash"] = normalized_title_hash
             patch["title_generation_failure"] = title_generation_failure
+            patch["title_generation_provider_id"] = title_generation_provider_id.strip()
+            patch["title_generation_model_id"] = title_generation_model_id.strip()
         if agent_label.strip():
             patch["agent_label"] = agent_label.strip()[:120]
         if agent_type_id.strip():
@@ -191,6 +195,8 @@ def create_runtime_thread(
         title_source=_thread_title_source(title.strip() or "New chat", title_source=title_source, title_pending=title_pending),
         title_generation_input_hash=title_generation_input_hash.strip(),
         title_generation_failure=title_generation_failure,
+        title_generation_provider_id=title_generation_provider_id.strip(),
+        title_generation_model_id=title_generation_model_id.strip(),
     )
     return store.save_thread(thread)
 
@@ -271,6 +277,8 @@ def update_runtime_thread(
             patch["title_source"] = "manual"
             patch["title_generation_input_hash"] = ""
             patch["title_generation_failure"] = None
+            patch["title_generation_provider_id"] = ""
+            patch["title_generation_model_id"] = ""
     for key, limit in {
         "runtime_session_id": 0,
         "agent_label": 120,
@@ -473,6 +481,8 @@ def mark_runtime_thread_user_message(
             patch["title_source"] = "pending"
             patch["title_generation_input_hash"] = pending_hash
             patch["title_generation_failure"] = None
+            patch["title_generation_provider_id"] = ""
+            patch["title_generation_model_id"] = ""
     return store.save_thread(replace(thread, **patch))
 
 
@@ -485,6 +495,8 @@ def complete_runtime_thread_title_generation(
     title: str,
     title_source: str,
     failure: str | None = None,
+    title_generation_provider_id: str = "",
+    title_generation_model_id: str = "",
     now: datetime | None = None,
 ) -> RuntimeThreadRecord | None:
     thread = find_runtime_thread_by_session(store, workspace_id=workspace_id, runtime_session_id=runtime_session_id)
@@ -506,6 +518,8 @@ def complete_runtime_thread_title_generation(
             title_pending=False,
             title_source=_normalized_generated_title_source(title_source),
             title_generation_failure=failure,
+            title_generation_provider_id=title_generation_provider_id.strip(),
+            title_generation_model_id=title_generation_model_id.strip(),
             updated_at=timestamp,
         )
     )

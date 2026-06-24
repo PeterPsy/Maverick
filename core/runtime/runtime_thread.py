@@ -36,3 +36,5 @@ class RuntimeThreadRecord:
     title_source: RuntimeThreadTitleSource = ""
     title_generation_input_hash: str = ""
     title_generation_failure: str | None = None
+    title_generation_provider_id: str = ""
+    title_generation_model_id: str = ""

@@ -111,7 +111,9 @@ title from the first user message, attachment labels, and app-reference labels.
 If hosted routing or hosted generation is unavailable, the worker falls back to
 the configured Codex runtime model and then to the deterministic title fallback.
 This keeps title generation independent from the active chat runtime while using
-the low-cost hosted model path when it is configured.
+the low-cost hosted model path when it is configured. Completed thread-title
+jobs persist the redaction-safe provider id and model id used for the title on
+the runtime thread record.
 
 The bridge is deliberately narrower than an agentic runtime. Before prompt
 materialization it rejects skills, tool/MCP use, workspace filesystem access,

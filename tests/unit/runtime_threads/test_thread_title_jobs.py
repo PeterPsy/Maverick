@@ -22,6 +22,7 @@ from core.runtime.service import create_runtime_session, queue_runtime_turn, rec
 from core.runtime.store import RuntimeCollections, RuntimeDocumentStore
 from core.runtime.thread_title_jobs import (
     ThreadTitleGenerationError,
+    ThreadTitleGenerationResult,
     _run_codex_title_command,
     fallback_thread_title,
     generate_ai_thread_title,
@@ -127,9 +128,49 @@ class RuntimeThreadTitleJobTest(unittest.TestCase):
         self.assertFalse(updated.title_pending)
         self.assertEqual(updated.title_source, "ai")
         self.assertIsNone(updated.title_generation_failure)
+        self.assertEqual(updated.title_generation_provider_id, "")
+        self.assertEqual(updated.title_generation_model_id, "")
 
     def test_ai_title_job_accepts_short_specific_title(self) -> None:
         self.assertEqual(normalize_ai_thread_title("Chi Sei"), "Chi Sei")
+
+    def test_ai_title_job_persists_generation_provider_metadata(self) -> None:
+        store = self.make_store()
+        now = datetime(2026, 4, 19, 10, 0, tzinfo=UTC)
+        message = "analizza il budget vendite mensili del cliente Rossi"
+        input_hash = thread_title_input_hash(message)
+        create_runtime_session(store, session_id="session-a", workspace_id="acme", agent_id="chat", now=now)
+        create_runtime_thread(
+            store,
+            workspace_id="acme",
+            thread_id="thread-a",
+            runtime_session_id="session-a",
+            title=DEFAULT_THREAD_TITLE,
+            title_pending=True,
+            title_source="pending",
+            title_generation_input_hash=input_hash,
+            now=now,
+        )
+        state = SimpleNamespace(runtime_store=store, runtime_thread_event_bus=None)
+
+        updated = run_runtime_thread_title_generation(
+            state=state,
+            workspace_id="acme",
+            runtime_session_id="session-a",
+            title_generation_input_hash=input_hash,
+            input_text=message,
+            title_generator=lambda **_: ThreadTitleGenerationResult(
+                title="Analisi Budget Vendite",
+                provider_id="openrouter",
+                model_id="google/gemma-4-31b-it:free",
+            ),
+        )
+
+        self.assertIsNotNone(updated)
+        assert updated is not None
+        self.assertEqual(updated.title, "Analisi Budget Vendite")
+        self.assertEqual(updated.title_generation_provider_id, "openrouter")
+        self.assertEqual(updated.title_generation_model_id, "google/gemma-4-31b-it:free")
 
     def test_ai_title_job_falls_back_to_deterministic_title_when_model_title_is_invalid(self) -> None:
         store = self.make_store()
@@ -182,13 +223,15 @@ class RuntimeThreadTitleJobTest(unittest.TestCase):
             )
 
         with patch("core.runtime.thread_title_jobs.execute_hosted_text_generation", side_effect=fake_execute):
-            title = generate_hosted_thread_title(
+            result = generate_hosted_thread_title(
                 state=state,
                 workspace_id="acme",
                 input_text="analizza il budget vendite mensili del cliente Rossi",
             )
 
-        self.assertEqual(title, "Analisi Budget Vendite")
+        self.assertEqual(result.title, "Analisi Budget Vendite")
+        self.assertEqual(result.provider_id, "openrouter")
+        self.assertEqual(result.model_id, "google/gemma-4-31b-it:free")
         self.assertEqual(captured["decision"].selected_provider_id, "openrouter")
         self.assertEqual(captured["request"].model_id, "google/gemma-4-31b-it:free")
         self.assertEqual(captured["request"].max_output_tokens, 80)
@@ -197,14 +240,19 @@ class RuntimeThreadTitleJobTest(unittest.TestCase):
     def test_ai_title_generation_falls_back_to_codex_when_hosted_profile_unavailable(self) -> None:
         state = SimpleNamespace(provider_store=self.make_provider_store(), secret_store=self.make_secret_store())
 
-        with patch("core.runtime.thread_title_jobs.generate_codex_thread_title", return_value="Fallback Codex Title") as codex:
-            title = generate_ai_thread_title(
+        with patch(
+            "core.runtime.thread_title_jobs.generate_codex_thread_title",
+            return_value=ThreadTitleGenerationResult(title="Fallback Codex Title", provider_id="codex", model_id="gpt-5.5"),
+        ) as codex:
+            result = generate_ai_thread_title(
                 state=state,
                 workspace_id="acme",
                 input_text="analizza il budget vendite mensili del cliente Rossi",
             )
 
-        self.assertEqual(title, "Fallback Codex Title")
+        self.assertEqual(result.title, "Fallback Codex Title")
+        self.assertEqual(result.provider_id, "codex")
+        self.assertEqual(result.model_id, "gpt-5.5")
         codex.assert_called_once()
 
     def test_ai_title_generation_falls_back_to_codex_when_hosted_returns_invalid_json(self) -> None:
@@ -220,15 +268,20 @@ class RuntimeThreadTitleJobTest(unittest.TestCase):
                     model_id="google/gemma-4-31b-it:free",
                 ),
             ),
-            patch("core.runtime.thread_title_jobs.generate_codex_thread_title", return_value="Fallback Codex Title") as codex,
+            patch(
+                "core.runtime.thread_title_jobs.generate_codex_thread_title",
+                return_value=ThreadTitleGenerationResult(title="Fallback Codex Title", provider_id="codex", model_id="gpt-5.5"),
+            ) as codex,
         ):
-            title = generate_ai_thread_title(
+            result = generate_ai_thread_title(
                 state=state,
                 workspace_id="acme",
                 input_text="analizza il budget vendite mensili del cliente Rossi",
             )
 
-        self.assertEqual(title, "Fallback Codex Title")
+        self.assertEqual(result.title, "Fallback Codex Title")
+        self.assertEqual(result.provider_id, "codex")
+        self.assertEqual(result.model_id, "gpt-5.5")
         codex.assert_called_once()
 
     def test_ai_title_job_does_not_overwrite_manual_rename(self) -> None:

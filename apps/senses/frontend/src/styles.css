@@ -429,6 +429,30 @@ a {
   padding-top: 10px;
 }
 
+.native-action-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 36px;
+  max-width: 100%;
+  border: 1px solid var(--senses-border);
+  border-radius: min(var(--senses-radius-control), 18px);
+  background: var(--senses-surface-muted);
+  padding: 0 10px;
+  color: var(--senses-muted);
+  font-size: 0.76rem;
+  white-space: nowrap;
+}
+
+.native-action-status span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.native-action-status.tone-warn {
+  color: var(--senses-warn);
+}
+
 .debug-grid {
   display: grid;
   grid-template-rows: auto auto minmax(0, 1fr);
@@ -1030,6 +1054,10 @@ a {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
     overflow: visible;
+  }
+
+  .native-action-status {
+    grid-column: 1 / -1;
   }
 
   .tool-button,

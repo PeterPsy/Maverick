@@ -43,6 +43,10 @@ import type {
 
 const APP_EVENTS_WS_PATH = '/api/apps/events/ws';
 const REFRESH_RESOURCES = new Set(['devices', 'pairing', 'settings', 'captures', 'routing', 'view-state']);
+const NATIVE_STATUS_ACK_TIMEOUT_MS = 4500;
+const NATIVE_COMMAND_FINAL_TIMEOUT_MS = 45000;
+const NATIVE_AUDIO_RECORDING_SECONDS = 8;
+const NATIVE_AUDIO_RECORDING_MS = NATIVE_AUDIO_RECORDING_SECONDS * 1000;
 const TAB_ITEMS = [
   { id: 'devices', label: 'Devices', icon: Glasses },
   { id: 'pairing', label: 'Pairing', icon: KeyRound },
@@ -56,6 +60,16 @@ type TabId = (typeof TAB_ITEMS)[number]['id'];
 type CaptureFilter = 'all' | 'stored' | 'chat-linked' | 'chat-pending' | 'errors';
 type RoutingFilter = 'all' | 'mapped' | 'pending' | 'task';
 type NativeCommand = 'refreshNativeStatus' | 'pairGlasses' | 'ask' | 'askAudio' | 'openLogin';
+type PendingNativeCommand = {
+  command: NativeCommand;
+  requestId: string;
+  busyLabel: string;
+  phase: 'posted' | 'accepted';
+  startedAt: number;
+  ackDeadlineAt: number;
+  finalDeadlineAt: number;
+  recordingEndsAt: number | null;
+};
 type NavigationParams = Record<string, string | boolean | null>;
 type ViewFilterState = {
   tab: TabId;
@@ -104,6 +118,12 @@ interface SensesNativeStatus {
     can_refresh?: boolean;
     can_open_login?: boolean;
   };
+  bridge_request?: {
+    request_id?: string;
+    command?: string;
+    status?: string;
+    message?: string | null;
+  } | null;
 }
 
 interface SettingsDraft {
@@ -137,6 +157,8 @@ export function App() {
   const [notice, setNotice] = useState('');
   const [error, setError] = useState('');
   const [busyAction, setBusyAction] = useState('');
+  const [pendingNativeCommand, setPendingNativeCommand] = useState<PendingNativeCommand | null>(null);
+  const [nativeClockNow, setNativeClockNow] = useState(() => Date.now());
   const [settingsDraft, setSettingsDraft] = useState<SettingsDraft | null>(null);
   const nativeHost = useNativeHost();
   const canPersistViewFilter = Boolean(
@@ -333,18 +355,34 @@ export function App() {
       askAudio: 'native-ask-audio',
       openLogin: 'native-login',
     };
-    const accepted = nativeHost.send(command);
-    if (!accepted) {
+    const requestId = nativeHost.send(command);
+    if (!requestId) {
       setError('iOS host is unavailable.');
       return;
     }
+    const now = Date.now();
+    const busyLabel = labels[command];
     setBusyAction(labels[command]);
-    setNotice('Command sent to the iOS app.');
     if (command === 'ask' || command === 'askAudio') {
+      setError('');
+      setNativeClockNow(now);
+      setPendingNativeCommand({
+        command,
+        requestId,
+        busyLabel,
+        phase: 'posted',
+        startedAt: now,
+        ackDeadlineAt: now + NATIVE_STATUS_ACK_TIMEOUT_MS,
+        finalDeadlineAt: now + NATIVE_COMMAND_FINAL_TIMEOUT_MS,
+        recordingEndsAt: command === 'askAudio' ? now + NATIVE_AUDIO_RECORDING_MS : null,
+      });
+      setNotice(command === 'askAudio' ? 'Voice command posted to iOS. Waiting for recording...' : 'Ask command posted to iOS. Waiting for capture...');
       return;
     }
+    setPendingNativeCommand(null);
+    setNotice('Command posted to the iOS bridge.');
     window.setTimeout(() => {
-      setBusyAction((current) => (current === labels[command] ? '' : current));
+      setBusyAction((current) => (current === busyLabel ? '' : current));
     }, 1800);
   }
 
@@ -362,6 +400,115 @@ export function App() {
     const timer = window.setTimeout(() => setNotice(''), 2600);
     return () => window.clearTimeout(timer);
   }, [notice]);
+
+  useEffect(() => {
+    if (!pendingNativeCommand) {
+      return undefined;
+    }
+    const timer = window.setInterval(() => setNativeClockNow(Date.now()), 250);
+    return () => window.clearInterval(timer);
+  }, [pendingNativeCommand?.requestId]);
+
+  useEffect(() => {
+    if (!pendingNativeCommand) {
+      return undefined;
+    }
+    const deadline = pendingNativeCommand.phase === 'posted'
+      ? pendingNativeCommand.ackDeadlineAt
+      : pendingNativeCommand.finalDeadlineAt;
+    const requestId = pendingNativeCommand.requestId;
+    const timer = window.setTimeout(() => {
+      setPendingNativeCommand((current) => {
+        if (!current || current.requestId !== requestId) {
+          return current;
+        }
+        setBusyAction((busy) => (busy === current.busyLabel ? '' : busy));
+        setNotice('');
+        setError(current.phase === 'posted' ? nativeAckTimeoutMessage(current.command) : nativeFinalTimeoutMessage(current.command));
+        return null;
+      });
+    }, Math.max(0, deadline - Date.now()));
+    return () => window.clearTimeout(timer);
+  }, [
+    pendingNativeCommand?.ackDeadlineAt,
+    pendingNativeCommand?.finalDeadlineAt,
+    pendingNativeCommand?.phase,
+    pendingNativeCommand?.requestId,
+  ]);
+
+  useEffect(() => {
+    if (!pendingNativeCommand || !nativeHost.status?.updated_at) {
+      return;
+    }
+    const status = nativeHost.status;
+    const bridgeRequest = status.bridge_request;
+    const updatedAt = status.updated_at;
+    if (!updatedAt) {
+      return;
+    }
+    const statusTime = Date.parse(updatedAt);
+    const isFreshLegacyStatus = !bridgeRequest
+      && !Number.isNaN(statusTime)
+      && statusTime >= pendingNativeCommand.startedAt - 500;
+    const isFreshLegacyCommandStatus = isFreshLegacyStatus
+      && (status.capture?.busy === true || pendingNativeCommand.phase === 'accepted');
+    const matchesRequest = bridgeRequest?.request_id === pendingNativeCommand.requestId;
+    if (!matchesRequest && !isFreshLegacyCommandStatus) {
+      return;
+    }
+
+    if (matchesRequest && bridgeRequest?.status === 'failed') {
+      setBusyAction((busy) => (busy === pendingNativeCommand.busyLabel ? '' : busy));
+      setPendingNativeCommand(null);
+      setNotice('');
+      setError(bridgeRequest.message || status.ios?.last_error || nativeFinalErrorMessage(pendingNativeCommand.command));
+      return;
+    }
+
+    if (matchesRequest && bridgeRequest?.status === 'completed') {
+      setBusyAction((busy) => (busy === pendingNativeCommand.busyLabel ? '' : busy));
+      setPendingNativeCommand(null);
+      setError('');
+      setNotice(nativeCompletedNotice(pendingNativeCommand.command, status));
+      return;
+    }
+
+    if (
+      pendingNativeCommand.phase === 'posted'
+      && ((matchesRequest && bridgeRequest?.status === 'accepted') || (isFreshLegacyStatus && status.capture?.busy))
+    ) {
+      setPendingNativeCommand((current) => {
+        if (!current || current.requestId !== pendingNativeCommand.requestId || current.phase === 'accepted') {
+          return current;
+        }
+        const acceptedAt = Date.now();
+        return {
+          ...current,
+          phase: 'accepted',
+          finalDeadlineAt: acceptedAt + NATIVE_COMMAND_FINAL_TIMEOUT_MS,
+          recordingEndsAt: current.command === 'askAudio' ? acceptedAt + NATIVE_AUDIO_RECORDING_MS : current.recordingEndsAt,
+        };
+      });
+      setError('');
+      setNotice(nativeAcceptedNotice(pendingNativeCommand.command));
+      return;
+    }
+
+    if (isFreshLegacyStatus && pendingNativeCommand.phase === 'accepted' && status.capture?.busy === false) {
+      setBusyAction((busy) => (busy === pendingNativeCommand.busyLabel ? '' : busy));
+      setPendingNativeCommand(null);
+      setError(status.ios?.last_error || '');
+      setNotice(status.ios?.last_error ? '' : nativeCompletedNotice(pendingNativeCommand.command, status));
+    }
+  }, [
+    nativeHost.status?.bridge_request?.message,
+    nativeHost.status?.bridge_request?.request_id,
+    nativeHost.status?.bridge_request?.status,
+    nativeHost.status?.capture?.busy,
+    nativeHost.status?.ios?.last_error,
+    nativeHost.status?.updated_at,
+    pendingNativeCommand,
+  ]);
 
   useEffect(() => {
     if (!overview?.settings) {
@@ -387,11 +534,11 @@ export function App() {
   }, [nativeHost.status?.updated_at]);
 
   useEffect(() => {
-    if (!nativeHost.status?.updated_at || nativeHost.status.capture?.busy) {
+    if (pendingNativeCommand || !nativeHost.status?.updated_at || nativeHost.status.capture?.busy) {
       return;
     }
     setBusyAction((current) => (current === 'native-ask' || current === 'native-ask-audio' ? '' : current));
-  }, [nativeHost.status?.capture?.busy, nativeHost.status?.updated_at]);
+  }, [nativeHost.status?.capture?.busy, nativeHost.status?.updated_at, pendingNativeCommand]);
 
   useEffect(() => {
     window.parent?.postMessage({ type: 'maverick.app.ready', app_id: 'senses' }, window.location.origin);
@@ -490,8 +637,10 @@ export function App() {
         {nativeHost.available ? (
           <NativeHeaderActions
             busyAction={busyAction}
+            clockNow={nativeClockNow}
             nativeHostStatus={nativeHost.status}
             onCommand={(command) => runNativeCommand(command)}
+            pendingCommand={pendingNativeCommand}
           />
         ) : null}
       </header>
@@ -604,11 +753,10 @@ function useNativeHost() {
   const send = useCallback((command: NativeCommand) => {
     if (!hasNativeHost()) {
       setAvailable(false);
-      return false;
+      return null;
     }
     setAvailable(true);
-    postNativeCommand(command);
-    return true;
+    return postNativeCommand(command);
   }, []);
 
   return { available, status, send };
@@ -619,11 +767,13 @@ function hasNativeHost() {
 }
 
 function postNativeCommand(command: NativeCommand) {
+  const requestId = makeRequestId();
   window.webkit?.messageHandlers?.sensesHost?.postMessage({
     command,
-    request_id: makeRequestId(),
+    request_id: requestId,
     source: 'senses.frontend',
   });
+  return requestId;
 }
 
 function emitViewStateChanged(viewFilter: ViewFilterState) {
@@ -774,21 +924,36 @@ function StatusTile({
 
 function NativeHeaderActions({
   busyAction,
+  clockNow,
   nativeHostStatus,
   onCommand,
+  pendingCommand,
 }: {
   busyAction: string;
+  clockNow: number;
   nativeHostStatus: SensesNativeStatus | null;
   onCommand: (command: NativeCommand) => void;
+  pendingCommand: PendingNativeCommand | null;
 }) {
   const nativeCaptureBusy = nativeHostStatus?.capture?.busy === true;
+  const pendingCaptureCommand = pendingCommand?.command === 'ask' || pendingCommand?.command === 'askAudio';
+  const captureControlsBusy = nativeCaptureBusy || Boolean(pendingCaptureCommand);
+  const actionStatus = nativeActionStatus(pendingCommand, nativeHostStatus, clockNow);
+  const askLabel = pendingCommand?.command === 'ask' ? nativeActionButtonLabel(pendingCommand, clockNow) : 'Ask';
+  const voiceLabel = pendingCommand?.command === 'askAudio' ? nativeActionButtonLabel(pendingCommand, clockNow) : 'Voice';
   return (
     <div className="native-header-actions" aria-label="iOS controls">
+      {actionStatus ? (
+        <span className={`native-action-status tone-${actionStatus.tone}`} role="status">
+          <Clock3 size={13} />
+          <span>{actionStatus.label}</span>
+        </span>
+      ) : null}
       <button
         className="tool-button"
         type="button"
         onClick={() => onCommand('pairGlasses')}
-        disabled={nativeCaptureBusy || nativeHostStatus?.actions?.can_pair === false || busyAction === 'native-pair'}
+        disabled={captureControlsBusy || nativeHostStatus?.actions?.can_pair === false || busyAction === 'native-pair'}
       >
         <Glasses size={16} />
         <span>Pair glasses</span>
@@ -797,19 +962,19 @@ function NativeHeaderActions({
         className="tool-button primary-tool"
         type="button"
         onClick={() => onCommand('ask')}
-        disabled={nativeCaptureBusy || nativeHostStatus?.actions?.can_ask === false || busyAction === 'native-ask'}
+        disabled={captureControlsBusy || nativeHostStatus?.actions?.can_ask === false}
       >
         <Send size={16} />
-        <span>Ask</span>
+        <span>{askLabel}</span>
       </button>
       <button
         className="tool-button"
         type="button"
         onClick={() => onCommand('askAudio')}
-        disabled={nativeCaptureBusy || nativeHostStatus?.actions?.can_ask_audio === false || busyAction === 'native-ask-audio'}
+        disabled={captureControlsBusy || nativeHostStatus?.actions?.can_ask_audio === false}
       >
         <Mic size={16} />
-        <span>Voice</span>
+        <span>{voiceLabel}</span>
       </button>
       <button
         className="tool-button"
@@ -831,6 +996,87 @@ function NativeHeaderActions({
       </button>
     </div>
   );
+}
+
+function nativeActionStatus(
+  pendingCommand: PendingNativeCommand | null,
+  nativeHostStatus: SensesNativeStatus | null,
+  now: number,
+) {
+  if (!pendingCommand) {
+    return null;
+  }
+  if (pendingCommand.phase === 'posted') {
+    return { label: `${nativeCommandName(pendingCommand.command)} posted to bridge`, tone: 'warn' as const };
+  }
+  if (pendingCommand.command === 'askAudio') {
+    const remaining = pendingCommand.recordingEndsAt ? secondsRemaining(pendingCommand.recordingEndsAt, now) : 0;
+    if (remaining > 0 && nativeHostStatus?.capture?.busy !== false) {
+      return { label: `Recording ${remaining}s`, tone: 'warn' as const };
+    }
+    const backendStatus = nativeHostStatus?.capture?.senses_status;
+    return { label: backendStatus ? `Sending ${backendStatus}` : 'Sending audio', tone: 'warn' as const };
+  }
+  const backendStatus = nativeHostStatus?.capture?.senses_status;
+  return { label: backendStatus ? `Capture ${backendStatus}` : 'Capturing', tone: 'warn' as const };
+}
+
+function nativeActionButtonLabel(pendingCommand: PendingNativeCommand, now: number) {
+  if (pendingCommand.phase === 'posted') {
+    return 'Waiting...';
+  }
+  if (pendingCommand.command === 'askAudio') {
+    const remaining = pendingCommand.recordingEndsAt ? secondsRemaining(pendingCommand.recordingEndsAt, now) : 0;
+    return remaining > 0 ? `Voice ${remaining}s` : 'Sending...';
+  }
+  return 'Capturing...';
+}
+
+function nativeAcceptedNotice(command: NativeCommand) {
+  if (command === 'askAudio') {
+    return 'iOS accepted Voice. Recording...';
+  }
+  if (command === 'ask') {
+    return 'iOS accepted Ask. Capturing...';
+  }
+  return 'iOS accepted the command.';
+}
+
+function nativeCompletedNotice(command: NativeCommand, status: SensesNativeStatus) {
+  const backendStatus = status.capture?.senses_status;
+  if (command === 'askAudio') {
+    return backendStatus ? `Voice finished: ${backendStatus}.` : 'Voice finished.';
+  }
+  if (command === 'ask') {
+    return backendStatus ? `Ask finished: ${backendStatus}.` : 'Ask finished.';
+  }
+  return 'Native command finished.';
+}
+
+function nativeAckTimeoutMessage(command: NativeCommand) {
+  return `${nativeCommandName(command)} was posted to iOS, but native did not acknowledge it. Try again from the iPhone app.`;
+}
+
+function nativeFinalTimeoutMessage(command: NativeCommand) {
+  return `${nativeCommandName(command)} was accepted by iOS, but no final native status arrived. Check the iPhone app and try again.`;
+}
+
+function nativeFinalErrorMessage(command: NativeCommand) {
+  return `${nativeCommandName(command)} failed in the iOS app.`;
+}
+
+function nativeCommandName(command: NativeCommand) {
+  if (command === 'askAudio') {
+    return 'Voice';
+  }
+  if (command === 'ask') {
+    return 'Ask';
+  }
+  return 'Command';
+}
+
+function secondsRemaining(deadline: number, now: number) {
+  return Math.max(0, Math.ceil((deadline - now) / 1000));
 }
 
 function DevicesTab({

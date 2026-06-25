@@ -1459,6 +1459,27 @@ def ingest_bundle_start(
         bundle = bundle_by_id(db, workspace_id, bundle_id)
     except sqlite3.IntegrityError:
         db.rollback()
+        existing = bundle_by_id(db, workspace_id, bundle_id)
+        if existing is None:
+            existing = db.execute(
+                """
+                SELECT * FROM capture_bundles
+                WHERE workspace_id = ? AND request_id = ?
+                """,
+                (workspace_id, request_id),
+            ).fetchone()
+        if (
+            existing is not None
+            and str(existing["bundle_id"]) == bundle_id
+            and str(existing["request_id"]) == request_id
+            and str(existing["user_id"]) == actor_user_id
+            and (text_or_none(existing["device_id"]) or "") == (device_id or "")
+        ):
+            return 200, bundle_action_response(
+                existing,
+                bundle_items_with_captures(db, workspace_id, bundle_id),
+                chat_provider_app_id=None,
+            )
         return error_payload(
             409,
             "bundle_conflict",

@@ -201,6 +201,7 @@ export function App() {
   const mediaStreamRef = useRef<MediaStream | null>(null);
   const recordingChunksRef = useRef<Blob[]>([]);
   const recordingContentTypeRef = useRef('');
+  const askGlassesRunningRef = useRef(false);
   const nativeHost = useNativeHost();
   const canPersistViewFilter = Boolean(
     overview?.management.can_manage_workspace_devices || overview?.actor.can_manage_workspace_devices,
@@ -389,22 +390,27 @@ export function App() {
   }
 
   async function runAskGlasses() {
-    if (busyAction === 'ask-glasses' || askGlassesFlow.status !== 'idle') {
+    if (askGlassesRunningRef.current || busyAction === 'ask-glasses' || askGlassesFlow.status !== 'idle') {
       return;
     }
+    askGlassesRunningRef.current = true;
     if (!nativeHost.available) {
+      askGlassesRunningRef.current = false;
       setError('iOS host is unavailable.');
       return;
     }
     if (nativeHost.status?.actions?.can_ask === false) {
+      askGlassesRunningRef.current = false;
       setError('Glasses capture is not ready.');
       return;
     }
     if (!navigator.mediaDevices?.getUserMedia || typeof MediaRecorder === 'undefined') {
+      askGlassesRunningRef.current = false;
       setError('Microphone recording is not supported in this browser.');
       return;
     }
     if (window.isSecureContext === false) {
+      askGlassesRunningRef.current = false;
       setError('Microphone access requires HTTPS or a trusted localhost session.');
       return;
     }
@@ -469,6 +475,7 @@ export function App() {
       setAskGlassesFlow((current) => ({ ...current, status: 'error', recordingEndsAt: null }));
       setError(err instanceof Error ? err.message : 'Ask glasses failed.');
     } finally {
+      askGlassesRunningRef.current = false;
       setBusyAction((current) => (current === 'ask-glasses' ? '' : current));
       window.setTimeout(() => {
         setAskGlassesFlow((current) => (

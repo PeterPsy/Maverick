@@ -71,6 +71,34 @@ class SharedEntrypointTests(unittest.TestCase):
             self.assertIsInstance(error, RuntimeError)
             self.assertIn("host shutdown", str(error))
 
+    def test_json_entrypoint_delivers_stdin_when_child_reads_after_initial_wait(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            entrypoint = Path(temp_dir) / "delayed_stdin_entrypoint.py"
+            entrypoint.write_text(
+                "\n".join(
+                    [
+                        "from __future__ import annotations",
+                        "import json",
+                        "import sys",
+                        "import time",
+                        "",
+                        "time.sleep(0.4)",
+                        "payload = json.loads(sys.stdin.read() or '{}')",
+                        "print(json.dumps({'status': 'ok', 'action': payload.get('action')}))",
+                    ]
+                ),
+                encoding="utf-8",
+            )
+
+            result = run_json_entrypoint(
+                entrypoint,
+                payload={"action": "delayed-read"},
+                cwd=REPO_ROOT,
+                timeout_seconds=5,
+            )
+
+        self.assertEqual(result, {"status": "ok", "action": "delayed-read"})
+
     def test_streaming_json_entrypoint_yields_header_then_binary_stdout(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             entrypoint = Path(temp_dir) / "stream_entrypoint.py"

@@ -363,23 +363,13 @@ def _communicate_with_limits(
     shutdown_controller: EntrypointShutdownController | None,
     entrypoint_path: str,
 ) -> tuple[str, str]:
-    deadline = time.monotonic() + timeout_seconds
-    pending_input: str | None = input_text
-    while True:
+    try:
+        return process.communicate(input=input_text, timeout=timeout_seconds)
+    except subprocess.TimeoutExpired as error:
+        _terminate_process_tree_and_wait(process)
         if shutdown_controller is not None and shutdown_controller.is_shutting_down():
-            _terminate_process_tree_and_wait(process)
-            raise RuntimeError(f"Entrypoint `{entrypoint_path}` interrupted by host shutdown.")
-        remaining = deadline - time.monotonic()
-        if remaining <= 0:
-            _terminate_process_tree_and_wait(process)
-            raise subprocess.TimeoutExpired(process.args, timeout_seconds)
-        try:
-            return process.communicate(input=pending_input, timeout=min(0.2, remaining))
-        except subprocess.TimeoutExpired as error:
-            pending_input = None
-            if time.monotonic() >= deadline:
-                _terminate_process_tree_and_wait(process)
-                raise subprocess.TimeoutExpired(process.args, timeout_seconds, output=error.output, stderr=error.stderr) from error
+            raise RuntimeError(f"Entrypoint `{entrypoint_path}` interrupted by host shutdown.") from error
+        raise
 
 
 def _terminate_process_tree_and_wait(process: subprocess.Popen[str], *, timeout_seconds: float = 1.0) -> None:

@@ -21,6 +21,20 @@ from engines import DEEPGRAM_CONVERSATION_MODEL, deepgram_model_for
 REMOTE_FLUX_TIMEOUT_SECONDS = 45
 FLUX_DRAIN_SECONDS = 0.15
 FLUX_FINAL_DRAIN_SECONDS = 1.0
+DEFAULT_FLUX_SESSION_IDLE_SECONDS = 90
+DEFAULT_FLUX_SESSION_MAX_AGE_SECONDS = 10 * 60
+DEFAULT_FLUX_SESSION_PRUNE_INTERVAL_SECONDS = 15
+DEFAULT_FLUX_MAX_SESSIONS = 32
+
+
+def _configured_int(name: str, default: int, *, minimum: int) -> int:
+    configured = os.environ.get(name, "").strip()
+    if not configured:
+        return default
+    try:
+        return max(minimum, int(configured))
+    except ValueError:
+        return default
 
 
 class FluxWebSocketClient:
@@ -153,10 +167,20 @@ class FluxWebSocketClient:
 class DeepgramFluxSession:
     """One live Deepgram Flux WebSocket session."""
 
-    def __init__(self, *, session_id: str, model: str, api_key: str, language: str, client_factory=FluxWebSocketClient) -> None:
+    def __init__(
+        self,
+        *,
+        session_id: str,
+        model: str,
+        api_key: str,
+        language: str,
+        client_factory=FluxWebSocketClient,
+        clock=time.monotonic,
+    ) -> None:
         self.session_id = session_id
         self.model = model
         self.language = language
+        self._clock = clock
         self.client = client_factory(
             _flux_endpoint(model=model, language=language),
             headers={"Authorization": f"Token {api_key}"},
@@ -167,7 +191,8 @@ class DeepgramFluxSession:
         self.final_text_parts: list[str] = []
         self.partial_text = ""
         self.closed = False
-        self.updated_at = time.monotonic()
+        self.created_at = self._clock()
+        self.updated_at = self.created_at
 
     def transcribe_chunk(self, audio_bytes: bytes, *, final: bool) -> dict[str, object]:
         with self.lock:
@@ -179,7 +204,7 @@ class DeepgramFluxSession:
             events = self._drain_events(FLUX_FINAL_DRAIN_SECONDS if final else FLUX_DRAIN_SECONDS)
             if final:
                 self.close()
-            self.updated_at = time.monotonic()
+            self.updated_at = self._clock()
             chunk_text = _chunk_text(events)
             text = " ".join(part for part in [*self.final_text_parts, self.partial_text] if part).strip()
             return {
@@ -225,9 +250,41 @@ class DeepgramFluxSession:
 class DeepgramFluxSessionManager:
     """Own Deepgram Flux sessions for one persistent backend worker process."""
 
-    def __init__(self, *, client_factory=FluxWebSocketClient) -> None:
+    def __init__(
+        self,
+        *,
+        client_factory=FluxWebSocketClient,
+        idle_ttl_seconds: int | None = None,
+        max_age_seconds: int | None = None,
+        prune_interval_seconds: int | None = None,
+        max_sessions: int | None = None,
+        clock=time.monotonic,
+    ) -> None:
         self.client_factory = client_factory
+        self.idle_ttl_seconds = max(0, idle_ttl_seconds) if idle_ttl_seconds is not None else _configured_int(
+            "MAVERICK_SPEECH_FLUX_SESSION_IDLE_SECONDS",
+            DEFAULT_FLUX_SESSION_IDLE_SECONDS,
+            minimum=5,
+        )
+        self.max_age_seconds = max(1, max_age_seconds) if max_age_seconds is not None else _configured_int(
+            "MAVERICK_SPEECH_FLUX_SESSION_MAX_AGE_SECONDS",
+            DEFAULT_FLUX_SESSION_MAX_AGE_SECONDS,
+            minimum=30,
+        )
+        self.prune_interval_seconds = max(0, prune_interval_seconds) if prune_interval_seconds is not None else _configured_int(
+            "MAVERICK_SPEECH_FLUX_SESSION_PRUNE_INTERVAL_SECONDS",
+            DEFAULT_FLUX_SESSION_PRUNE_INTERVAL_SECONDS,
+            minimum=1,
+        )
+        self.max_sessions = max(1, max_sessions) if max_sessions is not None else _configured_int(
+            "MAVERICK_SPEECH_FLUX_MAX_SESSIONS",
+            DEFAULT_FLUX_MAX_SESSIONS,
+            minimum=1,
+        )
+        self.clock = clock
         self.sessions: dict[str, DeepgramFluxSession] = {}
+        self.active_session_counts: dict[str, int] = {}
+        self.last_pruned_at = 0.0
         self.lock = threading.Lock()
 
     def transcribe_chunk(
@@ -241,23 +298,99 @@ class DeepgramFluxSessionManager:
         language: str,
     ) -> dict[str, object]:
         with self.lock:
+            self._prune_sessions_locked(now=self.clock(), force=False)
             session = self.sessions.get(session_id)
             if session is None or session.closed:
+                self._reserve_session_slot_locked()
                 session = DeepgramFluxSession(
                     session_id=session_id,
                     model=model,
                     api_key=api_key,
                     language=language,
                     client_factory=self.client_factory,
+                    clock=self.clock,
                 )
                 self.sessions[session_id] = session
+            self._begin_active_session_locked(session_id)
+        failed = False
         try:
             result = session.transcribe_chunk(audio_bytes, final=final)
-        finally:
-            if final:
-                with self.lock:
+        except Exception:
+            failed = True
+            with self.lock:
+                if self.sessions.get(session_id) is session:
                     self.sessions.pop(session_id, None)
+                self._finish_active_session_locked(session_id)
+            session.close()
+            raise
+        finally:
+            if not failed:
+                with self.lock:
+                    self._finish_active_session_locked(session_id)
+                    if final:
+                        self.sessions.pop(session_id, None)
+                        session.close()
         return result
+
+    def prune_expired_sessions(self) -> int:
+        with self.lock:
+            return self._prune_sessions_locked(now=self.clock(), force=True)
+
+    def _prune_sessions_locked(self, *, now: float, force: bool) -> int:
+        if not force and now - self.last_pruned_at < self.prune_interval_seconds:
+            return 0
+        self.last_pruned_at = now
+        expired_session_ids: list[str] = []
+        for session_id, session in self.sessions.items():
+            if self._session_active_locked(session_id) and not session.closed:
+                continue
+            idle_seconds = now - session.updated_at
+            age_seconds = now - session.created_at
+            if session.closed or idle_seconds > self.idle_ttl_seconds or age_seconds > self.max_age_seconds:
+                expired_session_ids.append(session_id)
+        for session_id in expired_session_ids:
+            self._close_session_locked(session_id)
+        return len(expired_session_ids)
+
+    def _reserve_session_slot_locked(self) -> None:
+        while len(self.sessions) >= self.max_sessions:
+            stale_session_id = self._oldest_inactive_session_id_locked()
+            if stale_session_id is None:
+                raise SpeechValidationError(
+                    "too many active conversation stream sessions.",
+                    operation="transcribe_audio",
+                    allowed_values={"max_sessions": [str(self.max_sessions)]},
+                )
+            self._close_session_locked(stale_session_id)
+
+    def _oldest_inactive_session_id_locked(self) -> str | None:
+        inactive_sessions = [
+            (session_id, session)
+            for session_id, session in self.sessions.items()
+            if not self._session_active_locked(session_id)
+        ]
+        if not inactive_sessions:
+            return None
+        return min(inactive_sessions, key=lambda item: item[1].updated_at)[0]
+
+    def _close_session_locked(self, session_id: str) -> None:
+        session = self.sessions.pop(session_id, None)
+        self.active_session_counts.pop(session_id, None)
+        if session is not None:
+            session.close()
+
+    def _begin_active_session_locked(self, session_id: str) -> None:
+        self.active_session_counts[session_id] = self.active_session_counts.get(session_id, 0) + 1
+
+    def _finish_active_session_locked(self, session_id: str) -> None:
+        count = self.active_session_counts.get(session_id, 0)
+        if count <= 1:
+            self.active_session_counts.pop(session_id, None)
+        else:
+            self.active_session_counts[session_id] = count - 1
+
+    def _session_active_locked(self, session_id: str) -> bool:
+        return self.active_session_counts.get(session_id, 0) > 0
 
 
 _FLUX_MANAGER = DeepgramFluxSessionManager()

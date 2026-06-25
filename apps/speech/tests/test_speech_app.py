@@ -197,7 +197,7 @@ class SpeechAppTests(unittest.TestCase):
         self.assertTrue(transcription["inline_default_profile_available"])
         self.assertTrue(transcription["streaming_supported"])
         self.assertTrue(transcription["conversation_streaming_supported"])
-        self.assertTrue(transcription["chunked_dictation_supported"])
+        self.assertFalse(transcription["chunked_dictation_supported"])
         self.assertFalse(transcription["dictation_streaming_supported"])
 
     def test_capabilities_do_not_advertise_flux_streaming_without_persistent_worker(self) -> None:
@@ -770,6 +770,164 @@ class SpeechAppTests(unittest.TestCase):
         self.assertEqual(len(FakeFluxClient.instances), 1)
         self.assertEqual(flux_streaming.parse_flux_url_query(FakeFluxClient.instances[0].url)["model"], "flux-general-en")
         self.assertEqual(FakeFluxClient.instances[0].json_messages, [{"type": "CloseStream"}])
+
+    def test_transcribe_audio_conversation_skips_duration_probe_for_mediarecorder_chunks(self) -> None:
+        audio = b"not-a-standalone-webm" * 32
+        fake_result = {
+            "text": "hello",
+            "chunk_text": "hello",
+            "events": [],
+            "turn_events": [],
+            "duration_seconds": 0.0,
+            "engine": "deepgram",
+            "model": "flux-general-en",
+            "language": "en",
+            "language_probability": 0.0,
+            "profile": "flux",
+        }
+        with TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            write_settings(root / "data", {"transcription_engine": "deepgram"})
+            with (
+                patch("transcription.probe_audio_duration_seconds", side_effect=AssertionError("duration probe should be skipped")),
+                patch("transcription.transcribe_deepgram_flux_audio_chunk", return_value=fake_result) as flux_chunk,
+            ):
+                status_code, payload = handle_action(
+                    root / "data",
+                    root / "generated",
+                    {
+                        "action": "transcribe_audio",
+                        "content_type": "audio/webm",
+                        "audio_base64": base64.b64encode(audio).decode("ascii"),
+                        "conversation": True,
+                        "session_id": "voice-session",
+                        "_app_secrets": {"deepgram-api-key": "deepgram-token"},
+                        "_provider_config": {
+                            "speech_stt": {
+                                "selection": {
+                                    "audio_transcription_model_id": "nova-3",
+                                    "conversation_model_id": "flux-general-en",
+                                }
+                            }
+                        },
+                    },
+                )
+
+        self.assertEqual(status_code, 200)
+        self.assertEqual(payload["text"], "hello")
+        self.assertEqual(payload["duration_seconds"], 0.0)
+        self.assertEqual(flux_chunk.call_args.kwargs["session"]["session_id"], "voice-session")
+
+    def test_flux_session_manager_prunes_idle_sessions(self) -> None:
+        class FakeFluxClient:
+            instances: list["FakeFluxClient"] = []
+
+            def __init__(self, url: str, *, headers: dict[str, str], timeout: float) -> None:
+                self.url = url
+                self.headers = headers
+                self.timeout = timeout
+                self.closed = False
+                FakeFluxClient.instances.append(self)
+
+            def connect(self) -> None:
+                return None
+
+            def send_binary(self, data: bytes) -> None:
+                return None
+
+            def send_json(self, payload: dict) -> None:
+                return None
+
+            def receive_json(self, timeout: float) -> dict | None:
+                raise TimeoutError()
+
+            def close(self) -> None:
+                self.closed = True
+
+        now = 0.0
+        manager = flux_streaming.DeepgramFluxSessionManager(
+            client_factory=FakeFluxClient,
+            idle_ttl_seconds=5,
+            max_age_seconds=60,
+            prune_interval_seconds=0,
+            max_sessions=4,
+            clock=lambda: now,
+        )
+        manager.transcribe_chunk(
+            session_id="stale-session",
+            audio_bytes=b"audio",
+            final=False,
+            model="flux-general-en",
+            api_key="token",
+            language="en",
+        )
+        now = 6.0
+        manager.transcribe_chunk(
+            session_id="fresh-session",
+            audio_bytes=b"audio",
+            final=False,
+            model="flux-general-en",
+            api_key="token",
+            language="en",
+        )
+
+        self.assertTrue(FakeFluxClient.instances[0].closed)
+        self.assertNotIn("stale-session", manager.sessions)
+        self.assertIn("fresh-session", manager.sessions)
+
+    def test_flux_session_manager_limits_sessions_per_worker(self) -> None:
+        class FakeFluxClient:
+            instances: list["FakeFluxClient"] = []
+
+            def __init__(self, url: str, *, headers: dict[str, str], timeout: float) -> None:
+                self.closed = False
+                FakeFluxClient.instances.append(self)
+
+            def connect(self) -> None:
+                return None
+
+            def send_binary(self, data: bytes) -> None:
+                return None
+
+            def send_json(self, payload: dict) -> None:
+                return None
+
+            def receive_json(self, timeout: float) -> dict | None:
+                raise TimeoutError()
+
+            def close(self) -> None:
+                self.closed = True
+
+        now = 0.0
+        manager = flux_streaming.DeepgramFluxSessionManager(
+            client_factory=FakeFluxClient,
+            idle_ttl_seconds=60,
+            max_age_seconds=60,
+            prune_interval_seconds=0,
+            max_sessions=1,
+            clock=lambda: now,
+        )
+        manager.transcribe_chunk(
+            session_id="first-session",
+            audio_bytes=b"audio",
+            final=False,
+            model="flux-general-en",
+            api_key="token",
+            language="en",
+        )
+        now = 1.0
+        manager.transcribe_chunk(
+            session_id="second-session",
+            audio_bytes=b"audio",
+            final=False,
+            model="flux-general-en",
+            api_key="token",
+            language="en",
+        )
+
+        self.assertTrue(FakeFluxClient.instances[0].closed)
+        self.assertNotIn("first-session", manager.sessions)
+        self.assertIn("second-session", manager.sessions)
 
     def test_kokoro_openrouter_synthesis_uses_delivered_openrouter_secret(self) -> None:
         class FakeResponse:

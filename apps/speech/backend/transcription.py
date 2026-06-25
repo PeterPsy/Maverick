@@ -236,8 +236,10 @@ def transcribe_path(
     provider_config: dict | None = None,
     conversation_mode: bool = False,
 ) -> dict:
-    preflight_duration_seconds = probe_audio_duration_seconds(audio_path, content_type=content_type)
-    validate_audio_duration(preflight_duration_seconds, operation=operation)
+    preflight_duration_seconds = None
+    if not conversation_mode:
+        preflight_duration_seconds = probe_audio_duration_seconds(audio_path, content_type=content_type)
+        validate_audio_duration(preflight_duration_seconds, operation=operation)
     settings = read_settings(data_root)
     if profile:
         settings = {**settings, "transcription_profile": profile}

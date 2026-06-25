@@ -7,10 +7,11 @@ from datetime import UTC, datetime, timedelta
 from io import BytesIO
 from pathlib import Path
 from types import SimpleNamespace
+from unittest.mock import patch
 
-from core.api.app_mounts import _apply_app_secret_writes, _backend_request_headers, _backend_secret_request_body, _read_backend_body, _resolve_app_secret_payload, _serve_app_file_gateway_manifest, _serve_app_file_response, backend_entrypoint_timeout_seconds, serve_frontend
+from core.api.app_mounts import _apply_app_secret_writes, _backend_request_headers, _backend_secret_request_body, _read_backend_body, _resolve_app_secret_payload, _serve_app_file_gateway_manifest, _serve_app_file_response, backend_entrypoint_timeout_seconds, handle_app_backend, serve_frontend
 from core.api.http import HttpRequestError
-from core.apps.contracts import build_app_contract, build_app_hook_timeouts, build_parsed_app_contract
+from core.apps.contracts import build_app_contract, build_app_entrypoints, build_app_hook_timeouts, build_parsed_app_contract
 from core.observability.store import ObservabilityCollections, ObservabilityDocumentStore
 from core.secrets.app_delivery import app_secret_target
 from core.secrets.errors import SecretPolicyError
@@ -55,6 +56,87 @@ class AppMountsTestCase(unittest.TestCase):
         )
 
         self.assertEqual(backend_entrypoint_timeout_seconds(parsed), 300)
+
+    def test_speech_backend_mount_passes_provider_config(self) -> None:
+        speech_status = {
+            "profile": "speech_stt",
+            "selection": {
+                "provider_id": "deepgram",
+                "audio_transcription_model_id": "nova-3-general",
+                "conversation_model_id": "flux-general-en",
+            },
+            "model_settings": {
+                "audio_transcription_model_id": "nova-3-general",
+                "conversation_model_id": "flux-general-en",
+            },
+        }
+        captured_payloads: list[dict[str, object]] = []
+
+        def fake_start_response(status: str, headers: list[tuple[str, str]]) -> None:
+            captured_payloads.append({"response_status": status, "response_headers": headers})
+
+        def fake_run_entrypoint(_entrypoint, *, payload, **_kwargs):
+            captured_payloads.append(payload)
+            return {"status_code": 200, "json": {"ok": True}}
+
+        request_body = json.dumps({"action": "transcribe_audio"}).encode("utf-8")
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            source_root = root / "source"
+            data_root = root / "data"
+            source_root.mkdir()
+            data_root.mkdir()
+            parsed = build_parsed_app_contract(
+                app_id="speech",
+                name="Speech",
+                version="1.0.0",
+                description="Speech provider.",
+                publisher="maverick",
+                contract=build_app_contract(entrypoints=build_app_entrypoints(backend="backend/app_backend.py")),
+            )
+            binding = SimpleNamespace(data_root=str(data_root), source_kind="platform")
+            state = SimpleNamespace(
+                provider_store=SimpleNamespace(),
+                workspace_store=None,
+                app_event_bus=None,
+                secret_store=None,
+                observability_store=None,
+            )
+
+            with (
+                patch("core.api.app_mounts.resolve_app_surface", return_value=(binding, source_root, parsed)),
+                patch("core.api.app_mounts.resolve_provider_for_workspace", return_value=(SimpleNamespace(provider_id="openai"), None)),
+                patch("core.api.app_mounts.resolve_app_secret_payload_requests", return_value=SimpleNamespace(secrets={}, errors=[])),
+                patch("core.api.app_mounts._app_dependencies_payload", return_value={"dependencies": []}),
+                patch("core.api.app_mounts.enabled_app_items", return_value=[]),
+                patch("core.api.app_mounts._apply_app_secret_writes", return_value=[]),
+                patch("core.api.app_mounts.apply_app_runtime_requests", return_value=[]),
+                patch("core.api.app_mounts.apply_runtime_cleanup_requests", return_value=[]),
+                patch("core.api.provider_api.workspace_speech_stt_status", return_value=speech_status),
+                patch("core.api.app_mounts.run_json_entrypoint", side_effect=fake_run_entrypoint),
+            ):
+                response = b"".join(
+                    handle_app_backend(
+                        state,  # type: ignore[arg-type]
+                        environ={
+                            "REQUEST_METHOD": "POST",
+                            "PATH_INFO": "/api/apps/speech/backend",
+                            "CONTENT_TYPE": "application/json",
+                            "CONTENT_LENGTH": str(len(request_body)),
+                            "wsgi.input": BytesIO(request_body),
+                        },
+                        workspace_id="default",
+                        app_id="speech",
+                        user=None,
+                        start_path=Path(__file__).resolve().parents[3],
+                        start_response=fake_start_response,
+                        trusted_platform_invocation=True,
+                    )
+                )
+
+        payload = next(item for item in captured_payloads if item.get("surface") == "backend")
+        self.assertEqual(json.loads(response.decode("utf-8")), {"ok": True})
+        self.assertEqual(payload["provider_config"], {"speech_stt": speech_status})
 
     def test_non_json_backend_body_is_spooled_to_app_data_root(self) -> None:
         with tempfile.TemporaryDirectory() as directory:

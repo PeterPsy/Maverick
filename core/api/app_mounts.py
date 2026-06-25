@@ -483,6 +483,7 @@ def handle_app_backend(
             "body": body,
             "body_file": body_file or {},
             "provider_id": provider_id,
+            "provider_config": _backend_provider_config(state, workspace_id=workspace_id, app_id=app_id),
             "effective_mode": "full-access" if trusted_platform_invocation else "sandbox",
             "platform_role": None if user is None else user.platform_role,
             "user_id": None if user is None else user.user_id,
@@ -633,6 +634,17 @@ def handle_app_backend(
     if "body" in result:
         return text_response(start_response, str(result["body"]), status=status_line(status_code))
     return json_response(start_response, result, status=status_line(status_code))
+
+
+def _backend_provider_config(state, *, workspace_id: str, app_id: str) -> dict[str, Any]:
+    if app_id != "speech":
+        return {}
+    from core.api.provider_api import workspace_speech_stt_status
+
+    try:
+        return {"speech_stt": workspace_speech_stt_status(state, workspace_id=workspace_id)}
+    except ProviderError:
+        return {}
 
 
 def _serve_app_file_gateway_manifest(

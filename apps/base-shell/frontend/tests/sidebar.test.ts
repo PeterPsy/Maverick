@@ -141,12 +141,15 @@ describe("Sidebar desktop layout contract", () => {
     expect(appShellSource).toContain("<MobilePinnedAppsPanel");
     expect(appShellSource).toContain("mobilePrimaryActionRequestId");
     expect(appShellSource).toContain("newChatRouteParams()");
+    expect(appShellSource).toContain("const settingsShortcutApp = shellVisibleApps(apps).find((app) => app.app_id === SETTINGS_APP_ID) ?? null;");
     expect(appShellSource).toContain("onOpenMobileChat={openMobileChatPanel}");
     expect(appShellSource).toContain("onCloseMobileChat={closeMobileChatPanel}");
     expect(appShellSource).toContain("showMobileChatAction={!isChatAppActive}");
     expect(appShellSource).toContain("onOpenNewChat={openNewChat}");
     expect(appShellSource).toContain("onToggleSidebar={toggleMobileSidebar}");
     expect(appShellSource).toContain("onTogglePinnedApps={toggleMobilePinnedApps}");
+    expect(appShellSource).toContain("onOpenSettings={openSettingsApp}");
+    expect(appShellSource).toContain("settingsApp={settingsShortcutApp}");
     expect(appShellSource).toContain("shellTheme={shellTheme}");
     expect(headerSource).toContain("const logoSrc = sidebarLogoSrc(shellTheme);");
     expect(headerSource).toContain("src={logoSrc}");

@@ -9,14 +9,18 @@ export function MobilePinnedAppsPanel({
   isOpen,
   isLoading,
   onOpenApp,
+  onOpenSettings,
+  settingsApp,
 }: {
   activeAppId: string | null;
   apps: AppRegistryItem[];
   isOpen: boolean;
   isLoading: boolean;
   onOpenApp: (appId: string) => void;
+  onOpenSettings: () => void;
+  settingsApp: AppRegistryItem | null;
 }) {
-  const panelLabel = isLoading ? "Caricamento applicazioni pinnate" : "Applicazioni pinnate";
+  const panelLabel = isLoading ? "Caricamento applicazioni" : "Applicazioni";
 
   return (
     <section
@@ -50,6 +54,20 @@ export function MobilePinnedAppsPanel({
                   </button>
                 </div>
               ))}
+          {!isLoading && settingsApp ? (
+            <div className="bs-mobile-pinned-apps__item" role="listitem">
+              <button
+                aria-current={activeAppId === settingsApp.app_id ? "page" : undefined}
+                aria-label={settingsApp.name}
+                className={`bs-mobile-pinned-apps__button ${activeAppId === settingsApp.app_id ? "is-active" : ""}`}
+                onClick={onOpenSettings}
+                type="button"
+              >
+                <AppLogo app={settingsApp} className="bs-mobile-pinned-apps__logo" />
+                <span className="bs-mobile-pinned-apps__name">{settingsApp.name}</span>
+              </button>
+            </div>
+          ) : null}
         </div>
       </div>
     </section>

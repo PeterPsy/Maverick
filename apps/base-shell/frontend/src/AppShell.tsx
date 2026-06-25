@@ -104,7 +104,8 @@ export function AppShell() {
   const persistedPinnedAppIdsRef = useRef(pinnedAppIds);
   const persistedPinnedAppsVersionRef = useRef(0);
   const railApps = shellAppRailApps(apps, pinnedAppIds);
-  const hasSettingsShortcut = shellVisibleApps(apps).some((app) => app.app_id === SETTINGS_APP_ID);
+  const settingsShortcutApp = shellVisibleApps(apps).find((app) => app.app_id === SETTINGS_APP_ID) ?? null;
+  const hasSettingsShortcut = Boolean(settingsShortcutApp);
   const shellRailItemCount = isLoading && railApps.length === 0 ? 4 : railApps.length + (hasSettingsShortcut ? 1 : 0);
   const shellSidebarMetrics = useSidebarRailMetrics(shellRailItemCount, isMobileLayout);
   const shellTheme = useMemo(() => createShellThemeState(themeMode, systemColorScheme), [systemColorScheme, themeMode]);
@@ -617,6 +618,8 @@ export function AppShell() {
           isOpen={isMobilePinnedAppsOpen}
           isLoading={isLoading && railApps.length === 0}
           onOpenApp={openApp}
+          onOpenSettings={openSettingsApp}
+          settingsApp={settingsShortcutApp}
         />
       ) : null}
       <div className="bs-workspace-view-shell">

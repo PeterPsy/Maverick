@@ -64,6 +64,7 @@ const NATIVE_AUDIO_RECORDING_MS = NATIVE_AUDIO_RECORDING_SECONDS * 1000;
 const BUNDLE_POLL_INTERVAL_MS = 1200;
 const BUNDLE_POLL_TIMEOUT_MS = 75000;
 const BUNDLE_FRAME_TIMEOUT_MS = 75000;
+const BUNDLE_NATIVE_FRAME_GRACE_MS = 6000;
 const BUNDLE_AUDIO_UPLOAD_RETRY_MS = 1000;
 const BUNDLE_AUDIO_UPLOAD_TIMEOUT_MS = 15000;
 const MICROPHONE_AUDIO_CONSTRAINTS: MediaTrackConstraints = {
@@ -465,8 +466,13 @@ export function App() {
         throw new Error('iOS host is unavailable.');
       }
 
-      const audio = await recording.done;
-      await waitForBundleFrame(bundleId);
+      const nativeFrameResult = waitForNativeCommand(nativeRequestId, 'captureFrameForBundle');
+      const [audio] = await Promise.all([recording.done, nativeFrameResult]);
+      await waitForBundleFrame(
+        bundleId,
+        BUNDLE_NATIVE_FRAME_GRACE_MS,
+        'iOS finished the frame capture, but Senses did not receive the bundle frame.',
+      );
       setAskGlassesFlow((current) => ({ ...current, status: 'transcribing', recordingEndsAt: null }));
       await ingestBundleAudioPartWhenDeviceReady({
         bundleId,
@@ -1435,8 +1441,37 @@ async function waitForBundleReady(bundleId: string): Promise<SensesCaptureBundle
   throw new Error(detail);
 }
 
-async function waitForBundleFrame(bundleId: string): Promise<SensesCaptureBundle> {
-  const deadline = Date.now() + BUNDLE_FRAME_TIMEOUT_MS;
+async function waitForNativeCommand(requestId: string, command: NativeCommand): Promise<SensesNativeStatus> {
+  const deadline = Date.now() + NATIVE_COMMAND_FINAL_TIMEOUT_MS;
+  let lastStatus: SensesNativeStatus | null = window.__maverickSensesNativeStatus || null;
+  while (Date.now() < deadline) {
+    const status = window.__maverickSensesNativeStatus || lastStatus;
+    if (status) {
+      lastStatus = status;
+    } else {
+      await sleep(250);
+      continue;
+    }
+    const bridgeRequest = status.bridge_request;
+    if (bridgeRequest?.request_id === requestId && bridgeRequest.command === command) {
+      if (bridgeRequest.status === 'failed') {
+        throw new Error(bridgeRequest.message || status.ios?.last_error || nativeFinalErrorMessage(command));
+      }
+      if (bridgeRequest.status === 'completed') {
+        return status;
+      }
+    }
+    await sleep(250);
+  }
+  throw new Error(lastStatus?.ios?.last_error || nativeFinalTimeoutMessage(command));
+}
+
+async function waitForBundleFrame(
+  bundleId: string,
+  timeoutMs = BUNDLE_FRAME_TIMEOUT_MS,
+  timeoutMessage = 'Senses did not receive the glasses frame in time.',
+): Promise<SensesCaptureBundle> {
+  const deadline = Date.now() + timeoutMs;
   let lastBundle: SensesCaptureBundle | null = null;
   while (Date.now() < deadline) {
     const bundle = await getCaptureBundle(bundleId);
@@ -1450,8 +1485,8 @@ async function waitForBundleFrame(bundleId: string): Promise<SensesCaptureBundle
     }
     await sleep(BUNDLE_POLL_INTERVAL_MS);
   }
-  const detail = lastBundle?.readiness?.blocking_detail || 'Senses did not receive the glasses frame in time.';
-  throw new Error(detail);
+  const detail = lastBundle?.readiness?.blocking_detail;
+  throw new Error(detail && detail !== 'Bundle is waiting for required media parts.' ? detail : timeoutMessage);
 }
 
 async function ingestBundleAudioPartWhenDeviceReady(input: Parameters<typeof ingestBundleAudioPart>[0]): Promise<SensesCaptureBundle> {

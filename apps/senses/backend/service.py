@@ -43,11 +43,16 @@ CAPTURE_REQUEST_SCHEMA_VERSION = "senses.capture.v1"
 CAPTURE_ACCEPTED_SCHEMA_VERSION = "senses.capture.accepted.v1"
 AUDIO_CAPTURE_REQUEST_SCHEMA_VERSION = "senses.audio.v1"
 AUDIO_ACCEPTED_SCHEMA_VERSION = "senses.audio.accepted.v1"
+BUNDLE_REQUEST_SCHEMA_VERSION = "senses.bundle.v1"
+BUNDLE_ACCEPTED_SCHEMA_VERSION = "senses.bundle.accepted.v1"
+BUNDLE_PART_ACCEPTED_SCHEMA_VERSION = "senses.bundle_part.accepted.v1"
+BUNDLE_DISPATCH_SCHEMA_VERSION = "senses.bundle.dispatch.v1"
 CAPTURE_CLOCK_SKEW_SECONDS = 600
 FRAME_RATE_LIMIT_WINDOW_SECONDS = 60
 FRAME_RATE_LIMIT_MAX = 30
 MAX_AUDIO_DURATION_SECONDS = 60
 MIN_AUDIO_BYTES = 128
+BUNDLE_ITEM_ROLES = {"frame", "audio"}
 SUPPORTED_FRAME_CONTENT_TYPES = {
     "image/jpeg": ".jpg",
     "image/png": ".png",
@@ -168,8 +173,12 @@ DECLARED_BACKEND_ACTIONS = (
     "settings.get",
     "settings.update",
     "captures.get",
+    "captures.bundle_get",
+    "ingest.bundle.start",
+    "ingest.bundle_part",
     "ingest.frame",
     "ingest.audio",
+    "routing.dispatch_bundle",
     "routing.dispatch_capture",
     "routing.reset",
     "view_filter",
@@ -268,6 +277,21 @@ def handle_action(data_root: Path, payload: dict[str, object]) -> tuple[int, dic
         if auth_error is not None:
             return auth_error
         return captures_get(data_root, workspace_id, actor, dependencies, payload)
+    if action == "captures.bundle_get":
+        auth_error = require_authenticated(actor)
+        if auth_error is not None:
+            return auth_error
+        return captures_bundle_get(data_root, workspace_id, actor, dependencies, payload)
+    if action == "ingest.bundle.start":
+        auth_error = require_authenticated(actor)
+        if auth_error is not None:
+            return auth_error
+        return ingest_bundle_start(data_root, workspace_id, actor, payload)
+    if action == "ingest.bundle_part":
+        auth_error = require_authenticated(actor)
+        if auth_error is not None:
+            return auth_error
+        return ingest_bundle_part(data_root, workspace_id, actor, dependencies, payload)
     if action == "ingest.frame":
         auth_error = require_authenticated(actor)
         if auth_error is not None:
@@ -283,6 +307,11 @@ def handle_action(data_root: Path, payload: dict[str, object]) -> tuple[int, dic
         if auth_error is not None:
             return auth_error
         return routing_dispatch_capture(data_root, workspace_id, actor, dependencies, payload)
+    if action == "routing.dispatch_bundle":
+        auth_error = require_authenticated(actor)
+        if auth_error is not None:
+            return auth_error
+        return routing_dispatch_bundle(data_root, workspace_id, actor, dependencies, payload)
     if action == "routing.reset":
         auth_error = require_authenticated(actor)
         if auth_error is not None:
@@ -409,8 +438,10 @@ def manifest_payload(
             "Senses Phase 8 uses Maverick user sessions for pairing, device registry, frame/audio ingestion, routing, and the workspace frontend.",
             "ingest.frame is available with a Maverick user session and active device_session_id.",
             "ingest.audio accepts bounded push-to-talk audio, writes Storage, and uses Speech transcription when the optional dependency is resolved.",
+            "ingest.bundle.start and ingest.bundle_part group one frame plus one audio capture for a single multimodal dispatch.",
             "ingest.frame stores captures through the declared Storage dependency and never launches runtime turns.",
             "routing.dispatch_capture emits runtime_launch_requests only after a capture is stored.",
+            "routing.dispatch_bundle emits one runtime request only after the frame, audio file, and non-empty transcript are ready.",
             "Raw device auth remains deferred.",
         ],
     }
@@ -446,6 +477,13 @@ def overview_payload(
         "devices": list_devices(data_root, workspace_id, actor, include_all=actor_is_manager(actor)),
         "pairing_sessions": list_pairing_sessions(data_root, workspace_id, actor),
         "captures": list_captures(
+            data_root,
+            workspace_id,
+            actor,
+            include_all=actor_is_manager(actor),
+            chat_provider_app_id=chat_provider_app_id,
+        ),
+        "capture_bundles": list_capture_bundles(
             data_root,
             workspace_id,
             actor,
@@ -1193,18 +1231,19 @@ def ingest_frame(
                 timestamp,
             ),
         )
-        db.execute(
-            "UPDATE devices SET last_seen_at = ?, updated_at = ? WHERE workspace_id = ? AND device_id = ?",
-            (timestamp, timestamp, workspace_id, device_id),
-        )
-        db.execute(
-            """
-            UPDATE device_sessions
-            SET last_seen_at = ?
-            WHERE workspace_id = ? AND device_session_id = ?
-            """,
-            (timestamp, workspace_id, device_session_id),
-        )
+        if device_id and device_session_id:
+            db.execute(
+                "UPDATE devices SET last_seen_at = ?, updated_at = ? WHERE workspace_id = ? AND device_id = ?",
+                (timestamp, timestamp, workspace_id, device_id),
+            )
+            db.execute(
+                """
+                UPDATE device_sessions
+                SET last_seen_at = ?
+                WHERE workspace_id = ? AND device_session_id = ?
+                """,
+                (timestamp, workspace_id, device_session_id),
+            )
         write_audit(
             db,
             workspace_id=workspace_id,
@@ -1289,6 +1328,388 @@ def ingest_audio(
     return status_code, response
 
 
+def ingest_bundle_start(
+    data_root: Path,
+    workspace_id: str,
+    actor: dict[str, str | None],
+    payload: dict[str, object],
+) -> tuple[int, dict[str, object]]:
+    schema_version = text_or_none(payload.get("schema_version"))
+    if schema_version not in {None, BUNDLE_REQUEST_SCHEMA_VERSION}:
+        return error_payload(
+            400,
+            "invalid_schema_version",
+            f"ingest.bundle.start requires schema_version `{BUNDLE_REQUEST_SCHEMA_VERSION}` when supplied.",
+        )
+    bundle_id = bounded_identifier(payload.get("bundle_id"), max_length=160)
+    request_id = bounded_identifier(payload.get("request_id"), max_length=160)
+    if not bundle_id:
+        return error_payload(400, "invalid_bundle_id", "ingest.bundle.start requires bundle_id.")
+    if not request_id:
+        return error_payload(400, "invalid_request_id", "ingest.bundle.start requires request_id.")
+    device_id = bounded_identifier(payload.get("device_id"), max_length=128)
+    device_session_id = bounded_identifier(payload.get("device_session_id"), max_length=128)
+    if bool(device_id) != bool(device_session_id):
+        return error_payload(
+            400,
+            "invalid_device",
+            "ingest.bundle.start requires both device_id and device_session_id when either is supplied.",
+        )
+    stored_device_id = device_id or None
+    stored_device_session_id = device_session_id or None
+
+    actor_user_id = str(actor["user_id"])
+    timestamp = now_timestamp()
+    metadata = metadata_payload(payload.get("metadata"))
+    prompt = bounded_text(payload.get("prompt"), fallback="", max_length=2048)
+
+    ensure_schema(data_root, workspace_id)
+    db = connect(data_root)
+    try:
+        db.execute("BEGIN IMMEDIATE")
+        if device_id and device_session_id:
+            auth_error = validate_device_for_ingest(
+                db,
+                workspace_id=workspace_id,
+                actor_user_id=actor_user_id,
+                device_id=device_id,
+                device_session_id=device_session_id,
+            )
+            if auth_error is not None:
+                db.rollback()
+                return auth_error
+
+        existing = bundle_by_id(db, workspace_id, bundle_id)
+        if existing is not None:
+            if (
+                str(existing["request_id"]) != request_id
+                or (text_or_none(existing["device_id"]) or "") != (device_id or "")
+                or str(existing["user_id"]) != actor_user_id
+            ):
+                db.rollback()
+                return error_payload(
+                    409,
+                    "bundle_conflict",
+                    "bundle_id is already associated with a different Senses bundle request.",
+                )
+            db.commit()
+            return 200, bundle_action_response(
+                existing,
+                bundle_items_with_captures(db, workspace_id, bundle_id),
+                chat_provider_app_id=None,
+            )
+
+        request_conflict = db.execute(
+            """
+            SELECT * FROM capture_bundles
+            WHERE workspace_id = ? AND request_id = ?
+            """,
+            (workspace_id, request_id),
+        ).fetchone()
+        if request_conflict is not None:
+            db.rollback()
+            return error_payload(
+                409,
+                "bundle_conflict",
+                "request_id is already associated with a different Senses bundle.",
+            )
+
+        db.execute(
+            """
+            INSERT INTO capture_bundles(
+              workspace_id, bundle_id, request_id, user_id, device_id, device_session_id,
+              status, prompt, metadata_json, created_at, updated_at
+            ) VALUES (?, ?, ?, ?, ?, ?, 'started', ?, ?, ?, ?)
+            """,
+            (
+                workspace_id,
+                bundle_id,
+                request_id,
+                actor_user_id,
+                stored_device_id,
+                stored_device_session_id,
+                prompt,
+                encode_json_object(metadata),
+                timestamp,
+                timestamp,
+            ),
+        )
+        if device_id and device_session_id:
+            db.execute(
+                "UPDATE devices SET last_seen_at = ?, updated_at = ? WHERE workspace_id = ? AND device_id = ?",
+                (timestamp, timestamp, workspace_id, device_id),
+            )
+            db.execute(
+                """
+                UPDATE device_sessions
+                SET last_seen_at = ?
+                WHERE workspace_id = ? AND device_session_id = ?
+                """,
+                (timestamp, workspace_id, device_session_id),
+            )
+        write_audit(
+            db,
+            workspace_id=workspace_id,
+            event_type="bundle.started",
+            actor_user_id=actor_user_id,
+            device_id=device_id,
+            details={"bundle_id": bundle_id, "request_id": request_id},
+        )
+        db.commit()
+        bundle = bundle_by_id(db, workspace_id, bundle_id)
+    except sqlite3.IntegrityError:
+        db.rollback()
+        return error_payload(
+            409,
+            "bundle_conflict",
+            "Senses could not claim this bundle_id or request_id because it already exists.",
+        )
+    except Exception:
+        db.rollback()
+        raise
+    finally:
+        db.close()
+
+    return 201, bundle_action_response(bundle, [], chat_provider_app_id=None)
+
+
+def ingest_bundle_part(
+    data_root: Path,
+    workspace_id: str,
+    actor: dict[str, str | None],
+    dependencies: dict[str, object],
+    payload: dict[str, object],
+) -> tuple[int, dict[str, object]]:
+    bundle_id = bounded_identifier(payload.get("bundle_id"), max_length=160)
+    if not bundle_id:
+        return error_payload(400, "invalid_bundle_id", "ingest.bundle_part requires bundle_id.")
+    role = normalize_bundle_item_role(payload.get("role"))
+    if role is None:
+        return error_payload(400, "invalid_bundle_role", "ingest.bundle_part role must be `frame` or `audio`.")
+
+    ensure_schema(data_root, workspace_id)
+    db = connect(data_root)
+    try:
+        bundle = bundle_by_id(db, workspace_id, bundle_id)
+        if bundle is None:
+            return error_payload(404, "bundle_not_found", "No matching Senses capture bundle was found.")
+        if not actor_can_access_bundle(db, workspace_id=workspace_id, actor=actor, bundle=bundle):
+            return error_payload(403, "senses_permission_forbidden", "You cannot update this Senses bundle.")
+        existing = bundle_item_by_role(db, workspace_id, bundle_id, role)
+        if existing is not None:
+            capture = capture_by_id(db, workspace_id, str(existing["capture_id"]))
+            if capture is None:
+                return error_payload(
+                    500,
+                    "bundle_item_missing_capture",
+                    "Senses bundle state is missing the linked capture record.",
+                )
+            return 200, bundle_part_response(
+                bundle,
+                bundle_items_with_captures(db, workspace_id, bundle_id),
+                existing,
+                capture,
+                chat_provider_app_id=chat_provider_app_id_from_dependencies(dependencies),
+            )
+    finally:
+        db.close()
+
+    part_payload = bundle_part_capture_payload(payload, role=role, bundle_id=bundle_id)
+    bundle_device_id = text_or_none(bundle["device_id"])
+    bundle_device_session_id = text_or_none(bundle["device_session_id"])
+    part_has_device = bool(text_or_none(part_payload.get("device_id")) and text_or_none(part_payload.get("device_session_id")))
+    if not part_has_device and bundle_device_id and bundle_device_session_id:
+        part_payload["device_id"] = bundle_device_id
+        part_payload["device_session_id"] = bundle_device_session_id
+    elif not part_has_device and role == "audio":
+        return error_payload(
+            409,
+            "bundle_device_pending",
+            "Senses needs the frame bundle part before audio can inherit the active device session.",
+            bundle_id=bundle_id,
+        )
+    if role == "audio":
+        status_code, response = ingest_audio(data_root, workspace_id, actor, dependencies, part_payload)
+    else:
+        status_code, response = ingest_frame(data_root, workspace_id, actor, dependencies, part_payload)
+    if status_code >= 400 or not response.get("ok"):
+        return status_code, response
+
+    capture_id = text_or_none(response.get("capture_id"))
+    request_id = text_or_none(response.get("request_id"))
+    if not capture_id:
+        return error_payload(500, "invalid_bundle_part", "Senses accepted a bundle part without capture_id.")
+
+    timestamp = now_timestamp()
+    chat_provider_app_id = chat_provider_app_id_from_dependencies(dependencies)
+    ensure_schema(data_root, workspace_id)
+    db = connect(data_root)
+    try:
+        db.execute("BEGIN IMMEDIATE")
+        bundle = bundle_by_id(db, workspace_id, bundle_id)
+        if bundle is None:
+            db.rollback()
+            return error_payload(404, "bundle_not_found", "No matching Senses capture bundle was found.")
+        if not actor_can_access_bundle(db, workspace_id=workspace_id, actor=actor, bundle=bundle):
+            db.rollback()
+            return error_payload(403, "senses_permission_forbidden", "You cannot update this Senses bundle.")
+        capture = capture_by_id(db, workspace_id, capture_id)
+        if capture is None:
+            db.rollback()
+            return error_payload(404, "capture_not_found", "No matching Senses capture was found.")
+        existing = bundle_item_by_role(db, workspace_id, bundle_id, role)
+        if existing is not None and str(existing["capture_id"]) != capture_id:
+            db.rollback()
+            return error_payload(
+                409,
+                "bundle_part_conflict",
+                f"Senses bundle already has a different `{role}` part.",
+            )
+        if existing is None:
+            db.execute(
+                """
+                INSERT INTO capture_bundle_items(
+                  workspace_id, bundle_id, role, capture_id, request_id, status, metadata_json,
+                  created_at, updated_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    workspace_id,
+                    bundle_id,
+                    role,
+                    capture_id,
+                    request_id,
+                    capture["status"],
+                    encode_json_object({"source_action": payload.get("action")}),
+                    timestamp,
+                    timestamp,
+                ),
+            )
+        else:
+            db.execute(
+                """
+                UPDATE capture_bundle_items
+                SET status = ?, error_code = ?, updated_at = ?
+                WHERE workspace_id = ? AND bundle_id = ? AND role = ?
+                """,
+                (capture["status"], capture["error_code"], timestamp, workspace_id, bundle_id, role),
+            )
+        if not text_or_none(bundle["device_id"]):
+            db.execute(
+                """
+                UPDATE capture_bundles
+                SET device_id = ?,
+                    device_session_id = ?,
+                    updated_at = ?
+                WHERE workspace_id = ? AND bundle_id = ?
+                """,
+                (
+                    capture["device_id"],
+                    capture["device_session_id"],
+                    timestamp,
+                    workspace_id,
+                    bundle_id,
+                ),
+            )
+        update_bundle_status_from_items(db, workspace_id=workspace_id, bundle_id=bundle_id, timestamp=timestamp)
+        write_audit(
+            db,
+            workspace_id=workspace_id,
+            event_type="bundle.part_accepted",
+            actor_user_id=str(actor["user_id"]),
+            device_id=str(capture["device_id"]),
+            details={"bundle_id": bundle_id, "role": role, "capture_id": capture_id},
+        )
+        db.commit()
+        updated_bundle = bundle_by_id(db, workspace_id, bundle_id)
+        updated_item = bundle_item_by_role(db, workspace_id, bundle_id, role)
+        bundle_items = bundle_items_with_captures(db, workspace_id, bundle_id)
+    except sqlite3.IntegrityError:
+        db.rollback()
+        return error_payload(
+            409,
+            "bundle_part_conflict",
+            f"Senses bundle already has a `{role}` part.",
+        )
+    except Exception:
+        db.rollback()
+        raise
+    finally:
+        db.close()
+
+    bundle_response = bundle_part_response(
+        updated_bundle,
+        bundle_items,
+        updated_item,
+        capture,
+        chat_provider_app_id=chat_provider_app_id,
+    )
+    if "dependency_backend_requests" in response:
+        bundle_response["dependency_backend_requests"] = response["dependency_backend_requests"]
+    bundle_response["capture_response"] = {key: value for key, value in response.items() if key != "dependency_backend_requests"}
+    return status_code, bundle_response
+
+
+def captures_bundle_get(
+    data_root: Path,
+    workspace_id: str,
+    actor: dict[str, str | None],
+    dependencies: dict[str, object],
+    payload: dict[str, object],
+) -> tuple[int, dict[str, object]]:
+    chat_provider_app_id = chat_provider_app_id_from_dependencies(dependencies)
+    speech_provider_app_id = speech_provider_app_id_from_dependencies(dependencies, alias=SPEECH_TRANSCRIPTION_DEPENDENCY_ALIAS)
+    bundle_id = bounded_identifier(payload.get("bundle_id"), max_length=160)
+    if not bundle_id:
+        return error_payload(400, "invalid_bundle_id", "captures.bundle_get requires bundle_id.")
+    dependency_backend_requests: list[dict[str, object]] = []
+    ensure_schema(data_root, workspace_id)
+    db = connect(data_root)
+    try:
+        bundle = bundle_by_id(db, workspace_id, bundle_id)
+        if bundle is None:
+            return error_payload(404, "bundle_not_found", "No matching Senses capture bundle was found.")
+        if not actor_can_access_bundle(db, workspace_id=workspace_id, actor=actor, bundle=bundle):
+            return error_payload(403, "senses_permission_forbidden", "You cannot inspect this Senses bundle.")
+        items = bundle_items_with_captures(db, workspace_id, bundle_id)
+        attempts = bundle_runtime_attempts(db, workspace_id=workspace_id, bundle=bundle, items=items)
+    finally:
+        db.close()
+    audio_capture = bundle_capture_for_role(items, "audio")
+    if speech_provider_app_id and audio_capture is not None:
+        dependency_backend_requests = claim_transcription_request_for_capture(
+            data_root,
+            workspace_id=workspace_id,
+            capture_id=str(audio_capture["capture_id"]),
+            provider_app_id=speech_provider_app_id,
+        )
+        if dependency_backend_requests:
+            ensure_schema(data_root, workspace_id)
+            db = connect(data_root)
+            try:
+                bundle = bundle_by_id(db, workspace_id, bundle_id)
+                items = bundle_items_with_captures(db, workspace_id, bundle_id)
+                attempts = bundle_runtime_attempts(db, workspace_id=workspace_id, bundle=bundle, items=items) if bundle is not None else []
+            finally:
+                db.close()
+    response = {
+        "ok": True,
+        "schema_version": BUNDLE_ACCEPTED_SCHEMA_VERSION,
+        "bundle_id": bundle_id,
+        "bundle": bundle_payload(bundle, items, chat_provider_app_id=chat_provider_app_id),
+        "items": bundle_items_payload(items, chat_provider_app_id=chat_provider_app_id),
+        "readiness": bundle_readiness_payload(items),
+        "runtime_dispatch_attempts": [
+            dispatch_attempt_payload(row, chat_provider_app_id=chat_provider_app_id) for row in attempts
+        ],
+        "chat": chat_link_payload(bundle["thread_id"], provider_app_id=chat_provider_app_id),
+        "error": None,
+    }
+    if dependency_backend_requests:
+        response["dependency_backend_requests"] = dependency_backend_requests
+    return 200, response
+
+
 def storage_write_completed(
     data_root: Path,
     workspace_id: str,
@@ -1361,6 +1782,12 @@ def storage_write_completed(
                 error_detail=bounded_text(payload.get("error"), fallback="storage dependency failed", max_length=240),
                 timestamp=timestamp,
             )
+            update_bundle_items_for_capture(
+                db,
+                workspace_id=workspace_id,
+                capture_id=capture_id,
+                timestamp=timestamp,
+            )
             db.commit()
             return 200, {
                 "ok": True,
@@ -1386,6 +1813,12 @@ def storage_write_completed(
                 capture=capture,
                 error_code="storage_write_failed",
                 error_detail=storage_error,
+                timestamp=timestamp,
+            )
+            update_bundle_items_for_capture(
+                db,
+                workspace_id=workspace_id,
+                capture_id=capture_id,
                 timestamp=timestamp,
             )
             db.commit()
@@ -1425,6 +1858,12 @@ def storage_write_completed(
             WHERE workspace_id = ? AND request_id = ?
             """,
             (timestamp, workspace_id, capture["ingestion_request_id"]),
+        )
+        update_bundle_items_for_capture(
+            db,
+            workspace_id=workspace_id,
+            capture_id=capture_id,
+            timestamp=timestamp,
         )
         write_audit(
             db,
@@ -1537,6 +1976,12 @@ def speech_transcription_completed(
             WHERE workspace_id = ? AND capture_id = ?
             """,
             (encode_json_object(metadata), timestamp, workspace_id, capture_id),
+        )
+        update_bundle_items_for_capture(
+            db,
+            workspace_id=workspace_id,
+            capture_id=capture_id,
+            timestamp=timestamp,
         )
         write_audit(
             db,
@@ -1847,6 +2292,249 @@ def routing_dispatch_capture(
     return 202, response
 
 
+def routing_dispatch_bundle(
+    data_root: Path,
+    workspace_id: str,
+    actor: dict[str, str | None],
+    dependencies: dict[str, object],
+    payload: dict[str, object],
+) -> tuple[int, dict[str, object]]:
+    chat_provider_app_id = chat_provider_app_id_from_dependencies(dependencies)
+    bundle_id = bounded_identifier(payload.get("bundle_id"), max_length=160)
+    if not bundle_id:
+        return error_payload(400, "invalid_bundle_id", "routing.dispatch_bundle requires bundle_id.")
+    actor_user_id = str(actor["user_id"])
+    timestamp = now_timestamp()
+    agent_id = bounded_identifier(payload.get("agent_id") or payload.get("agent_type_id"), max_length=128)
+    if not agent_id:
+        agent_id = DEFAULT_RUNTIME_AGENT_ID
+
+    ensure_schema(data_root, workspace_id)
+    db = connect(data_root)
+    try:
+        db.execute("BEGIN IMMEDIATE")
+        bundle = bundle_by_id(db, workspace_id, bundle_id)
+        if bundle is None:
+            db.rollback()
+            return error_payload(404, "bundle_not_found", "No matching Senses capture bundle was found.")
+        if not actor_can_access_bundle(db, workspace_id=workspace_id, actor=actor, bundle=bundle):
+            db.rollback()
+            return error_payload(403, "senses_permission_forbidden", "You cannot dispatch this Senses bundle.")
+        items = bundle_items_with_captures(db, workspace_id, bundle_id)
+        readiness = bundle_readiness_payload(items)
+        if not readiness["ready"]:
+            db.rollback()
+            return error_payload(
+                409,
+                "invalid_bundle_state",
+                "routing.dispatch_bundle requires a stored frame, stored audio, and completed non-empty transcript.",
+                bundle_id=bundle_id,
+                readiness=readiness,
+            )
+        frame_capture = bundle_capture_for_role(items, "frame")
+        audio_capture = bundle_capture_for_role(items, "audio")
+        if frame_capture is None or audio_capture is None:
+            db.rollback()
+            return error_payload(
+                409,
+                "invalid_bundle_state",
+                "routing.dispatch_bundle requires both frame and audio bundle parts.",
+                bundle_id=bundle_id,
+                readiness=readiness,
+            )
+        if bundle["runtime_session_id"] and bundle["turn_id"]:
+            db.commit()
+            return 200, bundle_dispatch_existing_response(
+                bundle,
+                items,
+                chat_provider_app_id=chat_provider_app_id,
+            )
+
+        pending = latest_pending_dispatch_attempt(db, workspace_id=workspace_id, capture_id=str(frame_capture["capture_id"]))
+        if pending is not None:
+            db.rollback()
+            return error_payload(
+                409,
+                "dispatch_in_progress",
+                "A runtime dispatch attempt is already pending for this bundle frame.",
+                attempt=dispatch_attempt_payload(pending, chat_provider_app_id=chat_provider_app_id),
+                bundle_id=bundle_id,
+            )
+
+        device = db.execute(
+            "SELECT * FROM devices WHERE workspace_id = ? AND device_id = ?",
+            (workspace_id, frame_capture["device_id"]),
+        ).fetchone()
+        if device is None:
+            db.rollback()
+            return error_payload(404, "device_not_found", "The bundle device no longer exists.")
+
+        settings_row = db.execute("SELECT * FROM settings WHERE workspace_id = ?", (workspace_id,)).fetchone()
+        settings = dict(settings_row) if settings_row is not None else {}
+        routing_session = ensure_routing_session(
+            db,
+            workspace_id=workspace_id,
+            user_id=actor_user_id,
+            device_id=str(frame_capture["device_id"]),
+            device_session_id=text_or_none(frame_capture["device_session_id"]),
+            timestamp=timestamp,
+        )
+        route = select_capture_route(
+            capture=frame_capture,
+            routing_session=routing_session,
+            settings=settings,
+            payload=payload,
+            timestamp=timestamp,
+        )
+        target_thread_kind = str(route["target_thread_kind"])
+        if target_thread_kind in {"new_primary", "new_task"}:
+            session_pending = latest_pending_dispatch_attempt_for_routing_session(
+                db,
+                workspace_id=workspace_id,
+                routing_session_id=str(routing_session["routing_session_id"]),
+                target_thread_kind=target_thread_kind,
+            )
+            if session_pending is not None:
+                db.rollback()
+                return error_payload(
+                    409,
+                    "dispatch_in_progress",
+                    "A runtime dispatch attempt is already pending for this routing session target.",
+                    attempt=dispatch_attempt_payload(session_pending, chat_provider_app_id=chat_provider_app_id),
+                    routing_session_id=routing_session["routing_session_id"],
+                    bundle_id=bundle_id,
+                )
+
+        previous_attempts = int(
+            db.execute(
+                """
+                SELECT COUNT(*) FROM runtime_dispatch_attempts
+                WHERE workspace_id = ? AND capture_id = ?
+                """,
+                (workspace_id, frame_capture["capture_id"]),
+            ).fetchone()[0]
+        )
+        attempt_id = prefixed_id("rda")
+        request_id = f"dispatch-bundle-{attempt_id}"
+        transcript = str(readiness["transcript"])
+        runtime_request = runtime_launch_request_for_bundle(
+            bundle=bundle,
+            frame_capture=frame_capture,
+            audio_capture=audio_capture,
+            device=device,
+            attempt_id=attempt_id,
+            request_id=request_id,
+            route=route,
+            agent_id=agent_id,
+            transcript=transcript,
+        )
+        db.execute(
+            """
+            INSERT INTO runtime_dispatch_attempts(
+              workspace_id, attempt_id, capture_id, routing_session_id, request_id,
+              route_kind, target_thread_kind, status, runtime_session_id, thread_id, turn_id,
+              retry_count, agent_id, runtime_request_json, created_at, updated_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?, NULL, ?, ?, ?, ?, ?)
+            """,
+            (
+                workspace_id,
+                attempt_id,
+                frame_capture["capture_id"],
+                routing_session["routing_session_id"],
+                request_id,
+                route["route_kind"],
+                route["target_thread_kind"],
+                route["runtime_session_id"],
+                route["thread_id"],
+                previous_attempts,
+                agent_id,
+                encode_json_object(runtime_request),
+                timestamp,
+                timestamp,
+            ),
+        )
+        db.execute(
+            """
+            UPDATE capture_bundles
+            SET status = 'dispatching',
+                error_code = NULL,
+                updated_at = ?
+            WHERE workspace_id = ? AND bundle_id = ?
+            """,
+            (timestamp, workspace_id, bundle_id),
+        )
+        db.execute(
+            """
+            UPDATE routing_sessions
+            SET device_session_id = ?,
+                last_capture_id = ?,
+                last_routing_kind = ?,
+                updated_at = ?
+            WHERE workspace_id = ? AND routing_session_id = ?
+            """,
+            (
+                frame_capture["device_session_id"],
+                frame_capture["capture_id"],
+                route["route_kind"],
+                timestamp,
+                workspace_id,
+                routing_session["routing_session_id"],
+            ),
+        )
+        write_audit(
+            db,
+            workspace_id=workspace_id,
+            event_type="bundle.runtime_dispatch_requested",
+            actor_user_id=actor_user_id,
+            device_id=str(frame_capture["device_id"]),
+            details={
+                "bundle_id": bundle_id,
+                "frame_capture_id": frame_capture["capture_id"],
+                "audio_capture_id": audio_capture["capture_id"],
+                "attempt_id": attempt_id,
+                "request_id": request_id,
+                "route_kind": route["route_kind"],
+                "target_thread_kind": route["target_thread_kind"],
+                "runtime_session_id": route["runtime_session_id"],
+                "thread_id": route["thread_id"],
+                "agent_id": agent_id,
+            },
+        )
+        db.commit()
+        attempt = db.execute(
+            "SELECT * FROM runtime_dispatch_attempts WHERE workspace_id = ? AND attempt_id = ?",
+            (workspace_id, attempt_id),
+        ).fetchone()
+        updated_bundle = bundle_by_id(db, workspace_id, bundle_id)
+        updated_items = bundle_items_with_captures(db, workspace_id, bundle_id)
+        updated_session = db.execute(
+            "SELECT * FROM routing_sessions WHERE workspace_id = ? AND routing_session_id = ?",
+            (workspace_id, routing_session["routing_session_id"]),
+        ).fetchone()
+    except Exception:
+        db.rollback()
+        raise
+    finally:
+        db.close()
+
+    return 202, {
+        "ok": True,
+        "schema_version": BUNDLE_DISPATCH_SCHEMA_VERSION,
+        "status": "dispatch_pending",
+        "bundle_id": bundle_id,
+        "capture_id": frame_capture["capture_id"],
+        "bundle": bundle_payload(updated_bundle, updated_items, chat_provider_app_id=chat_provider_app_id),
+        "items": bundle_items_payload(updated_items, chat_provider_app_id=chat_provider_app_id),
+        "readiness": bundle_readiness_payload(updated_items),
+        "routing": route,
+        "routing_session": routing_session_payload(updated_session, chat_provider_app_id=chat_provider_app_id),
+        "runtime_dispatch_attempt": dispatch_attempt_payload(attempt, chat_provider_app_id=chat_provider_app_id),
+        "runtime_launch_requests": [runtime_request],
+        "chat": chat_link_payload(route["thread_id"], provider_app_id=chat_provider_app_id),
+        "error": None,
+    }
+
+
 def routing_reset(
     data_root: Path,
     workspace_id: str,
@@ -1945,6 +2633,7 @@ def runtime_dispatch_completed(
             "Senses runtime dispatch callbacks may only run through the runtime request callback surface.",
         )
     capture_id = text_or_none(payload.get("capture_id"))
+    bundle_id = text_or_none(payload.get("bundle_id"))
     attempt_id = text_or_none(payload.get("attempt_id"))
     request_id = text_or_none(payload.get("request_id"))
     if not capture_id or not attempt_id or not request_id:
@@ -2031,6 +2720,18 @@ def runtime_dispatch_completed(
                 """,
                 (timestamp, workspace_id, capture_id),
             )
+            if bundle_id:
+                db.execute(
+                    """
+                    UPDATE capture_bundles
+                    SET status = 'failed',
+                        error_code = 'runtime_dispatch_failed',
+                        updated_at = ?,
+                        completed_at = ?
+                    WHERE workspace_id = ? AND bundle_id = ?
+                    """,
+                    (timestamp, timestamp, workspace_id, bundle_id),
+                )
             write_audit(
                 db,
                 workspace_id=workspace_id,
@@ -2101,6 +2802,29 @@ def runtime_dispatch_completed(
             """,
             (runtime_session_id, thread_id, turn_id, timestamp, workspace_id, capture_id),
         )
+        if bundle_id:
+            db.execute(
+                """
+                UPDATE capture_bundles
+                SET status = 'dispatched',
+                    runtime_session_id = ?,
+                    thread_id = ?,
+                    turn_id = ?,
+                    error_code = NULL,
+                    updated_at = ?,
+                    completed_at = ?
+                WHERE workspace_id = ? AND bundle_id = ?
+                """,
+                (
+                    runtime_session_id,
+                    thread_id,
+                    turn_id,
+                    timestamp,
+                    timestamp,
+                    workspace_id,
+                    bundle_id,
+                ),
+            )
         update_routing_session_after_runtime_callback(
             db,
             workspace_id=workspace_id,
@@ -2256,6 +2980,45 @@ def list_captures(
     return [capture_payload(row, chat_provider_app_id=chat_provider_app_id) for row in rows]
 
 
+def list_capture_bundles(
+    data_root: Path,
+    workspace_id: str,
+    actor: dict[str, str | None],
+    *,
+    include_all: bool,
+    limit: int = 50,
+    chat_provider_app_id: str | None = None,
+) -> list[dict[str, object]]:
+    ensure_schema(data_root, workspace_id)
+    db = connect(data_root)
+    try:
+        params: list[object] = [workspace_id]
+        where = ["workspace_id = ?"]
+        if not include_all:
+            where.append("user_id = ?")
+            params.append(actor["user_id"])
+        rows = db.execute(
+            f"""
+            SELECT * FROM capture_bundles
+            WHERE {" AND ".join(where)}
+            ORDER BY updated_at DESC, created_at DESC
+            LIMIT ?
+            """,
+            [*params, max(1, min(250, int(limit)))],
+        ).fetchall()
+        bundle_ids = [str(row["bundle_id"]) for row in rows]
+        items_by_bundle = {
+            bundle_id: bundle_items_with_captures(db, workspace_id, bundle_id)
+            for bundle_id in bundle_ids
+        }
+    finally:
+        db.close()
+    return [
+        bundle_payload(row, items_by_bundle.get(str(row["bundle_id"]), []), chat_provider_app_id=chat_provider_app_id)
+        for row in rows
+    ]
+
+
 def list_routing_sessions(
     data_root: Path,
     workspace_id: str,
@@ -2302,6 +3065,27 @@ def actor_can_access_capture(
         WHERE workspace_id = ? AND device_id = ?
         """,
         (workspace_id, capture["device_id"]),
+    ).fetchone()
+    return owner is not None and str(owner["owner_user_id"]) == str(actor.get("user_id") or "")
+
+
+def actor_can_access_bundle(
+    db: sqlite3.Connection,
+    *,
+    workspace_id: str,
+    actor: dict[str, str | None],
+    bundle: sqlite3.Row,
+) -> bool:
+    if actor_is_manager(actor):
+        return True
+    if str(bundle["user_id"]) == str(actor.get("user_id") or ""):
+        return True
+    owner = db.execute(
+        """
+        SELECT owner_user_id FROM devices
+        WHERE workspace_id = ? AND device_id = ?
+        """,
+        (workspace_id, bundle["device_id"]),
     ).fetchone()
     return owner is not None and str(owner["owner_user_id"]) == str(actor.get("user_id") or "")
 
@@ -2612,6 +3396,83 @@ def runtime_launch_request_for_capture(
     return request
 
 
+def runtime_launch_request_for_bundle(
+    *,
+    bundle: sqlite3.Row,
+    frame_capture: sqlite3.Row,
+    audio_capture: sqlite3.Row,
+    device: sqlite3.Row,
+    attempt_id: str,
+    request_id: str,
+    route: dict[str, object],
+    agent_id: str,
+    transcript: str,
+) -> dict[str, object]:
+    request: dict[str, object] = {
+        "request_id": request_id,
+        "client_message_id": f"senses:{bundle['bundle_id']}:{attempt_id}",
+        "input_text": runtime_input_text_for_bundle(
+            bundle=bundle,
+            frame_capture=frame_capture,
+            audio_capture=audio_capture,
+            device=device,
+            route=route,
+            transcript=transcript,
+        ),
+        "attachments": [
+            runtime_attachment_for_capture(frame_capture),
+            runtime_attachment_for_capture(audio_capture),
+        ],
+        "app_references": [
+            {
+                "app_id": APP_ID,
+                "entity_type": "capture_bundle",
+                "entity_id": bundle["bundle_id"],
+                "label": "Senses multimodal bundle",
+            },
+            {
+                "app_id": APP_ID,
+                "entity_type": "capture",
+                "entity_id": frame_capture["capture_id"],
+                "label": "Senses frame",
+            },
+            {
+                "app_id": APP_ID,
+                "entity_type": "capture",
+                "entity_id": audio_capture["capture_id"],
+                "label": "Senses audio",
+            },
+        ],
+        "callback": {
+            "action": RUNTIME_DISPATCH_CALLBACK_ACTION,
+            "payload": {
+                "capture_id": frame_capture["capture_id"],
+                "attempt_id": attempt_id,
+                "bundle_id": bundle["bundle_id"],
+            },
+        },
+    }
+    runtime_session_id = text_or_none(route.get("runtime_session_id"))
+    if runtime_session_id:
+        request["runtime_session_id"] = runtime_session_id
+    else:
+        request.update(
+            {
+                "agent_id": agent_id,
+                "agent_type_id": agent_id,
+                "agent_label": "Senses",
+                "title": runtime_thread_title_for_bundle(
+                    bundle=bundle,
+                    frame_capture=frame_capture,
+                    device=device,
+                    route=route,
+                ),
+                "requested_mode": "sandbox",
+            }
+        )
+    return request
+
+
 def runtime_input_text(
     *,
     capture: sqlite3.Row,
@@ -2647,6 +3508,35 @@ def runtime_input_text(
     return f"{prompt}\n\n" + "\n".join(details)
 
 
+def runtime_input_text_for_bundle(
+    *,
+    bundle: sqlite3.Row,
+    frame_capture: sqlite3.Row,
+    audio_capture: sqlite3.Row,
+    device: sqlite3.Row,
+    route: dict[str, object],
+    transcript: str,
+) -> str:
+    origin_label = capture_origin_label(capture=frame_capture, device=device)
+    details = [
+        f"Senses bundle: {bundle['bundle_id']}",
+        f"Frame capture: {frame_capture['capture_id']}",
+        f"Audio capture: {audio_capture['capture_id']}",
+        f"Device: {device['display_name']} ({device['device_kind']}/{device['platform']})",
+        f"Origin: {origin_label}",
+        f"Routing: {route['route_kind']} ({route['reason']})",
+    ]
+    if frame_capture["width"] and frame_capture["height"]:
+        details.append(f"Frame: {frame_capture['width']}x{frame_capture['height']}")
+    return (
+        "Richiesta vocale trascritta:\n"
+        f"{transcript}\n\n"
+        "Usa l'immagine allegata come contesto visivo e rispondi alla richiesta dell'utente.\n"
+        "Non descrivere genericamente l'immagine se non serve.\n\n"
+        + "\n".join(details)
+    )
+
+
 def runtime_thread_title(
     *,
     capture: sqlite3.Row,
@@ -2663,6 +3553,24 @@ def runtime_thread_title(
     else:
         suffix = f"domanda {modality}"
     return f"{device_label} - {suffix}"
+
+
+def runtime_thread_title_for_bundle(
+    *,
+    bundle: sqlite3.Row,
+    frame_capture: sqlite3.Row,
+    device: sqlite3.Row,
+    route: dict[str, object],
+) -> str:
+    device_label = capture_origin_label(capture=frame_capture, device=device)
+    if route["route_kind"] == "task":
+        suffix = "task multimodale"
+    elif route["route_kind"] == "new_thread":
+        suffix = "nuova domanda multimodale"
+    else:
+        suffix = "domanda multimodale"
+    custom_title = bounded_text(bundle["prompt"], fallback="", max_length=80)
+    return custom_title or f"{device_label} - {suffix}"
 
 
 def capture_origin_label(
@@ -2911,6 +3819,37 @@ def prepare_capture_payload(
     }, None
 
 
+def normalize_bundle_item_role(value: object) -> str | None:
+    role = str(value or "").strip().lower().replace("-", "_")
+    if role in BUNDLE_ITEM_ROLES:
+        return role
+    return None
+
+
+def bundle_part_capture_payload(
+    payload: dict[str, object],
+    *,
+    role: str,
+    bundle_id: str,
+) -> dict[str, object]:
+    result = dict(payload)
+    result["action"] = "ingest.audio" if role == "audio" else "ingest.frame"
+    result.setdefault(
+        "schema_version",
+        AUDIO_CAPTURE_REQUEST_SCHEMA_VERSION if role == "audio" else CAPTURE_REQUEST_SCHEMA_VERSION,
+    )
+    metadata = metadata_payload(result.get("metadata"))
+    metadata["bundle_id"] = bundle_id
+    metadata["bundle_role"] = role
+    metadata.setdefault("origin_kind", "meta_glasses")
+    result["metadata"] = metadata
+    if role == "frame":
+        result["input_mode"] = bounded_text(result.get("input_mode"), fallback="vision.snapshot", max_length=80)
+    else:
+        result["input_mode"] = bounded_text(result.get("input_mode"), fallback="audio.push_to_talk", max_length=80)
+    return result
+
+
 def validate_device_for_ingest(
     db: sqlite3.Connection,
     *,
@@ -2985,6 +3924,79 @@ def capture_by_id_from_root(data_root: Path, workspace_id: str, capture_id: str)
         return capture_by_id(db, workspace_id, capture_id)
     finally:
         db.close()
+
+
+def bundle_by_id(db: sqlite3.Connection, workspace_id: str, bundle_id: str) -> sqlite3.Row | None:
+    if not bundle_id:
+        return None
+    return db.execute(
+        "SELECT * FROM capture_bundles WHERE workspace_id = ? AND bundle_id = ?",
+        (workspace_id, bundle_id),
+    ).fetchone()
+
+
+def bundle_item_by_role(
+    db: sqlite3.Connection,
+    workspace_id: str,
+    bundle_id: str,
+    role: str,
+) -> sqlite3.Row | None:
+    return db.execute(
+        """
+        SELECT * FROM capture_bundle_items
+        WHERE workspace_id = ? AND bundle_id = ? AND role = ?
+        """,
+        (workspace_id, bundle_id, role),
+    ).fetchone()
+
+
+def bundle_items_with_captures(
+    db: sqlite3.Connection,
+    workspace_id: str,
+    bundle_id: str,
+) -> list[dict[str, sqlite3.Row | None]]:
+    rows = db.execute(
+        """
+        SELECT * FROM capture_bundle_items
+        WHERE workspace_id = ? AND bundle_id = ?
+        ORDER BY CASE role WHEN 'frame' THEN 0 WHEN 'audio' THEN 1 ELSE 2 END, created_at
+        """,
+        (workspace_id, bundle_id),
+    ).fetchall()
+    return [
+        {
+            "item": row,
+            "capture": capture_by_id(db, workspace_id, str(row["capture_id"])),
+        }
+        for row in rows
+    ]
+
+
+def bundle_runtime_attempts(
+    db: sqlite3.Connection,
+    *,
+    workspace_id: str,
+    bundle: sqlite3.Row,
+    items: list[dict[str, sqlite3.Row | None]],
+) -> list[sqlite3.Row]:
+    capture_ids = [
+        str(capture["capture_id"])
+        for capture in (item.get("capture") for item in items)
+        if capture is not None
+    ]
+    if not capture_ids:
+        return []
+    placeholders = ", ".join("?" for _ in capture_ids)
+    return db.execute(
+        f"""
+        SELECT * FROM runtime_dispatch_attempts
+        WHERE workspace_id = ?
+          AND capture_id IN ({placeholders})
+        ORDER BY created_at DESC
+        LIMIT 25
+        """,
+        [workspace_id, *capture_ids],
+    ).fetchall()
 
 
 def capture_storage_path(
@@ -3089,6 +4101,63 @@ def mark_capture_transcription_requested(
         db.close()
 
 
+def claim_transcription_request_for_capture(
+    data_root: Path,
+    *,
+    workspace_id: str,
+    capture_id: str,
+    provider_app_id: str,
+) -> list[dict[str, object]]:
+    timestamp = now_timestamp()
+    ensure_schema(data_root, workspace_id)
+    db = connect(data_root)
+    try:
+        db.execute("BEGIN IMMEDIATE")
+        capture = capture_by_id(db, workspace_id, capture_id)
+        if capture is None or str(capture["status"]) != "stored" or not str(capture["input_mode"] or "").startswith("audio."):
+            db.rollback()
+            return []
+        metadata = decode_json_object(capture["metadata_json"])
+        transcription = metadata.get("transcription") if isinstance(metadata.get("transcription"), dict) else {}
+        if not transcription_needs_background_submit(transcription, timestamp=timestamp):
+            db.rollback()
+            return []
+        request_id = text_or_none(transcription.get("request_id")) or f"transcribe-{capture['capture_id']}"
+        attempt_count = bounded_int(transcription.get("attempt_count"), default=0, minimum=0, maximum=1000) + 1
+        metadata["transcription"] = {
+            **transcription,
+            "status": "submitted",
+            "request_id": request_id,
+            "provider_app_id": provider_app_id,
+            "text": bounded_text(transcription.get("text"), fallback="", max_length=12000),
+            "error": None,
+            "attempt_count": attempt_count,
+            "submitted_at": timestamp,
+            "updated_at": timestamp,
+        }
+        db.execute(
+            """
+            UPDATE captures
+            SET metadata_json = ?, updated_at = ?
+            WHERE workspace_id = ? AND capture_id = ?
+            """,
+            (encode_json_object(metadata), timestamp, workspace_id, capture["capture_id"]),
+        )
+        update_bundle_items_for_capture(
+            db,
+            workspace_id=workspace_id,
+            capture_id=capture_id,
+            timestamp=timestamp,
+        )
+        db.commit()
+        return [speech_transcription_dependency_request(capture=capture, request_id=request_id)]
+    except Exception:
+        db.rollback()
+        raise
+    finally:
+        db.close()
+
+
 def claim_background_transcription_requests(
     data_root: Path,
     *,
@@ -3141,6 +4210,12 @@ def claim_background_transcription_requests(
                 WHERE workspace_id = ? AND capture_id = ?
                 """,
                 (encode_json_object(metadata), timestamp, workspace_id, capture["capture_id"]),
+            )
+            update_bundle_items_for_capture(
+                db,
+                workspace_id=workspace_id,
+                capture_id=str(capture["capture_id"]),
+                timestamp=timestamp,
             )
             request = speech_transcription_dependency_request(capture=capture, request_id=request_id)
             claimed.append(
@@ -3249,6 +4324,291 @@ def capture_payload(row: sqlite3.Row | None, *, chat_provider_app_id: str | None
         "created_at": row["created_at"],
         "updated_at": row["updated_at"],
     }
+
+
+def bundle_action_response(
+    bundle: sqlite3.Row | None,
+    items: list[dict[str, sqlite3.Row | None]],
+    *,
+    chat_provider_app_id: str | None,
+) -> dict[str, object]:
+    payload = bundle_payload(bundle, items, chat_provider_app_id=chat_provider_app_id)
+    return {
+        "ok": True,
+        "schema_version": BUNDLE_ACCEPTED_SCHEMA_VERSION,
+        "request_id": payload.get("request_id"),
+        "bundle_id": payload.get("bundle_id"),
+        "status": payload.get("status"),
+        "bundle": payload,
+        "items": bundle_items_payload(items, chat_provider_app_id=chat_provider_app_id),
+        "readiness": bundle_readiness_payload(items),
+        "dispatch": {
+            "required": True,
+            "action": "routing.dispatch_bundle",
+            "ready_status": "ready",
+        },
+        "error": None,
+    }
+
+
+def bundle_part_response(
+    bundle: sqlite3.Row | None,
+    items: list[dict[str, sqlite3.Row | None]],
+    item: sqlite3.Row | None,
+    capture: sqlite3.Row | None,
+    *,
+    chat_provider_app_id: str | None,
+) -> dict[str, object]:
+    role = item["role"] if item is not None else None
+    capture_payload_value = capture_payload(capture, chat_provider_app_id=chat_provider_app_id)
+    payload = bundle_action_response(bundle, items, chat_provider_app_id=chat_provider_app_id)
+    payload.update(
+        {
+            "schema_version": BUNDLE_PART_ACCEPTED_SCHEMA_VERSION,
+            "role": role,
+            "capture_id": capture_payload_value.get("capture_id"),
+            "capture": capture_payload_value,
+            "status": capture_payload_value.get("status") or payload.get("status"),
+            "storage": capture_payload_value.get("storage") or {},
+            "transcription": capture_payload_value.get("transcription") or transcription_response_payload(None),
+        }
+    )
+    return payload
+
+
+def bundle_dispatch_existing_response(
+    bundle: sqlite3.Row,
+    items: list[dict[str, sqlite3.Row | None]],
+    *,
+    chat_provider_app_id: str | None,
+) -> dict[str, object]:
+    frame_capture = bundle_capture_for_role(items, "frame")
+    return {
+        "ok": True,
+        "schema_version": BUNDLE_DISPATCH_SCHEMA_VERSION,
+        "status": "dispatched",
+        "bundle_id": bundle["bundle_id"],
+        "capture_id": frame_capture["capture_id"] if frame_capture is not None else None,
+        "bundle": bundle_payload(bundle, items, chat_provider_app_id=chat_provider_app_id),
+        "items": bundle_items_payload(items, chat_provider_app_id=chat_provider_app_id),
+        "readiness": bundle_readiness_payload(items),
+        "runtime_launch_requests": [],
+        "chat": chat_link_payload(bundle["thread_id"], provider_app_id=chat_provider_app_id),
+        "error": None,
+    }
+
+
+def bundle_payload(
+    row: sqlite3.Row | None,
+    items: list[dict[str, sqlite3.Row | None]],
+    *,
+    chat_provider_app_id: str | None = None,
+) -> dict[str, object]:
+    if row is None:
+        return {}
+    frame_capture = bundle_capture_for_role(items, "frame")
+    audio_capture = bundle_capture_for_role(items, "audio")
+    chat = chat_link_payload(row["thread_id"], provider_app_id=chat_provider_app_id)
+    return {
+        "workspace_id": row["workspace_id"],
+        "bundle_id": row["bundle_id"],
+        "request_id": row["request_id"],
+        "user_id": row["user_id"],
+        "device_id": row["device_id"],
+        "device_session_id": row["device_session_id"],
+        "status": row["status"],
+        "prompt": row["prompt"],
+        "frame_capture_id": frame_capture["capture_id"] if frame_capture is not None else None,
+        "audio_capture_id": audio_capture["capture_id"] if audio_capture is not None else None,
+        "runtime_session_id": row["runtime_session_id"],
+        "thread_id": row["thread_id"],
+        "turn_id": row["turn_id"],
+        "chat": chat,
+        "readiness": bundle_readiness_payload(items),
+        "items": bundle_items_payload(items, chat_provider_app_id=chat_provider_app_id),
+        "error_code": row["error_code"],
+        "metadata": decode_json_object(row["metadata_json"]),
+        "created_at": row["created_at"],
+        "updated_at": row["updated_at"],
+        "completed_at": row["completed_at"],
+    }
+
+
+def bundle_items_payload(
+    items: list[dict[str, sqlite3.Row | None]],
+    *,
+    chat_provider_app_id: str | None,
+) -> list[dict[str, object]]:
+    payload: list[dict[str, object]] = []
+    for item in items:
+        row = item.get("item")
+        capture = item.get("capture")
+        if row is None:
+            continue
+        payload.append(
+            {
+                "workspace_id": row["workspace_id"],
+                "bundle_id": row["bundle_id"],
+                "role": row["role"],
+                "capture_id": row["capture_id"],
+                "request_id": row["request_id"],
+                "status": row["status"],
+                "error_code": row["error_code"],
+                "capture": capture_payload(capture, chat_provider_app_id=chat_provider_app_id),
+                "metadata": decode_json_object(row["metadata_json"]),
+                "created_at": row["created_at"],
+                "updated_at": row["updated_at"],
+            }
+        )
+    return payload
+
+
+def bundle_readiness_payload(items: list[dict[str, sqlite3.Row | None]]) -> dict[str, object]:
+    frame_capture = bundle_capture_for_role(items, "frame")
+    audio_capture = bundle_capture_for_role(items, "audio")
+    missing_roles = [
+        role
+        for role, capture in (("frame", frame_capture), ("audio", audio_capture))
+        if capture is None
+    ]
+    transcription = transcription_payload(audio_capture)
+    transcript = text_or_none(transcription.get("text")) or ""
+    frame_status = str(frame_capture["status"]) if frame_capture is not None else None
+    audio_status = str(audio_capture["status"]) if audio_capture is not None else None
+    transcription_status = text_or_none(transcription.get("status")) or "not_requested"
+    frame_ready = frame_status == "stored"
+    audio_ready = audio_status == "stored"
+    transcript_ready = transcription_status == "completed" and bool(transcript)
+    ready = not missing_roles and frame_ready and audio_ready and transcript_ready
+    blocking_code = None
+    blocking_detail = None
+    if missing_roles:
+        blocking_code = "missing_" + "_".join(missing_roles)
+        blocking_detail = "Bundle is waiting for required media parts."
+    elif not frame_ready:
+        blocking_code = "frame_not_stored"
+        blocking_detail = "Bundle frame is not stored in Storage yet."
+    elif not audio_ready:
+        blocking_code = "audio_not_stored"
+        blocking_detail = "Bundle audio is not stored in Storage yet."
+    elif transcription_status == "completed" and not transcript:
+        blocking_code = "transcript_empty"
+        blocking_detail = "Speech transcription completed with no usable text."
+    elif transcription_status in {"failed", "empty", "unavailable", "not_requested"}:
+        blocking_code = f"transcription_{transcription_status}"
+        blocking_detail = "Speech transcription is not available for this audio capture."
+    elif not transcript_ready:
+        blocking_code = "transcription_pending"
+        blocking_detail = "Speech transcription has not completed yet."
+    return {
+        "ready": ready,
+        "status": "ready" if ready else blocking_code,
+        "blocking_code": blocking_code,
+        "blocking_detail": blocking_detail,
+        "missing_roles": missing_roles,
+        "frame_status": frame_status,
+        "audio_status": audio_status,
+        "transcription_status": transcription_status,
+        "transcript": transcript,
+    }
+
+
+def bundle_capture_for_role(
+    items: list[dict[str, sqlite3.Row | None]],
+    role: str,
+) -> sqlite3.Row | None:
+    for item in items:
+        row = item.get("item")
+        if row is not None and str(row["role"]) == role:
+            return item.get("capture")
+    return None
+
+
+def update_bundle_items_for_capture(
+    db: sqlite3.Connection,
+    *,
+    workspace_id: str,
+    capture_id: str,
+    timestamp: str,
+) -> None:
+    items = db.execute(
+        """
+        SELECT * FROM capture_bundle_items
+        WHERE workspace_id = ? AND capture_id = ?
+        """,
+        (workspace_id, capture_id),
+    ).fetchall()
+    if not items:
+        return
+    capture = capture_by_id(db, workspace_id, capture_id)
+    for item in items:
+        db.execute(
+            """
+            UPDATE capture_bundle_items
+            SET status = ?, error_code = ?, updated_at = ?
+            WHERE workspace_id = ? AND bundle_id = ? AND role = ?
+            """,
+            (
+                capture["status"] if capture is not None else "missing",
+                capture["error_code"] if capture is not None else "capture_missing",
+                timestamp,
+                workspace_id,
+                item["bundle_id"],
+                item["role"],
+            ),
+        )
+        update_bundle_status_from_items(
+            db,
+            workspace_id=workspace_id,
+            bundle_id=str(item["bundle_id"]),
+            timestamp=timestamp,
+        )
+
+
+def update_bundle_status_from_items(
+    db: sqlite3.Connection,
+    *,
+    workspace_id: str,
+    bundle_id: str,
+    timestamp: str,
+) -> None:
+    bundle = bundle_by_id(db, workspace_id, bundle_id)
+    if bundle is None:
+        return
+    current_status = str(bundle["status"] or "")
+    if current_status in {"dispatching", "dispatched"}:
+        return
+    items = bundle_items_with_captures(db, workspace_id, bundle_id)
+    readiness = bundle_readiness_payload(items)
+    status = bundle_status_from_readiness(readiness)
+    error_code = text_or_none(readiness.get("blocking_code")) if status == "failed" else None
+    completed_at = timestamp if status in {"ready", "failed"} else None
+    db.execute(
+        """
+        UPDATE capture_bundles
+        SET status = ?,
+            error_code = ?,
+            updated_at = ?,
+            completed_at = COALESCE(?, completed_at)
+        WHERE workspace_id = ? AND bundle_id = ?
+        """,
+        (status, error_code, timestamp, completed_at, workspace_id, bundle_id),
+    )
+
+
+def bundle_status_from_readiness(readiness: dict[str, object]) -> str:
+    if readiness.get("ready"):
+        return "ready"
+    blocking_code = text_or_none(readiness.get("blocking_code")) or ""
+    if blocking_code.startswith("missing_"):
+        return "waiting_for_parts"
+    if blocking_code in {"frame_not_stored", "audio_not_stored"}:
+        return "storing"
+    if blocking_code == "transcription_pending":
+        return "transcribing"
+    if blocking_code.startswith("transcription_") or blocking_code == "transcript_empty":
+        return "failed"
+    return "waiting_for_parts"
 
 
 def transcription_payload(row: sqlite3.Row | None) -> dict[str, object]:
@@ -4148,16 +5508,37 @@ def app_events_for_action(action: str) -> list[dict[str, str]]:
         return [{"type": "maverick.app.data-changed", "owner_app_id": APP_ID, "resource": "devices"}]
     if normalized == "settings.update":
         return [{"type": "maverick.app.data-changed", "owner_app_id": APP_ID, "resource": "settings"}]
-    if normalized in {"ingest.frame", "ingest.audio", "storage_write.completed", SPEECH_TRANSCRIPTION_CALLBACK_ACTION}:
+    if normalized in {"ingest.frame", "ingest.audio"}:
         return [
             {"type": "maverick.app.data-changed", "owner_app_id": APP_ID, "resource": "captures"},
             {"type": "maverick.app.data-changed", "owner_app_id": APP_ID, "resource": "devices"},
         ]
-    if normalized == "background.tick":
-        return [{"type": "maverick.app.data-changed", "owner_app_id": APP_ID, "resource": "captures"}]
-    if normalized in {"routing.dispatch_capture", "routing.reset", RUNTIME_DISPATCH_CALLBACK_ACTION}:
+    if normalized in {"ingest.bundle.start", "ingest.bundle_part"}:
+        return [
+            {"type": "maverick.app.data-changed", "owner_app_id": APP_ID, "resource": "bundles"},
+            {"type": "maverick.app.data-changed", "owner_app_id": APP_ID, "resource": "captures"},
+            {"type": "maverick.app.data-changed", "owner_app_id": APP_ID, "resource": "devices"},
+        ]
+    if normalized in {"storage_write.completed", SPEECH_TRANSCRIPTION_CALLBACK_ACTION}:
         return [
             {"type": "maverick.app.data-changed", "owner_app_id": APP_ID, "resource": "captures"},
+            {"type": "maverick.app.data-changed", "owner_app_id": APP_ID, "resource": "bundles"},
+            {"type": "maverick.app.data-changed", "owner_app_id": APP_ID, "resource": "devices"},
+        ]
+    if normalized == "background.tick":
+        return [
+            {"type": "maverick.app.data-changed", "owner_app_id": APP_ID, "resource": "captures"},
+            {"type": "maverick.app.data-changed", "owner_app_id": APP_ID, "resource": "bundles"},
+        ]
+    if normalized in {"routing.dispatch_capture", "routing.reset"}:
+        return [
+            {"type": "maverick.app.data-changed", "owner_app_id": APP_ID, "resource": "captures"},
+            {"type": "maverick.app.data-changed", "owner_app_id": APP_ID, "resource": "routing"},
+        ]
+    if normalized in {"routing.dispatch_bundle", RUNTIME_DISPATCH_CALLBACK_ACTION}:
+        return [
+            {"type": "maverick.app.data-changed", "owner_app_id": APP_ID, "resource": "captures"},
+            {"type": "maverick.app.data-changed", "owner_app_id": APP_ID, "resource": "bundles"},
             {"type": "maverick.app.data-changed", "owner_app_id": APP_ID, "resource": "routing"},
         ]
     if normalized in {"set_view_filter", "set_custom_view", "clear_custom_view", "view-state.changed"}:

@@ -453,6 +453,14 @@ a {
   color: var(--senses-warn);
 }
 
+.native-action-status.tone-good {
+  color: var(--senses-good);
+}
+
+.native-action-status.tone-danger {
+  color: var(--senses-danger);
+}
+
 .debug-grid {
   display: grid;
   grid-template-rows: auto auto minmax(0, 1fr);

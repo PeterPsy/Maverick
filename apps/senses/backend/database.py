@@ -8,7 +8,7 @@ from pathlib import Path
 import sqlite3
 
 
-SCHEMA_VERSION = "4"
+SCHEMA_VERSION = "5"
 DB_FILENAME = "senses.sqlite"
 PRIMARY_DB_PATH = f"data/senses/{DB_FILENAME}"
 WORKSPACE_TABLES = (
@@ -19,6 +19,8 @@ WORKSPACE_TABLES = (
     "device_sessions",
     "ingestion_requests",
     "captures",
+    "capture_bundles",
+    "capture_bundle_items",
     "routing_sessions",
     "runtime_dispatch_attempts",
     "audit",
@@ -201,6 +203,59 @@ def ensure_schema(data_root: Path, workspace_id: str) -> None:
 
             CREATE INDEX IF NOT EXISTS idx_senses_captures_runtime
               ON captures(workspace_id, runtime_session_id, turn_id);
+
+            CREATE TABLE IF NOT EXISTS capture_bundles (
+              workspace_id TEXT NOT NULL,
+              bundle_id TEXT NOT NULL,
+              request_id TEXT NOT NULL,
+              user_id TEXT NOT NULL,
+              device_id TEXT,
+              device_session_id TEXT,
+              status TEXT NOT NULL,
+              prompt TEXT NOT NULL DEFAULT '',
+              runtime_session_id TEXT,
+              thread_id TEXT,
+              turn_id TEXT,
+              error_code TEXT,
+              metadata_json TEXT NOT NULL DEFAULT '{}',
+              created_at TEXT NOT NULL,
+              updated_at TEXT NOT NULL,
+              completed_at TEXT,
+              PRIMARY KEY (workspace_id, bundle_id),
+              UNIQUE (workspace_id, request_id),
+              FOREIGN KEY (workspace_id, device_id)
+                REFERENCES devices(workspace_id, device_id)
+                ON DELETE CASCADE
+            );
+
+            CREATE INDEX IF NOT EXISTS idx_senses_capture_bundles_device_time
+              ON capture_bundles(workspace_id, device_id, created_at DESC);
+
+            CREATE INDEX IF NOT EXISTS idx_senses_capture_bundles_status_time
+              ON capture_bundles(workspace_id, status, updated_at DESC);
+
+            CREATE TABLE IF NOT EXISTS capture_bundle_items (
+              workspace_id TEXT NOT NULL,
+              bundle_id TEXT NOT NULL,
+              role TEXT NOT NULL,
+              capture_id TEXT NOT NULL,
+              request_id TEXT,
+              status TEXT NOT NULL,
+              error_code TEXT,
+              metadata_json TEXT NOT NULL DEFAULT '{}',
+              created_at TEXT NOT NULL,
+              updated_at TEXT NOT NULL,
+              PRIMARY KEY (workspace_id, bundle_id, role),
+              FOREIGN KEY (workspace_id, bundle_id)
+                REFERENCES capture_bundles(workspace_id, bundle_id)
+                ON DELETE CASCADE,
+              FOREIGN KEY (workspace_id, capture_id)
+                REFERENCES captures(workspace_id, capture_id)
+                ON DELETE CASCADE
+            );
+
+            CREATE INDEX IF NOT EXISTS idx_senses_capture_bundle_items_capture
+              ON capture_bundle_items(workspace_id, capture_id);
 
             CREATE TABLE IF NOT EXISTS routing_sessions (
               workspace_id TEXT NOT NULL,

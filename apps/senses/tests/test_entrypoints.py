@@ -315,6 +315,74 @@ def audio_request(
     return payload
 
 
+def bundle_start_request(
+    completed: dict[str, object],
+    *,
+    bundle_id: str = "bundle-1",
+    request_id: str = "bundle-start-1",
+    dependencies: dict[str, object] | None = None,
+    include_device: bool = True,
+) -> dict[str, object]:
+    payload: dict[str, object] = {
+        "action": "ingest.bundle.start",
+        "_workspace_id": "default",
+        "_app_actor": actor(),
+        "_app_dependencies": dependencies or resolved_storage_dependencies(),
+        "schema_version": "senses.bundle.v1",
+        "bundle_id": bundle_id,
+        "request_id": request_id,
+        "metadata": {"adapter_id": "meta_glasses", "origin_label": "Occhiali"},
+    }
+    if include_device:
+        payload["device_id"] = completed["device"]["device_id"]
+        payload["device_session_id"] = completed["device_session"]["device_session_id"]
+    return payload
+
+
+def bundle_frame_part_request(
+    completed: dict[str, object],
+    *,
+    bundle_id: str = "bundle-1",
+    request_id: str = "bundle-frame-1",
+    idempotency_key: str = "bundle-frame-1",
+) -> dict[str, object]:
+    payload = capture_request(
+        completed,
+        request_id=request_id,
+        idempotency_key=idempotency_key,
+        prompt="",
+    )
+    payload["action"] = "ingest.bundle_part"
+    payload["bundle_id"] = bundle_id
+    payload["role"] = "frame"
+    return payload
+
+
+def bundle_audio_part_request(
+    completed: dict[str, object],
+    *,
+    bundle_id: str = "bundle-1",
+    request_id: str = "bundle-audio-1",
+    idempotency_key: str = "bundle-audio-1",
+    dependencies: dict[str, object] | None = None,
+    include_device: bool = True,
+) -> dict[str, object]:
+    payload = audio_request(
+        completed,
+        request_id=request_id,
+        idempotency_key=idempotency_key,
+        prompt="",
+        dependencies=dependencies,
+    )
+    payload["action"] = "ingest.bundle_part"
+    payload["bundle_id"] = bundle_id
+    payload["role"] = "audio"
+    if not include_device:
+        payload.pop("device_id", None)
+        payload.pop("device_session_id", None)
+    return payload
+
+
 def storage_callback_payload(
     accepted: dict[str, object],
     *,
@@ -398,7 +466,13 @@ def runtime_callback_payload(
     error: str = "",
 ) -> dict[str, object]:
     attempt = dispatch["runtime_dispatch_attempt"]
-    return {
+    request = dispatch["runtime_launch_requests"][0]
+    callback_payload = {}
+    if isinstance(request, dict) and isinstance(request.get("callback"), dict):
+        raw_callback_payload = request["callback"].get("payload")
+        if isinstance(raw_callback_payload, dict):
+            callback_payload = raw_callback_payload
+    payload = {
         "action": "runtime_dispatch.completed",
         "_workspace_id": "default",
         "_app_surface": "runtime_request_callback",
@@ -410,8 +484,11 @@ def runtime_callback_payload(
         "runtime_session_id": runtime_session_id,
         "turn_id": turn_id,
         "error": error,
-        "request": dispatch["runtime_launch_requests"][0],
+        "request": request,
     }
+    if callback_payload.get("bundle_id"):
+        payload["bundle_id"] = callback_payload["bundle_id"]
+    return payload
 
 
 class SensesPhase8EntrypointTest(unittest.TestCase):
@@ -462,8 +539,12 @@ class SensesPhase8EntrypointTest(unittest.TestCase):
             self.assertIn("pairing.start", manifest["backend_actions"])
             self.assertIn("devices.revoke", manifest["backend_actions"])
             self.assertIn("captures.get", manifest["backend_actions"])
+            self.assertIn("captures.bundle_get", manifest["backend_actions"])
+            self.assertIn("ingest.bundle.start", manifest["backend_actions"])
+            self.assertIn("ingest.bundle_part", manifest["backend_actions"])
             self.assertIn("ingest.frame", manifest["backend_actions"])
             self.assertIn("ingest.audio", manifest["backend_actions"])
+            self.assertIn("routing.dispatch_bundle", manifest["backend_actions"])
             self.assertIn("routing.dispatch_capture", manifest["backend_actions"])
             self.assertIn("routing.reset", manifest["backend_actions"])
             self.assertIn("storage_write.completed", manifest["callback_actions"])
@@ -1079,6 +1160,151 @@ class SensesPhase8EntrypointTest(unittest.TestCase):
             self.assertIn("Transcript: ciao Maverick", runtime_request["input_text"])
             self.assertEqual(runtime_request["attachments"][0]["content_type"], "audio/wav")
             self.assertIn("domanda vocale", runtime_request["title"])
+
+    def test_bundle_frame_audio_transcript_dispatches_one_multimodal_runtime_request(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            data_root = Path(tmp)
+            completed = start_and_complete_device(data_root)
+            dependencies = resolved_storage_dependencies(
+                speech_provider_app_id="speech",
+                speech_status="resolved",
+            )
+
+            status, started = handle_action(
+                data_root,
+                bundle_start_request(completed, dependencies=dependencies, include_device=False),
+            )
+            self.assertEqual(status, 201)
+            self.assertEqual(started["bundle"]["status"], "started")
+
+            status, replayed_start = handle_action(
+                data_root,
+                bundle_start_request(completed, dependencies=dependencies, include_device=False),
+            )
+            self.assertEqual(status, 200)
+            self.assertEqual(replayed_start["bundle"]["status"], "started")
+            self.assertIsNone(replayed_start["bundle"]["device_id"])
+
+            status, frame_part = handle_action(data_root, bundle_frame_part_request(completed))
+            self.assertEqual(status, 202)
+            self.assertEqual(frame_part["role"], "frame")
+            status, stored_frame = handle_action(data_root, storage_callback_payload(frame_part))
+            self.assertEqual(status, 200)
+            self.assertEqual(stored_frame["capture"]["status"], "stored")
+
+            status, audio_part = handle_action(
+                data_root,
+                bundle_audio_part_request(completed, dependencies=dependencies, include_device=False),
+            )
+            self.assertEqual(status, 202)
+            self.assertEqual(audio_part["role"], "audio")
+            status, stored_audio = handle_action(data_root, storage_callback_payload(audio_part))
+            self.assertEqual(status, 200)
+            self.assertEqual(stored_audio["capture"]["status"], "stored")
+
+            status, blocked = handle_action(
+                data_root,
+                {
+                    "action": "routing.dispatch_bundle",
+                    "_workspace_id": "default",
+                    "_app_actor": actor(),
+                    "_app_dependencies": dependencies,
+                    "bundle_id": "bundle-1",
+                    "agent_id": "chat",
+                },
+            )
+            self.assertEqual(status, 409)
+            self.assertEqual(blocked["error"], "invalid_bundle_state")
+            self.assertEqual(blocked["readiness"]["blocking_code"], "transcription_pending")
+
+            status, tick = service.background_tick(data_root, "default", dependencies)
+            self.assertEqual(status, 200)
+            self.assertEqual(tick["status"], "queued")
+            speech_request = tick["dependency_backend_requests"][0]
+
+            status, transcribed = handle_action(
+                data_root,
+                {
+                    "action": "speech_transcription.completed",
+                    "_workspace_id": "default",
+                    "_app_surface": "dependency_backend_request_callback",
+                    "_app_dependencies": dependencies,
+                    "capture_id": audio_part["capture_id"],
+                    "request_id": speech_request["request_id"],
+                    "dependency_alias": "speech-to-text",
+                    "dependency_backend_status": "completed",
+                    "dependency_backend_result": {
+                        "status_code": 200,
+                        "dependency_provider_app_id": "speech",
+                        "json": {
+                            "job_id": "stt_bundle",
+                            "text": "che prezzo ha questo prodotto?",
+                            "language": "it",
+                            "duration_seconds": 1.2,
+                        },
+                    },
+                    "request": speech_request,
+                },
+            )
+            self.assertEqual(status, 200)
+            self.assertEqual(transcribed["transcription"]["status"], "completed")
+
+            status, fetched = handle_action(
+                data_root,
+                {
+                    "action": "captures.bundle_get",
+                    "_workspace_id": "default",
+                    "_app_actor": actor(),
+                    "_app_dependencies": dependencies,
+                    "bundle_id": "bundle-1",
+                },
+            )
+            self.assertEqual(status, 200)
+            self.assertTrue(fetched["readiness"]["ready"])
+            self.assertEqual(fetched["readiness"]["transcript"], "che prezzo ha questo prodotto?")
+
+            status, dispatch = handle_action(
+                data_root,
+                {
+                    "action": "routing.dispatch_bundle",
+                    "_workspace_id": "default",
+                    "_app_actor": actor(),
+                    "_app_dependencies": dependencies,
+                    "bundle_id": "bundle-1",
+                    "agent_id": "chat",
+                },
+            )
+            self.assertEqual(status, 202)
+            self.assertEqual(dispatch["status"], "dispatch_pending")
+            runtime_request = dispatch["runtime_launch_requests"][0]
+            self.assertIn("Richiesta vocale trascritta:\nche prezzo ha questo prodotto?", runtime_request["input_text"])
+            self.assertIn("Usa l'immagine allegata come contesto visivo", runtime_request["input_text"])
+            self.assertNotIn("What am I looking at?", runtime_request["input_text"])
+            self.assertEqual([item["content_type"] for item in runtime_request["attachments"]], ["image/jpeg", "audio/wav"])
+            self.assertEqual(runtime_request["callback"]["payload"]["bundle_id"], "bundle-1")
+            self.assertEqual(runtime_request["app_references"][0]["entity_type"], "capture_bundle")
+
+            status, callback = handle_action(
+                data_root,
+                runtime_callback_payload(dispatch, runtime_session_id="runtime-bundle-1", turn_id="turn-bundle-1"),
+            )
+            self.assertEqual(status, 200)
+            self.assertEqual(callback["status"], "submitted")
+
+            status, after_callback = handle_action(
+                data_root,
+                {
+                    "action": "captures.bundle_get",
+                    "_workspace_id": "default",
+                    "_app_actor": actor(),
+                    "_app_dependencies": dependencies,
+                    "bundle_id": "bundle-1",
+                },
+            )
+            self.assertEqual(status, 200)
+            self.assertEqual(after_callback["bundle"]["status"], "dispatched")
+            self.assertEqual(after_callback["bundle"]["thread_id"], "runtime-bundle-1")
+            self.assertEqual(after_callback["chat"]["deep_link"], "/app/chat/threads/runtime-bundle-1")
 
     def test_ingest_audio_requires_bounded_duration(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

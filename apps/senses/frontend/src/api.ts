@@ -1,5 +1,6 @@
 import type {
   SensesActionResult,
+  SensesCaptureBundle,
   SensesDevice,
   SensesOverview,
   SensesPairingSession,
@@ -96,4 +97,80 @@ export async function resetRoutingSession(routingSessionId: string): Promise<Sen
     throw new SensesApiError('invalid_routing_response', 'Senses did not return routing sessions.', 500);
   }
   return payload.routing_sessions;
+}
+
+export async function startCaptureBundle(input: {
+  bundleId: string;
+  requestId: string;
+}): Promise<SensesCaptureBundle> {
+  const payload = await request({
+    action: 'ingest.bundle.start',
+    schema_version: 'senses.bundle.v1',
+    bundle_id: input.bundleId,
+    request_id: input.requestId,
+    metadata: {
+      origin_kind: 'meta_glasses',
+      origin_label: 'Occhiali',
+      source: 'senses.frontend.webkit_media_recorder',
+    },
+  });
+  if (!payload.bundle) {
+    throw new SensesApiError('invalid_bundle_response', 'Senses did not return a capture bundle.', 500);
+  }
+  return payload.bundle;
+}
+
+export async function ingestBundleAudioPart(input: {
+  bundleId: string;
+  requestId: string;
+  idempotencyKey: string;
+  contentBase64: string;
+  contentType: string;
+  durationSeconds: number;
+  capturedAt: string;
+  sizeBytes: number;
+}): Promise<SensesCaptureBundle> {
+  const payload = await request({
+    action: 'ingest.bundle_part',
+    bundle_id: input.bundleId,
+    role: 'audio',
+    schema_version: 'senses.audio.v1',
+    request_id: input.requestId,
+    idempotency_key: input.idempotencyKey,
+    input_mode: 'audio.webkit_media_recorder',
+    prompt: '',
+    content_type: input.contentType,
+    content_base64: input.contentBase64,
+    duration_seconds: input.durationSeconds,
+    captured_at: input.capturedAt,
+    metadata: {
+      origin_kind: 'meta_glasses',
+      origin_label: 'Occhiali',
+      source: 'senses.frontend.webkit_media_recorder',
+      duration_seconds: input.durationSeconds,
+      decoded_size_bytes: input.sizeBytes,
+    },
+  });
+  if (!payload.bundle) {
+    throw new SensesApiError('invalid_bundle_response', 'Senses did not return a capture bundle.', 500);
+  }
+  return payload.bundle;
+}
+
+export async function getCaptureBundle(bundleId: string): Promise<SensesCaptureBundle> {
+  const payload = await request({ action: 'captures.bundle_get', bundle_id: bundleId });
+  if (!payload.bundle) {
+    throw new SensesApiError('invalid_bundle_response', 'Senses did not return a capture bundle.', 500);
+  }
+  return payload.bundle;
+}
+
+export async function dispatchCaptureBundle(bundleId: string): Promise<SensesActionResult> {
+  const payload = await request({
+    action: 'routing.dispatch_bundle',
+    schema_version: 'senses.bundle.dispatch.v1',
+    bundle_id: bundleId,
+    agent_id: 'chat',
+  });
+  return payload;
 }

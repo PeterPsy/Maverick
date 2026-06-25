@@ -20,7 +20,6 @@ import {
   RotateCcw,
   Route,
   Search,
-  Send,
   Settings as SettingsIcon,
   ShieldCheck,
   SlidersHorizontal,
@@ -30,9 +29,23 @@ import {
   X,
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
-import { useCallback, useEffect, useMemo, useState } from 'react';
-import { loadOverview, loadViewFilter, resetRoutingSession, revokeDevice, setViewFilter, startPairing, updateSettings } from './api';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import {
+  SensesApiError,
+  dispatchCaptureBundle,
+  getCaptureBundle,
+  ingestBundleAudioPart,
+  loadOverview,
+  loadViewFilter,
+  resetRoutingSession,
+  revokeDevice,
+  setViewFilter,
+  startCaptureBundle,
+  startPairing,
+  updateSettings,
+} from './api';
 import type {
+  SensesCaptureBundle,
   SensesCapture,
   SensesDevice,
   SensesOverview,
@@ -42,11 +55,20 @@ import type {
 } from './types';
 
 const APP_EVENTS_WS_PATH = '/api/apps/events/ws';
-const REFRESH_RESOURCES = new Set(['devices', 'pairing', 'settings', 'captures', 'routing', 'view-state']);
+const REFRESH_RESOURCES = new Set(['devices', 'pairing', 'settings', 'captures', 'bundles', 'routing', 'view-state']);
 const NATIVE_STATUS_ACK_TIMEOUT_MS = 4500;
 const NATIVE_COMMAND_FINAL_TIMEOUT_MS = 75000;
 const NATIVE_AUDIO_RECORDING_SECONDS = 8;
 const NATIVE_AUDIO_RECORDING_MS = NATIVE_AUDIO_RECORDING_SECONDS * 1000;
+const BUNDLE_POLL_INTERVAL_MS = 1200;
+const BUNDLE_POLL_TIMEOUT_MS = 75000;
+const BUNDLE_AUDIO_UPLOAD_RETRY_MS = 1000;
+const BUNDLE_AUDIO_UPLOAD_TIMEOUT_MS = 15000;
+const MICROPHONE_AUDIO_CONSTRAINTS: MediaTrackConstraints = {
+  autoGainControl: true,
+  echoCancellation: true,
+  noiseSuppression: true,
+};
 const TAB_ITEMS = [
   { id: 'devices', label: 'Devices', icon: Glasses },
   { id: 'pairing', label: 'Pairing', icon: KeyRound },
@@ -59,7 +81,8 @@ const TAB_ITEMS = [
 type TabId = (typeof TAB_ITEMS)[number]['id'];
 type CaptureFilter = 'all' | 'stored' | 'chat-linked' | 'chat-pending' | 'errors';
 type RoutingFilter = 'all' | 'mapped' | 'pending' | 'task';
-type NativeCommand = 'refreshNativeStatus' | 'pairGlasses' | 'ask' | 'askAudio' | 'openLogin';
+type NativeCommand = 'refreshNativeStatus' | 'pairGlasses' | 'ask' | 'askAudio' | 'captureFrameForBundle' | 'openLogin';
+type AskGlassesStatus = 'idle' | 'preparing' | 'recording_and_capturing' | 'transcribing' | 'dispatching' | 'completed' | 'error';
 type PendingNativeCommand = {
   command: NativeCommand;
   requestId: string;
@@ -76,6 +99,13 @@ type ViewFilterState = {
   query: string;
   capture_filter: CaptureFilter;
   routing_filter: RoutingFilter;
+};
+type AskGlassesFlow = {
+  status: AskGlassesStatus;
+  bundleId: string | null;
+  requestId: string | null;
+  recordingEndsAt: number | null;
+  startedAt: number | null;
 };
 
 interface SensesNativeStatus {
@@ -159,7 +189,18 @@ export function App() {
   const [busyAction, setBusyAction] = useState('');
   const [pendingNativeCommand, setPendingNativeCommand] = useState<PendingNativeCommand | null>(null);
   const [nativeClockNow, setNativeClockNow] = useState(() => Date.now());
+  const [askGlassesFlow, setAskGlassesFlow] = useState<AskGlassesFlow>({
+    status: 'idle',
+    bundleId: null,
+    requestId: null,
+    recordingEndsAt: null,
+    startedAt: null,
+  });
   const [settingsDraft, setSettingsDraft] = useState<SettingsDraft | null>(null);
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const mediaStreamRef = useRef<MediaStream | null>(null);
+  const recordingChunksRef = useRef<Blob[]>([]);
+  const recordingContentTypeRef = useRef('');
   const nativeHost = useNativeHost();
   const canPersistViewFilter = Boolean(
     overview?.management.can_manage_workspace_devices || overview?.actor.can_manage_workspace_devices,
@@ -347,6 +388,98 @@ export function App() {
     setNotice('Code copied.');
   }
 
+  async function runAskGlasses() {
+    if (busyAction === 'ask-glasses' || askGlassesFlow.status !== 'idle') {
+      return;
+    }
+    if (!nativeHost.available) {
+      setError('iOS host is unavailable.');
+      return;
+    }
+    if (nativeHost.status?.actions?.can_ask === false) {
+      setError('Glasses capture is not ready.');
+      return;
+    }
+    if (!navigator.mediaDevices?.getUserMedia || typeof MediaRecorder === 'undefined') {
+      setError('Microphone recording is not supported in this browser.');
+      return;
+    }
+    if (window.isSecureContext === false) {
+      setError('Microphone access requires HTTPS or a trusted localhost session.');
+      return;
+    }
+
+    const bundleId = `bundle-${makeRequestId()}`;
+    const requestId = `req-${makeRequestId()}`;
+    const startedAt = Date.now();
+    setBusyAction('ask-glasses');
+    setError('');
+    setNotice('');
+    setAskGlassesFlow({
+      status: 'preparing',
+      bundleId,
+      requestId,
+      recordingEndsAt: null,
+      startedAt,
+    });
+
+    try {
+      await startCaptureBundle({ bundleId, requestId });
+      const recording = await startFixedAudioRecording(NATIVE_AUDIO_RECORDING_MS, mediaRecorderRef, mediaStreamRef, recordingChunksRef, recordingContentTypeRef);
+      setNativeClockNow(Date.now());
+      setAskGlassesFlow({
+        status: 'recording_and_capturing',
+        bundleId,
+        requestId,
+        recordingEndsAt: Date.now() + NATIVE_AUDIO_RECORDING_MS,
+        startedAt,
+      });
+      const nativeRequestId = nativeHost.send('captureFrameForBundle', { bundle_id: bundleId, request_id: requestId });
+      if (!nativeRequestId) {
+        throw new Error('iOS host is unavailable.');
+      }
+
+      const audio = await recording.done;
+      setAskGlassesFlow((current) => ({ ...current, status: 'transcribing', recordingEndsAt: null }));
+      await ingestBundleAudioPartWhenDeviceReady({
+        bundleId,
+        requestId: `audio-${makeRequestId()}`,
+        idempotencyKey: `audio-${bundleId}`,
+        contentBase64: await blobToBase64(audio.blob),
+        contentType: audio.contentType,
+        durationSeconds: audio.durationSeconds,
+        capturedAt: audio.capturedAt,
+        sizeBytes: audio.blob.size,
+      });
+
+      const readyBundle = await waitForBundleReady(bundleId);
+      setAskGlassesFlow((current) => ({ ...current, status: 'dispatching' }));
+      const dispatch = await dispatchCaptureBundle(readyBundle.bundle_id);
+      const linkedBundle = await getCaptureBundle(readyBundle.bundle_id).catch(() => dispatch.bundle || readyBundle);
+      const chatLink = linkedBundle.chat?.deep_link || dispatch.chat?.deep_link || runtimeResultChatLink(dispatch.runtime_request_results);
+      setAskGlassesFlow((current) => ({ ...current, status: 'completed' }));
+      setNotice('Ask glasses sent.');
+      await refresh({ silent: true });
+      if (chatLink) {
+        window.location.assign(chatLink);
+      }
+    } catch (err) {
+      stopRecorderSafely(mediaRecorderRef.current);
+      stopMediaStream(mediaStreamRef.current);
+      setAskGlassesFlow((current) => ({ ...current, status: 'error', recordingEndsAt: null }));
+      setError(err instanceof Error ? err.message : 'Ask glasses failed.');
+    } finally {
+      setBusyAction((current) => (current === 'ask-glasses' ? '' : current));
+      window.setTimeout(() => {
+        setAskGlassesFlow((current) => (
+          current.bundleId === bundleId && (current.status === 'completed' || current.status === 'error')
+            ? { status: 'idle', bundleId: null, requestId: null, recordingEndsAt: null, startedAt: null }
+            : current
+        ));
+      }, 1800);
+    }
+  }
+
   function runNativeCommand(command: NativeCommand) {
     if (command === 'askAudio' && nativeHost.status?.actions?.can_ask_audio !== true) {
       setBusyAction('');
@@ -361,6 +494,7 @@ export function App() {
       pairGlasses: 'native-pair',
       ask: 'native-ask',
       askAudio: 'native-ask-audio',
+      captureFrameForBundle: 'native-capture-frame-bundle',
       openLogin: 'native-login',
     };
     const requestId = nativeHost.send(command);
@@ -400,6 +534,14 @@ export function App() {
       void syncRemoteViewFilter();
     }
   }, []);
+
+  useEffect(
+    () => () => {
+      stopRecorderSafely(mediaRecorderRef.current);
+      stopMediaStream(mediaStreamRef.current);
+    },
+    [],
+  );
 
   useEffect(() => {
     if (!notice) {
@@ -644,9 +786,11 @@ export function App() {
         </div>
         {nativeHost.available ? (
           <NativeHeaderActions
+            askFlow={askGlassesFlow}
             busyAction={busyAction}
             clockNow={nativeClockNow}
             nativeHostStatus={nativeHost.status}
+            onAskGlasses={() => void runAskGlasses()}
             onCommand={(command) => runNativeCommand(command)}
             pendingCommand={pendingNativeCommand}
           />
@@ -774,13 +918,13 @@ function useNativeHost() {
     };
   }, []);
 
-  const send = useCallback((command: NativeCommand) => {
+  const send = useCallback((command: NativeCommand, extra: Record<string, unknown> = {}) => {
     if (!hasNativeHost() && window.__maverickSensesNativeStatus?.available !== true) {
       setAvailable(false);
       return null;
     }
     setAvailable(true);
-    return postNativeCommand(command);
+    return postNativeCommand(command, extra);
   }, []);
 
   return { available, status, send };
@@ -790,9 +934,10 @@ function hasNativeHost() {
   return Boolean(window.webkit?.messageHandlers?.sensesHost?.postMessage);
 }
 
-function postNativeCommand(command: NativeCommand) {
+function postNativeCommand(command: NativeCommand, extra: Record<string, unknown> = {}) {
   const requestId = makeRequestId();
   const message = {
+    ...extra,
     app_id: 'senses',
     command,
     location_href: window.location.href,
@@ -962,24 +1107,28 @@ function StatusTile({
 }
 
 function NativeHeaderActions({
+  askFlow,
   busyAction,
   clockNow,
   nativeHostStatus,
+  onAskGlasses,
   onCommand,
   pendingCommand,
 }: {
+  askFlow: AskGlassesFlow;
   busyAction: string;
   clockNow: number;
   nativeHostStatus: SensesNativeStatus | null;
+  onAskGlasses: () => void;
   onCommand: (command: NativeCommand) => void;
   pendingCommand: PendingNativeCommand | null;
 }) {
   const nativeCaptureBusy = nativeHostStatus?.capture?.busy === true;
-  const pendingCaptureCommand = pendingCommand?.command === 'ask' || pendingCommand?.command === 'askAudio';
-  const captureControlsBusy = nativeCaptureBusy || Boolean(pendingCaptureCommand);
-  const actionStatus = nativeActionStatus(pendingCommand, nativeHostStatus, clockNow);
-  const askLabel = pendingCommand?.command === 'ask' ? nativeActionButtonLabel(pendingCommand, clockNow) : 'Ask';
-  const voiceLabel = pendingCommand?.command === 'askAudio' ? nativeActionButtonLabel(pendingCommand, clockNow) : 'Voice';
+  const pendingCaptureCommand = pendingCommand?.command === 'ask' || pendingCommand?.command === 'askAudio' || pendingCommand?.command === 'captureFrameForBundle';
+  const askFlowBusy = askFlow.status !== 'idle' && askFlow.status !== 'completed' && askFlow.status !== 'error';
+  const captureControlsBusy = nativeCaptureBusy || Boolean(pendingCaptureCommand) || askFlowBusy;
+  const actionStatus = askGlassesActionStatus(askFlow, clockNow) || nativeActionStatus(pendingCommand, nativeHostStatus, clockNow);
+  const askLabel = askGlassesButtonLabel(askFlow, clockNow);
   return (
     <div className="native-header-actions" aria-label="iOS controls">
       {actionStatus ? (
@@ -1000,20 +1149,11 @@ function NativeHeaderActions({
       <button
         className="tool-button primary-tool"
         type="button"
-        onClick={() => onCommand('ask')}
-        disabled={captureControlsBusy || nativeHostStatus?.actions?.can_ask === false}
-      >
-        <Send size={16} />
-        <span>{askLabel}</span>
-      </button>
-      <button
-        className="tool-button"
-        type="button"
-        onClick={() => onCommand('askAudio')}
-        disabled={captureControlsBusy || nativeHostStatus?.actions?.can_ask_audio !== true}
+        onClick={onAskGlasses}
+        disabled={captureControlsBusy || nativeHostStatus?.actions?.can_ask === false || busyAction === 'ask-glasses'}
       >
         <Mic size={16} />
-        <span>{voiceLabel}</span>
+        <span>{askLabel}</span>
       </button>
       <button
         className="tool-button"
@@ -1060,6 +1200,45 @@ function nativeActionStatus(
   return { label: backendStatus ? `Capture ${backendStatus}` : 'Capturing', tone: 'warn' as const };
 }
 
+function askGlassesActionStatus(flow: AskGlassesFlow, now: number) {
+  switch (flow.status) {
+    case 'preparing':
+      return { label: 'Preparing Ask glasses', tone: 'warn' as const };
+    case 'recording_and_capturing': {
+      const remaining = flow.recordingEndsAt ? secondsRemaining(flow.recordingEndsAt, now) : 0;
+      return { label: remaining > 0 ? `Recording ${remaining}s` : 'Finishing recording', tone: 'warn' as const };
+    }
+    case 'transcribing':
+      return { label: 'Transcribing request', tone: 'warn' as const };
+    case 'dispatching':
+      return { label: 'Sending to Chat', tone: 'warn' as const };
+    case 'completed':
+      return { label: 'Ask glasses sent', tone: 'good' as const };
+    case 'error':
+      return { label: 'Ask glasses failed', tone: 'danger' as const };
+    case 'idle':
+    default:
+      return null;
+  }
+}
+
+function askGlassesButtonLabel(flow: AskGlassesFlow, now: number) {
+  if (flow.status === 'recording_and_capturing') {
+    const remaining = flow.recordingEndsAt ? secondsRemaining(flow.recordingEndsAt, now) : 0;
+    return remaining > 0 ? `Ask glasses ${remaining}s` : 'Ask glasses';
+  }
+  if (flow.status === 'preparing') {
+    return 'Preparing...';
+  }
+  if (flow.status === 'transcribing') {
+    return 'Transcribing...';
+  }
+  if (flow.status === 'dispatching') {
+    return 'Sending...';
+  }
+  return 'Ask glasses';
+}
+
 function nativeActionButtonLabel(pendingCommand: PendingNativeCommand, now: number) {
   if (pendingCommand.phase === 'posted') {
     return 'Waiting...';
@@ -1072,6 +1251,9 @@ function nativeActionButtonLabel(pendingCommand: PendingNativeCommand, now: numb
 }
 
 function nativeAcceptedNotice(command: NativeCommand) {
+  if (command === 'captureFrameForBundle') {
+    return 'iOS accepted frame capture.';
+  }
   if (command === 'askAudio') {
     return 'iOS accepted Voice. Recording...';
   }
@@ -1083,6 +1265,9 @@ function nativeAcceptedNotice(command: NativeCommand) {
 
 function nativeCompletedNotice(command: NativeCommand, status: SensesNativeStatus) {
   const backendStatus = status.capture?.senses_status;
+  if (command === 'captureFrameForBundle') {
+    return backendStatus ? `Frame finished: ${backendStatus}.` : 'Frame finished.';
+  }
   if (command === 'askAudio') {
     return backendStatus ? `Voice finished: ${backendStatus}.` : 'Voice finished.';
   }
@@ -1105,6 +1290,9 @@ function nativeFinalErrorMessage(command: NativeCommand) {
 }
 
 function nativeCommandName(command: NativeCommand) {
+  if (command === 'captureFrameForBundle') {
+    return 'Frame capture';
+  }
   if (command === 'askAudio') {
     return 'Voice';
   }
@@ -1116,6 +1304,234 @@ function nativeCommandName(command: NativeCommand) {
 
 function secondsRemaining(deadline: number, now: number) {
   return Math.max(0, Math.ceil((deadline - now) / 1000));
+}
+
+function startFixedAudioRecording(
+  durationMs: number,
+  recorderRef: { current: MediaRecorder | null },
+  streamRef: { current: MediaStream | null },
+  chunksRef: { current: Blob[] },
+  contentTypeRef: { current: string },
+): Promise<{ done: Promise<{ blob: Blob; contentType: string; durationSeconds: number; capturedAt: string }> }> {
+  return microphonePermissionState()
+    .then(async (permissionState) => {
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: MICROPHONE_AUDIO_CONSTRAINTS });
+        const mimeType = supportedRecordingMimeType();
+        const recorder = new MediaRecorder(stream, mimeType ? { mimeType } : undefined);
+        const startedAt = Date.now();
+        const capturedAt = new Date().toISOString();
+        chunksRef.current = [];
+        contentTypeRef.current = recorder.mimeType || mimeType || 'audio/webm';
+        recorderRef.current = recorder;
+        streamRef.current = stream;
+        const done = new Promise<{ blob: Blob; contentType: string; durationSeconds: number; capturedAt: string }>((resolve, reject) => {
+          let settled = false;
+          const finish = (callback: () => void) => {
+            if (settled) {
+              return;
+            }
+            settled = true;
+            callback();
+          };
+          recorder.ondataavailable = (event) => {
+            if (event.data.size > 0) {
+              contentTypeRef.current = recorder.mimeType || mimeType || event.data.type || contentTypeRef.current || 'audio/webm';
+              chunksRef.current.push(event.data);
+            }
+          };
+          recorder.onerror = (event) => {
+            finish(() => {
+              stopMediaStream(streamRef.current);
+              reject(new Error(mediaRecorderErrorMessage(event)));
+            });
+          };
+          recorder.onstop = () => {
+            finish(() => {
+              stopMediaStream(streamRef.current);
+              recorderRef.current = null;
+              const chunks = chunksRef.current;
+              chunksRef.current = [];
+              const contentType = contentTypeRef.current || chunks[0]?.type || 'audio/webm';
+              if (!chunks.length) {
+                reject(new Error('No speech detected.'));
+                return;
+              }
+              const blob = new Blob(chunks, { type: contentType });
+              if (blob.size <= 0) {
+                reject(new Error('No speech detected.'));
+                return;
+              }
+              resolve({
+                blob,
+                contentType,
+                durationSeconds: Math.max(0.1, Math.round((Date.now() - startedAt) / 100) / 10),
+                capturedAt,
+              });
+            });
+          };
+        });
+        recorder.start();
+        window.setTimeout(() => stopRecorderSafely(recorder), Math.max(500, durationMs));
+        return { done };
+      } catch (error) {
+        stopMediaStream(streamRef.current);
+        throw new Error(microphoneRequestErrorMessage(error, permissionState));
+      }
+    });
+}
+
+async function waitForBundleReady(bundleId: string): Promise<SensesCaptureBundle> {
+  const deadline = Date.now() + BUNDLE_POLL_TIMEOUT_MS;
+  let lastBundle: SensesCaptureBundle | null = null;
+  while (Date.now() < deadline) {
+    const bundle = await getCaptureBundle(bundleId);
+    lastBundle = bundle;
+    if (bundle.readiness?.ready) {
+      return bundle;
+    }
+    const blockingCode = bundle.readiness?.blocking_code || '';
+    if (
+      bundle.status === 'failed'
+      || blockingCode === 'transcript_empty'
+      || blockingCode === 'transcription_failed'
+      || blockingCode === 'transcription_empty'
+      || blockingCode === 'transcription_unavailable'
+      || blockingCode === 'transcription_not_requested'
+    ) {
+      throw new Error(bundle.readiness?.blocking_detail || `Ask glasses failed: ${blockingCode || bundle.status}.`);
+    }
+    await sleep(BUNDLE_POLL_INTERVAL_MS);
+  }
+  const detail = lastBundle?.readiness?.blocking_detail || 'Senses did not finish frame/audio/transcript readiness in time.';
+  throw new Error(detail);
+}
+
+async function ingestBundleAudioPartWhenDeviceReady(input: Parameters<typeof ingestBundleAudioPart>[0]): Promise<SensesCaptureBundle> {
+  const deadline = Date.now() + BUNDLE_AUDIO_UPLOAD_TIMEOUT_MS;
+  for (;;) {
+    try {
+      return await ingestBundleAudioPart(input);
+    } catch (error) {
+      const canRetry = error instanceof SensesApiError
+        && error.code === 'bundle_device_pending'
+        && Date.now() < deadline;
+      if (!canRetry) {
+        throw error;
+      }
+      await sleep(BUNDLE_AUDIO_UPLOAD_RETRY_MS);
+    }
+  }
+}
+
+function supportedRecordingMimeType(): string {
+  if (typeof MediaRecorder === 'undefined' || typeof MediaRecorder.isTypeSupported !== 'function') {
+    return '';
+  }
+  for (const mimeType of ['audio/webm;codecs=opus', 'audio/webm', 'audio/mp4', 'audio/ogg;codecs=opus']) {
+    if (MediaRecorder.isTypeSupported(mimeType)) {
+      return mimeType;
+    }
+  }
+  return '';
+}
+
+async function blobToBase64(blob: Blob): Promise<string> {
+  const bytes = new Uint8Array(await blob.arrayBuffer());
+  let binary = '';
+  const chunkSize = 0x8000;
+  for (let index = 0; index < bytes.length; index += chunkSize) {
+    binary += String.fromCharCode(...bytes.subarray(index, index + chunkSize));
+  }
+  return btoa(binary);
+}
+
+function runtimeResultChatLink(results: Record<string, unknown>[] | undefined) {
+  const first = Array.isArray(results) ? results[0] : null;
+  const runtimeSessionId = typeof first?.runtime_session_id === 'string' ? first.runtime_session_id : '';
+  return runtimeSessionId ? `/app/chat/threads/${encodeURIComponent(runtimeSessionId)}` : '';
+}
+
+function stopRecorderSafely(recorder: MediaRecorder | null) {
+  if (!recorder || recorder.state === 'inactive') {
+    return;
+  }
+  try {
+    recorder.stop();
+  } catch {
+    return;
+  }
+}
+
+function stopMediaStream(stream: MediaStream | null) {
+  stream?.getTracks().forEach((track) => track.stop());
+}
+
+function sleep(ms: number) {
+  return new Promise((resolve) => window.setTimeout(resolve, ms));
+}
+
+async function microphonePermissionState(): Promise<PermissionState | 'unknown'> {
+  if (!navigator.permissions?.query) {
+    return 'unknown';
+  }
+  try {
+    const status = await navigator.permissions.query({ name: 'microphone' as PermissionName });
+    return status.state;
+  } catch {
+    return 'unknown';
+  }
+}
+
+function microphoneRequestErrorMessage(error: unknown, permissionState: PermissionState | 'unknown'): string {
+  const name = domErrorName(error);
+  if (name === 'NotAllowedError' || name === 'SecurityError' || name === 'PermissionDeniedError') {
+    if (microphoneBlockedByFramePolicy()) {
+      return 'Maverick shell is blocking microphone access for Senses. Hard refresh the full Maverick page, then try again.';
+    }
+    if (permissionState === 'denied') {
+      return 'Microphone permission was denied by the browser. Allow microphone access in browser site settings, then reload Maverick.';
+    }
+    return 'Microphone permission was blocked. Allow microphone access for Maverick, then try again.';
+  }
+  if (name === 'NotFoundError' || name === 'DevicesNotFoundError') {
+    return 'No microphone device was found by the browser.';
+  }
+  if (name === 'NotReadableError' || name === 'TrackStartError') {
+    return 'The microphone is already in use or cannot be read by the browser.';
+  }
+  if (name === 'OverconstrainedError') {
+    return 'The browser could not find a microphone matching the requested audio settings.';
+  }
+  return 'Microphone permission was denied or unavailable.';
+}
+
+function mediaRecorderErrorMessage(event: Event): string {
+  const error = 'error' in event ? (event as ErrorEvent).error : null;
+  const detail = error instanceof Error && error.message ? ` ${error.message}` : '';
+  return `Unable to record microphone audio.${detail}`;
+}
+
+function domErrorName(error: unknown): string {
+  return error && typeof error === 'object' && 'name' in error ? String(error.name || '') : '';
+}
+
+function microphoneBlockedByFramePolicy(): boolean {
+  const policyDocument = document as Document & {
+    featurePolicy?: { allowsFeature(feature: string): boolean };
+    permissionsPolicy?: { allowsFeature(feature: string): boolean };
+  };
+  try {
+    if (policyDocument.permissionsPolicy) {
+      return !policyDocument.permissionsPolicy.allowsFeature('microphone');
+    }
+    if (policyDocument.featurePolicy) {
+      return !policyDocument.featurePolicy.allowsFeature('microphone');
+    }
+  } catch {
+    return false;
+  }
+  return false;
 }
 
 function DevicesTab({

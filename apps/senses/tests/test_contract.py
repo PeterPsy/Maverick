@@ -56,13 +56,13 @@ class SensesContractTest(unittest.TestCase):
         contract = json.loads((APP_ROOT / "app_contract.json").read_text(encoding="utf-8"))
         self.assertEqual(contract["version"], "0.8.0")
         self.assertEqual(contract["presentation"]["frontend_role"], "workspace")
-        self.assertEqual(contract["storage"]["data_schema_version"], "4")
+        self.assertEqual(contract["storage"]["data_schema_version"], "5")
         self.assertTrue(contract["permissions"]["runtime"]["create_sessions"])
         provided = {item["interface"]: item for item in contract["provides"]}
         self.assertEqual(provided["device.registry"]["version"], "1")
         self.assertEqual(provided["device.registry"]["surfaces"], ["backend", "view", "widget"])
         event_resources = {item["resource"] for item in contract["capabilities"]["data_events"]}
-        self.assertEqual(event_resources, {"devices", "pairing", "settings", "captures", "routing", "view-state"})
+        self.assertEqual(event_resources, {"devices", "pairing", "settings", "captures", "bundles", "routing", "view-state"})
 
     def test_contract_declares_base_shell_sidebar_widget(self) -> None:
         parsed = parse_app_contract_file(APP_ROOT)

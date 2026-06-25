@@ -105,6 +105,56 @@ export interface SensesCapture {
   updated_at: string;
 }
 
+export interface SensesBundleReadiness {
+  ready: boolean;
+  status: string | null;
+  blocking_code: string | null;
+  blocking_detail: string | null;
+  missing_roles: string[];
+  frame_status: string | null;
+  audio_status: string | null;
+  transcription_status: string;
+  transcript: string;
+}
+
+export interface SensesCaptureBundleItem {
+  workspace_id: string;
+  bundle_id: string;
+  role: 'frame' | 'audio' | string;
+  capture_id: string;
+  request_id: string | null;
+  status: string;
+  error_code: string | null;
+  capture: SensesCapture;
+  metadata: Record<string, unknown>;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface SensesCaptureBundle {
+  workspace_id: string;
+  bundle_id: string;
+  request_id: string;
+  user_id: string;
+  device_id: string | null;
+  device_session_id: string | null;
+  status: string;
+  prompt: string;
+  frame_capture_id: string | null;
+  audio_capture_id: string | null;
+  runtime_session_id: string | null;
+  thread_id: string | null;
+  turn_id: string | null;
+  chat: SensesChatLink;
+  readiness: SensesBundleReadiness;
+  items: SensesCaptureBundleItem[];
+  error_code: string | null;
+  metadata: Record<string, unknown>;
+  created_at: string;
+  updated_at: string;
+  completed_at: string | null;
+}
+
 export interface SensesRoutingSession {
   workspace_id: string;
   routing_session_id: string;
@@ -151,6 +201,7 @@ export interface SensesOverview {
   devices: SensesDevice[];
   pairing_sessions: SensesPairingSession[];
   captures: SensesCapture[];
+  capture_bundles?: SensesCaptureBundle[];
   routing_sessions: SensesRoutingSession[];
   dependencies: {
     status: string;
@@ -168,6 +219,12 @@ export interface SensesActionResult {
   devices?: SensesDevice[];
   capture?: SensesCapture;
   captures?: SensesCapture[];
+  bundle?: SensesCaptureBundle;
+  items?: SensesCaptureBundleItem[];
+  readiness?: SensesBundleReadiness;
+  runtime_launch_requests?: Record<string, unknown>[];
+  runtime_request_results?: Record<string, unknown>[];
+  chat?: SensesChatLink;
   pairing?: SensesPairingSession;
   pairing_sessions?: SensesPairingSession[];
   routing_session?: SensesRoutingSession;

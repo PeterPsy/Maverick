@@ -120,6 +120,10 @@
         "description": "Senses capture metadata or Storage references changed."
       },
       {
+        "resource": "bundles",
+        "description": "Senses multimodal capture bundle metadata or readiness changed."
+      },
+      {
         "resource": "routing",
         "description": "Senses runtime routing sessions or dispatch attempts changed."
       },
@@ -195,7 +199,7 @@
   },
   "storage": {
     "storage_kind": "sqlite+files",
-    "data_schema_version": "4",
+    "data_schema_version": "5",
     "primary_paths": [
       "data/senses/senses.sqlite"
     ],

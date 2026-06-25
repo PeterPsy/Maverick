@@ -48,7 +48,7 @@ export function SidebarAppRail({
     onReorderPinnedApps,
     reorderableAppIds: reorderableRailAppIds,
   });
-  const baseClassName = className ? `bs-sidebar__rail-apps ${className}` : "bs-sidebar__rail-apps";
+  const appListClassName = className ? `bs-sidebar__rail-apps ${className}` : "bs-sidebar__rail-apps";
   const renderedApps = canReorder ? reorderedRailAppsForRender(appsToRender, activeRailReorder) : appsToRender;
   const renderedReorderableIds = renderedApps.filter((app) => isDesktopRailReorderableApp(app.app_id)).map((app) => app.app_id);
   const isReorderActive = Boolean(activeRailReorder);
@@ -67,7 +67,7 @@ export function SidebarAppRail({
 
   if (isInitialLoading) {
     return (
-      <div className={`${baseClassName} is-loading`} role="list" aria-hidden="true">
+      <div className={`${appListClassName} is-loading`} role="list" aria-hidden="true">
         {Array.from({ length: 4 }).map((_, index) => (
           <div className="bs-sidebar__rail-item" key={index} role="listitem">
             <span className="bs-app-logo bs-app-logo--rail bs-sidebar__rail-skeleton-logo" />
@@ -79,7 +79,7 @@ export function SidebarAppRail({
 
   return (
     <>
-      <div className={baseClassName} ref={canReorder ? railAppsContainerRef : undefined} role="list">
+      <div className={appListClassName} ref={canReorder ? railAppsContainerRef : undefined} role="list" aria-label="Pinned apps">
         {renderedApps.map((app) => {
           const reorderableIndex = renderedReorderableIds.indexOf(app.app_id);
           const isReorderable = canReorder && reorderableIndex >= 0;
@@ -112,7 +112,9 @@ export function SidebarAppRail({
             </div>
           );
         })}
-        {settingsApp ? (
+      </div>
+      {settingsApp ? (
+        <div className="bs-sidebar__rail-static" role="list" aria-label="Static app shortcuts">
           <div className="bs-sidebar__rail-item" role="listitem">
             <button
               aria-current={activeAppId === SETTINGS_APP_ID ? "page" : undefined}
@@ -128,9 +130,9 @@ export function SidebarAppRail({
               <span className="bs-sidebar__rail-tooltip" role="tooltip">{settingsApp.name}</span>
             </button>
           </div>
-        ) : null}
-        <span className="bs-sidebar__rail-status" aria-live="polite">{keyboardReorderStatus}</span>
-      </div>
+        </div>
+      ) : null}
+      <span className="bs-sidebar__rail-status" aria-live="polite">{keyboardReorderStatus}</span>
     </>
   );
 }

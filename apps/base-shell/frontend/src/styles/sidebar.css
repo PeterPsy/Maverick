@@ -166,12 +166,13 @@
 
 .bs-sidebar__rail-apps {
   display: flex;
+  flex: 1 1 auto;
   flex-direction: column;
   align-items: center;
   justify-content: center;
   gap: 0.48rem;
   min-height: 0;
-  max-height: 100%;
+  max-height: none;
   overflow-x: visible;
   overflow-y: var(--bs-sidebar-rail-apps-overflow-y, visible);
   overscroll-behavior: contain;
@@ -185,6 +186,15 @@
 
 .bs-sidebar__rail-apps::-webkit-scrollbar {
   display: none;
+}
+
+.bs-sidebar__rail-static {
+  display: flex;
+  flex: 0 0 auto;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.48rem;
+  padding-top: 0.48rem;
 }
 
 .bs-sidebar__rail-item {

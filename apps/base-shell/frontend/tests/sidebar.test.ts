@@ -63,6 +63,7 @@ describe("Sidebar desktop layout contract", () => {
     const sidebarStyles = readStyle("sidebar.css");
     const railLayoutRule = sidebarStyles.match(/\.bs-sidebar__rail \{\n  display: flex;[\s\S]*?\n\}/)?.[0] ?? "";
     const railAppsRule = sidebarStyles.match(/\.bs-sidebar__rail-apps \{[\s\S]*?\n\}/)?.[0] ?? "";
+    const railStaticRule = sidebarStyles.match(/\.bs-sidebar__rail-static \{[\s\S]*?\n\}/)?.[0] ?? "";
     const railButtonRule = sidebarStyles.match(/\.bs-sidebar__rail-button \{[\s\S]*?\n\}/)?.[0] ?? "";
     const railLogoRule = sidebarStyles.match(/\.bs-app-logo--rail \{\n  width:[\s\S]*?\n\}/)?.[0] ?? "";
 
@@ -75,7 +76,10 @@ describe("Sidebar desktop layout contract", () => {
     expect(sidebarStyles).toContain("left: var(--bs-sidebar-desktop-rail-left, 1rem);");
     expect(railLayoutRule).toContain("max-height: calc(100dvh - 2rem);");
     expect(railLayoutRule).not.toContain("min(38rem");
+    expect(railAppsRule).toContain("flex: 1 1 auto;");
     expect(railAppsRule).toContain("gap: 0.48rem;");
+    expect(railStaticRule).toContain("flex: 0 0 auto;");
+    expect(railStaticRule).toContain("padding-top: 0.48rem;");
     expect(railButtonRule).toContain("width: var(--bs-sidebar-icon-size, 2.4rem);");
     expect(railLogoRule).toContain("width: var(--bs-sidebar-icon-size, 2.4rem);");
     expect(panelsStyles).toContain("width: var(--bs-sidebar-icon-size, 2.4rem);");

@@ -58,6 +58,7 @@ describe("Sidebar desktop rail reorder", () => {
   let openApp: ReturnType<typeof vi.fn<(appId: string, params?: Record<string, string | boolean | null>) => void>>;
   let closeSidebar: ReturnType<typeof vi.fn<() => void>>;
   let reorderPinnedApps: ReturnType<typeof vi.fn<(appIds: string[]) => void>>;
+  let openSettings: ReturnType<typeof vi.fn<() => void>>;
   let resizeSidebar: ReturnType<typeof vi.fn<(widthPx: number) => void>>;
 
   beforeEach(() => {
@@ -70,6 +71,7 @@ describe("Sidebar desktop rail reorder", () => {
     document.body.append(container);
     root = createRoot(container);
     openApp = vi.fn<(appId: string, params?: Record<string, string | boolean | null>) => void>();
+    openSettings = vi.fn<() => void>();
     closeSidebar = vi.fn<() => void>();
     reorderPinnedApps = vi.fn<(appIds: string[]) => void>();
     resizeSidebar = vi.fn<(widthPx: number) => void>();
@@ -154,6 +156,21 @@ describe("Sidebar desktop rail reorder", () => {
 
     expect(container.querySelector(".bs-sidebar__rail")).toBeNull();
     expect(reorderPinnedApps).not.toHaveBeenCalled();
+  });
+
+  it("keeps Settings visible as a static rail shortcut outside the reorder scroller", async () => {
+    await renderSidebar({ apps: [...apps, app("settings", "Settings")] });
+
+    const settingsButton = railButton("Settings");
+    expect(settingsButton.closest(".bs-sidebar__rail-static")).not.toBeNull();
+    expect(settingsButton.closest(".bs-sidebar__rail-apps")).toBeNull();
+
+    await act(async () => {
+      settingsButton.click();
+    });
+
+    expect(openSettings).toHaveBeenCalledTimes(1);
+    expect(openApp).not.toHaveBeenCalledWith("settings");
   });
 
   it("keeps the mobile sidebar open when the pointer leaves toward the header", async () => {
@@ -245,14 +262,14 @@ describe("Sidebar desktop rail reorder", () => {
     expect(reorderPinnedApps).toHaveBeenCalledWith(["agents", "skills", "docs", "chat"]);
   });
 
-  async function renderSidebar(overrides: Partial<{ isMobileLayout: boolean; pinnedAppIds: string[] }> = {}) {
+  async function renderSidebar(overrides: Partial<{ apps: AppRegistryItem[]; isMobileLayout: boolean; pinnedAppIds: string[] }> = {}) {
     await act(async () => {
       root.render(
         <Sidebar
           activeAppId="chat"
           activeAppParams={{}}
           activeWorkspaceId="default"
-          apps={apps}
+          apps={overrides.apps ?? apps}
           isLoading={false}
           isMobileLayout={overrides.isMobileLayout ?? false}
           isOpen={true}
@@ -268,7 +285,7 @@ describe("Sidebar desktop rail reorder", () => {
             }
             openApp(appId, params);
           }}
-          onOpenSettings={vi.fn()}
+          onOpenSettings={openSettings}
           onOpenSidebar={vi.fn()}
           onPrimaryActionStateChange={vi.fn()}
           onReorderPinnedApps={(appIds) => reorderPinnedApps(appIds)}

@@ -8,7 +8,7 @@ from pathlib import Path
 import sqlite3
 
 
-SCHEMA_VERSION = "5"
+SCHEMA_VERSION = "6"
 DB_FILENAME = "senses.sqlite"
 PRIMARY_DB_PATH = f"data/senses/{DB_FILENAME}"
 WORKSPACE_TABLES = (
@@ -346,6 +346,7 @@ def ensure_schema(data_root: Path, workspace_id: str) -> None:
               ON audit(workspace_id, created_at);
         """)
         _ensure_settings_columns(db)
+        _ensure_capture_bundles_device_nullable(db)
         db.execute(
             "INSERT OR IGNORE INTO schema_migrations(workspace_id, version, applied_at) VALUES (?, ?, ?)",
             (workspace, SCHEMA_VERSION, timestamp),
@@ -458,6 +459,74 @@ def _ensure_settings_columns(db: sqlite3.Connection) -> None:
     for name, definition in additions.items():
         if name not in columns:
             db.execute(f"ALTER TABLE settings ADD COLUMN {definition}")
+
+
+def _ensure_capture_bundles_device_nullable(db: sqlite3.Connection) -> None:
+    columns = {str(row["name"]): row for row in db.execute("PRAGMA table_info(capture_bundles)").fetchall()}
+    device_id = columns.get("device_id")
+    if device_id is None or int(device_id["notnull"] or 0) == 0:
+        return
+
+    db.commit()
+    foreign_keys_enabled = int(db.execute("PRAGMA foreign_keys").fetchone()[0] or 0)
+    db.execute("PRAGMA foreign_keys = OFF")
+    try:
+        db.executescript(
+            """
+            CREATE TABLE capture_bundles_new (
+              workspace_id TEXT NOT NULL,
+              bundle_id TEXT NOT NULL,
+              request_id TEXT NOT NULL,
+              user_id TEXT NOT NULL,
+              device_id TEXT,
+              device_session_id TEXT,
+              status TEXT NOT NULL,
+              prompt TEXT NOT NULL DEFAULT '',
+              runtime_session_id TEXT,
+              thread_id TEXT,
+              turn_id TEXT,
+              error_code TEXT,
+              metadata_json TEXT NOT NULL DEFAULT '{}',
+              created_at TEXT NOT NULL,
+              updated_at TEXT NOT NULL,
+              completed_at TEXT,
+              PRIMARY KEY (workspace_id, bundle_id),
+              UNIQUE (workspace_id, request_id),
+              FOREIGN KEY (workspace_id, device_id)
+                REFERENCES devices(workspace_id, device_id)
+                ON DELETE CASCADE
+            );
+
+            INSERT INTO capture_bundles_new(
+              workspace_id, bundle_id, request_id, user_id, device_id, device_session_id,
+              status, prompt, runtime_session_id, thread_id, turn_id, error_code,
+              metadata_json, created_at, updated_at, completed_at
+            )
+            SELECT
+              workspace_id, bundle_id, request_id, user_id, device_id, device_session_id,
+              status, prompt, runtime_session_id, thread_id, turn_id, error_code,
+              metadata_json, created_at, updated_at, completed_at
+            FROM capture_bundles;
+
+            DROP TABLE capture_bundles;
+            ALTER TABLE capture_bundles_new RENAME TO capture_bundles;
+
+            CREATE INDEX IF NOT EXISTS idx_senses_capture_bundles_device_time
+              ON capture_bundles(workspace_id, device_id, created_at DESC);
+
+            CREATE INDEX IF NOT EXISTS idx_senses_capture_bundles_status_time
+              ON capture_bundles(workspace_id, status, updated_at DESC);
+            """
+        )
+        violations = db.execute("PRAGMA foreign_key_check").fetchall()
+        if violations:
+            raise RuntimeError("Senses capture_bundles schema migration failed foreign key validation.")
+        db.commit()
+    except Exception:
+        db.rollback()
+        raise
+    finally:
+        db.execute(f"PRAGMA foreign_keys = {1 if foreign_keys_enabled else 0}")
 
 
 def _table_column_names(db: sqlite3.Connection, table_name: str) -> list[str]:

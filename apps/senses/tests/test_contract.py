@@ -56,7 +56,7 @@ class SensesContractTest(unittest.TestCase):
         contract = json.loads((APP_ROOT / "app_contract.json").read_text(encoding="utf-8"))
         self.assertEqual(contract["version"], "0.8.0")
         self.assertEqual(contract["presentation"]["frontend_role"], "workspace")
-        self.assertEqual(contract["storage"]["data_schema_version"], "5")
+        self.assertEqual(contract["storage"]["data_schema_version"], "6")
         self.assertTrue(contract["permissions"]["runtime"]["create_sessions"])
         provided = {item["interface"]: item for item in contract["provides"]}
         self.assertEqual(provided["device.registry"]["version"], "1")

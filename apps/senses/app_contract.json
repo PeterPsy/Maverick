@@ -199,7 +199,7 @@
   },
   "storage": {
     "storage_kind": "sqlite+files",
-    "data_schema_version": "5",
+    "data_schema_version": "6",
     "primary_paths": [
       "data/senses/senses.sqlite"
     ],

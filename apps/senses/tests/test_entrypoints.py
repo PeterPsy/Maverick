@@ -512,6 +512,63 @@ class SensesPhase8EntrypointTest(unittest.TestCase):
             self.assertEqual(settings_count, 1)
             self.assertTrue(set(WORKSPACE_TABLES).issubset(table_names))
 
+    def test_schema_migrates_legacy_capture_bundles_device_nullable(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            data_root = Path(tmp)
+            data_root.mkdir(parents=True, exist_ok=True)
+            with closing(sqlite3.connect(db_path(data_root))) as db:
+                db.executescript(
+                    """
+                    CREATE TABLE capture_bundles (
+                      workspace_id TEXT NOT NULL,
+                      bundle_id TEXT NOT NULL,
+                      request_id TEXT NOT NULL,
+                      user_id TEXT NOT NULL,
+                      device_id TEXT NOT NULL,
+                      device_session_id TEXT,
+                      status TEXT NOT NULL,
+                      prompt TEXT NOT NULL DEFAULT '',
+                      runtime_session_id TEXT,
+                      thread_id TEXT,
+                      turn_id TEXT,
+                      error_code TEXT,
+                      metadata_json TEXT NOT NULL DEFAULT '{}',
+                      created_at TEXT NOT NULL,
+                      updated_at TEXT NOT NULL,
+                      completed_at TEXT,
+                      PRIMARY KEY (workspace_id, bundle_id),
+                      UNIQUE (workspace_id, request_id),
+                      FOREIGN KEY (workspace_id, device_id)
+                        REFERENCES devices(workspace_id, device_id)
+                        ON DELETE CASCADE
+                    );
+                    """
+                )
+
+            ensure_schema(data_root, "default")
+            with closing(sqlite3.connect(db_path(data_root))) as db:
+                columns = {
+                    row[1]: row
+                    for row in db.execute("PRAGMA table_info(capture_bundles)").fetchall()
+                }
+                migrations = {
+                    row[0]
+                    for row in db.execute(
+                        "SELECT version FROM schema_migrations WHERE workspace_id = ?",
+                        ("default",),
+                    ).fetchall()
+                }
+            self.assertEqual(columns["device_id"][3], 0)
+            self.assertIn("6", migrations)
+
+            completed = start_and_complete_device(data_root)
+            status, started = handle_action(
+                data_root,
+                bundle_start_request(completed, include_device=False),
+            )
+            self.assertEqual(status, 201)
+            self.assertIsNone(started["bundle"]["device_id"])
+
     def test_manifest_reports_phase_7_surfaces(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             status, manifest = handle_action(

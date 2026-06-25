@@ -1381,16 +1381,13 @@ def ingest_bundle_start(
 
         existing = bundle_by_id(db, workspace_id, bundle_id)
         if existing is not None:
-            if (
-                str(existing["request_id"]) != request_id
-                or (text_or_none(existing["device_id"]) or "") != (device_id or "")
-                or str(existing["user_id"]) != actor_user_id
-            ):
+            existing_device_id = text_or_none(existing["device_id"])
+            if str(existing["user_id"]) != actor_user_id or (existing_device_id and device_id and existing_device_id != device_id):
                 db.rollback()
                 return error_payload(
                     409,
                     "bundle_conflict",
-                    "bundle_id is already associated with a different Senses bundle request.",
+                    "bundle_id is already associated with a different Senses bundle owner or device.",
                 )
             db.commit()
             return 200, bundle_action_response(
@@ -1407,12 +1404,7 @@ def ingest_bundle_start(
             (workspace_id, request_id),
         ).fetchone()
         if request_conflict is not None:
-            db.rollback()
-            return error_payload(
-                409,
-                "bundle_conflict",
-                "request_id is already associated with a different Senses bundle.",
-            )
+            request_id = unique_bundle_request_id(db, workspace_id=workspace_id, requested_request_id=request_id)
 
         db.execute(
             """
@@ -1460,20 +1452,9 @@ def ingest_bundle_start(
     except sqlite3.IntegrityError:
         db.rollback()
         existing = bundle_by_id(db, workspace_id, bundle_id)
-        if existing is None:
-            existing = db.execute(
-                """
-                SELECT * FROM capture_bundles
-                WHERE workspace_id = ? AND request_id = ?
-                """,
-                (workspace_id, request_id),
-            ).fetchone()
-        if (
-            existing is not None
-            and str(existing["bundle_id"]) == bundle_id
-            and str(existing["request_id"]) == request_id
-            and str(existing["user_id"]) == actor_user_id
-            and (text_or_none(existing["device_id"]) or "") == (device_id or "")
+        existing_device_id = text_or_none(existing["device_id"]) if existing is not None else None
+        if existing is not None and str(existing["user_id"]) == actor_user_id and not (
+            existing_device_id and device_id and existing_device_id != device_id
         ):
             return 200, bundle_action_response(
                 existing,
@@ -3954,6 +3935,27 @@ def bundle_by_id(db: sqlite3.Connection, workspace_id: str, bundle_id: str) -> s
         "SELECT * FROM capture_bundles WHERE workspace_id = ? AND bundle_id = ?",
         (workspace_id, bundle_id),
     ).fetchone()
+
+
+def unique_bundle_request_id(
+    db: sqlite3.Connection,
+    *,
+    workspace_id: str,
+    requested_request_id: str,
+) -> str:
+    prefix = requested_request_id[:96].rstrip("-_") or "bundle-start"
+    for _ in range(10):
+        candidate = f"{prefix}-{prefixed_id('retry')}"
+        existing = db.execute(
+            """
+            SELECT 1 FROM capture_bundles
+            WHERE workspace_id = ? AND request_id = ?
+            """,
+            (workspace_id, candidate),
+        ).fetchone()
+        if existing is None:
+            return candidate
+    return f"bundle-start-{prefixed_id('retry')}"
 
 
 def bundle_item_by_role(

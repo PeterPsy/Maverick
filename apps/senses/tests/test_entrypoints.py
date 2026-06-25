@@ -1185,6 +1185,33 @@ class SensesPhase8EntrypointTest(unittest.TestCase):
             self.assertEqual(replayed_start["bundle"]["status"], "started")
             self.assertIsNone(replayed_start["bundle"]["device_id"])
 
+            status, replayed_bundle_id = handle_action(
+                data_root,
+                bundle_start_request(
+                    completed,
+                    dependencies=dependencies,
+                    include_device=False,
+                    request_id="bundle-start-retry-from-webview",
+                ),
+            )
+            self.assertEqual(status, 200)
+            self.assertEqual(replayed_bundle_id["bundle"]["bundle_id"], "bundle-1")
+            self.assertEqual(replayed_bundle_id["bundle"]["request_id"], "bundle-start-1")
+
+            status, request_id_collision = handle_action(
+                data_root,
+                bundle_start_request(
+                    completed,
+                    dependencies=dependencies,
+                    include_device=False,
+                    bundle_id="bundle-2",
+                    request_id="bundle-start-1",
+                ),
+            )
+            self.assertEqual(status, 201)
+            self.assertEqual(request_id_collision["bundle"]["bundle_id"], "bundle-2")
+            self.assertNotEqual(request_id_collision["bundle"]["request_id"], "bundle-start-1")
+
             status, frame_part = handle_action(data_root, bundle_frame_part_request(completed))
             self.assertEqual(status, 202)
             self.assertEqual(frame_part["role"], "frame")

@@ -415,22 +415,31 @@ export function App() {
       return;
     }
 
-    const bundleId = `bundle-${makeRequestId()}`;
-    const requestId = `req-${makeRequestId()}`;
+    let { bundleId, requestId } = makeBundleRequestIds();
     const startedAt = Date.now();
     setBusyAction('ask-glasses');
     setError('');
     setNotice('');
-    setAskGlassesFlow({
-      status: 'preparing',
-      bundleId,
-      requestId,
-      recordingEndsAt: null,
-      startedAt,
-    });
 
     try {
-      await startCaptureBundle({ bundleId, requestId });
+      for (let attempt = 0; attempt < 3; attempt += 1) {
+        setAskGlassesFlow({
+          status: 'preparing',
+          bundleId,
+          requestId,
+          recordingEndsAt: null,
+          startedAt,
+        });
+        try {
+          await startCaptureBundle({ bundleId, requestId });
+          break;
+        } catch (error) {
+          if (!(error instanceof SensesApiError) || error.code !== 'bundle_conflict' || attempt >= 2) {
+            throw error;
+          }
+          ({ bundleId, requestId } = makeBundleRequestIds());
+        }
+      }
       const recording = await startFixedAudioRecording(NATIVE_AUDIO_RECORDING_MS, mediaRecorderRef, mediaStreamRef, recordingChunksRef, recordingContentTypeRef);
       setNativeClockNow(Date.now());
       setAskGlassesFlow({
@@ -2393,4 +2402,11 @@ function makeRequestId() {
     return crypto.randomUUID();
   }
   return `req-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+}
+
+function makeBundleRequestIds() {
+  return {
+    bundleId: `bundle-${makeRequestId()}`,
+    requestId: `bundle-start-${makeRequestId()}`,
+  };
 }

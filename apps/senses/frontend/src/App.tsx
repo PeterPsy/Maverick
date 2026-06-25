@@ -58,10 +58,12 @@ const APP_EVENTS_WS_PATH = '/api/apps/events/ws';
 const REFRESH_RESOURCES = new Set(['devices', 'pairing', 'settings', 'captures', 'bundles', 'routing', 'view-state']);
 const NATIVE_STATUS_ACK_TIMEOUT_MS = 4500;
 const NATIVE_COMMAND_FINAL_TIMEOUT_MS = 75000;
+const NATIVE_SENSES_READY_TIMEOUT_MS = 30000;
 const NATIVE_AUDIO_RECORDING_SECONDS = 8;
 const NATIVE_AUDIO_RECORDING_MS = NATIVE_AUDIO_RECORDING_SECONDS * 1000;
 const BUNDLE_POLL_INTERVAL_MS = 1200;
 const BUNDLE_POLL_TIMEOUT_MS = 75000;
+const BUNDLE_FRAME_TIMEOUT_MS = 75000;
 const BUNDLE_AUDIO_UPLOAD_RETRY_MS = 1000;
 const BUNDLE_AUDIO_UPLOAD_TIMEOUT_MS = 15000;
 const MICROPHONE_AUDIO_CONSTRAINTS: MediaTrackConstraints = {
@@ -422,6 +424,15 @@ export function App() {
     setNotice('');
 
     try {
+      setAskGlassesFlow({
+        status: 'preparing',
+        bundleId,
+        requestId,
+        recordingEndsAt: null,
+        startedAt,
+      });
+      await ensureNativeSensesReady(nativeHost);
+
       for (let attempt = 0; attempt < 3; attempt += 1) {
         setAskGlassesFlow({
           status: 'preparing',
@@ -455,6 +466,7 @@ export function App() {
       }
 
       const audio = await recording.done;
+      await waitForBundleFrame(bundleId);
       setAskGlassesFlow((current) => ({ ...current, status: 'transcribing', recordingEndsAt: null }));
       await ingestBundleAudioPartWhenDeviceReady({
         bundleId,
@@ -1423,6 +1435,25 @@ async function waitForBundleReady(bundleId: string): Promise<SensesCaptureBundle
   throw new Error(detail);
 }
 
+async function waitForBundleFrame(bundleId: string): Promise<SensesCaptureBundle> {
+  const deadline = Date.now() + BUNDLE_FRAME_TIMEOUT_MS;
+  let lastBundle: SensesCaptureBundle | null = null;
+  while (Date.now() < deadline) {
+    const bundle = await getCaptureBundle(bundleId);
+    lastBundle = bundle;
+    const frameItem = bundle.items.find((item) => item.role === 'frame');
+    if (bundle.device_id && bundle.device_session_id && frameItem) {
+      return bundle;
+    }
+    if (bundle.status === 'failed' || frameItem?.status === 'failed' || frameItem?.error_code) {
+      throw new Error(bundle.readiness?.blocking_detail || frameItem?.error_code || 'Senses frame capture failed.');
+    }
+    await sleep(BUNDLE_POLL_INTERVAL_MS);
+  }
+  const detail = lastBundle?.readiness?.blocking_detail || 'Senses did not receive the glasses frame in time.';
+  throw new Error(detail);
+}
+
 async function ingestBundleAudioPartWhenDeviceReady(input: Parameters<typeof ingestBundleAudioPart>[0]): Promise<SensesCaptureBundle> {
   const deadline = Date.now() + BUNDLE_AUDIO_UPLOAD_TIMEOUT_MS;
   for (;;) {
@@ -1438,6 +1469,40 @@ async function ingestBundleAudioPartWhenDeviceReady(input: Parameters<typeof ing
       await sleep(BUNDLE_AUDIO_UPLOAD_RETRY_MS);
     }
   }
+}
+
+async function ensureNativeSensesReady(nativeHost: {
+  status: SensesNativeStatus | null;
+  send: (command: NativeCommand, extra?: Record<string, unknown>) => string | null;
+}) {
+  if (isNativeSensesReady(window.__maverickSensesNativeStatus || nativeHost.status)) {
+    return;
+  }
+  const requestId = nativeHost.send('refreshNativeStatus');
+  if (!requestId) {
+    throw new Error('iOS host is unavailable.');
+  }
+  const deadline = Date.now() + NATIVE_SENSES_READY_TIMEOUT_MS;
+  let lastStatus: SensesNativeStatus | null = window.__maverickSensesNativeStatus || nativeHost.status || null;
+  while (Date.now() < deadline) {
+    lastStatus = window.__maverickSensesNativeStatus || lastStatus;
+    if (isNativeSensesReady(lastStatus)) {
+      return;
+    }
+    const bridgeRequest = lastStatus?.bridge_request;
+    if (bridgeRequest?.request_id === requestId && bridgeRequest.status === 'failed') {
+      throw new Error(bridgeRequest.message || lastStatus?.ios?.last_error || 'iOS could not prepare Senses upload.');
+    }
+    if (bridgeRequest?.request_id === requestId && bridgeRequest.status === 'completed') {
+      throw new Error(lastStatus?.ios?.last_error || 'iOS Senses upload is not ready.');
+    }
+    await sleep(250);
+  }
+  throw new Error(lastStatus?.ios?.last_error || 'iOS Senses upload did not become ready in time.');
+}
+
+function isNativeSensesReady(status: SensesNativeStatus | null | undefined) {
+  return status?.maverick?.can_use_senses === true;
 }
 
 function supportedRecordingMimeType(): string {

@@ -5,6 +5,7 @@ from datetime import UTC, datetime, timedelta
 from io import BytesIO
 import json
 from pathlib import Path
+import tempfile
 from types import SimpleNamespace
 from unittest.mock import patch
 import unittest
@@ -17,6 +18,32 @@ from core.workspaces.file_uploads import save_workspace_upload
 
 
 class WorkspaceFileUploadsTestCase(unittest.TestCase):
+    def test_save_workspace_upload_normalizes_m4a_content_type(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            start_path = Path(temp)
+            (start_path / "AGENTS.md").write_text("", encoding="utf-8")
+            (start_path / "core").mkdir()
+            (start_path / "apps").mkdir()
+            with self.subTest("empty browser type"):
+                uploaded = save_workspace_upload(
+                    workspace_id="default",
+                    filename="voice.m4a",
+                    content_type="",
+                    content_base64=base64.b64encode(b"audio").decode("ascii"),
+                    start_path=start_path,
+                )
+                self.assertEqual(uploaded.content_type, "audio/mp4")
+
+            with self.subTest("browser x-m4a type"):
+                uploaded = save_workspace_upload(
+                    workspace_id="default",
+                    filename="voice.m4a",
+                    content_type="audio/x-m4a",
+                    content_base64=base64.b64encode(b"audio").decode("ascii"),
+                    start_path=start_path,
+                )
+                self.assertEqual(uploaded.content_type, "audio/mp4")
+
     def test_save_workspace_upload_rejects_decoded_payload_over_limit(self) -> None:
         content = base64.b64encode(b"too-large").decode("ascii")
 

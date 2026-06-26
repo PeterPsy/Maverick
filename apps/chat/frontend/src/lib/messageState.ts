@@ -25,6 +25,7 @@ export function attachmentToMessageAttachment(attachment: ComposerAttachment): C
     size: attachment.size,
     type: attachment.type,
     isImage: attachment.isImage,
+    isAudio: attachment.isAudio,
     objectUrl: attachment.objectUrl,
     warning: attachment.warning,
   };

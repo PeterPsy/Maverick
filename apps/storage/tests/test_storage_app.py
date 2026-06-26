@@ -251,6 +251,7 @@ class StorageAppTestCase(unittest.TestCase):
             (generated_root / "report.md").write_text("# report", encoding="utf-8")
             (generated_root / "deck.pptx").write_bytes(b"deck")
             (generated_root / "clip.mp4").write_bytes(b"video")
+            (generated_root / "voice.m4a").write_bytes(b"audio")
 
             result = self.run_backend(
                 data_root=data_root,
@@ -268,13 +269,63 @@ class StorageAppTestCase(unittest.TestCase):
                     "storage/generated/report.md",
                     "storage/generated/deck.pptx",
                     "storage/generated/clip.mp4",
+                    "storage/generated/voice.m4a",
                 },
             )
             kinds = {item["workspace_relative_path"]: item["preview_kind"] for item in result["json"]["files"]}
+            content_types = {item["workspace_relative_path"]: item["content_type"] for item in result["json"]["files"]}
             self.assertEqual(kinds["storage/generated/report.md"], "markdown")
             self.assertEqual(kinds["storage/generated/deck.pptx"], "presentation")
             self.assertEqual(kinds["storage/generated/clip.mp4"], "video")
-            self.assertEqual(result["json"]["available_kinds"], ["video", "presentation", "markdown", "text"])
+            self.assertEqual(kinds["storage/generated/voice.m4a"], "audio")
+            self.assertEqual(content_types["storage/generated/voice.m4a"], "audio/mp4")
+            self.assertEqual(result["json"]["available_kinds"], ["video", "audio", "presentation", "markdown", "text"])
+
+    def test_backend_catalog_normalizes_existing_m4a_inventory_records(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            uploaded_root = root / "storage" / "uploaded"
+            generated_root = root / "storage" / "generated"
+            data_root = root / "data" / "storage"
+            generated_root.mkdir(parents=True)
+            data_root.mkdir(parents=True)
+            (generated_root / "voice.m4a").write_bytes(b"audio")
+            (data_root / "files.json").write_text(
+                json.dumps(
+                    {
+                        "schema_version": "1",
+                        "updated_at": "2026-06-26T00:00:00+00:00",
+                        "directories": [],
+                        "files": [
+                            {
+                                "file_id": "file_11111111111111111111111111111111",
+                                "role": "generated",
+                                "relative_path": "voice.m4a",
+                                "name": "voice.m4a",
+                                "extension": ".m4a",
+                                "content_type": "application/octet-stream",
+                                "preview_kind": "file",
+                                "size_bytes": 5,
+                                "modified_at": "2026-06-26T00:00:00+00:00",
+                                "status": "active",
+                            }
+                        ],
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            result = self.run_backend(
+                data_root=data_root,
+                uploaded_root=uploaded_root,
+                generated_root=generated_root,
+                body={"action": "catalog"},
+            )
+
+            self.assertEqual(result["status_code"], 200)
+            record = result["json"]["files"][0]
+            self.assertEqual(record["content_type"], "audio/mp4")
+            self.assertEqual(record["preview_kind"], "audio")
 
     def test_backend_catalog_keeps_local_records_provider_aware(self) -> None:
         with tempfile.TemporaryDirectory() as temp:

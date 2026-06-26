@@ -377,6 +377,7 @@ export type ChatMessageAttachment = {
   size: number;
   type: string;
   isImage: boolean;
+  isAudio?: boolean;
   objectUrl?: string | null;
   warning?: string | null;
   fileId?: string;

@@ -26,6 +26,7 @@ from drive_oauth import (
 from errors import StorageValidationError
 from inventory import preview_kind
 from storage_provider_model import GOOGLE_DRIVE_PROVIDER, normalize_capabilities
+from storage_mime import normalize_content_type
 
 
 DRIVE_API_BASE = "https://www.googleapis.com/drive/v3"
@@ -1032,7 +1033,7 @@ class GoogleDriveProvider:
     def _normalize_item(self, item: dict[str, Any], *, display_path: str) -> dict[str, Any]:
         drive_file_id = str(item.get("id") or "").strip()
         name = str(item.get("name") or drive_file_id).strip()
-        mime_type = str(item.get("mimeType") or "application/octet-stream").strip()
+        mime_type = normalize_content_type(item.get("mimeType"), file_name=name)
         status = "removed" if bool(item.get("trashed") or item.get("explicitlyTrashed")) else "active"
         stable_id = stable_storage_file_id(self.connection_id, drive_file_id)
         version = str(item.get("headRevisionId") or item.get("version") or item.get("modifiedTime") or "")
@@ -1974,8 +1975,7 @@ def _required_content(value: bytes, *, operation: str) -> bytes:
 
 
 def _content_type(value: object) -> str:
-    normalized = str(value or "").strip()
-    return normalized or "application/octet-stream"
+    return normalize_content_type(value)
 
 
 def _capability(file_record: dict[str, Any], name: str) -> bool:

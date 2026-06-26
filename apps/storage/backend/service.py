@@ -85,6 +85,7 @@ from store import (
 )
 from storage_provider_model import GOOGLE_DRIVE_PROVIDER, reject_remote_workspace_relative_path
 from storage_reference_resolver import StorageReferenceResolver
+from storage_mime import normalize_content_type
 from text_preview import extract_text_preview
 
 CATALOG_ROLES = {"all", "uploaded", "generated"}
@@ -574,7 +575,7 @@ def handle_action(
         started = provider.start_resumable_upload(
             parent_drive_file_id=str(body.get("parent_drive_file_id") or body.get("drive_file_id") or ""),
             file_name=str(body.get("file_name") or ""),
-            content_type=str(body.get("content_type") or "application/octet-stream"),
+            content_type=normalize_content_type(body.get("content_type"), file_name=body.get("file_name")),
             size_bytes=_optional_nonnegative_int(body, "size_bytes") or 0,
         )
         session = create_drive_upload_session(
@@ -582,7 +583,7 @@ def handle_action(
             connection_id=connection_id,
             parent_drive_file_id=str(started["parent_drive_file_id"]),
             file_name=str(started["file_name"]),
-            content_type=str(started["content_type"]),
+            content_type=normalize_content_type(started.get("content_type"), file_name=started.get("file_name")),
             size_bytes=int(started["size_bytes"]),
             session_uri=str(started["session_uri"]),
             parent_display_path=str(started.get("parent_display_path") or ""),
@@ -597,7 +598,7 @@ def handle_action(
                 result = provider.query_resumable_upload(
                     session_uri=str(session.get("session_uri") or ""),
                     file_name=str(session.get("file_name") or ""),
-                    content_type=str(session.get("content_type") or "application/octet-stream"),
+                    content_type=normalize_content_type(session.get("content_type"), file_name=session.get("file_name")),
                     parent_display_path=str(session.get("parent_display_path") or ""),
                     total_size=int(session.get("size_bytes") or 0),
                 )
@@ -680,7 +681,7 @@ def handle_action(
             result = provider.upload_resumable_chunk(
                 session_uri=str(session.get("session_uri") or ""),
                 file_name=str(session.get("file_name") or ""),
-                content_type=str(session.get("content_type") or "application/octet-stream"),
+                content_type=normalize_content_type(session.get("content_type"), file_name=session.get("file_name")),
                 parent_display_path=str(session.get("parent_display_path") or ""),
                 chunk=chunk,
                 start=chunk_offset,
@@ -1360,7 +1361,7 @@ def _media_stream_payload(
         "file": record,
         "file_response": {
             "path": str(path),
-            "content_type": str(record.get("content_type") or "application/octet-stream"),
+            "content_type": normalize_content_type(record.get("content_type"), file_name=record.get("name")),
             "file_name": str(record.get("name") or path.name),
             "etag": str(record.get("sha256") or record.get("etag_or_version") or record.get("modified_at") or ""),
             "download": download,
@@ -1635,8 +1636,8 @@ def _drive_index_binary_preview_text(*, preview: dict[str, Any], file_record: di
         payload = b64decode(content_base64, validate=True)
     except (binascii.Error, ValueError) as error:
         raise StorageValidationError("Google Drive preview returned invalid base64 content for Memory indexing.", operation="drive_index") from error
-    content_type = str(preview.get("content_type") or file_record.get("content_type") or "application/octet-stream")
     file_name = str(preview.get("file_name") or file_record.get("name") or "drive-file")
+    content_type = normalize_content_type(preview.get("content_type") or file_record.get("content_type"), file_name=file_name)
     suffix = Path(file_name).suffix.lower() or _extension_for_content_type(content_type)
     preview_kind = str(file_record.get("preview_kind") or inventory_preview_kind(content_type, suffix))
     with tempfile.NamedTemporaryFile(prefix="storage-drive-index-", suffix=suffix) as handle:
@@ -1770,12 +1771,12 @@ def _drive_content_from_body(body: dict[str, Any]) -> tuple[bytes, str]:
             raise StorageValidationError("content_base64 must be valid base64.", operation="drive_write") from error
         if len(content) > MAX_WRITE_BYTES:
             raise StorageValidationError(f"Drive write content must be at most {MAX_WRITE_BYTES} bytes.", operation="drive_write")
-        return content, str(body.get("content_type") or "application/octet-stream")
+        return content, normalize_content_type(body.get("content_type"), file_name=body.get("file_name"))
     if "content" in body and body.get("content") is not None:
         content = str(body.get("content") or "").encode("utf-8")
         if len(content) > MAX_WRITE_BYTES:
             raise StorageValidationError(f"Drive write content must be at most {MAX_WRITE_BYTES} bytes.", operation="drive_write")
-        return content, str(body.get("content_type") or "text/plain; charset=utf-8")
+        return content, normalize_content_type(body.get("content_type") or "text/plain; charset=utf-8", file_name=body.get("file_name"))
     raise StorageValidationError(
         "Drive write requires content or content_base64.",
         operation="drive_write",

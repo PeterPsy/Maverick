@@ -15,6 +15,9 @@ from core.workspaces.paths import workspace_paths
 
 SAFE_NAME_PATTERN = re.compile(r"[^A-Za-z0-9._-]+")
 MAX_UPLOAD_BYTES = 25 * 1024 * 1024
+UPLOAD_CONTENT_TYPES_BY_SUFFIX = {
+    ".m4a": "audio/mp4",
+}
 
 
 @dataclass(frozen=True)
@@ -37,6 +40,15 @@ class WorkspaceUploadedFile:
 def _safe_filename(filename: str) -> str:
     candidate = SAFE_NAME_PATTERN.sub("-", filename.strip()).strip(".-")
     return candidate or "upload.bin"
+
+
+def _upload_content_type(content_type: str, filename: str) -> str:
+    normalized = content_type.strip()
+    media_type = normalized.split(";", 1)[0].lower()
+    suffix = Path(filename).suffix.lower()
+    if suffix == ".m4a" and (not media_type or media_type in {"application/octet-stream", "audio/x-m4a", "audio/m4a", "video/mp4"}):
+        return UPLOAD_CONTENT_TYPES_BY_SUFFIX[suffix]
+    return normalized or "application/octet-stream"
 
 
 def save_workspace_upload(
@@ -67,7 +79,7 @@ def save_workspace_upload(
         workspace_id=workspace_id,
         relative_path=relative_path,
         filename=safe_name,
-        content_type=content_type.strip() or "application/octet-stream",
+        content_type=_upload_content_type(content_type, safe_name),
         size_bytes=len(raw),
         sha256=hashlib.sha256(raw).hexdigest(),
         created_at=datetime.now(tz=UTC),

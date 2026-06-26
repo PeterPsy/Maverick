@@ -15,6 +15,7 @@ from typing import Any
 from errors import StorageValidationError
 from inventory import upsert_file_record
 from limits import LOCAL_UPLOAD_SESSION_CHUNK_BYTES, MAX_STORAGE_FILE_TRANSFER_BYTES
+from storage_mime import normalize_content_type
 from store_files_paths import (
     enforce_storage_budget,
     hash_file,
@@ -97,7 +98,7 @@ def create_local_upload_session(
             "requested_relative_path": requested_target.relative_to(root).as_posix(),
             "relative_path": target.relative_to(root).as_posix(),
             "file_name": target.name,
-            "content_type": str(content_type or "application/octet-stream").strip() or "application/octet-stream",
+            "content_type": normalize_content_type(content_type, file_name=file_name),
             "size_bytes": size_bytes,
             "bytes_uploaded": 0,
             "error": "",

@@ -1,6 +1,28 @@
 import type { CatalogPayload, CreateFolderPayload, DeleteFilePayload, DeleteFolderPayload, DownloadFolderPayload, DriveCompleteOAuthPayload, DriveConnectionsPayload, DriveDisconnectPayload, DriveListPayload, DriveLocalizePayload, DrivePreviewPayload, DriveStartOAuthPayload, DriveWritePayload, FileRole, StorageFile, StorageFolder, StorageViewFilter, MoveFilePayload, MoveFolderPayload, MoveItemsPayload, PreviewTablePayload, PreviewTextPayload, ReadFilePayload, RenderPreviewPayload, UpdateMarkdownPayload, UploadFilePayload } from './types';
 
 const DEFAULT_APP_ID = 'storage';
+const extensionContentTypes: Record<string, string> = {
+  aac: 'audio/aac',
+  flac: 'audio/flac',
+  m4a: 'audio/mp4',
+  mp3: 'audio/mpeg',
+  oga: 'audio/ogg',
+  ogg: 'audio/ogg',
+  opus: 'audio/ogg',
+  wav: 'audio/wav',
+  weba: 'audio/webm'
+};
+
+function contentTypeForFile(file: File) {
+  const extension = file.name.split('.').pop()?.toLowerCase() || '';
+  if (!file.type || file.type === 'application/octet-stream') {
+    return extensionContentTypes[extension] || 'application/octet-stream';
+  }
+  if (extension === 'm4a' && ['audio/x-m4a', 'audio/m4a', 'video/mp4'].includes(file.type.toLowerCase())) {
+    return 'audio/mp4';
+  }
+  return file.type;
+}
 
 export type StorageApiOptions = {
   appId?: string;
@@ -440,7 +462,8 @@ export async function uploadFile(role: FileRole, folderRelativePath: string, fil
     role,
     folder_relative_path: folderRelativePath,
     file_name: file.name,
-    content_base64: contentBase64
+    content_base64: contentBase64,
+    content_type: contentTypeForFile(file)
   };
   options.onProgress?.({ loaded: 0, percent: 35, phase: 'uploading', total: file.size });
   const useProgressRequest = Boolean(options.onProgress) && typeof XMLHttpRequest !== 'undefined' && !options.fetchImpl;
@@ -527,7 +550,7 @@ function startLocalUploadSession(role: FileRole, folderRelativePath: string, fil
     role,
     folder_relative_path: folderRelativePath,
     file_name: file.name,
-    content_type: file.type || 'application/octet-stream',
+    content_type: contentTypeForFile(file),
     size_bytes: file.size
   }, options);
 }
@@ -575,7 +598,7 @@ export async function uploadDriveFile(file: File, target: DriveUploadTarget, opt
     parent_drive_file_id: parentDriveFileId,
     file_name: file.name,
     content_base64: contentBase64,
-    content_type: file.type || 'application/octet-stream',
+    content_type: contentTypeForFile(file),
     _app_secret_request: driveConnectionSecretRequest(connectionId)
   };
   options.onProgress?.({ loaded: 0, percent: 35, phase: 'uploading', total: file.size });
@@ -675,7 +698,7 @@ function startDriveUploadSession(file: File, target: DriveUploadTarget, options:
     connection_id: target.connectionId,
     parent_drive_file_id: target.driveFileId,
     file_name: file.name,
-    content_type: file.type || 'application/octet-stream',
+    content_type: contentTypeForFile(file),
     size_bytes: file.size,
     _app_secret_request: driveConnectionSecretRequest(target.connectionId)
   }, options);

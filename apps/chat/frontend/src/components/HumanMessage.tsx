@@ -40,7 +40,7 @@ export function HumanMessage({
                 <img alt="" className="chatapp-attachment-card__preview" src={attachment.objectUrl} />
               ) : (
                 <span className="chatapp-attachment-card__icon" aria-hidden="true">
-                  <span className="material-symbols-rounded">description</span>
+                  <span className="material-symbols-rounded">{attachment.isAudio ? "audio_file" : "description"}</span>
                 </span>
               )}
               <span className="chatapp-attachment-card__meta">

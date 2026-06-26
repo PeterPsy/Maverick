@@ -484,6 +484,36 @@ describe('storage api client', () => {
     );
   });
 
+  it('normalizes m4a browser uploads to audio/mp4', async () => {
+    const fetchImpl = vi.fn(async () => new Response(JSON.stringify({
+      file: { id: 'file_voice', file_id: 'file_voice', name: 'voice.m4a' },
+      bytes_written: 5
+    }), { status: 200 }));
+    vi.stubGlobal('FileReader', FakeFileReader);
+
+    try {
+      await uploadFile('generated', 'Audio', new File(['voice'], 'voice.m4a', { type: '' }), { fetchImpl });
+    } finally {
+      vi.unstubAllGlobals();
+    }
+
+    expect(fetchImpl).toHaveBeenCalledWith(
+      '/api/apps/storage/backend',
+      expect.objectContaining({
+        body: JSON.stringify({
+          action: 'upload_file',
+          role: 'generated',
+          folder_relative_path: 'Audio',
+          file_name: 'voice.m4a',
+          content_base64: 'dm9pY2U=',
+          content_type: 'audio/mp4',
+          _app_secret_request: { logical_names: [], required: false }
+        }),
+        method: 'POST'
+      })
+    );
+  });
+
   it('uses local upload sessions for files above the base64 write limit', async () => {
     const fileSize = MAX_BASE64_WRITE_BYTES + 3;
     const largeFile = {

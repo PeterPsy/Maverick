@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from base64 import b64encode
 import json
-import mimetypes
 from pathlib import Path
 import sys
 
@@ -14,6 +13,7 @@ from errors import StorageValidationError, validation_error_payload
 from limits import LOCAL_UPLOAD_SESSION_CHUNK_BYTES
 from operations_manifest import STORAGE_ACTION_ALIASES
 from service import app_events_for_action, handle_action, secret_lookup_for_drive_action
+from storage_mime import normalize_content_type
 from store_files_paths import normalize_write_mode, reference_from_payload
 
 
@@ -26,7 +26,7 @@ def _upload_local_file_payload(*, data_root: Path, uploaded_root: Path, generate
     mode = normalize_write_mode(body.get("mode"), operation="upload_local_file")
     confirm = body.get("confirm")
     role, folder_relative_path, file_name = _local_upload_target(body, source)
-    content_type = str(body.get("content_type") or mimetypes.guess_type(source.name)[0] or "application/octet-stream")
+    content_type = normalize_content_type(body.get("content_type"), file_name=source.name)
     size_bytes = source.stat().st_size
     _ensure_local_upload_folder(
         data_root=data_root,

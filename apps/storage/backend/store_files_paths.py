@@ -8,7 +8,6 @@ from contextlib import contextmanager
 from datetime import UTC, datetime
 import fcntl
 import hashlib
-import mimetypes
 import os
 from pathlib import Path
 import re
@@ -23,6 +22,7 @@ from inventory import (
 from limits import MAX_INLINE_READ_BYTES, MAX_INLINE_WRITE_BYTES
 from local_storage_provider import LocalStorageProvider
 from storage_catalog import StorageCatalog
+from storage_mime import guess_content_type
 
 
 SCHEMA_VERSION = "1"
@@ -219,7 +219,7 @@ def file_record(*, role: str, root: Path, path: Path, file_id: str | None = None
     relative = path.relative_to(root).as_posix()
     workspace_relative = f"storage/{role}/{relative}"
     stat = path.stat()
-    content_type = mimetypes.guess_type(path.name)[0] or "application/octet-stream"
+    content_type = guess_content_type(path.name)
     modified = datetime.fromtimestamp(stat.st_mtime, tz=UTC).isoformat()
     path_id = f"{role}:{relative}"
     return {

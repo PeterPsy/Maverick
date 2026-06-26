@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 import hashlib
-import mimetypes
 from pathlib import Path
 import re
 from uuid import uuid4
@@ -20,6 +19,7 @@ from storage_provider_model import (
     normalize_provider,
     normalize_remote_locator,
 )
+from storage_mime import guess_content_type, normalize_content_type
 
 
 INVENTORY_FILE = "files.json"
@@ -36,12 +36,14 @@ def inventory_path(data_root: Path) -> Path:
 
 
 def preview_kind(content_type: str, suffix: str) -> str:
+    content_type = normalize_content_type(content_type, suffix=suffix)
+    media_type = content_type.split(";", 1)[0].lower()
     normalized_suffix = suffix.lower()
-    if content_type.startswith("image/"):
+    if media_type.startswith("image/"):
         return "image"
-    if content_type.startswith("video/"):
+    if media_type.startswith("video/"):
         return "video"
-    if content_type.startswith("audio/"):
+    if media_type.startswith("audio/"):
         return "audio"
     if normalized_suffix == ".md":
         return "markdown"
@@ -51,9 +53,9 @@ def preview_kind(content_type: str, suffix: str) -> str:
         return "presentation"
     if normalized_suffix in {".xls", ".xlsx", ".ods", ".numbers"}:
         return "spreadsheet"
-    if content_type.startswith("text/") or normalized_suffix in {".json", ".csv", ".log", ".py", ".ts", ".tsx", ".txt"}:
+    if media_type.startswith("text/") or normalized_suffix in {".json", ".csv", ".log", ".py", ".ts", ".tsx", ".txt"}:
         return "text"
-    if content_type == "application/pdf":
+    if media_type == "application/pdf":
         return "pdf"
     return "file"
 
@@ -734,6 +736,10 @@ def _normalize_entry(item: dict[str, Any]) -> dict[str, Any]:
         name = str(item.get("name") or Path(display_path).name or drive_file_id or file_id)
         extension = str(item.get("extension") or Path(name).suffix.lower())
         sync_status = str(item.get("sync_status") or "unknown")
+    content_type = normalize_content_type(item.get("content_type"), file_name=name, suffix=extension)
+    computed_preview_kind = preview_kind(content_type, extension)
+    stored_preview_kind = str(item.get("preview_kind") or "")
+    normalized_preview_kind = computed_preview_kind if stored_preview_kind in {"", "file"} and computed_preview_kind != "file" else stored_preview_kind or computed_preview_kind
     return {
         "id": file_id,
         "file_id": file_id,
@@ -750,8 +756,8 @@ def _normalize_entry(item: dict[str, Any]) -> dict[str, Any]:
         "extension": extension,
         "size_bytes": int(item.get("size_bytes") or 0),
         "modified_at": str(item.get("modified_at") or ""),
-        "content_type": str(item.get("content_type") or "application/octet-stream"),
-        "preview_kind": str(item.get("preview_kind") or "file"),
+        "content_type": content_type,
+        "preview_kind": normalized_preview_kind,
         "sha256": str(item.get("sha256") or ""),
         "etag_or_version": str(item.get("etag_or_version") or item.get("source_version") or ""),
         "capabilities": normalize_capabilities(item.get("capabilities"), provider=provider),
@@ -827,7 +833,7 @@ def _entry_for_path(
 ) -> dict[str, Any]:
     relative = path.relative_to(root).as_posix()
     stat = path.stat()
-    content_type = mimetypes.guess_type(path.name)[0] or "application/octet-stream"
+    content_type = guess_content_type(path.name)
     modified = datetime.fromtimestamp(stat.st_mtime, tz=UTC).isoformat()
     stable_id = file_id if file_id and stable_file_id(file_id) else f"file_{uuid4().hex}"
     return {

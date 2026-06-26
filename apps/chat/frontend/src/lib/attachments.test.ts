@@ -24,4 +24,17 @@ describe("composer attachment helpers", () => {
     const attachments = buildComposerAttachments([file]);
     expect(attachments[0].warning).toBe("Unsupported file type");
   });
+
+  it("accepts m4a audio attachments when the browser omits the MIME type", () => {
+    const file = new File(["audio"], "AUDIO-2026-06-25-22-00.m4a", {
+      type: "",
+    });
+
+    const attachments = buildComposerAttachments([file]);
+
+    expect(attachments[0].warning).toBeNull();
+    expect(attachments[0].type).toBe("audio/mp4");
+    expect(attachments[0].isAudio).toBe(true);
+    expect(hasInvalidAttachments(attachments)).toBe(false);
+  });
 });

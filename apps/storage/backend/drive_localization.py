@@ -15,6 +15,7 @@ from urllib.parse import quote, urlencode
 from drive_oauth import GOOGLE_DRIVE_CLIENT_ID_SECRET, GOOGLE_DRIVE_CLIENT_SECRET_SECRET, GOOGLE_DRIVE_REFRESH_TOKEN_SECRET
 from errors import StorageValidationError
 from google_drive_provider import DriveProviderError, GoogleDriveProvider, PreparedDriveBinaryStream
+from storage_mime import normalize_content_type
 from storage_provider_model import GOOGLE_DRIVE_PROVIDER
 
 
@@ -392,7 +393,7 @@ def _drive_proxy_media_response(
             "localization": _streaming_localization(target=target, file_record=file_record, metadata=cached_range or {}),
             "file_response": {
                 "path": str(range_path),
-                "content_type": str(file_record.get("content_type") or "application/octet-stream"),
+                "content_type": normalize_content_type(file_record.get("content_type"), file_name=file_record.get("name")),
                 "file_name": str(file_record.get("name") or "drive-file"),
                 "etag": _media_etag(target=target, source_version=_source_version(file_record)),
                 "download": download,
@@ -635,7 +636,7 @@ def _localization_id(file_record: dict[str, Any]) -> str:
             str(file_record.get("connection_id") or ""),
             str(file_record.get("drive_file_id") or ""),
             _source_version(file_record),
-            str(file_record.get("content_type") or "application/octet-stream"),
+            normalize_content_type(file_record.get("content_type"), file_name=file_record.get("name")),
         ]
     )
     if not material.strip("\0"):
@@ -736,7 +737,7 @@ def _range_metadata(
         "connection_id": str(file_record.get("connection_id") or ""),
         "drive_file_id": str(file_record.get("drive_file_id") or ""),
         "source_version": _source_version(file_record),
-        "content_type": str(file_record.get("content_type") or "application/octet-stream"),
+        "content_type": normalize_content_type(file_record.get("content_type"), file_name=file_record.get("name")),
         "file_name": str(file_record.get("name") or "drive-file"),
         "start": start,
         "end": end,
@@ -783,7 +784,7 @@ def _streaming_localization(*, target: LocalizedDriveTarget, file_record: dict[s
         "id": target.localization_id,
         "status": "localizing",
         "source_version": metadata.get("source_version") or _source_version(file_record),
-        "content_type": metadata.get("content_type") or file_record.get("content_type") or "application/octet-stream",
+        "content_type": normalize_content_type(metadata.get("content_type") or file_record.get("content_type"), file_name=metadata.get("file_name") or file_record.get("name")),
         "file_name": metadata.get("file_name") or file_record.get("name") or "drive-file",
         "size_bytes": total_size,
         "sha256": metadata.get("sha256") or "",
@@ -798,7 +799,7 @@ def _streaming_localization(*, target: LocalizedDriveTarget, file_record: dict[s
 
 def _drive_stream_response(*, file_record: dict[str, Any], target: LocalizedDriveTarget, download: bool, content_length: int | None) -> dict[str, Any]:
     response = {
-        "content_type": str(file_record.get("content_type") or "application/octet-stream"),
+        "content_type": normalize_content_type(file_record.get("content_type"), file_name=file_record.get("name")),
         "file_name": str(file_record.get("name") or "drive-file"),
         "etag": _media_etag(target=target, source_version=_source_version(file_record)),
         "download": download,
@@ -848,7 +849,7 @@ def _pending_metadata(*, file_record: dict[str, Any], localization_id: str) -> d
         "drive_file_id": str(file_record.get("drive_file_id") or ""),
         "stable_storage_file_id": str(file_record.get("file_id") or file_record.get("stable_storage_file_id") or file_record.get("id") or ""),
         "source_version": _source_version(file_record),
-        "content_type": str(file_record.get("content_type") or "application/octet-stream"),
+        "content_type": normalize_content_type(file_record.get("content_type"), file_name=file_record.get("name")),
         "file_name": str(file_record.get("name") or "drive-file"),
         "size_bytes": int(file_record.get("size_bytes") or 0),
         "sha256": "",
@@ -927,7 +928,7 @@ def _localization_payload(
             "id": target.localization_id,
             "status": metadata.get("status") or "ready",
             "source_version": metadata.get("source_version") or _source_version(file_record),
-            "content_type": metadata.get("content_type") or file_record.get("content_type") or "application/octet-stream",
+            "content_type": normalize_content_type(metadata.get("content_type") or file_record.get("content_type"), file_name=metadata.get("file_name") or file_record.get("name")),
             "file_name": metadata.get("file_name") or file_record.get("name") or "drive-file",
             "size_bytes": int(metadata.get("size_bytes") or 0),
             "sha256": metadata.get("sha256") or "",
@@ -970,7 +971,8 @@ def _cache_file_is_ready(target: LocalizedDriveTarget, metadata: dict[str, Any],
     return (
         str(metadata.get("stable_storage_file_id") or "") == stable_id
         and str(metadata.get("source_version") or "") == _source_version(file_record)
-        and str(metadata.get("content_type") or "") == str(file_record.get("content_type") or "application/octet-stream")
+        and normalize_content_type(metadata.get("content_type"), file_name=metadata.get("file_name") or file_record.get("name"))
+        == normalize_content_type(file_record.get("content_type"), file_name=file_record.get("name"))
     )
 
 

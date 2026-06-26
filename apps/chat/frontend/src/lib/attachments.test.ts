@@ -37,4 +37,26 @@ describe("composer attachment helpers", () => {
     expect(attachments[0].isAudio).toBe(true);
     expect(hasInvalidAttachments(attachments)).toBe(false);
   });
+
+  it("blocks non-image attachments for hosted chat image input", () => {
+    const file = new File(["notes"], "notes.txt", {
+      type: "text/plain",
+    });
+
+    const attachments = buildComposerAttachments([file], 0, { inputMode: "image" });
+
+    expect(attachments[0].warning).toBe("Hosted chat supports image attachments only");
+    expect(hasInvalidAttachments(attachments)).toBe(true);
+  });
+
+  it("blocks all attachments for hosted chat models without attachment input", () => {
+    const file = new File(["image"], "frame.png", {
+      type: "image/png",
+    });
+
+    const attachments = buildComposerAttachments([file], 0, { inputMode: "none" });
+
+    expect(attachments[0].warning).toBe("Selected hosted model does not support attachments");
+    expect(hasInvalidAttachments(attachments)).toBe(true);
+  });
 });

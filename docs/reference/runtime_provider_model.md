@@ -125,12 +125,12 @@ the runtime thread record.
 
 The bridge is deliberately narrower than an agentic runtime. Before prompt
 materialization it rejects skills, tool/MCP use, workspace filesystem access,
-and operative app references. Attachments are allowed only when the selected
-hosted model advertises compatible input modalities. The first supported path is
-OpenRouter image input: Chat-uploaded workspace images are read by the platform
-and sent as OpenAI-compatible `image_url` data URL content parts, without
-including local workspace paths in the provider prompt. Non-image files and
-text-only models fail closed. Hosted text requests must not contain local
+generic file attachments, and operative app references. The only attachment
+exception is image input when the selected hosted model advertises image input.
+Chat-uploaded workspace images are read by the platform and sent as
+OpenAI-compatible `image_url` data URL content parts, without including local
+workspace paths in the provider prompt. Non-image files and text-only models
+fail closed. Hosted text requests must not contain local
 workspace paths, `local path:` labels, or materialized app-owned record blocks.
 Routing decisions, runtime events, logs, transcripts, Storage artifacts,
 CLI/MCP payloads, and HTTP responses may expose provider ids, model ids, binding

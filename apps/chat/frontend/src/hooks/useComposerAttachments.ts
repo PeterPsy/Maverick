@@ -1,13 +1,13 @@
 import { useEffect, useRef, useState } from "react";
-import { buildComposerAttachments, ComposerAttachment } from "../lib/attachments";
+import { buildComposerAttachments, ComposerAttachment, type ComposerAttachmentOptions, refreshComposerAttachmentWarnings } from "../lib/attachments";
 
-export function useComposerAttachments() {
+export function useComposerAttachments(options: ComposerAttachmentOptions = {}) {
   const [attachments, setAttachments] = useState<ComposerAttachment[]>([]);
   const objectUrlsRef = useRef<Set<string>>(new Set());
 
   function addAttachments(files: File[]) {
     setAttachments((current) => {
-      const nextAttachments = buildComposerAttachments(files, current.length);
+      const nextAttachments = buildComposerAttachments(files, current.length, options);
       nextAttachments.forEach((attachment) => {
         if (attachment.objectUrl) {
           objectUrlsRef.current.add(attachment.objectUrl);
@@ -39,6 +39,10 @@ export function useComposerAttachments() {
       objectUrlsRef.current.clear();
     };
   }, []);
+
+  useEffect(() => {
+    setAttachments((current) => refreshComposerAttachmentWarnings(current, options));
+  }, [options.inputMode]);
 
   return {
     addAttachments,

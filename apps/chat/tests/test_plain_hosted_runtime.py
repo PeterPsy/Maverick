@@ -19,23 +19,23 @@ from tests.support.repo import make_temp_repo_root
 
 
 class ChatPlainHostedRuntimeTest(unittest.IsolatedAsyncioTestCase):
-    def make_state(self, *, bind_groq: bool = True):
+    def make_state(self, *, bind_openrouter: bool = True):
         state = bootstrap_platform_state(start_path=make_temp_repo_root(self))
         secret = create_platform_secret(
             state.secret_store,
-            label="Groq chat test",
+            label="OpenRouter chat test",
             raw_value="super-secret-token",
-            alias="groq-chat-hosted",
+            alias="openrouter-chat-hosted",
             kind="api_key",
         )
         activation = activate_hosted_model_provider(
             state.provider_store,
             secret_store=state.secret_store,
             workspace_id="default",
-            provider_id="groq",
-            secret_ref=build_secret_ref(alias=secret.alias or "groq-chat-hosted"),
+            provider_id="openrouter",
+            secret_ref=build_secret_ref(alias=secret.alias or "openrouter-chat-hosted"),
         )
-        if bind_groq:
+        if bind_openrouter:
             return state
         if activation.credential_binding is not None:
             disable_provider_binding(state.provider_store, activation.credential_binding.binding_id)
@@ -129,7 +129,7 @@ class ChatPlainHostedRuntimeTest(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual(status, 201)
         self.assertEqual(payload["session"]["runtime_mode"], "plain_hosted_chat")
-        self.assertEqual(payload["session"]["provider_id"], "groq")
+        self.assertEqual(payload["session"]["provider_id"], "openrouter")
         self.assertEqual(payload["turn"]["status"], "completed")
         self.assertEqual(payload["turn"]["runtime_mode"], "plain_hosted_chat")
         event_types = [event["event_type"] for event in payload["events"]]
@@ -142,19 +142,19 @@ class ChatPlainHostedRuntimeTest(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(snapshot["type"], "runtime.snapshot")
         snapshot_events = snapshot["events"]
         self.assertEqual(snapshot["session"]["runtime_mode"], "plain_hosted_chat")
-        self.assertEqual(snapshot["session"]["provider_id"], "groq")
+        self.assertEqual(snapshot["session"]["provider_id"], "openrouter")
         snapshot_event_types = [event["event_type"] for event in snapshot_events]
         self.assertIn("provider.routing.decision", snapshot_event_types)
         self.assertIn("runtime.output.delta", snapshot_event_types)
         routing_event = next(event for event in snapshot_events if event["event_type"] == "provider.routing.decision")
-        self.assertEqual(routing_event["payload"]["selected_provider_id"], "groq")
+        self.assertEqual(routing_event["payload"]["selected_provider_id"], "openrouter")
         self.assertNotIn("secret_ref", json.dumps(routing_event))
         final_event = next(event for event in snapshot_events if event["event_type"] == "runtime.output.final")
         self.assertEqual(final_event["payload"]["complete_text"], "Hosted answer")
         self.assertNotIn("super-secret-token", json.dumps(snapshot))
 
     async def test_chat_plain_hosted_missing_credentials_returns_failed_turn_reason_without_codex(self) -> None:
-        state = self.make_state(bind_groq=False)
+        state = self.make_state(bind_openrouter=False)
         cookie = self.login_cookie(state)
 
         with patch(
@@ -189,16 +189,16 @@ class ChatPlainHostedRuntimeTest(unittest.IsolatedAsyncioTestCase):
 
     async def test_chat_plain_hosted_legacy_invalid_binding_is_not_selected_or_leaked(self) -> None:
         state = bootstrap_platform_state(start_path=make_temp_repo_root(self))
-        groq = state.provider_store.get_provider_definition("groq")
-        state.provider_store.save_provider_definition(replace(groq, status="active"))
+        openrouter = state.provider_store.get_provider_definition("openrouter")
+        state.provider_store.save_provider_definition(replace(openrouter, status="active"))
         now = datetime(2026, 6, 22, 12, 0, tzinfo=UTC)
         state.provider_store.save_provider_binding(
             ProviderCredentialBinding(
-                binding_id="legacy-groq",
-                provider_id="groq",
+                binding_id="legacy-openrouter",
+                provider_id="openrouter",
                 workspace_id="default",
-                secret_ref="platform:providers/groq",
-                label="Legacy Groq",
+                secret_ref="platform:providers/openrouter",
+                label="Legacy OpenRouter",
                 status="active",
                 created_at=now,
                 updated_at=now,
@@ -231,19 +231,19 @@ class ChatPlainHostedRuntimeTest(unittest.IsolatedAsyncioTestCase):
         failed_event = next(event for event in payload["events"] if event["event_type"] == "runtime.turn.failed")
         self.assertEqual(failed_event["payload"]["error"], "provider_credential_authorization_missing")
         self.assertIn("provider_credential_binding_invalid_secret_ref", failed_event["payload"]["reason_codes"])
-        self.assertNotIn("platform:providers/groq", json.dumps(payload))
+        self.assertNotIn("platform:providers/openrouter", json.dumps(payload))
         self.assertNotIn('"secret_ref":', json.dumps(payload))
 
     async def test_chat_plain_hosted_missing_bound_core_secret_is_not_selected_or_leaked(self) -> None:
         state = bootstrap_platform_state(start_path=make_temp_repo_root(self))
-        groq = state.provider_store.get_provider_definition("groq")
-        state.provider_store.save_provider_definition(replace(groq, status="active"))
+        openrouter = state.provider_store.get_provider_definition("openrouter")
+        state.provider_store.save_provider_definition(replace(openrouter, status="active"))
         bind_provider_credential(
             state.provider_store,
-            provider_id="groq",
+            provider_id="openrouter",
             workspace_id="default",
-            secret_ref="platform:secret-alias/missing-groq",
-            label="Missing Groq",
+            secret_ref="platform:secret-alias/missing-openrouter",
+            label="Missing OpenRouter",
         )
         cookie = self.login_cookie(state)
 
@@ -272,7 +272,7 @@ class ChatPlainHostedRuntimeTest(unittest.IsolatedAsyncioTestCase):
         failed_event = next(event for event in payload["events"] if event["event_type"] == "runtime.turn.failed")
         self.assertEqual(failed_event["payload"]["error"], "provider_credential_authorization_missing")
         self.assertIn("provider_credential_binding_secret_missing", failed_event["payload"]["reason_codes"])
-        self.assertNotIn("platform:secret-alias/missing-groq", json.dumps(payload))
+        self.assertNotIn("platform:secret-alias/missing-openrouter", json.dumps(payload))
         self.assertNotIn('"secret_ref":', json.dumps(payload))
 
     async def test_chat_plain_hosted_rejects_unknown_routing_profile(self) -> None:
@@ -297,6 +297,37 @@ class ChatPlainHostedRuntimeTest(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(status, 400)
         self.assertEqual(payload["error"], "unsupported_routing_profile")
         self.assertEqual(state.runtime_store.list_sessions("default"), [])
+
+    async def test_chat_plain_hosted_rejects_non_image_attachments_before_submit(self) -> None:
+        state = self.make_state()
+        cookie = self.login_cookie(state)
+
+        status, payload, _headers = self.invoke(
+            state,
+            path="/api/runtime/sessions",
+            method="POST",
+            cookie=cookie,
+            body={
+                "agent_id": "chat",
+                "source_app_id": "chat",
+                "runtime_mode": "plain_hosted_chat",
+                "routing_profile": "fast_model",
+                "input_text": "Summarize this file",
+                "attachments": [
+                    {
+                        "id": "attachment-1",
+                        "name": "notes.txt",
+                        "type": "text/plain",
+                        "isImage": False,
+                        "relativePath": "storage/uploaded/chat/notes.txt",
+                    }
+                ],
+                "async": False,
+            },
+        )
+
+        self.assertEqual(status, 400)
+        self.assertEqual(payload["error"], "plain_hosted_chat_blocks_attachments")
 
 
 if __name__ == "__main__":

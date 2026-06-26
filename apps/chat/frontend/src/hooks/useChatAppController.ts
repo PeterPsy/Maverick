@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   getInterAgentRun,
   listInterAgentRunApprovals,
@@ -16,6 +16,7 @@ import {
 } from "../api/client";
 import type { ExternalFileDrop, ExternalMentionDrop } from "../lib/externalInputs";
 import { type ActiveAppContext, loadWidgetActiveAppContext } from "../lib/activeAppContext";
+import { providerUsesPlainHostedRuntime } from "../lib/providerRuntimeOptions";
 import { openAppParamsInShell } from "../lib/shellNavigation";
 import { postActiveThreadChanged } from "./chatActiveThreadNotifications";
 import { useChatComposerContext } from "./useChatComposerContext";
@@ -102,7 +103,15 @@ export function useChatAppController({
   const [activeSession, setActiveSession] = useState<RuntimeSession | null>(null);
   const [events, setEvents] = useState<RuntimeEvent[]>([]);
   const [composer, setComposer] = useState("");
-  const { addAttachments, attachments, clearAttachments, removeAttachment } = useComposerAttachments();
+  const selectedProvider = providers.find((provider) => provider.provider_id === activeProviderId) || null;
+  const attachmentInputMode = useMemo(() => {
+    const isHostedSession = activeSession?.runtime_mode === "plain_hosted_chat" || providerUsesPlainHostedRuntime(selectedProvider);
+    if (!isHostedSession) {
+      return "all";
+    }
+    return selectedProvider?.input_modalities?.includes("image") ? "image" : "none";
+  }, [activeSession?.runtime_mode, selectedProvider]);
+  const { addAttachments, attachments, clearAttachments, removeAttachment } = useComposerAttachments({ inputMode: attachmentInputMode });
   const [activeTurn, setActiveTurn] = useState<RuntimeTurn | null>(null);
   const [isBootstrapping, setIsBootstrapping] = useState(true);
   const [isHistoryLoading, setIsHistoryLoading] = useState(false);

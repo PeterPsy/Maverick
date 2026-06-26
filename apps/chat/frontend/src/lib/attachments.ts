@@ -10,8 +10,16 @@ export type ComposerAttachment = {
   warning: string | null;
 };
 
+export type AttachmentInputMode = "all" | "image" | "none";
+
+export type ComposerAttachmentOptions = {
+  inputMode?: AttachmentInputMode;
+};
+
 const MAX_ATTACHMENT_COUNT = 8;
 const MAX_ATTACHMENT_SIZE_BYTES = 25 * 1024 * 1024;
+const HOSTED_IMAGE_ONLY_WARNING = "Hosted chat supports image attachments only";
+const HOSTED_NO_ATTACHMENT_WARNING = "Selected hosted model does not support attachments";
 const ACCEPTED_MIME_PREFIXES = ["audio/", "image/", "text/"];
 const ACCEPTED_MIME_TYPES = new Set([
   "application/json",
@@ -47,14 +55,6 @@ export function formatFileSize(size: number): string {
   return `${(size / (1024 * 1024)).toFixed(1)} MB`;
 }
 
-function hasAcceptedType(file: File): boolean {
-  const mimeType = contentTypeForFile(file).toLowerCase();
-  const fileName = file.name.toLowerCase();
-  const hasAcceptedMimeType = Boolean(mimeType) && (ACCEPTED_MIME_TYPES.has(mimeType) || ACCEPTED_MIME_PREFIXES.some((prefix) => mimeType.startsWith(prefix)));
-  const hasAcceptedExtension = Array.from(ACCEPTED_EXTENSIONS).some((extension) => fileName.endsWith(extension));
-  return hasAcceptedMimeType || hasAcceptedExtension;
-}
-
 export function contentTypeForFile(file: File): string {
   const fileName = file.name.toLowerCase();
   const extension = Array.from(EXTENSION_CONTENT_TYPES.keys()).find((item) => fileName.endsWith(item)) || "";
@@ -68,30 +68,85 @@ export function contentTypeForFile(file: File): string {
   return file.type || "application/octet-stream";
 }
 
-export function buildComposerAttachments(files: File[], existingCount = 0): ComposerAttachment[] {
+function attachmentWarning({
+  fileName,
+  inputMode = "all",
+  isImage,
+  size,
+  type,
+}: {
+  fileName: string;
+  inputMode?: AttachmentInputMode;
+  isImage: boolean;
+  size: number;
+  type: string;
+}): string | null {
+  const isTooLarge = size > MAX_ATTACHMENT_SIZE_BYTES;
+  const hasUnsupportedType = !hasAcceptedFileIdentity(fileName, type);
+  if (isTooLarge) {
+    return `File exceeds the ${formatFileSize(MAX_ATTACHMENT_SIZE_BYTES)} limit`;
+  }
+  if (hasUnsupportedType) {
+    return "Unsupported file type";
+  }
+  if (inputMode === "none") {
+    return HOSTED_NO_ATTACHMENT_WARNING;
+  }
+  if (inputMode === "image" && !isImage) {
+    return HOSTED_IMAGE_ONLY_WARNING;
+  }
+  return null;
+}
+
+function hasAcceptedFileIdentity(fileName: string, contentType: string): boolean {
+  const mimeType = contentType.toLowerCase();
+  const normalizedFileName = fileName.toLowerCase();
+  const hasAcceptedMimeType = Boolean(mimeType) && (ACCEPTED_MIME_TYPES.has(mimeType) || ACCEPTED_MIME_PREFIXES.some((prefix) => mimeType.startsWith(prefix)));
+  const hasAcceptedExtension = Array.from(ACCEPTED_EXTENSIONS).some((extension) => normalizedFileName.endsWith(extension));
+  return hasAcceptedMimeType || hasAcceptedExtension;
+}
+
+export function buildComposerAttachments(files: File[], existingCount = 0, options: ComposerAttachmentOptions = {}): ComposerAttachment[] {
   const availableSlots = Math.max(0, MAX_ATTACHMENT_COUNT - existingCount);
   return files.slice(0, availableSlots).map((file) => {
     const contentType = contentTypeForFile(file);
     const isImage = contentType.startsWith("image/");
     const isAudio = contentType.startsWith("audio/");
-    const isTooLarge = file.size > MAX_ATTACHMENT_SIZE_BYTES;
-    const hasUnsupportedType = !hasAcceptedType(file);
+    const name = file.name || "Untitled attachment";
     return {
       id: makeAttachmentId(file),
       file,
-      name: file.name || "Untitled attachment",
+      name,
       size: file.size,
       type: contentType,
       objectUrl: isImage ? URL.createObjectURL(file) : null,
       isImage,
       isAudio,
-      warning: isTooLarge
-        ? `File exceeds the ${formatFileSize(MAX_ATTACHMENT_SIZE_BYTES)} limit`
-        : hasUnsupportedType
-          ? "Unsupported file type"
-          : null,
+      warning: attachmentWarning({
+        fileName: name,
+        inputMode: options.inputMode,
+        isImage,
+        size: file.size,
+        type: contentType,
+      }),
     };
   });
+}
+
+export function refreshComposerAttachmentWarnings(
+  attachments: ComposerAttachment[],
+  options: ComposerAttachmentOptions = {},
+): ComposerAttachment[] {
+  return attachments.map((attachment) => ({
+    ...attachment,
+    warning: attachmentWarning({
+      fileName: attachment.name,
+      inputMode: options.inputMode,
+      isImage: attachment.isImage,
+      size: attachment.size,
+      type: attachment.type,
+    }),
+  }));
 }
 
 export function hasInvalidAttachments(attachments: ComposerAttachment[]): boolean {

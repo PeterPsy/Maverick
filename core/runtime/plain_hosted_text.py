@@ -55,6 +55,17 @@ def assert_plain_hosted_chat_input_allowed(
         raise HostedTextGenerationError("plain_hosted_chat_blocks_skills")
     if app_references:
         raise HostedTextGenerationError("plain_hosted_chat_blocks_app_references")
+    attachment_error = plain_hosted_chat_attachment_error(attachments)
+    if attachment_error:
+        raise HostedTextGenerationError(attachment_error)
+
+
+def plain_hosted_chat_attachment_error(attachments: list[dict[str, object]] | None) -> str | None:
+    """Return the stable hosted-chat error for unsupported attachment inputs."""
+    for attachment in attachments or []:
+        if isinstance(attachment, dict) and not _attachment_is_image(attachment):
+            return "plain_hosted_chat_blocks_attachments"
+    return None
 
 
 def execute_plain_hosted_text_turn(
@@ -185,7 +196,7 @@ def _hosted_message_content(
 
 def _image_attachment_part(*, attachment: dict[str, object], workspace_root: str) -> TextGenerationContentPart:
     content_type = _string_value(attachment.get("type") or attachment.get("content_type"))
-    if not (content_type.startswith("image/") or bool(attachment.get("isImage"))):
+    if not _attachment_is_image(attachment):
         raise HostedTextGenerationError("plain_hosted_chat_blocks_attachments")
     relative_path = _safe_workspace_relative_path(_string_value(attachment.get("relativePath") or attachment.get("relative_path")))
     if not relative_path:
@@ -197,6 +208,11 @@ def _image_attachment_part(*, attachment: dict[str, object], workspace_root: str
     mime_type = content_type or mimetypes.guess_type(path.name)[0] or "image/png"
     data_url = f"data:{mime_type};base64,{base64.b64encode(raw).decode('ascii')}"
     return TextGenerationContentPart(type="image_url", image_url=data_url)
+
+
+def _attachment_is_image(attachment: dict[str, object]) -> bool:
+    content_type = _string_value(attachment.get("type") or attachment.get("content_type"))
+    return content_type.startswith("image/") or bool(attachment.get("isImage"))
 
 
 def _safe_workspace_relative_path(value: str) -> str:

@@ -37,8 +37,6 @@ class PlainHostedRuntimeTest(unittest.TestCase):
             )
         )
         register_builtin_providers(store)
-        groq = builtin_provider_registry().get_provider_definition("groq")
-        store.save_provider_definition(replace(groq, status="active"))
         openrouter = builtin_provider_registry().get_provider_definition("openrouter")
         store.save_provider_definition(replace(openrouter, status="active"))
         return store
@@ -81,22 +79,16 @@ class PlainHostedRuntimeTest(unittest.TestCase):
         secret_store = self.make_secret_store()
         secret = create_platform_secret(
             secret_store,
-            label="Groq",
+            label="OpenRouter",
             raw_value="super-secret-token",
-            alias="groq-runtime-key",
+            alias="openrouter-runtime-key",
             kind="api_key",
-        )
-        bind_provider_credential(
-            provider_store,
-            provider_id="groq",
-            workspace_id="default",
-            secret_ref=build_secret_ref(secret_id=secret.secret_id),
         )
         bind_provider_credential(
             provider_store,
             provider_id="openrouter",
             workspace_id="default",
-            secret_ref=build_secret_ref(alias="groq-runtime-key"),
+            secret_ref=build_secret_ref(alias="openrouter-runtime-key"),
         )
         return SimpleNamespace(
             provider_store=provider_store,
@@ -196,12 +188,16 @@ class PlainHostedRuntimeTest(unittest.TestCase):
         self.assertEqual(turn.status, "completed")
         self.assertEqual(state.runtime_store.get_turn(turn.turn_id).runtime_mode, "plain_hosted_chat")
         self.assertEqual(_turn_payload(turn)["runtime_mode"], "plain_hosted_chat")
-        self.assertEqual(state.runtime_store.get_session(session.session_id).provider_id, "groq")
+        self.assertEqual(state.runtime_store.get_session(session.session_id).provider_id, "openrouter")
         self.assertIn("runtime.output.delta", event_types)
         self.assertIn("runtime.output.final", event_types)
         self.assertIn("runtime.turn.completed", event_types)
         self.assertEqual(final_events[-1].payload["complete_text"], "hello")
         self.assertNotIn("super-secret-token", str(state.runtime_store.list_events(session.session_id)))
+        self.assertEqual(
+            [event.payload["label"] for event in state.runtime_store.list_events(session.session_id) if event.event_type == "runtime.step.updated"],
+            ["Routing hosted model", "Generating hosted response", "Hosted response complete"],
+        )
 
     def test_plain_hosted_turn_with_image_uses_multimodal_openrouter_model(self) -> None:
         state = self.make_state()
@@ -310,6 +306,7 @@ class PlainHostedRuntimeTest(unittest.TestCase):
         self.assertEqual(current.status, "completed")
         event_types = [event.event_type for event in state.runtime_store.list_events(session.session_id)]
         self.assertIn("runtime.output.delta", event_types)
+        self.assertIn("runtime.step.updated", event_types)
         self.assertIn("runtime.turn.completed", event_types)
 
     def test_plain_hosted_api_blocks_app_references_before_materialization(self) -> None:

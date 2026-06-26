@@ -228,11 +228,42 @@ class HostedTextGenerationTest(unittest.TestCase):
             api_key="secret-token",
             transport=transport,
         )
+        live_deltas: list[str] = []
 
-        result = client.generate(self.request(stream=True))
+        result = client.generate(self.request(stream=True), delta_sink=live_deltas.append)
 
         self.assertEqual(result.output_text, "hello")
         self.assertEqual(result.deltas, ["hel", "lo"])
+        self.assertEqual(live_deltas, ["hel", "lo"])
+
+    def test_openai_streaming_transport_emits_live_chunks(self) -> None:
+        class StreamingResponse:
+            status = 200
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, exc_type, exc, tb) -> None:
+                return None
+
+            def __iter__(self):
+                yield b'data: {"choices":[{"delta":{"content":"hel"}}]}\n'
+                yield b'data: {"choices":[{"delta":{"content":"lo"}}]}\n'
+                yield b"data: [DONE]\n"
+
+        client = OpenAICompatibleTextGenerationClient(
+            provider_id="openrouter",
+            api_key="secret-token",
+            transport=OpenAICompatibleHttpTransport(),
+        )
+        live_deltas: list[str] = []
+
+        with patch("core.providers.text_generation.urllib_request.urlopen", return_value=StreamingResponse()):
+            result = client.generate(self.request(stream=True), delta_sink=live_deltas.append)
+
+        self.assertEqual(result.output_text, "hello")
+        self.assertEqual(result.deltas, ["hel", "lo"])
+        self.assertEqual(live_deltas, ["hel", "lo"])
 
     def test_provider_errors_map_to_reason_codes(self) -> None:
         cases = [

@@ -128,7 +128,7 @@ def _google_ai_studio_definition(timestamp: datetime) -> ProviderDefinition:
                 label="Gemini 3.5 Flash",
                 description="Google AI Studio Gemini Flash model candidate for fast_model routing.",
                 default_reasoning_effort=None,
-                input_modalities=["text", "image"],
+                input_modalities=["text", "image", "audio", "video", "pdf"],
                 output_modalities=["text"],
                 metadata={
                     "endpoint": "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash:generateContent",
@@ -141,7 +141,7 @@ def _google_ai_studio_definition(timestamp: datetime) -> ProviderDefinition:
                 label="Gemini 3.1 Flash",
                 description="Google AI Studio Gemini Flash model candidate for fast_model routing.",
                 default_reasoning_effort=None,
-                input_modalities=["text", "image"],
+                input_modalities=["text", "image", "audio", "video", "pdf"],
                 output_modalities=["text"],
                 metadata={
                     "endpoint": "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash:generateContent",
@@ -175,7 +175,7 @@ def _openrouter_definition(timestamp: datetime) -> ProviderDefinition:
                 label="Gemma 4 31B (free)",
                 description="OpenRouter hosted multimodal model candidate for fast_model routing.",
                 default_reasoning_effort=None,
-                input_modalities=["text", "image", "video"],
+                input_modalities=["text", "image", "video", "pdf"],
                 output_modalities=["text"],
                 upstream_provider_options=[
                     _openrouter_upstream(
@@ -200,7 +200,7 @@ def _openrouter_definition(timestamp: datetime) -> ProviderDefinition:
                 label="Nemotron 3 Ultra (free)",
                 description="OpenRouter hosted text model candidate for fast_model routing.",
                 default_reasoning_effort=None,
-                input_modalities=["text"],
+                input_modalities=["text", "pdf"],
                 output_modalities=["text"],
                 upstream_provider_options=[
                     _openrouter_upstream(
@@ -217,7 +217,7 @@ def _openrouter_definition(timestamp: datetime) -> ProviderDefinition:
                 label="DeepSeek V4 Flash",
                 description="OpenRouter paid text model candidate for high-throughput fast_model routing.",
                 default_reasoning_effort=None,
-                input_modalities=["text"],
+                input_modalities=["text", "pdf"],
                 output_modalities=["text"],
                 upstream_provider_options=[
                     _openrouter_upstream(

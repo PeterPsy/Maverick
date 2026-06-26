@@ -298,37 +298,5 @@ class ChatPlainHostedRuntimeTest(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(payload["error"], "unsupported_routing_profile")
         self.assertEqual(state.runtime_store.list_sessions("default"), [])
 
-    async def test_chat_plain_hosted_rejects_non_image_attachments_before_submit(self) -> None:
-        state = self.make_state()
-        cookie = self.login_cookie(state)
-
-        status, payload, _headers = self.invoke(
-            state,
-            path="/api/runtime/sessions",
-            method="POST",
-            cookie=cookie,
-            body={
-                "agent_id": "chat",
-                "source_app_id": "chat",
-                "runtime_mode": "plain_hosted_chat",
-                "routing_profile": "fast_model",
-                "input_text": "Summarize this file",
-                "attachments": [
-                    {
-                        "id": "attachment-1",
-                        "name": "notes.txt",
-                        "type": "text/plain",
-                        "isImage": False,
-                        "relativePath": "storage/uploaded/chat/notes.txt",
-                    }
-                ],
-                "async": False,
-            },
-        )
-
-        self.assertEqual(status, 400)
-        self.assertEqual(payload["error"], "plain_hosted_chat_blocks_attachments")
-
-
 if __name__ == "__main__":
     unittest.main()

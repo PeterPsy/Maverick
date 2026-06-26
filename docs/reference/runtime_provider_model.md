@@ -48,9 +48,9 @@ Core Secrets alias `openrouter_api_key`, the public secret reference
 completions endpoint `https://openrouter.ai/api/v1/chat/completions`.
 Maverick exposes these OpenRouter model options:
 
-- `google/gemma-4-31b-it:free` as `Gemma 4 31B (free)`, with text, image, and video input metadata
-- `nvidia/nemotron-3-ultra-550b-a55b:free` as `Nemotron 3 Ultra (free)`, with text-only input metadata
-- `deepseek/deepseek-v4-flash` as `DeepSeek V4 Flash`, with text-only input metadata and paid OpenRouter pricing
+- `google/gemma-4-31b-it:free` as `Gemma 4 31B (free)`, with text, image, video, and PDF input metadata
+- `nvidia/nemotron-3-ultra-550b-a55b:free` as `Nemotron 3 Ultra (free)`, with text and PDF input metadata
+- `deepseek/deepseek-v4-flash` as `DeepSeek V4 Flash`, with text and PDF input metadata and paid OpenRouter pricing
 - `hexgrad/kokoro-82m` as `Kokoro 82M`, with text-to-speech metadata and paid OpenRouter pricing
 
 Hosted text providers are enabled through an operator-only hosted activation
@@ -125,12 +125,13 @@ the runtime thread record.
 
 The bridge is deliberately narrower than an agentic runtime. Before prompt
 materialization it rejects skills, tool/MCP use, workspace filesystem access,
-generic file attachments, and operative app references. The only attachment
-exception is image input when the selected hosted model advertises image input.
-Chat-uploaded workspace images are read by the platform and sent as
-OpenAI-compatible `image_url` data URL content parts, without including local
-workspace paths in the provider prompt. Non-image files and text-only models
-fail closed. Hosted text requests must not contain local
+and operative app references. Storage-backed attachments are read by the
+platform and sent only when the selected hosted model advertises the matching
+input modality and the hosted provider bridge can serialize that modality.
+OpenRouter uses `image_url`, `input_audio`, `video_url`, and `file` content
+parts for local base64 data; Gemini uses `inlineData` parts. Attachments whose
+type is not declared by the selected hosted model fail closed. Hosted text
+requests must not contain local
 workspace paths, `local path:` labels, or materialized app-owned record blocks.
 Routing decisions, runtime events, logs, transcripts, Storage artifacts,
 CLI/MCP payloads, and HTTP responses may expose provider ids, model ids, binding

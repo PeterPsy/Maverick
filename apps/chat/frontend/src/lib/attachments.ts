@@ -10,16 +10,13 @@ export type ComposerAttachment = {
   warning: string | null;
 };
 
-export type AttachmentInputMode = "all" | "image" | "none";
-
 export type ComposerAttachmentOptions = {
-  inputMode?: AttachmentInputMode;
+  allowedInputModalities?: string[] | null;
 };
 
 const MAX_ATTACHMENT_COUNT = 8;
 const MAX_ATTACHMENT_SIZE_BYTES = 25 * 1024 * 1024;
-const HOSTED_IMAGE_ONLY_WARNING = "Hosted chat supports image attachments only";
-const HOSTED_NO_ATTACHMENT_WARNING = "Selected hosted model does not support attachments";
+const HOSTED_ATTACHMENT_WARNING = "Selected hosted model does not support this attachment type";
 const ACCEPTED_MIME_PREFIXES = ["audio/", "image/", "text/"];
 const ACCEPTED_MIME_TYPES = new Set([
   "application/json",
@@ -70,14 +67,12 @@ export function contentTypeForFile(file: File): string {
 
 function attachmentWarning({
   fileName,
-  inputMode = "all",
-  isImage,
+  allowedInputModalities = null,
   size,
   type,
 }: {
   fileName: string;
-  inputMode?: AttachmentInputMode;
-  isImage: boolean;
+  allowedInputModalities?: string[] | null;
   size: number;
   type: string;
 }): string | null {
@@ -89,11 +84,8 @@ function attachmentWarning({
   if (hasUnsupportedType) {
     return "Unsupported file type";
   }
-  if (inputMode === "none") {
-    return HOSTED_NO_ATTACHMENT_WARNING;
-  }
-  if (inputMode === "image" && !isImage) {
-    return HOSTED_IMAGE_ONLY_WARNING;
+  if (allowedInputModalities && !attachmentMatchesInputModalities(type, allowedInputModalities)) {
+    return HOSTED_ATTACHMENT_WARNING;
   }
   return null;
 }
@@ -104,6 +96,49 @@ function hasAcceptedFileIdentity(fileName: string, contentType: string): boolean
   const hasAcceptedMimeType = Boolean(mimeType) && (ACCEPTED_MIME_TYPES.has(mimeType) || ACCEPTED_MIME_PREFIXES.some((prefix) => mimeType.startsWith(prefix)));
   const hasAcceptedExtension = Array.from(ACCEPTED_EXTENSIONS).some((extension) => normalizedFileName.endsWith(extension));
   return hasAcceptedMimeType || hasAcceptedExtension;
+}
+
+function attachmentMatchesInputModalities(contentType: string, inputModalities: string[]): boolean {
+  const modalities = new Set(inputModalities);
+  const modality = attachmentModality(contentType.toLowerCase());
+  if (modality === "text") {
+    return modalities.has("text") || modalities.has("file") || modalities.has("document");
+  }
+  if (modality === "pdf") {
+    return modalities.has("pdf") || modalities.has("file") || modalities.has("document");
+  }
+  if (modality === "document") {
+    return modalities.has("document") || modalities.has("file");
+  }
+  if (modality === "spreadsheet") {
+    return modalities.has("spreadsheet") || modalities.has("document") || modalities.has("file");
+  }
+  return modalities.has(modality) || modalities.has("file");
+}
+
+function attachmentModality(contentType: string): string {
+  if (contentType.startsWith("image/")) {
+    return "image";
+  }
+  if (contentType.startsWith("audio/")) {
+    return "audio";
+  }
+  if (contentType.startsWith("video/")) {
+    return "video";
+  }
+  if (contentType.startsWith("text/") || contentType === "application/json") {
+    return "text";
+  }
+  if (contentType === "application/pdf") {
+    return "pdf";
+  }
+  if (contentType === "application/msword" || contentType === "application/vnd.openxmlformats-officedocument.wordprocessingml.document") {
+    return "document";
+  }
+  if (contentType === "application/vnd.ms-excel" || contentType === "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet") {
+    return "spreadsheet";
+  }
+  return "file";
 }
 
 export function buildComposerAttachments(files: File[], existingCount = 0, options: ComposerAttachmentOptions = {}): ComposerAttachment[] {
@@ -124,8 +159,7 @@ export function buildComposerAttachments(files: File[], existingCount = 0, optio
       isAudio,
       warning: attachmentWarning({
         fileName: name,
-        inputMode: options.inputMode,
-        isImage,
+        allowedInputModalities: options.allowedInputModalities,
         size: file.size,
         type: contentType,
       }),
@@ -141,8 +175,7 @@ export function refreshComposerAttachmentWarnings(
     ...attachment,
     warning: attachmentWarning({
       fileName: attachment.name,
-      inputMode: options.inputMode,
-      isImage: attachment.isImage,
+      allowedInputModalities: options.allowedInputModalities,
       size: attachment.size,
       type: attachment.type,
     }),

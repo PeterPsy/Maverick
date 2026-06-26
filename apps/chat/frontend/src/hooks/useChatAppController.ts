@@ -104,14 +104,14 @@ export function useChatAppController({
   const [events, setEvents] = useState<RuntimeEvent[]>([]);
   const [composer, setComposer] = useState("");
   const selectedProvider = providers.find((provider) => provider.provider_id === activeProviderId) || null;
-  const attachmentInputMode = useMemo(() => {
+  const allowedAttachmentInputModalities = useMemo(() => {
     const isHostedSession = activeSession?.runtime_mode === "plain_hosted_chat" || providerUsesPlainHostedRuntime(selectedProvider);
     if (!isHostedSession) {
-      return "all";
+      return null;
     }
-    return selectedProvider?.input_modalities?.includes("image") ? "image" : "none";
+    return selectedProvider?.input_modalities || [];
   }, [activeSession?.runtime_mode, selectedProvider]);
-  const { addAttachments, attachments, clearAttachments, removeAttachment } = useComposerAttachments({ inputMode: attachmentInputMode });
+  const { addAttachments, attachments, clearAttachments, removeAttachment } = useComposerAttachments({ allowedInputModalities: allowedAttachmentInputModalities });
   const [activeTurn, setActiveTurn] = useState<RuntimeTurn | null>(null);
   const [isBootstrapping, setIsBootstrapping] = useState(true);
   const [isHistoryLoading, setIsHistoryLoading] = useState(false);

@@ -46,7 +46,7 @@ from core.runtime.service import (
 )
 from core.runtime.runtime_events import RuntimeEventRecord
 from core.runtime.runtime_session import RuntimeSessionRecord, runtime_session_allows_user_thread
-from core.runtime.plain_hosted_text import HOSTED_TEXT_RUNTIME_PROVIDER_ID, plain_hosted_chat_attachment_error, runtime_session_is_plain_hosted_chat
+from core.runtime.plain_hosted_text import HOSTED_TEXT_RUNTIME_PROVIDER_ID, runtime_session_is_plain_hosted_chat
 from core.runtime.runtime_turns import RuntimeTurnRecord
 from core.runtime.turn_submission import (
     interrupt_runtime_provider_turn,
@@ -723,9 +723,6 @@ def _submit_runtime_turn_response(
             return json_response(start_response, {"error": "plain_hosted_chat_blocks_skills"}, status="400 Bad Request")
         if app_references:
             return json_response(start_response, {"error": "plain_hosted_chat_blocks_app_references"}, status="400 Bad Request")
-        attachment_error = plain_hosted_chat_attachment_error(attachment_items)
-        if attachment_error:
-            return json_response(start_response, {"error": attachment_error}, status="400 Bad Request")
     app_reference_items = materialize_runtime_app_references(
         state,
         context=context,

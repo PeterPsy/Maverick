@@ -55,17 +55,6 @@ def assert_plain_hosted_chat_input_allowed(
         raise HostedTextGenerationError("plain_hosted_chat_blocks_skills")
     if app_references:
         raise HostedTextGenerationError("plain_hosted_chat_blocks_app_references")
-    attachment_error = plain_hosted_chat_attachment_error(attachments)
-    if attachment_error:
-        raise HostedTextGenerationError(attachment_error)
-
-
-def plain_hosted_chat_attachment_error(attachments: list[dict[str, object]] | None) -> str | None:
-    """Return the stable hosted-chat error for unsupported attachment inputs."""
-    for attachment in attachments or []:
-        if isinstance(attachment, dict) and not _attachment_is_image(attachment):
-            return "plain_hosted_chat_blocks_attachments"
-    return None
 
 
 def execute_plain_hosted_text_turn(
@@ -114,6 +103,7 @@ def execute_plain_hosted_text_turn(
                     attachments=attachments,
                     session=session,
                     model_option=model_option,
+                    provider_id=decision.selected_provider_id or "",
                 ),
             )
         ],
@@ -181,23 +171,35 @@ def _hosted_message_content(
     attachments: list[dict[str, object]] | None,
     session: RuntimeSessionRecord,
     model_option: ProviderModelOption | None,
+    provider_id: str = "",
 ) -> str | list[TextGenerationContentPart]:
     attachment_items = [item for item in attachments or [] if isinstance(item, dict)]
     if not attachment_items:
         return input_text
     input_modalities = set(model_option.input_modalities if model_option is not None else [])
-    if "image" not in input_modalities:
-        raise HostedTextGenerationError("plain_hosted_chat_model_blocks_attachments")
-    parts = [TextGenerationContentPart(type="text", text=input_text.strip() or "Please inspect the uploaded image(s).")]
+    parts = [TextGenerationContentPart(type="text", text=input_text.strip() or "Please inspect the uploaded attachment(s).")]
     for attachment in attachment_items:
-        parts.append(_image_attachment_part(attachment=attachment, workspace_root=session.workspace_root))
+        parts.append(
+            _attachment_content_part(
+                attachment=attachment,
+                input_modalities=input_modalities,
+                provider_id=provider_id,
+                workspace_root=session.workspace_root,
+            )
+        )
     return parts
 
 
-def _image_attachment_part(*, attachment: dict[str, object], workspace_root: str) -> TextGenerationContentPart:
+def _attachment_content_part(
+    *,
+    attachment: dict[str, object],
+    input_modalities: set[str],
+    provider_id: str,
+    workspace_root: str,
+) -> TextGenerationContentPart:
     content_type = _string_value(attachment.get("type") or attachment.get("content_type"))
-    if not _attachment_is_image(attachment):
-        raise HostedTextGenerationError("plain_hosted_chat_blocks_attachments")
+    if not _attachment_modality_supported(content_type=content_type, input_modalities=input_modalities, provider_id=provider_id):
+        raise HostedTextGenerationError("plain_hosted_chat_model_blocks_attachments")
     relative_path = _safe_workspace_relative_path(_string_value(attachment.get("relativePath") or attachment.get("relative_path")))
     if not relative_path:
         raise HostedTextGenerationError("plain_hosted_chat_attachment_unavailable")
@@ -205,14 +207,54 @@ def _image_attachment_part(*, attachment: dict[str, object], workspace_root: str
     if not path.is_file():
         raise HostedTextGenerationError("plain_hosted_chat_attachment_unavailable")
     raw = path.read_bytes()
-    mime_type = content_type or mimetypes.guess_type(path.name)[0] or "image/png"
-    data_url = f"data:{mime_type};base64,{base64.b64encode(raw).decode('ascii')}"
-    return TextGenerationContentPart(type="image_url", image_url=data_url)
+    mime_type = content_type or mimetypes.guess_type(path.name)[0] or "application/octet-stream"
+    encoded = base64.b64encode(raw).decode("ascii")
+    if mime_type.startswith("image/"):
+        return TextGenerationContentPart(type="image_url", image_url=f"data:{mime_type};base64,{encoded}")
+    return TextGenerationContentPart(
+        type="inline_data",
+        mime_type=mime_type,
+        data=encoded,
+        filename=_string_value(attachment.get("name") or attachment.get("filename")) or path.name,
+    )
 
 
-def _attachment_is_image(attachment: dict[str, object]) -> bool:
-    content_type = _string_value(attachment.get("type") or attachment.get("content_type"))
-    return content_type.startswith("image/") or bool(attachment.get("isImage"))
+def _attachment_modality_supported(*, content_type: str, input_modalities: set[str], provider_id: str) -> bool:
+    normalized_type = content_type.lower()
+    modality = _attachment_modality(normalized_type)
+    if modality == "text":
+        return "text" in input_modalities or "file" in input_modalities or "document" in input_modalities
+    if modality == "pdf":
+        return provider_id == "openrouter" or bool({"pdf", "file", "document"} & input_modalities)
+    if modality == "document":
+        return bool({"document", "file"} & input_modalities)
+    if modality == "spreadsheet":
+        return bool({"spreadsheet", "document", "file"} & input_modalities)
+    return modality in input_modalities or "file" in input_modalities
+
+
+def _attachment_modality(content_type: str) -> str:
+    if content_type.startswith("image/"):
+        return "image"
+    if content_type.startswith("audio/"):
+        return "audio"
+    if content_type.startswith("video/"):
+        return "video"
+    if content_type.startswith("text/") or content_type == "application/json":
+        return "text"
+    if content_type == "application/pdf":
+        return "pdf"
+    if content_type in {
+        "application/msword",
+        "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    }:
+        return "document"
+    if content_type in {
+        "application/vnd.ms-excel",
+        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    }:
+        return "spreadsheet"
+    return "file"
 
 
 def _safe_workspace_relative_path(value: str) -> str:

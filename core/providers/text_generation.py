@@ -22,7 +22,7 @@ from core.secrets.store import SecretStore
 
 
 MessageRole = Literal["system", "user", "assistant"]
-MessageContentPartType = Literal["text", "image_url"]
+MessageContentPartType = Literal["text", "image_url", "inline_data"]
 
 OPENAI_COMPATIBLE_ENDPOINTS = {
     "openrouter": "https://openrouter.ai/api/v1/chat/completions",
@@ -52,6 +52,9 @@ class TextGenerationContentPart:
     type: MessageContentPartType
     text: str | None = None
     image_url: str | None = None
+    mime_type: str | None = None
+    data: str | None = None
+    filename: str | None = None
 
 
 @dataclass(frozen=True)
@@ -547,6 +550,15 @@ def _gemini_content_parts(content: str | list[TextGenerationContentPart]) -> lis
             inline = _gemini_inline_data_part(part.image_url)
             if inline:
                 parts.append(inline)
+        elif part.type == "inline_data" and part.data:
+            parts.append(
+                {
+                    "inlineData": {
+                        "mimeType": part.mime_type or "application/octet-stream",
+                        "data": part.data,
+                    }
+                }
+            )
     return parts or [{"text": ""}]
 
 
@@ -599,7 +611,52 @@ def _message_content_payload(content: str | list[TextGenerationContentPart]) -> 
             parts.append({"type": "text", "text": part.text or ""})
         elif part.type == "image_url" and part.image_url:
             parts.append({"type": "image_url", "image_url": {"url": part.image_url}})
+        elif part.type == "inline_data" and part.data:
+            payload = _openai_inline_data_payload(part)
+            if payload:
+                parts.append(payload)
     return parts
+
+
+def _openai_inline_data_payload(part: TextGenerationContentPart) -> dict[str, object] | None:
+    mime_type = part.mime_type or "application/octet-stream"
+    if mime_type.startswith("image/"):
+        return {"type": "image_url", "image_url": {"url": _data_url(mime_type=mime_type, data=part.data or "")}}
+    if mime_type.startswith("audio/"):
+        return {
+            "type": "input_audio",
+            "input_audio": {
+                "data": part.data or "",
+                "format": _audio_format(mime_type=mime_type, filename=part.filename or ""),
+            },
+        }
+    if mime_type.startswith("video/"):
+        return {"type": "video_url", "video_url": {"url": _data_url(mime_type=mime_type, data=part.data or "")}}
+    return {
+        "type": "file",
+        "file": {
+            "filename": part.filename or "attachment",
+            "file_data": _data_url(mime_type=mime_type, data=part.data or ""),
+        },
+    }
+
+
+def _data_url(*, mime_type: str, data: str) -> str:
+    return f"data:{mime_type};base64,{data}"
+
+
+def _audio_format(*, mime_type: str, filename: str) -> str:
+    extension = filename.rsplit(".", 1)[-1].lower() if "." in filename else ""
+    if extension in {"wav", "mp3", "aiff", "aac", "ogg", "flac", "m4a", "pcm16", "pcm24"}:
+        return extension
+    subtype = mime_type.split("/", 1)[1].split(";", 1)[0].lower() if "/" in mime_type else ""
+    return {
+        "mpeg": "mp3",
+        "mp4": "m4a",
+        "x-m4a": "m4a",
+        "x-wav": "wav",
+        "webm": "webm",
+    }.get(subtype, subtype or "wav")
 
 
 def _validate_hosted_text_request(request: TextGenerationRequest) -> None:

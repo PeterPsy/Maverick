@@ -42,7 +42,7 @@ export function useComposerAttachments(options: ComposerAttachmentOptions = {}) 
 
   useEffect(() => {
     setAttachments((current) => refreshComposerAttachmentWarnings(current, options));
-  }, [options.inputMode]);
+  }, [options.allowedInputModalities]);
 
   return {
     addAttachments,

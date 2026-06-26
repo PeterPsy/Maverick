@@ -38,25 +38,25 @@ describe("composer attachment helpers", () => {
     expect(hasInvalidAttachments(attachments)).toBe(false);
   });
 
-  it("blocks non-image attachments for hosted chat image input", () => {
-    const file = new File(["notes"], "notes.txt", {
-      type: "text/plain",
+  it("accepts audio attachments when the hosted model declares audio input", () => {
+    const file = new File(["audio"], "recording.wav", {
+      type: "audio/wav",
     });
 
-    const attachments = buildComposerAttachments([file], 0, { inputMode: "image" });
+    const attachments = buildComposerAttachments([file], 0, { allowedInputModalities: ["text", "audio"] });
 
-    expect(attachments[0].warning).toBe("Hosted chat supports image attachments only");
-    expect(hasInvalidAttachments(attachments)).toBe(true);
+    expect(attachments[0].warning).toBeNull();
+    expect(hasInvalidAttachments(attachments)).toBe(false);
   });
 
-  it("blocks all attachments for hosted chat models without attachment input", () => {
+  it("blocks attachments not declared by the hosted model", () => {
     const file = new File(["image"], "frame.png", {
       type: "image/png",
     });
 
-    const attachments = buildComposerAttachments([file], 0, { inputMode: "none" });
+    const attachments = buildComposerAttachments([file], 0, { allowedInputModalities: ["text", "audio"] });
 
-    expect(attachments[0].warning).toBe("Selected hosted model does not support attachments");
+    expect(attachments[0].warning).toBe("Selected hosted model does not support this attachment type");
     expect(hasInvalidAttachments(attachments)).toBe(true);
   });
 });

@@ -137,6 +137,45 @@ class HostedTextGenerationTest(unittest.TestCase):
         self.assertEqual(message["content"][0], {"type": "text", "text": "Describe this image."})
         self.assertEqual(message["content"][1], {"type": "image_url", "image_url": {"url": "data:image/png;base64,aGVsbG8="}})
 
+    def test_openrouter_serializes_hosted_attachment_content_parts(self) -> None:
+        transport = FakeHostedTextTransport(response_text="attachment answer")
+        client = OpenAICompatibleTextGenerationClient(
+            provider_id="openrouter",
+            api_key="secret-token",
+            transport=transport,
+        )
+
+        client.generate(
+            TextGenerationRequest(
+                model_id="google/gemma-4-31b-it:free",
+                messages=[
+                    TextGenerationMessage(
+                        role="user",
+                        content=[
+                            TextGenerationContentPart(type="text", text="Inspect these attachments."),
+                            TextGenerationContentPart(type="inline_data", mime_type="audio/wav", data="YXVkaW8=", filename="recording.wav"),
+                            TextGenerationContentPart(type="inline_data", mime_type="video/mp4", data="dmlkZW8=", filename="clip.mp4"),
+                            TextGenerationContentPart(type="inline_data", mime_type="application/pdf", data="cGRm", filename="document.pdf"),
+                        ],
+                    )
+                ],
+            )
+        )
+
+        content = transport.requests[0]["payload"]["messages"][0]["content"]
+        self.assertEqual(content[1], {"type": "input_audio", "input_audio": {"data": "YXVkaW8=", "format": "wav"}})
+        self.assertEqual(content[2], {"type": "video_url", "video_url": {"url": "data:video/mp4;base64,dmlkZW8="}})
+        self.assertEqual(
+            content[3],
+            {
+                "type": "file",
+                "file": {
+                    "filename": "document.pdf",
+                    "file_data": "data:application/pdf;base64,cGRm",
+                },
+            },
+        )
+
     def test_openrouter_serializes_provider_routing_preferences(self) -> None:
         transport = FakeHostedTextTransport(response_text="routed")
         client = OpenAICompatibleTextGenerationClient(
@@ -220,6 +259,38 @@ class HostedTextGenerationTest(unittest.TestCase):
             {"inlineData": {"mimeType": "image/png", "data": "aGVsbG8="}},
         )
         self.assertNotIn("secret-token", str(transport.requests))
+
+    def test_google_ai_studio_serializes_inline_attachment_content_parts(self) -> None:
+        transport = FakeHostedTextTransport(
+            payload={
+                "candidates": [
+                    {
+                        "content": {
+                            "parts": [{"text": "audio answer"}],
+                        }
+                    }
+                ]
+            }
+        )
+        client = GoogleAIStudioTextGenerationClient(api_key="secret-token", transport=transport)
+
+        client.generate(
+            TextGenerationRequest(
+                model_id="gemini-3.5-flash",
+                messages=[
+                    TextGenerationMessage(
+                        role="user",
+                        content=[
+                            TextGenerationContentPart(type="text", text="Transcribe this."),
+                            TextGenerationContentPart(type="inline_data", mime_type="audio/wav", data="YXVkaW8=", filename="recording.wav"),
+                        ],
+                    )
+                ],
+            )
+        )
+
+        parts = transport.requests[0]["payload"]["contents"][0]["parts"]
+        self.assertEqual(parts[1], {"inlineData": {"mimeType": "audio/wav", "data": "YXVkaW8="}})
 
     def test_fake_transport_streaming_normalizes_deltas(self) -> None:
         transport = FakeHostedTextTransport(chunks=["hel", "lo"])

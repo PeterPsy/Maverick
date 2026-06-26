@@ -44,20 +44,20 @@ class ProviderAuthorizationTest(unittest.TestCase):
             )
         )
 
-    def groq_definition(self):
+    def openrouter_definition(self):
         definitions = build_hosted_provider_definitions(datetime(2026, 6, 22, 12, 0, tzinfo=UTC))
-        return next(definition for definition in definitions if definition.provider_id == "groq")
+        return next(definition for definition in definitions if definition.provider_id == "openrouter")
 
     def test_missing_provider_binding_is_reported_without_secret_values(self) -> None:
         authorization = check_provider_credential_authorization(
             self.make_provider_store(),
-            definition=self.groq_definition(),
+            definition=self.openrouter_definition(),
             workspace_id="default",
         )
 
         self.assertTrue(authorization.required)
         self.assertFalse(authorization.authorized)
-        self.assertEqual(authorization.secret_alias_or_logical_name, "groq_api_key")
+        self.assertEqual(authorization.secret_alias_or_logical_name, "openrouter_api_key")
         self.assertIn("provider_credential_binding_missing", authorization.reason_codes)
         self.assertFalse(hasattr(authorization, "secret_ref"))
 
@@ -65,54 +65,54 @@ class ProviderAuthorizationTest(unittest.TestCase):
         provider_store = self.make_provider_store()
         binding = bind_provider_credential(
             provider_store,
-            provider_id="groq",
+            provider_id="openrouter",
             workspace_id="default",
-            secret_ref="platform:secret-alias/groq",
-            label="Groq API key",
+            secret_ref="platform:secret-alias/openrouter",
+            label="OpenRouter API key",
         )
 
         authorization = check_provider_credential_authorization(
             provider_store,
-            definition=self.groq_definition(),
+            definition=self.openrouter_definition(),
             workspace_id="default",
         )
 
         self.assertTrue(authorization.authorized)
         self.assertEqual(authorization.provider_credential_binding_id_optional, binding.binding_id)
         self.assertIn("provider_credential_binding_present", authorization.reason_codes)
-        self.assertNotIn("platform:secret-alias/groq", str(authorization))
+        self.assertNotIn("platform:secret-alias/openrouter", str(authorization))
 
     def test_provider_credential_binding_requires_existing_secret_when_store_available(self) -> None:
         provider_store = self.make_provider_store()
         bind_provider_credential(
             provider_store,
-            provider_id="groq",
+            provider_id="openrouter",
             workspace_id="default",
-            secret_ref="platform:secret-alias/missing-groq",
-            label="Missing Groq API key",
+            secret_ref="platform:secret-alias/missing-openrouter",
+            label="Missing OpenRouter API key",
         )
 
         authorization = check_provider_credential_authorization(
             provider_store,
-            definition=self.groq_definition(),
+            definition=self.openrouter_definition(),
             workspace_id="default",
             secret_store=self.make_secret_store(),
         )
 
         self.assertFalse(authorization.authorized)
         self.assertIn("provider_credential_binding_secret_missing", authorization.reason_codes)
-        self.assertNotIn("platform:secret-alias/missing-groq", str(authorization))
+        self.assertNotIn("platform:secret-alias/missing-openrouter", str(authorization))
 
     def test_legacy_provider_credential_binding_does_not_authorize(self) -> None:
         provider_store = self.make_provider_store()
         now = datetime(2026, 6, 22, 12, 0, tzinfo=UTC)
         provider_store.save_provider_binding(
             ProviderCredentialBinding(
-                binding_id="legacy-groq",
-                provider_id="groq",
+                binding_id="legacy-openrouter",
+                provider_id="openrouter",
                 workspace_id="default",
-                secret_ref="platform:providers/groq",
-                label="Legacy Groq",
+                secret_ref="platform:providers/openrouter",
+                label="Legacy OpenRouter",
                 status="active",
                 created_at=now,
                 updated_at=now,
@@ -121,34 +121,34 @@ class ProviderAuthorizationTest(unittest.TestCase):
 
         authorization = check_provider_credential_authorization(
             provider_store,
-            definition=self.groq_definition(),
+            definition=self.openrouter_definition(),
             workspace_id="default",
         )
 
         self.assertFalse(authorization.authorized)
         self.assertIn("provider_credential_binding_invalid_secret_ref", authorization.reason_codes)
-        self.assertNotIn("platform:providers/groq", str(authorization))
+        self.assertNotIn("platform:providers/openrouter", str(authorization))
 
     def test_provider_secret_binding_authorizes_without_reading_secret_value(self) -> None:
         secret_store = self.make_secret_store()
         secret = create_platform_secret(
             secret_store,
-            label="Groq",
+            label="OpenRouter",
             raw_value="super-secret-token",
-            alias="groq-key",
+            alias="openrouter-key",
             kind="api_key",
         )
         binding = bind_provider_secret(
             secret_store,
-            provider_id="groq",
+            provider_id="openrouter",
             workspace_id="default",
-            logical_name="groq_api_key",
+            logical_name="openrouter_api_key",
             secret_ref=build_secret_ref(secret_id=secret.secret_id),
         )
 
         authorization = check_provider_credential_authorization(
             self.make_provider_store(),
-            definition=self.groq_definition(),
+            definition=self.openrouter_definition(),
             workspace_id="default",
             secret_store=secret_store,
         )
@@ -163,25 +163,25 @@ class ProviderAuthorizationTest(unittest.TestCase):
         secret_store = self.make_secret_store()
         secret = create_platform_secret(
             secret_store,
-            label="Groq App",
+            label="OpenRouter App",
             raw_value="app-secret-token",
-            alias="groq-app-key",
+            alias="openrouter-app-key",
             kind="api_key",
         )
         grant = grant_app_secret_use(
             secret_store,
             workspace_id="default",
             app_id="chat",
-            logical_name="groq_api_key",
+            logical_name="openrouter_api_key",
             secret_ref=build_secret_ref(secret_id=secret.secret_id),
             actions=["provider.hosted_text.execute"],
-            target_patterns=[provider_secret_target("groq", "plain_hosted_chat")],
+            target_patterns=[provider_secret_target("openrouter", "plain_hosted_chat")],
         )
         app_definition = replace(
-            self.groq_definition(),
+            self.openrouter_definition(),
             credential_requirements=[
                 ProviderCredentialRequirement(
-                    secret_alias_or_logical_name="groq_api_key",
+                    secret_alias_or_logical_name="openrouter_api_key",
                     secret_kind="api_key",
                     required_for_modes=["plain_hosted_chat"],
                     secret_binding_scope="app",
@@ -195,7 +195,7 @@ class ProviderAuthorizationTest(unittest.TestCase):
             workspace_id="default",
             secret_store=secret_store,
             app_id="chat",
-            target=provider_secret_target("groq", "plain_hosted_chat"),
+            target=provider_secret_target("openrouter", "plain_hosted_chat"),
         )
 
         self.assertTrue(authorization.authorized)

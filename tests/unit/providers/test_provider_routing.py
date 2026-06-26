@@ -22,7 +22,7 @@ from core.providers.service import (
     effective_provider_registry,
 )
 from core.providers.store import ProviderCollections, ProviderDocumentStore
-from core.secrets.service import build_secret_ref, create_platform_secret
+from core.secrets.service import bind_provider_secret, build_secret_ref, create_platform_secret
 from core.secrets.store import SecretCollections, SecretDocumentStore
 from core.shared.json_file_collection import JsonFileCollection
 from tests.support.collections import FakeCollection
@@ -60,10 +60,7 @@ class ProviderRoutingTest(unittest.TestCase):
         )
 
     def active_fast_registry(self) -> ProviderRegistry:
-        registry = builtin_provider_registry()
-        groq = registry.get_provider_definition("groq")
-        registry.register_provider_definition(replace(groq, status="active"))
-        return registry
+        return self.active_openrouter_registry()
 
     def active_openrouter_registry(self) -> ProviderRegistry:
         registry = builtin_provider_registry()
@@ -71,13 +68,19 @@ class ProviderRoutingTest(unittest.TestCase):
         registry.register_provider_definition(replace(openrouter, status="active"))
         return registry
 
+    def active_google_ai_studio_registry(self) -> ProviderRegistry:
+        registry = builtin_provider_registry()
+        google = registry.get_provider_definition("google-ai-studio")
+        registry.register_provider_definition(replace(google, status="active"))
+        return registry
+
     def test_fast_model_selects_active_provider_with_binding(self) -> None:
         store = self.make_provider_store()
         bind_provider_credential(
             store,
-            provider_id="groq",
+            provider_id="openrouter",
             workspace_id="default",
-            secret_ref="platform:secret-alias/groq",
+            secret_ref="platform:secret-alias/openrouter",
         )
 
         decision = select_provider_for_profile(
@@ -91,14 +94,14 @@ class ProviderRoutingTest(unittest.TestCase):
         )
 
         self.assertEqual(decision.request_id, "req-1")
-        self.assertEqual(decision.selected_provider_id, "groq")
-        self.assertEqual(decision.selected_model_id_or_voice_id, "llama-3.3-70b-versatile")
+        self.assertEqual(decision.selected_provider_id, "openrouter")
+        self.assertEqual(decision.selected_model_id_or_voice_id, "google/gemma-4-31b-it:free")
         self.assertEqual(decision.execution_path, "plain_hosted_text")
         self.assertTrue(decision.credential_authorization_required)
         self.assertIsNotNone(decision.provider_credential_binding_id_optional)
         self.assertFalse(decision.fallback_used)
         self.assertIn("plain_hosted_text_selected", decision.reason_codes)
-        self.assertNotIn("platform:secret-alias/groq", str(decision))
+        self.assertNotIn("platform:secret-alias/openrouter", str(decision))
         json.dumps(routing_decision_payload(decision))
 
     def test_effective_registry_uses_operator_activated_hosted_provider_from_store(self) -> None:
@@ -106,9 +109,9 @@ class ProviderRoutingTest(unittest.TestCase):
         secret_store = self.make_secret_store()
         secret = create_platform_secret(
             secret_store,
-            label="Groq",
+            label="OpenRouter",
             raw_value="super-secret-token",
-            alias="groq-routing",
+            alias="openrouter-routing",
             kind="api_key",
         )
 
@@ -116,8 +119,8 @@ class ProviderRoutingTest(unittest.TestCase):
             store,
             secret_store=secret_store,
             workspace_id="default",
-            provider_id="groq",
-            secret_ref=build_secret_ref(alias=secret.alias or "groq-routing"),
+            provider_id="openrouter",
+            secret_ref=build_secret_ref(alias=secret.alias or "openrouter-routing"),
         )
         decision = select_provider_for_profile(
             "fast_model",
@@ -130,8 +133,8 @@ class ProviderRoutingTest(unittest.TestCase):
         )
 
         self.assertEqual(activation.definition.status, "active")
-        self.assertEqual(activation.routing_decision.selected_provider_id, "groq")
-        self.assertEqual(decision.selected_provider_id, "groq")
+        self.assertEqual(activation.routing_decision.selected_provider_id, "openrouter")
+        self.assertEqual(decision.selected_provider_id, "openrouter")
         self.assertEqual(decision.execution_path, "plain_hosted_text")
         self.assertNotIn("super-secret-token", str(decision))
 
@@ -221,6 +224,49 @@ class ProviderRoutingTest(unittest.TestCase):
         self.assertIn("hosted_model_selection_present:openrouter", decision.reason_codes)
         self.assertNotIn("super-secret-token", str(decision))
         self.assertNotIn("platform:secret-alias/openrouter-api-key", str(decision))
+
+    def test_fast_model_routes_to_selected_google_ai_studio_model_after_activation(self) -> None:
+        store = self.make_provider_store()
+        secret_store = self.make_secret_store()
+        create_platform_secret(
+            secret_store,
+            label="Google AI Studio",
+            raw_value="super-secret-token",
+            alias="google-ai-studio-api-key",
+            kind="api_key",
+        )
+
+        activation = activate_hosted_model_provider(
+            store,
+            secret_store=secret_store,
+            workspace_id="default",
+            provider_id="google-ai-studio",
+            secret_ref=build_secret_ref(alias="google-ai-studio-api-key"),
+        )
+        selection = configure_hosted_model_provider(
+            store,
+            workspace_id="default",
+            provider_id="google-ai-studio",
+            model_id="gemini-3.1-flash",
+        )
+        decision = select_provider_for_profile(
+            "fast_model",
+            ProviderRoutingContext(
+                workspace_id="default",
+                provider_store=store,
+                registry=effective_provider_registry(store),
+                secret_store=secret_store,
+                request_id="req-google-ai-studio",
+            ),
+        )
+
+        self.assertEqual(activation.hosted_selection.provider_id if activation.hosted_selection else None, "google-ai-studio")
+        self.assertEqual(selection.model_id, "gemini-3.1-flash")
+        self.assertEqual(decision.selected_provider_id, "google-ai-studio")
+        self.assertEqual(decision.selected_model_id_or_voice_id, "gemini-3.1-flash")
+        self.assertEqual(decision.execution_path, "plain_hosted_text")
+        self.assertIn("hosted_model_selection_present:google-ai-studio", decision.reason_codes)
+        self.assertNotIn("super-secret-token", str(decision))
 
     def test_fast_model_honors_session_hosted_model_override(self) -> None:
         store = self.make_provider_store()
@@ -404,11 +450,11 @@ class ProviderRoutingTest(unittest.TestCase):
         now = datetime(2026, 6, 22, 12, 0, tzinfo=UTC)
         store.save_provider_binding(
             ProviderCredentialBinding(
-                binding_id="legacy-groq",
-                provider_id="groq",
+                binding_id="legacy-openrouter",
+                provider_id="openrouter",
                 workspace_id="default",
-                secret_ref="platform:providers/groq",
-                label="Legacy Groq",
+                secret_ref="platform:providers/openrouter",
+                label="Legacy OpenRouter",
                 status="active",
                 created_at=now,
                 updated_at=now,
@@ -429,15 +475,15 @@ class ProviderRoutingTest(unittest.TestCase):
         self.assertIsNone(decision.execution_path)
         self.assertIn("provider_credential_binding_invalid_secret_ref", decision.reason_codes)
         self.assertIn("fallback_no_credential_authorization", decision.reason_codes)
-        self.assertNotIn("platform:providers/groq", str(decision))
+        self.assertNotIn("platform:providers/openrouter", str(decision))
 
     def test_fast_model_does_not_select_missing_core_secret_binding_when_store_available(self) -> None:
         store = self.make_provider_store()
         bind_provider_credential(
             store,
-            provider_id="groq",
+            provider_id="openrouter",
             workspace_id="default",
-            secret_ref="platform:secret-alias/missing-groq",
+            secret_ref="platform:secret-alias/missing-openrouter",
         )
 
         decision = select_provider_for_profile(
@@ -455,7 +501,7 @@ class ProviderRoutingTest(unittest.TestCase):
         self.assertIsNone(decision.execution_path)
         self.assertIn("provider_credential_binding_secret_missing", decision.reason_codes)
         self.assertIn("fallback_no_credential_authorization", decision.reason_codes)
-        self.assertNotIn("platform:secret-alias/missing-groq", str(decision))
+        self.assertNotIn("platform:secret-alias/missing-openrouter", str(decision))
 
     def test_disabled_provider_is_not_selected(self) -> None:
         decision = select_provider_for_profile(
@@ -467,24 +513,61 @@ class ProviderRoutingTest(unittest.TestCase):
             ),
         )
 
-        self.assertEqual(decision.candidate_provider_ids, ["groq", "openrouter"])
+        self.assertEqual(decision.candidate_provider_ids, ["google-ai-studio", "openrouter"])
         self.assertIsNone(decision.selected_provider_id)
-        self.assertIn("provider_disabled:groq", decision.reason_codes)
+        self.assertIn("provider_disabled:google-ai-studio", decision.reason_codes)
         self.assertIn("provider_disabled:openrouter", decision.reason_codes)
+        self.assertIn("provider_disabled:openrouter", decision.reason_codes)
+
+    def test_disabled_builtin_provider_with_bound_secret_is_routable(self) -> None:
+        store = self.make_provider_store()
+        secret_store = self.make_secret_store()
+        create_platform_secret(
+            secret_store,
+            label="Google AI Studio",
+            raw_value="super-secret-token",
+            alias="google_ai_studio_api_key",
+            kind="api_key",
+        )
+        bind_provider_secret(
+            secret_store,
+            provider_id="google-ai-studio",
+            workspace_id="default",
+            logical_name="google_ai_studio_api_key",
+            secret_ref=build_secret_ref(alias="google_ai_studio_api_key"),
+        )
+
+        decision = select_provider_for_profile(
+            "fast_model",
+            ProviderRoutingContext(
+                workspace_id="default",
+                provider_store=store,
+                registry=builtin_provider_registry(),
+                secret_store=secret_store,
+                hosted_provider_id="google-ai-studio",
+                hosted_model_id="gemini-3.5-flash",
+            ),
+        )
+
+        self.assertEqual(decision.selected_provider_id, "google-ai-studio")
+        self.assertEqual(decision.selected_model_id_or_voice_id, "gemini-3.5-flash")
+        self.assertEqual(decision.execution_path, "plain_hosted_text")
+        self.assertNotIn("provider_disabled:google-ai-studio", decision.reason_codes)
+        self.assertIn("provider_secret_binding_present", decision.reason_codes)
 
     def test_tier_policy_can_deny_free_and_allow_premium(self) -> None:
         store = self.make_provider_store()
         bind_provider_credential(
             store,
-            provider_id="groq",
+            provider_id="openrouter",
             workspace_id="default",
-            secret_ref="platform:secret-alias/groq",
+            secret_ref="platform:secret-alias/openrouter",
         )
         policy = WorkspaceProviderPolicy(
             workspace_id="default",
             plan_or_tier_rules={
-                "free": {"allowed_provider_ids": ["deepseek"]},
-                "premium": {"allowed_provider_ids": ["groq"]},
+                "free": {"allowed_provider_ids": ["google-ai-studio"]},
+                "premium": {"allowed_provider_ids": ["openrouter"]},
             },
         )
 
@@ -510,8 +593,8 @@ class ProviderRoutingTest(unittest.TestCase):
         )
 
         self.assertIsNone(free_decision.selected_provider_id)
-        self.assertIn("workspace_policy_denied:groq", free_decision.reason_codes)
-        self.assertEqual(premium_decision.selected_provider_id, "groq")
+        self.assertIn("workspace_policy_denied:openrouter", free_decision.reason_codes)
+        self.assertEqual(premium_decision.selected_provider_id, "openrouter")
 
     def test_codex_fallback_requires_explicit_flag(self) -> None:
         explicit = select_provider_for_profile(

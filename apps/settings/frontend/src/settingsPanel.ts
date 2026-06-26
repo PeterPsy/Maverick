@@ -19,6 +19,13 @@ type HostedRoutingDraft = {
   sort: '' | 'price' | 'throughput' | 'latency';
 };
 
+type HostedProviderModelGroup = {
+  providerId: string;
+  providerLabel: string;
+  providerStatus: string;
+  models: ProviderModelOption[];
+};
+
 export type SettingsPanelState = {
   cleanupError: string;
   clearingAllRuntime: boolean;
@@ -200,6 +207,8 @@ export function settingsPanelHtml(settings: PlatformSettings | null, state: Sett
   const cleanupScope = settings.runtime.cleanup_scope || 'none';
   const modelOptions = modelOptionsForSettings(settings);
   const hostedModelOptions = hostedModelOptionsForSettings(settings);
+  const hostedTextModelOptions = hostedModelOptions.filter(modelSupportsTextOutput);
+  const hostedSpeechModelOptions = hostedModelOptions.filter(modelSupportsSpeechOutput);
   const selectedModel = selectedProviderDraft(settings).modelId;
   const selectedReasoning = selectedProviderDraft(settings).reasoningEffort;
   const selectedOption = modelOptions.find((option) => option.model_id === state.draftModelId) || modelOptions[0] || null;
@@ -213,15 +222,26 @@ export function settingsPanelHtml(settings: PlatformSettings | null, state: Sett
   );
 
   return `${userSettingsCardHtml(settings)}
-    ${modelSettingsCardHtml(
+    ${agenticModelSettingsCardHtml(
       provider,
       modelOptions,
       reasoningOptions,
       canSaveProvider,
       activeRuntimeSessions.length,
       runtimeSessions.length,
+      false,
+      state
+    )}
+    ${hostedTextModelSettingsCardHtml(
       openHostedModel,
-      hostedModelOptions,
+      hostedTextModelOptions,
+      hostedProvider,
+      settings,
+      state
+    )}
+    ${speechModelSettingsCardHtml(
+      hostedSpeechModelOptions,
+      openHostedModel,
       hostedProvider,
       speechStt,
       settings,
@@ -253,30 +273,75 @@ function userSettingsCardHtml(settings: PlatformSettings) {
   </section>`;
 }
 
-function modelSettingsCardHtml(
+function hostedTextModelSettingsCardHtml(
+  openHostedModel: string,
+  hostedModelOptions: ProviderModelOption[],
+  hostedProvider: PlatformSettings['provider']['active_provider'] | null,
+  settings: PlatformSettings,
+  state: SettingsPanelState
+) {
+  return `<section class="settings-card settings-platform settings-hosted-text-model-settings-card">
+    ${modelSettingsHeadingHtml('route', 'Hosted text model settings')}
+    ${hostedProviderSettingsListHtml({
+      modelOptions: hostedModelOptions,
+      openHostedModel,
+      hostedProvider,
+      settings,
+      state,
+      emptyMessage: 'No hosted text models are available from the active hosted providers.',
+      inactiveMessage: 'Activate a hosted text provider before selecting a fast model.'
+    })}
+  </section>`;
+}
+
+function modelSettingsHeadingHtml(icon: string, title: string) {
+  return `<div class="settings-heading settings-platform-heading settings-model-card-heading">
+    <span class="settings-platform-icon material-symbols-rounded" aria-hidden="true">${escapeHtml(icon)}</span>
+      <div>
+        <p class="settings-kicker">Models</p>
+        <h2>${escapeHtml(title)}</h2>
+      </div>
+    </div>`;
+}
+
+function agenticModelSettingsCardHtml(
   provider: PlatformSettings['provider']['active_provider'] | null,
   modelOptions: ProviderModelOption[],
   reasoningOptions: ProviderModelOption['supported_reasoning_efforts'],
   canSaveProvider: boolean,
   activeRuntimeSessionCount: number,
   runtimeSessionCount: number,
+  isOpen: boolean,
+  state: SettingsPanelState
+) {
+  return `<section class="settings-card settings-platform settings-agentic-model-settings-card">
+    ${modelSettingsHeadingHtml('memory', 'Agentic model settings')}
+    <div class="settings-platform-provider-forms">
+      ${providerSettingsFormHtml(provider, modelOptions, reasoningOptions, canSaveProvider, activeRuntimeSessionCount, runtimeSessionCount, isOpen, state)}
+    </div>
+  </section>`;
+}
+
+function speechModelSettingsCardHtml(
+  hostedSpeechModelOptions: ProviderModelOption[],
   openHostedModel: string,
-  hostedModelOptions: ProviderModelOption[],
   hostedProvider: PlatformSettings['provider']['active_provider'] | null,
   speechStt: PlatformSettings['provider']['speech_stt'] | null,
   settings: PlatformSettings,
   state: SettingsPanelState
 ) {
-  return `<section class="settings-card settings-platform settings-model-settings-card">
-    <div class="settings-heading settings-platform-heading">
-      <div>
-        <p class="settings-kicker">Models</p>
-        <h2>Model settings</h2>
-      </div>
-    </div>
+  return `<section class="settings-card settings-platform settings-speech-model-settings-card">
+    ${modelSettingsHeadingHtml('record_voice_over', 'Speech model settings')}
     <div class="settings-platform-provider-forms">
-      ${providerSettingsFormHtml(provider, modelOptions, reasoningOptions, canSaveProvider, activeRuntimeSessionCount, runtimeSessionCount, !openHostedModel, state)}
-      ${hostedProviderSettingsListHtml(hostedModelOptions, openHostedModel, hostedProvider, settings, state)}
+      ${hostedProviderSettingsListHtml({
+        modelOptions: hostedSpeechModelOptions,
+        openHostedModel,
+        hostedProvider,
+        settings,
+        state,
+        emptyMessage: 'No hosted speech models are available from the active hosted providers.',
+        inactiveMessage: 'Activate the hosted provider before saving speech model routing.'
+      })}
       ${speechSttSettingsListHtml(speechStt, state)}
     </div>
   </section>`;
@@ -294,6 +359,11 @@ export function bindSettingsPanelEvents(actions: SettingsPanelActions) {
   });
   document.getElementById('settings-speech-conversation-model')?.addEventListener('change', (event) => {
     actions.onSpeechConversationModelChanged((event.currentTarget as HTMLSelectElement).value);
+  });
+  document.querySelectorAll<HTMLButtonElement>('[data-speech-save]').forEach((button) => {
+    button.addEventListener('click', () => {
+      actions.onSaveSpeechProviderSettings();
+    });
   });
   document.getElementById('settings-speech-save')?.addEventListener('click', () => {
     actions.onSaveSpeechProviderSettings();
@@ -377,29 +447,53 @@ function providerSettingsFormHtml(
   </details>`;
 }
 
-function hostedProviderSettingsListHtml(
-  modelOptions: ProviderModelOption[],
+function hostedProviderSettingsListHtml({
+  modelOptions,
+  openHostedModel,
+  hostedProvider,
+  settings,
+  state,
+  emptyMessage,
+  inactiveMessage
+}: {
+  modelOptions: ProviderModelOption[];
+  openHostedModel: string;
+  hostedProvider: PlatformSettings['provider']['active_provider'] | null;
+  settings: PlatformSettings;
+  state: SettingsPanelState;
+  emptyMessage: string;
+  inactiveMessage: string;
+}) {
+  const hasHostedProvider = Boolean(hostedProvider);
+  const providerGroups = hostedProviderModelGroups(modelOptions, hostedProvider);
+  return `<div class="settings-hosted-models">
+    ${
+      modelOptions.length
+        ? providerGroups.map((group) => hostedProviderModelGroupHtml(group, openHostedModel, hostedProvider, settings, state)).join('')
+        : `<p class="settings-card-copy settings-platform-note">${escapeHtml(emptyMessage)}</p>`
+    }
+    ${!hasHostedProvider ? `<p class="settings-card-copy settings-platform-note">${escapeHtml(inactiveMessage)}</p>` : ''}
+  </div>`;
+}
+
+function hostedProviderModelGroupHtml(
+  group: HostedProviderModelGroup,
   openHostedModel: string,
   hostedProvider: PlatformSettings['provider']['active_provider'] | null,
   settings: PlatformSettings,
   state: SettingsPanelState
 ) {
-  const hasHostedProvider = Boolean(hostedProvider);
-  return `<div class="settings-hosted-models">
-    <div class="settings-platform-form-heading settings-hosted-models-heading">
-      <span class="material-symbols-rounded" aria-hidden="true">route</span>
+  const statusPill = group.providerStatus === 'active' ? 'Active provider' : 'Inactive provider';
+  return `<section class="settings-hosted-provider-group" data-hosted-provider-group="${escapeAttr(group.providerId)}">
+    <div class="settings-hosted-provider-heading">
       <span>
-        <strong>Hosted OpenRouter models</strong>
-        <small>Settings manages model defaults and upstream routing; Chat only uses text-output fast models.</small>
+        <strong>${escapeHtml(group.providerLabel)}</strong>
+        <small>${group.models.length} ${group.models.length === 1 ? 'model' : 'models'}</small>
       </span>
+      <span class="settings-pill">${escapeHtml(statusPill)}</span>
     </div>
-    ${
-      modelOptions.length
-        ? modelOptions.map((option) => hostedProviderModelAccordionHtml(option, openHostedModel, hostedProvider, settings, state)).join('')
-        : '<p class="settings-card-copy settings-platform-note">No hosted models are available from the active hosted provider.</p>'
-    }
-    ${!hasHostedProvider ? '<p class="settings-card-copy settings-platform-note">Activate a hosted text provider before selecting a fast model.</p>' : ''}
-  </div>`;
+    ${group.models.map((option) => hostedProviderModelAccordionHtml(option, openHostedModel, hostedProvider, settings, state)).join('')}
+  </section>`;
 }
 
 function hostedProviderModelAccordionHtml(
@@ -412,14 +506,23 @@ function hostedProviderModelAccordionHtml(
   const modelId = option.model_id;
   const draft = hostedRoutingDraftForModel(state, settings, modelId);
   const upstreamOptions = option.upstream_provider_options || [];
+  const hasOpenRouterRouting = upstreamOptions.length > 0;
   const quantizations = Array.from(new Set(upstreamOptions.map((option) => option.quantization || '').filter(Boolean)));
-  const hasHostedProvider = Boolean(hostedProvider);
+  const modelProviderId = hostedProviderIdForModel(option, hostedProvider);
+  const modelProviderStatus = hostedProviderStatusForModel(option, hostedProvider);
+  const hasHostedProvider = Boolean(modelProviderId);
   const isSavingThisModel = state.isSavingHostedProvider && state.hostedDraftModelId === modelId;
+  const selectedHostedProviderId = settings.provider.hosted_text?.selection?.provider_id || hostedProvider?.provider_id || '';
+  const selectedHostedModelId =
+    modelProviderId === selectedHostedProviderId
+      ? settings.provider.hosted_text?.model_settings?.selected_model_id || hostedProvider?.default_model_family || ''
+      : '';
   const canSaveProvider = Boolean(
     hasHostedProvider &&
+      modelProviderStatus === 'active' &&
       modelId &&
       !state.isSavingHostedProvider &&
-      hostedRoutingChanged(state, settings, modelId)
+      (modelProviderId !== selectedHostedProviderId || modelId !== selectedHostedModelId || hostedRoutingChanged(state, settings, modelId))
   );
   const isTextOutputModel = modelSupportsTextOutput(option);
   const modelKindLabel = isTextOutputModel ? 'Hosted chat / fast model' : 'Hosted speech model';
@@ -428,14 +531,13 @@ function hostedProviderModelAccordionHtml(
     : 'speech synthesis metadata · not used by plain hosted chat';
   const modelIcon = isTextOutputModel ? 'bolt' : 'record_voice_over';
   const isOpen = modelId === openHostedModel;
-  const providerLabel = hostedProvider?.label || hostedProvider?.provider_id || 'Hosted provider';
+  const providerLabel = hostedProviderLabelForModel(option, hostedProvider);
   return `<details class="settings-model-accordion settings-hosted-model-accordion" data-settings-model-accordion="hosted:${escapeAttr(modelId)}" data-hosted-model-accordion="${escapeAttr(modelId)}" ${isOpen ? 'open' : ''}>
     <summary class="settings-model-trigger">
       <span class="settings-platform-icon material-symbols-rounded" aria-hidden="true">${modelIcon}</span>
       <span class="settings-model-copy">
         <span class="settings-model-kicker">
           <span class="settings-kicker">${modelKindLabel}</span>
-          <span class="settings-pill">Active</span>
         </span>
         <strong>${escapeHtml(option.label || modelId)} - ${escapeHtml(providerLabel)}</strong>
         <small>${escapeHtml(modelId || 'model not selected')} · ${modelRuntimeLabel}</small>
@@ -447,6 +549,9 @@ function hostedProviderModelAccordionHtml(
         <span>Model</span>
         <code class="settings-model-code">${escapeHtml(modelId || 'model not selected')}</code>
       </div>
+    ${
+      hasOpenRouterRouting
+        ? `
     <label class="settings-platform-field">
       <span>OpenRouter upstream</span>
       <select data-openrouter-routing="mode" data-hosted-model-id="${escapeAttr(modelId)}" ${!hasHostedProvider || !upstreamOptions.length || state.isSavingHostedProvider ? 'disabled' : ''}>
@@ -497,6 +602,9 @@ function hostedProviderModelAccordionHtml(
       <label><input type="checkbox" data-openrouter-routing="allow_fallbacks" data-hosted-model-id="${escapeAttr(modelId)}" ${draft.allowFallbacks ? 'checked' : ''} ${!hasHostedProvider || state.isSavingHostedProvider ? 'disabled' : ''}> Allow OpenRouter fallback</label>
       <label><input type="checkbox" data-openrouter-routing="require_parameters" data-hosted-model-id="${escapeAttr(modelId)}" ${draft.requireParameters ? 'checked' : ''} ${!hasHostedProvider || state.isSavingHostedProvider ? 'disabled' : ''}> Require supported parameters</label>
     </div>
+    `
+        : ''
+    }
     <button type="button" data-hosted-provider-save="${escapeAttr(modelId)}" ${canSaveProvider ? '' : 'disabled'}>
       <span class="material-symbols-rounded" aria-hidden="true">${isSavingThisModel ? 'sync' : 'save'}</span>
       ${isSavingThisModel ? 'Saving' : 'Save hosted model'}
@@ -506,9 +614,67 @@ function hostedProviderModelAccordionHtml(
   </details>`;
 }
 
+function hostedProviderModelGroups(
+  modelOptions: ProviderModelOption[],
+  fallbackProvider: PlatformSettings['provider']['active_provider'] | null
+): HostedProviderModelGroup[] {
+  const groupsByProvider = new Map<string, HostedProviderModelGroup>();
+  for (const option of modelOptions) {
+    const providerId = hostedProviderIdForModel(option, fallbackProvider) || 'hosted-provider';
+    const existing = groupsByProvider.get(providerId);
+    if (existing) {
+      existing.models.push(option);
+      continue;
+    }
+    groupsByProvider.set(providerId, {
+      providerId,
+      providerLabel: hostedProviderLabelForModel(option, fallbackProvider),
+      providerStatus: hostedProviderStatusForModel(option, fallbackProvider),
+      models: [option]
+    });
+  }
+  return Array.from(groupsByProvider.values()).sort((left, right) => {
+    if (left.providerStatus === 'active' && right.providerStatus !== 'active') {
+      return -1;
+    }
+    if (right.providerStatus === 'active' && left.providerStatus !== 'active') {
+      return 1;
+    }
+    return left.providerLabel.localeCompare(right.providerLabel);
+  });
+}
+
 function modelSupportsTextOutput(option: ProviderModelOption): boolean {
   const outputs = option.output_modalities || [];
   return !outputs.length || outputs.includes('text');
+}
+
+function modelSupportsSpeechOutput(option: ProviderModelOption): boolean {
+  return (option.output_modalities || []).includes('speech');
+}
+
+function hostedProviderIdForModel(
+  option: ProviderModelOption,
+  fallbackProvider: PlatformSettings['provider']['active_provider'] | null
+): string {
+  const value = option.metadata?.hosted_provider_id;
+  return typeof value === 'string' && value ? value : fallbackProvider?.provider_id || '';
+}
+
+function hostedProviderLabelForModel(
+  option: ProviderModelOption,
+  fallbackProvider: PlatformSettings['provider']['active_provider'] | null
+): string {
+  const value = option.metadata?.hosted_provider_label;
+  return typeof value === 'string' && value ? value : fallbackProvider?.label || fallbackProvider?.provider_id || 'Hosted provider';
+}
+
+function hostedProviderStatusForModel(
+  option: ProviderModelOption,
+  fallbackProvider: PlatformSettings['provider']['active_provider'] | null
+): string {
+  const value = option.metadata?.hosted_provider_status;
+  return typeof value === 'string' && value ? value : fallbackProvider?.status || '';
 }
 
 function speechSttSettingsListHtml(status: PlatformSettings['provider']['speech_stt'] | null, state: SettingsPanelState) {
@@ -531,38 +697,43 @@ function speechSttSettingsListHtml(status: PlatformSettings['provider']['speech_
       !state.isSavingSpeechProvider &&
       (audioDraft !== selectedAudioModelId || conversationDraft !== selectedConversationModelId)
   );
+  const providerLabel = provider?.label || provider?.provider_id || 'Deepgram';
+  const providerId = provider?.provider_id || 'deepgram';
+  const providerStatus = active ? 'Active provider' : 'Inactive provider';
   return `<div class="settings-hosted-models settings-speech-models">
-    <div class="settings-platform-form-heading settings-hosted-models-heading">
-      <span class="material-symbols-rounded" aria-hidden="true">graphic_eq</span>
-      <span>
-        <strong>Deepgram models</strong>
-        <small>Audio transcription uses Nova-3; realtime conversation uses Flux turn-taking models.</small>
-      </span>
-    </div>
-    ${speechModelSelectHtml({
-      id: 'settings-speech-audio-model',
-      label: 'Audio transcription model',
-      icon: 'hearing',
-      value: audioDraft,
-      options: audioOptions,
-      endpoint: audioEndpoint,
-      description: audioOption?.description || 'Deepgram model for prerecorded audio, files, and one-shot microphone transcription.',
-      disabled: !active || state.isSavingSpeechProvider
-    })}
-    ${speechModelSelectHtml({
-      id: 'settings-speech-conversation-model',
-      label: 'Conversation model',
-      icon: 'forum',
-      value: conversationDraft,
-      options: conversationOptions,
-      endpoint: conversationEndpoint,
-      description: conversationOption?.description || 'Deepgram Flux model for realtime voice conversation and turn detection.',
-      disabled: !active || state.isSavingSpeechProvider
-    })}
-    <button type="button" id="settings-speech-save" ${canSave ? '' : 'disabled'}>
-      <span class="material-symbols-rounded" aria-hidden="true">${state.isSavingSpeechProvider ? 'sync' : 'save'}</span>
-      ${state.isSavingSpeechProvider ? 'Saving' : 'Save speech models'}
-    </button>
+    <section class="settings-hosted-provider-group" data-speech-provider-group="${escapeAttr(providerId)}">
+      <div class="settings-hosted-provider-heading">
+        <span>
+          <strong>${escapeHtml(providerLabel)}</strong>
+          <small>2 settings</small>
+        </span>
+        <span class="settings-pill">${escapeHtml(providerStatus)}</span>
+      </div>
+      ${speechModelSelectHtml({
+        id: 'settings-speech-audio-model',
+        label: 'Audio transcription model',
+        icon: 'hearing',
+        value: audioDraft,
+        options: audioOptions,
+        endpoint: audioEndpoint,
+        description: audioOption?.description || 'Deepgram model for prerecorded audio, files, and one-shot microphone transcription.',
+        disabled: !active || state.isSavingSpeechProvider,
+        canSave,
+        isSaving: state.isSavingSpeechProvider
+      })}
+      ${speechModelSelectHtml({
+        id: 'settings-speech-conversation-model',
+        label: 'Conversation model',
+        icon: 'forum',
+        value: conversationDraft,
+        options: conversationOptions,
+        endpoint: conversationEndpoint,
+        description: conversationOption?.description || 'Deepgram Flux model for realtime voice conversation and turn detection.',
+        disabled: !active || state.isSavingSpeechProvider,
+        canSave,
+        isSaving: state.isSavingSpeechProvider
+      })}
+    </section>
     ${state.speechProviderError ? `<p class="settings-platform-error">${escapeHtml(state.speechProviderError)}</p>` : ''}
     ${active ? '' : '<p class="settings-card-copy settings-platform-note">Activate Deepgram with a Core Secrets binding before using speech-to-text.</p>'}
   </div>`;
@@ -576,7 +747,9 @@ function speechModelSelectHtml({
   options,
   endpoint,
   description,
-  disabled
+  disabled,
+  canSave,
+  isSaving
 }: {
   id: string;
   label: string;
@@ -586,22 +759,24 @@ function speechModelSelectHtml({
   endpoint: string;
   description: string;
   disabled: boolean;
+  canSave: boolean;
+  isSaving: boolean;
 }) {
   if (!options.length) {
     return `<p class="settings-card-copy settings-platform-note">No ${escapeHtml(label.toLowerCase())} options are available.</p>`;
   }
-  return `<article class="settings-model-accordion settings-speech-model-accordion">
-    <div class="settings-model-trigger">
+  return `<details class="settings-model-accordion settings-speech-model-accordion">
+    <summary class="settings-model-trigger">
       <span class="settings-platform-icon material-symbols-rounded" aria-hidden="true">${escapeHtml(icon)}</span>
       <span class="settings-model-copy">
         <span class="settings-model-kicker">
           <span class="settings-kicker">${escapeHtml(label)}</span>
-          <span class="settings-pill">Active</span>
         </span>
         <strong>${escapeHtml(options.find((option) => option.model_id === value)?.label || value)}</strong>
         <small>${escapeHtml(value)} · ${escapeHtml(endpoint)}</small>
       </span>
-    </div>
+      <span class="settings-model-chevron material-symbols-rounded" aria-hidden="true">expand_more</span>
+    </summary>
     <div class="settings-model-content settings-hosted-model-content">
       <label class="settings-platform-field settings-platform-field-wide">
         <span>${escapeHtml(label)}</span>
@@ -614,8 +789,12 @@ function speechModelSelectHtml({
         <code class="settings-model-code">${escapeHtml(endpoint)}</code>
       </div>
       <p class="settings-card-copy">${escapeHtml(description)}</p>
+      <button type="button" data-speech-save="${escapeAttr(id)}" ${canSave ? '' : 'disabled'}>
+        <span class="material-symbols-rounded" aria-hidden="true">${isSaving ? 'sync' : 'save'}</span>
+        ${isSaving ? 'Saving' : 'Save speech model'}
+      </button>
     </div>
-  </article>`;
+  </details>`;
 }
 
 function speechModelOptions(

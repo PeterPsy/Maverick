@@ -14,7 +14,7 @@ from core.providers.payloads import (
 )
 from core.providers.provider_registry import ProviderRegistry
 from core.providers.routing import ProviderRoutingContext, select_provider_for_profile
-from core.providers.service import activate_hosted_model_provider, effective_provider_registry
+from core.providers.service import activate_hosted_model_provider, effective_provider_registry, is_retired_provider_definition
 from core.providers.store import ProviderStore
 from core.runtime.runtime_session import runtime_session_allows_user_thread
 from core.runtime.store import RuntimeStore
@@ -204,7 +204,16 @@ def _provider_definitions(
     provider_registry: ProviderRegistry | None,
 ) -> list:
     if provider_store is not None:
-        return sort_provider_definitions(provider_store.list_provider_definitions())
+        registry = effective_provider_registry(provider_store, registry=provider_registry)
+        return sort_provider_definitions([
+            definition
+            for definition in registry.list_provider_definitions()
+            if not is_retired_provider_definition(definition)
+        ])
     if provider_registry is not None:
-        return sort_provider_definitions(provider_registry.list_provider_definitions())
+        return sort_provider_definitions([
+            definition
+            for definition in provider_registry.list_provider_definitions()
+            if not is_retired_provider_definition(definition)
+        ])
     return []

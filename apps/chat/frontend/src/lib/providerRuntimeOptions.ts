@@ -7,9 +7,9 @@ export function providerItemsFromPayload(payload: ProviderPayload): ProviderItem
     options.push(payload.active_provider);
   }
 
-  const hostedProvider = payload.hosted_text?.active_provider || null;
-  if (hostedProvider && providerIsActive(hostedProvider)) {
-    options.push(...hostedModelProviderItems(payload.hosted_text));
+  const hostedProviders = hostedTextProviders(payload.hosted_text);
+  if (hostedProviders.length) {
+    options.push(...hostedProviders.flatMap((provider) => hostedModelProviderItems(payload.hosted_text, provider)));
   }
 
   if (!options.length) {
@@ -46,13 +46,24 @@ export function hostedProviderRuntimeConfig(provider: ProviderItem | null | unde
   };
 }
 
-function hostedModelProviderItems(status: HostedTextProviderStatus | null | undefined): ProviderItem[] {
-  const provider = status?.active_provider;
-  if (!provider) {
-    return [];
-  }
-  const selectedModelId = status?.model_settings?.selected_model_id || provider.default_model_family || "";
-  const models = status?.model_settings?.available_models?.length ? status.model_settings.available_models : provider.model_options || [];
+function hostedTextProviders(status: HostedTextProviderStatus | null | undefined): ProviderItem[] {
+  const providers = [
+    status?.active_provider,
+    ...(status?.available_providers || []),
+  ].filter((provider): provider is ProviderItem => Boolean(provider) && providerIsSelectable(provider as ProviderItem));
+  return dedupeProviders(providers);
+}
+
+function hostedModelProviderItems(status: HostedTextProviderStatus | null | undefined, provider: ProviderItem): ProviderItem[] {
+  const activeProviderId = status?.active_provider?.provider_id || "";
+  const selectedModelId =
+    activeProviderId === provider.provider_id
+      ? status?.model_settings?.selected_model_id || provider.default_model_family || ""
+      : provider.default_model_family || "";
+  const models =
+    activeProviderId === provider.provider_id && status?.model_settings?.available_models?.length
+      ? status.model_settings.available_models
+      : provider.model_options || [];
   const textModels = models.filter(modelSupportsPlainHostedChat);
   if (models.length && !textModels.length) {
     return [];

@@ -23,8 +23,7 @@ def build_hosted_provider_definitions(now: datetime | None = None) -> list[Provi
     """Return built-in hosted provider metadata without executable runtime adapters."""
     timestamp = now or utcnow()
     return [
-        _groq_definition(timestamp),
-        _deepseek_definition(timestamp),
+        _google_ai_studio_definition(timestamp),
         _openrouter_definition(timestamp),
         _deepgram_definition(timestamp),
         _cartesia_definition(timestamp),
@@ -109,61 +108,50 @@ def _openrouter_upstream(
     return payload
 
 
-def _groq_definition(timestamp: datetime) -> ProviderDefinition:
+def _google_ai_studio_definition(timestamp: datetime) -> ProviderDefinition:
     return ProviderDefinition(
-        provider_id="groq",
-        label="Groq",
-        description="Hosted low-latency text generation provider metadata.",
+        provider_id="google-ai-studio",
+        label="Google AI Studio",
+        description="Hosted Gemini text generation provider metadata.",
         kind="hosted_api",
         provider_role="model_provider",
         status="disabled",
         capabilities=_hosted_text_capabilities(latency_class="low"),
-        default_model_family="llama-3.3-70b-versatile",
+        default_model_family="gemini-3.5-flash",
         requires_credentials=True,
         supported_execution_modes=[],
         created_at=timestamp,
         updated_at=timestamp,
         model_options=[
             ProviderModelOption(
-                model_id="llama-3.3-70b-versatile",
-                label="Llama 3.3 70B Versatile",
-                description="Hosted text model candidate for fast_model routing.",
+                model_id="gemini-3.5-flash",
+                label="Gemini 3.5 Flash",
+                description="Google AI Studio Gemini Flash model candidate for fast_model routing.",
                 default_reasoning_effort=None,
-            )
+                input_modalities=["text", "image"],
+                output_modalities=["text"],
+                metadata={
+                    "endpoint": "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash:generateContent",
+                    "context_length": 1000000,
+                    "max_output_tokens": 65536,
+                },
+            ),
+            ProviderModelOption(
+                model_id="gemini-3.1-flash",
+                label="Gemini 3.1 Flash",
+                description="Google AI Studio Gemini Flash model candidate for fast_model routing.",
+                default_reasoning_effort=None,
+                input_modalities=["text", "image"],
+                output_modalities=["text"],
+                metadata={
+                    "endpoint": "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash:generateContent",
+                },
+            ),
         ],
-        credential_requirements=[_credential("groq_api_key", modes=["plain_hosted_chat"])],
-        network_requirements=[_network("api.groq.com")],
-        execution_contract=_hosted_text_contract("groq_api_key"),
+        credential_requirements=[_credential("google_ai_studio_api_key", modes=["plain_hosted_chat"])],
+        network_requirements=[_network("generativelanguage.googleapis.com")],
+        execution_contract=_hosted_text_contract("google_ai_studio_api_key"),
         latency_metadata={"latency_class": "low"},
-    )
-
-
-def _deepseek_definition(timestamp: datetime) -> ProviderDefinition:
-    return ProviderDefinition(
-        provider_id="deepseek",
-        label="DeepSeek",
-        description="Hosted text generation provider metadata.",
-        kind="hosted_api",
-        provider_role="model_provider",
-        status="disabled",
-        capabilities=_hosted_text_capabilities(latency_class="standard"),
-        default_model_family="deepseek-chat",
-        requires_credentials=True,
-        supported_execution_modes=[],
-        created_at=timestamp,
-        updated_at=timestamp,
-        model_options=[
-            ProviderModelOption(
-                model_id="deepseek-chat",
-                label="DeepSeek Chat",
-                description="Hosted text model candidate for plain hosted chat.",
-                default_reasoning_effort=None,
-            )
-        ],
-        credential_requirements=[_credential("deepseek_api_key", modes=["plain_hosted_chat"])],
-        network_requirements=[_network("api.deepseek.com")],
-        execution_contract=_hosted_text_contract("deepseek_api_key"),
-        latency_metadata={"latency_class": "standard"},
     )
 
 
@@ -237,113 +225,29 @@ def _openrouter_definition(timestamp: datetime) -> ProviderDefinition:
                         "Wafer",
                         quantization="fp4",
                         context_length=1000000,
-                        max_completion_tokens=65536,
+                        max_completion_tokens=32000,
                     ),
                     _openrouter_upstream("gmicloud/fp8", "GMICloud", quantization="fp8", context_length=1048575),
-                    _openrouter_upstream(
-                        "baidu/fp8",
-                        "Baidu",
-                        quantization="fp8",
-                        context_length=1048576,
-                        max_completion_tokens=131072,
-                    ),
                     _openrouter_upstream(
                         "deepinfra/fp4",
                         "DeepInfra",
                         quantization="fp4",
                         context_length=1048576,
-                        max_completion_tokens=16384,
-                    ),
-                    _openrouter_upstream(
-                        "digitalocean",
-                        "DigitalOcean",
-                        quantization="unknown",
-                        context_length=65536,
-                    ),
-                    _openrouter_upstream(
-                        "siliconflow/fp8",
-                        "SiliconFlow",
-                        quantization="fp8",
-                        context_length=1048576,
-                        max_completion_tokens=393216,
-                    ),
-                    _openrouter_upstream(
-                        "streamlake/fp8",
-                        "StreamLake",
-                        quantization="fp8",
-                        context_length=1024000,
-                        max_completion_tokens=384000,
-                    ),
-                    _openrouter_upstream(
-                        "alibaba",
-                        "Alibaba",
-                        quantization="unknown",
-                        context_length=1000000,
-                        max_completion_tokens=393216,
-                    ),
-                    _openrouter_upstream(
-                        "morph",
-                        "Morph",
-                        quantization="unknown",
-                        context_length=1048576,
-                        max_completion_tokens=1048576,
-                    ),
-                    _openrouter_upstream(
-                        "parasail/fp8",
-                        "Parasail",
-                        quantization="fp8",
-                        context_length=1048576,
-                        max_completion_tokens=1048576,
-                    ),
-                    _openrouter_upstream(
-                        "atlas-cloud/fp8",
-                        "AtlasCloud",
-                        quantization="fp8",
-                        context_length=1048576,
-                        max_completion_tokens=393216,
-                    ),
-                    _openrouter_upstream(
-                        "akashml/fp8",
-                        "AkashML",
-                        quantization="fp8",
-                        context_length=1048576,
-                        max_completion_tokens=1048576,
-                    ),
-                    _openrouter_upstream("fireworks", "Fireworks", quantization="unknown", context_length=1048576),
-                    _openrouter_upstream(
-                        "novita/fp8",
-                        "Novita",
-                        quantization="fp8",
-                        context_length=1048576,
-                        max_completion_tokens=393216,
-                    ),
-                    _openrouter_upstream(
-                        "wandb/fp8",
-                        "WandB",
-                        quantization="fp8",
-                        context_length=1048576,
-                        max_completion_tokens=1048576,
-                    ),
-                    _openrouter_upstream(
-                        "cloudflare",
-                        "Cloudflare",
-                        quantization="unknown",
-                        context_length=384000,
-                        max_completion_tokens=384000,
+                        max_completion_tokens=163840,
                     ),
                     _openrouter_upstream(
                         "deepseek",
                         "DeepSeek",
                         quantization="unknown",
                         context_length=1048576,
-                        max_completion_tokens=384000,
+                        max_completion_tokens=163840,
                     ),
                     _openrouter_upstream(
                         "venice",
                         "Venice",
                         quantization="unknown",
                         context_length=1000000,
-                        max_completion_tokens=32768,
+                        max_completion_tokens=163840,
                     ),
                 ],
             ),

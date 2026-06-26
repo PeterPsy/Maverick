@@ -103,7 +103,7 @@ class ProvidersTestCase(unittest.TestCase):
 
         self.assertEqual(
             {definition.provider_id for definition in definitions},
-            {"cartesia", "codex", "deepgram", "deepseek", "groq", "kokoro-hosted", "openrouter"},
+            {"cartesia", "codex", "deepgram", "google-ai-studio", "kokoro-hosted", "openrouter"},
         )
         self.assertEqual(codex.kind, "runtime_backend")
         self.assertEqual(codex.provider_role, "runtime_engine")
@@ -120,21 +120,14 @@ class ProvidersTestCase(unittest.TestCase):
 
     def test_builtin_registry_exposes_remote_providers_as_disabled_metadata(self) -> None:
         definitions = builtin_provider_registry().list_provider_definitions()
-        groq = self.provider_by_id(definitions, "groq")
-        deepseek = self.provider_by_id(definitions, "deepseek")
+        google_ai_studio = self.provider_by_id(definitions, "google-ai-studio")
         openrouter = self.provider_by_id(definitions, "openrouter")
         deepgram = self.provider_by_id(definitions, "deepgram")
         cartesia = self.provider_by_id(definitions, "cartesia")
         kokoro_hosted = self.provider_by_id(definitions, "kokoro-hosted")
 
-        self.assertEqual(groq.provider_role, "model_provider")
-        self.assertEqual(groq.status, "disabled")
-        self.assertEqual(groq.capabilities.input_modalities, ["text"])
-        self.assertEqual(groq.capabilities.output_modalities, ["text"])
-        self.assertFalse(groq.capabilities.supports_tool_calling)
-        self.assertEqual(groq.execution_contract.adapter_type if groq.execution_contract else None, "hosted_text_generation")
-        self.assertEqual(deepseek.provider_role, "model_provider")
-        self.assertEqual(deepseek.status, "disabled")
+        self.assertEqual(google_ai_studio.provider_role, "model_provider")
+        self.assertEqual(google_ai_studio.status, "disabled")
         self.assertEqual(openrouter.provider_role, "model_provider")
         self.assertEqual(openrouter.status, "disabled")
         self.assertEqual(openrouter.default_model_family, "google/gemma-4-31b-it:free")

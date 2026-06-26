@@ -49,7 +49,7 @@ export async function saveActiveProviderSettings(context: ProviderSettingsAction
 }
 
 export async function saveHostedProviderSettings(context: ProviderSettingsActionContext) {
-  const providerId = context.settings?.provider.hosted_text?.active_provider?.provider_id;
+  const providerId = hostedProviderIdForModel(context.settings, context.state.hostedDraftModelId);
   if (!providerId || !context.state.hostedDraftModelId) {
     context.state.hostedProviderErrorModelId = context.state.hostedDraftModelId;
     context.state.hostedProviderError = 'Hosted provider not loaded.';
@@ -77,6 +77,21 @@ export async function saveHostedProviderSettings(context: ProviderSettingsAction
     context.state.isSavingHostedProvider = false;
     context.render();
   }
+}
+
+function hostedProviderIdForModel(settings: PlatformSettings | null, modelId: string): string {
+  const status = settings?.provider.hosted_text || null;
+  const providers = [
+    status?.active_provider,
+    ...(status?.available_providers || []),
+  ].filter(Boolean);
+  const matchedProvider = providers.find((provider) => {
+    if (!provider || provider.status !== 'active') {
+      return false;
+    }
+    return (provider.model_options || []).some((option) => option.model_id === modelId);
+  });
+  return matchedProvider?.provider_id || status?.active_provider?.provider_id || '';
 }
 
 export async function saveSpeechProviderSettings(context: ProviderSettingsActionContext) {

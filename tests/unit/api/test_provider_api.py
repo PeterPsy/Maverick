@@ -15,7 +15,7 @@ from core.providers.service import register_builtin_providers
 from core.providers.store import ProviderCollections, ProviderDocumentStore
 from core.runtime.service import create_runtime_session
 from core.runtime.store import RuntimeCollections, RuntimeDocumentStore
-from core.secrets.service import build_secret_ref, create_platform_secret
+from core.secrets.service import bind_provider_secret, build_secret_ref, create_platform_secret
 from core.secrets.store import SecretCollections, SecretDocumentStore
 from tests.support.collections import FakeCollection
 
@@ -79,8 +79,8 @@ class ProviderApiTest(unittest.TestCase):
         self.assertEqual(status, "200 OK")
         decision = payload["decision"]
         self.assertEqual(decision["request_id"], "req-api")
-        self.assertEqual(decision["candidate_provider_ids"], ["groq", "openrouter"])
-        self.assertIn("provider_disabled:groq", decision["reason_codes"])
+        self.assertEqual(decision["candidate_provider_ids"], ["google-ai-studio", "openrouter"])
+        self.assertIn("provider_disabled:google-ai-studio", decision["reason_codes"])
         self.assertIn("provider_disabled:openrouter", decision["reason_codes"])
         self.assertNotIn("secret_ref", str(payload))
 
@@ -88,9 +88,9 @@ class ProviderApiTest(unittest.TestCase):
         state = self.make_state()
         secret = create_platform_secret(
             state.secret_store,
-            label="Groq API",
+            label="Google AI Studio API",
             raw_value="super-secret-token",
-            alias="groq-api",
+            alias="google-ai-studio-api",
             kind="api_key",
         )
 
@@ -98,8 +98,8 @@ class ProviderApiTest(unittest.TestCase):
             "/api/providers/hosted/active",
             method="POST",
             body={
-                "provider_id": "groq",
-                "secret_ref": build_secret_ref(alias=secret.alias or "groq-api"),
+                "provider_id": "google-ai-studio",
+                "secret_ref": build_secret_ref(alias=secret.alias or "google-ai-studio-api"),
             },
             state=state,
         )
@@ -110,12 +110,12 @@ class ProviderApiTest(unittest.TestCase):
         )
 
         self.assertEqual(status, "200 OK")
-        self.assertEqual(payload["provider"]["provider_id"], "groq")
+        self.assertEqual(payload["provider"]["provider_id"], "google-ai-studio")
         self.assertEqual(payload["provider"]["status"], "active")
-        self.assertEqual(payload["credential_binding"]["provider_id"], "groq")
-        self.assertEqual(payload["preflight"]["selected_provider_id"], "groq")
+        self.assertEqual(payload["credential_binding"]["provider_id"], "google-ai-studio")
+        self.assertEqual(payload["preflight"]["selected_provider_id"], "google-ai-studio")
         self.assertEqual(route_status, "200 OK")
-        self.assertEqual(route_payload["decision"]["selected_provider_id"], "groq")
+        self.assertEqual(route_payload["decision"]["selected_provider_id"], "google-ai-studio")
         self.assertNotIn("super-secret-token", json.dumps(payload))
         self.assertNotIn("secret_ref", json.dumps(payload))
 
@@ -366,6 +366,36 @@ class ProviderApiTest(unittest.TestCase):
         self.assertNotIn("super-secret-token", json.dumps(payload_after_disable))
         self.assertNotIn("secret_ref", json.dumps(payload_after_disable))
 
+    def test_hosted_text_status_marks_bound_google_provider_active(self) -> None:
+        state = self.make_state()
+        secret = create_platform_secret(
+            state.secret_store,
+            label="Google AI Studio API",
+            raw_value="super-secret-token",
+            alias="google_ai_studio_api_key",
+            kind="api_key",
+        )
+        bind_provider_secret(
+            state.secret_store,
+            provider_id="google-ai-studio",
+            workspace_id="default",
+            logical_name="google_ai_studio_api_key",
+            secret_ref=build_secret_ref(alias=secret.alias or "google_ai_studio_api_key"),
+        )
+
+        status, payload = self.invoke("/api/providers/active", state=state)
+
+        self.assertEqual(status, "200 OK")
+        google = next(
+            provider
+            for provider in payload["hosted_text"]["available_providers"]
+            if provider["provider_id"] == "google-ai-studio"
+        )
+        self.assertEqual(google["status"], "active")
+        self.assertEqual(payload["hosted_text"]["route_preview"]["selected_provider_id"], "google-ai-studio")
+        self.assertNotIn("super-secret-token", json.dumps(payload))
+        self.assertNotIn("secret_ref", json.dumps(payload))
+
     def test_hosted_activation_rejects_caller_supplied_binding_id_collision(self) -> None:
         state = self.make_state()
         secret = create_platform_secret(
@@ -377,7 +407,7 @@ class ProviderApiTest(unittest.TestCase):
         )
         existing = bind_provider_credential(
             state.provider_store,
-            provider_id="deepseek",
+            provider_id="google-ai-studio",
             workspace_id="default",
             secret_ref=build_secret_ref(alias=secret.alias or "shared-api"),
             binding_id="shared-binding",
@@ -387,7 +417,7 @@ class ProviderApiTest(unittest.TestCase):
             "/api/providers/hosted/active",
             method="POST",
             body={
-                "provider_id": "groq",
+                "provider_id": "google-ai-studio",
                 "secret_ref": build_secret_ref(alias=secret.alias or "shared-api"),
                 "binding_id": existing.binding_id,
             },
@@ -396,7 +426,7 @@ class ProviderApiTest(unittest.TestCase):
 
         self.assertEqual(status, "400 Bad Request")
         self.assertEqual(payload["error"], "binding_id_not_supported")
-        self.assertEqual(state.provider_store.get_provider_binding(existing.binding_id).provider_id, "deepseek")
+        self.assertEqual(state.provider_store.get_provider_binding(existing.binding_id).provider_id, "google-ai-studio")
 
     def test_runtime_status_exposes_runtime_mode(self) -> None:
         state = self.make_state()

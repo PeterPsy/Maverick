@@ -35,6 +35,9 @@ from core.secrets.store import SecretStore
 from core.skills.models import SkillDefinition, SkillMaterialization
 
 
+RETIRED_PROVIDER_IDS = {"deepseek", "groq"}
+
+
 @dataclass(frozen=True)
 class HostedModelProviderActivation:
     """Result of operator activation for a hosted model provider."""
@@ -126,8 +129,15 @@ def effective_provider_registry(
         refresh_model_catalog=refresh_model_catalog,
     )
     for definition in store.list_provider_definitions():
+        if is_retired_provider_definition(definition):
+            continue
         active_registry.register_provider_definition(definition)
     return active_registry
+
+
+def is_retired_provider_definition(definition: ProviderDefinition) -> bool:
+    """Return whether a persisted provider definition should no longer be exposed."""
+    return definition.provider_id in RETIRED_PROVIDER_IDS
 
 
 def activate_hosted_model_provider(

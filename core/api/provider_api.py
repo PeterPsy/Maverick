@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from dataclasses import replace
+
 from core.api.http import StartResponse, json_response, query_params
 from core.api.platform_state import PlatformState
 from core.api.session_api import RequestSession, require_session
@@ -17,6 +19,7 @@ from core.providers.payloads import (
     sort_provider_definitions,
     speech_provider_selection_payload,
 )
+from core.providers.provider_authorization import check_provider_credential_authorization
 from core.providers.provider_credentials import resolve_provider_binding
 from core.providers.routing import ProviderRoutingContext, select_provider_for_profile
 from core.providers.service import (
@@ -131,6 +134,10 @@ def workspace_hosted_text_status(state: PlatformState, *, workspace_id: str) -> 
         and selection.provider_id == active_provider.provider_id
         else None
     )
+    display_providers = [
+        _hosted_provider_display_definition(state, provider, workspace_id=workspace_id)
+        for provider in available_providers
+    ]
     return {
         "profile": "fast_model",
         "active_provider": None if active_provider is None else provider_payload(active_provider),
@@ -140,9 +147,28 @@ def workspace_hosted_text_status(state: PlatformState, *, workspace_id: str) -> 
             if active_provider is None
             else hosted_provider_model_settings_payload(active_provider, active_selection)
         ),
-        "available_providers": [provider_payload(provider) for provider in sort_provider_definitions(available_providers)],
+        "available_providers": [provider_payload(provider) for provider in sort_provider_definitions(display_providers)],
         "route_preview": routing_decision_payload(decision),
     }
+
+
+def _hosted_provider_display_definition(
+    state: PlatformState,
+    provider: ProviderDefinition,
+    *,
+    workspace_id: str,
+) -> ProviderDefinition:
+    if provider.status == "active":
+        return provider
+    authorization = check_provider_credential_authorization(
+        state.provider_store,
+        definition=provider,
+        workspace_id=workspace_id,
+        secret_store=getattr(state, "secret_store", None),
+    )
+    if not authorization.authorized:
+        return provider
+    return replace(provider, status="active")
 
 
 def workspace_speech_stt_status(state: PlatformState, *, workspace_id: str) -> dict[str, object]:
@@ -211,6 +237,24 @@ def workspace_speech_stt_status(state: PlatformState, *, workspace_id: str) -> d
         ),
         "available_providers": [provider_payload(provider) for provider in sort_provider_definitions(available_providers)],
     }
+
+
+def workspace_speech_stt_backend_provider_config(state: PlatformState, *, workspace_id: str) -> dict[str, object]:
+    """Return the minimal JSON-safe Speech backend provider config."""
+    return speech_stt_backend_provider_config_payload(workspace_speech_stt_status(state, workspace_id=workspace_id))
+
+
+def speech_stt_backend_provider_config_payload(status: dict[str, object]) -> dict[str, object]:
+    """Extract only model ids that Speech backend entrypoints consume."""
+    model_settings = status.get("model_settings")
+    if not isinstance(model_settings, dict):
+        return {}
+    config: dict[str, object] = {}
+    for key in ("audio_transcription_model_id", "conversation_model_id"):
+        value = str(model_settings.get(key) or "").strip()
+        if value:
+            config[key] = value
+    return config
 
 
 def speech_provider_model_settings_payload(

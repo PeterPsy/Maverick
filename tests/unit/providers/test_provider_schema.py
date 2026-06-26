@@ -79,8 +79,8 @@ class ProviderSchemaTest(unittest.TestCase):
         store = self.make_store()
         now = datetime(2026, 6, 22, 12, 0, tzinfo=UTC)
         definition = ProviderDefinition(
-            provider_id="groq",
-            label="Groq",
+            provider_id="example-hosted",
+            label="Example Hosted",
             description="Hosted low-latency text model provider.",
             kind="hosted_api",
             status="experimental",
@@ -100,15 +100,15 @@ class ProviderSchemaTest(unittest.TestCase):
                 supports_tool_calling=False,
                 latency_class="low",
             ),
-            default_model_family="llama-3.3-70b-versatile",
+            default_model_family="example-fast-text",
             requires_credentials=True,
             supported_execution_modes=[],
             created_at=now,
             updated_at=now,
             model_options=[
                 ProviderModelOption(
-                    model_id="llama-3.3-70b-versatile",
-                    label="Llama 3.3 70B Versatile",
+                    model_id="example-fast-text",
+                    label="Example Fast Text",
                     description="Hosted text model.",
                     default_reasoning_effort=None,
                 )
@@ -116,17 +116,17 @@ class ProviderSchemaTest(unittest.TestCase):
             provider_role="model_provider",
             credential_requirements=[
                 ProviderCredentialRequirement(
-                    secret_alias_or_logical_name="groq_api_key",
+                    secret_alias_or_logical_name="example_hosted_api_key",
                     secret_kind="api_key",
                     required_for_modes=["plain_hosted_chat"],
                     secret_binding_scope="provider",
-                    provider_credential_binding_id_optional="provider-groq-binding",
+                    provider_credential_binding_id_optional="provider-example-hosted-binding",
                 )
             ],
             network_requirements=[
                 ProviderNetworkRequirement(
                     outbound_required=True,
-                    allowed_hosts=["api.groq.com"],
+                    allowed_hosts=["api.example-hosted.invalid"],
                     transport="https",
                 )
             ],
@@ -136,20 +136,20 @@ class ProviderSchemaTest(unittest.TestCase):
                 streaming_supported=True,
                 non_streaming_supported=True,
                 timeout_policy="short_interactive",
-                secret_alias_or_logical_name="groq_api_key",
+                secret_alias_or_logical_name="example_hosted_api_key",
                 transport_test_mode="fake_supported",
             ),
             latency_metadata={"latency_class": "low"},
         )
 
         store.save_provider_definition(definition)
-        reloaded = store.get_provider_definition("groq")
+        reloaded = store.get_provider_definition("example-hosted")
 
         self.assertEqual(reloaded.provider_role, "model_provider")
-        self.assertEqual(reloaded.credential_requirements[0].secret_alias_or_logical_name, "groq_api_key")
+        self.assertEqual(reloaded.credential_requirements[0].secret_alias_or_logical_name, "example_hosted_api_key")
         self.assertTrue(reloaded.credential_requirements[0].redaction_required)
         self.assertEqual(reloaded.credential_requirements[0].resolution_stage, "execution_only")
-        self.assertEqual(reloaded.network_requirements[0].allowed_hosts, ["api.groq.com"])
+        self.assertEqual(reloaded.network_requirements[0].allowed_hosts, ["api.example-hosted.invalid"])
         self.assertIsNotNone(reloaded.execution_contract)
         self.assertEqual(reloaded.execution_contract.adapter_type, "hosted_text_generation")
         self.assertFalse(hasattr(reloaded.credential_requirements[0], "secret_value"))
@@ -193,6 +193,26 @@ class ProviderSchemaTest(unittest.TestCase):
             "openrouter_api_key",
         )
         self.assertNotIn("platform:secret-alias/openrouter_api_key", str(payload))
+        self.assertNotIn("secret_ref", str(payload))
+
+    def test_google_ai_studio_metadata_exposes_gemini_flash_models(self) -> None:
+        definitions = build_hosted_provider_definitions(datetime(2026, 6, 24, 12, 0, tzinfo=UTC))
+        google = next(definition for definition in definitions if definition.provider_id == "google-ai-studio")
+        payload = provider_payload(google)
+
+        self.assertEqual(google.label, "Google AI Studio")
+        self.assertEqual(google.kind, "hosted_api")
+        self.assertEqual(google.provider_role, "model_provider")
+        self.assertEqual(google.default_model_family, "gemini-3.5-flash")
+        self.assertEqual([option.model_id for option in google.model_options], ["gemini-3.5-flash", "gemini-3.1-flash"])
+        self.assertEqual([option.label for option in google.model_options], ["Gemini 3.5 Flash", "Gemini 3.1 Flash"])
+        self.assertEqual(google.model_options[0].input_modalities, ["text", "image"])
+        self.assertEqual(google.model_options[0].output_modalities, ["text"])
+        self.assertEqual(google.credential_requirements[0].secret_alias_or_logical_name, "google_ai_studio_api_key")
+        self.assertEqual(google.network_requirements[0].allowed_hosts, ["generativelanguage.googleapis.com"])
+        self.assertEqual(google.execution_contract.adapter_type if google.execution_contract else None, "hosted_text_generation")
+        self.assertEqual(payload["model_options"][0]["metadata"]["context_length"], 1000000)
+        self.assertNotIn("platform:secret-alias/google_ai_studio_api_key", str(payload))
         self.assertNotIn("secret_ref", str(payload))
 
     def test_deepgram_metadata_exposes_separate_transcription_and_conversation_models(self) -> None:

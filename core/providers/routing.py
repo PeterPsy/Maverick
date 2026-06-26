@@ -142,9 +142,6 @@ def _select_fast_model(context: ProviderRoutingContext) -> RoutingDecision:
         if requested_model_id and (model is None or model.model_id != requested_model_id):
             reason_codes.append(f"hosted_model_override_unavailable:{candidate.provider_id}")
             continue
-        if candidate.status != "active":
-            reason_codes.append(f"provider_disabled:{candidate.provider_id}")
-            continue
         if not _provider_allowed(candidate.provider_id, policy=policy, user_tier=context.user_tier):
             reason_codes.append(f"workspace_policy_denied:{candidate.provider_id}")
             continue
@@ -166,6 +163,9 @@ def _select_fast_model(context: ProviderRoutingContext) -> RoutingDecision:
             app_id=context.app_id,
         )
         reason_codes.extend(authorization.reason_codes)
+        if candidate.status != "active" and not authorization.authorized:
+            reason_codes.append(f"provider_disabled:{candidate.provider_id}")
+            continue
         if not authorization.authorized:
             reason_codes.append("fallback_no_credential_authorization")
             continue

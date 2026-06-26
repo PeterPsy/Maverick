@@ -927,12 +927,12 @@ class TestMcpCliSurfaces(SurfaceTestBase):
         register_builtin_providers(provider_store)
         secret = create_platform_secret(
             secret_store,
-            label="Groq CLI MCP",
+            label="Google AI Studio CLI MCP",
             raw_value="super-secret-token",
-            alias="groq-cli-mcp",
+            alias="google-ai-studio-cli-mcp",
             kind="api_key",
         )
-        secret_ref = build_secret_ref(alias=secret.alias or "groq-cli-mcp")
+        secret_ref = build_secret_ref(alias=secret.alias or "google-ai-studio-cli-mcp")
         repo_root = self.make_repo_root()
         context = CliInvocationContext(
             caller_kind="sandbox_agent",
@@ -967,7 +967,7 @@ class TestMcpCliSurfaces(SurfaceTestBase):
             observability_store=observability_store,
             workspace_id="default",
             start_path=repo_root,
-            arguments={"provider_id": "groq", "secret_ref": secret_ref},
+            arguments={"provider_id": "google-ai-studio", "secret_ref": secret_ref},
         )
         surface = build_workspace_mcp_surface(
             workspace_store=workspace_store,
@@ -979,7 +979,7 @@ class TestMcpCliSurfaces(SurfaceTestBase):
         )
         mcp_activation = surface.call_tool(
             "core.providers.hosted.activate",
-            {"provider_id": "groq", "secret_ref": secret_ref},
+            {"provider_id": "google-ai-studio", "secret_ref": secret_ref},
             context=mcp_operator_context,
         )
 
@@ -1002,10 +1002,10 @@ class TestMcpCliSurfaces(SurfaceTestBase):
         self.assertEqual(mcp_activation["provider"]["status"], "active")
         self.assertEqual(cli_result["decision"]["request_id"], "req-cli")
         self.assertEqual(mcp_result["decision"]["request_id"], "req-mcp")
-        self.assertEqual(cli_result["decision"]["candidate_provider_ids"], ["groq", "openrouter"])
-        self.assertEqual(cli_result["decision"]["selected_provider_id"], "groq")
-        self.assertEqual(mcp_result["decision"]["selected_provider_id"], "groq")
-        self.assertNotIn("provider_disabled:groq", cli_result["decision"]["reason_codes"])
+        self.assertEqual(cli_result["decision"]["candidate_provider_ids"], ["google-ai-studio", "openrouter"])
+        self.assertEqual(cli_result["decision"]["selected_provider_id"], "google-ai-studio")
+        self.assertEqual(mcp_result["decision"]["selected_provider_id"], "google-ai-studio")
+        self.assertNotIn("provider_disabled:google-ai-studio", cli_result["decision"]["reason_codes"])
         self.assertNotIn("super-secret-token", str(activation))
         self.assertNotIn("secret_ref", str(cli_result))
         self.assertNotIn("secret_ref", str(mcp_result))

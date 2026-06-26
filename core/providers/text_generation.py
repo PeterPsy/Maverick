@@ -7,6 +7,7 @@ import json
 import socket
 from typing import Iterable, Literal, Protocol
 from urllib import error as urllib_error
+from urllib import parse as urllib_parse
 from urllib import request as urllib_request
 
 from core.providers.errors import ProviderError
@@ -24,10 +25,9 @@ MessageRole = Literal["system", "user", "assistant"]
 MessageContentPartType = Literal["text", "image_url"]
 
 OPENAI_COMPATIBLE_ENDPOINTS = {
-    "groq": "https://api.groq.com/openai/v1/chat/completions",
-    "deepseek": "https://api.deepseek.com/chat/completions",
     "openrouter": "https://openrouter.ai/api/v1/chat/completions",
 }
+GOOGLE_AI_STUDIO_ENDPOINT_ROOT = "https://generativelanguage.googleapis.com/v1beta/models"
 BLOCKED_HOSTED_TEXT_MARKERS = (
     "local path:",
     "Referenced app-owned records:",
@@ -152,7 +152,7 @@ class FakeHostedTextTransport:
         timeout_seconds: int | None,
     ) -> HostedTextTransportResult:
         safe_headers = {
-            key: ("<redacted>" if key.lower() == "authorization" else value)
+            key: ("<redacted>" if key.lower() in {"authorization", "x-goog-api-key"} else value)
             for key, value in headers.items()
         }
         self.requests.append(
@@ -208,6 +208,42 @@ class OpenAICompatibleHttpTransport:
                 except (json.JSONDecodeError, UnicodeDecodeError):
                     return HostedTextTransportResult(status_code=response.status, error="provider_response_invalid")
                 return HostedTextTransportResult(status_code=response.status, payload=decoded)
+        except urllib_error.HTTPError as error:
+            return HostedTextTransportResult(status_code=error.code, error=str(error))
+        except (TimeoutError, socket.timeout, urllib_error.URLError) as error:
+            if isinstance(error, urllib_error.URLError) and not isinstance(error.reason, TimeoutError | socket.timeout):
+                return HostedTextTransportResult(status_code=0, error=str(error))
+            return HostedTextTransportResult(status_code=0, timed_out=True, error=str(error))
+
+
+class GoogleAIStudioHttpTransport(OpenAICompatibleHttpTransport):
+    """HTTP transport that parses Gemini SSE chunks."""
+
+    def send(
+        self,
+        *,
+        endpoint_url: str,
+        headers: dict[str, str],
+        payload: dict[str, object],
+        stream: bool,
+        timeout_seconds: int | None,
+    ) -> HostedTextTransportResult:
+        if not stream:
+            return super().send(
+                endpoint_url=endpoint_url,
+                headers=headers,
+                payload=payload,
+                stream=stream,
+                timeout_seconds=timeout_seconds,
+            )
+        body = json.dumps(payload).encode("utf-8")
+        req = urllib_request.Request(endpoint_url, data=body, headers=headers, method="POST")
+        try:
+            with urllib_request.urlopen(req, timeout=timeout_seconds) as response:
+                return HostedTextTransportResult(
+                    status_code=response.status,
+                    chunks=list(_iter_gemini_sse_chunks(response)),
+                )
         except urllib_error.HTTPError as error:
             return HostedTextTransportResult(status_code=error.code, error=str(error))
         except (TimeoutError, socket.timeout, urllib_error.URLError) as error:
@@ -272,6 +308,59 @@ class OpenAICompatibleTextGenerationClient:
         )
 
 
+class GoogleAIStudioTextGenerationClient:
+    """Hosted text generation client for the Gemini API."""
+
+    def __init__(
+        self,
+        *,
+        api_key: str,
+        endpoint_root: str | None = None,
+        transport: HostedTextTransport | None = None,
+    ) -> None:
+        self.provider_id = "google-ai-studio"
+        self.api_key = api_key
+        self.endpoint_root = (endpoint_root or GOOGLE_AI_STUDIO_ENDPOINT_ROOT).rstrip("/")
+        self.transport = transport or GoogleAIStudioHttpTransport()
+
+    def generate(self, request: TextGenerationRequest) -> TextGenerationResult:
+        """Generate text through Google AI Studio and normalize Gemini responses."""
+        _validate_hosted_text_request(request)
+        payload = _gemini_payload(request)
+        result = self.transport.send(
+            endpoint_url=_gemini_endpoint(self.endpoint_root, model_id=request.model_id, stream=request.stream),
+            headers={
+                "x-goog-api-key": self.api_key,
+                "Content-Type": "application/json",
+                "Accept": "text/event-stream" if request.stream else "application/json",
+            },
+            payload=payload,
+            stream=request.stream,
+            timeout_seconds=request.timeout_seconds,
+        )
+        if result.timed_out:
+            raise HostedTextGenerationError("provider_timeout")
+        if result.status_code in {401, 403}:
+            raise HostedTextGenerationError("provider_credential_rejected")
+        if result.status_code == 429:
+            raise HostedTextGenerationError("provider_rate_limited")
+        if result.status_code >= 400 or result.status_code == 0:
+            raise HostedTextGenerationError("provider_http_error")
+        deltas = result.chunks if request.stream else [_extract_gemini_text(result.payload)]
+        if not deltas or any(delta is None for delta in deltas):
+            raise HostedTextGenerationError("provider_response_invalid")
+        text_deltas = [str(delta) for delta in deltas if str(delta)]
+        if not text_deltas:
+            raise HostedTextGenerationError("provider_response_invalid")
+        return TextGenerationResult(
+            output_text="".join(text_deltas),
+            deltas=text_deltas,
+            provider_id=self.provider_id,
+            model_id=request.model_id,
+            reason_codes=["hosted_text_generation_completed"],
+        )
+
+
 def execute_hosted_text_generation(
     provider_store: ProviderStore,
     secret_store: SecretStore,
@@ -292,12 +381,27 @@ def execute_hosted_text_generation(
         runtime_session_id=runtime_session_id,
         app_id=app_id,
     )
-    client = OpenAICompatibleTextGenerationClient(
+    client = _hosted_text_generation_client(
         provider_id=decision.selected_provider_id,
         api_key=api_key,
         transport=transport,
     )
     return client.generate(request)
+
+
+def _hosted_text_generation_client(
+    *,
+    provider_id: str,
+    api_key: str,
+    transport: HostedTextTransport | None = None,
+) -> TextGenerationClient:
+    if provider_id == "google-ai-studio":
+        return GoogleAIStudioTextGenerationClient(api_key=api_key, transport=transport)
+    return OpenAICompatibleTextGenerationClient(
+        provider_id=provider_id,
+        api_key=api_key,
+        transport=transport,
+    )
 
 
 def _resolve_hosted_text_api_key(
@@ -373,6 +477,49 @@ def _openai_payload(request: TextGenerationRequest) -> dict[str, object]:
     if provider_routing:
         payload["provider"] = provider_routing
     return payload
+
+
+def _gemini_endpoint(endpoint_root: str, *, model_id: str, stream: bool) -> str:
+    action = "streamGenerateContent?alt=sse" if stream else "generateContent"
+    return f"{endpoint_root}/{urllib_parse.quote(model_id, safe='')}:{action}"
+
+
+def _gemini_payload(request: TextGenerationRequest) -> dict[str, object]:
+    contents = []
+    for message in request.messages:
+        role = "model" if message.role == "assistant" else "user"
+        contents.append({"role": role, "parts": _gemini_content_parts(message.content)})
+    payload: dict[str, object] = {"contents": contents}
+    if request.system_prompt:
+        payload["systemInstruction"] = {"parts": [{"text": request.system_prompt}]}
+    generation_config: dict[str, object] = {}
+    if request.max_output_tokens is not None:
+        generation_config["maxOutputTokens"] = request.max_output_tokens
+    if generation_config:
+        payload["generationConfig"] = generation_config
+    return payload
+
+
+def _gemini_content_parts(content: str | list[TextGenerationContentPart]) -> list[dict[str, object]]:
+    if isinstance(content, str):
+        return [{"text": content}]
+    parts: list[dict[str, object]] = []
+    for part in content:
+        if part.type == "text":
+            parts.append({"text": part.text or ""})
+        elif part.type == "image_url" and part.image_url:
+            inline = _gemini_inline_data_part(part.image_url)
+            if inline:
+                parts.append(inline)
+    return parts or [{"text": ""}]
+
+
+def _gemini_inline_data_part(image_url: str) -> dict[str, object] | None:
+    if not image_url.startswith("data:") or "," not in image_url:
+        return None
+    metadata, data = image_url.split(",", 1)
+    mime_type = metadata.removeprefix("data:").split(";", 1)[0] or "application/octet-stream"
+    return {"inlineData": {"mimeType": mime_type, "data": data}}
 
 
 def _openrouter_provider_payload(value: dict[str, object] | None) -> dict[str, object]:
@@ -462,6 +609,30 @@ def _extract_message_content(payload: dict[str, object] | None) -> str:
     return content
 
 
+def _extract_gemini_text(payload: dict[str, object] | None) -> str:
+    if not isinstance(payload, dict):
+        raise HostedTextGenerationError("provider_response_invalid")
+    candidates = payload.get("candidates")
+    if not isinstance(candidates, list) or not candidates:
+        raise HostedTextGenerationError("provider_response_invalid")
+    return _extract_gemini_candidate_text(candidates[0])
+
+
+def _extract_gemini_candidate_text(candidate: object) -> str:
+    if not isinstance(candidate, dict):
+        raise HostedTextGenerationError("provider_response_invalid")
+    content = candidate.get("content")
+    if not isinstance(content, dict):
+        raise HostedTextGenerationError("provider_response_invalid")
+    parts = content.get("parts")
+    if not isinstance(parts, list):
+        raise HostedTextGenerationError("provider_response_invalid")
+    text_parts = [part.get("text") for part in parts if isinstance(part, dict) and isinstance(part.get("text"), str)]
+    if not text_parts:
+        raise HostedTextGenerationError("provider_response_invalid")
+    return "".join(text_parts)
+
+
 def _iter_openai_sse_chunks(response) -> Iterable[str]:
     for raw_line in response:
         try:
@@ -484,3 +655,29 @@ def _iter_openai_sse_chunks(response) -> Iterable[str]:
         content = delta.get("content") if isinstance(delta, dict) else None
         if isinstance(content, str) and content:
             yield content
+
+
+def _iter_gemini_sse_chunks(response) -> Iterable[str]:
+    for raw_line in response:
+        try:
+            line = raw_line.decode("utf-8").strip()
+        except UnicodeDecodeError as error:
+            raise HostedTextGenerationError("provider_response_invalid") from error
+        if not line.startswith("data:"):
+            continue
+        data = line.removeprefix("data:").strip()
+        if not data:
+            continue
+        try:
+            payload = json.loads(data)
+        except json.JSONDecodeError:
+            continue
+        candidates = payload.get("candidates") if isinstance(payload, dict) else None
+        if not isinstance(candidates, list) or not candidates:
+            continue
+        try:
+            text = _extract_gemini_candidate_text(candidates[0])
+        except HostedTextGenerationError:
+            continue
+        if text:
+            yield text

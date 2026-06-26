@@ -91,6 +91,36 @@ const payload: ProviderPayload = {
   },
 };
 
+const googleProvider = {
+  provider_id: "google-ai-studio",
+  label: "Google AI Studio",
+  description: "Hosted Gemini text generation provider metadata.",
+  kind: "hosted_api",
+  provider_role: "model_provider",
+  status: "active",
+  default_model_family: "gemini-3.5-flash",
+  model_options: [
+    {
+      model_id: "gemini-3.5-flash",
+      label: "Gemini 3.5 Flash",
+      description: null,
+      default_reasoning_effort: null,
+      supported_reasoning_efforts: [],
+      input_modalities: ["text", "image"],
+      output_modalities: ["text"],
+    },
+    {
+      model_id: "gemini-3.1-flash",
+      label: "Gemini 3.1 Flash",
+      description: null,
+      default_reasoning_effort: null,
+      supported_reasoning_efforts: [],
+      input_modalities: ["text", "image"],
+      output_modalities: ["text"],
+    },
+  ],
+};
+
 describe("provider runtime options", () => {
   it("labels hosted text options with the selected model and provider", () => {
     expect(providerItemsFromPayload(payload).map((provider) => provider.label)).toEqual([
@@ -126,5 +156,55 @@ describe("provider runtime options", () => {
       hosted_model_id: "nvidia/nemotron-3-ultra-550b-a55b:free",
       runtime_mode: "plain_hosted_chat",
     });
+  });
+
+  it("exposes active hosted models from available hosted providers", () => {
+    const providers = providerItemsFromPayload({
+      ...payload,
+      hosted_text: {
+        ...payload.hosted_text!,
+        available_providers: [payload.hosted_text!.active_provider!, googleProvider],
+      },
+    });
+
+    expect(providers.map((provider) => provider.label)).toContain("Gemini 3.5 Flash - Google AI Studio");
+    expect(providers.map((provider) => provider.label)).toContain("Gemini 3.1 Flash - Google AI Studio");
+    expect(hostedProviderRuntimeConfig(providers.find((provider) => provider.hosted_model_id === "gemini-3.5-flash"))).toMatchObject({
+      hosted_provider_id: "google-ai-studio",
+      hosted_model_id: "gemini-3.5-flash",
+      runtime_mode: "plain_hosted_chat",
+    });
+  });
+
+  it("does not apply active Google model settings to an OpenRouter persisted selection", () => {
+    const providers = providerItemsFromPayload({
+      ...payload,
+      hosted_text: {
+        ...payload.hosted_text!,
+        active_provider: googleProvider,
+        selection: {
+          workspace_id: "default",
+          profile: "fast_model",
+          provider_id: "openrouter",
+          selection_reason: "configured by hosted model settings",
+          updated_at: "2026-06-26T00:00:00Z",
+          model_id: "hexgrad/kokoro-82m",
+        },
+        model_settings: {
+          selected_model_id: "gemini-3.5-flash",
+          selected_reasoning_effort: null,
+          available_models: googleProvider.model_options!,
+        },
+        available_providers: [payload.hosted_text!.active_provider!, googleProvider],
+      },
+    });
+
+    const labels = providers.map((provider) => provider.label);
+    expect(labels).toContain("Gemini 3.5 Flash - Google AI Studio");
+    expect(labels).toContain("Gemini 3.1 Flash - Google AI Studio");
+    expect(labels).toContain("Gemma 4 31B (free) - OpenRouter");
+    expect(labels).toContain("Nemotron 3 Ultra (free) - OpenRouter");
+    expect(labels).not.toContain("Gemini 3.5 Flash - OpenRouter");
+    expect(labels).not.toContain("Gemini 3.1 Flash - OpenRouter");
   });
 });

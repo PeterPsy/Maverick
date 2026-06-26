@@ -242,26 +242,34 @@ assert.ok((html.match(/auto default/g) || []).length >= 5);
         app_root = Path(__file__).resolve().parents[1]
         main_source = (app_root / "frontend" / "src" / "main.ts").read_text(encoding="utf-8")
         settings_source = (app_root / "frontend" / "src" / "settingsPanel.ts").read_text(encoding="utf-8")
+        styles_source = (app_root / "frontend" / "src" / "styles.css").read_text(encoding="utf-8")
         api_source = (app_root / "frontend" / "src" / "adminApi.ts").read_text(encoding="utf-8")
 
         self.assertIn("settingsPanelHtml(platformSettings, settingsPanelState)", main_source)
         self.assertIn("Platform settings", settings_source)
         self.assertIn("settings-user-settings-card", settings_source)
-        self.assertIn("settings-model-settings-card", settings_source)
+        self.assertIn("settings-hosted-text-model-settings-card", settings_source)
+        self.assertIn("settings-agentic-model-settings-card", settings_source)
+        self.assertIn("settings-speech-model-settings-card", settings_source)
         self.assertIn("settings-runtime-settings-card", settings_source)
         self.assertIn("configureActiveProvider", api_source)
         self.assertIn("configureHostedProvider", api_source)
         self.assertIn("/api/providers/hosted/selection", api_source)
         self.assertIn("speech_stt", api_source)
-        self.assertIn("Deepgram models", settings_source)
+        self.assertIn("Hosted text model settings", settings_source)
+        self.assertIn("Agentic model settings", settings_source)
+        self.assertIn("Speech model settings", settings_source)
         self.assertIn("saveHostedProviderSettingsFromPanel", main_source)
         self.assertIn("data-agentic-provider-accordion", settings_source)
         self.assertIn("data-settings-model-accordion", settings_source)
         self.assertIn("data-hosted-model-accordion", settings_source)
         self.assertIn("data-hosted-provider-save", settings_source)
         self.assertNotIn("settings-hosted-provider-model", settings_source)
-        self.assertIn("Hosted OpenRouter models", settings_source)
-        self.assertIn("Chat only uses text-output fast models", settings_source)
+        self.assertIn("settings-model-card-heading", settings_source)
+        self.assertIn(".settings-speech-model-settings-card .settings-hosted-models + .settings-hosted-models", styles_source)
+        self.assertNotIn("Hosted text models", settings_source)
+        self.assertNotIn("Chat only uses text-output fast models", settings_source)
+        self.assertNotIn("Audio transcription uses Nova-3", settings_source)
         self.assertNotIn("OpenRouter governs", settings_source)
         self.assertIn("runtime engine remains Codex", settings_source)
         self.assertIn("/api/settings/runtime-sessions/clear", api_source)
@@ -356,6 +364,27 @@ const openrouterModels = [
   }
 ];
 
+const googleModels = [
+  {
+    model_id: 'gemini-3.5-flash',
+    label: 'Gemini 3.5 Flash',
+    description: null,
+    default_reasoning_effort: null,
+    supported_reasoning_efforts: [],
+    input_modalities: ['text', 'image'],
+    output_modalities: ['text']
+  },
+  {
+    model_id: 'gemini-3.1-flash',
+    label: 'Gemini 3.1 Flash',
+    description: null,
+    default_reasoning_effort: null,
+    supported_reasoning_efforts: [],
+    input_modalities: ['text', 'image'],
+    output_modalities: ['text']
+  }
+];
+
 const settings = {
   user: { username: 'admin', display_name: 'Admin', platform_role: 'admin' },
   workspace: { workspace_id: 'default', name: 'Default' },
@@ -382,6 +411,7 @@ const settings = {
       active_provider: {
         provider_id: 'openrouter',
         label: 'OpenRouter',
+        status: 'active',
         default_model_family: 'google/gemma-4-31b-it:free',
         model_options: openrouterModels
       },
@@ -405,7 +435,22 @@ const settings = {
         selected_reasoning_effort: null,
         available_models: openrouterModels
       },
-      available_providers: []
+      available_providers: [
+        {
+          provider_id: 'openrouter',
+          label: 'OpenRouter',
+          status: 'active',
+          default_model_family: 'google/gemma-4-31b-it:free',
+          model_options: openrouterModels
+        },
+        {
+          provider_id: 'google-ai-studio',
+          label: 'Google AI Studio',
+          status: 'disabled',
+          default_model_family: 'gemini-3.5-flash',
+          model_options: googleModels
+        }
+      ]
     },
     speech_stt: {
       profile: 'speech_stt',
@@ -495,34 +540,68 @@ syncSettingsPanelDraft(state, settings);
 const html = settingsPanelHtml(settings, state);
 
 assert.ok(html.includes('settings-user-settings-card'));
-assert.ok(html.includes('settings-model-settings-card'));
+assert.ok(html.includes('settings-hosted-text-model-settings-card'));
+assert.ok(html.includes('settings-agentic-model-settings-card'));
+assert.ok(html.includes('settings-speech-model-settings-card'));
 assert.ok(html.includes('settings-runtime-settings-card'));
+assert.ok(html.includes('Hosted text model settings'));
+assert.ok(html.includes('Agentic model settings'));
+assert.ok(html.includes('Speech model settings'));
+assert.ok(html.indexOf('settings-agentic-model-settings-card') < html.indexOf('settings-hosted-text-model-settings-card'));
+assert.ok(html.indexOf('settings-hosted-text-model-settings-card') < html.indexOf('settings-speech-model-settings-card'));
 assert.ok(html.includes('Agentic provider'));
 assert.ok(html.includes('data-agentic-provider-accordion'));
+assert.ok(!html.includes('data-settings-model-accordion="agentic-provider" data-agentic-provider-accordion open'));
 assert.ok(html.includes('Codex tools/filesystem/MCP'));
 assert.ok(html.includes('Hosted chat / fast model'));
-assert.ok(html.includes('Hosted OpenRouter models'));
-assert.ok(html.includes('Chat only uses text-output fast models'));
+assert.ok(!html.includes('Hosted text models'));
+assert.ok(!html.includes('Chat only uses text-output fast models'));
+assert.ok(html.includes('data-hosted-provider-group="openrouter"'));
+assert.ok(html.includes('data-hosted-provider-group="google-ai-studio"'));
+assert.ok(html.includes('data-speech-provider-group="deepgram"'));
+assert.ok(html.includes('Active provider'));
+assert.ok(html.includes('Inactive provider'));
 assert.ok(html.includes('OpenRouter'));
 assert.ok(html.includes('Gemma 4 31B (free)'));
 assert.ok(html.includes('Nemotron 3 Ultra (free)'));
-assert.ok(html.includes('DeepSeek V4 Flash'));
+assert.ok(html.includes('DeepSeek V4 Flash - OpenRouter'));
+assert.ok(html.includes('Gemini 3.5 Flash - Google AI Studio'));
+assert.ok(html.includes('Gemini 3.1 Flash - Google AI Studio'));
+assert.ok(!html.includes('<span class="settings-pill">Inactive</span>'));
 assert.ok(html.includes('Kokoro 82M'));
 assert.ok(html.includes('Hosted speech model'));
 assert.ok(html.includes('speech synthesis metadata · not used by plain hosted chat'));
-assert.ok(html.includes('Deepgram models'));
+assert.ok(!html.includes('Hosted speech models'));
+assert.ok(!html.includes('Audio transcription uses Nova-3'));
+const hostedTextSection = html.slice(
+  html.indexOf('settings-hosted-text-model-settings-card'),
+  html.indexOf('settings-speech-model-settings-card')
+);
+const speechSection = html.slice(
+  html.indexOf('settings-speech-model-settings-card'),
+  html.indexOf('settings-runtime-settings-card')
+);
+assert.ok(hostedTextSection.includes('DeepSeek V4 Flash - OpenRouter'));
+assert.ok(!hostedTextSection.includes('Kokoro 82M'));
+assert.ok(speechSection.includes('Kokoro 82M - OpenRouter'));
+assert.ok(speechSection.includes('data-hosted-provider-group="openrouter"'));
 assert.ok(html.includes('Nova-3'));
 assert.ok(html.includes('Flux General Multilingual'));
 assert.ok(html.includes('https://api.deepgram.com/v1/listen?model=nova-3'));
 assert.ok(html.includes('wss://api.deepgram.com/v2/listen?model=flux-general-multi'));
-assert.ok(html.includes('settings-speech-save'));
-assert.equal((html.match(/data-settings-model-accordion=/g) || []).length, 5);
-assert.equal((html.match(/data-hosted-model-accordion=/g) || []).length, 4);
-assert.equal((html.match(/<span class="settings-pill">Active<\/span>/g) || []).length, 6);
+assert.ok(!html.includes('id="settings-speech-save"'));
+assert.equal((html.match(/data-speech-save=/g) || []).length, 2);
+assert.equal((html.match(/Save speech model/g) || []).length, 2);
+assert.equal((html.match(/data-settings-model-accordion=/g) || []).length, 7);
+assert.equal((html.match(/data-hosted-model-accordion=/g) || []).length, 6);
+assert.equal((html.match(/<span class="settings-pill">Active provider<\/span>/g) || []).length, 3);
+assert.equal((html.match(/<span class="settings-pill">Inactive provider<\/span>/g) || []).length, 1);
 assert.ok(html.includes('data-hosted-provider-save="google/gemma-4-31b-it:free"'));
 assert.ok(html.includes('data-hosted-provider-save="nvidia/nemotron-3-ultra-550b-a55b:free"'));
 assert.ok(html.includes('data-hosted-provider-save="deepseek/deepseek-v4-flash"'));
 assert.ok(html.includes('data-hosted-provider-save="hexgrad/kokoro-82m"'));
+assert.ok(html.includes('data-hosted-provider-save="gemini-3.5-flash"'));
+assert.ok(html.includes('data-hosted-provider-save="gemini-3.1-flash"'));
 assert.ok(!html.includes('settings-hosted-provider-model'));
 assert.ok(html.includes('OpenRouter upstream'));
 assert.ok(html.includes('data-openrouter-routing="mode"'));

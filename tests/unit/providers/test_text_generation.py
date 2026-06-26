@@ -12,6 +12,7 @@ from core.providers.service import builtin_provider_registry
 from core.providers.store import ProviderCollections, ProviderDocumentStore
 from core.providers.text_generation import (
     FakeHostedTextTransport,
+    GoogleAIStudioTextGenerationClient,
     HostedTextGenerationError,
     OpenAICompatibleHttpTransport,
     OpenAICompatibleTextGenerationClient,
@@ -48,8 +49,8 @@ class HostedTextGenerationTest(unittest.TestCase):
 
     def active_fast_registry(self):
         registry = builtin_provider_registry()
-        groq = registry.get_provider_definition("groq")
-        registry.register_provider_definition(replace(groq, status="active"))
+        openrouter = registry.get_provider_definition("openrouter")
+        registry.register_provider_definition(replace(openrouter, status="active"))
         return registry
 
     def request(
@@ -61,7 +62,7 @@ class HostedTextGenerationTest(unittest.TestCase):
         workspace_root: str | None = None,
     ) -> TextGenerationRequest:
         return TextGenerationRequest(
-            model_id="llama-3.3-70b-versatile",
+            model_id="google/gemma-4-31b-it:free",
             messages=[TextGenerationMessage(role="user", content=content)],
             system_prompt="Answer briefly.",
             max_output_tokens=64,
@@ -74,7 +75,7 @@ class HostedTextGenerationTest(unittest.TestCase):
     def test_fake_transport_non_streaming_normalizes_response(self) -> None:
         transport = FakeHostedTextTransport(response_text="hello from hosted")
         client = OpenAICompatibleTextGenerationClient(
-            provider_id="groq",
+            provider_id="openrouter",
             api_key="secret-token",
             transport=transport,
         )
@@ -172,10 +173,58 @@ class HostedTextGenerationTest(unittest.TestCase):
             },
         )
 
+    def test_google_ai_studio_serializes_gemini_generate_content_request(self) -> None:
+        transport = FakeHostedTextTransport(
+            payload={
+                "candidates": [
+                    {
+                        "content": {
+                            "parts": [{"text": "hello from gemini"}],
+                        }
+                    }
+                ]
+            }
+        )
+        client = GoogleAIStudioTextGenerationClient(api_key="secret-token", transport=transport)
+
+        result = client.generate(
+            TextGenerationRequest(
+                model_id="gemini-3.5-flash",
+                messages=[
+                    TextGenerationMessage(
+                        role="user",
+                        content=[
+                            TextGenerationContentPart(type="text", text="Describe this image."),
+                            TextGenerationContentPart(type="image_url", image_url="data:image/png;base64,aGVsbG8="),
+                        ],
+                    )
+                ],
+                system_prompt="Answer briefly.",
+                max_output_tokens=64,
+            )
+        )
+
+        request = transport.requests[0]
+        self.assertEqual(
+            request["endpoint_url"],
+            "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash:generateContent",
+        )
+        self.assertEqual(request["headers"]["x-goog-api-key"], "<redacted>")
+        self.assertEqual(result.output_text, "hello from gemini")
+        self.assertEqual(request["payload"]["systemInstruction"], {"parts": [{"text": "Answer briefly."}]})
+        self.assertEqual(request["payload"]["generationConfig"], {"maxOutputTokens": 64})
+        self.assertEqual(request["payload"]["contents"][0]["role"], "user")
+        self.assertEqual(request["payload"]["contents"][0]["parts"][0], {"text": "Describe this image."})
+        self.assertEqual(
+            request["payload"]["contents"][0]["parts"][1],
+            {"inlineData": {"mimeType": "image/png", "data": "aGVsbG8="}},
+        )
+        self.assertNotIn("secret-token", str(transport.requests))
+
     def test_fake_transport_streaming_normalizes_deltas(self) -> None:
         transport = FakeHostedTextTransport(chunks=["hel", "lo"])
         client = OpenAICompatibleTextGenerationClient(
-            provider_id="groq",
+            provider_id="openrouter",
             api_key="secret-token",
             transport=transport,
         )
@@ -196,7 +245,7 @@ class HostedTextGenerationTest(unittest.TestCase):
         for transport, reason_code in cases:
             with self.subTest(reason_code=reason_code):
                 client = OpenAICompatibleTextGenerationClient(
-                    provider_id="groq",
+                    provider_id="openrouter",
                     api_key="secret-token",
                     transport=transport,
                 )
@@ -225,7 +274,7 @@ class HostedTextGenerationTest(unittest.TestCase):
         for payload in cases:
             with self.subTest(payload=payload):
                 client = OpenAICompatibleTextGenerationClient(
-                    provider_id="groq",
+                    provider_id="openrouter",
                     api_key="secret-token",
                     transport=OpenAICompatibleHttpTransport(),
                 )
@@ -251,7 +300,7 @@ class HostedTextGenerationTest(unittest.TestCase):
                 yield b"\xff\n"
 
         client = OpenAICompatibleTextGenerationClient(
-            provider_id="groq",
+            provider_id="openrouter",
             api_key="secret-token",
             transport=OpenAICompatibleHttpTransport(),
         )
@@ -267,7 +316,7 @@ class HostedTextGenerationTest(unittest.TestCase):
 
     def test_hosted_text_request_rejects_operational_references(self) -> None:
         client = OpenAICompatibleTextGenerationClient(
-            provider_id="groq",
+            provider_id="openrouter",
             api_key="secret-token",
             transport=FakeHostedTextTransport(),
         )
@@ -297,14 +346,14 @@ class HostedTextGenerationTest(unittest.TestCase):
         secret_store = self.make_secret_store()
         secret = create_platform_secret(
             secret_store,
-            label="Groq",
+            label="OpenRouter",
             raw_value="super-secret-token",
-            alias="groq-hosted-text",
+            alias="openrouter-hosted-text",
             kind="api_key",
         )
         bind_provider_credential(
             provider_store,
-            provider_id="groq",
+            provider_id="openrouter",
             workspace_id="default",
             secret_ref=build_secret_ref(secret_id=secret.secret_id),
         )

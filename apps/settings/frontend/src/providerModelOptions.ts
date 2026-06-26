@@ -19,9 +19,25 @@ export function selectedHostedProviderDraft(settings: PlatformSettings | null) {
 }
 
 export function hostedModelOptionsForSettings(settings: PlatformSettings | null) {
-  const provider = settings?.provider.hosted_text?.active_provider || null;
-  const modelSettings = settings?.provider.hosted_text?.model_settings || null;
-  return modelOptionsForProvider(provider, modelSettings);
+  const status = settings?.provider.hosted_text || null;
+  const activeProvider = status?.active_provider || null;
+  const providers = status?.available_providers?.length
+    ? status.available_providers
+    : activeProvider
+      ? [activeProvider]
+      : [];
+  return providers.flatMap((provider) => {
+    const modelSettings = provider.provider_id === activeProvider?.provider_id ? status?.model_settings || null : null;
+    return modelOptionsForProvider(provider, modelSettings).map((option) => ({
+      ...option,
+      metadata: {
+        ...(option.metadata || {}),
+        hosted_provider_id: provider.provider_id,
+        hosted_provider_label: provider.label || provider.provider_id,
+        hosted_provider_status: provider.status
+      }
+    }));
+  });
 }
 
 function selectedDraft(

@@ -83,11 +83,6 @@ def execute_plain_hosted_text_turn(
     if decision.execution_path != "plain_hosted_text" or decision.selected_provider_id is None:
         reason = primary_routing_failure_reason(decision)
         raise HostedTextGenerationError(reason, reason_codes=decision.reason_codes)
-    _emit_hosted_step(
-        event_sink,
-        label="Routing hosted model",
-        decision=decision,
-    )
     model_option = _selected_model_option(
         effective_provider_registry(state.provider_store).get_provider_definition(decision.selected_provider_id),
         decision.selected_model_id_or_voice_id,
@@ -113,11 +108,6 @@ def execute_plain_hosted_text_turn(
         workspace_root=session.workspace_root,
         provider_routing=_openrouter_provider_routing_for_decision(state, session=session, decision=decision),
     )
-    _emit_hosted_step(
-        event_sink,
-        label="Generating hosted response",
-        decision=decision,
-    )
     try:
         result = execute_hosted_text_generation(
             state.provider_store,
@@ -133,11 +123,6 @@ def execute_plain_hosted_text_turn(
             error.reason_code,
             reason_codes=[*decision.reason_codes, error.reason_code],
         ) from error
-    _emit_hosted_step(
-        event_sink,
-        label="Hosted response complete",
-        decision=decision,
-    )
     return RuntimeExecutionResult(output_text=result.output_text, exit_code=0), decision
 
 
@@ -320,27 +305,6 @@ def _hosted_delta_sink(
         )
 
     return emit_delta
-
-
-def _emit_hosted_step(
-    event_sink: Callable[[RuntimeExecutionEvent], object] | None,
-    *,
-    label: str,
-    decision: RoutingDecision,
-) -> None:
-    if event_sink is None:
-        return
-    event_sink(
-        RuntimeExecutionEvent(
-            event_type="runtime.step.updated",
-            payload={
-                "label": label,
-                "provider_id": decision.selected_provider_id,
-                "model_id": decision.selected_model_id_or_voice_id,
-                "runtime_mode": "plain_hosted_chat",
-            },
-        )
-    )
 
 
 def _record_platform_routing_decision(state, *, session: RuntimeSessionRecord, decision: RoutingDecision) -> None:

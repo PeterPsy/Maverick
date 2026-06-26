@@ -194,10 +194,7 @@ class PlainHostedRuntimeTest(unittest.TestCase):
         self.assertIn("runtime.turn.completed", event_types)
         self.assertEqual(final_events[-1].payload["complete_text"], "hello")
         self.assertNotIn("super-secret-token", str(state.runtime_store.list_events(session.session_id)))
-        self.assertEqual(
-            [event.payload["label"] for event in state.runtime_store.list_events(session.session_id) if event.event_type == "runtime.step.updated"],
-            ["Routing hosted model", "Generating hosted response", "Hosted response complete"],
-        )
+        self.assertNotIn("runtime.step.updated", event_types)
 
     def test_plain_hosted_turn_with_image_uses_multimodal_openrouter_model(self) -> None:
         state = self.make_state()
@@ -306,7 +303,7 @@ class PlainHostedRuntimeTest(unittest.TestCase):
         self.assertEqual(current.status, "completed")
         event_types = [event.event_type for event in state.runtime_store.list_events(session.session_id)]
         self.assertIn("runtime.output.delta", event_types)
-        self.assertIn("runtime.step.updated", event_types)
+        self.assertNotIn("runtime.step.updated", event_types)
         self.assertIn("runtime.turn.completed", event_types)
 
     def test_plain_hosted_api_blocks_app_references_before_materialization(self) -> None:

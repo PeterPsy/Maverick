@@ -103,14 +103,41 @@ export function useChatAppController({
   const [activeSession, setActiveSession] = useState<RuntimeSession | null>(null);
   const [events, setEvents] = useState<RuntimeEvent[]>([]);
   const [composer, setComposer] = useState("");
-  const selectedProvider = providers.find((provider) => provider.provider_id === activeProviderId) || null;
+  const selectedProvider = useMemo(() => {
+    if (activeThread && activeSession?.runtime_mode === "plain_hosted_chat") {
+      return (
+        providers.find(
+          (provider) =>
+            provider.hosted_provider_id === activeSession.hosted_provider_id &&
+            provider.hosted_model_id === activeSession.hosted_model_id,
+        ) ||
+        providers.find((provider) => provider.hosted_provider_id === activeSession.hosted_provider_id) ||
+        null
+      );
+    }
+    if (activeThread && activeSession?.provider_id) {
+      return providers.find((provider) => provider.provider_id === activeSession.provider_id) || null;
+    }
+    return providers.find((provider) => provider.provider_id === activeProviderId) || null;
+  }, [
+    activeProviderId,
+    activeSession?.hosted_model_id,
+    activeSession?.hosted_provider_id,
+    activeSession?.provider_id,
+    activeSession?.runtime_mode,
+    activeThread,
+    providers,
+  ]);
+  const composerActiveProviderId = selectedProvider?.provider_id || activeProviderId;
   const allowedAttachmentInputModalities = useMemo(() => {
-    const isHostedSession = activeSession?.runtime_mode === "plain_hosted_chat" || providerUsesPlainHostedRuntime(selectedProvider);
+    const isHostedSession = activeThread
+      ? activeSession?.runtime_mode === "plain_hosted_chat"
+      : providerUsesPlainHostedRuntime(selectedProvider);
     if (!isHostedSession) {
       return null;
     }
     return selectedProvider?.input_modalities || [];
-  }, [activeSession?.runtime_mode, selectedProvider]);
+  }, [activeSession?.runtime_mode, activeThread, selectedProvider]);
   const { addAttachments, attachments, clearAttachments, removeAttachment } = useComposerAttachments({ allowedInputModalities: allowedAttachmentInputModalities });
   const [activeTurn, setActiveTurn] = useState<RuntimeTurn | null>(null);
   const [isBootstrapping, setIsBootstrapping] = useState(true);
@@ -163,7 +190,7 @@ export function useChatAppController({
   const runtimeControls = useChatRuntimeControls({
     activeThread,
     activeTurn,
-    activeProviderId,
+    activeProviderId: composerActiveProviderId,
     agentCatalogAppId,
     canStopTurn: runtimeCanStopTurn,
     providers,
@@ -495,6 +522,7 @@ export function useChatAppController({
     onRevealOlderMessages: handleRevealOlderMessages,
     pendingUserMessages,
     providers,
+    providerSelectorLocked: Boolean(activeThread),
     queuedMessages,
     removeAttachment,
     selectedAgentTypeId,

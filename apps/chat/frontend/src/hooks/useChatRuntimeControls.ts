@@ -104,6 +104,10 @@ export function useChatRuntimeControls({
   }, [agentCatalogAppId, selectedAgentTypeId, workspaceId]);
 
   async function handleSelectProvider(providerId: string) {
+    if (activeThread) {
+      setComposerError("Start a new chat to switch models.");
+      return;
+    }
     setActiveProviderId(providerId);
     const provider = providers.find((item) => item.provider_id === providerId) || null;
     if (providerUsesPlainHostedRuntime(provider)) {

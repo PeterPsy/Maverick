@@ -48,9 +48,11 @@ afterEach(() => {
 
 async function renderSelector({
   activeProviderId = "codex",
+  locked = false,
   onSelect = () => undefined,
 }: {
   activeProviderId?: string;
+  locked?: boolean;
   onSelect?: (providerId: string) => void;
 } = {}) {
   container = document.createElement("div");
@@ -59,7 +61,7 @@ async function renderSelector({
 
   await act(async () => {
     root?.render(
-      <ProviderSelector activeProviderId={activeProviderId} disabled={false} onSelect={onSelect} providers={providerOptions} />,
+      <ProviderSelector activeProviderId={activeProviderId} disabled={false} locked={locked} onSelect={onSelect} providers={providerOptions} />,
     );
   });
 
@@ -137,5 +139,22 @@ describe("ProviderSelector", () => {
     });
 
     expect(onSelect).toHaveBeenCalledWith("hosted:openrouter:google%2Fgemma-4-31b-it%3Afree");
+  });
+
+  it("does not open or select while locked to an existing runtime session", async () => {
+    const onSelect = vi.fn();
+    const element = await renderSelector({ locked: true, onSelect });
+
+    const trigger = element.querySelector<HTMLButtonElement>('[aria-label="Model: Codex"]');
+    expect(trigger).toBeInstanceOf(HTMLButtonElement);
+    expect(trigger?.disabled).toBe(true);
+    expect(trigger?.title).toBe("Start a new chat to switch models");
+
+    await act(async () => {
+      trigger?.click();
+    });
+
+    expect(element.querySelector('[role="listbox"]')).toBeNull();
+    expect(onSelect).not.toHaveBeenCalled();
   });
 });

@@ -42,6 +42,7 @@ export type ChatComposerProps = {
   onSelectMultiAgentMode?: (mode: MultiAgentComposerMode) => void;
   onSelectAgent: (agentTypeId: string) => void;
   onSelectProvider: (providerId: string) => void;
+  providerSelectorLocked?: boolean;
   onRemoveAttachment: (attachmentId: string) => void;
   onStopTurn: () => void;
   onSubmit: () => void;
@@ -82,6 +83,7 @@ export function ChatComposer({
   onSelectMultiAgentMode,
   onSelectAgent,
   onSelectProvider,
+  providerSelectorLocked = false,
   onRemoveAttachment,
   onStopTurn,
   onSubmit,
@@ -284,6 +286,7 @@ export function ChatComposer({
                   activeProviderId={activeProviderId}
                   disabled={disabled || isSending}
                   executionMode={executionMode}
+                  locked={providerSelectorLocked}
                   onSelectProvider={onSelectProvider}
                   providers={providers}
                 />

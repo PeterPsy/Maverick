@@ -7,18 +7,20 @@ export function ComposerRuntimeBadges({
   activeProviderId,
   disabled,
   executionMode,
+  locked = false,
   onSelectProvider,
   providers,
 }: {
   activeProviderId: string;
   disabled: boolean;
   executionMode: ExecutionMode | null;
+  locked?: boolean;
   onSelectProvider: (providerId: string) => void;
   providers: ProviderItem[];
 }) {
   return (
     <div className="chatapp-composer__runtime-badges">
-      <ProviderSelector activeProviderId={activeProviderId} disabled={disabled} onSelect={onSelectProvider} providers={providers} />
+      <ProviderSelector activeProviderId={activeProviderId} disabled={disabled} locked={locked} onSelect={onSelectProvider} providers={providers} />
       {executionMode ? (
         <span
           aria-label={executionMode === "full-access" ? "Full access runtime" : "Sandbox runtime"}

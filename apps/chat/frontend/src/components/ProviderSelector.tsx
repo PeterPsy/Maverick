@@ -34,11 +34,13 @@ function providerMatchesQuery(provider: ProviderItem, normalizedQuery: string) {
 export function ProviderSelector({
   activeProviderId,
   disabled,
+  locked = false,
   onSelect,
   providers,
 }: {
   activeProviderId: string;
   disabled: boolean;
+  locked?: boolean;
   onSelect: (providerId: string) => void;
   providers: ProviderItem[];
 }) {
@@ -61,7 +63,7 @@ export function ProviderSelector({
   );
   const activeProvider = filteredProviders[activeIndex] || filteredProviders[0];
   const activeProviderOptionId = activeProvider ? `${menuId}-option-${activeProvider.provider_id}` : undefined;
-  const isDisabled = disabled || !providers.length;
+  const isDisabled = disabled || locked || !providers.length;
 
   function selectedProviderIndex(options: ProviderItem[]) {
     const optionIndex = options.findIndex((provider) => provider.provider_id === activeProviderId);
@@ -242,7 +244,7 @@ export function ProviderSelector({
         onClick={handleTriggerClick}
         onPointerDown={handleTriggerPointerDown}
         ref={buttonRef}
-        title={`Model: ${selectedLabel}`}
+        title={locked ? "Start a new chat to switch models" : `Model: ${selectedLabel}`}
         type="button"
       >
         <span aria-hidden="true" className="chatapp-provider-selector__icon material-symbols-rounded">

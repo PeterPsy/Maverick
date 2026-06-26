@@ -274,6 +274,8 @@ export type RuntimeSession = {
   runtime_mode?: "agentic" | "plain_hosted_chat" | string;
   skill_catalog_app_id?: string | null;
   provider_id?: string;
+  hosted_provider_id?: string | null;
+  hosted_model_id?: string | null;
 };
 
 export type RuntimeTurn = {

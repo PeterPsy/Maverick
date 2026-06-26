@@ -71,6 +71,7 @@ type UseChatControllerPresentationParams = {
   onCloseInterAgentGraph: () => void;
   pendingUserMessages: PendingMessage[];
   providers: ProviderItem[];
+  providerSelectorLocked: boolean;
   queuedMessages: QueuedMessage[];
   removeAttachment: (attachmentId: string) => void;
   hasMoreHistory: boolean;
@@ -136,6 +137,7 @@ export function useChatControllerPresentation({
   onCloseInterAgentGraph,
   pendingUserMessages,
   providers,
+  providerSelectorLocked,
   queuedMessages,
   removeAttachment,
   hasMoreHistory,
@@ -225,6 +227,7 @@ export function useChatControllerPresentation({
       onStopTurn: handleStopTurn,
       onSubmit: handleSend,
       providers,
+      providerSelectorLocked,
       queuedCount: queuedMessages.length,
       queuedPreview: queuedMessages[0]?.content || null,
       selectedAgentTypeId: composerSelectedAgentTypeId,

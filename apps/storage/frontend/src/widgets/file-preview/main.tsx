@@ -2,7 +2,7 @@ import { useEffect, useRef, useState, type RefObject } from 'react';
 import { createRoot } from 'react-dom/client';
 import * as pdfjs from 'pdfjs-dist';
 import pdfWorkerUrl from 'pdfjs-dist/build/pdf.worker.min.mjs?url';
-import { callBackend, decodeBase64, driveMediaStreamUrl, previewDriveFile, readFile } from '../../storageApi';
+import { callBackend, decodeBase64, driveMediaStreamUrl, previewDriveFile, readFile, storageMediaStreamUrl } from '../../storageApi';
 import { iconForKind, kindLabels } from '../../storageMeta';
 import { Icon } from '../../Icon';
 import { MarkdownPreview } from '../../markdownPreview';
@@ -67,6 +67,10 @@ function isDriveFile(file: StorageFile) {
 
 function isDriveStreamable(file: StorageFile) {
   return isDriveFile(file) && ['image', 'video', 'audio', 'pdf'].includes(file.preview_kind);
+}
+
+function isBrowserStreamableMedia(file: StorageFile) {
+  return !isDriveFile(file) && ['image', 'video', 'audio', 'pdf'].includes(file.preview_kind);
 }
 
 function openStorage(file?: StorageFile) {
@@ -237,8 +241,10 @@ function StorageFilePreviewWidget() {
     if (!file || !canInlinePreview(file)) return;
     let active = true;
     let objectUrl = '';
-    const previewRequest = isDriveStreamable(file)
-      ? Promise.resolve({ stream_url: driveMediaStreamUrl(file) })
+    const previewRequest = isBrowserStreamableMedia(file)
+      ? Promise.resolve({ stream_url: storageMediaStreamUrl(file) })
+      : isDriveStreamable(file)
+        ? Promise.resolve({ stream_url: driveMediaStreamUrl(file) })
       : isDriveFile(file)
         ? previewDriveFile(file, PREVIEW_BYTES)
         : readFile(file, PREVIEW_BYTES);

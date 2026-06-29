@@ -25,6 +25,7 @@ DRIVE_LOCALIZE_MAX_BYTES = 2 * 1024 * 1024 * 1024
 DRIVE_LOCAL_CACHE_MAX_BYTES = 4 * 1024 * 1024 * 1024
 DRIVE_LOCAL_CACHE_MIN_FREE_BYTES = 512 * 1024 * 1024
 DRIVE_LOCAL_CACHE_TTL_SECONDS = 14 * 24 * 60 * 60
+DRIVE_LOCALIZATION_STALE_SECONDS = 10 * 60
 DRIVE_MEDIA_RANGE_MAX_BYTES = 8 * 1024 * 1024
 DRIVE_MEDIA_RANGE_TTL_SECONDS = 60 * 60
 STREAMABLE_PREVIEW_KINDS = {"image", "video", "audio", "pdf"}
@@ -61,6 +62,8 @@ def localize_drive_file_payload(
     target = _target_for_record(data_root=data_root, file_record=resolved_record)
     cleanup_drive_local_cache(data_root=data_root, current_file_record=resolved_record, keep_localization_id=target.localization_id)
     cached = _read_localization_metadata(target)
+    if cached and _localization_metadata_is_stale(target, cached):
+        cached = None
     if cached and not force and _cache_file_is_ready(target, cached, file_record=resolved_record):
         return _localization_payload(
             app_id=app_id,
@@ -147,6 +150,8 @@ def drive_localization_status_payload(
         raise StorageValidationError("Google Drive Storage reference does not belong to the requested connection.", operation=operation)
     target = _target_for_record(data_root=data_root, file_record=resolved_record)
     metadata = _read_localization_metadata(target)
+    if metadata and _localization_metadata_is_stale(target, metadata):
+        metadata = None
     if metadata and _cache_file_is_ready(target, metadata, file_record=resolved_record):
         payload = _localization_payload(app_id=app_id, target=target, file_record=resolved_record, metadata={**metadata, "cache_hit": True})
     else:
@@ -262,6 +267,8 @@ def drive_media_stream_response(
     )
     cleanup_drive_local_cache(data_root=data_root, current_file_record=file_record, keep_localization_id=target.localization_id)
     metadata = _read_localization_metadata(target)
+    if metadata and _localization_metadata_is_stale(target, metadata):
+        metadata = None
     if metadata and _cache_file_is_ready(target, metadata, file_record=file_record):
         localization = _localization_payload(
             app_id=app_id,
@@ -388,6 +395,7 @@ def _drive_proxy_media_response(
             except Exception:
                 temporary_path.unlink(missing_ok=True)
                 raise
+        _promote_complete_range_to_ready_cache(target=target, file_record=file_record, range_path=range_path, range_metadata=cached_range)
         return {
             "file": file_record,
             "localization": _streaming_localization(target=target, file_record=file_record, metadata=cached_range or {}),
@@ -769,12 +777,52 @@ def _range_file_is_ready(
     if not metadata or metadata.get("status") != "ready" or not path.is_file():
         return False
     return (
-        int(metadata.get("start") or -1) == start
-        and int(metadata.get("end") or -1) == end
-        and int(metadata.get("total_size") or -1) == total_size
-        and int(metadata.get("size_bytes") or -1) == path.stat().st_size
+        _metadata_int(metadata, "start", -1) == start
+        and _metadata_int(metadata, "end", -1) == end
+        and _metadata_int(metadata, "total_size", -1) == total_size
+        and _metadata_int(metadata, "size_bytes", -1) == path.stat().st_size
         and str(metadata.get("source_version") or "") == _source_version(file_record)
     )
+
+
+def _promote_complete_range_to_ready_cache(
+    *,
+    target: LocalizedDriveTarget,
+    file_record: dict[str, Any],
+    range_path: Path,
+    range_metadata: dict[str, Any] | None,
+) -> None:
+    if not range_metadata or not range_path.is_file():
+        return
+    start = _metadata_int(range_metadata, "start", -1)
+    end = _metadata_int(range_metadata, "end", -1)
+    total_size = _metadata_int(range_metadata, "total_size", 0)
+    size_bytes = _metadata_int(range_metadata, "size_bytes", 0)
+    if start != 0 or total_size <= 0 or end != total_size - 1 or size_bytes != total_size:
+        return
+    if str(range_metadata.get("source_version") or "") != _source_version(file_record):
+        return
+    if target.content_path.is_file() and _cache_file_is_ready(target, _read_localization_metadata(target) or {}, file_record=file_record):
+        return
+    temporary_path = target.content_path.with_name(f".{target.content_path.name}.{os.getpid()}.tmp")
+    temporary_path.unlink(missing_ok=True)
+    shutil.copyfile(range_path, temporary_path)
+    temporary_path.replace(target.content_path)
+    ready = _ready_metadata(
+        file_record=file_record,
+        localization_id=target.localization_id,
+        size_bytes=size_bytes,
+        sha256=str(range_metadata.get("sha256") or ""),
+        provider_cache_hit=bool(range_metadata.get("cache_hit")),
+    )
+    _atomic_write_json(target.metadata_path, ready)
+
+
+def _metadata_int(metadata: dict[str, Any], key: str, default: int) -> int:
+    try:
+        return int(metadata.get(key, default))
+    except (TypeError, ValueError):
+        return default
 
 
 def _streaming_localization(*, target: LocalizedDriveTarget, file_record: dict[str, Any], metadata: dict[str, Any]) -> dict[str, Any]:
@@ -976,6 +1024,15 @@ def _cache_file_is_ready(target: LocalizedDriveTarget, metadata: dict[str, Any],
     )
 
 
+def _localization_metadata_is_stale(target: LocalizedDriveTarget, metadata: dict[str, Any]) -> bool:
+    if metadata.get("status") not in {"localizing", "cancel_requested"}:
+        return False
+    if target.content_path.is_file():
+        return False
+    metadata_time = _metadata_sort_time(metadata, target.metadata_path)
+    return bool(metadata_time and time.time() - metadata_time > DRIVE_LOCALIZATION_STALE_SECONDS)
+
+
 def cleanup_drive_local_cache(
     *,
     data_root: Path,
@@ -1066,6 +1123,8 @@ def _cache_entry_should_be_removed(
     content_path = directory / "content.bin"
     if _ready_cache_entry_is_corrupt(content_path=content_path, metadata=metadata, current_file_record=current_file_record):
         return True
+    if _localization_metadata_is_stale(LocalizedDriveTarget(localization_id=localization_id, directory=directory, content_path=content_path, metadata_path=directory / "metadata.json"), metadata):
+        return localization_id != keep_localization_id
     if localization_id == keep_localization_id:
         return False
     if now - _metadata_sort_time(metadata, directory / "metadata.json") > DRIVE_LOCAL_CACHE_TTL_SECONDS:

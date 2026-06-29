@@ -1,4 +1,4 @@
-import { decodeBase64, driveMediaStreamUrl, previewDriveFile, readFile, readPreviewTable, readPreviewText, renderPreview, renderThumbnail } from './storageApi';
+import { decodeBase64, driveMediaStreamUrl, previewDriveFile, readFile, readPreviewTable, readPreviewText, renderPreview, renderThumbnail, storageMediaStreamUrl } from './storageApi';
 import type { StorageFile, PreviewTablePayload } from './types';
 
 const MAX_CACHE_ENTRIES = 80;
@@ -44,6 +44,10 @@ function isDriveFile(file: StorageFile) {
 
 function isDriveStreamable(file: StorageFile) {
   return isDriveFile(file) && ['image', 'video', 'audio', 'pdf'].includes(file.preview_kind);
+}
+
+function isLocalStreamable(file: StorageFile) {
+  return !isDriveFile(file) && ['image', 'video', 'audio', 'pdf'].includes(file.preview_kind);
 }
 
 function previewKey(file: StorageFile, scope: 'card' | 'full') {
@@ -162,6 +166,7 @@ export function loadFullPreview(file: StorageFile) {
   const cached = getCachedPreview(key);
   if (cached) return cached;
   if (isDriveFile(file)) return remember(key, drivePreview(file, FULL_PREVIEW_BYTES));
+  if (isLocalStreamable(file)) return remember(key, Promise.resolve({ text: '', url: storageMediaStreamUrl(file) }));
   if (canTablePreview(file)) return remember(key, tablePreview(file, 'full'));
   if (canRenderedPreview(file)) return remember(key, renderedDocumentPreview(file, 'full'));
   if (canInlinePreview(file)) return remember(key, blobPreview(file, FULL_PREVIEW_BYTES));

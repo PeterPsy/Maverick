@@ -30,4 +30,15 @@ describe('storage Drive file cards', () => {
     expect(source).toContain('cardPreviewQueue.push(run);');
     expect(source).toContain("return remember(key, scheduleCardPreview(() => {");
   });
+
+  it('streams full local media previews instead of reading base64 blobs', () => {
+    const previewCacheSource = readSource('previewCache.ts');
+    const widgetSource = readSource('widgets/file-preview/main.tsx');
+
+    expect(previewCacheSource).toContain('storageMediaStreamUrl');
+    expect(previewCacheSource).toContain('function isLocalStreamable');
+    expect(previewCacheSource).toContain("if (isLocalStreamable(file)) return remember(key, Promise.resolve({ text: '', url: storageMediaStreamUrl(file) }));");
+    expect(widgetSource).toContain('function isBrowserStreamableMedia');
+    expect(widgetSource).toContain('? Promise.resolve({ stream_url: storageMediaStreamUrl(file) })');
+  });
 });

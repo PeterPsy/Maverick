@@ -583,7 +583,8 @@ def _policy_token(tool_name: str) -> str:
 
 def _looks_read_only(normalized_tool_name: str) -> bool:
     return normalized_tool_name.startswith(READ_ONLY_PREFIXES) or any(
-        f"_{prefix}_" in normalized_tool_name for prefix in READ_ONLY_PREFIXES
+        f"_{prefix}_" in normalized_tool_name or normalized_tool_name.endswith(f"_{prefix}")
+        for prefix in READ_ONLY_PREFIXES
     )
 
 

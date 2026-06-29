@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import base64
 from concurrent.futures import ThreadPoolExecutor
+from datetime import UTC, datetime
 import io
 import json
 import os
@@ -18,7 +19,9 @@ from urllib.parse import parse_qs, urlparse
 import wave
 from unittest.mock import patch
 
-from core.apps.contracts import parse_app_contract_file
+from core.api.app_mounts import _read_backend_body, handle_app_backend
+from core.api.http import HttpRequestError
+from core.apps.contracts import build_app_contract, build_app_entrypoints, build_parsed_app_contract, parse_app_contract_file
 
 
 APP_ROOT = Path(__file__).resolve().parents[1]
@@ -118,6 +121,144 @@ class SpeechAppTests(unittest.TestCase):
         self.assertEqual(parsed.contract.hook_timeouts.backend_seconds, 300)
         self.assertEqual(parsed.contract.entrypoints.cli, "cli/app_cli.py")
         self.assertEqual(parsed.contract.entrypoints.mcp, "mcp/server.py")
+
+    def test_core_backend_mount_passes_json_safe_provider_config(self) -> None:
+        speech_status = {
+            "profile": "speech_stt",
+            "credential_binding": {
+                "binding_id": "binding-deepgram",
+                "provider_id": "deepgram",
+                "workspace_id": "default",
+                "label": "Deepgram",
+                "status": "active",
+                "created_at": datetime(2026, 1, 1, tzinfo=UTC),
+                "updated_at": datetime(2026, 1, 2, tzinfo=UTC),
+            },
+            "selection": {
+                "provider_id": "deepgram",
+                "audio_transcription_model_id": "nova-3-general",
+                "conversation_model_id": "flux-general-en",
+            },
+            "model_settings": {
+                "audio_transcription_model_id": "nova-3-general",
+                "conversation_model_id": "flux-general-en",
+            },
+        }
+        captured_payloads: list[dict[str, object]] = []
+
+        def fake_start_response(status: str, headers: list[tuple[str, str]]) -> None:
+            captured_payloads.append({"response_status": status, "response_headers": headers})
+
+        def fake_run_entrypoint(_entrypoint, *, payload, **_kwargs):
+            json.dumps(payload, ensure_ascii=True)
+            captured_payloads.append(payload)
+            return {"status_code": 200, "json": {"ok": True}}
+
+        request_body = json.dumps({"action": "transcribe_audio"}).encode("utf-8")
+        with TemporaryDirectory() as directory:
+            root = Path(directory)
+            source_root = root / "source"
+            data_root = root / "data"
+            source_root.mkdir()
+            data_root.mkdir()
+            parsed = build_parsed_app_contract(
+                app_id="speech",
+                name="Speech",
+                version="1.0.0",
+                description="Speech provider.",
+                publisher="maverick",
+                contract=build_app_contract(entrypoints=build_app_entrypoints(backend="backend/app_backend.py")),
+            )
+            binding = SimpleNamespace(data_root=str(data_root), source_kind="platform")
+            state = SimpleNamespace(
+                provider_store=SimpleNamespace(),
+                workspace_store=None,
+                app_event_bus=None,
+                secret_store=None,
+                observability_store=None,
+            )
+
+            with (
+                patch("core.api.app_mounts.resolve_app_surface", return_value=(binding, source_root, parsed)),
+                patch("core.api.app_mounts.resolve_provider_for_workspace", return_value=(SimpleNamespace(provider_id="openai"), None)),
+                patch("core.api.app_mounts.resolve_app_secret_payload_requests", return_value=SimpleNamespace(secrets={}, errors=[])),
+                patch("core.api.app_mounts._app_dependencies_payload", return_value={"dependencies": []}),
+                patch("core.api.app_mounts.enabled_app_items", return_value=[]),
+                patch("core.api.app_mounts._apply_app_secret_writes", return_value=[]),
+                patch("core.api.app_mounts.apply_app_runtime_requests", return_value=[]),
+                patch("core.api.app_mounts.apply_runtime_cleanup_requests", return_value=[]),
+                patch("core.api.provider_api.workspace_speech_stt_status", return_value=speech_status),
+                patch("core.api.app_mounts.run_json_entrypoint", side_effect=fake_run_entrypoint),
+            ):
+                response = b"".join(
+                    handle_app_backend(
+                        state,  # type: ignore[arg-type]
+                        environ={
+                            "REQUEST_METHOD": "POST",
+                            "PATH_INFO": "/api/apps/speech/backend",
+                            "CONTENT_TYPE": "application/json",
+                            "CONTENT_LENGTH": str(len(request_body)),
+                            "wsgi.input": io.BytesIO(request_body),
+                        },
+                        workspace_id="default",
+                        app_id="speech",
+                        user=None,
+                        start_path=APP_ROOT.parents[1],
+                        start_response=fake_start_response,
+                        trusted_platform_invocation=True,
+                    )
+                )
+
+        payload = next(item for item in captured_payloads if item.get("surface") == "backend")
+        self.assertEqual(json.loads(response.decode("utf-8")), {"ok": True})
+        self.assertEqual(
+            payload["provider_config"],
+            {
+                "speech_stt": {
+                    "audio_transcription_model_id": "nova-3-general",
+                    "conversation_model_id": "flux-general-en",
+                }
+            },
+        )
+
+    def test_core_binary_backend_body_uses_inline_audio_limit_before_spooling(self) -> None:
+        with TemporaryDirectory() as directory:
+            root = Path(directory)
+
+            with self.assertRaises(HttpRequestError) as raised:
+                _read_backend_body(
+                    {
+                        "CONTENT_TYPE": "audio/webm",
+                        "CONTENT_LENGTH": str(20_000_001),
+                        "wsgi.input": io.BytesIO(b""),
+                    },
+                    data_root=str(root),
+                    app_id="speech",
+                )
+
+            self.assertEqual(raised.exception.error, "request_body_too_large")
+            self.assertFalse((root / "run" / "http-body").exists())
+
+    def test_core_binary_backend_body_allows_recordings_over_previous_700kb_limit(self) -> None:
+        with TemporaryDirectory() as directory:
+            root = Path(directory)
+            raw = b"x" * 700_001
+
+            body, body_file = _read_backend_body(
+                {
+                    "CONTENT_TYPE": "audio/webm",
+                    "CONTENT_LENGTH": str(len(raw)),
+                    "wsgi.input": io.BytesIO(raw),
+                },
+                data_root=str(root),
+                app_id="speech",
+            )
+
+            self.assertEqual(body, {})
+            self.assertIsNotNone(body_file)
+            assert body_file is not None
+            self.assertEqual(body_file["size_bytes"], len(raw))
+            self.assertEqual(Path(str(body_file["path"])).read_bytes(), raw)
 
     def test_capabilities_report_unavailable_without_local_engine(self) -> None:
         with patch("service.synthesis_engine_statuses", return_value=[{"engine": "piper", "kind": "tts", "available": False, "voices": []}]):
@@ -494,6 +635,20 @@ class SpeechAppTests(unittest.TestCase):
                         "audio_transcription_model_id": "nova-3-general",
                         "conversation_model_id": "flux-general-en",
                     }
+                }
+            }
+        }
+
+        self.assertEqual(engines.deepgram_model_for("transcribe_file", settings=settings), "nova-3-general")
+        self.assertEqual(engines.deepgram_model_for("transcribe_audio", "one_shot", settings=settings), "nova-3-general")
+        self.assertEqual(engines.deepgram_model_for("conversation_stream", "conversation", settings=settings), "flux-general-en")
+
+    def test_deepgram_model_resolver_uses_minimal_provider_config(self) -> None:
+        settings = {
+            "_provider_config": {
+                "speech_stt": {
+                    "audio_transcription_model_id": "nova-3-general",
+                    "conversation_model_id": "flux-general-en",
                 }
             }
         }

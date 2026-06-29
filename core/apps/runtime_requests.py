@@ -782,9 +782,13 @@ def _dependency_provider_config(
 ) -> dict[str, Any]:
     if provider_id != "speech" or interface != "speech.transcription":
         return {}
-    from core.api.provider_api import workspace_speech_stt_status
+    from core.api.provider_api import workspace_speech_stt_backend_provider_config
 
-    return {"speech_stt": workspace_speech_stt_status(state, workspace_id=workspace_id)}
+    try:
+        speech_stt = workspace_speech_stt_backend_provider_config(state, workspace_id=workspace_id)
+    except ProviderError:
+        return {}
+    return {"speech_stt": speech_stt} if speech_stt else {}
 
 
 def _dependency_backend_provider_secret_requests(

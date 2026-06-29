@@ -305,7 +305,7 @@ describe("speech provider client calls", () => {
       interfaces: { "speech.synthesis": { available: true } },
     });
     await expect(prewarmSpeechWorker("speech")).resolves.toMatchObject({});
-    await expect(synthesizeSpeech("speech", "Hello")).resolves.toMatchObject({
+    await expect(synthesizeSpeech("speech", "Hello", { language: "it" })).resolves.toMatchObject({
       audio_base64: "UklGRg==",
     });
     await expect(transcribeSpeech("speech", "UklGRg==", "audio/wav", { profile: "fast" })).resolves.toMatchObject({
@@ -323,7 +323,7 @@ describe("speech provider client calls", () => {
       "/api/apps/speech/backend",
     ]);
     expect(JSON.parse(String(fetchMock.mock.calls[1]?.[1]?.body || "{}"))).toEqual({ action: "prewarm_worker" });
-    expect(JSON.parse(String(fetchMock.mock.calls[2]?.[1]?.body || "{}"))).toEqual({ action: "synthesize", text: "Hello" });
+    expect(JSON.parse(String(fetchMock.mock.calls[2]?.[1]?.body || "{}"))).toEqual({ action: "synthesize", text: "Hello", language: "it" });
     expect(JSON.parse(String(fetchMock.mock.calls[3]?.[1]?.body || "{}"))).toEqual({
       action: "transcribe_audio",
       audio_base64: "UklGRg==",

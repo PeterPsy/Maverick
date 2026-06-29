@@ -110,8 +110,8 @@ const googleProvider = {
       output_modalities: ["text"],
     },
     {
-      model_id: "gemini-3.1-flash",
-      label: "Gemini 3.1 Flash",
+      model_id: "gemini-3.1-flash-lite",
+      label: "Gemini 3.1 Flash-Lite",
       description: null,
       default_reasoning_effort: null,
       supported_reasoning_efforts: [],
@@ -168,7 +168,7 @@ describe("provider runtime options", () => {
     });
 
     expect(providers.map((provider) => provider.label)).toContain("Gemini 3.5 Flash - Google AI Studio");
-    expect(providers.map((provider) => provider.label)).toContain("Gemini 3.1 Flash - Google AI Studio");
+    expect(providers.map((provider) => provider.label)).toContain("Gemini 3.1 Flash-Lite - Google AI Studio");
     expect(hostedProviderRuntimeConfig(providers.find((provider) => provider.hosted_model_id === "gemini-3.5-flash"))).toMatchObject({
       hosted_provider_id: "google-ai-studio",
       hosted_model_id: "gemini-3.5-flash",
@@ -201,10 +201,10 @@ describe("provider runtime options", () => {
 
     const labels = providers.map((provider) => provider.label);
     expect(labels).toContain("Gemini 3.5 Flash - Google AI Studio");
-    expect(labels).toContain("Gemini 3.1 Flash - Google AI Studio");
+    expect(labels).toContain("Gemini 3.1 Flash-Lite - Google AI Studio");
     expect(labels).toContain("Gemma 4 31B (free) - OpenRouter");
     expect(labels).toContain("Nemotron 3 Ultra (free) - OpenRouter");
     expect(labels).not.toContain("Gemini 3.5 Flash - OpenRouter");
-    expect(labels).not.toContain("Gemini 3.1 Flash - OpenRouter");
+    expect(labels).not.toContain("Gemini 3.1 Flash-Lite - OpenRouter");
   });
 });

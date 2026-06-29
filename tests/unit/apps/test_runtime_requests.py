@@ -1,8 +1,9 @@
 from __future__ import annotations
 
+import json
+from datetime import UTC, datetime
 from pathlib import Path
 from types import SimpleNamespace
-from datetime import UTC, datetime
 import unittest
 from unittest.mock import patch
 
@@ -106,6 +107,15 @@ class RuntimeRequestsTestCase(unittest.TestCase):
         captured_payloads: list[dict[str, object]] = []
         speech_status = {
             "profile": "speech_stt",
+            "credential_binding": {
+                "binding_id": "binding-deepgram",
+                "provider_id": "deepgram",
+                "workspace_id": "default",
+                "label": "Deepgram",
+                "status": "active",
+                "created_at": datetime(2026, 1, 1, tzinfo=UTC),
+                "updated_at": datetime(2026, 1, 2, tzinfo=UTC),
+            },
             "selection": {
                 "provider_id": "deepgram",
                 "audio_transcription_model_id": "nova-3",
@@ -135,6 +145,7 @@ class RuntimeRequestsTestCase(unittest.TestCase):
             return Path("/provider/speech"), self._provider_parsed(read_secrets=["deepgram-api-key"])
 
         def fake_run_entrypoint(_entrypoint, *, payload, **_kwargs):
+            json.dumps(payload, ensure_ascii=True)
             captured_payloads.append(payload)
             if payload.get("surface") == "secret_selector":
                 return {"requires_secrets": False}
@@ -162,7 +173,15 @@ class RuntimeRequestsTestCase(unittest.TestCase):
         payload = captured_payloads[-1]
         self.assertEqual(result["json"], {"ok": True})
         self.assertEqual(payload["app_id"], "speech")
-        self.assertEqual(payload["provider_config"], {"speech_stt": speech_status})
+        self.assertEqual(
+            payload["provider_config"],
+            {
+                "speech_stt": {
+                    "audio_transcription_model_id": "nova-3",
+                    "conversation_model_id": "flux-general-multi",
+                }
+            },
+        )
 
     def test_dependency_backend_requires_selected_provider_backend_surface(self) -> None:
         def fake_resolve_dependencies(*_args, **_kwargs):

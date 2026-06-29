@@ -137,6 +137,7 @@ def run_json_entrypoint(
     shutdown_controller: EntrypointShutdownController | None = None,
 ) -> dict[str, Any]:
     """Invoke one Python entrypoint script with JSON stdin and JSON stdout."""
+    input_text = json.dumps(payload, ensure_ascii=True)
     repository_root = str(installation_paths(start_path=Path(cwd)).repository_root)
     env = dict(os.environ)
     env["PYTHONPATH"] = (
@@ -159,7 +160,7 @@ def run_json_entrypoint(
     try:
         stdout, stderr = _communicate_with_limits(
             process,
-            input_text=json.dumps(payload, ensure_ascii=True),
+            input_text=input_text,
             timeout_seconds=timeout_seconds,
             shutdown_controller=shutdown_controller,
             entrypoint_path=str(entrypoint_path),
@@ -192,6 +193,7 @@ def run_streaming_json_entrypoint(
     shutdown_controller: EntrypointShutdownController | None = None,
 ) -> StreamingJsonEntrypointResult:
     """Invoke an entrypoint that emits one JSON header line, optionally followed by bytes."""
+    input_bytes = json.dumps(payload, ensure_ascii=True).encode("utf-8")
     repository_root = str(installation_paths(start_path=Path(cwd)).repository_root)
     env = dict(os.environ)
     env["PYTHONPATH"] = (
@@ -214,7 +216,7 @@ def run_streaming_json_entrypoint(
         shutdown_controller.register(process)  # type: ignore[arg-type]
     try:
         assert process.stdin is not None
-        process.stdin.write(json.dumps(payload, ensure_ascii=True).encode("utf-8"))
+        process.stdin.write(input_bytes)
         process.stdin.close()
         header, stdout_prefix = _read_streaming_json_header(
             process,

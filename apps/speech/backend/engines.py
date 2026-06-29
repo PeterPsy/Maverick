@@ -1002,6 +1002,9 @@ def _configured_deepgram_model(
             return direct
         provider_config = settings.get("_provider_config") if isinstance(settings.get("_provider_config"), dict) else {}
         speech_config = provider_config.get("speech_stt") if isinstance(provider_config.get("speech_stt"), dict) else {}
+        selected = str(speech_config.get(selection_key) or "").strip()
+        if selected:
+            return selected
         selection = speech_config.get("selection") if isinstance(speech_config.get("selection"), dict) else {}
         selected = str(selection.get(selection_key) or "").strip()
         if selected:

@@ -6,6 +6,7 @@ import tempfile
 from threading import Thread
 import time
 import unittest
+from unittest.mock import patch
 
 from core.shared.entrypoints import EntrypointShutdownController, redact_entrypoint_stderr, run_json_entrypoint, run_streaming_json_entrypoint
 
@@ -19,6 +20,30 @@ class SharedEntrypointTests(unittest.TestCase):
             redact_entrypoint_stderr("raw_value=super-secret-token"),
             "[redacted entrypoint stderr]",
         )
+
+    def test_json_entrypoint_rejects_non_json_payload_before_launch(self) -> None:
+        with patch("core.shared.entrypoints.subprocess.Popen") as popen:
+            with self.assertRaises(TypeError):
+                run_json_entrypoint(
+                    Path("/tmp/not-launched.py"),
+                    payload={"bad": object()},
+                    cwd=REPO_ROOT,
+                    timeout_seconds=5,
+                )
+
+        popen.assert_not_called()
+
+    def test_streaming_json_entrypoint_rejects_non_json_payload_before_launch(self) -> None:
+        with patch("core.shared.entrypoints.subprocess.Popen") as popen:
+            with self.assertRaises(TypeError):
+                run_streaming_json_entrypoint(
+                    Path("/tmp/not-launched.py"),
+                    payload={"bad": object()},
+                    cwd=REPO_ROOT,
+                    timeout_seconds=5,
+                )
+
+        popen.assert_not_called()
 
     def test_shutdown_controller_interrupts_live_entrypoint_subprocess(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:

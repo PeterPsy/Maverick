@@ -7,6 +7,57 @@ const INITIAL_TTS_CHUNK_CHARS = 180;
 const MIN_RETRY_TTS_CHUNK_CHARS = 180;
 const AUDIO_PLAY_START_TIMEOUT_MS = 8000;
 const AUDIO_CHUNK_END_TIMEOUT_MS = 180000;
+const TTS_WORD_RE = /[A-Za-zÀ-ÿ']+/g;
+const ITALIAN_TTS_MARKERS = new Set([
+  "abbiamo",
+  "adesso",
+  "aiutarti",
+  "applicato",
+  "audio",
+  "cambiato",
+  "chiamata",
+  "controlla",
+  "correttamente",
+  "dopo",
+  "fatto",
+  "funziona",
+  "funzionano",
+  "italiana",
+  "italiano",
+  "messaggio",
+  "modello",
+  "passate",
+  "processi",
+  "reale",
+  "risponde",
+  "rotta",
+  "solo",
+  "sono",
+  "testo",
+  "verificato",
+  "verifiche",
+  "voce",
+]);
+const ENGLISH_TTS_MARKERS = new Set([
+  "about",
+  "and",
+  "because",
+  "can",
+  "done",
+  "for",
+  "from",
+  "hello",
+  "message",
+  "not",
+  "response",
+  "speech",
+  "that",
+  "the",
+  "this",
+  "voice",
+  "with",
+  "you",
+]);
 
 type MessageSpeechButtonProps = {
   activeMessageId: string | null;
@@ -99,12 +150,13 @@ function SupportedMessageSpeechButton({
     const requestId = requestIdRef.current + 1;
     requestIdRef.current = requestId;
     const chunks = speechChunks(speechText, maxTextChars);
+    const language = speechLanguageHint(speechText);
     let chunkIndex = 0;
 
     function synthesizeNextChunk(): Promise<SpeechAudioResult[]> | null {
       const chunk = chunks[chunkIndex];
       chunkIndex += 1;
-      return chunk ? synthesizeChunkWithFallback(chunk, requestId) : null;
+      return chunk ? synthesizeChunkWithFallback(chunk, requestId, language) : null;
     }
 
     try {
@@ -189,9 +241,9 @@ function SupportedMessageSpeechButton({
     return objectUrl;
   }
 
-  async function synthesizeChunkWithFallback(chunk: string, requestId: number): Promise<SpeechAudioResult[]> {
+  async function synthesizeChunkWithFallback(chunk: string, requestId: number, language: string): Promise<SpeechAudioResult[]> {
     try {
-      return [await synthesizeSpeech(providerAppId, chunk)];
+      return [await synthesizeSpeechChunk(providerAppId, chunk, language)];
     } catch (error) {
       const retryChunks = retrySpeechChunks(chunk);
       if (isSplittableSynthesisError(error) && retryChunks.length > 1) {
@@ -200,7 +252,7 @@ function SupportedMessageSpeechButton({
           if (requestIdRef.current !== requestId) {
             return results;
           }
-          results.push(...(await synthesizeChunkWithFallback(retryChunk, requestId)));
+          results.push(...(await synthesizeChunkWithFallback(retryChunk, requestId, language)));
         }
         return results;
       }
@@ -335,6 +387,31 @@ function speechPlaybackErrorMessage(error: unknown): string {
 
 function clearActiveMessage(onActiveMessageChange: Dispatch<SetStateAction<string | null>>, messageId: string) {
   onActiveMessageChange((currentMessageId) => (currentMessageId === messageId ? null : currentMessageId));
+}
+
+function synthesizeSpeechChunk(providerAppId: string, chunk: string, language: string): Promise<SpeechAudioResult> {
+  return language ? synthesizeSpeech(providerAppId, chunk, { language }) : synthesizeSpeech(providerAppId, chunk);
+}
+
+export function speechLanguageHint(text: string): string {
+  const normalized = text.toLowerCase();
+  const tokens = new Set(
+    Array.from(normalized.matchAll(TTS_WORD_RE), ([token]) => token.replace(/^'+|'+$/g, "")).filter((token) => token.length > 1),
+  );
+  let italianScore = 0;
+  let englishScore = 0;
+  for (const token of tokens) {
+    if (ITALIAN_TTS_MARKERS.has(token)) {
+      italianScore += 1;
+    }
+    if (ENGLISH_TTS_MARKERS.has(token)) {
+      englishScore += 1;
+    }
+  }
+  if (/[àèéìòù]/.test(normalized)) {
+    italianScore += 2;
+  }
+  return italianScore >= 2 && italianScore > englishScore ? "it" : "";
 }
 
 export function speechChunks(text: string, maxTextChars = 0): string[] {

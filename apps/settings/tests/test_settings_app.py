@@ -375,8 +375,8 @@ const googleModels = [
     output_modalities: ['text']
   },
   {
-    model_id: 'gemini-3.1-flash',
-    label: 'Gemini 3.1 Flash',
+    model_id: 'gemini-3.1-flash-lite',
+    label: 'Gemini 3.1 Flash-Lite',
     description: null,
     default_reasoning_effort: null,
     supported_reasoning_efforts: [],
@@ -566,7 +566,7 @@ assert.ok(html.includes('Gemma 4 31B (free)'));
 assert.ok(html.includes('Nemotron 3 Ultra (free)'));
 assert.ok(html.includes('DeepSeek V4 Flash - OpenRouter'));
 assert.ok(html.includes('Gemini 3.5 Flash - Google AI Studio'));
-assert.ok(html.includes('Gemini 3.1 Flash - Google AI Studio'));
+assert.ok(html.includes('Gemini 3.1 Flash-Lite - Google AI Studio'));
 assert.ok(!html.includes('<span class="settings-pill">Inactive</span>'));
 assert.ok(html.includes('Kokoro 82M'));
 assert.ok(html.includes('Hosted speech model'));
@@ -601,7 +601,7 @@ assert.ok(html.includes('data-hosted-provider-save="nvidia/nemotron-3-ultra-550b
 assert.ok(html.includes('data-hosted-provider-save="deepseek/deepseek-v4-flash"'));
 assert.ok(html.includes('data-hosted-provider-save="hexgrad/kokoro-82m"'));
 assert.ok(html.includes('data-hosted-provider-save="gemini-3.5-flash"'));
-assert.ok(html.includes('data-hosted-provider-save="gemini-3.1-flash"'));
+assert.ok(html.includes('data-hosted-provider-save="gemini-3.1-flash-lite"'));
 assert.ok(!html.includes('settings-hosted-provider-model'));
 assert.ok(html.includes('OpenRouter upstream'));
 assert.ok(html.includes('data-openrouter-routing="mode"'));

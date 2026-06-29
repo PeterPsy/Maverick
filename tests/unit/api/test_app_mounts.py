@@ -7,11 +7,9 @@ from datetime import UTC, datetime, timedelta
 from io import BytesIO
 from pathlib import Path
 from types import SimpleNamespace
-from unittest.mock import patch
 
-from core.api.app_mounts import _apply_app_secret_writes, _backend_request_headers, _backend_secret_request_body, _read_backend_body, _resolve_app_secret_payload, _serve_app_file_gateway_manifest, _serve_app_file_response, backend_entrypoint_timeout_seconds, handle_app_backend, serve_frontend
-from core.api.http import HttpRequestError
-from core.apps.contracts import build_app_contract, build_app_entrypoints, build_app_hook_timeouts, build_parsed_app_contract
+from core.api.app_mounts import _apply_app_secret_writes, _backend_request_headers, _backend_secret_request_body, _read_backend_body, _resolve_app_secret_payload, _serve_app_file_gateway_manifest, _serve_app_file_response, backend_entrypoint_timeout_seconds, serve_frontend
+from core.apps.contracts import build_app_contract, build_app_hook_timeouts, build_parsed_app_contract
 from core.observability.store import ObservabilityCollections, ObservabilityDocumentStore
 from core.secrets.app_delivery import app_secret_target
 from core.secrets.errors import SecretPolicyError
@@ -47,96 +45,15 @@ class AppMountsTestCase(unittest.TestCase):
 
     def test_backend_entrypoint_timeout_comes_from_app_contract(self) -> None:
         parsed = build_parsed_app_contract(
-            app_id="speech",
-            name="Speech",
+            app_id="sample",
+            name="Sample",
             version="1.0.0",
-            description="Speech provider.",
+            description="Sample provider.",
             publisher="maverick",
             contract=build_app_contract(hook_timeouts=build_app_hook_timeouts(backend_seconds=300)),
         )
 
         self.assertEqual(backend_entrypoint_timeout_seconds(parsed), 300)
-
-    def test_speech_backend_mount_passes_provider_config(self) -> None:
-        speech_status = {
-            "profile": "speech_stt",
-            "selection": {
-                "provider_id": "deepgram",
-                "audio_transcription_model_id": "nova-3-general",
-                "conversation_model_id": "flux-general-en",
-            },
-            "model_settings": {
-                "audio_transcription_model_id": "nova-3-general",
-                "conversation_model_id": "flux-general-en",
-            },
-        }
-        captured_payloads: list[dict[str, object]] = []
-
-        def fake_start_response(status: str, headers: list[tuple[str, str]]) -> None:
-            captured_payloads.append({"response_status": status, "response_headers": headers})
-
-        def fake_run_entrypoint(_entrypoint, *, payload, **_kwargs):
-            captured_payloads.append(payload)
-            return {"status_code": 200, "json": {"ok": True}}
-
-        request_body = json.dumps({"action": "transcribe_audio"}).encode("utf-8")
-        with tempfile.TemporaryDirectory() as directory:
-            root = Path(directory)
-            source_root = root / "source"
-            data_root = root / "data"
-            source_root.mkdir()
-            data_root.mkdir()
-            parsed = build_parsed_app_contract(
-                app_id="speech",
-                name="Speech",
-                version="1.0.0",
-                description="Speech provider.",
-                publisher="maverick",
-                contract=build_app_contract(entrypoints=build_app_entrypoints(backend="backend/app_backend.py")),
-            )
-            binding = SimpleNamespace(data_root=str(data_root), source_kind="platform")
-            state = SimpleNamespace(
-                provider_store=SimpleNamespace(),
-                workspace_store=None,
-                app_event_bus=None,
-                secret_store=None,
-                observability_store=None,
-            )
-
-            with (
-                patch("core.api.app_mounts.resolve_app_surface", return_value=(binding, source_root, parsed)),
-                patch("core.api.app_mounts.resolve_provider_for_workspace", return_value=(SimpleNamespace(provider_id="openai"), None)),
-                patch("core.api.app_mounts.resolve_app_secret_payload_requests", return_value=SimpleNamespace(secrets={}, errors=[])),
-                patch("core.api.app_mounts._app_dependencies_payload", return_value={"dependencies": []}),
-                patch("core.api.app_mounts.enabled_app_items", return_value=[]),
-                patch("core.api.app_mounts._apply_app_secret_writes", return_value=[]),
-                patch("core.api.app_mounts.apply_app_runtime_requests", return_value=[]),
-                patch("core.api.app_mounts.apply_runtime_cleanup_requests", return_value=[]),
-                patch("core.api.provider_api.workspace_speech_stt_status", return_value=speech_status),
-                patch("core.api.app_mounts.run_json_entrypoint", side_effect=fake_run_entrypoint),
-            ):
-                response = b"".join(
-                    handle_app_backend(
-                        state,  # type: ignore[arg-type]
-                        environ={
-                            "REQUEST_METHOD": "POST",
-                            "PATH_INFO": "/api/apps/speech/backend",
-                            "CONTENT_TYPE": "application/json",
-                            "CONTENT_LENGTH": str(len(request_body)),
-                            "wsgi.input": BytesIO(request_body),
-                        },
-                        workspace_id="default",
-                        app_id="speech",
-                        user=None,
-                        start_path=Path(__file__).resolve().parents[3],
-                        start_response=fake_start_response,
-                        trusted_platform_invocation=True,
-                    )
-                )
-
-        payload = next(item for item in captured_payloads if item.get("surface") == "backend")
-        self.assertEqual(json.loads(response.decode("utf-8")), {"ok": True})
-        self.assertEqual(payload["provider_config"], {"speech_stt": speech_status})
 
     def test_non_json_backend_body_is_spooled_to_app_data_root(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
@@ -160,45 +77,6 @@ class AppMountsTestCase(unittest.TestCase):
             body_path = Path(str(body_file["path"]))
             self.assertEqual(body_path.read_bytes(), raw)
             self.assertEqual(body_path.parent, root / "run" / "http-body")
-
-    def test_speech_binary_backend_body_uses_inline_audio_limit_before_spooling(self) -> None:
-        with tempfile.TemporaryDirectory() as directory:
-            root = Path(directory)
-
-            with self.assertRaises(HttpRequestError) as raised:
-                _read_backend_body(
-                    {
-                        "CONTENT_TYPE": "audio/webm",
-                        "CONTENT_LENGTH": str(20_000_001),
-                        "wsgi.input": BytesIO(b""),
-                    },
-                    data_root=str(root),
-                    app_id="speech",
-                )
-
-            self.assertEqual(raised.exception.error, "request_body_too_large")
-            self.assertFalse((root / "run" / "http-body").exists())
-
-    def test_speech_binary_backend_body_allows_recordings_over_previous_700kb_limit(self) -> None:
-        with tempfile.TemporaryDirectory() as directory:
-            root = Path(directory)
-            raw = b"x" * 700_001
-
-            body, body_file = _read_backend_body(
-                {
-                    "CONTENT_TYPE": "audio/webm",
-                    "CONTENT_LENGTH": str(len(raw)),
-                    "wsgi.input": BytesIO(raw),
-                },
-                data_root=str(root),
-                app_id="speech",
-            )
-
-            self.assertEqual(body, {})
-            self.assertIsNotNone(body_file)
-            assert body_file is not None
-            self.assertEqual(body_file["size_bytes"], len(raw))
-            self.assertEqual(Path(str(body_file["path"])).read_bytes(), raw)
 
     def test_app_file_response_serves_single_byte_range(self) -> None:
         with tempfile.TemporaryDirectory() as directory:

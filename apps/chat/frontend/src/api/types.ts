@@ -176,6 +176,11 @@ export type SpeechSynthesizePayload = {
   size_bytes?: number;
 };
 
+export type SpeechSynthesizeOptions = {
+  language?: string;
+  voice?: string;
+};
+
 export type SpeechTranscribePayload = {
   job_id?: string;
   text: string;

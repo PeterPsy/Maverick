@@ -639,12 +639,13 @@ def handle_app_backend(
 def _backend_provider_config(state, *, workspace_id: str, app_id: str) -> dict[str, Any]:
     if app_id != "speech":
         return {}
-    from core.api.provider_api import workspace_speech_stt_status
+    from core.api.provider_api import workspace_speech_stt_backend_provider_config
 
     try:
-        return {"speech_stt": workspace_speech_stt_status(state, workspace_id=workspace_id)}
+        speech_stt = workspace_speech_stt_backend_provider_config(state, workspace_id=workspace_id)
     except ProviderError:
         return {}
+    return {"speech_stt": speech_stt} if speech_stt else {}
 
 
 def _serve_app_file_gateway_manifest(

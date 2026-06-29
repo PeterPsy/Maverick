@@ -1,5 +1,11 @@
 import { requestJson } from "./http";
-import type { SpeechCapabilitiesPayload, SpeechSynthesizePayload, SpeechTranscribeOptions, SpeechTranscribePayload } from "./types";
+import type {
+  SpeechCapabilitiesPayload,
+  SpeechSynthesizeOptions,
+  SpeechSynthesizePayload,
+  SpeechTranscribeOptions,
+  SpeechTranscribePayload,
+} from "./types";
 
 export function getSpeechCapabilities(providerAppId: string): Promise<SpeechCapabilitiesPayload> {
   return requestJson<SpeechCapabilitiesPayload>(`/api/apps/${encodeURIComponent(providerAppId)}/backend`, {
@@ -9,11 +15,18 @@ export function getSpeechCapabilities(providerAppId: string): Promise<SpeechCapa
   });
 }
 
-export function synthesizeSpeech(providerAppId: string, text: string): Promise<SpeechSynthesizePayload> {
+export function synthesizeSpeech(providerAppId: string, text: string, options: SpeechSynthesizeOptions = {}): Promise<SpeechSynthesizePayload> {
+  const body: Record<string, string> = { action: "synthesize", text };
+  if (options.language) {
+    body.language = options.language;
+  }
+  if (options.voice) {
+    body.voice = options.voice;
+  }
   return requestJson<SpeechSynthesizePayload>(`/api/apps/${encodeURIComponent(providerAppId)}/backend`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ action: "synthesize", text }),
+    body: JSON.stringify(body),
   });
 }
 

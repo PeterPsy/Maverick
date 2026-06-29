@@ -6,7 +6,7 @@ import { createRoot } from "react-dom/client";
 import type { Root } from "react-dom/client";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { synthesizeSpeech } from "../api/client";
-import { MessageSpeechButton, speechChunks, speechTextFromMarkdown } from "./MessageSpeechButton";
+import { MessageSpeechButton, speechChunks, speechLanguageHint, speechTextFromMarkdown } from "./MessageSpeechButton";
 
 vi.mock("../api/client", () => ({
   synthesizeSpeech: vi.fn(),
@@ -80,6 +80,44 @@ describe("MessageSpeechButton", () => {
     expect(objectUrlMock.revokeObjectURL).toHaveBeenCalledWith("blob:speech-audio");
     expect(button?.getAttribute("aria-label")).toBe("Read response aloud");
     expect(button?.textContent?.trim()).toBe("volume_up");
+  });
+
+  it("passes an Italian language hint inferred from the full response to every speech chunk", async () => {
+    installAudioMock({ endDuringPlay: true });
+    installObjectUrlMock();
+    vi.mocked(synthesizeSpeech).mockResolvedValue({ audio_base64: "UklGRg==", content_type: "audio/wav" });
+    container = document.createElement("div");
+    document.body.appendChild(container);
+    root = createRoot(container);
+
+    const content = [
+      "Fix applicato e verificato. Ho cambiato core/api/provider_api.py e provider_config.",
+      "Dopo il restart la rotta reale risponde correttamente e non restano processi appesi.",
+    ].join(" ");
+
+    await act(async () => {
+      root?.render(
+        <MessageSpeechButton
+          activeMessageId={null}
+          content={content}
+          maxTextChars={90}
+          messageId="agent-1"
+          onActiveMessageChange={() => null}
+          providerAppId="speech"
+        />,
+      );
+    });
+
+    const button = container.querySelector("button");
+    await act(async () => {
+      button?.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
+      for (let index = 0; index < 4; index += 1) {
+        await Promise.resolve();
+      }
+    });
+
+    expect(synthesizeSpeech).toHaveBeenCalledTimes(2);
+    expect(vi.mocked(synthesizeSpeech).mock.calls.every((call) => call[2]?.language === "it")).toBe(true);
   });
 
   it("surfaces audio playback failures instead of staying in loading state", async () => {
@@ -356,6 +394,15 @@ describe("MessageSpeechButton", () => {
     const chunks = speechChunks(`${"word ".repeat(180)}done`, 1500);
     expect(chunks[0].length).toBeLessThanOrEqual(180);
     expect(chunks.every((chunk) => chunk.length <= 450)).toBe(true);
+  });
+
+  it("infers Italian speech language from a technical Italian response", () => {
+    expect(
+      speechLanguageHint(
+        "Fix applicato e verificato. Ho cambiato core/api/provider_api.py. Dopo il restart la rotta reale risponde correttamente.",
+      ),
+    ).toBe("it");
+    expect(speechLanguageHint("Implemented and verified the provider_config update. The route now responds correctly.")).toBe("");
   });
 });
 

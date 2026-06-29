@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from dataclasses import replace
 from threading import Lock
+import time
 from typing import TYPE_CHECKING, Callable
 
 from core.apps.runtime_event_hooks import dispatch_source_app_runtime_event
@@ -40,11 +41,15 @@ def submit_runtime_turn(
     client_message_id: str | None = None,
     attachments: list[dict[str, object]] | None = None,
     app_references: list[dict[str, object]] | None = None,
+    app_reference_materializer: Callable[[list[dict[str, object]]], list[dict[str, object]]] | None = None,
     on_queued: Callable[[RuntimeTurnRecord, list[RuntimeEventRecord]], None] | None = None,
 ) -> tuple[RuntimeTurnRecord, list[RuntimeEventRecord]]:
     """Queue and execute one runtime turn synchronously."""
     plain_hosted = runtime_session_is_plain_hosted_chat(session)
     assert_plain_hosted_chat_input_allowed(session, attachments=attachments, app_references=app_references)
+    existing = _existing_turn_for_client_message(state, session=session, client_message_id=client_message_id)
+    if existing is not None:
+        return existing, _turn_events_for_response(state, existing)
     if plain_hosted:
         provider = None
         runtime_adapter = None
@@ -70,6 +75,7 @@ def submit_runtime_turn(
             raise
     turn = transition_runtime_turn(state.runtime_store, turn_id=turn.turn_id, target_status="active")
     events.append(_record_turn_started(state, session_id=session.session_id, turn_id=turn.turn_id, provider_id=provider_id))
+    events.append(_record_turn_worker_started(state, session_id=session.session_id, turn_id=turn.turn_id, provider_id=provider_id))
     _debug_log_runtime_turn(
         state,
         session=session,
@@ -82,23 +88,74 @@ def submit_runtime_turn(
         try:
             output_recorder = _RuntimeTurnOutputRecorder(state, session_id=session.session_id, turn_id=turn.turn_id)
             if plain_hosted:
+                dispatch_started_at = time.perf_counter()
+                events.append(
+                    _record_provider_dispatching(
+                        state,
+                        session_id=session.session_id,
+                        turn_id=turn.turn_id,
+                        provider_id=provider_id,
+                        runtime_mode=session.runtime_mode,
+                    )
+                )
+
+                def record_plain_provider_accepted(metadata: dict[str, object]) -> None:
+                    accepted = _record_provider_accepted(
+                        state,
+                        session_id=session.session_id,
+                        turn_id=turn.turn_id,
+                        provider_id=str(metadata.get("provider_id") or provider_id),
+                        runtime_mode=session.runtime_mode,
+                        elapsed_ms=(time.perf_counter() - dispatch_started_at) * 1000,
+                        metadata=metadata,
+                    )
+                    events.append(accepted)
+
                 result, routing_decision = execute_plain_hosted_text_turn(
                     state,
                     session=session,
                     input_text=input_text,
                     attachments=attachments,
                     event_sink=output_recorder.record,
+                    on_provider_accepted=record_plain_provider_accepted,
                 )
                 provider_id = routing_decision.selected_provider_id or provider_id
                 session = state.runtime_store.save_session(replace(session, provider_id=provider_id))
             else:
                 assert provider is not None
                 launch_spec = _build_launch_spec_for_execution(state, session=session, provider_id=provider_id)
+                execution_app_references = _materialize_app_references_for_execution(
+                    app_references=app_references,
+                    app_reference_materializer=app_reference_materializer,
+                )
                 provider_input_text = input_text_with_attachment_links(
-                    input_text=input_text_with_app_references(input_text=input_text, app_references=app_references),
+                    input_text=input_text_with_app_references(input_text=input_text, app_references=execution_app_references),
                     attachments=attachments,
                     workspace_root=session.workspace_root,
                 )
+                dispatch_started_at = time.perf_counter()
+                events.append(
+                    _record_provider_dispatching(
+                        state,
+                        session_id=session.session_id,
+                        turn_id=turn.turn_id,
+                        provider_id=provider_id,
+                        runtime_mode=session.runtime_mode,
+                    )
+                )
+
+                def record_provider_accepted(metadata: dict[str, object]) -> None:
+                    accepted = _record_provider_accepted(
+                        state,
+                        session_id=session.session_id,
+                        turn_id=turn.turn_id,
+                        provider_id=provider_id,
+                        runtime_mode=session.runtime_mode,
+                        elapsed_ms=(time.perf_counter() - dispatch_started_at) * 1000,
+                        metadata=metadata,
+                    )
+                    events.append(accepted)
+
                 result = execute_runtime_turn(
                     session=session,
                     provider=provider,
@@ -106,6 +163,7 @@ def submit_runtime_turn(
                     launch_spec=launch_spec,
                     runtime_adapter=runtime_adapter,
                     on_provider_thread_id=lambda provider_thread_id: _record_provider_thread_id(state, session=session, provider_id=provider_id, provider_thread_id=provider_thread_id),
+                    on_provider_accepted=record_provider_accepted,
                     event_sink=output_recorder.record,
                 )
         except Exception as error:

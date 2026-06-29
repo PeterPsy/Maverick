@@ -90,6 +90,15 @@ class RuntimeStore(Protocol):
     def list_turns(self, session_id: str) -> list[RuntimeTurnRecord]:
         ...
 
+    def find_turn_by_client_message_id(
+        self,
+        *,
+        workspace_id: str,
+        client_message_id: str,
+        session_id: str | None = None,
+    ) -> RuntimeTurnRecord | None:
+        ...
+
     def save_event(self, record: RuntimeEventRecord) -> RuntimeEventRecord:
         ...
 
@@ -255,6 +264,25 @@ class RuntimeDocumentStore:
 
     def list_turns(self, session_id: str) -> list[RuntimeTurnRecord]:
         return [RuntimeTurnRecord(**document) for document in self.collections.turns.find({"session_id": session_id})]
+
+    def find_turn_by_client_message_id(
+        self,
+        *,
+        workspace_id: str,
+        client_message_id: str,
+        session_id: str | None = None,
+    ) -> RuntimeTurnRecord | None:
+        normalized_client_message_id = client_message_id.strip()
+        if not workspace_id or not normalized_client_message_id:
+            return None
+        query = {
+            "workspace_id": workspace_id,
+            "client_message_id": normalized_client_message_id,
+        }
+        if session_id:
+            query["session_id"] = session_id
+        document = self.collections.turns.find_one(query)
+        return RuntimeTurnRecord(**document) if document is not None else None
 
     def save_event(self, record: RuntimeEventRecord) -> RuntimeEventRecord:
         append_history_upsert = getattr(self.collections.events, "append_history_upsert", None)

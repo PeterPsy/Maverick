@@ -27,3 +27,4 @@ class RuntimeTurnRecord:
     completed_at: datetime | None
     failure_reason: str | None
     runtime_mode: RuntimeMode = "agentic"
+    client_message_id: str | None = None

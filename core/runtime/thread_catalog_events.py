@@ -7,7 +7,6 @@ from typing import TYPE_CHECKING
 
 from core.runtime.runtime_threads import (
     create_runtime_thread,
-    ensure_runtime_threads_for_sessions,
     find_runtime_thread_by_session,
     mark_runtime_thread_response_completed,
     mark_runtime_thread_user_message,
@@ -34,19 +33,12 @@ def publish_runtime_thread_catalog_change(
     thread_bus = getattr(state, "runtime_thread_event_bus", None)
     if thread_bus is None:
         return
-    threads = ensure_runtime_threads_for_sessions(
-        state.runtime_store,
-        workspace_id=workspace_id,
-        sessions=state.runtime_store.list_sessions(workspace_id),
-    )
     payload = {
         "action": action,
-        "threads": [thread_payload(item) for item in threads],
     }
     if thread is not None:
-        latest_thread = next((item for item in threads if item.thread_id == thread.thread_id), thread)
-        payload["thread"] = thread_payload(latest_thread)
-        payload["thread_id"] = latest_thread.thread_id
+        payload["thread"] = thread_payload(thread)
+        payload["thread_id"] = thread.thread_id
     thread_bus.publish(workspace_id=workspace_id, event=payload)
 
 

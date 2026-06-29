@@ -80,13 +80,10 @@ def runtime_thread_changed_frame(
     event: dict[str, Any],
 ) -> dict[str, Any]:
     """Build one user-specific thread catalog mutation frame."""
-    threads = _ordered_runtime_threads(state, workspace_id=workspace_id)
-    payloads = [thread_payload(thread, viewer_user_id=viewer_user_id) for thread in threads]
     frame: dict[str, Any] = {
         "type": "runtime.thread.changed",
         "workspace_id": workspace_id,
         "action": str(event.get("action") or "updated"),
-        "threads": payloads,
     }
     for key in ("deleted_thread_ids", "deleted_runtime_session_ids"):
         value = event.get(key)
@@ -94,9 +91,10 @@ def runtime_thread_changed_frame(
             frame[key] = value
     thread_id = _event_thread_id(event)
     if thread_id:
-        thread_payload_item = next((item for item in payloads if item.get("thread_id") == thread_id), None)
-        if thread_payload_item is not None:
-            frame["thread"] = thread_payload_item
+        with suppress(Exception):
+            thread = state.runtime_store.get_thread(thread_id)
+            if thread.workspace_id == workspace_id:
+                frame["thread"] = thread_payload(thread, viewer_user_id=viewer_user_id)
     return frame
 
 

@@ -150,6 +150,7 @@ def queue_runtime_turn(
     turn_id: str,
     session_id: str,
     input_text: str | None = None,
+    client_message_id: str | None = None,
     now: datetime | None = None,
 ) -> RuntimeTurnRecord:
     """Create one queued runtime turn."""
@@ -168,6 +169,7 @@ def queue_runtime_turn(
             completed_at=None,
             failure_reason=None,
             runtime_mode=session.runtime_mode,
+            client_message_id=client_message_id.strip() if isinstance(client_message_id, str) and client_message_id.strip() else None,
         )
     )
 
@@ -185,7 +187,7 @@ def transition_runtime_turn(
     timestamp = now or utcnow()
     turn = store.get_turn(turn_id)
     allowed: dict[RuntimeTurnStatus, set[RuntimeTurnStatus]] = {
-        "queued": {"active", "cancelled", "timed-out"},
+        "queued": {"active", "failed", "cancelled", "timed-out"},
         "active": {"completed", "failed", "cancelled", "timed-out"},
         "completed": set(),
         "failed": set(),

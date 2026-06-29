@@ -5,6 +5,7 @@ from __future__ import annotations
 from contextlib import suppress
 from dataclasses import replace
 from threading import Lock, Thread, Timer
+import time
 from typing import TYPE_CHECKING, Callable
 from uuid import uuid4
 
@@ -14,6 +15,7 @@ from core.runtime.plain_hosted_text import (
     HOSTED_TEXT_RUNTIME_PROVIDER_ID,
     assert_plain_hosted_chat_input_allowed,
     execute_plain_hosted_text_turn,
+    queue_provider_id_for_session,
     runtime_session_is_plain_hosted_chat,
 )
 from core.runtime.app_references import input_text_with_app_references
@@ -46,38 +48,29 @@ def submit_runtime_turn_async(
     client_message_id: str | None = None,
     attachments: list[dict[str, object]] | None = None,
     app_references: list[dict[str, object]] | None = None,
+    app_reference_materializer: Callable[[list[dict[str, object]]], list[dict[str, object]]] | None = None,
     on_queued: Callable[[RuntimeTurnRecord, list[RuntimeEventRecord]], None] | None = None,
 ) -> tuple[RuntimeTurnRecord, list[RuntimeEventRecord]]:
     """Queue one runtime turn and execute it in a background worker."""
     plain_hosted = runtime_session_is_plain_hosted_chat(session)
     assert_plain_hosted_chat_input_allowed(session, attachments=attachments, app_references=app_references)
-    if plain_hosted:
-        provider = None
-        runtime_adapter = None
-        provider_id = HOSTED_TEXT_RUNTIME_PROVIDER_ID
-    else:
-        provider, _selection, runtime_adapter = resolve_runtime_backend_for_session(state.provider_store, session=session)
-        provider_id = provider.provider_id
+    queue_provider_id = HOSTED_TEXT_RUNTIME_PROVIDER_ID if plain_hosted else queue_provider_id_for_session(session)
+    existing = _existing_turn_for_client_message(state, session=session, client_message_id=client_message_id)
+    if existing is not None:
+        return existing, _turn_events_for_response(state, existing)
     turn, events = _queue_turn_with_event(
         state,
         session=session,
         input_text=input_text,
-        provider_id=provider_id,
+        provider_id=queue_provider_id,
         client_message_id=client_message_id,
         attachments=attachments,
         app_references=app_references,
     )
-    if on_queued is not None:
-        try:
-            on_queued(turn, events)
-        except Exception as error:
-            failed = transition_runtime_turn(state.runtime_store, turn_id=turn.turn_id, target_status="failed", failure_reason=str(error))
-            _record_turn_failed(state, session_id=session.session_id, turn_id=failed.turn_id, provider_id=provider_id, error=str(error))
-            raise
 
     def worker() -> None:
         force_idle_reap = False
-        worker_provider_id = provider_id
+        worker_provider_id = queue_provider_id
         with _session_execution_lock(session.session_id):
             _debug_log_runtime_turn(
                 state,
@@ -99,8 +92,27 @@ def submit_runtime_turn_async(
                         payload={"phase": "async_worker_pre_cancelled"},
                     )
                     return
+                if on_queued is not None:
+                    try:
+                        on_queued(turn, events)
+                    except Exception as error:
+                        failed = transition_runtime_turn(
+                            state.runtime_store,
+                            turn_id=turn.turn_id,
+                            target_status="failed",
+                            failure_reason=str(error),
+                        )
+                        _record_turn_failed(
+                            state,
+                            session_id=session.session_id,
+                            turn_id=failed.turn_id,
+                            provider_id=worker_provider_id,
+                            error=str(error),
+                        )
+                        return
                 active = transition_runtime_turn(state.runtime_store, turn_id=turn.turn_id, target_status="active")
                 _record_turn_started(state, session_id=session.session_id, turn_id=active.turn_id, provider_id=worker_provider_id)
+                _record_turn_worker_started(state, session_id=session.session_id, turn_id=active.turn_id, provider_id=worker_provider_id)
                 current_session = state.runtime_store.get_session(session.session_id)
                 _debug_log_runtime_turn(
                     state,
@@ -112,23 +124,72 @@ def submit_runtime_turn_async(
                 )
                 output_recorder = _RuntimeTurnOutputRecorder(state, session_id=session.session_id, turn_id=turn.turn_id)
                 if runtime_session_is_plain_hosted_chat(current_session):
+                    dispatch_started_at = time.perf_counter()
+                    _record_provider_dispatching(
+                        state,
+                        session_id=session.session_id,
+                        turn_id=turn.turn_id,
+                        provider_id=worker_provider_id,
+                        runtime_mode=current_session.runtime_mode,
+                    )
+
+                    def record_plain_provider_accepted(metadata: dict[str, object]) -> None:
+                        selected_provider_id = str(metadata.get("provider_id") or worker_provider_id)
+                        _record_provider_accepted(
+                            state,
+                            session_id=session.session_id,
+                            turn_id=turn.turn_id,
+                            provider_id=selected_provider_id,
+                            runtime_mode=current_session.runtime_mode,
+                            elapsed_ms=(time.perf_counter() - dispatch_started_at) * 1000,
+                            metadata=metadata,
+                        )
+
                     result, routing_decision = execute_plain_hosted_text_turn(
                         state,
                         session=current_session,
                         input_text=input_text,
                         attachments=attachments,
                         event_sink=output_recorder.record,
+                        on_provider_accepted=record_plain_provider_accepted,
                     )
                     worker_provider_id = routing_decision.selected_provider_id or worker_provider_id
                     current_session = state.runtime_store.save_session(replace(current_session, provider_id=worker_provider_id))
                 else:
-                    assert provider is not None
+                    provider, _selection, runtime_adapter = resolve_runtime_backend_for_session(state.provider_store, session=current_session)
+                    worker_provider_id = provider.provider_id
+                    if current_session.provider_id != worker_provider_id:
+                        current_session = state.runtime_store.save_session(replace(current_session, provider_id=worker_provider_id))
                     launch_spec = _build_launch_spec_for_execution(state, session=current_session, provider_id=worker_provider_id)
+                    execution_app_references = _materialize_app_references_for_execution(
+                        app_references=app_references,
+                        app_reference_materializer=app_reference_materializer,
+                    )
                     provider_input_text = input_text_with_attachment_links(
-                        input_text=input_text_with_app_references(input_text=input_text, app_references=app_references),
+                        input_text=input_text_with_app_references(input_text=input_text, app_references=execution_app_references),
                         attachments=attachments,
                         workspace_root=current_session.workspace_root,
                     )
+                    dispatch_started_at = time.perf_counter()
+                    _record_provider_dispatching(
+                        state,
+                        session_id=session.session_id,
+                        turn_id=turn.turn_id,
+                        provider_id=worker_provider_id,
+                        runtime_mode=current_session.runtime_mode,
+                    )
+
+                    def record_provider_accepted(metadata: dict[str, object]) -> None:
+                        _record_provider_accepted(
+                            state,
+                            session_id=session.session_id,
+                            turn_id=turn.turn_id,
+                            provider_id=worker_provider_id,
+                            runtime_mode=current_session.runtime_mode,
+                            elapsed_ms=(time.perf_counter() - dispatch_started_at) * 1000,
+                            metadata=metadata,
+                        )
+
                     result = execute_runtime_turn(
                         session=current_session,
                         provider=provider,
@@ -141,6 +202,7 @@ def submit_runtime_turn_async(
                             provider_id=worker_provider_id,
                             provider_thread_id=provider_thread_id,
                         ),
+                        on_provider_accepted=record_provider_accepted,
                         event_sink=output_recorder.record,
                     )
                 _debug_log_runtime_turn(
@@ -232,6 +294,17 @@ def submit_runtime_turn_async(
 
     Thread(target=worker, name=f"maverick-runtime-turn-{turn.turn_id}", daemon=True).start()
     return turn, events
+
+
+def _materialize_app_references_for_execution(
+    *,
+    app_references: list[dict[str, object]] | None,
+    app_reference_materializer: Callable[[list[dict[str, object]]], list[dict[str, object]]] | None,
+) -> list[dict[str, object]] | None:
+    references = [item for item in app_references or [] if isinstance(item, dict)]
+    if not references or app_reference_materializer is None:
+        return references
+    return app_reference_materializer(references)
 
 
 

@@ -327,7 +327,7 @@ export type RuntimeThreadWebSocketFrame =
       type: "runtime.thread.changed";
       workspace_id: string;
       action: string;
-      threads: ChatThread[];
+      threads?: ChatThread[];
       thread?: ChatThread;
       deleted_thread_ids?: string[];
       deleted_runtime_session_ids?: string[];

@@ -63,6 +63,7 @@ def execute_codex_app_server_turn(
     event_sink: RuntimeExecutionEventSink | None,
     timeout_seconds: int | None,
     on_provider_thread_id: Callable[[str], None] | None = None,
+    on_provider_accepted: Callable[[dict[str, object]], None] | None = None,
     command_runner=subprocess.Popen,
 ) -> CodexAppServerTurnResult:
     """Execute one turn against a persistent Codex app-server thread."""
@@ -105,6 +106,13 @@ def execute_codex_app_server_turn(
         provider_turn_id = str(turn.get("id") or "").strip()
         if provider_turn_id:
             runtime.current_provider_turn_id = provider_turn_id
+    if on_provider_accepted is not None:
+        on_provider_accepted(
+            {
+                "provider_thread_id": provider_thread_id,
+                "provider_turn_id": runtime.current_provider_turn_id or "",
+            }
+        )
     _debug_log(
         runtime,
         "Codex app-server debug: turn/start acknowledged",

@@ -68,6 +68,15 @@ function eventActivityLabel(event: RuntimeEvent): string | null {
   if (event.event_type === "runtime.turn.queued") {
     return "Queued";
   }
+  if (event.event_type === "runtime.turn.worker_started") {
+    return "Preparing runtime";
+  }
+  if (event.event_type === "runtime.provider.dispatching") {
+    return "Starting model";
+  }
+  if (event.event_type === "runtime.provider.accepted") {
+    return "Thinking";
+  }
   if (event.event_type === "runtime.turn.started") {
     return "Thinking";
   }

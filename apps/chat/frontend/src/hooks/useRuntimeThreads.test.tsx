@@ -27,8 +27,8 @@ class MockWebSocket {
   }
 }
 
-function RuntimeThreadsProbe({ onError }: { onError: (error: string | null) => void }) {
-  const [, setThreads] = useState<ChatThread[]>([]);
+function RuntimeThreadsProbe({ onError, onThreads }: { onError: (error: string | null) => void; onThreads?: (threads: ChatThread[]) => void }) {
+  const [threads, setThreads] = useState<ChatThread[]>([]);
   const [error, setError] = useState<string | null>(null);
 
   useRuntimeThreads({ setError, setThreads });
@@ -36,6 +36,9 @@ function RuntimeThreadsProbe({ onError }: { onError: (error: string | null) => v
   useEffect(() => {
     onError(error);
   }, [error, onError]);
+  useEffect(() => {
+    onThreads?.(threads);
+  }, [onThreads, threads]);
 
   return null;
 }
@@ -110,4 +113,62 @@ describe("useRuntimeThreads", () => {
     });
     expect(MockWebSocket.instances).toHaveLength(3);
   });
+
+  it("applies delta thread changes without a full catalog replacement", async () => {
+    const onThreads = vi.fn();
+    await act(async () => {
+      root.render(<RuntimeThreadsProbe onError={() => undefined} onThreads={onThreads} />);
+    });
+    const firstThread = thread({ thread_id: "thread-1", runtime_session_id: "session-1", title: "First" });
+    const secondThread = thread({
+      thread_id: "thread-2",
+      runtime_session_id: "session-2",
+      title: "Second",
+      created_at: "2026-06-29T00:00:01.000Z",
+      updated_at: "2026-06-29T00:00:01.000Z",
+    });
+
+    await act(async () => {
+      MockWebSocket.instances[0].onmessage?.({
+        data: JSON.stringify({ type: "runtime.thread.snapshot", workspace_id: "default", threads: [firstThread], at: "2026-06-29T00:00:00.000Z" }),
+      } as MessageEvent);
+      MockWebSocket.instances[0].onmessage?.({
+        data: JSON.stringify({ type: "runtime.thread.changed", workspace_id: "default", action: "created", thread: secondThread }),
+      } as MessageEvent);
+    });
+
+    expect(onThreads).toHaveBeenLastCalledWith([secondThread, firstThread]);
+
+    await act(async () => {
+      MockWebSocket.instances[0].onmessage?.({
+        data: JSON.stringify({
+          type: "runtime.thread.changed",
+          workspace_id: "default",
+          action: "deleted",
+          deleted_thread_ids: ["thread-1"],
+        }),
+      } as MessageEvent);
+    });
+
+    expect(onThreads).toHaveBeenLastCalledWith([secondThread]);
+  });
 });
+
+function thread(overrides: Partial<ChatThread>): ChatThread {
+  return {
+    thread_id: "thread",
+    runtime_session_id: "session",
+    title: "Thread",
+    agent_label: "chat",
+    agent_type_id: "",
+    agent_role_id: "",
+    source_app_id: "chat",
+    system_prompt: "",
+    project_id: null,
+    archived: false,
+    availability: "free",
+    created_at: "2026-06-29T00:00:00.000Z",
+    updated_at: "2026-06-29T00:00:00.000Z",
+    ...overrides,
+  };
+}

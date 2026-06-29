@@ -55,6 +55,30 @@ describe("runtimeActivityLabel", () => {
     ).toBe("Thinking");
   });
 
+  it("distinguishes worker startup from provider dispatch and acceptance", () => {
+    expect(
+      runtimeActivityLabel({
+        activeTurn: turn("active"),
+        events: [event({ event_type: "runtime.turn.worker_started" })],
+        isRuntimeBusy: true,
+      }),
+    ).toBe("Preparing runtime");
+    expect(
+      runtimeActivityLabel({
+        activeTurn: turn("active"),
+        events: [event({ event_type: "runtime.provider.dispatching" })],
+        isRuntimeBusy: true,
+      }),
+    ).toBe("Starting model");
+    expect(
+      runtimeActivityLabel({
+        activeTurn: turn("active"),
+        events: [event({ event_type: "runtime.provider.accepted" })],
+        isRuntimeBusy: true,
+      }),
+    ).toBe("Thinking");
+  });
+
   it("uses the latest visible step for the active turn", () => {
     expect(
       runtimeActivityLabel({

@@ -168,6 +168,75 @@ def materialize_runtime_app_references(
     return materialized
 
 
+def validate_runtime_app_references(
+    state,
+    *,
+    context: RequestSession,
+    references: list[dict[str, object]],
+    start_path: Path,
+) -> list[dict[str, object]]:
+    """Verify client-submitted references without invoking app-owned MCP tools."""
+    visible_apps = visible_workspace_apps(state, context=context, start_path=start_path)
+    providers_by_app_id = {
+        provider["app_id"]: provider
+        for provider in reference_providers(state, context=context, start_path=start_path)
+    }
+    validated: list[dict[str, object]] = []
+    seen: set[str] = set()
+    for reference in references:
+        app_id = _bounded_text(reference.get("app_id"), max_length=120)
+        if not app_id:
+            continue
+        if str(reference.get("type") or "app").strip().lower() == "entity":
+            payload = _validate_runtime_entity_reference(
+                provider=providers_by_app_id.get(app_id),
+                reference=reference,
+            )
+        else:
+            app = visible_apps.get(app_id)
+            payload = (
+                {
+                    "type": "app",
+                    "app_id": app_id,
+                    "label": _bounded_text(app.get("name"), max_length=240),
+                }
+                if app is not None
+                else None
+            )
+        if payload is None:
+            continue
+        key = _reference_key(payload)
+        if key in seen:
+            continue
+        seen.add(key)
+        validated.append(payload)
+    return validated
+
+
+def _validate_runtime_entity_reference(
+    *,
+    provider: dict[str, Any] | None,
+    reference: dict[str, object],
+) -> dict[str, object] | None:
+    if provider is None:
+        return None
+    entity_type = _bounded_text(reference.get("entity_type"), max_length=120)
+    entity_id = _bounded_text(reference.get("entity_id") or reference.get("id"), max_length=240)
+    if not entity_type or not entity_id:
+        return None
+    declaration = next((item for item in provider["entities"] if item.get("entity_type") == entity_type), None)
+    if declaration is None:
+        return None
+    return {
+        "type": "entity",
+        "app_id": provider["app_id"],
+        "entity_type": entity_type,
+        "entity_id": entity_id,
+        "label": entity_id,
+        "summary": "",
+    }
+
+
 def _materialize_runtime_entity_reference(
     state,
     *,

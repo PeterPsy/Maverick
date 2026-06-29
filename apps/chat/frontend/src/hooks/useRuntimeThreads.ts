@@ -39,6 +39,26 @@ export function useRuntimeThreads({ enabled = true, onSnapshot, setError, setThr
       setThreads(orderChatThreads(threads || []));
     }
 
+    function applyThreadDelta(frame: Extract<RuntimeThreadWebSocketFrame, { type: "runtime.thread.changed" }>) {
+      if (Array.isArray(frame.threads)) {
+        applyThreads(frame.threads);
+        return;
+      }
+      setThreads((current) => {
+        const deletedThreadIds = new Set(frame.deleted_thread_ids || []);
+        const deletedRuntimeSessionIds = new Set(frame.deleted_runtime_session_ids || []);
+        const retained = current.filter(
+          (thread) => !deletedThreadIds.has(thread.thread_id) && !deletedRuntimeSessionIds.has(thread.runtime_session_id),
+        );
+        if (!frame.thread) {
+          return orderChatThreads(retained);
+        }
+        const next = retained.filter((thread) => thread.thread_id !== frame.thread?.thread_id);
+        next.push(frame.thread);
+        return orderChatThreads(next);
+      });
+    }
+
     function connect() {
       let socketOpened = false;
       socket = new WebSocket(runtimeThreadWebSocketUrl());
@@ -59,7 +79,7 @@ export function useRuntimeThreads({ enabled = true, onSnapshot, setError, setThr
             return;
           }
           if (frame.type === "runtime.thread.changed") {
-            applyThreads(frame.threads);
+            applyThreadDelta(frame);
           }
         } catch (parseError) {
           setError(parseError instanceof Error ? parseError.message : "Unable to parse runtime thread WebSocket frame.");

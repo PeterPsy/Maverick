@@ -365,6 +365,9 @@ class AppReferencesApiTestCase(AppReferenceApiTestSupport, unittest.TestCase):
 
             def fake_submit_runtime_turn(*_args, **kwargs):
                 captured["app_references"] = kwargs.get("app_references")
+                materializer = kwargs.get("app_reference_materializer")
+                if callable(materializer):
+                    captured["materialized_app_references"] = materializer(kwargs.get("app_references") or [])
                 now = datetime.now(timezone.utc)
                 return RuntimeTurnRecord(
                     turn_id="turn-1",
@@ -414,6 +417,27 @@ class AppReferencesApiTestCase(AppReferenceApiTestSupport, unittest.TestCase):
         self.assertEqual(status, 202)
         self.assertEqual(
             captured["app_references"],
+            [
+                {
+                    "type": "entity",
+                    "app_id": "records",
+                    "entity_type": "record",
+                    "entity_id": "record-1",
+                    "label": "record-1",
+                    "summary": "",
+                },
+                {
+                    "type": "entity",
+                    "app_id": "records",
+                    "entity_type": "record",
+                    "entity_id": "deleted",
+                    "label": "deleted",
+                    "summary": "",
+                },
+            ],
+        )
+        self.assertEqual(
+            captured["materialized_app_references"],
             [
                 {
                     "type": "entity",

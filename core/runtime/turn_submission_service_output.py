@@ -12,6 +12,7 @@ from core.providers.service import build_runtime_backend_launch_spec
 from core.providers.service import prepare_runtime_skills
 from core.runtime.execution_events import RuntimeExecutionEvent
 from core.runtime.output_compaction import ToolOutputCompactionContext, compact_tool_call_event
+from core.runtime.plain_hosted_text import queue_provider_id_for_session
 from core.runtime.runtime_events import RuntimeEventRecord
 from core.runtime.runtime_session import RuntimeSessionRecord
 from core.runtime.runtime_turns import RuntimeTurnRecord
@@ -37,13 +38,24 @@ def _queue_turn_with_event(
     *,
     session: RuntimeSessionRecord,
     input_text: str,
-    provider_id: str,
+    provider_id: str | None,
     client_message_id: str | None,
     attachments: list[dict[str, object]] | None,
     app_references: list[dict[str, object]] | None,
 ) -> tuple[RuntimeTurnRecord, list[RuntimeEventRecord]]:
-    turn = queue_runtime_turn(state.runtime_store, turn_id=str(uuid4()), session_id=session.session_id, input_text=input_text)
-    payload: dict[str, object] = {"input_text": input_text, "provider_id": provider_id}
+    existing = _existing_turn_for_client_message(state, session=session, client_message_id=client_message_id)
+    if existing is not None:
+        return existing, _turn_events_for_response(state, existing)
+
+    normalized_provider_id = (provider_id or queue_provider_id_for_session(session)).strip()
+    turn = queue_runtime_turn(
+        state.runtime_store,
+        turn_id=str(uuid4()),
+        session_id=session.session_id,
+        input_text=input_text,
+        client_message_id=client_message_id,
+    )
+    payload: dict[str, object] = {"input_text": input_text, "provider_id": normalized_provider_id}
     if client_message_id:
         payload["client_message_id"] = client_message_id
     if attachments:
@@ -84,6 +96,34 @@ def _queue_turn_with_event(
     )
     return turn, [event]
 
+
+def _existing_turn_for_client_message(
+    state: PlatformState,
+    *,
+    session: RuntimeSessionRecord,
+    client_message_id: str | None,
+) -> RuntimeTurnRecord | None:
+    normalized_client_message_id = client_message_id.strip() if isinstance(client_message_id, str) else ""
+    if not normalized_client_message_id:
+        return None
+    find_turn = getattr(state.runtime_store, "find_turn_by_client_message_id", None)
+    if not callable(find_turn):
+        return None
+    return find_turn(
+        workspace_id=session.workspace_id,
+        session_id=session.session_id,
+        client_message_id=normalized_client_message_id,
+    )
+
+
+def _turn_events_for_response(state: PlatformState, turn: RuntimeTurnRecord) -> list[RuntimeEventRecord]:
+    return [
+        event
+        for event in state.runtime_store.list_events(turn.session_id)
+        if event.turn_id == turn.turn_id and event.event_type == "runtime.turn.queued"
+    ][:1]
+
+
 def _record_turn_started(state: PlatformState, *, session_id: str, turn_id: str, provider_id: str) -> RuntimeEventRecord:
     event = record_runtime_event(
         state.runtime_store,
@@ -104,6 +144,67 @@ def _record_turn_started(state: PlatformState, *, session_id: str, turn_id: str,
         now=event.created_at,
     )
     return event
+
+
+def _record_turn_worker_started(state: PlatformState, *, session_id: str, turn_id: str, provider_id: str) -> RuntimeEventRecord:
+    return record_runtime_event(
+        state.runtime_store,
+        event_id=str(uuid4()),
+        session_id=session_id,
+        turn_id=turn_id,
+        plane="turn",
+        event_type="runtime.turn.worker_started",
+        payload={"provider_id": provider_id},
+        event_bus=state.runtime_event_bus,
+    )
+
+
+def _record_provider_dispatching(
+    state: PlatformState,
+    *,
+    session_id: str,
+    turn_id: str,
+    provider_id: str,
+    runtime_mode: str,
+) -> RuntimeEventRecord:
+    return record_runtime_event(
+        state.runtime_store,
+        event_id=str(uuid4()),
+        session_id=session_id,
+        turn_id=turn_id,
+        plane="turn",
+        event_type="runtime.provider.dispatching",
+        payload={"provider_id": provider_id, "runtime_mode": runtime_mode},
+        event_bus=state.runtime_event_bus,
+    )
+
+
+def _record_provider_accepted(
+    state: PlatformState,
+    *,
+    session_id: str,
+    turn_id: str,
+    provider_id: str,
+    runtime_mode: str,
+    elapsed_ms: float | None = None,
+    metadata: dict[str, object] | None = None,
+) -> RuntimeEventRecord:
+    payload: dict[str, object] = {"provider_id": provider_id, "runtime_mode": runtime_mode}
+    if elapsed_ms is not None:
+        payload["elapsed_ms"] = round(elapsed_ms, 3)
+    for key, value in (metadata or {}).items():
+        if key in {"provider_thread_id", "provider_turn_id", "model_id", "status_code", "source"} and value is not None and value != "":
+            payload[key] = value
+    return record_runtime_event(
+        state.runtime_store,
+        event_id=str(uuid4()),
+        session_id=session_id,
+        turn_id=turn_id,
+        plane="turn",
+        event_type="runtime.provider.accepted",
+        payload=payload,
+        event_bus=state.runtime_event_bus,
+    )
 
 
 

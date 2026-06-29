@@ -8,7 +8,7 @@ import time
 from urllib.parse import parse_qs
 from uuid import uuid4
 
-from core.api.app_reference_payloads import materialize_runtime_app_references
+from core.api.app_reference_payloads import materialize_runtime_app_references, validate_runtime_app_references
 from core.api.http import StartResponse, json_response, read_json_body, status_line
 from core.api.platform_state import PlatformState
 from core.api.provider_api import workspace_provider_status
@@ -46,7 +46,7 @@ from core.runtime.service import (
 )
 from core.runtime.runtime_events import RuntimeEventRecord
 from core.runtime.runtime_session import RuntimeSessionRecord, runtime_session_allows_user_thread
-from core.runtime.plain_hosted_text import HOSTED_TEXT_RUNTIME_PROVIDER_ID, runtime_session_is_plain_hosted_chat
+from core.runtime.plain_hosted_text import HOSTED_TEXT_RUNTIME_PROVIDER_ID, queue_provider_id_for_session, runtime_session_is_plain_hosted_chat
 from core.runtime.runtime_turns import RuntimeTurnRecord
 from core.runtime.turn_submission import (
     interrupt_runtime_provider_turn,
@@ -102,7 +102,6 @@ def _publish_thread_change(
 ) -> None:
     payload = {
         "action": action,
-        **_threads_payload(state, workspace_id=workspace_id),
     }
     if thread is not None:
         payload["thread"] = thread_payload(thread)
@@ -134,6 +133,96 @@ def _resolved_provider_id(state: PlatformState, session: RuntimeSessionRecord) -
     except ProviderError:
         return None
     return provider.provider_id
+
+
+def _response_provider_id(session: RuntimeSessionRecord, events: list[RuntimeEventRecord] | None = None) -> str | None:
+    if session.provider_id:
+        return session.provider_id
+    for event in events or []:
+        provider_id = event.payload.get("provider_id") if isinstance(event.payload, dict) else None
+        if isinstance(provider_id, str) and provider_id.strip():
+            return provider_id.strip()
+    return queue_provider_id_for_session(session)
+
+
+def _turn_for_client_message(
+    state: PlatformState,
+    *,
+    workspace_id: str,
+    client_message_id: str | None,
+    session_id: str | None = None,
+) -> RuntimeTurnRecord | None:
+    normalized_client_message_id = client_message_id.strip() if isinstance(client_message_id, str) else ""
+    if not normalized_client_message_id:
+        return None
+    find_turn = getattr(state.runtime_store, "find_turn_by_client_message_id", None)
+    if not callable(find_turn):
+        return None
+    return find_turn(
+        workspace_id=workspace_id,
+        session_id=session_id,
+        client_message_id=normalized_client_message_id,
+    )
+
+
+def _turn_response_events(state: PlatformState, turn: RuntimeTurnRecord) -> list[RuntimeEventRecord]:
+    return [
+        event
+        for event in state.runtime_store.list_events(turn.session_id)
+        if event.turn_id == turn.turn_id and event.event_type == "runtime.turn.queued"
+    ][:1]
+
+
+def _runtime_turn_response_payload(
+    state: PlatformState,
+    context: RequestSession,
+    *,
+    session: RuntimeSessionRecord,
+    turn: RuntimeTurnRecord,
+    events: list[RuntimeEventRecord],
+) -> dict[str, object]:
+    thread = find_runtime_thread_by_session(
+        state.runtime_store,
+        workspace_id=session.workspace_id,
+        runtime_session_id=session.session_id,
+    )
+    payload = {
+        "session": _session_payload(session, provider_id=_response_provider_id(session, events)),
+        "turn": _turn_payload(turn),
+        "events": [_event_payload(event) for event in events],
+    }
+    if thread is not None:
+        payload["thread"] = thread_payload(thread, viewer_user_id=context.user.user_id)
+    return payload
+
+
+def _idempotent_runtime_turn_response(
+    state: PlatformState,
+    context: RequestSession,
+    turn: RuntimeTurnRecord,
+    start_response: StartResponse,
+) -> list[bytes]:
+    try:
+        session = state.runtime_store.get_session(turn.session_id)
+    except RuntimeSessionNotFoundError:
+        return json_response(start_response, {"error": "runtime_session_not_found"}, status="404 Not Found")
+    except ValueError:
+        return _hidden_runtime_session_response(start_response, runtime_session_id=turn.session_id, thread_visibility="invalid")
+    if session.workspace_id != context.workspace_id:
+        return json_response(start_response, {"error": "runtime_session_not_found"}, status="404 Not Found")
+    if not runtime_session_allows_user_thread(session):
+        return _hidden_runtime_session_response(start_response, session)
+    return json_response(
+        start_response,
+        _runtime_turn_response_payload(
+            state,
+            context,
+            session=session,
+            turn=turn,
+            events=_turn_response_events(state, turn),
+        ),
+        status="200 OK",
+    )
 
 
 def _hidden_runtime_session_response(
@@ -304,6 +393,15 @@ def _handle_session_collection(state: PlatformState, context: RequestSession, me
         routing_profile_error = _routing_profile_error(body)
         if routing_profile_error is not None:
             return json_response(start_response, {"error": routing_profile_error}, status="400 Bad Request")
+        client_message_id = str(body.get("client_message_id") or "").strip() or None
+        if _runtime_turn_requested(body):
+            existing_turn = _turn_for_client_message(
+                state,
+                workspace_id=context.workspace_id,
+                client_message_id=client_message_id,
+            )
+            if existing_turn is not None:
+                return _idempotent_runtime_turn_response(state, context, existing_turn, start_response)
         try:
             session = _create_session(state, context, body, agent_id=agent_id, start_path=start_path)
         except AuthorizationError as error:
@@ -712,6 +810,14 @@ def _submit_runtime_turn_response(
     if routing_profile_error is not None:
         return json_response(start_response, {"error": routing_profile_error}, status="400 Bad Request")
     client_message_id = str(body.get("client_message_id") or "").strip() or None
+    existing_turn = _turn_for_client_message(
+        state,
+        workspace_id=session.workspace_id,
+        session_id=session.session_id,
+        client_message_id=client_message_id,
+    )
+    if existing_turn is not None:
+        return _idempotent_runtime_turn_response(state, context, existing_turn, start_response)
     attachments = body.get("attachments") if isinstance(body.get("attachments"), list) else []
     attachment_items = [item for item in attachments if isinstance(item, dict)]
     input_text = str(body.get("input_text") or body.get("message") or "").strip()
@@ -723,13 +829,21 @@ def _submit_runtime_turn_response(
             return json_response(start_response, {"error": "plain_hosted_chat_blocks_skills"}, status="400 Bad Request")
         if app_references:
             return json_response(start_response, {"error": "plain_hosted_chat_blocks_app_references"}, status="400 Bad Request")
-    app_reference_items = materialize_runtime_app_references(
+    app_reference_items = validate_runtime_app_references(
         state,
         context=context,
         references=[item for item in app_references if isinstance(item, dict)],
         start_path=start_path,
     )
     async_requested = bool(body.get("async"))
+
+    def materialize_app_references(references: list[dict[str, object]]) -> list[dict[str, object]]:
+        return materialize_runtime_app_references(
+            state,
+            context=context,
+            references=references,
+            start_path=start_path,
+        )
 
     def notify_source_app_queued(queued_turn: RuntimeTurnRecord, _events: list[RuntimeEventRecord]) -> None:
         dispatch_source_app_runtime_event(
@@ -749,6 +863,7 @@ def _submit_runtime_turn_response(
                 client_message_id=client_message_id,
                 attachments=attachment_items,
                 app_references=app_reference_items,
+                app_reference_materializer=materialize_app_references if app_reference_items else None,
                 on_queued=notify_source_app_queued,
             )
             status = "202 Accepted"
@@ -760,6 +875,7 @@ def _submit_runtime_turn_response(
                 client_message_id=client_message_id,
                 attachments=attachment_items,
                 app_references=app_reference_items,
+                app_reference_materializer=materialize_app_references if app_reference_items else None,
                 on_queued=notify_source_app_queued,
             )
             status = status_line(201)
@@ -770,21 +886,15 @@ def _submit_runtime_turn_response(
             status="409 Conflict",
         )
     response_session = state.runtime_store.get_session(session.session_id)
-    thread = find_runtime_thread_by_session(
-        state.runtime_store,
-        workspace_id=session.workspace_id,
-        runtime_session_id=session.session_id,
-    )
-    payload = {
-        "session": _session_payload(response_session, provider_id=_resolved_provider_id(state, response_session)),
-        "turn": _turn_payload(turn),
-        "events": [_event_payload(event) for event in events],
-    }
-    if thread is not None:
-        payload["thread"] = thread_payload(thread, viewer_user_id=context.user.user_id)
     return json_response(
         start_response,
-        payload,
+        _runtime_turn_response_payload(
+            state,
+            context,
+            session=response_session,
+            turn=turn,
+            events=events,
+        ),
         status=status,
     )
 

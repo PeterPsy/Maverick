@@ -344,6 +344,119 @@ class RuntimeLifecycleTestCase(unittest.TestCase):
     def test_runtime_app_output_keeps_full_provider_text_when_stream_was_duplicate(self) -> None:
         self.assertEqual(_complete_output_text("hello from codex", "hello from codex"), "hello from codex")
 
+    def test_async_turn_submit_queues_before_provider_resolution_and_reuses_client_message_id(self) -> None:
+        store = self.make_store()
+        repo_root = self.make_repo_root()
+        session = create_runtime_session(
+            store,
+            session_id="sess-fast-ack",
+            workspace_id="acme",
+            agent_id="agent-1",
+            start_path=repo_root,
+        )
+        created_threads: list[object] = []
+
+        class DeferredThread:
+            def __init__(self, *, target, name, daemon) -> None:
+                self.target = target
+                created_threads.append(self)
+
+            def start(self) -> None:
+                return None
+
+        resolve_backend = Mock(return_value=(SimpleNamespace(provider_id="fake-provider"), None, SimpleNamespace()))
+        worker_globals = submit_runtime_turn_async.__globals__
+        with patch.dict(worker_globals, {"Thread": DeferredThread, "resolve_runtime_backend_for_session": resolve_backend}), patch(
+            "core.runtime.turn_submission_service_output.schedule_runtime_thread_title_generation"
+        ):
+            first_turn, first_events = submit_runtime_turn_async(
+                SimpleNamespace(
+                    runtime_store=store,
+                    provider_store=SimpleNamespace(),
+                    runtime_event_bus=None,
+                    runtime_thread_event_bus=None,
+                ),
+                session=session,
+                input_text="fast ack",
+                client_message_id="client-fast-ack",
+            )
+            second_turn, second_events = submit_runtime_turn_async(
+                SimpleNamespace(
+                    runtime_store=store,
+                    provider_store=SimpleNamespace(),
+                    runtime_event_bus=None,
+                    runtime_thread_event_bus=None,
+                ),
+                session=session,
+                input_text="fast ack retry",
+                client_message_id="client-fast-ack",
+            )
+
+        resolve_backend.assert_not_called()
+        self.assertEqual(first_turn.turn_id, second_turn.turn_id)
+        self.assertEqual(first_turn.client_message_id, "client-fast-ack")
+        self.assertEqual(len(created_threads), 1)
+        self.assertEqual(first_events[0].event_type, "runtime.turn.queued")
+        self.assertEqual(second_events[0].event_type, "runtime.turn.queued")
+        self.assertEqual(first_events[0].payload["provider_id"], "codex")
+
+    def test_async_turn_records_worker_and_provider_dispatch_lifecycle(self) -> None:
+        store = self.make_store()
+        repo_root = self.make_repo_root()
+        session = create_runtime_session(
+            store,
+            session_id="sess-provider-lifecycle",
+            workspace_id="acme",
+            agent_id="agent-1",
+            start_path=repo_root,
+        )
+
+        class ImmediateThread:
+            def __init__(self, *, target, name, daemon) -> None:
+                self.target = target
+
+            def start(self) -> None:
+                self.target()
+
+        def fake_execute_runtime_turn(**kwargs):
+            kwargs["on_provider_accepted"]({"provider_thread_id": "thread-provider", "provider_turn_id": "turn-provider"})
+            return SimpleNamespace(output_text="", exit_code=0)
+
+        worker_globals = submit_runtime_turn_async.__globals__
+        with patch.dict(
+            worker_globals,
+            {
+                "Thread": ImmediateThread,
+                "resolve_runtime_backend_for_session": Mock(
+                    return_value=(SimpleNamespace(provider_id="fake-provider"), None, SimpleNamespace())
+                ),
+                "_build_launch_spec_for_execution": Mock(return_value=SimpleNamespace()),
+                "execute_runtime_turn": fake_execute_runtime_turn,
+                "release_idle_runtime_processes": Mock(return_value=0),
+            },
+        ), patch("core.runtime.turn_submission_service_output.schedule_runtime_thread_title_generation"):
+            turn, _events = submit_runtime_turn_async(
+                SimpleNamespace(
+                    runtime_store=store,
+                    provider_store=SimpleNamespace(),
+                    runtime_event_bus=None,
+                    runtime_thread_event_bus=None,
+                    repository_root=repo_root,
+                ),
+                session=session,
+                input_text="lifecycle",
+                client_message_id="client-lifecycle",
+            )
+
+        event_types = [event.event_type for event in store.list_events(session.session_id) if event.turn_id == turn.turn_id]
+        self.assertIn("runtime.turn.worker_started", event_types)
+        self.assertIn("runtime.provider.dispatching", event_types)
+        self.assertIn("runtime.provider.accepted", event_types)
+        accepted = next(event for event in store.list_events(session.session_id) if event.event_type == "runtime.provider.accepted")
+        self.assertEqual(accepted.payload["provider_id"], "fake-provider")
+        self.assertEqual(accepted.payload["provider_thread_id"], "thread-provider")
+        self.assertEqual(accepted.payload["provider_turn_id"], "turn-provider")
+
     def test_json_runtime_store_keeps_history_across_bootstrap_instances(self) -> None:
         repo_root = self.make_repo_root()
         now = datetime.now(tz=UTC)

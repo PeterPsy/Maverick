@@ -114,6 +114,7 @@ class HostedTextTransport(Protocol):
         stream: bool,
         timeout_seconds: int | None,
         chunk_sink: Callable[[str], None] | None = None,
+        accepted_sink: Callable[[dict[str, object]], None] | None = None,
     ) -> HostedTextTransportResult:
         ...
 
@@ -126,6 +127,7 @@ class TextGenerationClient(Protocol):
         request: TextGenerationRequest,
         *,
         delta_sink: Callable[[str], None] | None = None,
+        accepted_sink: Callable[[dict[str, object]], None] | None = None,
     ) -> TextGenerationResult:
         ...
 
@@ -160,6 +162,7 @@ class FakeHostedTextTransport:
         stream: bool,
         timeout_seconds: int | None,
         chunk_sink: Callable[[str], None] | None = None,
+        accepted_sink: Callable[[dict[str, object]], None] | None = None,
     ) -> HostedTextTransportResult:
         safe_headers = {
             key: ("<redacted>" if key.lower() in {"authorization", "x-goog-api-key"} else value)
@@ -178,6 +181,8 @@ class FakeHostedTextTransport:
             return HostedTextTransportResult(status_code=0, timed_out=True, error=self.error)
         if self.status_code >= 400:
             return HostedTextTransportResult(status_code=self.status_code, payload=self.payload, error=self.error)
+        if accepted_sink is not None:
+            accepted_sink({"status_code": self.status_code})
         if stream and self.chunks:
             if chunk_sink is not None:
                 for chunk in self.chunks:
@@ -207,11 +212,14 @@ class OpenAICompatibleHttpTransport:
         stream: bool,
         timeout_seconds: int | None,
         chunk_sink: Callable[[str], None] | None = None,
+        accepted_sink: Callable[[dict[str, object]], None] | None = None,
     ) -> HostedTextTransportResult:
         body = json.dumps(payload).encode("utf-8")
         req = urllib_request.Request(endpoint_url, data=body, headers=headers, method="POST")
         try:
             with urllib_request.urlopen(req, timeout=timeout_seconds) as response:
+                if accepted_sink is not None:
+                    accepted_sink({"status_code": response.status})
                 if stream:
                     chunks: list[str] = []
                     for chunk in _iter_openai_sse_chunks(response):
@@ -247,6 +255,7 @@ class GoogleAIStudioHttpTransport(OpenAICompatibleHttpTransport):
         stream: bool,
         timeout_seconds: int | None,
         chunk_sink: Callable[[str], None] | None = None,
+        accepted_sink: Callable[[dict[str, object]], None] | None = None,
     ) -> HostedTextTransportResult:
         if not stream:
             return super().send(
@@ -256,11 +265,14 @@ class GoogleAIStudioHttpTransport(OpenAICompatibleHttpTransport):
                 stream=stream,
                 timeout_seconds=timeout_seconds,
                 chunk_sink=chunk_sink,
+                accepted_sink=accepted_sink,
             )
         body = json.dumps(payload).encode("utf-8")
         req = urllib_request.Request(endpoint_url, data=body, headers=headers, method="POST")
         try:
             with urllib_request.urlopen(req, timeout=timeout_seconds) as response:
+                if accepted_sink is not None:
+                    accepted_sink({"status_code": response.status})
                 chunks: list[str] = []
                 for chunk in _iter_gemini_sse_chunks(response):
                     chunks.append(chunk)
@@ -301,6 +313,7 @@ class OpenAICompatibleTextGenerationClient:
         request: TextGenerationRequest,
         *,
         delta_sink: Callable[[str], None] | None = None,
+        accepted_sink: Callable[[dict[str, object]], None] | None = None,
     ) -> TextGenerationResult:
         """Generate text and normalize streaming/non-streaming provider output."""
         _validate_hosted_text_request(request)
@@ -316,6 +329,7 @@ class OpenAICompatibleTextGenerationClient:
             stream=request.stream,
             timeout_seconds=request.timeout_seconds,
             chunk_sink=delta_sink,
+            accepted_sink=accepted_sink,
         )
         if result.timed_out:
             raise HostedTextGenerationError("provider_timeout")
@@ -360,6 +374,7 @@ class GoogleAIStudioTextGenerationClient:
         request: TextGenerationRequest,
         *,
         delta_sink: Callable[[str], None] | None = None,
+        accepted_sink: Callable[[dict[str, object]], None] | None = None,
     ) -> TextGenerationResult:
         """Generate text through Google AI Studio and normalize Gemini responses."""
         _validate_hosted_text_request(request)
@@ -375,6 +390,7 @@ class GoogleAIStudioTextGenerationClient:
             stream=request.stream,
             timeout_seconds=request.timeout_seconds,
             chunk_sink=delta_sink,
+            accepted_sink=accepted_sink,
         )
         if result.timed_out:
             raise HostedTextGenerationError("provider_timeout")
@@ -409,6 +425,7 @@ def execute_hosted_text_generation(
     app_id: str | None = None,
     transport: HostedTextTransport | None = None,
     delta_sink: Callable[[str], None] | None = None,
+    accepted_sink: Callable[[dict[str, object]], None] | None = None,
 ) -> TextGenerationResult:
     """Resolve the authorized API key and execute hosted text generation."""
     if decision.selected_provider_id is None:
@@ -425,7 +442,7 @@ def execute_hosted_text_generation(
         api_key=api_key,
         transport=transport,
     )
-    return client.generate(request, delta_sink=delta_sink)
+    return client.generate(request, delta_sink=delta_sink, accepted_sink=accepted_sink)
 
 
 def _hosted_text_generation_client(

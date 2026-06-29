@@ -41,6 +41,26 @@ Primary core WebSocket routes include:
 - `/ws/runtime/sessions/<session_id>`
 - `/ws/inter-agent/runs/<run_id>`
 
+Runtime turn submission is idempotent when callers provide `client_message_id`.
+Retries with the same client message id return the already persisted turn instead
+of creating a duplicate runtime session or turn. The async submission fast path
+persists `runtime.turn.queued` before provider backend resolution, then records
+the worker and provider handoff through:
+
+- `runtime.turn.worker_started`
+- `runtime.provider.dispatching`
+- `runtime.provider.accepted`
+
+`runtime.provider.accepted` is the core-owned boundary for "work handed to the
+runtime/model"; first model text remains provider-dependent and is represented by
+later output events such as `runtime.output.delta`.
+
+The runtime thread WebSocket sends a full catalog in `runtime.thread.snapshot`.
+Subsequent `runtime.thread.changed` frames may be deltas containing `thread`,
+`deleted_thread_ids`, or `deleted_runtime_session_ids` without a full `threads`
+array. Clients must upsert/remove deltas and keep full replacement support for
+older frames that still include `threads`.
+
 The inter-agent WebSocket serves graph snapshots, bounded replay, history pages,
 live event frames, and heartbeats with server-side visibility filtering.
 

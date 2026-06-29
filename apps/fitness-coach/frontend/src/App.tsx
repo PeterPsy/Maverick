@@ -45,6 +45,7 @@ import {
 import { readBootstrapCache, writeBootstrapCache } from './bootstrapCache';
 import { GradientBarsBackground } from './components/ui/gradient-bars-background';
 import { cachedMediaPlayback, cancelMediaPlayback, clearMediaPlaybackCache, createLocalBlobFallback, driveMediaStreamUrl, initialMediaResolution, latestMediaPlaybackError, mediaCacheKey, preloadMediaPlayback, resolveMediaPlayback, retainMediaPlayback } from './mediaPlaybackResolver';
+import { latestMediaResourceTiming, recordMediaPlaybackMetric } from './mediaPlaybackMetrics';
 import { captureMediaThumbVideoFrame, mediaThumbPreviewFrameKey, readMediaThumbPreviewFrame } from './mediaThumbPreviewCache';
 import { TagsInputField } from './components/ui/tags-input';
 import type { AppBootstrapPayload, Exercise, ExerciseMediaRef, MediaPlaybackResolution, RestBlock, RuntimeSegment, SetupTab, StartWorkoutPayload, ViewState, WorkBlock, Workout, WorkoutBlock, WorkoutRunSummary } from './types';
@@ -1085,6 +1086,7 @@ function ExercisePlayer({ exercise, onClose }: { exercise: Exercise; onClose: ()
           <PlayerMediaLayer
             key={currentResolution.url}
             resolution={currentResolution}
+            mediaKey={mediaKey}
             role="current"
             isLoaded={currentMediaLoaded}
             paused={paused}
@@ -1612,6 +1614,7 @@ function WorkPlayer({ workout, startPromise, onClose, onComplete }: { workout: W
           <PlayerMediaLayer
             key={currentResolution.url}
             resolution={currentResolution}
+            mediaKey={activeWorkMediaKey}
             role="current"
             isLoaded={currentMediaLoaded}
             paused={paused}
@@ -1625,6 +1628,7 @@ function WorkPlayer({ workout, startPromise, onClose, onComplete }: { workout: W
           <PlayerMediaLayer
             key={nextPreviewResolved.url}
             resolution={nextPreviewResolved}
+            mediaKey={nextPreviewMediaKey}
             role="preload"
             isLoaded={nextPreviewMediaLoaded}
             paused
@@ -1698,7 +1702,7 @@ function WorkPlayer({ workout, startPromise, onClose, onComplete }: { workout: W
         </div>
         {nextSegmentPreview ? (
           <section className="player-next-preview" aria-label="Next exercise preview">
-            <NextPreviewMedia resolution={nextPreviewResolved} isLoaded={nextPreviewMediaLoaded} onLoaded={markMediaLoaded} />
+            <NextPreviewMedia resolution={nextPreviewResolved} mediaKey={nextPreviewMediaKey} isLoaded={nextPreviewMediaLoaded} onLoaded={markMediaLoaded} />
             <div className="player-next-preview-copy">
               <strong>{nextSegmentPreview.title}</strong>
               <span>{nextPreviewDescription || 'Next exercise'}</span>
@@ -1750,6 +1754,7 @@ function RestIconImage({ className }: { className: string }) {
 
 function PlayerMediaLayer({
   resolution,
+  mediaKey,
   role,
   isLoaded,
   paused,
@@ -1759,6 +1764,7 @@ function PlayerMediaLayer({
   onError
 }: {
   resolution: MediaPlaybackResolution;
+  mediaKey: string;
   role: 'current' | 'preload';
   isLoaded: boolean;
   paused: boolean;
@@ -1768,6 +1774,18 @@ function PlayerMediaLayer({
   onError?: () => void | Promise<void>;
 }) {
   const className = role === 'preload' ? 'is-preload-layer' : isLoaded ? 'is-frame-ready' : 'is-awaiting-frame';
+  const recordVideoMetric = (event: 'loadeddata' | 'canplay' | 'error', video: HTMLVideoElement) => {
+    recordMediaPlaybackMetric({
+      event: `media.video.${event}`,
+      media_key: mediaKey,
+      role,
+      media_kind: resolution.mediaKind,
+      status: resolution.status,
+      ready_state: video.readyState,
+      network_state: video.networkState,
+      ...latestMediaResourceTiming(resolution.url)
+    });
+  };
   const handleError = () => {
     if (onError) void onError();
   };
@@ -1784,9 +1802,18 @@ function PlayerMediaLayer({
         {...inlineVideoPlaybackProps}
         preload="auto"
         aria-hidden={role === 'preload' ? 'true' : undefined}
-        onLoadedData={(event) => onVideoFrameLoaded(event.currentTarget, resolution.url)}
-        onCanPlay={(event) => onVideoFrameLoaded(event.currentTarget, resolution.url)}
-        onError={handleError}
+        onLoadedData={(event) => {
+          recordVideoMetric('loadeddata', event.currentTarget);
+          onVideoFrameLoaded(event.currentTarget, resolution.url);
+        }}
+        onCanPlay={(event) => {
+          recordVideoMetric('canplay', event.currentTarget);
+          onVideoFrameLoaded(event.currentTarget, resolution.url);
+        }}
+        onError={(event) => {
+          recordVideoMetric('error', event.currentTarget);
+          handleError();
+        }}
       />
     );
   }
@@ -1804,7 +1831,19 @@ function PlayerMediaLayer({
   );
 }
 
-function NextPreviewMedia({ resolution, isLoaded, onLoaded }: { resolution: MediaPlaybackResolution; isLoaded: boolean; onLoaded: (url: string) => void }) {
+function NextPreviewMedia({ resolution, mediaKey, isLoaded, onLoaded }: { resolution: MediaPlaybackResolution; mediaKey: string; isLoaded: boolean; onLoaded: (url: string) => void }) {
+  const recordPreviewVideoMetric = (event: 'loadeddata' | 'canplay' | 'error', video: HTMLVideoElement) => {
+    recordMediaPlaybackMetric({
+      event: `media.video.${event}`,
+      media_key: mediaKey,
+      role: 'preview',
+      media_kind: resolution.mediaKind,
+      status: resolution.status,
+      ready_state: video.readyState,
+      network_state: video.networkState,
+      ...latestMediaResourceTiming(resolution.url)
+    });
+  };
   if (resolution.status === 'ready' && resolution.mediaKind === 'video') {
     return (
       <div className={`player-next-preview-media ${isLoaded ? 'is-ready' : 'is-loading'}`}>
@@ -1817,8 +1856,15 @@ function NextPreviewMedia({ resolution, isLoaded, onLoaded }: { resolution: Medi
           loop
           {...inlineVideoPlaybackProps}
           preload="auto"
-          onLoadedData={() => onLoaded(resolution.url)}
-          onCanPlay={() => onLoaded(resolution.url)}
+          onLoadedData={(event) => {
+            recordPreviewVideoMetric('loadeddata', event.currentTarget);
+            onLoaded(resolution.url);
+          }}
+          onCanPlay={(event) => {
+            recordPreviewVideoMetric('canplay', event.currentTarget);
+            onLoaded(resolution.url);
+          }}
+          onError={(event) => recordPreviewVideoMetric('error', event.currentTarget)}
         />
       </div>
     );

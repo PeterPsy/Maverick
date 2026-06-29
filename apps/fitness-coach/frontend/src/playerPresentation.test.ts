@@ -6,6 +6,7 @@ describe('work player presentation', () => {
   const styles = readFileSync(new URL('./styles.css', import.meta.url), 'utf8');
   const appSource = readFileSync(new URL('./App.tsx', import.meta.url), 'utf8');
   const mediaPlaybackResolverSource = readFileSync(new URL('./mediaPlaybackResolver.ts', import.meta.url), 'utf8');
+  const mediaPlaybackMetricsSource = readFileSync(new URL('./mediaPlaybackMetrics.ts', import.meta.url), 'utf8');
   const gradientBarsSource = readFileSync(new URL('./components/ui/gradient-bars-background.tsx', import.meta.url), 'utf8');
   const restIcon = readFileSync(new URL('../public/rest-icon.svg', import.meta.url), 'utf8');
 
@@ -139,7 +140,7 @@ describe('work player presentation', () => {
     expect(appSource).toContain('const [nextPreviewResolution, setNextPreviewResolution] = useState(initialMediaResolution());');
     expect(appSource).toContain('const nextPreviewCandidate = nextWorkSegment(segments, index);');
     expect(appSource).toContain("className=\"player-next-preview\"");
-    expect(appSource).toContain('<NextPreviewMedia resolution={nextPreviewResolved} isLoaded={nextPreviewMediaLoaded} onLoaded={markMediaLoaded} />');
+    expect(appSource).toContain('<NextPreviewMedia resolution={nextPreviewResolved} mediaKey={nextPreviewMediaKey} isLoaded={nextPreviewMediaLoaded} onLoaded={markMediaLoaded} />');
     expect(appSource).toContain('function NextPreviewMedia');
     expect(appSource).toContain('className="player-next-preview-media is-loading"');
     expect(appSource).toContain('className="player-next-preview-skeleton"');
@@ -180,6 +181,21 @@ describe('work player presentation', () => {
     expect(styles).toContain('.player-media-backdrop.is-frame-wait');
     expect(styles).toContain('.player-media .is-awaiting-frame');
     expect(styles).toContain('.player-media .is-preload-layer');
+  });
+
+  it('records lightweight media timings without exposing raw media URLs', () => {
+    expect(appSource).toContain("event: `media.video.${event}`");
+    expect(appSource).toContain('latestMediaResourceTiming(resolution.url)');
+    expect(appSource).toContain('media_key: mediaKey');
+    expect(mediaPlaybackResolverSource).toContain("event: 'media.resolve'");
+    expect(mediaPlaybackResolverSource).toContain("event: 'media.asset_preload'");
+    expect(mediaPlaybackResolverSource).toContain("event: 'storage.file_info'");
+    expect(mediaPlaybackResolverSource).toContain("'storage.file.localize_status'");
+    expect(mediaPlaybackResolverSource).toContain("'storage.file.localize'");
+    expect(mediaPlaybackResolverSource).toContain("event: 'storage.file.content.read'");
+    expect(mediaPlaybackMetricsSource).toContain('__fitnessCoachMediaMetrics');
+    expect(mediaPlaybackMetricsSource).toContain("console.debug('[fitness-coach:media]', entry)");
+    expect(mediaPlaybackMetricsSource).not.toContain('console.debug(url');
   });
 
   it('shows the next exercise preview during the final five seconds of timed work blocks', () => {

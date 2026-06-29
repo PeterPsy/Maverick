@@ -1,4 +1,5 @@
 import { callStorageBackend, currentStorageAppId } from './api';
+import { elapsedMediaMetricMs, mediaMetricNow, recordMediaPlaybackMetric } from './mediaPlaybackMetrics';
 import type { ExerciseMediaRef, MediaPlaybackResolution } from './types';
 
 const LOCAL_BLOB_FALLBACK_MAX_BYTES = 25 * 1024 * 1024;
@@ -25,6 +26,7 @@ const driveWarmupCache = new Map<string, WarmupEntry>();
 const driveWarmupErrors = new Map<string, string>();
 const driveWarmupReady = new Set<string>();
 const mediaAssetPreloadCache = new Map<string, AssetPreloadEntry>();
+const storageFileInfoMetricCache = new Map<string, Promise<void>>();
 
 export function initialMediaResolution(): MediaPlaybackResolution {
   return { status: 'idle', url: '', mediaKind: 'none', detail: '' };
@@ -41,16 +43,41 @@ export async function resolveMediaPlayback(media: ExerciseMediaRef | null, stora
   const cached = mediaPlaybackCache.get(key);
   if (cached) {
     refreshCachedDriveWarmup(media, storageAppId, cached);
+    recordMediaPlaybackMetric({
+      event: 'media.resolve.cache_hit',
+      media_key: key,
+      provider: media.kind,
+      media_kind: media.preview_kind,
+      status: cached.resolution?.status || 'pending'
+    });
     return cached.promise;
   }
+  const startedAt = mediaMetricNow();
   const controller = typeof AbortController === 'undefined' ? null : new AbortController();
   const entry: CacheEntry = {
     controller,
     promise: resolveMediaPlaybackUncached(media, storageAppId, controller?.signal).then((resolution) => {
       entry.resolution = resolution;
+      recordMediaPlaybackMetric({
+        event: 'media.resolve',
+        media_key: key,
+        provider: media.kind,
+        media_kind: media.preview_kind,
+        status: resolution.status,
+        duration_ms: elapsedMediaMetricMs(startedAt)
+      });
       return resolution;
     }).catch((error) => {
       mediaPlaybackCache.delete(key);
+      recordMediaPlaybackMetric({
+        event: 'media.resolve',
+        media_key: key,
+        provider: media.kind,
+        media_kind: media.preview_kind,
+        status: error instanceof Error && error.name === 'AbortError' ? 'aborted' : 'error',
+        duration_ms: elapsedMediaMetricMs(startedAt),
+        detail: error instanceof Error ? error.message : 'Storage media could not be resolved.'
+      });
       if (error instanceof Error && error.name === 'AbortError') {
         return { status: 'blocked', url: '', mediaKind: 'none', detail: 'Media resolution was canceled.' };
       }
@@ -80,9 +107,20 @@ export async function preloadMediaPlayback(media: ExerciseMediaRef | null, stora
     return { status: 'blocked', url: '', mediaKind: 'none', detail: 'This segment has no playable Storage media.' };
   }
   const key = mediaCacheKey(media, storageAppId, 'asset-preload');
+  const streamKey = mediaCacheKey(media, storageAppId, 'stream');
   const cached = mediaAssetPreloadCache.get(key);
-  if (cached) return cached.promise;
+  if (cached) {
+    recordMediaPlaybackMetric({
+      event: 'media.asset_preload.cache_hit',
+      media_key: streamKey,
+      provider: media.kind,
+      media_kind: media.preview_kind,
+      status: cached.resolution?.status || 'pending'
+    });
+    return cached.promise;
+  }
 
+  const startedAt = mediaMetricNow();
   const entry: AssetPreloadEntry = {
     element: null,
     promise: Promise.resolve(initialMediaResolution())
@@ -92,9 +130,26 @@ export async function preloadMediaPlayback(media: ExerciseMediaRef | null, stora
       await preloadResolvedMedia(resolution, entry);
     }
     entry.resolution = resolution;
+    recordMediaPlaybackMetric({
+      event: 'media.asset_preload',
+      media_key: streamKey,
+      provider: media.kind,
+      media_kind: media.preview_kind,
+      status: resolution.status,
+      duration_ms: elapsedMediaMetricMs(startedAt)
+    });
     return resolution;
   }).catch((error) => {
     mediaAssetPreloadCache.delete(key);
+    recordMediaPlaybackMetric({
+      event: 'media.asset_preload',
+      media_key: streamKey,
+      provider: media.kind,
+      media_kind: media.preview_kind,
+      status: 'error',
+      duration_ms: elapsedMediaMetricMs(startedAt),
+      detail: error instanceof Error ? error.message : 'Storage media could not be preloaded.'
+    });
     return {
       status: 'error',
       url: '',
@@ -160,6 +215,7 @@ function preloadVideo(url: string, entry: AssetPreloadEntry): Promise<void> {
 }
 
 async function resolveMediaPlaybackUncached(media: ExerciseMediaRef, storageAppId: string, signal?: AbortSignal): Promise<MediaPlaybackResolution> {
+  void warmStorageFileInfoMetric(media, storageAppId, signal);
   if (media.kind === 'local_file') {
     if (!media.file_id) {
       return { status: 'blocked', url: '', mediaKind: 'none', detail: 'Local media needs a stable Storage file_id.' };
@@ -221,11 +277,34 @@ export async function createLocalBlobFallback(media: ExerciseMediaRef, storageAp
 }
 
 async function createLocalBlobFallbackUncached(media: Extract<ExerciseMediaRef, { kind: 'local_file' }>, storageAppId: string, signal?: AbortSignal): Promise<MediaPlaybackResolution> {
-  const payload = await callStorageBackend<{ content_base64: string; file?: { content_type?: string } }>(
-    { action: 'file.content.read', workspace_relative_path: media.workspace_relative_path, max_bytes: LOCAL_BLOB_FALLBACK_MAX_BYTES },
-    storageAppId,
-    { signal }
-  );
+  const startedAt = mediaMetricNow();
+  let payload: { content_base64: string; file?: { content_type?: string } };
+  try {
+    payload = await callStorageBackend<{ content_base64: string; file?: { content_type?: string } }>(
+      { action: 'file.content.read', workspace_relative_path: media.workspace_relative_path, max_bytes: LOCAL_BLOB_FALLBACK_MAX_BYTES },
+      storageAppId,
+      { signal }
+    );
+    recordMediaPlaybackMetric({
+      event: 'storage.file.content.read',
+      media_key: mediaCacheKey(media, storageAppId, 'stream'),
+      provider: media.kind,
+      media_kind: media.preview_kind,
+      status: 'ready',
+      duration_ms: elapsedMediaMetricMs(startedAt)
+    });
+  } catch (error) {
+    recordMediaPlaybackMetric({
+      event: 'storage.file.content.read',
+      media_key: mediaCacheKey(media, storageAppId, 'stream'),
+      provider: media.kind,
+      media_kind: media.preview_kind,
+      status: error instanceof Error && error.name === 'AbortError' ? 'aborted' : 'error',
+      duration_ms: elapsedMediaMetricMs(startedAt),
+      detail: error instanceof Error ? error.message : 'Storage fallback could not be loaded.'
+    });
+    throw error;
+  }
   const binary = Uint8Array.from(atob(payload.content_base64), (char) => char.charCodeAt(0));
   const blob = new Blob([binary], { type: payload.file?.content_type || media.content_type || 'application/octet-stream' });
   const url = URL.createObjectURL(blob);
@@ -268,17 +347,108 @@ function warmDriveLocalization(media: Extract<ExerciseMediaRef, { kind: 'drive_f
 
 async function warmDriveLocalizationUncached(media: Extract<ExerciseMediaRef, { kind: 'drive_file' }>, storageAppId: string, signal?: AbortSignal): Promise<MediaPlaybackResolution | null> {
   const body = driveLocalizationBody(media);
-  const statusPayload = await callStorageBackend<DriveLocalizationPayload>(
+  const statusPayload = await callTimedDriveBackend<DriveLocalizationPayload>(
     { ...body, action: 'file.localize_status' },
     storageAppId,
-    { signal }
+    signal,
+    media,
+    'storage.file.localize_status'
   );
   const statusResolution = driveLocalizationResolution(statusPayload, media, storageAppId);
   if (statusResolution?.status === 'ready' || statusResolution?.status === 'error') return statusResolution;
-  const status = String(statusPayload.localization?.status || statusPayload.status || '');
+  const status = driveLocalizationStatus(statusPayload);
   if (status === 'ready' || status === 'localized') return statusResolution;
-  const localizePayload = await callStorageBackend<DriveLocalizationPayload>({ ...body, action: 'file.localize' }, storageAppId, { signal });
+  const localizePayload = await callTimedDriveBackend<DriveLocalizationPayload>(
+    { ...body, action: 'file.localize' },
+    storageAppId,
+    signal,
+    media,
+    'storage.file.localize'
+  );
   return driveLocalizationResolution(localizePayload, media, storageAppId);
+}
+
+type StorageFileInfoPayload = {
+  file?: {
+    provider?: string;
+    preview_kind?: string;
+  };
+};
+
+function warmStorageFileInfoMetric(media: ExerciseMediaRef, storageAppId: string, signal?: AbortSignal) {
+  const key = mediaCacheKey(media, storageAppId, 'file-info');
+  if (storageFileInfoMetricCache.has(key)) return storageFileInfoMetricCache.get(key);
+
+  const startedAt = mediaMetricNow();
+  const promise = callStorageBackend<StorageFileInfoPayload>(storageFileInfoBody(media), storageAppId, { signal }).then((payload) => {
+    recordMediaPlaybackMetric({
+      event: 'storage.file_info',
+      media_key: mediaCacheKey(media, storageAppId, 'stream'),
+      provider: media.kind,
+      media_kind: payload.file?.preview_kind || media.preview_kind,
+      status: 'ready',
+      duration_ms: elapsedMediaMetricMs(startedAt)
+    });
+  }).catch((error) => {
+    if (error instanceof Error && error.name === 'AbortError') {
+      storageFileInfoMetricCache.delete(key);
+    }
+    recordMediaPlaybackMetric({
+      event: 'storage.file_info',
+      media_key: mediaCacheKey(media, storageAppId, 'stream'),
+      provider: media.kind,
+      media_kind: media.preview_kind,
+      status: error instanceof Error && error.name === 'AbortError' ? 'aborted' : 'error',
+      duration_ms: elapsedMediaMetricMs(startedAt),
+      detail: error instanceof Error ? error.message : 'Storage file_info failed.'
+    });
+  });
+  storageFileInfoMetricCache.set(key, promise);
+  return promise;
+}
+
+function storageFileInfoBody(media: ExerciseMediaRef) {
+  if (media.kind === 'local_file') {
+    if (media.file_id) return { action: 'file_info', file_id: media.file_id };
+    return { action: 'file_info', workspace_relative_path: media.workspace_relative_path };
+  }
+  return { action: 'file_info', file_id: media.stable_storage_file_id };
+}
+
+async function callTimedDriveBackend<T extends DriveLocalizationPayload>(
+  body: Record<string, unknown>,
+  storageAppId: string,
+  signal: AbortSignal | undefined,
+  media: Extract<ExerciseMediaRef, { kind: 'drive_file' }>,
+  event: string
+): Promise<T> {
+  const startedAt = mediaMetricNow();
+  try {
+    const payload = await callStorageBackend<T>(body, storageAppId, { signal });
+    const status = driveLocalizationStatus(payload);
+    recordMediaPlaybackMetric({
+      event,
+      media_key: mediaCacheKey(media, storageAppId, 'stream'),
+      provider: media.kind,
+      media_kind: media.preview_kind,
+      status,
+      drive_cache_status: driveLocalizationCacheStatus(payload),
+      duration_ms: elapsedMediaMetricMs(startedAt)
+    });
+    return payload;
+  } catch (error) {
+    recordMediaPlaybackMetric({
+      event,
+      media_key: mediaCacheKey(media, storageAppId, 'stream'),
+      provider: media.kind,
+      media_kind: media.preview_kind,
+      status: error instanceof Error && error.name === 'AbortError' ? 'aborted' : 'error',
+      drive_cache_status: 'error',
+      duration_ms: elapsedMediaMetricMs(startedAt),
+      detail: error instanceof Error ? error.message : 'Storage Drive request failed.'
+    });
+    throw error;
+  }
 }
 
 export function driveMediaStreamUrl(media: Extract<ExerciseMediaRef, { kind: 'drive_file' }>, storageAppId = currentStorageAppId()) {
@@ -359,6 +529,7 @@ export function clearMediaPlaybackCache() {
   driveWarmupCache.clear();
   driveWarmupErrors.clear();
   driveWarmupReady.clear();
+  storageFileInfoMetricCache.clear();
   mediaAssetPreloadCache.forEach((entry) => disposeAssetPreload(entry));
   mediaAssetPreloadCache.clear();
 }
@@ -378,11 +549,12 @@ type DriveLocalizationPayload = {
     error?: string;
     can_retry?: boolean;
     can_cancel?: boolean;
+    cache_hit?: boolean;
   };
 };
 
 function driveLocalizationResolution(payload: DriveLocalizationPayload, media: Extract<ExerciseMediaRef, { kind: 'drive_file' }>, storageAppId: string): MediaPlaybackResolution | null {
-  const status = String(payload.localization?.status || payload.status || '');
+  const status = driveLocalizationStatus(payload);
   const detail = String(payload.localization?.detail || payload.detail || payload.localization?.error || payload.error || '');
   if (payload.stream_url || status === 'ready' || status === 'localized') {
     return { status: 'ready', url: driveMediaStreamUrl(media, storageAppId), mediaKind: media.preview_kind, detail: '' };
@@ -408,6 +580,18 @@ function driveLocalizationResolution(payload: DriveLocalizationPayload, media: E
     };
   }
   return null;
+}
+
+function driveLocalizationStatus(payload: DriveLocalizationPayload): string {
+  return String(payload.localization?.status || payload.status || 'unknown');
+}
+
+function driveLocalizationCacheStatus(payload: DriveLocalizationPayload): string {
+  const status = driveLocalizationStatus(payload);
+  if (typeof payload.localization?.cache_hit === 'boolean') {
+    return payload.localization.cache_hit ? 'hit' : status === 'ready' || status === 'localized' ? 'miss' : status;
+  }
+  return status;
 }
 
 function driveLocalizationBody(media: Extract<ExerciseMediaRef, { kind: 'drive_file' }>) {

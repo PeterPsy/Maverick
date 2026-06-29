@@ -14,6 +14,10 @@ function abortError() {
   return Object.assign(new Error('Aborted'), { name: 'AbortError' });
 }
 
+function storageRequestActions(fetchMock: { mock: { calls: unknown[][] } }) {
+  return fetchMock.mock.calls.map((call) => JSON.parse(String((call[1] as RequestInit | undefined)?.body)).action);
+}
+
 const driveMedia: Extract<ExerciseMediaRef, { kind: 'drive_file' }> = {
   kind: 'drive_file',
   provider: 'google_drive',
@@ -64,7 +68,8 @@ describe('media playback resolver', () => {
     expect(second.url).toBe(first.url);
     expect(first.url).toContain('/api/apps/storage/media?');
     expect(first.url).toContain('stable_storage_file_id=file_drive');
-    expect(fetchMock.mock.calls.map(([, init]) => JSON.parse(String(init?.body)).action)).toEqual([
+    expect(storageRequestActions(fetchMock)).toEqual([
+      'file_info',
       'file.localize_status',
       'file.localize'
     ]);
@@ -90,7 +95,10 @@ describe('media playback resolver', () => {
       canRetry: true
     });
     expect(latestMediaPlaybackError(driveMedia, 'storage')).toBe('Google Drive grant is missing.');
-    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(storageRequestActions(fetchMock)).toEqual([
+      'file_info',
+      'file.localize_status'
+    ]);
   });
 
   it('keeps resolved stream routes cached after inactive media is no longer preloaded', async () => {
@@ -106,7 +114,10 @@ describe('media playback resolver', () => {
     const second = await resolveMediaPlayback(driveMedia, 'storage');
 
     expect(second.url).toBe(first.url);
-    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(storageRequestActions(fetchMock)).toEqual([
+      'file_info',
+      'file.localize_status'
+    ]);
   });
 
   it('dedupes browser preload requests for the next workout media', async () => {
@@ -123,14 +134,18 @@ describe('media playback resolver', () => {
 
     expect(first).toMatchObject({ status: 'ready', mediaKind: 'video' });
     expect(second.url).toBe(first.url);
-    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(storageRequestActions(fetchMock)).toEqual([
+      'file_info',
+      'file.localize_status'
+    ]);
   });
 
   it('restarts aborted Drive warmups when a cached stream route becomes active again', async () => {
-    const requests: AbortSignal[] = [];
+    const requests: Array<{ action: string; signal?: AbortSignal }> = [];
     const fetchMock = vi.fn((_input: RequestInfo | URL, init?: RequestInit) => {
+      const body = JSON.parse(String(init?.body));
       const signal = init?.signal as AbortSignal | undefined;
-      if (signal) requests.push(signal);
+      requests.push({ action: String(body.action), signal });
       return new Promise<Response>((_resolve, reject) => {
         if (signal?.aborted) {
           reject(abortError());
@@ -145,9 +160,11 @@ describe('media playback resolver', () => {
     retainMediaPlayback([], 'storage');
     await resolveMediaPlayback(driveMedia, 'storage');
 
-    expect(fetchMock).toHaveBeenCalledTimes(2);
-    expect(requests[0]?.aborted).toBe(true);
-    expect(requests[1]?.aborted).toBe(false);
+    const warmups = requests.filter((request) => request.action === 'file.localize_status');
+    expect(fetchMock).toHaveBeenCalledTimes(3);
+    expect(warmups).toHaveLength(2);
+    expect(warmups[0]?.signal?.aborted).toBe(true);
+    expect(warmups[1]?.signal?.aborted).toBe(false);
   });
 
   it('aborts Drive warmups outside the retained current and next media', async () => {

@@ -64,6 +64,7 @@ def execute_plain_hosted_text_turn(
     input_text: str,
     attachments: list[dict[str, object]] | None = None,
     event_sink: Callable[[RuntimeExecutionEvent], object] | None = None,
+    on_provider_turn_start_sent: Callable[[dict[str, object]], None] | None = None,
     on_provider_accepted: Callable[[dict[str, object]], None] | None = None,
 ) -> tuple[RuntimeExecutionResult, RoutingDecision]:
     """Execute one plain hosted chat turn through a routed hosted text provider."""
@@ -118,6 +119,7 @@ def execute_plain_hosted_text_turn(
             runtime_session_id=session.session_id,
             transport=_fake_transport_from_environment(),
             delta_sink=_hosted_delta_sink(event_sink, decision=decision),
+            sent_sink=_hosted_provider_sent_sink(on_provider_turn_start_sent, decision=decision),
             accepted_sink=_hosted_provider_accepted_sink(on_provider_accepted, decision=decision),
         )
     except HostedTextGenerationError as error:
@@ -126,6 +128,26 @@ def execute_plain_hosted_text_turn(
             reason_codes=[*decision.reason_codes, error.reason_code],
         ) from error
     return RuntimeExecutionResult(output_text=result.output_text, exit_code=0), decision
+
+
+def _hosted_provider_sent_sink(
+    on_provider_turn_start_sent: Callable[[dict[str, object]], None] | None,
+    *,
+    decision: RoutingDecision,
+) -> Callable[[dict[str, object]], None] | None:
+    if on_provider_turn_start_sent is None:
+        return None
+
+    def sink(metadata: dict[str, object]) -> None:
+        on_provider_turn_start_sent(
+            {
+                **metadata,
+                "provider_id": decision.selected_provider_id or "",
+                "model_id": decision.selected_model_id_or_voice_id or "",
+            }
+        )
+
+    return sink
 
 
 def _hosted_provider_accepted_sink(

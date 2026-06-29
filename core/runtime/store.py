@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from dataclasses import asdict, dataclass, replace
 from datetime import UTC, datetime
+from threading import RLock
 from typing import Any, Protocol
 
 from core.runtime.errors import (
@@ -13,6 +14,7 @@ from core.runtime.errors import (
     RuntimeThreadNotFoundError,
     RuntimeTurnNotFoundError,
 )
+from core.runtime.client_message_claims import RuntimeClientMessageClaim
 from core.runtime.models import RuntimeLocation
 from core.runtime.paths import workspace_runtime_root
 from core.runtime.runtime_events import RuntimeEventRecord
@@ -49,6 +51,9 @@ class DocumentCollection(Protocol):
     def update_one(self, query: dict[str, Any], update: dict[str, Any], *, upsert: bool = False) -> Any:
         ...
 
+    def insert_one_if_absent(self, query: dict[str, Any], document: dict[str, Any]) -> tuple[dict[str, Any], bool]:
+        ...
+
     def delete_one(self, query: dict[str, Any]) -> Any:
         ...
 
@@ -64,6 +69,7 @@ class RuntimeCollections:
     states: DocumentCollection
     threads: DocumentCollection
     api_tokens: DocumentCollection | None = None
+    client_messages: DocumentCollection | None = None
 
 
 class RuntimeStore(Protocol):
@@ -82,6 +88,9 @@ class RuntimeStore(Protocol):
         ...
 
     def save_turn(self, record: RuntimeTurnRecord) -> RuntimeTurnRecord:
+        ...
+
+    def save_turn_if_client_message_absent(self, record: RuntimeTurnRecord) -> tuple[RuntimeTurnRecord, bool]:
         ...
 
     def get_turn(self, turn_id: str) -> RuntimeTurnRecord:
@@ -162,12 +171,34 @@ class RuntimeStore(Protocol):
     def revoke_api_token(self, token_id: str, *, now: datetime | None = None) -> RuntimeApiTokenRecord | None:
         ...
 
+    def claim_client_message_id(
+        self,
+        *,
+        workspace_id: str,
+        client_message_id: str,
+        session_id: str,
+        turn_id: str,
+        now: datetime | None = None,
+    ) -> tuple[RuntimeClientMessageClaim, bool]:
+        ...
+
+    def release_client_message_claim(
+        self,
+        *,
+        workspace_id: str,
+        client_message_id: str,
+        session_id: str,
+        turn_id: str,
+    ) -> bool:
+        ...
+
 
 class RuntimeDocumentStore:
     """Persist runtime-domain records in document-style collections."""
 
     def __init__(self, collections: RuntimeCollections) -> None:
         self.collections = collections
+        self._fallback_lock = RLock()
 
     def save_session(self, record: RuntimeSessionRecord) -> RuntimeSessionRecord:
         self.collections.sessions.update_one({"session_id": record.session_id}, {"$set": asdict(record)}, upsert=True)
@@ -217,6 +248,7 @@ class RuntimeDocumentStore:
             "processes": 0,
             "states": 0,
             "api_tokens": 0,
+            "client_messages": 0,
         }
         deleted["turns"] = _delete_session_records(
             self.collections.turns,
@@ -249,12 +281,31 @@ class RuntimeDocumentStore:
                 workspace_id=workspace_id,
                 identity_field="token_id",
             )
+        if self.collections.client_messages is not None:
+            deleted["client_messages"] = _delete_session_records(
+                self.collections.client_messages,
+                session_id=session_id,
+                workspace_id=workspace_id,
+                identity_field="client_message_id",
+            )
         self.collections.sessions.delete_one({"session_id": session_id})
         return deleted
 
     def save_turn(self, record: RuntimeTurnRecord) -> RuntimeTurnRecord:
         self.collections.turns.update_one({"turn_id": record.turn_id}, {"$set": asdict(record)}, upsert=True)
         return record
+
+    def save_turn_if_client_message_absent(self, record: RuntimeTurnRecord) -> tuple[RuntimeTurnRecord, bool]:
+        normalized_client_message_id = record.client_message_id.strip() if isinstance(record.client_message_id, str) else ""
+        if not normalized_client_message_id:
+            return self.save_turn(record), True
+        query = {
+            "workspace_id": record.workspace_id,
+            "session_id": record.session_id,
+            "client_message_id": normalized_client_message_id,
+        }
+        document, inserted = self._insert_one_if_absent(self.collections.turns, query, asdict(record))
+        return RuntimeTurnRecord(**document), inserted
 
     def get_turn(self, turn_id: str) -> RuntimeTurnRecord:
         document = self.collections.turns.find_one({"turn_id": turn_id})
@@ -283,6 +334,60 @@ class RuntimeDocumentStore:
             query["session_id"] = session_id
         document = self.collections.turns.find_one(query)
         return RuntimeTurnRecord(**document) if document is not None else None
+
+    def claim_client_message_id(
+        self,
+        *,
+        workspace_id: str,
+        client_message_id: str,
+        session_id: str,
+        turn_id: str,
+        now: datetime | None = None,
+    ) -> tuple[RuntimeClientMessageClaim, bool]:
+        normalized_client_message_id = client_message_id.strip()
+        if not workspace_id or not normalized_client_message_id or not session_id or not turn_id:
+            raise ValueError("Runtime client message claims require workspace_id, client_message_id, session_id, and turn_id.")
+        timestamp = now or datetime.now(tz=UTC)
+        claim = RuntimeClientMessageClaim(
+            workspace_id=workspace_id,
+            client_message_id=normalized_client_message_id,
+            session_id=session_id,
+            turn_id=turn_id,
+            created_at=timestamp,
+            updated_at=timestamp,
+        )
+        collection = self.collections.client_messages
+        if collection is None:
+            return claim, True
+        document, inserted = self._insert_one_if_absent(
+            collection,
+            {"workspace_id": workspace_id, "client_message_id": normalized_client_message_id},
+            asdict(claim),
+        )
+        return RuntimeClientMessageClaim(**document), inserted
+
+    def release_client_message_claim(
+        self,
+        *,
+        workspace_id: str,
+        client_message_id: str,
+        session_id: str,
+        turn_id: str,
+    ) -> bool:
+        normalized_client_message_id = client_message_id.strip()
+        collection = self.collections.client_messages
+        if collection is None or not workspace_id or not normalized_client_message_id:
+            return False
+        query = {
+            "workspace_id": workspace_id,
+            "client_message_id": normalized_client_message_id,
+            "session_id": session_id,
+            "turn_id": turn_id,
+        }
+        if collection.find_one(query) is None:
+            return False
+        collection.delete_one(query)
+        return True
 
     def save_event(self, record: RuntimeEventRecord) -> RuntimeEventRecord:
         append_history_upsert = getattr(self.collections.events, "append_history_upsert", None)
@@ -415,6 +520,22 @@ class RuntimeDocumentStore:
             return False
         self.collections.threads.delete_one({"thread_id": thread_id})
         return True
+
+    def _insert_one_if_absent(
+        self,
+        collection: DocumentCollection,
+        query: dict[str, Any],
+        document: dict[str, Any],
+    ) -> tuple[dict[str, Any], bool]:
+        insert_one_if_absent = getattr(collection, "insert_one_if_absent", None)
+        if callable(insert_one_if_absent):
+            return insert_one_if_absent(query, document)
+        with self._fallback_lock:
+            existing = collection.find_one(query)
+            if existing is not None:
+                return existing, False
+            collection.update_one(query, {"$set": document}, upsert=True)
+            return {**query, **document}, True
 
     def _prune_session_events(self, session_id: str) -> None:
         try:

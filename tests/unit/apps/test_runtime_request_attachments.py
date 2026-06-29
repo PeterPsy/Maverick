@@ -10,7 +10,7 @@ import core.apps.runtime_requests as runtime_requests
 import core.runtime.turn_submission_service_runtime as runtime_submission_runtime
 from core.runtime.execution import RuntimeExecutionResult
 from core.runtime.store import RuntimeCollections, RuntimeDocumentStore
-from core.runtime.turn_submission_service_output import _queue_turn_with_event
+from core.runtime.turn_submission_service_queue import _queue_turn_with_event
 from core.workspaces.service import default_workspace_governance
 from tests.support.collections import FakeCollection
 from tests.support.repo import make_temp_repo_root

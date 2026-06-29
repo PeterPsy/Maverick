@@ -39,6 +39,15 @@ class InMemoryCollection:
             if upsert:
                 self._documents.append({**deepcopy(query), **payload})
 
+    def insert_one_if_absent(self, query: dict[str, Any], document: dict[str, Any]) -> tuple[dict[str, Any], bool]:
+        payload = {**deepcopy(query), **deepcopy(document)}
+        with self._lock:
+            for existing in self._documents:
+                if all(existing.get(key) == value for key, value in query.items()):
+                    return deepcopy(existing), False
+            self._documents.append(payload)
+            return deepcopy(payload), True
+
     def delete_one(self, query: dict[str, Any]) -> None:
         with self._lock:
             self._documents = [

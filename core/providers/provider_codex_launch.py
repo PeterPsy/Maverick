@@ -255,6 +255,7 @@ class CodexLaunchMixin:
         event_sink: RuntimeExecutionEventSink | None = None,
         timeout_seconds: int | None = None,
         on_provider_thread_id: Callable[[str], None] | None = None,
+        on_provider_turn_start_sent: Callable[[dict[str, object]], None] | None = None,
         on_provider_accepted: Callable[[dict[str, object]], None] | None = None,
         command_runner=subprocess.Popen,
     ) -> "RuntimeExecutionResult":
@@ -269,6 +270,7 @@ class CodexLaunchMixin:
             event_sink=event_sink,
             timeout_seconds=timeout_seconds,
             on_provider_thread_id=on_provider_thread_id,
+            on_provider_turn_start_sent=on_provider_turn_start_sent,
             on_provider_accepted=on_provider_accepted,
             command_runner=command_runner,
         )

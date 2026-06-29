@@ -174,6 +174,39 @@ def queue_runtime_turn(
     )
 
 
+def queue_runtime_turn_if_client_message_absent(
+    store: RuntimeStore,
+    *,
+    turn_id: str,
+    session_id: str,
+    input_text: str | None = None,
+    client_message_id: str | None = None,
+    now: datetime | None = None,
+) -> tuple[RuntimeTurnRecord, bool]:
+    """Create one queued runtime turn unless the client message was already queued."""
+    timestamp = now or utcnow()
+    session = store.get_session(session_id)
+    record = RuntimeTurnRecord(
+        turn_id=turn_id,
+        session_id=session_id,
+        workspace_id=session.workspace_id,
+        status="queued",
+        input_text=input_text,
+        created_at=timestamp,
+        updated_at=timestamp,
+        started_at=None,
+        completed_at=None,
+        failure_reason=None,
+        runtime_mode=session.runtime_mode,
+        client_message_id=client_message_id.strip() if isinstance(client_message_id, str) and client_message_id.strip() else None,
+    )
+    save_once = getattr(store, "save_turn_if_client_message_absent", None)
+    if callable(save_once):
+        return save_once(record)
+    store.save_turn(record)
+    return record, True
+
+
 
 def transition_runtime_turn(
     store: RuntimeStore,

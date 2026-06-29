@@ -38,6 +38,14 @@ class WorkspaceRuntimeJsonCollection:
             raise ValueError(f"Runtime {self.filename} updates require workspace_id.")
         JsonFileCollection(self._record_path(workspace_id)).update_one(query, update, upsert=upsert)
 
+    def insert_one_if_absent(self, query: dict[str, Any], document: dict[str, Any]) -> tuple[dict[str, Any], bool]:
+        """Insert one workspace-scoped record atomically when no existing record matches."""
+        payload = {**deepcopy(query), **deepcopy(document)}
+        workspace_id = str(payload.get("workspace_id") or "").strip()
+        if not workspace_id:
+            raise ValueError(f"Runtime {self.filename} inserts require workspace_id.")
+        return JsonFileCollection(self._record_path(workspace_id)).insert_one_if_absent(query, payload)
+
     def delete_one(self, query: dict[str, Any]) -> None:
         for path in self._candidate_paths(query):
             collection = JsonFileCollection(path)

@@ -50,15 +50,14 @@ def submit_runtime_turn_async(
     app_references: list[dict[str, object]] | None = None,
     app_reference_materializer: Callable[[list[dict[str, object]]], list[dict[str, object]]] | None = None,
     on_queued: Callable[[RuntimeTurnRecord, list[RuntimeEventRecord]], None] | None = None,
+    turn_id: str | None = None,
+    received_perf_counter: float | None = None,
 ) -> tuple[RuntimeTurnRecord, list[RuntimeEventRecord]]:
     """Queue one runtime turn and execute it in a background worker."""
     plain_hosted = runtime_session_is_plain_hosted_chat(session)
     assert_plain_hosted_chat_input_allowed(session, attachments=attachments, app_references=app_references)
     queue_provider_id = HOSTED_TEXT_RUNTIME_PROVIDER_ID if plain_hosted else queue_provider_id_for_session(session)
-    existing = _existing_turn_for_client_message(state, session=session, client_message_id=client_message_id)
-    if existing is not None:
-        return existing, _turn_events_for_response(state, existing)
-    turn, events = _queue_turn_with_event(
+    turn, events, created = _queue_turn_with_event_result(
         state,
         session=session,
         input_text=input_text,
@@ -66,7 +65,11 @@ def submit_runtime_turn_async(
         client_message_id=client_message_id,
         attachments=attachments,
         app_references=app_references,
+        turn_id=turn_id,
+        received_perf_counter=received_perf_counter,
     )
+    if not created:
+        return turn, events
 
     def worker() -> None:
         force_idle_reap = False
@@ -125,6 +128,7 @@ def submit_runtime_turn_async(
                 output_recorder = _RuntimeTurnOutputRecorder(state, session_id=session.session_id, turn_id=turn.turn_id)
                 if runtime_session_is_plain_hosted_chat(current_session):
                     dispatch_started_at = time.perf_counter()
+                    turn_start_sent_at: float | None = None
                     _record_provider_dispatching(
                         state,
                         session_id=session.session_id,
@@ -133,15 +137,29 @@ def submit_runtime_turn_async(
                         runtime_mode=current_session.runtime_mode,
                     )
 
+                    def record_plain_provider_turn_start_sent(metadata: dict[str, object]) -> None:
+                        nonlocal turn_start_sent_at
+                        turn_start_sent_at = time.perf_counter()
+                        selected_provider_id = str(metadata.get("provider_id") or worker_provider_id)
+                        _record_provider_turn_start_sent(
+                            state,
+                            session_id=session.session_id,
+                            turn_id=turn.turn_id,
+                            provider_id=selected_provider_id,
+                            runtime_mode=current_session.runtime_mode,
+                            metadata=metadata,
+                        )
+
                     def record_plain_provider_accepted(metadata: dict[str, object]) -> None:
                         selected_provider_id = str(metadata.get("provider_id") or worker_provider_id)
+                        started_at = turn_start_sent_at if turn_start_sent_at is not None else dispatch_started_at
                         _record_provider_accepted(
                             state,
                             session_id=session.session_id,
                             turn_id=turn.turn_id,
                             provider_id=selected_provider_id,
                             runtime_mode=current_session.runtime_mode,
-                            elapsed_ms=(time.perf_counter() - dispatch_started_at) * 1000,
+                            elapsed_ms=(time.perf_counter() - started_at) * 1000,
                             metadata=metadata,
                         )
 
@@ -151,6 +169,7 @@ def submit_runtime_turn_async(
                         input_text=input_text,
                         attachments=attachments,
                         event_sink=output_recorder.record,
+                        on_provider_turn_start_sent=record_plain_provider_turn_start_sent,
                         on_provider_accepted=record_plain_provider_accepted,
                     )
                     worker_provider_id = routing_decision.selected_provider_id or worker_provider_id
@@ -171,6 +190,7 @@ def submit_runtime_turn_async(
                         workspace_root=current_session.workspace_root,
                     )
                     dispatch_started_at = time.perf_counter()
+                    turn_start_sent_at: float | None = None
                     _record_provider_dispatching(
                         state,
                         session_id=session.session_id,
@@ -179,14 +199,27 @@ def submit_runtime_turn_async(
                         runtime_mode=current_session.runtime_mode,
                     )
 
+                    def record_provider_turn_start_sent(metadata: dict[str, object]) -> None:
+                        nonlocal turn_start_sent_at
+                        turn_start_sent_at = time.perf_counter()
+                        _record_provider_turn_start_sent(
+                            state,
+                            session_id=session.session_id,
+                            turn_id=turn.turn_id,
+                            provider_id=worker_provider_id,
+                            runtime_mode=current_session.runtime_mode,
+                            metadata=metadata,
+                        )
+
                     def record_provider_accepted(metadata: dict[str, object]) -> None:
+                        started_at = turn_start_sent_at if turn_start_sent_at is not None else dispatch_started_at
                         _record_provider_accepted(
                             state,
                             session_id=session.session_id,
                             turn_id=turn.turn_id,
                             provider_id=worker_provider_id,
                             runtime_mode=current_session.runtime_mode,
-                            elapsed_ms=(time.perf_counter() - dispatch_started_at) * 1000,
+                            elapsed_ms=(time.perf_counter() - started_at) * 1000,
                             metadata=metadata,
                         )
 
@@ -202,6 +235,7 @@ def submit_runtime_turn_async(
                             provider_id=worker_provider_id,
                             provider_thread_id=provider_thread_id,
                         ),
+                        on_provider_turn_start_sent=record_provider_turn_start_sent,
                         on_provider_accepted=record_provider_accepted,
                         event_sink=output_recorder.record,
                     )

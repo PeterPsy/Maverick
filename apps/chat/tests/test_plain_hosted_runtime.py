@@ -105,7 +105,7 @@ class ChatPlainHostedRuntimeTest(unittest.IsolatedAsyncioTestCase):
 
         with (
             patch.dict(os.environ, {"MAVERICK_HOSTED_TEXT_FAKE_CHUNKS": '["Hosted ", "answer"]'}, clear=False),
-            patch("core.runtime.turn_submission_service_output.schedule_runtime_thread_title_generation"),
+            patch("core.runtime.turn_submission_service_queue.schedule_runtime_thread_title_generation"),
             patch(
                 "core.runtime.turn_submission_service_submit.resolve_runtime_backend_for_session",
                 side_effect=AssertionError("plain hosted chat must not resolve Codex runtime"),

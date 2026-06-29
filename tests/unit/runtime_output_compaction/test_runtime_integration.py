@@ -14,7 +14,7 @@ from core.providers.codex_app_server_runtime_notifications import _structured_co
 from core.runtime.execution_events import RuntimeExecutionEvent, parse_provider_json_event
 from core.runtime.service import create_runtime_session, record_runtime_event
 from core.runtime.turn_submission_service_events import _record_final_output
-from core.runtime.turn_submission_service_output import _RuntimeTurnOutputRecorder
+from core.runtime.turn_submission_service_output_text import _RuntimeTurnOutputRecorder
 
 
 class RuntimeOutputCompactionIntegrationTest(unittest.TestCase):

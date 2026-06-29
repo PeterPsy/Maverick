@@ -440,10 +440,16 @@ class FakeRuntimeAdapter:
         event_sink=None,
         timeout_seconds: int | None = None,
         on_provider_thread_id=None,
+        on_provider_turn_start_sent=None,
+        on_provider_accepted=None,
         command_runner=None,
     ) -> RuntimeExecutionResult:
         self.inputs.append(input_text)
         output = f"fake: {input_text}"
+        if on_provider_turn_start_sent is not None:
+            on_provider_turn_start_sent({"provider_id": "fake-runtime", "source": "fake"})
+        if on_provider_accepted is not None:
+            on_provider_accepted({"provider_id": "fake-runtime", "source": "fake"})
         if event_sink is not None:
             event_sink(RuntimeExecutionEvent(event_type="runtime.output.delta", payload={"text": output}))
         return RuntimeExecutionResult(output_text=output, exit_code=0)

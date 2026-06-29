@@ -21,7 +21,7 @@ from core.api.platform_state import PlatformState, bootstrap_platform_state
 from core.apps.dependencies import save_app_dependency_selection
 import core.apps.runtime_requests as runtime_requests
 from core.apps.service import install_store_app, register_app_source_from_contract
-from core.runtime.turn_submission_service_output import _queue_turn_with_event
+from core.runtime.turn_submission_service_queue import _queue_turn_with_event
 from tests.support.env import apply_test_environment_defaults
 from tests.support.repo import link_app_sources, make_temp_repo_root
 
@@ -99,7 +99,7 @@ class SensesHostedE2ETest(unittest.TestCase):
         with (
             patch.object(runtime_requests, "submit_runtime_turn_async", self._fake_submit_runtime_turn(runtime_results)),
             patch(
-                "core.runtime.turn_submission_service_output.schedule_runtime_thread_title_generation",
+                "core.runtime.turn_submission_service_queue.schedule_runtime_thread_title_generation",
                 lambda *_args, **_kwargs: None,
             ),
         ):
@@ -237,7 +237,7 @@ class SensesHostedE2ETest(unittest.TestCase):
         with (
             patch.object(runtime_requests, "submit_runtime_turn_async", self._fake_submit_runtime_turn(runtime_results)),
             patch(
-                "core.runtime.turn_submission_service_output.schedule_runtime_thread_title_generation",
+                "core.runtime.turn_submission_service_queue.schedule_runtime_thread_title_generation",
                 lambda *_args, **_kwargs: None,
             ),
         ):

@@ -82,6 +82,7 @@ def bootstrap_platform_state(
     runtime_processes = RuntimeSessionJsonCollection(start_path=repository_root, filename="processes.json")
     runtime_states = RuntimeSessionJsonCollection(start_path=repository_root, filename="state.json")
     runtime_threads = WorkspaceRuntimeJsonCollection(start_path=repository_root, filename="threads.json")
+    runtime_client_messages = WorkspaceRuntimeJsonCollection(start_path=repository_root, filename="client_messages.json")
     runtime_store = RuntimeDocumentStore(
         RuntimeCollections(
             sessions=runtime_sessions,
@@ -90,6 +91,7 @@ def bootstrap_platform_state(
             processes=runtime_processes,
             states=runtime_states,
             threads=runtime_threads,
+            client_messages=runtime_client_messages,
             api_tokens=control_collections.runtime_api_tokens,
         )
     )

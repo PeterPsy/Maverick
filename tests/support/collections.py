@@ -27,6 +27,14 @@ class FakeCollection:
         if upsert:
             self.documents.append({**query, **payload})
 
+    def insert_one_if_absent(self, query: dict, document: dict) -> tuple[dict, bool]:
+        payload = {**query, **document}
+        for existing in self.documents:
+            if _matches(existing, query):
+                return dict(existing), False
+        self.documents.append(payload)
+        return dict(payload), True
+
     def delete_one(self, query: dict) -> None:
         for index, document in enumerate(self.documents):
             if _matches(document, query):

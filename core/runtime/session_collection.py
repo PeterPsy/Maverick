@@ -110,6 +110,25 @@ class RuntimeSessionJsonCollection:
                     self._write_documents(path, documents)
                     self._partition_counts[path] = len(documents)
 
+    def insert_one_if_absent(self, query: dict[str, Any], document: dict[str, Any]) -> tuple[dict[str, Any], bool]:
+        """Insert one session-partitioned record atomically when the query has no match."""
+        payload = {**deepcopy(query), **deepcopy(document)}
+        workspace_id = str(payload.get("workspace_id") or "").strip()
+        session_id = str(payload.get("session_id") or "").strip()
+        if not workspace_id or not session_id:
+            raise ValueError(f"Runtime {self.filename} inserts require both workspace_id and session_id.")
+        path = self._record_path(workspace_id=workspace_id, session_id=session_id)
+        with self._lock:
+            with _locked_collection_path(path):
+                documents = self._read_documents(path)
+                for existing in documents:
+                    if _matches(existing, query):
+                        return deepcopy(existing), False
+                documents.append(payload)
+                self._write_documents(path, documents)
+                self._partition_counts[path] = len(documents)
+                return deepcopy(payload), True
+
     def append_bounded_upsert(self, query: dict[str, Any], update: dict[str, Any], *, max_documents: int) -> None:
         """Append an upserted record while keeping a session partition bounded."""
         if max_documents < 1:

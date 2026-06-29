@@ -25,6 +25,7 @@ from core.observability.service import append_platform_log
 from core.providers.errors import ProviderError
 from core.providers.service import resolve_provider_for_runtime_session
 from core.runtime.errors import RuntimeSessionHiddenError, RuntimeSessionNotFoundError, RuntimeThreadNotFoundError, RuntimeTurnNotFoundError
+from core.runtime.client_message_claims import RuntimeClientMessageClaim
 from core.runtime.runtime_threads import (
     clear_runtime_threads_complete,
     create_runtime_thread,
@@ -55,6 +56,9 @@ from core.runtime.turn_submission import (
     submit_runtime_turn_async,
 )
 from core.skills.runtime_catalog import runtime_skill_catalog_app_id_for_request
+
+
+IDEMPOTENT_CLAIM_WAIT_SECONDS = 5.0
 
 
 def _session_payload(session: RuntimeSessionRecord, *, provider_id: str | None = None) -> dict[str, object]:
@@ -163,6 +167,88 @@ def _turn_for_client_message(
         session_id=session_id,
         client_message_id=normalized_client_message_id,
     )
+
+
+def _claim_client_message_for_new_session(
+    state: PlatformState,
+    *,
+    workspace_id: str,
+    client_message_id: str | None,
+) -> tuple[RuntimeClientMessageClaim | None, bool]:
+    normalized_client_message_id = client_message_id.strip() if isinstance(client_message_id, str) else ""
+    if not normalized_client_message_id:
+        return None, True
+    claim_client_message_id = getattr(state.runtime_store, "claim_client_message_id", None)
+    if not callable(claim_client_message_id):
+        return None, True
+    return claim_client_message_id(
+        workspace_id=workspace_id,
+        client_message_id=normalized_client_message_id,
+        session_id=str(uuid4()),
+        turn_id=str(uuid4()),
+    )
+
+
+def _release_client_message_claim(state: PlatformState, claim: RuntimeClientMessageClaim | None) -> None:
+    if claim is None:
+        return
+    release_claim = getattr(state.runtime_store, "release_client_message_claim", None)
+    if not callable(release_claim):
+        return
+    with suppress(Exception):
+        release_claim(
+            workspace_id=claim.workspace_id,
+            client_message_id=claim.client_message_id,
+            session_id=claim.session_id,
+            turn_id=claim.turn_id,
+        )
+
+
+def _wait_for_claimed_turn(state: PlatformState, claim: RuntimeClientMessageClaim) -> RuntimeTurnRecord | None:
+    deadline = time.monotonic() + IDEMPOTENT_CLAIM_WAIT_SECONDS
+    while True:
+        try:
+            turn = state.runtime_store.get_turn(claim.turn_id)
+        except RuntimeTurnNotFoundError:
+            turn = None
+        if (
+            turn is not None
+            and turn.workspace_id == claim.workspace_id
+            and turn.session_id == claim.session_id
+            and turn.client_message_id == claim.client_message_id
+        ):
+            return turn
+        if time.monotonic() >= deadline:
+            return None
+        time.sleep(0.01)
+
+
+def _turn_exists(state: PlatformState, turn_id: str) -> RuntimeTurnRecord | None:
+    try:
+        return state.runtime_store.get_turn(turn_id)
+    except RuntimeTurnNotFoundError:
+        return None
+
+
+def _pending_client_message_claim_response(
+    state: PlatformState,
+    context: RequestSession,
+    claim: RuntimeClientMessageClaim,
+    start_response: StartResponse,
+) -> list[bytes]:
+    payload: dict[str, object] = {
+        "idempotency": {
+            "status": "pending",
+            "client_message_id": claim.client_message_id,
+            "session_id": claim.session_id,
+            "turn_id": claim.turn_id,
+        }
+    }
+    with suppress(Exception):
+        session = state.runtime_store.get_session(claim.session_id)
+        if session.workspace_id == context.workspace_id and runtime_session_allows_user_thread(session):
+            payload["session"] = _session_payload(session, provider_id=_response_provider_id(session))
+    return json_response(start_response, payload, status="202 Accepted")
 
 
 def _turn_response_events(state: PlatformState, turn: RuntimeTurnRecord) -> list[RuntimeEventRecord]:
@@ -317,7 +403,15 @@ def _timed_runtime_api_response(
         )
 
 
-def _create_session(state: PlatformState, context: RequestSession, body: dict, *, agent_id: str, start_path) -> RuntimeSessionRecord:
+def _create_session(
+    state: PlatformState,
+    context: RequestSession,
+    body: dict,
+    *,
+    agent_id: str,
+    start_path,
+    session_id: str | None = None,
+) -> RuntimeSessionRecord:
     authorize_runtime_session_create(
         workspace_store=state.workspace_store,
         runtime_store=state.runtime_store,
@@ -327,7 +421,7 @@ def _create_session(state: PlatformState, context: RequestSession, body: dict, *
     source_app_id = str(body.get("source_app_id") or "").strip() or None
     session = create_runtime_session(
         state.runtime_store,
-        session_id=str(uuid4()),
+        session_id=session_id or str(uuid4()),
         workspace_id=context.workspace_id,
         agent_id=agent_id,
         requested_mode=body.get("requested_mode"),
@@ -383,7 +477,16 @@ def _create_session(state: PlatformState, context: RequestSession, body: dict, *
     return session
 
 
-def _handle_session_collection(state: PlatformState, context: RequestSession, method: str, body: dict, start_response: StartResponse, *, start_path):
+def _handle_session_collection(
+    state: PlatformState,
+    context: RequestSession,
+    method: str,
+    body: dict,
+    start_response: StartResponse,
+    *,
+    start_path,
+    received_perf_counter: float | None = None,
+):
     if method == "GET":
         return json_response(start_response, {"items": _list_session_payloads(state, workspace_id=context.workspace_id, start_path=start_path)})
     if method == "POST":
@@ -394,27 +497,51 @@ def _handle_session_collection(state: PlatformState, context: RequestSession, me
         if routing_profile_error is not None:
             return json_response(start_response, {"error": routing_profile_error}, status="400 Bad Request")
         client_message_id = str(body.get("client_message_id") or "").strip() or None
+        client_message_claim: RuntimeClientMessageClaim | None = None
+        client_message_claim_created = True
         if _runtime_turn_requested(body):
-            existing_turn = _turn_for_client_message(
+            client_message_claim, client_message_claim_created = _claim_client_message_for_new_session(
                 state,
                 workspace_id=context.workspace_id,
                 client_message_id=client_message_id,
             )
-            if existing_turn is not None:
-                return _idempotent_runtime_turn_response(state, context, existing_turn, start_response)
+            if client_message_claim is not None and not client_message_claim_created:
+                existing_turn = _wait_for_claimed_turn(state, client_message_claim)
+                if existing_turn is not None:
+                    return _idempotent_runtime_turn_response(state, context, existing_turn, start_response)
+                return _pending_client_message_claim_response(state, context, client_message_claim, start_response)
         try:
-            session = _create_session(state, context, body, agent_id=agent_id, start_path=start_path)
+            session = _create_session(
+                state,
+                context,
+                body,
+                agent_id=agent_id,
+                start_path=start_path,
+                session_id=client_message_claim.session_id if client_message_claim is not None else None,
+            )
         except AuthorizationError as error:
+            _release_client_message_claim(state, client_message_claim if client_message_claim_created else None)
             status = "429 Too Many Requests" if error.reason == "max_agent_instances_reached" else "403 Forbidden"
             return json_response(start_response, {"error": error.reason}, status=status)
         except AppHostingError as error:
+            _release_client_message_claim(state, client_message_claim if client_message_claim_created else None)
             return json_response(
                 start_response,
                 {"error": "runtime_skill_catalog_unavailable", "detail": str(error)},
                 status="400 Bad Request",
             )
         if _runtime_turn_requested(body):
-            return _submit_runtime_turn_response(state, context, session, body, start_response, start_path=start_path)
+            return _submit_runtime_turn_response(
+                state,
+                context,
+                session,
+                body,
+                start_response,
+                start_path=start_path,
+                reserved_turn_id=client_message_claim.turn_id if client_message_claim is not None else None,
+                received_perf_counter=received_perf_counter,
+                release_claim_on_failure=client_message_claim if client_message_claim_created else None,
+            )
         return json_response(start_response, _session_payload(session, provider_id=_resolved_provider_id(state, session)), status="201 Created")
     return json_response(start_response, {"error": "method_not_allowed"}, status="405 Method Not Allowed")
 
@@ -766,7 +893,17 @@ def _handle_session_events(state: PlatformState, context: RequestSession, sessio
     )
 
 
-def _handle_session_turns(state: PlatformState, context: RequestSession, session_id: str, method: str, body: dict, start_response: StartResponse, *, start_path):
+def _handle_session_turns(
+    state: PlatformState,
+    context: RequestSession,
+    session_id: str,
+    method: str,
+    body: dict,
+    start_response: StartResponse,
+    *,
+    start_path,
+    received_perf_counter: float | None = None,
+):
     try:
         session = state.runtime_store.get_session(session_id)
     except (RuntimeSessionNotFoundError, ValueError):
@@ -780,7 +917,15 @@ def _handle_session_turns(state: PlatformState, context: RequestSession, session
         return json_response(start_response, {"items": [_turn_payload(turn) for turn in state.runtime_store.list_turns(session_id)]})
     if method != "POST":
         return json_response(start_response, {"error": "method_not_allowed"}, status="405 Method Not Allowed")
-    return _submit_runtime_turn_response(state, context, session, body, start_response, start_path=start_path)
+    return _submit_runtime_turn_response(
+        state,
+        context,
+        session,
+        body,
+        start_response,
+        start_path=start_path,
+        received_perf_counter=received_perf_counter,
+    )
 
 
 def _runtime_turn_requested(body: dict) -> bool:
@@ -805,9 +950,13 @@ def _submit_runtime_turn_response(
     start_response: StartResponse,
     *,
     start_path,
+    reserved_turn_id: str | None = None,
+    received_perf_counter: float | None = None,
+    release_claim_on_failure: RuntimeClientMessageClaim | None = None,
 ):
     routing_profile_error = _routing_profile_error(body)
     if routing_profile_error is not None:
+        _release_client_message_claim(state, release_claim_on_failure)
         return json_response(start_response, {"error": routing_profile_error}, status="400 Bad Request")
     client_message_id = str(body.get("client_message_id") or "").strip() or None
     existing_turn = _turn_for_client_message(
@@ -822,12 +971,15 @@ def _submit_runtime_turn_response(
     attachment_items = [item for item in attachments if isinstance(item, dict)]
     input_text = str(body.get("input_text") or body.get("message") or "").strip()
     if not input_text and not attachment_items:
+        _release_client_message_claim(state, release_claim_on_failure)
         return json_response(start_response, {"error": "empty_runtime_input"}, status="400 Bad Request")
     app_references = body.get("app_references") if isinstance(body.get("app_references"), list) else []
     if runtime_session_is_plain_hosted_chat(session):
         if session.skill_ids:
+            _release_client_message_claim(state, release_claim_on_failure)
             return json_response(start_response, {"error": "plain_hosted_chat_blocks_skills"}, status="400 Bad Request")
         if app_references:
+            _release_client_message_claim(state, release_claim_on_failure)
             return json_response(start_response, {"error": "plain_hosted_chat_blocks_app_references"}, status="400 Bad Request")
     app_reference_items = validate_runtime_app_references(
         state,
@@ -865,6 +1017,8 @@ def _submit_runtime_turn_response(
                 app_references=app_reference_items,
                 app_reference_materializer=materialize_app_references if app_reference_items else None,
                 on_queued=notify_source_app_queued,
+                turn_id=reserved_turn_id,
+                received_perf_counter=received_perf_counter,
             )
             status = "202 Accepted"
         else:
@@ -877,9 +1031,13 @@ def _submit_runtime_turn_response(
                 app_references=app_reference_items,
                 app_reference_materializer=materialize_app_references if app_reference_items else None,
                 on_queued=notify_source_app_queued,
+                turn_id=reserved_turn_id,
+                received_perf_counter=received_perf_counter,
             )
             status = status_line(201)
     except ProviderError as error:
+        if reserved_turn_id is None or _turn_exists(state, reserved_turn_id) is None:
+            _release_client_message_claim(state, release_claim_on_failure)
         return json_response(
             start_response,
             _provider_unavailable_response(state, session.workspace_id, error),
@@ -1082,6 +1240,7 @@ def handle_runtime_api(state: PlatformState, environ: dict, start_response: Star
     path = environ.get("PATH_INFO", "/")
     if not path.startswith("/api/runtime/"):
         return None
+    received_perf_counter = time.perf_counter()
     context_or_response = require_session(state, environ, start_response)
     if not isinstance(context_or_response, RequestSession):
         return context_or_response
@@ -1100,7 +1259,15 @@ def handle_runtime_api(state: PlatformState, environ: dict, start_response: Star
             context,
             route="/api/runtime/sessions",
             method=method,
-            handler=lambda: _handle_session_collection(state, context, method, body, start_response, start_path=start_path),
+            handler=lambda: _handle_session_collection(
+                state,
+                context,
+                method,
+                body,
+                start_response,
+                start_path=start_path,
+                received_perf_counter=received_perf_counter,
+            ),
         )
 
     parts = [part for part in path.removeprefix("/api/runtime/").split("/") if part]
@@ -1119,7 +1286,16 @@ def handle_runtime_api(state: PlatformState, environ: dict, start_response: Star
             route="/api/runtime/sessions/:id/turns",
             method=method,
             runtime_session_id=parts[1],
-            handler=lambda: _handle_session_turns(state, context, parts[1], method, body, start_response, start_path=start_path),
+            handler=lambda: _handle_session_turns(
+                state,
+                context,
+                parts[1],
+                method,
+                body,
+                start_response,
+                start_path=start_path,
+                received_perf_counter=received_perf_counter,
+            ),
         )
     if len(parts) == 3 and parts[0] == "sessions" and parts[2] == "cleanup":
         return _handle_session_cleanup(state, context, parts[1], method, body, start_response, start_path=start_path)

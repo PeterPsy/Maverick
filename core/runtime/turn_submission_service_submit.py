@@ -43,13 +43,12 @@ def submit_runtime_turn(
     app_references: list[dict[str, object]] | None = None,
     app_reference_materializer: Callable[[list[dict[str, object]]], list[dict[str, object]]] | None = None,
     on_queued: Callable[[RuntimeTurnRecord, list[RuntimeEventRecord]], None] | None = None,
+    turn_id: str | None = None,
+    received_perf_counter: float | None = None,
 ) -> tuple[RuntimeTurnRecord, list[RuntimeEventRecord]]:
     """Queue and execute one runtime turn synchronously."""
     plain_hosted = runtime_session_is_plain_hosted_chat(session)
     assert_plain_hosted_chat_input_allowed(session, attachments=attachments, app_references=app_references)
-    existing = _existing_turn_for_client_message(state, session=session, client_message_id=client_message_id)
-    if existing is not None:
-        return existing, _turn_events_for_response(state, existing)
     if plain_hosted:
         provider = None
         runtime_adapter = None
@@ -57,7 +56,7 @@ def submit_runtime_turn(
     else:
         provider, _selection, runtime_adapter = resolve_runtime_backend_for_session(state.provider_store, session=session)
         provider_id = provider.provider_id
-    turn, events = _queue_turn_with_event(
+    turn, events, created = _queue_turn_with_event_result(
         state,
         session=session,
         input_text=input_text,
@@ -65,7 +64,11 @@ def submit_runtime_turn(
         client_message_id=client_message_id,
         attachments=attachments,
         app_references=app_references,
+        turn_id=turn_id,
+        received_perf_counter=received_perf_counter,
     )
+    if not created:
+        return turn, events
     if on_queued is not None:
         try:
             on_queued(turn, events)
@@ -89,6 +92,7 @@ def submit_runtime_turn(
             output_recorder = _RuntimeTurnOutputRecorder(state, session_id=session.session_id, turn_id=turn.turn_id)
             if plain_hosted:
                 dispatch_started_at = time.perf_counter()
+                turn_start_sent_at: float | None = None
                 events.append(
                     _record_provider_dispatching(
                         state,
@@ -99,14 +103,28 @@ def submit_runtime_turn(
                     )
                 )
 
+                def record_plain_provider_turn_start_sent(metadata: dict[str, object]) -> None:
+                    nonlocal turn_start_sent_at
+                    turn_start_sent_at = time.perf_counter()
+                    sent = _record_provider_turn_start_sent(
+                        state,
+                        session_id=session.session_id,
+                        turn_id=turn.turn_id,
+                        provider_id=str(metadata.get("provider_id") or provider_id),
+                        runtime_mode=session.runtime_mode,
+                        metadata=metadata,
+                    )
+                    events.append(sent)
+
                 def record_plain_provider_accepted(metadata: dict[str, object]) -> None:
+                    started_at = turn_start_sent_at if turn_start_sent_at is not None else dispatch_started_at
                     accepted = _record_provider_accepted(
                         state,
                         session_id=session.session_id,
                         turn_id=turn.turn_id,
                         provider_id=str(metadata.get("provider_id") or provider_id),
                         runtime_mode=session.runtime_mode,
-                        elapsed_ms=(time.perf_counter() - dispatch_started_at) * 1000,
+                        elapsed_ms=(time.perf_counter() - started_at) * 1000,
                         metadata=metadata,
                     )
                     events.append(accepted)
@@ -117,6 +135,7 @@ def submit_runtime_turn(
                     input_text=input_text,
                     attachments=attachments,
                     event_sink=output_recorder.record,
+                    on_provider_turn_start_sent=record_plain_provider_turn_start_sent,
                     on_provider_accepted=record_plain_provider_accepted,
                 )
                 provider_id = routing_decision.selected_provider_id or provider_id
@@ -134,6 +153,7 @@ def submit_runtime_turn(
                     workspace_root=session.workspace_root,
                 )
                 dispatch_started_at = time.perf_counter()
+                turn_start_sent_at: float | None = None
                 events.append(
                     _record_provider_dispatching(
                         state,
@@ -144,14 +164,28 @@ def submit_runtime_turn(
                     )
                 )
 
+                def record_provider_turn_start_sent(metadata: dict[str, object]) -> None:
+                    nonlocal turn_start_sent_at
+                    turn_start_sent_at = time.perf_counter()
+                    sent = _record_provider_turn_start_sent(
+                        state,
+                        session_id=session.session_id,
+                        turn_id=turn.turn_id,
+                        provider_id=provider_id,
+                        runtime_mode=session.runtime_mode,
+                        metadata=metadata,
+                    )
+                    events.append(sent)
+
                 def record_provider_accepted(metadata: dict[str, object]) -> None:
+                    started_at = turn_start_sent_at if turn_start_sent_at is not None else dispatch_started_at
                     accepted = _record_provider_accepted(
                         state,
                         session_id=session.session_id,
                         turn_id=turn.turn_id,
                         provider_id=provider_id,
                         runtime_mode=session.runtime_mode,
-                        elapsed_ms=(time.perf_counter() - dispatch_started_at) * 1000,
+                        elapsed_ms=(time.perf_counter() - started_at) * 1000,
                         metadata=metadata,
                     )
                     events.append(accepted)
@@ -163,6 +197,7 @@ def submit_runtime_turn(
                     launch_spec=launch_spec,
                     runtime_adapter=runtime_adapter,
                     on_provider_thread_id=lambda provider_thread_id: _record_provider_thread_id(state, session=session, provider_id=provider_id, provider_thread_id=provider_thread_id),
+                    on_provider_turn_start_sent=record_provider_turn_start_sent,
                     on_provider_accepted=record_provider_accepted,
                     event_sink=output_recorder.record,
                 )

@@ -120,7 +120,14 @@ def _turn_sandbox_policy(launch_spec: RuntimeBackendLaunchSpec) -> dict[str, Any
 
 
 
-def _send_request(runtime: _CodexAppServerRuntime, method: str, params: dict[str, Any], *, timeout: float) -> dict[str, Any]:
+def _send_request(
+    runtime: _CodexAppServerRuntime,
+    method: str,
+    params: dict[str, Any],
+    *,
+    timeout: float,
+    on_sent: Callable[[dict[str, object]], None] | None = None,
+) -> dict[str, Any]:
     with runtime.request_lock:
         request_id = runtime.next_request_id
         runtime.next_request_id += 1
@@ -132,6 +139,8 @@ def _send_request(runtime: _CodexAppServerRuntime, method: str, params: dict[str
             raise RuntimeError("Codex app-server stdin is unavailable.")
         runtime.process.stdin.write(json.dumps(payload) + "\n")
         runtime.process.stdin.flush()
+        if on_sent is not None:
+            on_sent({"request_id": request_id})
     except Exception as error:
         with runtime.request_lock:
             runtime.response_waiters.pop(request_id, None)

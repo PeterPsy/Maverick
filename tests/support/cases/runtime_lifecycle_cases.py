@@ -7,6 +7,7 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 import subprocess
 import tempfile
+from threading import Barrier, Thread
 import time
 from types import SimpleNamespace
 import unittest
@@ -19,6 +20,7 @@ from core.runtime.service import (
     create_runtime_process,
     create_runtime_session,
     queue_runtime_turn,
+    queue_runtime_turn_if_client_message_absent,
     record_runtime_event,
     reconcile_runtime_session_policy,
     transition_runtime_process,
@@ -90,6 +92,7 @@ class RuntimeLifecycleTestCase(unittest.TestCase):
                 processes=RuntimeSessionJsonCollection(start_path=repo_root, filename="processes.json"),
                 states=RuntimeSessionJsonCollection(start_path=repo_root, filename="state.json"),
                 threads=WorkspaceRuntimeJsonCollection(start_path=repo_root, filename="threads.json"),
+                client_messages=WorkspaceRuntimeJsonCollection(start_path=repo_root, filename="client_messages.json"),
                 api_tokens=JsonFileCollection(state_root / "api_tokens.json"),
             )
         )
@@ -367,7 +370,7 @@ class RuntimeLifecycleTestCase(unittest.TestCase):
         resolve_backend = Mock(return_value=(SimpleNamespace(provider_id="fake-provider"), None, SimpleNamespace()))
         worker_globals = submit_runtime_turn_async.__globals__
         with patch.dict(worker_globals, {"Thread": DeferredThread, "resolve_runtime_backend_for_session": resolve_backend}), patch(
-            "core.runtime.turn_submission_service_output.schedule_runtime_thread_title_generation"
+            "core.runtime.turn_submission_service_queue.schedule_runtime_thread_title_generation"
         ):
             first_turn, first_events = submit_runtime_turn_async(
                 SimpleNamespace(
@@ -400,6 +403,49 @@ class RuntimeLifecycleTestCase(unittest.TestCase):
         self.assertEqual(second_events[0].event_type, "runtime.turn.queued")
         self.assertEqual(first_events[0].payload["provider_id"], "codex")
 
+    def test_json_runtime_turn_client_message_insert_is_atomic(self) -> None:
+        repo_root = self.make_repo_root()
+        store = self.make_json_store(repo_root)
+        create_runtime_session(
+            store,
+            session_id="sess-client-atomic",
+            workspace_id="acme",
+            agent_id="agent-1",
+            start_path=repo_root,
+        )
+        barrier = Barrier(6)
+        results: list[tuple[str, bool]] = []
+        errors: list[BaseException] = []
+
+        def queue_once(index: int) -> None:
+            try:
+                barrier.wait(timeout=2)
+                turn, created = queue_runtime_turn_if_client_message_absent(
+                    store,
+                    turn_id=f"turn-client-atomic-{index}",
+                    session_id="sess-client-atomic",
+                    input_text=f"hello {index}",
+                    client_message_id="client-atomic",
+                )
+                results.append((turn.turn_id, created))
+            except BaseException as error:
+                errors.append(error)
+
+        threads = [Thread(target=queue_once, args=(index,)) for index in range(6)]
+        for thread in threads:
+            thread.start()
+        for thread in threads:
+            thread.join(2)
+
+        if errors:
+            raise errors[0]
+        self.assertEqual(len(results), 6)
+        self.assertEqual(sum(1 for _turn_id, created in results if created), 1)
+        self.assertEqual(len({turn_id for turn_id, _created in results}), 1)
+        turns = store.list_turns("sess-client-atomic")
+        self.assertEqual(len(turns), 1)
+        self.assertEqual(turns[0].client_message_id, "client-atomic")
+
     def test_async_turn_records_worker_and_provider_dispatch_lifecycle(self) -> None:
         store = self.make_store()
         repo_root = self.make_repo_root()
@@ -419,6 +465,7 @@ class RuntimeLifecycleTestCase(unittest.TestCase):
                 self.target()
 
         def fake_execute_runtime_turn(**kwargs):
+            kwargs["on_provider_turn_start_sent"]({"provider_thread_id": "thread-provider"})
             kwargs["on_provider_accepted"]({"provider_thread_id": "thread-provider", "provider_turn_id": "turn-provider"})
             return SimpleNamespace(output_text="", exit_code=0)
 
@@ -434,7 +481,7 @@ class RuntimeLifecycleTestCase(unittest.TestCase):
                 "execute_runtime_turn": fake_execute_runtime_turn,
                 "release_idle_runtime_processes": Mock(return_value=0),
             },
-        ), patch("core.runtime.turn_submission_service_output.schedule_runtime_thread_title_generation"):
+        ), patch("core.runtime.turn_submission_service_queue.schedule_runtime_thread_title_generation"):
             turn, _events = submit_runtime_turn_async(
                 SimpleNamespace(
                     runtime_store=store,
@@ -451,11 +498,15 @@ class RuntimeLifecycleTestCase(unittest.TestCase):
         event_types = [event.event_type for event in store.list_events(session.session_id) if event.turn_id == turn.turn_id]
         self.assertIn("runtime.turn.worker_started", event_types)
         self.assertIn("runtime.provider.dispatching", event_types)
+        self.assertIn("runtime.provider.turn_start_sent", event_types)
         self.assertIn("runtime.provider.accepted", event_types)
+        self.assertLess(event_types.index("runtime.provider.turn_start_sent"), event_types.index("runtime.provider.accepted"))
         accepted = next(event for event in store.list_events(session.session_id) if event.event_type == "runtime.provider.accepted")
         self.assertEqual(accepted.payload["provider_id"], "fake-provider")
         self.assertEqual(accepted.payload["provider_thread_id"], "thread-provider")
         self.assertEqual(accepted.payload["provider_turn_id"], "turn-provider")
+        self.assertEqual(accepted.payload["elapsed_from"], "provider_turn_start_sent")
+        self.assertIn("turn_start_to_ack_ms", accepted.payload)
 
     def test_json_runtime_store_keeps_history_across_bootstrap_instances(self) -> None:
         repo_root = self.make_repo_root()

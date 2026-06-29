@@ -41,7 +41,7 @@ def cleanup_runtime_session(
             "workspace_id": None,
             "terminated_processes": 0,
             "cancelled_turns": 0,
-            "deleted": {"sessions": 0, "turns": 0, "events": 0, "processes": 0, "states": 0},
+            "deleted": {"sessions": 0, "turns": 0, "events": 0, "processes": 0, "states": 0, "client_messages": 0},
             "deleted_threads": 0,
             "deleted_thread_ids": [],
             "runtime_root_deleted": False,

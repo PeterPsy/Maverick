@@ -63,6 +63,7 @@ def execute_codex_app_server_turn(
     event_sink: RuntimeExecutionEventSink | None,
     timeout_seconds: int | None,
     on_provider_thread_id: Callable[[str], None] | None = None,
+    on_provider_turn_start_sent: Callable[[dict[str, object]], None] | None = None,
     on_provider_accepted: Callable[[dict[str, object]], None] | None = None,
     command_runner=subprocess.Popen,
 ) -> CodexAppServerTurnResult:
@@ -101,6 +102,14 @@ def execute_codex_app_server_turn(
             "cwd": launch_spec.working_directory,
         },
         timeout=20.0,
+        on_sent=lambda metadata: on_provider_turn_start_sent(
+            {
+                **metadata,
+                "provider_thread_id": provider_thread_id,
+            }
+        )
+        if on_provider_turn_start_sent is not None
+        else None,
     ).get("turn")
     if isinstance(turn, dict):
         provider_turn_id = str(turn.get("id") or "").strip()

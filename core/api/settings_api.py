@@ -182,7 +182,7 @@ def _clear_visible_runtime_sessions(state: PlatformState, context: RequestSessio
     if requested_session_ids and not sessions and len(requested_session_ids) == 1:
         return 404, {"error": "runtime_session_not_found"}
     reason = str(body.get("reason") or "settings_runtime_sessions_cleared")
-    deleted_totals = {"sessions": 0, "turns": 0, "events": 0, "processes": 0, "states": 0}
+    deleted_totals = {"sessions": 0, "turns": 0, "events": 0, "processes": 0, "states": 0, "client_messages": 0}
     terminated_processes = 0
     cancelled_turns = 0
     deleted_threads = 0

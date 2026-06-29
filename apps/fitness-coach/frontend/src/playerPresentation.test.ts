@@ -153,8 +153,14 @@ describe('work player presentation', () => {
     expect(styles).not.toContain('.player-rest-preview-placeholder');
   });
 
-  it('preloads the next workout media from preparation and keeps cached media off the black frame path', () => {
-    expect(appSource).toContain('resolveMediaPlayback(nextPreviewCandidate.media)');
+  it('preloads workout media sequentially one exercise ahead and keeps cached media off the black frame path', () => {
+    expect(appSource).toContain('const warmupMediaList = useMemo(() => workMediaWarmupWindow(segments, index), [segments, index]);');
+    expect(appSource).toContain('retainMediaPlayback(warmupMediaList)');
+    expect(appSource).toContain('for (const media of warmupMediaList)');
+    expect(appSource).toContain('const preloaded = await preloadMediaPlayback(media)');
+    expect(appSource).toContain('function workMediaWarmupWindow');
+    expect(appSource).toContain("const limit = segments[index]?.type === 'work' ? 3 : 2;");
+    expect(appSource).toContain('if (mediaList.length >= limit) break;');
     expect(appSource).toContain('const hasNextPreloadLayer = nextPreviewResolved.status ===');
     expect(appSource).toContain('function PlayerMediaLayer');
     expect(appSource).toContain('role="preload"');

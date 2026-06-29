@@ -44,7 +44,7 @@ import {
 } from './api';
 import { readBootstrapCache, writeBootstrapCache } from './bootstrapCache';
 import { GradientBarsBackground } from './components/ui/gradient-bars-background';
-import { cachedMediaPlayback, cancelMediaPlayback, clearMediaPlaybackCache, createLocalBlobFallback, driveMediaStreamUrl, initialMediaResolution, latestMediaPlaybackError, mediaCacheKey, resolveMediaPlayback, retainMediaPlayback } from './mediaPlaybackResolver';
+import { cachedMediaPlayback, cancelMediaPlayback, clearMediaPlaybackCache, createLocalBlobFallback, driveMediaStreamUrl, initialMediaResolution, latestMediaPlaybackError, mediaCacheKey, preloadMediaPlayback, resolveMediaPlayback, retainMediaPlayback } from './mediaPlaybackResolver';
 import { captureMediaThumbVideoFrame, mediaThumbPreviewFrameKey, readMediaThumbPreviewFrame } from './mediaThumbPreviewCache';
 import { TagsInputField } from './components/ui/tags-input';
 import type { AppBootstrapPayload, Exercise, ExerciseMediaRef, MediaPlaybackResolution, RestBlock, RuntimeSegment, SetupTab, StartWorkoutPayload, ViewState, WorkBlock, Workout, WorkoutBlock, WorkoutRunSummary } from './types';
@@ -1179,6 +1179,8 @@ function WorkPlayer({ workout, startPromise, onClose, onComplete }: { workout: W
   const nextPreviewCandidate = nextWorkSegment(segments, index);
   const activeWorkMediaKey = segment?.type === 'work' ? mediaCacheKey(segment.media) : '';
   const nextPreviewMediaKey = nextPreviewCandidate ? mediaCacheKey(nextPreviewCandidate.media) : '';
+  const warmupMediaList = useMemo(() => workMediaWarmupWindow(segments, index), [segments, index]);
+  const warmupMediaWindowKey = useMemo(() => warmupMediaList.map((media) => mediaCacheKey(media)).join('|'), [warmupMediaList]);
 
   const clearPlaybackOverlayTimer = useCallback(() => {
     if (playbackOverlayTimerRef.current === null) return;
@@ -1219,6 +1221,17 @@ function WorkPlayer({ workout, startPromise, onClose, onComplete }: { workout: W
     }
     if (video.readyState >= 2) markMediaLoaded(url);
   }, [markMediaLoaded]);
+
+  const applyWarmupResolution = useCallback((key: string, next: MediaPlaybackResolution) => {
+    if (activeWorkMediaKey && key === activeWorkMediaKey) {
+      setResolutionKey(key);
+      setResolution(next);
+    }
+    if (nextPreviewMediaKey && key === nextPreviewMediaKey) {
+      setNextPreviewResolutionKey(key);
+      setNextPreviewResolution(next);
+    }
+  }, [activeWorkMediaKey, nextPreviewMediaKey]);
 
   const currentResolution = activeWorkMediaKey && resolutionKey === activeWorkMediaKey
     ? resolution
@@ -1267,11 +1280,8 @@ function WorkPlayer({ workout, startPromise, onClose, onComplete }: { workout: W
   }, [clearPlaybackOverlayTimer, index]);
 
   useEffect(() => {
-    const activeMedia: ExerciseMediaRef[] = [];
-    if (segment?.type === 'work') activeMedia.push(segment.media);
-    if (nextPreviewCandidate) activeMedia.push(nextPreviewCandidate.media);
-    retainMediaPlayback(activeMedia);
-  }, [nextPreviewCandidate, segment]);
+    retainMediaPlayback(warmupMediaList);
+  }, [warmupMediaList, warmupMediaWindowKey]);
 
   useEffect(() => {
     if (!segment || segment.type !== 'work') {
@@ -1303,16 +1313,37 @@ function WorkPlayer({ workout, startPromise, onClose, onComplete }: { workout: W
     const key = mediaCacheKey(nextPreviewCandidate.media);
     setNextPreviewResolutionKey(key);
     setNextPreviewResolution(cachedMediaPlayback(nextPreviewCandidate.media) || initialMediaResolution());
+  }, [nextPreviewCandidate, nextPreviewMediaKey, retryNonce]);
+
+  useEffect(() => {
+    if (warmupMediaList.length === 0) return;
     let canceled = false;
-    resolveMediaPlayback(nextPreviewCandidate.media).then((next) => {
-      if (canceled) return;
-      setNextPreviewResolutionKey(key);
-      setNextPreviewResolution(next);
-    });
+
+    async function warmSequentially() {
+      for (const media of warmupMediaList) {
+        if (canceled) return;
+        const key = mediaCacheKey(media);
+        const cached = cachedMediaPlayback(media);
+        if (cached) applyWarmupResolution(key, cached);
+
+        const resolved = await resolveMediaPlayback(media);
+        if (canceled) return;
+        applyWarmupResolution(key, resolved);
+
+        const preloaded = await preloadMediaPlayback(media);
+        if (canceled) return;
+        applyWarmupResolution(key, preloaded);
+        if (preloaded.status === 'ready' && preloaded.url) {
+          markMediaLoaded(preloaded.url);
+        }
+      }
+    }
+
+    void warmSequentially();
     return () => {
       canceled = true;
     };
-  }, [nextPreviewCandidate, nextPreviewMediaKey, retryNonce]);
+  }, [applyWarmupResolution, markMediaLoaded, retryNonce, warmupMediaList, warmupMediaWindowKey]);
 
   useEffect(() => {
     const video = videoRef.current;
@@ -2223,6 +2254,21 @@ function insertAfter<T extends { id: string }>(items: T[], id: string, next: T) 
 function nextWorkSegment(segments: RuntimeSegment[], index: number): Extract<RuntimeSegment, { type: 'work' }> | null {
   const next = segments.slice(index + 1).find((item) => item.type === 'work');
   return next?.type === 'work' ? next : null;
+}
+
+function workMediaWarmupWindow(segments: RuntimeSegment[], index: number): ExerciseMediaRef[] {
+  const mediaList: ExerciseMediaRef[] = [];
+  const seen = new Set<string>();
+  const limit = segments[index]?.type === 'work' ? 3 : 2;
+  for (const segment of segments.slice(Math.max(0, index))) {
+    if (segment.type !== 'work') continue;
+    const key = mediaCacheKey(segment.media);
+    if (seen.has(key)) continue;
+    seen.add(key);
+    mediaList.push(segment.media);
+    if (mediaList.length >= limit) break;
+  }
+  return mediaList;
 }
 
 function formatDuration(seconds: number) {

@@ -1,0 +1,38 @@
+{
+  "commands": {
+    "fusion-connector": {
+      "description": "Run Fusion Connector operations from CLI using an action argument.",
+      "argument_schema": {
+        "type": "object",
+        "properties": {
+          "action": {
+            "type": "string",
+            "enum": [
+              "status",
+              "list_tools",
+              "call_tool",
+              "config_get",
+              "config_set",
+              "audit_recent",
+              "operations_manifest",
+              "reference_manifest"
+            ],
+            "default": "status"
+          },
+          "endpoint": {"type": "string"},
+          "request_timeout_seconds": {"type": "number", "minimum": 0.5, "maximum": 30},
+          "limit": {"type": "integer", "minimum": 1, "maximum": 500},
+          "fusion_tool_name": {"type": "string"},
+          "tool_arguments": {"type": "object", "additionalProperties": true},
+          "confirm": {"type": "boolean", "default": false},
+          "reset_defaults": {"type": "boolean", "default": false},
+          "tool_allowlist": {"type": "array", "items": {"type": "string"}},
+          "tool_denylist": {"type": "array", "items": {"type": "string"}},
+          "mutating_requires_confirm": {"type": "boolean"},
+          "unknown_requires_confirm": {"type": "boolean"}
+        },
+        "additionalProperties": false
+      }
+    }
+  }
+}

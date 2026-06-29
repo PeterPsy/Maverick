@@ -1,0 +1,170 @@
+{
+  "tools": {
+    "fusion_status": {
+      "description": "Check whether Autodesk Fusion MCP is reachable from this Maverick host. Fusion must be open with Fusion MCP Server enabled.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "endpoint": {
+            "type": "string",
+            "description": "Optional loopback MCP endpoint override. Defaults to http://127.0.0.1:27182/mcp."
+          },
+          "request_timeout_seconds": {
+            "type": "number",
+            "minimum": 0.5,
+            "maximum": 30
+          }
+        },
+        "additionalProperties": false
+      },
+      "output_schema": {"type": "object"}
+    },
+    "fusion_list_tools": {
+      "description": "Discover tools exposed by the active Autodesk Fusion MCP server.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "limit": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 500,
+            "default": 100
+          },
+          "endpoint": {
+            "type": "string",
+            "description": "Optional loopback MCP endpoint override."
+          },
+          "request_timeout_seconds": {
+            "type": "number",
+            "minimum": 0.5,
+            "maximum": 30
+          }
+        },
+        "additionalProperties": false
+      },
+      "output_schema": {"type": "object"}
+    },
+    "fusion_call_tool": {
+      "description": "Call one discovered Autodesk Fusion MCP tool after endpoint, denylist, allowlist, and confirmation checks.",
+      "input_schema": {
+        "type": "object",
+        "required": ["fusion_tool_name"],
+        "properties": {
+          "fusion_tool_name": {
+            "type": "string",
+            "description": "Exact tool name returned by fusion_list_tools."
+          },
+          "tool_arguments": {
+            "type": "object",
+            "description": "Arguments matching the discovered Fusion tool input schema.",
+            "additionalProperties": true,
+            "default": {}
+          },
+          "confirm": {
+            "type": "boolean",
+            "description": "Required for mutating or unknown Fusion tools after explicit user approval.",
+            "default": false
+          },
+          "endpoint": {
+            "type": "string",
+            "description": "Optional loopback MCP endpoint override."
+          },
+          "request_timeout_seconds": {
+            "type": "number",
+            "minimum": 0.5,
+            "maximum": 30
+          }
+        },
+        "additionalProperties": false
+      },
+      "output_schema": {"type": "object"}
+    },
+    "fusion_config_get": {
+      "description": "Read redaction-safe Fusion Connector configuration.",
+      "input_schema": {
+        "type": "object",
+        "properties": {},
+        "additionalProperties": false
+      },
+      "output_schema": {"type": "object"}
+    },
+    "fusion_config_set": {
+      "description": "Update Fusion Connector endpoint or tool policy. Endpoint must remain loopback-only. Requires confirm=true.",
+      "input_schema": {
+        "type": "object",
+        "required": ["confirm"],
+        "properties": {
+          "confirm": {
+            "type": "boolean",
+            "const": true
+          },
+          "reset_defaults": {
+            "type": "boolean",
+            "default": false
+          },
+          "endpoint": {
+            "type": "string",
+            "description": "Loopback-only MCP endpoint, usually http://127.0.0.1:27182/mcp."
+          },
+          "request_timeout_seconds": {
+            "type": "number",
+            "minimum": 0.5,
+            "maximum": 30
+          },
+          "tool_allowlist": {
+            "type": "array",
+            "items": {"type": "string"},
+            "description": "If non-empty, only exact Fusion MCP tool names in this list may be called."
+          },
+          "tool_denylist": {
+            "type": "array",
+            "items": {"type": "string"},
+            "description": "Case-insensitive substrings that block external Fusion tool names."
+          },
+          "mutating_requires_confirm": {
+            "type": "boolean"
+          },
+          "unknown_requires_confirm": {
+            "type": "boolean"
+          }
+        },
+        "additionalProperties": false
+      },
+      "output_schema": {"type": "object"}
+    },
+    "fusion_audit_recent": {
+      "description": "Return recent Fusion Connector audit records from the app-owned data root.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "limit": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 100,
+            "default": 20
+          }
+        },
+        "additionalProperties": false
+      },
+      "output_schema": {"type": "object"}
+    },
+    "fusion_operations_manifest": {
+      "description": "Return the compact Fusion Connector operations manifest.",
+      "input_schema": {
+        "type": "object",
+        "properties": {},
+        "additionalProperties": false
+      },
+      "output_schema": {"type": "object"}
+    },
+    "fusion_connector_reference_manifest": {
+      "description": "Describe Fusion Connector reference entity support. This v1 connector exposes no reference entities.",
+      "input_schema": {
+        "type": "object",
+        "properties": {},
+        "additionalProperties": false
+      },
+      "output_schema": {"type": "object"}
+    }
+  }
+}

@@ -193,6 +193,7 @@ class FusionConnectorService:
             )
             return exc.status_code, {"ok": False, "fusion_tool_name": fusion_tool_name, "error": str(exc), **exc.details}
 
+        result_summary = _fusion_result_summary(result)
         self._append_audit(
             {
                 "timestamp": started_at,
@@ -201,6 +202,7 @@ class FusionConnectorService:
                 "ok": True,
                 "status_code": 200,
                 "arguments_preview": _truncate_json(tool_arguments, limit=1200),
+                **result_summary,
                 **_context_audit_fields(context),
             }
         )
@@ -208,6 +210,7 @@ class FusionConnectorService:
             "ok": True,
             "endpoint": client.endpoint,
             "fusion_tool_name": fusion_tool_name,
+            "fusion_result_summary": result_summary,
             "result": result,
         }
 
@@ -642,6 +645,35 @@ def _tool_summary(tool: dict[str, Any]) -> dict[str, Any]:
         "description": str(tool.get("description") or ""),
         "input_schema": schema if isinstance(schema, dict) else {"type": "object"},
     }
+
+
+def _fusion_result_summary(result: dict[str, Any]) -> dict[str, Any]:
+    content = result.get("content")
+    if not isinstance(content, list):
+        return {}
+    for item in content:
+        if not isinstance(item, dict) or item.get("type") != "text":
+            continue
+        text = str(item.get("text") or "").strip()
+        if not text:
+            continue
+        try:
+            parsed = json.loads(text)
+        except json.JSONDecodeError:
+            return {"fusion_text_preview": text[:500]}
+        if not isinstance(parsed, dict):
+            return {"fusion_text_preview": text[:500]}
+        summary: dict[str, Any] = {}
+        if "success" in parsed:
+            summary["fusion_success"] = bool(parsed.get("success"))
+        if parsed.get("message"):
+            summary["fusion_message"] = str(parsed.get("message"))[:500]
+        if parsed.get("error"):
+            summary["fusion_error"] = str(parsed.get("error"))[:500]
+        if parsed.get("failureReason"):
+            summary["fusion_failure_reason"] = str(parsed.get("failureReason"))[:200]
+        return summary
+    return {}
 
 
 def _bounded_int(value: Any, *, default: int, minimum: int, maximum: int) -> int:

@@ -91,7 +91,7 @@ class FakeFusionMcpHandler(BaseHTTPRequestHandler):
                 {
                     "jsonrpc": "2.0",
                     "id": payload.get("id"),
-                    "result": {"content": [{"type": "text", "text": "ok"}]},
+                    "result": {"content": [{"type": "text", "text": "{\"success\": true, \"message\": \"ok\"}"}]},
                 }
             )
             return
@@ -152,7 +152,8 @@ class FusionConnectorServiceTest(unittest.TestCase):
                     context=context,
                 )
                 self.assertEqual(status, 200)
-                self.assertEqual(result["result"]["content"][0]["text"], "ok")
+                self.assertEqual(result["fusion_result_summary"]["fusion_success"], True)
+                self.assertEqual(result["fusion_result_summary"]["fusion_message"], "ok")
 
                 status, result = handle_action(
                     data_root,

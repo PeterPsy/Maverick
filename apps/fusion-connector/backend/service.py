@@ -51,7 +51,6 @@ MUTATING_HINTS = (
 )
 DEFAULT_DENYLIST = [
     "eval",
-    "execute",
     "filesystem",
     "open_url",
     "python",

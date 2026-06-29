@@ -139,8 +139,7 @@ p {
 .primary-action,
 .secondary-action,
 .danger-action,
-.rename-group button,
-.custom-view-bar button {
+.rename-group button {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -160,7 +159,7 @@ p {
 }
 
 .secondary-action,
-.custom-view-bar button {
+.content-counts button {
   border: 1px solid var(--storage-border);
   background: var(--storage-surface);
   color: var(--storage-text);
@@ -548,10 +547,49 @@ h3 {
   font-size: 0.78rem;
 }
 
-.content-counts span {
+.content-counts span,
+.content-counts button {
   border: 1px solid var(--storage-border);
   border-radius: 999px;
   padding: 5px 9px;
+}
+
+.content-counts button {
+  display: inline-flex;
+  align-items: center;
+  min-height: 1.75rem;
+  color: var(--storage-text);
+  cursor: pointer;
+  font: inherit;
+}
+
+.content-counts button:hover,
+.content-counts button:focus-visible {
+  border-color: var(--storage-border-strong);
+  outline: none;
+}
+
+.content-count-title {
+  display: inline-flex;
+  max-width: min(34vw, 360px);
+  min-width: 0;
+  align-items: center;
+  gap: 6px;
+}
+
+.content-count-title .storage-icon {
+  width: 0.88rem;
+  height: 0.88rem;
+  flex: 0 0 auto;
+}
+
+.content-count-title span {
+  min-width: 0;
+  overflow: hidden;
+  border: 0;
+  padding: 0;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .storage-error {
@@ -598,39 +636,6 @@ h3 {
 .storage-error .storage-icon {
   width: 0.92rem;
   height: 0.92rem;
-}
-
-.custom-view-bar {
-  border: 1px solid var(--storage-border);
-  border-radius: 12px;
-  background: var(--storage-surface-muted);
-  padding: 8px;
-}
-
-.custom-view-bar {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-}
-
-.custom-view-bar div {
-  display: flex;
-  min-width: 0;
-  align-items: center;
-  gap: 8px;
-}
-
-.custom-view-bar strong,
-.custom-view-bar small {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.custom-view-bar small {
-  color: var(--storage-muted);
 }
 
 .rename-group input {

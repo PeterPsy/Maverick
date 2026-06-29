@@ -1500,6 +1500,9 @@ function App() {
   const folderBreadcrumbs = isDriveView ? [] : folderBreadcrumbItems(currentFolderPath);
   const driveBreadcrumbs = isDriveView ? driveBreadcrumbItems(driveTarget?.displayPath || 'Google Drive', driveBreadcrumbTrail) : [];
   const storageBreadcrumbLabel = activeRole === 'all' ? '' : roleLabels[activeRole];
+  const customReferenceCount = customFileIds.length + customWorkspacePaths.length;
+  const customViewTitle = customTitle || 'Custom file view';
+  const isCustomStorageView = viewMode === 'custom' && !isDriveView;
   const pendingDeleteName = pendingDelete?.kind === 'file' ? pendingDelete.file.name : pendingDelete?.folder.name || '';
   const pendingDeletePath = pendingDelete?.kind === 'file'
     ? (isDriveItem(pendingDelete.file) ? driveItemPath(pendingDelete.file) : pendingDelete.file.workspace_relative_path)
@@ -2370,7 +2373,7 @@ function App() {
                   <Breadcrumb className="storage-breadcrumb">
                     <BreadcrumbList>
                       <BreadcrumbItem>
-                    {storageBreadcrumbLabel || folderBreadcrumbs.length ? (
+                    {storageBreadcrumbLabel || folderBreadcrumbs.length || isCustomStorageView ? (
                       <BreadcrumbLink asChild>
                         <button
                           type="button"
@@ -2392,7 +2395,14 @@ function App() {
                       </BreadcrumbPage>
                     )}
                   </BreadcrumbItem>
-                  {storageBreadcrumbLabel ? (
+                  {isCustomStorageView ? (
+                    <>
+                      <BreadcrumbSeparator />
+                      <BreadcrumbItem>
+                        <BreadcrumbPage>Custom view</BreadcrumbPage>
+                      </BreadcrumbItem>
+                    </>
+                  ) : storageBreadcrumbLabel ? (
                     <>
                       <BreadcrumbSeparator />
                       <BreadcrumbItem>
@@ -2460,9 +2470,23 @@ function App() {
               </div>
             ) : (
               <div className="content-counts">
-                <span>{visibleFolders.length} folders</span>
-                <span>{fileCountLabel}</span>
-                <span aria-label={`Folder size ${currentFolderSizeLabel}`} title="Folder size">{currentFolderSizeLabel}</span>
+                {isCustomStorageView ? (
+                  <>
+                    <span className="content-count-title" title={customViewTitle}>
+                      <Icon name="filter_list" />
+                      <span>{customViewTitle}</span>
+                    </span>
+                    <span>{filteredFiles.length} visible files</span>
+                    <span>{customReferenceCount} references</span>
+                    <button type="button" onClick={clearCustomFileView}>Clear</button>
+                  </>
+                ) : (
+                  <>
+                    <span>{visibleFolders.length} folders</span>
+                    <span>{fileCountLabel}</span>
+                    <span aria-label={`Folder size ${currentFolderSizeLabel}`} title="Folder size">{currentFolderSizeLabel}</span>
+                  </>
+                )}
               </div>
             )}
               </>
@@ -2476,17 +2500,6 @@ function App() {
                 <Icon name="close" />
               </button>
             </div>
-          ) : null}
-
-          {viewMode === 'custom' ? (
-            <section className="custom-view-bar" aria-label="Custom Storage view">
-              <div>
-                <Icon name="filter_list" />
-                <strong>{customTitle || 'Custom file view'}</strong>
-                <small>{filteredFiles.length} visible files from {customFileIds.length + customWorkspacePaths.length} selected references</small>
-              </div>
-              <button type="button" onClick={clearCustomFileView}>Clear custom view</button>
-            </section>
           ) : null}
 
           <section className={`storage-browser ${layoutMode}`} aria-busy={isCatalogContentLoading} aria-label="Workspace storage">

@@ -17,7 +17,9 @@ arguments = payload.arguments
 tool_actions = {
     "fusion_status": "status",
     "fusion_list_tools": "list_tools",
+    "fusion_session_brief": "session_brief",
     "fusion_call_tool": "call_tool",
+    "fusion_capture_screenshot": "capture_screenshot",
     "fusion_config_get": "config_get",
     "fusion_config_set": "config_set",
     "fusion_audit_recent": "audit_recent",

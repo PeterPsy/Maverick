@@ -16,7 +16,9 @@ For agent-to-agent handoff details, see `docs/agent-handoff.md`.
 
 - Check Fusion MCP reachability.
 - Discover the dynamic tool list exposed by Fusion.
+- Return a compact session brief with connection status, tool names, and open-document metadata in one call.
 - Call one discovered Fusion MCP tool after allowlist/denylist and confirmation checks.
+- Capture viewport screenshots to app-owned data without returning inline base64.
 - Store connector config and audit records under `data/fusion-connector/state.json`.
 - Keep endpoint targets loopback-only for v1.
 
@@ -41,11 +43,21 @@ Keep the SSH process running while Maverick uses Fusion.
 ## MCP Workflow
 
 ```bash
-maverick app fusion-connector mcp call fusion_status --json
-maverick app fusion-connector mcp call fusion_list_tools --json --limit 100
+maverick app fusion-connector mcp call fusion_session_brief --json
 maverick app fusion-connector mcp call fusion_call_tool --json --arguments-json \
-'{"fusion_tool_name":"<tool from fusion_list_tools>","tool_arguments":{}}'
+'{"fusion_tool_name":"<tool name from fusion_session_brief>","tool_arguments":{}}'
 ```
+
+Use `fusion_status` and `fusion_list_tools` separately only when you need full tool schemas or are debugging connection state.
+
+Capture a screenshot for agent verification without triggering output compaction:
+
+```bash
+maverick app fusion-connector mcp call fusion_capture_screenshot --json --arguments-json \
+'{"width":960,"height":720,"direction":"iso-top-right"}'
+```
+
+The response returns metadata and paths under `data/fusion-connector/screenshots/`; it does not return inline image base64.
 
 For mutating operations, ask the user first and then include:
 
@@ -57,7 +69,9 @@ For mutating operations, ask the user first and then include:
 
 ```bash
 maverick app fusion-connector cli run fusion-connector --json --action status
+maverick app fusion-connector cli run fusion-connector --json --action session_brief
 maverick app fusion-connector cli run fusion-connector --json --action list_tools --limit 100
+maverick app fusion-connector cli run fusion-connector --json --action capture_screenshot --width 960 --height 720
 maverick app fusion-connector cli run fusion-connector --json --action audit_recent --limit 20
 ```
 
@@ -90,15 +104,14 @@ Known Autodesk Fusion MCP tools observed in v1 testing:
 Read open documents:
 
 ```bash
-maverick app fusion-connector mcp call fusion_call_tool --json --arguments-json \
-'{"fusion_tool_name":"fusion_mcp_read","tool_arguments":{"queryType":"document","operation":"open"}}'
+maverick app fusion-connector mcp call fusion_session_brief --json
 ```
 
 Capture a screenshot without dumping the full base64 payload into chat:
 
 ```bash
-maverick app fusion-connector mcp call fusion_call_tool --json --arguments-json \
-'{"fusion_tool_name":"fusion_mcp_read","tool_arguments":{"queryType":"screenshot","width":640,"height":480,"direction":"iso-top-right"}}'
+maverick app fusion-connector mcp call fusion_capture_screenshot --json --arguments-json \
+'{"width":640,"height":480,"direction":"iso-top-right"}'
 ```
 
 Undo after user confirmation:

@@ -72,6 +72,14 @@ class FakeFusionMcpHandler(BaseHTTPRequestHandler):
                     "result": {
                         "tools": [
                             {
+                                "name": "fusion_mcp_read",
+                                "description": "Read Fusion documents, projects, and screenshots.",
+                                "inputSchema": {
+                                    "type": "object",
+                                    "properties": {"queryType": {"type": "string"}, "operation": {"type": "string"}},
+                                },
+                            },
+                            {
                                 "name": "get_document_info",
                                 "description": "Return active document info.",
                                 "inputSchema": {"type": "object", "properties": {}},
@@ -87,6 +95,58 @@ class FakeFusionMcpHandler(BaseHTTPRequestHandler):
             )
             return
         if method == "tools/call":
+            params = payload.get("params") if isinstance(payload.get("params"), dict) else {}
+            arguments = params.get("arguments") if isinstance(params.get("arguments"), dict) else {}
+            if arguments.get("queryType") == "document" and arguments.get("operation") == "open":
+                self._send(
+                    {
+                        "jsonrpc": "2.0",
+                        "id": payload.get("id"),
+                        "result": {
+                            "content": [
+                                {
+                                    "type": "text",
+                                    "text": json.dumps(
+                                        {
+                                            "success": True,
+                                            "message": "1 open document(s)",
+                                            "results": [
+                                                {
+                                                    "name": "Bauliera v4",
+                                                    "isActive": True,
+                                                    "isModified": False,
+                                                    "isReadOnly": False,
+                                                    "isSaved": True,
+                                                    "parentFolder": "Camperizzazione macchina",
+                                                    "parentProject": "Camperizzazione macchina",
+                                                    "id": "hidden-from-brief",
+                                                }
+                                            ],
+                                        }
+                                    ),
+                                }
+                            ]
+                        },
+                    }
+                )
+                return
+            if arguments.get("queryType") == "screenshot":
+                self._send(
+                    {
+                        "jsonrpc": "2.0",
+                        "id": payload.get("id"),
+                        "result": {
+                            "content": [
+                                {
+                                    "type": "image",
+                                    "mimeType": "image/png",
+                                    "data": "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/p9sAAAAASUVORK5CYII=",
+                                }
+                            ]
+                        },
+                    }
+                )
+                return
             self._send(
                 {
                     "jsonrpc": "2.0",
@@ -143,7 +203,10 @@ class FusionConnectorServiceTest(unittest.TestCase):
                 self.assertEqual(status, 200)
                 status, result = handle_action(data_root, "list_tools", {}, context=context)
                 self.assertEqual(status, 200)
-                self.assertEqual([tool["name"] for tool in result["tools"]], ["get_document_info", "create_box"])
+                self.assertEqual(
+                    [tool["name"] for tool in result["tools"]],
+                    ["fusion_mcp_read", "get_document_info", "create_box"],
+                )
 
                 status, result = handle_action(
                     data_root,
@@ -171,6 +234,71 @@ class FusionConnectorServiceTest(unittest.TestCase):
                     context=context,
                 )
                 self.assertEqual(status, 200)
+        finally:
+            server.shutdown()
+            thread.join(timeout=5)
+            server.server_close()
+
+    def test_session_brief_combines_tools_and_open_document_context(self) -> None:
+        FakeFusionMcpHandler.requests = []
+        server = ThreadingHTTPServer(("127.0.0.1", 0), FakeFusionMcpHandler)
+        thread = Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        endpoint = f"http://127.0.0.1:{server.server_port}/mcp"
+        try:
+            with TemporaryDirectory() as tmp:
+                status, result = handle_action(
+                    Path(tmp),
+                    "session_brief",
+                    {"endpoint": endpoint},
+                    context=InvocationContext(surface="test", effective_mode="full-access"),
+                )
+                self.assertEqual(status, 200)
+                self.assertTrue(result["connected"])
+                self.assertEqual(result["tool_names"], ["fusion_mcp_read", "get_document_info", "create_box"])
+                self.assertNotIn("input_schema", result["tools"][0])
+                self.assertEqual(result["tools"][0]["input_properties"], ["operation", "queryType"])
+                self.assertEqual(result["open_documents"]["count"], 1)
+                self.assertEqual(result["open_documents"]["active_document"]["name"], "Bauliera v4")
+                self.assertNotIn("id", result["open_documents"]["active_document"])
+                methods = [request.get("method") for request in FakeFusionMcpHandler.requests]
+                self.assertEqual(
+                    methods,
+                    ["initialize", "notifications/initialized", "tools/list", "tools/call"],
+                )
+        finally:
+            server.shutdown()
+            thread.join(timeout=5)
+            server.server_close()
+
+    def test_capture_screenshot_saves_image_without_inline_base64(self) -> None:
+        FakeFusionMcpHandler.requests = []
+        server = ThreadingHTTPServer(("127.0.0.1", 0), FakeFusionMcpHandler)
+        thread = Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        endpoint = f"http://127.0.0.1:{server.server_port}/mcp"
+        try:
+            with TemporaryDirectory() as tmp:
+                data_root = Path(tmp)
+                status, result = handle_action(
+                    data_root,
+                    "capture_screenshot",
+                    {"endpoint": endpoint, "width": 320, "height": 240, "direction": "iso-top-right"},
+                    context=InvocationContext(surface="test", effective_mode="full-access"),
+                )
+                self.assertEqual(status, 200)
+                self.assertTrue(result["ok"])
+                self.assertNotIn("result", result)
+                screenshot = result["screenshot"]
+                self.assertEqual(screenshot["mime_type"], "image/png")
+                self.assertEqual(screenshot["width"], 320)
+                self.assertEqual(screenshot["height"], 240)
+                self.assertTrue(screenshot["workspace_relative_path"].startswith("data/fusion-connector/screenshots/"))
+
+                image_path = data_root / screenshot["app_data_relative_path"]
+                self.assertTrue(image_path.exists())
+                self.assertEqual(image_path.read_bytes()[:8], b"\x89PNG\r\n\x1a\n")
+                self.assertEqual(screenshot["bytes"], image_path.stat().st_size)
         finally:
             server.shutdown()
             thread.join(timeout=5)

@@ -38,7 +38,9 @@
     "mcp_tools": [
       "fusion_status",
       "fusion_list_tools",
+      "fusion_session_brief",
       "fusion_call_tool",
+      "fusion_capture_screenshot",
       "fusion_config_get",
       "fusion_config_set",
       "fusion_audit_recent",

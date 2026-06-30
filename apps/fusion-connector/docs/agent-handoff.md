@@ -38,6 +38,7 @@ Use scoped discovery every time rather than guessing:
 
 ```bash
 maverick app fusion-connector mcp list --json
+maverick app fusion-connector mcp call fusion_session_brief --json
 maverick app fusion-connector mcp inspect fusion_call_tool --json
 maverick app fusion-connector cli list --json
 maverick app fusion-connector cli inspect fusion-connector --json
@@ -51,7 +52,9 @@ All executable surfaces require a trusted workspace context and full-access mode
 | --- | --- |
 | `fusion_status` | Check whether Fusion MCP is reachable and list a compact tool preview. |
 | `fusion_list_tools` | Discover Autodesk Fusion MCP tools and input schemas. |
+| `fusion_session_brief` | Return compact connection, tool-name, and open-document context in one call. |
 | `fusion_call_tool` | Call one discovered Autodesk tool after policy checks. |
+| `fusion_capture_screenshot` | Save a viewport screenshot to app-owned data and return metadata instead of inline base64. |
 | `fusion_config_get` | Read endpoint, timeout, allowlist, denylist, and confirmation policy. |
 | `fusion_config_set` | Update config. Requires `confirm: true`. Endpoint remains loopback-only. |
 | `fusion_audit_recent` | Read recent connector audit records. |
@@ -69,21 +72,20 @@ The Fusion MCP server has a dynamic tool list. In v1 testing it exposed:
 | `fusion_mcp_update` | Undo/redo. |
 | `fusion_mcp_electronics_read` | Read Electronics design data when an Electronics document is active. |
 
-Always call `fusion_list_tools` first and use the returned exact tool name and schema.
+For routine CAD tasks, start with `fusion_session_brief`. It reuses one MCP client to return connection state, compact tool names, and active open-document metadata without dumping full tool descriptions into chat. Follow with `fusion_list_tools` only when you need a full dynamic input schema. Always use an exact tool name returned by one of those discovery calls.
 
 ## Read-Only Smoke Tests
 
 Status:
 
 ```bash
-maverick app fusion-connector mcp call fusion_status --json
+maverick app fusion-connector mcp call fusion_session_brief --json
 ```
 
 Open documents:
 
 ```bash
-maverick app fusion-connector mcp call fusion_call_tool --json --arguments-json \
-'{"fusion_tool_name":"fusion_mcp_read","tool_arguments":{"queryType":"document","operation":"open"}}'
+maverick app fusion-connector mcp call fusion_session_brief --json
 ```
 
 Projects:
@@ -96,11 +98,11 @@ maverick app fusion-connector mcp call fusion_call_tool --json --arguments-json 
 Screenshot:
 
 ```bash
-maverick app fusion-connector mcp call fusion_call_tool --json --arguments-json \
-'{"fusion_tool_name":"fusion_mcp_read","tool_arguments":{"queryType":"screenshot","width":640,"height":480,"direction":"iso-top-right"}}'
+maverick app fusion-connector mcp call fusion_capture_screenshot --json --arguments-json \
+'{"width":960,"height":720,"direction":"iso-top-right"}'
 ```
 
-Do not dump large screenshot base64 into chat. Summarize it or write it to Storage.
+Prefer `fusion_capture_screenshot` over raw `fusion_mcp_read` screenshots. Raw screenshot calls return inline base64 that can be compacted before the agent can inspect it. The capture tool stores the PNG under `data/fusion-connector/screenshots/` and returns `app_data_relative_path`, `workspace_relative_path`, MIME type, dimensions, and byte size.
 
 ## Mutating Calls
 
@@ -121,6 +123,10 @@ maverick app fusion-connector mcp call fusion_call_tool --json --arguments-json 
 ```
 
 Do not save, close, overwrite, delete, or run arbitrary scripts unless the user explicitly approves the exact intended effect.
+
+For CAD-building scripts, avoid one large monolithic script. Use staged scripts with focused bodies/features, pass a higher per-call `request_timeout_seconds` when needed, and verify each stage with `fusion_status`, `fusion_audit_recent`, or `fusion_capture_screenshot`. Autodesk Fusion may continue executing after the connector request times out, so follow a timeout with status/audit checks before retrying.
+
+Do not assume the active Fusion document can accept a new component. Some part documents allow only the root component. Probe or handle that failure and fall back to named root bodies with a stable prefix instead of failing the whole build.
 
 ## CLI Surface
 

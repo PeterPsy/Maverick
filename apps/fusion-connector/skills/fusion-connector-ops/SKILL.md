@@ -35,11 +35,12 @@ The Autodesk account is managed by Fusion itself. Do not ask the user to connect
 Start every Fusion task with:
 
 ```bash
-maverick app fusion-connector mcp call fusion_status --json
-maverick app fusion-connector mcp call fusion_list_tools --json --limit 20
+maverick app fusion-connector mcp call fusion_session_brief --json
 ```
 
-If `fusion_status` returns `connected: false`, check that Fusion is open, MCP is enabled, and the tunnel is still running when Fusion is not on the same host.
+If `fusion_session_brief` returns `connected: false`, check that Fusion is open, MCP is enabled, and the tunnel is still running when Fusion is not on the same host.
+
+`fusion_session_brief` is the fast path for routine CAD work. It returns connection state, compact tool names, and open-document metadata without dumping full tool descriptions into chat. Use `fusion_list_tools --limit 20` only when you need the full dynamic input schemas.
 
 The current Autodesk Fusion MCP server commonly exposes these tools:
 
@@ -48,7 +49,7 @@ The current Autodesk Fusion MCP server commonly exposes these tools:
 - `fusion_mcp_update`: undo/redo.
 - `fusion_mcp_electronics_read`: read Electronics documents.
 
-Always use exact tool names returned by `fusion_list_tools`; Autodesk can change the dynamic tool list.
+Always use exact tool names returned by `fusion_session_brief` or `fusion_list_tools`; Autodesk can change the dynamic tool list.
 
 ## Calling Fusion Tools
 
@@ -64,12 +65,20 @@ Useful read-only checks:
 ```bash
 maverick app fusion-connector mcp call fusion_call_tool --json --arguments-json \
 '{"fusion_tool_name":"fusion_mcp_read","tool_arguments":{"queryType":"projects"}}'
-
-maverick app fusion-connector mcp call fusion_call_tool --json --arguments-json \
-'{"fusion_tool_name":"fusion_mcp_read","tool_arguments":{"queryType":"screenshot","width":640,"height":480,"direction":"iso-top-right"}}'
 ```
 
-Screenshot responses can contain large base64 image data. Summarize or save them through Storage instead of dumping the full payload into chat.
+Prefer the connector-owned screenshot capture tool for visual verification:
+
+```bash
+maverick app fusion-connector mcp call fusion_capture_screenshot --json --arguments-json \
+'{"width":960,"height":720,"direction":"iso-top-right"}'
+```
+
+It writes a PNG under `data/fusion-connector/screenshots/` and returns metadata/path fields instead of inline base64. Raw screenshot responses can contain large base64 image data that may be compacted before the agent can inspect it.
+
+For CAD-building tasks, avoid one large script. Use staged scripts with focused geometry changes, verify each stage, and pass `request_timeout_seconds` up to 30 seconds when the stage is expected to be slow. If a mutating call times out, do not immediately retry the same mutation; check `fusion_status` and `fusion_audit_recent` first because Fusion may still be executing.
+
+Do not assume the active document can accept `addNewComponent`; some Fusion part documents only allow root-component bodies. Inspect or handle this case and use named root bodies with a stable prefix when component creation is not supported.
 
 For mutating or unknown operations, ask the user for explicit confirmation before retrying with `confirm: true`.
 

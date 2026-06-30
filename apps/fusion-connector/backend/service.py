@@ -2,11 +2,14 @@
 
 from __future__ import annotations
 
+import base64
+import binascii
 from dataclasses import dataclass
 from datetime import datetime, timezone
 import ipaddress
 import json
 from pathlib import Path
+import re
 import socket
 from typing import Any
 from urllib import error as urlerror
@@ -20,6 +23,7 @@ MCP_PROTOCOL_VERSION = "2025-03-26"
 CLIENT_INFO = {"name": "maverick-fusion-connector", "version": "0.1.0"}
 MAX_HTTP_RESPONSE_BYTES = 5_000_000
 MAX_AUDIT_ITEMS = 100
+MAX_SCREENSHOT_FILE_BYTES = 10_000_000
 
 READ_ONLY_PREFIXES = (
     "describe",
@@ -115,8 +119,12 @@ class FusionConnectorService:
             return self.status(arguments)
         if normalized == "list_tools":
             return self.list_tools(arguments)
+        if normalized == "session_brief":
+            return self.session_brief(arguments)
         if normalized == "call_tool":
             return self.call_tool(arguments, context=context)
+        if normalized == "capture_screenshot":
+            return self.capture_screenshot(arguments, context=context)
         if normalized == "config_get":
             return 200, {"ok": True, "config": _public_config(self._state()["config"])}
         if normalized == "config_set":
@@ -161,6 +169,103 @@ class FusionConnectorService:
             "endpoint": client.endpoint,
             "tool_count": len(tools),
             "tools": [_tool_summary(tool) for tool in tools],
+        }
+
+    def session_brief(self, arguments: dict[str, Any]) -> tuple[int, dict[str, Any]]:
+        config = self._state()["config"]
+        client = _client_for_config(config, arguments)
+        limit = _bounded_int(arguments.get("limit"), default=20, minimum=1, maximum=100)
+        include_open_documents = bool(arguments.get("include_open_documents", True))
+        fusion_read_tool_name = str(arguments.get("fusion_read_tool_name") or "fusion_mcp_read").strip()
+        try:
+            tools = client.list_tools(limit=limit)
+        except FusionConnectorError as exc:
+            return exc.status_code, {
+                "ok": False,
+                "connected": False,
+                "endpoint": client.endpoint,
+                "error": str(exc),
+                "hint": "Fusion must be open on the same host as Maverick, with Fusion MCP Server enabled.",
+            }
+
+        tool_names = [str(tool.get("name") or "") for tool in tools if str(tool.get("name") or "")]
+        result: dict[str, Any] = {
+            "ok": True,
+            "connected": True,
+            "endpoint": client.endpoint,
+            "protocol_version": MCP_PROTOCOL_VERSION,
+            "tool_count": len(tools),
+            "tool_names": tool_names,
+            "tools": [_compact_tool_summary(tool) for tool in tools],
+        }
+        if include_open_documents:
+            result["open_documents"] = self._open_documents_brief(
+                client,
+                config,
+                fusion_read_tool_name=fusion_read_tool_name,
+                tool_names=tool_names,
+            )
+        return 200, result
+
+    def _open_documents_brief(
+        self,
+        client: FusionMcpHttpClient,
+        config: dict[str, Any],
+        *,
+        fusion_read_tool_name: str,
+        tool_names: list[str],
+    ) -> dict[str, Any]:
+        if not fusion_read_tool_name:
+            return {"ok": False, "skipped": True, "reason": "`fusion_read_tool_name` is empty."}
+        if fusion_read_tool_name not in tool_names:
+            return {
+                "ok": False,
+                "skipped": True,
+                "fusion_tool_name": fusion_read_tool_name,
+                "reason": "Read tool was not present in the discovered Fusion tool list.",
+            }
+        if not _looks_read_only(_policy_token(fusion_read_tool_name)):
+            return {
+                "ok": False,
+                "skipped": True,
+                "fusion_tool_name": fusion_read_tool_name,
+                "reason": "Open-document discovery requires a read-only Fusion tool.",
+            }
+        policy_error = _policy_error(config, fusion_read_tool_name, confirmed=True)
+        if policy_error is not None:
+            status_code, payload = policy_error
+            return {"ok": False, "status_code": status_code, **payload}
+        try:
+            result = client.call_tool(
+                fusion_read_tool_name,
+                {"queryType": "document", "operation": "open"},
+            )
+        except FusionConnectorError as exc:
+            return {
+                "ok": False,
+                "fusion_tool_name": fusion_read_tool_name,
+                "status_code": exc.status_code,
+                "error": str(exc),
+                **exc.details,
+            }
+
+        parsed = _first_text_json_object(result)
+        if parsed is None:
+            return {
+                "ok": False,
+                "fusion_tool_name": fusion_read_tool_name,
+                "error": "Fusion open-document response did not include a JSON text payload.",
+                **_fusion_result_summary(result),
+            }
+        documents = _document_results_brief(parsed.get("results"))
+        active_document = next((doc for doc in documents if doc.get("isActive")), documents[0] if documents else None)
+        return {
+            "ok": bool(parsed.get("success", True)),
+            "fusion_tool_name": fusion_read_tool_name,
+            "message": str(parsed.get("message") or "")[:300],
+            "count": len(documents),
+            "active_document": active_document,
+            "documents": documents,
         }
 
     def call_tool(self, arguments: dict[str, Any], *, context: InvocationContext) -> tuple[int, dict[str, Any]]:
@@ -212,6 +317,87 @@ class FusionConnectorService:
             "fusion_tool_name": fusion_tool_name,
             "fusion_result_summary": result_summary,
             "result": result,
+        }
+
+    def capture_screenshot(self, arguments: dict[str, Any], *, context: InvocationContext) -> tuple[int, dict[str, Any]]:
+        config = self._state()["config"]
+        client = _client_for_config(config, arguments)
+        fusion_tool_name = str(arguments.get("fusion_read_tool_name") or "fusion_mcp_read").strip()
+        if not fusion_tool_name:
+            raise FusionConnectorError("`fusion_read_tool_name` must not be empty.", status_code=400)
+        if not _looks_read_only(_policy_token(fusion_tool_name)):
+            raise FusionConnectorError("Screenshot capture requires a read-only Fusion tool.", status_code=400)
+        policy_error = _policy_error(config, fusion_tool_name, confirmed=True)
+        if policy_error is not None:
+            return policy_error
+
+        width = _bounded_int(arguments.get("width"), default=960, minimum=64, maximum=2400)
+        height = _bounded_int(arguments.get("height"), default=720, minimum=64, maximum=2400)
+        direction = str(arguments.get("direction") or "iso-top-right").strip() or "iso-top-right"
+        tool_arguments = {
+            "queryType": "screenshot",
+            "width": width,
+            "height": height,
+            "direction": direction,
+        }
+
+        started_at = _utc_now()
+        try:
+            result = client.call_tool(fusion_tool_name, tool_arguments)
+            image = _first_image_content(result)
+            raw = _decode_base64_image(image["data"])
+            if len(raw) > MAX_SCREENSHOT_FILE_BYTES:
+                raise FusionConnectorError("Fusion screenshot exceeded the app screenshot safety limit.", status_code=502)
+            relative_path = _write_screenshot_file(
+                self.data_root,
+                raw,
+                mime_type=image["mime_type"],
+                width=width,
+                height=height,
+                direction=direction,
+            )
+        except FusionConnectorError as exc:
+            self._append_audit(
+                {
+                    "timestamp": started_at,
+                    "action": "capture_screenshot",
+                    "fusion_tool_name": fusion_tool_name,
+                    "ok": False,
+                    "status_code": exc.status_code,
+                    "error": str(exc),
+                    **_context_audit_fields(context),
+                }
+            )
+            return exc.status_code, {"ok": False, "fusion_tool_name": fusion_tool_name, "error": str(exc), **exc.details}
+
+        screenshot = {
+            "app_data_relative_path": relative_path,
+            "workspace_relative_path": str(Path("data") / APP_ID / relative_path),
+            "mime_type": image["mime_type"],
+            "bytes": len(raw),
+            "width": width,
+            "height": height,
+            "direction": direction,
+        }
+        result_summary = _fusion_result_summary(result)
+        self._append_audit(
+            {
+                "timestamp": started_at,
+                "action": "capture_screenshot",
+                "fusion_tool_name": fusion_tool_name,
+                "ok": True,
+                "status_code": 200,
+                "screenshot": screenshot,
+                **result_summary,
+                **_context_audit_fields(context),
+            }
+        )
+        return 200, {
+            "ok": True,
+            "endpoint": client.endpoint,
+            "fusion_tool_name": fusion_tool_name,
+            "fusion_result_summary": result_summary,
+            "screenshot": screenshot,
         }
 
     def config_set(self, arguments: dict[str, Any], *, context: InvocationContext) -> tuple[int, dict[str, Any]]:
@@ -444,7 +630,12 @@ def operations_manifest() -> list[dict[str, Any]]:
     return [
         {"action": "status", "description": "Check whether Fusion MCP is reachable from Maverick."},
         {"action": "list_tools", "description": "List tools exposed by the active Fusion MCP server."},
+        {
+            "action": "session_brief",
+            "description": "Return compact connection, tool-name, and open-document context in one call.",
+        },
         {"action": "call_tool", "description": "Call one discovered Fusion MCP tool after policy checks."},
+        {"action": "capture_screenshot", "description": "Capture a Fusion viewport screenshot to app-owned data."},
         {"action": "config_get", "description": "Read redaction-safe Fusion Connector configuration."},
         {"action": "config_set", "description": "Update endpoint or tool policy. Requires confirm=true."},
         {"action": "audit_recent", "description": "Return recent Fusion Connector audit records."},
@@ -472,7 +663,11 @@ def _normalize_action(action: str) -> str:
     aliases = {
         "tools": "list_tools",
         "tool_list": "list_tools",
+        "brief": "session_brief",
+        "context": "session_brief",
+        "session": "session_brief",
         "call": "call_tool",
+        "screenshot": "capture_screenshot",
         "config": "config_get",
         "audit": "audit_recent",
     }
@@ -647,6 +842,18 @@ def _tool_summary(tool: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def _compact_tool_summary(tool: dict[str, Any]) -> dict[str, Any]:
+    schema = tool.get("inputSchema") or tool.get("input_schema")
+    properties = schema.get("properties") if isinstance(schema, dict) else None
+    summary: dict[str, Any] = {
+        "name": str(tool.get("name") or ""),
+        "description": str(tool.get("description") or "")[:220],
+    }
+    if isinstance(properties, dict):
+        summary["input_properties"] = sorted(str(name) for name in properties)[:50]
+    return summary
+
+
 def _fusion_result_summary(result: dict[str, Any]) -> dict[str, Any]:
     content = result.get("content")
     if not isinstance(content, list):
@@ -674,6 +881,114 @@ def _fusion_result_summary(result: dict[str, Any]) -> dict[str, Any]:
             summary["fusion_failure_reason"] = str(parsed.get("failureReason"))[:200]
         return summary
     return {}
+
+
+def _first_text_json_object(result: dict[str, Any]) -> dict[str, Any] | None:
+    content = result.get("content")
+    if not isinstance(content, list):
+        return None
+    for item in content:
+        if not isinstance(item, dict) or item.get("type") != "text":
+            continue
+        text = str(item.get("text") or "").strip()
+        if not text:
+            continue
+        try:
+            parsed = json.loads(text)
+        except json.JSONDecodeError:
+            return None
+        return parsed if isinstance(parsed, dict) else None
+    return None
+
+
+def _document_results_brief(results: Any) -> list[dict[str, Any]]:
+    if not isinstance(results, list):
+        return []
+    documents: list[dict[str, Any]] = []
+    for item in results[:20]:
+        if not isinstance(item, dict):
+            continue
+        doc: dict[str, Any] = {}
+        for key in (
+            "name",
+            "isActive",
+            "isModified",
+            "isReadOnly",
+            "isSaved",
+            "parentFolder",
+            "parentProject",
+        ):
+            if key in item:
+                doc[key] = item[key]
+        if doc:
+            documents.append(doc)
+    return documents
+
+
+def _first_image_content(result: dict[str, Any]) -> dict[str, str]:
+    content = result.get("content")
+    if not isinstance(content, list):
+        raise FusionConnectorError("Fusion screenshot response did not include content.", status_code=502)
+    observed_types: list[str] = []
+    for item in content:
+        if not isinstance(item, dict):
+            continue
+        observed_types.append(str(item.get("type") or ""))
+        if item.get("type") != "image":
+            continue
+        data = str(item.get("data") or "").strip()
+        if not data:
+            raise FusionConnectorError("Fusion screenshot image did not include base64 data.", status_code=502)
+        mime_type = str(item.get("mimeType") or item.get("mime_type") or "image/png").strip() or "image/png"
+        return {"data": data, "mime_type": mime_type}
+    raise FusionConnectorError(
+        "Fusion screenshot response did not include an image item.",
+        status_code=502,
+        details={"content_types": [value for value in observed_types if value][:10]},
+    )
+
+
+def _decode_base64_image(data: str) -> bytes:
+    if data.startswith("data:") and "," in data:
+        data = data.split(",", 1)[1]
+    try:
+        return base64.b64decode(data, validate=True)
+    except (binascii.Error, ValueError) as exc:
+        raise FusionConnectorError("Fusion screenshot image data was not valid base64.", status_code=502) from exc
+
+
+def _write_screenshot_file(
+    data_root: Path,
+    raw: bytes,
+    *,
+    mime_type: str,
+    width: int,
+    height: int,
+    direction: str,
+) -> str:
+    screenshots_dir = data_root / "screenshots"
+    screenshots_dir.mkdir(parents=True, exist_ok=True)
+    stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S%fZ")
+    slug = _safe_filename_token(direction, default="view")
+    extension = _extension_for_mime(mime_type)
+    filename = f"fusion-screenshot-{stamp}-{slug}-{width}x{height}.{extension}"
+    path = screenshots_dir / filename
+    path.write_bytes(raw)
+    return str(Path("screenshots") / filename)
+
+
+def _safe_filename_token(value: str, *, default: str) -> str:
+    token = re.sub(r"[^A-Za-z0-9_.-]+", "-", value.strip()).strip(".-").lower()
+    return (token or default)[:80]
+
+
+def _extension_for_mime(mime_type: str) -> str:
+    normalized = mime_type.split(";", 1)[0].strip().lower()
+    if normalized == "image/jpeg":
+        return "jpg"
+    if normalized == "image/webp":
+        return "webp"
+    return "png"
 
 
 def _bounded_int(value: Any, *, default: int, minimum: int, maximum: int) -> int:

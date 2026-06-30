@@ -44,6 +44,42 @@
       },
       "output_schema": {"type": "object"}
     },
+    "fusion_session_brief": {
+      "description": "Return compact Fusion connection, tool-name, and open-document context in one MCP call for faster agent startup.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "limit": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 100,
+            "default": 20,
+            "description": "Maximum number of Fusion MCP tools to include in the compact tool list."
+          },
+          "include_open_documents": {
+            "type": "boolean",
+            "default": true,
+            "description": "When true, call the read tool once to include open-document and active-document metadata."
+          },
+          "fusion_read_tool_name": {
+            "type": "string",
+            "description": "Read-only Fusion MCP tool used for open-document discovery. Defaults to fusion_mcp_read.",
+            "default": "fusion_mcp_read"
+          },
+          "endpoint": {
+            "type": "string",
+            "description": "Optional loopback MCP endpoint override."
+          },
+          "request_timeout_seconds": {
+            "type": "number",
+            "minimum": 0.5,
+            "maximum": 30
+          }
+        },
+        "additionalProperties": false
+      },
+      "output_schema": {"type": "object"}
+    },
     "fusion_call_tool": {
       "description": "Call one discovered Autodesk Fusion MCP tool after endpoint, denylist, allowlist, and confirmation checks.",
       "input_schema": {
@@ -64,6 +100,46 @@
             "type": "boolean",
             "description": "Required for mutating or unknown Fusion tools after explicit user approval.",
             "default": false
+          },
+          "endpoint": {
+            "type": "string",
+            "description": "Optional loopback MCP endpoint override."
+          },
+          "request_timeout_seconds": {
+            "type": "number",
+            "minimum": 0.5,
+            "maximum": 30
+          }
+        },
+        "additionalProperties": false
+      },
+      "output_schema": {"type": "object"}
+    },
+    "fusion_capture_screenshot": {
+      "description": "Capture a Fusion viewport screenshot and save it to Fusion Connector app-owned data without returning inline base64.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "width": {
+            "type": "integer",
+            "minimum": 64,
+            "maximum": 2400,
+            "default": 960
+          },
+          "height": {
+            "type": "integer",
+            "minimum": 64,
+            "maximum": 2400,
+            "default": 720
+          },
+          "direction": {
+            "type": "string",
+            "default": "iso-top-right"
+          },
+          "fusion_read_tool_name": {
+            "type": "string",
+            "description": "Read-only screenshot-capable Fusion MCP tool. Defaults to fusion_mcp_read.",
+            "default": "fusion_mcp_read"
           },
           "endpoint": {
             "type": "string",

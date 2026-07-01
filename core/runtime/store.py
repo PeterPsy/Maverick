@@ -14,7 +14,11 @@ from core.runtime.errors import (
     RuntimeThreadNotFoundError,
     RuntimeTurnNotFoundError,
 )
-from core.runtime.client_message_claims import CLIENT_MESSAGE_CLAIM_LEASE_SECONDS, RuntimeClientMessageClaim
+from core.runtime.client_message_claims import (
+    CLIENT_MESSAGE_CLAIM_LEASE_SECONDS,
+    RuntimeClientMessageClaim,
+    RuntimeClientMessageClaimConflictError,
+)
 from core.runtime.models import RuntimeLocation
 from core.runtime.paths import workspace_runtime_root
 from core.runtime.runtime_events import RuntimeEventRecord
@@ -91,6 +95,15 @@ class RuntimeStore(Protocol):
         ...
 
     def save_turn_if_client_message_absent(self, record: RuntimeTurnRecord) -> tuple[RuntimeTurnRecord, bool]:
+        ...
+
+    def save_turn_if_current_client_message_claim(
+        self,
+        record: RuntimeTurnRecord,
+        claim: RuntimeClientMessageClaim,
+        *,
+        now: datetime | None = None,
+    ) -> tuple[RuntimeTurnRecord, bool]:
         ...
 
     def get_turn(self, turn_id: str) -> RuntimeTurnRecord:
@@ -320,6 +333,47 @@ class RuntimeDocumentStore:
         }
         document, inserted = self._insert_one_if_absent(self.collections.turns, query, asdict(record))
         return RuntimeTurnRecord(**document), inserted
+
+    def save_turn_if_current_client_message_claim(
+        self,
+        record: RuntimeTurnRecord,
+        claim: RuntimeClientMessageClaim,
+        *,
+        now: datetime | None = None,
+    ) -> tuple[RuntimeTurnRecord, bool]:
+        normalized_client_message_id = record.client_message_id.strip() if isinstance(record.client_message_id, str) else ""
+        if not normalized_client_message_id:
+            return self.save_turn(record), True
+        collection = self.collections.client_messages
+        if collection is None:
+            return self.save_turn_if_client_message_absent(record)
+        if not _client_message_claim_matches_record(claim, record, normalized_client_message_id):
+            raise ValueError("Runtime turn does not match the expected client message claim.")
+        timestamp = now or datetime.now(tz=UTC)
+        identity_query = {"workspace_id": record.workspace_id, "client_message_id": normalized_client_message_id}
+        with self._fallback_lock:
+            current_document = collection.find_one(identity_query)
+            current_claim = _client_message_claim_from_document(current_document) if current_document is not None else None
+            if current_claim is None or not _client_message_claim_matches(current_claim, claim):
+                raise RuntimeClientMessageClaimConflictError(current_claim)
+            if _client_message_claim_is_expired(current_claim, timestamp):
+                raise RuntimeClientMessageClaimConflictError(current_claim)
+            turn_query = {
+                "workspace_id": record.workspace_id,
+                "client_message_id": normalized_client_message_id,
+            }
+            document, inserted = self._insert_one_if_absent(self.collections.turns, turn_query, asdict(record))
+            turn = RuntimeTurnRecord(**document)
+            if turn.session_id != record.session_id or turn.turn_id != record.turn_id:
+                raise RuntimeClientMessageClaimConflictError(current_claim)
+            self.mark_client_message_claim_queued(
+                workspace_id=claim.workspace_id,
+                client_message_id=claim.client_message_id,
+                session_id=claim.session_id,
+                turn_id=claim.turn_id,
+                now=timestamp,
+            )
+            return turn, inserted
 
     def get_turn(self, turn_id: str) -> RuntimeTurnRecord:
         document = self.collections.turns.find_one({"turn_id": turn_id})
@@ -680,6 +734,28 @@ def _client_message_claim_is_expired(claim: RuntimeClientMessageClaim, now: date
     if lease_expires_at.tzinfo is None:
         lease_expires_at = lease_expires_at.replace(tzinfo=UTC)
     return lease_expires_at <= now
+
+
+def _client_message_claim_matches(left: RuntimeClientMessageClaim, right: RuntimeClientMessageClaim) -> bool:
+    return (
+        left.workspace_id == right.workspace_id
+        and left.client_message_id == right.client_message_id
+        and left.session_id == right.session_id
+        and left.turn_id == right.turn_id
+    )
+
+
+def _client_message_claim_matches_record(
+    claim: RuntimeClientMessageClaim,
+    record: RuntimeTurnRecord,
+    client_message_id: str,
+) -> bool:
+    return (
+        claim.workspace_id == record.workspace_id
+        and claim.client_message_id == client_message_id
+        and claim.session_id == record.session_id
+        and claim.turn_id == record.turn_id
+    )
 
 
 def _client_message_claim_replace_query(

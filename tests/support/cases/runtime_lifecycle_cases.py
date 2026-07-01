@@ -31,7 +31,7 @@ from core.runtime.event_collection import RuntimeEventJsonCollection
 from core.runtime.process_control import register_runtime_process
 from core.runtime.runtime_events import RuntimeEventRecord
 from core.runtime.runtime_thread import RuntimeThreadRecord
-from core.runtime.client_message_claims import CLIENT_MESSAGE_CLAIM_LEASE_SECONDS
+from core.runtime.client_message_claims import CLIENT_MESSAGE_CLAIM_LEASE_SECONDS, RuntimeClientMessageClaimConflictError
 from core.runtime.runtime_threads import (
     create_runtime_thread,
     list_runtime_threads,
@@ -536,6 +536,68 @@ class RuntimeLifecycleTestCase(unittest.TestCase):
         self.assertFalse(retry_created)
         self.assertEqual(retry_claim.session_id, "sess-claimed-turn")
         self.assertEqual(retry_claim.turn_id, "turn-claimed")
+
+    def test_expired_reclaimed_claim_blocks_late_original_turn_queue(self) -> None:
+        store = self.make_store_with_client_messages()
+        repo_root = self.make_repo_root()
+        now = datetime(2026, 1, 1, tzinfo=UTC)
+        create_runtime_session(
+            store,
+            session_id="sess-old-claim",
+            workspace_id="acme",
+            agent_id="agent-1",
+            now=now,
+            start_path=repo_root,
+        )
+        create_runtime_session(
+            store,
+            session_id="sess-new-claim",
+            workspace_id="acme",
+            agent_id="agent-1",
+            now=now,
+            start_path=repo_root,
+        )
+        old_claim, old_created = store.claim_client_message_id(
+            workspace_id="acme",
+            client_message_id="client-reclaimed",
+            session_id="sess-old-claim",
+            turn_id="turn-old",
+            now=now,
+        )
+        new_claim, new_created = store.claim_client_message_id(
+            workspace_id="acme",
+            client_message_id="client-reclaimed",
+            session_id="sess-new-claim",
+            turn_id="turn-new",
+            now=now + timedelta(seconds=CLIENT_MESSAGE_CLAIM_LEASE_SECONDS + 1),
+        )
+        new_turn, created = queue_runtime_turn_if_client_message_absent(
+            store,
+            turn_id="turn-new",
+            session_id="sess-new-claim",
+            input_text="new request",
+            client_message_id="client-reclaimed",
+            client_message_claim=new_claim,
+            now=now + timedelta(seconds=CLIENT_MESSAGE_CLAIM_LEASE_SECONDS + 1),
+        )
+
+        with self.assertRaises(RuntimeClientMessageClaimConflictError):
+            queue_runtime_turn_if_client_message_absent(
+                store,
+                turn_id="turn-old",
+                session_id="sess-old-claim",
+                input_text="late old request",
+                client_message_id="client-reclaimed",
+                client_message_claim=old_claim,
+                now=now + timedelta(seconds=CLIENT_MESSAGE_CLAIM_LEASE_SECONDS + 2),
+            )
+
+        self.assertTrue(old_created)
+        self.assertTrue(new_created)
+        self.assertTrue(created)
+        self.assertEqual(new_turn.turn_id, "turn-new")
+        self.assertEqual(store.list_turns("sess-old-claim"), [])
+        self.assertEqual([turn.turn_id for turn in store.list_turns("sess-new-claim")], ["turn-new"])
 
     def test_async_turn_records_worker_and_provider_dispatch_lifecycle(self) -> None:
         store = self.make_store()

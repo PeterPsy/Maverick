@@ -21,3 +21,11 @@ class RuntimeClientMessageClaim:
     updated_at: datetime
     status: str = "claimed"
     lease_expires_at: datetime | None = None
+
+
+class RuntimeClientMessageClaimConflictError(RuntimeError):
+    """Raised when a queued turn no longer owns its client-message claim."""
+
+    def __init__(self, current_claim: RuntimeClientMessageClaim | None) -> None:
+        super().__init__("Runtime client message claim is no longer current.")
+        self.current_claim = current_claim

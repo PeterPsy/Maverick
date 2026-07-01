@@ -7,6 +7,7 @@ from typing import TYPE_CHECKING
 from uuid import uuid4
 
 from core.runtime.plain_hosted_text import queue_provider_id_for_session
+from core.runtime.client_message_claims import RuntimeClientMessageClaim
 from core.runtime.runtime_events import RuntimeEventRecord
 from core.runtime.runtime_session import RuntimeSessionRecord
 from core.runtime.runtime_turns import RuntimeTurnRecord
@@ -55,6 +56,7 @@ def _queue_turn_with_event_result(
     app_references: list[dict[str, object]] | None,
     turn_id: str | None = None,
     received_perf_counter: float | None = None,
+    client_message_claim: RuntimeClientMessageClaim | None = None,
 ) -> tuple[RuntimeTurnRecord, list[RuntimeEventRecord], bool]:
     normalized_provider_id = (provider_id or queue_provider_id_for_session(session)).strip()
     turn, created = queue_runtime_turn_if_client_message_absent(
@@ -63,6 +65,7 @@ def _queue_turn_with_event_result(
         session_id=session.session_id,
         input_text=input_text,
         client_message_id=client_message_id,
+        client_message_claim=client_message_claim,
     )
     if not created:
         return turn, _turn_events_for_response(state, turn, wait_seconds=2.0), False

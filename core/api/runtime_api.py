@@ -25,7 +25,7 @@ from core.observability.service import append_platform_log
 from core.providers.errors import ProviderError
 from core.providers.service import resolve_provider_for_runtime_session
 from core.runtime.errors import RuntimeSessionHiddenError, RuntimeSessionNotFoundError, RuntimeThreadNotFoundError, RuntimeTurnNotFoundError
-from core.runtime.client_message_claims import RuntimeClientMessageClaim
+from core.runtime.client_message_claims import RuntimeClientMessageClaim, RuntimeClientMessageClaimConflictError
 from core.runtime.runtime_threads import (
     clear_runtime_threads_complete,
     create_runtime_thread,
@@ -228,6 +228,17 @@ def _mark_client_message_claim_queued(state: PlatformState, claim: RuntimeClient
             session_id=claim.session_id,
             turn_id=claim.turn_id,
         )
+
+
+def _same_client_message_claim(left: RuntimeClientMessageClaim | None, right: RuntimeClientMessageClaim | None) -> bool:
+    return (
+        left is not None
+        and right is not None
+        and left.workspace_id == right.workspace_id
+        and left.client_message_id == right.client_message_id
+        and left.session_id == right.session_id
+        and left.turn_id == right.turn_id
+    )
 
 
 def _wait_for_claimed_turn(state: PlatformState, claim: RuntimeClientMessageClaim) -> RuntimeTurnRecord | None:
@@ -1052,6 +1063,7 @@ def _submit_runtime_turn_response(
                 on_queued=notify_source_app_queued,
                 turn_id=reserved_turn_id,
                 received_perf_counter=received_perf_counter,
+                client_message_claim=release_claim_on_failure,
             )
             status = "202 Accepted"
         else:
@@ -1066,8 +1078,18 @@ def _submit_runtime_turn_response(
                 on_queued=notify_source_app_queued,
                 turn_id=reserved_turn_id,
                 received_perf_counter=received_perf_counter,
+                client_message_claim=release_claim_on_failure,
             )
             status = status_line(201)
+    except RuntimeClientMessageClaimConflictError as error:
+        current_claim = error.current_claim
+        if current_claim is not None and not _same_client_message_claim(current_claim, release_claim_on_failure):
+            existing_turn = _wait_for_claimed_turn(state, current_claim)
+            if existing_turn is not None:
+                return _idempotent_runtime_turn_response(state, context, existing_turn, start_response)
+            return _pending_client_message_claim_response(state, context, current_claim, start_response)
+        _release_client_message_claim_if_turn_absent(state, release_claim_on_failure)
+        return json_response(start_response, {"error": "client_message_claim_expired"}, status="409 Conflict")
     except ProviderError as error:
         if reserved_turn_id is None or _turn_exists(state, reserved_turn_id) is None:
             _release_client_message_claim(state, release_claim_on_failure)

@@ -47,7 +47,9 @@ of creating a duplicate runtime session or turn. The async submission fast path
 persists `runtime.turn.queued` before provider backend resolution. New-session
 submission reserves the client message id with a workspace-scoped lease so a
 crash before queue persistence can be retried after the lease expires instead of
-leaving the id permanently pending.
+leaving the id permanently pending. The queue persistence path verifies that the
+reserved claim is still current before inserting the turn, so a late handler from
+an expired/reclaimed claim cannot materialize a duplicate turn.
 
 The runtime records queue timing, worker start, and provider handoff through:
 

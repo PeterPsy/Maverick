@@ -22,6 +22,7 @@ from core.runtime.app_references import input_text_with_app_references
 from core.runtime.attachments import input_text_with_attachment_links
 from core.runtime.execution import execute_runtime_turn
 from core.runtime.process_control import terminate_codex_app_server_processes_for_session, terminate_runtime_processes
+from core.runtime.client_message_claims import RuntimeClientMessageClaim
 from core.runtime.runtime_events import RuntimeEventRecord
 from core.runtime.runtime_session import RuntimeSessionRecord
 from core.runtime.runtime_turns import RuntimeTurnRecord
@@ -52,6 +53,7 @@ def submit_runtime_turn_async(
     on_queued: Callable[[RuntimeTurnRecord, list[RuntimeEventRecord]], None] | None = None,
     turn_id: str | None = None,
     received_perf_counter: float | None = None,
+    client_message_claim: RuntimeClientMessageClaim | None = None,
 ) -> tuple[RuntimeTurnRecord, list[RuntimeEventRecord]]:
     """Queue one runtime turn and execute it in a background worker."""
     plain_hosted = runtime_session_is_plain_hosted_chat(session)
@@ -67,6 +69,7 @@ def submit_runtime_turn_async(
         app_references=app_references,
         turn_id=turn_id,
         received_perf_counter=received_perf_counter,
+        client_message_claim=client_message_claim,
     )
     if not created:
         return turn, events

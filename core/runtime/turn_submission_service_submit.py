@@ -17,6 +17,7 @@ from core.runtime.plain_hosted_text import (
 )
 from core.runtime.app_references import input_text_with_app_references
 from core.runtime.attachments import input_text_with_attachment_links
+from core.runtime.client_message_claims import RuntimeClientMessageClaim
 from core.runtime.execution import execute_runtime_turn
 from core.runtime.runtime_events import RuntimeEventRecord
 from core.runtime.runtime_session import RuntimeSessionRecord
@@ -45,6 +46,7 @@ def submit_runtime_turn(
     on_queued: Callable[[RuntimeTurnRecord, list[RuntimeEventRecord]], None] | None = None,
     turn_id: str | None = None,
     received_perf_counter: float | None = None,
+    client_message_claim: RuntimeClientMessageClaim | None = None,
 ) -> tuple[RuntimeTurnRecord, list[RuntimeEventRecord]]:
     """Queue and execute one runtime turn synchronously."""
     plain_hosted = runtime_session_is_plain_hosted_chat(session)
@@ -66,6 +68,7 @@ def submit_runtime_turn(
         app_references=app_references,
         turn_id=turn_id,
         received_perf_counter=received_perf_counter,
+        client_message_claim=client_message_claim,
     )
     if not created:
         return turn, events

@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from core.observability.service import append_platform_log, record_platform_audit, record_platform_event
+from core.runtime.client_message_claims import RuntimeClientMessageClaim
 from core.runtime.routing import build_runtime_routing
 from core.runtime.runtime_session import RuntimeSessionRecord, RuntimeSessionStatus
 from core.runtime.runtime_turns import RuntimeTurnRecord, RuntimeTurnStatus
@@ -181,6 +182,7 @@ def queue_runtime_turn_if_client_message_absent(
     session_id: str,
     input_text: str | None = None,
     client_message_id: str | None = None,
+    client_message_claim: RuntimeClientMessageClaim | None = None,
     now: datetime | None = None,
 ) -> tuple[RuntimeTurnRecord, bool]:
     """Create one queued runtime turn unless the client message was already queued."""
@@ -200,6 +202,9 @@ def queue_runtime_turn_if_client_message_absent(
         runtime_mode=session.runtime_mode,
         client_message_id=client_message_id.strip() if isinstance(client_message_id, str) and client_message_id.strip() else None,
     )
+    save_claimed = getattr(store, "save_turn_if_current_client_message_claim", None)
+    if client_message_claim is not None and callable(save_claimed):
+        return save_claimed(record, client_message_claim, now=timestamp)
     save_once = getattr(store, "save_turn_if_client_message_absent", None)
     if callable(save_once):
         return save_once(record)

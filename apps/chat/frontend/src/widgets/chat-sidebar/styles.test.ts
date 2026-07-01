@@ -50,8 +50,15 @@ describe("chat sidebar search", () => {
     expect(styles).toMatch(/\.bs-chat-list__trailing\s*{[\s\S]*width:\s*4\.85rem;/);
     expect(styles).toMatch(/\.bs-chat-list__source-badges\s*{[\s\S]*position:\s*absolute;/);
     expect(styles).toMatch(/\.bs-chat-list__source-badges\s*{[\s\S]*opacity:\s*0\.54;/);
+    expect(styles).toContain("--chat-sidebar-source-badge-bg: rgba(255, 255, 255, 0.86);");
+    expect(styles).toContain("--chat-sidebar-source-badge-text: #0a0a0b;");
+    expect(styles).toContain("--chat-sidebar-source-badge-bg: rgba(15, 23, 42, 0.88);");
+    expect(styles).toContain("--chat-sidebar-source-badge-text: #ffffff;");
     expect(styles).toMatch(/\.bs-chat-list__source-badge\s*{[\s\S]*width:\s*1\.32rem;/);
     expect(styles).toMatch(/\.bs-chat-list__source-badge\s*{[\s\S]*padding:\s*0;/);
+    expect(styles).toMatch(/\.bs-chat-list__source-badge\s*{[\s\S]*background:\s*var\(--chat-sidebar-source-badge-bg\);/);
+    expect(styles).toMatch(/\.bs-chat-list__source-badge\s*{[\s\S]*color:\s*var\(--chat-sidebar-source-badge-text\);/);
+    expect(styles).toMatch(/\.bs-chat-list__source-badge \.material-symbols-rounded\s*{[\s\S]*color:\s*currentColor;/);
     expect(styles).toContain(".bs-chat-list__source-badges");
     expect(styles).toContain(".bs-chat-list__item:hover .bs-chat-list__source-badges");
   });

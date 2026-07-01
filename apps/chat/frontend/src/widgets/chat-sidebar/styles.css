@@ -36,6 +36,9 @@
   --chat-sidebar-edit-surface-focus: rgba(12, 12, 14, 0.72);
   --chat-sidebar-edit-surface-strong: rgba(12, 12, 14, 0.78);
   --chat-sidebar-inline-action-surface: rgba(12, 12, 14, 0.7);
+  --chat-sidebar-source-badge-bg: rgba(255, 255, 255, 0.86);
+  --chat-sidebar-source-badge-text: #0a0a0b;
+  --chat-sidebar-source-badge-border: rgba(255, 255, 255, 0.2);
 }
 
 :root[data-maverick-theme="light"],
@@ -72,6 +75,9 @@
   --chat-sidebar-edit-surface-focus: rgba(var(--maverick-contrast-rgb), 0.085);
   --chat-sidebar-edit-surface-strong: rgba(var(--maverick-contrast-rgb), 0.075);
   --chat-sidebar-inline-action-surface: rgba(var(--maverick-contrast-rgb), 0.065);
+  --chat-sidebar-source-badge-bg: rgba(15, 23, 42, 0.88);
+  --chat-sidebar-source-badge-text: #ffffff;
+  --chat-sidebar-source-badge-border: rgba(15, 23, 42, 0.16);
 }
 
 * {
@@ -935,10 +941,10 @@ input {
   width: 1.32rem;
   height: 1.32rem;
   padding: 0;
-  border: 1px solid rgba(var(--maverick-contrast-rgb), 0.11);
+  border: 1px solid var(--chat-sidebar-source-badge-border);
   border-radius: 999px;
-  background: var(--chat-sidebar-soft-surface);
-  color: var(--maverick-text-muted);
+  background: var(--chat-sidebar-source-badge-bg);
+  color: var(--chat-sidebar-source-badge-text);
   box-shadow: var(--chat-sidebar-inner-edge);
   font-size: 0.62rem;
   line-height: 1;
@@ -965,6 +971,7 @@ input {
 .bs-chat-list__source-badge .material-symbols-rounded {
   width: 0.82rem;
   height: 0.82rem;
+  color: currentColor;
   font-size: 0.82rem;
 }
 

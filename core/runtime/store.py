@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import asdict, dataclass, replace
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from threading import RLock
 from typing import Any, Protocol
 
@@ -14,7 +14,7 @@ from core.runtime.errors import (
     RuntimeThreadNotFoundError,
     RuntimeTurnNotFoundError,
 )
-from core.runtime.client_message_claims import RuntimeClientMessageClaim
+from core.runtime.client_message_claims import CLIENT_MESSAGE_CLAIM_LEASE_SECONDS, RuntimeClientMessageClaim
 from core.runtime.models import RuntimeLocation
 from core.runtime.paths import workspace_runtime_root
 from core.runtime.runtime_events import RuntimeEventRecord
@@ -192,6 +192,17 @@ class RuntimeStore(Protocol):
     ) -> bool:
         ...
 
+    def mark_client_message_claim_queued(
+        self,
+        *,
+        workspace_id: str,
+        client_message_id: str,
+        session_id: str,
+        turn_id: str,
+        now: datetime | None = None,
+    ) -> RuntimeClientMessageClaim | None:
+        ...
+
 
 class RuntimeDocumentStore:
     """Persist runtime-domain records in document-style collections."""
@@ -288,7 +299,10 @@ class RuntimeDocumentStore:
                 workspace_id=workspace_id,
                 identity_field="client_message_id",
             )
-        self.collections.sessions.delete_one({"session_id": session_id})
+        session_delete_query = {"session_id": session_id}
+        if workspace_id:
+            session_delete_query["workspace_id"] = workspace_id
+        self.collections.sessions.delete_one(session_delete_query)
         return deleted
 
     def save_turn(self, record: RuntimeTurnRecord) -> RuntimeTurnRecord:
@@ -348,6 +362,7 @@ class RuntimeDocumentStore:
         if not workspace_id or not normalized_client_message_id or not session_id or not turn_id:
             raise ValueError("Runtime client message claims require workspace_id, client_message_id, session_id, and turn_id.")
         timestamp = now or datetime.now(tz=UTC)
+        lease_expires_at = timestamp + timedelta(seconds=CLIENT_MESSAGE_CLAIM_LEASE_SECONDS)
         claim = RuntimeClientMessageClaim(
             workspace_id=workspace_id,
             client_message_id=normalized_client_message_id,
@@ -355,16 +370,28 @@ class RuntimeDocumentStore:
             turn_id=turn_id,
             created_at=timestamp,
             updated_at=timestamp,
+            status="claimed",
+            lease_expires_at=lease_expires_at,
         )
         collection = self.collections.client_messages
         if collection is None:
             return claim, True
-        document, inserted = self._insert_one_if_absent(
-            collection,
-            {"workspace_id": workspace_id, "client_message_id": normalized_client_message_id},
-            asdict(claim),
-        )
-        return RuntimeClientMessageClaim(**document), inserted
+        identity_query = {"workspace_id": workspace_id, "client_message_id": normalized_client_message_id}
+        document, inserted = self._insert_one_if_absent(collection, identity_query, asdict(claim))
+        existing = _client_message_claim_from_document(document)
+        if inserted:
+            return existing, True
+        if self._claim_has_persisted_turn(existing):
+            return existing, False
+        if not _client_message_claim_is_expired(existing, timestamp):
+            return existing, False
+        replace_query = _client_message_claim_replace_query(document, identity_query)
+        collection.update_one(replace_query, {"$set": asdict(claim)}, upsert=False)
+        replaced_document = collection.find_one(identity_query)
+        if replaced_document is None:
+            return existing, False
+        replaced = _client_message_claim_from_document(replaced_document)
+        return replaced, replaced.session_id == session_id and replaced.turn_id == turn_id
 
     def release_client_message_claim(
         self,
@@ -388,6 +415,47 @@ class RuntimeDocumentStore:
             return False
         collection.delete_one(query)
         return True
+
+    def mark_client_message_claim_queued(
+        self,
+        *,
+        workspace_id: str,
+        client_message_id: str,
+        session_id: str,
+        turn_id: str,
+        now: datetime | None = None,
+    ) -> RuntimeClientMessageClaim | None:
+        normalized_client_message_id = client_message_id.strip()
+        collection = self.collections.client_messages
+        if collection is None or not workspace_id or not normalized_client_message_id:
+            return None
+        timestamp = now or datetime.now(tz=UTC)
+        query = {
+            "workspace_id": workspace_id,
+            "client_message_id": normalized_client_message_id,
+            "session_id": session_id,
+            "turn_id": turn_id,
+        }
+        collection.update_one(
+            query,
+            {"$set": {"status": "queued", "lease_expires_at": None, "updated_at": timestamp}},
+            upsert=False,
+        )
+        document = collection.find_one(query)
+        return _client_message_claim_from_document(document) if document is not None else None
+
+    def _claim_has_persisted_turn(self, claim: RuntimeClientMessageClaim) -> bool:
+        return (
+            self.collections.turns.find_one(
+                {
+                    "workspace_id": claim.workspace_id,
+                    "session_id": claim.session_id,
+                    "turn_id": claim.turn_id,
+                    "client_message_id": claim.client_message_id,
+                }
+            )
+            is not None
+        )
 
     def save_event(self, record: RuntimeEventRecord) -> RuntimeEventRecord:
         append_history_upsert = getattr(self.collections.events, "append_history_upsert", None)
@@ -581,12 +649,48 @@ def _delete_session_records(
     if callable(delete_session_partition):
         return int(delete_session_partition(session_id=session_id, workspace_id=workspace_id))
     deleted = 0
-    for document in collection.find({"session_id": session_id}):
+    find_query = {"session_id": session_id}
+    if workspace_id:
+        find_query["workspace_id"] = workspace_id
+    for document in collection.find(find_query):
         identity_value = document.get(identity_field)
         if isinstance(identity_value, str):
-            collection.delete_one({identity_field: identity_value})
+            delete_query = {identity_field: identity_value, "session_id": session_id}
+            if workspace_id:
+                delete_query["workspace_id"] = workspace_id
+            collection.delete_one(delete_query)
             deleted += 1
     return deleted
+
+
+def _client_message_claim_from_document(document: dict[str, Any]) -> RuntimeClientMessageClaim:
+    if "status" not in document:
+        document = {**document, "status": "claimed"}
+    if "lease_expires_at" not in document:
+        document = {**document, "lease_expires_at": None}
+    return RuntimeClientMessageClaim(**document)
+
+
+def _client_message_claim_is_expired(claim: RuntimeClientMessageClaim, now: datetime) -> bool:
+    if claim.status == "queued":
+        return False
+    if claim.lease_expires_at is None:
+        return True
+    lease_expires_at = claim.lease_expires_at
+    if lease_expires_at.tzinfo is None:
+        lease_expires_at = lease_expires_at.replace(tzinfo=UTC)
+    return lease_expires_at <= now
+
+
+def _client_message_claim_replace_query(
+    document: dict[str, Any],
+    identity_query: dict[str, str],
+) -> dict[str, Any]:
+    query: dict[str, Any] = dict(identity_query)
+    for field in ("session_id", "turn_id", "status", "lease_expires_at"):
+        if field in document:
+            query[field] = document[field]
+    return query
 
 
 def _workspace_id_from_documents(documents: list[dict[str, Any]]) -> str | None:

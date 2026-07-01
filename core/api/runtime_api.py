@@ -204,6 +204,32 @@ def _release_client_message_claim(state: PlatformState, claim: RuntimeClientMess
         )
 
 
+def _release_client_message_claim_if_turn_absent(
+    state: PlatformState,
+    claim: RuntimeClientMessageClaim | None,
+) -> None:
+    if claim is None:
+        return
+    if _turn_exists(state, claim.turn_id) is not None:
+        return
+    _release_client_message_claim(state, claim)
+
+
+def _mark_client_message_claim_queued(state: PlatformState, claim: RuntimeClientMessageClaim | None) -> None:
+    if claim is None:
+        return
+    mark_claim = getattr(state.runtime_store, "mark_client_message_claim_queued", None)
+    if not callable(mark_claim):
+        return
+    with suppress(Exception):
+        mark_claim(
+            workspace_id=claim.workspace_id,
+            client_message_id=claim.client_message_id,
+            session_id=claim.session_id,
+            turn_id=claim.turn_id,
+        )
+
+
 def _wait_for_claimed_turn(state: PlatformState, claim: RuntimeClientMessageClaim) -> RuntimeTurnRecord | None:
     deadline = time.monotonic() + IDEMPOTENT_CLAIM_WAIT_SECONDS
     while True:
@@ -531,17 +557,24 @@ def _handle_session_collection(
                 status="400 Bad Request",
             )
         if _runtime_turn_requested(body):
-            return _submit_runtime_turn_response(
-                state,
-                context,
-                session,
-                body,
-                start_response,
-                start_path=start_path,
-                reserved_turn_id=client_message_claim.turn_id if client_message_claim is not None else None,
-                received_perf_counter=received_perf_counter,
-                release_claim_on_failure=client_message_claim if client_message_claim_created else None,
-            )
+            try:
+                return _submit_runtime_turn_response(
+                    state,
+                    context,
+                    session,
+                    body,
+                    start_response,
+                    start_path=start_path,
+                    reserved_turn_id=client_message_claim.turn_id if client_message_claim is not None else None,
+                    received_perf_counter=received_perf_counter,
+                    release_claim_on_failure=client_message_claim if client_message_claim_created else None,
+                )
+            except Exception:
+                _release_client_message_claim_if_turn_absent(
+                    state,
+                    client_message_claim if client_message_claim_created else None,
+                )
+                raise
         return json_response(start_response, _session_payload(session, provider_id=_resolved_provider_id(state, session)), status="201 Created")
     return json_response(start_response, {"error": "method_not_allowed"}, status="405 Method Not Allowed")
 
@@ -1043,6 +1076,8 @@ def _submit_runtime_turn_response(
             _provider_unavailable_response(state, session.workspace_id, error),
             status="409 Conflict",
         )
+    if reserved_turn_id is None or turn.turn_id == reserved_turn_id:
+        _mark_client_message_claim_queued(state, release_claim_on_failure)
     response_session = state.runtime_store.get_session(session.session_id)
     return json_response(
         start_response,

@@ -6,6 +6,9 @@ from dataclasses import dataclass
 from datetime import datetime
 
 
+CLIENT_MESSAGE_CLAIM_LEASE_SECONDS = 300.0
+
+
 @dataclass(frozen=True)
 class RuntimeClientMessageClaim:
     """Workspace-scoped reservation for one client-submitted chat message."""
@@ -16,3 +19,5 @@ class RuntimeClientMessageClaim:
     turn_id: str
     created_at: datetime
     updated_at: datetime
+    status: str = "claimed"
+    lease_expires_at: datetime | None = None

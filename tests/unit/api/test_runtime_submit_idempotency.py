@@ -199,6 +199,89 @@ class RuntimeSubmitIdempotencyApiTestCase(AppReferenceApiTestSupport, unittest.T
             self.assertEqual(first_result[1]["turn"]["turn_id"], second_result[1]["turn"]["turn_id"])
             self.assertEqual(len(state.runtime_store.list_sessions("default")), 1)
 
+    def test_new_session_turn_releases_claim_after_pre_queue_internal_error(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            repo_root = self._repo_root(temp_dir)
+            with patch.dict(
+                "os.environ",
+                {
+                    "MAVERICK_ALLOW_INSECURE_TEST_DEFAULTS": "1",
+                    "MAVERICK_ADMIN_USERNAME": "admin",
+                    "MAVERICK_ADMIN_PASSWORD": "maverick",
+                },
+            ):
+                state = bootstrap_platform_state(start_path=repo_root)
+            app = PlatformHost(state, start_path=repo_root)
+            cookie = self._login(app)
+            calls = 0
+
+            def fake_submit_runtime_turn_async(
+                submit_state,
+                *,
+                session,
+                input_text,
+                client_message_id=None,
+                attachments=None,
+                app_references=None,
+                on_queued=None,
+                turn_id=None,
+                received_perf_counter=None,
+                **_kwargs,
+            ):
+                nonlocal calls
+                calls += 1
+                turn, events = _queue_turn_with_event(
+                    submit_state,
+                    session=session,
+                    input_text=input_text,
+                    provider_id="codex",
+                    client_message_id=client_message_id,
+                    attachments=attachments,
+                    app_references=app_references,
+                    turn_id=turn_id,
+                    received_perf_counter=received_perf_counter,
+                )
+                if on_queued is not None:
+                    on_queued(turn, events)
+                return turn, events
+
+            body = {
+                "agent_id": "chat",
+                "source_app_id": "chat",
+                "input_text": "retry after validation crash",
+                "client_message_id": "client-validation-crash",
+                "async": True,
+                "app_references": [{"type": "app", "app_id": "records"}],
+            }
+            with patch(
+                "core.api.runtime_api.validate_runtime_app_references",
+                side_effect=RuntimeError("reference validation failed"),
+            ), patch("core.api.platform_host.logger"):
+                first_status, first_payload, _headers = self._invoke(
+                    app,
+                    path="/api/runtime/sessions",
+                    method="POST",
+                    body=body,
+                    cookie=cookie,
+                )
+            with patch("core.api.runtime_api.submit_runtime_turn_async", side_effect=fake_submit_runtime_turn_async), patch(
+                "core.runtime.turn_submission_service_queue.schedule_runtime_thread_title_generation"
+            ):
+                retry_status, retry_payload, _headers = self._invoke(
+                    app,
+                    path="/api/runtime/sessions",
+                    method="POST",
+                    body=body,
+                    cookie=cookie,
+                )
+
+            self.assertEqual(first_status, 500)
+            self.assertEqual(first_payload, {"error": "internal_server_error"})
+            self.assertEqual(retry_status, 202)
+            self.assertEqual(calls, 1)
+            self.assertEqual(retry_payload["turn"]["client_message_id"], "client-validation-crash")
+            self.assertNotIn("idempotency", retry_payload)
+
 
 if __name__ == "__main__":
     unittest.main()

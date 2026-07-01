@@ -44,16 +44,24 @@ Primary core WebSocket routes include:
 Runtime turn submission is idempotent when callers provide `client_message_id`.
 Retries with the same client message id return the already persisted turn instead
 of creating a duplicate runtime session or turn. The async submission fast path
-persists `runtime.turn.queued` before provider backend resolution, then records
-the worker and provider handoff through:
+persists `runtime.turn.queued` before provider backend resolution. New-session
+submission reserves the client message id with a workspace-scoped lease so a
+crash before queue persistence can be retried after the lease expires instead of
+leaving the id permanently pending.
+
+The runtime records queue timing, worker start, and provider handoff through:
 
 - `runtime.turn.worker_started`
+- `runtime.turn.receive_to_queued`
 - `runtime.provider.dispatching`
+- `runtime.provider.turn_start_sent`
 - `runtime.provider.accepted`
 
 `runtime.provider.accepted` is the core-owned boundary for "work handed to the
-runtime/model"; first model text remains provider-dependent and is represented by
-later output events such as `runtime.output.delta`.
+runtime/model"; when `runtime.provider.turn_start_sent` is present, accepted
+latency is measured from that handoff point. First model text remains
+provider-dependent and is represented by later output events such as
+`runtime.output.delta`.
 
 The runtime thread WebSocket sends a full catalog in `runtime.thread.snapshot`.
 Subsequent `runtime.thread.changed` frames may be deltas containing `thread`,

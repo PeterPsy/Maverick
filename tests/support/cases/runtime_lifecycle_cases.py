@@ -31,6 +31,7 @@ from core.runtime.event_collection import RuntimeEventJsonCollection
 from core.runtime.process_control import register_runtime_process
 from core.runtime.runtime_events import RuntimeEventRecord
 from core.runtime.runtime_thread import RuntimeThreadRecord
+from core.runtime.client_message_claims import CLIENT_MESSAGE_CLAIM_LEASE_SECONDS
 from core.runtime.runtime_threads import (
     create_runtime_thread,
     list_runtime_threads,
@@ -79,6 +80,19 @@ class RuntimeLifecycleTestCase(unittest.TestCase):
                 processes=FakeCollection(),
                 states=FakeCollection(),
                 threads=FakeCollection(),
+            )
+        )
+
+    def make_store_with_client_messages(self, client_messages: FakeCollection | None = None) -> RuntimeDocumentStore:
+        return RuntimeDocumentStore(
+            RuntimeCollections(
+                sessions=FakeCollection(),
+                turns=FakeCollection(),
+                events=FakeCollection(),
+                processes=FakeCollection(),
+                states=FakeCollection(),
+                threads=FakeCollection(),
+                client_messages=client_messages or FakeCollection(),
             )
         )
 
@@ -445,6 +459,83 @@ class RuntimeLifecycleTestCase(unittest.TestCase):
         turns = store.list_turns("sess-client-atomic")
         self.assertEqual(len(turns), 1)
         self.assertEqual(turns[0].client_message_id, "client-atomic")
+
+    def test_client_message_claim_reclaims_expired_orphan(self) -> None:
+        store = self.make_store_with_client_messages()
+        now = datetime(2026, 1, 1, tzinfo=UTC)
+
+        first_claim, first_created = store.claim_client_message_id(
+            workspace_id="acme",
+            client_message_id="client-orphan",
+            session_id="sess-first",
+            turn_id="turn-first",
+            now=now,
+        )
+        pending_claim, pending_created = store.claim_client_message_id(
+            workspace_id="acme",
+            client_message_id="client-orphan",
+            session_id="sess-pending",
+            turn_id="turn-pending",
+            now=now + timedelta(seconds=1),
+        )
+        reclaimed_claim, reclaimed_created = store.claim_client_message_id(
+            workspace_id="acme",
+            client_message_id="client-orphan",
+            session_id="sess-reclaimed",
+            turn_id="turn-reclaimed",
+            now=now + timedelta(seconds=CLIENT_MESSAGE_CLAIM_LEASE_SECONDS + 1),
+        )
+
+        self.assertTrue(first_created)
+        self.assertEqual(first_claim.status, "claimed")
+        self.assertEqual(first_claim.lease_expires_at, now + timedelta(seconds=CLIENT_MESSAGE_CLAIM_LEASE_SECONDS))
+        self.assertFalse(pending_created)
+        self.assertEqual(pending_claim.session_id, "sess-first")
+        self.assertTrue(reclaimed_created)
+        self.assertEqual(reclaimed_claim.session_id, "sess-reclaimed")
+        self.assertEqual(reclaimed_claim.turn_id, "turn-reclaimed")
+
+    def test_client_message_claim_keeps_expired_claim_with_persisted_turn(self) -> None:
+        store = self.make_store_with_client_messages()
+        repo_root = self.make_repo_root()
+        now = datetime(2026, 1, 1, tzinfo=UTC)
+        create_runtime_session(
+            store,
+            session_id="sess-claimed-turn",
+            workspace_id="acme",
+            agent_id="agent-1",
+            now=now,
+            start_path=repo_root,
+        )
+        first_claim, first_created = store.claim_client_message_id(
+            workspace_id="acme",
+            client_message_id="client-persisted",
+            session_id="sess-claimed-turn",
+            turn_id="turn-claimed",
+            now=now,
+        )
+        queue_runtime_turn(
+            store,
+            turn_id="turn-claimed",
+            session_id="sess-claimed-turn",
+            input_text="persisted",
+            client_message_id="client-persisted",
+            now=now,
+        )
+
+        retry_claim, retry_created = store.claim_client_message_id(
+            workspace_id="acme",
+            client_message_id="client-persisted",
+            session_id="sess-new",
+            turn_id="turn-new",
+            now=now + timedelta(seconds=CLIENT_MESSAGE_CLAIM_LEASE_SECONDS + 1),
+        )
+
+        self.assertTrue(first_created)
+        self.assertEqual(first_claim.session_id, "sess-claimed-turn")
+        self.assertFalse(retry_created)
+        self.assertEqual(retry_claim.session_id, "sess-claimed-turn")
+        self.assertEqual(retry_claim.turn_id, "turn-claimed")
 
     def test_async_turn_records_worker_and_provider_dispatch_lifecycle(self) -> None:
         store = self.make_store()
@@ -1543,6 +1634,51 @@ class RuntimeLifecycleTestCase(unittest.TestCase):
         self.assertFalse((session_root / "turns.json").exists())
         self.assertFalse((session_root / "processes.json").exists())
         self.assertFalse((session_root / "state.json").exists())
+
+    def test_json_session_cleanup_keeps_same_client_message_claim_in_other_workspace(self) -> None:
+        repo_root = self.make_repo_root()
+        store = self.make_json_store(repo_root)
+        now = datetime.now(tz=UTC)
+        create_runtime_session(
+            store,
+            session_id="sess-json-claim-delete",
+            workspace_id="acme",
+            agent_id="agent-1",
+            now=now,
+            start_path=repo_root,
+        )
+        other_claim, other_created = store.claim_client_message_id(
+            workspace_id="aaa",
+            client_message_id="client-shared",
+            session_id="sess-other",
+            turn_id="turn-other",
+            now=now,
+        )
+        acme_claim, acme_created = store.claim_client_message_id(
+            workspace_id="acme",
+            client_message_id="client-shared",
+            session_id="sess-json-claim-delete",
+            turn_id="turn-acme",
+            now=now,
+        )
+
+        deleted = store.delete_session_records("sess-json-claim-delete")
+
+        self.assertTrue(other_created)
+        self.assertTrue(acme_created)
+        self.assertEqual(other_claim.workspace_id, "aaa")
+        self.assertEqual(acme_claim.workspace_id, "acme")
+        self.assertEqual(deleted["client_messages"], 1)
+        self.assertIsNotNone(
+            store.collections.client_messages.find_one(
+                {"workspace_id": "aaa", "client_message_id": "client-shared", "session_id": "sess-other"}
+            )
+        )
+        self.assertIsNone(
+            store.collections.client_messages.find_one(
+                {"workspace_id": "acme", "client_message_id": "client-shared", "session_id": "sess-json-claim-delete"}
+            )
+        )
 
 
 if __name__ == "__main__":

@@ -10,7 +10,13 @@ import {
 } from "../api/client";
 import { ActiveAppContext, loadDefaultSystemPrompt } from "../lib/activeAppContext";
 import type { PendingMessage, QueuedMessage } from "../lib/messageState";
-import { queueStorageKey, readPersistedPendingMessages, readPersistedQueuedMessages, readPersistedRecoverableQueuedMessages } from "../lib/queuedMessages";
+import {
+  migratePersistedQueuedMessages,
+  queueStorageKey,
+  readPersistedPendingMessages,
+  readPersistedQueuedMessages,
+  readPersistedRecoverableQueuedMessages,
+} from "../lib/queuedMessages";
 import {
   chatNavigationRequestKey,
   consumeNewChatRequest,
@@ -308,6 +314,7 @@ export function useChatNavigation({
     setIsOlderHistoryLoading(false);
     if (thread) {
       const conversationKey = conversationKeyFor(thread, null);
+      migratePersistedQueuedMessages(navigationScope, `draft:${ACTIVE_DRAFT_ID}`, conversationKey);
       const storageKey = queueStorageKey(navigationScope, conversationKey);
       setPendingUserMessagesForConversation(conversationKey, readPersistedPendingMessages(storageKey));
       setQueuedMessagesForConversation(conversationKey, readPersistedQueuedMessages(storageKey));

@@ -56,22 +56,42 @@ function terminalStatus(eventType: string): RuntimeTurn["status"] | null {
 
 export function applyRuntimeEventEffects(
   events: RuntimeEvent[],
-  activeTurn: RuntimeTurn,
+  activeTurn: RuntimeTurn | null,
   setActiveTurn: Dispatch<SetStateAction<RuntimeTurn | null>>,
   setPendingUserMessages: Dispatch<SetStateAction<PendingMessage[]>>,
 ) {
+  const completedClientMessageIds = completedClientMessageIdsForEvents(events);
+  if (completedClientMessageIds.size) {
+    setPendingUserMessages((current) => current.filter((item) => !completedClientMessageIds.has(item.clientMessageId)));
+  }
+  if (!activeTurn) {
+    return;
+  }
   const terminalEvent = events.find((event) => event.turn_id === activeTurn.turn_id && terminalStatus(event.event_type));
   if (!terminalEvent) {
     return;
   }
   const status = terminalStatus(terminalEvent.event_type);
-  const completedClientMessageIds = new Set(
+  setActiveTurn((current) => (current?.turn_id === activeTurn.turn_id && status ? { ...current, status } : current));
+}
+
+function completedClientMessageIdsForEvents(events: RuntimeEvent[]): Set<string> {
+  const terminalTurnIds = new Set(
     events
-      .filter((event) => event.turn_id === activeTurn.turn_id && event.event_type === "runtime.turn.queued" && typeof event.payload.client_message_id === "string")
+      .filter((event) => event.turn_id && terminalStatus(event.event_type))
+      .map((event) => event.turn_id as string),
+  );
+  return new Set(
+    events
+      .filter(
+        (event) =>
+          event.turn_id &&
+          terminalTurnIds.has(event.turn_id) &&
+          event.event_type === "runtime.turn.queued" &&
+          typeof event.payload.client_message_id === "string",
+      )
       .map((event) => event.payload.client_message_id as string),
   );
-  setActiveTurn((current) => (current?.turn_id === activeTurn.turn_id && status ? { ...current, status } : current));
-  setPendingUserMessages((current) => current.filter((item) => !completedClientMessageIds.has(item.clientMessageId)));
 }
 
 export function useRuntimeEvents({
@@ -159,9 +179,7 @@ export function useRuntimeEvents({
         const merged = mergeRuntimeEvents(eventsForCurrentSession(current), scopedIncoming);
         setOldestEventCursor(merged, oldestEventId);
         const currentTurn = activeTurnRef.current;
-        if (currentTurn?.session_id === currentSessionId) {
-          applyRuntimeEventEffects(merged, currentTurn, setActiveTurn, setPendingUserMessages);
-        }
+        applyRuntimeEventEffects(merged, currentTurn?.session_id === currentSessionId ? currentTurn : null, setActiveTurn, setPendingUserMessages);
         setActiveTurn(inferActiveRuntimeTurn(merged, currentSessionId));
         return merged;
       });
@@ -186,6 +204,8 @@ export function useRuntimeEvents({
       const scopedCurrent = eventsForCurrentSession(current);
       lastEventId = lastRuntimeEventId(scopedCurrent);
       setOldestEventCursor(scopedCurrent);
+      const currentTurn = activeTurnRef.current;
+      applyRuntimeEventEffects(scopedCurrent, currentTurn?.session_id === currentSessionId ? currentTurn : null, setActiveTurn, setPendingUserMessages);
       setActiveTurn(inferActiveRuntimeTurn(scopedCurrent, currentSessionId));
       return scopedCurrent;
     });

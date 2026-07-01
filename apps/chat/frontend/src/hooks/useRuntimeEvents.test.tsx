@@ -49,6 +49,7 @@ type RuntimeEventsHarnessState = {
   activeTurn: RuntimeTurn | null;
   error: string | null;
   events: RuntimeEvent[];
+  pendingUserMessages: PendingMessage[];
 };
 
 function event(eventId: string): RuntimeEvent {
@@ -64,11 +65,13 @@ function event(eventId: string): RuntimeEvent {
 
 function RuntimeEventsHarness({
   initialEvents,
+  initialPendingUserMessages = [],
   olderHistoryRequestId = 0,
   onState,
   runtimeSessionId = "session-1",
 }: {
   initialEvents: RuntimeEvent[];
+  initialPendingUserMessages?: PendingMessage[];
   olderHistoryRequestId?: number;
   onState?: (state: RuntimeEventsHarnessState) => void;
   runtimeSessionId?: string;
@@ -79,11 +82,11 @@ function RuntimeEventsHarness({
   const [hasMoreHistory, setHasMoreHistory] = useState(false);
   const [, setIsOlderHistoryLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [, setPendingUserMessages] = useState<PendingMessage[]>([]);
+  const [pendingUserMessages, setPendingUserMessages] = useState<PendingMessage[]>(initialPendingUserMessages);
 
   useEffect(() => {
-    onState?.({ activeSession, activeTurn, error, events });
-  }, [activeSession, activeTurn, error, events, onState]);
+    onState?.({ activeSession, activeTurn, error, events, pendingUserMessages });
+  }, [activeSession, activeTurn, error, events, onState, pendingUserMessages]);
 
   useRuntimeEvents({
     activeTurn,
@@ -302,5 +305,60 @@ describe("useRuntimeEvents", () => {
       { id: "client-plain", role: "human", content: "Hello hosted", status: "complete" },
       { role: "agent", content: "Hosted answer", status: "complete" },
     ]);
+  });
+
+  it("removes pending messages from a terminal snapshot without an active turn", async () => {
+    let latestState: RuntimeEventsHarnessState | null = null;
+    const onState = (state: RuntimeEventsHarnessState) => {
+      latestState = state;
+    };
+
+    await act(async () => {
+      root?.render(
+        <RuntimeEventsHarness
+          initialEvents={[]}
+          initialPendingUserMessages={[
+            {
+              clientMessageId: "client-completed",
+              content: "Done while away",
+              createdAt: "2026-04-19T09:59:59Z",
+              appReferences: [],
+              attachments: [],
+            },
+          ]}
+          onState={onState}
+        />,
+      );
+    });
+
+    await act(async () => {
+      MockWebSocket.instances[0].onmessage?.({
+        data: JSON.stringify({
+          type: "runtime.snapshot",
+          session,
+          events: [
+            {
+              ...event("queued-completed"),
+              event_type: "runtime.turn.queued",
+              payload: { input_text: "Done while away", client_message_id: "client-completed" },
+              created_at: "2026-04-19T10:00:00.000Z",
+            },
+            {
+              ...event("final-completed"),
+              event_type: "runtime.output.final",
+              payload: { complete_text: "Done" },
+              created_at: "2026-04-19T10:00:01.000Z",
+            },
+          ],
+          last_event_id: "final-completed",
+          has_more_before: false,
+          oldest_event_id: "queued-completed",
+        }),
+      } as MessageEvent);
+    });
+
+    const state = latestState as RuntimeEventsHarnessState | null;
+    expect(state?.activeTurn).toBeNull();
+    expect(state?.pendingUserMessages).toEqual([]);
   });
 });

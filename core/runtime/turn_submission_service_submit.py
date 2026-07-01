@@ -135,6 +135,7 @@ def submit_runtime_turn(
                 result, routing_decision = execute_plain_hosted_text_turn(
                     state,
                     session=session,
+                    turn_id=turn.turn_id,
                     input_text=input_text,
                     attachments=attachments,
                     event_sink=output_recorder.record,

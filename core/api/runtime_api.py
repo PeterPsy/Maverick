@@ -87,12 +87,46 @@ def _event_payload(event: RuntimeEventRecord) -> dict[str, object]:
 
 def _threads_payload(state: PlatformState, *, workspace_id: str, viewer_user_id: str | None = None) -> dict[str, object]:
     sessions = state.runtime_store.list_sessions(workspace_id)
+    sessions_by_id = {session.session_id: session for session in sessions}
     threads = ensure_runtime_threads_for_sessions(
         state.runtime_store,
         workspace_id=workspace_id,
         sessions=sessions,
     )
-    return {"threads": [thread_payload(thread, viewer_user_id=viewer_user_id) for thread in threads]}
+    return {
+        "threads": [
+            _thread_payload_with_runtime(
+                state,
+                thread,
+                session=sessions_by_id.get(thread.runtime_session_id),
+                viewer_user_id=viewer_user_id,
+            )
+            for thread in threads
+        ]
+    }
+
+
+def _thread_payload_with_runtime(
+    state: PlatformState,
+    thread,
+    *,
+    session: RuntimeSessionRecord | None = None,
+    viewer_user_id: str | None = None,
+) -> dict[str, object]:
+    payload = thread_payload(thread, viewer_user_id=viewer_user_id)
+    runtime_session = session
+    if runtime_session is None and getattr(thread, "runtime_session_id", ""):
+        try:
+            runtime_session = state.runtime_store.get_session(thread.runtime_session_id)
+        except (RuntimeSessionNotFoundError, ValueError):
+            runtime_session = None
+    if runtime_session is None:
+        return payload
+    payload["runtime_mode"] = runtime_session.runtime_mode
+    payload["provider_id"] = _resolved_provider_id(state, runtime_session)
+    payload["hosted_provider_id"] = runtime_session.hosted_provider_id
+    payload["hosted_model_id"] = runtime_session.hosted_model_id
+    return payload
 
 
 def _publish_thread_change(
@@ -108,7 +142,7 @@ def _publish_thread_change(
         "action": action,
     }
     if thread is not None:
-        payload["thread"] = thread_payload(thread)
+        payload["thread"] = _thread_payload_with_runtime(state, thread)
         payload["thread_id"] = thread.thread_id
     if deleted_thread_ids is not None:
         payload["deleted_thread_ids"] = deleted_thread_ids
@@ -315,7 +349,7 @@ def _runtime_turn_response_payload(
         "events": [_event_payload(event) for event in events],
     }
     if thread is not None:
-        payload["thread"] = thread_payload(thread, viewer_user_id=context.user.user_id)
+        payload["thread"] = _thread_payload_with_runtime(state, thread, viewer_user_id=context.user.user_id)
     return payload
 
 
@@ -641,7 +675,7 @@ def _handle_thread_collection(state: PlatformState, context: RequestSession, met
     _publish_thread_change(state, workspace_id=context.workspace_id, action="updated" if existing else "created", thread=thread)
     return json_response(
         start_response,
-        {"thread": thread_payload(thread, viewer_user_id=context.user.user_id), **_threads_payload(state, workspace_id=context.workspace_id, viewer_user_id=context.user.user_id)},
+        {"thread": _thread_payload_with_runtime(state, thread, viewer_user_id=context.user.user_id), **_threads_payload(state, workspace_id=context.workspace_id, viewer_user_id=context.user.user_id)},
         status="201 Created",
     )
 
@@ -712,7 +746,7 @@ def _handle_thread_item(
     if method == "GET":
         return json_response(
             start_response,
-            {"thread": thread_payload(thread, viewer_user_id=context.user.user_id), **_threads_payload(state, workspace_id=context.workspace_id, viewer_user_id=context.user.user_id)},
+            {"thread": _thread_payload_with_runtime(state, thread, viewer_user_id=context.user.user_id), **_threads_payload(state, workspace_id=context.workspace_id, viewer_user_id=context.user.user_id)},
         )
     if method == "PATCH":
         try:
@@ -736,7 +770,7 @@ def _handle_thread_item(
         _publish_thread_change(state, workspace_id=context.workspace_id, action="updated", thread=updated)
         return json_response(
             start_response,
-            {"thread": thread_payload(updated, viewer_user_id=context.user.user_id), **_threads_payload(state, workspace_id=context.workspace_id, viewer_user_id=context.user.user_id)},
+            {"thread": _thread_payload_with_runtime(state, updated, viewer_user_id=context.user.user_id), **_threads_payload(state, workspace_id=context.workspace_id, viewer_user_id=context.user.user_id)},
         )
     if method == "DELETE":
         forbidden_reason = _thread_cleanup_forbidden_reason(
@@ -830,7 +864,7 @@ def _handle_thread_read(
     _publish_thread_change(state, workspace_id=context.workspace_id, action="updated", thread=updated)
     return json_response(
         start_response,
-        {"thread": thread_payload(updated, viewer_user_id=context.user.user_id), **_threads_payload(state, workspace_id=context.workspace_id, viewer_user_id=context.user.user_id)},
+        {"thread": _thread_payload_with_runtime(state, updated, viewer_user_id=context.user.user_id), **_threads_payload(state, workspace_id=context.workspace_id, viewer_user_id=context.user.user_id)},
     )
 
 
@@ -961,6 +995,15 @@ def _handle_session_turns(
         return json_response(start_response, {"items": [_turn_payload(turn) for turn in state.runtime_store.list_turns(session_id)]})
     if method != "POST":
         return json_response(start_response, {"error": "method_not_allowed"}, status="405 Method Not Allowed")
+    try:
+        require_runtime_session_operation(
+            workspace_store=state.workspace_store,
+            user=context.user,
+            session=session,
+            operation="turn_submit",
+        )
+    except AuthorizationError as error:
+        return json_response(start_response, {"error": error.reason}, status="403 Forbidden")
     return _submit_runtime_turn_response(
         state,
         context,

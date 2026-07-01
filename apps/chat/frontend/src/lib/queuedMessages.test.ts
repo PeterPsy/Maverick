@@ -73,6 +73,22 @@ describe("queued message persistence", () => {
     ]);
   });
 
+  it("restores multi-agent mode for queued messages", () => {
+    const storageKey = queueStorageKey("", "thread:thread-1");
+
+    persistQueuedMessages(storageKey, [
+      {
+        clientMessageId: "message-1",
+        content: "Review this",
+        appReferences: [],
+        attachments: [],
+        multiAgentMode: "group_chat",
+      },
+    ]);
+
+    expect(readPersistedQueuedMessages(storageKey)[0].multiAgentMode).toBe("group_chat");
+  });
+
   it("drops invalid payloads and clears empty queues", () => {
     const storageKey = queueStorageKey("", "draft:draft-1");
 

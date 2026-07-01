@@ -300,7 +300,7 @@ export function useChatNavigation({
 
   async function selectThreadWithoutHttp(thread: ChatThread | null) {
     const cachedTranscript = cachedTranscriptForThread(thread);
-    const cachedHistoryLoaded = Boolean(cachedTranscript && (cachedTranscript.hasLoadedHistory || cachedTranscript.events.length > 0));
+    const cachedHistoryLoaded = cachedTranscript?.hasLoadedHistory === true;
     setIsHistoryLoading(Boolean(thread?.runtime_session_id && !cachedHistoryLoaded));
     setActiveThread(thread);
     setDraftChat(null);

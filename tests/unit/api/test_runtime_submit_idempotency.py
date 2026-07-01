@@ -8,11 +8,60 @@ from unittest.mock import patch
 
 from core.api.platform_host import PlatformHost
 from core.api.platform_state import bootstrap_platform_state
+from core.identity.service import create_user
+from core.runtime.service import create_runtime_session
 from core.runtime.turn_submission_service_queue import _queue_turn_with_event
+from core.workspaces.service import ensure_workspace_membership
 from tests.unit.api.app_reference_test_support import AppReferenceApiTestSupport
 
 
 class RuntimeSubmitIdempotencyApiTestCase(AppReferenceApiTestSupport, unittest.TestCase):
+    def test_existing_session_turn_submit_requires_owner_admin_or_grant(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            repo_root = self._repo_root(temp_dir)
+            with patch.dict(
+                "os.environ",
+                {
+                    "MAVERICK_ALLOW_INSECURE_TEST_DEFAULTS": "1",
+                    "MAVERICK_ADMIN_USERNAME": "admin",
+                    "MAVERICK_ADMIN_PASSWORD": "maverick",
+                },
+            ):
+                state = bootstrap_platform_state(start_path=repo_root)
+            create_runtime_session(
+                state.runtime_store,
+                session_id="owner-session",
+                workspace_id="default",
+                agent_id="chat",
+                source_app_id="chat",
+                owner_user_id="user:admin",
+                governance=state.workspace_store.get_governance("default"),
+                platform_allows_full_access=True,
+                start_path=repo_root,
+            )
+            create_user(state.identity_store, username="member", password="memberpass", platform_role="member")
+            ensure_workspace_membership(
+                state.workspace_store,
+                membership_id="default:user:member",
+                workspace_id="default",
+                user_id="user:member",
+                role="member",
+            )
+            app = PlatformHost(state, start_path=repo_root)
+            member_cookie = self._login(app, username="member", password="memberpass")
+
+            with patch("core.api.runtime_api.submit_runtime_turn_async", side_effect=AssertionError("submit should be forbidden")):
+                status, payload, _headers = self._invoke(
+                    app,
+                    path="/api/runtime/sessions/owner-session/turns",
+                    method="POST",
+                    body={"input_text": "not my session", "client_message_id": "client-forbidden", "async": True},
+                    cookie=member_cookie,
+                )
+
+        self.assertEqual(status, 403)
+        self.assertEqual(payload, {"error": "runtime_session_turn_submit_forbidden"})
+
     def test_new_session_turn_retry_reuses_existing_client_message_id(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             repo_root = self._repo_root(temp_dir)

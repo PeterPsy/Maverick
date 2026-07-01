@@ -10,6 +10,8 @@ from typing import TYPE_CHECKING, Any, Awaitable, Callable
 
 from core.api.http import json_default
 from core.api.session_api import resolve_request_session
+from core.runtime.plain_hosted_text import queue_provider_id_for_session
+from core.runtime.errors import RuntimeSessionNotFoundError
 from core.runtime.runtime_threads import ensure_runtime_threads_for_sessions, thread_payload, thread_recency_key
 from core.shared.entrypoints import EntrypointShutdownController
 
@@ -63,11 +65,13 @@ def _websocket_environ(scope: dict[str, Any]) -> dict[str, str]:
 
 def runtime_thread_snapshot_frame(state: PlatformState, *, workspace_id: str, viewer_user_id: str | None = None) -> dict[str, Any]:
     """Build the current workspace runtime thread catalog snapshot."""
-    threads = _ordered_runtime_threads(state, workspace_id=workspace_id)
+    sessions = state.runtime_store.list_sessions(workspace_id)
+    sessions_by_id = {session.session_id: session for session in sessions}
+    threads = _ordered_runtime_threads(state, workspace_id=workspace_id, sessions=sessions)
     return {
         "type": "runtime.thread.snapshot",
         "workspace_id": workspace_id,
-        "threads": [thread_payload(thread, viewer_user_id=viewer_user_id) for thread in threads],
+        "threads": [_thread_payload_with_runtime(state, thread, session=sessions_by_id.get(thread.runtime_session_id), viewer_user_id=viewer_user_id) for thread in threads],
         "at": datetime.now(tz=UTC),
     }
 
@@ -94,16 +98,33 @@ def runtime_thread_changed_frame(
         with suppress(Exception):
             thread = state.runtime_store.get_thread(thread_id)
             if thread.workspace_id == workspace_id:
-                frame["thread"] = thread_payload(thread, viewer_user_id=viewer_user_id)
+                frame["thread"] = _thread_payload_with_runtime(state, thread, viewer_user_id=viewer_user_id)
     return frame
 
 
-def _ordered_runtime_threads(state: PlatformState, *, workspace_id: str):
-    sessions = state.runtime_store.list_sessions(workspace_id)
+def _thread_payload_with_runtime(state: PlatformState, thread, *, session=None, viewer_user_id: str | None = None) -> dict[str, Any]:
+    payload = thread_payload(thread, viewer_user_id=viewer_user_id)
+    runtime_session = session
+    if runtime_session is None and getattr(thread, "runtime_session_id", ""):
+        try:
+            runtime_session = state.runtime_store.get_session(thread.runtime_session_id)
+        except (RuntimeSessionNotFoundError, ValueError):
+            runtime_session = None
+    if runtime_session is None:
+        return payload
+    payload["runtime_mode"] = runtime_session.runtime_mode
+    payload["provider_id"] = runtime_session.provider_id or queue_provider_id_for_session(runtime_session)
+    payload["hosted_provider_id"] = runtime_session.hosted_provider_id
+    payload["hosted_model_id"] = runtime_session.hosted_model_id
+    return payload
+
+
+def _ordered_runtime_threads(state: PlatformState, *, workspace_id: str, sessions=None):
+    runtime_sessions = sessions if sessions is not None else state.runtime_store.list_sessions(workspace_id)
     threads = ensure_runtime_threads_for_sessions(
         state.runtime_store,
         workspace_id=workspace_id,
-        sessions=sessions,
+        sessions=runtime_sessions,
     )
     return sorted(threads, key=thread_recency_key, reverse=True)
 

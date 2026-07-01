@@ -72,9 +72,10 @@ export function selectedProviderForSession({
   activeThread: ChatThread | null;
   providers: ProviderItem[];
 }): ProviderItem | null {
-  if (activeThread && activeSession?.runtime_mode === "plain_hosted_chat") {
-    const hostedProviderId = activeSession.hosted_provider_id || "";
-    const hostedModelId = activeSession.hosted_model_id || "";
+  const selectionSession = activeSession || runtimeSessionSummaryFromThread(activeThread);
+  if (activeThread && selectionSession?.runtime_mode === "plain_hosted_chat") {
+    const hostedProviderId = selectionSession.hosted_provider_id || "";
+    const hostedModelId = selectionSession.hosted_model_id || "";
     const exact = providers.find((provider) => provider.hosted_provider_id === hostedProviderId && provider.hosted_model_id === hostedModelId);
     if (exact) {
       return exact;
@@ -92,10 +93,38 @@ export function selectedProviderForSession({
     }
     return providerFallback || null;
   }
-  if (activeThread && activeSession?.provider_id) {
-    return providers.find((provider) => provider.provider_id === activeSession.provider_id) || null;
+  if (activeThread && selectionSession?.provider_id) {
+    return providerById(providers, selectionSession.provider_id) || existingThreadDefaultProvider(providers);
+  }
+  if (activeThread) {
+    return existingThreadDefaultProvider(providers);
   }
   return providers.find((provider) => provider.provider_id === activeProviderId) || null;
+}
+
+function runtimeSessionSummaryFromThread(thread: ChatThread | null): RuntimeSession | null {
+  if (!thread?.runtime_session_id || !thread.runtime_mode) {
+    return null;
+  }
+  return {
+    session_id: thread.runtime_session_id,
+    workspace_id: "",
+    agent_id: thread.agent_label || "chat",
+    status: "",
+    effective_mode: "",
+    runtime_mode: thread.runtime_mode,
+    provider_id: thread.provider_id || undefined,
+    hosted_provider_id: thread.hosted_provider_id || null,
+    hosted_model_id: thread.hosted_model_id || null,
+  };
+}
+
+function providerById(providers: ProviderItem[], providerId: string): ProviderItem | null {
+  return providers.find((provider) => provider.provider_id === providerId) || null;
+}
+
+function existingThreadDefaultProvider(providers: ProviderItem[]): ProviderItem | null {
+  return providerById(providers, "codex") || providers.find((provider) => provider.provider_role === "runtime_engine") || null;
 }
 
 export function providersForComposer(providers: ProviderItem[], selectedProvider: ProviderItem | null): ProviderItem[] {
@@ -503,7 +532,7 @@ export function useChatAppController({
     postActiveThreadChanged({ activeThread, activeThreadId, navigationScope, threadId });
   }
 
-  useQueuedMessagePersistence({ activeConversationKey, isBootstrapping, navigationScope, queuedMessages });
+  useQueuedMessagePersistence({ activeConversationKey, isBootstrapping, navigationScope, pendingUserMessages, queuedMessages });
 
   const presentation = useChatControllerPresentation({
     activeProviderId,

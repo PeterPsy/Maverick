@@ -108,6 +108,18 @@ provider-store definitions. Runtime failure payloads keep bounded router reason
 codes so missing credentials, disabled providers, model/policy failures, and
 provider transport failures remain distinguishable.
 
+Hosted providers do not own Maverick conversation state. Before each
+`plain_hosted_chat` request, the runtime rebuilds a bounded message history
+from completed turns in the same runtime session and sends complete
+`user`/`assistant` pairs before the current user message. Failed, cancelled,
+active, current, and incomplete turns are excluded; historical attachments are
+not replayed. The builder orders turns by creation time and turn id, chooses the
+latest `runtime.output.final` event per turn by event creation time and event
+id, trims only whole historical pairs, and always keeps the current user
+message. Because hosted text request validation scans the whole generated
+request, an operational reference in an older retained turn fails closed just
+like one in the current prompt.
+
 The only supported Chat routing profile for this bridge is `fast_model`.
 Runtime HTTP requests may omit `routing_profile` or pass `fast_model`; any other
 provided value is rejected with `unsupported_routing_profile` instead of being

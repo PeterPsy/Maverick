@@ -18,7 +18,7 @@ export function readPersistedQueuedMessages(storageKey: string): QueuedMessage[]
       return [];
     }
     return payload.items
-      .map((item) => {
+      .map((item): QueuedMessage | null => {
         if (!item || typeof item !== "object") {
           return null;
         }
@@ -29,11 +29,13 @@ export function readPersistedQueuedMessages(storageKey: string): QueuedMessage[]
         if (!clientMessageId || (!content.trim() && !attachments.length)) {
           return null;
         }
+        const multiAgentMode = persistedMultiAgentMode(record.multiAgentMode);
         return {
           clientMessageId,
           content,
           appReferences: persistedAppReferences(record.appReferences),
           attachments,
+          ...(multiAgentMode ? { multiAgentMode } : {}),
         };
       })
       .filter((item): item is QueuedMessage => Boolean(item));
@@ -74,6 +76,10 @@ export function migratePersistedQueuedMessages(navigationScope: string, fromConv
     persistQueuedMessages(toStorageKey, [...readPersistedQueuedMessages(toStorageKey), ...queuedMessages]);
   }
   persistQueuedMessages(fromStorageKey, []);
+}
+
+function persistedMultiAgentMode(value: unknown): QueuedMessage["multiAgentMode"] | undefined {
+  return value === "auto" || value === "multi" || value === "group_chat" || value === "off" ? value : undefined;
 }
 
 function persistedAppReferences(value: unknown): AppReference[] {

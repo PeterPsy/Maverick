@@ -176,6 +176,8 @@ def validate_runtime_app_references(
     start_path: Path,
 ) -> list[dict[str, object]]:
     """Verify client-submitted references without invoking app-owned MCP tools."""
+    if not references:
+        return []
     visible_apps = visible_workspace_apps(state, context=context, start_path=start_path)
     providers_by_app_id = {
         provider["app_id"]: provider

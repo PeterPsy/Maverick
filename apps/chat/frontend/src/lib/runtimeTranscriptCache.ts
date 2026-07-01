@@ -10,7 +10,7 @@ export type RuntimeTranscriptCacheEntry = {
 
 type TranscriptStorage = Pick<Storage, "getItem" | "removeItem" | "setItem">;
 
-const STORAGE_KEY_PREFIX = "maverick.chat.runtime-transcript-cache.v1:";
+const STORAGE_KEY_PREFIX = "maverick.chat.runtime-transcript-cache.v2:";
 const MAX_CACHED_EVENTS = 300;
 
 export function normalizeRuntimeTranscriptCacheEntry(entry: RuntimeTranscriptCacheEntry): RuntimeTranscriptCacheEntry {
@@ -19,7 +19,7 @@ export function normalizeRuntimeTranscriptCacheEntry(entry: RuntimeTranscriptCac
     activeSession: entry.activeSession,
     activeTurn: entry.activeTurn,
     events,
-    hasLoadedHistory: entry.hasLoadedHistory || events.length > 0,
+    hasLoadedHistory: entry.hasLoadedHistory === true,
     hasMoreHistory: entry.hasMoreHistory === true,
   };
 }

@@ -169,6 +169,7 @@ def submit_runtime_turn_async(
                     result, routing_decision = execute_plain_hosted_text_turn(
                         state,
                         session=current_session,
+                        turn_id=turn.turn_id,
                         input_text=input_text,
                         attachments=attachments,
                         event_sink=output_recorder.record,
@@ -182,7 +183,11 @@ def submit_runtime_turn_async(
                     worker_provider_id = provider.provider_id
                     if current_session.provider_id != worker_provider_id:
                         current_session = state.runtime_store.save_session(replace(current_session, provider_id=worker_provider_id))
-                    launch_spec = _build_launch_spec_for_execution(state, session=current_session, provider_id=worker_provider_id)
+                    launch_result = _build_launch_spec_for_execution(state, session=current_session, provider_id=worker_provider_id)
+                    if isinstance(launch_result, tuple):
+                        launch_spec, launch_metadata = launch_result
+                    else:
+                        launch_spec, launch_metadata = launch_result, {}
                     execution_app_references = _materialize_app_references_for_execution(
                         app_references=app_references,
                         app_reference_materializer=app_reference_materializer,
@@ -200,6 +205,7 @@ def submit_runtime_turn_async(
                         turn_id=turn.turn_id,
                         provider_id=worker_provider_id,
                         runtime_mode=current_session.runtime_mode,
+                        metadata=launch_metadata,
                     )
 
                     def record_provider_turn_start_sent(metadata: dict[str, object]) -> None:

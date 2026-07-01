@@ -292,6 +292,56 @@ class HostedTextGenerationTest(unittest.TestCase):
         parts = transport.requests[0]["payload"]["contents"][0]["parts"]
         self.assertEqual(parts[1], {"inlineData": {"mimeType": "audio/wav", "data": "YXVkaW8="}})
 
+    def test_google_ai_studio_serializes_assistant_history_as_model_role(self) -> None:
+        transport = FakeHostedTextTransport(
+            payload={
+                "candidates": [
+                    {
+                        "content": {
+                            "parts": [{"text": "follow up"}],
+                        }
+                    }
+                ]
+            }
+        )
+        client = GoogleAIStudioTextGenerationClient(api_key="secret-token", transport=transport)
+
+        client.generate(
+            TextGenerationRequest(
+                model_id="gemini-3.5-flash",
+                messages=[
+                    TextGenerationMessage(role="user", content="Question one"),
+                    TextGenerationMessage(role="assistant", content="Answer one"),
+                    TextGenerationMessage(role="user", content="Question two"),
+                ],
+            )
+        )
+
+        self.assertEqual([item["role"] for item in transport.requests[0]["payload"]["contents"]], ["user", "model", "user"])
+
+    def test_blocked_operational_reference_in_history_fails_closed(self) -> None:
+        client = OpenAICompatibleTextGenerationClient(
+            provider_id="openrouter",
+            api_key="secret-token",
+            transport=FakeHostedTextTransport(response_text="unused"),
+        )
+
+        with self.assertRaises(HostedTextGenerationError) as raised:
+            client.generate(
+                TextGenerationRequest(
+                    model_id="google/gemma-4-31b-it:free",
+                    messages=[
+                        TextGenerationMessage(role="user", content="Earlier path /home/ubuntu/projects/maverick-v3/workspaces/default/data"),
+                        TextGenerationMessage(role="assistant", content="Acknowledged."),
+                        TextGenerationMessage(role="user", content="Now answer normally."),
+                    ],
+                    workspace_root="/home/ubuntu/projects/maverick-v3/workspaces/default",
+                    workspace_id="default",
+                )
+            )
+
+        self.assertEqual(raised.exception.reason_code, "hosted_text_request_contains_operational_reference")
+
     def test_fake_transport_streaming_normalizes_deltas(self) -> None:
         transport = FakeHostedTextTransport(chunks=["hel", "lo"])
         client = OpenAICompatibleTextGenerationClient(

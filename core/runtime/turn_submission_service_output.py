@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from dataclasses import replace
 import os
+import time
 from typing import TYPE_CHECKING
 from uuid import uuid4
 
@@ -64,7 +65,14 @@ def _record_provider_dispatching(
     turn_id: str,
     provider_id: str,
     runtime_mode: str,
+    metadata: dict[str, object] | None = None,
 ) -> RuntimeEventRecord:
+    payload: dict[str, object] = {"provider_id": provider_id, "runtime_mode": runtime_mode}
+    for key, value in (metadata or {}).items():
+        if key.endswith("_ms") and isinstance(value, int | float):
+            payload[key] = round(float(value), 3)
+        elif key in {"skill_count", "provider_id_resolved"} and value is not None:
+            payload[key] = value
     return record_runtime_event(
         state.runtime_store,
         event_id=str(uuid4()),
@@ -72,7 +80,7 @@ def _record_provider_dispatching(
         turn_id=turn_id,
         plane="turn",
         event_type="runtime.provider.dispatching",
-        payload={"provider_id": provider_id, "runtime_mode": runtime_mode},
+        payload=payload,
         event_bus=state.runtime_event_bus,
     )
 
@@ -90,6 +98,8 @@ def _record_provider_turn_start_sent(
     for key, value in (metadata or {}).items():
         if key in {"provider_thread_id", "provider_turn_id", "model_id", "source", "request_id"} and value is not None and value != "":
             payload[key] = value
+        elif key.endswith("_ms") and isinstance(value, int | float):
+            payload[key] = round(float(value), 3)
     return record_runtime_event(
         state.runtime_store,
         event_id=str(uuid4()),
@@ -120,6 +130,8 @@ def _record_provider_accepted(
     for key, value in (metadata or {}).items():
         if key in {"provider_thread_id", "provider_turn_id", "model_id", "status_code", "source"} and value is not None and value != "":
             payload[key] = value
+        elif key.endswith("_ms") and isinstance(value, int | float):
+            payload[key] = round(float(value), 3)
     return record_runtime_event(
         state.runtime_store,
         event_id=str(uuid4()),
@@ -156,13 +168,16 @@ def _record_provider_thread_id(
 
 def _build_launch_spec_for_execution(state: PlatformState, *, session: RuntimeSessionRecord, provider_id: str):
     if os.environ.get("MAVERICK_RUNTIME_FAKE_RESPONSE") is not None:
-        return None
+        return None, {}
+    started_at = time.perf_counter()
     spec = build_runtime_backend_launch_spec(
         state.provider_store,
         session=session,
         secret_store=state.secret_store,
         observability_store=state.observability_store,
     )
+    launch_spec_ms = (time.perf_counter() - started_at) * 1000
+    skill_resolve_started_at = time.perf_counter()
     skills = (
         resolve_runtime_skills(session, start_path=state.repository_root)
         if session.skill_ids
@@ -172,9 +187,19 @@ def _build_launch_spec_for_execution(state: PlatformState, *, session: RuntimeSe
             app_id=session.skill_catalog_app_id or DEFAULT_SKILL_CATALOG_APP_ID,
         )
     )
+    skill_resolve_ms = (time.perf_counter() - skill_resolve_started_at) * 1000
+    skill_prepare_ms = 0.0
     if skills:
+        skill_prepare_started_at = time.perf_counter()
         prepare_runtime_skills(state.provider_store, session=session, skills=skills)
+        skill_prepare_ms = (time.perf_counter() - skill_prepare_started_at) * 1000
     token = spec.env_overrides.get("MAVERICK_RUNTIME_API_TOKEN")
     if token:
         register_workspace_api_token(state.runtime_store, token)
-    return spec
+    return spec, {
+        "launch_spec_ms": launch_spec_ms,
+        "skill_resolve_ms": skill_resolve_ms,
+        "skill_prepare_ms": skill_prepare_ms,
+        "skill_count": len(skills),
+        "provider_id_resolved": provider_id,
+    }

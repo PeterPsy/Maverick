@@ -14,6 +14,57 @@ from tests.unit.api.app_reference_test_support import AppReferenceApiTestSupport
 
 
 class AppReferencesRuntimeApiTestCase(AppReferenceApiTestSupport, unittest.TestCase):
+    def test_runtime_turn_skips_app_reference_discovery_when_empty(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            repo_root = self._repo_root(temp_dir)
+            with patch.dict(
+                "os.environ",
+                {
+                    "MAVERICK_ALLOW_INSECURE_TEST_DEFAULTS": "1",
+                    "MAVERICK_ADMIN_USERNAME": "admin",
+                    "MAVERICK_ADMIN_PASSWORD": "maverick",
+                },
+            ):
+                state = bootstrap_platform_state(start_path=repo_root)
+            session = create_runtime_session(
+                state.runtime_store,
+                session_id="sess-empty-refs",
+                workspace_id="default",
+                agent_id="chat",
+                owner_user_id="user:admin",
+                start_path=repo_root,
+            )
+            app = PlatformHost(state, start_path=repo_root)
+            cookie = self._login(app)
+
+            def fake_submit_runtime_turn(*_args, **kwargs):
+                now = datetime.now(timezone.utc)
+                return RuntimeTurnRecord(
+                    turn_id="turn-empty-refs",
+                    session_id=session.session_id,
+                    workspace_id=session.workspace_id,
+                    status="queued",
+                    input_text=kwargs["input_text"],
+                    created_at=now,
+                    updated_at=now,
+                    started_at=None,
+                    completed_at=None,
+                    failure_reason=None,
+                ), []
+
+            with patch("core.api.app_reference_payloads.visible_workspace_apps", side_effect=AssertionError("discovery should be skipped")), patch(
+                "core.api.app_reference_payloads.reference_providers", side_effect=AssertionError("provider discovery should be skipped")
+            ), patch("core.api.runtime_api.submit_runtime_turn_async", side_effect=fake_submit_runtime_turn):
+                status, _payload, _headers = self._invoke(
+                    app,
+                    path="/api/runtime/sessions/sess-empty-refs/turns",
+                    method="POST",
+                    body={"input_text": "No references", "async": True, "app_references": []},
+                    cookie=cookie,
+                )
+
+        self.assertEqual(status, 202)
+
     def test_runtime_turn_materializes_references_server_side(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             repo_root = self._repo_root(temp_dir)

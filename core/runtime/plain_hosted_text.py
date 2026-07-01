@@ -24,6 +24,7 @@ from core.providers.text_generation import (
 )
 from core.runtime.execution import RuntimeExecutionResult
 from core.runtime.execution_events import RuntimeExecutionEvent
+from core.runtime.plain_hosted_history import build_plain_hosted_message_history
 from core.runtime.runtime_session import RuntimeSessionRecord
 
 
@@ -61,6 +62,7 @@ def execute_plain_hosted_text_turn(
     state,
     *,
     session: RuntimeSessionRecord,
+    turn_id: str | None = None,
     input_text: str,
     attachments: list[dict[str, object]] | None = None,
     event_sink: Callable[[RuntimeExecutionEvent], object] | None = None,
@@ -89,21 +91,26 @@ def execute_plain_hosted_text_turn(
         effective_provider_registry(state.provider_store).get_provider_definition(decision.selected_provider_id),
         decision.selected_model_id_or_voice_id,
     )
+    messages = build_plain_hosted_message_history(
+        state.runtime_store,
+        session_id=session.session_id,
+        current_turn_id=turn_id,
+        current_input_text=input_text,
+    )
+    messages[-1] = TextGenerationMessage(
+        role="user",
+        content=_hosted_message_content(
+            input_text=input_text,
+            attachments=attachments,
+            session=session,
+            model_option=model_option,
+            provider_id=decision.selected_provider_id or "",
+        ),
+    )
     request = TextGenerationRequest(
         model_id=decision.selected_model_id_or_voice_id or "",
         system_prompt=session.system_prompt,
-        messages=[
-            TextGenerationMessage(
-                role="user",
-                content=_hosted_message_content(
-                    input_text=input_text,
-                    attachments=attachments,
-                    session=session,
-                    model_option=model_option,
-                    provider_id=decision.selected_provider_id or "",
-                ),
-            )
-        ],
+        messages=messages,
         stream=True,
         timeout_seconds=30,
         workspace_id=session.workspace_id,

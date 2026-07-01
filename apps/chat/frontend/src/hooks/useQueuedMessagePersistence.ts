@@ -7,11 +7,13 @@ export function useQueuedMessagePersistence({
   isBootstrapping,
   navigationScope,
   queuedMessages,
+  pendingUserMessages = [],
 }: {
   activeConversationKey: string;
   isBootstrapping: boolean;
   navigationScope: string;
   queuedMessages: QueuedMessage[];
+  pendingUserMessages?: QueuedMessage[];
 }) {
   const hasHydratedQueuedMessagesRef = useRef(false);
 
@@ -26,6 +28,6 @@ export function useQueuedMessagePersistence({
     if (isBootstrapping || !hasHydratedQueuedMessagesRef.current || !activeConversationKey) {
       return;
     }
-    persistQueuedMessages(queueStorageKey(navigationScope, activeConversationKey), queuedMessages);
-  }, [activeConversationKey, isBootstrapping, navigationScope, queuedMessages]);
+    persistQueuedMessages(queueStorageKey(navigationScope, activeConversationKey), [...pendingUserMessages, ...queuedMessages]);
+  }, [activeConversationKey, isBootstrapping, navigationScope, pendingUserMessages, queuedMessages]);
 }

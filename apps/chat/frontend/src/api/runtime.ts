@@ -7,6 +7,7 @@ import type {
   RuntimeSession,
   RuntimeSessionOptions,
   RuntimeTurn,
+  RuntimeTurnSubmitResponse,
   RuntimeWebSocketFrame,
   UploadedWorkspaceFile,
 } from "./types";
@@ -65,12 +66,7 @@ export function createRuntimeSessionWithTurn({
   inputText: string;
   options?: RuntimeSessionOptions;
   signal?: AbortSignal;
-}): Promise<{
-  session: RuntimeSession;
-  thread?: ChatThread;
-  turn: RuntimeTurn;
-  events: RuntimeEvent[];
-}> {
+}): Promise<RuntimeTurnSubmitResponse> {
   const body: Record<string, unknown> = {
     agent_id: options.agent_id || "chat",
     agent_role_id: options.agent_role_id || "",
@@ -141,12 +137,7 @@ export function sendRuntimeTurn(
   attachments: ChatMessageAttachment[] = [],
   appReferences: AppReference[] = [],
   requestOptions: { signal?: AbortSignal } = {},
-): Promise<{
-  session: RuntimeSession;
-  thread?: ChatThread;
-  turn: RuntimeTurn;
-  events: RuntimeEvent[];
-}> {
+): Promise<RuntimeTurnSubmitResponse> {
   const body: Record<string, unknown> = {
     input_text: inputText,
     client_message_id: clientMessageId,

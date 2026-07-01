@@ -75,11 +75,12 @@ export function useRuntimeTranscriptCache({
     if (!runtimeSessionId) {
       return;
     }
+    const previousEntry = runtimeTranscriptCacheRef.current.get(runtimeSessionId);
     const cacheEntry = {
-      activeSession,
+      activeSession: activeSession ?? previousEntry?.activeSession ?? null,
       activeTurn,
       events,
-      hasLoadedHistory: hasLoadedHistory || events.length > 0,
+      hasLoadedHistory,
       hasMoreHistory,
     };
     runtimeTranscriptCacheRef.current.set(runtimeSessionId, cacheEntry);

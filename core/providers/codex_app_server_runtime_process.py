@@ -68,9 +68,13 @@ def execute_codex_app_server_turn(
     command_runner=subprocess.Popen,
 ) -> CodexAppServerTurnResult:
     """Execute one turn against a persistent Codex app-server thread."""
+    ensure_runtime_started_at = time.perf_counter()
     runtime = _ensure_runtime(session=session, launch_spec=launch_spec, command_runner=command_runner)
+    ensure_runtime_ms = (time.perf_counter() - ensure_runtime_started_at) * 1000
     _remove_generated_system_skills(launch_spec=launch_spec, session=session)
+    ensure_thread_started_at = time.perf_counter()
     provider_thread_id = _ensure_provider_thread(runtime=runtime, session=session, launch_spec=launch_spec, on_provider_thread_id=on_provider_thread_id)
+    ensure_provider_thread_ms = (time.perf_counter() - ensure_thread_started_at) * 1000
     with runtime.event_lock:
         runtime.current_event_sink = event_sink
         runtime.current_chunks = []
@@ -106,6 +110,8 @@ def execute_codex_app_server_turn(
             {
                 **metadata,
                 "provider_thread_id": provider_thread_id,
+                "ensure_runtime_ms": ensure_runtime_ms,
+                "ensure_provider_thread_ms": ensure_provider_thread_ms,
             }
         )
         if on_provider_turn_start_sent is not None
@@ -120,6 +126,8 @@ def execute_codex_app_server_turn(
             {
                 "provider_thread_id": provider_thread_id,
                 "provider_turn_id": runtime.current_provider_turn_id or "",
+                "ensure_runtime_ms": ensure_runtime_ms,
+                "ensure_provider_thread_ms": ensure_provider_thread_ms,
             }
         )
     _debug_log(

@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { ChatThread, ProviderItem, RuntimeSession, RuntimeTurn } from "../api/client";
 import { isActiveRuntimeTurnBusyForThread, providersForComposer, selectedProviderForSession } from "./useChatAppController";
 
-function thread(availability: string): ChatThread {
+function thread(availability: string, overrides: Partial<ChatThread> = {}): ChatThread {
   return {
     thread_id: "thread-1",
     runtime_session_id: "session-1",
@@ -17,6 +17,7 @@ function thread(availability: string): ChatThread {
     availability,
     created_at: "2026-04-19T10:00:00Z",
     updated_at: "2026-04-19T10:00:00Z",
+    ...overrides,
   };
 }
 
@@ -143,6 +144,45 @@ describe("selectedProviderForSession", () => {
     });
 
     expect(selected?.provider_id).toBe("codex");
+  });
+
+  it("does not show the global hosted model while an existing agentic thread session is loading", () => {
+    const selected = selectedProviderForSession({
+      activeProviderId: "hosted:openrouter:model-a",
+      activeSession: null,
+      activeThread: thread("free", { runtime_mode: "agentic", provider_id: "codex" }),
+      providers: [
+        provider({ provider_id: "hosted:openrouter:model-a", label: "Gemma", provider_role: "model_provider", kind: "hosted_api" }),
+        provider({ provider_id: "codex", label: "Codex", provider_role: "runtime_engine" }),
+      ],
+    });
+
+    expect(selected?.provider_id).toBe("codex");
+  });
+
+  it("uses hosted runtime metadata from the active thread while the session snapshot is loading", () => {
+    const selected = selectedProviderForSession({
+      activeProviderId: "codex",
+      activeSession: null,
+      activeThread: thread("free", {
+        runtime_mode: "plain_hosted_chat",
+        hosted_provider_id: "openrouter",
+        hosted_model_id: "model-a",
+      }),
+      providers: [
+        provider({ provider_id: "codex", label: "Codex", provider_role: "runtime_engine" }),
+        provider({
+          provider_id: "hosted:openrouter:model-a",
+          label: "Model A - OpenRouter",
+          provider_role: "model_provider",
+          kind: "hosted_api",
+          hosted_provider_id: "openrouter",
+          hosted_model_id: "model-a",
+        }),
+      ],
+    });
+
+    expect(selected?.provider_id).toBe("hosted:openrouter:model-a");
   });
 
   it("includes synthetic selected providers in composer options", () => {

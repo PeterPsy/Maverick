@@ -48,9 +48,20 @@ describe("runtime transcript cache", () => {
     expect(readStoredRuntimeTranscript("session-1", fakeStorage)).toMatchObject({
       activeSession: { session_id: "session-1" },
       events: [{ event_id: "event-1" }],
-      hasLoadedHistory: true,
+      hasLoadedHistory: false,
       hasMoreHistory: false,
     });
+  });
+
+  it("does not treat partial cached events as complete loaded history", () => {
+    const normalized = normalizeRuntimeTranscriptCacheEntry({
+      activeSession: null,
+      activeTurn: null,
+      events: [event(1)],
+      hasLoadedHistory: false,
+    });
+
+    expect(normalized.hasLoadedHistory).toBe(false);
   });
 
   it("preserves explicit older-history metadata", () => {
@@ -83,7 +94,7 @@ describe("runtime transcript cache", () => {
 
   it("drops corrupted entries instead of throwing", () => {
     const fakeStorage = storage();
-    fakeStorage.setItem("maverick.chat.runtime-transcript-cache.v1:session-1", "{not json");
+    fakeStorage.setItem("maverick.chat.runtime-transcript-cache.v2:session-1", "{not json");
 
     expect(readStoredRuntimeTranscript("session-1", fakeStorage)).toBeNull();
     expect(readStoredRuntimeTranscript("session-1", fakeStorage)).toBeNull();

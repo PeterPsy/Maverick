@@ -235,6 +235,10 @@ export type ChatThread = {
   last_completed_response_at?: string | null;
   last_completed_turn_id?: string | null;
   has_unread_completed_response?: boolean;
+  runtime_mode?: "agentic" | "plain_hosted_chat" | string;
+  provider_id?: string | null;
+  hosted_provider_id?: string | null;
+  hosted_model_id?: string | null;
 };
 
 export type ChatProject = {
@@ -293,6 +297,21 @@ export type RuntimeTurn = {
   runtime_mode?: "agentic" | "plain_hosted_chat" | string;
   created_at: string;
   updated_at: string;
+};
+
+export type RuntimeTurnIdempotency = {
+  status: "pending" | string;
+  client_message_id: string;
+  session_id: string;
+  turn_id: string;
+};
+
+export type RuntimeTurnSubmitResponse = {
+  session?: RuntimeSession;
+  thread?: ChatThread;
+  turn?: RuntimeTurn;
+  events?: RuntimeEvent[];
+  idempotency?: RuntimeTurnIdempotency;
 };
 
 export type RuntimeEvent = {

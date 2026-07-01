@@ -7,6 +7,7 @@ import {
   RuntimeEvent,
   RuntimeSession,
   RuntimeTurn,
+  RuntimeTurnSubmitResponse,
   type CreateInterAgentRunPayload,
   type InterAgentParticipantSpecPayload,
   createInterAgentRun,
@@ -155,6 +156,10 @@ function throwIfAborted(signal: AbortSignal) {
   throw error;
 }
 
+function isPendingIdempotencyResponse(response: RuntimeTurnSubmitResponse): boolean {
+  return response.idempotency?.status === "pending" && !response.turn;
+}
+
 export function useMessageSubmission({
   activeAppContext,
   activeThread,
@@ -287,10 +292,11 @@ export function useMessageSubmission({
       {
         clientMessageId: message.clientMessageId,
         content: message.content,
-        createdAt: new Date().toISOString(),
-        attachments: message.attachments,
-        appReferences: message.appReferences,
-      },
+              createdAt: new Date().toISOString(),
+              attachments: message.attachments,
+              appReferences: message.appReferences,
+              multiAgentMode: message.multiAgentMode,
+            },
     ]);
   }
 
@@ -563,6 +569,30 @@ export function useMessageSubmission({
         );
       }
       throwIfAborted(abortController.signal);
+      if (isPendingIdempotencyResponse(response)) {
+        const pending = response.idempotency;
+        if (pending?.turn_id) {
+          inFlightSubmissionsRef.current[conversationKey] = {
+            ...(inFlightSubmissionsRef.current[conversationKey] || {
+              abortController,
+              clientMessageId: message.clientMessageId,
+            }),
+            turnId: pending.turn_id,
+          };
+          setSubmittedTurnForConversation(conversationKey, pending.turn_id);
+        }
+        if (response.session && isConversationStillActive(conversationKey)) {
+          setActiveSession(response.session);
+        }
+        setConversationSending(conversationKey, false);
+        return;
+      }
+      if (!response.turn) {
+        throw new Error("Runtime turn was not created.");
+      }
+      if (!response.session) {
+        throw new Error("Runtime session was not returned.");
+      }
       const responseThread = response.thread;
       const baseThread = responseThread || thread;
       if (!baseThread) {
@@ -589,7 +619,7 @@ export function useMessageSubmission({
       if (isConversationStillActive(conversationKey)) {
         setActiveSession(response.session);
         setActiveTurn(response.turn);
-        setEvents((current) => mergeRuntimeEvents(current, response.events));
+        setEvents((current) => mergeRuntimeEvents(current, response.events || []));
         setActiveThread((current) => (current?.thread_id === optimisticThread.thread_id ? { ...current, ...optimisticThread } : optimisticThread));
         if (!thread) {
           setDraftChat(null);

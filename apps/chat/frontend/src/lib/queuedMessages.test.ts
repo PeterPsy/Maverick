@@ -1,5 +1,13 @@
 import { beforeEach, describe, expect, it } from "vitest";
-import { migratePersistedQueuedMessages, persistQueuedMessages, queueStorageKey, readPersistedQueuedMessages } from "./queuedMessages";
+import {
+  migratePersistedQueuedMessages,
+  persistQueuedMessageState,
+  persistQueuedMessages,
+  queueStorageKey,
+  readPersistedPendingMessages,
+  readPersistedQueuedMessages,
+  readPersistedRecoverableQueuedMessages,
+} from "./queuedMessages";
 
 function installLocalStorageWindow() {
   const values = new Map<string, string>();
@@ -53,7 +61,7 @@ describe("queued message persistence", () => {
       },
     ]);
 
-    expect(JSON.parse(window.localStorage.getItem(storageKey) || "{}").items[0].attachments[0].objectUrl).toBeNull();
+    expect(JSON.parse(window.localStorage.getItem(storageKey) || "{}").queued[0].attachments[0].objectUrl).toBeNull();
     expect(readPersistedQueuedMessages(storageKey)).toEqual([
       {
         clientMessageId: "message-1",
@@ -70,6 +78,35 @@ describe("queued message persistence", () => {
           },
         ],
       },
+    ]);
+  });
+
+  it("persists pending separately from queued messages", () => {
+    const storageKey = queueStorageKey("", "thread:thread-1");
+    const pendingMessage = {
+      clientMessageId: "message-pending",
+      content: "Running",
+      createdAt: "2026-07-01T12:00:00.000Z",
+      appReferences: [],
+      attachments: [],
+    };
+    const queuedMessage = {
+      clientMessageId: "message-queued",
+      content: "Next",
+      appReferences: [],
+      attachments: [],
+    };
+
+    persistQueuedMessageState(storageKey, {
+      pendingMessages: [pendingMessage],
+      queuedMessages: [pendingMessage, queuedMessage],
+    });
+
+    expect(readPersistedPendingMessages(storageKey).map((message) => message.clientMessageId)).toEqual(["message-pending"]);
+    expect(readPersistedQueuedMessages(storageKey).map((message) => message.clientMessageId)).toEqual(["message-queued"]);
+    expect(readPersistedRecoverableQueuedMessages(storageKey).map((message) => message.clientMessageId)).toEqual([
+      "message-pending",
+      "message-queued",
     ]);
   });
 
@@ -129,5 +166,46 @@ describe("queued message persistence", () => {
 
     expect(window.localStorage.getItem(draftStorageKey)).toBeNull();
     expect(readPersistedQueuedMessages(threadStorageKey).map((message) => message.clientMessageId)).toEqual(["message-existing", "message-draft"]);
+  });
+
+  it("migrates pending and queued buckets without cross-contaminating them", () => {
+    const draftStorageKey = queueStorageKey("floating-window", "draft:active");
+    const threadStorageKey = queueStorageKey("floating-window", "thread:thread-1");
+    persistQueuedMessageState(threadStorageKey, {
+      pendingMessages: [
+        {
+          clientMessageId: "message-existing-pending",
+          content: "Existing pending",
+          createdAt: "2026-07-01T12:00:00.000Z",
+          appReferences: [],
+          attachments: [],
+        },
+      ],
+      queuedMessages: [{ clientMessageId: "message-existing-queued", content: "Existing queued", appReferences: [], attachments: [] }],
+    });
+    persistQueuedMessageState(draftStorageKey, {
+      pendingMessages: [
+        {
+          clientMessageId: "message-draft-pending",
+          content: "Draft pending",
+          createdAt: "2026-07-01T12:01:00.000Z",
+          appReferences: [],
+          attachments: [],
+        },
+      ],
+      queuedMessages: [{ clientMessageId: "message-draft-queued", content: "Draft queued", appReferences: [], attachments: [] }],
+    });
+
+    migratePersistedQueuedMessages("floating-window", "draft:active", "thread:thread-1");
+
+    expect(window.localStorage.getItem(draftStorageKey)).toBeNull();
+    expect(readPersistedPendingMessages(threadStorageKey).map((message) => message.clientMessageId)).toEqual([
+      "message-existing-pending",
+      "message-draft-pending",
+    ]);
+    expect(readPersistedQueuedMessages(threadStorageKey).map((message) => message.clientMessageId)).toEqual([
+      "message-existing-queued",
+      "message-draft-queued",
+    ]);
   });
 });

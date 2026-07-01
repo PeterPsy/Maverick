@@ -1,6 +1,6 @@
 import { useEffect, useRef } from "react";
-import type { QueuedMessage } from "../lib/messageState";
-import { persistQueuedMessages, queueStorageKey } from "../lib/queuedMessages";
+import type { PendingMessage, QueuedMessage } from "../lib/messageState";
+import { persistQueuedMessageState, queueStorageKey } from "../lib/queuedMessages";
 
 export function useQueuedMessagePersistence({
   activeConversationKey,
@@ -13,7 +13,7 @@ export function useQueuedMessagePersistence({
   isBootstrapping: boolean;
   navigationScope: string;
   queuedMessages: QueuedMessage[];
-  pendingUserMessages?: QueuedMessage[];
+  pendingUserMessages?: PendingMessage[];
 }) {
   const hasHydratedQueuedMessagesRef = useRef(false);
 
@@ -28,6 +28,6 @@ export function useQueuedMessagePersistence({
     if (isBootstrapping || !hasHydratedQueuedMessagesRef.current || !activeConversationKey) {
       return;
     }
-    persistQueuedMessages(queueStorageKey(navigationScope, activeConversationKey), [...pendingUserMessages, ...queuedMessages]);
+    persistQueuedMessageState(queueStorageKey(navigationScope, activeConversationKey), { pendingMessages: pendingUserMessages, queuedMessages });
   }, [activeConversationKey, isBootstrapping, navigationScope, pendingUserMessages, queuedMessages]);
 }

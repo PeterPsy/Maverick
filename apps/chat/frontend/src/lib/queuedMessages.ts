@@ -1,24 +1,123 @@
 import type { AppReference, ChatMessageAttachment } from "../api/client";
-import type { QueuedMessage } from "./messageState";
+import type { PendingMessage, QueuedMessage } from "./messageState";
 
 const QUEUED_MESSAGES_STORAGE_PREFIX = "maverick.chat.queued-messages.v1";
+
+type PersistedQueuedMessageState = {
+  pending: PendingMessage[];
+  queued: QueuedMessage[];
+};
+
+type PersistedMessage = QueuedMessage & {
+  createdAt?: string;
+};
 
 export function queueStorageKey(navigationScope: string, conversationKey: string): string {
   return `${QUEUED_MESSAGES_STORAGE_PREFIX}:${navigationScope || "main"}:${conversationKey || "none"}`;
 }
 
 export function readPersistedQueuedMessages(storageKey: string): QueuedMessage[] {
+  return readPersistedMessageState(storageKey).queued;
+}
+
+export function readPersistedPendingMessages(storageKey: string): PendingMessage[] {
+  return readPersistedMessageState(storageKey).pending;
+}
+
+export function readPersistedRecoverableQueuedMessages(storageKey: string): QueuedMessage[] {
+  const state = readPersistedMessageState(storageKey);
+  return dedupeMessages([...state.pending, ...state.queued]);
+}
+
+export function readPersistedMessageState(storageKey: string): PersistedQueuedMessageState {
   try {
     const rawValue = window.localStorage.getItem(storageKey);
     if (!rawValue) {
-      return [];
+      return { pending: [], queued: [] };
     }
     const payload = JSON.parse(rawValue) as { items?: unknown[]; version?: unknown };
-    if (payload.version !== 1 || !Array.isArray(payload.items)) {
-      return [];
+    if (payload.version === 1 && Array.isArray(payload.items)) {
+      return { pending: [], queued: parsePersistedMessages(payload.items) };
     }
-    return payload.items
-      .map((item): QueuedMessage | null => {
+    if (payload.version !== 2) {
+      return { pending: [], queued: [] };
+    }
+    const pending = parsePersistedPendingMessages(
+      Array.isArray((payload as { pending?: unknown[] }).pending) ? (payload as { pending: unknown[] }).pending : [],
+    );
+    const pendingIds = new Set(pending.map((message) => message.clientMessageId));
+    const queued = parsePersistedMessages(Array.isArray((payload as { queued?: unknown[] }).queued) ? (payload as { queued: unknown[] }).queued : []).filter(
+      (message) => !pendingIds.has(message.clientMessageId),
+    );
+    return { pending, queued };
+  } catch {
+    return { pending: [], queued: [] };
+  }
+}
+
+export function persistQueuedMessages(storageKey: string, queuedMessages: QueuedMessage[]) {
+  persistQueuedMessageState(storageKey, { queuedMessages });
+}
+
+export function persistQueuedMessageState(
+  storageKey: string,
+  {
+    pendingMessages = [],
+    queuedMessages = [],
+  }: {
+    pendingMessages?: PendingMessage[];
+    queuedMessages?: QueuedMessage[];
+  },
+) {
+  try {
+    const pending = dedupeMessages(pendingMessages);
+    const pendingIds = new Set(pending.map((message) => message.clientMessageId));
+    const queued = dedupeMessages(queuedMessages).filter((message) => !pendingIds.has(message.clientMessageId));
+    if (!pending.length && !queued.length) {
+      window.localStorage.removeItem(storageKey);
+      return;
+    }
+    window.localStorage.setItem(
+      storageKey,
+      JSON.stringify({
+        version: 2,
+        pending: pending.map(serializableQueuedMessage),
+        queued: queued.map(serializableQueuedMessage),
+      }),
+    );
+  } catch {
+    // Queue persistence is best-effort; in-memory sending remains the source of truth.
+  }
+}
+
+export function migratePersistedQueuedMessages(navigationScope: string, fromConversationKey: string, toConversationKey: string) {
+  if (!fromConversationKey || !toConversationKey || fromConversationKey === toConversationKey) {
+    return;
+  }
+  const fromStorageKey = queueStorageKey(navigationScope, fromConversationKey);
+  const fromState = readPersistedMessageState(fromStorageKey);
+  if (fromState.pending.length || fromState.queued.length) {
+    const toStorageKey = queueStorageKey(navigationScope, toConversationKey);
+    const toState = readPersistedMessageState(toStorageKey);
+    persistQueuedMessageState(toStorageKey, {
+      pendingMessages: [...toState.pending, ...fromState.pending],
+      queuedMessages: [...toState.queued, ...fromState.queued],
+    });
+  }
+  persistQueuedMessages(fromStorageKey, []);
+}
+
+function parsePersistedPendingMessages(items: unknown[]): PendingMessage[] {
+  return parsePersistedMessages(items).map((message) => ({
+    ...message,
+    createdAt: message.createdAt || new Date().toISOString(),
+  }));
+}
+
+function parsePersistedMessages(items: unknown[]): PersistedMessage[] {
+  return dedupeMessages(
+    items
+      .map((item): PersistedMessage | null => {
         if (!item || typeof item !== "object") {
           return null;
         }
@@ -33,49 +132,32 @@ export function readPersistedQueuedMessages(storageKey: string): QueuedMessage[]
         return {
           clientMessageId,
           content,
+          ...(typeof record.createdAt === "string" ? { createdAt: record.createdAt } : {}),
           appReferences: persistedAppReferences(record.appReferences),
           attachments,
           ...(multiAgentMode ? { multiAgentMode } : {}),
         };
       })
-      .filter((item): item is QueuedMessage => Boolean(item));
-  } catch {
-    return [];
-  }
+      .filter((item): item is PersistedMessage => Boolean(item)),
+  );
 }
 
-export function persistQueuedMessages(storageKey: string, queuedMessages: QueuedMessage[]) {
-  try {
-    if (!queuedMessages.length) {
-      window.localStorage.removeItem(storageKey);
-      return;
+function dedupeMessages<T extends QueuedMessage>(messages: T[]): T[] {
+  const seenClientMessageIds = new Set<string>();
+  return messages.filter((message) => {
+    if (seenClientMessageIds.has(message.clientMessageId)) {
+      return false;
     }
-    window.localStorage.setItem(
-      storageKey,
-      JSON.stringify({
-        version: 1,
-        items: queuedMessages.map((message) => ({
-          ...message,
-          attachments: message.attachments.map((attachment) => ({ ...attachment, objectUrl: null })),
-        })),
-      }),
-    );
-  } catch {
-    // Queue persistence is best-effort; in-memory sending remains the source of truth.
-  }
+    seenClientMessageIds.add(message.clientMessageId);
+    return true;
+  });
 }
 
-export function migratePersistedQueuedMessages(navigationScope: string, fromConversationKey: string, toConversationKey: string) {
-  if (!fromConversationKey || !toConversationKey || fromConversationKey === toConversationKey) {
-    return;
-  }
-  const fromStorageKey = queueStorageKey(navigationScope, fromConversationKey);
-  const queuedMessages = readPersistedQueuedMessages(fromStorageKey);
-  if (queuedMessages.length) {
-    const toStorageKey = queueStorageKey(navigationScope, toConversationKey);
-    persistQueuedMessages(toStorageKey, [...readPersistedQueuedMessages(toStorageKey), ...queuedMessages]);
-  }
-  persistQueuedMessages(fromStorageKey, []);
+function serializableQueuedMessage(message: QueuedMessage) {
+  return {
+    ...message,
+    attachments: message.attachments.map((attachment) => ({ ...attachment, objectUrl: null })),
+  };
 }
 
 function persistedMultiAgentMode(value: unknown): QueuedMessage["multiAgentMode"] | undefined {

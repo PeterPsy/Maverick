@@ -10,7 +10,7 @@ import {
 } from "../api/client";
 import { ActiveAppContext, loadDefaultSystemPrompt } from "../lib/activeAppContext";
 import type { PendingMessage, QueuedMessage } from "../lib/messageState";
-import { queueStorageKey, readPersistedQueuedMessages } from "../lib/queuedMessages";
+import { queueStorageKey, readPersistedPendingMessages, readPersistedQueuedMessages, readPersistedRecoverableQueuedMessages } from "../lib/queuedMessages";
 import {
   chatNavigationRequestKey,
   consumeNewChatRequest,
@@ -276,7 +276,8 @@ export function useChatNavigation({
     const draft = { draftId: ACTIVE_DRAFT_ID, projectId, systemPrompt: "" };
     const conversationKey = conversationKeyFor(null, draft);
     setDraftChat(draft);
-    setQueuedMessagesForConversation(conversationKey, readPersistedQueuedMessages(queueStorageKey(navigationScope, conversationKey)));
+    setPendingUserMessagesForConversation(conversationKey, []);
+    setQueuedMessagesForConversation(conversationKey, readPersistedRecoverableQueuedMessages(queueStorageKey(navigationScope, conversationKey)));
     setActiveInterAgentGraphRunId(null);
     setActiveSession(null);
     setEvents([]);
@@ -307,7 +308,9 @@ export function useChatNavigation({
     setIsOlderHistoryLoading(false);
     if (thread) {
       const conversationKey = conversationKeyFor(thread, null);
-      setQueuedMessagesForConversation(conversationKey, readPersistedQueuedMessages(queueStorageKey(navigationScope, conversationKey)));
+      const storageKey = queueStorageKey(navigationScope, conversationKey);
+      setPendingUserMessagesForConversation(conversationKey, readPersistedPendingMessages(storageKey));
+      setQueuedMessagesForConversation(conversationKey, readPersistedQueuedMessages(storageKey));
     }
     setActiveTurn(cachedActiveTurnForThread(thread, cachedTranscript));
     if (!thread?.runtime_session_id) {

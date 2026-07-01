@@ -104,30 +104,28 @@ export function ThreadRow({
                     {thread.title}
                   </p>
                 )}
+                {sourceBadges.length ? (
+                  <span className="bs-chat-list__source-badges">
+                    {sourceBadges.map((badge) => (
+                      <span className="bs-chat-list__source-badge" key={badge.kind} title={badge.label}>
+                        <span aria-hidden="true" className="material-symbols-rounded">
+                          {badge.icon}
+                        </span>
+                      </span>
+                    ))}
+                  </span>
+                ) : null}
               </div>
             </div>
           </button>
         )}
       </div>
       <div className="bs-chat-list__trailing">
-        {sourceBadges.length || lastMessageTimestamp ? (
+        {lastMessageTimestamp ? (
           <span className="bs-chat-list__meta">
-            {sourceBadges.length ? (
-              <span className="bs-chat-list__source-badges">
-                {sourceBadges.map((badge) => (
-                  <span className="bs-chat-list__source-badge" key={badge.kind} title={badge.label}>
-                    <span aria-hidden="true" className="material-symbols-rounded">
-                      {badge.icon}
-                    </span>
-                  </span>
-                ))}
-              </span>
-            ) : null}
-            {lastMessageTimestamp ? (
-              <time className="bs-chat-list__timestamp" dateTime={lastMessageIso} title={`Last message ${lastMessageTimestamp}`}>
-                {lastMessageTimestamp}
-              </time>
-            ) : null}
+            <time className="bs-chat-list__timestamp" dateTime={lastMessageIso} title={`Last message ${lastMessageTimestamp}`}>
+              {lastMessageTimestamp}
+            </time>
           </span>
         ) : null}
         <div className="bs-chat-list__actions">

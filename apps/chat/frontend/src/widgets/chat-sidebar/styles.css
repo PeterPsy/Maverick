@@ -844,8 +844,8 @@ input {
   display: grid;
   align-items: center;
   justify-items: end;
-  width: 6.55rem;
-  min-width: 6.55rem;
+  width: 4.85rem;
+  min-width: 4.85rem;
   min-height: 28px;
 }
 
@@ -885,6 +885,7 @@ input {
 
 .bs-chat-list__copy {
   display: flex;
+  position: relative;
   align-items: center;
   gap: 0.42rem;
   min-width: 0;
@@ -948,9 +949,17 @@ input {
 
 .bs-chat-list__source-badges {
   display: inline-flex;
+  position: absolute;
+  right: 0;
+  top: 50%;
+  z-index: 2;
   flex: none;
   align-items: center;
   gap: 0.22rem;
+  opacity: 0.54;
+  pointer-events: none;
+  transform: translateY(-50%);
+  transition: opacity 140ms ease;
 }
 
 .bs-chat-list__source-badge .material-symbols-rounded {
@@ -1224,9 +1233,14 @@ input {
 }
 
 .bs-chat-list__item:hover .bs-chat-list__meta,
+.bs-chat-list__item:hover .bs-chat-list__source-badges,
 .bs-chat-list__item:focus-within .bs-chat-list__meta,
+.bs-chat-list__item:focus-within .bs-chat-list__source-badges,
 .bs-chat-list__item.is-selected .bs-chat-list__meta,
+.bs-chat-list__item.is-selected .bs-chat-list__source-badges,
 .bs-chat-list__item.is-expanded .bs-chat-list__meta,
+.bs-chat-list__item.is-expanded .bs-chat-list__source-badges,
+.bs-widget-root.is-shell-mobile.has-thread-actions-revealed .bs-chat-list__item .bs-chat-list__source-badges,
 .bs-widget-root.is-shell-mobile.has-thread-actions-revealed .bs-chat-list__item .bs-chat-list__meta {
   opacity: 0;
 }

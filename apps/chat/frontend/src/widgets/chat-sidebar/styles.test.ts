@@ -47,10 +47,13 @@ describe("chat sidebar search", () => {
     const styles = readStyle("styles.css");
 
     expect(styles).toContain(".bs-chat-list__meta");
-    expect(styles).toMatch(/\.bs-chat-list__trailing\s*{[\s\S]*width:\s*6\.55rem;/);
+    expect(styles).toMatch(/\.bs-chat-list__trailing\s*{[\s\S]*width:\s*4\.85rem;/);
+    expect(styles).toMatch(/\.bs-chat-list__source-badges\s*{[\s\S]*position:\s*absolute;/);
+    expect(styles).toMatch(/\.bs-chat-list__source-badges\s*{[\s\S]*opacity:\s*0\.54;/);
     expect(styles).toMatch(/\.bs-chat-list__source-badge\s*{[\s\S]*width:\s*1\.32rem;/);
     expect(styles).toMatch(/\.bs-chat-list__source-badge\s*{[\s\S]*padding:\s*0;/);
     expect(styles).toContain(".bs-chat-list__source-badges");
+    expect(styles).toContain(".bs-chat-list__item:hover .bs-chat-list__source-badges");
   });
 });
 

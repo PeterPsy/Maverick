@@ -113,16 +113,19 @@ describe("ThreadRow", () => {
     const badge = container?.querySelector(".bs-chat-list__source-badge");
     expect(badge?.getAttribute("title")).toBe("Senses");
     expect(badge?.textContent?.trim()).toBe("sensors");
-    expect(container?.querySelector(".bs-chat-list__trailing .bs-chat-list__source-badge")).toBe(badge);
-    expect(container?.querySelector(".bs-chat-list__copy .bs-chat-list__source-badge")).toBeNull();
+    expect(container?.querySelector(".bs-chat-list__copy .bs-chat-list__source-badge")).toBe(badge);
+    expect(container?.querySelector(".bs-chat-list__trailing .bs-chat-list__source-badge")).toBeNull();
     expect(container?.textContent).not.toContain("Senses");
   });
 
-  it("does not show a multi-agent badge for multi-agent threads", async () => {
+  it("shows a multi-chat badge for multi-agent threads", async () => {
     await renderThreadRow(thread({ thread_id: "multi-thread", title: "Coordinated research" }));
 
-    expect(container?.querySelector(".bs-chat-list__source-badge")).toBeNull();
-    expect(container?.textContent).not.toContain("Multi-agent");
+    const badge = container?.querySelector(".bs-chat-list__source-badge");
+    expect(badge?.getAttribute("title")).toBe("Multi-chat");
+    expect(badge?.textContent?.trim()).toBe("account_tree");
+    expect(container?.querySelector(".bs-chat-list__copy .bs-chat-list__source-badge")).toBe(badge);
+    expect(container?.querySelector(".bs-chat-list__trailing .bs-chat-list__source-badge")).toBeNull();
   });
 
   it("does not show a source badge for ordinary chat threads", async () => {

@@ -85,11 +85,13 @@ describe("chat sidebar runtime status", () => {
     ]);
   });
 
-  it("returns source badge metadata only for non-chat source apps", () => {
+  it("returns source badge metadata for Senses and multi-agent threads", () => {
     const multiAgentThreadIds = new Set(["multi-thread"]);
 
     expect(threadSourceBadges(thread({ source_app_id: "senses" }))).toEqual([{ icon: "sensors", kind: "senses", label: "Senses" }]);
-    expect(threadSourceBadges(thread({ thread_id: "multi-thread" }), multiAgentThreadIds)).toEqual([]);
+    expect(threadSourceBadges(thread({ thread_id: "multi-thread" }), multiAgentThreadIds)).toEqual([
+      { icon: "account_tree", kind: "multi_agent", label: "Multi-chat" },
+    ]);
     expect(threadSourceBadges(thread({ source_app_id: "chat" }))).toEqual([]);
   });
 

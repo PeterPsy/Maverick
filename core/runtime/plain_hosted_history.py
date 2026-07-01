@@ -11,6 +11,8 @@ from core.providers.text_generation import TextGenerationMessage
 
 DEFAULT_MAX_HISTORY_TURNS = 20
 DEFAULT_MAX_HISTORY_CHARS = 80_000
+HISTORY_TURN_SCAN_MULTIPLIER = 4
+HISTORY_EVENT_SCAN_MULTIPLIER = 50
 
 
 @dataclass(frozen=True)
@@ -49,13 +51,18 @@ def _completed_history_pairs(
     current_turn_id: str | None,
     max_history_turns: int,
 ) -> list[_HistoryPair]:
+    bounded_turns = max(0, int(max_history_turns))
+    if not bounded_turns:
+        return []
+    turn_scan_limit = bounded_turns * HISTORY_TURN_SCAN_MULTIPLIER
+    event_scan_limit = max(bounded_turns * HISTORY_EVENT_SCAN_MULTIPLIER, bounded_turns)
     completed_turns = [
         turn
-        for turn in runtime_store.list_turns(session_id)
+        for turn in runtime_store.list_recent_turns(session_id, limit=turn_scan_limit)
         if turn.status == "completed" and turn.turn_id != current_turn_id and _non_empty_text(turn.input_text)
     ]
     completed_turns.sort(key=lambda turn: (turn.created_at, turn.turn_id))
-    final_outputs = _latest_final_outputs_by_turn(runtime_store.list_events(session_id))
+    final_outputs = _latest_final_outputs_by_turn(runtime_store.list_recent_events(session_id, limit=event_scan_limit))
     pairs = [
         _HistoryPair(
             turn_created_at=turn.created_at,
@@ -66,8 +73,7 @@ def _completed_history_pairs(
         for turn in completed_turns
         if _non_empty_text(final_outputs.get(turn.turn_id))
     ]
-    bounded_turns = max(0, int(max_history_turns))
-    return pairs[-bounded_turns:] if bounded_turns else []
+    return pairs[-bounded_turns:]
 
 
 def _latest_final_outputs_by_turn(events: list[Any]) -> dict[str, str]:

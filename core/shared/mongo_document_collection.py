@@ -22,6 +22,12 @@ class MongoDocumentCollection:
     def find(self, query: dict[str, Any]) -> list[dict[str, Any]]:
         return [_without_mongo_id(document) for document in self.collection.find(deepcopy(query))]
 
+    def find_recent(self, query: dict[str, Any], *, limit: int) -> list[dict[str, Any]]:
+        if limit < 1:
+            return []
+        cursor = self.collection.find(deepcopy(query)).sort([("created_at", -1), ("event_id", -1), ("turn_id", -1)]).limit(limit)
+        return [_without_mongo_id(document) for document in reversed(list(cursor))]
+
     def update_one(self, query: dict[str, Any], update: dict[str, Any], *, upsert: bool = False) -> None:
         payload = deepcopy(update.get("$set", {}))
         if upsert:

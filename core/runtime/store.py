@@ -112,6 +112,9 @@ class RuntimeStore(Protocol):
     def list_turns(self, session_id: str) -> list[RuntimeTurnRecord]:
         ...
 
+    def list_recent_turns(self, session_id: str, *, limit: int) -> list[RuntimeTurnRecord]:
+        ...
+
     def find_turn_by_client_message_id(
         self,
         *,
@@ -383,6 +386,18 @@ class RuntimeDocumentStore:
 
     def list_turns(self, session_id: str) -> list[RuntimeTurnRecord]:
         return [RuntimeTurnRecord(**document) for document in self.collections.turns.find({"session_id": session_id})]
+
+    def list_recent_turns(self, session_id: str, *, limit: int) -> list[RuntimeTurnRecord]:
+        if limit < 1:
+            return []
+        find_recent = getattr(self.collections.turns, "find_recent", None)
+        if callable(find_recent):
+            documents = find_recent({"session_id": session_id}, limit=limit)
+        else:
+            documents = self.collections.turns.find({"session_id": session_id})
+            documents.sort(key=lambda item: (str(item.get("created_at") or ""), str(item.get("turn_id") or "")))
+            documents = documents[-limit:]
+        return [RuntimeTurnRecord(**document) for document in documents]
 
     def find_turn_by_client_message_id(
         self,

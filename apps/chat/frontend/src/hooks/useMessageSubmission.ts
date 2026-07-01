@@ -115,6 +115,43 @@ function threadConversationKey(threadId: string): string {
   return `thread:${threadId}`;
 }
 
+function optimisticThreadForPendingSession({
+  agentRuntimeConfig,
+  draftChat,
+  messageCreatedAt,
+  session,
+  systemPrompt,
+}: {
+  agentRuntimeConfig: AgentRuntimeConfig | null;
+  draftChat: DraftChat | null;
+  messageCreatedAt: string;
+  session: RuntimeSession;
+  systemPrompt: string;
+}): ChatThread {
+  return {
+    thread_id: session.session_id,
+    runtime_session_id: session.session_id,
+    title: "New chat",
+    title_pending: true,
+    title_source: "pending",
+    agent_label: agentRuntimeConfig?.agent_id || session.agent_id || "chat",
+    agent_type_id: agentRuntimeConfig?.agent_type_id || "",
+    agent_role_id: agentRuntimeConfig?.agent_role_id || "",
+    source_app_id: agentRuntimeConfig?.source_app_id || session.agent_id || "chat",
+    system_prompt: systemPrompt,
+    project_id: draftChat?.projectId ?? null,
+    archived: false,
+    availability: "queued",
+    created_at: messageCreatedAt,
+    updated_at: messageCreatedAt,
+    last_user_message_at: messageCreatedAt,
+    runtime_mode: session.runtime_mode,
+    provider_id: session.provider_id,
+    hosted_provider_id: session.hosted_provider_id,
+    hosted_model_id: session.hosted_model_id,
+  };
+}
+
 function itemsForConversation<T>(itemsByConversationKey: ConversationItems<T>, conversationKey: string): T[] {
   return conversationKey ? itemsByConversationKey[conversationKey] || [] : [];
 }
@@ -280,6 +317,7 @@ export function useMessageSubmission({
               attachments: message.attachments,
               appReferences: message.appReferences,
               content: message.content,
+              multiAgentMode: message.multiAgentMode,
             }
           : item,
       ),
@@ -292,11 +330,11 @@ export function useMessageSubmission({
       {
         clientMessageId: message.clientMessageId,
         content: message.content,
-              createdAt: new Date().toISOString(),
-              attachments: message.attachments,
-              appReferences: message.appReferences,
-              multiAgentMode: message.multiAgentMode,
-            },
+        createdAt: new Date().toISOString(),
+        attachments: message.attachments,
+        appReferences: message.appReferences,
+        multiAgentMode: message.multiAgentMode,
+      },
     ]);
   }
 
@@ -393,6 +431,7 @@ export function useMessageSubmission({
         createdAt: new Date().toISOString(),
         attachments: message.attachments,
         appReferences: message.appReferences,
+        multiAgentMode: message.multiAgentMode,
       },
     ]);
     setItemsForConversation(setFailedUserMessagesByConversationKey, target.conversationKey, (current) =>
@@ -524,12 +563,13 @@ export function useMessageSubmission({
         return;
       }
       let thread = targetThread;
+      let agentRuntimeConfig: AgentRuntimeConfig | null = null;
+      let systemPrompt = targetDraftChat?.systemPrompt || "";
       let response: Awaited<ReturnType<typeof sendRuntimeTurn>>;
       if (!thread) {
-        const agentRuntimeConfig = await selectedAgentRuntimeConfig(target.activeAppContext);
+        agentRuntimeConfig = await selectedAgentRuntimeConfig(target.activeAppContext);
         throwIfAborted(abortController.signal);
-        const systemPrompt =
-          agentRuntimeConfig?.system_prompt || targetDraftChat?.systemPrompt || (await loadDefaultSystemPrompt(target.activeAppContext));
+        systemPrompt = agentRuntimeConfig?.system_prompt || targetDraftChat?.systemPrompt || (await loadDefaultSystemPrompt(target.activeAppContext));
         throwIfAborted(abortController.signal);
         response = await createRuntimeSessionWithTurn({
           appReferences: message.appReferences,
@@ -571,20 +611,49 @@ export function useMessageSubmission({
       throwIfAborted(abortController.signal);
       if (isPendingIdempotencyResponse(response)) {
         const pending = response.idempotency;
+        const pendingSession = response.session;
+        const pendingThread =
+          response.thread ||
+          (!thread && pendingSession
+            ? optimisticThreadForPendingSession({
+                agentRuntimeConfig,
+                draftChat: targetDraftChat,
+                messageCreatedAt: new Date().toISOString(),
+                session: pendingSession,
+                systemPrompt,
+              })
+            : null);
+        const pendingConversationKey = pendingThread ? threadConversationKey(pendingThread.thread_id) : conversationKey;
+        if (pendingThread) {
+          migrateConversationState(conversationKey, pendingConversationKey);
+          delete inFlightSubmissionsRef.current[conversationKey];
+          setThreads((current) => upsertOrderedThread(current, pendingThread));
+        }
         if (pending?.turn_id) {
-          inFlightSubmissionsRef.current[conversationKey] = {
-            ...(inFlightSubmissionsRef.current[conversationKey] || {
+          inFlightSubmissionsRef.current[pendingConversationKey] = {
+            ...(inFlightSubmissionsRef.current[pendingConversationKey] || {
               abortController,
               clientMessageId: message.clientMessageId,
             }),
             turnId: pending.turn_id,
           };
-          setSubmittedTurnForConversation(conversationKey, pending.turn_id);
+          setSubmittedTurnForConversation(pendingConversationKey, pending.turn_id);
         }
         if (response.session && isConversationStillActive(conversationKey)) {
           setActiveSession(response.session);
         }
+        if (pendingThread && isConversationStillActive(conversationKey)) {
+          setActiveThread((current) => (current?.thread_id === pendingThread.thread_id ? { ...current, ...pendingThread } : pendingThread));
+          if (!thread) {
+            setDraftChat(null);
+            notifyActiveThreadChanged(pendingThread.thread_id);
+            openChatThreadRouteInShell(pendingThread.thread_id, { navigationScope });
+          }
+        }
         setConversationSending(conversationKey, false);
+        if (pendingConversationKey !== conversationKey) {
+          setConversationSending(pendingConversationKey, false);
+        }
         return;
       }
       if (!response.turn) {

@@ -12,11 +12,21 @@ class StubRuntimeStore:
     def __init__(self, turns: list[RuntimeTurnRecord], events: list[RuntimeEventRecord]) -> None:
         self.turns = turns
         self.events = events
+        self.recent_turn_limits: list[int] = []
+        self.recent_event_limits: list[int] = []
 
     def list_turns(self, session_id: str) -> list[RuntimeTurnRecord]:
+        raise AssertionError("plain hosted history must use bounded turn reads")
+
+    def list_recent_turns(self, session_id: str, *, limit: int) -> list[RuntimeTurnRecord]:
+        self.recent_turn_limits.append(limit)
         return [turn for turn in self.turns if turn.session_id == session_id]
 
     def list_events(self, session_id: str) -> list[RuntimeEventRecord]:
+        raise AssertionError("plain hosted history must use bounded event reads")
+
+    def list_recent_events(self, session_id: str, *, limit: int) -> list[RuntimeEventRecord]:
+        self.recent_event_limits.append(limit)
         return [event for event in self.events if event.session_id == session_id]
 
 
@@ -75,6 +85,8 @@ class PlainHostedHistoryTest(unittest.TestCase):
 
         self.assertEqual([message.role for message in messages], ["user", "assistant", "user", "assistant", "user"])
         self.assertEqual([message.content for message in messages], ["first", "answer one", "second", "answer two", "current"])
+        self.assertEqual(store.recent_turn_limits, [80])
+        self.assertEqual(store.recent_event_limits, [1000])
 
     def test_latest_final_event_wins_per_turn(self) -> None:
         store = StubRuntimeStore(

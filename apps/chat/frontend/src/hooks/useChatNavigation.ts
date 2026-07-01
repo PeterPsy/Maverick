@@ -28,12 +28,7 @@ import { useRuntimeTranscriptCache } from "./useRuntimeTranscriptCache";
 
 const THREAD_NOT_FOUND_MESSAGE = "This chat is no longer available.";
 
-function createDraftId(): string {
-  if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
-    return crypto.randomUUID();
-  }
-  return `draft-${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
-}
+const ACTIVE_DRAFT_ID = "active";
 
 type CreateChatOptions = {
   activeAppContext?: ActiveAppContext | null;
@@ -278,7 +273,7 @@ export function useChatNavigation({
       resetActiveConversation();
     }
     setActiveThread(null);
-    const draft = { draftId: createDraftId(), projectId, systemPrompt: "" };
+    const draft = { draftId: ACTIVE_DRAFT_ID, projectId, systemPrompt: "" };
     const conversationKey = conversationKeyFor(null, draft);
     setDraftChat(draft);
     setQueuedMessagesForConversation(conversationKey, readPersistedQueuedMessages(queueStorageKey(navigationScope, conversationKey)));

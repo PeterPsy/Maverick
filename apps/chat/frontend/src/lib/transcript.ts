@@ -12,7 +12,9 @@ export function clearTranscriptProjectionCache(): void {
 }
 
 function textPayload(event: RuntimeEvent): string {
-  const value = event.payload.text;
+  const value = event.event_type === "runtime.output.final" && typeof event.payload.complete_text === "string"
+    ? event.payload.complete_text
+    : event.payload.text;
   return typeof value === "string" ? removeNoisyRuntimeTextLines(value).trim() : "";
 }
 

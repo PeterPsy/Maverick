@@ -535,7 +535,7 @@ export function useChatAppController({
   useQueuedMessagePersistence({ activeConversationKey, isBootstrapping, navigationScope, pendingUserMessages, queuedMessages });
 
   const presentation = useChatControllerPresentation({
-    activeProviderId,
+    activeProviderId: composerActiveProviderId,
     activeConversationKey,
     activeInterAgentGraphRunId,
     activeThread,

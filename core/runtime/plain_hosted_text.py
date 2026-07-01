@@ -29,6 +29,7 @@ from core.runtime.runtime_session import RuntimeSessionRecord
 
 
 HOSTED_TEXT_RUNTIME_PROVIDER_ID = "hosted-text-runtime"
+DEFAULT_HOSTED_TEXT_MAX_OUTPUT_TOKENS = 4096
 
 
 def runtime_session_is_plain_hosted_chat(session: RuntimeSessionRecord) -> bool:
@@ -111,6 +112,7 @@ def execute_plain_hosted_text_turn(
         model_id=decision.selected_model_id_or_voice_id or "",
         system_prompt=session.system_prompt,
         messages=messages,
+        max_output_tokens=DEFAULT_HOSTED_TEXT_MAX_OUTPUT_TOKENS,
         stream=True,
         timeout_seconds=30,
         workspace_id=session.workspace_id,

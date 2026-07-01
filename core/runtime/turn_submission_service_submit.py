@@ -146,7 +146,8 @@ def submit_runtime_turn(
                 session = state.runtime_store.save_session(replace(session, provider_id=provider_id))
             else:
                 assert provider is not None
-                launch_spec = _build_launch_spec_for_execution(state, session=session, provider_id=provider_id)
+                launch_result = _build_launch_spec_for_execution(state, session=session, provider_id=provider_id)
+                launch_spec = launch_result[0] if isinstance(launch_result, tuple) else launch_result
                 execution_app_references = _materialize_app_references_for_execution(
                     app_references=app_references,
                     app_reference_materializer=app_reference_materializer,

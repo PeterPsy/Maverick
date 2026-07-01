@@ -112,6 +112,26 @@ describe("runtime event transcript projection", () => {
     expect(messages).toMatchObject([{ role: "agent", content: "## Result", status: "complete" }]);
   });
 
+  it("uses complete final text when streamed hosted output stores only a suffix in text", () => {
+    const messages = eventsToMessages([
+      event({
+        event_id: "delta-1",
+        event_type: "runtime.output.delta",
+        payload: { text: "Il cane " },
+      }),
+      event({
+        event_id: "final-1",
+        event_type: "runtime.output.final",
+        payload: {
+          text: "ballava.",
+          complete_text: "Il cane ubriaco ballava.",
+        },
+      }),
+    ]);
+
+    expect(messages.filter((message) => message.role === "agent").map((message) => message.content).join("")).toBe("Il cane ubriaco ballava.");
+  });
+
   it("projects structured final output without losing the fallback text", () => {
     const messages = eventsToMessages([
       event({

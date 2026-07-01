@@ -35,6 +35,7 @@ import { useRuntimeTranscriptCache } from "./useRuntimeTranscriptCache";
 const THREAD_NOT_FOUND_MESSAGE = "This chat is no longer available.";
 
 const ACTIVE_DRAFT_ID = "active";
+const ACTIVE_DRAFT_CONVERSATION_KEY = `draft:${ACTIVE_DRAFT_ID}`;
 
 type CreateChatOptions = {
   activeAppContext?: ActiveAppContext | null;
@@ -84,6 +85,47 @@ type UseChatNavigationParams = {
   threadId: string | null;
   threads: ChatThread[];
 };
+
+function terminalRuntimeEventType(eventType: string): boolean {
+  return (
+    eventType === "runtime.output.final" ||
+    eventType === "runtime.turn.completed" ||
+    eventType === "runtime.turn.failed" ||
+    eventType === "runtime.turn.cancelled" ||
+    eventType === "runtime.turn.timed-out"
+  );
+}
+
+function queuedClientMessageIdsForEvents(events: RuntimeEvent[]): Set<string> {
+  return new Set(
+    events
+      .filter((event) => event.event_type === "runtime.turn.queued" && typeof event.payload.client_message_id === "string")
+      .map((event) => event.payload.client_message_id as string),
+  );
+}
+
+function terminalClientMessageIdsForEvents(events: RuntimeEvent[]): Set<string> {
+  const terminalTurnIds = new Set(
+    events
+      .filter((event) => event.turn_id && terminalRuntimeEventType(event.event_type))
+      .map((event) => event.turn_id as string),
+  );
+  return new Set(
+    events
+      .filter(
+        (event) =>
+          event.turn_id &&
+          terminalTurnIds.has(event.turn_id) &&
+          event.event_type === "runtime.turn.queued" &&
+          typeof event.payload.client_message_id === "string",
+      )
+      .map((event) => event.payload.client_message_id as string),
+  );
+}
+
+function messagesWithoutClientMessageIds<T extends { clientMessageId: string }>(messages: T[], clientMessageIds: Set<string>): T[] {
+  return clientMessageIds.size ? messages.filter((message) => !clientMessageIds.has(message.clientMessageId)) : messages;
+}
 
 export function useChatNavigation({
   activeAppContext,
@@ -206,6 +248,34 @@ export function useChatNavigation({
     });
   }, [threadsLoaded, isBootstrapping, newChatProjectId, newChatRequestId]);
 
+  useEffect(() => {
+    if (!activeThread || !events.length) {
+      return;
+    }
+    const threadConversationKey = conversationKeyFor(activeThread, null);
+    const draftStorageKey = queueStorageKey(navigationScope, ACTIVE_DRAFT_CONVERSATION_KEY);
+    const recoverableDraftMessages = readPersistedRecoverableQueuedMessages(draftStorageKey);
+    if (!recoverableDraftMessages.length) {
+      return;
+    }
+    const runtimeClientMessageIds = queuedClientMessageIdsForEvents(events);
+    const hasMatchingRuntimeTurn = recoverableDraftMessages.some((message) => runtimeClientMessageIds.has(message.clientMessageId));
+    if (!hasMatchingRuntimeTurn) {
+      return;
+    }
+    migratePersistedQueuedMessages(navigationScope, ACTIVE_DRAFT_CONVERSATION_KEY, threadConversationKey);
+    const storageKey = queueStorageKey(navigationScope, threadConversationKey);
+    const terminalClientMessageIds = terminalClientMessageIdsForEvents(events);
+    setPendingUserMessagesForConversation(
+      threadConversationKey,
+      messagesWithoutClientMessageIds(readPersistedPendingMessages(storageKey), terminalClientMessageIds),
+    );
+    setQueuedMessagesForConversation(
+      threadConversationKey,
+      messagesWithoutClientMessageIds(readPersistedQueuedMessages(storageKey), terminalClientMessageIds),
+    );
+  }, [activeThread, events, navigationScope, setPendingUserMessagesForConversation, setQueuedMessagesForConversation]);
+
   async function selectInitialThread() {
     try {
       const query = new URLSearchParams(window.location.search);
@@ -314,7 +384,6 @@ export function useChatNavigation({
     setIsOlderHistoryLoading(false);
     if (thread) {
       const conversationKey = conversationKeyFor(thread, null);
-      migratePersistedQueuedMessages(navigationScope, `draft:${ACTIVE_DRAFT_ID}`, conversationKey);
       const storageKey = queueStorageKey(navigationScope, conversationKey);
       setPendingUserMessagesForConversation(conversationKey, readPersistedPendingMessages(storageKey));
       setQueuedMessagesForConversation(conversationKey, readPersistedQueuedMessages(storageKey));

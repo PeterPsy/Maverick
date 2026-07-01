@@ -7,7 +7,7 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 import subprocess
 import tempfile
-from threading import Barrier, Thread
+from threading import Barrier, Event, Thread
 import time
 from types import SimpleNamespace
 import unittest
@@ -60,6 +60,21 @@ class PruneReadErrorCollection(FakeCollection):
         raise ValueError("Unable to read malformed JSON collection")
 
 
+class BlockingInsertCollection(FakeCollection):
+    """Collection that pauses inserts so tests can exercise lock ordering."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.insert_entered = Event()
+        self.release_insert = Event()
+
+    def insert_one_if_absent(self, query: dict, document: dict) -> tuple[dict, bool]:
+        self.insert_entered.set()
+        if not self.release_insert.wait(2):
+            raise TimeoutError("test did not release blocked insert")
+        return super().insert_one_if_absent(query, document)
+
+
 class CapturingThreadEventBus:
     def __init__(self) -> None:
         self.events: list[dict] = []
@@ -83,11 +98,15 @@ class RuntimeLifecycleTestCase(unittest.TestCase):
             )
         )
 
-    def make_store_with_client_messages(self, client_messages: FakeCollection | None = None) -> RuntimeDocumentStore:
+    def make_store_with_client_messages(
+        self,
+        client_messages: FakeCollection | None = None,
+        turns: FakeCollection | None = None,
+    ) -> RuntimeDocumentStore:
         return RuntimeDocumentStore(
             RuntimeCollections(
                 sessions=FakeCollection(),
-                turns=FakeCollection(),
+                turns=turns or FakeCollection(),
                 events=FakeCollection(),
                 processes=FakeCollection(),
                 states=FakeCollection(),
@@ -598,6 +617,87 @@ class RuntimeLifecycleTestCase(unittest.TestCase):
         self.assertEqual(new_turn.turn_id, "turn-new")
         self.assertEqual(store.list_turns("sess-old-claim"), [])
         self.assertEqual([turn.turn_id for turn in store.list_turns("sess-new-claim")], ["turn-new"])
+
+    def test_client_message_reclaim_waits_for_claim_aware_queue_critical_section(self) -> None:
+        turns = BlockingInsertCollection()
+        store = self.make_store_with_client_messages(turns=turns)
+        repo_root = self.make_repo_root()
+        now = datetime(2026, 1, 1, tzinfo=UTC)
+        create_runtime_session(
+            store,
+            session_id="sess-old-race",
+            workspace_id="acme",
+            agent_id="agent-1",
+            now=now,
+            start_path=repo_root,
+        )
+        create_runtime_session(
+            store,
+            session_id="sess-new-race",
+            workspace_id="acme",
+            agent_id="agent-1",
+            now=now,
+            start_path=repo_root,
+        )
+        old_claim, old_created = store.claim_client_message_id(
+            workspace_id="acme",
+            client_message_id="client-race",
+            session_id="sess-old-race",
+            turn_id="turn-old-race",
+            now=now,
+        )
+        queue_results: list[tuple[str, bool]] = []
+        reclaim_results: list[tuple[str, bool]] = []
+        errors: list[BaseException] = []
+
+        def queue_old_turn() -> None:
+            try:
+                turn, created = queue_runtime_turn_if_client_message_absent(
+                    store,
+                    turn_id="turn-old-race",
+                    session_id="sess-old-race",
+                    input_text="old request",
+                    client_message_id="client-race",
+                    client_message_claim=old_claim,
+                    now=now + timedelta(seconds=CLIENT_MESSAGE_CLAIM_LEASE_SECONDS - 1),
+                )
+                queue_results.append((turn.turn_id, created))
+            except BaseException as error:
+                errors.append(error)
+
+        def reclaim_after_expiry() -> None:
+            try:
+                claim, created = store.claim_client_message_id(
+                    workspace_id="acme",
+                    client_message_id="client-race",
+                    session_id="sess-new-race",
+                    turn_id="turn-new-race",
+                    now=now + timedelta(seconds=CLIENT_MESSAGE_CLAIM_LEASE_SECONDS + 1),
+                )
+                reclaim_results.append((claim.turn_id, created))
+            except BaseException as error:
+                errors.append(error)
+
+        queue_thread = Thread(target=queue_old_turn)
+        reclaim_thread = Thread(target=reclaim_after_expiry)
+        queue_thread.start()
+        self.assertTrue(turns.insert_entered.wait(2), "old queue did not reach turn insert")
+        reclaim_thread.start()
+        time.sleep(0.05)
+        self.assertEqual(reclaim_results, [])
+        turns.release_insert.set()
+        queue_thread.join(2)
+        reclaim_thread.join(2)
+
+        if errors:
+            raise errors[0]
+        self.assertFalse(queue_thread.is_alive())
+        self.assertFalse(reclaim_thread.is_alive())
+        self.assertTrue(old_created)
+        self.assertEqual(queue_results, [("turn-old-race", True)])
+        self.assertEqual(reclaim_results, [("turn-old-race", False)])
+        self.assertEqual([turn.turn_id for turn in store.list_turns("sess-old-race")], ["turn-old-race"])
+        self.assertEqual(store.list_turns("sess-new-race"), [])
 
     def test_async_turn_records_worker_and_provider_dispatch_lifecycle(self) -> None:
         store = self.make_store()

@@ -431,21 +431,22 @@ class RuntimeDocumentStore:
         if collection is None:
             return claim, True
         identity_query = {"workspace_id": workspace_id, "client_message_id": normalized_client_message_id}
-        document, inserted = self._insert_one_if_absent(collection, identity_query, asdict(claim))
-        existing = _client_message_claim_from_document(document)
-        if inserted:
-            return existing, True
-        if self._claim_has_persisted_turn(existing):
-            return existing, False
-        if not _client_message_claim_is_expired(existing, timestamp):
-            return existing, False
-        replace_query = _client_message_claim_replace_query(document, identity_query)
-        collection.update_one(replace_query, {"$set": asdict(claim)}, upsert=False)
-        replaced_document = collection.find_one(identity_query)
-        if replaced_document is None:
-            return existing, False
-        replaced = _client_message_claim_from_document(replaced_document)
-        return replaced, replaced.session_id == session_id and replaced.turn_id == turn_id
+        with self._fallback_lock:
+            document, inserted = self._insert_one_if_absent(collection, identity_query, asdict(claim))
+            existing = _client_message_claim_from_document(document)
+            if inserted:
+                return existing, True
+            if self._claim_has_persisted_turn(existing):
+                return existing, False
+            if not _client_message_claim_is_expired(existing, timestamp):
+                return existing, False
+            replace_query = _client_message_claim_replace_query(document, identity_query)
+            collection.update_one(replace_query, {"$set": asdict(claim)}, upsert=False)
+            replaced_document = collection.find_one(identity_query)
+            if replaced_document is None:
+                return existing, False
+            replaced = _client_message_claim_from_document(replaced_document)
+            return replaced, replaced.session_id == session_id and replaced.turn_id == turn_id
 
     def release_client_message_claim(
         self,

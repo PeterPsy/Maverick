@@ -35,6 +35,8 @@ if TYPE_CHECKING:
 MIN_AI_THREAD_TITLE_WORDS = 2
 MAX_AI_THREAD_TITLE_WORDS = 8
 _HOSTED_TITLE_MAX_OUTPUT_TOKENS = 80
+_HOSTED_TITLE_PROVIDER_ID = "google-ai-studio"
+_HOSTED_TITLE_MODEL_ID = "gemini-3.1-flash-lite"
 _DEFAULT_TITLE_TIMEOUT_SECONDS = 20
 _TITLE_PROCESS_SHUTDOWN_SECONDS = 1.0
 _TITLE_TOKEN = re.compile(r"[^\W_]+(?:[.+][^\W_]+)*", re.UNICODE)
@@ -199,7 +201,7 @@ def generate_hosted_thread_title(
     attachments: list[dict[str, object]] | None = None,
     app_references: list[dict[str, object]] | None = None,
 ) -> ThreadTitleGenerationResult:
-    """Generate one thread title through the fast hosted text provider profile."""
+    """Generate one thread title through the dedicated hosted text title model."""
     decision = select_provider_for_profile(
         "fast_model",
         ProviderRoutingContext(
@@ -209,6 +211,8 @@ def generate_hosted_thread_title(
             secret_store=getattr(state, "secret_store", None),
             app_id="chat",
             requested_capabilities=["text_generation", "low_latency", "thread_title"],
+            hosted_provider_id=_HOSTED_TITLE_PROVIDER_ID,
+            hosted_model_id=_HOSTED_TITLE_MODEL_ID,
         ),
     )
     if decision.execution_path != "plain_hosted_text" or decision.selected_provider_id is None:

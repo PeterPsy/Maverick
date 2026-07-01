@@ -71,17 +71,17 @@ class RuntimeThreadTitleJobTest(unittest.TestCase):
         secret_store = self.make_secret_store()
         secret = create_platform_secret(
             secret_store,
-            label="OpenRouter title tests",
+            label="Google AI Studio title tests",
             raw_value="super-secret-token",
-            alias="openrouter-title-test",
+            alias="google-ai-studio-title-test",
             kind="api_key",
         )
         activate_hosted_model_provider(
             provider_store,
             secret_store=secret_store,
             workspace_id="acme",
-            provider_id="openrouter",
-            secret_ref=build_secret_ref(alias=secret.alias or "openrouter-title-test"),
+            provider_id="google-ai-studio",
+            secret_ref=build_secret_ref(alias=secret.alias or "google-ai-studio-title-test"),
         )
         return SimpleNamespace(
             provider_store=provider_store,
@@ -156,16 +156,16 @@ class RuntimeThreadTitleJobTest(unittest.TestCase):
             input_text=message,
             title_generator=lambda **_: ThreadTitleGenerationResult(
                 title="Analisi Budget Vendite",
-                provider_id="openrouter",
-                model_id="google/gemma-4-31b-it:free",
+                provider_id="google-ai-studio",
+                model_id="gemini-3.1-flash-lite",
             ),
         )
 
         self.assertIsNotNone(updated)
         assert updated is not None
         self.assertEqual(updated.title, "Analisi Budget Vendite")
-        self.assertEqual(updated.title_generation_provider_id, "openrouter")
-        self.assertEqual(updated.title_generation_model_id, "google/gemma-4-31b-it:free")
+        self.assertEqual(updated.title_generation_provider_id, "google-ai-studio")
+        self.assertEqual(updated.title_generation_model_id, "gemini-3.1-flash-lite")
 
     def test_ai_title_job_falls_back_to_deterministic_title_when_model_title_is_invalid(self) -> None:
         store = self.make_store()
@@ -202,7 +202,7 @@ class RuntimeThreadTitleJobTest(unittest.TestCase):
         self.assertEqual(updated.title, fallback_thread_title(message))
         self.assertTrue(updated.title_generation_failure)
 
-    def test_hosted_title_generation_uses_openrouter_gemma_fast_model(self) -> None:
+    def test_hosted_title_generation_uses_google_ai_studio_gemini_title_model(self) -> None:
         state = self.make_hosted_title_state()
         captured = {}
 
@@ -225,10 +225,10 @@ class RuntimeThreadTitleJobTest(unittest.TestCase):
             )
 
         self.assertEqual(result.title, "Analisi Budget Vendite")
-        self.assertEqual(result.provider_id, "openrouter")
-        self.assertEqual(result.model_id, "google/gemma-4-31b-it:free")
-        self.assertEqual(captured["decision"].selected_provider_id, "openrouter")
-        self.assertEqual(captured["request"].model_id, "google/gemma-4-31b-it:free")
+        self.assertEqual(result.provider_id, "google-ai-studio")
+        self.assertEqual(result.model_id, "gemini-3.1-flash-lite")
+        self.assertEqual(captured["decision"].selected_provider_id, "google-ai-studio")
+        self.assertEqual(captured["request"].model_id, "gemini-3.1-flash-lite")
         self.assertEqual(captured["request"].max_output_tokens, 80)
         self.assertEqual(captured["app_id"], "chat")
 
@@ -259,8 +259,8 @@ class RuntimeThreadTitleJobTest(unittest.TestCase):
                 return_value=TextGenerationResult(
                     output_text="not json",
                     deltas=["not json"],
-                    provider_id="openrouter",
-                    model_id="google/gemma-4-31b-it:free",
+                    provider_id="google-ai-studio",
+                    model_id="gemini-3.1-flash-lite",
                 ),
             ),
             patch(

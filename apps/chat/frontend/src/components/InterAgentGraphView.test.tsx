@@ -12,10 +12,8 @@ import type {
   InterAgentRunDetail,
 } from "../api/client";
 import {
-  closeInterAgentRun,
   getInterAgentParticipantTranscript,
   getInterAgentRun,
-  interruptInterAgentRun,
   listInterAgentRunApprovals,
   listInterAgentRunArtifacts,
   listInterAgentRunEvents,
@@ -24,11 +22,9 @@ import {
 import { InterAgentGraphView } from "./InterAgentGraphView";
 
 vi.mock("../api/client", () => ({
-  closeInterAgentRun: vi.fn(),
   getInterAgentParticipantTranscript: vi.fn(),
   getInterAgentRun: vi.fn(),
   interAgentWebSocketUrl: vi.fn(() => "ws://maverick.test/ws/inter-agent/runs/run-1"),
-  interruptInterAgentRun: vi.fn(),
   listInterAgentRunApprovals: vi.fn(),
   listInterAgentRunArtifacts: vi.fn(),
   listInterAgentRunEvents: vi.fn(),
@@ -299,11 +295,6 @@ beforeEach(() => {
     oldest_event_id: null,
     newest_event_id: null,
   });
-  vi.mocked(interruptInterAgentRun).mockResolvedValue({ run: { ...runDetail().run, status: "paused" } });
-  vi.mocked(closeInterAgentRun).mockResolvedValue({
-    run: { ...runDetail().run, status: "cancelled" },
-    participant_cleanups: [],
-  });
   vi.mocked(resolveInterAgentApproval).mockResolvedValue({ approval: approvalRecord({ status: "approved" }) });
 });
 
@@ -331,22 +322,21 @@ describe("InterAgentGraphView", () => {
     });
 
     expect(element.textContent).toContain("No agent nodes yet.");
-    expect(element.textContent).toContain("No participant selected.");
+    expect(element.querySelector(".chatapp-inter-agent-graph__transcript")).toBeNull();
   });
 
-  it("renders product-facing nodes and participant transcript without debug UI", async () => {
+  it("renders full-screen nodes without graph chrome or debug UI", async () => {
     const element = await renderGraph();
 
-    expect(element.textContent).toContain("Agent nodes view");
-    expect(element.textContent).toContain("2 nodes");
-    expect(element.textContent).toContain("1 connections");
+    expect(element.querySelector('[aria-label="Back to chat"]')).not.toBeNull();
     expect(element.querySelectorAll("[data-participant-id]").length).toBe(2);
-    expect(element.querySelector('[aria-label="Zoom out"]')).not.toBeNull();
-    expect(element.querySelector('[aria-label="Fit graph"]')).not.toBeNull();
-    expect(element.querySelector('[aria-label="Zoom in"]')).not.toBeNull();
-    expect(element.textContent).toContain("Participant transcript");
-    expect(element.textContent).toContain("Coordinate the run.");
-    expect(element.textContent).toContain("Plan created.");
+    expect(element.querySelector('[aria-label="Zoom out"]')).toBeNull();
+    expect(element.querySelector('[aria-label="Fit graph"]')).toBeNull();
+    expect(element.querySelector('[aria-label="Zoom in"]')).toBeNull();
+    expect(element.textContent).not.toContain("Agent nodes view");
+    expect(element.textContent).not.toContain("2 nodes");
+    expect(element.textContent).not.toContain("1 connections");
+    expect(element.textContent).not.toContain("Coordinate the run.");
     expect(element.textContent).not.toContain("Event visibility");
     expect(element.textContent).not.toContain("Inspector");
     expect(element.textContent).not.toContain("Runtime session");
@@ -363,6 +353,7 @@ describe("InterAgentGraphView", () => {
     });
 
     expect(getInterAgentParticipantTranscript).toHaveBeenCalledWith("run-1", "researcher", { limit: 80 });
+    expect(element.querySelector('[aria-label="Researcher transcript"]')).not.toBeNull();
     expect(element.textContent).toContain("Find launch facts.");
     expect(element.textContent).toContain("Research complete.");
     expect(element.textContent).not.toContain("child-1");
@@ -437,6 +428,12 @@ describe("InterAgentGraphView", () => {
       await settle();
     });
 
+    const orchestratorNode = element.querySelector('[data-participant-id="orchestrator"]') as HTMLButtonElement | null;
+    await act(async () => {
+      orchestratorNode?.click();
+      await settle();
+    });
+
     const artifactLink = element.querySelector(".chatapp-inter-agent-graph__artifact-list a") as HTMLAnchorElement | null;
     expect(element.textContent).toContain("Run artifact");
     expect(artifactLink?.getAttribute("href")).toBe(
@@ -457,7 +454,7 @@ describe("InterAgentGraphView", () => {
     expect(element.querySelector(".chatapp-inter-agent-graph__node-copy")).not.toBeNull();
   });
 
-  it("uses a navigable React Flow surface with selectable nodes and controls", async () => {
+  it("uses a navigable React Flow surface with selectable nodes", async () => {
     const base = runDetail();
     const detail = runDetail({
       participants: [
@@ -494,36 +491,19 @@ describe("InterAgentGraphView", () => {
       node.getAttribute("data-participant-id") || "",
     );
 
-    expect(board?.getAttribute("style")).toContain("--graph-board-min-height");
+    expect(board?.getAttribute("style") || "").not.toContain("--graph-board-min-height");
     expect(flow).not.toBeNull();
     expect(nodeIds.length).toBe(4);
     expect(new Set(nodeIds).size).toBe(4);
     expect(element.querySelector(".react-flow__viewport")).not.toBeNull();
 
     await act(async () => {
-      (element.querySelector('[aria-label="Zoom out"]') as HTMLButtonElement | null)?.click();
-      (element.querySelector('[aria-label="Fit graph"]') as HTMLButtonElement | null)?.click();
-      (element.querySelector('[aria-label="Zoom in"]') as HTMLButtonElement | null)?.click();
+      (element.querySelector('[data-participant-id="reviewer"]') as HTMLButtonElement | null)?.click();
       await settle();
     });
 
+    expect(element.querySelector('[aria-label="Reviewer with a long label transcript"]')).not.toBeNull();
     expect(element.textContent).toContain("Reviewer with a long label");
-  });
-
-  it("sends pause and stop requests through the inter-agent API", async () => {
-    const element = await renderGraph();
-
-    await act(async () => {
-      (Array.from(element.querySelectorAll("button")).find((button) => button.textContent?.includes("Pause")) as HTMLButtonElement | undefined)?.click();
-      await settle();
-    });
-    await act(async () => {
-      (Array.from(element.querySelectorAll("button")).find((button) => button.textContent?.includes("Stop")) as HTMLButtonElement | undefined)?.click();
-      await settle();
-    });
-
-    expect(interruptInterAgentRun).toHaveBeenCalledWith("run-1", { reason: "chat_graph_pause" });
-    expect(closeInterAgentRun).toHaveBeenCalledWith("run-1", { reason: "chat_graph_stop", terminal_status: "cancelled" });
   });
 
   it("resolves approval from the Agent nodes view", async () => {
@@ -537,7 +517,7 @@ describe("InterAgentGraphView", () => {
     vi.mocked(listInterAgentRunApprovals).mockResolvedValueOnce({ items: [pendingApproval] }).mockResolvedValue({ items: [] });
     const element = await renderGraph({ initialApprovals: [pendingApproval] });
 
-    expect(element.textContent).toContain("pending approvals");
+    expect(element.textContent).toContain("Write a generated file.");
 
     await act(async () => {
       (Array.from(element.querySelectorAll("button")).find((button) => button.textContent === "Approve") as HTMLButtonElement | undefined)?.click();
@@ -589,7 +569,6 @@ describe("InterAgentGraphView", () => {
       await settle();
     });
 
-    expect(element.textContent).toContain("Running");
     expect(element.textContent).toContain("agent - running");
   });
 });

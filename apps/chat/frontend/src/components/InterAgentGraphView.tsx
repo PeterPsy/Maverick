@@ -1,7 +1,5 @@
-import { useCallback, useEffect, useMemo, useState, type CSSProperties, type MouseEvent } from "react";
+import { useCallback, useEffect, useMemo, useState, type MouseEvent } from "react";
 import {
-  Background,
-  BackgroundVariant,
   Handle,
   MarkerType,
   Position,
@@ -24,7 +22,7 @@ import {
   type InterAgentVisibilityPlane,
 } from "../api/client";
 import { useInterAgentGraph } from "../hooks/useInterAgentGraph";
-import { eventSummary, isTerminalRunStatus, participantIcon, runStatusLabel } from "../lib/interAgentGraph";
+import { participantIcon, runStatusLabel } from "../lib/interAgentGraph";
 import { openAppRouteInShell, openStoragePathInShell } from "../lib/shellNavigation";
 import { storageAppPageShellHref, storageLinkTargetFromHref, storageShellHref } from "../lib/storageLinks";
 
@@ -58,17 +56,13 @@ export function InterAgentGraphView({
   const [transcriptError, setTranscriptError] = useState<string | null>(null);
   const [transcriptLoading, setTranscriptLoading] = useState(false);
   const {
-    actionPending,
     approvals,
     artifacts,
     connectionState,
     error,
     events,
-    pauseRun,
     resolveApproval,
-    resumeRun,
     runDetail,
-    stopRun,
   } = useInterAgentGraph({
     initialApprovals,
     initialEvents,
@@ -78,9 +72,6 @@ export function InterAgentGraphView({
   });
 
   const participants = runDetail?.participants || [];
-  const edges = runDetail?.edges || [];
-  const terminal = isTerminalRunStatus(runDetail?.run.status || "");
-  const paused = runDetail?.run.status === "paused" || runDetail?.run.status === "recovering";
   const selectedParticipant =
     participants.find((participant) => participant.participant_id === selectedParticipantId) || null;
   const selectedParticipantArtifacts = useMemo(
@@ -100,19 +91,12 @@ export function InterAgentGraphView({
     [artifacts, runDetail?.run.orchestrator_participant_id, selectedParticipant?.kind, selectedParticipantId],
   );
   const pendingApprovals = approvals.filter((approval) => approval.status === "pending");
-  const latestSummary = useMemo(() => latestRunSummary(events), [events]);
 
   useEffect(() => {
-    if (selectedParticipantId && participants.some((participant) => participant.participant_id === selectedParticipantId)) {
-      return;
+    if (selectedParticipantId && !participants.some((participant) => participant.participant_id === selectedParticipantId)) {
+      setSelectedParticipantId(null);
     }
-    const orchestrator =
-      participants.find((participant) => participant.participant_id === runDetail?.run.orchestrator_participant_id) ||
-      participants.find((participant) => participant.kind === "orchestrator") ||
-      participants[0] ||
-      null;
-    setSelectedParticipantId(orchestrator?.participant_id || null);
-  }, [participants, runDetail?.run.orchestrator_participant_id, selectedParticipantId]);
+  }, [participants, selectedParticipantId]);
 
   useEffect(() => {
     if (!selectedParticipantId) {
@@ -150,58 +134,9 @@ export function InterAgentGraphView({
 
   return (
     <section className="chatapp-inter-agent-graph chatapp-agent-nodes-view" aria-label="Agent nodes view">
-      <header className="chatapp-inter-agent-graph__header">
-        <div className="chatapp-inter-agent-graph__title">
-          <span className={`chatapp-inter-agent-graph__stream is-${connectionState}`} />
-          <div>
-            <span className="chatapp-inter-agent-graph__eyebrow">Agent nodes view</span>
-            <h2>{runDetail ? runStatusLabel(runDetail.run.status) : "Loading run"}</h2>
-            {latestSummary ? <p>{latestSummary}</p> : null}
-          </div>
-        </div>
-        <div className="chatapp-inter-agent-graph__header-actions">
-          <button
-            className="chatapp-inter-agent-graph__button"
-            disabled={!runDetail || terminal || paused || actionPending !== null}
-            onClick={pauseRun}
-            title="Pause run"
-            type="button"
-          >
-            <span className="material-symbols-rounded" aria-hidden="true">pause</span>
-            <span>Pause</span>
-          </button>
-          <button
-            className="chatapp-inter-agent-graph__button"
-            disabled={!runDetail || terminal || !paused || actionPending !== null}
-            onClick={resumeRun}
-            title="Resume run"
-            type="button"
-          >
-            <span className="material-symbols-rounded" aria-hidden="true">play_arrow</span>
-            <span>Resume</span>
-          </button>
-          <button
-            className="chatapp-inter-agent-graph__button is-danger"
-            disabled={!runDetail || terminal || actionPending !== null}
-            onClick={stopRun}
-            title="Stop run"
-            type="button"
-          >
-            <span className="material-symbols-rounded" aria-hidden="true">stop</span>
-            <span>Stop</span>
-          </button>
-          <button className="chatapp-inter-agent-graph__close" onClick={onClose} type="button" aria-label="Close Agent nodes">
-            <span className="material-symbols-rounded" aria-hidden="true">close</span>
-          </button>
-        </div>
-      </header>
-
-      <div className="chatapp-inter-agent-graph__statusbar" aria-live="polite">
-        <span>{participants.length} nodes</span>
-        <span>{edges.length} connections</span>
-        {pendingApprovals.length ? <span>{pendingApprovals.length} pending approvals</span> : null}
-        {actionPending ? <span>{actionPending} pending</span> : null}
-      </div>
+      <button className="chatapp-inter-agent-graph__back" onClick={onClose} type="button" aria-label="Back to chat">
+        <span className="material-symbols-rounded" aria-hidden="true">arrow_back</span>
+      </button>
 
       {error ? (
         <div className="chatapp-inter-agent-graph__notice is-error" role="alert">
@@ -223,13 +158,16 @@ export function InterAgentGraphView({
           runDetail={runDetail}
           selectedParticipantId={selectedParticipantId}
         />
-        <ParticipantTranscript
-          artifacts={selectedParticipantArtifacts}
-          error={transcriptError}
-          isLoading={transcriptLoading}
-          participant={selectedParticipant}
-          transcript={transcript}
-        />
+        {selectedParticipant ? (
+          <ParticipantTranscript
+            artifacts={selectedParticipantArtifacts}
+            error={transcriptError}
+            isLoading={transcriptLoading}
+            onClose={() => setSelectedParticipantId(null)}
+            participant={selectedParticipant}
+            transcript={transcript}
+          />
+        ) : null}
       </div>
 
       {pendingApprovals.length ? (
@@ -264,14 +202,12 @@ function GraphCanvas({
   );
   const flowEdges = useMemo(() => graphFlowEdges(edges, layout.nodesById), [edges, layout.nodesById]);
   const missingConnectionCount = Math.max(0, edges.length - flowEdges.length);
-  const boardHeightRem = Math.min(38, Math.max(21, layout.height / 16 + 3));
 
   return (
     <div className="chatapp-inter-agent-graph__canvas" aria-label="Agent node map">
       {participants.length ? (
         <ReactFlowProvider initialWidth={760} initialHeight={420}>
           <GraphFlowCanvas
-            boardHeightRem={boardHeightRem}
             edges={flowEdges}
             missingConnectionCount={missingConnectionCount}
             nodes={flowNodes}
@@ -293,61 +229,64 @@ function ParticipantTranscript({
   artifacts,
   error,
   isLoading,
+  onClose,
   participant,
   transcript,
 }: {
   artifacts: InterAgentArtifactRecord[];
   error: string | null;
   isLoading: boolean;
-  participant: NonNullable<InterAgentRunDetail>["participants"][number] | null;
+  onClose: () => void;
+  participant: NonNullable<InterAgentRunDetail>["participants"][number];
   transcript: InterAgentParticipantTranscriptPayload | null;
 }) {
   return (
-    <aside className="chatapp-inter-agent-graph__transcript" aria-label="Participant transcript">
-      <div className="chatapp-inter-agent-graph__panel-title">
-        <span>Participant transcript</span>
-        {participant ? <small>{participant.status}</small> : null}
-      </div>
-      {participant ? (
-        <div className="chatapp-inter-agent-graph__participant-heading">
-          <span className="material-symbols-rounded" aria-hidden="true">{participantIcon(participant.kind)}</span>
+    <aside className="chatapp-inter-agent-graph__transcript" aria-label={`${participant.label} transcript`}>
+      <div className="chatapp-inter-agent-graph__transcript-header">
+        <div className="chatapp-inter-agent-graph__transcript-title">
+          <span className="material-symbols-rounded" aria-hidden="true">
+            {participantIcon(participant.kind)}
+          </span>
           <div>
             <strong>{participant.label}</strong>
             <small>{participantStatusLabel(participant.kind, participant.status)}</small>
           </div>
         </div>
-      ) : (
-        <div className="chatapp-inter-agent-graph__empty is-compact">No participant selected.</div>
-      )}
-      {isLoading ? (
-        <div className="chatapp-inter-agent-graph__loading is-compact" role="status" aria-live="polite">
-          <span className="chatapp-inter-agent-graph__loading-dot" />
-          <span>Loading transcript</span>
-        </div>
-      ) : null}
-      {error ? (
-        <div className="chatapp-inter-agent-graph__notice is-error" role="alert">
-          <span className="material-symbols-rounded" aria-hidden="true">error</span>
-          <span>{error}</span>
-        </div>
-      ) : null}
-      {!isLoading && !error && transcript?.items.length ? (
-        <ol className="chatapp-inter-agent-graph__transcript-list">
-          {transcript.items.map((item) => (
-            <li className={`is-${item.role} is-${item.kind}`} key={item.message_id}>
-              <span className="material-symbols-rounded" aria-hidden="true">{transcriptItemIcon(item.kind, item.role)}</span>
-              <div>
-                <small>{transcriptItemLabel(item.kind, item.role, item.status)}</small>
-                <p>{item.text}</p>
-              </div>
-            </li>
-          ))}
-        </ol>
-      ) : null}
-      {!isLoading && !error && participant && artifacts.length ? <ParticipantArtifacts artifacts={artifacts} /> : null}
-      {!isLoading && !error && participant && !transcript?.items.length && !artifacts.length ? (
-        <div className="chatapp-inter-agent-graph__empty is-compact">No transcript yet.</div>
-      ) : null}
+        <button className="chatapp-inter-agent-graph__transcript-close" onClick={onClose} type="button" aria-label="Close transcript">
+          <span className="material-symbols-rounded" aria-hidden="true">close</span>
+        </button>
+      </div>
+      <div className="chatapp-inter-agent-graph__transcript-content">
+        {isLoading ? (
+          <div className="chatapp-inter-agent-graph__loading is-compact" role="status" aria-live="polite">
+            <span className="chatapp-inter-agent-graph__loading-dot" />
+            <span>Loading transcript</span>
+          </div>
+        ) : null}
+        {error ? (
+          <div className="chatapp-inter-agent-graph__notice is-error" role="alert">
+            <span className="material-symbols-rounded" aria-hidden="true">error</span>
+            <span>{error}</span>
+          </div>
+        ) : null}
+        {!isLoading && !error && transcript?.items.length ? (
+          <ol className="chatapp-inter-agent-graph__transcript-list">
+            {transcript.items.map((item) => (
+              <li className={`is-${item.role} is-${item.kind}`} key={item.message_id}>
+                <span className="material-symbols-rounded" aria-hidden="true">{transcriptItemIcon(item.kind, item.role)}</span>
+                <div>
+                  <small>{transcriptItemLabel(item.kind, item.role, item.status)}</small>
+                  <p>{item.text}</p>
+                </div>
+              </li>
+            ))}
+          </ol>
+        ) : null}
+        {!isLoading && !error && artifacts.length ? <ParticipantArtifacts artifacts={artifacts} /> : null}
+        {!isLoading && !error && !transcript?.items.length && !artifacts.length ? (
+          <div className="chatapp-inter-agent-graph__empty is-compact">No transcript yet.</div>
+        ) : null}
+      </div>
     </aside>
   );
 }
@@ -623,14 +562,12 @@ const AGENT_NODE_TYPES = {
 };
 
 function GraphFlowCanvas({
-  boardHeightRem,
   edges,
   missingConnectionCount,
   nodes,
   onSelectParticipant,
   rawEdgeCount,
 }: {
-  boardHeightRem: number;
   edges: AgentFlowEdge[];
   missingConnectionCount: number;
   nodes: AgentFlowNode[];
@@ -669,7 +606,6 @@ function GraphFlowCanvas({
     <div
       className="chatapp-inter-agent-graph__board"
       data-react-flow-agent-graph="true"
-      style={{ "--graph-board-min-height": `${boardHeightRem}rem` } as CSSProperties}
     >
       <ReactFlow<AgentFlowNode, AgentFlowEdge>
         className="chatapp-inter-agent-graph__flow"
@@ -694,31 +630,11 @@ function GraphFlowCanvas({
         zoomOnDoubleClick
         zoomOnPinch
         zoomOnScroll
-      >
-        <Background color="rgba(var(--maverick-contrast-rgb), 0.12)" gap={42} lineWidth={1} variant={BackgroundVariant.Lines} />
-        <GraphFlowControls />
-      </ReactFlow>
+      />
       {missingConnectionCount ? (
         <div className="chatapp-inter-agent-graph__edge-empty">Some connections are unavailable.</div>
       ) : null}
       {!rawEdgeCount ? <div className="chatapp-inter-agent-graph__edge-empty">No connections recorded.</div> : null}
-    </div>
-  );
-}
-
-function GraphFlowControls() {
-  const reactFlow = useReactFlow<AgentFlowNode, AgentFlowEdge>();
-  return (
-    <div className="chatapp-inter-agent-graph__canvas-controls" aria-label="Canvas controls">
-      <button aria-label="Zoom out" onClick={() => void reactFlow.zoomOut({ duration: 120 })} title="Zoom out" type="button">
-        <span className="material-symbols-rounded" aria-hidden="true">remove</span>
-      </button>
-      <button aria-label="Fit graph" onClick={() => void reactFlow.fitView({ duration: 140, padding: 0.18 })} title="Fit graph" type="button">
-        <span className="material-symbols-rounded" aria-hidden="true">fit_screen</span>
-      </button>
-      <button aria-label="Zoom in" onClick={() => void reactFlow.zoomIn({ duration: 120 })} title="Zoom in" type="button">
-        <span className="material-symbols-rounded" aria-hidden="true">add</span>
-      </button>
     </div>
   );
 }
@@ -858,15 +774,6 @@ function chunk<T>(items: T[], size: number): T[][] {
     chunks.push(items.slice(index, index + size));
   }
   return chunks;
-}
-
-function latestRunSummary(events: InterAgentEventRecord[]): string {
-  return (
-    [...events]
-      .reverse()
-      .map((event) => eventSummary(event))
-      .find((summary) => summary && summary !== "summary" && summary !== "detail" && summary !== "debug") || ""
-  );
 }
 
 function participantStatusLabel(kind: string, status: string): string {

@@ -896,6 +896,7 @@ input {
   gap: 0.42rem;
   min-width: 0;
   overflow: hidden;
+  padding-right: 34px;
   text-align: left;
 }
 
@@ -934,8 +935,8 @@ input {
 }
 
 .bs-chat-list__source-badge {
-  display: inline-flex;
-  flex: none;
+  display: grid;
+  flex: 0 0 28px;
   align-items: center;
   justify-content: center;
   width: 28px;
@@ -956,18 +957,26 @@ input {
 }
 
 .bs-chat-list__source-badges {
-  display: inline-flex;
+  display: grid;
   position: absolute;
   right: 0;
   top: 50%;
   z-index: 2;
-  flex: none;
+  width: 28px;
+  height: 28px;
+  min-width: 28px;
+  overflow: visible;
   align-items: center;
-  gap: 0.22rem;
+  justify-items: end;
+  gap: 0;
   opacity: 1;
   pointer-events: none;
   transform: translateY(-50%);
   transition: opacity 140ms ease;
+}
+
+.bs-chat-list__source-badges .bs-chat-list__source-badge {
+  grid-area: 1 / 1;
 }
 
 .bs-chat-list__source-badge .material-symbols-rounded {

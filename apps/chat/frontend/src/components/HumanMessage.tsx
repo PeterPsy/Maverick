@@ -7,7 +7,7 @@ import { fallbackMatchesForAppReference, rangesOverlap } from "../lib/messageRef
 import type { MessageMentionMatch } from "../lib/messageReferenceMatches";
 import { referenceKindLabel } from "../lib/referenceKindLabels";
 import { openAppParamsInShell, type ShellRouteParams } from "../lib/shellNavigation";
-import { CopyMessageButton } from "./MessageCopyButton";
+import { CopyMessageButton, type CopyMessageHandler } from "./MessageCopyButton";
 import { MessageFooter } from "./MessageFooter";
 
 const URL_PARSE_BASE = "https://maverick.local";
@@ -19,7 +19,7 @@ export function HumanMessage({
 }: {
   mentionItems: MentionItem[];
   message: ChatMessage;
-  onCopyMessage: (content: string) => Promise<void>;
+  onCopyMessage: CopyMessageHandler;
 }) {
   return (
     <div className="chatapp-human-message">

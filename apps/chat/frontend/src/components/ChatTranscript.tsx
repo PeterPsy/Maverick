@@ -82,9 +82,10 @@ export function ChatTranscript({
 
   async function copyMessage(content: string) {
     if (!content || !navigator.clipboard) {
-      return;
+      return false;
     }
     await navigator.clipboard.writeText(content);
+    return true;
   }
 
   function updateScrollState() {

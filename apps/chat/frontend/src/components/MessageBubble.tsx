@@ -3,7 +3,7 @@ import type { ChatMessage } from "../api/client";
 import type { MentionItem } from "../lib/mentions";
 import { HumanMessage } from "./HumanMessage";
 import { MarkdownMessage } from "./MarkdownMessage";
-import { CopyMessageButton } from "./MessageCopyButton";
+import { CopyMessageButton, type CopyMessageHandler } from "./MessageCopyButton";
 import { MessageFooter, formatMessageTime } from "./MessageFooter";
 import { MessageSpeechButton } from "./MessageSpeechButton";
 import { RuntimeStepMessage } from "./RuntimeStepMessage";
@@ -29,7 +29,7 @@ export function MessageBubble({
   mentionItems: MentionItem[];
   message: ChatMessage;
   onActiveSpeechMessageChange: Dispatch<SetStateAction<string | null>>;
-  onCopyMessage: (content: string) => Promise<void>;
+  onCopyMessage: CopyMessageHandler;
   onToggleExpanded: (messageId: string) => void;
   speakingMessageId: string | null;
   speechMaxTextChars: number;
@@ -100,7 +100,7 @@ function AgentMessage({
   expanded: boolean;
   message: ChatMessage;
   onActiveSpeechMessageChange: Dispatch<SetStateAction<string | null>>;
-  onCopyMessage: (content: string) => Promise<void>;
+  onCopyMessage: CopyMessageHandler;
   onToggleExpanded: (messageId: string) => void;
   speakingMessageId: string | null;
   speechMaxTextChars: number;
@@ -145,7 +145,7 @@ function AgentMessage({
   );
 }
 
-function MessageMeta({ message, onCopyMessage }: { message: ChatMessage; onCopyMessage: (content: string) => Promise<void> }) {
+function MessageMeta({ message, onCopyMessage }: { message: ChatMessage; onCopyMessage: CopyMessageHandler }) {
   return (
     <div className="chatapp-bubble__meta">
       {message.content && (message.role === "human" || message.role === "agent") ? (

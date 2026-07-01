@@ -53,7 +53,7 @@ describe("HumanMessage", () => {
     };
 
     await act(async () => {
-      root?.render(<HumanMessage mentionItems={[checklistApp]} message={message} onCopyMessage={async () => undefined} />);
+      root?.render(<HumanMessage mentionItems={[checklistApp]} message={message} onCopyMessage={async () => true} />);
     });
 
     const chip = container.querySelector(".chatapp-message-reference-chip.is-entity");
@@ -77,7 +77,7 @@ describe("HumanMessage", () => {
     };
 
     await act(async () => {
-      root?.render(<HumanMessage mentionItems={[]} message={message} onCopyMessage={async () => undefined} />);
+      root?.render(<HumanMessage mentionItems={[]} message={message} onCopyMessage={async () => true} />);
     });
 
     const chip = container.querySelector(".chatapp-message-reference-chip.is-entity");
@@ -121,7 +121,7 @@ describe("HumanMessage", () => {
       };
 
       await act(async () => {
-        root?.render(<HumanMessage mentionItems={[]} message={message} onCopyMessage={async () => undefined} />);
+        root?.render(<HumanMessage mentionItems={[]} message={message} onCopyMessage={async () => true} />);
       });
 
       const button = container.querySelector("button.chatapp-message-reference-chip");

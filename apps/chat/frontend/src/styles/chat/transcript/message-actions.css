@@ -49,6 +49,12 @@
     color 160ms ease;
 }
 
+.chatapp-message-action--copy.is-copied {
+  color: var(--maverick-text);
+  opacity: 1;
+  pointer-events: auto;
+}
+
 .chatapp-message-action--speech {
   margin: 0;
   padding: 0;

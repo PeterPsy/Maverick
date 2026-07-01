@@ -1,6 +1,7 @@
 import type { Dispatch, SetStateAction } from "react";
 import type { ChatMessage } from "../api/client";
 import type { MentionItem } from "../lib/mentions";
+import type { CopyMessageHandler } from "./MessageCopyButton";
 import { MessageBubble } from "./MessageBubble";
 
 export function MessageList({
@@ -22,7 +23,7 @@ export function MessageList({
   mentionItems: MentionItem[];
   messages: ChatMessage[];
   onActiveSpeechMessageChange: Dispatch<SetStateAction<string | null>>;
-  onCopyMessage: (content: string) => Promise<void>;
+  onCopyMessage: CopyMessageHandler;
   onToggleExpanded: (messageId: string) => void;
   speakingMessageId: string | null;
   speechMaxTextChars: number;

@@ -15,6 +15,7 @@ afterEach(() => {
   root = null;
   container?.remove();
   container = null;
+  vi.useRealTimers();
 });
 
 describe("ChatTranscript inter-agent board entry", () => {
@@ -70,6 +71,52 @@ describe("ChatTranscript inter-agent board entry", () => {
     });
 
     expect(container.querySelector(".chatapp-pending-turn__board")).toBeNull();
+  });
+});
+
+describe("ChatTranscript message copy", () => {
+  it("shows a copied check on agent copy buttons after clipboard write succeeds", async () => {
+    vi.useFakeTimers();
+    const writeText = vi.fn(async () => undefined);
+    const originalClipboard = navigator.clipboard;
+    Object.defineProperty(navigator, "clipboard", {
+      configurable: true,
+      value: { writeText },
+    });
+    container = document.createElement("div");
+    document.body.append(container);
+    root = createRoot(container);
+
+    try {
+      await act(async () => {
+        root?.render(
+          <ChatTranscript
+            error={null}
+            interAgentRuns={[]}
+            isLoading={false}
+            loadingLabel="Thinking"
+            mentionItems={[]}
+            messages={[message("agent-1", "agent", "Copy this answer")]}
+          />,
+        );
+      });
+
+      const button = container.querySelector<HTMLButtonElement>(".chatapp-message-copy-row--agent button");
+      expect(button).not.toBeNull();
+
+      await act(async () => {
+        button?.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
+      });
+
+      expect(writeText).toHaveBeenCalledWith("Copy this answer");
+      expect(button?.getAttribute("aria-label")).toBe("Message copied");
+      expect(button?.textContent).toContain("done");
+    } finally {
+      Object.defineProperty(navigator, "clipboard", {
+        configurable: true,
+        value: originalClipboard,
+      });
+    }
   });
 });
 
@@ -130,5 +177,14 @@ function runDetail(status: InterAgentRunDetail["run"]["status"]): InterAgentRunD
     edges: [],
     budget_policy: null,
     budget_ledger: null,
+  };
+}
+
+function message(id: string, role: ChatMessage["role"], content: string): ChatMessage {
+  return {
+    id,
+    role,
+    content,
+    createdAt: "2026-06-18T10:00:00Z",
   };
 }

@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import { CopyMessageButton, type CopyMessageHandler } from "./MessageCopyButton";
 
 export function formatMessageTime(value: string) {
   const parsed = new Date(value);
@@ -20,23 +21,13 @@ export function MessageFooter({
 }: {
   content: string;
   createdAt: string;
-  onCopy: (content: string) => Promise<void>;
+  onCopy: CopyMessageHandler;
   speechControl?: ReactNode;
 }) {
   return (
     <div className="chatapp-message-mobile-footer">
       {content ? (
-        <button
-          aria-label="Copy message"
-          className="chatapp-message-action chatapp-message-action--icon chatapp-message-action--copy"
-          onClick={() => void onCopy(content)}
-          title="Copy"
-          type="button"
-        >
-          <span aria-hidden="true" className="material-symbols-rounded">
-            content_copy
-          </span>
-        </button>
+        <CopyMessageButton content={content} onCopyMessage={onCopy} />
       ) : null}
       {speechControl}
       <time className="chatapp-bubble__time" dateTime={createdAt}>

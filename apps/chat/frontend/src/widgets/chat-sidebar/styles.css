@@ -891,12 +891,10 @@ input {
 
 .bs-chat-list__copy {
   display: flex;
-  position: relative;
   align-items: center;
   gap: 0.42rem;
   min-width: 0;
   overflow: hidden;
-  padding-right: 34px;
   text-align: left;
 }
 
@@ -937,15 +935,19 @@ input {
 .bs-chat-list__source-badge {
   display: grid;
   flex: 0 0 28px;
-  align-items: center;
-  justify-content: center;
+  place-items: center;
+  aspect-ratio: 1;
+  inline-size: 28px;
+  block-size: 28px;
+  max-inline-size: 28px;
+  max-block-size: 28px;
   width: 28px;
   min-width: 28px;
   height: 28px;
   min-height: 28px;
   padding: 0;
   border: 1px solid var(--chat-sidebar-source-badge-border);
-  border-radius: 999px;
+  border-radius: 50%;
   background: var(--chat-sidebar-source-badge-bg);
   color: var(--chat-sidebar-source-badge-text);
   box-shadow: var(--chat-sidebar-inner-edge);
@@ -958,20 +960,18 @@ input {
 
 .bs-chat-list__source-badges {
   display: grid;
-  position: absolute;
-  right: 0;
-  top: 50%;
   z-index: 2;
+  flex: 0 0 28px;
   width: 28px;
   height: 28px;
   min-width: 28px;
-  overflow: visible;
+  min-height: 28px;
+  overflow: hidden;
   align-items: center;
-  justify-items: end;
+  justify-items: center;
   gap: 0;
   opacity: 1;
   pointer-events: none;
-  transform: translateY(-50%);
   transition: opacity 140ms ease;
 }
 

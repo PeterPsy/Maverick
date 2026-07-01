@@ -104,18 +104,18 @@ export function ThreadRow({
                     {thread.title}
                   </p>
                 )}
-                {sourceBadges.length ? (
-                  <span className="bs-chat-list__source-badges">
-                    {sourceBadges.map((badge) => (
-                      <span className="bs-chat-list__source-badge" key={badge.kind} title={badge.label}>
-                        <span aria-hidden="true" className="material-symbols-rounded">
-                          {badge.icon}
-                        </span>
-                      </span>
-                    ))}
-                  </span>
-                ) : null}
               </div>
+              {sourceBadges.length ? (
+                <span className="bs-chat-list__source-badges">
+                  {sourceBadges.map((badge) => (
+                    <span className="bs-chat-list__source-badge" key={badge.kind} title={badge.label}>
+                      <span aria-hidden="true" className="material-symbols-rounded">
+                        {badge.icon}
+                      </span>
+                    </span>
+                  ))}
+                </span>
+              ) : null}
             </div>
           </button>
         )}

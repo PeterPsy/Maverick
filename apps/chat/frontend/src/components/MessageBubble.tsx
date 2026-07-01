@@ -12,13 +12,11 @@ import { ToolCallInlineMessage } from "./ToolCallInlineMessage";
 
 export function MessageBubble({
   expanded,
-  interAgentRunStatusById,
   latestToolMessageId,
   mentionItems,
   message,
   onActiveSpeechMessageChange,
   onCopyMessage,
-  onOpenInterAgentGraph,
   onToggleExpanded,
   speakingMessageId,
   speechMaxTextChars,
@@ -27,13 +25,11 @@ export function MessageBubble({
   speechProviderQualityProfile,
 }: {
   expanded: boolean;
-  interAgentRunStatusById?: Record<string, string>;
   latestToolMessageId: string | null;
   mentionItems: MentionItem[];
   message: ChatMessage;
   onActiveSpeechMessageChange: Dispatch<SetStateAction<string | null>>;
   onCopyMessage: (content: string) => Promise<void>;
-  onOpenInterAgentGraph?: (runId: string) => void;
   onToggleExpanded: (messageId: string) => void;
   speakingMessageId: string | null;
   speechMaxTextChars: number;
@@ -65,11 +61,7 @@ export function MessageBubble({
       ) : isToolMessage ? (
         <ToolCallInlineMessage createdAt={message.createdAt} defaultExpanded={message.id === latestToolMessageId} toolCalls={toolCalls} />
       ) : message.role === "step" && message.step ? (
-        <RuntimeStepMessage
-          interAgentRunStatusById={interAgentRunStatusById}
-          onOpenInterAgentGraph={onOpenInterAgentGraph}
-          step={message.step}
-        />
+        <RuntimeStepMessage step={message.step} />
       ) : message.role === "structured" && message.structuredContent ? (
         <StructuredContentMessage content={message.structuredContent} messageId={message.id} />
       ) : (

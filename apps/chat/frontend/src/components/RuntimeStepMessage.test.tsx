@@ -3,21 +3,19 @@
  */
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
 import { RuntimeStepMessage } from "./RuntimeStepMessage";
 
 let root: Root | null = null;
 let container: HTMLDivElement | null = null;
 
-function renderStep(summaryKind: string, interAgentRunStatusById: Record<string, string> = {}) {
+function renderStep(summaryKind: string) {
   container = document.createElement("div");
   document.body.append(container);
   root = createRoot(container);
   act(() => {
     root?.render(
       <RuntimeStepMessage
-        interAgentRunStatusById={interAgentRunStatusById}
-        onOpenInterAgentGraph={vi.fn()}
         step={{
           label: "Multi-agent update",
           detail: {
@@ -40,20 +38,11 @@ afterEach(() => {
 });
 
 describe("RuntimeStepMessage", () => {
-  it("pulses Agent nodes only for non-terminal inter-agent steps", () => {
-    let element = renderStep("plan");
-    expect(element.querySelector(".chatapp-inter-agent-message__graph")?.classList.contains("is-live")).toBe(true);
+  it("renders inter-agent summaries as plain runtime steps", () => {
+    const element = renderStep("plan");
 
-    root?.unmount();
-    container?.remove();
-
-    element = renderStep("completed");
-    expect(element.querySelector(".chatapp-inter-agent-message__graph")?.classList.contains("is-live")).toBe(false);
-  });
-
-  it("uses the current run status when an older step payload is still non-terminal", () => {
-    const element = renderStep("plan", { "run-1": "completed" });
-
-    expect(element.querySelector(".chatapp-inter-agent-message__graph")?.classList.contains("is-live")).toBe(false);
+    expect(element.querySelector(".chatapp-agent-step--thought")?.textContent).toContain("Multi-agent update");
+    expect(element.querySelector(".chatapp-inter-agent-message")).toBeNull();
+    expect(element.querySelector(".chatapp-inter-agent-message__graph")).toBeNull();
   });
 });

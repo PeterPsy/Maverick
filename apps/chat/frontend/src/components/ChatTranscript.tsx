@@ -2,6 +2,7 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { ChatMessage } from "../api/client";
 import type { InterAgentApprovalRecord, InterAgentEventRecord, InterAgentRunDetail } from "../api/client";
 import type { MentionItem } from "../lib/mentions";
+import { isTerminalRunStatus } from "../lib/interAgentGraph";
 import { ChatTranscriptSkeleton } from "./ChatTranscriptSkeleton";
 import { InterAgentRunPanel } from "./InterAgentRunPanel";
 import { MessageList } from "./MessageList";
@@ -37,7 +38,6 @@ export function ChatTranscript({
   isLoading,
   isLoadingOlderHistory = false,
   interAgentApprovalsByRunId = {},
-  interAgentEventsByRunId = {},
   interAgentRuns = [],
   loadingLabel,
   mentionItems,
@@ -146,8 +146,8 @@ export function ChatTranscript({
     [...messages]
       .reverse()
       .find((message) => message.role === "tool" && (message.toolCalls?.length || message.toolCall))?.id || null;
-  const interAgentRunStatusById = useMemo(
-    () => Object.fromEntries(interAgentRuns.map((detail) => [detail.run.run_id, detail.run.status])),
+  const liveInterAgentRun = useMemo(
+    () => [...interAgentRuns].reverse().find((detail) => !isTerminalRunStatus(detail.run.status)) || null,
     [interAgentRuns],
   );
 
@@ -183,20 +183,16 @@ export function ChatTranscript({
         ) : null}
         <InterAgentRunPanel
           approvalsByRunId={interAgentApprovalsByRunId}
-          eventsByRunId={interAgentEventsByRunId}
-          onOpenGraph={onOpenInterAgentGraph}
           onResolveApproval={onResolveInterAgentApproval}
           runs={interAgentRuns}
         />
         <MessageList
           expandedMessages={expandedMessages}
-          interAgentRunStatusById={interAgentRunStatusById}
           latestToolMessageId={latestToolMessageId}
           mentionItems={mentionItems}
           messages={messages}
           onActiveSpeechMessageChange={setSpeakingMessageId}
           onCopyMessage={copyMessage}
-          onOpenInterAgentGraph={onOpenInterAgentGraph}
           onToggleExpanded={toggleExpanded}
           speakingMessageId={speakingMessageId}
           speechMaxTextChars={speechMaxTextChars}
@@ -209,6 +205,19 @@ export function ChatTranscript({
             <div className="chatapp-pending-turn" aria-live="polite">
               <MorphingSpinner size="sm" className="chatapp-pending-turn__icon" />
               <span className="chatapp-pending-turn__label">{loadingLabel}</span>
+              {liveInterAgentRun ? (
+                <button
+                  className="chatapp-pending-turn__board"
+                  onClick={() => onOpenInterAgentGraph(liveInterAgentRun.run.run_id)}
+                  type="button"
+                >
+                  <LiveBoardButtonGlow />
+                  <span aria-hidden="true" className="material-symbols-rounded chatapp-pending-turn__board-icon">
+                    account_tree
+                  </span>
+                  <span className="chatapp-pending-turn__board-label">Open multi-agent board</span>
+                </button>
+              ) : null}
             </div>
           </article>
         ) : null}
@@ -229,5 +238,18 @@ export function ChatTranscript({
         </button>
       ) : null}
     </section>
+  );
+}
+
+function LiveBoardButtonGlow() {
+  return (
+    <span aria-hidden="true" className="chatapp-live-board-glow">
+      <span className="chatapp-live-board-glow__layer chatapp-live-board-glow__layer--outer" />
+      <span className="chatapp-live-board-glow__layer chatapp-live-board-glow__layer--a" />
+      <span className="chatapp-live-board-glow__layer chatapp-live-board-glow__layer--b" />
+      <span className="chatapp-live-board-glow__layer chatapp-live-board-glow__layer--c" />
+      <span className="chatapp-live-board-glow__layer chatapp-live-board-glow__layer--bright" />
+      <span className="chatapp-live-board-glow__layer chatapp-live-board-glow__layer--rim" />
+    </span>
   );
 }

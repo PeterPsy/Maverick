@@ -1,35 +1,27 @@
 import { useMemo, useState } from "react";
-import type { InterAgentApprovalRecord, InterAgentEventRecord, InterAgentRunDetail } from "../api/client";
-import { eventSummary } from "../lib/interAgentGraph";
+import type { InterAgentApprovalRecord, InterAgentRunDetail } from "../api/client";
 
 type InterAgentRunPanelProps = {
   approvalsByRunId: Record<string, InterAgentApprovalRecord[]>;
-  eventsByRunId: Record<string, InterAgentEventRecord[]>;
-  onOpenGraph: (runId: string) => void;
   onResolveApproval: (approvalId: string, approved: boolean) => Promise<void>;
   runs: InterAgentRunDetail[];
 };
 
 export function InterAgentRunPanel({
   approvalsByRunId,
-  eventsByRunId,
-  onOpenGraph,
   onResolveApproval,
   runs,
 }: InterAgentRunPanelProps) {
   const [resolvingApprovalId, setResolvingApprovalId] = useState<string | null>(null);
-  const latestRun = runs.at(-1) || null;
   const pendingApprovals = useMemo(
     () =>
       runs.flatMap((detail) =>
-        (approvalsByRunId[detail.run.run_id] || [])
-          .filter((approval) => approval.status === "pending")
-          .map((approval) => ({ approval, run: detail })),
+        (approvalsByRunId[detail.run.run_id] || []).filter((approval) => approval.status === "pending"),
       ),
     [approvalsByRunId, runs],
   );
 
-  if (!latestRun && pendingApprovals.length === 0) {
+  if (pendingApprovals.length === 0) {
     return null;
   }
 
@@ -44,121 +36,37 @@ export function InterAgentRunPanel({
 
   return (
     <div className="chatapp-inter-agent-panel">
-      {latestRun ? (
-        <InterAgentBanner
-          events={eventsByRunId[latestRun.run.run_id] || []}
-          onOpenGraph={onOpenGraph}
-          runDetail={latestRun}
-        />
-      ) : null}
-      {pendingApprovals.length ? (
-        <div className="chatapp-inter-agent-approvals" aria-live="polite">
-          {pendingApprovals.map(({ approval, run }) => (
-            <article className="chatapp-inter-agent-approval" key={approval.approval_id}>
-              <div className="chatapp-inter-agent-approval__main">
-                <span className={`chatapp-inter-agent-approval__risk is-${approval.risk_level}`}>{approval.risk_level}</span>
-                <div className="chatapp-inter-agent-approval__copy">
-                  <strong>{approval.operation_kind}</strong>
-                  <p>{approval.summary}</p>
-                </div>
+      <div className="chatapp-inter-agent-approvals" aria-live="polite">
+        {pendingApprovals.map((approval) => (
+          <article className="chatapp-inter-agent-approval" key={approval.approval_id}>
+            <div className="chatapp-inter-agent-approval__main">
+              <span className={`chatapp-inter-agent-approval__risk is-${approval.risk_level}`}>{approval.risk_level}</span>
+              <div className="chatapp-inter-agent-approval__copy">
+                <strong>{approval.operation_kind}</strong>
+                <p>{approval.summary}</p>
               </div>
-              <div className="chatapp-inter-agent-approval__actions">
-                <button
-                  className="chatapp-inter-agent-approval__button"
-                  disabled={resolvingApprovalId === approval.approval_id}
-                  onClick={() => resolveApproval(approval.approval_id, false)}
-                  type="button"
-                >
-                  Reject
-                </button>
-                <button
-                  className="chatapp-inter-agent-approval__button is-primary"
-                  disabled={resolvingApprovalId === approval.approval_id}
-                  onClick={() => resolveApproval(approval.approval_id, true)}
-                  type="button"
-                >
-                  Approve
-                </button>
-                <button
-                  aria-label="Agent nodes"
-                  className="chatapp-inter-agent-approval__graph"
-                  onClick={() => onOpenGraph(run.run.run_id)}
-                  type="button"
-                >
-                  <span aria-hidden="true" className="material-symbols-rounded">
-                    account_tree
-                  </span>
-                </button>
-              </div>
-            </article>
-          ))}
-        </div>
-      ) : null}
+            </div>
+            <div className="chatapp-inter-agent-approval__actions">
+              <button
+                className="chatapp-inter-agent-approval__button"
+                disabled={resolvingApprovalId === approval.approval_id}
+                onClick={() => resolveApproval(approval.approval_id, false)}
+                type="button"
+              >
+                Reject
+              </button>
+              <button
+                className="chatapp-inter-agent-approval__button is-primary"
+                disabled={resolvingApprovalId === approval.approval_id}
+                onClick={() => resolveApproval(approval.approval_id, true)}
+                type="button"
+              >
+                Approve
+              </button>
+            </div>
+          </article>
+        ))}
+      </div>
     </div>
   );
-}
-
-function InterAgentBanner({
-  events,
-  onOpenGraph,
-  runDetail,
-}: {
-  events: InterAgentEventRecord[];
-  onOpenGraph: (runId: string) => void;
-  runDetail: InterAgentRunDetail;
-}) {
-  const latestSummary = [...events]
-    .reverse()
-    .map((event) => eventSummary(event))
-    .find(Boolean);
-  const workerCount = runDetail.participants.filter((participant) => participant.kind !== "orchestrator").length;
-  const hasOrchestrator = runDetail.participants.some((participant) => participant.kind === "orchestrator");
-  const budget = runDetail.budget_policy;
-  return (
-    <aside className={`chatapp-inter-agent-banner is-${runDetail.run.status}`}>
-      <div className="chatapp-inter-agent-banner__icon" aria-hidden="true">
-        <span className="material-symbols-rounded">hub</span>
-      </div>
-      <div className="chatapp-inter-agent-banner__body">
-        <div className="chatapp-inter-agent-banner__meta">
-          <span>{runStatusLabel(runDetail.run.status)}</span>
-          <span>{runTopologyLabel(workerCount, hasOrchestrator)}</span>
-          {budget ? <span>{budget.max_total_turns} turns</span> : null}
-        </div>
-        {latestSummary ? <p>{latestSummary}</p> : null}
-      </div>
-      <button
-        className={`chatapp-inter-agent-banner__graph ${isLiveRunStatus(runDetail.run.status) ? "is-live" : ""}`}
-        onClick={() => onOpenGraph(runDetail.run.run_id)}
-        type="button"
-      >
-        <span aria-hidden="true" className="material-symbols-rounded">
-          account_tree
-        </span>
-        <span>Agent nodes</span>
-      </button>
-    </aside>
-  );
-}
-
-function runStatusLabel(status: string): string {
-  if (status === "waiting_approval") {
-    return "Waiting approval";
-  }
-  return status
-    .split("_")
-    .map((part) => part.slice(0, 1).toUpperCase() + part.slice(1))
-    .join(" ");
-}
-
-function runTopologyLabel(workerCount: number, hasOrchestrator: boolean): string {
-  if (workerCount <= 0) {
-    return hasOrchestrator ? "orchestrator only" : "0 workers";
-  }
-  const workerLabel = `${workerCount} worker${workerCount === 1 ? "" : "s"}`;
-  return hasOrchestrator ? `${workerLabel} + orchestrator` : workerLabel;
-}
-
-function isLiveRunStatus(status: string): boolean {
-  return status === "running" || status === "planning" || status === "waiting_approval" || status === "recovering";
 }

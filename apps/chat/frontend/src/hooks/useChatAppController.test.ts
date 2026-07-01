@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import type { ChatThread, RuntimeTurn } from "../api/client";
-import { isActiveRuntimeTurnBusyForThread } from "./useChatAppController";
+import type { ChatThread, ProviderItem, RuntimeSession, RuntimeTurn } from "../api/client";
+import { isActiveRuntimeTurnBusyForThread, providersForComposer, selectedProviderForSession } from "./useChatAppController";
 
 function thread(availability: string): ChatThread {
   return {
@@ -47,5 +47,116 @@ describe("chat runtime busy guard", () => {
 
   it("keeps existing busy behavior when the thread is not selected yet", () => {
     expect(isActiveRuntimeTurnBusyForThread(turn("active"), null)).toBe(true);
+  });
+});
+
+function provider(overrides: Partial<ProviderItem>): ProviderItem {
+  return {
+    provider_id: "codex",
+    label: "Codex",
+    description: "",
+    status: "active",
+    default_model_family: null,
+    ...overrides,
+  };
+}
+
+function session(overrides: Partial<RuntimeSession>): RuntimeSession {
+  return {
+    session_id: "session-1",
+    workspace_id: "default",
+    agent_id: "chat",
+    status: "running",
+    effective_mode: "sandbox",
+    provider_id: "codex",
+    ...overrides,
+  };
+}
+
+describe("selectedProviderForSession", () => {
+  it("uses the exact hosted provider and model persisted on the active session", () => {
+    const providers = [
+      provider({
+        provider_id: "hosted:openrouter:model-a",
+        label: "Model A - OpenRouter",
+        provider_role: "model_provider",
+        kind: "hosted_api",
+        hosted_provider_id: "openrouter",
+        hosted_model_id: "model-a",
+      }),
+      provider({
+        provider_id: "hosted:openrouter:model-b",
+        label: "Model B - OpenRouter",
+        provider_role: "model_provider",
+        kind: "hosted_api",
+        hosted_provider_id: "openrouter",
+        hosted_model_id: "model-b",
+      }),
+    ];
+
+    const selected = selectedProviderForSession({
+      activeProviderId: "codex",
+      activeSession: session({
+        runtime_mode: "plain_hosted_chat",
+        hosted_provider_id: "openrouter",
+        hosted_model_id: "model-b",
+      }),
+      activeThread: thread("free"),
+      providers,
+    });
+
+    expect(selected?.label).toBe("Model B - OpenRouter");
+    expect(selected?.hosted_model_id).toBe("model-b");
+  });
+
+  it("creates a readable locked hosted label when provider data lacks the exact model option", () => {
+    const selected = selectedProviderForSession({
+      activeProviderId: "codex",
+      activeSession: session({
+        runtime_mode: "plain_hosted_chat",
+        hosted_provider_id: "google-ai-studio",
+        hosted_model_id: "gemini-3.5-flash",
+      }),
+      activeThread: thread("free"),
+      providers: [
+        provider({
+          provider_id: "hosted:google-ai-studio:gemini-current",
+          label: "Gemini Current - Google AI Studio",
+          provider_role: "model_provider",
+          kind: "hosted_api",
+          hosted_provider_id: "google-ai-studio",
+          hosted_model_id: "gemini-current",
+        }),
+      ],
+    });
+
+    expect(selected?.hosted_model_id).toBe("gemini-3.5-flash");
+    expect(selected?.label).toBe("gemini-3.5-flash - Gemini Current - Google AI Studio");
+  });
+
+  it("uses provider_id for existing agentic sessions", () => {
+    const selected = selectedProviderForSession({
+      activeProviderId: "hosted:openrouter:model-a",
+      activeSession: session({ runtime_mode: "agentic", provider_id: "codex" }),
+      activeThread: thread("free"),
+      providers: [provider({ provider_id: "codex", label: "Codex" }), provider({ provider_id: "other", label: "Other" })],
+    });
+
+    expect(selected?.provider_id).toBe("codex");
+  });
+
+  it("includes synthetic selected providers in composer options", () => {
+    const loadedProviders = [provider({ provider_id: "hosted:google-ai-studio:gemini-current", label: "Gemini Current" })];
+    const selected = provider({
+      provider_id: "hosted-session:google-ai-studio:gemini-3.5-flash",
+      label: "gemini-3.5-flash - Gemini Current",
+      hosted_provider_id: "google-ai-studio",
+      hosted_model_id: "gemini-3.5-flash",
+    });
+
+    expect(providersForComposer(loadedProviders, selected).map((item) => item.provider_id)).toEqual([
+      "hosted-session:google-ai-studio:gemini-3.5-flash",
+      "hosted:google-ai-studio:gemini-current",
+    ]);
   });
 });

@@ -5,116 +5,18 @@
   margin: 0 auto 0.35rem;
 }
 
-.chatapp-inter-agent-banner {
-  display: grid;
-  grid-template-columns: auto minmax(0, 1fr) auto;
-  align-items: center;
-  gap: 0.72rem;
-  min-width: 0;
-  padding: 0.72rem 0.82rem;
-  border: 1px solid rgba(var(--maverick-contrast-rgb), 0.1);
-  border-radius: 0.72rem;
-  background: rgba(var(--maverick-contrast-rgb), 0.045);
-  color: var(--maverick-text);
-}
-
-.chatapp-inter-agent-banner.is-running,
-.chatapp-inter-agent-banner.is-planning,
-.chatapp-inter-agent-banner.is-waiting_approval,
-.chatapp-inter-agent-banner.is-recovering {
-  border-color: var(--maverick-accent-hover);
-  background: var(--maverick-accent-soft);
-}
-
-.chatapp-inter-agent-banner__icon {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 2rem;
-  height: 2rem;
-  border-radius: 0.62rem;
-  background: rgba(var(--maverick-contrast-rgb), 0.06);
-  color: var(--maverick-accent);
-}
-
-.chatapp-inter-agent-banner__icon .material-symbols-rounded {
-  font-size: 1.08rem;
-}
-
-.chatapp-inter-agent-banner__body {
-  display: grid;
-  gap: 0.22rem;
-  min-width: 0;
-}
-
-.chatapp-inter-agent-banner__meta {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.36rem;
-  min-width: 0;
-  color: var(--maverick-text-soft);
-  font-size: 0.74rem;
-  font-weight: 650;
-  line-height: 1.2;
-}
-
-.chatapp-inter-agent-banner__meta span {
-  min-width: 0;
-}
-
-.chatapp-inter-agent-banner__body p {
-  margin: 0;
-  overflow: hidden;
-  color: var(--maverick-text);
-  font-size: 0.86rem;
-  line-height: 1.35;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.chatapp-inter-agent-banner__graph,
-.chatapp-inter-agent-message__graph,
 .chatapp-inter-agent-approval__button,
-.chatapp-inter-agent-approval__graph {
+.chatapp-inter-agent-approval__risk {
   display: inline-flex;
   align-items: center;
   justify-content: center;
   border: 0;
-  border-radius: 0.58rem;
   cursor: pointer;
   font: inherit;
 }
 
-.chatapp-inter-agent-banner__graph {
-  gap: 0.36rem;
-  min-height: 2rem;
-  padding: 0 0.68rem;
-  background: rgba(var(--maverick-contrast-rgb), 0.07);
-  color: var(--maverick-text);
-  font-size: 0.78rem;
-  font-weight: 700;
-  white-space: nowrap;
-}
-
-.chatapp-inter-agent-banner__graph.is-live::after,
-.chatapp-inter-agent-message__graph.is-live::after {
-  content: "";
-  width: 0.36rem;
-  height: 0.36rem;
-  border-radius: 999px;
-  background: var(--maverick-accent);
-  animation: chatapp-inter-agent-pulse 1.25s ease-in-out infinite;
-}
-
-.chatapp-inter-agent-banner__graph:hover,
-.chatapp-inter-agent-message__graph:hover,
-.chatapp-inter-agent-approval__graph:hover,
 .chatapp-inter-agent-approval__button:hover {
   background: rgba(var(--maverick-contrast-rgb), 0.11);
-}
-
-.chatapp-inter-agent-banner__graph .material-symbols-rounded {
-  font-size: 0.98rem;
 }
 
 .chatapp-inter-agent-approvals {
@@ -195,6 +97,7 @@
 .chatapp-inter-agent-approval__button {
   min-height: 1.95rem;
   padding: 0 0.66rem;
+  border-radius: 0.58rem;
   background: rgba(var(--maverick-contrast-rgb), 0.06);
   color: var(--maverick-text);
   font-size: 0.78rem;
@@ -209,68 +112,6 @@
 .chatapp-inter-agent-approval__button:disabled {
   cursor: default;
   opacity: 0.55;
-}
-
-.chatapp-inter-agent-approval__graph {
-  width: 1.95rem;
-  height: 1.95rem;
-  background: rgba(var(--maverick-contrast-rgb), 0.06);
-  color: var(--maverick-text);
-}
-
-.chatapp-inter-agent-approval__graph .material-symbols-rounded {
-  font-size: 1rem;
-}
-
-.chatapp-inter-agent-message {
-  display: grid;
-  gap: 0.38rem;
-  max-width: min(100%, 42rem);
-  padding: 0.58rem 0.68rem;
-  border: 1px solid var(--maverick-accent-hover);
-  border-radius: 0.72rem;
-  background: var(--maverick-accent-soft);
-}
-
-.chatapp-inter-agent-message__meta {
-  display: flex;
-  align-items: center;
-  gap: 0.48rem;
-  min-width: 0;
-}
-
-.chatapp-inter-agent-message__icon {
-  color: var(--maverick-accent);
-  font-size: 1rem;
-}
-
-.chatapp-inter-agent-message__meta-top {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.32rem;
-  min-width: 0;
-  color: var(--maverick-text-soft);
-  font-size: 0.74rem;
-  font-weight: 700;
-}
-
-.chatapp-inter-agent-message__graph {
-  margin-left: auto;
-  min-height: 1.75rem;
-  padding: 0 0.52rem;
-  background: rgba(var(--maverick-contrast-rgb), 0.06);
-  color: var(--maverick-text);
-  font-size: 0.74rem;
-  font-weight: 700;
-  white-space: nowrap;
-}
-
-.chatapp-inter-agent-message p {
-  margin: 0;
-  overflow-wrap: anywhere;
-  color: var(--maverick-text);
-  font-size: 0.84rem;
-  line-height: 1.42;
 }
 
 .chatapp-inter-agent-graph {
@@ -927,19 +768,13 @@
 }
 
 @media (max-width: 640px) {
-  .chatapp-inter-agent-banner,
   .chatapp-inter-agent-approval {
     grid-template-columns: 1fr;
     align-items: stretch;
   }
 
-  .chatapp-inter-agent-banner__graph,
   .chatapp-inter-agent-approval__actions {
     justify-self: start;
-  }
-
-  .chatapp-inter-agent-banner__body p {
-    white-space: normal;
   }
 
   .chatapp-inter-agent-graph__body {

@@ -10,6 +10,7 @@ import {
   type InterAgentEventRecord,
   type InterAgentRunDetail,
   type MultiAgentComposerMode,
+  type ProviderItem,
   type RuntimeEvent,
   type RuntimeSession,
   type RuntimeTurn,
@@ -60,6 +61,50 @@ export function isActiveRuntimeTurnBusyForThread(activeTurn: RuntimeTurn | null,
   return isThreadAvailabilityBusy(activeThread.availability);
 }
 
+export function selectedProviderForSession({
+  activeProviderId,
+  activeSession,
+  activeThread,
+  providers,
+}: {
+  activeProviderId: string;
+  activeSession: RuntimeSession | null;
+  activeThread: ChatThread | null;
+  providers: ProviderItem[];
+}): ProviderItem | null {
+  if (activeThread && activeSession?.runtime_mode === "plain_hosted_chat") {
+    const hostedProviderId = activeSession.hosted_provider_id || "";
+    const hostedModelId = activeSession.hosted_model_id || "";
+    const exact = providers.find((provider) => provider.hosted_provider_id === hostedProviderId && provider.hosted_model_id === hostedModelId);
+    if (exact) {
+      return exact;
+    }
+    const providerFallback = providers.find((provider) => provider.hosted_provider_id === hostedProviderId || provider.provider_id === hostedProviderId);
+    if (providerFallback && hostedModelId) {
+      return {
+        ...providerFallback,
+        provider_id: `hosted-session:${hostedProviderId}:${encodeURIComponent(hostedModelId)}`,
+        hosted_provider_id: hostedProviderId,
+        hosted_model_id: hostedModelId,
+        default_model_family: hostedModelId,
+        label: `${hostedModelId} - ${providerFallback.label || hostedProviderId}`,
+      };
+    }
+    return providerFallback || null;
+  }
+  if (activeThread && activeSession?.provider_id) {
+    return providers.find((provider) => provider.provider_id === activeSession.provider_id) || null;
+  }
+  return providers.find((provider) => provider.provider_id === activeProviderId) || null;
+}
+
+export function providersForComposer(providers: ProviderItem[], selectedProvider: ProviderItem | null): ProviderItem[] {
+  if (!selectedProvider || providers.some((provider) => provider.provider_id === selectedProvider.provider_id)) {
+    return providers;
+  }
+  return [selectedProvider, ...providers];
+}
+
 export function useChatAppController({
   enablePageCapture,
   externalFileDrop,
@@ -103,23 +148,7 @@ export function useChatAppController({
   const [activeSession, setActiveSession] = useState<RuntimeSession | null>(null);
   const [events, setEvents] = useState<RuntimeEvent[]>([]);
   const [composer, setComposer] = useState("");
-  const selectedProvider = useMemo(() => {
-    if (activeThread && activeSession?.runtime_mode === "plain_hosted_chat") {
-      return (
-        providers.find(
-          (provider) =>
-            provider.hosted_provider_id === activeSession.hosted_provider_id &&
-            provider.hosted_model_id === activeSession.hosted_model_id,
-        ) ||
-        providers.find((provider) => provider.hosted_provider_id === activeSession.hosted_provider_id) ||
-        null
-      );
-    }
-    if (activeThread && activeSession?.provider_id) {
-      return providers.find((provider) => provider.provider_id === activeSession.provider_id) || null;
-    }
-    return providers.find((provider) => provider.provider_id === activeProviderId) || null;
-  }, [
+  const selectedProvider = useMemo(() => selectedProviderForSession({ activeProviderId, activeSession, activeThread, providers }), [
     activeProviderId,
     activeSession?.hosted_model_id,
     activeSession?.hosted_provider_id,
@@ -129,6 +158,7 @@ export function useChatAppController({
     providers,
   ]);
   const composerActiveProviderId = selectedProvider?.provider_id || activeProviderId;
+  const composerProviders = useMemo(() => providersForComposer(providers, selectedProvider), [providers, selectedProvider]);
   const allowedAttachmentInputModalities = useMemo(() => {
     const isHostedSession = activeThread
       ? activeSession?.runtime_mode === "plain_hosted_chat"
@@ -193,7 +223,7 @@ export function useChatAppController({
     activeProviderId: composerActiveProviderId,
     agentCatalogAppId,
     canStopTurn: runtimeCanStopTurn,
-    providers,
+    providers: composerProviders,
     selectedAgentTypeId,
     workspaceId,
     setActiveProviderId,
@@ -521,7 +551,7 @@ export function useChatAppController({
     onLoadOlderHistory: handleLoadOlderHistory,
     onRevealOlderMessages: handleRevealOlderMessages,
     pendingUserMessages,
-    providers,
+    providers: composerProviders,
     providerSelectorLocked: Boolean(activeThread),
     queuedMessages,
     removeAttachment,

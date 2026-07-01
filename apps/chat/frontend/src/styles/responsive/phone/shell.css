@@ -84,18 +84,6 @@
     padding: 0;
   }
 
-  .chatapp-inter-agent-message__meta {
-    gap: 0.35rem;
-  }
-
-  .chatapp-inter-agent-message__meta-top {
-    gap: 0.35rem;
-  }
-
-  .chatapp-inter-agent-message__relation {
-    justify-self: start;
-  }
-
   .chatapp-heavy-message__header {
     flex-direction: column;
   }

@@ -3,7 +3,7 @@
  */
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import type { ChatMessage, InterAgentRunDetail } from "../api/client";
 import { ChatTranscript } from "./ChatTranscript";
 
@@ -17,8 +17,40 @@ afterEach(() => {
   container = null;
 });
 
-describe("ChatTranscript inter-agent runtime steps", () => {
-  it("stops pulsing older Agent nodes steps when the current run is terminal", async () => {
+describe("ChatTranscript inter-agent board entry", () => {
+  it("shows the live board opener beside thinking without top inter-agent badges", async () => {
+    container = document.createElement("div");
+    document.body.append(container);
+    root = createRoot(container);
+    const onOpenInterAgentGraph = vi.fn();
+
+    await act(async () => {
+      root?.render(
+        <ChatTranscript
+          error={null}
+          interAgentRuns={[runDetail("running")]}
+          isLoading
+          loadingLabel="Thinking"
+          mentionItems={[]}
+          messages={[interAgentStepMessage()]}
+          onOpenInterAgentGraph={onOpenInterAgentGraph}
+        />,
+      );
+    });
+
+    const boardButton = container.querySelector<HTMLButtonElement>(".chatapp-pending-turn__board");
+    expect(boardButton?.textContent).toContain("Open multi-agent board");
+    expect(container.querySelector(".chatapp-inter-agent-banner")).toBeNull();
+    expect(container.querySelector(".chatapp-inter-agent-message__graph")).toBeNull();
+
+    await act(async () => {
+      boardButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+
+    expect(onOpenInterAgentGraph).toHaveBeenCalledWith("run-1");
+  });
+
+  it("hides the board opener once the inter-agent run is terminal", async () => {
     container = document.createElement("div");
     document.body.append(container);
     root = createRoot(container);
@@ -28,17 +60,16 @@ describe("ChatTranscript inter-agent runtime steps", () => {
         <ChatTranscript
           error={null}
           interAgentRuns={[runDetail("completed")]}
-          isLoading={false}
-          loadingLabel="Loading"
+          isLoading
+          loadingLabel="Thinking"
           mentionItems={[]}
           messages={[interAgentStepMessage()]}
-          onOpenInterAgentGraph={() => undefined}
+          onOpenInterAgentGraph={vi.fn()}
         />,
       );
     });
 
-    const historicalStepButton = container.querySelector(".chatapp-inter-agent-message__graph");
-    expect(historicalStepButton?.classList.contains("is-live")).toBe(false);
+    expect(container.querySelector(".chatapp-pending-turn__board")).toBeNull();
   });
 });
 

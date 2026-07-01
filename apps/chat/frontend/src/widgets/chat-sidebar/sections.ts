@@ -15,7 +15,7 @@ export type ThreadSourceFilter = "all" | "senses" | "multi_agent";
 
 export type ThreadSourceBadge = {
   icon: string;
-  kind: "senses" | "multi_agent";
+  kind: "senses";
   label: string;
 };
 
@@ -108,9 +108,6 @@ export function threadSourceBadges(thread: ChatThread, multiAgentThreadIds: Read
   const badges: ThreadSourceBadge[] = [];
   if (isSensesThread(thread)) {
     badges.push({ icon: "sensors", kind: "senses", label: "Senses" });
-  }
-  if (isMultiAgentThread(thread, multiAgentThreadIds)) {
-    badges.push({ icon: "account_tree", kind: "multi_agent", label: "Multi-agent" });
   }
   return badges;
 }

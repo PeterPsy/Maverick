@@ -118,14 +118,10 @@ describe("ThreadRow", () => {
     expect(container?.textContent).not.toContain("Senses");
   });
 
-  it("shows an icon-only multi-agent badge for multi-agent threads", async () => {
+  it("does not show a multi-agent badge for multi-agent threads", async () => {
     await renderThreadRow(thread({ thread_id: "multi-thread", title: "Coordinated research" }));
 
-    const badge = container?.querySelector(".bs-chat-list__source-badge");
-    expect(badge?.getAttribute("title")).toBe("Multi-agent");
-    expect(badge?.textContent?.trim()).toBe("account_tree");
-    expect(container?.querySelector(".bs-chat-list__trailing .bs-chat-list__source-badge")).toBe(badge);
-    expect(container?.querySelector(".bs-chat-list__copy .bs-chat-list__source-badge")).toBeNull();
+    expect(container?.querySelector(".bs-chat-list__source-badge")).toBeNull();
     expect(container?.textContent).not.toContain("Multi-agent");
   });
 

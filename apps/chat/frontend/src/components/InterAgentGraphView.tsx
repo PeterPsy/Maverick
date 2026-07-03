@@ -17,6 +17,7 @@ import {
   type InterAgentApprovalRecord,
   type InterAgentArtifactRecord,
   type InterAgentEventRecord,
+  type InterAgentParticipantTranscriptItem,
   type InterAgentParticipantTranscriptPayload,
   type InterAgentRunDetail,
   type InterAgentVisibilityPlane,
@@ -25,6 +26,8 @@ import { useInterAgentGraph } from "../hooks/useInterAgentGraph";
 import { participantIcon, runStatusLabel } from "../lib/interAgentGraph";
 import { openAppRouteInShell, openStoragePathInShell } from "../lib/shellNavigation";
 import { storageAppPageShellHref, storageLinkTargetFromHref, storageShellHref } from "../lib/storageLinks";
+import { MarkdownMessage } from "./MarkdownMessage";
+import { formatMessageTime } from "./MessageFooter";
 
 type InterAgentGraphViewProps = {
   initialApprovals?: InterAgentApprovalRecord[];
@@ -240,18 +243,30 @@ function ParticipantTranscript({
   participant: NonNullable<InterAgentRunDetail>["participants"][number];
   transcript: InterAgentParticipantTranscriptPayload | null;
 }) {
+  const inputSummary = participantInputSummary(transcript);
+  const outputItems = participantOutputItems(transcript);
+
   return (
     <aside className="chatapp-inter-agent-graph__transcript" aria-label={`${participant.label} transcript`}>
       <div className="chatapp-inter-agent-graph__transcript-header">
-        <div className="chatapp-inter-agent-graph__transcript-title">
-          <span className="material-symbols-rounded" aria-hidden="true">
-            {participantIcon(participant.kind)}
-          </span>
-          <div>
-            <strong>{participant.label}</strong>
-            <small>{participantStatusLabel(participant.kind, participant.status)}</small>
+        <details className="chatapp-inter-agent-graph__transcript-title">
+          <summary aria-label={`${participant.label} input summary`}>
+            <span className="material-symbols-rounded" aria-hidden="true">
+              {participantIcon(participant.kind)}
+            </span>
+            <span className="chatapp-inter-agent-graph__transcript-title-copy">
+              <strong>{participant.label}</strong>
+              <small>{participantStatusLabel(participant.kind, participant.status)}</small>
+            </span>
+            <span className="material-symbols-rounded chatapp-inter-agent-graph__transcript-title-caret" aria-hidden="true">
+              expand_more
+            </span>
+          </summary>
+          <div className="chatapp-inter-agent-graph__input-summary">
+            <span>Input summary</span>
+            <p>{inputSummary || "No input summary available."}</p>
           </div>
-        </div>
+        </details>
         <button className="chatapp-inter-agent-graph__transcript-close" onClick={onClose} type="button" aria-label="Close transcript">
           <span className="material-symbols-rounded" aria-hidden="true">close</span>
         </button>
@@ -269,26 +284,77 @@ function ParticipantTranscript({
             <span>{error}</span>
           </div>
         ) : null}
-        {!isLoading && !error && transcript?.items.length ? (
+        {!isLoading && !error && outputItems.length ? (
           <ol className="chatapp-inter-agent-graph__transcript-list">
-            {transcript.items.map((item) => (
-              <li className={`is-${item.role} is-${item.kind}`} key={item.message_id}>
-                <span className="material-symbols-rounded" aria-hidden="true">{transcriptItemIcon(item.kind, item.role)}</span>
-                <div>
-                  <small>{transcriptItemLabel(item.kind, item.role, item.status)}</small>
-                  <p>{item.text}</p>
-                </div>
+            {outputItems.map((item) => (
+              <li className="chatapp-inter-agent-graph__transcript-message" key={item.message_id}>
+                <article className="chatapp-bubble is-agent">
+                  <div className="chatapp-agent-trace">
+                    <section className="chatapp-agent-block chatapp-agent-block--action">
+                      <div className="chatapp-agent-block__body">
+                        <MarkdownMessage content={item.text || "_No text output._"} />
+                      </div>
+                      <div className="chatapp-message-mobile-footer chatapp-inter-agent-graph__message-footer">
+                        <span>{transcriptOutputLabel(item)}</span>
+                        <time className="chatapp-bubble__time" dateTime={item.created_at}>
+                          {formatMessageTime(item.created_at)}
+                        </time>
+                      </div>
+                    </section>
+                  </div>
+                </article>
               </li>
             ))}
           </ol>
         ) : null}
         {!isLoading && !error && artifacts.length ? <ParticipantArtifacts artifacts={artifacts} /> : null}
-        {!isLoading && !error && !transcript?.items.length && !artifacts.length ? (
+        {!isLoading && !error && !outputItems.length && !artifacts.length ? (
           <div className="chatapp-inter-agent-graph__empty is-compact">No transcript yet.</div>
         ) : null}
       </div>
     </aside>
   );
+}
+
+function participantInputSummary(transcript: InterAgentParticipantTranscriptPayload | null): string {
+  const inputText = (transcript?.items || [])
+    .filter((item) => item.kind === "input" || item.role === "user")
+    .map((item) => item.text)
+    .filter(Boolean)
+    .join(" ");
+  return compactInputSummary(inputText);
+}
+
+function participantOutputItems(
+  transcript: InterAgentParticipantTranscriptPayload | null,
+): InterAgentParticipantTranscriptItem[] {
+  return (transcript?.items || []).filter(
+    (item) => item.role === "participant" && (item.kind === "output" || item.kind === "summary") && Boolean(item.text.trim()),
+  );
+}
+
+function transcriptOutputLabel(item: InterAgentParticipantTranscriptItem): string {
+  const kind = item.kind === "summary" ? "Summary" : "Output";
+  const status = item.status ? ` - ${item.status.replace(/_/g, " ")}` : "";
+  return `${kind}${status}`;
+}
+
+function compactInputSummary(value: string): string {
+  const normalized = value
+    .replace(/```[\s\S]*?```/g, " technical details ")
+    .replace(/\{[\s\S]{180,}\}/g, " technical details ")
+    .replace(/\[[\s\S]{180,}\]/g, " technical details ")
+    .replace(/\s+/g, " ")
+    .trim();
+  if (!normalized) {
+    return "";
+  }
+  if (normalized.length <= 180) {
+    return normalized;
+  }
+  const sentenceBoundary = normalized.slice(0, 180).search(/[.!?](?=\s)[^.!?]*$/);
+  const candidate = sentenceBoundary > 80 ? normalized.slice(0, sentenceBoundary + 1) : normalized.slice(0, 180);
+  return `${candidate.replace(/[,;:\s]+$/, "")}...`;
 }
 
 function ParticipantArtifacts({ artifacts }: { artifacts: InterAgentArtifactRecord[] }) {
@@ -778,26 +844,4 @@ function chunk<T>(items: T[], size: number): T[][] {
 
 function participantStatusLabel(kind: string, status: string): string {
   return `${kind.replace(/_/g, " ")} - ${status.replace(/_/g, " ")}`;
-}
-
-function transcriptItemIcon(kind: string, role: string): string {
-  if (kind === "artifact") {
-    return "draft";
-  }
-  if (kind === "approval") {
-    return "approval";
-  }
-  if (role === "user") {
-    return "subdirectory_arrow_right";
-  }
-  if (role === "system") {
-    return "info";
-  }
-  return "smart_toy";
-}
-
-function transcriptItemLabel(kind: string, role: string, status: string): string {
-  const owner = role === "user" ? "Request" : role === "system" ? "System" : "Participant";
-  const state = status ? ` - ${status.replace(/_/g, " ")}` : "";
-  return `${owner} ${kind.replace(/_/g, " ")}${state}`;
 }

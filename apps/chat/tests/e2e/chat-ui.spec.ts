@@ -314,8 +314,10 @@ test.describe("Chat app browser smoke", () => {
     await expectReactFlowGraphRendered(page, 3);
 
     await page.locator('[data-participant-id="implementer"]').click();
-    await expect(page.getByText("Implementer accepted browser-observed task.")).toBeVisible();
+    await expect(page.getByText("Implementer accepted browser-observed task.")).toBeHidden();
     await expect(page.getByText("Implementer produced a safe participant summary.")).toBeVisible();
+    await page.locator(".chatapp-inter-agent-graph__transcript-title summary").click();
+    await expect(page.getByText("Implementer accepted browser-observed task.")).toBeVisible();
     await expect(page.getByText("child-implementer")).toHaveCount(0);
     await page.getByLabel("Zoom out").click();
     await page.getByLabel("Fit graph").click();

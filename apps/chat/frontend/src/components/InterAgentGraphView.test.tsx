@@ -354,8 +354,14 @@ describe("InterAgentGraphView", () => {
 
     expect(getInterAgentParticipantTranscript).toHaveBeenCalledWith("run-1", "researcher", { limit: 80 });
     expect(element.querySelector('[aria-label="Researcher transcript"]')).not.toBeNull();
-    expect(element.textContent).toContain("Find launch facts.");
-    expect(element.textContent).toContain("Research complete.");
+    expect(element.querySelector(".chatapp-inter-agent-graph__input-summary")?.textContent).toContain("Find launch facts.");
+    expect(element.querySelector(".chatapp-inter-agent-graph__transcript-title summary")).not.toBeNull();
+    expect(element.querySelector(".chatapp-inter-agent-graph__transcript-list .chatapp-agent-block")).not.toBeNull();
+    const outputText = Array.from(element.querySelectorAll(".chatapp-inter-agent-graph__transcript-message"))
+      .map((message) => message.textContent || "")
+      .join(" ");
+    expect(outputText).toContain("Research complete.");
+    expect(outputText).not.toContain("Find launch facts.");
     expect(element.textContent).not.toContain("child-1");
   });
 

@@ -12,9 +12,12 @@ export function clearTranscriptProjectionCache(): void {
 }
 
 function textPayload(event: RuntimeEvent): string {
-  const value = event.event_type === "runtime.output.final" && typeof event.payload.complete_text === "string"
-    ? event.payload.complete_text
-    : event.payload.text;
+  const value = event.payload.text;
+  return typeof value === "string" ? removeNoisyRuntimeTextLines(value).trim() : "";
+}
+
+function completeTextPayload(event: RuntimeEvent): string {
+  const value = event.payload.complete_text;
   return typeof value === "string" ? removeNoisyRuntimeTextLines(value).trim() : "";
 }
 
@@ -238,6 +241,16 @@ function projectEventsToMessages(events: RuntimeEvent[]): ChatMessage[] {
     }
   }
 
+  function removeRenderedOutputMessages(turnId: string) {
+    const streamPrefix = `${turnId}:agent:stream:`;
+    for (let index = orderedMessages.length - 1; index >= 0; index -= 1) {
+      if (orderedMessages[index].message.id.startsWith(streamPrefix)) {
+        orderedMessages.splice(index, 1);
+      }
+    }
+    renderedOutputByTurn.delete(turnId);
+  }
+
   function flushOutputSegment(turnId: string, closeActive = false) {
     const segment = outputSegmentsByTurn.get(turnId);
     if (!segment || !segment.text) {
@@ -356,9 +369,13 @@ function projectEventsToMessages(events: RuntimeEvent[]): ChatMessage[] {
     if (event.event_type === "runtime.output.final") {
       flushToolSegment(turnId, true);
       flushOutputSegment(turnId, true);
-      const finalText = textPayload(event);
+      const finalProjection = finalOutputProjection(event, renderedOutputByTurn.get(turnId) || "");
+      if (finalProjection.replaceRenderedOutput) {
+        removeRenderedOutputMessages(turnId);
+      }
+      const finalText = finalProjection.previewText;
       const structured = structuredPayload(event.payload.structured_content || event.payload.structuredContent || event.payload.content);
-      const text = finalTextRemainder(finalText, renderedOutputByTurn.get(turnId) || "");
+      const text = finalProjection.text;
       const structuredKey = structured ? structuredPayloadKey(turnId, structured) : "";
       const structuredAlreadyRendered = Boolean(structuredKey) && renderedStructuredOutput.has(structuredKey);
       const shouldPushStructured = Boolean(structured) && !structuredAlreadyRendered;
@@ -448,6 +465,38 @@ function projectEventsToMessages(events: RuntimeEvent[]): ChatMessage[] {
   return orderedMessages.map((entry) => entry.message);
 }
 
+function finalOutputProjection(event: RuntimeEvent, renderedText: string): { text: string; previewText: string; replaceRenderedOutput: boolean } {
+  const finalText = textPayload(event);
+  const completeText = completeTextPayload(event);
+  if (finalText) {
+    if (completeText && renderedText && textStartsWithRenderedText(completeText, renderedText)) {
+      const completeRemainder = finalTextRemainder(completeText, renderedText);
+      if (!completeRemainder || completeRemainder.endsWith(finalText)) {
+        return { text: completeRemainder, previewText: completeText, replaceRenderedOutput: false };
+      }
+    }
+    return {
+      text: finalTextRemainder(finalText, renderedText),
+      previewText: completeText || finalText,
+      replaceRenderedOutput: false,
+    };
+  }
+  if (!completeText) {
+    return { text: "", previewText: "", replaceRenderedOutput: false };
+  }
+  if (!renderedText) {
+    return { text: completeText, previewText: completeText, replaceRenderedOutput: false };
+  }
+  if (textStartsWithRenderedText(completeText, renderedText)) {
+    return {
+      text: finalTextRemainder(completeText, renderedText),
+      previewText: completeText,
+      replaceRenderedOutput: false,
+    };
+  }
+  return { text: completeText, previewText: completeText, replaceRenderedOutput: true };
+}
+
 function finalTextRemainder(finalText: string, renderedText: string): string {
   if (!finalText || !renderedText) {
     return finalText;
@@ -463,6 +512,13 @@ function finalTextRemainder(finalText: string, renderedText: string): string {
     return "";
   }
   return finalText;
+}
+
+function textStartsWithRenderedText(text: string, renderedText: string): boolean {
+  if (!text || !renderedText) {
+    return false;
+  }
+  return text.startsWith(renderedText) || prefixEndIgnoringWhitespace(text, renderedText) !== null || normalizedText(text) === normalizedText(renderedText);
 }
 
 function prefixEndIgnoringWhitespace(text: string, prefix: string): number | null {

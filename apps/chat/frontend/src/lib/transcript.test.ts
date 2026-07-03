@@ -849,6 +849,56 @@ describe("runtime event transcript projection", () => {
     ]);
   });
 
+  it("replaces partial streamed tail with complete final text for bounded history snapshots", () => {
+    const messages = eventsToMessages([
+      event({
+        event_id: "delta-tail",
+        event_type: "runtime.output.delta",
+        payload: { text: "Tail visible in the bounded replay." },
+        created_at: "2026-04-19T00:00:01.000Z",
+      }),
+      event({
+        event_id: "final-1",
+        event_type: "runtime.output.final",
+        payload: {
+          text: "",
+          complete_text: "Full answer starts before the bounded replay. Tail visible in the bounded replay.",
+        },
+        created_at: "2026-04-19T00:00:02.000Z",
+      }),
+    ]);
+
+    expect(messages.filter((message) => message.role === "agent")).toMatchObject([
+      {
+        id: "turn-1:agent",
+        content: "Full answer starts before the bounded replay. Tail visible in the bounded replay.",
+        status: "complete",
+      },
+    ]);
+  });
+
+  it("keeps streamed progress when final text is a separate answer", () => {
+    const messages = eventsToMessages([
+      event({
+        event_id: "delta-progress",
+        event_type: "runtime.output.delta",
+        payload: { text: "Checking the workspace." },
+        created_at: "2026-04-19T00:00:01.000Z",
+      }),
+      event({
+        event_id: "final-1",
+        event_type: "runtime.output.final",
+        payload: { text: "Final answer only.", complete_text: "Final answer only." },
+        created_at: "2026-04-19T00:00:02.000Z",
+      }),
+    ]);
+
+    expect(messages.filter((message) => message.role === "agent")).toMatchObject([
+      { id: "turn-1:agent:stream:0", content: "Checking the workspace.", status: "complete" },
+      { id: "turn-1:agent", content: "Final answer only.", status: "complete" },
+    ]);
+  });
+
   it("concatenates streaming deltas without injecting newlines or trimming spaces", () => {
     const messages = eventsToMessages([
       event({

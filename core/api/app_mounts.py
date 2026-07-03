@@ -9,6 +9,7 @@ import logging
 import mimetypes
 import re
 from pathlib import Path
+import time
 import uuid
 from typing import Any, Mapping
 
@@ -1126,14 +1127,28 @@ def _read_backend_body(environ: dict, *, data_root: str, app_id: str = "") -> tu
     content_type = str(environ.get("CONTENT_TYPE") or "").split(";", 1)[0].strip().lower()
     if not content_type or content_type == "application/json":
         return read_json_body(environ), None
+    body_stage_started = time.monotonic()
     raw = read_request_body_bytes(environ, max_bytes=app_backend_binary_body_limit(app_id))
+    body_read_seconds = time.monotonic() - body_stage_started
     if not raw:
         return {}, None
     body_dir = Path(data_root) / "run" / "http-body"
     body_dir.mkdir(parents=True, exist_ok=True)
     body_path = body_dir / f"body-{uuid.uuid4().hex}.bin"
+    body_write_started = time.monotonic()
     body_path.write_bytes(raw)
-    return {}, {"path": str(body_path), "content_type": content_type, "size_bytes": len(raw)}
+    body_write_seconds = time.monotonic() - body_write_started
+    return (
+        {},
+        {
+            "path": str(body_path),
+            "content_type": content_type,
+            "size_bytes": len(raw),
+            "stage_seconds": time.monotonic() - body_stage_started,
+            "read_seconds": body_read_seconds,
+            "write_seconds": body_write_seconds,
+        },
+    )
 
 
 def app_backend_binary_body_limit(app_id: str) -> int:

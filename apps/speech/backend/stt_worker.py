@@ -68,7 +68,11 @@ def serve(*, socket_path: Path, pid_path: Path, config: dict, idle_timeout_secon
             except socket.timeout:
                 continue
             with connection:
-                request = _read_request(connection)
+                try:
+                    request = _read_request(connection)
+                except OSError as error:
+                    _log_event("request_read_failed", error_type=error.__class__.__name__, detail=str(error))
+                    continue
                 if not request:
                     continue
                 last_activity = time.monotonic()
@@ -93,7 +97,7 @@ def serve(*, socket_path: Path, pid_path: Path, config: dict, idle_timeout_secon
                 except Exception as error:
                     _log_event("job_failed", error_type=error.__class__.__name__, detail=str(error))
                     response = {"ok": False, "error_type": error.__class__.__name__, "detail": str(error)}
-                connection.sendall((json.dumps(response, ensure_ascii=False) + "\n").encode("utf-8"))
+                _send_response(connection, response)
     finally:
         _log_event("stopped", socket_name=socket_path.name)
         server.close()
@@ -121,6 +125,15 @@ def _read_request(connection: socket.socket) -> dict:
     except json.JSONDecodeError:
         return {}
     return payload if isinstance(payload, dict) else {}
+
+
+def _send_response(connection: socket.socket, response: dict) -> bool:
+    try:
+        connection.sendall((json.dumps(response, ensure_ascii=False) + "\n").encode("utf-8"))
+    except (BrokenPipeError, ConnectionResetError, OSError) as error:
+        _log_event("response_write_failed", error_type=error.__class__.__name__, detail=str(error))
+        return False
+    return True
 
 
 def _log_event(event: str, **fields: object) -> None:

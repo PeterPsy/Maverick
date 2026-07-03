@@ -258,6 +258,9 @@ class SpeechAppTests(unittest.TestCase):
             self.assertIsNotNone(body_file)
             assert body_file is not None
             self.assertEqual(body_file["size_bytes"], len(raw))
+            self.assertGreaterEqual(body_file["stage_seconds"], 0.0)
+            self.assertGreaterEqual(body_file["read_seconds"], 0.0)
+            self.assertGreaterEqual(body_file["write_seconds"], 0.0)
             self.assertEqual(Path(str(body_file["path"])).read_bytes(), raw)
 
     def test_capabilities_report_unavailable_without_local_engine(self) -> None:
@@ -338,8 +341,8 @@ class SpeechAppTests(unittest.TestCase):
         self.assertTrue(transcription["inline_default_profile_available"])
         self.assertTrue(transcription["streaming_supported"])
         self.assertTrue(transcription["conversation_streaming_supported"])
-        self.assertFalse(transcription["chunked_dictation_supported"])
-        self.assertFalse(transcription["dictation_streaming_supported"])
+        self.assertTrue(transcription["chunked_dictation_supported"])
+        self.assertTrue(transcription["dictation_streaming_supported"])
 
     def test_capabilities_do_not_advertise_flux_streaming_without_persistent_worker(self) -> None:
         old_mode = os.environ.get("MAVERICK_SPEECH_BACKEND_WORKER")
@@ -365,6 +368,7 @@ class SpeechAppTests(unittest.TestCase):
         self.assertFalse(transcription["streaming_supported"])
         self.assertFalse(transcription["conversation_streaming_supported"])
         self.assertFalse(transcription["chunked_dictation_supported"])
+        self.assertFalse(transcription["dictation_streaming_supported"])
 
     def test_synthesize_rejects_empty_or_too_long_text(self) -> None:
         with self.assertRaises(SpeechValidationError):
@@ -973,6 +977,96 @@ class SpeechAppTests(unittest.TestCase):
         self.assertEqual(payload["duration_seconds"], 0.0)
         self.assertEqual(flux_chunk.call_args.kwargs["session"]["session_id"], "voice-session")
 
+    def test_transcribe_audio_dictation_session_uses_flux_without_conversation_flag(self) -> None:
+        audio = b"not-a-standalone-webm" * 32
+        fake_result = {
+            "text": "nuova riga",
+            "chunk_text": "nuova riga",
+            "events": [{"type": "Results", "text": "nuova riga", "is_final": True}],
+            "turn_events": [],
+            "duration_seconds": 0.0,
+            "engine": "deepgram",
+            "model": "flux-general-en",
+            "language": "it",
+            "language_probability": 0.0,
+            "profile": "flux",
+        }
+        with TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            write_settings(root / "data", {"transcription_engine": "deepgram"})
+            with (
+                patch("transcription.probe_audio_duration_seconds", side_effect=AssertionError("duration probe should be skipped")),
+                patch("transcription.transcribe_audio_file", side_effect=AssertionError("Nova one-shot should not be used")),
+                patch("transcription.transcribe_deepgram_flux_audio_chunk", return_value=fake_result) as flux_chunk,
+            ):
+                status_code, payload = handle_action(
+                    root / "data",
+                    root / "generated",
+                    {
+                        "action": "transcribe_audio",
+                        "content_type": "audio/webm",
+                        "audio_base64": base64.b64encode(audio).decode("ascii"),
+                        "dictation": True,
+                        "session_id": "chat-session",
+                        "chunk_index": 0,
+                        "_app_secrets": {"deepgram-api-key": "deepgram-token"},
+                        "_provider_config": {
+                            "speech_stt": {
+                                "selection": {
+                                    "audio_transcription_model_id": "nova-3",
+                                    "conversation_model_id": "flux-general-en",
+                                }
+                            }
+                        },
+                    },
+                )
+
+        self.assertEqual(status_code, 200)
+        self.assertEqual(payload["engine"], "deepgram")
+        self.assertEqual(payload["model"], "flux-general-en")
+        self.assertEqual(payload["chunk_text"], "\n")
+        self.assertEqual(payload["text"], "\n")
+        self.assertEqual(payload["commands"][0]["type"], "insert_text")
+        self.assertEqual(payload["metrics"]["duration_probe_seconds"], 0.0)
+        self.assertEqual(flux_chunk.call_args.kwargs["session"]["session_id"], "chat-session")
+
+    def test_transcribe_audio_dictation_flux_does_not_insert_partial_events(self) -> None:
+        audio = b"not-a-standalone-webm" * 32
+        fake_result = {
+            "text": "hel",
+            "chunk_text": "hel",
+            "events": [{"type": "Results", "text": "hel", "is_final": False}],
+            "turn_events": [],
+            "duration_seconds": 0.0,
+            "engine": "deepgram",
+            "model": "flux-general-en",
+            "language": "en",
+            "language_probability": 0.0,
+            "profile": "flux",
+        }
+        with TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            write_settings(root / "data", {"transcription_engine": "deepgram"})
+            with patch("transcription.transcribe_deepgram_flux_audio_chunk", return_value=fake_result):
+                status_code, payload = handle_action(
+                    root / "data",
+                    root / "generated",
+                    {
+                        "action": "transcribe_audio",
+                        "content_type": "audio/webm",
+                        "audio_base64": base64.b64encode(audio).decode("ascii"),
+                        "dictation": True,
+                        "session_id": "chat-session",
+                        "chunk_index": 0,
+                        "_app_secrets": {"deepgram-api-key": "deepgram-token"},
+                    },
+                )
+
+        self.assertEqual(status_code, 200)
+        self.assertEqual(payload["chunk_text"], "")
+        self.assertEqual(payload["text"], "")
+        self.assertTrue(payload["partial"])
+
     def test_flux_session_manager_prunes_idle_sessions(self) -> None:
         class FakeFluxClient:
             instances: list["FakeFluxClient"] = []
@@ -1371,6 +1465,7 @@ class SpeechAppTests(unittest.TestCase):
                         status = engines.faster_whisper_worker_status(data_root, {"transcription_profile": "fast"})
 
         self.assertFalse(status["prewarm"]["attempted"])
+        self.assertEqual(status["prewarm"]["skipped_reason"], "not_requested")
         ensure_worker.assert_not_called()
 
     def test_worker_prewarm_explicitly_warms_current_faster_whisper_worker(self) -> None:
@@ -1383,7 +1478,40 @@ class SpeechAppTests(unittest.TestCase):
 
         self.assertTrue(status["prewarm"]["attempted"])
         self.assertTrue(status["prewarm"]["ok"])
+        self.assertEqual(status["prewarm"]["skipped_reason"], "")
         ensure_worker.assert_called_once()
+
+    def test_worker_prewarm_reports_deepgram_skip_reason(self) -> None:
+        with TemporaryDirectory() as temp_dir:
+            data_root = Path(temp_dir) / "data"
+            with patch.dict(os.environ, {"MAVERICK_SPEECH_FASTER_WHISPER_WORKER": "auto"}):
+                with patch("engines.resolve_transcription_engine", return_value="deepgram"):
+                    with patch("engines._ensure_external_faster_whisper_worker") as ensure_worker:
+                        status = engines.faster_whisper_worker_status(data_root, {"transcription_engine": "deepgram"}, ensure_warm=True)
+
+        self.assertFalse(status["prewarm"]["attempted"])
+        self.assertEqual(status["prewarm"]["skipped_reason"], "selected_engine_deepgram")
+        ensure_worker.assert_not_called()
+
+    def test_worker_prewarm_warms_inline_and_file_profiles(self) -> None:
+        with TemporaryDirectory() as temp_dir:
+            data_root = Path(temp_dir) / "data"
+            with patch.dict(
+                os.environ,
+                {
+                    "MAVERICK_SPEECH_FASTER_WHISPER_FAST_MODEL": "/models/fast",
+                    "MAVERICK_SPEECH_FASTER_WHISPER_BALANCED_MODEL": "/models/balanced",
+                    "MAVERICK_SPEECH_FASTER_WHISPER_WORKER": "auto",
+                },
+            ):
+                with patch("engines.resolve_transcription_engine", return_value="faster-whisper"):
+                    with patch("engines._ensure_external_faster_whisper_worker") as ensure_worker:
+                        status = engines.faster_whisper_worker_status(data_root, {"transcription_profile": "balanced"}, ensure_warm=True)
+
+        self.assertEqual(status["current_profile"], "fast")
+        self.assertEqual([target["profile"] for target in status["profiles"]], ["fast", "balanced"])
+        self.assertTrue(all(target["prewarm"]["attempted"] for target in status["profiles"]))
+        self.assertEqual(ensure_worker.call_count, 2)
 
     def test_worker_status_current_profile_matches_chat_inline_default(self) -> None:
         with TemporaryDirectory() as temp_dir:
@@ -1408,6 +1536,7 @@ class SpeechAppTests(unittest.TestCase):
         self.assertEqual(status["profiles"][1]["profile"], "balanced")
         self.assertEqual(status["profiles"][1]["usages"][0]["operation"], "transcribe_file")
         self.assertFalse(status["prewarm"]["attempted"])
+        self.assertEqual(status["prewarm"]["skipped_reason"], "not_requested")
         ensure_worker.assert_not_called()
 
     def test_worker_status_prunes_dead_pid_and_stale_socket_files(self) -> None:
@@ -1742,6 +1871,18 @@ class SpeechAppTests(unittest.TestCase):
         self.assertFalse(response["result"]["worker"]["cold_start"])
         self.assertTrue(response["result"]["worker"]["ready_before_request"])
 
+    def test_external_worker_response_write_handles_broken_pipe(self) -> None:
+        class BrokenConnection:
+            def sendall(self, payload: bytes) -> None:
+                raise BrokenPipeError("client closed")
+
+        with patch("stt_worker._log_event") as log_event:
+            ok = stt_worker._send_response(BrokenConnection(), {"ok": True})
+
+        self.assertFalse(ok)
+        log_event.assert_called_once()
+        self.assertEqual(log_event.call_args.args[0], "response_write_failed")
+
     def test_capabilities_report_default_english_voice_and_full_voice_list(self) -> None:
         with TemporaryDirectory() as temp_dir:
             root = Path(temp_dir)
@@ -2021,9 +2162,16 @@ class SpeechAppTests(unittest.TestCase):
             self.assertEqual(payload["retention"], "metadata_only")
             self.assertEqual(payload["profile"], "")
             self.assertEqual(payload["beam_size"], 0)
+            self.assertIn("request_total_seconds", payload["metrics"])
+            self.assertIn("body_stage_seconds", payload["metrics"])
+            self.assertIn("duration_probe_seconds", payload["metrics"])
+            self.assertIn("engine_seconds", payload["metrics"])
+            self.assertIn("postprocess_seconds", payload["metrics"])
+            self.assertIn("store_seconds", payload["metrics"])
             jobs = (root / "data" / "jobs.json").read_text(encoding="utf-8")
             self.assertIn('"kind": "stt"', jobs)
             self.assertIn('"transcript_chars": 11', jobs)
+            self.assertIn('"engine_seconds"', jobs)
 
     def test_transcribe_audio_rejects_long_audio_before_engine(self) -> None:
         audio = b"RIFF" + b"\0" * 512
@@ -2245,6 +2393,7 @@ class SpeechAppTests(unittest.TestCase):
                                 "content_type": "audio/webm",
                                 "_body_file_path": str(body_path),
                                 "_body_file_size_bytes": len(audio),
+                                "_body_file_stage_seconds": 0.125,
                                 "language": "it-IT",
                                 "profile": "fast",
                             },
@@ -2252,6 +2401,7 @@ class SpeechAppTests(unittest.TestCase):
 
             self.assertEqual(status_code, 200)
             self.assertEqual(payload["text"], "ciao")
+            self.assertEqual(payload["metrics"]["body_stage_seconds"], 0.125)
             self.assertEqual(transcribe_audio_file.call_args.args[0], body_path)
             self.assertEqual(transcribe_audio_file.call_args.kwargs["language"], "it")
             jobs = read_jobs(root / "data")["jobs"]
@@ -2269,7 +2419,14 @@ class SpeechAppTests(unittest.TestCase):
                     "final": "true",
                     "dictation": "true",
                 },
-                "body_file": {"path": "/tmp/audio.webm", "content_type": "audio/webm", "size_bytes": 123},
+                "body_file": {
+                    "path": "/tmp/audio.webm",
+                    "content_type": "audio/webm",
+                    "size_bytes": 123,
+                    "stage_seconds": 0.12,
+                    "read_seconds": 0.08,
+                    "write_seconds": 0.04,
+                },
             }
         )
 
@@ -2283,6 +2440,9 @@ class SpeechAppTests(unittest.TestCase):
         self.assertEqual(body["dictation"], "true")
         self.assertEqual(body["_body_file_path"], "/tmp/audio.webm")
         self.assertEqual(body["_body_file_size_bytes"], 123)
+        self.assertEqual(body["_body_file_stage_seconds"], 0.12)
+        self.assertEqual(body["_body_file_read_seconds"], 0.08)
+        self.assertEqual(body["_body_file_write_seconds"], 0.04)
 
     def test_transcribe_audio_rejects_unknown_inline_profile(self) -> None:
         audio = b"RIFF" + b"\0" * 512

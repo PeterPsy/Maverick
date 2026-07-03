@@ -15,9 +15,9 @@ import time
 import uuid
 import wave
 
-from engines import transcribe_audio_file
+from engines import resolve_transcription_engine, transcribe_audio_file
 from errors import SpeechProviderUnavailableError, SpeechValidationError
-from flux_streaming import transcribe_deepgram_flux_audio_chunk
+from flux_streaming import flux_streaming_supported, transcribe_deepgram_flux_audio_chunk
 from models import (
     DEFAULT_INLINE_TRANSCRIPTION_PROFILE,
     MAX_INLINE_TRANSCRIPTION_AUDIO_BYTES,
@@ -70,6 +70,9 @@ DICTATION_COMMANDS = {
 
 
 def transcribe_audio_payload(*, data_root: Path, body: dict) -> dict:
+    request_started = time.monotonic()
+    upstream_body_stage_seconds = body_file_stage_seconds(body)
+    body_stage_seconds = upstream_body_stage_seconds
     content_type = normalized_transcription_content_type(body.get("content_type"), operation="transcribe_audio")
     language = normalized_language(body.get("language"))
     profile = normalized_transcription_profile(body.get("profile"), operation="transcribe_audio")
@@ -87,19 +90,27 @@ def transcribe_audio_payload(*, data_root: Path, body: dict) -> dict:
             size_bytes=int(body.get("_body_file_size_bytes") or 0),
             language=language,
             profile=profile,
+            request_started=request_started,
+            body_stage_seconds=body_stage_seconds,
+            upstream_body_stage_seconds=upstream_body_stage_seconds,
             session=session,
             dictation_mode=dictation_mode,
             app_secrets=body.get("_app_secrets") if isinstance(body.get("_app_secrets"), dict) else {},
             provider_config=body.get("_provider_config") if isinstance(body.get("_provider_config"), dict) else {},
             conversation_mode=conversation_mode,
         )
+    body_decode_started = time.monotonic()
     audio = decoded_audio(body.get("audio_base64"))
+    body_stage_seconds += time.monotonic() - body_decode_started
     return transcribe_bytes(
         data_root=data_root,
         audio=audio,
         content_type=content_type,
         language=language,
         profile=profile,
+        request_started=request_started,
+        body_stage_seconds=body_stage_seconds,
+        upstream_body_stage_seconds=upstream_body_stage_seconds,
         source={"kind": "inline"},
         session=session,
         dictation_mode=dictation_mode,
@@ -117,6 +128,9 @@ def transcribe_inline_body_file(
     size_bytes: int,
     language: str,
     profile: str,
+    request_started: float,
+    body_stage_seconds: float,
+    upstream_body_stage_seconds: float,
     session: dict | None = None,
     dictation_mode: bool = False,
     app_secrets: dict | None = None,
@@ -136,6 +150,9 @@ def transcribe_inline_body_file(
         size_bytes=actual_size,
         language=language,
         profile=profile,
+        request_started=request_started,
+        body_stage_seconds=body_stage_seconds,
+        upstream_body_stage_seconds=upstream_body_stage_seconds,
         operation="transcribe_audio",
         source={"kind": "inline", "transport": "binary"},
         session=session,
@@ -161,6 +178,7 @@ def transcribe_file_payload(
     uploaded_storage_root: Path | None,
     body: dict,
 ) -> dict:
+    request_started = time.monotonic()
     audio_path = resolve_workspace_audio_path(
         generated_storage_root=generated_storage_root,
         uploaded_storage_root=uploaded_storage_root,
@@ -178,6 +196,9 @@ def transcribe_file_payload(
         content_type=content_type,
         size_bytes=size_bytes,
         language=language,
+        request_started=request_started,
+        body_stage_seconds=0.0,
+        upstream_body_stage_seconds=0.0,
         operation="transcribe_file",
         source={"kind": "storage", "workspace_relative_path": normalized_workspace_relative_path(body)},
         app_secrets=body.get("_app_secrets") if isinstance(body.get("_app_secrets"), dict) else {},
@@ -192,6 +213,9 @@ def transcribe_bytes(
     content_type: str,
     language: str,
     profile: str,
+    request_started: float,
+    body_stage_seconds: float,
+    upstream_body_stage_seconds: float,
     source: dict,
     session: dict | None = None,
     dictation_mode: bool = False,
@@ -200,9 +224,11 @@ def transcribe_bytes(
     conversation_mode: bool = False,
 ) -> dict:
     extension = CONTENT_TYPE_EXTENSIONS[content_type]
+    body_write_started = time.monotonic()
     with tempfile.TemporaryDirectory(prefix="maverick-speech-stt-") as temp_dir:
         audio_path = Path(temp_dir) / f"input{extension}"
         audio_path.write_bytes(audio)
+        body_stage_seconds += time.monotonic() - body_write_started
         return transcribe_path(
             data_root=data_root,
             audio_path=audio_path,
@@ -210,6 +236,9 @@ def transcribe_bytes(
             size_bytes=len(audio),
             language=language,
             profile=profile,
+            request_started=request_started,
+            body_stage_seconds=body_stage_seconds,
+            upstream_body_stage_seconds=upstream_body_stage_seconds,
             operation="transcribe_audio",
             source=source,
             session=session,
@@ -230,16 +259,19 @@ def transcribe_path(
     operation: str,
     source: dict,
     profile: str = "",
+    request_started: float | None = None,
+    body_stage_seconds: float = 0.0,
+    upstream_body_stage_seconds: float = 0.0,
     session: dict | None = None,
     dictation_mode: bool = False,
     app_secrets: dict | None = None,
     provider_config: dict | None = None,
     conversation_mode: bool = False,
 ) -> dict:
+    if request_started is None:
+        request_started = time.monotonic()
+    duration_probe_seconds = 0.0
     preflight_duration_seconds = None
-    if not conversation_mode:
-        preflight_duration_seconds = probe_audio_duration_seconds(audio_path, content_type=content_type)
-        validate_audio_duration(preflight_duration_seconds, operation=operation)
     settings = read_settings(data_root)
     if profile:
         settings = {**settings, "transcription_profile": profile}
@@ -248,8 +280,19 @@ def transcribe_path(
     if provider_config:
         settings = {**settings, "_provider_config": dict(provider_config)}
     settings["_data_root"] = str(data_root)
+    dictation_stream_mode = deepgram_dictation_stream_enabled(
+        settings,
+        session=session,
+        dictation_mode=dictation_mode,
+        conversation_mode=conversation_mode,
+    )
+    if not conversation_mode and not dictation_stream_mode:
+        duration_probe_started = time.monotonic()
+        preflight_duration_seconds = probe_audio_duration_seconds(audio_path, content_type=content_type)
+        duration_probe_seconds = time.monotonic() - duration_probe_started
+        validate_audio_duration(preflight_duration_seconds, operation=operation)
     transcription_started = time.monotonic()
-    if conversation_mode:
+    if conversation_mode or dictation_stream_mode:
         result = transcribe_deepgram_flux_audio_chunk(audio_path, settings=settings, language=language, session=session or {})
     else:
         result = transcribe_audio_file(
@@ -265,19 +308,38 @@ def transcribe_path(
             data_root=data_root,
             result=result,
             transcription_seconds=transcription_seconds,
+            request_started=request_started,
+            body_stage_seconds=body_stage_seconds,
+            upstream_body_stage_seconds=upstream_body_stage_seconds,
+            duration_probe_seconds=duration_probe_seconds,
             duration_seconds=float(result.get("duration_seconds") or preflight_duration_seconds or 0.0),
             content_type=content_type,
             size_bytes=size_bytes,
             session=session or {},
             source=source,
         )
+    if dictation_stream_mode:
+        return dictation_stream_response(
+            data_root=data_root,
+            result=result,
+            transcription_seconds=transcription_seconds,
+            request_started=request_started,
+            body_stage_seconds=body_stage_seconds,
+            upstream_body_stage_seconds=upstream_body_stage_seconds,
+            duration_probe_seconds=duration_probe_seconds,
+            duration_seconds=float(result.get("duration_seconds") or 0.0),
+            content_type=content_type,
+            size_bytes=size_bytes,
+            session=session or {},
+            source=source,
+        )
+    postprocess_started = time.monotonic()
     post_processed = post_process_transcript(str(result.get("text") or ""), enable_commands=dictation_mode)
     cleaned_text = str(post_processed.get("text") or "")
     commands = [item for item in post_processed.get("commands", []) if isinstance(item, dict)]
     duration_seconds = float(result.get("duration_seconds") or preflight_duration_seconds or 0.0)
     validate_audio_duration(duration_seconds, operation=operation)
     segments = normalized_segments(result.get("segments", []), enable_commands=dictation_mode)
-    metrics = transcription_metrics(result=result, transcription_seconds=transcription_seconds, duration_seconds=duration_seconds)
     session_payload = apply_transcription_session(
         data_root,
         session=session,
@@ -285,9 +347,21 @@ def transcribe_path(
         commands=commands,
         segments=segments,
     )
+    postprocess_seconds = time.monotonic() - postprocess_started
+    metrics = transcription_metrics(
+        result=result,
+        transcription_seconds=transcription_seconds,
+        duration_seconds=duration_seconds,
+        request_started=request_started,
+        body_stage_seconds=body_stage_seconds,
+        upstream_body_stage_seconds=upstream_body_stage_seconds,
+        duration_probe_seconds=duration_probe_seconds,
+        postprocess_seconds=postprocess_seconds,
+    )
     public_text = str(session_payload.get("text") if session_payload else cleaned_text)
     job_id = f"stt_{uuid.uuid4().hex}"
     created_at = datetime.now(tz=UTC).isoformat()
+    store_started = time.monotonic()
     append_job(
         data_root,
         {
@@ -310,6 +384,12 @@ def transcribe_path(
             "source": source,
             "retention": "metadata_only",
         },
+    )
+    finish_transcription_metrics(
+        metrics,
+        request_started=request_started,
+        upstream_body_stage_seconds=upstream_body_stage_seconds,
+        store_started=store_started,
     )
     return {
         "job_id": job_id,
@@ -339,6 +419,10 @@ def conversation_stream_response(
     data_root: Path,
     result: dict,
     transcription_seconds: float,
+    request_started: float,
+    body_stage_seconds: float,
+    upstream_body_stage_seconds: float,
+    duration_probe_seconds: float,
     duration_seconds: float,
     content_type: str,
     size_bytes: int,
@@ -351,9 +435,19 @@ def conversation_stream_response(
     public_text = str(result.get("text") or "")
     chunk_text = str(result.get("chunk_text") or public_text)
     segments = normalized_segments(result.get("segments", []), enable_commands=False)
-    metrics = transcription_metrics(result=result, transcription_seconds=transcription_seconds, duration_seconds=duration_seconds)
+    metrics = transcription_metrics(
+        result=result,
+        transcription_seconds=transcription_seconds,
+        duration_seconds=duration_seconds,
+        request_started=request_started,
+        body_stage_seconds=body_stage_seconds,
+        upstream_body_stage_seconds=upstream_body_stage_seconds,
+        duration_probe_seconds=duration_probe_seconds,
+        postprocess_seconds=0.0,
+    )
     job_id = f"stt_{uuid.uuid4().hex}"
     created_at = datetime.now(tz=UTC).isoformat()
+    store_started = time.monotonic()
     append_job(
         data_root,
         {
@@ -376,6 +470,12 @@ def conversation_stream_response(
             "source": source,
             "retention": "metadata_only",
         },
+    )
+    finish_transcription_metrics(
+        metrics,
+        request_started=request_started,
+        upstream_body_stage_seconds=upstream_body_stage_seconds,
+        store_started=store_started,
     )
     return {
         "job_id": job_id,
@@ -405,6 +505,108 @@ def conversation_stream_response(
     }
 
 
+def dictation_stream_response(
+    *,
+    data_root: Path,
+    result: dict,
+    transcription_seconds: float,
+    request_started: float,
+    body_stage_seconds: float,
+    upstream_body_stage_seconds: float,
+    duration_probe_seconds: float,
+    duration_seconds: float,
+    content_type: str,
+    size_bytes: int,
+    session: dict,
+    source: dict,
+) -> dict:
+    session_id = str(session.get("session_id") or "")
+    chunk_index = int(session.get("chunk_index") or 0)
+    final = bool(session.get("final"))
+    existing_state = read_transcription_session(data_root, session_id)
+    existing_text = str(existing_state.get("text") or "")
+    stable_chunk_text = finalized_flux_dictation_chunk_text(result, existing_text=existing_text, final=final)
+    postprocess_started = time.monotonic()
+    post_processed = post_process_transcript(stable_chunk_text, enable_commands=True)
+    cleaned_text = str(post_processed.get("text") or "")
+    commands = [item for item in post_processed.get("commands", []) if isinstance(item, dict)]
+    segments: list[dict] = []
+    session_payload = apply_transcription_session(
+        data_root,
+        session=session,
+        chunk_text=cleaned_text,
+        commands=commands,
+        segments=segments,
+    )
+    postprocess_seconds = time.monotonic() - postprocess_started
+    public_text = str(session_payload.get("text") or "")
+    metrics = transcription_metrics(
+        result=result,
+        transcription_seconds=transcription_seconds,
+        duration_seconds=duration_seconds,
+        request_started=request_started,
+        body_stage_seconds=body_stage_seconds,
+        upstream_body_stage_seconds=upstream_body_stage_seconds,
+        duration_probe_seconds=duration_probe_seconds,
+        postprocess_seconds=postprocess_seconds,
+    )
+    job_id = f"stt_{uuid.uuid4().hex}"
+    created_at = datetime.now(tz=UTC).isoformat()
+    store_started = time.monotonic()
+    append_job(
+        data_root,
+        {
+            "job_id": job_id,
+            "kind": "stt",
+            "created_at": created_at,
+            "engine": str(result.get("engine") or ""),
+            "model": str(result.get("model") or ""),
+            "language": str(result.get("language") or ""),
+            "content_type": content_type,
+            "size_bytes": size_bytes,
+            "duration_seconds": duration_seconds,
+            "transcript_chars": len(public_text),
+            "chunk_transcript_chars": len(cleaned_text),
+            "profile": str(result.get("profile") or ""),
+            "beam_size": 0,
+            "worker": {},
+            "metrics": metrics,
+            "session": public_session_metadata(session_payload),
+            "source": source,
+            "retention": "metadata_only",
+        },
+    )
+    finish_transcription_metrics(
+        metrics,
+        request_started=request_started,
+        upstream_body_stage_seconds=upstream_body_stage_seconds,
+        store_started=store_started,
+    )
+    return {
+        "job_id": job_id,
+        "created_at": created_at,
+        "text": public_text,
+        "chunk_text": cleaned_text,
+        "commands": commands,
+        "segments": segments,
+        "language": str(result.get("language") or ""),
+        "language_probability": float(result.get("language_probability") or 0.0),
+        "duration_seconds": duration_seconds,
+        "engine": str(result.get("engine") or ""),
+        "model": str(result.get("model") or ""),
+        "profile": str(result.get("profile") or ""),
+        "beam_size": 0,
+        "worker": {},
+        "metrics": metrics,
+        **session_payload,
+        "events": result.get("events") if isinstance(result.get("events"), list) else [],
+        "turn_events": result.get("turn_events") if isinstance(result.get("turn_events"), list) else [],
+        "content_type": content_type,
+        "size_bytes": size_bytes,
+        "retention": "metadata_only",
+    }
+
+
 def normalized_segments(value: object, *, enable_commands: bool = False) -> list[dict]:
     segments: list[dict] = []
     if not isinstance(value, list):
@@ -425,17 +627,89 @@ def normalized_segments(value: object, *, enable_commands: bool = False) -> list
     return segments
 
 
-def transcription_metrics(*, result: dict, transcription_seconds: float, duration_seconds: float) -> dict:
+def transcription_metrics(
+    *,
+    result: dict,
+    transcription_seconds: float,
+    duration_seconds: float,
+    request_started: float,
+    body_stage_seconds: float,
+    upstream_body_stage_seconds: float,
+    duration_probe_seconds: float,
+    postprocess_seconds: float,
+) -> dict:
     worker = result.get("worker") if isinstance(result.get("worker"), dict) else {}
     model_load_seconds = float(worker.get("model_load_seconds") or worker.get("startup_model_load_seconds") or 0.0)
     realtime_factor = transcription_seconds / duration_seconds if duration_seconds > 0 else 0.0
+    request_total_seconds = time.monotonic() - request_started + upstream_body_stage_seconds
     return {
-        "transcription_seconds": round(max(0.0, transcription_seconds), 6),
+        "request_total_seconds": rounded_seconds(request_total_seconds),
+        "body_stage_seconds": rounded_seconds(body_stage_seconds),
+        "duration_probe_seconds": rounded_seconds(duration_probe_seconds),
+        "engine_seconds": rounded_seconds(transcription_seconds),
+        "transcription_seconds": rounded_seconds(transcription_seconds),
+        "postprocess_seconds": rounded_seconds(postprocess_seconds),
+        "store_seconds": 0.0,
         "audio_duration_seconds": round(max(0.0, duration_seconds), 6),
         "realtime_factor": round(max(0.0, realtime_factor), 6),
         "cold_start": bool(worker.get("cold_start")),
-        "model_load_seconds": round(max(0.0, model_load_seconds), 6),
+        "model_load_seconds": rounded_seconds(model_load_seconds),
     }
+
+
+def finish_transcription_metrics(
+    metrics: dict,
+    *,
+    request_started: float,
+    upstream_body_stage_seconds: float,
+    store_started: float,
+) -> None:
+    metrics["store_seconds"] = rounded_seconds(time.monotonic() - store_started)
+    metrics["request_total_seconds"] = rounded_seconds(time.monotonic() - request_started + upstream_body_stage_seconds)
+
+
+def rounded_seconds(value: float) -> float:
+    return round(max(0.0, float(value or 0.0)), 6)
+
+
+def body_file_stage_seconds(body: dict) -> float:
+    return rounded_seconds(body.get("_body_file_stage_seconds") or 0.0)
+
+
+def deepgram_dictation_stream_enabled(
+    settings: dict,
+    *,
+    session: dict | None,
+    dictation_mode: bool,
+    conversation_mode: bool,
+) -> bool:
+    if conversation_mode or not session or not dictation_mode:
+        return False
+    return resolve_transcription_engine(settings) == "deepgram" and flux_streaming_supported(settings)
+
+
+def finalized_flux_dictation_chunk_text(result: dict, *, existing_text: str, final: bool) -> str:
+    events = result.get("events") if isinstance(result.get("events"), list) else []
+    finalized_texts = [
+        str(event.get("text") or "").strip()
+        for event in events
+        if isinstance(event, dict) and bool(event.get("is_final")) and str(event.get("text") or "").strip()
+    ]
+    if finalized_texts:
+        return " ".join(finalized_texts).strip()
+    if final:
+        return incremental_transcript_text(existing_text, str(result.get("text") or ""))
+    return ""
+
+
+def incremental_transcript_text(existing_text: str, full_text: str) -> str:
+    existing = normalized_transcript_text(existing_text)
+    full = normalized_transcript_text(full_text)
+    if not full or full == existing:
+        return ""
+    if existing and full.startswith(existing):
+        return full[len(existing) :].strip()
+    return full
 
 
 def public_session_metadata(session_payload: dict) -> dict:

@@ -270,7 +270,16 @@ describe("ComposerDictationButton", () => {
     expect(options).toMatchObject({ dictation: true, language: undefined, profile: "fast" });
     expect(options).not.toHaveProperty("sessionId");
     expect(options).not.toHaveProperty("chunkIndex");
-    expect(onTranscript).toHaveBeenCalledWith("one shot", expect.objectContaining({ text: "one shot" }));
+    expect(onTranscript).toHaveBeenCalledWith(
+      "one shot",
+      expect.objectContaining({
+        metrics: expect.objectContaining({
+          client_stop_to_insert_seconds: expect.any(Number),
+          client_stop_to_text_seconds: expect.any(Number),
+        }),
+        text: "one shot",
+      }),
+    );
   });
 
   it("allows one-shot recordings larger than the old 700 KB cap", async () => {
@@ -338,5 +347,34 @@ describe("ComposerDictationButton", () => {
     expect(onTranscript).not.toHaveBeenCalled();
     expect(onError).toHaveBeenLastCalledWith("Unable to transcribe microphone audio: backend unavailable");
     expect(onError).not.toHaveBeenCalledWith("No speech detected.");
+  });
+
+  it("does not insert full streaming text when chunk text is empty", async () => {
+    const onError = vi.fn();
+    const onTranscript = vi.fn();
+    vi.mocked(transcribeSpeechBlob).mockResolvedValue({ chunk_text: "", language: "en", language_probability: 0.9, text: "partial full text" });
+
+    await act(async () => {
+      root.render(
+        <ComposerDictationButton
+          chunkedDictationSupported
+          disabled={false}
+          onError={onError}
+          onTranscript={onTranscript}
+          providerAppId="speech"
+          providerAvailable
+          supportedContentTypes={["audio/webm"]}
+        />,
+      );
+    });
+
+    const button = container.querySelector("button");
+    await act(async () => {
+      button?.click();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(onTranscript).not.toHaveBeenCalled();
   });
 });

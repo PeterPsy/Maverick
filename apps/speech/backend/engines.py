@@ -11,6 +11,7 @@ import multiprocessing
 import os
 from pathlib import Path
 import queue
+import re
 import shutil
 import signal
 import socket
@@ -1324,11 +1325,10 @@ def faster_whisper_worker_status(data_root: Path, settings: dict | None = None, 
     primary = targets[0]
     _prune_stale_external_worker_files(data_root, current_paths=[target["paths"] for target in targets])
     for target in targets:
-        should_prewarm = ensure_warm and bool(target["prewarm_by_default"])
         target["prewarm"] = (
             _prewarm_external_worker_status(target["config"], target["paths"], target["settings"])
-            if should_prewarm
-            else {"attempted": False, "ok": False, "detail": ""}
+            if ensure_warm
+            else {"attempted": False, "ok": False, "detail": "", "skipped_reason": "not_requested"}
         )
         target["current"] = _worker_file_status(target["paths"])
     return {
@@ -1410,8 +1410,16 @@ def _public_worker_status_target(target: dict) -> dict:
 
 
 def _prewarm_external_worker_status(config: dict, paths: dict[str, Path], settings: dict) -> dict:
-    if not persistent_faster_whisper_worker_enabled() or resolve_transcription_engine(settings) != "faster-whisper":
-        return {"attempted": False, "ok": False, "detail": ""}
+    if not persistent_faster_whisper_worker_enabled():
+        return {"attempted": False, "ok": False, "detail": "", "skipped_reason": "persistent_worker_disabled"}
+    selected_engine = resolve_transcription_engine(settings)
+    if selected_engine != "faster-whisper":
+        return {
+            "attempted": False,
+            "ok": False,
+            "detail": "",
+            "skipped_reason": selected_engine_skip_reason(selected_engine),
+        }
     try:
         _ensure_external_faster_whisper_worker(
             config,
@@ -1425,7 +1433,15 @@ def _prewarm_external_worker_status(config: dict, paths: dict[str, Path], settin
             "ok": False,
             "detail": f"{error.__class__.__name__}: {error}",
         }
-    return {"attempted": True, "ok": True, "detail": ""}
+    return {"attempted": True, "ok": True, "detail": "", "skipped_reason": ""}
+
+
+def selected_engine_skip_reason(selected_engine: object) -> str:
+    engine = str(selected_engine or "").strip().lower()
+    if not engine:
+        return "selected_engine_unavailable"
+    normalized = re.sub(r"[^a-z0-9]+", "_", engine).strip("_")
+    return f"selected_engine_{normalized or 'unavailable'}"
 
 
 def _prune_stale_external_worker_files(data_root: Path, *, current_paths: list[dict[str, Path]]) -> None:

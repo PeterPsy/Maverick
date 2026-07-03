@@ -55,6 +55,7 @@ export function ComposerDictationButton({
   const pendingTranscriptionRef = useRef<Promise<void>>(Promise.resolve());
   const nextChunkIndexRef = useRef(0);
   const stoppingRef = useRef(false);
+  const stopRequestedAtRef = useRef<number | null>(null);
   const totalAudioBytesRef = useRef(0);
   const providerDisabled = !providerAppId || providerAvailable === false;
   const effectiveMaxAudioBytes = Number.isFinite(maxAudioBytes) && maxAudioBytes > 0 ? maxAudioBytes : DEFAULT_MAX_DICTATION_AUDIO_BYTES;
@@ -111,6 +112,7 @@ export function ComposerDictationButton({
       recordingContentTypeRef.current = recorder.mimeType || mimeType || "audio/webm";
       nextChunkIndexRef.current = 0;
       stoppingRef.current = false;
+      stopRequestedAtRef.current = null;
       totalAudioBytesRef.current = 0;
       recorder.ondataavailable = (event) => {
         if (event.data.size > 0) {
@@ -209,7 +211,7 @@ export function ComposerDictationButton({
     });
     if (transcript || result.commands?.length) {
       insertedTranscriptRef.current = true;
-      onTranscript(transcript, result);
+      onTranscript(transcript, withClientDictationMetrics(result, stopRequestedAtRef.current));
     }
   }
 
@@ -247,10 +249,10 @@ export function ComposerDictationButton({
           probability: result.language_probability,
           transcript: result.chunk_text || result.text,
         });
-        const transcript = result.chunk_text ?? result.text ?? "";
+        const transcript = result.chunk_text ?? "";
         if (transcript || result.commands?.length) {
           insertedTranscriptRef.current = true;
-          onTranscript(transcript, result);
+          onTranscript(transcript, withClientDictationMetrics(result, stopRequestedAtRef.current));
         }
       })
       .catch((error) => {
@@ -272,6 +274,9 @@ export function ComposerDictationButton({
   }
 
   function stopCurrentRecording() {
+    if (!stoppingRef.current) {
+      stopRequestedAtRef.current = performance.now();
+    }
     stoppingRef.current = true;
     stopRecorderSafely(recorderRef.current);
   }
@@ -313,6 +318,22 @@ function adaptiveLanguageForRequest(current: AdaptiveLanguageHint): string {
 function newDictationSessionId(): string {
   const random = Math.random().toString(36).slice(2, 10);
   return `chat-${Date.now().toString(36)}-${random}`;
+}
+
+function withClientDictationMetrics(result: SpeechTranscribePayload, stopRequestedAt: number | null): SpeechTranscribePayload {
+  if (stopRequestedAt === null) {
+    return result;
+  }
+  const seconds = Math.max(0, (performance.now() - stopRequestedAt) / 1000);
+  const roundedSeconds = Math.round(seconds * 1_000_000) / 1_000_000;
+  return {
+    ...result,
+    metrics: {
+      ...(result.metrics || {}),
+      client_stop_to_insert_seconds: roundedSeconds,
+      client_stop_to_text_seconds: roundedSeconds,
+    },
+  };
 }
 
 function nextAdaptiveLanguageHint({

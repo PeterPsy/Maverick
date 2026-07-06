@@ -5,6 +5,7 @@ from __future__ import annotations
 import base64
 from contextlib import contextmanager, nullcontext
 from datetime import UTC, datetime
+import hashlib
 import json
 import os
 from pathlib import Path
@@ -57,6 +58,7 @@ CONTENT_TYPE_EXTENSIONS = {
 }
 STT_SESSION_MAX_AGE_SECONDS = 60 * 60
 STT_SESSION_ID_PATTERN = re.compile(r"^[a-zA-Z0-9][a-zA-Z0-9_.:-]{0,79}$")
+STT_SESSION_LOCK_BUCKETS = 256
 MAX_TRANSCRIPTION_SESSION_CHUNKS = 240
 DICTATION_COMMANDS = {
     "new line": {"type": "insert_text", "text": "\n"},
@@ -741,7 +743,7 @@ def validate_audio_size_for_path(size_bytes: int, *, operation: str, allow_small
 
 @contextmanager
 def transcription_session_lock(data_root: Path, session_id: str):
-    lock_path = data_root / "run" / "stt-sessions" / "locks" / f"{session_id}.lock"
+    lock_path = transcription_session_lock_path(data_root, session_id)
     lock_path.parent.mkdir(parents=True, exist_ok=True)
     with lock_path.open("a+", encoding="utf-8") as handle:
         try:
@@ -759,6 +761,12 @@ def transcription_session_lock(data_root: Path, session_id: str):
                 fcntl.flock(handle.fileno(), fcntl.LOCK_UN)
             except ImportError:
                 pass
+
+
+def transcription_session_lock_path(data_root: Path, session_id: str) -> Path:
+    digest = hashlib.blake2s(session_id.encode("utf-8"), digest_size=2).digest()
+    bucket = int.from_bytes(digest, byteorder="big") % STT_SESSION_LOCK_BUCKETS
+    return data_root / "run" / "stt-sessions" / "locks" / f"{bucket:02x}.lock"
 
 
 def validate_transcription_session_limits(data_root: Path, *, session: dict, chunk_size_bytes: int) -> dict:

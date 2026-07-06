@@ -46,7 +46,12 @@ from models import (
 from service import app_events_for_action, handle_action, operations_manifest
 from store import append_job, read_jobs, write_settings
 from synthesis import evict_synthesis_cache, read_cached_synthesis
-from transcription import MAX_TRANSCRIPTION_SESSION_CHUNKS, cleaned_transcript
+from transcription import (
+    MAX_TRANSCRIPTION_SESSION_CHUNKS,
+    STT_SESSION_LOCK_BUCKETS,
+    cleaned_transcript,
+    transcription_session_lock,
+)
 
 
 def _write_fake_faster_whisper_module(root: Path) -> None:
@@ -1242,6 +1247,19 @@ class SpeechAppTests(unittest.TestCase):
         self.assertIn("chunk_index", str(errors[0]))
         self.assertEqual(provider_calls, 1)
         self.assertEqual(session_state["chunk_count"], 1)
+
+    def test_transcription_session_lock_uses_bounded_bucket_files(self) -> None:
+        with TemporaryDirectory() as temp_dir:
+            data_root = Path(temp_dir) / "data"
+            for index in range(STT_SESSION_LOCK_BUCKETS + 32):
+                with transcription_session_lock(data_root, f"chat-session-{index}"):
+                    pass
+
+            lock_dir = data_root / "run" / "stt-sessions" / "locks"
+            lock_files = list(lock_dir.glob("*.lock"))
+            self.assertLessEqual(len(lock_files), STT_SESSION_LOCK_BUCKETS)
+            self.assertGreater(len(lock_files), 1)
+            self.assertFalse((lock_dir / "chat-session-0.lock").exists())
 
     def test_transcribe_audio_dictation_flux_rejects_session_chunk_overflow_before_provider(self) -> None:
         audio = b"x" * 256

@@ -7,7 +7,7 @@ from unittest.mock import Mock, patch
 
 from core.providers.models import ProviderSelection, RuntimeBackendLaunchSpec
 from core.providers.provider_codex import build_codex_definition
-from core.runtime.service import create_runtime_session
+from core.runtime.service import create_runtime_session, queue_runtime_turn
 from core.runtime.store import RuntimeCollections, RuntimeDocumentStore
 from core.runtime.turn_submission import prewarm_runtime_session_async, submit_runtime_turn_async
 from core.runtime.turn_submission_launch_cache import clear_cached_runtime_launch_context
@@ -78,6 +78,89 @@ class TurnSubmissionLaunchSpecTestCase(unittest.TestCase):
 
         prewarm.assert_called_once()
         self.assertEqual(prewarm.call_args.kwargs["session"].session_id, session.session_id)
+
+    def test_prewarm_runs_with_queued_turn_before_execution(self) -> None:
+        repo_root = make_temp_repo_root(self)
+        runtime_store = _runtime_store()
+        session = create_runtime_session(
+            runtime_store,
+            session_id="sess-prewarm-with-queued-turn",
+            workspace_id="default",
+            agent_id="agent-1",
+            start_path=repo_root,
+        )
+        queue_runtime_turn(runtime_store, turn_id="turn-queued", session_id=session.session_id, input_text="hello")
+        provider = build_codex_definition()
+        adapter = _FakeRuntimeAdapter()
+        launch_spec = _launch_spec(session)
+        state = SimpleNamespace(
+            provider_store=SimpleNamespace(),
+            runtime_store=runtime_store,
+            runtime_event_bus=None,
+            repository_root=repo_root,
+        )
+
+        with patch("core.runtime.turn_submission_service_runtime.Thread", _ImmediateThread), patch(
+            "core.runtime.turn_submission_service_runtime.resolve_runtime_backend_for_session",
+            Mock(return_value=(provider, None, adapter)),
+        ), patch(
+            "core.runtime.turn_submission_service_runtime._build_launch_spec_for_execution",
+            Mock(return_value=(launch_spec, {})),
+        ), patch(
+            "core.providers.codex_app_server.prewarm_codex_app_server_runtime",
+            Mock(return_value="provider-thread-queued"),
+        ) as prewarm_runtime:
+            prewarm_runtime_session_async(state, session=session)
+
+        prewarm_runtime.assert_called_once()
+        updated = runtime_store.get_session(session.session_id)
+        self.assertEqual(updated.provider_thread_id, "provider-thread-queued")
+
+    def test_async_worker_waits_for_session_prewarm_before_execution(self) -> None:
+        repo_root = make_temp_repo_root(self)
+        runtime_store = _runtime_store()
+        session = create_runtime_session(
+            runtime_store,
+            session_id="sess-wait-for-prewarm",
+            workspace_id="default",
+            agent_id="agent-1",
+            start_path=repo_root,
+        )
+        adapter = _FakeRuntimeAdapter()
+        provider = build_codex_definition()
+        launch_spec = _launch_spec(session)
+        calls: list[str] = []
+        state = SimpleNamespace(
+            provider_store=SimpleNamespace(),
+            runtime_store=runtime_store,
+            runtime_event_bus=None,
+            runtime_thread_event_bus=None,
+            repository_root=repo_root,
+        )
+
+        def wait_for_prewarm(session_id: str) -> bool:
+            calls.append(f"wait:{session_id}")
+            return True
+
+        def execute_turn(**_kwargs):
+            calls.append("execute")
+            return SimpleNamespace(output_text="done", exit_code=0)
+
+        with patch.dict(
+            submit_runtime_turn_async.__globals__,
+            {
+                "Thread": _ImmediateThread,
+                "_wait_for_session_prewarm": wait_for_prewarm,
+                "resolve_runtime_backend_for_session": Mock(return_value=(provider, None, adapter)),
+                "_build_launch_spec_for_execution": Mock(return_value=(launch_spec, {})),
+                "execute_runtime_turn": execute_turn,
+                "release_idle_runtime_processes": Mock(return_value=0),
+            },
+        ), patch("core.runtime.turn_submission_service_queue.schedule_runtime_thread_title_generation"):
+            turn, _events = submit_runtime_turn_async(state, session=session, input_text="hello")
+
+        self.assertEqual(runtime_store.get_turn(turn.turn_id).status, "completed")
+        self.assertEqual(calls[:2], [f"wait:{session.session_id}", "execute"])
 
     def test_execution_launch_spec_uses_resolved_runtime_adapter(self) -> None:
         repo_root = make_temp_repo_root(self)

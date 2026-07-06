@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from contextlib import suppress
 from dataclasses import replace
-from threading import Lock, Thread, Timer
+from threading import Event, Lock, Thread, Timer
 import time
 from typing import TYPE_CHECKING, Callable
 from uuid import uuid4
@@ -40,64 +40,77 @@ _SESSION_EXECUTION_LOCKS_LOCK = Lock()
 _ACTIVE_TURN_STATUSES = {"queued", "active"}
 _IDLE_RUNTIME_REAP_TTL_SECONDS = 180.0
 _PREWARM_AFTER_TURN_DELAY_SECONDS = 0.05
+_PREWARM_JOIN_TIMEOUT_SECONDS = 2.0
 _IDLE_REAP_TIMERS: dict[str, Timer] = {}
 _IDLE_REAP_TIMERS_LOCK = Lock()
+_PREWARM_COMPLETIONS: dict[str, Event] = {}
+_PREWARM_COMPLETIONS_LOCK = Lock()
 
 
 def prewarm_runtime_session_async(state: PlatformState, *, session: RuntimeSessionRecord) -> None:
     """Best-effort warmup for Codex runtime process and provider thread."""
     if runtime_session_is_plain_hosted_chat(session):
         return
-    if _session_has_active_turn(state, session.session_id):
+    if _session_has_executing_turn(state, session.session_id):
+        return
+    completion = _register_session_prewarm(session.session_id)
+    if completion is None:
         return
 
     def worker() -> None:
-        lock = _session_execution_lock(session.session_id)
-        if not lock.acquire(blocking=False):
-            return
         try:
-            if _session_has_active_turn(state, session.session_id):
+            lock = _session_execution_lock(session.session_id)
+            if not lock.acquire(blocking=False):
                 return
-            current_session = state.runtime_store.get_session(session.session_id)
-            if runtime_session_is_plain_hosted_chat(current_session):
-                return
-            provider, selection, runtime_adapter = resolve_runtime_backend_for_session(
-                state.provider_store,
-                session=current_session,
-            )
-            if provider.provider_id != "codex":
-                return
-            if current_session.provider_id != provider.provider_id:
-                current_session = state.runtime_store.save_session(replace(current_session, provider_id=provider.provider_id))
-            launch_spec, _metadata = _build_launch_spec_for_execution(
-                state,
-                session=current_session,
-                provider_id=provider.provider_id,
-                provider_definition=provider,
-                provider_selection=selection,
-                runtime_adapter=runtime_adapter,
-            )
-            if launch_spec is None or _session_has_active_turn(state, session.session_id):
-                return
-            from core.providers.codex_app_server import prewarm_codex_app_server_runtime
-
-            provider_thread_id = prewarm_codex_app_server_runtime(
-                session=current_session,
-                launch_spec=launch_spec,
-            )
-            if provider_thread_id and provider_thread_id != (current_session.provider_thread_id or ""):
-                _record_provider_thread_id(
+            try:
+                if _session_has_executing_turn(state, session.session_id):
+                    return
+                current_session = state.runtime_store.get_session(session.session_id)
+                if runtime_session_is_plain_hosted_chat(current_session):
+                    return
+                provider, selection, runtime_adapter = resolve_runtime_backend_for_session(
+                    state.provider_store,
+                    session=current_session,
+                )
+                if provider.provider_id != "codex":
+                    return
+                if current_session.provider_id != provider.provider_id:
+                    current_session = state.runtime_store.save_session(replace(current_session, provider_id=provider.provider_id))
+                launch_spec, _metadata = _build_launch_spec_for_execution(
                     state,
                     session=current_session,
                     provider_id=provider.provider_id,
-                    provider_thread_id=provider_thread_id,
+                    provider_definition=provider,
+                    provider_selection=selection,
+                    runtime_adapter=runtime_adapter,
                 )
+                if launch_spec is None or _session_has_executing_turn(state, session.session_id):
+                    return
+                from core.providers.codex_app_server import prewarm_codex_app_server_runtime
+
+                provider_thread_id = prewarm_codex_app_server_runtime(
+                    session=current_session,
+                    launch_spec=launch_spec,
+                )
+                if provider_thread_id and provider_thread_id != (current_session.provider_thread_id or ""):
+                    _record_provider_thread_id(
+                        state,
+                        session=current_session,
+                        provider_id=provider.provider_id,
+                        provider_thread_id=provider_thread_id,
+                    )
+            finally:
+                lock.release()
         except Exception:
             return
         finally:
-            lock.release()
+            _complete_session_prewarm(session.session_id, completion)
 
-    Thread(target=worker, name=f"maverick-runtime-prewarm-{session.session_id}", daemon=True).start()
+    try:
+        Thread(target=worker, name=f"maverick-runtime-prewarm-{session.session_id}", daemon=True).start()
+    except Exception:
+        _complete_session_prewarm(session.session_id, completion)
+        raise
 
 
 def schedule_runtime_session_prewarm(
@@ -109,11 +122,11 @@ def schedule_runtime_session_prewarm(
     """Schedule best-effort prewarm for the next turn after the current worker releases its lock."""
     if runtime_session_is_plain_hosted_chat(session):
         return
-    if _session_has_active_turn(state, session.session_id):
+    if _session_has_executing_turn(state, session.session_id):
         return
 
     def run() -> None:
-        if _session_has_active_turn(state, session.session_id):
+        if _session_has_executing_turn(state, session.session_id):
             return
         with suppress(Exception):
             current_session = state.runtime_store.get_session(session.session_id)
@@ -124,10 +137,35 @@ def schedule_runtime_session_prewarm(
     timer.start()
 
 
-def _session_has_active_turn(state: PlatformState, session_id: str) -> bool:
+def _session_has_executing_turn(state: PlatformState, session_id: str) -> bool:
     with suppress(Exception):
-        return any(turn.status in _ACTIVE_TURN_STATUSES for turn in state.runtime_store.list_turns(session_id))
+        return any(turn.status == "active" for turn in state.runtime_store.list_turns(session_id))
     return True
+
+
+def _register_session_prewarm(session_id: str) -> Event | None:
+    with _PREWARM_COMPLETIONS_LOCK:
+        existing = _PREWARM_COMPLETIONS.get(session_id)
+        if existing is not None and not existing.is_set():
+            return None
+        completion = Event()
+        _PREWARM_COMPLETIONS[session_id] = completion
+        return completion
+
+
+def _complete_session_prewarm(session_id: str, completion: Event) -> None:
+    completion.set()
+    with _PREWARM_COMPLETIONS_LOCK:
+        if _PREWARM_COMPLETIONS.get(session_id) is completion:
+            _PREWARM_COMPLETIONS.pop(session_id, None)
+
+
+def _wait_for_session_prewarm(session_id: str, *, timeout_seconds: float = _PREWARM_JOIN_TIMEOUT_SECONDS) -> bool:
+    with _PREWARM_COMPLETIONS_LOCK:
+        completion = _PREWARM_COMPLETIONS.get(session_id)
+    if completion is None:
+        return False
+    return completion.wait(max(0.0, timeout_seconds))
 
 
 def submit_runtime_turn_async(
@@ -169,6 +207,8 @@ def submit_runtime_turn_async(
         force_idle_reap = False
         worker_provider_id = queue_provider_id
         prewarm_after_turn = False
+        if not plain_hosted:
+            _wait_for_session_prewarm(session.session_id)
         with _session_execution_lock(session.session_id):
             _debug_log_runtime_turn(
                 state,

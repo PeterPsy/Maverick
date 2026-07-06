@@ -23,6 +23,7 @@ from core.runtime.runtime_events import RuntimeEventRecord
 from core.runtime.runtime_session import RuntimeSessionRecord
 from core.runtime.runtime_turns import RuntimeTurnRecord
 from core.runtime.service import transition_runtime_turn
+from core.runtime.turn_submission_service_runtime import _wait_for_session_prewarm
 
 if TYPE_CHECKING:
     from core.api.platform_state import PlatformState
@@ -81,6 +82,8 @@ def submit_runtime_turn(
             failed = transition_runtime_turn(state.runtime_store, turn_id=turn.turn_id, target_status="failed", failure_reason=str(error))
             _record_turn_failed(state, session_id=session.session_id, turn_id=failed.turn_id, provider_id=provider_id, error=str(error))
             raise
+    if not plain_hosted:
+        _wait_for_session_prewarm(session.session_id)
     turn = transition_runtime_turn(state.runtime_store, turn_id=turn.turn_id, target_status="active")
     events.append(_record_turn_started(state, session_id=session.session_id, turn_id=turn.turn_id, provider_id=provider_id))
     events.append(_record_turn_worker_started(state, session_id=session.session_id, turn_id=turn.turn_id, provider_id=provider_id))

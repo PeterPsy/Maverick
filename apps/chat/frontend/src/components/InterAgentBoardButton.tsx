@@ -21,7 +21,6 @@ export function InterAgentBoardButton({
       type="button"
     >
       {state === "live" ? <LiveBoardButtonGlow /> : null}
-      {state === "pending" ? <span aria-hidden="true" className="chatapp-inter-agent-board-button__pending-dot" /> : null}
       <span aria-hidden="true" className="material-symbols-rounded chatapp-inter-agent-board-button__icon">
         account_tree
       </span>

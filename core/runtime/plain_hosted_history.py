@@ -13,6 +13,7 @@ DEFAULT_MAX_HISTORY_TURNS = 20
 DEFAULT_MAX_HISTORY_CHARS = 80_000
 HISTORY_TURN_SCAN_MULTIPLIER = 4
 HISTORY_EVENT_SCAN_MULTIPLIER = 50
+HISTORY_EVENT_PAGE_LIMIT = 500
 
 
 @dataclass(frozen=True)
@@ -62,7 +63,13 @@ def _completed_history_pairs(
         if turn.status == "completed" and turn.turn_id != current_turn_id and _non_empty_text(turn.input_text)
     ]
     completed_turns.sort(key=lambda turn: (turn.created_at, turn.turn_id))
-    final_outputs = _latest_final_outputs_by_turn(runtime_store.list_recent_events(session_id, limit=event_scan_limit))
+    final_outputs = _final_outputs_for_completed_turns(
+        runtime_store,
+        session_id=session_id,
+        completed_turn_ids=[turn.turn_id for turn in completed_turns],
+        event_scan_limit=event_scan_limit,
+        max_event_pages=bounded_turns,
+    )
     pairs = [
         _HistoryPair(
             turn_created_at=turn.created_at,
@@ -76,10 +83,78 @@ def _completed_history_pairs(
     return pairs[-bounded_turns:]
 
 
-def _latest_final_outputs_by_turn(events: list[Any]) -> dict[str, str]:
+def _final_outputs_for_completed_turns(
+    runtime_store,
+    *,
+    session_id: str,
+    completed_turn_ids: list[str],
+    event_scan_limit: int,
+    max_event_pages: int,
+) -> dict[str, str]:
+    if not completed_turn_ids:
+        return {}
+    target_turn_ids = set(completed_turn_ids)
+    recent_events = runtime_store.list_recent_events(session_id, limit=event_scan_limit)
+    final_outputs = _latest_final_outputs_by_turn(recent_events, target_turn_ids=target_turn_ids)
+    missing_turn_ids = target_turn_ids.difference(final_outputs)
+    if not missing_turn_ids:
+        return final_outputs
+    paged_outputs = _paged_final_outputs_by_turn(
+        runtime_store,
+        session_id=session_id,
+        missing_turn_ids=missing_turn_ids,
+        before_event_id=_oldest_event_id(recent_events),
+        page_limit=min(max(1, event_scan_limit), HISTORY_EVENT_PAGE_LIMIT),
+        max_pages=max_event_pages,
+    )
+    return {**final_outputs, **paged_outputs}
+
+
+def _paged_final_outputs_by_turn(
+    runtime_store,
+    *,
+    session_id: str,
+    missing_turn_ids: set[str],
+    before_event_id: str | None,
+    page_limit: int,
+    max_pages: int,
+) -> dict[str, str]:
+    list_event_page = getattr(runtime_store, "list_event_page", None)
+    if not callable(list_event_page) or not missing_turn_ids or max_pages <= 0:
+        return {}
+    found: dict[str, str] = {}
+    cursor = before_event_id
+    for _ in range(max_pages):
+        page = list_event_page(session_id, before_event_id=cursor, limit=page_limit)
+        events = list(getattr(page, "events", []) or [])
+        if not events:
+            break
+        page_outputs = _latest_final_outputs_by_turn(events, target_turn_ids=missing_turn_ids)
+        for turn_id, assistant_text in page_outputs.items():
+            if turn_id not in found:
+                found[turn_id] = assistant_text
+        missing_turn_ids = missing_turn_ids.difference(found)
+        if not missing_turn_ids:
+            break
+        cursor = getattr(page, "oldest_event_id", None) or _oldest_event_id(events)
+        if not cursor or not bool(getattr(page, "has_more_before", False)):
+            break
+    return found
+
+
+def _oldest_event_id(events: list[Any]) -> str | None:
+    if not events:
+        return None
+    oldest = min(events, key=lambda event: (event.created_at, event.event_id))
+    return oldest.event_id
+
+
+def _latest_final_outputs_by_turn(events: list[Any], *, target_turn_ids: set[str] | None = None) -> dict[str, str]:
     candidates: dict[str, tuple[datetime, str, str]] = {}
     for event in events:
         if event.event_type != "runtime.output.final" or not event.turn_id:
+            continue
+        if target_turn_ids is not None and event.turn_id not in target_turn_ids:
             continue
         assistant_text = _final_event_complete_text(event.payload)
         if not _non_empty_text(assistant_text):

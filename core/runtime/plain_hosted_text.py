@@ -29,6 +29,7 @@ from core.runtime.runtime_session import RuntimeSessionRecord
 
 
 HOSTED_TEXT_RUNTIME_PROVIDER_ID = "hosted-text-runtime"
+MAX_PLAIN_HOSTED_ATTACHMENT_BYTES = 25 * 1024 * 1024
 DEFAULT_HOSTED_TEXT_MAX_OUTPUT_TOKENS = 4096
 
 
@@ -153,6 +154,7 @@ def _hosted_provider_sent_sink(
                 **metadata,
                 "provider_id": decision.selected_provider_id or "",
                 "model_id": decision.selected_model_id_or_voice_id or "",
+                "acceptance_slo_scope": "hosted_http_provider",
             }
         )
 
@@ -173,6 +175,7 @@ def _hosted_provider_accepted_sink(
                 **metadata,
                 "provider_id": decision.selected_provider_id or "",
                 "model_id": decision.selected_model_id_or_voice_id or "",
+                "acceptance_slo_scope": "hosted_http_provider",
             }
         )
 
@@ -244,7 +247,7 @@ def _attachment_content_part(
     path = _local_attachment_path(workspace_root=workspace_root, relative_path=relative_path)
     if not path.is_file():
         raise HostedTextGenerationError("plain_hosted_chat_attachment_unavailable")
-    raw = path.read_bytes()
+    raw = _read_bounded_attachment_bytes(path)
     mime_type = content_type or mimetypes.guess_type(path.name)[0] or "application/octet-stream"
     encoded = base64.b64encode(raw).decode("ascii")
     if mime_type.startswith("image/"):
@@ -293,6 +296,23 @@ def _attachment_modality(content_type: str) -> str:
     }:
         return "spreadsheet"
     return "file"
+
+
+def _read_bounded_attachment_bytes(path: Path) -> bytes:
+    try:
+        size_bytes = path.stat().st_size
+    except OSError as error:
+        raise HostedTextGenerationError("plain_hosted_chat_attachment_unavailable") from error
+    if size_bytes > MAX_PLAIN_HOSTED_ATTACHMENT_BYTES:
+        raise HostedTextGenerationError("plain_hosted_chat_attachment_too_large")
+    try:
+        with path.open("rb") as handle:
+            raw = handle.read(MAX_PLAIN_HOSTED_ATTACHMENT_BYTES + 1)
+    except OSError as error:
+        raise HostedTextGenerationError("plain_hosted_chat_attachment_unavailable") from error
+    if len(raw) > MAX_PLAIN_HOSTED_ATTACHMENT_BYTES:
+        raise HostedTextGenerationError("plain_hosted_chat_attachment_too_large")
+    return raw
 
 
 def _safe_workspace_relative_path(value: str) -> str:

@@ -50,6 +50,12 @@ METRIC_NAMES = (
 COHORT_NAMES = ("codex_cold", "codex_warm", "plain_hosted", "other_provider")
 CODEX_PROVIDER_ID = "codex"
 HOSTED_TEXT_RUNTIME_PROVIDER_ID = "hosted-text-runtime"
+SLO_SCOPE_BY_COHORT = {
+    "codex_cold": "codex_runtime_cold",
+    "codex_warm": "codex_runtime_warm",
+    "plain_hosted": "hosted_http_provider",
+    "other_provider": "other_provider",
+}
 
 
 @dataclass(frozen=True)
@@ -142,7 +148,7 @@ def build_report(
         filtered = filtered[-limit_turns:]
 
     cohorts = {
-        cohort_name: _summarize_cohort([item for item in filtered if item.cohort == cohort_name])
+        cohort_name: _summarize_cohort(cohort_name, [item for item in filtered if item.cohort == cohort_name])
         for cohort_name in COHORT_NAMES
     }
     report: dict[str, Any] = {
@@ -165,6 +171,10 @@ def build_report(
         "cohorts": cohorts,
         "notes": [
             "codex_cold uses ensure_runtime_ms or ensure_provider_thread_ms at/above the configured threshold when those spans exist; otherwise it falls back to the first observed Codex provider turn in a session.",
+            (
+                "plain_hosted has slo_scope=hosted_http_provider because provider acceptance can include "
+                "external hosted HTTP network latency."
+            ),
             "receive_to_provider_accepted_ms is reconstructed as receive_to_queued_ms plus queued_to_provider_accepted_ms when both components are available.",
             "The report intentionally omits input text and provider payload bodies beyond numeric latency spans.",
         ],
@@ -228,7 +238,10 @@ def print_human_report(report: dict[str, Any]) -> None:
     for cohort_name in COHORT_NAMES:
         cohort = report["cohorts"][cohort_name]
         print("")
-        print(f"{cohort_name}: {cohort['turn_count']} turns across {cohort['session_count']} sessions")
+        print(
+            f"{cohort_name}: {cohort['turn_count']} turns across "
+            f"{cohort['session_count']} sessions (slo_scope={cohort['slo_scope']})"
+        )
         for metric_name in METRIC_NAMES:
             metric = cohort["metrics"].get(metric_name)
             if not metric:
@@ -563,13 +576,14 @@ def _codex_cold_signal(metrics: dict[str, float], *, threshold_ms: float) -> boo
     return any(value >= threshold_ms for value in numeric_values)
 
 
-def _summarize_cohort(observations: list[TurnObservation]) -> dict[str, Any]:
+def _summarize_cohort(cohort_name: str, observations: list[TurnObservation]) -> dict[str, Any]:
     metric_summaries = {}
     for metric_name in METRIC_NAMES:
         values = [item.metrics[metric_name] for item in observations if metric_name in item.metrics]
         if values:
             metric_summaries[metric_name] = _summarize_values(values)
     return {
+        "slo_scope": SLO_SCOPE_BY_COHORT.get(cohort_name, cohort_name),
         "turn_count": len(observations),
         "session_count": len({(item.workspace_id, item.session_id) for item in observations}),
         "metrics": metric_summaries,

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
+from types import SimpleNamespace
 import unittest
 
 from core.runtime.plain_hosted_history import build_plain_hosted_message_history
@@ -9,11 +10,19 @@ from core.runtime.runtime_turns import RuntimeTurnRecord
 
 
 class StubRuntimeStore:
-    def __init__(self, turns: list[RuntimeTurnRecord], events: list[RuntimeEventRecord]) -> None:
+    def __init__(
+        self,
+        turns: list[RuntimeTurnRecord],
+        events: list[RuntimeEventRecord],
+        *,
+        event_pages: list[list[RuntimeEventRecord]] | None = None,
+    ) -> None:
         self.turns = turns
         self.events = events
+        self.event_pages = list(event_pages or [])
         self.recent_turn_limits: list[int] = []
         self.recent_event_limits: list[int] = []
+        self.event_page_requests: list[tuple[str | None, int]] = []
 
     def list_turns(self, session_id: str) -> list[RuntimeTurnRecord]:
         raise AssertionError("plain hosted history must use bounded turn reads")
@@ -28,6 +37,15 @@ class StubRuntimeStore:
     def list_recent_events(self, session_id: str, *, limit: int) -> list[RuntimeEventRecord]:
         self.recent_event_limits.append(limit)
         return [event for event in self.events if event.session_id == session_id]
+
+    def list_event_page(self, session_id: str, *, before_event_id: str | None = None, limit: int = 200):
+        self.event_page_requests.append((before_event_id, limit))
+        events = self.event_pages.pop(0) if self.event_pages else []
+        return SimpleNamespace(
+            events=[event for event in events if event.session_id == session_id],
+            has_more_before=bool(self.event_pages),
+            oldest_event_id=events[0].event_id if events else None,
+        )
 
 
 class PlainHostedHistoryTest(unittest.TestCase):
@@ -60,6 +78,19 @@ class PlainHostedHistoryTest(unittest.TestCase):
             turn_id=turn_id,
             process_id=None,
             payload={"text": "stream suffix", "complete_text": text},
+            created_at=self.now + timedelta(minutes=minutes),
+        )
+
+    def delta_event(self, turn_id: str, minutes: int, event_id: str, text: str) -> RuntimeEventRecord:
+        return RuntimeEventRecord(
+            event_id=event_id,
+            workspace_id="default",
+            session_id="session-1",
+            plane="turn",
+            event_type="runtime.output.delta",
+            turn_id=turn_id,
+            process_id=None,
+            payload={"text": text},
             created_at=self.now + timedelta(minutes=minutes),
         )
 
@@ -105,6 +136,25 @@ class PlainHostedHistoryTest(unittest.TestCase):
         )
 
         self.assertEqual(messages[1].content, "newer answer")
+
+    def test_pages_older_events_when_recent_tail_loses_final_output(self) -> None:
+        store = StubRuntimeStore(
+            turns=[self.turn("turn-1", 1, input_text="first")],
+            events=[self.delta_event("turn-noisy", 3, "tail-1", "noise")],
+            event_pages=[[self.final_event("turn-1", 1, "event-1", "answer one")]],
+        )
+
+        messages = build_plain_hosted_message_history(
+            store,
+            session_id="session-1",
+            current_turn_id="turn-current",
+            current_input_text="current",
+            max_history_turns=1,
+        )
+
+        self.assertEqual([message.content for message in messages], ["first", "answer one", "current"])
+        self.assertEqual(store.recent_event_limits, [50])
+        self.assertEqual(store.event_page_requests, [("tail-1", 50)])
 
     def test_excludes_non_completed_current_and_incomplete_turns(self) -> None:
         store = StubRuntimeStore(

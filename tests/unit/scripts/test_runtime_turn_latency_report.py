@@ -65,6 +65,7 @@ class RuntimeTurnLatencyReportTestCase(unittest.TestCase):
         self.assertEqual(report["cohorts"]["codex_cold"]["turn_count"], 1)
         self.assertEqual(report["cohorts"]["codex_warm"]["turn_count"], 1)
         self.assertEqual(report["cohorts"]["plain_hosted"]["turn_count"], 1)
+        self.assertEqual(report["cohorts"]["plain_hosted"]["slo_scope"], "hosted_http_provider")
         cold_metrics = report["cohorts"]["codex_cold"]["metrics"]
         warm_metrics = report["cohorts"]["codex_warm"]["metrics"]
         hosted_metrics = report["cohorts"]["plain_hosted"]["metrics"]

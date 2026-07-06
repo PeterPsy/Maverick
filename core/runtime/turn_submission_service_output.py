@@ -96,7 +96,7 @@ def _record_provider_turn_start_sent(
 ) -> RuntimeEventRecord:
     payload: dict[str, object] = {"provider_id": provider_id, "runtime_mode": runtime_mode}
     for key, value in (metadata or {}).items():
-        if key in {"provider_thread_id", "provider_turn_id", "model_id", "source", "request_id"} and value is not None and value != "":
+        if key in {"provider_thread_id", "provider_turn_id", "model_id", "source", "request_id", "acceptance_slo_scope"} and value is not None and value != "":
             payload[key] = value
         elif key.endswith("_ms") and isinstance(value, int | float):
             payload[key] = round(float(value), 3)
@@ -128,7 +128,7 @@ def _record_provider_accepted(
         payload["turn_start_to_ack_ms"] = round(elapsed_ms, 3)
         payload["elapsed_from"] = "provider_turn_start_sent"
     for key, value in (metadata or {}).items():
-        if key in {"provider_thread_id", "provider_turn_id", "model_id", "status_code", "source"} and value is not None and value != "":
+        if key in {"provider_thread_id", "provider_turn_id", "model_id", "status_code", "source", "acceptance_slo_scope"} and value is not None and value != "":
             payload[key] = value
         elif key.endswith("_ms") and isinstance(value, int | float):
             payload[key] = round(float(value), 3)

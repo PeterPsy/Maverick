@@ -35,6 +35,7 @@ class _CodexAppServerRuntime:
     process: subprocess.Popen
     request_lock: threading.Lock = field(default_factory=threading.Lock)
     event_lock: threading.Lock = field(default_factory=threading.Lock)
+    provider_thread_lock: threading.Lock = field(default_factory=threading.Lock)
     response_waiters: dict[int, queue.Queue] = field(default_factory=dict)
     next_request_id: int = 1
     provider_thread_id: str | None = None
@@ -52,6 +53,18 @@ class _CodexAppServerRuntime:
 
 _RUNTIMES: dict[str, _CodexAppServerRuntime] = {}
 _RUNTIMES_LOCK = threading.Lock()
+
+
+def prewarm_codex_app_server_runtime(
+    *,
+    session: RuntimeSessionRecord,
+    launch_spec: RuntimeBackendLaunchSpec,
+    command_runner=subprocess.Popen,
+) -> str:
+    """Start the Codex app-server and bind a provider thread before the next turn."""
+    runtime = _ensure_runtime(session=session, launch_spec=launch_spec, command_runner=command_runner)
+    _remove_generated_system_skills(launch_spec=launch_spec, session=session)
+    return _ensure_provider_thread(runtime=runtime, session=session, launch_spec=launch_spec, on_provider_thread_id=None)
 
 
 

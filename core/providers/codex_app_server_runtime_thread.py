@@ -64,25 +64,26 @@ def _ensure_provider_thread(
     launch_spec: RuntimeBackendLaunchSpec,
     on_provider_thread_id: Callable[[str], None] | None,
 ) -> str:
-    if runtime.provider_thread_id:
-        return runtime.provider_thread_id
-    existing_thread_id = str(session.provider_thread_id or "").strip()
-    params = _thread_params(session=session, launch_spec=launch_spec)
-    if existing_thread_id:
-        try:
-            result = _send_request(runtime, "thread/resume", {"threadId": existing_thread_id, **params}, timeout=20.0)
-        except RuntimeError:
+    with runtime.provider_thread_lock:
+        if runtime.provider_thread_id:
+            return runtime.provider_thread_id
+        existing_thread_id = str(session.provider_thread_id or "").strip()
+        params = _thread_params(session=session, launch_spec=launch_spec)
+        if existing_thread_id:
+            try:
+                result = _send_request(runtime, "thread/resume", {"threadId": existing_thread_id, **params}, timeout=20.0)
+            except RuntimeError:
+                result = _send_request(runtime, "thread/start", params, timeout=20.0)
+        else:
             result = _send_request(runtime, "thread/start", params, timeout=20.0)
-    else:
-        result = _send_request(runtime, "thread/start", params, timeout=20.0)
-    thread = result.get("thread") if isinstance(result.get("thread"), dict) else {}
-    provider_thread_id = str(thread.get("id") or existing_thread_id).strip()
-    if not provider_thread_id:
-        raise RuntimeError("Codex app-server did not return a provider thread id.")
-    runtime.provider_thread_id = provider_thread_id
-    if on_provider_thread_id is not None and provider_thread_id != existing_thread_id:
-        on_provider_thread_id(provider_thread_id)
-    return provider_thread_id
+        thread = result.get("thread") if isinstance(result.get("thread"), dict) else {}
+        provider_thread_id = str(thread.get("id") or existing_thread_id).strip()
+        if not provider_thread_id:
+            raise RuntimeError("Codex app-server did not return a provider thread id.")
+        runtime.provider_thread_id = provider_thread_id
+        if on_provider_thread_id is not None and provider_thread_id != existing_thread_id:
+            on_provider_thread_id(provider_thread_id)
+        return provider_thread_id
 
 
 

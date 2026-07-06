@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime
+import hashlib
+import json
 import os
 from pathlib import Path
 import shutil
@@ -35,6 +37,7 @@ CODEX_MANAGED_RUNTIME_FEATURES = {
     "plugins": False,
     "skill_mcp_dependency_install": False,
 }
+CODEX_SKILL_MANIFEST_FILE = ".maverick_skill_manifest.json"
 
 
 def utcnow() -> datetime:
@@ -135,6 +138,59 @@ def _default_reasoning_effort(option: ProviderModelOption | None) -> str | None:
 
 
 
+def _skill_manifest(skills: list["SkillDefinition"]) -> dict[str, object]:
+    """Build a content manifest for the selected workspace skill set."""
+    items: list[dict[str, str]] = []
+    for skill in sorted(skills, key=lambda item: item.skill_id):
+        source_root = Path(skill.source_root).resolve()
+        items.append(
+            {
+                "skill_id": skill.skill_id,
+                "source_root": str(source_root),
+                "content_hash": _directory_content_hash(source_root),
+            }
+        )
+    digest = hashlib.sha256(json.dumps(items, sort_keys=True, separators=(",", ":")).encode("utf-8")).hexdigest()
+    return {"version": 1, "hash": digest, "skills": items}
+
+
+def _directory_content_hash(root: Path) -> str:
+    digest = hashlib.sha256()
+    if not root.exists():
+        digest.update(b"missing")
+        digest.update(str(root).encode("utf-8"))
+        return digest.hexdigest()
+    for path in sorted(item for item in root.rglob("*") if item.is_file()):
+        digest.update(path.relative_to(root).as_posix().encode("utf-8"))
+        digest.update(b"\0")
+        digest.update(path.read_bytes())
+        digest.update(b"\0")
+    return digest.hexdigest()
+
+
+def _skill_manifest_current(manifest_path: Path, manifest: dict[str, object], skills_root: Path) -> bool:
+    try:
+        current = json.loads(manifest_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return False
+    if current != manifest:
+        return False
+    skill_items = manifest.get("skills")
+    if not isinstance(skill_items, list):
+        return False
+    for item in skill_items:
+        if not isinstance(item, dict):
+            return False
+        skill_id = str(item.get("skill_id") or "").strip()
+        if not skill_id or not skills_root.joinpath(*skill_id.split(".")).is_dir():
+            return False
+    return True
+
+
+def _write_skill_manifest(manifest_path: Path, manifest: dict[str, object]) -> None:
+    manifest_path.write_text(json.dumps(manifest, sort_keys=True, separators=(",", ":")) + "\n", encoding="utf-8")
+
+
 class CodexLaunchMixin:
     def validate_backend(self) -> None:
         """Ensure the configured Codex binary is available locally."""
@@ -222,6 +278,19 @@ class CodexLaunchMixin:
         runtime_home = self._runtime_home(session)
         skills_root = runtime_home / "skills"
         skills_root.mkdir(parents=True, exist_ok=True)
+        manifest_path = skills_root / CODEX_SKILL_MANIFEST_FILE
+        manifest = _skill_manifest(skills)
+        if _skill_manifest_current(manifest_path, manifest, skills_root):
+            return [
+                SkillMaterialization(
+                    provider_id="codex",
+                    skill_id=skill.skill_id,
+                    source_root=str(Path(skill.source_root).resolve()),
+                    target_root=str(skills_root.joinpath(*skill.skill_id.split("."))),
+                    strategy="copy",
+                )
+                for skill in skills
+            ]
         materializations: list[SkillMaterialization] = []
         for skill in skills:
             source_root = Path(skill.source_root).resolve()
@@ -242,6 +311,7 @@ class CodexLaunchMixin:
                     strategy="copy",
                 )
             )
+        _write_skill_manifest(manifest_path, manifest)
         return materializations
 
 

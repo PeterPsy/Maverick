@@ -166,7 +166,13 @@ def _record_provider_thread_id(
 
 
 
-def _build_launch_spec_for_execution(state: PlatformState, *, session: RuntimeSessionRecord, provider_id: str):
+def _build_launch_spec_for_execution(
+    state: PlatformState,
+    *,
+    session: RuntimeSessionRecord,
+    provider_id: str,
+    runtime_adapter=None,
+):
     if os.environ.get("MAVERICK_RUNTIME_FAKE_RESPONSE") is not None:
         return None, {}
     started_at = time.perf_counter()
@@ -191,7 +197,7 @@ def _build_launch_spec_for_execution(state: PlatformState, *, session: RuntimeSe
     skill_prepare_ms = 0.0
     if skills:
         skill_prepare_started_at = time.perf_counter()
-        prepare_runtime_skills(state.provider_store, session=session, skills=skills)
+        prepare_runtime_skills(state.provider_store, session=session, skills=skills, runtime_adapter=runtime_adapter)
         skill_prepare_ms = (time.perf_counter() - skill_prepare_started_at) * 1000
     token = spec.env_overrides.get("MAVERICK_RUNTIME_API_TOKEN")
     if token:

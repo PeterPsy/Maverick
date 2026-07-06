@@ -11,6 +11,7 @@ from uuid import uuid4
 
 from core.apps.runtime_event_hooks import dispatch_source_app_runtime_event
 from core.providers.service import resolve_runtime_backend_for_session
+from core.runtime.turn_submission_service_output import _build_launch_spec_for_execution, _record_provider_thread_id
 from core.runtime.plain_hosted_text import (
     HOSTED_TEXT_RUNTIME_PROVIDER_ID,
     assert_plain_hosted_chat_input_allowed,
@@ -39,6 +40,52 @@ _ACTIVE_TURN_STATUSES = {"queued", "active"}
 _IDLE_RUNTIME_REAP_TTL_SECONDS = 180.0
 _IDLE_REAP_TIMERS: dict[str, Timer] = {}
 _IDLE_REAP_TIMERS_LOCK = Lock()
+
+
+def prewarm_runtime_session_async(state: PlatformState, *, session: RuntimeSessionRecord) -> None:
+    """Best-effort warmup for Codex runtime process and provider thread."""
+    if runtime_session_is_plain_hosted_chat(session):
+        return
+
+    def worker() -> None:
+        with _session_execution_lock(session.session_id):
+            try:
+                current_session = state.runtime_store.get_session(session.session_id)
+                if runtime_session_is_plain_hosted_chat(current_session):
+                    return
+                provider, _selection, runtime_adapter = resolve_runtime_backend_for_session(
+                    state.provider_store,
+                    session=current_session,
+                )
+                if provider.provider_id != "codex":
+                    return
+                if current_session.provider_id != provider.provider_id:
+                    current_session = state.runtime_store.save_session(replace(current_session, provider_id=provider.provider_id))
+                launch_spec, _metadata = _build_launch_spec_for_execution(
+                    state,
+                    session=current_session,
+                    provider_id=provider.provider_id,
+                    runtime_adapter=runtime_adapter,
+                )
+                if launch_spec is None:
+                    return
+                from core.providers.codex_app_server import prewarm_codex_app_server_runtime
+
+                provider_thread_id = prewarm_codex_app_server_runtime(
+                    session=current_session,
+                    launch_spec=launch_spec,
+                )
+                if provider_thread_id and provider_thread_id != (current_session.provider_thread_id or ""):
+                    _record_provider_thread_id(
+                        state,
+                        session=current_session,
+                        provider_id=provider.provider_id,
+                        provider_thread_id=provider_thread_id,
+                    )
+            except Exception:
+                return
+
+    Thread(target=worker, name=f"maverick-runtime-prewarm-{session.session_id}", daemon=True).start()
 
 
 def submit_runtime_turn_async(
@@ -183,7 +230,12 @@ def submit_runtime_turn_async(
                     worker_provider_id = provider.provider_id
                     if current_session.provider_id != worker_provider_id:
                         current_session = state.runtime_store.save_session(replace(current_session, provider_id=worker_provider_id))
-                    launch_result = _build_launch_spec_for_execution(state, session=current_session, provider_id=worker_provider_id)
+                    launch_result = _build_launch_spec_for_execution(
+                        state,
+                        session=current_session,
+                        provider_id=worker_provider_id,
+                        runtime_adapter=runtime_adapter,
+                    )
                     if isinstance(launch_result, tuple):
                         launch_spec, launch_metadata = launch_result
                     else:

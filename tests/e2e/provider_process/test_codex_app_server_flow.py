@@ -8,6 +8,7 @@ from tests.support.cases import runtime_execution_command_cases as cases
 _SELECTED = {
     'test_codex_execution_uses_persistent_app_server_thread',
     'test_codex_execution_removes_provider_generated_system_skills_before_thread_start',
+    'test_codex_prewarm_starts_runtime_thread_before_turn',
     'test_codex_completed_agent_message_without_delta_is_emitted',
     'test_codex_execution_has_no_default_turn_timeout',
     'test_codex_retryable_app_server_error_does_not_end_turn',

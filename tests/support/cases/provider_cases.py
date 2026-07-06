@@ -40,6 +40,7 @@ from core.runtime.service import create_runtime_session
 from core.runtime.store import RuntimeDocumentStore, RuntimeCollections
 from core.secrets.service import create_platform_secret
 from core.secrets.store import SecretDocumentStore, SecretCollections
+from core.skills.models import SkillDefinition
 from tests.support.collections import FakeCollection
 
 
@@ -738,6 +739,47 @@ class ProvidersTestCase(unittest.TestCase):
         self.assertTrue(os.access(runtime_rg, os.X_OK))
         self.assertEqual(spec.env_overrides["HOME"], spec.env_overrides["CODEX_HOME"])
         self.assertTrue((runtime_bin / CODEX_POST_TOOL_USE_HOOK_NAME).is_file())
+
+    def test_codex_skill_prepare_reuses_current_manifest(self) -> None:
+        runtime_store = self.make_runtime_store()
+        repo_root = self.make_repo_root()
+        session = create_runtime_session(
+            runtime_store,
+            session_id="sess-codex-skills",
+            workspace_id="default",
+            agent_id="agent-1",
+            start_path=repo_root,
+        )
+        source_root = repo_root / "workspaces" / "default" / "data" / "skills" / "skills" / "writer"
+        source_root.mkdir(parents=True)
+        (source_root / "SKILL.md").write_text("# Writer\n", encoding="utf-8")
+        skill = SkillDefinition(
+            skill_id="workspace.writer",
+            local_skill_id="writer",
+            name="Writer",
+            description="Writes.",
+            source_root=str(source_root),
+            owner_kind="workspace",
+            owner_id="default",
+            workspace_id="default",
+            status="available",
+        )
+        adapter = CodexProviderAdapter(codex_command="/bin/echo")
+
+        adapter.prepare_runtime_skills(session, [skill])
+        target_root = repo_root / "workspaces" / "default" / "runtime" / "sessions" / "sess-codex-skills" / "codex-home" / "skills" / "workspace" / "writer"
+        sentinel = target_root / "sentinel.txt"
+        sentinel.write_text("kept when cached\n", encoding="utf-8")
+
+        adapter.prepare_runtime_skills(session, [skill])
+
+        self.assertTrue(sentinel.exists())
+
+        (source_root / "SKILL.md").write_text("# Writer\n\nChanged.\n", encoding="utf-8")
+        adapter.prepare_runtime_skills(session, [skill])
+
+        self.assertFalse(sentinel.exists())
+        self.assertEqual((target_root / "SKILL.md").read_text(encoding="utf-8"), "# Writer\n\nChanged.\n")
 
     def test_codex_runtime_home_is_prepared_from_configured_source_home(self) -> None:
         runtime_store = self.make_runtime_store()

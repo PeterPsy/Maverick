@@ -11,7 +11,7 @@ from unittest.mock import patch
 from core.providers.models import ProviderCapabilitySet, ProviderDefinition, RuntimeBackendLaunchSpec
 from core.providers.provider_codex import CodexProviderAdapter, build_codex_definition
 from core.providers.provider_codex import _codex_app_server_command
-from core.providers.codex_app_server import _turn_sandbox_policy
+from core.providers.codex_app_server import _turn_sandbox_policy, prewarm_codex_app_server_runtime
 from core.providers.provider_registry import ProviderRegistry
 from core.providers.service import configure_workspace_provider
 from core.providers.store import ProviderDocumentStore, ProviderCollections
@@ -97,6 +97,34 @@ class RuntimeExecutionCommandTest(unittest.TestCase):
         self.assertEqual(result.exit_code, 0)
         self.assertFalse((codex_home / "skills" / ".system").exists())
         self.assertFalse(FakeCodexProcess.system_skills_present_at_thread_start)
+
+    def test_codex_prewarm_starts_runtime_thread_before_turn(self) -> None:
+        temp_dir = tempfile.TemporaryDirectory()
+        self.addCleanup(temp_dir.cleanup)
+        session = _session("sandbox", root=temp_dir.name, session_id="session-prewarm")
+        launch_spec = _launch_spec(session)
+
+        provider_thread_id = prewarm_codex_app_server_runtime(
+            session=session,
+            launch_spec=launch_spec,
+            command_runner=FakeCodexProcess,
+        )
+
+        self.assertEqual(provider_thread_id, "thread-1")
+        self.assertEqual(FakeCodexProcess.requests, ["initialize", "thread/start"])
+
+        result = execute_runtime_turn(
+            session=session,
+            provider=build_codex_definition(),
+            input_text="hello",
+            launch_spec=launch_spec,
+            runtime_adapter=_codex_adapter(),
+            command_runner=FakeCodexProcess,
+            timeout_seconds=2,
+        )
+
+        self.assertEqual(result.exit_code, 0)
+        self.assertEqual(FakeCodexProcess.requests, ["initialize", "thread/start", "turn/start"])
 
     def test_codex_completed_agent_message_without_delta_is_emitted(self) -> None:
         temp_dir = tempfile.TemporaryDirectory()

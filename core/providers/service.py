@@ -909,10 +909,13 @@ def prepare_runtime_skills(
     *,
     session: RuntimeSessionRecord,
     skills: list[SkillDefinition],
+    runtime_adapter: RuntimeBackendAdapter | None = None,
     registry: ProviderRegistry | None = None,
     codex_command: str = "codex",
 ) -> list[SkillMaterialization]:
     """Prepare provider-specific runtime skill installation for one runtime session."""
+    if runtime_adapter is not None:
+        return runtime_adapter.prepare_runtime_skills(session, skills)
     active_registry = registry or builtin_provider_registry(codex_command=codex_command)
     definition, _selection = resolve_provider_for_runtime_session(
         store,

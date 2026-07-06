@@ -51,6 +51,7 @@ from core.runtime.plain_hosted_text import HOSTED_TEXT_RUNTIME_PROVIDER_ID, queu
 from core.runtime.runtime_turns import RuntimeTurnRecord
 from core.runtime.turn_submission import (
     interrupt_runtime_provider_turn,
+    prewarm_runtime_session_async,
     release_idle_runtime_processes,
     submit_runtime_turn,
     submit_runtime_turn_async,
@@ -545,6 +546,7 @@ def _create_session(
         now=session.started_at or session.updated_at,
     )
     _publish_thread_change(state, workspace_id=context.workspace_id, action="created", thread=thread)
+    prewarm_runtime_session_async(state, session=session)
     return session
 
 

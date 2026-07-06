@@ -10,6 +10,7 @@ type AppFrameParams = Record<string, string | boolean | null>;
 const APP_EVENTS_WS_PATH = "/api/apps/events/ws";
 
 type AppReadyMessage = {
+  active?: boolean;
   app_id?: string;
   deleted_thread_id?: string;
   detail?: Record<string, unknown>;
@@ -39,6 +40,7 @@ export function AppFrameHost({
   activeWorkspaceId,
   isMobileLayout,
   onOpenApp,
+  onWorkspaceFocusChange,
   shellTheme = DEFAULT_SHELL_THEME_STATE,
 }: {
   activeApp: AppRegistryItem;
@@ -46,6 +48,7 @@ export function AppFrameHost({
   activeWorkspaceId: string;
   isMobileLayout: boolean;
   onOpenApp: (appId: string, params?: AppFrameParams) => void;
+  onWorkspaceFocusChange?: (appId: string, active: boolean) => void;
   shellTheme?: ShellThemeState;
 }) {
   const activeMountKey = `${activeWorkspaceId}:${activeApp.app_id}`;
@@ -299,6 +302,12 @@ export function AppFrameHost({
       if (!senderIsMountedApp) {
         return;
       }
+      if (payload.type === "maverick.shell.workspace-focus") {
+        if (payload.app_id === activeApp.app_id) {
+          onWorkspaceFocusChange?.(payload.app_id, payload.active === true);
+        }
+        return;
+      }
       if (payload.type === "maverick.app.dependencies-changed") {
         const dependencyAppId = payload.app_id;
         getAppDependencies(dependencyAppId)
@@ -352,7 +361,7 @@ export function AppFrameHost({
 
     window.addEventListener("message", handleAppMessage);
     return () => window.removeEventListener("message", handleAppMessage);
-  }, [frameRevisions, mountedApps, onOpenApp]);
+  }, [activeApp.app_id, frameRevisions, mountedApps, onOpenApp, onWorkspaceFocusChange]);
 
   useEffect(() => {
     return () => {

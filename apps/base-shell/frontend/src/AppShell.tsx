@@ -70,6 +70,7 @@ export function AppShell() {
   const [floatingChatWidthPx, setFloatingChatWidthPx] = useState(() => clampFloatingChatWidth(initialSession.floatingChatWidthPx));
   const [floatingChatThreadId, setFloatingChatThreadId] = useState<string | null>(initialSession.floatingChatThreadId);
   const [floatingChatNavigationScope, setFloatingChatNavigationScope] = useState<string | null>(initialSession.floatingChatNavigationScope);
+  const [workspaceFocusAppId, setWorkspaceFocusAppId] = useState<string | null>(null);
   const [themeMode, setThemeMode] = useState<ShellThemeMode>(initialSession.themeMode);
   const [systemColorScheme, setSystemColorScheme] = useState<ShellEffectiveTheme>(() => readSystemColorScheme());
   const [isSidebarOpen, setIsSidebarOpen] = useState(() =>
@@ -349,6 +350,13 @@ export function AppShell() {
   );
   const activeApp = registryActiveApp ?? provisionalActiveApp;
   const chatApp = apps.find((app) => app.app_id === CHAT_APP_ID) ?? (isLoading ? provisionalMountedApp(CHAT_APP_ID) : null);
+  const isWorkspaceFocusActive = Boolean(activeApp?.app_id && workspaceFocusAppId === activeApp.app_id);
+
+  useEffect(() => {
+    if (workspaceFocusAppId && workspaceFocusAppId !== activeApp?.app_id) {
+      setWorkspaceFocusAppId(null);
+    }
+  }, [activeApp?.app_id, workspaceFocusAppId]);
 
   useEffect(() => {
     function handlePopState() {
@@ -476,6 +484,15 @@ export function AppShell() {
     setFloatingChatMode("overlay");
   }
 
+  function updateWorkspaceFocus(appId: string, active: boolean) {
+    setWorkspaceFocusAppId((current) => {
+      if (active) {
+        return appId;
+      }
+      return current === appId ? null : current;
+    });
+  }
+
   function updateFloatingChatActiveThread(event: { navigationScope: string | null; threadId: string }) {
     const nextThreadId = event.threadId.trim();
     if (!nextThreadId) {
@@ -589,7 +606,7 @@ export function AppShell() {
 
   return (
     <main
-      className={`bs-shell is-sidebar-mode-${sidebarMode} ${isSidebarOpen ? "is-sidebar-open" : ""} ${isSidebarClosing ? "is-sidebar-closing" : ""} ${isSidebarResizing ? "is-sidebar-resizing" : ""} ${isFloatingChatFixed ? "is-floating-chat-fixed" : ""} ${isFloatingChatResizing ? "is-floating-chat-resizing" : ""} ${isMobileLayout ? "is-mobile-layout" : ""}`}
+      className={`bs-shell is-sidebar-mode-${sidebarMode} ${isSidebarOpen ? "is-sidebar-open" : ""} ${isSidebarClosing ? "is-sidebar-closing" : ""} ${isSidebarResizing ? "is-sidebar-resizing" : ""} ${isFloatingChatFixed ? "is-floating-chat-fixed" : ""} ${isFloatingChatResizing ? "is-floating-chat-resizing" : ""} ${isWorkspaceFocusActive ? "is-workspace-focus" : ""} ${isMobileLayout ? "is-mobile-layout" : ""}`}
       style={shellStyle}
     >
       {isMobileLayout ? (
@@ -632,6 +649,7 @@ export function AppShell() {
           isLoading={isLoading}
           isMobileLayout={isMobileLayout}
           onOpenApp={openApp}
+          onWorkspaceFocusChange={updateWorkspaceFocus}
           shellTheme={shellTheme}
         />
       </div>

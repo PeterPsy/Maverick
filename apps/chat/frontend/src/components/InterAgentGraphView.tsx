@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useMemo, useState, type MouseEvent } from "react";
 import {
   applyNodeChanges,
+  Background,
+  BackgroundVariant,
   Handle,
   MarkerType,
   Position,
@@ -12,6 +14,7 @@ import {
   type NodeChange,
   type NodeProps,
   type OnSelectionChangeParams,
+  type SmoothStepPathOptions,
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
 import {
@@ -41,11 +44,15 @@ type InterAgentGraphViewProps = {
 
 const GRAPH_VISIBILITY_PLANE: InterAgentVisibilityPlane = "detail";
 const TRANSCRIPT_LIMIT = 80;
-const GRAPH_NODE_WIDTH = 220;
-const GRAPH_NODE_HEIGHT = 72;
-const GRAPH_COLUMN_GAP = 84;
-const GRAPH_ROW_GAP = 128;
+const GRAPH_NODE_WIDTH = 236;
+const GRAPH_NODE_HEIGHT = 78;
+const GRAPH_COLUMN_GAP = 116;
+const GRAPH_ROW_GAP = 138;
 const GRAPH_PADDING = 56;
+const GRAPH_MAX_ROW_COLUMNS = 4;
+const GRAPH_EDGE_DIRECT_OFFSET = 26;
+const GRAPH_EDGE_LOOP_OFFSET = 96;
+const GRAPH_EDGE_LOOP_MARGIN = 48;
 const GRAPH_MIN_ZOOM = 0.25;
 const GRAPH_MAX_ZOOM = 1.6;
 
@@ -201,10 +208,10 @@ function GraphCanvas({
 }) {
   const participants = runDetail?.participants || [];
   const edges = runDetail?.edges || [];
-  const layout = useMemo(() => graphBoardLayout(participants, runDetail?.run.orchestrator_participant_id), [
-    participants,
-    runDetail?.run.orchestrator_participant_id,
-  ]);
+  const layout = useMemo(
+    () => graphBoardLayout(participants, edges, runDetail?.run.orchestrator_participant_id),
+    [edges, participants, runDetail?.run.orchestrator_participant_id],
+  );
   const flowNodes = useMemo(
     () => graphFlowNodes(layout, selectedParticipantId, onSelectParticipant),
     [layout, onSelectParticipant, selectedParticipantId],
@@ -616,10 +623,15 @@ type AgentEdgeData = Record<string, unknown> & {
   edge: GraphEdge;
 };
 type AgentFlowNode = ReactFlowNode<AgentNodeData, "agentParticipant">;
-type AgentFlowEdge = ReactFlowEdge<AgentEdgeData, "smoothstep">;
+type AgentFlowEdge = ReactFlowEdge<AgentEdgeData, "smoothstep"> & {
+  pathOptions?: SmoothStepPathOptions;
+};
 
 type GraphBoardNode = {
+  columnIndex: number;
+  depth: number;
   participant: GraphParticipant;
+  rowIndex: number;
   x: number;
   y: number;
 };
@@ -630,6 +642,28 @@ type GraphBoardLayout = {
   nodesById: Map<string, GraphBoardNode>;
   width: number;
 };
+
+type GraphHandleSide = "top" | "right" | "bottom" | "left";
+
+type GraphEdgeRoute = {
+  borderRadius: number;
+  kind: "vertical" | "lateral" | "return";
+  offset: number;
+  sourceSide: GraphHandleSide;
+  targetSide: GraphHandleSide;
+};
+
+type GraphBoardBounds = {
+  maxX: number;
+  minX: number;
+};
+
+const GRAPH_HANDLES: Array<{ position: Position; side: GraphHandleSide }> = [
+  { position: Position.Top, side: "top" },
+  { position: Position.Right, side: "right" },
+  { position: Position.Bottom, side: "bottom" },
+  { position: Position.Left, side: "left" },
+];
 
 const AGENT_NODE_TYPES = {
   agentParticipant: AgentParticipantNode,
@@ -715,7 +749,15 @@ function GraphFlowCanvas({
         zoomOnDoubleClick
         zoomOnPinch
         zoomOnScroll
-      />
+      >
+        <Background
+          className="chatapp-inter-agent-graph__background"
+          color="rgba(var(--maverick-contrast-rgb), 0.24)"
+          gap={28}
+          size={1.25}
+          variant={BackgroundVariant.Dots}
+        />
+      </ReactFlow>
       {missingConnectionCount ? (
         <div className="chatapp-inter-agent-graph__edge-empty">Some connections are unavailable.</div>
       ) : null}
@@ -737,13 +779,29 @@ function AgentParticipantNode({ data, selected }: NodeProps) {
       }}
       type="button"
     >
-      <Handle className="chatapp-inter-agent-graph__handle" position={Position.Top} type="target" />
+      {GRAPH_HANDLES.map(({ position, side }) => (
+        <Handle
+          className={`chatapp-inter-agent-graph__handle is-${side}`}
+          id={graphHandleId("target", side)}
+          key={`target-${side}`}
+          position={position}
+          type="target"
+        />
+      ))}
       <span className="material-symbols-rounded" aria-hidden="true">{participantIcon(participant.kind)}</span>
       <span className="chatapp-inter-agent-graph__node-copy">
         <strong>{participant.label}</strong>
         <span>{participantStatusLabel(participant.kind, participant.status)}</span>
       </span>
-      <Handle className="chatapp-inter-agent-graph__handle" position={Position.Bottom} type="source" />
+      {GRAPH_HANDLES.map(({ position, side }) => (
+        <Handle
+          className={`chatapp-inter-agent-graph__handle is-${side}`}
+          id={graphHandleId("source", side)}
+          key={`source-${side}`}
+          position={position}
+          type="source"
+        />
+      ))}
     </button>
   );
 }
@@ -788,61 +846,78 @@ function mergeInteractiveGraphNodes(currentNodes: AgentFlowNode[], nextNodes: Ag
   });
 }
 
-function graphFlowEdges(edges: GraphEdge[], nodesById: Map<string, GraphBoardNode>): AgentFlowEdge[] {
+export function graphFlowEdges(edges: GraphEdge[], nodesById: Map<string, GraphBoardNode>): AgentFlowEdge[] {
+  const bounds = graphBoardBounds(nodesById);
   return edges.flatMap((edge) => {
     const source = nodesById.get(edge.source_id);
     const target = nodesById.get(edge.target_id);
     if (!source || !target) {
       return [];
     }
+    const route = graphEdgeRoute(edge, source, target, bounds);
     return [
       {
         animated: edge.status === "active" || edge.status === "running",
-        className: "chatapp-inter-agent-graph__flow-edge",
+        className: `chatapp-inter-agent-graph__flow-edge is-${route.kind} is-${edge.status}`,
         data: { edge },
         id: edge.edge_id,
+        interactionWidth: 18,
         label: edgeDisplayLabel(edge),
         labelBgBorderRadius: 7,
         labelBgPadding: [7, 4],
         labelShowBg: true,
-        markerEnd: { color: "var(--maverick-accent)", type: MarkerType.ArrowClosed },
+        markerEnd: {
+          color: "var(--chatapp-graph-edge-marker, var(--maverick-accent))",
+          type: MarkerType.ArrowClosed,
+        },
+        pathOptions: {
+          borderRadius: route.borderRadius,
+          offset: route.offset,
+        },
         source: source.participant.participant_id,
+        sourceHandle: graphHandleId("source", route.sourceSide),
         target: target.participant.participant_id,
+        targetHandle: graphHandleId("target", route.targetSide),
         type: "smoothstep",
+        zIndex: route.kind === "return" ? 1 : 0,
       } satisfies AgentFlowEdge,
     ];
   });
 }
 
-function graphBoardLayout(
+export function graphBoardLayout(
   participants: GraphParticipant[],
+  edges: GraphEdge[],
   orchestratorParticipantId?: string | null,
 ): GraphBoardLayout {
   if (!participants.length) {
     return { height: 320, nodes: [], nodesById: new Map(), width: 640 };
   }
-  const orchestrators = participants.filter((participant) =>
+  const sortedParticipants = [...participants].sort(compareGraphParticipants);
+  const orchestrators = sortedParticipants.filter((participant) =>
     participant.participant_id === orchestratorParticipantId || participant.kind === "orchestrator"
   );
-  const topParticipants = orchestrators.length ? orchestrators : [participants[0]];
+  const topParticipants = orchestrators.length ? orchestrators : [sortedParticipants[0]];
   const topIds = new Set(topParticipants.map((participant) => participant.participant_id));
-  const lowerParticipants = participants.filter((participant) => !topIds.has(participant.participant_id));
-  const lowerColumns = Math.max(1, Math.min(4, Math.ceil(Math.sqrt(Math.max(1, lowerParticipants.length)))));
-  const lowerRows = chunk(lowerParticipants, lowerColumns);
-  const columnCount = Math.max(topParticipants.length, lowerColumns);
+  const depthById = graphParticipantDepths(sortedParticipants, edges, topIds);
+  const rows = graphParticipantRows(sortedParticipants, depthById);
+  const columnCount = Math.max(1, ...rows.map((row) => row.participants.length));
   const width = GRAPH_PADDING * 2 + columnCount * GRAPH_NODE_WIDTH + Math.max(0, columnCount - 1) * GRAPH_COLUMN_GAP;
-  const rowCount = 1 + lowerRows.length;
+  const rowCount = rows.length;
   const height = GRAPH_PADDING * 2 + rowCount * GRAPH_NODE_HEIGHT + Math.max(0, rowCount - 1) * GRAPH_ROW_GAP;
   const nodes: GraphBoardNode[] = [];
-  const topY = GRAPH_PADDING + GRAPH_NODE_HEIGHT / 2;
 
-  topParticipants.forEach((participant, index) => {
-    nodes.push({ participant, x: rowX(index, topParticipants.length, width), y: topY });
-  });
-  lowerRows.forEach((row, rowIndex) => {
-    const y = topY + GRAPH_NODE_HEIGHT + GRAPH_ROW_GAP + rowIndex * (GRAPH_NODE_HEIGHT + GRAPH_ROW_GAP);
-    row.forEach((participant, index) => {
-      nodes.push({ participant, x: rowX(index, row.length, width), y });
+  rows.forEach((row, rowIndex) => {
+    const y = GRAPH_PADDING + GRAPH_NODE_HEIGHT / 2 + rowIndex * (GRAPH_NODE_HEIGHT + GRAPH_ROW_GAP);
+    row.participants.forEach((participant, columnIndex) => {
+      nodes.push({
+        columnIndex,
+        depth: row.depth,
+        participant,
+        rowIndex,
+        x: rowX(columnIndex, row.participants.length, width),
+        y,
+      });
     });
   });
 
@@ -852,6 +927,164 @@ function graphBoardLayout(
     nodesById: new Map(nodes.map((node) => [node.participant.participant_id, node])),
     width,
   };
+}
+
+function graphParticipantDepths(
+  participants: GraphParticipant[],
+  edges: GraphEdge[],
+  topIds: Set<string>,
+): Map<string, number> {
+  const participantIds = new Set(participants.map((participant) => participant.participant_id));
+  const depthById = new Map<string, number>();
+  const adjacency = new Map<string, string[]>();
+
+  for (const topId of topIds) {
+    if (participantIds.has(topId)) {
+      depthById.set(topId, 0);
+    }
+  }
+
+  for (const edge of edges) {
+    if (!participantIds.has(edge.source_id) || !participantIds.has(edge.target_id) || topIds.has(edge.target_id)) {
+      continue;
+    }
+    const targets = adjacency.get(edge.source_id) || [];
+    if (!targets.includes(edge.target_id)) {
+      targets.push(edge.target_id);
+    }
+    adjacency.set(edge.source_id, targets);
+  }
+
+  const queue = Array.from(depthById.keys());
+  for (let index = 0; index < queue.length; index += 1) {
+    const sourceId = queue[index];
+    const sourceDepth = depthById.get(sourceId);
+    if (sourceDepth === undefined) {
+      continue;
+    }
+    for (const targetId of adjacency.get(sourceId) || []) {
+      const nextDepth = sourceDepth + 1;
+      const currentDepth = depthById.get(targetId);
+      if (currentDepth === undefined || nextDepth < currentDepth) {
+        depthById.set(targetId, nextDepth);
+        queue.push(targetId);
+      }
+    }
+  }
+
+  participants.forEach((participant) => {
+    if (!depthById.has(participant.participant_id)) {
+      depthById.set(participant.participant_id, 1);
+    }
+  });
+
+  return depthById;
+}
+
+function graphParticipantRows(
+  participants: GraphParticipant[],
+  depthById: Map<string, number>,
+): Array<{ depth: number; participants: GraphParticipant[] }> {
+  const participantsByDepth = new Map<number, GraphParticipant[]>();
+  participants.forEach((participant) => {
+    const depth = Math.max(0, depthById.get(participant.participant_id) || 0);
+    const group = participantsByDepth.get(depth) || [];
+    group.push(participant);
+    participantsByDepth.set(depth, group);
+  });
+
+  return Array.from(participantsByDepth.entries())
+    .sort(([leftDepth], [rightDepth]) => leftDepth - rightDepth)
+    .flatMap(([depth, depthParticipants]) =>
+      chunk(depthParticipants.sort(compareGraphParticipants), GRAPH_MAX_ROW_COLUMNS).map((row) => ({
+        depth,
+        participants: row,
+      })),
+    );
+}
+
+function graphEdgeRoute(
+  edge: GraphEdge,
+  source: GraphBoardNode,
+  target: GraphBoardNode,
+  bounds: GraphBoardBounds,
+): GraphEdgeRoute {
+  const dx = target.x - source.x;
+  const dy = target.y - source.y;
+  const returnsToEarlierLevel =
+    target.depth < source.depth ||
+    target.rowIndex < source.rowIndex ||
+    (edge.kind === "produced" && target.participant.kind === "orchestrator");
+
+  if (returnsToEarlierLevel) {
+    const sourceRight = source.x + GRAPH_NODE_WIDTH / 2;
+    const targetRight = target.x + GRAPH_NODE_WIDTH / 2;
+    const sourceLeft = source.x - GRAPH_NODE_WIDTH / 2;
+    const targetLeft = target.x - GRAPH_NODE_WIDTH / 2;
+    const rightOffset = Math.max(sourceRight, targetRight) <= bounds.maxX
+      ? bounds.maxX + GRAPH_EDGE_LOOP_MARGIN - Math.max(sourceRight, targetRight)
+      : GRAPH_EDGE_LOOP_OFFSET;
+    const leftOffset = Math.min(sourceLeft, targetLeft) >= bounds.minX
+      ? Math.min(sourceLeft, targetLeft) - (bounds.minX - GRAPH_EDGE_LOOP_MARGIN)
+      : GRAPH_EDGE_LOOP_OFFSET;
+    const side: GraphHandleSide = rightOffset <= leftOffset ? "right" : "left";
+    return {
+      borderRadius: 24,
+      kind: "return",
+      offset: Math.ceil(Math.max(GRAPH_EDGE_LOOP_OFFSET, side === "right" ? rightOffset : leftOffset)),
+      sourceSide: side,
+      targetSide: side,
+    };
+  }
+
+  if (Math.abs(dy) <= GRAPH_NODE_HEIGHT && Math.abs(dx) > GRAPH_NODE_WIDTH * 0.55) {
+    return {
+      borderRadius: 18,
+      kind: "lateral",
+      offset: GRAPH_EDGE_DIRECT_OFFSET,
+      sourceSide: dx > 0 ? "right" : "left",
+      targetSide: dx > 0 ? "left" : "right",
+    };
+  }
+
+  if (dy >= 0) {
+    return {
+      borderRadius: 18,
+      kind: "vertical",
+      offset: GRAPH_EDGE_DIRECT_OFFSET,
+      sourceSide: "bottom",
+      targetSide: "top",
+    };
+  }
+
+  return {
+    borderRadius: 18,
+    kind: "vertical",
+    offset: GRAPH_EDGE_DIRECT_OFFSET,
+    sourceSide: "top",
+    targetSide: "bottom",
+  };
+}
+
+function graphHandleId(type: "source" | "target", side: GraphHandleSide): string {
+  return `${type}-${side}`;
+}
+
+function graphBoardBounds(nodesById: Map<string, GraphBoardNode>): GraphBoardBounds {
+  const nodes = Array.from(nodesById.values());
+  if (!nodes.length) {
+    return { maxX: GRAPH_NODE_WIDTH, minX: 0 };
+  }
+  return {
+    maxX: Math.max(...nodes.map((node) => node.x + GRAPH_NODE_WIDTH / 2)),
+    minX: Math.min(...nodes.map((node) => node.x - GRAPH_NODE_WIDTH / 2)),
+  };
+}
+
+function compareGraphParticipants(left: GraphParticipant, right: GraphParticipant): number {
+  const leftIndex = typeof left.sequence_index === "number" ? left.sequence_index : Number.MAX_SAFE_INTEGER;
+  const rightIndex = typeof right.sequence_index === "number" ? right.sequence_index : Number.MAX_SAFE_INTEGER;
+  return leftIndex - rightIndex || left.participant_id.localeCompare(right.participant_id);
 }
 
 function edgeDisplayLabel(edge: GraphEdge): string {

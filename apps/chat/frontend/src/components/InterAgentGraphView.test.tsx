@@ -19,7 +19,7 @@ import {
   listInterAgentRunEvents,
   resolveInterAgentApproval,
 } from "../api/client";
-import { InterAgentGraphView } from "./InterAgentGraphView";
+import { InterAgentGraphView, graphBoardLayout, graphFlowEdges } from "./InterAgentGraphView";
 
 vi.mock("../api/client", () => ({
   getInterAgentParticipantTranscript: vi.fn(),
@@ -512,6 +512,126 @@ describe("InterAgentGraphView", () => {
 
     expect(element.querySelector('[aria-label="Reviewer with a long label transcript"]')).not.toBeNull();
     expect(element.textContent).toContain("Reviewer with a long label");
+  });
+
+  it("routes return connections through side handles to avoid crossing the board", async () => {
+    const base = runDetail();
+    const implementer = {
+      ...base.participants[1],
+      participant_id: "implementer",
+      agent_type_id: "implementer",
+      label: "Implementer",
+      runtime_session_id: "child-implementer",
+      status: "completed",
+      sequence_index: 1,
+    };
+    const reviewer = {
+      ...base.participants[1],
+      participant_id: "reviewer",
+      agent_type_id: "reviewer",
+      label: "Reviewer",
+      runtime_session_id: "child-reviewer",
+      status: "completed",
+      sequence_index: 2,
+    };
+    const detail = runDetail({
+      participants: [base.participants[0], implementer, reviewer],
+      edges: [
+        {
+          ...base.edges[0],
+          edge_id: "edge-implementation",
+          source_id: "orchestrator",
+          target_id: "implementer",
+          label: "Implementation",
+        },
+        {
+          ...base.edges[0],
+          edge_id: "edge-review",
+          source_id: "implementer",
+          target_id: "reviewer",
+          kind: "reviewed_by",
+          label: "Review",
+        },
+        {
+          ...base.edges[0],
+          edge_id: "edge-final-review",
+          source_id: "reviewer",
+          target_id: "orchestrator",
+          kind: "produced",
+          label: "Final review",
+        },
+      ],
+    });
+    vi.mocked(getInterAgentRun).mockResolvedValue(detail);
+    const element = await renderGraph({ initialRunDetail: detail });
+    const layout = graphBoardLayout(detail.participants, detail.edges, detail.run.orchestrator_participant_id);
+    const flowEdges = graphFlowEdges(detail.edges, layout.nodesById);
+    const implementationEdge = flowEdges.find((edge) => edge.id === "edge-implementation");
+    const reviewEdge = flowEdges.find((edge) => edge.id === "edge-review");
+    const finalReviewEdge = flowEdges.find((edge) => edge.id === "edge-final-review");
+
+    expect(element.querySelectorAll(".chatapp-inter-agent-graph__handle").length).toBe(24);
+    expect(element.querySelectorAll(".chatapp-inter-agent-graph__handle.is-right").length).toBe(6);
+    expect(layout.nodesById.get("reviewer")?.depth).toBe(2);
+    expect(implementationEdge?.sourceHandle).toBe("source-bottom");
+    expect(implementationEdge?.targetHandle).toBe("target-top");
+    expect(reviewEdge?.sourceHandle).toBe("source-bottom");
+    expect(reviewEdge?.targetHandle).toBe("target-top");
+    expect(finalReviewEdge?.className).toContain("is-return");
+    expect(finalReviewEdge?.label).toBe("Final review");
+    expect(finalReviewEdge?.pathOptions?.offset).toBeGreaterThanOrEqual(96);
+    expect(finalReviewEdge?.sourceHandle).toBe("source-right");
+    expect(finalReviewEdge?.targetHandle).toBe("target-right");
+
+    const analyst = { ...implementer, participant_id: "analyst", label: "Analyst", sequence_index: 1 };
+    const synthesizer = { ...implementer, participant_id: "synthesizer", label: "Synthesizer", sequence_index: 3 };
+    const groupDetail = runDetail({
+      participants: [base.participants[0], analyst, reviewer, synthesizer],
+      edges: [
+        {
+          ...base.edges[0],
+          edge_id: "edge-analysis",
+          source_id: "orchestrator",
+          target_id: "analyst",
+        },
+        {
+          ...base.edges[0],
+          edge_id: "edge-reviewer",
+          source_id: "orchestrator",
+          target_id: "reviewer",
+        },
+        {
+          ...base.edges[0],
+          edge_id: "edge-analyst-synth",
+          source_id: "analyst",
+          target_id: "synthesizer",
+          kind: "depends_on",
+        },
+        {
+          ...base.edges[0],
+          edge_id: "edge-reviewer-synth",
+          source_id: "reviewer",
+          target_id: "synthesizer",
+          kind: "depends_on",
+        },
+        {
+          ...base.edges[0],
+          edge_id: "edge-synth-final",
+          source_id: "synthesizer",
+          target_id: "orchestrator",
+          kind: "produced",
+        },
+      ],
+    });
+    const groupLayout = graphBoardLayout(
+      groupDetail.participants,
+      groupDetail.edges,
+      groupDetail.run.orchestrator_participant_id,
+    );
+    const groupReturnEdge = graphFlowEdges(groupDetail.edges, groupLayout.nodesById).find((edge) => edge.id === "edge-synth-final");
+
+    expect(groupReturnEdge?.className).toContain("is-return");
+    expect(groupReturnEdge?.pathOptions?.offset).toBeGreaterThan(200);
   });
 
   it("resolves approval from the Agent nodes view", async () => {

@@ -1,5 +1,8 @@
 import { useCallback, useEffect, useMemo, useState, type MouseEvent } from "react";
 import {
+  applyNodeChanges,
+  Background,
+  BackgroundVariant,
   Handle,
   MarkerType,
   Position,
@@ -8,6 +11,7 @@ import {
   useReactFlow,
   type Edge as ReactFlowEdge,
   type Node as ReactFlowNode,
+  type NodeChange,
   type NodeProps,
   type OnSelectionChangeParams,
 } from "@xyflow/react";
@@ -211,6 +215,7 @@ function GraphCanvas({
       {participants.length ? (
         <ReactFlowProvider initialWidth={760} initialHeight={420}>
           <GraphFlowCanvas
+            key={runDetail?.run.run_id || "inter-agent-graph"}
             edges={flowEdges}
             missingConnectionCount={missingConnectionCount}
             nodes={flowNodes}
@@ -641,9 +646,13 @@ function GraphFlowCanvas({
   rawEdgeCount: number;
 }) {
   const reactFlow = useReactFlow<AgentFlowNode, AgentFlowEdge>();
+  const [interactiveNodes, setInteractiveNodes] = useState<AgentFlowNode[]>(() => nodes);
   const fitToView = useCallback(() => {
     void reactFlow.fitView({ duration: 140, padding: 0.18 });
   }, [reactFlow]);
+  const onNodesChange = useCallback((changes: NodeChange<AgentFlowNode>[]) => {
+    setInteractiveNodes((currentNodes) => applyNodeChanges(changes, currentNodes));
+  }, []);
   const onNodeClick = useCallback(
     (_event: MouseEvent, node: AgentFlowNode) => {
       onSelectParticipant(node.data.participant.participant_id);
@@ -659,6 +668,10 @@ function GraphFlowCanvas({
     },
     [onSelectParticipant],
   );
+
+  useEffect(() => {
+    setInteractiveNodes((currentNodes) => mergeInteractiveGraphNodes(currentNodes, nodes));
+  }, [nodes]);
 
   useEffect(() => {
     if (!nodes.length) {
@@ -682,11 +695,12 @@ function GraphFlowCanvas({
         fitViewOptions={{ padding: 0.18 }}
         maxZoom={GRAPH_MAX_ZOOM}
         minZoom={GRAPH_MIN_ZOOM}
-        nodes={nodes}
+        nodes={interactiveNodes}
         nodesConnectable={false}
-        nodesDraggable={false}
+        nodesDraggable
         nodeTypes={AGENT_NODE_TYPES}
         onNodeClick={onNodeClick}
+        onNodesChange={onNodesChange}
         onSelectionChange={onSelectionChange}
         panOnDrag
         panOnScroll
@@ -696,7 +710,14 @@ function GraphFlowCanvas({
         zoomOnDoubleClick
         zoomOnPinch
         zoomOnScroll
-      />
+      >
+        <Background
+          color="rgba(var(--maverick-contrast-rgb), 0.14)"
+          gap={34}
+          lineWidth={1}
+          variant={BackgroundVariant.Lines}
+        />
+      </ReactFlow>
       {missingConnectionCount ? (
         <div className="chatapp-inter-agent-graph__edge-empty">Some connections are unavailable.</div>
       ) : null}
@@ -739,7 +760,7 @@ function graphFlowNodes(
       onSelect: onSelectParticipant,
       participant: node.participant,
     },
-    draggable: false,
+    draggable: true,
     id: node.participant.participant_id,
     position: {
       x: node.x - GRAPH_NODE_WIDTH / 2,
@@ -753,6 +774,20 @@ function graphFlowNodes(
     },
     type: "agentParticipant",
   }));
+}
+
+function mergeInteractiveGraphNodes(currentNodes: AgentFlowNode[], nextNodes: AgentFlowNode[]): AgentFlowNode[] {
+  const currentNodesById = new Map(currentNodes.map((node) => [node.id, node]));
+  return nextNodes.map((nextNode) => {
+    const currentNode = currentNodesById.get(nextNode.id);
+    if (!currentNode) {
+      return nextNode;
+    }
+    return {
+      ...nextNode,
+      position: currentNode.position,
+    };
+  });
 }
 
 function graphFlowEdges(edges: GraphEdge[], nodesById: Map<string, GraphBoardNode>): AgentFlowEdge[] {

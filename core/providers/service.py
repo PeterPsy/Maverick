@@ -809,24 +809,17 @@ def resolve_workspace_provider_status(
     )
 
 
-def build_runtime_backend_launch_spec(
+def build_resolved_runtime_backend_launch_spec(
     store: ProviderStore,
     *,
     session: RuntimeSessionRecord,
-    registry: ProviderRegistry | None = None,
-    codex_command: str = "codex",
+    definition: ProviderDefinition,
+    selection: ProviderSelection | None,
+    runtime_adapter: RuntimeBackendAdapter,
     secret_store: SecretStore | None = None,
     observability_store=None,
 ) -> RuntimeBackendLaunchSpec:
-    """Build the launch spec for the selected provider for one runtime session."""
-    active_registry = registry or builtin_provider_registry(codex_command=codex_command)
-    definition, selection = resolve_provider_for_runtime_session(
-        store,
-        session=session,
-        registry=active_registry,
-        codex_command=codex_command,
-    )
-    adapter = active_registry.get_runtime_adapter(definition.provider_id)
+    """Build a launch spec from an already resolved runtime backend."""
     secret_env: dict[str, str] = {}
     resolved_secret_refs: list[str] = []
     credential_binding_id: str | None = None
@@ -863,12 +856,12 @@ def build_runtime_backend_launch_spec(
         "credential_binding_id": credential_binding_id,
         "resolved_secret_refs": resolved_secret_refs,
     }
-    launch_parameters = signature(adapter.build_launch_spec).parameters
+    launch_parameters = signature(runtime_adapter.build_launch_spec).parameters
     if "model_id" in launch_parameters:
         launch_kwargs["model_id"] = None if selection is None else selection.model_id
     if "model_reasoning_effort" in launch_parameters:
         launch_kwargs["model_reasoning_effort"] = None if selection is None else selection.model_reasoning_effort
-    spec = adapter.build_launch_spec(session, **launch_kwargs)
+    spec = runtime_adapter.build_launch_spec(session, **launch_kwargs)
     if observability_store is not None:
         record_platform_audit(
             observability_store,
@@ -904,6 +897,35 @@ def build_runtime_backend_launch_spec(
     return spec
 
 
+def build_runtime_backend_launch_spec(
+    store: ProviderStore,
+    *,
+    session: RuntimeSessionRecord,
+    registry: ProviderRegistry | None = None,
+    codex_command: str = "codex",
+    secret_store: SecretStore | None = None,
+    observability_store=None,
+) -> RuntimeBackendLaunchSpec:
+    """Build the launch spec for the selected provider for one runtime session."""
+    active_registry = registry or builtin_provider_registry(codex_command=codex_command)
+    definition, selection = resolve_provider_for_runtime_session(
+        store,
+        session=session,
+        registry=active_registry,
+        codex_command=codex_command,
+    )
+    adapter = active_registry.get_runtime_adapter(definition.provider_id)
+    return build_resolved_runtime_backend_launch_spec(
+        store,
+        session=session,
+        definition=definition,
+        selection=selection,
+        runtime_adapter=adapter,
+        secret_store=secret_store,
+        observability_store=observability_store,
+    )
+
+
 def prepare_runtime_skills(
     store: ProviderStore,
     *,
@@ -932,6 +954,7 @@ __all__ = [
     "activate_hosted_model_provider",
     "bind_provider_credential",
     "builtin_provider_registry",
+    "build_resolved_runtime_backend_launch_spec",
     "build_runtime_backend_launch_spec",
     "configure_workspace_provider",
     "disable_provider_binding",

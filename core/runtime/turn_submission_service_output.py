@@ -8,7 +8,7 @@ import time
 from typing import TYPE_CHECKING
 from uuid import uuid4
 
-from core.providers.service import build_runtime_backend_launch_spec
+from core.providers.service import build_resolved_runtime_backend_launch_spec, build_runtime_backend_launch_spec
 from core.providers.service import prepare_runtime_skills
 from core.runtime.runtime_events import RuntimeEventRecord
 from core.runtime.runtime_session import RuntimeSessionRecord
@@ -171,17 +171,30 @@ def _build_launch_spec_for_execution(
     *,
     session: RuntimeSessionRecord,
     provider_id: str,
+    provider_definition=None,
+    provider_selection=None,
     runtime_adapter=None,
 ):
     if os.environ.get("MAVERICK_RUNTIME_FAKE_RESPONSE") is not None:
         return None, {}
     started_at = time.perf_counter()
-    spec = build_runtime_backend_launch_spec(
-        state.provider_store,
-        session=session,
-        secret_store=state.secret_store,
-        observability_store=state.observability_store,
-    )
+    if provider_definition is not None and runtime_adapter is not None:
+        spec = build_resolved_runtime_backend_launch_spec(
+            state.provider_store,
+            session=session,
+            definition=provider_definition,
+            selection=provider_selection,
+            runtime_adapter=runtime_adapter,
+            secret_store=state.secret_store,
+            observability_store=state.observability_store,
+        )
+    else:
+        spec = build_runtime_backend_launch_spec(
+            state.provider_store,
+            session=session,
+            secret_store=state.secret_store,
+            observability_store=state.observability_store,
+        )
     launch_spec_ms = (time.perf_counter() - started_at) * 1000
     skill_resolve_started_at = time.perf_counter()
     skills = (
@@ -195,7 +208,7 @@ def _build_launch_spec_for_execution(
     )
     skill_resolve_ms = (time.perf_counter() - skill_resolve_started_at) * 1000
     skill_prepare_ms = 0.0
-    if skills:
+    if skills or provider_id == "codex":
         skill_prepare_started_at = time.perf_counter()
         prepare_runtime_skills(state.provider_store, session=session, skills=skills, runtime_adapter=runtime_adapter)
         skill_prepare_ms = (time.perf_counter() - skill_prepare_started_at) * 1000

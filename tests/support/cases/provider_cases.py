@@ -21,6 +21,7 @@ from core.providers.provider_codex_config_policy import (
 from core.providers.provider_credentials import bind_provider_credential, disable_provider_binding
 from core.providers.provider_codex import CodexProviderAdapter, refresh_workspace_maverick_wrappers
 from core.providers.provider_codex_hooks import CODEX_POST_TOOL_USE_HOOK_NAME
+from core.providers.provider_codex_launch import CODEX_SKILL_MANIFEST_FILE, _skill_manifest
 from core.providers.provider_codex_wrappers import _workspace_maverick_wrapper_source
 from core.providers.provider_registry import ProviderRegistry
 from core.providers.provider_selection import ProviderSelectionService
@@ -771,7 +772,8 @@ class ProvidersTestCase(unittest.TestCase):
         sentinel = target_root / "sentinel.txt"
         sentinel.write_text("kept when cached\n", encoding="utf-8")
 
-        adapter.prepare_runtime_skills(session, [skill])
+        with patch("pathlib.Path.read_bytes", side_effect=AssertionError("cache hit should not read skill file bytes")):
+            adapter.prepare_runtime_skills(session, [skill])
 
         self.assertTrue(sentinel.exists())
 
@@ -780,6 +782,101 @@ class ProvidersTestCase(unittest.TestCase):
 
         self.assertFalse(sentinel.exists())
         self.assertEqual((target_root / "SKILL.md").read_text(encoding="utf-8"), "# Writer\n\nChanged.\n")
+
+    def test_codex_skill_prepare_removes_stale_manifest_targets(self) -> None:
+        runtime_store = self.make_runtime_store()
+        repo_root = self.make_repo_root()
+        session = create_runtime_session(
+            runtime_store,
+            session_id="sess-codex-stale-skills",
+            workspace_id="default",
+            agent_id="agent-1",
+            start_path=repo_root,
+        )
+        skills_source_root = repo_root / "workspaces" / "default" / "data" / "skills" / "skills"
+        writer_root = skills_source_root / "writer"
+        reviewer_root = skills_source_root / "reviewer"
+        writer_root.mkdir(parents=True)
+        reviewer_root.mkdir(parents=True)
+        (writer_root / "SKILL.md").write_text("# Writer\n", encoding="utf-8")
+        (reviewer_root / "SKILL.md").write_text("# Reviewer\n", encoding="utf-8")
+        writer = SkillDefinition(
+            skill_id="workspace.writer",
+            local_skill_id="writer",
+            name="Writer",
+            description="Writes.",
+            source_root=str(writer_root),
+            owner_kind="workspace",
+            owner_id="default",
+            workspace_id="default",
+            status="available",
+        )
+        reviewer = SkillDefinition(
+            skill_id="workspace.reviewer",
+            local_skill_id="reviewer",
+            name="Reviewer",
+            description="Reviews.",
+            source_root=str(reviewer_root),
+            owner_kind="workspace",
+            owner_id="default",
+            workspace_id="default",
+            status="available",
+        )
+        adapter = CodexProviderAdapter(codex_command="/bin/echo")
+
+        adapter.prepare_runtime_skills(session, [writer, reviewer])
+        skills_root = repo_root / "workspaces" / "default" / "runtime" / "sessions" / "sess-codex-stale-skills" / "codex-home" / "skills"
+        writer_target = skills_root / "workspace" / "writer"
+        reviewer_target = skills_root / "workspace" / "reviewer"
+        self.assertTrue(writer_target.is_dir())
+        self.assertTrue(reviewer_target.is_dir())
+
+        adapter.prepare_runtime_skills(session, [reviewer])
+
+        self.assertFalse(writer_target.exists())
+        self.assertTrue((reviewer_target / "SKILL.md").is_file())
+
+    def test_codex_skill_prepare_empty_set_cleans_previous_skills(self) -> None:
+        runtime_store = self.make_runtime_store()
+        repo_root = self.make_repo_root()
+        session = create_runtime_session(
+            runtime_store,
+            session_id="sess-codex-empty-skills",
+            workspace_id="default",
+            agent_id="agent-1",
+            start_path=repo_root,
+        )
+        source_root = repo_root / "workspaces" / "default" / "data" / "skills" / "skills" / "writer"
+        source_root.mkdir(parents=True)
+        (source_root / "SKILL.md").write_text("# Writer\n", encoding="utf-8")
+        skill = SkillDefinition(
+            skill_id="workspace.writer",
+            local_skill_id="writer",
+            name="Writer",
+            description="Writes.",
+            source_root=str(source_root),
+            owner_kind="workspace",
+            owner_id="default",
+            workspace_id="default",
+            status="available",
+        )
+        adapter = CodexProviderAdapter(codex_command="/bin/echo")
+
+        adapter.prepare_runtime_skills(session, [skill])
+        skills_root = repo_root / "workspaces" / "default" / "runtime" / "sessions" / "sess-codex-empty-skills" / "codex-home" / "skills"
+        target_root = skills_root / "workspace" / "writer"
+        self.assertTrue(target_root.is_dir())
+        manifest_path = skills_root / CODEX_SKILL_MANIFEST_FILE
+        manifest_path.write_text(
+            json.dumps(_skill_manifest([]), sort_keys=True, separators=(",", ":")) + "\n",
+            encoding="utf-8",
+        )
+
+        adapter.prepare_runtime_skills(session, [])
+
+        self.assertFalse(target_root.exists())
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+        self.assertEqual(manifest["skills"], [])
 
     def test_codex_runtime_home_is_prepared_from_configured_source_home(self) -> None:
         runtime_store = self.make_runtime_store()

@@ -46,46 +46,70 @@ def prewarm_runtime_session_async(state: PlatformState, *, session: RuntimeSessi
     """Best-effort warmup for Codex runtime process and provider thread."""
     if runtime_session_is_plain_hosted_chat(session):
         return
+    if not _session_has_any_turn(state, session.session_id):
+        return
+    if _session_has_active_turn(state, session.session_id):
+        return
 
     def worker() -> None:
-        with _session_execution_lock(session.session_id):
-            try:
-                current_session = state.runtime_store.get_session(session.session_id)
-                if runtime_session_is_plain_hosted_chat(current_session):
-                    return
-                provider, _selection, runtime_adapter = resolve_runtime_backend_for_session(
-                    state.provider_store,
-                    session=current_session,
-                )
-                if provider.provider_id != "codex":
-                    return
-                if current_session.provider_id != provider.provider_id:
-                    current_session = state.runtime_store.save_session(replace(current_session, provider_id=provider.provider_id))
-                launch_spec, _metadata = _build_launch_spec_for_execution(
+        lock = _session_execution_lock(session.session_id)
+        if not lock.acquire(blocking=False):
+            return
+        try:
+            if _session_has_active_turn(state, session.session_id):
+                return
+            current_session = state.runtime_store.get_session(session.session_id)
+            if runtime_session_is_plain_hosted_chat(current_session):
+                return
+            provider, selection, runtime_adapter = resolve_runtime_backend_for_session(
+                state.provider_store,
+                session=current_session,
+            )
+            if provider.provider_id != "codex":
+                return
+            if current_session.provider_id != provider.provider_id:
+                current_session = state.runtime_store.save_session(replace(current_session, provider_id=provider.provider_id))
+            launch_spec, _metadata = _build_launch_spec_for_execution(
+                state,
+                session=current_session,
+                provider_id=provider.provider_id,
+                provider_definition=provider,
+                provider_selection=selection,
+                runtime_adapter=runtime_adapter,
+            )
+            if launch_spec is None or _session_has_active_turn(state, session.session_id):
+                return
+            from core.providers.codex_app_server import prewarm_codex_app_server_runtime
+
+            provider_thread_id = prewarm_codex_app_server_runtime(
+                session=current_session,
+                launch_spec=launch_spec,
+            )
+            if provider_thread_id and provider_thread_id != (current_session.provider_thread_id or ""):
+                _record_provider_thread_id(
                     state,
                     session=current_session,
                     provider_id=provider.provider_id,
-                    runtime_adapter=runtime_adapter,
+                    provider_thread_id=provider_thread_id,
                 )
-                if launch_spec is None:
-                    return
-                from core.providers.codex_app_server import prewarm_codex_app_server_runtime
-
-                provider_thread_id = prewarm_codex_app_server_runtime(
-                    session=current_session,
-                    launch_spec=launch_spec,
-                )
-                if provider_thread_id and provider_thread_id != (current_session.provider_thread_id or ""):
-                    _record_provider_thread_id(
-                        state,
-                        session=current_session,
-                        provider_id=provider.provider_id,
-                        provider_thread_id=provider_thread_id,
-                    )
-            except Exception:
-                return
+        except Exception:
+            return
+        finally:
+            lock.release()
 
     Thread(target=worker, name=f"maverick-runtime-prewarm-{session.session_id}", daemon=True).start()
+
+
+def _session_has_any_turn(state: PlatformState, session_id: str) -> bool:
+    with suppress(Exception):
+        return bool(state.runtime_store.list_turns(session_id))
+    return False
+
+
+def _session_has_active_turn(state: PlatformState, session_id: str) -> bool:
+    with suppress(Exception):
+        return any(turn.status in _ACTIVE_TURN_STATUSES for turn in state.runtime_store.list_turns(session_id))
+    return True
 
 
 def submit_runtime_turn_async(
@@ -226,7 +250,7 @@ def submit_runtime_turn_async(
                     worker_provider_id = routing_decision.selected_provider_id or worker_provider_id
                     current_session = state.runtime_store.save_session(replace(current_session, provider_id=worker_provider_id))
                 else:
-                    provider, _selection, runtime_adapter = resolve_runtime_backend_for_session(state.provider_store, session=current_session)
+                    provider, selection, runtime_adapter = resolve_runtime_backend_for_session(state.provider_store, session=current_session)
                     worker_provider_id = provider.provider_id
                     if current_session.provider_id != worker_provider_id:
                         current_session = state.runtime_store.save_session(replace(current_session, provider_id=worker_provider_id))
@@ -234,6 +258,8 @@ def submit_runtime_turn_async(
                         state,
                         session=current_session,
                         provider_id=worker_provider_id,
+                        provider_definition=provider,
+                        provider_selection=selection,
                         runtime_adapter=runtime_adapter,
                     )
                     if isinstance(launch_result, tuple):

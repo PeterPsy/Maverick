@@ -19,7 +19,7 @@ from core.runtime.runtime_session import runtime_session_allows_user_thread
 from core.runtime.runtime_threads import create_runtime_thread
 from core.runtime.service import create_runtime_session, record_runtime_event, transition_runtime_session, transition_runtime_turn
 from core.runtime.thread_catalog_events import set_thread_availability
-from core.runtime.turn_submission import interrupt_runtime_provider_turn, prewarm_runtime_session_async, release_idle_runtime_processes, submit_runtime_turn_async
+from core.runtime.turn_submission import interrupt_runtime_provider_turn, release_idle_runtime_processes, submit_runtime_turn_async
 from core.secrets.app_delivery import AppSecretRequest, resolve_app_secret_payload_requests
 from core.secrets.errors import SecretError
 from core.skills.runtime_catalog import runtime_skill_catalog_app_id_for_request
@@ -431,7 +431,6 @@ def _runtime_session_for_request(
         project_id=_text(request.get("project_id")) or None,
         now=session.started_at or session.updated_at,
     )
-    prewarm_runtime_session_async(state, session=session)
     return session
 
 

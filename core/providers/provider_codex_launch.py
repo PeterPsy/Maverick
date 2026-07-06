@@ -139,7 +139,7 @@ def _default_reasoning_effort(option: ProviderModelOption | None) -> str | None:
 
 
 def _skill_manifest(skills: list["SkillDefinition"]) -> dict[str, object]:
-    """Build a content manifest for the selected workspace skill set."""
+    """Build a cheap invalidation manifest for the selected workspace skill set."""
     items: list[dict[str, str]] = []
     for skill in sorted(skills, key=lambda item: item.skill_id):
         source_root = Path(skill.source_root).resolve()
@@ -147,48 +147,137 @@ def _skill_manifest(skills: list["SkillDefinition"]) -> dict[str, object]:
             {
                 "skill_id": skill.skill_id,
                 "source_root": str(source_root),
-                "content_hash": _directory_content_hash(source_root),
+                "source_metadata_hash": _directory_metadata_hash(source_root),
             }
         )
-    digest = hashlib.sha256(json.dumps(items, sort_keys=True, separators=(",", ":")).encode("utf-8")).hexdigest()
-    return {"version": 1, "hash": digest, "skills": items}
+    digest = hashlib.sha256(
+        json.dumps(items, sort_keys=True, separators=(",", ":")).encode("utf-8")
+    ).hexdigest()
+    return {"version": 2, "hash": digest, "skills": items}
 
 
-def _directory_content_hash(root: Path) -> str:
+def _directory_metadata_hash(root: Path) -> str:
+    """Hash recursive path, mtime, and size metadata without reading file contents."""
     digest = hashlib.sha256()
     if not root.exists():
         digest.update(b"missing")
         digest.update(str(root).encode("utf-8"))
         return digest.hexdigest()
-    for path in sorted(item for item in root.rglob("*") if item.is_file()):
+    for path in sorted(root.rglob("*"), key=lambda item: item.relative_to(root).as_posix()):
+        try:
+            stat = path.stat()
+        except OSError:
+            digest.update(b"unreadable")
+            digest.update(path.relative_to(root).as_posix().encode("utf-8"))
+            digest.update(b"\0")
+            continue
         digest.update(path.relative_to(root).as_posix().encode("utf-8"))
         digest.update(b"\0")
-        digest.update(path.read_bytes())
+        digest.update(b"dir" if path.is_dir() else b"file")
+        digest.update(b"\0")
+        digest.update(str(stat.st_size).encode("utf-8"))
+        digest.update(b"\0")
+        digest.update(str(stat.st_mtime_ns).encode("utf-8"))
         digest.update(b"\0")
     return digest.hexdigest()
 
 
-def _skill_manifest_current(manifest_path: Path, manifest: dict[str, object], skills_root: Path) -> bool:
+def _read_skill_manifest(manifest_path: Path) -> dict[str, object] | None:
     try:
-        current = json.loads(manifest_path.read_text(encoding="utf-8"))
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError):
+        return None
+    return manifest if isinstance(manifest, dict) else None
+
+
+def _skill_ids_from_manifest(manifest: dict[str, object] | None) -> set[str]:
+    skill_items = manifest.get("skills") if isinstance(manifest, dict) else None
+    if not isinstance(skill_items, list):
+        return set()
+    skill_ids: set[str] = set()
+    for item in skill_items:
+        if not isinstance(item, dict):
+            continue
+        skill_id = str(item.get("skill_id") or "").strip()
+        if skill_id:
+            skill_ids.add(skill_id)
+    return skill_ids
+
+
+def _skill_target_root(skills_root: Path, skill_id: str) -> Path | None:
+    parts = [part for part in str(skill_id or "").strip().split(".") if part]
+    if not parts:
+        return None
+    if any(part in {".", "..", CODEX_SYSTEM_SKILLS_ROOT} or "/" in part or "\\" in part for part in parts):
+        return None
+    return skills_root.joinpath(*parts)
+
+
+def _skill_target_parts(skills_root: Path, skill_id: str) -> tuple[str, ...] | None:
+    target_root = _skill_target_root(skills_root, skill_id)
+    if target_root is None:
+        return None
+    try:
+        return target_root.relative_to(skills_root).parts
+    except ValueError:
+        return None
+
+
+def _skill_manifest_current(manifest_path: Path, manifest: dict[str, object], skills_root: Path) -> bool:
+    current = _read_skill_manifest(manifest_path)
+    if current is None:
         return False
     if current != manifest:
         return False
-    skill_items = manifest.get("skills")
-    if not isinstance(skill_items, list):
-        return False
-    for item in skill_items:
-        if not isinstance(item, dict):
-            return False
-        skill_id = str(item.get("skill_id") or "").strip()
-        if not skill_id or not skills_root.joinpath(*skill_id.split(".")).is_dir():
+    for skill_id in _skill_ids_from_manifest(manifest):
+        target_root = _skill_target_root(skills_root, skill_id)
+        if target_root is None or not target_root.is_dir():
             return False
     return True
 
 
 def _write_skill_manifest(manifest_path: Path, manifest: dict[str, object]) -> None:
     manifest_path.write_text(json.dumps(manifest, sort_keys=True, separators=(",", ":")) + "\n", encoding="utf-8")
+
+
+def _remove_unmanifested_skill_directories(skills_root: Path, manifest: dict[str, object]) -> None:
+    current_targets = {
+        parts
+        for skill_id in _skill_ids_from_manifest(manifest)
+        if (parts := _skill_target_parts(skills_root, skill_id)) is not None
+    }
+
+    def current_target_has_prefix(prefix: tuple[str, ...]) -> bool:
+        return any(target[: len(prefix)] == prefix for target in current_targets)
+
+    def visit(directory: Path, prefix: tuple[str, ...]) -> None:
+        for child in sorted(directory.iterdir(), key=lambda item: item.name):
+            if child.name in {CODEX_SYSTEM_SKILLS_ROOT, CODEX_SKILL_MANIFEST_FILE}:
+                continue
+            child_prefix = (*prefix, child.name)
+            if child_prefix in current_targets:
+                continue
+            if current_target_has_prefix(child_prefix):
+                if child.is_dir() and not child.is_symlink():
+                    visit(child, child_prefix)
+                    _remove_empty_skill_parents(skills_root, child)
+                continue
+            if child.is_symlink() or child.is_file():
+                child.unlink()
+            elif child.is_dir():
+                shutil.rmtree(child)
+
+    visit(skills_root, ())
+
+
+def _remove_empty_skill_parents(skills_root: Path, start: Path) -> None:
+    current = start
+    while current != skills_root and skills_root in current.parents:
+        try:
+            current.rmdir()
+        except OSError:
+            return
+        current = current.parent
 
 
 class CodexLaunchMixin:
@@ -281,20 +370,27 @@ class CodexLaunchMixin:
         manifest_path = skills_root / CODEX_SKILL_MANIFEST_FILE
         manifest = _skill_manifest(skills)
         if _skill_manifest_current(manifest_path, manifest, skills_root):
+            _remove_unmanifested_skill_directories(skills_root, manifest)
             return [
                 SkillMaterialization(
                     provider_id="codex",
                     skill_id=skill.skill_id,
                     source_root=str(Path(skill.source_root).resolve()),
-                    target_root=str(skills_root.joinpath(*skill.skill_id.split("."))),
+                    target_root=str(
+                        _skill_target_root(skills_root, skill.skill_id)
+                        or skills_root.joinpath(*skill.skill_id.split("."))
+                    ),
                     strategy="copy",
                 )
                 for skill in skills
             ]
+        _remove_unmanifested_skill_directories(skills_root, manifest)
         materializations: list[SkillMaterialization] = []
         for skill in skills:
             source_root = Path(skill.source_root).resolve()
-            target_root = skills_root.joinpath(*skill.skill_id.split("."))
+            target_root = _skill_target_root(skills_root, skill.skill_id)
+            if target_root is None:
+                continue
             if target_root.exists() or target_root.is_symlink():
                 if target_root.is_symlink() or target_root.is_file():
                     target_root.unlink()

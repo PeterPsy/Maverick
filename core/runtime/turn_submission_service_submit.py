@@ -56,7 +56,7 @@ def submit_runtime_turn(
         runtime_adapter = None
         provider_id = HOSTED_TEXT_RUNTIME_PROVIDER_ID
     else:
-        provider, _selection, runtime_adapter = resolve_runtime_backend_for_session(state.provider_store, session=session)
+        provider, selection, runtime_adapter = resolve_runtime_backend_for_session(state.provider_store, session=session)
         provider_id = provider.provider_id
     turn, events, created = _queue_turn_with_event_result(
         state,
@@ -146,7 +146,14 @@ def submit_runtime_turn(
                 session = state.runtime_store.save_session(replace(session, provider_id=provider_id))
             else:
                 assert provider is not None
-                launch_result = _build_launch_spec_for_execution(state, session=session, provider_id=provider_id)
+                launch_result = _build_launch_spec_for_execution(
+                    state,
+                    session=session,
+                    provider_id=provider_id,
+                    provider_definition=provider,
+                    provider_selection=selection,
+                    runtime_adapter=runtime_adapter,
+                )
                 launch_spec = launch_result[0] if isinstance(launch_result, tuple) else launch_result
                 execution_app_references = _materialize_app_references_for_execution(
                     app_references=app_references,

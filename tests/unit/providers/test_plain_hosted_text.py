@@ -11,6 +11,7 @@ from core.runtime.plain_hosted_text import (
     _hosted_message_content,
     _hosted_provider_accepted_sink,
     _hosted_provider_sent_sink,
+    assert_plain_hosted_chat_input_allowed,
 )
 from core.runtime.turn_submission_service_output import _record_provider_accepted, _record_provider_turn_start_sent
 from core.runtime.runtime_session import RuntimeSessionRecord
@@ -168,6 +169,72 @@ class PlainHostedTextAttachmentTest(unittest.TestCase):
             )
 
         self.assertEqual(raised.exception.reason_code, "plain_hosted_chat_attachment_too_large")
+
+    def test_rejects_too_many_attachments_before_stat(self) -> None:
+        attachments = [
+            {
+                "name": f"recording-{index}.wav",
+                "type": "audio/wav",
+                "relativePath": f"storage/uploaded/chat/recording-{index}.wav",
+            }
+            for index in range(9)
+        ]
+
+        with patch("pathlib.Path.stat", side_effect=AssertionError("attachment paths must not be statted")), self.assertRaises(HostedTextGenerationError) as raised:
+            _hosted_message_content(
+                input_text="Transcribe these.",
+                attachments=attachments,
+                session=self.session("/tmp/workspace"),
+                model_option=self.model(["text", "audio"]),
+                provider_id="openrouter",
+            )
+
+        self.assertEqual(raised.exception.reason_code, "plain_hosted_chat_too_many_attachments")
+
+    def test_plain_hosted_input_guard_rejects_too_many_attachments_before_queue(self) -> None:
+        attachments = [
+            {
+                "name": f"recording-{index}.wav",
+                "type": "audio/wav",
+                "relativePath": f"storage/uploaded/chat/recording-{index}.wav",
+            }
+            for index in range(9)
+        ]
+
+        with self.assertRaises(HostedTextGenerationError) as raised:
+            assert_plain_hosted_chat_input_allowed(
+                self.session("/tmp/workspace"),
+                attachments=attachments,
+                app_references=[],
+            )
+
+        self.assertEqual(raised.exception.reason_code, "plain_hosted_chat_too_many_attachments")
+
+    def test_rejects_aggregate_attachment_bytes_before_opening_files(self) -> None:
+        repo_root = make_temp_repo_root(self)
+        relative_path = "storage/uploaded/chat/recording.wav"
+        path = repo_root / "workspaces" / "default" / relative_path
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_bytes(b"abc")
+
+        attachment = {
+            "name": "recording.wav",
+            "type": "audio/wav",
+            "relativePath": relative_path,
+        }
+        with patch("core.runtime.plain_hosted_text.MAX_PLAIN_HOSTED_ATTACHMENTS_TOTAL_BYTES", 5), patch(
+            "pathlib.Path.open",
+            side_effect=AssertionError("aggregate over-limit attachments must not be opened"),
+        ), self.assertRaises(HostedTextGenerationError) as raised:
+            _hosted_message_content(
+                input_text="Transcribe these.",
+                attachments=[attachment, attachment],
+                session=self.session(str(repo_root / "workspaces" / "default")),
+                model_option=self.model(["text", "audio"]),
+                provider_id="openrouter",
+            )
+
+        self.assertEqual(raised.exception.reason_code, "plain_hosted_chat_attachments_too_large")
 
     def test_rejects_attachments_not_declared_by_model(self) -> None:
         repo_root = make_temp_repo_root(self)

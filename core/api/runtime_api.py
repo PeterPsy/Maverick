@@ -47,7 +47,12 @@ from core.runtime.service import (
 )
 from core.runtime.runtime_events import RuntimeEventRecord
 from core.runtime.runtime_session import RuntimeSessionRecord, runtime_session_allows_user_thread
-from core.runtime.plain_hosted_text import HOSTED_TEXT_RUNTIME_PROVIDER_ID, queue_provider_id_for_session, runtime_session_is_plain_hosted_chat
+from core.runtime.plain_hosted_text import (
+    HOSTED_TEXT_RUNTIME_PROVIDER_ID,
+    plain_hosted_chat_attachment_limit_error,
+    queue_provider_id_for_session,
+    runtime_session_is_plain_hosted_chat,
+)
 from core.runtime.runtime_turns import RuntimeTurnRecord
 from core.runtime.turn_submission import (
     interrupt_runtime_provider_turn,
@@ -1068,6 +1073,10 @@ def _submit_runtime_turn_response(
         if app_references:
             _release_client_message_claim(state, release_claim_on_failure)
             return json_response(start_response, {"error": "plain_hosted_chat_blocks_app_references"}, status="400 Bad Request")
+        attachment_limit_error = plain_hosted_chat_attachment_limit_error(attachment_items)
+        if attachment_limit_error is not None:
+            _release_client_message_claim(state, release_claim_on_failure)
+            return json_response(start_response, {"error": attachment_limit_error}, status="400 Bad Request")
     app_reference_items = validate_runtime_app_references(
         state,
         context=context,

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import base64
+from dataclasses import dataclass
 import json
 import mimetypes
 import os
@@ -29,8 +30,18 @@ from core.runtime.runtime_session import RuntimeSessionRecord
 
 
 HOSTED_TEXT_RUNTIME_PROVIDER_ID = "hosted-text-runtime"
+MAX_PLAIN_HOSTED_ATTACHMENTS = 8
 MAX_PLAIN_HOSTED_ATTACHMENT_BYTES = 25 * 1024 * 1024
+MAX_PLAIN_HOSTED_ATTACHMENTS_TOTAL_BYTES = MAX_PLAIN_HOSTED_ATTACHMENT_BYTES
 DEFAULT_HOSTED_TEXT_MAX_OUTPUT_TOKENS = 4096
+
+
+@dataclass(frozen=True)
+class _AttachmentSource:
+    attachment: dict[str, object]
+    path: Path
+    mime_type: str
+    size_bytes: int
 
 
 def runtime_session_is_plain_hosted_chat(session: RuntimeSessionRecord) -> bool:
@@ -58,6 +69,16 @@ def assert_plain_hosted_chat_input_allowed(
         raise HostedTextGenerationError("plain_hosted_chat_blocks_skills")
     if app_references:
         raise HostedTextGenerationError("plain_hosted_chat_blocks_app_references")
+    attachment_limit_error = plain_hosted_chat_attachment_limit_error(attachments)
+    if attachment_limit_error is not None:
+        raise HostedTextGenerationError(attachment_limit_error)
+
+
+def plain_hosted_chat_attachment_limit_error(attachments: list[dict[str, object]] | None) -> str | None:
+    """Return a stable error when plain-hosted attachment metadata exceeds cheap submit-time limits."""
+    if len(_attachment_items(attachments)) > MAX_PLAIN_HOSTED_ATTACHMENTS:
+        return "plain_hosted_chat_too_many_attachments"
+    return None
 
 
 def execute_plain_hosted_text_turn(
@@ -214,30 +235,63 @@ def _hosted_message_content(
     model_option: ProviderModelOption | None,
     provider_id: str = "",
 ) -> str | list[TextGenerationContentPart]:
-    attachment_items = [item for item in attachments or [] if isinstance(item, dict)]
+    attachment_items = _attachment_items(attachments)
     if not attachment_items:
         return input_text
     input_modalities = set(model_option.input_modalities if model_option is not None else [])
+    sources = _attachment_sources(
+        attachments=attachment_items,
+        input_modalities=input_modalities,
+        provider_id=provider_id,
+        workspace_root=session.workspace_root,
+    )
     parts = [TextGenerationContentPart(type="text", text=input_text.strip() or "Please inspect the uploaded attachment(s).")]
-    for attachment in attachment_items:
-        parts.append(
-            _attachment_content_part(
-                attachment=attachment,
-                input_modalities=input_modalities,
-                provider_id=provider_id,
-                workspace_root=session.workspace_root,
-            )
-        )
+    total_read_bytes = 0
+    for source in sources:
+        raw = _read_bounded_attachment_bytes(source.path)
+        total_read_bytes += len(raw)
+        if total_read_bytes > MAX_PLAIN_HOSTED_ATTACHMENTS_TOTAL_BYTES:
+            raise HostedTextGenerationError("plain_hosted_chat_attachments_too_large")
+        parts.append(_attachment_content_part(source=source, raw=raw))
     return parts
 
 
-def _attachment_content_part(
+def _attachment_items(attachments: list[dict[str, object]] | None) -> list[dict[str, object]]:
+    return [item for item in attachments or [] if isinstance(item, dict)]
+
+
+def _attachment_sources(
+    *,
+    attachments: list[dict[str, object]],
+    input_modalities: set[str],
+    provider_id: str,
+    workspace_root: str,
+) -> list[_AttachmentSource]:
+    if len(attachments) > MAX_PLAIN_HOSTED_ATTACHMENTS:
+        raise HostedTextGenerationError("plain_hosted_chat_too_many_attachments")
+    sources: list[_AttachmentSource] = []
+    total_size_bytes = 0
+    for attachment in attachments:
+        source = _attachment_source(
+            attachment=attachment,
+            input_modalities=input_modalities,
+            provider_id=provider_id,
+            workspace_root=workspace_root,
+        )
+        total_size_bytes += source.size_bytes
+        if total_size_bytes > MAX_PLAIN_HOSTED_ATTACHMENTS_TOTAL_BYTES:
+            raise HostedTextGenerationError("plain_hosted_chat_attachments_too_large")
+        sources.append(source)
+    return sources
+
+
+def _attachment_source(
     *,
     attachment: dict[str, object],
     input_modalities: set[str],
     provider_id: str,
     workspace_root: str,
-) -> TextGenerationContentPart:
+) -> _AttachmentSource:
     content_type = _string_value(attachment.get("type") or attachment.get("content_type"))
     if not _attachment_modality_supported(content_type=content_type, input_modalities=input_modalities, provider_id=provider_id):
         raise HostedTextGenerationError("plain_hosted_chat_model_blocks_attachments")
@@ -247,16 +301,20 @@ def _attachment_content_part(
     path = _local_attachment_path(workspace_root=workspace_root, relative_path=relative_path)
     if not path.is_file():
         raise HostedTextGenerationError("plain_hosted_chat_attachment_unavailable")
-    raw = _read_bounded_attachment_bytes(path)
+    size_bytes = _bounded_attachment_size(path)
     mime_type = content_type or mimetypes.guess_type(path.name)[0] or "application/octet-stream"
+    return _AttachmentSource(attachment=attachment, path=path, mime_type=mime_type, size_bytes=size_bytes)
+
+
+def _attachment_content_part(*, source: _AttachmentSource, raw: bytes) -> TextGenerationContentPart:
     encoded = base64.b64encode(raw).decode("ascii")
-    if mime_type.startswith("image/"):
-        return TextGenerationContentPart(type="image_url", image_url=f"data:{mime_type};base64,{encoded}")
+    if source.mime_type.startswith("image/"):
+        return TextGenerationContentPart(type="image_url", image_url=f"data:{source.mime_type};base64,{encoded}")
     return TextGenerationContentPart(
         type="inline_data",
-        mime_type=mime_type,
+        mime_type=source.mime_type,
         data=encoded,
-        filename=_string_value(attachment.get("name") or attachment.get("filename")) or path.name,
+        filename=_string_value(source.attachment.get("name") or source.attachment.get("filename")) or source.path.name,
     )
 
 
@@ -299,12 +357,7 @@ def _attachment_modality(content_type: str) -> str:
 
 
 def _read_bounded_attachment_bytes(path: Path) -> bytes:
-    try:
-        size_bytes = path.stat().st_size
-    except OSError as error:
-        raise HostedTextGenerationError("plain_hosted_chat_attachment_unavailable") from error
-    if size_bytes > MAX_PLAIN_HOSTED_ATTACHMENT_BYTES:
-        raise HostedTextGenerationError("plain_hosted_chat_attachment_too_large")
+    _bounded_attachment_size(path)
     try:
         with path.open("rb") as handle:
             raw = handle.read(MAX_PLAIN_HOSTED_ATTACHMENT_BYTES + 1)
@@ -313,6 +366,16 @@ def _read_bounded_attachment_bytes(path: Path) -> bytes:
     if len(raw) > MAX_PLAIN_HOSTED_ATTACHMENT_BYTES:
         raise HostedTextGenerationError("plain_hosted_chat_attachment_too_large")
     return raw
+
+
+def _bounded_attachment_size(path: Path) -> int:
+    try:
+        size_bytes = path.stat().st_size
+    except OSError as error:
+        raise HostedTextGenerationError("plain_hosted_chat_attachment_unavailable") from error
+    if size_bytes > MAX_PLAIN_HOSTED_ATTACHMENT_BYTES:
+        raise HostedTextGenerationError("plain_hosted_chat_attachment_too_large")
+    return size_bytes
 
 
 def _safe_workspace_relative_path(value: str) -> str:

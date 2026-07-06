@@ -237,6 +237,55 @@ class AppReferencesRuntimeApiTestCase(AppReferenceApiTestSupport, unittest.TestC
         self.assertEqual(payload, {"error": "empty_runtime_input"})
         materialize.assert_not_called()
 
+    def test_plain_hosted_turn_rejects_too_many_attachments_before_submit(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            repo_root = self._repo_root(temp_dir)
+            with patch.dict(
+                "os.environ",
+                {
+                    "MAVERICK_ALLOW_INSECURE_TEST_DEFAULTS": "1",
+                    "MAVERICK_ADMIN_USERNAME": "admin",
+                    "MAVERICK_ADMIN_PASSWORD": "maverick",
+                },
+            ):
+                state = bootstrap_platform_state(start_path=repo_root)
+            create_runtime_session(
+                state.runtime_store,
+                session_id="sess-hosted",
+                workspace_id="default",
+                agent_id="chat",
+                source_app_id="chat",
+                owner_user_id="user:admin",
+                runtime_mode="plain_hosted_chat",
+                start_path=repo_root,
+            )
+            app = PlatformHost(state, start_path=repo_root)
+            cookie = self._login(app)
+            attachments = [
+                {
+                    "name": f"recording-{index}.wav",
+                    "type": "audio/wav",
+                    "relativePath": f"storage/uploaded/chat/recording-{index}.wav",
+                }
+                for index in range(9)
+            ]
+
+            with patch("core.api.runtime_api.submit_runtime_turn_async", side_effect=AssertionError("submit should not run")):
+                status, payload, _headers = self._invoke(
+                    app,
+                    path="/api/runtime/sessions/sess-hosted/turns",
+                    method="POST",
+                    body={
+                        "input_text": "Transcribe these.",
+                        "attachments": attachments,
+                        "async": True,
+                    },
+                    cookie=cookie,
+                )
+
+        self.assertEqual(status, 400)
+        self.assertEqual(payload, {"error": "plain_hosted_chat_too_many_attachments"})
+
 
 if __name__ == "__main__":
     unittest.main()

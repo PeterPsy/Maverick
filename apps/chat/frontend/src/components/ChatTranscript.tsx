@@ -6,7 +6,6 @@ import { isTerminalRunStatus } from "../lib/interAgentGraph";
 import { ChatTranscriptSkeleton } from "./ChatTranscriptSkeleton";
 import { InterAgentRunPanel } from "./InterAgentRunPanel";
 import { MessageList } from "./MessageList";
-import { interAgentSummaryRunId } from "./RuntimeStepMessage";
 import { MorphingSpinner } from "./ui/morphing-spinner";
 
 export type ChatTranscriptProps = {
@@ -26,7 +25,6 @@ export type ChatTranscriptProps = {
   onLoadOlderMessages?: () => void;
   onOpenInterAgentGraph?: (runId: string) => void;
   onResolveInterAgentApproval?: (approvalId: string, approved: boolean) => Promise<void>;
-  openedInterAgentGraphRunIds?: ReadonlySet<string>;
   speechMaxTextChars?: number;
   speechProviderAvailable?: boolean;
   speechProviderAppId?: string;
@@ -48,7 +46,6 @@ export function ChatTranscript({
   onLoadOlderMessages,
   onOpenInterAgentGraph = () => undefined,
   onResolveInterAgentApproval = async () => undefined,
-  openedInterAgentGraphRunIds = new Set(),
   speechMaxTextChars = 0,
   speechProviderAvailable = true,
   speechProviderAppId = "",
@@ -150,20 +147,9 @@ export function ChatTranscript({
     [...messages]
       .reverse()
       .find((message) => message.role === "tool" && (message.toolCalls?.length || message.toolCall))?.id || null;
-  const liveInterAgentRunIds = useMemo(
-    () => new Set(interAgentRuns.filter((detail) => !isTerminalRunStatus(detail.run.status)).map((detail) => detail.run.run_id)),
+  const liveInterAgentRun = useMemo(
+    () => [...interAgentRuns].reverse().find((detail) => !isTerminalRunStatus(detail.run.status)) || null,
     [interAgentRuns],
-  );
-  const hasLiveInterAgentStep = useMemo(
-    () =>
-      messages.some((message) => {
-        if (message.role !== "step" || !message.step) {
-          return false;
-        }
-        const runId = interAgentSummaryRunId(message.step);
-        return Boolean(runId && liveInterAgentRunIds.has(runId));
-      }),
-    [liveInterAgentRunIds, messages],
   );
 
   const hasInterAgentContent =
@@ -204,13 +190,11 @@ export function ChatTranscript({
         <MessageList
           expandedMessages={expandedMessages}
           latestToolMessageId={latestToolMessageId}
-          liveInterAgentRunIds={liveInterAgentRunIds}
           mentionItems={mentionItems}
           messages={messages}
           onActiveSpeechMessageChange={setSpeakingMessageId}
           onCopyMessage={copyMessage}
           onOpenInterAgentGraph={onOpenInterAgentGraph}
-          openedInterAgentGraphRunIds={openedInterAgentGraphRunIds}
           onToggleExpanded={toggleExpanded}
           speakingMessageId={speakingMessageId}
           speechMaxTextChars={speechMaxTextChars}
@@ -218,11 +202,24 @@ export function ChatTranscript({
           speechProviderAvailable={speechProviderAvailable}
           speechProviderQualityProfile={speechProviderQualityProfile}
         />
-        {isLoading && !hasLiveInterAgentStep ? (
+        {isLoading ? (
           <article className="chatapp-bubble is-agent">
             <div className="chatapp-pending-turn" aria-live="polite">
               <MorphingSpinner size="sm" className="chatapp-pending-turn__icon" />
               <span className="chatapp-pending-turn__label">{loadingLabel}</span>
+              {liveInterAgentRun ? (
+                <button
+                  className="chatapp-pending-turn__board"
+                  onClick={() => onOpenInterAgentGraph(liveInterAgentRun.run.run_id)}
+                  type="button"
+                >
+                  <LiveBoardButtonGlow />
+                  <span aria-hidden="true" className="material-symbols-rounded chatapp-pending-turn__board-icon">
+                    account_tree
+                  </span>
+                  <span className="chatapp-pending-turn__board-label">Open multi-agent board</span>
+                </button>
+              ) : null}
             </div>
           </article>
         ) : null}
@@ -243,5 +240,18 @@ export function ChatTranscript({
         </button>
       ) : null}
     </section>
+  );
+}
+
+function LiveBoardButtonGlow() {
+  return (
+    <span aria-hidden="true" className="chatapp-live-board-glow">
+      <span className="chatapp-live-board-glow__layer chatapp-live-board-glow__layer--outer" />
+      <span className="chatapp-live-board-glow__layer chatapp-live-board-glow__layer--a" />
+      <span className="chatapp-live-board-glow__layer chatapp-live-board-glow__layer--b" />
+      <span className="chatapp-live-board-glow__layer chatapp-live-board-glow__layer--c" />
+      <span className="chatapp-live-board-glow__layer chatapp-live-board-glow__layer--bright" />
+      <span className="chatapp-live-board-glow__layer chatapp-live-board-glow__layer--rim" />
+    </span>
   );
 }

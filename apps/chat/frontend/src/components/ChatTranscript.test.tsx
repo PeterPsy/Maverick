@@ -19,7 +19,7 @@ afterEach(() => {
 });
 
 describe("ChatTranscript inter-agent board entry", () => {
-  it("shows the live board opener inside the inter-agent step without a separate pending block", async () => {
+  it("shows the live board opener beside thinking without top inter-agent badges", async () => {
     container = document.createElement("div");
     document.body.append(container);
     root = createRoot(container);
@@ -39,10 +39,8 @@ describe("ChatTranscript inter-agent board entry", () => {
       );
     });
 
-    const boardButton = container.querySelector<HTMLButtonElement>(".chatapp-agent-step__board");
+    const boardButton = container.querySelector<HTMLButtonElement>(".chatapp-pending-turn__board");
     expect(boardButton?.textContent).toContain("Open multi-agent board");
-    expect(boardButton?.classList.contains("is-live")).toBe(true);
-    expect(container.querySelector(".chatapp-pending-turn")).toBeNull();
     expect(container.querySelector(".chatapp-inter-agent-banner")).toBeNull();
     expect(container.querySelector(".chatapp-inter-agent-message__graph")).toBeNull();
 
@@ -97,36 +95,12 @@ describe("ChatTranscript inter-agent board entry", () => {
 
     const boardButton = container.querySelector<HTMLButtonElement>(".chatapp-agent-step__board");
     expect(boardButton?.textContent).toContain("Open multi-agent board");
-    expect(boardButton?.classList.contains("is-pending")).toBe(true);
 
     await act(async () => {
       boardButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
     });
 
     expect(onOpenInterAgentGraph).toHaveBeenCalledWith("run-1");
-  });
-
-  it("shows final multi-agent board entries as normal once opened", async () => {
-    container = document.createElement("div");
-    document.body.append(container);
-    root = createRoot(container);
-
-    await act(async () => {
-      root?.render(
-        <ChatTranscript
-          error={null}
-          interAgentRuns={[runDetail("completed")]}
-          isLoading={false}
-          loadingLabel="Thinking"
-          mentionItems={[]}
-          messages={[interAgentStepMessage("completed")]}
-          openedInterAgentGraphRunIds={new Set(["run-1"])}
-        />,
-      );
-    });
-
-    const boardButton = container.querySelector<HTMLButtonElement>(".chatapp-agent-step__board");
-    expect(boardButton?.classList.contains("is-pending")).toBe(false);
   });
 });
 

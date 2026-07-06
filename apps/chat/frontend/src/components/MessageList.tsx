@@ -7,13 +7,11 @@ import { MessageBubble } from "./MessageBubble";
 export function MessageList({
   expandedMessages,
   latestToolMessageId,
-  liveInterAgentRunIds,
   mentionItems,
   messages,
   onActiveSpeechMessageChange,
   onCopyMessage,
   onOpenInterAgentGraph,
-  openedInterAgentGraphRunIds,
   onToggleExpanded,
   speakingMessageId,
   speechMaxTextChars,
@@ -23,13 +21,11 @@ export function MessageList({
 }: {
   expandedMessages: Set<string>;
   latestToolMessageId: string | null;
-  liveInterAgentRunIds: ReadonlySet<string>;
   mentionItems: MentionItem[];
   messages: ChatMessage[];
   onActiveSpeechMessageChange: Dispatch<SetStateAction<string | null>>;
   onCopyMessage: CopyMessageHandler;
   onOpenInterAgentGraph?: (runId: string) => void;
-  openedInterAgentGraphRunIds: ReadonlySet<string>;
   onToggleExpanded: (messageId: string) => void;
   speakingMessageId: string | null;
   speechMaxTextChars: number;
@@ -44,13 +40,11 @@ export function MessageList({
           expanded={expandedMessages.has(message.id)}
           key={message.id}
           latestToolMessageId={latestToolMessageId}
-          liveInterAgentRunIds={liveInterAgentRunIds}
           mentionItems={mentionItems}
           message={message}
           onActiveSpeechMessageChange={onActiveSpeechMessageChange}
           onCopyMessage={onCopyMessage}
           onOpenInterAgentGraph={onOpenInterAgentGraph}
-          openedInterAgentGraphRunIds={openedInterAgentGraphRunIds}
           onToggleExpanded={onToggleExpanded}
           speakingMessageId={speakingMessageId}
           speechMaxTextChars={speechMaxTextChars}

@@ -31,6 +31,8 @@ WEBSOCKET_POLICY_VIOLATION = 4408
 DEFAULT_INITIAL_EVENT_LIMIT = 500
 MAX_HISTORY_EVENT_LIMIT = 500
 MAX_REPLAY_PAYLOAD_TEXT_CHARS = 8000
+MAX_TURN_ANCHOR_BACKFILL_EVENTS = 5000
+TURN_ANCHOR_EVENT_TYPES = {"runtime.turn.queued", "runtime.turn.started"}
 
 
 def runtime_websocket_manifest() -> dict[str, object]:
@@ -41,11 +43,11 @@ def runtime_websocket_manifest() -> dict[str, object]:
         "primary_for": ["runtime_events", "agent_turn_updates"],
         "client_query": {
             "last_event_id": "optional last persisted runtime event id for replay after reconnect",
-            "initial_event_limit": "optional bounded tail event count for the initial snapshot",
+            "initial_event_limit": "optional bounded tail event count; replay may include earlier same-turn anchor events",
         },
         "frames": {
-            "runtime.snapshot": "runtime session metadata and persisted event replay after the requested cursor",
-            "runtime.history.page": "older persisted runtime event page requested by the client",
+            "runtime.snapshot": "runtime session metadata and persisted event replay after the requested cursor, anchored to avoid starting mid-turn when possible",
+            "runtime.history.page": "older persisted runtime event page requested by the client, anchored to avoid starting mid-turn when possible",
             "runtime.event": "persisted runtime event record",
             "runtime.heartbeat": "transport keepalive frame, never persisted as a runtime event",
         },
@@ -152,9 +154,21 @@ def ordered_events_after(events: list[RuntimeEventRecord], last_event_id: str | 
     return ordered
 
 
+def turn_anchored_runtime_event_page(
+    state: PlatformState,
+    session_id: str,
+    *,
+    before_event_id: str | None,
+    limit: int,
+) -> RuntimeEventPage:
+    """Return a bounded event page extended backward to the oldest turn anchor."""
+    page = state.runtime_store.list_event_page(session_id, before_event_id=before_event_id, limit=limit)
+    return _extend_page_to_turn_anchor(state, session_id, page)
+
+
 def initial_runtime_event_page(state: PlatformState, session_id: str, *, last_event_id: str | None, limit: int) -> RuntimeEventPage:
     """Return the bounded initial replay page for a WebSocket connection."""
-    page = state.runtime_store.list_event_page(session_id, before_event_id=None, limit=limit)
+    page = turn_anchored_runtime_event_page(state, session_id, before_event_id=None, limit=limit)
     tail_events = page.events
     if last_event_id:
         events = ordered_events_after(tail_events, last_event_id)
@@ -168,6 +182,83 @@ def initial_runtime_event_page(state: PlatformState, session_id: str, *, last_ev
             newest_event_id=events[-1].event_id if events else None,
         )
     return page
+
+
+def _extend_page_to_turn_anchor(state: PlatformState, session_id: str, page: RuntimeEventPage) -> RuntimeEventPage:
+    if not page.events or not page.has_more_before:
+        return page
+    oldest_event = page.events[0]
+    turn_id = oldest_event.turn_id
+    if not turn_id or _contains_turn_anchor(page.events, turn_id):
+        return page
+
+    events = list(page.events)
+    cursor_event_id = page.oldest_event_id
+    backfilled_count = 0
+    while cursor_event_id and backfilled_count < MAX_TURN_ANCHOR_BACKFILL_EVENTS:
+        older_page = state.runtime_store.list_event_page(
+            session_id,
+            before_event_id=cursor_event_id,
+            limit=MAX_HISTORY_EVENT_LIMIT,
+        )
+        if not older_page.events:
+            return page
+
+        anchor_index = _turn_anchor_index(older_page.events, turn_id)
+        if anchor_index is not None:
+            prefix = older_page.events[anchor_index:]
+            events = _merge_runtime_event_lists(prefix, events)
+            has_more_before = older_page.has_more_before or anchor_index > 0
+            return RuntimeEventPage(
+                events=events,
+                has_more_before=has_more_before,
+                before_event_id=page.before_event_id,
+                oldest_event_id=events[0].event_id if events else None,
+                newest_event_id=events[-1].event_id if events else None,
+            )
+
+        first_turn_index = _first_turn_event_index(older_page.events, turn_id)
+        if first_turn_index is None:
+            return page
+        prefix = older_page.events[first_turn_index:]
+        events = _merge_runtime_event_lists(prefix, events)
+        backfilled_count += len(prefix)
+        cursor_event_id = events[0].event_id if events else None
+        if not older_page.has_more_before and first_turn_index == 0:
+            break
+
+    return RuntimeEventPage(
+        events=events,
+        has_more_before=True,
+        before_event_id=page.before_event_id,
+        oldest_event_id=events[0].event_id if events else None,
+        newest_event_id=events[-1].event_id if events else None,
+    )
+
+
+def _contains_turn_anchor(events: list[RuntimeEventRecord], turn_id: str) -> bool:
+    return any(event.turn_id == turn_id and event.event_type in TURN_ANCHOR_EVENT_TYPES for event in events)
+
+
+def _turn_anchor_index(events: list[RuntimeEventRecord], turn_id: str) -> int | None:
+    for index, event in enumerate(events):
+        if event.turn_id == turn_id and event.event_type in TURN_ANCHOR_EVENT_TYPES:
+            return index
+    return None
+
+
+def _first_turn_event_index(events: list[RuntimeEventRecord], turn_id: str) -> int | None:
+    for index, event in enumerate(events):
+        if event.turn_id == turn_id:
+            return index
+    return None
+
+
+def _merge_runtime_event_lists(left: list[RuntimeEventRecord], right: list[RuntimeEventRecord]) -> list[RuntimeEventRecord]:
+    merged: dict[str, RuntimeEventRecord] = {}
+    for event in [*left, *right]:
+        merged[event.event_id] = event
+    return sorted(merged.values(), key=lambda event: (event.created_at, event.event_id))
 
 
 def runtime_turns_for_events(state: PlatformState, session_id: str, events: list[RuntimeEventRecord]) -> list[RuntimeTurnRecord]:
@@ -306,7 +397,8 @@ async def stream_runtime_session_events(
                                 maximum=MAX_HISTORY_EVENT_LIMIT,
                             )
                             if isinstance(before_event_id, str) and before_event_id:
-                                page = state.runtime_store.list_event_page(
+                                page = turn_anchored_runtime_event_page(
+                                    state,
                                     session_id,
                                     before_event_id=before_event_id,
                                     limit=page_limit,

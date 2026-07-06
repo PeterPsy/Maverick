@@ -217,13 +217,35 @@ class RuntimeWebSocketTestCase(unittest.IsolatedAsyncioTestCase):
         state = bootstrap_platform_state(start_path=self.make_repo_root())
         cookie = self.login_cookie(state)
         session_id, _event_ids = self.create_session_with_events(state)
+        record_runtime_event(
+            state.runtime_store,
+            event_id="event-4",
+            session_id=session_id,
+            turn_id="turn-2",
+            process_id=None,
+            plane="turn",
+            event_type="runtime.turn.started",
+            payload={},
+            now=datetime(2026, 4, 19, 10, 0, 1, tzinfo=UTC),
+        )
+        record_runtime_event(
+            state.runtime_store,
+            event_id="event-5",
+            session_id=session_id,
+            turn_id="turn-2",
+            process_id=None,
+            plane="turn",
+            event_type="runtime.turn.completed",
+            payload={},
+            now=datetime(2026, 4, 19, 10, 0, 1, 1000, tzinfo=UTC),
+        )
 
         sent = await self.collect_websocket_messages(state, session_id=session_id, cookie=cookie, query_string=b"initial_event_limit=2")
 
         frames = [json.loads(item["text"]) for item in sent if item.get("type") == "websocket.send"]
         self.assertEqual(frames[0]["type"], "runtime.snapshot")
-        self.assertEqual([event["event_id"] for event in frames[0]["events"]], ["event-2", "event-3"])
-        self.assertEqual(frames[0]["oldest_event_id"], "event-2")
+        self.assertEqual([event["event_id"] for event in frames[0]["events"]], ["event-4", "event-5"])
+        self.assertEqual(frames[0]["oldest_event_id"], "event-4")
         self.assertTrue(frames[0]["has_more_before"])
 
     async def test_runtime_websocket_initial_snapshot_includes_turn_metadata_for_cut_tail(self) -> None:
@@ -250,7 +272,7 @@ class RuntimeWebSocketTestCase(unittest.IsolatedAsyncioTestCase):
 
         frames = [json.loads(item["text"]) for item in sent if item.get("type") == "websocket.send"]
         self.assertEqual(frames[0]["type"], "runtime.snapshot")
-        self.assertEqual([event["event_id"] for event in frames[0]["events"]], ["event-2", "event-3"])
+        self.assertEqual([event["event_id"] for event in frames[0]["events"]], ["event-1", "event-2", "event-3"])
         self.assertEqual([turn["turn_id"] for turn in frames[0]["turns"]], ["turn-1"])
         self.assertEqual(frames[0]["turns"][0]["input_text"], "important user request")
 
@@ -296,9 +318,12 @@ class RuntimeWebSocketTestCase(unittest.IsolatedAsyncioTestCase):
         frames = [json.loads(item["text"]) for item in sent if item.get("type") == "websocket.send"]
         events = {event["event_id"]: event for event in frames[0]["events"]}
         self.assertNotIn("raw", events["event-step"]["payload"])
-        self.assertEqual(len(events["event-tool"]["payload"]["stdout"]), 8000)
-        self.assertTrue(events["event-tool"]["payload"]["stdout_truncated"])
-        self.assertEqual(events["event-tool"]["payload"]["stdout_original_chars"], 20000)
+        tool_payload = events["event-tool"]["payload"]
+        self.assertEqual(tool_payload["stdout"], "")
+        self.assertTrue(tool_payload["output_compaction"]["stdout_omitted"])
+        self.assertEqual(len(tool_payload["output"]), 8000)
+        self.assertTrue(tool_payload["output_truncated"])
+        self.assertEqual(tool_payload["output_original_chars"], 12000)
 
     async def test_runtime_websocket_initial_snapshot_uses_bounded_event_page_not_recovery_tail(self) -> None:
         event = RuntimeEventRecord(
@@ -324,6 +349,14 @@ class RuntimeWebSocketTestCase(unittest.IsolatedAsyncioTestCase):
                 raise AssertionError("bounded event pages already report older-history availability")
 
             def list_event_page(self, session_id: str, *, before_event_id: str | None = None, limit: int = 200):
+                if before_event_id:
+                    return RuntimeEventPage(
+                        events=[],
+                        has_more_before=False,
+                        before_event_id=before_event_id,
+                        oldest_event_id=None,
+                        newest_event_id=None,
+                    )
                 return RuntimeEventPage(
                     events=[event],
                     has_more_before=True,

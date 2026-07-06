@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import base64
+from contextlib import contextmanager, nullcontext
 from datetime import UTC, datetime
 import json
 import os
@@ -304,141 +305,142 @@ def transcribe_path(
         operation=operation,
         allow_small_audio=bool(close_only and dictation_stream_mode),
     )
-    session_limits = (
-        validate_transcription_session_limits(data_root, session=session, chunk_size_bytes=size_bytes)
+    session_lock = (
+        transcription_session_lock(data_root, str(session["session_id"]))
         if session and not conversation_mode
-        else {}
+        else nullcontext()
     )
-    if not conversation_mode and not dictation_stream_mode:
-        duration_probe_started = time.monotonic()
-        preflight_duration_seconds = probe_audio_duration_seconds(audio_path, content_type=content_type)
-        duration_probe_seconds = time.monotonic() - duration_probe_started
-        validate_audio_duration(preflight_duration_seconds, operation=operation)
-    transcription_started = time.monotonic()
-    if conversation_mode or dictation_stream_mode:
-        result = transcribe_deepgram_flux_audio_chunk(audio_path, settings=settings, language=language, session=session or {})
-    else:
-        result = transcribe_audio_file(
-            audio_path,
-            settings=settings,
-            language=language,
-            operation=operation,
-            mode="chunked_dictation" if session else "one_shot",
+    with session_lock:
+        session_limits = (
+            validate_transcription_session_limits(data_root, session=session, chunk_size_bytes=size_bytes)
+            if session and not conversation_mode
+            else {}
         )
-    transcription_seconds = time.monotonic() - transcription_started
-    if conversation_mode:
-        return conversation_stream_response(
-            data_root=data_root,
+        if not conversation_mode and not dictation_stream_mode:
+            duration_probe_started = time.monotonic()
+            preflight_duration_seconds = probe_audio_duration_seconds(audio_path, content_type=content_type)
+            duration_probe_seconds = time.monotonic() - duration_probe_started
+            validate_audio_duration(preflight_duration_seconds, operation=operation)
+        transcription_started = time.monotonic()
+        if conversation_mode or dictation_stream_mode:
+            result = transcribe_deepgram_flux_audio_chunk(audio_path, settings=settings, language=language, session=session or {})
+        else:
+            result = transcribe_audio_file(
+                audio_path,
+                settings=settings,
+                language=language,
+                operation=operation,
+                mode="chunked_dictation" if session else "one_shot",
+            )
+        transcription_seconds = time.monotonic() - transcription_started
+        if conversation_mode:
+            return conversation_stream_response(
+                data_root=data_root,
+                result=result,
+                transcription_seconds=transcription_seconds,
+                request_started=request_started,
+                body_stage_seconds=body_stage_seconds,
+                upstream_body_stage_seconds=upstream_body_stage_seconds,
+                duration_probe_seconds=duration_probe_seconds,
+                duration_seconds=float(result.get("duration_seconds") or preflight_duration_seconds or 0.0),
+                content_type=content_type,
+                size_bytes=size_bytes,
+                session=session or {},
+                source=source,
+                session_limits=session_limits,
+            )
+        if dictation_stream_mode:
+            return dictation_stream_response(
+                data_root=data_root,
+                result=result,
+                transcription_seconds=transcription_seconds,
+                request_started=request_started,
+                body_stage_seconds=body_stage_seconds,
+                upstream_body_stage_seconds=upstream_body_stage_seconds,
+                duration_probe_seconds=duration_probe_seconds,
+                duration_seconds=float(result.get("duration_seconds") or 0.0),
+                content_type=content_type,
+                size_bytes=size_bytes,
+                session=session or {},
+                source=source,
+                session_limits=session_limits,
+            )
+        postprocess_started = time.monotonic()
+        post_processed = post_process_transcript(str(result.get("text") or ""), enable_commands=dictation_mode)
+        cleaned_text = str(post_processed.get("text") or "")
+        commands = [item for item in post_processed.get("commands", []) if isinstance(item, dict)]
+        duration_seconds = float(result.get("duration_seconds") or preflight_duration_seconds or 0.0)
+        validate_audio_duration(duration_seconds, operation=operation)
+        segments = normalized_segments(result.get("segments", []), enable_commands=dictation_mode)
+        session_payload = apply_transcription_session(
+            data_root,
+            session=session,
+            chunk_text=cleaned_text,
+            commands=commands,
+            segments=segments,
+            chunk_size_bytes=size_bytes,
+            session_limits=session_limits,
+        )
+        postprocess_seconds = time.monotonic() - postprocess_started
+        metrics = transcription_metrics(
             result=result,
             transcription_seconds=transcription_seconds,
+            duration_seconds=duration_seconds,
             request_started=request_started,
             body_stage_seconds=body_stage_seconds,
             upstream_body_stage_seconds=upstream_body_stage_seconds,
             duration_probe_seconds=duration_probe_seconds,
-            duration_seconds=float(result.get("duration_seconds") or preflight_duration_seconds or 0.0),
-            content_type=content_type,
-            size_bytes=size_bytes,
-            session=session or {},
-            source=source,
-            session_limits=session_limits,
+            postprocess_seconds=postprocess_seconds,
         )
-    if dictation_stream_mode:
-        return dictation_stream_response(
-            data_root=data_root,
-            result=result,
-            transcription_seconds=transcription_seconds,
+        public_text = str(session_payload.get("text") if session_payload else cleaned_text)
+        job_id = f"stt_{uuid.uuid4().hex}"
+        created_at = datetime.now(tz=UTC).isoformat()
+        append_transcription_job(
+            data_root,
+            {
+                "job_id": job_id,
+                "kind": "stt",
+                "created_at": created_at,
+                "engine": str(result.get("engine") or ""),
+                "model": str(result.get("model") or ""),
+                "language": str(result.get("language") or language or ""),
+                "content_type": content_type,
+                "size_bytes": size_bytes,
+                "duration_seconds": duration_seconds,
+                "transcript_chars": len(public_text),
+                "chunk_transcript_chars": len(cleaned_text),
+                "profile": str(result.get("profile") or ""),
+                "beam_size": int(result.get("beam_size") or 0),
+                "worker": result.get("worker") if isinstance(result.get("worker"), dict) else {},
+                "session": public_session_metadata(session_payload),
+                "source": source,
+                "retention": "metadata_only",
+            },
+            metrics=metrics,
             request_started=request_started,
-            body_stage_seconds=body_stage_seconds,
             upstream_body_stage_seconds=upstream_body_stage_seconds,
-            duration_probe_seconds=duration_probe_seconds,
-            duration_seconds=float(result.get("duration_seconds") or 0.0),
-            content_type=content_type,
-            size_bytes=size_bytes,
-            session=session or {},
-            source=source,
-            session_limits=session_limits,
         )
-    postprocess_started = time.monotonic()
-    post_processed = post_process_transcript(str(result.get("text") or ""), enable_commands=dictation_mode)
-    cleaned_text = str(post_processed.get("text") or "")
-    commands = [item for item in post_processed.get("commands", []) if isinstance(item, dict)]
-    duration_seconds = float(result.get("duration_seconds") or preflight_duration_seconds or 0.0)
-    validate_audio_duration(duration_seconds, operation=operation)
-    segments = normalized_segments(result.get("segments", []), enable_commands=dictation_mode)
-    session_payload = apply_transcription_session(
-        data_root,
-        session=session,
-        chunk_text=cleaned_text,
-        commands=commands,
-        segments=segments,
-        chunk_size_bytes=size_bytes,
-        session_limits=session_limits,
-    )
-    postprocess_seconds = time.monotonic() - postprocess_started
-    metrics = transcription_metrics(
-        result=result,
-        transcription_seconds=transcription_seconds,
-        duration_seconds=duration_seconds,
-        request_started=request_started,
-        body_stage_seconds=body_stage_seconds,
-        upstream_body_stage_seconds=upstream_body_stage_seconds,
-        duration_probe_seconds=duration_probe_seconds,
-        postprocess_seconds=postprocess_seconds,
-    )
-    public_text = str(session_payload.get("text") if session_payload else cleaned_text)
-    job_id = f"stt_{uuid.uuid4().hex}"
-    created_at = datetime.now(tz=UTC).isoformat()
-    store_started = time.monotonic()
-    finish_transcription_metrics(
-        metrics,
-        request_started=request_started,
-        upstream_body_stage_seconds=upstream_body_stage_seconds,
-        store_started=store_started,
-    )
-    append_job(
-        data_root,
-        {
+        return {
             "job_id": job_id,
-            "kind": "stt",
             "created_at": created_at,
+            "text": public_text,
+            "chunk_text": cleaned_text,
+            "commands": commands,
+            "segments": segments,
+            "language": str(result.get("language") or language or ""),
+            "language_probability": float(result.get("language_probability") or 0.0),
+            "duration_seconds": duration_seconds,
             "engine": str(result.get("engine") or ""),
             "model": str(result.get("model") or ""),
-            "language": str(result.get("language") or language or ""),
-            "content_type": content_type,
-            "size_bytes": size_bytes,
-            "duration_seconds": duration_seconds,
-            "transcript_chars": len(public_text),
-            "chunk_transcript_chars": len(cleaned_text),
             "profile": str(result.get("profile") or ""),
             "beam_size": int(result.get("beam_size") or 0),
             "worker": result.get("worker") if isinstance(result.get("worker"), dict) else {},
             "metrics": metrics,
-            "session": public_session_metadata(session_payload),
-            "source": source,
+            **session_payload,
+            "content_type": content_type,
+            "size_bytes": size_bytes,
             "retention": "metadata_only",
-        },
-    )
-    return {
-        "job_id": job_id,
-        "created_at": created_at,
-        "text": public_text,
-        "chunk_text": cleaned_text,
-        "commands": commands,
-        "segments": segments,
-        "language": str(result.get("language") or language or ""),
-        "language_probability": float(result.get("language_probability") or 0.0),
-        "duration_seconds": duration_seconds,
-        "engine": str(result.get("engine") or ""),
-        "model": str(result.get("model") or ""),
-        "profile": str(result.get("profile") or ""),
-        "beam_size": int(result.get("beam_size") or 0),
-        "worker": result.get("worker") if isinstance(result.get("worker"), dict) else {},
-        "metrics": metrics,
-        **session_payload,
-        "content_type": content_type,
-        "size_bytes": size_bytes,
-        "retention": "metadata_only",
-    }
+        }
 
 
 def conversation_stream_response(
@@ -475,14 +477,7 @@ def conversation_stream_response(
     )
     job_id = f"stt_{uuid.uuid4().hex}"
     created_at = datetime.now(tz=UTC).isoformat()
-    store_started = time.monotonic()
-    finish_transcription_metrics(
-        metrics,
-        request_started=request_started,
-        upstream_body_stage_seconds=upstream_body_stage_seconds,
-        store_started=store_started,
-    )
-    append_job(
+    append_transcription_job(
         data_root,
         {
             "job_id": job_id,
@@ -499,11 +494,13 @@ def conversation_stream_response(
             "profile": str(result.get("profile") or ""),
             "beam_size": 0,
             "worker": {},
-            "metrics": metrics,
             "session": {"session_id": session_id, "chunk_index": chunk_index, "partial": not final, "final": final},
             "source": source,
             "retention": "metadata_only",
         },
+        metrics=metrics,
+        request_started=request_started,
+        upstream_body_stage_seconds=upstream_body_stage_seconds,
     )
     return {
         "job_id": job_id,
@@ -583,14 +580,7 @@ def dictation_stream_response(
     )
     job_id = f"stt_{uuid.uuid4().hex}"
     created_at = datetime.now(tz=UTC).isoformat()
-    store_started = time.monotonic()
-    finish_transcription_metrics(
-        metrics,
-        request_started=request_started,
-        upstream_body_stage_seconds=upstream_body_stage_seconds,
-        store_started=store_started,
-    )
-    append_job(
+    append_transcription_job(
         data_root,
         {
             "job_id": job_id,
@@ -607,11 +597,13 @@ def dictation_stream_response(
             "profile": str(result.get("profile") or ""),
             "beam_size": 0,
             "worker": {},
-            "metrics": metrics,
             "session": public_session_metadata(session_payload),
             "source": source,
             "retention": "metadata_only",
         },
+        metrics=metrics,
+        request_started=request_started,
+        upstream_body_stage_seconds=upstream_body_stage_seconds,
     )
     return {
         "job_id": job_id,
@@ -699,6 +691,30 @@ def finish_transcription_metrics(
     metrics["request_total_seconds"] = rounded_seconds(time.monotonic() - request_started + upstream_body_stage_seconds)
 
 
+def append_transcription_job(
+    data_root: Path,
+    job: dict,
+    *,
+    metrics: dict,
+    request_started: float,
+    upstream_body_stage_seconds: float,
+) -> None:
+    job["metrics"] = persisted_transcription_metrics(metrics)
+    store_started = time.monotonic()
+    append_job(data_root, job)
+    finish_transcription_metrics(
+        metrics,
+        request_started=request_started,
+        upstream_body_stage_seconds=upstream_body_stage_seconds,
+        store_started=store_started,
+    )
+
+
+def persisted_transcription_metrics(metrics: dict) -> dict:
+    omitted = {"request_total_seconds", "store_seconds"}
+    return {key: value for key, value in metrics.items() if key not in omitted}
+
+
 def rounded_seconds(value: float) -> float:
     return round(max(0.0, float(value or 0.0)), 6)
 
@@ -723,9 +739,32 @@ def validate_audio_size_for_path(size_bytes: int, *, operation: str, allow_small
     validate_audio_size(size_bytes, operation=operation, max_audio_bytes=max_audio_bytes)
 
 
+@contextmanager
+def transcription_session_lock(data_root: Path, session_id: str):
+    lock_path = data_root / "run" / "stt-sessions" / "locks" / f"{session_id}.lock"
+    lock_path.parent.mkdir(parents=True, exist_ok=True)
+    with lock_path.open("a+", encoding="utf-8") as handle:
+        try:
+            import fcntl
+
+            fcntl.flock(handle.fileno(), fcntl.LOCK_EX)
+        except ImportError:
+            pass
+        try:
+            yield
+        finally:
+            try:
+                import fcntl
+
+                fcntl.flock(handle.fileno(), fcntl.LOCK_UN)
+            except ImportError:
+                pass
+
+
 def validate_transcription_session_limits(data_root: Path, *, session: dict, chunk_size_bytes: int) -> dict:
     cleanup_transcription_sessions(data_root)
     session_id = str(session["session_id"])
+    chunk_index = int(session.get("chunk_index") or 0)
     state = read_transcription_session(data_root, session_id)
     now = time.time()
     created_at = session_created_at(state, now=now)
@@ -733,6 +772,12 @@ def validate_transcription_session_limits(data_root: Path, *, session: dict, chu
     total_size_bytes = previous_total_size + max(0, chunk_size_bytes)
     previous_chunk_count = int(state.get("chunk_count") or legacy_session_chunk_count(state))
     chunk_count = previous_chunk_count + (1 if chunk_size_bytes > 0 else 0)
+    if chunk_index != previous_chunk_count:
+        raise SpeechValidationError(
+            f"dictation session chunk_index must be {previous_chunk_count}.",
+            operation="transcribe_audio",
+            allowed_values={"expected_chunk_index": [str(previous_chunk_count)]},
+        )
     if total_size_bytes > MAX_INLINE_TRANSCRIPTION_AUDIO_BYTES:
         raise SpeechValidationError(
             f"dictation session audio must be at most {MAX_INLINE_TRANSCRIPTION_AUDIO_BYTES} bytes.",

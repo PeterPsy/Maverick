@@ -46,7 +46,7 @@ from models import (
 from service import app_events_for_action, handle_action, operations_manifest
 from store import append_job, read_jobs, write_settings
 from synthesis import evict_synthesis_cache, read_cached_synthesis
-from transcription import cleaned_transcript
+from transcription import MAX_TRANSCRIPTION_SESSION_CHUNKS, cleaned_transcript
 
 
 def _write_fake_faster_whisper_module(root: Path) -> None:
@@ -1177,6 +1177,112 @@ class SpeechAppTests(unittest.TestCase):
                     )
 
         self.assertIn("dictation session audio", str(context.exception))
+
+    def test_transcribe_audio_dictation_flux_rejects_duplicate_parallel_chunk_before_provider(self) -> None:
+        audio = b"not-a-standalone-webm" * 32
+        fake_result = {
+            "text": "hello",
+            "chunk_text": "hello",
+            "events": [{"type": "Results", "text": "hello", "is_final": True}],
+            "turn_events": [],
+            "duration_seconds": 0.0,
+            "engine": "deepgram",
+            "model": "flux-general-en",
+            "language": "en",
+            "language_probability": 0.0,
+            "profile": "flux",
+        }
+
+        with TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            data_root = root / "data"
+            write_settings(data_root, {"transcription_engine": "deepgram"})
+            provider_calls = 0
+            provider_lock = threading.Lock()
+
+            def fake_flux(audio_path: Path, *, settings: dict, language: str, session: dict) -> dict:
+                nonlocal provider_calls
+                with provider_lock:
+                    provider_calls += 1
+                time.sleep(0.03)
+                return fake_result
+
+            def transcribe_duplicate_chunk() -> tuple[int, dict]:
+                return handle_action(
+                    data_root,
+                    root / "generated",
+                    {
+                        "action": "transcribe_audio",
+                        "content_type": "audio/webm",
+                        "audio_base64": base64.b64encode(audio).decode("ascii"),
+                        "dictation": True,
+                        "session_id": "chat-session",
+                        "chunk_index": 0,
+                        "_app_secrets": {"deepgram-api-key": "deepgram-token"},
+                    },
+                )
+
+            with patch("transcription.transcribe_deepgram_flux_audio_chunk", side_effect=fake_flux):
+                with ThreadPoolExecutor(max_workers=2) as executor:
+                    futures = [executor.submit(transcribe_duplicate_chunk) for _ in range(2)]
+                    results: list[tuple[int, dict]] = []
+                    errors: list[BaseException] = []
+                    for future in futures:
+                        try:
+                            results.append(future.result())
+                        except BaseException as error:
+                            errors.append(error)
+
+            session_state = json.loads((data_root / "run" / "stt-sessions" / "chat-session.json").read_text(encoding="utf-8"))
+
+        self.assertEqual(len(results), 1)
+        self.assertEqual(results[0][0], 200)
+        self.assertEqual(len(errors), 1)
+        self.assertIsInstance(errors[0], SpeechValidationError)
+        self.assertIn("chunk_index", str(errors[0]))
+        self.assertEqual(provider_calls, 1)
+        self.assertEqual(session_state["chunk_count"], 1)
+
+    def test_transcribe_audio_dictation_flux_rejects_session_chunk_overflow_before_provider(self) -> None:
+        audio = b"x" * 256
+        with TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            data_root = root / "data"
+            session_dir = data_root / "run" / "stt-sessions"
+            session_dir.mkdir(parents=True)
+            (session_dir / "chat-session.json").write_text(
+                json.dumps(
+                    {
+                        "schema_version": "1",
+                        "session_id": "chat-session",
+                        "created_at": time.time(),
+                        "updated_at": time.time(),
+                        "text": "",
+                        "total_size_bytes": 1024,
+                        "chunk_count": MAX_TRANSCRIPTION_SESSION_CHUNKS,
+                        "chunks": [{"chunk_index": MAX_TRANSCRIPTION_SESSION_CHUNKS - 1, "size_bytes": 256}],
+                    }
+                ),
+                encoding="utf-8",
+            )
+            write_settings(data_root, {"transcription_engine": "deepgram"})
+            with patch("transcription.transcribe_deepgram_flux_audio_chunk", side_effect=AssertionError("provider should not be called")):
+                with self.assertRaises(SpeechValidationError) as context:
+                    handle_action(
+                        data_root,
+                        root / "generated",
+                        {
+                            "action": "transcribe_audio",
+                            "content_type": "audio/webm",
+                            "audio_base64": base64.b64encode(audio).decode("ascii"),
+                            "dictation": True,
+                            "session_id": "chat-session",
+                            "chunk_index": MAX_TRANSCRIPTION_SESSION_CHUNKS,
+                            "_app_secrets": {"deepgram-api-key": "deepgram-token"},
+                        },
+                    )
+
+        self.assertIn("at most", str(context.exception))
 
     def test_transcribe_audio_dictation_flux_rejects_expired_session_before_provider(self) -> None:
         audio = b"x" * 256
@@ -2397,7 +2503,14 @@ class SpeechAppTests(unittest.TestCase):
         }
         with TemporaryDirectory() as temp_dir:
             root = Path(temp_dir)
-            with patch("transcription.transcribe_audio_file", return_value=fake_result):
+            def slow_append_job(data_root: Path, job: dict) -> None:
+                time.sleep(0.03)
+                append_job(data_root, job)
+
+            with (
+                patch("transcription.append_job", side_effect=slow_append_job),
+                patch("transcription.transcribe_audio_file", return_value=fake_result),
+            ):
                 status_code, payload = handle_action(
                     root / "data",
                     root / "storage" / "generated",
@@ -2425,8 +2538,10 @@ class SpeechAppTests(unittest.TestCase):
             self.assertIn('"kind": "stt"', jobs)
             self.assertIn('"transcript_chars": 11', jobs)
             self.assertIn('"engine_seconds"', jobs)
-            self.assertEqual(job_metrics["store_seconds"], payload["metrics"]["store_seconds"])
-            self.assertEqual(job_metrics["request_total_seconds"], payload["metrics"]["request_total_seconds"])
+            self.assertGreaterEqual(payload["metrics"]["store_seconds"], 0.02)
+            self.assertGreaterEqual(payload["metrics"]["request_total_seconds"], payload["metrics"]["store_seconds"])
+            self.assertNotIn("store_seconds", job_metrics)
+            self.assertNotIn("request_total_seconds", job_metrics)
 
     def test_transcribe_audio_rejects_long_audio_before_engine(self) -> None:
         audio = b"RIFF" + b"\0" * 512

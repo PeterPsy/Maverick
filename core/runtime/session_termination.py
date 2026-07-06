@@ -10,6 +10,7 @@ from core.runtime.process_control import terminate_runtime_processes
 from core.runtime.runtime_threads import runtime_thread_availability_for_session, update_runtime_thread_availability
 from core.runtime.service import record_runtime_event, transition_runtime_session, transition_runtime_turn
 from core.runtime.store import RuntimeStore
+from core.runtime.turn_submission_launch_cache import clear_cached_runtime_launch_context
 
 
 def terminate_runtime_session(
@@ -27,6 +28,7 @@ def terminate_runtime_session(
     except RuntimeSessionNotFoundError:
         return {"session_id": session_id, "found": False, "terminated_processes": 0, "cancelled_turns": 0}
 
+    clear_cached_runtime_launch_context(session_id)
     terminated_processes = terminate_runtime_processes(session_id)
     cancelled_turns = 0
     for turn in store.list_turns(session_id):

@@ -11,6 +11,7 @@ from uuid import uuid4
 
 from core.apps.runtime_event_hooks import dispatch_source_app_runtime_event
 from core.providers.service import resolve_runtime_backend_for_session
+from core.runtime.turn_submission_launch_cache import clear_cached_runtime_launch_context
 from core.runtime.turn_submission_service_output import _build_launch_spec_for_execution, _record_provider_thread_id
 from core.runtime.plain_hosted_text import (
     HOSTED_TEXT_RUNTIME_PROVIDER_ID,
@@ -46,8 +47,6 @@ _IDLE_REAP_TIMERS_LOCK = Lock()
 def prewarm_runtime_session_async(state: PlatformState, *, session: RuntimeSessionRecord) -> None:
     """Best-effort warmup for Codex runtime process and provider thread."""
     if runtime_session_is_plain_hosted_chat(session):
-        return
-    if not _session_has_any_turn(state, session.session_id):
         return
     if _session_has_active_turn(state, session.session_id):
         return
@@ -125,12 +124,6 @@ def schedule_runtime_session_prewarm(
     timer.start()
 
 
-def _session_has_any_turn(state: PlatformState, session_id: str) -> bool:
-    with suppress(Exception):
-        return bool(state.runtime_store.list_turns(session_id))
-    return False
-
-
 def _session_has_active_turn(state: PlatformState, session_id: str) -> bool:
     with suppress(Exception):
         return any(turn.status in _ACTIVE_TURN_STATUSES for turn in state.runtime_store.list_turns(session_id))
@@ -149,6 +142,7 @@ def submit_runtime_turn_async(
     on_queued: Callable[[RuntimeTurnRecord, list[RuntimeEventRecord]], None] | None = None,
     turn_id: str | None = None,
     received_perf_counter: float | None = None,
+    submission_timing=None,
     client_message_claim: RuntimeClientMessageClaim | None = None,
 ) -> tuple[RuntimeTurnRecord, list[RuntimeEventRecord]]:
     """Queue one runtime turn and execute it in a background worker."""
@@ -165,6 +159,7 @@ def submit_runtime_turn_async(
         app_references=app_references,
         turn_id=turn_id,
         received_perf_counter=received_perf_counter,
+        submission_timing=submission_timing,
         client_message_claim=client_message_claim,
     )
     if not created:
@@ -480,6 +475,7 @@ def release_idle_runtime_processes(
             idle_ttl_seconds=idle_ttl_seconds,
         )
     _cancel_scheduled_idle_runtime_process_reap(session_id)
+    clear_cached_runtime_launch_context(session_id)
     terminated = terminate_runtime_processes(session_id)
     with suppress(Exception):
         _definition, _selection, runtime_adapter = resolve_runtime_backend_for_session(

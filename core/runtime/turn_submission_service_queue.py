@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from dataclasses import dataclass, field
 import time
 from typing import TYPE_CHECKING
 from uuid import uuid4
@@ -19,6 +20,48 @@ if TYPE_CHECKING:
     from core.api.platform_state import PlatformState
 
 
+@dataclass
+class RuntimeTurnSubmissionTiming:
+    """Request-local latency spans for the HTTP receive to queue path."""
+
+    received_perf_counter: float | None = None
+    _durations_ms: dict[str, float] = field(default_factory=dict)
+    _queue_recorded_perf_counter: float | None = None
+
+    def record_duration_ms(self, name: str, started_perf_counter: float) -> None:
+        if self.received_perf_counter is None:
+            return
+        self._durations_ms[name] = (time.perf_counter() - started_perf_counter) * 1000
+
+    def record_queue_completed(self, started_perf_counter: float) -> None:
+        if self.received_perf_counter is None:
+            return
+        now = time.perf_counter()
+        self._durations_ms["queue_turn_ms"] = (now - started_perf_counter) * 1000
+        self._queue_recorded_perf_counter = now
+
+    def record_post_queue_response_ms(self) -> float | None:
+        if self.received_perf_counter is None or self._queue_recorded_perf_counter is None:
+            return None
+        value = (time.perf_counter() - self._queue_recorded_perf_counter) * 1000
+        self._durations_ms["post_queue_response_ms"] = value
+        return value
+
+    def payload(self, *names: str) -> dict[str, float]:
+        payload: dict[str, float] = {}
+        for name in names:
+            value = self._durations_ms.get(name)
+            if value is not None:
+                payload[name] = round(value, 3)
+        return payload
+
+
+def runtime_turn_submission_timing(received_perf_counter: float | None) -> RuntimeTurnSubmissionTiming | None:
+    if received_perf_counter is None:
+        return None
+    return RuntimeTurnSubmissionTiming(received_perf_counter=received_perf_counter)
+
+
 def _queue_turn_with_event(
     state: PlatformState,
     *,
@@ -30,6 +73,7 @@ def _queue_turn_with_event(
     app_references: list[dict[str, object]] | None,
     turn_id: str | None = None,
     received_perf_counter: float | None = None,
+    submission_timing: RuntimeTurnSubmissionTiming | None = None,
 ) -> tuple[RuntimeTurnRecord, list[RuntimeEventRecord]]:
     turn, events, _created = _queue_turn_with_event_result(
         state,
@@ -41,6 +85,7 @@ def _queue_turn_with_event(
         app_references=app_references,
         turn_id=turn_id,
         received_perf_counter=received_perf_counter,
+        submission_timing=submission_timing,
     )
     return turn, events
 
@@ -57,8 +102,11 @@ def _queue_turn_with_event_result(
     turn_id: str | None = None,
     received_perf_counter: float | None = None,
     client_message_claim: RuntimeClientMessageClaim | None = None,
+    submission_timing: RuntimeTurnSubmissionTiming | None = None,
 ) -> tuple[RuntimeTurnRecord, list[RuntimeEventRecord], bool]:
     normalized_provider_id = (provider_id or queue_provider_id_for_session(session)).strip()
+    timing = submission_timing or runtime_turn_submission_timing(received_perf_counter)
+    queue_started_at = time.perf_counter()
     turn, created = queue_runtime_turn_if_client_message_absent(
         state.runtime_store,
         turn_id=turn_id or str(uuid4()),
@@ -86,12 +134,15 @@ def _queue_turn_with_event_result(
         payload=payload,
         event_bus=state.runtime_event_bus,
     )
+    if timing is not None:
+        timing.record_queue_completed(queue_started_at)
     _record_receive_to_queued_metric(
         state,
         session=session,
         turn=turn,
         queued_event=event,
         received_perf_counter=received_perf_counter,
+        submission_timing=timing,
     )
     title_input_hash = thread_title_input_hash(
         input_text,
@@ -138,10 +189,24 @@ def _record_receive_to_queued_metric(
     turn: RuntimeTurnRecord,
     queued_event: RuntimeEventRecord,
     received_perf_counter: float | None,
+    submission_timing: RuntimeTurnSubmissionTiming | None = None,
 ) -> RuntimeEventRecord | None:
-    if received_perf_counter is None:
+    timing = submission_timing or runtime_turn_submission_timing(received_perf_counter)
+    if timing is None or timing.received_perf_counter is None:
         return None
-    elapsed_ms = (time.perf_counter() - received_perf_counter) * 1000
+    elapsed_ms = (time.perf_counter() - timing.received_perf_counter) * 1000
+    payload: dict[str, object] = {
+        "queued_event_id": queued_event.event_id,
+        "receive_to_queued_ms": round(elapsed_ms, 3),
+    }
+    payload.update(
+        timing.payload(
+            "claim_ms",
+            "session_create_ms",
+            "reference_validate_ms",
+            "queue_turn_ms",
+        )
+    )
     return record_runtime_event(
         state.runtime_store,
         event_id=str(uuid4()),
@@ -149,9 +214,30 @@ def _record_receive_to_queued_metric(
         turn_id=turn.turn_id,
         plane="turn",
         event_type="runtime.turn.receive_to_queued",
-        payload={
-            "queued_event_id": queued_event.event_id,
-            "receive_to_queued_ms": round(elapsed_ms, 3),
-        },
+        payload=payload,
+        event_bus=state.runtime_event_bus,
+    )
+
+
+def record_turn_post_queue_response_metric(
+    state: PlatformState,
+    *,
+    session: RuntimeSessionRecord,
+    turn: RuntimeTurnRecord,
+    submission_timing: RuntimeTurnSubmissionTiming | None,
+) -> RuntimeEventRecord | None:
+    if submission_timing is None:
+        return None
+    post_queue_response_ms = submission_timing.record_post_queue_response_ms()
+    if post_queue_response_ms is None:
+        return None
+    return record_runtime_event(
+        state.runtime_store,
+        event_id=str(uuid4()),
+        session_id=session.session_id,
+        turn_id=turn.turn_id,
+        plane="turn",
+        event_type="runtime.turn.post_queue_response",
+        payload={"post_queue_response_ms": round(post_queue_response_ms, 3)},
         event_bus=state.runtime_event_bus,
     )

@@ -89,6 +89,7 @@ class RuntimeSubmitIdempotencyApiTestCase(AppReferenceApiTestSupport, unittest.T
                 on_queued=None,
                 turn_id=None,
                 received_perf_counter=None,
+                submission_timing=None,
                 **_kwargs,
             ):
                 nonlocal calls
@@ -103,6 +104,7 @@ class RuntimeSubmitIdempotencyApiTestCase(AppReferenceApiTestSupport, unittest.T
                     app_references=app_references,
                     turn_id=turn_id,
                     received_perf_counter=received_perf_counter,
+                    submission_timing=submission_timing,
                 )
                 if on_queued is not None:
                     on_queued(turn, events)
@@ -146,7 +148,17 @@ class RuntimeSubmitIdempotencyApiTestCase(AppReferenceApiTestSupport, unittest.T
                 if event.event_type == "runtime.turn.receive_to_queued"
             ]
             self.assertEqual(len(metric_events), 1)
-            self.assertGreaterEqual(metric_events[0].payload["receive_to_queued_ms"], 0)
+            metric_payload = metric_events[0].payload
+            self.assertGreaterEqual(metric_payload["receive_to_queued_ms"], 0)
+            for metric_name in ("claim_ms", "session_create_ms", "reference_validate_ms", "queue_turn_ms"):
+                self.assertGreaterEqual(metric_payload[metric_name], 0)
+            post_queue_events = [
+                event
+                for event in state.runtime_store.list_events(first_payload["session"]["session_id"])
+                if event.event_type == "runtime.turn.post_queue_response"
+            ]
+            self.assertEqual(len(post_queue_events), 1)
+            self.assertGreaterEqual(post_queue_events[0].payload["post_queue_response_ms"], 0)
 
     def test_new_session_turn_concurrent_retry_reuses_claimed_turn(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -177,6 +189,7 @@ class RuntimeSubmitIdempotencyApiTestCase(AppReferenceApiTestSupport, unittest.T
                 on_queued=None,
                 turn_id=None,
                 received_perf_counter=None,
+                submission_timing=None,
                 **_kwargs,
             ):
                 nonlocal calls
@@ -193,6 +206,7 @@ class RuntimeSubmitIdempotencyApiTestCase(AppReferenceApiTestSupport, unittest.T
                     app_references=app_references,
                     turn_id=turn_id,
                     received_perf_counter=received_perf_counter,
+                    submission_timing=submission_timing,
                 )
                 if on_queued is not None:
                     on_queued(turn, events)
@@ -275,6 +289,7 @@ class RuntimeSubmitIdempotencyApiTestCase(AppReferenceApiTestSupport, unittest.T
                 on_queued=None,
                 turn_id=None,
                 received_perf_counter=None,
+                submission_timing=None,
                 **_kwargs,
             ):
                 nonlocal calls
@@ -289,6 +304,7 @@ class RuntimeSubmitIdempotencyApiTestCase(AppReferenceApiTestSupport, unittest.T
                     app_references=app_references,
                     turn_id=turn_id,
                     received_perf_counter=received_perf_counter,
+                    submission_timing=submission_timing,
                 )
                 if on_queued is not None:
                     on_queued(turn, events)

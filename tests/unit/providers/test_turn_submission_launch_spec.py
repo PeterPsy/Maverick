@@ -10,13 +10,14 @@ from core.providers.provider_codex import build_codex_definition
 from core.runtime.service import create_runtime_session
 from core.runtime.store import RuntimeCollections, RuntimeDocumentStore
 from core.runtime.turn_submission import prewarm_runtime_session_async, submit_runtime_turn_async
+from core.runtime.turn_submission_launch_cache import clear_cached_runtime_launch_context
 from core.runtime.turn_submission_service_output import _build_launch_spec_for_execution
 from tests.support.collections import FakeCollection
 from tests.support.repo import make_temp_repo_root
 
 
 class TurnSubmissionLaunchSpecTestCase(unittest.TestCase):
-    def test_prewarm_skips_brand_new_session(self) -> None:
+    def test_prewarm_accepts_brand_new_session(self) -> None:
         repo_root = make_temp_repo_root(self)
         runtime_store = _runtime_store()
         session = create_runtime_session(
@@ -31,7 +32,7 @@ class TurnSubmissionLaunchSpecTestCase(unittest.TestCase):
         with patch("core.runtime.turn_submission_service_runtime.Thread") as thread:
             prewarm_runtime_session_async(state, session=session)
 
-        thread.assert_not_called()
+        thread.assert_called_once()
 
     def test_completed_async_turn_schedules_prewarm_for_next_turn(self) -> None:
         repo_root = make_temp_repo_root(self)
@@ -126,6 +127,53 @@ class TurnSubmissionLaunchSpecTestCase(unittest.TestCase):
         self.assertEqual(adapter.launch_calls, [("gpt-test", "low")])
         self.assertEqual(adapter.skill_prepare_calls, [[]])
         self.assertEqual(metadata["provider_id_resolved"], "codex")
+        self.assertFalse(metadata["launch_cache_hit"])
+
+    def test_execution_launch_spec_reuses_cached_codex_launch_context(self) -> None:
+        repo_root = make_temp_repo_root(self)
+        runtime_store = _runtime_store()
+        session = create_runtime_session(
+            runtime_store,
+            session_id="sess-cached-launch",
+            workspace_id="default",
+            agent_id="agent-1",
+            start_path=repo_root,
+        )
+        adapter = _FakeRuntimeAdapter()
+        state = SimpleNamespace(
+            provider_store=SimpleNamespace(),
+            runtime_store=runtime_store,
+            secret_store=None,
+            observability_store=None,
+            repository_root=repo_root,
+        )
+        clear_cached_runtime_launch_context(session.session_id)
+
+        first_spec, first_metadata = _build_launch_spec_for_execution(
+            state,
+            session=session,
+            provider_id="codex",
+            provider_definition=build_codex_definition(),
+            provider_selection=None,
+            runtime_adapter=adapter,
+        )
+        second_spec, second_metadata = _build_launch_spec_for_execution(
+            state,
+            session=session,
+            provider_id="codex",
+            provider_definition=build_codex_definition(),
+            provider_selection=None,
+            runtime_adapter=adapter,
+        )
+
+        self.assertIs(first_spec, second_spec)
+        self.assertEqual(adapter.launch_calls, [(None, None)])
+        self.assertEqual(adapter.skill_prepare_calls, [[]])
+        self.assertFalse(first_metadata["launch_cache_hit"])
+        self.assertTrue(second_metadata["launch_cache_hit"])
+        self.assertEqual(second_metadata["launch_spec_ms"], 0.0)
+        self.assertEqual(second_metadata["skill_resolve_ms"], 0.0)
+        self.assertEqual(second_metadata["skill_prepare_ms"], 0.0)
 
 
 class _FakeRuntimeAdapter:

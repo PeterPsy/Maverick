@@ -70,6 +70,8 @@ class RuntimeTurnLatencyReportTestCase(unittest.TestCase):
         warm_metrics = report["cohorts"]["codex_warm"]["metrics"]
         hosted_metrics = report["cohorts"]["plain_hosted"]["metrics"]
         self.assertEqual(cold_metrics["ensure_runtime_ms"]["p50_ms"], 250)
+        self.assertEqual(cold_metrics["claim_ms"]["p50_ms"], 1)
+        self.assertEqual(cold_metrics["post_queue_response_ms"]["p50_ms"], 10)
         self.assertEqual(warm_metrics["ensure_runtime_ms"]["p50_ms"], 0.05)
         self.assertEqual(hosted_metrics["turn_start_sent_to_provider_accepted_ms"]["p50_ms"], 20)
         self.assertEqual(cold_metrics["receive_to_provider_accepted_ms"]["p50_ms"], 830)
@@ -84,7 +86,7 @@ class RuntimeTurnLatencyReportTestCase(unittest.TestCase):
 
             report = runtime_turn_latency_report.build_report(root, workspaces={"default"}, limit_turns=0, include_turns=True)
 
-        self.assertEqual(report["summary"]["events_loaded"], 6)
+        self.assertEqual(report["summary"]["events_loaded"], 7)
         self.assertEqual(report["summary"]["duplicate_events_skipped"], 2)
         self.assertEqual(report["summary"]["turns_reported"], 1)
         self.assertEqual(report["turns"][0]["metrics"]["queued_to_worker_started_ms"], 200)
@@ -158,6 +160,7 @@ def _turn_events(
     workspace_id = "default"
     queued_at = start
     receive_metric_at = start + timedelta(milliseconds=50)
+    post_queue_at = start + timedelta(milliseconds=60)
     worker_at = start + timedelta(milliseconds=200)
     dispatch_at = start + timedelta(milliseconds=450)
     sent_at = start + timedelta(milliseconds=760)
@@ -174,7 +177,22 @@ def _turn_events(
             turn_id,
             "runtime.turn.receive_to_queued",
             receive_metric_at,
-            {"receive_to_queued_ms": 50},
+            {
+                "receive_to_queued_ms": 50,
+                "claim_ms": 1,
+                "session_create_ms": 2,
+                "reference_validate_ms": 3,
+                "queue_turn_ms": 4,
+            },
+        ),
+        _event(
+            "post-queue",
+            workspace_id,
+            session_id,
+            turn_id,
+            "runtime.turn.post_queue_response",
+            post_queue_at,
+            {"post_queue_response_ms": 10},
         ),
         _event("worker", workspace_id, session_id, turn_id, "runtime.turn.worker_started", worker_at, {"provider_id": provider_id}),
         _event("dispatch", workspace_id, session_id, turn_id, "runtime.provider.dispatching", dispatch_at, dispatch_payload),

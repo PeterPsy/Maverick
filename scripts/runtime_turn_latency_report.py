@@ -19,6 +19,7 @@ DATETIME_MARKER = "__maverick_datetime__"
 INTERESTING_EVENT_TYPES = {
     "runtime.turn.queued",
     "runtime.turn.receive_to_queued",
+    "runtime.turn.post_queue_response",
     "runtime.turn.worker_started",
     "runtime.provider.dispatching",
     "runtime.provider.turn_start_sent",
@@ -27,6 +28,7 @@ INTERESTING_EVENT_TYPES = {
 EVENT_KEYS = {
     "runtime.turn.queued": "queued",
     "runtime.turn.receive_to_queued": "receive_to_queued",
+    "runtime.turn.post_queue_response": "post_queue_response",
     "runtime.turn.worker_started": "worker_started",
     "runtime.provider.dispatching": "provider_dispatching",
     "runtime.provider.turn_start_sent": "turn_start_sent",
@@ -34,6 +36,11 @@ EVENT_KEYS = {
 }
 METRIC_NAMES = (
     "receive_to_queued_ms",
+    "claim_ms",
+    "session_create_ms",
+    "reference_validate_ms",
+    "queue_turn_ms",
+    "post_queue_response_ms",
     "queued_to_worker_started_ms",
     "worker_started_to_provider_dispatching_ms",
     "worker_started_to_turn_start_sent_ms",
@@ -176,6 +183,7 @@ def build_report(
                 "external hosted HTTP network latency."
             ),
             "receive_to_provider_accepted_ms is reconstructed as receive_to_queued_ms plus queued_to_provider_accepted_ms when both components are available.",
+            "claim_ms, session_create_ms, reference_validate_ms, queue_turn_ms, and post_queue_response_ms are emitted only by newer runtime submission paths.",
             "The report intentionally omits input text and provider payload bodies beyond numeric latency spans.",
         ],
     }
@@ -487,6 +495,7 @@ def _turn_metrics(group: TurnEvents) -> dict[str, float]:
     events = group.events
     metrics: dict[str, float] = {}
     receive = events.get("receive_to_queued")
+    post_queue_response = events.get("post_queue_response")
     queued = events.get("queued")
     worker = events.get("worker_started")
     dispatching = events.get("provider_dispatching")
@@ -495,6 +504,10 @@ def _turn_metrics(group: TurnEvents) -> dict[str, float]:
 
     if receive is not None:
         _set_metric(metrics, "receive_to_queued_ms", _numeric(receive.payload.get("receive_to_queued_ms")))
+        for key in ("claim_ms", "session_create_ms", "reference_validate_ms", "queue_turn_ms"):
+            _set_metric(metrics, key, _numeric(receive.payload.get(key)))
+    if post_queue_response is not None:
+        _set_metric(metrics, "post_queue_response_ms", _numeric(post_queue_response.payload.get("post_queue_response_ms")))
     _set_metric(metrics, "queued_to_worker_started_ms", _delta_ms(queued, worker))
     _set_metric(metrics, "worker_started_to_provider_dispatching_ms", _delta_ms(worker, dispatching))
     _set_metric(metrics, "worker_started_to_turn_start_sent_ms", _delta_ms(worker, sent))

@@ -46,6 +46,7 @@ def submit_runtime_turn(
     on_queued: Callable[[RuntimeTurnRecord, list[RuntimeEventRecord]], None] | None = None,
     turn_id: str | None = None,
     received_perf_counter: float | None = None,
+    submission_timing=None,
     client_message_claim: RuntimeClientMessageClaim | None = None,
 ) -> tuple[RuntimeTurnRecord, list[RuntimeEventRecord]]:
     """Queue and execute one runtime turn synchronously."""
@@ -68,6 +69,7 @@ def submit_runtime_turn(
         app_references=app_references,
         turn_id=turn_id,
         received_perf_counter=received_perf_counter,
+        submission_timing=submission_timing,
         client_message_claim=client_message_claim,
     )
     if not created:

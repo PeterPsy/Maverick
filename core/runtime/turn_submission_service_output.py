@@ -10,6 +10,11 @@ from uuid import uuid4
 
 from core.providers.service import build_resolved_runtime_backend_launch_spec, build_runtime_backend_launch_spec
 from core.providers.service import prepare_runtime_skills
+from core.runtime.turn_submission_launch_cache import (
+    build_runtime_launch_context_fingerprint,
+    cache_runtime_launch_context,
+    get_cached_runtime_launch_context,
+)
 from core.runtime.runtime_events import RuntimeEventRecord
 from core.runtime.runtime_session import RuntimeSessionRecord
 from core.runtime.service import record_runtime_event
@@ -71,7 +76,7 @@ def _record_provider_dispatching(
     for key, value in (metadata or {}).items():
         if key.endswith("_ms") and isinstance(value, int | float):
             payload[key] = round(float(value), 3)
-        elif key in {"skill_count", "provider_id_resolved"} and value is not None:
+        elif key in {"skill_count", "provider_id_resolved", "launch_cache_hit"} and value is not None:
             payload[key] = value
     return record_runtime_event(
         state.runtime_store,
@@ -177,6 +182,33 @@ def _build_launch_spec_for_execution(
 ):
     if os.environ.get("MAVERICK_RUNTIME_FAKE_RESPONSE") is not None:
         return None, {}
+    cache_fingerprint_started_at = time.perf_counter()
+    cache_fingerprint = (
+        build_runtime_launch_context_fingerprint(
+            state,
+            session=session,
+            provider_id=provider_id,
+            provider_definition=provider_definition,
+            provider_selection=provider_selection,
+        )
+        if provider_definition is not None and runtime_adapter is not None
+        else None
+    )
+    cache_fingerprint_ms = (time.perf_counter() - cache_fingerprint_started_at) * 1000
+    if cache_fingerprint is not None:
+        cached = get_cached_runtime_launch_context(
+            session_id=session.session_id,
+            fingerprint=cache_fingerprint,
+        )
+        if cached is not None and cached.fingerprint == cache_fingerprint:
+            return cached.launch_spec, {
+                **cached.metadata,
+                "launch_spec_ms": 0.0,
+                "skill_resolve_ms": 0.0,
+                "skill_prepare_ms": 0.0,
+                "launch_cache_hit": True,
+                "launch_cache_fingerprint_ms": cache_fingerprint_ms,
+            }
     started_at = time.perf_counter()
     if provider_definition is not None and runtime_adapter is not None:
         spec = build_resolved_runtime_backend_launch_spec(
@@ -215,10 +247,20 @@ def _build_launch_spec_for_execution(
     token = spec.env_overrides.get("MAVERICK_RUNTIME_API_TOKEN")
     if token:
         register_workspace_api_token(state.runtime_store, token)
-    return spec, {
+    metadata = {
         "launch_spec_ms": launch_spec_ms,
         "skill_resolve_ms": skill_resolve_ms,
         "skill_prepare_ms": skill_prepare_ms,
         "skill_count": len(skills),
         "provider_id_resolved": provider_id,
+        "launch_cache_hit": False,
+        "launch_cache_fingerprint_ms": cache_fingerprint_ms,
     }
+    if cache_fingerprint is not None:
+        cache_runtime_launch_context(
+            session_id=session.session_id,
+            fingerprint=cache_fingerprint,
+            launch_spec=spec,
+            metadata=metadata,
+        )
+    return spec, metadata

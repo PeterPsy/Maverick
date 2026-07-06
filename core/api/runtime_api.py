@@ -56,9 +56,15 @@ from core.runtime.plain_hosted_text import (
 from core.runtime.runtime_turns import RuntimeTurnRecord
 from core.runtime.turn_submission import (
     interrupt_runtime_provider_turn,
+    prewarm_runtime_session_async,
     release_idle_runtime_processes,
     submit_runtime_turn,
     submit_runtime_turn_async,
+)
+from core.runtime.turn_submission_service_queue import (
+    RuntimeTurnSubmissionTiming,
+    record_turn_post_queue_response_metric,
+    runtime_turn_submission_timing,
 )
 from core.skills.runtime_catalog import runtime_skill_catalog_app_id_for_request
 
@@ -252,6 +258,20 @@ def _release_client_message_claim_if_turn_absent(
     if _turn_exists(state, claim.turn_id) is not None:
         return
     _release_client_message_claim(state, claim)
+
+
+def _record_timing_duration(
+    timing: RuntimeTurnSubmissionTiming | None,
+    name: str,
+    started_perf_counter: float,
+) -> None:
+    if timing is not None:
+        timing.record_duration_ms(name, started_perf_counter)
+
+
+def _prewarm_new_runtime_session(state: PlatformState, session: RuntimeSessionRecord) -> None:
+    with suppress(Exception):
+        prewarm_runtime_session_async(state, session=session)
 
 
 def _mark_client_message_claim_queued(state: PlatformState, claim: RuntimeClientMessageClaim | None) -> None:
@@ -575,18 +595,23 @@ def _handle_session_collection(
         client_message_id = str(body.get("client_message_id") or "").strip() or None
         client_message_claim: RuntimeClientMessageClaim | None = None
         client_message_claim_created = True
-        if _runtime_turn_requested(body):
+        turn_requested = _runtime_turn_requested(body)
+        submission_timing = runtime_turn_submission_timing(received_perf_counter) if turn_requested else None
+        if turn_requested:
+            claim_started_at = time.perf_counter()
             client_message_claim, client_message_claim_created = _claim_client_message_for_new_session(
                 state,
                 workspace_id=context.workspace_id,
                 client_message_id=client_message_id,
             )
+            _record_timing_duration(submission_timing, "claim_ms", claim_started_at)
             if client_message_claim is not None and not client_message_claim_created:
                 existing_turn = _wait_for_claimed_turn(state, client_message_claim)
                 if existing_turn is not None:
                     return _idempotent_runtime_turn_response(state, context, existing_turn, start_response)
                 return _pending_client_message_claim_response(state, context, client_message_claim, start_response)
         try:
+            session_create_started_at = time.perf_counter()
             session = _create_session(
                 state,
                 context,
@@ -595,6 +620,7 @@ def _handle_session_collection(
                 start_path=start_path,
                 session_id=client_message_claim.session_id if client_message_claim is not None else None,
             )
+            _record_timing_duration(submission_timing, "session_create_ms", session_create_started_at)
         except AuthorizationError as error:
             _release_client_message_claim(state, client_message_claim if client_message_claim_created else None)
             status = "429 Too Many Requests" if error.reason == "max_agent_instances_reached" else "403 Forbidden"
@@ -606,7 +632,8 @@ def _handle_session_collection(
                 {"error": "runtime_skill_catalog_unavailable", "detail": str(error)},
                 status="400 Bad Request",
             )
-        if _runtime_turn_requested(body):
+        _prewarm_new_runtime_session(state, session)
+        if turn_requested:
             try:
                 return _submit_runtime_turn_response(
                     state,
@@ -617,6 +644,7 @@ def _handle_session_collection(
                     start_path=start_path,
                     reserved_turn_id=client_message_claim.turn_id if client_message_claim is not None else None,
                     received_perf_counter=received_perf_counter,
+                    submission_timing=submission_timing,
                     release_claim_on_failure=client_message_claim if client_message_claim_created else None,
                 )
             except Exception:
@@ -1044,8 +1072,10 @@ def _submit_runtime_turn_response(
     start_path,
     reserved_turn_id: str | None = None,
     received_perf_counter: float | None = None,
+    submission_timing: RuntimeTurnSubmissionTiming | None = None,
     release_claim_on_failure: RuntimeClientMessageClaim | None = None,
 ):
+    timing = submission_timing or runtime_turn_submission_timing(received_perf_counter)
     routing_profile_error = _routing_profile_error(body)
     if routing_profile_error is not None:
         _release_client_message_claim(state, release_claim_on_failure)
@@ -1077,12 +1107,14 @@ def _submit_runtime_turn_response(
         if attachment_limit_error is not None:
             _release_client_message_claim(state, release_claim_on_failure)
             return json_response(start_response, {"error": attachment_limit_error}, status="400 Bad Request")
+    reference_validate_started_at = time.perf_counter()
     app_reference_items = validate_runtime_app_references(
         state,
         context=context,
         references=[item for item in app_references if isinstance(item, dict)],
         start_path=start_path,
     )
+    _record_timing_duration(timing, "reference_validate_ms", reference_validate_started_at)
     async_requested = bool(body.get("async"))
 
     def materialize_app_references(references: list[dict[str, object]]) -> list[dict[str, object]]:
@@ -1115,6 +1147,7 @@ def _submit_runtime_turn_response(
                 on_queued=notify_source_app_queued,
                 turn_id=reserved_turn_id,
                 received_perf_counter=received_perf_counter,
+                submission_timing=timing,
                 client_message_claim=release_claim_on_failure,
             )
             status = "202 Accepted"
@@ -1130,6 +1163,7 @@ def _submit_runtime_turn_response(
                 on_queued=notify_source_app_queued,
                 turn_id=reserved_turn_id,
                 received_perf_counter=received_perf_counter,
+                submission_timing=timing,
                 client_message_claim=release_claim_on_failure,
             )
             status = status_line(201)
@@ -1153,6 +1187,14 @@ def _submit_runtime_turn_response(
     if reserved_turn_id is None or turn.turn_id == reserved_turn_id:
         _mark_client_message_claim_queued(state, release_claim_on_failure)
     response_session = state.runtime_store.get_session(session.session_id)
+    post_queue_event = record_turn_post_queue_response_metric(
+        state,
+        session=response_session,
+        turn=turn,
+        submission_timing=timing,
+    )
+    if post_queue_event is not None:
+        events = [*events, post_queue_event]
     return json_response(
         start_response,
         _runtime_turn_response_payload(

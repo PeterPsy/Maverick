@@ -72,6 +72,36 @@ describe("ChatTranscript inter-agent board entry", () => {
 
     expect(container.querySelector(".chatapp-pending-turn__board")).toBeNull();
   });
+
+  it("shows the board opener on the final multi-agent summary message", async () => {
+    container = document.createElement("div");
+    document.body.append(container);
+    root = createRoot(container);
+    const onOpenInterAgentGraph = vi.fn();
+
+    await act(async () => {
+      root?.render(
+        <ChatTranscript
+          error={null}
+          interAgentRuns={[runDetail("completed")]}
+          isLoading={false}
+          loadingLabel="Thinking"
+          mentionItems={[]}
+          messages={[interAgentStepMessage("completed")]}
+          onOpenInterAgentGraph={onOpenInterAgentGraph}
+        />,
+      );
+    });
+
+    const boardButton = container.querySelector<HTMLButtonElement>(".chatapp-agent-step__board");
+    expect(boardButton?.textContent).toContain("Open multi-agent board");
+
+    await act(async () => {
+      boardButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+
+    expect(onOpenInterAgentGraph).toHaveBeenCalledWith("run-1");
+  });
 });
 
 describe("ChatTranscript message copy", () => {
@@ -120,7 +150,7 @@ describe("ChatTranscript message copy", () => {
   });
 });
 
-function interAgentStepMessage(): ChatMessage {
+function interAgentStepMessage(summaryKind = "plan"): ChatMessage {
   return {
     id: "step-1",
     role: "step",
@@ -131,7 +161,7 @@ function interAgentStepMessage(): ChatMessage {
       detail: {
         step_kind: "inter_agent_summary",
         inter_agent_run_id: "run-1",
-        summary_kind: "plan",
+        summary_kind: summaryKind,
       },
     },
   };

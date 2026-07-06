@@ -194,6 +194,7 @@ export function ChatTranscript({
           messages={messages}
           onActiveSpeechMessageChange={setSpeakingMessageId}
           onCopyMessage={copyMessage}
+          onOpenInterAgentGraph={onOpenInterAgentGraph}
           onToggleExpanded={toggleExpanded}
           speakingMessageId={speakingMessageId}
           speechMaxTextChars={speechMaxTextChars}

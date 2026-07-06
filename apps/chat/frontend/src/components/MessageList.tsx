@@ -11,6 +11,7 @@ export function MessageList({
   messages,
   onActiveSpeechMessageChange,
   onCopyMessage,
+  onOpenInterAgentGraph,
   onToggleExpanded,
   speakingMessageId,
   speechMaxTextChars,
@@ -24,6 +25,7 @@ export function MessageList({
   messages: ChatMessage[];
   onActiveSpeechMessageChange: Dispatch<SetStateAction<string | null>>;
   onCopyMessage: CopyMessageHandler;
+  onOpenInterAgentGraph?: (runId: string) => void;
   onToggleExpanded: (messageId: string) => void;
   speakingMessageId: string | null;
   speechMaxTextChars: number;
@@ -42,6 +44,7 @@ export function MessageList({
           message={message}
           onActiveSpeechMessageChange={onActiveSpeechMessageChange}
           onCopyMessage={onCopyMessage}
+          onOpenInterAgentGraph={onOpenInterAgentGraph}
           onToggleExpanded={onToggleExpanded}
           speakingMessageId={speakingMessageId}
           speechMaxTextChars={speechMaxTextChars}

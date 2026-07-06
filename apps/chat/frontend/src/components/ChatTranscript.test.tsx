@@ -91,7 +91,7 @@ describe("ChatTranscript inter-agent board entry", () => {
           isLoading={false}
           loadingLabel="Thinking"
           mentionItems={[]}
-          messages={[interAgentStepMessage("completed"), agentMessage()]}
+          messages={[interAgentStepMessage("completed", "summary-event:step:summary-event"), agentMessage()]}
           onOpenInterAgentGraph={onOpenInterAgentGraph}
         />,
       );
@@ -163,9 +163,9 @@ describe("ChatTranscript message copy", () => {
   });
 });
 
-function interAgentStepMessage(summaryKind = "plan"): ChatMessage {
+function interAgentStepMessage(summaryKind = "plan", id = "turn-1:step:event-1"): ChatMessage {
   return {
-    id: "turn-1:step:event-1",
+    id,
     role: "step",
     content: "",
     createdAt: "2026-06-18T10:00:00Z",

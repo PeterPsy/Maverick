@@ -42,41 +42,73 @@ export function interAgentBoardLinksByMessageId({
   runs: InterAgentRunDetail[];
   messages: ChatMessage[];
 }): Record<string, InterAgentBoardLink> {
-  const finalRunIdByTurnId = new Map<string, string>();
-  const lastAgentMessageByTurnId = new Map<string, ChatMessage>();
+  const finalSummaries: Array<{ index: number; runId: string; turnId: string }> = [];
+  const agentMessages: Array<{ index: number; message: ChatMessage; turnId: string }> = [];
+  const lastAgentMessageByTurnId = new Map<string, { index: number; message: ChatMessage; turnId: string }>();
   const runById = new Map(runs.map((detail) => [detail.run.run_id, detail]));
 
-  for (const message of messages) {
+  for (const [index, message] of messages.entries()) {
     if (message.role === "step") {
       const runId = interAgentFinalSummaryRunId(message.step);
       const turnId = chatMessageTurnId(message);
-      if (runId && turnId) {
-        finalRunIdByTurnId.set(turnId, runId);
+      if (runId) {
+        finalSummaries.push({ index, runId, turnId });
       }
     }
     if (message.role === "agent") {
       const turnId = chatMessageTurnId(message);
+      const entry = { index, message, turnId };
+      agentMessages.push(entry);
       if (turnId) {
-        lastAgentMessageByTurnId.set(turnId, message);
+        lastAgentMessageByTurnId.set(turnId, entry);
       }
     }
   }
 
   const linksByMessageId: Record<string, InterAgentBoardLink> = {};
-  for (const [turnId, runId] of finalRunIdByTurnId) {
-    const message = lastAgentMessageByTurnId.get(turnId);
-    if (!message) {
+  const linkedMessageIds = new Set<string>();
+  const linkedRunIds = new Set<string>();
+
+  function assignBoardLink(message: ChatMessage | null | undefined, runId: string) {
+    if (!message || linkedMessageIds.has(message.id)) {
+      return;
+    }
+    linkedMessageIds.add(message.id);
+    linkedRunIds.add(runId);
+    linksByMessageId[message.id] = boardLinkForRun(runId, runById, openedRunIds);
+  }
+
+  for (const summary of finalSummaries) {
+    if (!summary.turnId) {
       continue;
     }
-    const runDetail = runById.get(runId);
-    const isTerminal = runDetail ? isTerminalRunStatus(runDetail.run.status) : true;
-    linksByMessageId[message.id] = {
-      runId,
-      state: isTerminal ? (openedRunIds.has(runId) ? "normal" : "pending") : "live",
-    };
+    assignBoardLink(lastAgentMessageByTurnId.get(summary.turnId)?.message, summary.runId);
+  }
+
+  for (const summary of finalSummaries) {
+    if (linkedRunIds.has(summary.runId)) {
+      continue;
+    }
+    const nextAgent = agentMessages.find((entry) => entry.index > summary.index && !linkedMessageIds.has(entry.message.id));
+    const previousAgent = [...agentMessages].reverse().find((entry) => entry.index < summary.index && !linkedMessageIds.has(entry.message.id));
+    const fallbackAgent = [...agentMessages].reverse().find((entry) => !linkedMessageIds.has(entry.message.id));
+    assignBoardLink((nextAgent || previousAgent || fallbackAgent)?.message, summary.runId);
   }
 
   return linksByMessageId;
+}
+
+function boardLinkForRun(
+  runId: string,
+  runById: ReadonlyMap<string, InterAgentRunDetail>,
+  openedRunIds: ReadonlySet<string>,
+): InterAgentBoardLink {
+  const runDetail = runById.get(runId);
+  const isTerminal = runDetail ? isTerminalRunStatus(runDetail.run.status) : true;
+  return {
+    runId,
+    state: isTerminal ? (openedRunIds.has(runId) ? "normal" : "pending") : "live",
+  };
 }
 
 function chatMessageTurnId(message: ChatMessage): string {

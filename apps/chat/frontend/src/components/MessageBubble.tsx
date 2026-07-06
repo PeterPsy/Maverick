@@ -130,16 +130,6 @@ function AgentMessage({
           </div>
           {message.content ? <CopyMessageButton content={message.content} onCopyMessage={onCopyMessage} /> : null}
         </div>
-        {interAgentBoardLink ? (
-          <div className="chatapp-agent-block__actions">
-            <InterAgentBoardButton
-              className="chatapp-agent-message-board"
-              onOpen={onOpenInterAgentGraph}
-              runId={interAgentBoardLink.runId}
-              state={interAgentBoardLink.state}
-            />
-          </div>
-        ) : null}
         {message.content.length > 3200 ? (
           <button className="chatapp-message-action" onClick={() => onToggleExpanded(message.id)} type="button">
             {expanded ? "Collapse output" : "Expand full output"}
@@ -148,6 +138,16 @@ function AgentMessage({
         <MessageFooter
           content={message.content}
           createdAt={message.createdAt}
+          leadingControl={
+            interAgentBoardLink ? (
+              <InterAgentBoardButton
+                className="chatapp-agent-message-board"
+                onOpen={onOpenInterAgentGraph}
+                runId={interAgentBoardLink.runId}
+                state={interAgentBoardLink.state}
+              />
+            ) : null
+          }
           onCopy={onCopyMessage}
           speechControl={
             <MessageSpeechButton

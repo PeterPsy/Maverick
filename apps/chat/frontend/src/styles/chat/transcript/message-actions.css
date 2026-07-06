@@ -107,7 +107,31 @@
   align-items: center;
   justify-content: flex-end;
   gap: 0.24rem;
+  width: 100%;
   min-height: 1.05rem;
+}
+
+.chatapp-message-mobile-footer.has-leading-control {
+  justify-content: space-between;
+  gap: 0.55rem;
+}
+
+.chatapp-message-mobile-footer__leading {
+  display: inline-flex;
+  flex: 1 1 auto;
+  align-items: center;
+  min-width: 0;
+  max-width: 100%;
+}
+
+.chatapp-message-mobile-footer__trailing {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.24rem;
+  min-width: max-content;
+  margin-left: auto;
 }
 
 .chatapp-bubble.has-mobile-message-footer>.chatapp-bubble__meta,

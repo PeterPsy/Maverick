@@ -105,6 +105,13 @@ describe("ChatTranscript inter-agent board entry", () => {
     expect(boardButton?.textContent).toContain("Open multi-agent board");
     expect(boardButton?.classList.contains("is-pending")).toBe(true);
     expect(boardButton?.querySelector(".chatapp-live-board-glow")).toBeNull();
+    const footer = boardButton?.closest(".chatapp-message-mobile-footer");
+    expect(footer?.classList.contains("has-leading-control")).toBe(true);
+    expect(footer?.querySelector(".chatapp-message-mobile-footer__leading .chatapp-agent-message-board")).toBe(boardButton);
+    expect(footer?.querySelector(".chatapp-message-mobile-footer__trailing .chatapp-bubble__time")?.textContent).toBe(
+      "10:02:00 AM",
+    );
+    expect(container.querySelector(".chatapp-agent-block__actions")).toBeNull();
 
     await act(async () => {
       boardButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }));

@@ -14,6 +14,7 @@ const OPENED_INTER_AGENT_BOARD_RUNS_STORAGE_KEY = "chatapp.openedInterAgentBoard
 
 export type ChatTranscriptProps = {
   activeInterAgentGraphRunId?: string | null;
+  composerOverlayHeight?: number;
   conversationKey?: string;
   error: string | null;
   isLoading: boolean;
@@ -37,6 +38,7 @@ export type ChatTranscriptProps = {
 
 export function ChatTranscript({
   activeInterAgentGraphRunId = null,
+  composerOverlayHeight = 0,
   conversationKey = "",
   error,
   isLoading,
@@ -170,6 +172,15 @@ export function ChatTranscript({
     scrollAnchorRef.current = null;
     loadOlderPendingRef.current = false;
   }, [messages.length, isLoadingOlderHistory]);
+
+  useLayoutEffect(() => {
+    const viewport = viewportRef.current;
+    if (!viewport || !isNearBottom) {
+      return;
+    }
+    viewport.scrollTop = viewport.scrollHeight;
+    setShowScrollJump(false);
+  }, [composerOverlayHeight, isNearBottom]);
 
   const latestToolMessageId =
     [...messages]

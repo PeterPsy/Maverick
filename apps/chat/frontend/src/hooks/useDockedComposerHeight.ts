@@ -1,27 +1,30 @@
-import { type CSSProperties, useEffect, useRef, useState } from "react";
+import { type CSSProperties, useLayoutEffect, useRef, useState } from "react";
 
 export function useDockedComposerHeight({
   attachmentCount,
   composerError,
+  isComposerDockVisible,
   isEmptyChatView,
   queuedMessageCount,
 }: {
   attachmentCount: number;
   composerError: string | null;
+  isComposerDockVisible: boolean;
   isEmptyChatView: boolean;
   queuedMessageCount: number;
 }) {
   const dockedComposerRef = useRef<HTMLDivElement | null>(null);
   const [dockedComposerHeight, setDockedComposerHeight] = useState(144);
-  const chatMainStyle = isEmptyChatView
-    ? undefined
-    : ({
+  const canMeasureDock = !isEmptyChatView && isComposerDockVisible;
+  const chatMainStyle = canMeasureDock
+    ? ({
         "--chatapp-composer-overlay-height": `${dockedComposerHeight}px`,
-      } as CSSProperties);
+      } as CSSProperties)
+    : undefined;
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     const dock = dockedComposerRef.current;
-    if (!dock || isEmptyChatView) {
+    if (!dock || !canMeasureDock) {
       return;
     }
     const updateDockHeight = () => {
@@ -35,7 +38,7 @@ export function useDockedComposerHeight({
     const observer = new ResizeObserver(updateDockHeight);
     observer.observe(dock);
     return () => observer.disconnect();
-  }, [attachmentCount, composerError, isEmptyChatView, queuedMessageCount]);
+  }, [attachmentCount, canMeasureDock, composerError, queuedMessageCount]);
 
-  return { chatMainStyle, dockedComposerRef };
+  return { chatMainStyle, dockedComposerHeight, dockedComposerRef };
 }

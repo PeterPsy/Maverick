@@ -175,9 +175,10 @@ export function useChatControllerPresentation({
     !isTranscriptHistoryPending &&
     !error;
   const isThreadLoading = isBootstrapping || isHistoryLoading || isTranscriptHistoryPending;
-  const { chatMainStyle, dockedComposerRef } = useDockedComposerHeight({
+  const { chatMainStyle, dockedComposerHeight, dockedComposerRef } = useDockedComposerHeight({
     attachmentCount: attachments.length,
     composerError,
+    isComposerDockVisible: !activeInterAgentGraphRunId,
     isEmptyChatView,
     queuedMessageCount: queuedMessages.length,
   });
@@ -250,6 +251,7 @@ export function useChatControllerPresentation({
       error,
       hasMoreOlderMessages: hasHiddenMessages || hasMoreHistory,
       activeInterAgentGraphRunId,
+      composerOverlayHeight: dockedComposerHeight,
       conversationKey: activeConversationKey,
       isLoading: canStopTurn || isThreadLoading,
       isLoadingOlderHistory: isOlderHistoryLoading,

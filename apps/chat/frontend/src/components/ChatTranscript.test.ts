@@ -168,4 +168,52 @@ describe("chat transcript scroll state", () => {
       }
     }
   });
+
+  it("keeps the bottom anchored when the composer overlay height changes", async () => {
+    const originalScrollHeight = Object.getOwnPropertyDescriptor(HTMLElement.prototype, "scrollHeight");
+    Object.defineProperty(HTMLElement.prototype, "scrollHeight", {
+      configurable: true,
+      get() {
+        return this.classList.contains("chatapp-chat-scroll__inner") ? 960 : 0;
+      },
+    });
+    container = document.createElement("div");
+    document.body.append(container);
+    root = createRoot(container);
+
+    try {
+      await act(async () => {
+        root?.render(
+          createElement(ChatTranscript, {
+            ...transcriptProps("thread:first", [message("a", "First")]),
+            composerOverlayHeight: 144,
+          }),
+        );
+      });
+      const viewport = container.querySelector(".chatapp-chat-scroll__inner") as HTMLDivElement | null;
+      expect(viewport).not.toBeNull();
+      if (!viewport) {
+        return;
+      }
+      viewport.scrollTop = 420;
+
+      await act(async () => {
+        root?.render(
+          createElement(ChatTranscript, {
+            ...transcriptProps("thread:first", [message("a", "First")]),
+            composerOverlayHeight: 320,
+          }),
+        );
+      });
+
+      expect(viewport.scrollTop).toBe(960);
+      expect(container.querySelector(".chatapp-chat-scroll-jump")).toBeNull();
+    } finally {
+      if (originalScrollHeight) {
+        Object.defineProperty(HTMLElement.prototype, "scrollHeight", originalScrollHeight);
+      } else {
+        delete (HTMLElement.prototype as { scrollHeight?: unknown }).scrollHeight;
+      }
+    }
+  });
 });

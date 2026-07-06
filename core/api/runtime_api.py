@@ -3,7 +3,8 @@
 from __future__ import annotations
 
 from contextlib import suppress
-from dataclasses import asdict
+from dataclasses import asdict, replace
+from datetime import UTC, datetime, timedelta
 import time
 from urllib.parse import parse_qs
 from uuid import uuid4
@@ -70,6 +71,7 @@ from core.skills.runtime_catalog import runtime_skill_catalog_app_id_for_request
 
 
 IDEMPOTENT_CLAIM_WAIT_SECONDS = 5.0
+PREPARED_SESSION_TTL_SECONDS = 30 * 60
 
 
 def _session_payload(session: RuntimeSessionRecord, *, provider_id: str | None = None) -> dict[str, object]:
@@ -451,6 +453,79 @@ def _provider_unavailable_response(state: PlatformState, workspace_id: str, erro
     }
 
 
+def _create_thread_for_session(
+    state: PlatformState,
+    *,
+    context: RequestSession,
+    session: RuntimeSessionRecord,
+    body: dict,
+    action: str = "created",
+):
+    requested_title = str(body.get("title") or "").strip()
+    thread_title = requested_title or DEFAULT_THREAD_TITLE
+    thread = create_runtime_thread(
+        state.runtime_store,
+        workspace_id=context.workspace_id,
+        thread_id=session.session_id,
+        runtime_session_id=session.session_id,
+        title=thread_title,
+        title_source="placeholder" if not requested_title or requested_title == DEFAULT_THREAD_TITLE else "manual",
+        agent_label=session.agent_id,
+        agent_type_id=str(body.get("agent_type_id") or "").strip(),
+        agent_role_id=str(body.get("agent_role_id") or "").strip(),
+        source_app_id=session.source_app_id or session.agent_id,
+        system_prompt=session.system_prompt or "",
+        project_id=str(body.get("project_id") or "").strip() or None,
+        now=session.started_at or session.updated_at,
+    )
+    _publish_thread_change(state, workspace_id=context.workspace_id, action=action, thread=thread)
+    return thread
+
+
+def _cleanup_expired_prepared_sessions(state: PlatformState, *, context: RequestSession) -> None:
+    delete_session_records = getattr(state.runtime_store, "delete_session_records", None)
+    if not callable(delete_session_records):
+        return
+    cutoff = datetime.now(tz=UTC) - timedelta(seconds=PREPARED_SESSION_TTL_SECONDS)
+    for session in state.runtime_store.list_sessions(context.workspace_id):
+        if (
+            session.session_kind != "chat_root"
+            or session.thread_visibility != "hidden"
+            or session.owner_user_id != context.user.user_id
+            or session.updated_at >= cutoff
+        ):
+            continue
+        with suppress(Exception):
+            if state.runtime_store.list_turns(session.session_id):
+                continue
+            delete_session_records(session.session_id)
+
+
+def _prepared_session_can_be_promoted(session: RuntimeSessionRecord, context: RequestSession) -> bool:
+    return (
+        session.session_kind == "chat_root"
+        and session.thread_visibility == "hidden"
+        and session.workspace_id == context.workspace_id
+        and session.owner_user_id == context.user.user_id
+    )
+
+
+def _promote_prepared_session_for_turn(
+    state: PlatformState,
+    context: RequestSession,
+    session: RuntimeSessionRecord,
+    body: dict,
+) -> RuntimeSessionRecord:
+    visible = state.runtime_store.save_session(replace(session, thread_visibility="user", updated_at=datetime.now(tz=UTC)))
+    try:
+        state.runtime_store.get_thread(visible.session_id)
+        action = "updated"
+    except RuntimeThreadNotFoundError:
+        action = "created"
+    _create_thread_for_session(state, context=context, session=visible, body=body, action=action)
+    return visible
+
+
 def _log_runtime_api_timing(
     state: PlatformState,
     context: RequestSession,
@@ -507,6 +582,7 @@ def _create_session(
     agent_id: str,
     start_path,
     session_id: str | None = None,
+    prepare_only: bool = False,
 ) -> RuntimeSessionRecord:
     authorize_runtime_session_create(
         workspace_store=state.workspace_store,
@@ -539,6 +615,7 @@ def _create_session(
         source_app_id=source_app_id,
         owner_user_id=context.user.user_id,
         created_by_user_id=context.user.user_id,
+        thread_visibility="hidden" if prepare_only else "user",
         grants=[],
         governance=state.workspace_store.get_governance(context.workspace_id),
         platform_allows_full_access=context.workspace_id == "default",
@@ -552,24 +629,8 @@ def _create_session(
         observability_store=state.observability_store,
         start_path=start_path,
     )
-    requested_title = str(body.get("title") or "").strip()
-    thread_title = requested_title or DEFAULT_THREAD_TITLE
-    thread = create_runtime_thread(
-        state.runtime_store,
-        workspace_id=context.workspace_id,
-        thread_id=session.session_id,
-        runtime_session_id=session.session_id,
-        title=thread_title,
-        title_source="placeholder" if not requested_title or requested_title == DEFAULT_THREAD_TITLE else "manual",
-        agent_label=session.agent_id,
-        agent_type_id=str(body.get("agent_type_id") or "").strip(),
-        agent_role_id=str(body.get("agent_role_id") or "").strip(),
-        source_app_id=session.source_app_id or session.agent_id,
-        system_prompt=session.system_prompt or "",
-        project_id=str(body.get("project_id") or "").strip() or None,
-        now=session.started_at or session.updated_at,
-    )
-    _publish_thread_change(state, workspace_id=context.workspace_id, action="created", thread=thread)
+    if not prepare_only:
+        _create_thread_for_session(state, context=context, session=session, body=body)
     return session
 
 
@@ -596,6 +657,11 @@ def _handle_session_collection(
         client_message_claim: RuntimeClientMessageClaim | None = None
         client_message_claim_created = True
         turn_requested = _runtime_turn_requested(body)
+        prepare_only = bool(body.get("prepare_only"))
+        if prepare_only and turn_requested:
+            return json_response(start_response, {"error": "prepare_only_turn_not_allowed"}, status="400 Bad Request")
+        if prepare_only:
+            _cleanup_expired_prepared_sessions(state, context=context)
         submission_timing = runtime_turn_submission_timing(received_perf_counter) if turn_requested else None
         if turn_requested:
             claim_started_at = time.perf_counter()
@@ -619,6 +685,7 @@ def _handle_session_collection(
                 agent_id=agent_id,
                 start_path=start_path,
                 session_id=client_message_claim.session_id if client_message_claim is not None else None,
+                prepare_only=prepare_only,
             )
             _record_timing_duration(submission_timing, "session_create_ms", session_create_started_at)
         except AuthorizationError as error:
@@ -1022,7 +1089,10 @@ def _handle_session_turns(
     if session.workspace_id != context.workspace_id:
         return json_response(start_response, {"error": "runtime_session_not_found"}, status="404 Not Found")
     if not runtime_session_allows_user_thread(session):
-        return _hidden_runtime_session_response(start_response, session)
+        if method == "POST" and _runtime_turn_requested(body) and _prepared_session_can_be_promoted(session, context):
+            session = _promote_prepared_session_for_turn(state, context, session, body)
+        else:
+            return _hidden_runtime_session_response(start_response, session)
     session = _reconciled_session(state, session, start_path=start_path)
     if method == "GET":
         return json_response(start_response, {"items": [_turn_payload(turn) for turn in state.runtime_store.list_turns(session_id)]})

@@ -15,9 +15,11 @@ import {
   createRuntimeSessionWithTurn,
   executeInterAgentRun,
   interruptRuntimeTurn,
+  isRuntimeSessionUnavailableError,
   sendRuntimeTurn,
 } from "../api/client";
 import type { ComposerAttachment } from "../lib/attachments";
+import type { RuntimeSessionOptions } from "../api/client";
 import { hasInvalidAttachments } from "../lib/attachments";
 import { ActiveAppContext, mergeAppReferences } from "../lib/activeAppContext";
 import { appReferencesFromText } from "../lib/mentions";
@@ -99,6 +101,19 @@ type SubmissionTarget = {
   draftChat: DraftChat | null;
   thread: ChatThread | null;
   threadIds: Set<string>;
+};
+
+type PreparedRuntimeSession = {
+  conversationKey: string;
+  key: string;
+  session: RuntimeSession;
+};
+
+type PreparedRuntimeSessionRequest = {
+  abortController: AbortController;
+  conversationKey: string;
+  key: string;
+  promise: Promise<PreparedRuntimeSession | null>;
 };
 
 export function conversationKeyFor(activeThread: ChatThread | null, draftChat: DraftChat | null): string {
@@ -197,6 +212,50 @@ function isPendingIdempotencyResponse(response: RuntimeTurnSubmitResponse): bool
   return response.idempotency?.status === "pending" && !response.turn;
 }
 
+function runtimeSessionOptionsForNewChat({
+  agentRuntimeConfig,
+  draftChat,
+  systemPrompt,
+}: {
+  agentRuntimeConfig: AgentRuntimeConfig | null;
+  draftChat: DraftChat | null;
+  systemPrompt: string;
+}): RuntimeSessionOptions {
+  return {
+    agent_id: agentRuntimeConfig?.agent_id,
+    agent_role_id: agentRuntimeConfig?.agent_role_id,
+    agent_type_id: agentRuntimeConfig?.agent_type_id,
+    project_id: draftChat?.projectId ?? null,
+    source_app_id: agentRuntimeConfig?.source_app_id || "chat",
+    system_prompt: systemPrompt,
+    skill_catalog_app_id: agentRuntimeConfig?.skill_catalog_app_id,
+    skill_ids: agentRuntimeConfig?.skill_ids || [],
+    runtime_mode: agentRuntimeConfig?.runtime_mode,
+    routing_profile: agentRuntimeConfig?.routing_profile,
+    hosted_provider_id: agentRuntimeConfig?.hosted_provider_id,
+    hosted_model_id: agentRuntimeConfig?.hosted_model_id,
+    title: "New chat",
+  };
+}
+
+function preparedRuntimeSessionKey(conversationKey: string, options: RuntimeSessionOptions): string {
+  return JSON.stringify({
+    conversationKey,
+    agent_id: options.agent_id || "chat",
+    agent_role_id: options.agent_role_id || "",
+    agent_type_id: options.agent_type_id || "",
+    hosted_model_id: options.hosted_model_id || "",
+    hosted_provider_id: options.hosted_provider_id || "",
+    project_id: options.project_id || null,
+    routing_profile: options.routing_profile || "",
+    runtime_mode: options.runtime_mode || "",
+    skill_catalog_app_id: options.skill_catalog_app_id || "",
+    skill_ids: options.skill_ids || [],
+    source_app_id: options.source_app_id || "chat",
+    system_prompt: options.system_prompt || "",
+  });
+}
+
 export function useMessageSubmission({
   activeAppContext,
   activeThread,
@@ -233,6 +292,8 @@ export function useMessageSubmission({
   const threadsRef = useRef(threads);
   const conversationKeyAliasesRef = useRef<Record<string, string>>({});
   const inFlightSubmissionsRef = useRef<Record<string, InFlightSubmission>>({});
+  const preparedRuntimeSessionRef = useRef<PreparedRuntimeSession | null>(null);
+  const preparedRuntimeSessionRequestRef = useRef<PreparedRuntimeSessionRequest | null>(null);
   const [pendingUserMessagesByConversationKey, setPendingUserMessagesByConversationKey] = useState<ConversationItems<PendingMessage>>({});
   const [failedUserMessagesByConversationKey, setFailedUserMessagesByConversationKey] = useState<ConversationItems<PendingMessage>>({});
   const [queuedMessagesByConversationKey, setQueuedMessagesByConversationKey] = useState<ConversationItems<QueuedMessage>>({});
@@ -251,6 +312,32 @@ export function useMessageSubmission({
     draftChatRef.current = draftChat;
     threadsRef.current = threads;
   }, [activeAppContext, activeConversationKey, activeThread, draftChat, threads]);
+
+  useEffect(() => {
+    if (!draftChat || activeThread || isBootstrapping || !activeConversationKey) {
+      cancelPreparedRuntimeSession({ preserveInFlight: true });
+      if (!draftChat && !preparedRuntimeSessionHasInFlightConsumer()) {
+        preparedRuntimeSessionRef.current = null;
+      }
+      return;
+    }
+    const target: SubmissionTarget = {
+      activeAppContext,
+      conversationKey: activeConversationKey,
+      draftChat,
+      thread: null,
+      threadIds: new Set(threads.map((item) => item.thread_id)),
+    };
+    void buildRuntimeSessionOptions(target)
+      .then(({ options }) => {
+        const key = preparedRuntimeSessionKey(activeConversationKey, options);
+        if (preparedRuntimeSessionRef.current?.key === key || preparedRuntimeSessionRequestRef.current?.key === key) {
+          return;
+        }
+        requestPreparedRuntimeSession(activeConversationKey, key, options);
+      })
+      .catch(() => undefined);
+  }, [activeAppContext, activeConversationKey, activeThread, draftChat, isBootstrapping, selectedAgentRuntimeConfig, threads]);
 
   const setPendingUserMessages = useCallback<Dispatch<SetStateAction<PendingMessage[]>>>((action) => {
     setItemsForConversation(setPendingUserMessagesByConversationKey, activeConversationKeyRef.current, action);
@@ -336,6 +423,157 @@ export function useMessageSubmission({
         multiAgentMode: message.multiAgentMode,
       },
     ]);
+  }
+
+  async function buildRuntimeSessionOptions(
+    target: SubmissionTarget,
+    signal?: AbortSignal,
+  ): Promise<{
+    agentRuntimeConfig: AgentRuntimeConfig | null;
+    options: RuntimeSessionOptions;
+    systemPrompt: string;
+  }> {
+    if (signal) {
+      throwIfAborted(signal);
+    }
+    const agentRuntimeConfig = await selectedAgentRuntimeConfig(target.activeAppContext);
+    if (signal) {
+      throwIfAborted(signal);
+    }
+    const systemPrompt =
+      agentRuntimeConfig?.system_prompt || target.draftChat?.systemPrompt || (await loadDefaultSystemPrompt(target.activeAppContext));
+    if (signal) {
+      throwIfAborted(signal);
+    }
+    return {
+      agentRuntimeConfig,
+      options: runtimeSessionOptionsForNewChat({
+        agentRuntimeConfig,
+        draftChat: target.draftChat,
+        systemPrompt,
+      }),
+      systemPrompt,
+    };
+  }
+
+  function preparedRuntimeSessionHasInFlightConsumer(): boolean {
+    const conversationKey =
+      preparedRuntimeSessionRequestRef.current?.conversationKey || preparedRuntimeSessionRef.current?.conversationKey || "";
+    return Boolean(conversationKey && inFlightSubmissionsRef.current[conversationKey]);
+  }
+
+  function cancelPreparedRuntimeSession({ preserveInFlight = false }: { preserveInFlight?: boolean } = {}) {
+    const pending = preparedRuntimeSessionRequestRef.current;
+    if (preserveInFlight && preparedRuntimeSessionHasInFlightConsumer()) {
+      return;
+    }
+    if (pending) {
+      pending.abortController.abort();
+      preparedRuntimeSessionRequestRef.current = null;
+    }
+  }
+
+  function requestPreparedRuntimeSession(
+    conversationKey: string,
+    key: string,
+    options: RuntimeSessionOptions,
+  ): Promise<PreparedRuntimeSession | null> {
+    const existing = preparedRuntimeSessionRequestRef.current;
+    if (existing?.key === key) {
+      return existing.promise;
+    }
+    if (existing) {
+      existing.abortController.abort();
+    }
+    const abortController = new AbortController();
+    const promise = createRuntimeSession(
+      {
+        ...options,
+        prepare_only: true,
+      },
+      { signal: abortController.signal },
+    )
+      .then((session) => {
+        const prepared = { conversationKey, key, session };
+        if (preparedRuntimeSessionRequestRef.current?.key === key) {
+          preparedRuntimeSessionRef.current = prepared;
+        }
+        return prepared;
+      })
+      .catch((error) => {
+        if (isAbortError(error)) {
+          return null;
+        }
+        if (preparedRuntimeSessionRequestRef.current?.key === key) {
+          preparedRuntimeSessionRef.current = null;
+        }
+        return null;
+      })
+      .finally(() => {
+        if (preparedRuntimeSessionRequestRef.current?.key === key) {
+          preparedRuntimeSessionRequestRef.current = null;
+        }
+      });
+    preparedRuntimeSessionRequestRef.current = {
+      abortController,
+      conversationKey,
+      key,
+      promise,
+    };
+    return promise;
+  }
+
+  async function waitForPreparedRuntimeSession(
+    request: PreparedRuntimeSessionRequest,
+    signal: AbortSignal,
+  ): Promise<PreparedRuntimeSession | null> {
+    throwIfAborted(signal);
+    return new Promise((resolve, reject) => {
+      let settled = false;
+      const cleanup = () => {
+        signal.removeEventListener("abort", abort);
+      };
+      const finish = (action: () => void) => {
+        if (settled) {
+          return;
+        }
+        settled = true;
+        cleanup();
+        action();
+      };
+      const abort = () => finish(() => reject(abortError()));
+      signal.addEventListener("abort", abort, { once: true });
+      void request.promise.then(
+        (prepared) => finish(() => resolve(prepared)),
+        (error) => finish(() => reject(error)),
+      );
+    });
+  }
+
+  async function preparedRuntimeSessionForOptions(
+    conversationKey: string,
+    options: RuntimeSessionOptions,
+    signal: AbortSignal,
+  ): Promise<PreparedRuntimeSession | null> {
+    const key = preparedRuntimeSessionKey(conversationKey, options);
+    const prepared = preparedRuntimeSessionRef.current;
+    if (prepared?.key === key) {
+      return prepared;
+    }
+    const pending = preparedRuntimeSessionRequestRef.current;
+    if (pending?.key === key) {
+      return waitForPreparedRuntimeSession(pending, signal);
+    }
+    return null;
+  }
+
+  function forgetPreparedRuntimeSession(prepared: PreparedRuntimeSession | null) {
+    if (!prepared) {
+      return;
+    }
+    if (preparedRuntimeSessionRef.current?.key === prepared.key) {
+      preparedRuntimeSessionRef.current = null;
+    }
   }
 
   function migrateConversationState(fromConversationKey: string, toConversationKey: string) {
@@ -567,32 +805,45 @@ export function useMessageSubmission({
       let systemPrompt = targetDraftChat?.systemPrompt || "";
       let response: Awaited<ReturnType<typeof sendRuntimeTurn>>;
       if (!thread) {
-        agentRuntimeConfig = await selectedAgentRuntimeConfig(target.activeAppContext);
-        throwIfAborted(abortController.signal);
-        systemPrompt = agentRuntimeConfig?.system_prompt || targetDraftChat?.systemPrompt || (await loadDefaultSystemPrompt(target.activeAppContext));
-        throwIfAborted(abortController.signal);
-        response = await createRuntimeSessionWithTurn({
-          appReferences: message.appReferences,
-          attachments: message.attachments,
-          clientMessageId: message.clientMessageId,
-          inputText: message.content,
-          options: {
-            agent_id: agentRuntimeConfig?.agent_id,
-            agent_role_id: agentRuntimeConfig?.agent_role_id,
-            agent_type_id: agentRuntimeConfig?.agent_type_id,
-            project_id: targetDraftChat?.projectId ?? null,
-            source_app_id: agentRuntimeConfig?.source_app_id || "chat",
-            system_prompt: systemPrompt,
-            skill_catalog_app_id: agentRuntimeConfig?.skill_catalog_app_id,
-            skill_ids: agentRuntimeConfig?.skill_ids || [],
-            runtime_mode: agentRuntimeConfig?.runtime_mode,
-            routing_profile: agentRuntimeConfig?.routing_profile,
-            hosted_provider_id: agentRuntimeConfig?.hosted_provider_id,
-            hosted_model_id: agentRuntimeConfig?.hosted_model_id,
-            title: "New chat",
-          },
-          signal: abortController.signal,
-        });
+        const runtimeOptions = await buildRuntimeSessionOptions(target, abortController.signal);
+        agentRuntimeConfig = runtimeOptions.agentRuntimeConfig;
+        systemPrompt = runtimeOptions.systemPrompt;
+        const prepared = await preparedRuntimeSessionForOptions(target.conversationKey, runtimeOptions.options, abortController.signal);
+        if (prepared) {
+          try {
+            response = await sendRuntimeTurn(
+              prepared.session.session_id,
+              message.content,
+              message.clientMessageId,
+              message.attachments,
+              message.appReferences,
+              { signal: abortController.signal },
+            );
+            forgetPreparedRuntimeSession(prepared);
+          } catch (sendPreparedError) {
+            forgetPreparedRuntimeSession(prepared);
+            if (!isRuntimeSessionUnavailableError(sendPreparedError, prepared.session.session_id)) {
+              throw sendPreparedError;
+            }
+            response = await createRuntimeSessionWithTurn({
+              appReferences: message.appReferences,
+              attachments: message.attachments,
+              clientMessageId: message.clientMessageId,
+              inputText: message.content,
+              options: runtimeOptions.options,
+              signal: abortController.signal,
+            });
+          }
+        } else {
+          response = await createRuntimeSessionWithTurn({
+            appReferences: message.appReferences,
+            attachments: message.attachments,
+            clientMessageId: message.clientMessageId,
+            inputText: message.content,
+            options: runtimeOptions.options,
+            signal: abortController.signal,
+          });
+        }
       } else if (!hasTargetThread(target, thread)) {
         throw new Error("This chat no longer exists.");
       } else {

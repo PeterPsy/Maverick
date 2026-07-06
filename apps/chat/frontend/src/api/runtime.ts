@@ -43,6 +43,7 @@ export function createRuntimeSession(options: RuntimeSessionOptions = {}, reques
       routing_profile: options.routing_profile || undefined,
       hosted_provider_id: options.hosted_provider_id || undefined,
       hosted_model_id: options.hosted_model_id || undefined,
+      prepare_only: options.prepare_only || undefined,
       title: options.title || "New chat",
     }),
   });

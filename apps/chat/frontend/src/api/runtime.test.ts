@@ -48,6 +48,18 @@ describe("runtime API client", () => {
     expect(requestBody()).not.toHaveProperty("routing_profile");
   });
 
+  it("serializes prepared session creation without a turn", async () => {
+    await createRuntimeSession({ prepare_only: true, title: "New chat" });
+
+    expect(requestBody()).toMatchObject({
+      agent_id: "chat",
+      prepare_only: true,
+      title: "New chat",
+    });
+    expect(requestBody()).not.toHaveProperty("input_text");
+    expect(requestBody()).not.toHaveProperty("async");
+  });
+
   it("serializes plain hosted Chat session options for runtime creation with a turn", async () => {
     vi.mocked(fetch).mockResolvedValueOnce(
       okJson({

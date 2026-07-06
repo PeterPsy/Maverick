@@ -115,6 +115,9 @@ class TurnSubmissionLaunchSpecTestCase(unittest.TestCase):
         prewarm_runtime.assert_called_once()
         updated = runtime_store.get_session(session.session_id)
         self.assertEqual(updated.provider_thread_id, "provider-thread-queued")
+        event_types = [event.event_type for event in runtime_store.list_events(session.session_id)]
+        self.assertIn("runtime.prewarm.started", event_types)
+        self.assertIn("runtime.prewarm.completed", event_types)
 
     def test_async_worker_waits_for_session_prewarm_before_execution(self) -> None:
         repo_root = make_temp_repo_root(self)
@@ -138,7 +141,7 @@ class TurnSubmissionLaunchSpecTestCase(unittest.TestCase):
             repository_root=repo_root,
         )
 
-        def wait_for_prewarm(session_id: str) -> bool:
+        def wait_for_prewarm(session_id: str, **_kwargs) -> bool:
             calls.append(f"wait:{session_id}")
             return True
 

@@ -16,6 +16,86 @@ from tests.unit.api.app_reference_test_support import AppReferenceApiTestSupport
 
 
 class RuntimeSubmitIdempotencyApiTestCase(AppReferenceApiTestSupport, unittest.TestCase):
+    def test_prepare_only_session_promotes_on_first_turn(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            repo_root = self._repo_root(temp_dir)
+            with patch.dict(
+                "os.environ",
+                {
+                    "MAVERICK_ALLOW_INSECURE_TEST_DEFAULTS": "1",
+                    "MAVERICK_ADMIN_USERNAME": "admin",
+                    "MAVERICK_ADMIN_PASSWORD": "maverick",
+                },
+            ):
+                state = bootstrap_platform_state(start_path=repo_root)
+            app = PlatformHost(state, start_path=repo_root)
+            cookie = self._login(app)
+
+            with patch("core.api.runtime_api._prewarm_new_runtime_session"):
+                status, payload, _headers = self._invoke(
+                    app,
+                    path="/api/runtime/sessions",
+                    method="POST",
+                    body={"agent_id": "chat", "source_app_id": "chat", "prepare_only": True, "title": "New chat"},
+                    cookie=cookie,
+                )
+
+            self.assertEqual(status, 201)
+            session_id = payload["session_id"]
+            prepared = state.runtime_store.get_session(session_id)
+            self.assertEqual(prepared.thread_visibility, "hidden")
+            self.assertEqual(state.runtime_store.list_threads("default"), [])
+
+            def fake_submit_runtime_turn_async(
+                submit_state,
+                *,
+                session,
+                input_text,
+                client_message_id=None,
+                attachments=None,
+                app_references=None,
+                on_queued=None,
+                turn_id=None,
+                received_perf_counter=None,
+                submission_timing=None,
+                **_kwargs,
+            ):
+                self.assertEqual(session.thread_visibility, "user")
+                turn, events = _queue_turn_with_event(
+                    submit_state,
+                    session=session,
+                    input_text=input_text,
+                    provider_id="codex",
+                    client_message_id=client_message_id,
+                    attachments=attachments,
+                    app_references=app_references,
+                    turn_id=turn_id,
+                    received_perf_counter=received_perf_counter,
+                    submission_timing=submission_timing,
+                )
+                if on_queued is not None:
+                    on_queued(turn, events)
+                return turn, events
+
+            with patch("core.api.runtime_api.submit_runtime_turn_async", side_effect=fake_submit_runtime_turn_async), patch(
+                "core.runtime.turn_submission_service_queue.schedule_runtime_thread_title_generation"
+            ):
+                turn_status, turn_payload, _headers = self._invoke(
+                    app,
+                    path=f"/api/runtime/sessions/{session_id}/turns",
+                    method="POST",
+                    body={"input_text": "hello prepared", "client_message_id": "client-prepared", "async": True},
+                    cookie=cookie,
+                )
+
+            self.assertEqual(turn_status, 202)
+            promoted = state.runtime_store.get_session(session_id)
+            self.assertEqual(promoted.thread_visibility, "user")
+            self.assertEqual(turn_payload["session"]["thread_visibility"], "user")
+            self.assertEqual(turn_payload["thread"]["runtime_session_id"], session_id)
+            self.assertEqual(turn_payload["turn"]["client_message_id"], "client-prepared")
+            self.assertEqual(len(state.runtime_store.list_threads("default")), 1)
+
     def test_existing_session_turn_submit_requires_owner_admin_or_grant(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             repo_root = self._repo_root(temp_dir)

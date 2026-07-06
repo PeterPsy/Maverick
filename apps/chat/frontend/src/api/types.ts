@@ -712,5 +712,6 @@ export type RuntimeSessionOptions = {
   routing_profile?: "fast_model" | string;
   hosted_provider_id?: string;
   hosted_model_id?: string;
+  prepare_only?: boolean;
   title?: string;
 };

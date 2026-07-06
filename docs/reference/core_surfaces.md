@@ -51,10 +51,22 @@ leaving the id permanently pending. The queue persistence path verifies that the
 reserved claim is still current before inserting the turn, so a late handler from
 an expired/reclaimed claim cannot materialize a duplicate turn.
 
+`POST /api/runtime/sessions` also accepts `prepare_only` for callers that need to
+warm a new chat runtime before the first user message. Prepared sessions are
+created with hidden thread visibility, do not appear in the runtime thread
+catalog, and may be promoted only by their owner when the first turn is submitted
+to `/api/runtime/sessions/<session_id>/turns`. Callers must keep the existing
+create-session-with-first-turn path as a fallback when no prepared session is
+available.
+
 The runtime records queue timing, worker start, and provider handoff through:
 
 - `runtime.turn.worker_started`
 - `runtime.turn.receive_to_queued`
+- `runtime.turn.prewarm_waited`
+- `runtime.prewarm.started`
+- `runtime.prewarm.completed`
+- `runtime.prewarm.failed`
 - `runtime.provider.dispatching`
 - `runtime.provider.turn_start_sent`
 - `runtime.provider.accepted`

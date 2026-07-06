@@ -20,6 +20,7 @@ INTERESTING_EVENT_TYPES = {
     "runtime.turn.queued",
     "runtime.turn.receive_to_queued",
     "runtime.turn.post_queue_response",
+    "runtime.turn.prewarm_waited",
     "runtime.turn.worker_started",
     "runtime.provider.dispatching",
     "runtime.provider.turn_start_sent",
@@ -29,6 +30,7 @@ EVENT_KEYS = {
     "runtime.turn.queued": "queued",
     "runtime.turn.receive_to_queued": "receive_to_queued",
     "runtime.turn.post_queue_response": "post_queue_response",
+    "runtime.turn.prewarm_waited": "prewarm_waited",
     "runtime.turn.worker_started": "worker_started",
     "runtime.provider.dispatching": "provider_dispatching",
     "runtime.provider.turn_start_sent": "turn_start_sent",
@@ -41,6 +43,8 @@ METRIC_NAMES = (
     "reference_validate_ms",
     "queue_turn_ms",
     "post_queue_response_ms",
+    "prewarm_wait_ms",
+    "prewarm_total_ms",
     "queued_to_worker_started_ms",
     "worker_started_to_provider_dispatching_ms",
     "worker_started_to_turn_start_sent_ms",
@@ -53,6 +57,7 @@ METRIC_NAMES = (
     "turn_start_sent_to_provider_accepted_ms",
     "queued_to_provider_accepted_ms",
     "receive_to_provider_accepted_ms",
+    "first_turn_receive_to_provider_accepted_ms",
 )
 COHORT_NAMES = ("codex_cold", "codex_warm", "plain_hosted", "other_provider")
 CODEX_PROVIDER_ID = "codex"
@@ -183,6 +188,8 @@ def build_report(
                 "external hosted HTTP network latency."
             ),
             "receive_to_provider_accepted_ms is reconstructed as receive_to_queued_ms plus queued_to_provider_accepted_ms when both components are available.",
+            "first_turn_receive_to_provider_accepted_ms is populated only for the first observed provider turn in each session.",
+            "prewarm_wait_ms and prewarm_total_ms come from runtime.turn.prewarm_waited and measure user-visible wait before execution, not provider-internal ensure spans.",
             "claim_ms, session_create_ms, reference_validate_ms, queue_turn_ms, and post_queue_response_ms are emitted only by newer runtime submission paths.",
             "The report intentionally omits input text and provider payload bodies beyond numeric latency spans.",
         ],
@@ -465,8 +472,20 @@ def _build_observations(
         if current is None or sort_value < current:
             first_codex_by_session[session_key] = sort_value
 
+    first_turn_by_session: dict[tuple[str, str], tuple[datetime, str]] = {}
+    for group, _metrics, _provider_id, _runtime_mode, anchor_at in preliminary:
+        session_key = (group.workspace_id, group.session_id)
+        current = first_turn_by_session.get(session_key)
+        sort_value = _turn_order_sort_value(group, fallback_at=anchor_at)
+        if current is None or sort_value < current:
+            first_turn_by_session[session_key] = sort_value
+
     observations: list[TurnObservation] = []
     for group, metrics, provider_id, runtime_mode, anchor_at in preliminary:
+        if first_turn_by_session.get((group.workspace_id, group.session_id)) == _turn_order_sort_value(group, fallback_at=anchor_at):
+            first_turn_e2e = metrics.get("receive_to_provider_accepted_ms")
+            if first_turn_e2e is not None:
+                metrics = {**metrics, "first_turn_receive_to_provider_accepted_ms": first_turn_e2e}
         cohort = _cohort_for_turn(
             group,
             metrics=metrics,
@@ -496,6 +515,7 @@ def _turn_metrics(group: TurnEvents) -> dict[str, float]:
     metrics: dict[str, float] = {}
     receive = events.get("receive_to_queued")
     post_queue_response = events.get("post_queue_response")
+    prewarm_waited = events.get("prewarm_waited")
     queued = events.get("queued")
     worker = events.get("worker_started")
     dispatching = events.get("provider_dispatching")
@@ -508,6 +528,9 @@ def _turn_metrics(group: TurnEvents) -> dict[str, float]:
             _set_metric(metrics, key, _numeric(receive.payload.get(key)))
     if post_queue_response is not None:
         _set_metric(metrics, "post_queue_response_ms", _numeric(post_queue_response.payload.get("post_queue_response_ms")))
+    if prewarm_waited is not None:
+        _set_metric(metrics, "prewarm_wait_ms", _numeric(prewarm_waited.payload.get("prewarm_wait_ms")))
+        _set_metric(metrics, "prewarm_total_ms", _numeric(prewarm_waited.payload.get("prewarm_total_ms")))
     _set_metric(metrics, "queued_to_worker_started_ms", _delta_ms(queued, worker))
     _set_metric(metrics, "worker_started_to_provider_dispatching_ms", _delta_ms(worker, dispatching))
     _set_metric(metrics, "worker_started_to_turn_start_sent_ms", _delta_ms(worker, sent))
@@ -529,6 +552,15 @@ def _turn_metrics(group: TurnEvents) -> dict[str, float]:
     if receive_to_queued is not None and queued_to_accepted is not None:
         _set_metric(metrics, "receive_to_provider_accepted_ms", receive_to_queued + queued_to_accepted)
     return metrics
+
+
+def _turn_order_sort_value(group: TurnEvents, *, fallback_at: datetime) -> tuple[datetime, str]:
+    queued = group.events.get("queued")
+    if queued is not None:
+        return queued.created_at, group.turn_id
+    if group.events:
+        return min(event.created_at for event in group.events.values()), group.turn_id
+    return fallback_at, group.turn_id
 
 
 def _provider_id_for_turn(group: TurnEvents, session: SessionSnapshot | None) -> str | None:

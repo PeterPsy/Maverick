@@ -31,7 +31,16 @@ class RuntimeTurnLatencyReportTestCase(unittest.TestCase):
                 "default",
                 "sess-codex",
                 [
-                    *_turn_events("sess-codex", "turn-cold", BASE, provider_id="codex", ensure_runtime_ms=250, ensure_provider_thread_ms=900),
+                    *_turn_events(
+                        "sess-codex",
+                        "turn-cold",
+                        BASE,
+                        provider_id="codex",
+                        ensure_runtime_ms=250,
+                        ensure_provider_thread_ms=900,
+                        prewarm_wait_ms=175,
+                        prewarm_total_ms=640,
+                    ),
                     *_turn_events(
                         "sess-codex",
                         "turn-warm",
@@ -72,6 +81,9 @@ class RuntimeTurnLatencyReportTestCase(unittest.TestCase):
         self.assertEqual(cold_metrics["ensure_runtime_ms"]["p50_ms"], 250)
         self.assertEqual(cold_metrics["claim_ms"]["p50_ms"], 1)
         self.assertEqual(cold_metrics["post_queue_response_ms"]["p50_ms"], 10)
+        self.assertEqual(cold_metrics["prewarm_wait_ms"]["p50_ms"], 175)
+        self.assertEqual(cold_metrics["prewarm_total_ms"]["p50_ms"], 640)
+        self.assertEqual(cold_metrics["first_turn_receive_to_provider_accepted_ms"]["p50_ms"], 830)
         self.assertEqual(warm_metrics["ensure_runtime_ms"]["p50_ms"], 0.05)
         self.assertEqual(hosted_metrics["turn_start_sent_to_provider_accepted_ms"]["p50_ms"], 20)
         self.assertEqual(cold_metrics["receive_to_provider_accepted_ms"]["p50_ms"], 830)
@@ -156,6 +168,8 @@ def _turn_events(
     ensure_runtime_ms: float = 10,
     ensure_provider_thread_ms: float = 15,
     include_launch_metrics: bool = True,
+    prewarm_wait_ms: float | None = None,
+    prewarm_total_ms: float | None = None,
 ) -> list[dict[str, object]]:
     workspace_id = "default"
     queued_at = start
@@ -168,7 +182,7 @@ def _turn_events(
     dispatch_payload: dict[str, object] = {"provider_id": provider_id, "runtime_mode": runtime_mode}
     if include_launch_metrics:
         dispatch_payload.update({"launch_spec_ms": 25, "skill_resolve_ms": 5, "skill_prepare_ms": 15})
-    return [
+    events = [
         _event("queued", workspace_id, session_id, turn_id, "runtime.turn.queued", queued_at, {"provider_id": provider_id}),
         _event(
             "receive",
@@ -194,38 +208,63 @@ def _turn_events(
             post_queue_at,
             {"post_queue_response_ms": 10},
         ),
-        _event("worker", workspace_id, session_id, turn_id, "runtime.turn.worker_started", worker_at, {"provider_id": provider_id}),
-        _event("dispatch", workspace_id, session_id, turn_id, "runtime.provider.dispatching", dispatch_at, dispatch_payload),
-        _event(
-            "sent",
-            workspace_id,
-            session_id,
-            turn_id,
-            "runtime.provider.turn_start_sent",
-            sent_at,
-            {
-                "provider_id": provider_id,
-                "runtime_mode": runtime_mode,
-                "ensure_runtime_ms": ensure_runtime_ms,
-                "ensure_provider_thread_ms": ensure_provider_thread_ms,
-            },
-        ),
-        _event(
-            "accepted",
-            workspace_id,
-            session_id,
-            turn_id,
-            "runtime.provider.accepted",
-            accepted_at,
-            {
-                "provider_id": provider_id,
-                "runtime_mode": runtime_mode,
-                "turn_start_to_ack_ms": 20,
-                "ensure_runtime_ms": ensure_runtime_ms,
-                "ensure_provider_thread_ms": ensure_provider_thread_ms,
-            },
-        ),
     ]
+    if prewarm_wait_ms is not None:
+        prewarm_payload: dict[str, object] = {
+            "provider_id": provider_id,
+            "prewarm_wait_ms": prewarm_wait_ms,
+            "completed": True,
+            "timed_out": False,
+        }
+        if prewarm_total_ms is not None:
+            prewarm_payload["prewarm_total_ms"] = prewarm_total_ms
+        events.append(
+            _event(
+                "prewarm-waited",
+                workspace_id,
+                session_id,
+                turn_id,
+                "runtime.turn.prewarm_waited",
+                start + timedelta(milliseconds=180),
+                prewarm_payload,
+            )
+        )
+    events.extend(
+        [
+            _event("worker", workspace_id, session_id, turn_id, "runtime.turn.worker_started", worker_at, {"provider_id": provider_id}),
+            _event("dispatch", workspace_id, session_id, turn_id, "runtime.provider.dispatching", dispatch_at, dispatch_payload),
+            _event(
+                "sent",
+                workspace_id,
+                session_id,
+                turn_id,
+                "runtime.provider.turn_start_sent",
+                sent_at,
+                {
+                    "provider_id": provider_id,
+                    "runtime_mode": runtime_mode,
+                    "ensure_runtime_ms": ensure_runtime_ms,
+                    "ensure_provider_thread_ms": ensure_provider_thread_ms,
+                },
+            ),
+            _event(
+                "accepted",
+                workspace_id,
+                session_id,
+                turn_id,
+                "runtime.provider.accepted",
+                accepted_at,
+                {
+                    "provider_id": provider_id,
+                    "runtime_mode": runtime_mode,
+                    "turn_start_to_ack_ms": 20,
+                    "ensure_runtime_ms": ensure_runtime_ms,
+                    "ensure_provider_thread_ms": ensure_provider_thread_ms,
+                },
+            ),
+        ]
+    )
+    return events
 
 
 def _event(

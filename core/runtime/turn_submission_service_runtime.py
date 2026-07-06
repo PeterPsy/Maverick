@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from contextlib import suppress
-from dataclasses import replace
+from dataclasses import dataclass, replace
 from threading import Event, Lock, Thread, Timer
 import time
 from typing import TYPE_CHECKING, Callable
@@ -43,8 +43,14 @@ _PREWARM_AFTER_TURN_DELAY_SECONDS = 0.05
 _PREWARM_JOIN_TIMEOUT_SECONDS = 2.0
 _IDLE_REAP_TIMERS: dict[str, Timer] = {}
 _IDLE_REAP_TIMERS_LOCK = Lock()
-_PREWARM_COMPLETIONS: dict[str, Event] = {}
+_PREWARM_COMPLETIONS: dict[str, "_SessionPrewarmState"] = {}
 _PREWARM_COMPLETIONS_LOCK = Lock()
+
+
+@dataclass(frozen=True)
+class _SessionPrewarmState:
+    completion: Event
+    started_perf_counter: float
 
 
 def prewarm_runtime_session_async(state: PlatformState, *, session: RuntimeSessionRecord) -> None:
@@ -56,23 +62,32 @@ def prewarm_runtime_session_async(state: PlatformState, *, session: RuntimeSessi
     completion = _register_session_prewarm(session.session_id)
     if completion is None:
         return
+    started_at = time.perf_counter()
+    _record_session_prewarm_started(state, session=session)
 
     def worker() -> None:
+        status = "completed"
+        provider_id = ""
         try:
             lock = _session_execution_lock(session.session_id)
             if not lock.acquire(blocking=False):
+                status = "skipped_lock_busy"
                 return
             try:
                 if _session_has_executing_turn(state, session.session_id):
+                    status = "skipped_active_turn"
                     return
                 current_session = state.runtime_store.get_session(session.session_id)
                 if runtime_session_is_plain_hosted_chat(current_session):
+                    status = "skipped_plain_hosted"
                     return
                 provider, selection, runtime_adapter = resolve_runtime_backend_for_session(
                     state.provider_store,
                     session=current_session,
                 )
+                provider_id = provider.provider_id
                 if provider.provider_id != "codex":
+                    status = "skipped_non_codex"
                     return
                 if current_session.provider_id != provider.provider_id:
                     current_session = state.runtime_store.save_session(replace(current_session, provider_id=provider.provider_id))
@@ -85,6 +100,7 @@ def prewarm_runtime_session_async(state: PlatformState, *, session: RuntimeSessi
                     runtime_adapter=runtime_adapter,
                 )
                 if launch_spec is None or _session_has_executing_turn(state, session.session_id):
+                    status = "skipped_no_launch_spec"
                     return
                 from core.providers.codex_app_server import prewarm_codex_app_server_runtime
 
@@ -101,14 +117,37 @@ def prewarm_runtime_session_async(state: PlatformState, *, session: RuntimeSessi
                     )
             finally:
                 lock.release()
-        except Exception:
+        except Exception as error:
+            status = "failed"
+            _record_session_prewarm_failed(
+                state,
+                session_id=session.session_id,
+                provider_id=provider_id or None,
+                elapsed_ms=(time.perf_counter() - started_at) * 1000,
+                error=error,
+            )
             return
         finally:
             _complete_session_prewarm(session.session_id, completion)
+            if status != "failed":
+                _record_session_prewarm_completed(
+                    state,
+                    session_id=session.session_id,
+                    provider_id=provider_id or None,
+                    elapsed_ms=(time.perf_counter() - started_at) * 1000,
+                    status=status,
+                )
 
     try:
         Thread(target=worker, name=f"maverick-runtime-prewarm-{session.session_id}", daemon=True).start()
-    except Exception:
+    except Exception as error:
+        _record_session_prewarm_failed(
+            state,
+            session_id=session.session_id,
+            provider_id=None,
+            elapsed_ms=(time.perf_counter() - started_at) * 1000,
+            error=error,
+        )
         _complete_session_prewarm(session.session_id, completion)
         raise
 
@@ -143,29 +182,152 @@ def _session_has_executing_turn(state: PlatformState, session_id: str) -> bool:
     return True
 
 
-def _register_session_prewarm(session_id: str) -> Event | None:
+def _register_session_prewarm(session_id: str) -> _SessionPrewarmState | None:
     with _PREWARM_COMPLETIONS_LOCK:
         existing = _PREWARM_COMPLETIONS.get(session_id)
-        if existing is not None and not existing.is_set():
+        if existing is not None and not existing.completion.is_set():
             return None
-        completion = Event()
-        _PREWARM_COMPLETIONS[session_id] = completion
-        return completion
+        state = _SessionPrewarmState(completion=Event(), started_perf_counter=time.perf_counter())
+        _PREWARM_COMPLETIONS[session_id] = state
+        return state
 
 
-def _complete_session_prewarm(session_id: str, completion: Event) -> None:
-    completion.set()
+def _complete_session_prewarm(session_id: str, completion: _SessionPrewarmState) -> None:
+    completion.completion.set()
     with _PREWARM_COMPLETIONS_LOCK:
         if _PREWARM_COMPLETIONS.get(session_id) is completion:
             _PREWARM_COMPLETIONS.pop(session_id, None)
 
 
-def _wait_for_session_prewarm(session_id: str, *, timeout_seconds: float = _PREWARM_JOIN_TIMEOUT_SECONDS) -> bool:
+def _wait_for_session_prewarm(
+    session_id: str,
+    *,
+    state: PlatformState | None = None,
+    turn: RuntimeTurnRecord | None = None,
+    provider_id: str | None = None,
+    timeout_seconds: float = _PREWARM_JOIN_TIMEOUT_SECONDS,
+) -> bool:
     with _PREWARM_COMPLETIONS_LOCK:
         completion = _PREWARM_COMPLETIONS.get(session_id)
     if completion is None:
         return False
-    return completion.wait(max(0.0, timeout_seconds))
+    wait_started_at = time.perf_counter()
+    completed = completion.completion.wait(max(0.0, timeout_seconds))
+    elapsed_ms = (time.perf_counter() - wait_started_at) * 1000
+    prewarm_total_ms = (time.perf_counter() - completion.started_perf_counter) * 1000 if completed else None
+    if state is not None and turn is not None:
+        _record_turn_prewarm_waited(
+            state,
+            session_id=session_id,
+            turn_id=turn.turn_id,
+            provider_id=provider_id,
+            elapsed_ms=elapsed_ms,
+            completed=completed,
+            timeout_seconds=timeout_seconds,
+            prewarm_total_ms=prewarm_total_ms,
+        )
+    return completed
+
+
+def _record_session_prewarm_started(state: PlatformState, *, session: RuntimeSessionRecord) -> RuntimeEventRecord | None:
+    with suppress(Exception):
+        return record_runtime_event(
+            state.runtime_store,
+            event_id=str(uuid4()),
+            session_id=session.session_id,
+            plane="runtime",
+            event_type="runtime.prewarm.started",
+            payload={
+                "provider_id": session.provider_id or "codex",
+                "runtime_mode": session.runtime_mode,
+            },
+            event_bus=getattr(state, "runtime_event_bus", None),
+        )
+    return None
+
+
+def _record_session_prewarm_completed(
+    state: PlatformState,
+    *,
+    session_id: str,
+    provider_id: str | None,
+    elapsed_ms: float,
+    status: str,
+) -> RuntimeEventRecord | None:
+    with suppress(Exception):
+        return record_runtime_event(
+            state.runtime_store,
+            event_id=str(uuid4()),
+            session_id=session_id,
+            plane="runtime",
+            event_type="runtime.prewarm.completed",
+            payload={
+                "provider_id": provider_id or "codex",
+                "prewarm_total_ms": round(elapsed_ms, 3),
+                "status": status,
+            },
+            event_bus=getattr(state, "runtime_event_bus", None),
+        )
+    return None
+
+
+def _record_session_prewarm_failed(
+    state: PlatformState,
+    *,
+    session_id: str,
+    provider_id: str | None,
+    elapsed_ms: float,
+    error: Exception,
+) -> RuntimeEventRecord | None:
+    with suppress(Exception):
+        return record_runtime_event(
+            state.runtime_store,
+            event_id=str(uuid4()),
+            session_id=session_id,
+            plane="runtime",
+            event_type="runtime.prewarm.failed",
+            payload={
+                "provider_id": provider_id or "codex",
+                "prewarm_total_ms": round(elapsed_ms, 3),
+                "error_type": error.__class__.__name__,
+            },
+            event_bus=getattr(state, "runtime_event_bus", None),
+        )
+    return None
+
+
+def _record_turn_prewarm_waited(
+    state: PlatformState,
+    *,
+    session_id: str,
+    turn_id: str,
+    provider_id: str | None,
+    elapsed_ms: float,
+    completed: bool,
+    timeout_seconds: float,
+    prewarm_total_ms: float | None,
+) -> RuntimeEventRecord | None:
+    payload: dict[str, object] = {
+        "provider_id": provider_id or "codex",
+        "prewarm_wait_ms": round(elapsed_ms, 3),
+        "completed": completed,
+        "timed_out": not completed,
+        "timeout_seconds": timeout_seconds,
+    }
+    if prewarm_total_ms is not None:
+        payload["prewarm_total_ms"] = round(prewarm_total_ms, 3)
+    with suppress(Exception):
+        return record_runtime_event(
+            state.runtime_store,
+            event_id=str(uuid4()),
+            session_id=session_id,
+            turn_id=turn_id,
+            plane="turn",
+            event_type="runtime.turn.prewarm_waited",
+            payload=payload,
+            event_bus=getattr(state, "runtime_event_bus", None),
+        )
+    return None
 
 
 def submit_runtime_turn_async(
@@ -208,7 +370,12 @@ def submit_runtime_turn_async(
         worker_provider_id = queue_provider_id
         prewarm_after_turn = False
         if not plain_hosted:
-            _wait_for_session_prewarm(session.session_id)
+            _wait_for_session_prewarm(
+                session.session_id,
+                state=state,
+                turn=turn,
+                provider_id=worker_provider_id,
+            )
         with _session_execution_lock(session.session_id):
             _debug_log_runtime_turn(
                 state,

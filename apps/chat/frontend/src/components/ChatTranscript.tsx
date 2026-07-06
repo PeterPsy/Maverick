@@ -1,12 +1,16 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { ChatMessage } from "../api/client";
 import type { InterAgentApprovalRecord, InterAgentEventRecord, InterAgentRunDetail } from "../api/client";
+import { interAgentBoardLinksByMessageId, visiblePrimaryChatMessages } from "../lib/interAgentTranscript";
 import type { MentionItem } from "../lib/mentions";
 import { isTerminalRunStatus } from "../lib/interAgentGraph";
 import { ChatTranscriptSkeleton } from "./ChatTranscriptSkeleton";
+import { InterAgentBoardButton } from "./InterAgentBoardButton";
 import { InterAgentRunPanel } from "./InterAgentRunPanel";
 import { MessageList } from "./MessageList";
 import { MorphingSpinner } from "./ui/morphing-spinner";
+
+const OPENED_INTER_AGENT_BOARD_RUNS_STORAGE_KEY = "chatapp.openedInterAgentBoardRunIds";
 
 export type ChatTranscriptProps = {
   activeInterAgentGraphRunId?: string | null;
@@ -58,6 +62,9 @@ export function ChatTranscript({
   const [showScrollJump, setShowScrollJump] = useState(false);
   const [expandedMessages, setExpandedMessages] = useState<Set<string>>(new Set());
   const [speakingMessageId, setSpeakingMessageId] = useState<string | null>(null);
+  const [openedInterAgentBoardRunIds, setOpenedInterAgentBoardRunIds] = useState<Set<string>>(
+    () => readOpenedInterAgentBoardRunIds(),
+  );
 
   function scrollToBottom() {
     const viewport = viewportRef.current;
@@ -86,6 +93,27 @@ export function ChatTranscript({
     }
     await navigator.clipboard.writeText(content);
     return true;
+  }
+
+  function markInterAgentBoardOpened(runId: string) {
+    const normalizedRunId = runId.trim();
+    if (!normalizedRunId) {
+      return;
+    }
+    setOpenedInterAgentBoardRunIds((current) => {
+      if (current.has(normalizedRunId)) {
+        return current;
+      }
+      const next = new Set(current);
+      next.add(normalizedRunId);
+      writeOpenedInterAgentBoardRunIds(next);
+      return next;
+    });
+  }
+
+  function openInterAgentGraph(runId: string) {
+    markInterAgentBoardOpened(runId);
+    onOpenInterAgentGraph(runId);
   }
 
   function updateScrollState() {
@@ -151,11 +179,21 @@ export function ChatTranscript({
     () => [...interAgentRuns].reverse().find((detail) => !isTerminalRunStatus(detail.run.status)) || null,
     [interAgentRuns],
   );
+  const primaryMessages = useMemo(() => visiblePrimaryChatMessages(messages), [messages]);
+  const boardLinksByMessageId = useMemo(
+    () =>
+      interAgentBoardLinksByMessageId({
+        messages,
+        openedRunIds: openedInterAgentBoardRunIds,
+        runs: interAgentRuns,
+      }),
+    [interAgentRuns, messages, openedInterAgentBoardRunIds],
+  );
 
   const hasInterAgentContent =
     interAgentRuns.length > 0 || Boolean(activeInterAgentGraphRunId) || Object.values(interAgentApprovalsByRunId).some((items) => items.length > 0);
 
-  if (!messages.length && !hasInterAgentContent && isLoading && !error) {
+  if (!primaryMessages.length && !hasInterAgentContent && isLoading && !error) {
     return (
       <section className="chatapp-chat-scroll" aria-busy="true" aria-live="polite">
         <div className="chatapp-chat-scroll__inner chatapp-chat-scroll__inner--skeleton" onScroll={updateScrollState} ref={viewportRef}>
@@ -165,7 +203,7 @@ export function ChatTranscript({
     );
   }
 
-  if (!messages.length && !hasInterAgentContent && !isLoading && !error) {
+  if (!primaryMessages.length && !hasInterAgentContent && !isLoading && !error) {
     return (
       <section className="chatapp-chat-scroll">
         <div className="chatapp-chat-scroll__inner" onScroll={updateScrollState} ref={viewportRef} />
@@ -189,12 +227,13 @@ export function ChatTranscript({
         />
         <MessageList
           expandedMessages={expandedMessages}
+          interAgentBoardLinksByMessageId={boardLinksByMessageId}
           latestToolMessageId={latestToolMessageId}
           mentionItems={mentionItems}
-          messages={messages}
+          messages={primaryMessages}
           onActiveSpeechMessageChange={setSpeakingMessageId}
           onCopyMessage={copyMessage}
-          onOpenInterAgentGraph={onOpenInterAgentGraph}
+          onOpenInterAgentGraph={openInterAgentGraph}
           onToggleExpanded={toggleExpanded}
           speakingMessageId={speakingMessageId}
           speechMaxTextChars={speechMaxTextChars}
@@ -208,17 +247,12 @@ export function ChatTranscript({
               <MorphingSpinner size="sm" className="chatapp-pending-turn__icon" />
               <span className="chatapp-pending-turn__label">{loadingLabel}</span>
               {liveInterAgentRun ? (
-                <button
+                <InterAgentBoardButton
                   className="chatapp-pending-turn__board"
-                  onClick={() => onOpenInterAgentGraph(liveInterAgentRun.run.run_id)}
-                  type="button"
-                >
-                  <LiveBoardButtonGlow />
-                  <span aria-hidden="true" className="material-symbols-rounded chatapp-pending-turn__board-icon">
-                    account_tree
-                  </span>
-                  <span className="chatapp-pending-turn__board-label">Open multi-agent board</span>
-                </button>
+                  onOpen={openInterAgentGraph}
+                  runId={liveInterAgentRun.run.run_id}
+                  state="live"
+                />
               ) : null}
             </div>
           </article>
@@ -243,15 +277,26 @@ export function ChatTranscript({
   );
 }
 
-function LiveBoardButtonGlow() {
-  return (
-    <span aria-hidden="true" className="chatapp-live-board-glow">
-      <span className="chatapp-live-board-glow__layer chatapp-live-board-glow__layer--outer" />
-      <span className="chatapp-live-board-glow__layer chatapp-live-board-glow__layer--a" />
-      <span className="chatapp-live-board-glow__layer chatapp-live-board-glow__layer--b" />
-      <span className="chatapp-live-board-glow__layer chatapp-live-board-glow__layer--c" />
-      <span className="chatapp-live-board-glow__layer chatapp-live-board-glow__layer--bright" />
-      <span className="chatapp-live-board-glow__layer chatapp-live-board-glow__layer--rim" />
-    </span>
-  );
+function readOpenedInterAgentBoardRunIds(): Set<string> {
+  if (typeof window === "undefined") {
+    return new Set();
+  }
+  try {
+    const raw = window.localStorage.getItem(OPENED_INTER_AGENT_BOARD_RUNS_STORAGE_KEY);
+    const parsed = raw ? JSON.parse(raw) : [];
+    return new Set(Array.isArray(parsed) ? parsed.filter((item): item is string => typeof item === "string" && Boolean(item.trim())) : []);
+  } catch {
+    return new Set();
+  }
+}
+
+function writeOpenedInterAgentBoardRunIds(runIds: ReadonlySet<string>) {
+  if (typeof window === "undefined") {
+    return;
+  }
+  try {
+    window.localStorage.setItem(OPENED_INTER_AGENT_BOARD_RUNS_STORAGE_KEY, JSON.stringify([...runIds].slice(-200)));
+  } catch {
+    // Best-effort UI receipt only.
+  }
 }

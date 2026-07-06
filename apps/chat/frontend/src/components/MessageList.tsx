@@ -1,11 +1,13 @@
 import type { Dispatch, SetStateAction } from "react";
 import type { ChatMessage } from "../api/client";
+import type { InterAgentBoardLink } from "../lib/interAgentTranscript";
 import type { MentionItem } from "../lib/mentions";
 import type { CopyMessageHandler } from "./MessageCopyButton";
 import { MessageBubble } from "./MessageBubble";
 
 export function MessageList({
   expandedMessages,
+  interAgentBoardLinksByMessageId = {},
   latestToolMessageId,
   mentionItems,
   messages,
@@ -20,6 +22,7 @@ export function MessageList({
   speechProviderQualityProfile,
 }: {
   expandedMessages: Set<string>;
+  interAgentBoardLinksByMessageId?: Record<string, InterAgentBoardLink>;
   latestToolMessageId: string | null;
   mentionItems: MentionItem[];
   messages: ChatMessage[];
@@ -38,6 +41,7 @@ export function MessageList({
       {messages.map((message) => (
         <MessageBubble
           expanded={expandedMessages.has(message.id)}
+          interAgentBoardLink={interAgentBoardLinksByMessageId[message.id]}
           key={message.id}
           latestToolMessageId={latestToolMessageId}
           mentionItems={mentionItems}

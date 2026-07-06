@@ -8,6 +8,15 @@
   min-width: 0;
 }
 
+.chatapp-agent-block__actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  min-width: 0;
+  max-width: 100%;
+  margin-top: 0.78rem;
+}
+
 .chatapp-agent-block__body p,
 .chatapp-agent-block__body ul,
 .chatapp-agent-block__body ol,

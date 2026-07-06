@@ -1,7 +1,9 @@
 import type { Dispatch, SetStateAction } from "react";
 import type { ChatMessage } from "../api/client";
+import type { InterAgentBoardLink } from "../lib/interAgentTranscript";
 import type { MentionItem } from "../lib/mentions";
 import { HumanMessage } from "./HumanMessage";
+import { InterAgentBoardButton } from "./InterAgentBoardButton";
 import { MarkdownMessage } from "./MarkdownMessage";
 import { CopyMessageButton, type CopyMessageHandler } from "./MessageCopyButton";
 import { MessageFooter, formatMessageTime } from "./MessageFooter";
@@ -12,6 +14,7 @@ import { ToolCallInlineMessage } from "./ToolCallInlineMessage";
 
 export function MessageBubble({
   expanded,
+  interAgentBoardLink,
   latestToolMessageId,
   mentionItems,
   message,
@@ -26,6 +29,7 @@ export function MessageBubble({
   speechProviderQualityProfile,
 }: {
   expanded: boolean;
+  interAgentBoardLink?: InterAgentBoardLink;
   latestToolMessageId: string | null;
   mentionItems: MentionItem[];
   message: ChatMessage;
@@ -63,15 +67,17 @@ export function MessageBubble({
       ) : isToolMessage ? (
         <ToolCallInlineMessage createdAt={message.createdAt} defaultExpanded={message.id === latestToolMessageId} toolCalls={toolCalls} />
       ) : message.role === "step" && message.step ? (
-        <RuntimeStepMessage onOpenInterAgentGraph={onOpenInterAgentGraph} step={message.step} />
+        <RuntimeStepMessage step={message.step} />
       ) : message.role === "structured" && message.structuredContent ? (
         <StructuredContentMessage content={message.structuredContent} messageId={message.id} />
       ) : (
         <AgentMessage
           expanded={expanded}
+          interAgentBoardLink={interAgentBoardLink}
           message={message}
           onActiveSpeechMessageChange={onActiveSpeechMessageChange}
           onCopyMessage={onCopyMessage}
+          onOpenInterAgentGraph={onOpenInterAgentGraph}
           onToggleExpanded={onToggleExpanded}
           speakingMessageId={speakingMessageId}
           speechMaxTextChars={speechMaxTextChars}
@@ -88,9 +94,11 @@ export function MessageBubble({
 
 function AgentMessage({
   expanded,
+  interAgentBoardLink,
   message,
   onActiveSpeechMessageChange,
   onCopyMessage,
+  onOpenInterAgentGraph,
   onToggleExpanded,
   speakingMessageId,
   speechMaxTextChars,
@@ -100,9 +108,11 @@ function AgentMessage({
   visibleContent,
 }: {
   expanded: boolean;
+  interAgentBoardLink?: InterAgentBoardLink;
   message: ChatMessage;
   onActiveSpeechMessageChange: Dispatch<SetStateAction<string | null>>;
   onCopyMessage: CopyMessageHandler;
+  onOpenInterAgentGraph?: (runId: string) => void;
   onToggleExpanded: (messageId: string) => void;
   speakingMessageId: string | null;
   speechMaxTextChars: number;
@@ -120,6 +130,16 @@ function AgentMessage({
           </div>
           {message.content ? <CopyMessageButton content={message.content} onCopyMessage={onCopyMessage} /> : null}
         </div>
+        {interAgentBoardLink ? (
+          <div className="chatapp-agent-block__actions">
+            <InterAgentBoardButton
+              className="chatapp-agent-message-board"
+              onOpen={onOpenInterAgentGraph}
+              runId={interAgentBoardLink.runId}
+              state={interAgentBoardLink.state}
+            />
+          </div>
+        ) : null}
         {message.content.length > 3200 ? (
           <button className="chatapp-message-action" onClick={() => onToggleExpanded(message.id)} type="button">
             {expanded ? "Collapse output" : "Expand full output"}

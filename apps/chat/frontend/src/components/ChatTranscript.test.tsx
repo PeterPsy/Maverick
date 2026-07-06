@@ -15,6 +15,7 @@ afterEach(() => {
   root = null;
   container?.remove();
   container = null;
+  window.localStorage.clear();
   vi.useRealTimers();
 });
 
@@ -41,8 +42,11 @@ describe("ChatTranscript inter-agent board entry", () => {
 
     const boardButton = container.querySelector<HTMLButtonElement>(".chatapp-pending-turn__board");
     expect(boardButton?.textContent).toContain("Open multi-agent board");
+    expect(boardButton?.classList.contains("is-live")).toBe(true);
+    expect(boardButton?.querySelector(".chatapp-live-board-glow")).not.toBeNull();
     expect(container.querySelector(".chatapp-inter-agent-banner")).toBeNull();
     expect(container.querySelector(".chatapp-inter-agent-message__graph")).toBeNull();
+    expect(container.querySelector(".chatapp-agent-step")).toBeNull();
 
     await act(async () => {
       boardButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
@@ -73,7 +77,7 @@ describe("ChatTranscript inter-agent board entry", () => {
     expect(container.querySelector(".chatapp-pending-turn__board")).toBeNull();
   });
 
-  it("shows the board opener on the final multi-agent summary message", async () => {
+  it("shows a pending board opener on the final assistant message until the board is opened", async () => {
     container = document.createElement("div");
     document.body.append(container);
     root = createRoot(container);
@@ -87,20 +91,29 @@ describe("ChatTranscript inter-agent board entry", () => {
           isLoading={false}
           loadingLabel="Thinking"
           mentionItems={[]}
-          messages={[interAgentStepMessage("completed")]}
+          messages={[interAgentStepMessage("completed"), agentMessage()]}
           onOpenInterAgentGraph={onOpenInterAgentGraph}
         />,
       );
     });
 
-    const boardButton = container.querySelector<HTMLButtonElement>(".chatapp-agent-step__board");
+    expect(container.querySelector(".chatapp-agent-step")).toBeNull();
+    expect(container.textContent).not.toContain("Multi-agent run completed.");
+    expect(container.textContent).toContain("Final assistant answer.");
+
+    let boardButton = container.querySelector<HTMLButtonElement>(".chatapp-agent-message-board");
     expect(boardButton?.textContent).toContain("Open multi-agent board");
+    expect(boardButton?.classList.contains("is-pending")).toBe(true);
+    expect(boardButton?.querySelector(".chatapp-live-board-glow")).toBeNull();
 
     await act(async () => {
       boardButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
     });
 
     expect(onOpenInterAgentGraph).toHaveBeenCalledWith("run-1");
+    boardButton = container.querySelector<HTMLButtonElement>(".chatapp-agent-message-board");
+    expect(boardButton?.classList.contains("is-normal")).toBe(true);
+    expect(boardButton?.classList.contains("is-pending")).toBe(false);
   });
 });
 
@@ -152,18 +165,28 @@ describe("ChatTranscript message copy", () => {
 
 function interAgentStepMessage(summaryKind = "plan"): ChatMessage {
   return {
-    id: "step-1",
+    id: "turn-1:step:event-1",
     role: "step",
     content: "",
     createdAt: "2026-06-18T10:00:00Z",
     step: {
-      label: "Orchestrator started a delegated multi-agent run.",
+      label: summaryKind === "completed" ? "Multi-agent run completed." : "Orchestrator started a delegated multi-agent run.",
       detail: {
         step_kind: "inter_agent_summary",
         inter_agent_run_id: "run-1",
         summary_kind: summaryKind,
       },
     },
+  };
+}
+
+function agentMessage(): ChatMessage {
+  return {
+    id: "turn-1:agent",
+    role: "agent",
+    content: "Final assistant answer.",
+    createdAt: "2026-06-18T10:02:00Z",
+    status: "complete",
   };
 }
 

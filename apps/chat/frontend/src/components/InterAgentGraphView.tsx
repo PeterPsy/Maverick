@@ -1,8 +1,6 @@
 import { useCallback, useEffect, useMemo, useState, type MouseEvent } from "react";
 import {
   applyNodeChanges,
-  Background,
-  BackgroundVariant,
   Handle,
   MarkerType,
   Position,
@@ -710,14 +708,7 @@ function GraphFlowCanvas({
         zoomOnDoubleClick
         zoomOnPinch
         zoomOnScroll
-      >
-        <Background
-          color="rgba(var(--maverick-contrast-rgb), 0.14)"
-          gap={34}
-          lineWidth={1}
-          variant={BackgroundVariant.Lines}
-        />
-      </ReactFlow>
+      />
       {missingConnectionCount ? (
         <div className="chatapp-inter-agent-graph__edge-empty">Some connections are unavailable.</div>
       ) : null}

@@ -38,6 +38,7 @@ _SESSION_EXECUTION_LOCKS: dict[str, Lock] = {}
 _SESSION_EXECUTION_LOCKS_LOCK = Lock()
 _ACTIVE_TURN_STATUSES = {"queued", "active"}
 _IDLE_RUNTIME_REAP_TTL_SECONDS = 180.0
+_PREWARM_AFTER_TURN_DELAY_SECONDS = 0.05
 _IDLE_REAP_TIMERS: dict[str, Timer] = {}
 _IDLE_REAP_TIMERS_LOCK = Lock()
 
@@ -100,6 +101,30 @@ def prewarm_runtime_session_async(state: PlatformState, *, session: RuntimeSessi
     Thread(target=worker, name=f"maverick-runtime-prewarm-{session.session_id}", daemon=True).start()
 
 
+def schedule_runtime_session_prewarm(
+    state: PlatformState,
+    *,
+    session: RuntimeSessionRecord,
+    delay_seconds: float = _PREWARM_AFTER_TURN_DELAY_SECONDS,
+) -> None:
+    """Schedule best-effort prewarm for the next turn after the current worker releases its lock."""
+    if runtime_session_is_plain_hosted_chat(session):
+        return
+    if _session_has_active_turn(state, session.session_id):
+        return
+
+    def run() -> None:
+        if _session_has_active_turn(state, session.session_id):
+            return
+        with suppress(Exception):
+            current_session = state.runtime_store.get_session(session.session_id)
+            prewarm_runtime_session_async(state, session=current_session)
+
+    timer = Timer(max(0.0, delay_seconds), run)
+    timer.daemon = True
+    timer.start()
+
+
 def _session_has_any_turn(state: PlatformState, session_id: str) -> bool:
     with suppress(Exception):
         return bool(state.runtime_store.list_turns(session_id))
@@ -148,6 +173,7 @@ def submit_runtime_turn_async(
     def worker() -> None:
         force_idle_reap = False
         worker_provider_id = queue_provider_id
+        prewarm_after_turn = False
         with _session_execution_lock(session.session_id):
             _debug_log_runtime_turn(
                 state,
@@ -373,6 +399,7 @@ def submit_runtime_turn_async(
                     message="Runtime turn debug: async terminal event recorded",
                     payload={"phase": "async_terminal_event_recorded", "turn_status": completed_turn.status, "terminal_event_type": terminal_event.event_type},
                 )
+                prewarm_after_turn = not plain_hosted
             except Exception as error:
                 failure_reason = str(getattr(error, "reason_code", None) or error)
                 reason_codes = getattr(error, "reason_codes", None)
@@ -412,6 +439,8 @@ def submit_runtime_turn_async(
                         reason="async_turn_failed" if force_idle_reap else "async_turn_idle",
                         idle_ttl_seconds=0 if force_idle_reap else None,
                     )
+        if prewarm_after_turn:
+            schedule_runtime_session_prewarm(state, session=session)
 
     Thread(target=worker, name=f"maverick-runtime-turn-{turn.turn_id}", daemon=True).start()
     return turn, events

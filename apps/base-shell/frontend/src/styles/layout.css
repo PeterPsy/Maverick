@@ -79,18 +79,6 @@
   width: calc(100% - var(--bs-shell-desktop-fixed-sidebar-space) - var(--bs-floating-chat-fixed-space));
 }
 
-.bs-shell.is-workspace-focus:not(.is-mobile-layout) .bs-workspace-view-shell {
-  width: 100%;
-  margin-left: 0;
-}
-
-.bs-shell.is-workspace-focus:not(.is-mobile-layout) .bs-sidebar {
-  opacity: 0;
-  pointer-events: none;
-  transform: translateX(calc(-100% - 1rem));
-  visibility: hidden;
-}
-
 .bs-shell.is-mobile-layout.is-sidebar-open,
 .bs-shell.is-mobile-layout.is-sidebar-closing {
   overscroll-behavior: none;

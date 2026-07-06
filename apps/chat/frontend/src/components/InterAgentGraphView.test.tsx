@@ -333,6 +333,7 @@ describe("InterAgentGraphView", () => {
     expect(element.querySelector('[aria-label="Zoom out"]')).toBeNull();
     expect(element.querySelector('[aria-label="Fit graph"]')).toBeNull();
     expect(element.querySelector('[aria-label="Zoom in"]')).toBeNull();
+    expect(element.querySelector(".chatapp-inter-agent-graph__body")?.classList.contains("has-transcript")).toBe(false);
     expect(element.textContent).not.toContain("Agent nodes view");
     expect(element.textContent).not.toContain("2 nodes");
     expect(element.textContent).not.toContain("1 connections");
@@ -354,6 +355,7 @@ describe("InterAgentGraphView", () => {
 
     expect(getInterAgentParticipantTranscript).toHaveBeenCalledWith("run-1", "researcher", { limit: 80 });
     expect(element.querySelector('[aria-label="Researcher transcript"]')).not.toBeNull();
+    expect(element.querySelector(".chatapp-inter-agent-graph__body")?.classList.contains("has-transcript")).toBe(true);
     expect(element.querySelector(".chatapp-inter-agent-graph__input-summary")?.textContent).toContain("Find launch facts.");
     expect(element.querySelector(".chatapp-inter-agent-graph__transcript-title summary")).not.toBeNull();
     expect(element.querySelector(".chatapp-inter-agent-graph__transcript-list .chatapp-agent-block")).not.toBeNull();

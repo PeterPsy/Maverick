@@ -12,7 +12,6 @@ export function WorkspaceView({
   isLoading,
   isMobileLayout,
   onOpenApp,
-  onWorkspaceFocusChange,
   shellTheme,
 }: {
   activeApp: AppRegistryItem | null;
@@ -23,7 +22,6 @@ export function WorkspaceView({
   isLoading: boolean;
   isMobileLayout: boolean;
   onOpenApp: (appId: string, params?: Record<string, string | boolean | null>) => void;
-  onWorkspaceFocusChange?: (appId: string, active: boolean) => void;
   shellTheme: ShellThemeState;
 }) {
   if (!activeApp) {
@@ -43,7 +41,6 @@ export function WorkspaceView({
       activeWorkspaceId={activeWorkspaceId}
       isMobileLayout={isMobileLayout}
       onOpenApp={onOpenApp}
-      onWorkspaceFocusChange={onWorkspaceFocusChange}
       shellTheme={shellTheme}
     />
   );

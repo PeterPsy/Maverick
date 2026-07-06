@@ -1,4 +1,4 @@
-import { useEffect, type CSSProperties, type RefObject } from "react";
+import type { CSSProperties, RefObject } from "react";
 import { ChatComposer } from "./ChatComposer";
 import type { ChatComposerProps } from "./ChatComposer";
 import { ChatTranscript } from "./ChatTranscript";
@@ -29,15 +29,6 @@ export function ChatSurface({ composerProps, surfaceActions, surfaceState, trans
     ? transcriptProps.interAgentRuns?.find((detail) => detail.run.run_id === activeInterAgentGraphRunId) || null
     : null;
   const isAgentNodesView = Boolean(activeInterAgentGraphRunId);
-
-  useEffect(() => {
-    postShellWorkspaceFocus(isAgentNodesView);
-    return () => {
-      if (isAgentNodesView) {
-        postShellWorkspaceFocus(false);
-      }
-    };
-  }, [isAgentNodesView]);
 
   return (
     <section className="chatapp-chat-panel">
@@ -74,17 +65,5 @@ export function ChatSurface({ composerProps, surfaceActions, surfaceState, trans
         </div>
       </div>
     </section>
-  );
-}
-
-function postShellWorkspaceFocus(active: boolean) {
-  window.parent?.postMessage(
-    {
-      type: "maverick.shell.workspace-focus",
-      app_id: "chat",
-      active,
-      reason: "chat.inter-agent-board",
-    },
-    window.location.origin,
   );
 }

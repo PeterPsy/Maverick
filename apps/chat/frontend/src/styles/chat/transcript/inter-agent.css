@@ -806,12 +806,20 @@
 .chatapp-inter-agent-graph.chatapp-agent-nodes-view .chatapp-inter-agent-graph__body {
   grid-row: auto;
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: minmax(0, 1fr);
   align-content: stretch;
+  align-items: stretch;
   height: 100%;
+  min-width: 0;
   min-height: 0;
   padding: 0;
   background: transparent;
   overflow: hidden;
+}
+
+.chatapp-inter-agent-graph.chatapp-agent-nodes-view .chatapp-inter-agent-graph__body.has-transcript {
+  grid-template-columns: minmax(0, 1fr) clamp(22rem, 28vw, 26rem);
 }
 
 .chatapp-inter-agent-graph.chatapp-agent-nodes-view .chatapp-inter-agent-graph__canvas {
@@ -847,17 +855,20 @@
 }
 
 .chatapp-inter-agent-graph.chatapp-agent-nodes-view .chatapp-inter-agent-graph__transcript {
-  position: fixed;
+  position: relative;
   z-index: 30;
-  top: calc(var(--chatapp-graph-shell-top-offset, var(--maverick-shell-mobile-content-top-offset, 0px)) + 0.78rem);
-  right: clamp(0.78rem, 1.8vw, 1.25rem);
-  bottom: max(0.78rem, env(safe-area-inset-bottom, 0px));
+  top: auto;
+  right: auto;
+  bottom: auto;
+  align-self: stretch;
+  justify-self: stretch;
   display: grid;
   grid-template-rows: auto minmax(0, 1fr);
   gap: 0.74rem;
-  width: min(26rem, calc(100vw - 1.56rem));
+  width: auto;
   min-width: 0;
   min-height: 0;
+  margin: calc(var(--chatapp-graph-shell-top-offset, var(--maverick-shell-mobile-content-top-offset, 0px)) + 0.78rem) 0.78rem 0.78rem 0;
   padding: 0.72rem;
   border: 1px solid var(--chatapp-graph-border);
   border-radius: var(--chatapp-graph-radius);
@@ -1020,9 +1031,17 @@
 }
 
 @media (max-width: 640px) {
+  .chatapp-inter-agent-graph.chatapp-agent-nodes-view .chatapp-inter-agent-graph__body.has-transcript {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
   .chatapp-inter-agent-graph.chatapp-agent-nodes-view .chatapp-inter-agent-graph__transcript {
+    position: fixed;
+    top: calc(var(--chatapp-graph-shell-top-offset, var(--maverick-shell-mobile-content-top-offset, 0px)) + 0.78rem);
     left: 0.78rem;
     right: 0.78rem;
+    bottom: max(0.78rem, env(safe-area-inset-bottom, 0px));
     width: auto;
+    margin: 0;
   }
 }

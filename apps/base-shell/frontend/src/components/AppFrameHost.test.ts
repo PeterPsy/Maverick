@@ -13,16 +13,4 @@ describe("AppFrameHost shell theme bridge", () => {
     expect(source).toContain("postMaverickShellTheme");
     expect(source).toContain('theme: shellTheme');
   });
-
-  it("accepts mounted app workspace focus requests", () => {
-    const frameHostSource = readFileSync(resolve(currentDir, "AppFrameHost.tsx"), "utf8");
-    const appShellSource = readFileSync(resolve(currentDir, "../AppShell.tsx"), "utf8");
-    const layoutSource = readFileSync(resolve(currentDir, "../styles/layout.css"), "utf8");
-
-    expect(frameHostSource).toContain("maverick.shell.workspace-focus");
-    expect(frameHostSource).toContain("onWorkspaceFocusChange");
-    expect(appShellSource).toContain("is-workspace-focus");
-    expect(layoutSource).toContain(".bs-shell.is-workspace-focus:not(.is-mobile-layout) .bs-workspace-view-shell");
-    expect(layoutSource).toContain("margin-left: 0");
-  });
 });

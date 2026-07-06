@@ -79,6 +79,7 @@ export function InterAgentGraphView({
   const participants = runDetail?.participants || [];
   const selectedParticipant =
     participants.find((participant) => participant.participant_id === selectedParticipantId) || null;
+  const hasSelectedParticipant = Boolean(selectedParticipant);
   const selectedParticipantArtifacts = useMemo(
     () => {
       if (!selectedParticipantId) {
@@ -157,8 +158,9 @@ export function InterAgentGraphView({
         </div>
       ) : null}
 
-      <div className="chatapp-inter-agent-graph__body">
+      <div className={`chatapp-inter-agent-graph__body ${hasSelectedParticipant ? "has-transcript" : ""}`}>
         <GraphCanvas
+          hasTranscript={hasSelectedParticipant}
           onSelectParticipant={setSelectedParticipantId}
           runDetail={runDetail}
           selectedParticipantId={selectedParticipantId}
@@ -187,10 +189,12 @@ export function InterAgentGraphView({
 }
 
 function GraphCanvas({
+  hasTranscript,
   onSelectParticipant,
   runDetail,
   selectedParticipantId,
 }: {
+  hasTranscript: boolean;
   onSelectParticipant: (participantId: string) => void;
   runDetail: InterAgentRunDetail | null;
   selectedParticipantId: string | null;
@@ -215,6 +219,7 @@ function GraphCanvas({
           <GraphFlowCanvas
             key={runDetail?.run.run_id || "inter-agent-graph"}
             edges={flowEdges}
+            hasTranscript={hasTranscript}
             missingConnectionCount={missingConnectionCount}
             nodes={flowNodes}
             onSelectParticipant={onSelectParticipant}
@@ -632,12 +637,14 @@ const AGENT_NODE_TYPES = {
 
 function GraphFlowCanvas({
   edges,
+  hasTranscript,
   missingConnectionCount,
   nodes,
   onSelectParticipant,
   rawEdgeCount,
 }: {
   edges: AgentFlowEdge[];
+  hasTranscript: boolean;
   missingConnectionCount: number;
   nodes: AgentFlowNode[];
   onSelectParticipant: (participantId: string) => void;
@@ -677,7 +684,7 @@ function GraphFlowCanvas({
     }
     const timeout = window.setTimeout(fitToView, 0);
     return () => window.clearTimeout(timeout);
-  }, [edges.length, fitToView, nodes.length]);
+  }, [edges.length, fitToView, hasTranscript, nodes.length]);
 
   return (
     <div

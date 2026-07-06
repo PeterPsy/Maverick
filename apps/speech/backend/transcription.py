@@ -21,6 +21,7 @@ from flux_streaming import flux_streaming_supported, transcribe_deepgram_flux_au
 from models import (
     DEFAULT_INLINE_TRANSCRIPTION_PROFILE,
     MAX_INLINE_TRANSCRIPTION_AUDIO_BYTES,
+    MAX_INLINE_TRANSCRIPTION_SECONDS,
     MAX_TRANSCRIPTION_AUDIO_BYTES,
     MAX_TRANSCRIPTION_FILE_AUDIO_BYTES,
     MAX_TRANSCRIPTION_SECONDS,
@@ -55,6 +56,7 @@ CONTENT_TYPE_EXTENSIONS = {
 }
 STT_SESSION_MAX_AGE_SECONDS = 60 * 60
 STT_SESSION_ID_PATTERN = re.compile(r"^[a-zA-Z0-9][a-zA-Z0-9_.:-]{0,79}$")
+MAX_TRANSCRIPTION_SESSION_CHUNKS = 240
 DICTATION_COMMANDS = {
     "new line": {"type": "insert_text", "text": "\n"},
     "newline": {"type": "insert_text", "text": "\n"},
@@ -81,6 +83,7 @@ def transcribe_audio_payload(*, data_root: Path, body: dict) -> dict:
     if conversation_mode and not session:
         raise SpeechValidationError("conversation stream requires session_id.", operation="transcribe_audio")
     dictation_mode = bool(session) or dictation_mode_enabled(body)
+    close_only = close_only_stream_final_requested(session=session, dictation_mode=dictation_mode, conversation_mode=conversation_mode)
     body_file_path = str(body.get("_body_file_path") or "")
     if body_file_path:
         return transcribe_inline_body_file(
@@ -93,6 +96,7 @@ def transcribe_audio_payload(*, data_root: Path, body: dict) -> dict:
             request_started=request_started,
             body_stage_seconds=body_stage_seconds,
             upstream_body_stage_seconds=upstream_body_stage_seconds,
+            allow_small_audio=close_only,
             session=session,
             dictation_mode=dictation_mode,
             app_secrets=body.get("_app_secrets") if isinstance(body.get("_app_secrets"), dict) else {},
@@ -100,7 +104,7 @@ def transcribe_audio_payload(*, data_root: Path, body: dict) -> dict:
             conversation_mode=conversation_mode,
         )
     body_decode_started = time.monotonic()
-    audio = decoded_audio(body.get("audio_base64"))
+    audio = decoded_audio(body.get("audio_base64"), allow_empty=close_only)
     body_stage_seconds += time.monotonic() - body_decode_started
     return transcribe_bytes(
         data_root=data_root,
@@ -131,6 +135,7 @@ def transcribe_inline_body_file(
     request_started: float,
     body_stage_seconds: float,
     upstream_body_stage_seconds: float,
+    allow_small_audio: bool = False,
     session: dict | None = None,
     dictation_mode: bool = False,
     app_secrets: dict | None = None,
@@ -142,7 +147,10 @@ def transcribe_inline_body_file(
     actual_size = audio_path.stat().st_size
     if size_bytes and size_bytes != actual_size:
         raise SpeechValidationError("inline audio upload size changed before transcription.", operation="transcribe_audio")
-    validate_audio_size(actual_size, operation="transcribe_audio", max_audio_bytes=MAX_INLINE_TRANSCRIPTION_AUDIO_BYTES)
+    if not allow_small_audio:
+        validate_audio_size(actual_size, operation="transcribe_audio", max_audio_bytes=MAX_INLINE_TRANSCRIPTION_AUDIO_BYTES)
+    elif actual_size > MAX_INLINE_TRANSCRIPTION_AUDIO_BYTES:
+        validate_audio_size(actual_size, operation="transcribe_audio", max_audio_bytes=MAX_INLINE_TRANSCRIPTION_AUDIO_BYTES)
     return transcribe_path(
         data_root=data_root,
         audio_path=audio_path,
@@ -286,6 +294,21 @@ def transcribe_path(
         dictation_mode=dictation_mode,
         conversation_mode=conversation_mode,
     )
+    close_only = close_only_stream_final_requested(
+        session=session,
+        dictation_mode=dictation_mode,
+        conversation_mode=conversation_mode,
+    )
+    validate_audio_size_for_path(
+        size_bytes,
+        operation=operation,
+        allow_small_audio=bool(close_only and dictation_stream_mode),
+    )
+    session_limits = (
+        validate_transcription_session_limits(data_root, session=session, chunk_size_bytes=size_bytes)
+        if session and not conversation_mode
+        else {}
+    )
     if not conversation_mode and not dictation_stream_mode:
         duration_probe_started = time.monotonic()
         preflight_duration_seconds = probe_audio_duration_seconds(audio_path, content_type=content_type)
@@ -317,6 +340,7 @@ def transcribe_path(
             size_bytes=size_bytes,
             session=session or {},
             source=source,
+            session_limits=session_limits,
         )
     if dictation_stream_mode:
         return dictation_stream_response(
@@ -332,6 +356,7 @@ def transcribe_path(
             size_bytes=size_bytes,
             session=session or {},
             source=source,
+            session_limits=session_limits,
         )
     postprocess_started = time.monotonic()
     post_processed = post_process_transcript(str(result.get("text") or ""), enable_commands=dictation_mode)
@@ -346,6 +371,8 @@ def transcribe_path(
         chunk_text=cleaned_text,
         commands=commands,
         segments=segments,
+        chunk_size_bytes=size_bytes,
+        session_limits=session_limits,
     )
     postprocess_seconds = time.monotonic() - postprocess_started
     metrics = transcription_metrics(
@@ -362,6 +389,12 @@ def transcribe_path(
     job_id = f"stt_{uuid.uuid4().hex}"
     created_at = datetime.now(tz=UTC).isoformat()
     store_started = time.monotonic()
+    finish_transcription_metrics(
+        metrics,
+        request_started=request_started,
+        upstream_body_stage_seconds=upstream_body_stage_seconds,
+        store_started=store_started,
+    )
     append_job(
         data_root,
         {
@@ -384,12 +417,6 @@ def transcribe_path(
             "source": source,
             "retention": "metadata_only",
         },
-    )
-    finish_transcription_metrics(
-        metrics,
-        request_started=request_started,
-        upstream_body_stage_seconds=upstream_body_stage_seconds,
-        store_started=store_started,
     )
     return {
         "job_id": job_id,
@@ -428,6 +455,7 @@ def conversation_stream_response(
     size_bytes: int,
     session: dict,
     source: dict,
+    session_limits: dict,
 ) -> dict:
     session_id = str(session.get("session_id") or "")
     chunk_index = int(session.get("chunk_index") or 0)
@@ -448,6 +476,12 @@ def conversation_stream_response(
     job_id = f"stt_{uuid.uuid4().hex}"
     created_at = datetime.now(tz=UTC).isoformat()
     store_started = time.monotonic()
+    finish_transcription_metrics(
+        metrics,
+        request_started=request_started,
+        upstream_body_stage_seconds=upstream_body_stage_seconds,
+        store_started=store_started,
+    )
     append_job(
         data_root,
         {
@@ -470,12 +504,6 @@ def conversation_stream_response(
             "source": source,
             "retention": "metadata_only",
         },
-    )
-    finish_transcription_metrics(
-        metrics,
-        request_started=request_started,
-        upstream_body_stage_seconds=upstream_body_stage_seconds,
-        store_started=store_started,
     )
     return {
         "job_id": job_id,
@@ -519,6 +547,7 @@ def dictation_stream_response(
     size_bytes: int,
     session: dict,
     source: dict,
+    session_limits: dict,
 ) -> dict:
     session_id = str(session.get("session_id") or "")
     chunk_index = int(session.get("chunk_index") or 0)
@@ -537,6 +566,8 @@ def dictation_stream_response(
         chunk_text=cleaned_text,
         commands=commands,
         segments=segments,
+        chunk_size_bytes=size_bytes,
+        session_limits=session_limits,
     )
     postprocess_seconds = time.monotonic() - postprocess_started
     public_text = str(session_payload.get("text") or "")
@@ -553,6 +584,12 @@ def dictation_stream_response(
     job_id = f"stt_{uuid.uuid4().hex}"
     created_at = datetime.now(tz=UTC).isoformat()
     store_started = time.monotonic()
+    finish_transcription_metrics(
+        metrics,
+        request_started=request_started,
+        upstream_body_stage_seconds=upstream_body_stage_seconds,
+        store_started=store_started,
+    )
     append_job(
         data_root,
         {
@@ -575,12 +612,6 @@ def dictation_stream_response(
             "source": source,
             "retention": "metadata_only",
         },
-    )
-    finish_transcription_metrics(
-        metrics,
-        request_started=request_started,
-        upstream_body_stage_seconds=upstream_body_stage_seconds,
-        store_started=store_started,
     )
     return {
         "job_id": job_id,
@@ -676,6 +707,80 @@ def body_file_stage_seconds(body: dict) -> float:
     return rounded_seconds(body.get("_body_file_stage_seconds") or 0.0)
 
 
+def close_only_stream_final_requested(
+    *,
+    session: dict | None,
+    dictation_mode: bool,
+    conversation_mode: bool,
+) -> bool:
+    return bool(session and session.get("final") and (dictation_mode or conversation_mode))
+
+
+def validate_audio_size_for_path(size_bytes: int, *, operation: str, allow_small_audio: bool = False) -> None:
+    max_audio_bytes = MAX_TRANSCRIPTION_FILE_AUDIO_BYTES if operation == "transcribe_file" else MAX_INLINE_TRANSCRIPTION_AUDIO_BYTES
+    if allow_small_audio and size_bytes < MIN_TRANSCRIPTION_AUDIO_BYTES:
+        return
+    validate_audio_size(size_bytes, operation=operation, max_audio_bytes=max_audio_bytes)
+
+
+def validate_transcription_session_limits(data_root: Path, *, session: dict, chunk_size_bytes: int) -> dict:
+    cleanup_transcription_sessions(data_root)
+    session_id = str(session["session_id"])
+    state = read_transcription_session(data_root, session_id)
+    now = time.time()
+    created_at = session_created_at(state, now=now)
+    previous_total_size = int(state.get("total_size_bytes") or legacy_session_total_size_bytes(state))
+    total_size_bytes = previous_total_size + max(0, chunk_size_bytes)
+    previous_chunk_count = int(state.get("chunk_count") or legacy_session_chunk_count(state))
+    chunk_count = previous_chunk_count + (1 if chunk_size_bytes > 0 else 0)
+    if total_size_bytes > MAX_INLINE_TRANSCRIPTION_AUDIO_BYTES:
+        raise SpeechValidationError(
+            f"dictation session audio must be at most {MAX_INLINE_TRANSCRIPTION_AUDIO_BYTES} bytes.",
+            operation="transcribe_audio",
+            allowed_values={"max_audio_bytes": [str(MAX_INLINE_TRANSCRIPTION_AUDIO_BYTES)]},
+        )
+    if now - created_at > MAX_INLINE_TRANSCRIPTION_SECONDS:
+        raise SpeechValidationError(
+            f"dictation session must finish within {MAX_INLINE_TRANSCRIPTION_SECONDS} seconds.",
+            operation="transcribe_audio",
+            allowed_values={"max_duration_seconds": [str(MAX_INLINE_TRANSCRIPTION_SECONDS)]},
+        )
+    if chunk_count > MAX_TRANSCRIPTION_SESSION_CHUNKS:
+        raise SpeechValidationError(
+            f"dictation session must contain at most {MAX_TRANSCRIPTION_SESSION_CHUNKS} chunks.",
+            operation="transcribe_audio",
+            allowed_values={"max_session_chunks": [str(MAX_TRANSCRIPTION_SESSION_CHUNKS)]},
+        )
+    return {
+        "created_at": created_at,
+        "updated_at": now,
+        "total_size_bytes": total_size_bytes,
+        "chunk_count": chunk_count,
+    }
+
+
+def session_created_at(state: dict, *, now: float) -> float:
+    try:
+        created_at = float(state.get("created_at") or 0.0)
+    except (TypeError, ValueError):
+        created_at = 0.0
+    return created_at if created_at > 0 else now
+
+
+def legacy_session_total_size_bytes(state: dict) -> int:
+    chunks = state.get("chunks") if isinstance(state.get("chunks"), list) else []
+    total = 0
+    for chunk in chunks:
+        if isinstance(chunk, dict):
+            total += max(0, int(chunk.get("size_bytes") or 0))
+    return total
+
+
+def legacy_session_chunk_count(state: dict) -> int:
+    chunks = state.get("chunks") if isinstance(state.get("chunks"), list) else []
+    return len(chunks)
+
+
 def deepgram_dictation_stream_enabled(
     settings: dict,
     *,
@@ -696,7 +801,7 @@ def finalized_flux_dictation_chunk_text(result: dict, *, existing_text: str, fin
         if isinstance(event, dict) and bool(event.get("is_final")) and str(event.get("text") or "").strip()
     ]
     if finalized_texts:
-        return " ".join(finalized_texts).strip()
+        return incremental_transcript_text(existing_text, " ".join(finalized_texts).strip())
     if final:
         return incremental_transcript_text(existing_text, str(result.get("text") or ""))
     return ""
@@ -720,8 +825,10 @@ def public_session_metadata(session_payload: dict) -> dict:
     }
 
 
-def decoded_audio(value: object) -> bytes:
+def decoded_audio(value: object, *, allow_empty: bool = False) -> bytes:
     if not isinstance(value, str) or not value.strip():
+        if allow_empty:
+            return b""
         raise SpeechValidationError(
             "Missing required field: audio_base64.",
             operation="transcribe_audio",
@@ -731,6 +838,8 @@ def decoded_audio(value: object) -> bytes:
         audio = base64.b64decode(value, validate=True)
     except ValueError as error:
         raise SpeechValidationError("audio_base64 must be valid base64.", operation="transcribe_audio") from error
+    if allow_empty and len(audio) < MIN_TRANSCRIPTION_AUDIO_BYTES:
+        return audio
     validate_audio_size(len(audio), operation="transcribe_audio", max_audio_bytes=MAX_INLINE_TRANSCRIPTION_AUDIO_BYTES)
     return audio
 
@@ -945,6 +1054,8 @@ def apply_transcription_session(
     chunk_text: str,
     commands: list[dict],
     segments: list[dict],
+    chunk_size_bytes: int = 0,
+    session_limits: dict | None = None,
 ) -> dict:
     if not session:
         return {}
@@ -953,14 +1064,28 @@ def apply_transcription_session(
     chunk_index = int(session["chunk_index"])
     final = bool(session["final"])
     state = read_transcription_session(data_root, session_id)
+    now = time.time()
+    limits = session_limits if isinstance(session_limits, dict) else {}
+    created_at = float(limits.get("created_at") or state.get("created_at") or now)
+    total_size_bytes = int(limits.get("total_size_bytes") or (int(state.get("total_size_bytes") or 0) + max(0, chunk_size_bytes)))
+    chunk_count = int(limits.get("chunk_count") or (int(state.get("chunk_count") or len(state.get("chunks") or [])) + (1 if chunk_size_bytes > 0 else 0)))
     text = str(state.get("text") or "")
     if any(command.get("type") == "delete_last_sentence" for command in commands):
         text = delete_last_sentence(text)
     elif chunk_text:
         text = append_dictation_text(text, chunk_text)
     chunks = state.get("chunks") if isinstance(state.get("chunks"), list) else []
-    chunks.append({"chunk_index": chunk_index, "text_chars": len(chunk_text), "segments": len(segments)})
-    state = {"schema_version": "1", "session_id": session_id, "text": text, "chunks": chunks[-200:]}
+    chunks.append({"chunk_index": chunk_index, "text_chars": len(chunk_text), "segments": len(segments), "size_bytes": max(0, chunk_size_bytes)})
+    state = {
+        "schema_version": "1",
+        "session_id": session_id,
+        "created_at": created_at,
+        "updated_at": now,
+        "text": text,
+        "total_size_bytes": total_size_bytes,
+        "chunk_count": chunk_count,
+        "chunks": chunks[-MAX_TRANSCRIPTION_SESSION_CHUNKS:],
+    }
     if final:
         remove_transcription_session(data_root, session_id)
     else:

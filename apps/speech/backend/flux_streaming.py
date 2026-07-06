@@ -198,7 +198,10 @@ class DeepgramFluxSession:
         with self.lock:
             if self.closed:
                 raise SpeechValidationError("conversation stream session is already closed.", operation="transcribe_audio")
-            self.client.send_binary(audio_bytes)
+            if audio_bytes:
+                self.client.send_binary(audio_bytes)
+            elif not final:
+                raise SpeechValidationError("conversation stream chunk must include audio unless final is true.", operation="transcribe_audio")
             if final:
                 self.client.send_json({"type": "CloseStream"})
             events = self._drain_events(FLUX_FINAL_DRAIN_SECONDS if final else FLUX_DRAIN_SECONDS)

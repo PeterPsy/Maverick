@@ -11,6 +11,7 @@ import socket
 import subprocess
 import stat
 import sys
+import time
 from tempfile import TemporaryDirectory
 import threading
 from types import SimpleNamespace
@@ -1067,6 +1068,211 @@ class SpeechAppTests(unittest.TestCase):
         self.assertEqual(payload["text"], "")
         self.assertTrue(payload["partial"])
 
+    def test_transcribe_audio_dictation_flux_accepts_close_only_final_request(self) -> None:
+        audio = b"not-a-standalone-webm" * 32
+        captured_final_size: list[int] = []
+
+        def fake_flux(audio_path: Path, *, settings: dict, language: str, session: dict) -> dict:
+            if session.get("final"):
+                captured_final_size.append(audio_path.stat().st_size)
+                return {
+                    "text": "hello",
+                    "chunk_text": "hello",
+                    "events": [{"type": "Results", "text": "hello", "is_final": True}],
+                    "turn_events": [{"type": "EndOfTurn", "text": ""}],
+                    "duration_seconds": 0.0,
+                    "engine": "deepgram",
+                    "model": "flux-general-en",
+                    "language": "en",
+                    "language_probability": 0.0,
+                    "profile": "flux",
+                }
+            return {
+                "text": "hel",
+                "chunk_text": "hel",
+                "events": [{"type": "Results", "text": "hel", "is_final": False}],
+                "turn_events": [],
+                "duration_seconds": 0.0,
+                "engine": "deepgram",
+                "model": "flux-general-en",
+                "language": "en",
+                "language_probability": 0.0,
+                "profile": "flux",
+            }
+
+        with TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            write_settings(root / "data", {"transcription_engine": "deepgram"})
+            with patch("transcription.transcribe_deepgram_flux_audio_chunk", side_effect=fake_flux):
+                handle_action(
+                    root / "data",
+                    root / "generated",
+                    {
+                        "action": "transcribe_audio",
+                        "content_type": "audio/webm",
+                        "audio_base64": base64.b64encode(audio).decode("ascii"),
+                        "dictation": True,
+                        "session_id": "chat-session",
+                        "chunk_index": 0,
+                        "_app_secrets": {"deepgram-api-key": "deepgram-token"},
+                    },
+                )
+                status_code, payload = handle_action(
+                    root / "data",
+                    root / "generated",
+                    {
+                        "action": "transcribe_audio",
+                        "content_type": "audio/webm",
+                        "audio_base64": "",
+                        "dictation": True,
+                        "session_id": "chat-session",
+                        "chunk_index": 1,
+                        "final": True,
+                        "_app_secrets": {"deepgram-api-key": "deepgram-token"},
+                    },
+                )
+
+        self.assertEqual(status_code, 200)
+        self.assertEqual(captured_final_size, [0])
+        self.assertEqual(payload["chunk_text"], "hello")
+        self.assertTrue(payload["final"])
+
+    def test_transcribe_audio_dictation_flux_rejects_session_byte_overflow_before_provider(self) -> None:
+        audio = b"x" * 256
+        with TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            data_root = root / "data"
+            session_dir = data_root / "run" / "stt-sessions"
+            session_dir.mkdir(parents=True)
+            (session_dir / "chat-session.json").write_text(
+                json.dumps(
+                    {
+                        "schema_version": "1",
+                        "session_id": "chat-session",
+                        "created_at": time.time(),
+                        "updated_at": time.time(),
+                        "text": "",
+                        "total_size_bytes": MAX_INLINE_TRANSCRIPTION_AUDIO_BYTES - 100,
+                        "chunk_count": 1,
+                        "chunks": [{"chunk_index": 0, "size_bytes": MAX_INLINE_TRANSCRIPTION_AUDIO_BYTES - 100}],
+                    }
+                ),
+                encoding="utf-8",
+            )
+            write_settings(data_root, {"transcription_engine": "deepgram"})
+            with patch("transcription.transcribe_deepgram_flux_audio_chunk", side_effect=AssertionError("provider should not be called")):
+                with self.assertRaises(SpeechValidationError) as context:
+                    handle_action(
+                        data_root,
+                        root / "generated",
+                        {
+                            "action": "transcribe_audio",
+                            "content_type": "audio/webm",
+                            "audio_base64": base64.b64encode(audio).decode("ascii"),
+                            "dictation": True,
+                            "session_id": "chat-session",
+                            "chunk_index": 1,
+                            "_app_secrets": {"deepgram-api-key": "deepgram-token"},
+                        },
+                    )
+
+        self.assertIn("dictation session audio", str(context.exception))
+
+    def test_transcribe_audio_dictation_flux_rejects_expired_session_before_provider(self) -> None:
+        audio = b"x" * 256
+        with TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            data_root = root / "data"
+            session_dir = data_root / "run" / "stt-sessions"
+            session_dir.mkdir(parents=True)
+            (session_dir / "chat-session.json").write_text(
+                json.dumps(
+                    {
+                        "schema_version": "1",
+                        "session_id": "chat-session",
+                        "created_at": time.time() - 181,
+                        "updated_at": time.time() - 181,
+                        "text": "",
+                        "total_size_bytes": 256,
+                        "chunk_count": 1,
+                        "chunks": [{"chunk_index": 0, "size_bytes": 256}],
+                    }
+                ),
+                encoding="utf-8",
+            )
+            write_settings(data_root, {"transcription_engine": "deepgram"})
+            with patch("transcription.transcribe_deepgram_flux_audio_chunk", side_effect=AssertionError("provider should not be called")):
+                with self.assertRaises(SpeechValidationError) as context:
+                    handle_action(
+                        data_root,
+                        root / "generated",
+                        {
+                            "action": "transcribe_audio",
+                            "content_type": "audio/webm",
+                            "audio_base64": base64.b64encode(audio).decode("ascii"),
+                            "dictation": True,
+                            "session_id": "chat-session",
+                            "chunk_index": 1,
+                            "_app_secrets": {"deepgram-api-key": "deepgram-token"},
+                        },
+                    )
+
+        self.assertIn("dictation session must finish", str(context.exception))
+
+    def test_transcribe_audio_dictation_flux_deduplicates_cumulative_final_event(self) -> None:
+        audio = b"not-a-standalone-webm" * 32
+        fake_result = {
+            "text": "hello world",
+            "chunk_text": "hello world",
+            "events": [{"type": "Results", "text": "hello world", "is_final": True}],
+            "turn_events": [],
+            "duration_seconds": 0.0,
+            "engine": "deepgram",
+            "model": "flux-general-en",
+            "language": "en",
+            "language_probability": 0.0,
+            "profile": "flux",
+        }
+        with TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            data_root = root / "data"
+            session_dir = data_root / "run" / "stt-sessions"
+            session_dir.mkdir(parents=True)
+            (session_dir / "chat-session.json").write_text(
+                json.dumps(
+                    {
+                        "schema_version": "1",
+                        "session_id": "chat-session",
+                        "created_at": time.time(),
+                        "updated_at": time.time(),
+                        "text": "hello",
+                        "total_size_bytes": 256,
+                        "chunk_count": 1,
+                        "chunks": [{"chunk_index": 0, "text_chars": 5, "size_bytes": 256}],
+                    }
+                ),
+                encoding="utf-8",
+            )
+            write_settings(data_root, {"transcription_engine": "deepgram"})
+            with patch("transcription.transcribe_deepgram_flux_audio_chunk", return_value=fake_result):
+                status_code, payload = handle_action(
+                    data_root,
+                    root / "generated",
+                    {
+                        "action": "transcribe_audio",
+                        "content_type": "audio/webm",
+                        "audio_base64": base64.b64encode(audio).decode("ascii"),
+                        "dictation": True,
+                        "session_id": "chat-session",
+                        "chunk_index": 1,
+                        "_app_secrets": {"deepgram-api-key": "deepgram-token"},
+                    },
+                )
+
+        self.assertEqual(status_code, 200)
+        self.assertEqual(payload["chunk_text"], "world")
+        self.assertEqual(payload["text"], "hello world")
+
     def test_flux_session_manager_prunes_idle_sessions(self) -> None:
         class FakeFluxClient:
             instances: list["FakeFluxClient"] = []
@@ -1123,6 +1329,52 @@ class SpeechAppTests(unittest.TestCase):
         self.assertTrue(FakeFluxClient.instances[0].closed)
         self.assertNotIn("stale-session", manager.sessions)
         self.assertIn("fresh-session", manager.sessions)
+
+    def test_flux_session_manager_allows_close_only_final_chunk(self) -> None:
+        class FakeFluxClient:
+            instances: list["FakeFluxClient"] = []
+
+            def __init__(self, url: str, *, headers: dict[str, str], timeout: float) -> None:
+                self.url = url
+                self.headers = headers
+                self.timeout = timeout
+                self.binary_chunks: list[bytes] = []
+                self.json_messages: list[dict] = []
+                self.events: list[dict] = []
+                FakeFluxClient.instances.append(self)
+
+            def connect(self) -> None:
+                return None
+
+            def send_binary(self, data: bytes) -> None:
+                self.binary_chunks.append(data)
+
+            def send_json(self, payload: dict) -> None:
+                self.json_messages.append(payload)
+                self.events.append({"type": "EndOfTurn"})
+
+            def receive_json(self, timeout: float) -> dict | None:
+                if not self.events:
+                    raise TimeoutError()
+                return self.events.pop(0)
+
+            def close(self) -> None:
+                return None
+
+        manager = flux_streaming.DeepgramFluxSessionManager(client_factory=FakeFluxClient)
+
+        result = manager.transcribe_chunk(
+            session_id="close-only",
+            audio_bytes=b"",
+            final=True,
+            model="flux-general-en",
+            api_key="deepgram-token",
+            language="en",
+        )
+
+        self.assertTrue(result["final"])
+        self.assertEqual(FakeFluxClient.instances[0].binary_chunks, [])
+        self.assertEqual(FakeFluxClient.instances[0].json_messages, [{"type": "CloseStream"}])
 
     def test_flux_session_manager_limits_sessions_per_worker(self) -> None:
         class FakeFluxClient:
@@ -2169,9 +2421,12 @@ class SpeechAppTests(unittest.TestCase):
             self.assertIn("postprocess_seconds", payload["metrics"])
             self.assertIn("store_seconds", payload["metrics"])
             jobs = (root / "data" / "jobs.json").read_text(encoding="utf-8")
+            job_metrics = json.loads(jobs)["jobs"][0]["metrics"]
             self.assertIn('"kind": "stt"', jobs)
             self.assertIn('"transcript_chars": 11', jobs)
             self.assertIn('"engine_seconds"', jobs)
+            self.assertEqual(job_metrics["store_seconds"], payload["metrics"]["store_seconds"])
+            self.assertEqual(job_metrics["request_total_seconds"], payload["metrics"]["request_total_seconds"])
 
     def test_transcribe_audio_rejects_long_audio_before_engine(self) -> None:
         audio = b"RIFF" + b"\0" * 512

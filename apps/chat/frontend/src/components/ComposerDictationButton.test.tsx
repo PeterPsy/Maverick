@@ -5,13 +5,14 @@ import { act } from "react";
 import { createRoot } from "react-dom/client";
 import type { Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { transcribeSpeechBlob } from "../api/client";
+import { transcribeSpeech, transcribeSpeechBlob } from "../api/client";
 import { ComposerDictationButton } from "./ComposerDictationButton";
 
 vi.mock("../api/client", () => ({
   ApiError: class ApiError extends Error {
     status = 500;
   },
+  transcribeSpeech: vi.fn(),
   transcribeSpeechBlob: vi.fn(),
 }));
 
@@ -76,6 +77,7 @@ describe("ComposerDictationButton", () => {
         }),
       },
     });
+    vi.mocked(transcribeSpeech).mockResolvedValue({ chunk_text: "", language: "en", language_probability: 0.9, text: "" });
     vi.mocked(transcribeSpeechBlob).mockResolvedValue({ language: "en", language_probability: 0.9, text: "hello" });
     container = document.createElement("div");
     document.body.append(container);
@@ -128,6 +130,8 @@ describe("ComposerDictationButton", () => {
       button?.click();
       button?.click();
       await Promise.resolve();
+      await Promise.resolve();
+      await Promise.resolve();
     });
 
     expect(MockMediaRecorder.stopCalls).toBe(1);
@@ -136,6 +140,13 @@ describe("ComposerDictationButton", () => {
       "speech",
       expect.any(Blob),
       expect.objectContaining({ chunkIndex: 0, language: undefined, profile: "fast", sessionId: expect.any(String) }),
+    );
+    const firstOptions = (vi.mocked(transcribeSpeechBlob).mock.calls[0]?.[2] || {}) as { sessionId?: string };
+    expect(transcribeSpeech).toHaveBeenCalledWith(
+      "speech",
+      "",
+      "audio/webm",
+      expect.objectContaining({ chunkIndex: 1, dictation: true, final: true, profile: "fast", sessionId: firstOptions.sessionId }),
     );
   });
 

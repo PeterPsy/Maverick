@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { ApiError, transcribeSpeechBlob, type SpeechTranscribePayload } from "../api/client";
+import { ApiError, transcribeSpeech, transcribeSpeechBlob, type SpeechTranscribePayload } from "../api/client";
 import { VoiceInput } from "./ui/voice-input";
 
 const DEFAULT_MAX_DICTATION_MS = 180000;
@@ -51,6 +51,7 @@ export function ComposerDictationButton({
   const dictationSessionIdRef = useRef("");
   const activeChunkedDictationRef = useRef(false);
   const failedDictationRef = useRef(false);
+  const finalChunkQueuedRef = useRef(false);
   const insertedTranscriptRef = useRef(false);
   const pendingTranscriptionRef = useRef<Promise<void>>(Promise.resolve());
   const nextChunkIndexRef = useRef(0);
@@ -106,6 +107,7 @@ export function ComposerDictationButton({
       activeChunkedDictationRef.current = chunkedDictationSupported === true;
       dictationSessionIdRef.current = newDictationSessionId();
       failedDictationRef.current = false;
+      finalChunkQueuedRef.current = false;
       insertedTranscriptRef.current = false;
       pendingTranscriptionRef.current = Promise.resolve();
       recordingChunksRef.current = [];
@@ -159,6 +161,9 @@ export function ComposerDictationButton({
     try {
       if (activeChunkedDictationRef.current) {
         await pendingTranscriptionRef.current;
+        if (!finalChunkQueuedRef.current) {
+          await finalizeChunkedDictationSession(contentType);
+        }
       } else {
         await finishOneShotDictation(contentType);
       }
@@ -228,6 +233,9 @@ export function ComposerDictationButton({
     const sessionId = dictationSessionIdRef.current;
     const chunkIndex = nextChunkIndexRef.current;
     nextChunkIndexRef.current += 1;
+    if (final) {
+      finalChunkQueuedRef.current = true;
+    }
     const audioBlob = new Blob([data], { type: contentType || data.type || "audio/webm" });
     const task = pendingTranscriptionRef.current
       .then(async () => {
@@ -259,6 +267,35 @@ export function ComposerDictationButton({
         failDictation(transcriptionErrorMessage(error));
       });
     pendingTranscriptionRef.current = task;
+  }
+
+  async function finalizeChunkedDictationSession(contentType: string) {
+    if (failedDictationRef.current || !dictationSessionIdRef.current) {
+      return;
+    }
+    finalChunkQueuedRef.current = true;
+    const languageHint = adaptiveLanguageForRequest(adaptiveLanguageRef.current);
+    const result = await transcribeSpeech(providerAppId, "", contentType || recordingContentTypeRef.current || "audio/webm", {
+      chunkIndex: nextChunkIndexRef.current,
+      dictation: true,
+      final: true,
+      language: languageHint || undefined,
+      profile: DICTATION_TRANSCRIPTION_PROFILE,
+      sessionId: dictationSessionIdRef.current,
+    });
+    nextChunkIndexRef.current += 1;
+    adaptiveLanguageRef.current = nextAdaptiveLanguageHint({
+      current: adaptiveLanguageRef.current,
+      detectedLanguage: result.language,
+      languageHint,
+      probability: result.language_probability,
+      transcript: result.chunk_text || result.text,
+    });
+    const transcript = result.chunk_text ?? "";
+    if (transcript || result.commands?.length) {
+      insertedTranscriptRef.current = true;
+      onTranscript(transcript, withClientDictationMetrics(result, stopRequestedAtRef.current));
+    }
   }
 
   function failDictation(message: string) {

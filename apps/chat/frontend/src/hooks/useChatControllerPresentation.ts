@@ -287,38 +287,85 @@ function useVisibleChatMessages(
   messageHistoryLimit: number,
 ): { hasHiddenMessages: boolean; messages: ChatMessage[] } {
   return useMemo(() => {
-    const projectedEvents = visibleProjectionEvents(events, messageHistoryLimit);
-    const currentMessages = eventsToMessages(projectedEvents);
-    const confirmedHumanMessageIds = new Set(currentMessages.filter((message) => message.role === "human").map((message) => message.id));
-    const visibleMessages = [
-      ...currentMessages,
-      ...pendingUserMessages
-        .filter((message) => !confirmedHumanMessageIds.has(message.clientMessageId))
-        .map((message) => ({
-          id: message.clientMessageId,
-          role: "human" as const,
-          content: message.content,
-          createdAt: message.createdAt,
-          status: "pending" as const,
-          attachments: message.attachments,
-          appReferences: message.appReferences,
-        })),
-      ...failedUserMessages.map((message) => ({
-        id: `${message.clientMessageId}:failed`,
-        role: "human" as const,
-        content: message.content,
-        createdAt: message.createdAt,
-        status: "failed" as const,
-        attachments: message.attachments,
-        appReferences: message.appReferences,
-      })),
-    ];
-    const messages = visibleMessages.slice(-messageHistoryLimit);
-    return { hasHiddenMessages: projectedEvents.length < events.length || visibleMessages.length > messages.length, messages };
+    return visibleChatMessages(events, pendingUserMessages, failedUserMessages, messageHistoryLimit);
   }, [events, failedUserMessages, messageHistoryLimit, pendingUserMessages]);
 }
 
-function visibleProjectionEvents(events: RuntimeEvent[], messageHistoryLimit: number): RuntimeEvent[] {
+export function visibleChatMessages(
+  events: RuntimeEvent[],
+  pendingUserMessages: PendingMessage[],
+  failedUserMessages: PendingMessage[],
+  messageHistoryLimit: number,
+): { hasHiddenMessages: boolean; messages: ChatMessage[] } {
+  const projectedEvents = visibleProjectionEvents(events, messageHistoryLimit);
+  const currentMessages = eventsToMessages(projectedEvents);
+  const confirmedHumanMessageIds = confirmedHumanMessageIdsForEvents(events, currentMessages);
+  const visibleMessages = [
+    ...currentMessages,
+    ...pendingUserMessages
+      .filter((message) => !confirmedHumanMessageIds.has(message.clientMessageId))
+      .map((message) => ({
+        id: message.clientMessageId,
+        role: "human" as const,
+        content: message.content,
+        createdAt: message.createdAt,
+        status: "pending" as const,
+        attachments: message.attachments,
+        appReferences: message.appReferences,
+      })),
+    ...failedUserMessages.map((message) => ({
+      id: `${message.clientMessageId}:failed`,
+      role: "human" as const,
+      content: message.content,
+      createdAt: message.createdAt,
+      status: "failed" as const,
+      attachments: message.attachments,
+      appReferences: message.appReferences,
+    })),
+  ];
+  const messages = visibleMessages.slice(-messageHistoryLimit);
+  return { hasHiddenMessages: projectedEvents.length < events.length || visibleMessages.length > messages.length, messages };
+}
+
+export function visibleProjectionEvents(events: RuntimeEvent[], messageHistoryLimit: number): RuntimeEvent[] {
   const eventLimit = Math.max(EVENT_PROJECTION_MIN_LIMIT, messageHistoryLimit * EVENT_PROJECTION_EVENTS_PER_VISIBLE_MESSAGE);
-  return events.length > eventLimit ? events.slice(-eventLimit) : events;
+  if (events.length <= eventLimit) {
+    return events;
+  }
+  const initialStartIndex = events.length - eventLimit;
+  return events.slice(turnBoundaryStartIndex(events, initialStartIndex));
+}
+
+function confirmedHumanMessageIdsForEvents(events: RuntimeEvent[], currentMessages: ChatMessage[]): Set<string> {
+  const ids = new Set(currentMessages.filter((message) => message.role === "human").map((message) => message.id));
+  for (const event of events) {
+    if (event.event_type !== "runtime.turn.queued") {
+      continue;
+    }
+    const clientMessageId = event.payload.client_message_id;
+    if (typeof clientMessageId === "string" && clientMessageId) {
+      ids.add(clientMessageId);
+    }
+  }
+  return ids;
+}
+
+function turnBoundaryStartIndex(events: RuntimeEvent[], initialStartIndex: number): number {
+  const includedTurnIds = new Set<string>();
+  for (let index = initialStartIndex; index < events.length; index += 1) {
+    const turnId = events[index].turn_id;
+    if (turnId) {
+      includedTurnIds.add(turnId);
+    }
+  }
+  if (!includedTurnIds.size) {
+    return initialStartIndex;
+  }
+  for (let index = 0; index < initialStartIndex; index += 1) {
+    const turnId = events[index].turn_id;
+    if (turnId && includedTurnIds.has(turnId)) {
+      return index;
+    }
+  }
+  return initialStartIndex;
 }

@@ -293,6 +293,7 @@ export type RuntimeTurn = {
   workspace_id: string;
   status: string;
   input_text: string | null;
+  client_message_id?: string | null;
   failure_reason: string | null;
   runtime_mode?: "agentic" | "plain_hosted_chat" | string;
   created_at: string;

@@ -84,6 +84,7 @@ describe("runtime websocket helpers", () => {
           workspace_id: "default",
           status: "completed",
           input_text: "user request",
+          client_message_id: "client-message-from-turn",
           failure_reason: null,
           created_at: "2026-04-19T10:00:00Z",
           updated_at: "2026-04-19T10:00:02Z",
@@ -94,9 +95,10 @@ describe("runtime websocket helpers", () => {
     expect(hydrated[0]).toMatchObject({
       event_id: "synthetic-turn-anchor:turn-1",
       event_type: "runtime.turn.queued",
-      payload: { input_text: "user request", synthetic_turn_anchor: true },
+      payload: { input_text: "user request", client_message_id: "client-message-from-turn", synthetic_turn_anchor: true },
     });
     expect(firstPersistedRuntimeEventId(hydrated)).toBe("event-2");
+    expect(eventsToMessages(hydrated)[0]).toMatchObject({ id: "client-message-from-turn", role: "human", content: "user request" });
     expect(eventsToMessages(hydrated).map((message) => [message.role, message.content])).toEqual([
       ["human", "user request"],
       ["agent", "done"],

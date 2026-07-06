@@ -77,15 +77,19 @@ export function hydrateMissingTurnAnchors(events: RuntimeEvent[], turns: Runtime
 }
 
 function syntheticTurnAnchor(turn: RuntimeTurn): RuntimeEvent {
+  const payload: Record<string, unknown> = {
+    input_text: turn.input_text || "",
+    synthetic_turn_anchor: true,
+  };
+  if (turn.client_message_id) {
+    payload.client_message_id = turn.client_message_id;
+  }
   return {
     event_id: `${SYNTHETIC_TURN_ANCHOR_PREFIX}${turn.turn_id}`,
     session_id: turn.session_id,
     turn_id: turn.turn_id,
     event_type: "runtime.turn.queued",
-    payload: {
-      input_text: turn.input_text || "",
-      synthetic_turn_anchor: true,
-    },
+    payload,
     created_at: turn.created_at,
   };
 }

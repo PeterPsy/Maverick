@@ -69,6 +69,7 @@ type UseChatControllerPresentationParams = {
   mentionItems: MentionItem[];
   multiAgentMode: MultiAgentComposerMode;
   onCloseInterAgentGraph: () => void;
+  openedInterAgentGraphRunIds: ReadonlySet<string>;
   pendingUserMessages: PendingMessage[];
   providers: ProviderItem[];
   providerSelectorLocked: boolean;
@@ -135,6 +136,7 @@ export function useChatControllerPresentation({
   mentionItems,
   multiAgentMode,
   onCloseInterAgentGraph,
+  openedInterAgentGraphRunIds,
   pendingUserMessages,
   providers,
   providerSelectorLocked,
@@ -263,6 +265,7 @@ export function useChatControllerPresentation({
       onOpenInterAgentGraph: handleOpenInterAgentGraph,
       onResolveInterAgentApproval: handleResolveInterAgentApproval,
       onLoadOlderMessages: hasHiddenMessages ? onRevealOlderMessages : onLoadOlderHistory,
+      openedInterAgentGraphRunIds,
       speechMaxTextChars,
       speechProviderAppId,
       speechProviderAvailable,

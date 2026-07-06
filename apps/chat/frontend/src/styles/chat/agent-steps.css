@@ -181,6 +181,27 @@
     var(--chatapp-solid-surface);
 }
 
+.chatapp-agent-step__board.is-pending {
+  padding-left: 0.64rem;
+}
+
+.chatapp-agent-step__board.is-pending::before {
+  content: "";
+  position: relative;
+  z-index: 2;
+  display: inline-block;
+  flex: 0 0 auto;
+  width: 0.42rem;
+  height: 0.42rem;
+  border-radius: 999px;
+  background: var(--maverick-accent);
+  box-shadow: 0 0 0 3px rgba(var(--maverick-contrast-rgb), 0.12);
+}
+
+.chatapp-agent-step__board.is-pending::after {
+  border: 1px solid rgba(var(--maverick-contrast-rgb), 0.2);
+}
+
 .chatapp-agent-step__board:focus-visible {
   outline: none;
   box-shadow: 0 0 0 3px rgba(var(--maverick-contrast-rgb), 0.12);

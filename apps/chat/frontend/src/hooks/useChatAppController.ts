@@ -43,6 +43,8 @@ type UseChatAppControllerParams = {
   threadId: string | null;
 };
 
+const OPENED_INTER_AGENT_BOARDS_STORAGE_PREFIX = "chat.openedInterAgentBoards";
+
 function isThreadAvailabilityBusy(availability: string) {
   return availability === "busy" || availability === "queued" || availability === "active";
 }
@@ -134,6 +136,34 @@ export function providersForComposer(providers: ProviderItem[], selectedProvider
   return [selectedProvider, ...providers];
 }
 
+function openedInterAgentBoardsStorageKey(workspaceId: string): string {
+  return `${OPENED_INTER_AGENT_BOARDS_STORAGE_PREFIX}:${workspaceId || "default"}`;
+}
+
+function loadOpenedInterAgentBoardIds(workspaceId: string): Set<string> {
+  if (typeof window === "undefined") {
+    return new Set();
+  }
+  try {
+    const raw = window.localStorage.getItem(openedInterAgentBoardsStorageKey(workspaceId));
+    const parsed = raw ? JSON.parse(raw) : [];
+    return new Set(Array.isArray(parsed) ? parsed.filter((item): item is string => typeof item === "string" && Boolean(item)) : []);
+  } catch {
+    return new Set();
+  }
+}
+
+function storeOpenedInterAgentBoardIds(workspaceId: string, runIds: ReadonlySet<string>) {
+  if (typeof window === "undefined") {
+    return;
+  }
+  try {
+    window.localStorage.setItem(openedInterAgentBoardsStorageKey(workspaceId), JSON.stringify([...runIds].slice(-200)));
+  } catch {
+    // Board read state is best-effort UI state.
+  }
+}
+
 export function useChatAppController({
   enablePageCapture,
   externalFileDrop,
@@ -214,6 +244,7 @@ export function useChatAppController({
   const [interAgentEventsByRunId, setInterAgentEventsByRunId] = useState<Record<string, InterAgentEventRecord[]>>({});
   const [interAgentApprovalsByRunId, setInterAgentApprovalsByRunId] = useState<Record<string, InterAgentApprovalRecord[]>>({});
   const [activeInterAgentGraphRunId, setActiveInterAgentGraphRunId] = useState<string | null>(null);
+  const [openedInterAgentGraphRunIds, setOpenedInterAgentGraphRunIds] = useState<Set<string>>(() => loadOpenedInterAgentBoardIds(""));
   const interAgentRefreshScopeRef = useRef("");
   const hasExternalRuntimeThreads = Array.isArray(runtimeThreads);
   const activeConversationKey = conversationKeyFor(activeThread, draftChat);
@@ -268,6 +299,26 @@ export function useChatAppController({
       return [...next, detail].sort((left, right) => left.run.created_at.localeCompare(right.run.created_at));
     });
   }, []);
+  useEffect(() => {
+    setOpenedInterAgentGraphRunIds(loadOpenedInterAgentBoardIds(workspaceId));
+  }, [workspaceId]);
+  const markInterAgentGraphOpened = useCallback(
+    (runId: string) => {
+      if (!runId) {
+        return;
+      }
+      setOpenedInterAgentGraphRunIds((current) => {
+        if (current.has(runId)) {
+          return current;
+        }
+        const next = new Set(current);
+        next.add(runId);
+        storeOpenedInterAgentBoardIds(workspaceId, next);
+        return next;
+      });
+    },
+    [workspaceId],
+  );
   const refreshInterAgentRuns = useCallback(async () => {
     const runtimeSessionId = activeThread?.runtime_session_id || "";
     const graphRunId = activeInterAgentGraphRunId || "";
@@ -353,6 +404,7 @@ export function useChatAppController({
   );
   const handleOpenInterAgentGraph = useCallback(
     (runId: string) => {
+      markInterAgentGraphOpened(runId);
       setActiveInterAgentGraphRunId(runId);
       const opened = openAppParamsInShell(
         "chat",
@@ -370,7 +422,7 @@ export function useChatAppController({
         window.history.pushState({}, "", url.toString());
       }
     },
-    [activeThread?.thread_id, navigationScope],
+    [activeThread?.thread_id, markInterAgentGraphOpened, navigationScope],
   );
   const handleCloseInterAgentGraph = useCallback(() => {
     setActiveInterAgentGraphRunId(null);
@@ -579,6 +631,7 @@ export function useChatAppController({
     hasMoreHistory,
     onLoadOlderHistory: handleLoadOlderHistory,
     onRevealOlderMessages: handleRevealOlderMessages,
+    openedInterAgentGraphRunIds,
     pendingUserMessages,
     providers: composerProviders,
     providerSelectorLocked: Boolean(activeThread),

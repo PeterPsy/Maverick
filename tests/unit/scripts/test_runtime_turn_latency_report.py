@@ -127,6 +127,77 @@ class RuntimeTurnLatencyReportTestCase(unittest.TestCase):
         self.assertEqual(report["cohorts"]["codex_cold"]["turn_count"], 0)
         self.assertEqual(report["cohorts"]["codex_warm"]["turn_count"], 1)
 
+    def test_associates_completed_session_prewarm_with_next_turn(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir) / "maverick"
+            _write_session(root, "default", "sess-prewarm", runtime_mode="agentic", provider_id="codex")
+            _write_events(
+                root,
+                "default",
+                "sess-prewarm",
+                [
+                    _event(
+                        "prewarm-completed",
+                        "default",
+                        "sess-prewarm",
+                        None,
+                        "runtime.prewarm.completed",
+                        BASE - timedelta(seconds=1),
+                        {"provider_id": "codex", "prewarm_total_ms": 321.5, "status": "completed"},
+                    ),
+                    *_turn_events(
+                        "sess-prewarm",
+                        "turn-after-prewarm",
+                        BASE,
+                        provider_id="codex",
+                        ensure_runtime_ms=0.05,
+                        ensure_provider_thread_ms=0.01,
+                    ),
+                ],
+            )
+
+            report = runtime_turn_latency_report.build_report(root, workspaces={"default"}, limit_turns=0, include_turns=True)
+
+        self.assertEqual(report["summary"]["turns_reported"], 1)
+        metrics = report["turns"][0]["metrics"]
+        self.assertEqual(metrics["prewarm_wait_ms"], 0)
+        self.assertEqual(metrics["prewarm_total_ms"], 321.5)
+
+    def test_does_not_reuse_completed_session_prewarm_already_reported_by_turn_wait(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir) / "maverick"
+            _write_session(root, "default", "sess-prewarm", runtime_mode="agentic", provider_id="codex")
+            _write_events(
+                root,
+                "default",
+                "sess-prewarm",
+                [
+                    *_turn_events(
+                        "sess-prewarm",
+                        "turn-waited",
+                        BASE,
+                        provider_id="codex",
+                        prewarm_wait_ms=50,
+                        prewarm_total_ms=200,
+                    ),
+                    _event(
+                        "prewarm-completed",
+                        "default",
+                        "sess-prewarm",
+                        None,
+                        "runtime.prewarm.completed",
+                        BASE + timedelta(milliseconds=190),
+                        {"provider_id": "codex", "prewarm_total_ms": 200, "status": "completed"},
+                    ),
+                    *_turn_events("sess-prewarm", "turn-later", BASE + timedelta(minutes=1), provider_id="codex"),
+                ],
+            )
+
+            report = runtime_turn_latency_report.build_report(root, workspaces={"default"}, limit_turns=0, include_turns=True)
+
+        later_metrics = next(item for item in report["turns"] if item["turn_id"] == "turn-later")["metrics"]
+        self.assertNotIn("prewarm_total_ms", later_metrics)
+
 
 def _write_session(root: Path, workspace_id: str, session_id: str, *, runtime_mode: str, provider_id: str) -> None:
     session_root = root / "workspaces" / workspace_id / "runtime" / "sessions" / session_id
@@ -271,16 +342,16 @@ def _event(
     prefix: str,
     workspace_id: str,
     session_id: str,
-    turn_id: str,
+    turn_id: str | None,
     event_type: str,
     created_at: datetime,
     payload: dict[str, object],
 ) -> dict[str, object]:
     return {
-        "event_id": f"{turn_id}-{prefix}",
+        "event_id": f"{turn_id or 'session'}-{prefix}",
         "workspace_id": workspace_id,
         "session_id": session_id,
-        "plane": "turn",
+        "plane": "turn" if turn_id is not None else "runtime",
         "event_type": event_type,
         "turn_id": turn_id,
         "process_id": None,

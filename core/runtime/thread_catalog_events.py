@@ -188,5 +188,6 @@ def _ensure_thread_for_runtime_session(
         agent_role_id=getattr(session, "agent_role_id", ""),
         source_app_id=session.source_app_id or session.agent_id,
         system_prompt=session.system_prompt or "",
+        project_id=getattr(session, "project_id", None),
         now=now or session.started_at or session.updated_at,
     )

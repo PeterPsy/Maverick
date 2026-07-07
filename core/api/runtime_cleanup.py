@@ -30,6 +30,7 @@ def cleanup_runtime_session(
     start_path=None,
     publish_thread_events: bool = True,
     allow_hidden_inter_agent_cleanup: bool = False,
+    allow_hidden_prepared_chat_cleanup: bool = False,
 ) -> dict[str, object]:
     """Fully remove one runtime session, app cleanup metadata, and runtime files."""
     try:
@@ -46,8 +47,14 @@ def cleanup_runtime_session(
             "deleted_thread_ids": [],
             "runtime_root_deleted": False,
         }
-    if not allow_hidden_inter_agent_cleanup and not runtime_session_allows_user_thread(session):
-        raise RuntimeCleanupError("runtime_session_hidden")
+    if not runtime_session_allows_user_thread(session):
+        hidden_prepared_chat_allowed = (
+            allow_hidden_prepared_chat_cleanup
+            and session.session_kind == "chat_root"
+            and session.thread_visibility == "hidden"
+        )
+        if not allow_hidden_inter_agent_cleanup and not hidden_prepared_chat_allowed:
+            raise RuntimeCleanupError("runtime_session_hidden")
     try:
         runtime_root = runtime_session_root(
             workspace_id=session.workspace_id,

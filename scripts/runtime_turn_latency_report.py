@@ -22,6 +22,7 @@ INTERESTING_EVENT_TYPES = {
     "runtime.turn.post_queue_response",
     "runtime.turn.prewarm_waited",
     "runtime.turn.worker_started",
+    "runtime.prewarm.completed",
     "runtime.provider.dispatching",
     "runtime.provider.turn_start_sent",
     "runtime.provider.accepted",
@@ -75,7 +76,7 @@ class RuntimeEventSnapshot:
     event_id: str
     workspace_id: str
     session_id: str
-    turn_id: str
+    turn_id: str | None
     event_type: str
     payload: dict[str, Any]
     created_at: datetime
@@ -189,7 +190,10 @@ def build_report(
             ),
             "receive_to_provider_accepted_ms is reconstructed as receive_to_queued_ms plus queued_to_provider_accepted_ms when both components are available.",
             "first_turn_receive_to_provider_accepted_ms is populated only for the first observed provider turn in each session.",
-            "prewarm_wait_ms and prewarm_total_ms come from runtime.turn.prewarm_waited and measure user-visible wait before execution, not provider-internal ensure spans.",
+            (
+                "prewarm_wait_ms and prewarm_total_ms come from runtime.turn.prewarm_waited when the turn waited, "
+                "or from session-scoped runtime.prewarm.completed for the next observed turn when prewarm had already completed."
+            ),
             "claim_ms, session_create_ms, reference_validate_ms, queue_turn_ms, and post_queue_response_ms are emitted only by newer runtime submission paths.",
             "The report intentionally omits input text and provider payload bodies beyond numeric latency spans.",
         ],
@@ -421,7 +425,9 @@ def _event_snapshot(document: dict[str, Any]) -> RuntimeEventSnapshot | None:
     turn_id = _optional_str(document.get("turn_id"))
     event_type = _optional_str(document.get("event_type"))
     created_at = _coerce_datetime(document.get("created_at"))
-    if not event_id or not session_id or not turn_id or not event_type or created_at is None:
+    if not event_id or not session_id or not event_type or created_at is None:
+        return None
+    if not turn_id and event_type != "runtime.prewarm.completed":
         return None
     payload = document.get("payload")
     return RuntimeEventSnapshot(
@@ -443,7 +449,12 @@ def _build_observations(
 ) -> list[TurnObservation]:
     sessions_by_id = {session.session_id: session for session in sessions.values()}
     grouped: dict[tuple[str, str, str], TurnEvents] = {}
+    prewarm_completed_by_session: dict[tuple[str, str], list[RuntimeEventSnapshot]] = {}
     for event in events:
+        if event.turn_id is None:
+            if _is_completed_session_prewarm(event):
+                prewarm_completed_by_session.setdefault((event.workspace_id, event.session_id), []).append(event)
+            continue
         key = (event.workspace_id, event.session_id, event.turn_id)
         group = grouped.setdefault(
             key,
@@ -461,6 +472,8 @@ def _build_observations(
         runtime_mode = _runtime_mode_for_turn(group, session)
         anchor_at = max(event.created_at for event in group.events.values())
         preliminary.append((group, metrics, provider_id, runtime_mode, anchor_at))
+
+    completed_prewarm_by_turn = _completed_prewarm_by_turn(preliminary, prewarm_completed_by_session)
 
     first_codex_by_session: dict[tuple[str, str], tuple[datetime, str]] = {}
     for group, _metrics, provider_id, runtime_mode, anchor_at in preliminary:
@@ -482,6 +495,11 @@ def _build_observations(
 
     observations: list[TurnObservation] = []
     for group, metrics, provider_id, runtime_mode, anchor_at in preliminary:
+        completed_prewarm = completed_prewarm_by_turn.get((group.workspace_id, group.session_id, group.turn_id))
+        if completed_prewarm is not None and "prewarm_total_ms" not in metrics:
+            metrics = dict(metrics)
+            _set_metric(metrics, "prewarm_wait_ms", 0.0)
+            _set_metric(metrics, "prewarm_total_ms", _numeric(completed_prewarm.payload.get("prewarm_total_ms")))
         if first_turn_by_session.get((group.workspace_id, group.session_id)) == _turn_order_sort_value(group, fallback_at=anchor_at):
             first_turn_e2e = metrics.get("receive_to_provider_accepted_ms")
             if first_turn_e2e is not None:
@@ -508,6 +526,46 @@ def _build_observations(
             )
         )
     return sorted(observations, key=lambda item: (item.anchor_at, item.session_id, item.turn_id))
+
+
+def _is_completed_session_prewarm(event: RuntimeEventSnapshot) -> bool:
+    return (
+        event.event_type == "runtime.prewarm.completed"
+        and event.turn_id is None
+        and event.payload.get("status") == "completed"
+        and _numeric(event.payload.get("prewarm_total_ms")) is not None
+    )
+
+
+def _completed_prewarm_by_turn(
+    preliminary: list[tuple[TurnEvents, dict[str, float], str | None, str | None, datetime]],
+    prewarm_completed_by_session: dict[tuple[str, str], list[RuntimeEventSnapshot]],
+) -> dict[tuple[str, str, str], RuntimeEventSnapshot]:
+    for session_events in prewarm_completed_by_session.values():
+        session_events.sort(key=_event_sort_key)
+    next_index_by_session = {session_key: 0 for session_key in prewarm_completed_by_session}
+    assigned: dict[tuple[str, str, str], RuntimeEventSnapshot] = {}
+    ordered_groups = sorted(
+        preliminary,
+        key=lambda item: (_turn_order_sort_value(item[0], fallback_at=item[4]), item[0].session_id, item[0].turn_id),
+    )
+    for group, metrics, _provider_id, _runtime_mode, anchor_at in ordered_groups:
+        session_key = (group.workspace_id, group.session_id)
+        session_events = prewarm_completed_by_session.get(session_key)
+        if not session_events:
+            continue
+        has_turn_prewarm_metric = "prewarm_total_ms" in metrics
+        event_deadline = anchor_at if has_turn_prewarm_metric else _turn_order_sort_value(group, fallback_at=anchor_at)[0]
+        index = next_index_by_session.get(session_key, 0)
+        eligible_index = index - 1
+        while index < len(session_events) and session_events[index].created_at <= event_deadline:
+            eligible_index = index
+            index += 1
+        if eligible_index >= next_index_by_session.get(session_key, 0):
+            next_index_by_session[session_key] = eligible_index + 1
+            if not has_turn_prewarm_metric:
+                assigned[(group.workspace_id, group.session_id, group.turn_id)] = session_events[eligible_index]
+    return assigned
 
 
 def _turn_metrics(group: TurnEvents) -> dict[str, float]:

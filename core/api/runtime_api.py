@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from contextlib import suppress
-from dataclasses import asdict, replace
+from dataclasses import asdict, dataclass, replace
 from datetime import UTC, datetime, timedelta
 import time
 from urllib.parse import parse_qs
@@ -72,6 +72,16 @@ from core.skills.runtime_catalog import runtime_skill_catalog_app_id_for_request
 
 IDEMPOTENT_CLAIM_WAIT_SECONDS = 5.0
 PREPARED_SESSION_TTL_SECONDS = 30 * 60
+
+
+@dataclass(frozen=True)
+class RuntimeTurnSubmissionDraft:
+    timing: RuntimeTurnSubmissionTiming | None
+    client_message_id: str | None
+    attachment_items: list[dict[str, object]]
+    input_text: str
+    app_reference_items: list[dict[str, object]]
+    async_requested: bool
 
 
 def _session_payload(session: RuntimeSessionRecord, *, provider_id: str | None = None) -> dict[str, object]:
@@ -453,6 +463,16 @@ def _provider_unavailable_response(state: PlatformState, workspace_id: str, erro
     }
 
 
+def _body_text_or_session(body: dict, key: str, session: RuntimeSessionRecord, attribute: str) -> str:
+    value = body.get(key)
+    if isinstance(value, str) and value.strip():
+        return value.strip()
+    session_value = getattr(session, attribute, "")
+    if isinstance(session_value, str):
+        return session_value.strip()
+    return ""
+
+
 def _create_thread_for_session(
     state: PlatformState,
     *,
@@ -461,7 +481,7 @@ def _create_thread_for_session(
     body: dict,
     action: str = "created",
 ):
-    requested_title = str(body.get("title") or "").strip()
+    requested_title = _body_text_or_session(body, "title", session, "thread_title")
     thread_title = requested_title or DEFAULT_THREAD_TITLE
     thread = create_runtime_thread(
         state.runtime_store,
@@ -470,12 +490,12 @@ def _create_thread_for_session(
         runtime_session_id=session.session_id,
         title=thread_title,
         title_source="placeholder" if not requested_title or requested_title == DEFAULT_THREAD_TITLE else "manual",
-        agent_label=session.agent_id,
-        agent_type_id=str(body.get("agent_type_id") or "").strip(),
-        agent_role_id=str(body.get("agent_role_id") or "").strip(),
+        agent_label=_body_text_or_session(body, "agent_label", session, "agent_label") or session.agent_id,
+        agent_type_id=_body_text_or_session(body, "agent_type_id", session, "agent_type_id"),
+        agent_role_id=_body_text_or_session(body, "agent_role_id", session, "agent_role_id"),
         source_app_id=session.source_app_id or session.agent_id,
         system_prompt=session.system_prompt or "",
-        project_id=str(body.get("project_id") or "").strip() or None,
+        project_id=_body_text_or_session(body, "project_id", session, "project_id") or None,
         now=session.started_at or session.updated_at,
     )
     _publish_thread_change(state, workspace_id=context.workspace_id, action=action, thread=thread)
@@ -483,9 +503,6 @@ def _create_thread_for_session(
 
 
 def _cleanup_expired_prepared_sessions(state: PlatformState, *, context: RequestSession) -> None:
-    delete_session_records = getattr(state.runtime_store, "delete_session_records", None)
-    if not callable(delete_session_records):
-        return
     cutoff = datetime.now(tz=UTC) - timedelta(seconds=PREPARED_SESSION_TTL_SECONDS)
     for session in state.runtime_store.list_sessions(context.workspace_id):
         if (
@@ -498,7 +515,14 @@ def _cleanup_expired_prepared_sessions(state: PlatformState, *, context: Request
         with suppress(Exception):
             if state.runtime_store.list_turns(session.session_id):
                 continue
-            delete_session_records(session.session_id)
+            cleanup_runtime_session(
+                state,
+                session_id=session.session_id,
+                reason="prepared_session_expired",
+                start_path=state.repository_root,
+                publish_thread_events=False,
+                allow_hidden_prepared_chat_cleanup=True,
+            )
 
 
 def _prepared_session_can_be_promoted(session: RuntimeSessionRecord, context: RequestSession) -> bool:
@@ -613,6 +637,11 @@ def _create_session(
             allow_missing_source_app=True,
         ),
         source_app_id=source_app_id,
+        thread_title=str(body.get("title") or "").strip(),
+        agent_label=str(body.get("agent_label") or "").strip(),
+        agent_type_id=str(body.get("agent_type_id") or "").strip(),
+        agent_role_id=str(body.get("agent_role_id") or "").strip(),
+        project_id=str(body.get("project_id") or "").strip() or None,
         owner_user_id=context.user.user_id,
         created_by_user_id=context.user.user_id,
         thread_visibility="hidden" if prepare_only else "user",
@@ -762,12 +791,12 @@ def _handle_thread_collection(state: PlatformState, context: RequestSession, met
             runtime_session_id=session.session_id,
             title=requested_title,
             title_source=title_source,
-            agent_label=str(body.get("agent_label") or "").strip() or session.agent_id,
-            agent_type_id=str(body.get("agent_type_id") or "").strip(),
-            agent_role_id=str(body.get("agent_role_id") or "").strip(),
+            agent_label=_body_text_or_session(body, "agent_label", session, "agent_label") or session.agent_id,
+            agent_type_id=_body_text_or_session(body, "agent_type_id", session, "agent_type_id"),
+            agent_role_id=_body_text_or_session(body, "agent_role_id", session, "agent_role_id"),
             source_app_id=str(body.get("source_app_id") or "").strip() or session.source_app_id or session.agent_id,
             system_prompt=str(body.get("system_prompt") or "").strip() or session.system_prompt or "",
-            project_id=str(body.get("project_id") or "").strip() or None,
+            project_id=_body_text_or_session(body, "project_id", session, "project_id") or None,
             now=session.started_at or session.updated_at,
         )
     except RuntimeSessionHiddenError:
@@ -833,9 +862,12 @@ def _handle_thread_item(
             runtime_session_id=session.session_id,
             title=DEFAULT_THREAD_TITLE,
             title_source="placeholder",
-            agent_label=session.agent_id,
+            agent_label=session.agent_label or session.agent_id,
+            agent_type_id=session.agent_type_id,
+            agent_role_id=session.agent_role_id,
             source_app_id=session.source_app_id or session.agent_id,
             system_prompt=session.system_prompt or "",
+            project_id=session.project_id,
             now=session.started_at or session.updated_at,
         )
         _publish_thread_change(state, workspace_id=context.workspace_id, action="created", thread=thread)
@@ -1090,7 +1122,40 @@ def _handle_session_turns(
         return json_response(start_response, {"error": "runtime_session_not_found"}, status="404 Not Found")
     if not runtime_session_allows_user_thread(session):
         if method == "POST" and _runtime_turn_requested(body) and _prepared_session_can_be_promoted(session, context):
+            try:
+                require_runtime_session_operation(
+                    workspace_store=state.workspace_store,
+                    user=context.user,
+                    session=session,
+                    operation="turn_submit",
+                )
+            except AuthorizationError as error:
+                return json_response(start_response, {"error": error.reason}, status="403 Forbidden")
+            submission_timing = runtime_turn_submission_timing(received_perf_counter)
+            draft, validation_response = _prepare_runtime_turn_submission(
+                state,
+                context,
+                session,
+                body,
+                start_response,
+                start_path=start_path,
+                timing=submission_timing,
+            )
+            if validation_response is not None:
+                return validation_response
+            if draft is None:
+                return json_response(start_response, {"error": "empty_runtime_input"}, status="400 Bad Request")
             session = _promote_prepared_session_for_turn(state, context, session, body)
+            session = _reconciled_session(state, session, start_path=start_path)
+            return _queue_runtime_turn_response(
+                state,
+                context,
+                session,
+                draft,
+                start_response,
+                start_path=start_path,
+                received_perf_counter=received_perf_counter,
+            )
         else:
             return _hidden_runtime_session_response(start_response, session)
     session = _reconciled_session(state, session, start_path=start_path)
@@ -1146,10 +1211,49 @@ def _submit_runtime_turn_response(
     release_claim_on_failure: RuntimeClientMessageClaim | None = None,
 ):
     timing = submission_timing or runtime_turn_submission_timing(received_perf_counter)
+    draft, validation_response = _prepare_runtime_turn_submission(
+        state,
+        context,
+        session,
+        body,
+        start_response,
+        start_path=start_path,
+        timing=timing,
+        release_claim_on_failure=release_claim_on_failure,
+    )
+    if validation_response is not None:
+        return validation_response
+    if draft is None:
+        _release_client_message_claim(state, release_claim_on_failure)
+        return json_response(start_response, {"error": "empty_runtime_input"}, status="400 Bad Request")
+    return _queue_runtime_turn_response(
+        state,
+        context,
+        session,
+        draft,
+        start_response,
+        start_path=start_path,
+        reserved_turn_id=reserved_turn_id,
+        received_perf_counter=received_perf_counter,
+        release_claim_on_failure=release_claim_on_failure,
+    )
+
+
+def _prepare_runtime_turn_submission(
+    state: PlatformState,
+    context: RequestSession,
+    session: RuntimeSessionRecord,
+    body: dict,
+    start_response: StartResponse,
+    *,
+    start_path,
+    timing: RuntimeTurnSubmissionTiming | None,
+    release_claim_on_failure: RuntimeClientMessageClaim | None = None,
+) -> tuple[RuntimeTurnSubmissionDraft | None, list[bytes] | None]:
     routing_profile_error = _routing_profile_error(body)
     if routing_profile_error is not None:
         _release_client_message_claim(state, release_claim_on_failure)
-        return json_response(start_response, {"error": routing_profile_error}, status="400 Bad Request")
+        return None, json_response(start_response, {"error": routing_profile_error}, status="400 Bad Request")
     client_message_id = str(body.get("client_message_id") or "").strip() or None
     existing_turn = _turn_for_client_message(
         state,
@@ -1158,25 +1262,25 @@ def _submit_runtime_turn_response(
         client_message_id=client_message_id,
     )
     if existing_turn is not None:
-        return _idempotent_runtime_turn_response(state, context, existing_turn, start_response)
+        return None, _idempotent_runtime_turn_response(state, context, existing_turn, start_response)
     attachments = body.get("attachments") if isinstance(body.get("attachments"), list) else []
     attachment_items = [item for item in attachments if isinstance(item, dict)]
     input_text = str(body.get("input_text") or body.get("message") or "").strip()
     if not input_text and not attachment_items:
         _release_client_message_claim(state, release_claim_on_failure)
-        return json_response(start_response, {"error": "empty_runtime_input"}, status="400 Bad Request")
+        return None, json_response(start_response, {"error": "empty_runtime_input"}, status="400 Bad Request")
     app_references = body.get("app_references") if isinstance(body.get("app_references"), list) else []
     if runtime_session_is_plain_hosted_chat(session):
         if session.skill_ids:
             _release_client_message_claim(state, release_claim_on_failure)
-            return json_response(start_response, {"error": "plain_hosted_chat_blocks_skills"}, status="400 Bad Request")
+            return None, json_response(start_response, {"error": "plain_hosted_chat_blocks_skills"}, status="400 Bad Request")
         if app_references:
             _release_client_message_claim(state, release_claim_on_failure)
-            return json_response(start_response, {"error": "plain_hosted_chat_blocks_app_references"}, status="400 Bad Request")
+            return None, json_response(start_response, {"error": "plain_hosted_chat_blocks_app_references"}, status="400 Bad Request")
         attachment_limit_error = plain_hosted_chat_attachment_limit_error(attachment_items)
         if attachment_limit_error is not None:
             _release_client_message_claim(state, release_claim_on_failure)
-            return json_response(start_response, {"error": attachment_limit_error}, status="400 Bad Request")
+            return None, json_response(start_response, {"error": attachment_limit_error}, status="400 Bad Request")
     reference_validate_started_at = time.perf_counter()
     app_reference_items = validate_runtime_app_references(
         state,
@@ -1185,7 +1289,34 @@ def _submit_runtime_turn_response(
         start_path=start_path,
     )
     _record_timing_duration(timing, "reference_validate_ms", reference_validate_started_at)
-    async_requested = bool(body.get("async"))
+    return RuntimeTurnSubmissionDraft(
+        timing=timing,
+        client_message_id=client_message_id,
+        attachment_items=attachment_items,
+        input_text=input_text,
+        app_reference_items=app_reference_items,
+        async_requested=bool(body.get("async")),
+    ), None
+
+
+def _queue_runtime_turn_response(
+    state: PlatformState,
+    context: RequestSession,
+    session: RuntimeSessionRecord,
+    draft: RuntimeTurnSubmissionDraft,
+    start_response: StartResponse,
+    *,
+    start_path,
+    reserved_turn_id: str | None = None,
+    received_perf_counter: float | None = None,
+    release_claim_on_failure: RuntimeClientMessageClaim | None = None,
+):
+    timing = draft.timing
+    client_message_id = draft.client_message_id
+    attachment_items = draft.attachment_items
+    input_text = draft.input_text
+    app_reference_items = draft.app_reference_items
+    async_requested = draft.async_requested
 
     def materialize_app_references(references: list[dict[str, object]]) -> list[dict[str, object]]:
         return materialize_runtime_app_references(

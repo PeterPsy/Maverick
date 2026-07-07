@@ -293,7 +293,7 @@ class BaseShellAppMountingTests(unittest.TestCase):
         self.assertIn("mergeAppReferences(appReferencesFromText(input, composerMentionItems), target.activeAppContext)", submission_source)
         self.assertIn("QUEUED_MESSAGES_STORAGE_PREFIX", (REPO_ROOT / "apps/chat/frontend/src/lib/queuedMessages.ts").read_text())
         self.assertIn("readPersistedQueuedMessages", navigation_source)
-        self.assertIn("persistQueuedMessages", persistence_source)
+        self.assertIn("persistQueuedMessageState", persistence_source)
         self.assertIn("queueStorageKey(navigationScope, activeConversationKey)", persistence_source)
         self.assertIn("useRuntimeEvents", app_source)
         self.assertIn("onRuntimeSnapshot: handleRuntimeSnapshot", controller_source)

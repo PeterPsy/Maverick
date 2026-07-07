@@ -58,6 +58,11 @@ class RuntimeSessionRecord:
     skill_ids: list[str] = field(default_factory=list)
     skill_catalog_app_id: str | None = None
     source_app_id: str | None = None
+    thread_title: str = ""
+    agent_label: str = ""
+    agent_type_id: str = ""
+    agent_role_id: str = ""
+    project_id: str | None = None
     owner_user_id: str | None = None
     created_by_user_id: str | None = None
     creator_runtime_session_id: str | None = None

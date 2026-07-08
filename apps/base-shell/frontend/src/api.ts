@@ -187,17 +187,28 @@ export type RuntimeThreadItem = {
   last_user_message_at?: string | null;
 };
 
+export type RuntimeThreadsPage = {
+  items: RuntimeThreadItem[];
+  limit: number;
+  has_more: boolean;
+  cursor: string | null;
+  sort: string;
+  query?: string | null;
+};
+
 export type RuntimeThreadWebSocketFrame =
   | {
       type: "runtime.thread.snapshot";
       workspace_id: string;
       threads: RuntimeThreadItem[];
+      threads_page?: RuntimeThreadsPage;
     }
   | {
       type: "runtime.thread.changed";
       workspace_id: string;
       action: string;
-      threads: RuntimeThreadItem[];
+      threads?: RuntimeThreadItem[];
+      threads_page?: RuntimeThreadsPage;
       thread?: RuntimeThreadItem;
       deleted_thread_ids?: string[];
       deleted_runtime_session_ids?: string[];

@@ -1,7 +1,7 @@
 import type { PointerEvent as ReactPointerEvent } from "react";
 import { useEffect, useRef, useState } from "react";
 import type { ChatThread } from "../../api/client";
-import { deleteThread, markThreadRead, updateThread } from "../../api/client";
+import { applyThreadCatalogPayload, deleteThread, markThreadRead, updateThread } from "../../api/client";
 import { useRuntimeThreads } from "../../hooks/useRuntimeThreads";
 import { isThreadUnread } from "../chat-sidebar/sections";
 import {
@@ -234,7 +234,7 @@ export function useFloatingWindows() {
     );
     try {
       const payload = await markThreadRead(thread.thread_id);
-      setThreads(payload.threads);
+      setThreads((current) => applyThreadCatalogPayload(current, payload));
     } catch {
       // Opening a floating chat should not be blocked by a best-effort read receipt.
     } finally {

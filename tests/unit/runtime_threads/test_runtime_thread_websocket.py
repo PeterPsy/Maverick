@@ -88,6 +88,39 @@ class RuntimeThreadWebSocketFrameTest(unittest.TestCase):
         self.assertEqual(frame["threads"][0]["last_completed_turn_id"], "turn-completed")
         self.assertEqual(store.get_thread("thread-stale").availability, "free")
 
+    def test_snapshot_is_bounded_to_initial_thread_page(self) -> None:
+        store = self.make_store()
+        state = SimpleNamespace(runtime_store=store)
+        started_at = datetime(2026, 4, 19, 10, 0, tzinfo=UTC)
+        for index in range(55):
+            updated_at = started_at + timedelta(minutes=index)
+            store.save_session(
+                RuntimeSessionRecord(
+                    session_id=f"session-{index:02d}",
+                    workspace_id="default",
+                    agent_id="test-agent",
+                    status="running",
+                    requested_mode=None,
+                    effective_mode="sandbox",
+                    workspace_root="/workspace",
+                    workdir="/workspace",
+                    runtime_root=f"/workspace/.maverick/runtime/session-{index:02d}",
+                    started_at=started_at,
+                    updated_at=updated_at,
+                    ended_at=None,
+                    last_progress_at=updated_at,
+                )
+            )
+
+        frame = runtime_thread_snapshot_frame(state, workspace_id="default", viewer_user_id=None)
+
+        self.assertEqual(len(frame["threads"]), 50)
+        self.assertEqual(frame["threads_page"]["items"], frame["threads"])
+        self.assertEqual(frame["threads_page"]["limit"], 50)
+        self.assertTrue(frame["threads_page"]["has_more"])
+        self.assertIsNotNone(frame["threads_page"]["cursor"])
+        self.assertEqual(frame["threads_page"]["sort"], "recency_desc")
+
 
 if __name__ == "__main__":
     unittest.main()

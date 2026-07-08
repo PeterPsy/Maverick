@@ -47,6 +47,16 @@ vi.mock("./hooks/useRuntimeThreads", async () => {
 });
 
 vi.mock("./api/client", () => ({
+  applyThreadCatalogPayload: vi.fn((current: ChatThread[], payload: { changed_thread?: ChatThread; thread?: ChatThread; threads?: ChatThread[] }) => {
+    if (Array.isArray(payload.threads)) {
+      return payload.threads;
+    }
+    const changedThread = payload.changed_thread || payload.thread;
+    if (!changedThread) {
+      return current;
+    }
+    return [...current.filter((thread) => thread.thread_id !== changedThread.thread_id), changedThread];
+  }),
   createRuntimeSession: vi.fn(),
   createRuntimeSessionWithTurn: vi.fn(),
   createInterAgentRun: vi.fn(),

@@ -248,10 +248,29 @@ export type ChatProject = {
   updated_at: string;
 };
 
+export type RuntimeThreadsPage = {
+  items: ChatThread[];
+  limit: number;
+  has_more: boolean;
+  cursor: string | null;
+  sort: string;
+  query?: string | null;
+};
+
 export type ChatSidebarPayload = {
-  threads: ChatThread[];
+  threads?: ChatThread[];
+  changed_thread?: ChatThread;
+  removed_thread_id?: string;
+  deleted_thread_id?: string;
+  deleted_thread_ids?: string[];
+  threads_page?: RuntimeThreadsPage;
   projects?: ChatProject[];
   preferences?: Record<string, unknown>;
+};
+
+export type RuntimeThreadsPayload = {
+  threads: ChatThread[];
+  threads_page?: RuntimeThreadsPage;
 };
 
 export type ChatProjectsPayload = {
@@ -269,7 +288,6 @@ export type RuntimeCleanup = {
 };
 
 export type DeleteThreadPayload = ChatSidebarPayload & {
-  deleted_thread_id?: string;
   deleted_runtime_session_id?: string;
   runtime_cleanup?: RuntimeCleanup;
 };
@@ -347,12 +365,13 @@ export type RuntimeWebSocketFrame =
   | { type: "runtime.heartbeat"; session_id: string; at: string };
 
 export type RuntimeThreadWebSocketFrame =
-  | { type: "runtime.thread.snapshot"; workspace_id: string; threads: ChatThread[]; at: string }
+  | { type: "runtime.thread.snapshot"; workspace_id: string; threads: ChatThread[]; threads_page?: RuntimeThreadsPage; at: string }
   | {
       type: "runtime.thread.changed";
       workspace_id: string;
       action: string;
       threads?: ChatThread[];
+      threads_page?: RuntimeThreadsPage;
       thread?: ChatThread;
       deleted_thread_ids?: string[];
       deleted_runtime_session_ids?: string[];

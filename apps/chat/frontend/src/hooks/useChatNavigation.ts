@@ -5,6 +5,7 @@ import {
   RuntimeEvent,
   RuntimeSession,
   RuntimeTurn,
+  applyThreadCatalogPayload,
   createThread,
   isRuntimeSessionUnavailableError,
 } from "../api/client";
@@ -525,7 +526,7 @@ export function useChatNavigation({
     setIsHistoryLoading(true);
     try {
       const payload = await createThread(runtimeSessionId, null, metadata);
-      setThreads(payload.threads);
+      setThreads((current) => applyThreadCatalogPayload(current, payload));
       setActiveThread(payload.thread);
       setTargetConversationResolved(true);
       setActiveRuntimeSessionId(runtimeSessionId);

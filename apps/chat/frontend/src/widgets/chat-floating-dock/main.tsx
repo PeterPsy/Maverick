@@ -2,7 +2,7 @@ import { StrictMode, useEffect, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
 import "../../styles/main.css";
 import "../chat-floating/styles.css";
-import { deleteThread, markThreadRead, updateThread } from "../../api/client";
+import { applyThreadCatalogPayload, deleteThread, markThreadRead, updateThread } from "../../api/client";
 import type { ChatThread } from "../../api/client";
 import { useRuntimeThreads } from "../../hooks/useRuntimeThreads";
 import { applyInitialMaverickTheme, listenForMaverickThemeMessages } from "../../lib/shellTheme";
@@ -170,7 +170,7 @@ function useFloatingDockWindow() {
     );
     try {
       const payload = await markThreadRead(thread.thread_id);
-      setThreads(payload.threads);
+      setThreads((current) => applyThreadCatalogPayload(current, payload));
     } catch {
       // Read receipts are best-effort UI state.
     } finally {

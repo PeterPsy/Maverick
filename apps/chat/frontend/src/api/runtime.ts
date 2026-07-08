@@ -6,6 +6,7 @@ import type {
   RuntimeEvent,
   RuntimeSession,
   RuntimeSessionOptions,
+  RuntimeThreadsPayload,
   RuntimeTurn,
   RuntimeTurnSubmitResponse,
   RuntimeWebSocketFrame,
@@ -115,6 +116,21 @@ export function runtimeEventFromWebSocketFrame(frame: RuntimeWebSocketFrame): Ru
 export function runtimeThreadWebSocketUrl(): string {
   const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
   return `${protocol}//${window.location.host}/ws/runtime/threads`;
+}
+
+export function listRuntimeThreads(options: { limit?: number; query?: string; signal?: AbortSignal } = {}): Promise<RuntimeThreadsPayload> {
+  const query = new URLSearchParams();
+  const searchQuery = (options.query || "").trim();
+  if (searchQuery) {
+    query.set("query", searchQuery);
+  }
+  if (options.limit && Number.isFinite(options.limit)) {
+    query.set("limit", String(Math.max(1, Math.floor(options.limit))));
+  }
+  const suffix = query.toString() ? `?${query.toString()}` : "";
+  return requestJson<RuntimeThreadsPayload>(`/api/runtime/threads${suffix}`, {
+    signal: options.signal,
+  });
 }
 
 export function listRuntimeSessionEvents(

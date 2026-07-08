@@ -1,5 +1,5 @@
 import { Dispatch, SetStateAction, useRef } from "react";
-import { ChatThread, markThreadRead } from "../api/client";
+import { ChatThread, applyThreadCatalogPayload, markThreadRead } from "../api/client";
 
 type UseChatReadReceiptsParams = {
   activeThread: ChatThread | null;
@@ -25,7 +25,7 @@ export function useChatReadReceipts({ activeThread, setActiveThread, setThreads 
     );
     try {
       const payload = await markThreadRead(thread.thread_id);
-      setThreads(payload.threads);
+      setThreads((current) => applyThreadCatalogPayload(current, payload));
       setActiveThread((current) => (current?.thread_id === payload.thread.thread_id ? payload.thread : current));
     } catch {
       // Reading an open chat should not be blocked by a best-effort receipt.

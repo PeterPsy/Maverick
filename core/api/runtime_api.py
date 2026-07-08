@@ -73,6 +73,8 @@ from core.skills.runtime_catalog import runtime_skill_catalog_app_id_for_request
 
 IDEMPOTENT_CLAIM_WAIT_SECONDS = 5.0
 PREPARED_SESSION_TTL_SECONDS = 30 * 60
+RUNTIME_THREAD_PAGE_DEFAULT_LIMIT = 50
+RUNTIME_THREAD_PAGE_MAX_LIMIT = 100
 
 
 @dataclass(frozen=True)
@@ -109,7 +111,14 @@ def _event_payload(event: RuntimeEventRecord) -> dict[str, object]:
     return asdict(event)
 
 
-def _threads_payload(state: PlatformState, *, workspace_id: str, viewer_user_id: str | None = None) -> dict[str, object]:
+def _runtime_thread_page(
+    state: PlatformState,
+    *,
+    workspace_id: str,
+    viewer_user_id: str | None = None,
+    limit: int = RUNTIME_THREAD_PAGE_DEFAULT_LIMIT,
+    query: str | None = None,
+) -> dict[str, object]:
     with startup_timer("runtime.threads.rest_payload", workspace_id=workspace_id) as timing:
         sessions = state.runtime_store.list_sessions(workspace_id)
         sessions_by_id = {session.session_id: session for session in sessions}
@@ -118,20 +127,76 @@ def _threads_payload(state: PlatformState, *, workspace_id: str, viewer_user_id:
             workspace_id=workspace_id,
             sessions=sessions,
         )
+        normalized_query = (query or "").strip()
+        total_thread_count = len(threads)
+        if normalized_query:
+            threads = [thread for thread in threads if _thread_matches_query(thread, normalized_query)]
+        bounded_limit = max(1, min(int(limit or RUNTIME_THREAD_PAGE_DEFAULT_LIMIT), RUNTIME_THREAD_PAGE_MAX_LIMIT))
+        page_threads = threads[:bounded_limit]
+        items = [
+            _thread_payload_with_runtime(
+                state,
+                thread,
+                session=sessions_by_id.get(thread.runtime_session_id),
+                viewer_user_id=viewer_user_id,
+            )
+            for thread in page_threads
+        ]
         payload = {
-            "threads": [
-                _thread_payload_with_runtime(
-                    state,
-                    thread,
-                    session=sessions_by_id.get(thread.runtime_session_id),
-                    viewer_user_id=viewer_user_id,
-                )
-                for thread in threads
-            ]
+            "threads": items,
+            "threads_page": {
+                "items": items,
+                "limit": bounded_limit,
+                "has_more": len(threads) > bounded_limit,
+                "cursor": page_threads[-1].thread_id if len(threads) > bounded_limit and page_threads else None,
+                "sort": "recency_desc",
+                "query": normalized_query or None,
+            },
         }
         timing["session_count"] = len(sessions)
-        timing["thread_count"] = len(payload["threads"])
+        timing["thread_count"] = len(items)
+        timing["filtered_thread_count"] = len(threads)
+        timing["total_thread_count"] = total_thread_count
         return payload
+
+
+def _threads_payload(state: PlatformState, *, workspace_id: str, viewer_user_id: str | None = None) -> dict[str, object]:
+    return _runtime_thread_page(state, workspace_id=workspace_id, viewer_user_id=viewer_user_id)
+
+
+def _thread_matches_query(thread, query: str) -> bool:
+    tokens = [token for token in query.casefold().split() if token]
+    if not tokens:
+        return True
+    haystack = " ".join(
+        str(value or "")
+        for value in [
+            thread.thread_id,
+            thread.runtime_session_id,
+            thread.title,
+            thread.agent_label,
+            thread.agent_type_id,
+            thread.agent_role_id,
+            thread.source_app_id,
+        ]
+    ).casefold()
+    return all(token in haystack for token in tokens)
+
+
+def _thread_mutation_payload(
+    state: PlatformState,
+    thread,
+    *,
+    viewer_user_id: str | None,
+    action: str = "updated",
+) -> dict[str, object]:
+    payload = _thread_payload_with_runtime(state, thread, viewer_user_id=viewer_user_id)
+    return {
+        "thread": payload,
+        "changed_thread": payload,
+        "action": action,
+        "page_hint": {"sort": "recency_desc"},
+    }
 
 
 def _thread_payload_with_runtime(
@@ -758,9 +823,21 @@ def _handle_session_collection(
     return json_response(start_response, {"error": "method_not_allowed"}, status="405 Method Not Allowed")
 
 
-def _handle_thread_collection(state: PlatformState, context: RequestSession, method: str, body: dict, start_response: StartResponse):
+def _handle_thread_collection(state: PlatformState, context: RequestSession, method: str, body: dict, start_response: StartResponse, *, query_string: str = ""):
     if method == "GET":
-        return json_response(start_response, _threads_payload(state, workspace_id=context.workspace_id, viewer_user_id=context.user.user_id))
+        query = parse_qs(query_string, keep_blank_values=False)
+        limit = _bounded_positive_int(query.get("limit", [None])[0], maximum=RUNTIME_THREAD_PAGE_MAX_LIMIT)
+        search_query = str(query.get("query", query.get("q", [""]))[0] or "").strip()
+        return json_response(
+            start_response,
+            _runtime_thread_page(
+                state,
+                workspace_id=context.workspace_id,
+                viewer_user_id=context.user.user_id,
+                limit=limit or RUNTIME_THREAD_PAGE_DEFAULT_LIMIT,
+                query=search_query or None,
+            ),
+        )
     if method != "POST":
         return json_response(start_response, {"error": "method_not_allowed"}, status="405 Method Not Allowed")
     runtime_session_id = str(body.get("runtime_session_id") or "").strip()
@@ -809,7 +886,12 @@ def _handle_thread_collection(state: PlatformState, context: RequestSession, met
     _publish_thread_change(state, workspace_id=context.workspace_id, action="updated" if existing else "created", thread=thread)
     return json_response(
         start_response,
-        {"thread": _thread_payload_with_runtime(state, thread, viewer_user_id=context.user.user_id), **_threads_payload(state, workspace_id=context.workspace_id, viewer_user_id=context.user.user_id)},
+        _thread_mutation_payload(
+            state,
+            thread,
+            viewer_user_id=context.user.user_id,
+            action="updated" if existing else "created",
+        ),
         status="201 Created",
     )
 
@@ -883,7 +965,7 @@ def _handle_thread_item(
     if method == "GET":
         return json_response(
             start_response,
-            {"thread": _thread_payload_with_runtime(state, thread, viewer_user_id=context.user.user_id), **_threads_payload(state, workspace_id=context.workspace_id, viewer_user_id=context.user.user_id)},
+            {"thread": _thread_payload_with_runtime(state, thread, viewer_user_id=context.user.user_id)},
         )
     if method == "PATCH":
         try:
@@ -907,7 +989,7 @@ def _handle_thread_item(
         _publish_thread_change(state, workspace_id=context.workspace_id, action="updated", thread=updated)
         return json_response(
             start_response,
-            {"thread": _thread_payload_with_runtime(state, updated, viewer_user_id=context.user.user_id), **_threads_payload(state, workspace_id=context.workspace_id, viewer_user_id=context.user.user_id)},
+            _thread_mutation_payload(state, updated, viewer_user_id=context.user.user_id, action="updated"),
         )
     if method == "DELETE":
         forbidden_reason = _thread_cleanup_forbidden_reason(
@@ -941,9 +1023,11 @@ def _handle_thread_item(
             deleted_runtime_session_ids=[deleted.runtime_session_id] if deleted.runtime_session_id else [],
         )
         payload = {
-            **_threads_payload(state, workspace_id=context.workspace_id, viewer_user_id=context.user.user_id),
             "deleted_thread_id": deleted.thread_id,
+            "removed_thread_id": deleted.thread_id,
             "deleted_runtime_session_id": deleted.runtime_session_id,
+            "action": "deleted",
+            "page_hint": {"sort": "recency_desc"},
         }
         if cleanup_result is not None:
             payload["runtime_cleanup"] = cleanup_result
@@ -1001,7 +1085,7 @@ def _handle_thread_read(
     _publish_thread_change(state, workspace_id=context.workspace_id, action="updated", thread=updated)
     return json_response(
         start_response,
-        {"thread": _thread_payload_with_runtime(state, updated, viewer_user_id=context.user.user_id), **_threads_payload(state, workspace_id=context.workspace_id, viewer_user_id=context.user.user_id)},
+        _thread_mutation_payload(state, updated, viewer_user_id=context.user.user_id, action="updated"),
     )
 
 
@@ -1052,10 +1136,11 @@ def _handle_thread_clear(
     return json_response(
         start_response,
         {
-            **_threads_payload(state, workspace_id=context.workspace_id, viewer_user_id=context.user.user_id),
             "deleted_thread_ids": [thread.thread_id for thread in deleted_threads],
             "deleted_runtime_session_ids": [thread.runtime_session_id for thread in deleted_threads if thread.runtime_session_id],
             "runtime_cleanup_results": cleanup_results,
+            "action": "cleared",
+            "page_hint": {"sort": "recency_desc"},
         },
     )
 
@@ -1607,7 +1692,7 @@ def handle_runtime_api(state: PlatformState, environ: dict, start_response: Star
     body = read_json_body(environ) if method in {"POST", "PATCH", "PUT", "DELETE"} else {}
 
     if path == "/api/runtime/threads":
-        return _handle_thread_collection(state, context, method, body, start_response)
+        return _handle_thread_collection(state, context, method, body, start_response, query_string=query_string)
     if path == "/api/runtime/threads/clear":
         return _handle_thread_clear(state, context, method, body, start_response, start_path=start_path)
     if path == "/api/runtime/sessions":

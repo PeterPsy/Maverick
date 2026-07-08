@@ -248,6 +248,53 @@ class RuntimeThreadVisibilityApiTestCase(AppReferenceApiTestSupport, unittest.Te
         self.assertEqual(list_status, 200)
         self.assertEqual([thread["runtime_session_id"] for thread in list_payload["threads"]], ["visible-session"])
 
+    def test_runtime_thread_rest_catalog_is_bounded_to_initial_page(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            repo_root = self._repo_root(temp_dir)
+            with patch.dict(
+                "os.environ",
+                {
+                    "MAVERICK_ALLOW_INSECURE_TEST_DEFAULTS": "1",
+                    "MAVERICK_ADMIN_USERNAME": "admin",
+                    "MAVERICK_ADMIN_PASSWORD": "maverick",
+                },
+            ):
+                state = bootstrap_platform_state(start_path=repo_root)
+            for index in range(55):
+                create_runtime_session(
+                    state.runtime_store,
+                    session_id=f"visible-session-{index:02d}",
+                    workspace_id="default",
+                    agent_id="chat",
+                    source_app_id="chat",
+                    thread_title=f"Archive thread {index:02d}",
+                    start_path=repo_root,
+                )
+            app = PlatformHost(state, start_path=repo_root)
+            cookie = self._login(app)
+
+            list_status, list_payload, _headers = self._invoke(
+                app,
+                path="/api/runtime/threads",
+                cookie=cookie,
+            )
+            search_status, search_payload, _headers = self._invoke(
+                app,
+                path="/api/runtime/threads?query=visible-session-00",
+                cookie=cookie,
+            )
+
+        self.assertEqual(list_status, 200)
+        self.assertEqual(len(list_payload["threads"]), 50)
+        self.assertEqual(list_payload["threads_page"]["items"], list_payload["threads"])
+        self.assertEqual(list_payload["threads_page"]["limit"], 50)
+        self.assertTrue(list_payload["threads_page"]["has_more"])
+        self.assertIsNotNone(list_payload["threads_page"]["cursor"])
+        self.assertEqual(list_payload["threads_page"]["sort"], "recency_desc")
+        self.assertEqual(search_status, 200)
+        self.assertEqual([thread["runtime_session_id"] for thread in search_payload["threads"]], ["visible-session-00"])
+        self.assertEqual(search_payload["threads_page"]["query"], "visible-session-00")
+
     def test_invalid_runtime_session_visibility_is_controlled_for_raw_session_api(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             repo_root = self._repo_root(temp_dir)

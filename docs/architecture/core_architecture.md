@@ -496,6 +496,8 @@ The core also owns the workspace chat thread catalog that points at runtime sess
 
 A chat thread is the user-visible runtime conversation record. It stores the thread id, linked `runtime_session_id`, title, availability, source app metadata, optional project id, and `last_user_message_at` timestamp. Apps such as `chat` may render or update that record through core runtime APIs, but they must not persist a second app-owned thread catalog or delete runtime sessions themselves. The core runtime owns availability transitions: queued user turns mark the linked thread as `queued`, started turns mark it as `active`, and terminal turn outcomes or interrupts mark it as `free`. Thread catalog reads reconcile both availability and `last_user_message_at` from the linked runtime turns so existing sessions without a stored recency timestamp still sort by their latest user turn.
 
+The runtime thread catalog is a bounded transport contract. `GET /api/runtime/threads` and the initial `runtime.thread.snapshot` WebSocket frame return the first recency-sorted page, currently limited to 50 user-visible threads, with `threads_page` metadata for limit, cursor, query, and `has_more`. The REST list accepts a bounded metadata query so shell search surfaces can backfill matching older threads without loading the full catalog. Mutating thread APIs return only the changed thread or removed ids plus a page hint; they must not reattach a full thread catalog to create, rename, read-receipt, delete, or clear responses.
+
 ### 7. Execution policy
 
 The core owns:

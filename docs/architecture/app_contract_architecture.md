@@ -1364,7 +1364,7 @@ The core remains responsible for:
 
 Host apps may forward generic app data invalidation messages to widgets when the invalidation belongs to the widget owner.
 
-Core-owned runtime data should use core realtime transports instead of app invalidation messages. For example, Chat full app and widgets subscribe to `WS /ws/runtime/threads` for initial and live thread catalog state; active thread selection can be mirrored with an app-owned UI message such as `maverick.chat.active-thread-changed`, but the thread records themselves must not be refreshed through `maverick.app.data-changed`.
+Core-owned runtime data should use core realtime transports instead of app invalidation messages. For example, Chat full app and widgets subscribe to `WS /ws/runtime/threads` for initial and live thread catalog state; active thread selection can be mirrored with an app-owned UI message such as `maverick.chat.active-thread-changed`, but the thread records themselves must not be refreshed through `maverick.app.data-changed`. Runtime thread snapshots are bounded initial pages with `threads_page` metadata, and REST mutations return changed-thread or removed-id deltas rather than a full catalog replacement.
 
 A shell-hosted floating widget follows the same rule. The shell may reserve a visual overlay slot, such as a bottom-right holder, but the embedded app still owns the widget declaration, renderer, backend actions, and persisted state. The shell selects the widget through the registry by `host` and `content_kind`; it must not import the widget owner's source or call private app APIs.
 

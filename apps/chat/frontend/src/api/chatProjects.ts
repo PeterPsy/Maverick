@@ -66,9 +66,31 @@ export function setChatViewFilter(query: string): Promise<ChatViewFilterPayload>
   });
 }
 
-async function withChatProjects<T extends { threads: ChatThread[] }>(payload: T): Promise<T & { projects: ChatProject[]; preferences?: Record<string, unknown> }> {
+type ThreadCatalogMutationPayload = {
+  thread?: ChatThread;
+  changed_thread?: ChatThread;
+  removed_thread_id?: string;
+  deleted_thread_id?: string;
+  deleted_thread_ids?: string[];
+  threads?: ChatThread[];
+};
+
+export function applyThreadCatalogPayload(current: ChatThread[], payload: ThreadCatalogMutationPayload): ChatThread[] {
+  if (Array.isArray(payload.threads)) {
+    return orderChatThreads(payload.threads);
+  }
+  const deletedThreadIds = new Set([...(payload.deleted_thread_ids || []), payload.deleted_thread_id || "", payload.removed_thread_id || ""].filter(Boolean));
+  const changedThread = payload.changed_thread || payload.thread || null;
+  const retained = current.filter((thread) => !deletedThreadIds.has(thread.thread_id));
+  if (!changedThread) {
+    return orderChatThreads(retained);
+  }
+  return orderChatThreads([...retained.filter((thread) => thread.thread_id !== changedThread.thread_id), changedThread]);
+}
+
+async function withChatProjects<T extends { threads?: ChatThread[] }>(payload: T): Promise<T & { projects: ChatProject[]; preferences?: Record<string, unknown> }> {
   const projectsPayload = await listChatProjects();
-  return { ...payload, threads: orderChatThreads(payload.threads || []), ...projectsPayload };
+  return { ...payload, threads: payload.threads ? orderChatThreads(payload.threads) : payload.threads, ...projectsPayload };
 }
 
 export async function createThread(
@@ -82,8 +104,8 @@ export async function createThread(
     system_prompt?: string;
     title?: string;
   } = {},
-): Promise<{ thread: ChatThread; threads: ChatThread[]; projects?: ChatProject[] }> {
-  const payload = await requestJson<{ thread: ChatThread; threads: ChatThread[] }>("/api/runtime/threads", {
+): Promise<{ thread: ChatThread; changed_thread?: ChatThread; threads?: ChatThread[]; projects?: ChatProject[] }> {
+  const payload = await requestJson<{ thread: ChatThread; changed_thread?: ChatThread; threads?: ChatThread[] }>("/api/runtime/threads", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ runtime_session_id: runtimeSessionId, project_id: projectId || null, ...metadata }),
@@ -98,8 +120,8 @@ export async function updateThread(payload: {
   system_prompt?: string;
   project_id?: string | null;
   archived?: boolean;
-}): Promise<{ thread: ChatThread; threads: ChatThread[]; projects?: ChatProject[] }> {
-  const response = await requestJson<{ thread: ChatThread; threads: ChatThread[] }>(`/api/runtime/threads/${encodeURIComponent(payload.thread_id)}`, {
+}): Promise<{ thread: ChatThread; changed_thread?: ChatThread; threads?: ChatThread[]; projects?: ChatProject[] }> {
+  const response = await requestJson<{ thread: ChatThread; changed_thread?: ChatThread; threads?: ChatThread[] }>(`/api/runtime/threads/${encodeURIComponent(payload.thread_id)}`, {
     method: "PATCH",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(payload),
@@ -107,8 +129,8 @@ export async function updateThread(payload: {
   return withChatProjects(response);
 }
 
-export async function markThreadRead(threadId: string): Promise<{ thread: ChatThread; threads: ChatThread[]; projects?: ChatProject[] }> {
-  const response = await requestJson<{ thread: ChatThread; threads: ChatThread[] }>(`/api/runtime/threads/${encodeURIComponent(threadId)}/read`, {
+export async function markThreadRead(threadId: string): Promise<{ thread: ChatThread; changed_thread?: ChatThread; threads?: ChatThread[]; projects?: ChatProject[] }> {
+  const response = await requestJson<{ thread: ChatThread; changed_thread?: ChatThread; threads?: ChatThread[] }>(`/api/runtime/threads/${encodeURIComponent(threadId)}/read`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
   });

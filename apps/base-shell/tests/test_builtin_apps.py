@@ -952,7 +952,9 @@ class BuiltinAppsTestCase(unittest.TestCase):
         self.assertEqual(first_status, 201)
         self.assertEqual(second_status, 201)
         self.assertEqual(first_payload["thread"]["thread_id"], second_payload["thread"]["thread_id"])
-        self.assertEqual(len(second_payload["threads"]), 1)
+        self.assertEqual(second_payload["changed_thread"]["thread_id"], first_payload["thread"]["thread_id"])
+        self.assertEqual(second_payload["action"], "updated")
+        self.assertNotIn("threads", second_payload)
 
     def test_chat_surfaces_are_visible_to_agents_and_operators(self) -> None:
         repo_root = self.make_product_repo_root()
@@ -1095,8 +1097,10 @@ class BuiltinAppsTestCase(unittest.TestCase):
         self.assertEqual(status_rename, 200)
         self.assertEqual(status_delete, 200)
         self.assertEqual(rename_payload["thread"]["title"], "Audit plan")
+        self.assertEqual(rename_payload["changed_thread"]["thread_id"], thread_id)
         self.assertIsNone(rename_payload["thread"]["project_id"])
-        self.assertEqual(delete_payload["threads"], [])
+        self.assertEqual(delete_payload["removed_thread_id"], thread_id)
+        self.assertNotIn("threads", delete_payload)
 
     def test_core_runtime_thread_delete_performs_server_side_runtime_cleanup(self) -> None:
         repo_root = self.make_repo_root()

@@ -13,6 +13,7 @@ import {
   listInterAgentRunEvents,
   listInterAgentRuns,
   listRuntimeSessionEvents,
+  listRuntimeThreads,
   prewarmSpeechWorker,
   resolveInterAgentApproval,
   resumeInterAgentRun,
@@ -162,6 +163,24 @@ describe("runtime event client calls", () => {
 
     expect(fetchMock).toHaveBeenCalledWith(
       "/api/runtime/sessions/session%2F1/events?limit=25",
+      expect.objectContaining({
+        credentials: "same-origin",
+        headers: expect.objectContaining({ Accept: "application/json" }),
+      }),
+    );
+  });
+
+  it("loads bounded runtime thread search results", async () => {
+    const fetchMock = vi.fn(async () => jsonResponse({ threads: [], threads_page: { items: [], limit: 50, has_more: false, cursor: null, sort: "recency_desc", query: "archive thread" } }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(listRuntimeThreads({ query: "archive thread", limit: 50 })).resolves.toEqual({
+      threads: [],
+      threads_page: { items: [], limit: 50, has_more: false, cursor: null, sort: "recency_desc", query: "archive thread" },
+    });
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/api/runtime/threads?query=archive+thread&limit=50",
       expect.objectContaining({
         credentials: "same-origin",
         headers: expect.objectContaining({ Accept: "application/json" }),

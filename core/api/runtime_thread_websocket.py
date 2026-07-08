@@ -26,6 +26,7 @@ AsgiSend = Callable[[dict[str, Any]], Awaitable[None]]
 RUNTIME_THREADS_WS_PATH = "/ws/runtime/threads"
 WEBSOCKET_UNAUTHORIZED = 4401
 WEBSOCKET_NOT_FOUND = 4404
+RUNTIME_THREAD_SNAPSHOT_LIMIT = 50
 
 
 def runtime_thread_websocket_manifest() -> dict[str, object]:
@@ -70,14 +71,33 @@ def runtime_thread_snapshot_frame(state: PlatformState, *, workspace_id: str, vi
         sessions = state.runtime_store.list_sessions(workspace_id)
         sessions_by_id = {session.session_id: session for session in sessions}
         threads = _ordered_runtime_threads(state, workspace_id=workspace_id, sessions=sessions)
+        page_threads = threads[:RUNTIME_THREAD_SNAPSHOT_LIMIT]
+        items = [
+            _thread_payload_with_runtime(
+                state,
+                thread,
+                session=sessions_by_id.get(thread.runtime_session_id),
+                viewer_user_id=viewer_user_id,
+            )
+            for thread in page_threads
+        ]
         frame = {
             "type": "runtime.thread.snapshot",
             "workspace_id": workspace_id,
-            "threads": [_thread_payload_with_runtime(state, thread, session=sessions_by_id.get(thread.runtime_session_id), viewer_user_id=viewer_user_id) for thread in threads],
+            "threads": items,
+            "threads_page": {
+                "items": items,
+                "limit": RUNTIME_THREAD_SNAPSHOT_LIMIT,
+                "has_more": len(threads) > RUNTIME_THREAD_SNAPSHOT_LIMIT,
+                "cursor": page_threads[-1].thread_id if len(threads) > RUNTIME_THREAD_SNAPSHOT_LIMIT and page_threads else None,
+                "sort": "recency_desc",
+                "query": None,
+            },
             "at": datetime.now(tz=UTC),
         }
         timing["session_count"] = len(sessions)
-        timing["thread_count"] = len(frame["threads"])
+        timing["thread_count"] = len(items)
+        timing["total_thread_count"] = len(threads)
         if startup_performance_enabled():
             timing["encoded_bytes"] = len(encode_thread_websocket_frame(frame).encode("utf-8"))
         return frame

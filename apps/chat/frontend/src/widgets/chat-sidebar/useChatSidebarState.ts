@@ -1,10 +1,12 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { ChatProject, ChatThread } from "../../api/client";
 import {
+  applyThreadCatalogPayload,
   deleteThread,
   getChatViewFilter,
   listInterAgentRuns,
   listRuntimeSessionEvents,
+  listRuntimeThreads,
   listChatProjects,
   markThreadRead,
   setChatViewFilter,
@@ -309,6 +311,39 @@ export function useChatSidebarState() {
   }, [searchTerm, threads]);
 
   useEffect(() => {
+    if (!searchTerm) {
+      return;
+    }
+    const controller = new AbortController();
+    let disposed = false;
+    const timeout = window.setTimeout(() => {
+      listRuntimeThreads({ query: searchTerm, limit: 50, signal: controller.signal })
+        .then((payload) => {
+          if (disposed) {
+            return;
+          }
+          setThreads((current) =>
+            (payload.threads || []).reduce(
+              (nextThreads, thread) => applyThreadCatalogPayload(nextThreads, { changed_thread: thread }),
+              current,
+            ),
+          );
+          setError(null);
+        })
+        .catch((loadError: Error) => {
+          if (!disposed && loadError.name !== "AbortError") {
+            setError(loadError.message);
+          }
+        });
+    }, 120);
+    return () => {
+      disposed = true;
+      window.clearTimeout(timeout);
+      controller.abort();
+    };
+  }, [searchTerm]);
+
+  useEffect(() => {
     const channel = createChatSidebarSelectionChannel((message) => {
       if (!isMessageForChatSidebar(message, CHAT_APP_ID, workspaceIdRef.current)) {
         return;
@@ -466,7 +501,7 @@ export function useChatSidebarState() {
       for (const threadId of threadIds) {
         const payload = await deleteThread(threadId);
         deletedThreadIds.add(threadId);
-        setThreads(payload.threads);
+        setThreads((current) => applyThreadCatalogPayload(current, payload));
         updateFromSidebarPayload(payload, applyProjects);
       }
       projectActions.clearProjectEditing();
@@ -492,7 +527,7 @@ export function useChatSidebarState() {
     );
     try {
       const payload = await markThreadRead(thread.thread_id);
-      setThreads(payload.threads);
+      setThreads((current) => applyThreadCatalogPayload(current, payload));
       updateFromSidebarPayload(payload, applyProjects);
     } catch {
       // Selection should not be blocked by a best-effort read receipt.
@@ -515,6 +550,7 @@ export function useChatSidebarState() {
 
   async function renameThread(threadId: string, title: string, projectId: string | null) {
     const payload = await updateThread({ thread_id: threadId, title, project_id: projectId });
+    setThreads((current) => applyThreadCatalogPayload(current, payload));
     updateFromSidebarPayload(payload, applyProjects);
     setActiveThreadId(payload.thread.thread_id);
     setExpandedThreadId(null);
@@ -524,7 +560,7 @@ export function useChatSidebarState() {
 
   async function removeThread(threadId: string) {
     const payload = await deleteThread(threadId);
-    setThreads(payload.threads);
+    setThreads((current) => applyThreadCatalogPayload(current, payload));
     updateFromSidebarPayload(payload, applyProjects);
     clearDeletedThreadState(new Set([threadId]));
     projectActions.clearProjectEditing();

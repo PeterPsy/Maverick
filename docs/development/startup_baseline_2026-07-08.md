@@ -123,3 +123,20 @@ and 84,768 gzip bytes. Initial provider setup now uses
 `/api/settings/provider-setup`; cleanup-scope runtime inventory is loaded from
 `/api/settings/runtime-sessions` by the Settings app instead of the shell
 bootstrap path.
+
+## PR2 Measurement
+
+After bounding runtime thread catalog payloads and switching REST mutations to
+delta responses, `python3 scripts/startup_performance_baseline.py` reported:
+
+| App | Raw bytes | Gzip bytes | Files |
+| --- | ---: | ---: | ---: |
+| `base-shell` | 374,327 | 105,847 | 4 |
+| `chat` | 1,228,932 | 344,613 | 20 |
+
+The initial runtime thread REST list and `runtime.thread.snapshot` WebSocket
+frame now return at most 50 recency-sorted visible threads with `threads_page`
+metadata. Thread create, rename, read-receipt, delete, and clear responses no
+longer attach a full replacement catalog. Sidebar search can request a bounded
+server-side thread search page and merge those results into the local catalog,
+so older matching threads can appear without loading every thread at startup.

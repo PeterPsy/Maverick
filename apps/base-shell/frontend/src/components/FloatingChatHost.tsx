@@ -91,6 +91,10 @@ export function FloatingChatHost({
     [activeApp, isDockMode, isMobileMode, navigationScope, placement, threadId, user?.username],
   );
 
+  if (!isVisible) {
+    return null;
+  }
+
   function handleCloseWidget() {
     if (isMobileMode) {
       onCloseMobileChat();

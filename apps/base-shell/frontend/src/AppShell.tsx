@@ -4,14 +4,12 @@ import {
   AppRegistryItem,
   configureActiveProvider,
   getPlatformSettings,
-  getPlatformStatus,
   getSession,
   listApps,
   listPinnedApps,
   listWorkspaces,
   logout,
   PlatformSettings,
-  PlatformStatus,
   savePinnedApps,
   SessionPayload,
   switchWorkspace,
@@ -59,7 +57,6 @@ export function AppShell() {
   const initialActiveAppId = initialLaunchRoute.appId || initialSession.activeAppId;
   const [apps, setApps] = useState<AppRegistryItem[]>([]);
   const [pinnedAppIds, setPinnedAppIds] = useState<string[]>(["chat"]);
-  const [status, setStatus] = useState<PlatformStatus | null>(null);
   const [session, setSession] = useState<SessionPayload | null>(null);
   const [workspaces, setWorkspaces] = useState<WorkspaceItem[]>([]);
   const [settings, setSettings] = useState<PlatformSettings | null>(null);
@@ -104,6 +101,7 @@ export function AppShell() {
   const pinnedAppsSaveVersionRef = useRef(0);
   const persistedPinnedAppIdsRef = useRef(pinnedAppIds);
   const persistedPinnedAppsVersionRef = useRef(0);
+  const shellLoadVersionRef = useRef(0);
   const railApps = shellAppRailApps(apps, pinnedAppIds);
   const settingsShortcutApp = shellVisibleApps(apps).find((app) => app.app_id === SETTINGS_APP_ID) ?? null;
   const hasSettingsShortcut = Boolean(settingsShortcutApp);
@@ -219,6 +217,8 @@ export function AppShell() {
   }
 
   async function loadShellState() {
+    const loadVersion = shellLoadVersionRef.current + 1;
+    shellLoadVersionRef.current = loadVersion;
     const loadStartedAt = performance.now();
     markStartupMetric("shell.bootstrap.start");
     setIsLoading(true);
@@ -229,7 +229,6 @@ export function AppShell() {
       setSession(currentSession);
       if (!currentSession.authenticated) {
         setApps([]);
-        setStatus(null);
         setWorkspaces([]);
         setSettings(null);
         setError(null);
@@ -237,25 +236,19 @@ export function AppShell() {
         return;
       }
       const blockingStartedAt = performance.now();
-      const [registry, platformStatus, workspacePayload, platformSettings, pinnedApps] = await Promise.all([
+      const [registry, pinnedApps] = await Promise.all([
         listApps(),
-        getPlatformStatus(),
-        listWorkspaces(),
-        getPlatformSettings(),
         listPinnedApps().catch(() => ({ pinned_apps: ["chat"] })),
       ]);
       setApps(registry.items);
       applyPersistedPinnedApps(pinnedApps.pinned_apps);
-      setStatus(platformStatus);
-      setWorkspaces(workspacePayload.items);
-      setSettings(platformSettings);
       setError(null);
       measureStartupMetric("shell.bootstrap.blocking_payloads", blockingStartedAt, {
         app_count: registry.items.length,
         pinned_app_count: pinnedApps.pinned_apps.length,
-        workspace_count: workspacePayload.items.length,
       });
       measureStartupMetric("shell.bootstrap.total", loadStartedAt, { authenticated: true });
+      void loadDeferredShellState(loadVersion);
     } catch (loadError) {
       setError(loadError instanceof Error ? loadError.message : "Errore sconosciuto.");
       measureStartupMetric("shell.bootstrap.error", loadStartedAt, {
@@ -263,6 +256,28 @@ export function AppShell() {
       });
     } finally {
       setIsLoading(false);
+    }
+  }
+
+  async function loadDeferredShellState(loadVersion: number) {
+    const deferredStartedAt = performance.now();
+    try {
+      const [workspacePayload, platformSettings] = await Promise.all([
+        listWorkspaces(),
+        getPlatformSettings(),
+      ]);
+      if (shellLoadVersionRef.current !== loadVersion) {
+        return;
+      }
+      setWorkspaces(workspacePayload.items);
+      setSettings(platformSettings);
+      measureStartupMetric("shell.bootstrap.deferred_payloads", deferredStartedAt, {
+        workspace_count: workspacePayload.items.length,
+      });
+    } catch (loadError) {
+      measureStartupMetric("shell.bootstrap.deferred_error", deferredStartedAt, {
+        message: loadError instanceof Error ? loadError.message : "unknown",
+      });
     }
   }
 
@@ -447,7 +462,7 @@ export function AppShell() {
 
   async function openApp(appId: string, params: Record<string, string | boolean | null> = {}) {
     const requestedWorkspaceId = typeof params.workspace_id === "string" && params.workspace_id.trim() ? params.workspace_id.trim() : null;
-    const activeWorkspaceId = status?.workspace_id || (session?.authenticated ? session.workspace_id : null);
+    const activeWorkspaceId = session?.authenticated ? session.workspace_id : null;
     if (requestedWorkspaceId && requestedWorkspaceId !== activeWorkspaceId) {
       try {
         await switchWorkspace(requestedWorkspaceId);
@@ -599,7 +614,7 @@ export function AppShell() {
     }} />;
   }
 
-  const activeWorkspaceId = status?.workspace_id || session.workspace_id;
+  const activeWorkspaceId = session.workspace_id;
   const needsProviderSetup =
     !!settings && !settings.provider.active_provider && dismissedProviderSetupWorkspaceId !== activeWorkspaceId;
 

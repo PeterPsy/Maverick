@@ -72,3 +72,21 @@ Before PR1/PR2:
   subject to recalibration with authenticated traces.
 - Compressible JS/CSS transfer reduction: at least `40%` after PR3 if assets
   are currently uncompressed.
+
+## PR1a Measurement
+
+After shell bootstrap/widget gate changes, `python3 scripts/startup_performance_baseline.py`
+reported:
+
+| App | Raw bytes | Gzip bytes | Files |
+| --- | ---: | ---: | ---: |
+| `base-shell` | 374,321 | 105,848 | 4 |
+| `chat` | 1,226,193 | 343,820 | 20 |
+
+The authenticated shell entry asset changed from
+`apps/base-shell/frontend/dist/assets/index-u8gEaTu7.js` at 300,044 raw bytes
+and 92,104 gzip bytes to
+`apps/base-shell/frontend/dist/assets/index-B68RkT9S.js` at 276,437 raw bytes
+and 84,768 gzip bytes. The login shader now lives in
+`LoginPaperBackground-DhP0-1ON.js` at 25,087 raw bytes and 8,096 gzip bytes,
+so authenticated refreshes no longer pay that code in the initial shell chunk.

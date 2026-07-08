@@ -1,9 +1,12 @@
-import { FormEvent, useEffect, useRef, useState } from "react";
+import { FormEvent, lazy, Suspense, useEffect, useRef, useState } from "react";
 import { login, SessionPayload } from "../api";
 import { BrandMark } from "./BrandMark";
-import { LoginPaperBackground } from "./LoginPaperBackground";
 
 type LoginStep = "email" | "password";
+
+const LoginPaperBackground = lazy(() =>
+  import("./LoginPaperBackground").then((module) => ({ default: module.LoginPaperBackground })),
+);
 
 export function LoginScreen({ onAuthenticated }: { onAuthenticated: (session: Extract<SessionPayload, { authenticated: true }>) => void }) {
   const [credential, setCredential] = useState("");
@@ -61,7 +64,9 @@ export function LoginScreen({ onAuthenticated }: { onAuthenticated: (session: Ex
 
   return (
     <main className="bs-login">
-      <LoginPaperBackground />
+      <Suspense fallback={<div className="bs-login-paper-bg is-static" aria-hidden="true" />}>
+        <LoginPaperBackground />
+      </Suspense>
       <div className="bs-login__brand-strip">
         <BrandMark className="bs-login__brand-mark" variant="mark" />
       </div>

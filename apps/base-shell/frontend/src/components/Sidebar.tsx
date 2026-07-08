@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type {
   CSSProperties,
   FocusEvent as ReactFocusEvent,
@@ -97,8 +97,9 @@ export function Sidebar({
   const settingsApp = visibleAppsById.get(SETTINGS_APP_ID) || null;
   const isInitialLoading = isLoading && railApps.length === 0;
   const isDetailLayerOpen = isOpen || isPinned;
+  const shouldMountDetailWidgets = isDetailLayerOpen;
   const showMobileChatThemeSwitcher = isMobileLayout && activeAppId === CHAT_APP_ID;
-  const sidebarFooterSlot = (
+  const sidebarFooterSlot = shouldMountDetailWidgets ? (
     <WidgetSlot
       activeWorkspaceId={activeWorkspaceId}
       content={{ active_app_id: activeAppId, active_app_params: activeAppParams, is_mobile_layout: isMobileLayout, placement: "sidebar-footer", user: user?.username || null }}
@@ -114,7 +115,18 @@ export function Sidebar({
       shellTheme={shellTheme}
       size="compact"
     />
-  );
+  ) : null;
+
+  useEffect(() => {
+    if (shouldMountDetailWidgets) {
+      return;
+    }
+    onPrimaryActionStateChange({
+      available: false,
+      label: "",
+      preferredSurface: "app",
+    });
+  }, [onPrimaryActionStateChange, shouldMountDetailWidgets]);
 
   function handlePointerEnter() {
     if (isMobileLayout) {
@@ -314,18 +326,20 @@ export function Sidebar({
 
         </div>
 
-        <WidgetSlot
-          activeWorkspaceId={activeWorkspaceId}
-          content={{ active_app_id: activeAppId, active_app_params: activeAppParams, is_mobile_layout: isMobileLayout, user: user?.username || null }}
-          contentKind="shell.sidebar.primary"
-          hostAppId="base-shell"
-          label="App sidebar content"
-          onCloseSidebar={onClose}
-          onOpenApp={onOpenApp}
-          onOpenSidebar={onOpenSidebar}
-          preferredOwnerAppId={activeAppId}
-          shellTheme={shellTheme}
-        />
+        {shouldMountDetailWidgets ? (
+          <WidgetSlot
+            activeWorkspaceId={activeWorkspaceId}
+            content={{ active_app_id: activeAppId, active_app_params: activeAppParams, is_mobile_layout: isMobileLayout, user: user?.username || null }}
+            contentKind="shell.sidebar.primary"
+            hostAppId="base-shell"
+            label="App sidebar content"
+            onCloseSidebar={onClose}
+            onOpenApp={onOpenApp}
+            onOpenSidebar={onOpenSidebar}
+            preferredOwnerAppId={activeAppId}
+            shellTheme={shellTheme}
+          />
+        ) : null}
 
         <div className="bs-sidebar__bottom-fixed">
           {showMobileChatThemeSwitcher ? (

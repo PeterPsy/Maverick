@@ -143,8 +143,9 @@ so older matching threads can appear without loading every thread at startup.
 Follow-up correction: the REST page cursor is now accepted by
 `GET /api/runtime/threads?cursor=<thread_id>`, and the Chat sidebar backfills
 additional pages in idle time after the first WebSocket snapshot. The first
-paint remains bounded to 50 threads, but older chats are no longer hidden from
-the sidebar catalog.
+paint remains bounded, but the WebSocket snapshot cap is high enough to cover
+the current workspace catalog so older chats are not hidden from existing
+sidebar clients; REST cursor paging remains the path for larger catalogs.
 
 ## PR3 Measurement
 

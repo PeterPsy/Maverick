@@ -88,7 +88,7 @@ class RuntimeThreadWebSocketFrameTest(unittest.TestCase):
         self.assertEqual(frame["threads"][0]["last_completed_turn_id"], "turn-completed")
         self.assertEqual(store.get_thread("thread-stale").availability, "free")
 
-    def test_snapshot_is_bounded_to_initial_thread_page(self) -> None:
+    def test_snapshot_covers_current_thread_catalog_under_cap(self) -> None:
         store = self.make_store()
         state = SimpleNamespace(runtime_store=store)
         started_at = datetime(2026, 4, 19, 10, 0, tzinfo=UTC)
@@ -114,11 +114,11 @@ class RuntimeThreadWebSocketFrameTest(unittest.TestCase):
 
         frame = runtime_thread_snapshot_frame(state, workspace_id="default", viewer_user_id=None)
 
-        self.assertEqual(len(frame["threads"]), 50)
+        self.assertEqual(len(frame["threads"]), 55)
         self.assertEqual(frame["threads_page"]["items"], frame["threads"])
-        self.assertEqual(frame["threads_page"]["limit"], 50)
-        self.assertTrue(frame["threads_page"]["has_more"])
-        self.assertIsNotNone(frame["threads_page"]["cursor"])
+        self.assertEqual(frame["threads_page"]["limit"], 250)
+        self.assertFalse(frame["threads_page"]["has_more"])
+        self.assertIsNone(frame["threads_page"]["cursor"])
         self.assertEqual(frame["threads_page"]["sort"], "recency_desc")
 
 

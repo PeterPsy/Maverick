@@ -26,7 +26,7 @@ AsgiSend = Callable[[dict[str, Any]], Awaitable[None]]
 RUNTIME_THREADS_WS_PATH = "/ws/runtime/threads"
 WEBSOCKET_UNAUTHORIZED = 4401
 WEBSOCKET_NOT_FOUND = 4404
-RUNTIME_THREAD_SNAPSHOT_LIMIT = 50
+RUNTIME_THREAD_SNAPSHOT_LIMIT = 250
 
 
 def runtime_thread_websocket_manifest() -> dict[str, object]:

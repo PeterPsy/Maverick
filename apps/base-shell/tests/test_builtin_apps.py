@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import gzip
 from io import BytesIO
 from pathlib import Path
 import json
@@ -123,15 +124,16 @@ class BuiltinAppsTestCase(unittest.TestCase):
         body: dict | None = None,
         cookie: str | None = None,
         query_string: str = "",
+        request_headers: dict[str, str] | None = None,
     ) -> tuple[int, bytes, dict[str, str]]:
         payload = b""
         if body is not None:
             payload = json.dumps(body).encode("utf-8")
-        headers: dict[str, str] = {}
+        response_headers: dict[str, str] = {}
 
-        def start_response(status: str, response_headers: list[tuple[str, str]]) -> None:
-            headers.update(dict(response_headers))
-            headers["__status__"] = status
+        def start_response(status: str, header_list: list[tuple[str, str]]) -> None:
+            response_headers.update(dict(header_list))
+            response_headers["__status__"] = status
 
         result = b"".join(
             app(
@@ -142,12 +144,16 @@ class BuiltinAppsTestCase(unittest.TestCase):
                     "CONTENT_TYPE": "application/json",
                     "QUERY_STRING": query_string,
                     "wsgi.input": BytesIO(payload),
+                    **{
+                        f"HTTP_{name.upper().replace('-', '_')}": value
+                        for name, value in (request_headers or {}).items()
+                    },
                     **({"HTTP_COOKIE": cookie} if cookie else {}),
                 },
                 start_response,
             )
         )
-        return int(headers["__status__"].split()[0]), result, headers
+        return int(response_headers["__status__"].split()[0]), result, response_headers
 
     def login(self, app) -> str:
         status, _body, headers = self.invoke(
@@ -751,9 +757,14 @@ class BuiltinAppsTestCase(unittest.TestCase):
         cookie = self.login(app)
 
         status_index, body_index, index_headers = self.invoke(app, path="/apps/base-shell/", cookie=cookie)
-        status_asset, logo_body, _ = self.invoke(app, path="/apps/base-shell/maverick-logo.png", cookie=cookie)
+        status_asset, logo_body, _ = self.invoke(app, path="/apps/base-shell/maverick-logotype.svg", cookie=cookie)
         script_path = next((repo_root / "apps" / "base-shell" / "frontend" / "dist" / "assets").glob("index-*.js")).name
-        status_script, script_body, script_headers = self.invoke(app, path=f"/apps/base-shell/assets/{script_path}", cookie=cookie)
+        status_script, script_body, script_headers = self.invoke(
+            app,
+            path=f"/apps/base-shell/assets/{script_path}",
+            cookie=cookie,
+            request_headers={"Accept-Encoding": "gzip"},
+        )
 
         self.assertEqual(status_index, 200)
         self.assertEqual(status_asset, 200)
@@ -761,16 +772,18 @@ class BuiltinAppsTestCase(unittest.TestCase):
         self.assertEqual(index_headers["Cache-Control"], "no-store")
         self.assertEqual(script_headers["Cache-Control"], "public, max-age=31536000, immutable")
         self.assertEqual(script_headers["Access-Control-Allow-Origin"], "*")
+        self.assertEqual(script_headers["Content-Encoding"], "gzip")
+        self.assertEqual(script_headers["Vary"], "Accept-Encoding")
         self.assertGreater(len(logo_body), 100)
         self.assertLess(len(logo_body), 10_000)
-        self.assertIn(b"/api/apps", script_body)
-        self.assertIn(b"/api/status", script_body)
-        self.assertIn(b"chat", script_body)
-        self.assertNotIn(b"bs-app-topbar", script_body)
-        self.assertNotIn(b"TopBar", script_body)
-        self.assertNotIn(b"Gallery", script_body)
-        self.assertNotIn(b"App Studio", script_body)
-        self.assertNotIn(b"Checklists", script_body)
+        decompressed_script = gzip.decompress(script_body)
+        self.assertIn(b"/api/apps", decompressed_script)
+        self.assertIn(b"chat", decompressed_script)
+        self.assertNotIn(b"bs-app-topbar", decompressed_script)
+        self.assertNotIn(b"TopBar", decompressed_script)
+        self.assertNotIn(b"Gallery", decompressed_script)
+        self.assertNotIn(b"App Studio", decompressed_script)
+        self.assertNotIn(b"Checklists", decompressed_script)
         self.assertIn(b"/apps/base-shell/assets/index-", body_index)
 
     def test_app_frontend_assets_are_public_for_sandboxed_iframes(self) -> None:

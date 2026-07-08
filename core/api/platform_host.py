@@ -151,6 +151,7 @@ class PlatformHost:
             if path in _ROOT_SHELL_STATIC_ASSETS:
                 return handle_root_shell_static_asset(
                     self.state,
+                    environ=environ,
                     workspace_id=workspace_id,
                     root_shell_app_id=self.state.root_shell_app_id,
                     subpath=_ROOT_SHELL_STATIC_ASSETS[path],
@@ -160,6 +161,7 @@ class PlatformHost:
             if path == "/" or path == "/app" or path.startswith("/app/"):
                 return handle_root_shell(
                     self.state,
+                    environ=environ,
                     workspace_id=workspace_id,
                     root_shell_app_id=self.state.root_shell_app_id,
                     start_path=self.start_path,
@@ -174,6 +176,7 @@ class PlatformHost:
                     return json_response(start_response, {"error": "authentication_required"}, status="401 Unauthorized")
                 return handle_app_frontend(
                     self.state,
+                    environ=environ,
                     workspace_id=workspace_id,
                     app_id=app_id,
                     subpath=subpath,

@@ -140,3 +140,22 @@ metadata. Thread create, rename, read-receipt, delete, and clear responses no
 longer attach a full replacement catalog. Sidebar search can request a bounded
 server-side thread search page and merge those results into the local catalog,
 so older matching threads can appear without loading every thread at startup.
+
+## PR3 Measurement
+
+After adding negotiated static asset compression and stricter public static
+asset filtering, `python3 scripts/startup_performance_baseline.py` reported the
+same committed bundle sizes:
+
+| App | Raw bytes | Gzip bytes | Files |
+| --- | ---: | ---: | ---: |
+| `base-shell` | 374,327 | 105,847 | 4 |
+| `chat` | 1,228,932 | 344,613 | 20 |
+
+The PR3 change reduces HTTP transfer size at serving time rather than changing
+bundle contents. `serve_frontend` now sends `Content-Encoding: gzip` for
+compressible JS/CSS/HTML/SVG/JSON assets when requested, keeps immutable cache
+headers for public built assets, keeps HTML `no-store`, and rejects source maps
+or source-like extensions instead of serving them or falling back to SPA HTML.
+Brotli is supported when the host Python environment provides a Brotli module;
+the local verification environment did not.

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import gzip
 from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 import json
@@ -51,6 +52,11 @@ from core.shared.entrypoints import EntrypointShutdownController, run_json_entry
 from core.workspaces.paths import workspace_paths
 from core.identity.models import UserRecord
 
+try:  # pragma: no cover - optional deployment dependency.
+    import brotli as _brotli
+except Exception:  # pragma: no cover - optional deployment dependency.
+    _brotli = None
+
 
 logger = logging.getLogger(__name__)
 
@@ -82,7 +88,6 @@ _PUBLIC_STATIC_EXTENSIONS = {
     ".jpeg",
     ".js",
     ".json",
-    ".map",
     ".png",
     ".svg",
     ".txt",
@@ -90,6 +95,56 @@ _PUBLIC_STATIC_EXTENSIONS = {
     ".woff",
     ".woff2",
 }
+_PRIVATE_SOURCE_EXTENSIONS = {
+    ".env",
+    ".jsx",
+    ".map",
+    ".py",
+    ".svelte",
+    ".ts",
+    ".tsx",
+    ".vue",
+}
+_COMPRESSIBLE_CONTENT_TYPE_PREFIXES = (
+    "application/javascript",
+    "application/json",
+    "application/manifest+json",
+    "image/svg+xml",
+    "text/",
+)
+_MIN_COMPRESSIBLE_BYTES = 1024
+
+
+def _accepted_content_encodings(environ: Mapping[str, str] | None) -> set[str]:
+    header = (environ or {}).get("HTTP_ACCEPT_ENCODING", "")
+    encodings: set[str] = set()
+    for item in header.split(","):
+        token, _separator, parameters = item.partition(";")
+        token = token.strip().lower()
+        q_zero = any(parameter.strip().lower() in {"q=0", "q=0.0", "q=0.00", "q=0.000"} for parameter in parameters.split(";"))
+        if token:
+            if q_zero:
+                continue
+            encodings.add(token)
+    return encodings
+
+
+def _is_compressible_frontend_response(content_type: str, body: bytes) -> bool:
+    if len(body) < _MIN_COMPRESSIBLE_BYTES:
+        return False
+    normalized = content_type.split(";", 1)[0].strip().lower()
+    return any(normalized == prefix.rstrip("/") or normalized.startswith(prefix) for prefix in _COMPRESSIBLE_CONTENT_TYPE_PREFIXES)
+
+
+def _encoded_frontend_body(body: bytes, *, content_type: str, environ: Mapping[str, str] | None) -> tuple[bytes, str]:
+    if not _is_compressible_frontend_response(content_type, body):
+        return body, ""
+    encodings = _accepted_content_encodings(environ)
+    if "br" in encodings and _brotli is not None:
+        return _brotli.compress(body), "br"
+    if "gzip" in encodings:
+        return gzip.compress(body, compresslevel=6), "gzip"
+    return body, ""
 
 
 def serve_frontend(
@@ -99,11 +154,16 @@ def serve_frontend(
     subpath: str,
     spa_fallback: bool = True,
     cross_origin: bool = False,
+    environ: Mapping[str, str] | None = None,
 ) -> list[bytes]:
     """Serve an app frontend asset, optionally falling back to index.html for SPA routes."""
     with startup_timer("frontend.asset.serve", subpath=subpath or "/", spa_fallback=spa_fallback, cross_origin=cross_origin) as timing:
         root = frontend_root.resolve()
-        candidate = (root / subpath.lstrip("/")).resolve() if subpath.strip("/") else (root / "index.html").resolve()
+        normalized_subpath = subpath.lstrip("/")
+        requested_suffix = Path(normalized_subpath).suffix.lower()
+        if requested_suffix in _PRIVATE_SOURCE_EXTENSIONS:
+            return text_response(start_response, "Not found", status="404 Not Found")
+        candidate = (root / normalized_subpath).resolve() if subpath.strip("/") else (root / "index.html").resolve()
         if candidate == root or root not in candidate.parents:
             return text_response(start_response, "Not found", status="404 Not Found")
         if candidate.is_dir():
@@ -116,7 +176,11 @@ def serve_frontend(
             return text_response(start_response, "Not found", status="404 Not Found")
         body = candidate.read_bytes()
         content_type = mimetypes.guess_type(str(candidate))[0] or "text/html; charset=utf-8"
-        headers = [("Content-Type", content_type), ("Content-Length", str(len(body)))]
+        encoded_body, content_encoding = _encoded_frontend_body(body, content_type=content_type, environ=environ)
+        headers = [("Content-Type", content_type), ("Content-Length", str(len(encoded_body)))]
+        if content_encoding:
+            headers.append(("Content-Encoding", content_encoding))
+            headers.append(("Vary", "Accept-Encoding"))
         cache_control = ""
         if content_type.startswith("text/html"):
             cache_control = "no-store"
@@ -135,25 +199,30 @@ def serve_frontend(
             {
                 "bytes": len(body),
                 "cache_control": cache_control,
+                "content_encoding": content_encoding,
                 "content_type": content_type,
                 "extension": candidate.suffix.lower(),
+                "transfer_bytes": len(encoded_body),
                 "served_fallback_html": candidate.name == "index.html" and bool(subpath.strip("/")),
             }
         )
         start_response("200 OK", headers)
-        return [body]
+        return [encoded_body]
 
 
 def is_public_app_static_asset(subpath: str) -> bool:
     """Return true for static frontend assets that iframe sandboxes must load without session cookies."""
     normalized = subpath.lstrip("/")
     suffix = Path(normalized).suffix.lower()
+    if suffix in _PRIVATE_SOURCE_EXTENSIONS:
+        return False
     return normalized.startswith("assets/") or (bool(suffix) and suffix in _PUBLIC_STATIC_EXTENSIONS)
 
 
 def handle_root_shell(
     state: PlatformState,
     *,
+    environ: Mapping[str, str] | None = None,
     workspace_id: str,
     root_shell_app_id: str,
     start_path: Path,
@@ -176,6 +245,7 @@ def handle_root_shell(
             start_response,
             frontend_root=(source_root / parsed.contract.entrypoints.frontend).resolve(),
             subpath="/",
+            environ=environ,
         )
     except Exception:
         logger.exception(
@@ -189,6 +259,7 @@ def handle_root_shell(
 def handle_root_shell_static_asset(
     state: PlatformState,
     *,
+    environ: Mapping[str, str] | None = None,
     workspace_id: str,
     root_shell_app_id: str,
     subpath: str,
@@ -217,6 +288,7 @@ def handle_root_shell_static_asset(
             subpath=subpath,
             spa_fallback=False,
             cross_origin=True,
+            environ=environ,
         )
     except Exception:
         logger.exception(
@@ -231,6 +303,7 @@ def handle_root_shell_static_asset(
 def handle_app_frontend(
     state: PlatformState,
     *,
+    environ: Mapping[str, str] | None = None,
     workspace_id: str,
     app_id: str,
     subpath: str,
@@ -273,6 +346,7 @@ def handle_app_frontend(
             subpath=subpath,
             spa_fallback=not public_static_asset,
             cross_origin=public_static_asset,
+            environ=environ,
         )
     except Exception:
         logger.exception("App `%s` frontend mount failed in workspace `%s`.", app_id, workspace_id)

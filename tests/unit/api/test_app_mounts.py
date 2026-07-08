@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import gzip
 import json
 import tempfile
 import unittest
@@ -8,7 +9,7 @@ from io import BytesIO
 from pathlib import Path
 from types import SimpleNamespace
 
-from core.api.app_mounts import _apply_app_secret_writes, _backend_request_headers, _backend_secret_request_body, _read_backend_body, _resolve_app_secret_payload, _serve_app_file_gateway_manifest, _serve_app_file_response, backend_entrypoint_timeout_seconds, serve_frontend
+from core.api.app_mounts import _apply_app_secret_writes, _backend_request_headers, _backend_secret_request_body, _read_backend_body, _resolve_app_secret_payload, _serve_app_file_gateway_manifest, _serve_app_file_response, backend_entrypoint_timeout_seconds, is_public_app_static_asset, serve_frontend
 from core.apps.contracts import build_app_contract, build_app_hook_timeouts, build_parsed_app_contract
 from core.observability.store import ObservabilityCollections, ObservabilityDocumentStore
 from core.secrets.app_delivery import app_secret_target
@@ -42,6 +43,55 @@ class AppMountsTestCase(unittest.TestCase):
         self.assertEqual(headers["Cache-Control"], "public, max-age=31536000, immutable")
         self.assertEqual(headers["Access-Control-Allow-Origin"], "*")
         self.assertEqual(headers["Cross-Origin-Resource-Policy"], "cross-origin")
+
+    def test_static_assets_use_gzip_when_accepted(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            asset_dir = root / "assets"
+            asset_dir.mkdir()
+            source = ("const message = 'startup-cache';\n" * 200).encode("utf-8")
+            (asset_dir / "app-abc123.js").write_bytes(source)
+
+            status, headers, body = _serve_body(
+                root,
+                "/assets/app-abc123.js",
+                cross_origin=True,
+                environ={"HTTP_ACCEPT_ENCODING": "br, gzip"},
+            )
+            status_identity, headers_identity, body_identity = _serve_body(
+                root,
+                "/assets/app-abc123.js",
+                cross_origin=True,
+                environ={"HTTP_ACCEPT_ENCODING": "gzip;q=0"},
+            )
+
+        self.assertEqual(status, "200 OK")
+        self.assertEqual(headers["Content-Encoding"], "gzip")
+        self.assertEqual(headers["Vary"], "Accept-Encoding")
+        self.assertEqual(headers["Cache-Control"], "public, max-age=31536000, immutable")
+        self.assertEqual(gzip.decompress(body), source)
+        self.assertEqual(int(headers["Content-Length"]), len(body))
+        self.assertEqual(status_identity, "200 OK")
+        self.assertNotIn("Content-Encoding", headers_identity)
+        self.assertEqual(body_identity, source)
+
+    def test_source_extensions_are_not_public_or_spa_fallback(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            asset_dir = root / "assets"
+            asset_dir.mkdir()
+            (root / "index.html").write_text("<!doctype html><div id=\"root\"></div>", encoding="utf-8")
+            (asset_dir / "app.js.map").write_text("{\"sources\":[\"src/App.tsx\"]}", encoding="utf-8")
+
+            status_map, _headers_map, body_map = _serve_body(root, "/assets/app.js.map", cross_origin=True)
+            status_source, _headers_source, body_source = _serve_body(root, "/src/App.tsx")
+
+        self.assertFalse(is_public_app_static_asset("assets/app.js.map"))
+        self.assertFalse(is_public_app_static_asset("src/App.tsx"))
+        self.assertEqual(status_map, "404 Not Found")
+        self.assertEqual(status_source, "404 Not Found")
+        self.assertNotIn(b"root", body_map)
+        self.assertNotIn(b"root", body_source)
 
     def test_backend_entrypoint_timeout_comes_from_app_contract(self) -> None:
         parsed = build_parsed_app_contract(
@@ -942,14 +992,19 @@ class AppMountsTestCase(unittest.TestCase):
 
 
 def _serve(root: Path, subpath: str, *, cross_origin: bool = False) -> tuple[str, dict[str, str]]:
+    status, headers, _body = _serve_body(root, subpath, cross_origin=cross_origin)
+    return status, headers
+
+
+def _serve_body(root: Path, subpath: str, *, cross_origin: bool = False, environ: dict[str, str] | None = None) -> tuple[str, dict[str, str], bytes]:
     captured: dict[str, object] = {}
 
     def start_response(status: str, headers: list[tuple[str, str]]) -> None:
         captured["status"] = status
         captured["headers"] = dict(headers)
 
-    serve_frontend(start_response, frontend_root=root, subpath=subpath, cross_origin=cross_origin)
-    return str(captured["status"]), captured["headers"]  # type: ignore[return-value]
+    body = b"".join(serve_frontend(start_response, frontend_root=root, subpath=subpath, cross_origin=cross_origin, environ=environ))
+    return str(captured["status"]), captured["headers"], body  # type: ignore[return-value]
 
 
 def _serve_file_response(*, root: Path, file_response: dict[str, object], environ: dict[str, str]) -> tuple[str, dict[str, str], bytes]:

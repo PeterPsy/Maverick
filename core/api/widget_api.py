@@ -200,6 +200,7 @@ def handle_widget_api(
             subpath=subpath,
             spa_fallback=resolved.widget.frontend.spa_fallback and not public_widget_static_asset,
             cross_origin=public_widget_static_asset,
+            environ=environ,
         )
 
     return json_response(start_response, {"error": "method_not_allowed"}, status="405 Method Not Allowed")

@@ -291,6 +291,85 @@ describe("runtime event transcript projection", () => {
     ]);
   });
 
+  it("keeps projected inter-agent participant outputs in normal chat blocks", () => {
+    const researcherProjection = {
+      inter_agent_projection: "participant_runtime_event",
+      inter_agent_run_id: "run-1",
+      inter_agent_participant_id: "researcher",
+      inter_agent_participant_label: "Researcher",
+      inter_agent_participant_block_id: "researcher-block",
+    };
+    const reviewerProjection = {
+      inter_agent_projection: "participant_runtime_event",
+      inter_agent_run_id: "run-1",
+      inter_agent_participant_id: "reviewer",
+      inter_agent_participant_label: "Reviewer",
+      inter_agent_participant_block_id: "reviewer-block",
+    };
+
+    const messages = eventsToMessages([
+      event({
+        event_id: "root-queued",
+        event_type: "runtime.turn.queued",
+        payload: { input_text: "Coordinate this.", client_message_id: "client-root" },
+        created_at: "2026-04-19T00:00:00.000Z",
+      }),
+      event({
+        event_id: "research-tool",
+        event_type: "runtime.tool_call.completed",
+        payload: { ...researcherProjection, name: "web_search" },
+        created_at: "2026-04-19T00:00:01.000Z",
+      }),
+      event({
+        event_id: "research-delta",
+        event_type: "runtime.output.delta",
+        payload: { ...researcherProjection, text: "Found the source. " },
+        created_at: "2026-04-19T00:00:02.000Z",
+      }),
+      event({
+        event_id: "research-final",
+        event_type: "runtime.output.final",
+        payload: { ...researcherProjection, text: "Found the source. It checks out." },
+        created_at: "2026-04-19T00:00:03.000Z",
+      }),
+      event({
+        event_id: "review-final",
+        event_type: "runtime.output.final",
+        payload: { ...reviewerProjection, text: "Reviewer agrees." },
+        created_at: "2026-04-19T00:00:04.000Z",
+      }),
+    ]);
+
+    expect(messages).toMatchObject([
+      { id: "client-root", role: "human", content: "Coordinate this." },
+      {
+        id: "turn-1:inter-agent:researcher-block:tools:0",
+        role: "tool",
+        sourceLabel: "Researcher",
+        toolCalls: [{ name: "web_search" }],
+      },
+      {
+        id: "turn-1:inter-agent:researcher-block:agent:stream:0",
+        role: "agent",
+        sourceLabel: "Researcher",
+        content: "Found the source. ",
+        status: "complete",
+      },
+      {
+        id: "turn-1:inter-agent:researcher-block:agent",
+        role: "agent",
+        sourceLabel: "Researcher",
+        content: "It checks out.",
+      },
+      {
+        id: "turn-1:inter-agent:reviewer-block:agent",
+        role: "agent",
+        sourceLabel: "Reviewer",
+        content: "Reviewer agrees.",
+      },
+    ]);
+  });
+
   it("filters command execution output delta tool events from the chat transcript", () => {
     const messages = eventsToMessages([
       event({

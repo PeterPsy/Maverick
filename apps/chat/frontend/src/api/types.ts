@@ -371,6 +371,7 @@ export type ChatMessage = {
   toolCall?: ToolCallMessage;
   toolCalls?: ToolCallMessage[];
   step?: RuntimeStepMessage;
+  sourceLabel?: string;
 };
 
 export type AppAppReference = {

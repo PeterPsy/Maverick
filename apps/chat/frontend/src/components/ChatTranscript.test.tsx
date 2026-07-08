@@ -122,9 +122,61 @@ describe("ChatTranscript inter-agent board entry", () => {
     expect(boardButton?.classList.contains("is-normal")).toBe(true);
     expect(boardButton?.classList.contains("is-pending")).toBe(false);
   });
+
+  it("attaches the board opener to projected participant agent blocks", async () => {
+    container = document.createElement("div");
+    document.body.append(container);
+    root = createRoot(container);
+
+    await act(async () => {
+      root?.render(
+        <ChatTranscript
+          error={null}
+          interAgentRuns={[runDetail("completed")]}
+          isLoading={false}
+          loadingLabel="Thinking"
+          mentionItems={[]}
+          messages={[
+            interAgentStepMessage("completed", "turn-1:step:summary-event"),
+            {
+              ...agentMessage(),
+              id: "turn-1:inter-agent:researcher-block:agent",
+              sourceLabel: "Researcher",
+            },
+          ]}
+          onOpenInterAgentGraph={vi.fn()}
+        />,
+      );
+    });
+
+    expect(container.querySelector(".chatapp-agent-message-board")).not.toBeNull();
+    expect(container.querySelector(".chatapp-message-source")?.textContent).toContain("Researcher");
+  });
 });
 
 describe("ChatTranscript message copy", () => {
+  it("shows projected participant source labels on normal agent messages", async () => {
+    container = document.createElement("div");
+    document.body.append(container);
+    root = createRoot(container);
+
+    await act(async () => {
+      root?.render(
+        <ChatTranscript
+          error={null}
+          interAgentRuns={[]}
+          isLoading={false}
+          loadingLabel="Thinking"
+          mentionItems={[]}
+          messages={[{ ...message("agent-1", "agent", "Participant answer."), sourceLabel: "Researcher" }]}
+        />,
+      );
+    });
+
+    expect(container.querySelector(".chatapp-message-source")?.textContent).toContain("Researcher");
+    expect(container.textContent).toContain("Participant answer.");
+  });
+
   it("shows a copied check on agent copy buttons after clipboard write succeeds", async () => {
     vi.useFakeTimers();
     const writeText = vi.fn(async () => undefined);

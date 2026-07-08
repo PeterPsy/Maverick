@@ -55,6 +55,7 @@ export function MessageBubble({
         hasMobileFooter ? "has-mobile-message-footer" : ""
       }`}
     >
+      {message.sourceLabel && message.role !== "human" ? <MessageSource label={message.sourceLabel} /> : null}
       {message.role === "human" ? (
         <HumanMessage message={message} mentionItems={mentionItems} onCopyMessage={onCopyMessage} />
       ) : message.role === "system" ? (
@@ -89,6 +90,17 @@ export function MessageBubble({
       )}
       {isToolMessage ? null : <MessageMeta message={message} onCopyMessage={onCopyMessage} />}
     </article>
+  );
+}
+
+function MessageSource({ label }: { label: string }) {
+  return (
+    <div className="chatapp-message-source" aria-label={`Agent source: ${label}`}>
+      <span className="material-symbols-rounded" aria-hidden="true">
+        smart_toy
+      </span>
+      <span>{label}</span>
+    </div>
   );
 }
 

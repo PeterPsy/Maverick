@@ -335,14 +335,140 @@ class InterAgentExecutorTest(unittest.TestCase):
                 input_text="Run the async child.",
                 project_summaries=False,
                 async_runtime_turns=True,
+                root_runtime_turn_id="root-turn-async",
                 now=NOW,
             )
+
+        root_events = runtime_store.list_events("root-session")
 
         self.assertTrue(submit_async.called)
         self.assertEqual(result.run.status, "completed")
         self.assertEqual(len(result.participant_results), 1)
         self.assertEqual(result.participant_results[0].output_text, "Async child completed.")
         self.assertEqual(result.participant_results[0].status, "completed")
+        self.assertEqual([event.event_type for event in root_events], ["runtime.output.final"])
+        self.assertEqual(root_events[0].turn_id, "root-turn-async")
+        self.assertEqual(root_events[0].payload["inter_agent_participant_label"], "Researcher")
+
+    def test_async_runtime_participant_projects_chat_facing_events_to_root_turn(self) -> None:
+        _repo_root, store, runtime_store = self._stores()
+        service = InterAgentService(store)
+        run = service.create_run(
+            _run_spec(
+                run_id="runtime-root-projection",
+                participants=[_participant("researcher", "Researcher", execution_mode="child_runtime_session")],
+            ),
+            now=NOW,
+        )
+
+        def fake_submit_async(state, *, session, input_text, client_message_id=None):
+            turn_id = f"turn-{session.session_id}"
+            queued_turn = RuntimeTurnRecord(
+                turn_id=turn_id,
+                session_id=session.session_id,
+                workspace_id="default",
+                status="queued",
+                input_text=input_text,
+                created_at=NOW,
+                updated_at=NOW,
+                started_at=None,
+                completed_at=None,
+                failure_reason=None,
+            )
+            completed_turn = RuntimeTurnRecord(
+                turn_id=turn_id,
+                session_id=session.session_id,
+                workspace_id="default",
+                status="completed",
+                input_text=input_text,
+                created_at=NOW,
+                updated_at=NOW.replace(second=4),
+                started_at=NOW,
+                completed_at=NOW.replace(second=4),
+                failure_reason=None,
+            )
+            queued = RuntimeEventRecord(
+                event_id=f"event-queued-{session.session_id}",
+                workspace_id="default",
+                session_id=session.session_id,
+                plane="turn",
+                event_type="runtime.turn.queued",
+                turn_id=turn_id,
+                process_id=None,
+                payload={"input_text": input_text},
+                created_at=NOW,
+            )
+            tool = RuntimeEventRecord(
+                event_id=f"event-tool-{session.session_id}",
+                workspace_id="default",
+                session_id=session.session_id,
+                plane="turn",
+                event_type="runtime.tool_call.completed",
+                turn_id=turn_id,
+                process_id=None,
+                payload={"name": "web_search", "summary": "Searched the docs."},
+                created_at=NOW.replace(second=1),
+            )
+            delta = RuntimeEventRecord(
+                event_id=f"event-delta-{session.session_id}",
+                workspace_id="default",
+                session_id=session.session_id,
+                plane="turn",
+                event_type="runtime.output.delta",
+                turn_id=turn_id,
+                process_id=None,
+                payload={"text": "Partial result. "},
+                created_at=NOW.replace(second=2),
+            )
+            final = RuntimeEventRecord(
+                event_id=f"event-final-{session.session_id}",
+                workspace_id="default",
+                session_id=session.session_id,
+                plane="turn",
+                event_type="runtime.output.final",
+                turn_id=turn_id,
+                process_id=None,
+                payload={"text": "Partial result. Done."},
+                created_at=NOW.replace(second=3),
+            )
+            state.runtime_store.save_turn(queued_turn)
+            state.runtime_store.save_event(queued)
+            state.runtime_store.save_turn(completed_turn)
+            for event in (tool, delta, final):
+                state.runtime_store.save_event(event)
+            return queued_turn, [queued]
+
+        with (
+            patch("core.inter_agent.service.submit_runtime_turn", side_effect=AssertionError("sync path called")),
+            patch("core.inter_agent.service.submit_runtime_turn_async", side_effect=fake_submit_async),
+        ):
+            result = execute_inter_agent_run(
+                service,
+                _state(runtime_store),
+                workspace_id="default",
+                run_id=run.run_id,
+                input_text="Research projection.",
+                project_summaries=False,
+                async_runtime_turns=True,
+                root_runtime_turn_id="root-turn-projection",
+                now=NOW,
+            )
+
+        root_events = runtime_store.list_events("root-session")
+        root_payload = root_events[0].payload
+
+        self.assertEqual(result.run.status, "completed")
+        self.assertEqual(
+            [event.event_type for event in root_events],
+            ["runtime.tool_call.completed", "runtime.output.delta", "runtime.output.final"],
+        )
+        self.assertTrue(all(event.turn_id == "root-turn-projection" for event in root_events))
+        self.assertEqual(root_payload["inter_agent_projection"], "participant_runtime_event")
+        self.assertEqual(root_payload["inter_agent_participant_id"], "researcher")
+        self.assertEqual(root_payload["inter_agent_participant_label"], "Researcher")
+        self.assertIn("inter_agent_participant_block_id", root_payload)
+        self.assertNotIn("runtime_session_id", root_payload)
+        self.assertNotIn("runtime_turn_id", root_payload)
 
     def test_runtime_participant_requires_explicit_final_output_for_final_answer(self) -> None:
         _repo_root, store, runtime_store = self._stores()

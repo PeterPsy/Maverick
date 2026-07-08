@@ -1350,6 +1350,11 @@ def _execute_inter_agent_run_with_root_projection(
             allow_synthetic_participants=False,
             project_summaries=project_summaries,
             async_runtime_turns=async_runtime_turns,
+            root_runtime_turn_id=(
+                root_projection["turn"].turn_id
+                if root_projection is not None and hasattr(root_projection.get("turn"), "turn_id")
+                else None
+            ),
         )
         if root_projection is not None:
             _mark_root_inter_agent_turn_completed(

@@ -49,6 +49,32 @@ function structuredPayload(value: unknown): StructuredContent | null {
   return { kind, payload };
 }
 
+function stringPayload(value: unknown): string {
+  return typeof value === "string" ? value.trim() : "";
+}
+
+function isInterAgentParticipantProjection(event: RuntimeEvent): boolean {
+  return event.payload.inter_agent_projection === "participant_runtime_event";
+}
+
+function messageTurnId(event: RuntimeEvent): string {
+  const turnId = event.turn_id || event.event_id;
+  if (!isInterAgentParticipantProjection(event)) {
+    return turnId;
+  }
+  const blockId = stringPayload(event.payload.inter_agent_participant_block_id);
+  return blockId ? `${turnId}:inter-agent:${blockId}` : turnId;
+}
+
+function sourceLabelForEvent(event: RuntimeEvent): string {
+  return isInterAgentParticipantProjection(event) ? stringPayload(event.payload.inter_agent_participant_label) : "";
+}
+
+function sourceFieldsForEvent(event: RuntimeEvent): Pick<ChatMessage, "sourceLabel"> {
+  const sourceLabel = sourceLabelForEvent(event);
+  return sourceLabel ? { sourceLabel } : {};
+}
+
 function structuredPayloadKey(turnId: string, structured: StructuredContent): string {
   return `${turnId}:${JSON.stringify(structured)}`;
 }
@@ -222,11 +248,14 @@ function projectEventsToMessages(events: RuntimeEvent[]): ChatMessage[] {
   const orderedMessages: Array<{ order: number; sequence: number; message: ChatMessage }> = [];
   let messageSequence = 0;
   const seenUserTurns = new Set<string>();
-  const finalTurnIds = new Set(events.filter((event) => event.event_type === "runtime.output.final").map((event) => event.turn_id || event.event_id));
-  const outputSegmentsByTurn = new Map<string, { text: string; createdAt: string; index: number; order: number }>();
+  const finalTurnIds = new Set(events.filter((event) => event.event_type === "runtime.output.final").map(messageTurnId));
+  const outputSegmentsByTurn = new Map<string, { text: string; createdAt: string; index: number; order: number; sourceLabel: string }>();
   const nextOutputSegmentIndexByTurn = new Map<string, number>();
   const renderedOutputByTurn = new Map<string, string>();
-  const toolSegmentsByTurn = new Map<string, { createdAt: string; itemsByKey: Map<string, ToolCallMessage>; index: number; order: number }>();
+  const toolSegmentsByTurn = new Map<
+    string,
+    { createdAt: string; itemsByKey: Map<string, ToolCallMessage>; index: number; order: number; sourceLabel: string }
+  >();
   const nextToolSegmentIndexByTurn = new Map<string, number>();
   const renderedStructuredOutput = new Set<string>();
 
@@ -262,6 +291,7 @@ function projectEventsToMessages(events: RuntimeEvent[]): ChatMessage[] {
       content: segment.text,
       createdAt: segment.createdAt,
       status: closeActive ? "complete" : "pending",
+      ...(segment.sourceLabel ? { sourceLabel: segment.sourceLabel } : {}),
     }, segment.order);
     appendRenderedOutput(turnId, segment.text);
     if (closeActive) {
@@ -306,13 +336,15 @@ function projectEventsToMessages(events: RuntimeEvent[]): ChatMessage[] {
         status: hasFailedTool ? "failed" : "complete",
         toolCalls: items,
         toolCall: items[0],
+        ...(segment.sourceLabel ? { sourceLabel: segment.sourceLabel } : {}),
       }, segment.order);
     }
     toolSegmentsByTurn.delete(turnId);
   }
 
   for (const [eventIndex, event] of events.entries()) {
-    const turnId = event.turn_id || event.event_id;
+    const turnId = messageTurnId(event);
+    const sourceFields = sourceFieldsForEvent(event);
     if (event.event_type === "runtime.turn.queued" && !seenUserTurns.has(turnId)) {
       const input = event.payload.input_text;
       const clientMessageId = event.payload.client_message_id;
@@ -347,6 +379,7 @@ function projectEventsToMessages(events: RuntimeEvent[]): ChatMessage[] {
           createdAt: event.created_at,
           order: current ? current.order : eventIndex,
           index: current ? current.index : index,
+          sourceLabel: current?.sourceLabel || sourceLabelForEvent(event),
         });
       }
     }
@@ -363,6 +396,7 @@ function projectEventsToMessages(events: RuntimeEvent[]): ChatMessage[] {
           createdAt: event.created_at,
           status: "complete",
           structuredContent: structured,
+          ...sourceFields,
         }, eventIndex);
       }
     }
@@ -388,6 +422,7 @@ function projectEventsToMessages(events: RuntimeEvent[]): ChatMessage[] {
           createdAt: event.created_at,
           status: "complete",
           structuredContent: structured,
+          ...sourceFields,
         }, eventIndex);
       }
       if (text) {
@@ -397,6 +432,7 @@ function projectEventsToMessages(events: RuntimeEvent[]): ChatMessage[] {
           content: text,
           createdAt: event.created_at,
           status: "complete",
+          ...sourceFields,
         }, eventIndex);
       }
       pushLinkPreviews(turnId, event.event_id, finalText, eventIndex, event.created_at);
@@ -413,7 +449,13 @@ function projectEventsToMessages(events: RuntimeEvent[]): ChatMessage[] {
         const key = toolCallKey(toolCall);
         const index = nextToolSegmentIndexByTurn.get(turnId) || 0;
         nextToolSegmentIndexByTurn.set(turnId, index + 1);
-        toolSegmentsByTurn.set(turnId, { createdAt: event.created_at, itemsByKey: new Map([[key, toolCall]]), index, order: eventIndex });
+        toolSegmentsByTurn.set(turnId, {
+          createdAt: event.created_at,
+          itemsByKey: new Map([[key, toolCall]]),
+          index,
+          order: eventIndex,
+          sourceLabel: sourceLabelForEvent(event),
+        });
       }
       continue;
     }
@@ -428,6 +470,7 @@ function projectEventsToMessages(events: RuntimeEvent[]): ChatMessage[] {
         createdAt: event.created_at,
         status: "complete",
         step,
+        ...sourceFields,
       }, eventIndex);
     }
     if (event.event_type === "runtime.turn.failed") {
@@ -440,6 +483,7 @@ function projectEventsToMessages(events: RuntimeEvent[]): ChatMessage[] {
         content: error,
         createdAt: event.created_at,
         status: "failed",
+        ...sourceFields,
       }, eventIndex);
     }
     if (event.event_type === "runtime.turn.cancelled") {
@@ -452,6 +496,7 @@ function projectEventsToMessages(events: RuntimeEvent[]): ChatMessage[] {
         content: reason,
         createdAt: event.created_at,
         status: "failed",
+        ...sourceFields,
       }, eventIndex);
     }
   }

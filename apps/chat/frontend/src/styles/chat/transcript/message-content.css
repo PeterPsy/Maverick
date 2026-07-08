@@ -140,3 +140,28 @@
   border-left: 3px solid var(--maverick-accent-hover);
   color: var(--maverick-text-muted);
 }
+
+.chatapp-message-source {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.32rem;
+  width: max-content;
+  max-width: 100%;
+  min-width: 0;
+  margin-bottom: 0.35rem;
+  color: rgba(var(--maverick-contrast-rgb), 0.48);
+  font-size: 0.72rem;
+  line-height: 1.1;
+}
+
+.chatapp-message-source .material-symbols-rounded {
+  flex: 0 0 auto;
+  font-size: 0.92rem;
+}
+
+.chatapp-message-source span:last-child {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}

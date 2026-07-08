@@ -115,8 +115,14 @@ function chatMessageTurnId(message: ChatMessage): string {
   for (const marker of [":step:", ":agent:stream:", ":agent"]) {
     const index = message.id.indexOf(marker);
     if (index > 0) {
-      return message.id.slice(0, index);
+      return rootTurnIdFromProjectedParticipantTurnId(message.id.slice(0, index));
     }
   }
   return "";
+}
+
+function rootTurnIdFromProjectedParticipantTurnId(turnId: string): string {
+  const marker = ":inter-agent:";
+  const index = turnId.indexOf(marker);
+  return index > 0 ? turnId.slice(0, index) : turnId;
 }

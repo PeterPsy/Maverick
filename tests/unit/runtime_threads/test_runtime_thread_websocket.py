@@ -6,7 +6,7 @@ from datetime import UTC, datetime, timedelta
 from types import SimpleNamespace
 import unittest
 
-from core.api.runtime_thread_websocket import runtime_thread_snapshot_frame
+from core.api.runtime_thread_websocket import encode_thread_websocket_frame, runtime_thread_snapshot_frame
 from core.runtime.runtime_session import RuntimeSessionRecord
 from core.runtime.runtime_thread import RuntimeThreadRecord
 from core.runtime.runtime_turns import RuntimeTurnRecord
@@ -85,14 +85,17 @@ class RuntimeThreadWebSocketFrameTest(unittest.TestCase):
         frame = runtime_thread_snapshot_frame(state, workspace_id="default", viewer_user_id=None)
 
         self.assertEqual(frame["threads"][0]["availability"], "free")
-        self.assertEqual(frame["threads"][0]["last_completed_turn_id"], "turn-completed")
+        self.assertNotIn("last_completed_turn_id", frame["threads"][0])
+        self.assertNotIn("system_prompt", frame["threads"][0])
         self.assertEqual(store.get_thread("thread-stale").availability, "free")
+        self.assertEqual(store.get_thread("thread-stale").last_completed_turn_id, "turn-completed")
 
-    def test_snapshot_covers_current_thread_catalog_under_cap(self) -> None:
+    def test_snapshot_covers_complete_thread_catalog_with_summary_payload(self) -> None:
         store = self.make_store()
         state = SimpleNamespace(runtime_store=store)
         started_at = datetime(2026, 4, 19, 10, 0, tzinfo=UTC)
-        for index in range(55):
+        long_system_prompt = "Private prompt " + ("x" * 4000)
+        for index in range(275):
             updated_at = started_at + timedelta(minutes=index)
             store.save_session(
                 RuntimeSessionRecord(
@@ -109,17 +112,24 @@ class RuntimeThreadWebSocketFrameTest(unittest.TestCase):
                     updated_at=updated_at,
                     ended_at=None,
                     last_progress_at=updated_at,
+                    system_prompt=long_system_prompt,
                 )
             )
 
         frame = runtime_thread_snapshot_frame(state, workspace_id="default", viewer_user_id=None)
+        encoded = encode_thread_websocket_frame(frame)
 
-        self.assertEqual(len(frame["threads"]), 55)
-        self.assertEqual(frame["threads_page"]["items"], frame["threads"])
-        self.assertEqual(frame["threads_page"]["limit"], 250)
+        self.assertEqual(len(frame["threads"]), 275)
+        self.assertNotIn("items", frame["threads_page"])
+        self.assertEqual(frame["threads_page"]["limit"], 275)
         self.assertFalse(frame["threads_page"]["has_more"])
         self.assertIsNone(frame["threads_page"]["cursor"])
         self.assertEqual(frame["threads_page"]["sort"], "recency_desc")
+        self.assertEqual(frame["threads_page"]["total"], 275)
+        self.assertTrue(all("system_prompt" not in thread for thread in frame["threads"]))
+        self.assertTrue(all("provider_id" not in thread for thread in frame["threads"]))
+        self.assertTrue(all("title_generation_input_hash" not in thread for thread in frame["threads"]))
+        self.assertNotIn(long_system_prompt, encoded)
 
 
 if __name__ == "__main__":

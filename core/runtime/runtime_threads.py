@@ -30,7 +30,32 @@ def utcnow() -> datetime:
     return datetime.now(tz=UTC)
 
 
-def thread_payload(thread: RuntimeThreadRecord, *, viewer_user_id: str | None = None) -> dict[str, object]:
+def thread_summary_payload(thread: RuntimeThreadRecord, *, viewer_user_id: str | None = None) -> dict[str, object]:
+    payload: dict[str, object] = {
+        "thread_id": thread.thread_id,
+        "runtime_session_id": thread.runtime_session_id,
+        "title": thread.title,
+        "title_pending": thread.title_pending,
+        "agent_label": thread.agent_label,
+        "agent_type_id": thread.agent_type_id,
+        "agent_role_id": thread.agent_role_id,
+        "source_app_id": thread.source_app_id,
+        "project_id": thread.project_id,
+        "archived": thread.archived,
+        "availability": thread.availability,
+        "created_at": thread.created_at,
+        "updated_at": thread.updated_at,
+        "last_user_message_at": thread.last_user_message_at,
+        "last_completed_response_at": thread.last_completed_response_at,
+    }
+    payload["has_unread_completed_response"] = runtime_thread_has_unread_completed_response(
+        thread,
+        viewer_user_id=viewer_user_id,
+    )
+    return payload
+
+
+def thread_detail_payload(thread: RuntimeThreadRecord, *, viewer_user_id: str | None = None) -> dict[str, object]:
     payload = asdict(thread)
     payload.pop("completed_response_read_at_by_user_id", None)
     payload["has_unread_completed_response"] = runtime_thread_has_unread_completed_response(
@@ -38,6 +63,10 @@ def thread_payload(thread: RuntimeThreadRecord, *, viewer_user_id: str | None = 
         viewer_user_id=viewer_user_id,
     )
     return payload
+
+
+def thread_payload(thread: RuntimeThreadRecord, *, viewer_user_id: str | None = None) -> dict[str, object]:
+    return thread_detail_payload(thread, viewer_user_id=viewer_user_id)
 
 
 def thread_recency_key(thread: RuntimeThreadRecord) -> tuple[bool, datetime, datetime, str]:

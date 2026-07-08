@@ -248,7 +248,7 @@ class RuntimeThreadVisibilityApiTestCase(AppReferenceApiTestSupport, unittest.Te
         self.assertEqual(list_status, 200)
         self.assertEqual([thread["runtime_session_id"] for thread in list_payload["threads"]], ["visible-session"])
 
-    def test_runtime_thread_rest_catalog_is_bounded_to_initial_page(self) -> None:
+    def test_runtime_thread_rest_catalog_uses_summary_payload_without_duplicate_items(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             repo_root = self._repo_root(temp_dir)
             with patch.dict(
@@ -267,6 +267,7 @@ class RuntimeThreadVisibilityApiTestCase(AppReferenceApiTestSupport, unittest.Te
                     workspace_id="default",
                     agent_id="chat",
                     source_app_id="chat",
+                    system_prompt=f"Long private prompt {index:02d} " + ("x" * 2000),
                     thread_title=f"Archive thread {index:02d}",
                     start_path=repo_root,
                 )
@@ -293,18 +294,28 @@ class RuntimeThreadVisibilityApiTestCase(AppReferenceApiTestSupport, unittest.Te
                 path="/api/runtime/threads?query=visible-session-00",
                 cookie=cookie,
             )
+            detail_status, detail_payload, _headers = self._invoke(
+                app,
+                path="/api/runtime/threads/visible-session-00",
+                cookie=cookie,
+            )
 
         self.assertEqual(list_status, 200)
         self.assertEqual(len(list_payload["threads"]), 50)
-        self.assertEqual(list_payload["threads_page"]["items"], list_payload["threads"])
+        self.assertNotIn("items", list_payload["threads_page"])
         self.assertEqual(list_payload["threads_page"]["limit"], 50)
         self.assertTrue(list_payload["threads_page"]["has_more"])
         self.assertIsNotNone(list_payload["threads_page"]["cursor"])
         self.assertEqual(list_payload["threads_page"]["sort"], "recency_desc")
         self.assertTrue(list_payload["threads_page"]["cursor_found"])
+        self.assertEqual(list_payload["threads_page"]["total"], 55)
+        self.assertEqual(list_payload["threads_page"]["filtered_total"], 55)
+        self.assertTrue(all("system_prompt" not in thread for thread in list_payload["threads"]))
+        self.assertTrue(all("provider_id" not in thread for thread in list_payload["threads"]))
+        self.assertTrue(all("title_generation_input_hash" not in thread for thread in list_payload["threads"]))
         self.assertEqual(next_status, 200)
         self.assertEqual(len(next_payload["threads"]), 5)
-        self.assertEqual(next_payload["threads_page"]["items"], next_payload["threads"])
+        self.assertNotIn("items", next_payload["threads_page"])
         self.assertFalse(next_payload["threads_page"]["has_more"])
         self.assertIsNone(next_payload["threads_page"]["cursor"])
         self.assertTrue(next_payload["threads_page"]["cursor_found"])
@@ -320,6 +331,9 @@ class RuntimeThreadVisibilityApiTestCase(AppReferenceApiTestSupport, unittest.Te
         self.assertEqual(search_status, 200)
         self.assertEqual([thread["runtime_session_id"] for thread in search_payload["threads"]], ["visible-session-00"])
         self.assertEqual(search_payload["threads_page"]["query"], "visible-session-00")
+        self.assertEqual(detail_status, 200)
+        self.assertIn("system_prompt", detail_payload["thread"])
+        self.assertTrue(detail_payload["thread"]["system_prompt"].startswith("Long private prompt 00"))
 
     def test_invalid_runtime_session_visibility_is_controlled_for_raw_session_api(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:

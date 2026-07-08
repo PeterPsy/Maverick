@@ -35,7 +35,8 @@ from core.runtime.runtime_threads import (
     ensure_runtime_threads_for_sessions,
     find_runtime_thread_by_session,
     mark_runtime_thread_completed_response_read,
-    thread_payload,
+    thread_detail_payload,
+    thread_summary_payload,
     update_runtime_thread,
 )
 from core.runtime.thread_catalog_events import set_thread_availability
@@ -122,7 +123,6 @@ def _runtime_thread_page(
 ) -> dict[str, object]:
     with startup_timer("runtime.threads.rest_payload", workspace_id=workspace_id) as timing:
         sessions = state.runtime_store.list_sessions(workspace_id)
-        sessions_by_id = {session.session_id: session for session in sessions}
         threads = ensure_runtime_threads_for_sessions(
             state.runtime_store,
             workspace_id=workspace_id,
@@ -141,10 +141,8 @@ def _runtime_thread_page(
         bounded_limit = max(1, min(int(limit or RUNTIME_THREAD_PAGE_DEFAULT_LIMIT), RUNTIME_THREAD_PAGE_MAX_LIMIT))
         page_threads = threads[:bounded_limit]
         items = [
-            _thread_payload_with_runtime(
-                state,
+            thread_summary_payload(
                 thread,
-                session=sessions_by_id.get(thread.runtime_session_id),
                 viewer_user_id=viewer_user_id,
             )
             for thread in page_threads
@@ -152,13 +150,14 @@ def _runtime_thread_page(
         payload = {
             "threads": items,
             "threads_page": {
-                "items": items,
                 "limit": bounded_limit,
                 "has_more": len(threads) > bounded_limit,
                 "cursor": page_threads[-1].thread_id if len(threads) > bounded_limit and page_threads else None,
                 "sort": "recency_desc",
                 "query": normalized_query or None,
                 "cursor_found": cursor_found,
+                "total": total_thread_count,
+                "filtered_total": len(threads),
             },
         }
         timing["session_count"] = len(sessions)
@@ -200,23 +199,24 @@ def _thread_mutation_payload(
     viewer_user_id: str | None,
     action: str = "updated",
 ) -> dict[str, object]:
-    payload = _thread_payload_with_runtime(state, thread, viewer_user_id=viewer_user_id)
+    detail = _thread_detail_payload_with_runtime(state, thread, viewer_user_id=viewer_user_id)
+    summary = thread_summary_payload(thread, viewer_user_id=viewer_user_id)
     return {
-        "thread": payload,
-        "changed_thread": payload,
+        "thread": detail,
+        "changed_thread": summary,
         "action": action,
         "page_hint": {"sort": "recency_desc"},
     }
 
 
-def _thread_payload_with_runtime(
+def _thread_detail_payload_with_runtime(
     state: PlatformState,
     thread,
     *,
     session: RuntimeSessionRecord | None = None,
     viewer_user_id: str | None = None,
 ) -> dict[str, object]:
-    payload = thread_payload(thread, viewer_user_id=viewer_user_id)
+    payload = thread_detail_payload(thread, viewer_user_id=viewer_user_id)
     runtime_session = session
     if runtime_session is None and getattr(thread, "runtime_session_id", ""):
         try:
@@ -245,7 +245,7 @@ def _publish_thread_change(
         "action": action,
     }
     if thread is not None:
-        payload["thread"] = _thread_payload_with_runtime(state, thread)
+        payload["thread"] = thread_summary_payload(thread)
         payload["thread_id"] = thread.thread_id
     if deleted_thread_ids is not None:
         payload["deleted_thread_ids"] = deleted_thread_ids
@@ -466,7 +466,7 @@ def _runtime_turn_response_payload(
         "events": [_event_payload(event) for event in events],
     }
     if thread is not None:
-        payload["thread"] = _thread_payload_with_runtime(state, thread, viewer_user_id=context.user.user_id)
+        payload["thread"] = _thread_detail_payload_with_runtime(state, thread, viewer_user_id=context.user.user_id)
     return payload
 
 
@@ -977,7 +977,7 @@ def _handle_thread_item(
     if method == "GET":
         return json_response(
             start_response,
-            {"thread": _thread_payload_with_runtime(state, thread, viewer_user_id=context.user.user_id)},
+            {"thread": _thread_detail_payload_with_runtime(state, thread, viewer_user_id=context.user.user_id)},
         )
     if method == "PATCH":
         try:

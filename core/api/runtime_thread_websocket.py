@@ -10,10 +10,8 @@ from typing import TYPE_CHECKING, Any, Awaitable, Callable
 
 from core.api.http import json_default
 from core.api.session_api import resolve_request_session
-from core.observability.startup_performance import startup_performance_enabled, startup_timer
-from core.runtime.plain_hosted_text import queue_provider_id_for_session
-from core.runtime.errors import RuntimeSessionNotFoundError
-from core.runtime.runtime_threads import ensure_runtime_threads_for_sessions, thread_payload, thread_recency_key
+from core.observability.startup_performance import startup_timer
+from core.runtime.runtime_threads import ensure_runtime_threads_for_sessions, thread_recency_key, thread_summary_payload
 from core.shared.entrypoints import EntrypointShutdownController
 
 if TYPE_CHECKING:
@@ -26,7 +24,6 @@ AsgiSend = Callable[[dict[str, Any]], Awaitable[None]]
 RUNTIME_THREADS_WS_PATH = "/ws/runtime/threads"
 WEBSOCKET_UNAUTHORIZED = 4401
 WEBSOCKET_NOT_FOUND = 4404
-RUNTIME_THREAD_SNAPSHOT_LIMIT = 250
 
 
 def runtime_thread_websocket_manifest() -> dict[str, object]:
@@ -69,37 +66,33 @@ def runtime_thread_snapshot_frame(state: PlatformState, *, workspace_id: str, vi
     """Build the current workspace runtime thread catalog snapshot."""
     with startup_timer("runtime.threads.websocket_snapshot", workspace_id=workspace_id) as timing:
         sessions = state.runtime_store.list_sessions(workspace_id)
-        sessions_by_id = {session.session_id: session for session in sessions}
         threads = _ordered_runtime_threads(state, workspace_id=workspace_id, sessions=sessions)
-        page_threads = threads[:RUNTIME_THREAD_SNAPSHOT_LIMIT]
         items = [
-            _thread_payload_with_runtime(
-                state,
+            thread_summary_payload(
                 thread,
-                session=sessions_by_id.get(thread.runtime_session_id),
                 viewer_user_id=viewer_user_id,
             )
-            for thread in page_threads
+            for thread in threads
         ]
         frame = {
             "type": "runtime.thread.snapshot",
             "workspace_id": workspace_id,
             "threads": items,
             "threads_page": {
-                "items": items,
-                "limit": RUNTIME_THREAD_SNAPSHOT_LIMIT,
-                "has_more": len(threads) > RUNTIME_THREAD_SNAPSHOT_LIMIT,
-                "cursor": page_threads[-1].thread_id if len(threads) > RUNTIME_THREAD_SNAPSHOT_LIMIT and page_threads else None,
+                "limit": len(items),
+                "has_more": False,
+                "cursor": None,
                 "sort": "recency_desc",
                 "query": None,
+                "total": len(threads),
+                "filtered_total": len(threads),
             },
             "at": datetime.now(tz=UTC),
         }
         timing["session_count"] = len(sessions)
         timing["thread_count"] = len(items)
         timing["total_thread_count"] = len(threads)
-        if startup_performance_enabled():
-            timing["encoded_bytes"] = len(encode_thread_websocket_frame(frame).encode("utf-8"))
+        timing["encoded_bytes"] = len(encode_thread_websocket_frame(frame).encode("utf-8"))
         return frame
 
 
@@ -125,25 +118,8 @@ def runtime_thread_changed_frame(
         with suppress(Exception):
             thread = state.runtime_store.get_thread(thread_id)
             if thread.workspace_id == workspace_id:
-                frame["thread"] = _thread_payload_with_runtime(state, thread, viewer_user_id=viewer_user_id)
+                frame["thread"] = thread_summary_payload(thread, viewer_user_id=viewer_user_id)
     return frame
-
-
-def _thread_payload_with_runtime(state: PlatformState, thread, *, session=None, viewer_user_id: str | None = None) -> dict[str, Any]:
-    payload = thread_payload(thread, viewer_user_id=viewer_user_id)
-    runtime_session = session
-    if runtime_session is None and getattr(thread, "runtime_session_id", ""):
-        try:
-            runtime_session = state.runtime_store.get_session(thread.runtime_session_id)
-        except (RuntimeSessionNotFoundError, ValueError):
-            runtime_session = None
-    if runtime_session is None:
-        return payload
-    payload["runtime_mode"] = runtime_session.runtime_mode
-    payload["provider_id"] = runtime_session.provider_id or queue_provider_id_for_session(runtime_session)
-    payload["hosted_provider_id"] = runtime_session.hosted_provider_id
-    payload["hosted_model_id"] = runtime_session.hosted_model_id
-    return payload
 
 
 def _ordered_runtime_threads(state: PlatformState, *, workspace_id: str, sessions=None):

@@ -171,12 +171,12 @@ describe("runtime event client calls", () => {
   });
 
   it("loads bounded runtime thread search results", async () => {
-    const fetchMock = vi.fn(async () => jsonResponse({ threads: [], threads_page: { items: [], limit: 50, has_more: false, cursor: null, sort: "recency_desc", query: "archive thread" } }));
+    const fetchMock = vi.fn(async () => jsonResponse({ threads: [], threads_page: { limit: 50, has_more: false, cursor: null, sort: "recency_desc", query: "archive thread" } }));
     vi.stubGlobal("fetch", fetchMock);
 
     await expect(listRuntimeThreads({ query: "archive thread", limit: 50 })).resolves.toEqual({
       threads: [],
-      threads_page: { items: [], limit: 50, has_more: false, cursor: null, sort: "recency_desc", query: "archive thread" },
+      threads_page: { limit: 50, has_more: false, cursor: null, sort: "recency_desc", query: "archive thread" },
     });
 
     expect(fetchMock).toHaveBeenCalledWith(
@@ -190,13 +190,13 @@ describe("runtime event client calls", () => {
 
   it("passes runtime thread page cursors", async () => {
     const fetchMock = vi.fn(async () =>
-      jsonResponse({ threads: [], threads_page: { items: [], limit: 50, has_more: false, cursor: null, sort: "recency_desc", cursor_found: true } }),
+      jsonResponse({ threads: [], threads_page: { limit: 50, has_more: false, cursor: null, sort: "recency_desc", cursor_found: true } }),
     );
     vi.stubGlobal("fetch", fetchMock);
 
     await expect(listRuntimeThreads({ cursor: "thread-50", limit: 50 })).resolves.toEqual({
       threads: [],
-      threads_page: { items: [], limit: 50, has_more: false, cursor: null, sort: "recency_desc", cursor_found: true },
+      threads_page: { limit: 50, has_more: false, cursor: null, sort: "recency_desc", cursor_found: true },
     });
 
     expect(fetchMock).toHaveBeenCalledWith(

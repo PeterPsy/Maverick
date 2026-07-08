@@ -214,18 +214,15 @@ export type SpeechTranscribeOptions = {
   dictation?: boolean;
 };
 
-export type ChatThread = {
+export type ChatThreadSummary = {
   thread_id: string;
   runtime_session_id: string;
   title: string;
   title_pending?: boolean;
-  title_source?: string;
-  title_generation_failure?: string | null;
   agent_label: string;
   agent_type_id: string;
   agent_role_id: string;
   source_app_id: string;
-  system_prompt: string;
   project_id: string | null;
   archived: boolean;
   availability: string;
@@ -233,8 +230,14 @@ export type ChatThread = {
   updated_at: string;
   last_user_message_at?: string | null;
   last_completed_response_at?: string | null;
-  last_completed_turn_id?: string | null;
   has_unread_completed_response?: boolean;
+};
+
+export type ChatThread = ChatThreadSummary & {
+  title_source?: string;
+  title_generation_failure?: string | null;
+  system_prompt?: string;
+  last_completed_turn_id?: string | null;
   runtime_mode?: "agentic" | "plain_hosted_chat" | string;
   provider_id?: string | null;
   hosted_provider_id?: string | null;
@@ -249,13 +252,15 @@ export type ChatProject = {
 };
 
 export type RuntimeThreadsPage = {
-  items: ChatThread[];
+  items?: ChatThread[];
   limit: number;
   has_more: boolean;
   cursor: string | null;
   cursor_found?: boolean;
   sort: string;
   query?: string | null;
+  total?: number;
+  filtered_total?: number;
 };
 
 export type ChatSidebarPayload = {

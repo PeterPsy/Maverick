@@ -106,3 +106,20 @@ The main Chat JS asset changed to
 208,141 gzip bytes. The composer can now become interactive after the
 conversation target and core dependencies resolve, while the agent catalog
 continues loading in the background.
+
+## PR1c Measurement
+
+After splitting provider setup from runtime-session inventory,
+`python3 scripts/startup_performance_baseline.py` reported:
+
+| App | Raw bytes | Gzip bytes | Files |
+| --- | ---: | ---: | ---: |
+| `base-shell` | 374,327 | 105,847 | 4 |
+| `chat` | 1,227,854 | 344,289 | 20 |
+
+The base-shell authenticated entry asset changed to
+`apps/base-shell/frontend/dist/assets/index-C0Qec5qD.js` at 276,443 raw bytes
+and 84,768 gzip bytes. Initial provider setup now uses
+`/api/settings/provider-setup`; cleanup-scope runtime inventory is loaded from
+`/api/settings/runtime-sessions` by the Settings app instead of the shell
+bootstrap path.

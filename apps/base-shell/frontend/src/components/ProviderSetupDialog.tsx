@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { PlatformSettings, ProviderItem } from "../api";
+import { ProviderItem, ProviderSetupSettings } from "../api";
 import { Button, Dialog, Surface } from "../ui";
 import { defaultReasoningForOption, usableModelOptions, withReasoningFallback } from "./providerModelOptions";
 
@@ -25,7 +25,7 @@ function selectedProvider(providers: ProviderItem[], preferredProviderId?: strin
 }
 
 export function buildProviderSetupDraft(
-  settings: PlatformSettings | null,
+  settings: ProviderSetupSettings | null,
   previous: Partial<ProviderSetupDraft> = {},
 ): ProviderSetupDraft {
   const providers = settings?.provider.available_providers || [];
@@ -57,7 +57,7 @@ export function ProviderSetupDialog({
   onClose: () => void;
   onConfigure: (payload: ProviderSetupPayload) => Promise<void>;
   open: boolean;
-  settings: PlatformSettings | null;
+  settings: ProviderSetupSettings | null;
 }) {
   const providers = settings?.provider.available_providers || [];
   const [draft, setDraft] = useState<ProviderSetupDraft>(() => buildProviderSetupDraft(settings));

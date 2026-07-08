@@ -322,6 +322,12 @@ export type RuntimeCleanupPayload = {
   sessions: RuntimeSessionItem[];
 };
 
+export type RuntimeSessionInventoryPayload = {
+  items: RuntimeSessionItem[];
+  cleanup_allowed?: boolean;
+  cleanup_scope?: 'none' | 'workspace' | 'server';
+};
+
 export type PlatformSettings = {
   user: SessionUser;
   workspace: WorkspaceItem;
@@ -419,6 +425,10 @@ export function saveAppDependencySelection(
 
 export function getPlatformSettings(): Promise<PlatformSettings> {
   return requestJson<PlatformSettings>('/api/settings/platform');
+}
+
+export function getRuntimeSessionInventory(): Promise<RuntimeSessionInventoryPayload> {
+  return requestJson<RuntimeSessionInventoryPayload>('/api/settings/runtime-sessions');
 }
 
 export function configureActiveProvider(payload: {

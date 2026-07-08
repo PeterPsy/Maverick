@@ -3,13 +3,13 @@ import type { CSSProperties } from "react";
 import {
   AppRegistryItem,
   configureActiveProvider,
-  getPlatformSettings,
+  getProviderSetupSettings,
   getSession,
   listApps,
   listPinnedApps,
   listWorkspaces,
   logout,
-  PlatformSettings,
+  ProviderSetupSettings,
   savePinnedApps,
   SessionPayload,
   switchWorkspace,
@@ -59,7 +59,7 @@ export function AppShell() {
   const [pinnedAppIds, setPinnedAppIds] = useState<string[]>(["chat"]);
   const [session, setSession] = useState<SessionPayload | null>(null);
   const [workspaces, setWorkspaces] = useState<WorkspaceItem[]>([]);
-  const [settings, setSettings] = useState<PlatformSettings | null>(null);
+  const [settings, setSettings] = useState<ProviderSetupSettings | null>(null);
   const [activeAppId, setActiveAppId] = useState<string | null>(initialActiveAppId);
   const [activeAppParams, setActiveAppParams] = useState<Record<string, string | boolean | null>>(initialLaunchRoute.params);
   const [sidebarMode, setSidebarMode] = useState<SidebarMode>(isInitialChatLaunch ? "rail" : initialSession.sidebarMode);
@@ -262,15 +262,15 @@ export function AppShell() {
   async function loadDeferredShellState(loadVersion: number) {
     const deferredStartedAt = performance.now();
     try {
-      const [workspacePayload, platformSettings] = await Promise.all([
+      const [workspacePayload, providerSetupSettings] = await Promise.all([
         listWorkspaces(),
-        getPlatformSettings(),
+        getProviderSetupSettings(),
       ]);
       if (shellLoadVersionRef.current !== loadVersion) {
         return;
       }
       setWorkspaces(workspacePayload.items);
-      setSettings(platformSettings);
+      setSettings(providerSetupSettings);
       measureStartupMetric("shell.bootstrap.deferred_payloads", deferredStartedAt, {
         workspace_count: workspacePayload.items.length,
       });
@@ -530,7 +530,7 @@ export function AppShell() {
     model_reasoning_effort?: string | null;
   }) {
     await configureActiveProvider(payload);
-    setSettings(await getPlatformSettings());
+    setSettings(await getProviderSetupSettings());
     setDismissedProviderSetupWorkspaceId(null);
   }
 

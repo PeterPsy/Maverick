@@ -37,13 +37,21 @@ def platform_settings_payload(state: PlatformState, context: RequestSession) -> 
     cleanup_scope = _runtime_cleanup_scope(state, context)
     runtime_status["cleanup_allowed"] = cleanup_scope != "none"
     runtime_status["cleanup_scope"] = cleanup_scope
-    runtime_status["all_sessions"] = runtime_session_inventory(state, context)
     return {
         "user": public_user_payload(context.user),
         "workspace": workspace_payload(state, context.workspace_id),
         "provider": workspace_provider_status(state, workspace_id=context.workspace_id),
         "runtime": runtime_status,
         "recovery": recovery_status(state.recovery_store, workspace_id=context.workspace_id),
+    }
+
+
+def provider_setup_settings_payload(state: PlatformState, context: RequestSession) -> dict[str, object]:
+    """Return only the data required by the initial provider setup UX."""
+    return {
+        "user": public_user_payload(context.user),
+        "workspace": workspace_payload(state, context.workspace_id),
+        "provider": workspace_provider_status(state, workspace_id=context.workspace_id),
     }
 
 
@@ -239,6 +247,7 @@ def handle_settings_api(state: PlatformState, environ: dict, start_response: Sta
     method = environ.get("REQUEST_METHOD", "GET").upper()
     owned_paths = {
         "/api/settings/platform",
+        "/api/settings/provider-setup",
         "/api/settings/workspace",
         "/api/settings/runtime-sessions",
         "/api/settings/runtime-sessions/clear",
@@ -255,6 +264,8 @@ def handle_settings_api(state: PlatformState, environ: dict, start_response: Sta
 
     if path == "/api/settings/platform" and method == "GET":
         return json_response(start_response, platform_settings_payload(state, context))
+    if path == "/api/settings/provider-setup" and method == "GET":
+        return json_response(start_response, provider_setup_settings_payload(state, context))
     if path == "/api/settings/runtime-sessions" and method == "GET":
         return json_response(
             start_response,

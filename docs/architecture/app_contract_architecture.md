@@ -1224,7 +1224,9 @@ The shell attaches only to platform protocols such as:
 - `/api/apps` for enabled app registry data
 - `/api/status` for platform status
 - `/api/providers/active` and `/api/runtime/status` for runtime provider indicators
+- `/api/settings/provider-setup` for shell provider setup metadata
 - `/api/settings/platform` for generic settings metadata
+- `/api/settings/runtime-sessions` for cleanup-scope runtime inventory
 - `/api/recovery/status` and related recovery routes for operator status where appropriate
 - mounted app frontend routes under `/apps/<mount_app_id>/`
 - mounted app backend routes under `/api/apps/<mount_app_id>/...`

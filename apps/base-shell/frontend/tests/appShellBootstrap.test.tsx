@@ -9,6 +9,7 @@ import { AppShell } from "../src/AppShell";
 const api = vi.hoisted(() => ({
   configureActiveProvider: vi.fn(),
   getPlatformSettings: vi.fn(),
+  getProviderSetupSettings: vi.fn(),
   getPlatformStatus: vi.fn(),
   getSession: vi.fn(),
   listApps: vi.fn(),
@@ -25,6 +26,7 @@ vi.mock("../src/api", async (importOriginal) => {
     ...actual,
     configureActiveProvider: api.configureActiveProvider,
     getPlatformSettings: api.getPlatformSettings,
+    getProviderSetupSettings: api.getProviderSetupSettings,
     getPlatformStatus: api.getPlatformStatus,
     getSession: api.getSession,
     listApps: api.listApps,
@@ -65,7 +67,8 @@ describe("AppShell bootstrap", () => {
     api.listApps.mockResolvedValue({ items: [app("chat")] });
     api.listPinnedApps.mockResolvedValue({ pinned_apps: ["chat"] });
     api.listWorkspaces.mockResolvedValue({ active_workspace_id: "default", items: [workspace("default")] });
-    api.getPlatformSettings.mockResolvedValue(platformSettings());
+    api.getPlatformSettings.mockRejectedValue(new Error("/api/settings/platform should not be part of shell bootstrap"));
+    api.getProviderSetupSettings.mockResolvedValue(platformSettings());
     api.getPlatformStatus.mockRejectedValue(new Error("/api/status should not be part of shell bootstrap"));
   });
 
@@ -85,6 +88,8 @@ describe("AppShell bootstrap", () => {
     expect(view?.getAttribute("data-workspace-id")).toBe("default");
     expect(view?.getAttribute("data-loading")).toBe("false");
     expect(api.getPlatformStatus).not.toHaveBeenCalled();
+    expect(api.getPlatformSettings).not.toHaveBeenCalled();
+    expect(api.getProviderSetupSettings).toHaveBeenCalled();
   });
 });
 

@@ -740,7 +740,8 @@ The first shell-facing API slice is intentionally core-generic, not `base-shell`
 - `/api/app-store/apps`, `/api/app-store/server-apps`, `/api/app-store/installations`, `/api/app-store/install`, `/api/app-store/install-server`, `/api/app-store/install-local`, and `/api/app-store/uninstall` expose authenticated remote catalog reads, installation-level server app source reads, workspace installation state, remote app installation, registered server source installation, workspace-local app installation, and workspace binding removal
 - `/api/status` exposes platform status for the active workspace
 - `/api/providers/active` and `/api/runtime/status` expose active runtime provider and runtime sessions
-- `/api/settings/platform` exposes read-only platform/workspace/provider/runtime/recovery metadata for settings UI
+- `/api/settings/provider-setup` exposes the minimal user/workspace/provider payload used by `base-shell` for initial provider setup without loading runtime-session inventory
+- `/api/settings/platform` exposes read-only platform/workspace/provider/runtime/recovery metadata for settings UI, excluding cleanup-scope runtime inventory
 - `/api/settings/runtime-sessions` and `/api/settings/runtime-sessions/clear` expose the runtime-session inventory in the cleanup scope of the active workspace and the cleanup action used by app-owned settings workflows
 - when the active workspace is `default`, only a platform admin may use settings cleanup and the scope expands to every workspace on the server
 - when the active workspace is not `default`, cleanup stays limited to that active workspace and is available to platform admins plus admins of that workspace
@@ -751,7 +752,7 @@ These APIs are platform capabilities that any suitable shell app may consume.
 
 They do not make the core own shell UX, chat project organization, or app-specific settings panels.
 
-When `/api/settings/platform` reports `active_provider: null`, `base-shell` may show an initial provider setup dialog backed by `/api/providers/active`. That dialog is shell UX over generic provider-selection governance; it must not silently select a provider in browser state or make Chat own the workspace-wide provider choice.
+When `/api/settings/provider-setup` reports `active_provider: null`, `base-shell` may show an initial provider setup dialog backed by `/api/providers/active`. That dialog is shell UX over generic provider-selection governance; it must not silently select a provider in browser state, load runtime-session inventory, or make Chat own the workspace-wide provider choice.
 
 Admin-facing apps must still stay app-agnostic at the core boundary.
 

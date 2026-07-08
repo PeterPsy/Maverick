@@ -218,6 +218,8 @@ export type PlatformSettings = {
   recovery: Record<string, unknown>;
 };
 
+export type ProviderSetupSettings = Pick<PlatformSettings, "user" | "workspace" | "provider"> & Partial<Pick<PlatformSettings, "runtime" | "recovery">>;
+
 export type WidgetRegistryItem = {
   owner_app_id: string;
   widget_id: string;
@@ -485,6 +487,10 @@ export function getRuntimeStatus(): Promise<RuntimeStatus> {
 
 export function getPlatformSettings(): Promise<PlatformSettings> {
   return requestJson<PlatformSettings>("/api/settings/platform");
+}
+
+export function getProviderSetupSettings(): Promise<ProviderSetupSettings> {
+  return requestJson<ProviderSetupSettings>("/api/settings/provider-setup");
 }
 
 export function runtimeThreadWebSocketUrl(): string {

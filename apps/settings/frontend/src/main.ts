@@ -25,6 +25,7 @@ import {
   type Workspace,
   type WorkspaceApp
 } from './adminApi';
+import { loadPlatformSettingsWithRuntimeInventory, mergeRuntimeSessionInventory } from './settingsRuntimeInventory';
 import {
   createSettingsPanelState,
   settingsPanelHtml,
@@ -201,7 +202,7 @@ async function requestPersistenceStatusQuiet(): Promise<PersistenceStatus | null
 
 async function requestPlatformSettingsQuiet(): Promise<PlatformSettings | null> {
   try {
-    return await getPlatformSettings();
+    return await loadPlatformSettingsWithRuntimeInventory();
   } catch {
     return null;
   }
@@ -353,7 +354,7 @@ async function clearRuntimeSessionsFromPanel(sessionIds?: string[]) {
   try {
     const payload = await clearRuntimeSessions(scopedIds.length ? scopedIds : undefined);
     publishRuntimeCleanupChanged(payload);
-    platformSettings = await getPlatformSettings();
+    platformSettings = mergeRuntimeSessionInventory(await getPlatformSettings(), payload);
     syncSettingsPanelDraft(settingsPanelState, platformSettings);
     notice = {
       tone: 'success',

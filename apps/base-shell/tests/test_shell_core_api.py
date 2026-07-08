@@ -531,6 +531,11 @@ class ShellCoreApiTestCase(unittest.TestCase):
         )
         status_runtime, runtime, _runtime_headers = self.invoke(app, path="/api/runtime/status", cookie=cookie)
         status_settings, settings, _settings_headers = self.invoke(app, path="/api/settings/platform", cookie=cookie)
+        status_provider_setup, provider_setup, _provider_setup_headers = self.invoke(
+            app,
+            path="/api/settings/provider-setup",
+            cookie=cookie,
+        )
         status_runtime_inventory, runtime_inventory, _inventory_headers = self.invoke(
             app,
             path="/api/settings/runtime-sessions",
@@ -565,7 +570,12 @@ class ShellCoreApiTestCase(unittest.TestCase):
         self.assertEqual(settings["workspace"]["workspace_id"], "default")
         self.assertTrue(settings["runtime"]["cleanup_allowed"])
         self.assertEqual(settings["runtime"]["cleanup_scope"], "server")
-        self.assertEqual({item["workspace_id"] for item in settings["runtime"]["all_sessions"]}, {"default", "runtime-lab"})
+        self.assertNotIn("all_sessions", settings["runtime"])
+        self.assertEqual(status_provider_setup, 200)
+        self.assertEqual(provider_setup["provider"]["active_provider"]["label"], "Codex")
+        self.assertEqual(provider_setup["workspace"]["workspace_id"], "default")
+        self.assertNotIn("runtime", provider_setup)
+        self.assertNotIn("recovery", provider_setup)
         self.assertEqual(status_runtime_inventory, 200)
         self.assertEqual({item["workspace_id"] for item in runtime_inventory["items"]}, {"default", "runtime-lab"})
         self.assertEqual(status_clear, 200)
@@ -674,6 +684,11 @@ class ShellCoreApiTestCase(unittest.TestCase):
         workspace_admin_cookie = self.login_as(app, username="workspace.admin", password="workspace-admin-pass")
 
         status_settings, settings, _ = self.invoke(app, path="/api/settings/platform", cookie=workspace_admin_cookie)
+        status_provider_setup, provider_setup, _ = self.invoke(
+            app,
+            path="/api/settings/provider-setup",
+            cookie=workspace_admin_cookie,
+        )
         status_runtime_inventory, runtime_inventory, _ = self.invoke(app, path="/api/settings/runtime-sessions", cookie=workspace_admin_cookie)
         status_clear, clear_result, _ = self.invoke(
             app,
@@ -687,7 +702,10 @@ class ShellCoreApiTestCase(unittest.TestCase):
         self.assertEqual(settings["workspace"]["workspace_id"], created_workspace["workspace_id"])
         self.assertTrue(settings["runtime"]["cleanup_allowed"])
         self.assertEqual(settings["runtime"]["cleanup_scope"], "workspace")
-        self.assertEqual({item["workspace_id"] for item in settings["runtime"]["all_sessions"]}, {created_workspace["workspace_id"]})
+        self.assertNotIn("all_sessions", settings["runtime"])
+        self.assertEqual(status_provider_setup, 200)
+        self.assertEqual(provider_setup["workspace"]["workspace_id"], created_workspace["workspace_id"])
+        self.assertNotIn("runtime", provider_setup)
         self.assertEqual(status_runtime_inventory, 200)
         self.assertEqual({item["workspace_id"] for item in runtime_inventory["items"]}, {created_workspace["workspace_id"]})
         self.assertEqual(status_clear, 200)

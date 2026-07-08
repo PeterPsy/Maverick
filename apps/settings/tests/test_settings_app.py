@@ -272,6 +272,7 @@ assert.ok((html.match(/auto default/g) || []).length >= 5);
         self.assertNotIn("Audio transcription uses Nova-3", settings_source)
         self.assertNotIn("OpenRouter governs", settings_source)
         self.assertIn("runtime engine remains Codex", settings_source)
+        self.assertIn("/api/settings/runtime-sessions", api_source)
         self.assertIn("/api/settings/runtime-sessions/clear", api_source)
 
     def test_settings_panel_renders_openrouter_hosted_models_separately_from_codex(self) -> None:

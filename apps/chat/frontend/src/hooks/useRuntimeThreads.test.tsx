@@ -6,6 +6,7 @@ import { createRoot } from "react-dom/client";
 import type { Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { ChatThread } from "../api/client";
+import { resetRuntimeThreadSourceForTests } from "./runtimeThreadSource";
 import { useRuntimeThreads } from "./useRuntimeThreads";
 
 class MockWebSocket {
@@ -46,12 +47,16 @@ function RuntimeThreadsProbe({ onError, onThreads }: { onError: (error: string |
 describe("useRuntimeThreads", () => {
   let container: HTMLDivElement;
   let root: Root;
+  let originalBroadcastChannel: typeof BroadcastChannel | undefined;
   let originalWebSocket: typeof WebSocket | undefined;
 
   beforeEach(() => {
     vi.useFakeTimers();
+    resetRuntimeThreadSourceForTests();
     MockWebSocket.instances = [];
+    originalBroadcastChannel = globalThis.BroadcastChannel;
     originalWebSocket = globalThis.WebSocket;
+    globalThis.BroadcastChannel = undefined as unknown as typeof BroadcastChannel;
     globalThis.WebSocket = MockWebSocket as unknown as typeof WebSocket;
     container = document.createElement("div");
     document.body.append(container);
@@ -63,7 +68,9 @@ describe("useRuntimeThreads", () => {
       root.unmount();
     });
     container.remove();
+    globalThis.BroadcastChannel = originalBroadcastChannel as typeof BroadcastChannel;
     globalThis.WebSocket = originalWebSocket as typeof WebSocket;
+    resetRuntimeThreadSourceForTests();
     vi.useRealTimers();
   });
 
@@ -151,6 +158,31 @@ describe("useRuntimeThreads", () => {
     });
 
     expect(onThreads).toHaveBeenLastCalledWith([secondThread]);
+  });
+
+  it("shares one WebSocket across multiple hook subscribers in one frame", async () => {
+    const firstThreads = vi.fn();
+    const secondThreads = vi.fn();
+    await act(async () => {
+      root.render(
+        <>
+          <RuntimeThreadsProbe onError={() => undefined} onThreads={firstThreads} />
+          <RuntimeThreadsProbe onError={() => undefined} onThreads={secondThreads} />
+        </>,
+      );
+    });
+
+    expect(MockWebSocket.instances).toHaveLength(1);
+
+    const firstThread = thread({ thread_id: "thread-1", runtime_session_id: "session-1", title: "First" });
+    await act(async () => {
+      MockWebSocket.instances[0].onmessage?.({
+        data: JSON.stringify({ type: "runtime.thread.snapshot", workspace_id: "default", threads: [firstThread], at: "2026-06-29T00:00:00.000Z" }),
+      } as MessageEvent);
+    });
+
+    expect(firstThreads).toHaveBeenLastCalledWith([firstThread]);
+    expect(secondThreads).toHaveBeenLastCalledWith([firstThread]);
   });
 });
 

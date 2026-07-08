@@ -46,7 +46,23 @@ vi.mock("./hooks/useRuntimeThreads", async () => {
   };
 });
 
+const MockApiError = vi.hoisted(
+  () =>
+    class MockApiError extends Error {
+      path: string;
+      status: number;
+
+      constructor(message: string, { path, status }: { path: string; status: number }) {
+        super(message);
+        this.name = "ApiError";
+        this.path = path;
+        this.status = status;
+      }
+    },
+);
+
 vi.mock("./api/client", () => ({
+  ApiError: MockApiError,
   applyThreadCatalogPayload: vi.fn((current: ChatThread[], payload: { changed_thread?: ChatThread; thread?: ChatThread; threads?: ChatThread[] }) => {
     if (Array.isArray(payload.threads)) {
       return payload.threads;
@@ -64,6 +80,12 @@ vi.mock("./api/client", () => ({
   executeInterAgentRun: vi.fn(),
   getAgentDefinition: vi.fn(),
   getAppDependencies: vi.fn(),
+  getRuntimeThread: vi.fn(async (threadId: string) => {
+    throw new MockApiError("runtime_thread_not_found", {
+      path: `/api/runtime/threads/${encodeURIComponent(threadId)}`,
+      status: 404,
+    });
+  }),
   getSpeechCapabilities: vi.fn(),
   getWidgetContext: vi.fn(),
   getInterAgentRun: vi.fn(),

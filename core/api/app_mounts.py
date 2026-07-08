@@ -31,6 +31,7 @@ from core.apps.service import build_workspace_app_frontend
 from core.authorization.errors import AuthorizationError
 from core.authorization.service import can_mount_app_visibility, require_workspace_admin, require_workspace_membership
 from core.observability.service import record_platform_audit, record_platform_event
+from core.observability.startup_performance import startup_timer
 from core.providers.errors import ProviderError
 from core.providers.service import resolve_provider_for_workspace
 from core.secrets.app_delivery import (
@@ -100,34 +101,47 @@ def serve_frontend(
     cross_origin: bool = False,
 ) -> list[bytes]:
     """Serve an app frontend asset, optionally falling back to index.html for SPA routes."""
-    root = frontend_root.resolve()
-    candidate = (root / subpath.lstrip("/")).resolve() if subpath.strip("/") else (root / "index.html").resolve()
-    if candidate == root or root not in candidate.parents:
-        return text_response(start_response, "Not found", status="404 Not Found")
-    if candidate.is_dir():
-        candidate = candidate / "index.html"
-    if not candidate.exists():
-        if not spa_fallback:
+    with startup_timer("frontend.asset.serve", subpath=subpath or "/", spa_fallback=spa_fallback, cross_origin=cross_origin) as timing:
+        root = frontend_root.resolve()
+        candidate = (root / subpath.lstrip("/")).resolve() if subpath.strip("/") else (root / "index.html").resolve()
+        if candidate == root or root not in candidate.parents:
             return text_response(start_response, "Not found", status="404 Not Found")
-        candidate = root / "index.html"
-    if not candidate.exists() or not candidate.is_file():
-        return text_response(start_response, "Not found", status="404 Not Found")
-    body = candidate.read_bytes()
-    content_type = mimetypes.guess_type(str(candidate))[0] or "text/html; charset=utf-8"
-    headers = [("Content-Type", content_type), ("Content-Length", str(len(body)))]
-    if content_type.startswith("text/html"):
-        headers.append(("Cache-Control", "no-store"))
-    elif cross_origin:
-        headers.append(("Cache-Control", "public, max-age=31536000, immutable"))
-    if cross_origin:
-        headers.extend(
-            [
-                ("Access-Control-Allow-Origin", "*"),
-                ("Cross-Origin-Resource-Policy", "cross-origin"),
-            ]
+        if candidate.is_dir():
+            candidate = candidate / "index.html"
+        if not candidate.exists():
+            if not spa_fallback:
+                return text_response(start_response, "Not found", status="404 Not Found")
+            candidate = root / "index.html"
+        if not candidate.exists() or not candidate.is_file():
+            return text_response(start_response, "Not found", status="404 Not Found")
+        body = candidate.read_bytes()
+        content_type = mimetypes.guess_type(str(candidate))[0] or "text/html; charset=utf-8"
+        headers = [("Content-Type", content_type), ("Content-Length", str(len(body)))]
+        cache_control = ""
+        if content_type.startswith("text/html"):
+            cache_control = "no-store"
+            headers.append(("Cache-Control", cache_control))
+        elif cross_origin:
+            cache_control = "public, max-age=31536000, immutable"
+            headers.append(("Cache-Control", cache_control))
+        if cross_origin:
+            headers.extend(
+                [
+                    ("Access-Control-Allow-Origin", "*"),
+                    ("Cross-Origin-Resource-Policy", "cross-origin"),
+                ]
+            )
+        timing.update(
+            {
+                "bytes": len(body),
+                "cache_control": cache_control,
+                "content_type": content_type,
+                "extension": candidate.suffix.lower(),
+                "served_fallback_html": candidate.name == "index.html" and bool(subpath.strip("/")),
+            }
         )
-    start_response("200 OK", headers)
-    return [body]
+        start_response("200 OK", headers)
+        return [body]
 
 
 def is_public_app_static_asset(subpath: str) -> bool:

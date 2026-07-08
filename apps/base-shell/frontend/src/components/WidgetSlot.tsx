@@ -2,6 +2,7 @@ import { type PointerEvent as ReactPointerEvent, useEffect, useRef, useState } f
 import { createWidgetContext, listWidgets, WidgetRegistryItem } from "../api";
 import { MAVERICK_IFRAME_SANDBOX, postMaverickFrameVisibility, postMaverickShellTheme, postToMaverickFrame } from "../iframePolicy";
 import { widgetSelectionChangedMessage } from "../lib/widgetSelectionMessages";
+import { measureStartupMetric } from "../startupMetrics";
 import type { ShellThemeState } from "../theme";
 import { DEFAULT_SHELL_THEME_STATE, shellThemeSignature, urlWithShellThemeSearchParams } from "../theme";
 import { ShellPendingIndicator } from "./ShellPendingIndicator";
@@ -142,7 +143,13 @@ export function WidgetSlot({
 
     async function loadWidget() {
       try {
+        const discoveryStartedAt = performance.now();
         const registry = await listWidgets(hostAppId, contentKind);
+        measureStartupMetric("widget.discovery", discoveryStartedAt, {
+          content_kind: contentKind,
+          host_app_id: hostAppId,
+          widget_count: registry.items.length,
+        });
         const selected = selectPreferredWidget(registry.items, preferredOwnerAppId);
         if (!selected) {
           if (!cancelled) {
@@ -155,6 +162,7 @@ export function WidgetSlot({
           }
           return;
         }
+        const contextStartedAt = performance.now();
         const context = await createWidgetContext({
           host_app_id: hostAppId,
           owner_app_id: selected.owner_app_id,
@@ -166,6 +174,12 @@ export function WidgetSlot({
             contentKind,
             shellTheme: shellThemeRef.current,
           }),
+        });
+        measureStartupMetric("widget.context", contextStartedAt, {
+          content_kind: contentKind,
+          host_app_id: hostAppId,
+          owner_app_id: selected.owner_app_id,
+          widget_id: selected.widget_id,
         });
         if (!cancelled) {
           setWidget(selected);

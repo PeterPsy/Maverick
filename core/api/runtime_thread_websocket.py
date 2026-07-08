@@ -10,6 +10,7 @@ from typing import TYPE_CHECKING, Any, Awaitable, Callable
 
 from core.api.http import json_default
 from core.api.session_api import resolve_request_session
+from core.observability.startup_performance import startup_performance_enabled, startup_timer
 from core.runtime.plain_hosted_text import queue_provider_id_for_session
 from core.runtime.errors import RuntimeSessionNotFoundError
 from core.runtime.runtime_threads import ensure_runtime_threads_for_sessions, thread_payload, thread_recency_key
@@ -65,15 +66,21 @@ def _websocket_environ(scope: dict[str, Any]) -> dict[str, str]:
 
 def runtime_thread_snapshot_frame(state: PlatformState, *, workspace_id: str, viewer_user_id: str | None = None) -> dict[str, Any]:
     """Build the current workspace runtime thread catalog snapshot."""
-    sessions = state.runtime_store.list_sessions(workspace_id)
-    sessions_by_id = {session.session_id: session for session in sessions}
-    threads = _ordered_runtime_threads(state, workspace_id=workspace_id, sessions=sessions)
-    return {
-        "type": "runtime.thread.snapshot",
-        "workspace_id": workspace_id,
-        "threads": [_thread_payload_with_runtime(state, thread, session=sessions_by_id.get(thread.runtime_session_id), viewer_user_id=viewer_user_id) for thread in threads],
-        "at": datetime.now(tz=UTC),
-    }
+    with startup_timer("runtime.threads.websocket_snapshot", workspace_id=workspace_id) as timing:
+        sessions = state.runtime_store.list_sessions(workspace_id)
+        sessions_by_id = {session.session_id: session for session in sessions}
+        threads = _ordered_runtime_threads(state, workspace_id=workspace_id, sessions=sessions)
+        frame = {
+            "type": "runtime.thread.snapshot",
+            "workspace_id": workspace_id,
+            "threads": [_thread_payload_with_runtime(state, thread, session=sessions_by_id.get(thread.runtime_session_id), viewer_user_id=viewer_user_id) for thread in threads],
+            "at": datetime.now(tz=UTC),
+        }
+        timing["session_count"] = len(sessions)
+        timing["thread_count"] = len(frame["threads"])
+        if startup_performance_enabled():
+            timing["encoded_bytes"] = len(encode_thread_websocket_frame(frame).encode("utf-8"))
+        return frame
 
 
 def runtime_thread_changed_frame(

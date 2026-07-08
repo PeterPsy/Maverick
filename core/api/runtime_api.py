@@ -23,6 +23,7 @@ from core.inter_agent.errors import InterAgentRunNotFoundError
 from core.inter_agent.service import InterAgentService, TERMINAL_RUN_STATUSES
 from core.inter_agent.surfaces import inter_agent_payload
 from core.observability.service import append_platform_log
+from core.observability.startup_performance import startup_timer
 from core.providers.errors import ProviderError
 from core.providers.service import resolve_provider_for_runtime_session
 from core.runtime.errors import RuntimeSessionHiddenError, RuntimeSessionNotFoundError, RuntimeThreadNotFoundError, RuntimeTurnNotFoundError
@@ -109,24 +110,28 @@ def _event_payload(event: RuntimeEventRecord) -> dict[str, object]:
 
 
 def _threads_payload(state: PlatformState, *, workspace_id: str, viewer_user_id: str | None = None) -> dict[str, object]:
-    sessions = state.runtime_store.list_sessions(workspace_id)
-    sessions_by_id = {session.session_id: session for session in sessions}
-    threads = ensure_runtime_threads_for_sessions(
-        state.runtime_store,
-        workspace_id=workspace_id,
-        sessions=sessions,
-    )
-    return {
-        "threads": [
-            _thread_payload_with_runtime(
-                state,
-                thread,
-                session=sessions_by_id.get(thread.runtime_session_id),
-                viewer_user_id=viewer_user_id,
-            )
-            for thread in threads
-        ]
-    }
+    with startup_timer("runtime.threads.rest_payload", workspace_id=workspace_id) as timing:
+        sessions = state.runtime_store.list_sessions(workspace_id)
+        sessions_by_id = {session.session_id: session for session in sessions}
+        threads = ensure_runtime_threads_for_sessions(
+            state.runtime_store,
+            workspace_id=workspace_id,
+            sessions=sessions,
+        )
+        payload = {
+            "threads": [
+                _thread_payload_with_runtime(
+                    state,
+                    thread,
+                    session=sessions_by_id.get(thread.runtime_session_id),
+                    viewer_user_id=viewer_user_id,
+                )
+                for thread in threads
+            ]
+        }
+        timing["session_count"] = len(sessions)
+        timing["thread_count"] = len(payload["threads"])
+        return payload
 
 
 def _thread_payload_with_runtime(

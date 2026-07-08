@@ -34,6 +34,7 @@ import { clampFloatingChatWidth, clampSidebarDetailsWidth, readShellSession, res
 import type { FloatingChatMode, SidebarMode } from "./session";
 import { applyShellThemeToDocument, createShellThemeState, readSystemColorScheme } from "./theme";
 import type { ShellEffectiveTheme, ShellThemeMode } from "./theme";
+import { markStartupMetric, measureStartupMetric } from "./startupMetrics";
 import { getInitialMobileLayout, useMobileLayout } from "./hooks/useMobileLayout";
 import { useSidebarRailMetrics } from "./hooks/useSidebarRailMetrics";
 import { FloatingChatHost } from "./components/FloatingChatHost";
@@ -218,9 +219,13 @@ export function AppShell() {
   }
 
   async function loadShellState() {
+    const loadStartedAt = performance.now();
+    markStartupMetric("shell.bootstrap.start");
     setIsLoading(true);
     try {
+      const sessionStartedAt = performance.now();
       const currentSession = await getSession();
+      measureStartupMetric("shell.bootstrap.session", sessionStartedAt, { authenticated: currentSession.authenticated });
       setSession(currentSession);
       if (!currentSession.authenticated) {
         setApps([]);
@@ -228,8 +233,10 @@ export function AppShell() {
         setWorkspaces([]);
         setSettings(null);
         setError(null);
+        measureStartupMetric("shell.bootstrap.total", loadStartedAt, { authenticated: false });
         return;
       }
+      const blockingStartedAt = performance.now();
       const [registry, platformStatus, workspacePayload, platformSettings, pinnedApps] = await Promise.all([
         listApps(),
         getPlatformStatus(),
@@ -243,8 +250,17 @@ export function AppShell() {
       setWorkspaces(workspacePayload.items);
       setSettings(platformSettings);
       setError(null);
+      measureStartupMetric("shell.bootstrap.blocking_payloads", blockingStartedAt, {
+        app_count: registry.items.length,
+        pinned_app_count: pinnedApps.pinned_apps.length,
+        workspace_count: workspacePayload.items.length,
+      });
+      measureStartupMetric("shell.bootstrap.total", loadStartedAt, { authenticated: true });
     } catch (loadError) {
       setError(loadError instanceof Error ? loadError.message : "Errore sconosciuto.");
+      measureStartupMetric("shell.bootstrap.error", loadStartedAt, {
+        message: loadError instanceof Error ? loadError.message : "unknown",
+      });
     } finally {
       setIsLoading(false);
     }

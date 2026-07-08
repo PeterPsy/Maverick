@@ -140,6 +140,11 @@ metadata. Thread create, rename, read-receipt, delete, and clear responses no
 longer attach a full replacement catalog. Sidebar search can request a bounded
 server-side thread search page and merge those results into the local catalog,
 so older matching threads can appear without loading every thread at startup.
+Follow-up correction: the REST page cursor is now accepted by
+`GET /api/runtime/threads?cursor=<thread_id>`, and the Chat sidebar backfills
+additional pages in idle time after the first WebSocket snapshot. The first
+paint remains bounded to 50 threads, but older chats are no longer hidden from
+the sidebar catalog.
 
 ## PR3 Measurement
 

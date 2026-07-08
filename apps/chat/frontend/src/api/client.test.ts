@@ -187,6 +187,26 @@ describe("runtime event client calls", () => {
       }),
     );
   });
+
+  it("passes runtime thread page cursors", async () => {
+    const fetchMock = vi.fn(async () =>
+      jsonResponse({ threads: [], threads_page: { items: [], limit: 50, has_more: false, cursor: null, sort: "recency_desc", cursor_found: true } }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(listRuntimeThreads({ cursor: "thread-50", limit: 50 })).resolves.toEqual({
+      threads: [],
+      threads_page: { items: [], limit: 50, has_more: false, cursor: null, sort: "recency_desc", cursor_found: true },
+    });
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/api/runtime/threads?cursor=thread-50&limit=50",
+      expect.objectContaining({
+        credentials: "same-origin",
+        headers: expect.objectContaining({ Accept: "application/json" }),
+      }),
+    );
+  });
 });
 
 describe("inter-agent client calls", () => {

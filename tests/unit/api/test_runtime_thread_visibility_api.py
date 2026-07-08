@@ -278,6 +278,16 @@ class RuntimeThreadVisibilityApiTestCase(AppReferenceApiTestSupport, unittest.Te
                 path="/api/runtime/threads",
                 cookie=cookie,
             )
+            next_status, next_payload, _headers = self._invoke(
+                app,
+                path=f"/api/runtime/threads?cursor={list_payload['threads_page']['cursor']}",
+                cookie=cookie,
+            )
+            missing_cursor_status, missing_cursor_payload, _headers = self._invoke(
+                app,
+                path="/api/runtime/threads?cursor=missing-thread",
+                cookie=cookie,
+            )
             search_status, search_payload, _headers = self._invoke(
                 app,
                 path="/api/runtime/threads?query=visible-session-00",
@@ -291,6 +301,22 @@ class RuntimeThreadVisibilityApiTestCase(AppReferenceApiTestSupport, unittest.Te
         self.assertTrue(list_payload["threads_page"]["has_more"])
         self.assertIsNotNone(list_payload["threads_page"]["cursor"])
         self.assertEqual(list_payload["threads_page"]["sort"], "recency_desc")
+        self.assertTrue(list_payload["threads_page"]["cursor_found"])
+        self.assertEqual(next_status, 200)
+        self.assertEqual(len(next_payload["threads"]), 5)
+        self.assertEqual(next_payload["threads_page"]["items"], next_payload["threads"])
+        self.assertFalse(next_payload["threads_page"]["has_more"])
+        self.assertIsNone(next_payload["threads_page"]["cursor"])
+        self.assertTrue(next_payload["threads_page"]["cursor_found"])
+        self.assertFalse(
+            {thread["thread_id"] for thread in list_payload["threads"]}.intersection(
+                thread["thread_id"] for thread in next_payload["threads"]
+            )
+        )
+        self.assertEqual(missing_cursor_status, 200)
+        self.assertEqual(missing_cursor_payload["threads"], [])
+        self.assertFalse(missing_cursor_payload["threads_page"]["has_more"])
+        self.assertFalse(missing_cursor_payload["threads_page"]["cursor_found"])
         self.assertEqual(search_status, 200)
         self.assertEqual([thread["runtime_session_id"] for thread in search_payload["threads"]], ["visible-session-00"])
         self.assertEqual(search_payload["threads_page"]["query"], "visible-session-00")

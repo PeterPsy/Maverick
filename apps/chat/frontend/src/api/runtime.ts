@@ -118,11 +118,15 @@ export function runtimeThreadWebSocketUrl(): string {
   return `${protocol}//${window.location.host}/ws/runtime/threads`;
 }
 
-export function listRuntimeThreads(options: { limit?: number; query?: string; signal?: AbortSignal } = {}): Promise<RuntimeThreadsPayload> {
+export function listRuntimeThreads(options: { cursor?: string | null; limit?: number; query?: string; signal?: AbortSignal } = {}): Promise<RuntimeThreadsPayload> {
   const query = new URLSearchParams();
   const searchQuery = (options.query || "").trim();
   if (searchQuery) {
     query.set("query", searchQuery);
+  }
+  const cursor = (options.cursor || "").trim();
+  if (cursor) {
+    query.set("cursor", cursor);
   }
   if (options.limit && Number.isFinite(options.limit)) {
     query.set("limit", String(Math.max(1, Math.floor(options.limit))));

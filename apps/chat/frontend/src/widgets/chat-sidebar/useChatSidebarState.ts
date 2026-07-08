@@ -47,6 +47,8 @@ import { useThreadTouchSelection } from "./useThreadTouchSelection";
 const CHAT_APP_ID = "chat";
 const TRANSCRIPT_SEARCH_EVENT_LIMIT = 500;
 const TRANSCRIPT_SEARCH_MAX_CONCURRENT = 4;
+const THREAD_PAGE_LIMIT = 50;
+const THREAD_BACKFILL_IDLE_DELAY_MS = 320;
 const THREAD_SOURCE_FILTERS: ThreadSourceFilter[] = ["all", "senses", "multi_agent"];
 
 export function useChatSidebarState() {
@@ -59,6 +61,9 @@ export function useChatSidebarState() {
   const [isTranscriptSearchLoading, setIsTranscriptSearchLoading] = useState(false);
   const [workspaceId, setWorkspaceId] = useState("");
   const [hasLoadedProjectCatalog, setHasLoadedProjectCatalog] = useState(false);
+  const [threadPageCursor, setThreadPageCursor] = useState<string | null>(null);
+  const [hasMoreThreadPages, setHasMoreThreadPages] = useState(false);
+  const [isThreadBackfillLoading, setIsThreadBackfillLoading] = useState(false);
   const [activeThreadId, setActiveThreadId] = useState<string | null>(null);
   const [selectedThreadIds, setSelectedThreadIds] = useState<Set<string>>(() => new Set());
   const [collapsedSections, setCollapsedSections] = useState<Record<string, boolean>>({});
@@ -133,6 +138,8 @@ export function useChatSidebarState() {
   useRuntimeThreads({
     onSnapshot: (frame) => {
       setWorkspaceId(frame.workspace_id);
+      setThreadPageCursor(frame.threads_page?.cursor || null);
+      setHasMoreThreadPages(Boolean(frame.threads_page?.has_more && frame.threads_page.cursor));
       if (!hasLoadedProjectCatalog) {
         const cachedProjects = readStoredChatProjects(frame.workspace_id);
         if (cachedProjects.length) {
@@ -342,6 +349,47 @@ export function useChatSidebarState() {
       controller.abort();
     };
   }, [searchTerm]);
+
+  useEffect(() => {
+    if (searchTerm || !hasMoreThreadPages || !threadPageCursor || isThreadBackfillLoading) {
+      return;
+    }
+    const controller = new AbortController();
+    let disposed = false;
+    const timeout = window.setTimeout(() => {
+      setIsThreadBackfillLoading(true);
+      listRuntimeThreads({ cursor: threadPageCursor, limit: THREAD_PAGE_LIMIT, signal: controller.signal })
+        .then((payload) => {
+          if (disposed) {
+            return;
+          }
+          setThreads((current) =>
+            (payload.threads || []).reduce(
+              (nextThreads, thread) => applyThreadCatalogPayload(nextThreads, { changed_thread: thread }),
+              current,
+            ),
+          );
+          setThreadPageCursor(payload.threads_page?.cursor || null);
+          setHasMoreThreadPages(Boolean(payload.threads_page?.has_more && payload.threads_page.cursor));
+          setError(null);
+        })
+        .catch((loadError: Error) => {
+          if (!disposed && loadError.name !== "AbortError") {
+            setError(loadError.message);
+          }
+        })
+        .finally(() => {
+          if (!disposed) {
+            setIsThreadBackfillLoading(false);
+          }
+        });
+    }, THREAD_BACKFILL_IDLE_DELAY_MS);
+    return () => {
+      disposed = true;
+      window.clearTimeout(timeout);
+      controller.abort();
+    };
+  }, [hasMoreThreadPages, isThreadBackfillLoading, searchTerm, threadPageCursor]);
 
   useEffect(() => {
     const channel = createChatSidebarSelectionChannel((message) => {

@@ -80,6 +80,7 @@ describe("useChatSidebarState search persistence", () => {
     mocks.listInterAgentRuns.mockResolvedValue({ items: [] });
     mocks.listRuntimeSessionEvents.mockResolvedValue({ items: [] });
     mocks.listRuntimeThreads.mockResolvedValue({ threads: [] });
+    mocks.getChatViewFilter.mockResolvedValue({ state: { view_filter: { query: "" } } });
     mocks.setChatViewFilter.mockResolvedValue({ state: { view_filter: { query: "local search" } } });
     mocks.applyThreadCatalogPayload.mockImplementation((current) => current);
     mocks.useRuntimeThreads.mockImplementation(() => undefined);
@@ -154,6 +155,40 @@ describe("useChatSidebarState search persistence", () => {
 
     expect(mocks.listRuntimeThreads).toHaveBeenCalledWith(expect.objectContaining({ limit: 50, query: "archive" }));
     expect(onTitles.mock.calls.some(([titles]) => titles.includes("Archived incident"))).toBe(true);
+  });
+
+  it("backfills older runtime thread pages after the bounded websocket snapshot", async () => {
+    const recentThread = thread({ thread_id: "thread-recent", runtime_session_id: "session-recent", title: "Recent conversation", updated_at: "2026-07-08T00:00:00.000Z" });
+    const olderThread = thread({ thread_id: "thread-older", runtime_session_id: "session-older", title: "Older conversation", created_at: "2026-06-24T00:00:00.000Z", updated_at: "2026-06-24T00:00:00.000Z" });
+    const onTitles = vi.fn();
+    mocks.applyThreadCatalogPayload.mockImplementation((current: ChatThread[], payload: { changed_thread?: ChatThread }) =>
+      payload.changed_thread ? [...current.filter((item) => item.thread_id !== payload.changed_thread?.thread_id), payload.changed_thread] : current,
+    );
+    mocks.useRuntimeThreads.mockImplementation(({ onSnapshot, setThreads }: { onSnapshot?: (frame: { workspace_id: string; threads_page?: { has_more: boolean; cursor: string | null } }) => void; setThreads: (threads: ChatThread[]) => void }) => {
+      useEffect(() => {
+        setThreads([recentThread]);
+        onSnapshot?.({
+          workspace_id: "default",
+          threads_page: { has_more: true, cursor: "thread-recent" },
+        });
+      }, []);
+    });
+    mocks.listRuntimeThreads.mockResolvedValue({
+      threads: [olderThread],
+      threads_page: { items: [olderThread], limit: 50, has_more: false, cursor: null, sort: "recency_desc", cursor_found: true },
+    });
+
+    await act(async () => {
+      root.render(<SidebarSectionsProbe onTitles={onTitles} />);
+    });
+    await act(async () => {
+      vi.advanceTimersByTime(400);
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(mocks.listRuntimeThreads).toHaveBeenCalledWith(expect.objectContaining({ cursor: "thread-recent", limit: 50 }));
+    expect(onTitles.mock.calls.some(([titles]) => titles.includes("Older conversation"))).toBe(true);
   });
 });
 

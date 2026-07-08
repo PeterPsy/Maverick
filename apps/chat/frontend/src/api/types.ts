@@ -253,6 +253,7 @@ export type RuntimeThreadsPage = {
   limit: number;
   has_more: boolean;
   cursor: string | null;
+  cursor_found?: boolean;
   sort: string;
   query?: string | null;
 };

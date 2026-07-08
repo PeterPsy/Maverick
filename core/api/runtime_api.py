@@ -118,6 +118,7 @@ def _runtime_thread_page(
     viewer_user_id: str | None = None,
     limit: int = RUNTIME_THREAD_PAGE_DEFAULT_LIMIT,
     query: str | None = None,
+    cursor: str | None = None,
 ) -> dict[str, object]:
     with startup_timer("runtime.threads.rest_payload", workspace_id=workspace_id) as timing:
         sessions = state.runtime_store.list_sessions(workspace_id)
@@ -131,6 +132,12 @@ def _runtime_thread_page(
         total_thread_count = len(threads)
         if normalized_query:
             threads = [thread for thread in threads if _thread_matches_query(thread, normalized_query)]
+        normalized_cursor = (cursor or "").strip()
+        cursor_found = True
+        if normalized_cursor:
+            cursor_index = next((index for index, thread in enumerate(threads) if thread.thread_id == normalized_cursor), None)
+            cursor_found = cursor_index is not None
+            threads = threads[cursor_index + 1 :] if cursor_index is not None else []
         bounded_limit = max(1, min(int(limit or RUNTIME_THREAD_PAGE_DEFAULT_LIMIT), RUNTIME_THREAD_PAGE_MAX_LIMIT))
         page_threads = threads[:bounded_limit]
         items = [
@@ -151,12 +158,15 @@ def _runtime_thread_page(
                 "cursor": page_threads[-1].thread_id if len(threads) > bounded_limit and page_threads else None,
                 "sort": "recency_desc",
                 "query": normalized_query or None,
+                "cursor_found": cursor_found,
             },
         }
         timing["session_count"] = len(sessions)
         timing["thread_count"] = len(items)
         timing["filtered_thread_count"] = len(threads)
         timing["total_thread_count"] = total_thread_count
+        timing["cursor"] = bool(normalized_cursor)
+        timing["cursor_found"] = cursor_found
         return payload
 
 
@@ -828,6 +838,7 @@ def _handle_thread_collection(state: PlatformState, context: RequestSession, met
         query = parse_qs(query_string, keep_blank_values=False)
         limit = _bounded_positive_int(query.get("limit", [None])[0], maximum=RUNTIME_THREAD_PAGE_MAX_LIMIT)
         search_query = str(query.get("query", query.get("q", [""]))[0] or "").strip()
+        cursor = str(query.get("cursor", [""])[0] or "").strip()
         return json_response(
             start_response,
             _runtime_thread_page(
@@ -836,6 +847,7 @@ def _handle_thread_collection(state: PlatformState, context: RequestSession, met
                 viewer_user_id=context.user.user_id,
                 limit=limit or RUNTIME_THREAD_PAGE_DEFAULT_LIMIT,
                 query=search_query or None,
+                cursor=cursor or None,
             ),
         )
     if method != "POST":

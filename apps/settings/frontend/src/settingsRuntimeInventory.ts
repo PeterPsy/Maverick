@@ -32,7 +32,7 @@ export function mergeRuntimeSessionInventory(
   };
 }
 
-async function requestRuntimeSessionInventoryQuiet(): Promise<RuntimeSessionInventoryPayload | null> {
+export async function requestRuntimeSessionInventoryQuiet(): Promise<RuntimeSessionInventoryPayload | null> {
   try {
     return await getRuntimeSessionInventory();
   } catch {

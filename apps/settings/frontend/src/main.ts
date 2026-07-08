@@ -1,31 +1,8 @@
 import './styles.css';
-import {
-  createAdminUser,
-  deleteAdminUser,
-  installWorkspaceApp as installWorkspaceAppBinding,
-  resetAdminUserPassword,
-  setWorkspaceAppEnabled,
-  uninstallWorkspaceApp as uninstallWorkspaceAppBinding,
-  updateAdminUser,
-  updateAdminUserMemberships
-} from './adminActions';
-import {
-  clearRuntimeSessions,
-  getPlatformSettings,
-  loadUsers,
-  loadWorkspaces,
-  loadWorkspaceApps,
-  logout,
-  requestJson,
-  type AppDependenciesPayload,
-  type PlatformSettings,
-  type PersistenceStatus,
-  type RuntimeCleanupPayload,
-  type User,
-  type Workspace,
-  type WorkspaceApp
-} from './adminApi';
-import { loadPlatformSettingsWithRuntimeInventory, mergeRuntimeSessionInventory } from './settingsRuntimeInventory';
+import { createAdminUser, deleteAdminUser, installWorkspaceApp as installWorkspaceAppBinding, resetAdminUserPassword, setWorkspaceAppEnabled, uninstallWorkspaceApp as uninstallWorkspaceAppBinding, updateAdminUser, updateAdminUserMemberships } from './adminActions';
+import { clearRuntimeSessions, getPlatformSettings, loadUsers, loadWorkspaces, loadWorkspaceApps, logout, requestJson } from './adminApi';
+import type { AppDependenciesPayload, PlatformSettings, PersistenceStatus, RuntimeCleanupPayload, User, Workspace, WorkspaceApp } from './adminApi';
+import { mergeRuntimeSessionInventory, requestRuntimeSessionInventoryQuiet } from './settingsRuntimeInventory';
 import {
   createSettingsPanelState,
   settingsPanelHtml,
@@ -68,6 +45,8 @@ let pendingDeleteUserId = '';
 let notice: { tone: 'info' | 'success' | 'error'; message: string } | null = null;
 let lastPublishedPageId = '';
 let lastPublishedUserId = '';
+let runtimeInventoryWorkspaceId = '';
+let isRuntimeInventoryLoading = false;
 
 const persistenceController = createPersistenceController({
   getPersistence: () => persistence,
@@ -136,6 +115,9 @@ function applyNavigationParams(params: Record<string, unknown>) {
   if (pageId === 'app-links') {
     void ensureAppLinksLoaded();
   }
+  if (pageId === 'platform-settings') {
+    void ensureRuntimeInventoryLoaded();
+  }
 }
 
 function publishSelectedPage(page: SettingsPage) {
@@ -202,7 +184,7 @@ async function requestPersistenceStatusQuiet(): Promise<PersistenceStatus | null
 
 async function requestPlatformSettingsQuiet(): Promise<PlatformSettings | null> {
   try {
-    return await loadPlatformSettingsWithRuntimeInventory();
+    return await getPlatformSettings();
   } catch {
     return null;
   }
@@ -228,6 +210,7 @@ async function refresh() {
     platformSettings = settingsPayload;
     if (previousWorkspaceId !== nextWorkspaceId) {
       appLinksController.reset();
+      runtimeInventoryWorkspaceId = '';
     }
     syncSettingsPanelDraft(settingsPanelState, platformSettings);
     if (!selectedUserId || !users.some((user) => user.user_id === selectedUserId)) {
@@ -240,11 +223,34 @@ async function refresh() {
   if (selectedPageId === 'app-links') {
     void ensureAppLinksLoaded();
   }
+  if (selectedPageId === 'platform-settings') {
+    void ensureRuntimeInventoryLoaded();
+  }
 }
 
 async function ensureAppLinksLoaded(force = false) {
   const workspaceId = platformSettings?.workspace.workspace_id || '';
   await appLinksController.ensureLoaded(workspaceId, workspaceApps, force);
+}
+
+async function ensureRuntimeInventoryLoaded(force = false) {
+  const workspaceId = platformSettings?.workspace.workspace_id || '';
+  if (!workspaceId || isRuntimeInventoryLoading || (!force && runtimeInventoryWorkspaceId === workspaceId)) {
+    return;
+  }
+  isRuntimeInventoryLoading = true;
+  try {
+    const inventory = await requestRuntimeSessionInventoryQuiet();
+    if (!inventory || platformSettings?.workspace.workspace_id !== workspaceId) {
+      return;
+    }
+    platformSettings = mergeRuntimeSessionInventory(platformSettings, inventory);
+    runtimeInventoryWorkspaceId = workspaceId;
+    syncSettingsPanelDraft(settingsPanelState, platformSettings);
+    render();
+  } finally {
+    isRuntimeInventoryLoading = false;
+  }
 }
 
 async function createUser(form: HTMLFormElement) {
@@ -355,6 +361,7 @@ async function clearRuntimeSessionsFromPanel(sessionIds?: string[]) {
     const payload = await clearRuntimeSessions(scopedIds.length ? scopedIds : undefined);
     publishRuntimeCleanupChanged(payload);
     platformSettings = mergeRuntimeSessionInventory(await getPlatformSettings(), payload);
+    runtimeInventoryWorkspaceId = platformSettings.workspace.workspace_id;
     syncSettingsPanelDraft(settingsPanelState, platformSettings);
     notice = {
       tone: 'success',

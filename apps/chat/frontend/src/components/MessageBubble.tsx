@@ -1,16 +1,20 @@
-import type { Dispatch, SetStateAction } from "react";
+import { lazy, Suspense, type Dispatch, type SetStateAction } from "react";
 import type { ChatMessage } from "../api/client";
 import type { InterAgentBoardLink } from "../lib/interAgentTranscript";
 import type { MentionItem } from "../lib/mentions";
 import { HumanMessage } from "./HumanMessage";
 import { InterAgentBoardButton } from "./InterAgentBoardButton";
-import { MarkdownMessage } from "./MarkdownMessage";
 import { CopyMessageButton, type CopyMessageHandler } from "./MessageCopyButton";
 import { MessageFooter, formatMessageTime } from "./MessageFooter";
 import { MessageSpeechButton } from "./MessageSpeechButton";
 import { RuntimeStepMessage } from "./RuntimeStepMessage";
 import { StructuredContentMessage } from "./StructuredContentMessage";
 import { ToolCallInlineMessage } from "./ToolCallInlineMessage";
+
+const LazyMarkdownMessage = lazy(async () => {
+  const module = await import("./MarkdownMessage");
+  return { default: module.MarkdownMessage };
+});
 
 export function MessageBubble({
   expanded,
@@ -138,7 +142,7 @@ function AgentMessage({
       <section className="chatapp-agent-block chatapp-agent-block--action">
         <div className="chatapp-message-copy-row chatapp-message-copy-row--agent">
           <div className="chatapp-agent-block__body">
-            <MarkdownMessage content={visibleContent || "_No text output._"} />
+            <AgentMarkdownMessage content={visibleContent || "_No text output._"} />
           </div>
           {message.content ? <CopyMessageButton content={message.content} onCopyMessage={onCopyMessage} /> : null}
         </div>
@@ -177,6 +181,18 @@ function AgentMessage({
       </section>
     </div>
   );
+}
+
+function AgentMarkdownMessage({ content }: { content: string }) {
+  return (
+    <Suspense fallback={<PlainTextMarkdownFallback content={content} />}>
+      <LazyMarkdownMessage content={content} />
+    </Suspense>
+  );
+}
+
+function PlainTextMarkdownFallback({ content }: { content: string }) {
+  return <p className="chatapp-markdown-fallback">{content}</p>;
 }
 
 function MessageMeta({ message, onCopyMessage }: { message: ChatMessage; onCopyMessage: CopyMessageHandler }) {

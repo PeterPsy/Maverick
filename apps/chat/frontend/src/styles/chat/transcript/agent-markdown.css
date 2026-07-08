@@ -8,6 +8,11 @@
   min-width: 0;
 }
 
+.chatapp-markdown-fallback {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
 .chatapp-agent-block__body p,
 .chatapp-agent-block__body ul,
 .chatapp-agent-block__body ol,

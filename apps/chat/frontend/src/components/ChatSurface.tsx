@@ -1,9 +1,13 @@
-import type { CSSProperties, RefObject } from "react";
+import { lazy, Suspense, type CSSProperties, type RefObject } from "react";
 import { ChatComposer } from "./ChatComposer";
 import type { ChatComposerProps } from "./ChatComposer";
 import { ChatTranscript } from "./ChatTranscript";
 import type { ChatTranscriptProps } from "./ChatTranscript";
-import { InterAgentGraphView } from "./InterAgentGraphView";
+
+const LazyInterAgentGraphView = lazy(async () => {
+  const module = await import("./InterAgentGraphView");
+  return { default: module.InterAgentGraphView };
+});
 
 type ChatSurfaceState = {
   chatMainStyle?: CSSProperties;
@@ -38,13 +42,15 @@ export function ChatSurface({ composerProps, surfaceActions, surfaceState, trans
           style={isAgentNodesView ? undefined : chatMainStyle}
         >
           {isAgentNodesView && activeInterAgentGraphRunId ? (
-            <InterAgentGraphView
-              initialApprovals={transcriptProps.interAgentApprovalsByRunId?.[activeInterAgentGraphRunId] || []}
-              initialEvents={transcriptProps.interAgentEventsByRunId?.[activeInterAgentGraphRunId] || []}
-              initialRunDetail={activeGraphRun}
-              onClose={transcriptProps.onCloseInterAgentGraph || (() => undefined)}
-              runId={activeInterAgentGraphRunId}
-            />
+            <Suspense fallback={<InterAgentGraphFallback />}>
+              <LazyInterAgentGraphView
+                initialApprovals={transcriptProps.interAgentApprovalsByRunId?.[activeInterAgentGraphRunId] || []}
+                initialEvents={transcriptProps.interAgentEventsByRunId?.[activeInterAgentGraphRunId] || []}
+                initialRunDetail={activeGraphRun}
+                onClose={transcriptProps.onCloseInterAgentGraph || (() => undefined)}
+                runId={activeInterAgentGraphRunId}
+              />
+            </Suspense>
           ) : isEmptyChatView ? (
             <div className="chatapp-empty-chat-stage">
               <div className="chatapp-empty-chat-stage__copy">
@@ -65,5 +71,14 @@ export function ChatSurface({ composerProps, surfaceActions, surfaceState, trans
         </div>
       </div>
     </section>
+  );
+}
+
+function InterAgentGraphFallback() {
+  return (
+    <div className="chatapp-inter-agent-graph__loading" role="status" aria-live="polite">
+      <span className="chatapp-inter-agent-graph__loading-dot" />
+      <span>Loading agent graph</span>
+    </div>
   );
 }

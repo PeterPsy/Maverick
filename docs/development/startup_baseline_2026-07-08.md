@@ -159,3 +159,26 @@ headers for public built assets, keeps HTML `no-store`, and rejects source maps
 or source-like extensions instead of serving them or falling back to SPA HTML.
 Brotli is supported when the host Python environment provides a Brotli module;
 the local verification environment did not.
+
+## PR4 Measurement
+
+After lazy-loading noncritical Chat surfaces, `python3
+scripts/startup_performance_baseline.py` reported:
+
+| App | Raw bytes | Gzip bytes | Files |
+| --- | ---: | ---: | ---: |
+| `base-shell` | 374,327 | 105,847 | 4 |
+| `chat` | 1,231,446 | 345,505 | 23 |
+
+The total Chat dist size is roughly flat because the code is still shipped, but
+the startup-critical Chat app entry chunk is now substantially smaller:
+
+| Chunk | PR3 raw bytes | PR3 gzip bytes | PR4 raw bytes | PR4 gzip bytes |
+| --- | ---: | ---: | ---: | ---: |
+| Chat main JS | 668,966 | 208,147 | 307,142 | 94,394 |
+
+The Markdown renderer now loads through `MarkdownMessage-DAEavVBq.js`
+(`163,031` raw, `49,406` gzip) only when agent Markdown content is rendered.
+The inter-agent graph view now loads through `InterAgentGraphView-C4RnmaDU.js`
+(`201,235` raw, `65,139` gzip) and its CSS chunk
+`InterAgentGraphView-C5ap-Sga.css` only when the graph view is opened.

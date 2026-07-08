@@ -903,8 +903,20 @@
   inset: 0;
   z-index: 1;
   background:
-    linear-gradient(180deg, rgba(var(--maverick-contrast-rgb), 0.42), transparent 16%, transparent 78%, rgba(var(--maverick-contrast-rgb), 0.46)),
-    linear-gradient(90deg, rgba(var(--maverick-contrast-rgb), 0.38), transparent 18%, transparent 82%, rgba(var(--maverick-contrast-rgb), 0.38));
+    linear-gradient(
+      180deg,
+      color-mix(in srgb, var(--maverick-bg) 94%, transparent),
+      transparent 16%,
+      transparent 78%,
+      color-mix(in srgb, var(--maverick-bg) 96%, transparent)
+    ),
+    linear-gradient(
+      90deg,
+      color-mix(in srgb, var(--maverick-bg) 90%, transparent),
+      transparent 18%,
+      transparent 82%,
+      color-mix(in srgb, var(--maverick-bg) 90%, transparent)
+    );
   pointer-events: none;
 }
 

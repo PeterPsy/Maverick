@@ -57,6 +57,37 @@ afterEach(() => {
 });
 
 describe("useChatDependencies", () => {
+  it("does not wait for the agent catalog during initial dependency loading", async () => {
+    const snapshots: Array<ReturnType<typeof useChatDependencies>> = [];
+    const catalog = deferred<Awaited<ReturnType<typeof listAgentCatalog>>>();
+    vi.mocked(getAppDependencies).mockResolvedValue(dependencyPayload(["agents"]));
+    vi.mocked(listAgentCatalog).mockReturnValue(catalog.promise);
+
+    container = document.createElement("div");
+    document.body.append(container);
+    root = createRoot(container);
+    await act(async () => {
+      root?.render(<DependencyProbe onSnapshot={(snapshot) => snapshots.push(snapshot)} />);
+    });
+
+    await waitForAssertion(() => {
+      const latest = snapshots.at(-1);
+      expect(latest?.workspaceId).toBe("default");
+      expect(latest?.agentCatalogLoading).toBe(true);
+      expect(latest?.agentCatalogLoaded).toBe(false);
+    });
+
+    catalog.resolve({ agent_types: [] });
+    await act(async () => {
+      await catalog.promise;
+    });
+
+    await waitForAssertion(() => {
+      expect(snapshots.at(-1)?.agentCatalogLoaded).toBe(true);
+      expect(snapshots.at(-1)?.agentCatalogLoading).toBe(false);
+    });
+  });
+
   it("keeps selected speech provider ids when capability loading fails", async () => {
     const snapshots: Array<ReturnType<typeof useChatDependencies>> = [];
 
@@ -143,18 +174,28 @@ function DependencyProbe({ onSnapshot }: { onSnapshot: (snapshot: ReturnType<typ
   return null;
 }
 
-function dependencyPayload(): AppDependenciesPayload {
+function dependencyPayload(agentProviderAppIds: string[] = []): AppDependenciesPayload {
   return {
     workspace_id: "default",
     consumer_app_id: "chat",
     status: "resolved",
     dependencies: [
-      dependency("agent-catalog", "agent.catalog", []),
-      dependency("agent-prompt-materializer", "agent.prompt-materializer", []),
+      dependency("agent-catalog", "agent.catalog", agentProviderAppIds),
+      dependency("agent-prompt-materializer", "agent.prompt-materializer", agentProviderAppIds),
       dependency("text-to-speech", "speech.synthesis", ["speech"]),
       dependency("speech-to-text", "speech.transcription", ["speech"]),
     ],
   };
+}
+
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+  let reject!: (reason?: unknown) => void;
+  const promise = new Promise<T>((resolvePromise, rejectPromise) => {
+    resolve = resolvePromise;
+    reject = rejectPromise;
+  });
+  return { promise, reject, resolve };
 }
 
 function dependency(alias: string, interfaceName: string, selectedProviderAppIds: string[]) {

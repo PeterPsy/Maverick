@@ -81,6 +81,7 @@ type UseChatNavigationParams = {
   setQueuedMessages: Dispatch<SetStateAction<QueuedMessage[]>>;
   setQueuedMessagesForConversation: (conversationKey: string, action: SetStateAction<QueuedMessage[]>) => void;
   setSelectedReferences: Dispatch<SetStateAction<AppReference[]>>;
+  setTargetConversationResolved: Dispatch<SetStateAction<boolean>>;
   setThreads: Dispatch<SetStateAction<ChatThread[]>>;
   threadId: string | null;
   threads: ChatThread[];
@@ -165,6 +166,7 @@ export function useChatNavigation({
   setQueuedMessages,
   setQueuedMessagesForConversation,
   setSelectedReferences,
+  setTargetConversationResolved,
   setThreads,
   threadId,
   threads,
@@ -209,6 +211,22 @@ export function useChatNavigation({
     });
 
   useEffect(() => {
+    if (initialSelectionHandledRef.current) {
+      return;
+    }
+    const query = new URLSearchParams(window.location.search);
+    if (!newChatRequestId && query.get("new_chat") !== "1") {
+      return;
+    }
+    initialSelectionHandledRef.current = true;
+    handledNewChatPropRequestRef.current = newChatRequestId;
+    suppressedExternalThreadIdRef.current = threadId || null;
+    createDraftChat({ activeAppContext, projectId: newChatProjectId || query.get("project_id") });
+    setError(null);
+    setIsBootstrapping(false);
+  }, [activeAppContext, newChatProjectId, newChatRequestId, threadId]);
+
+  useEffect(() => {
     if (!threadsLoaded || initialSelectionHandledRef.current) {
       return;
     }
@@ -217,7 +235,8 @@ export function useChatNavigation({
   }, [threadsLoaded, threads]);
 
   useEffect(() => {
-    if (isBootstrapping) {
+    const requestedThread = threadId ? threads.find((thread) => thread.thread_id === threadId) || null : null;
+    if (isBootstrapping && !requestedThread) {
       return;
     }
     debugThreadSync("app-thread-prop-effect", {
@@ -231,6 +250,10 @@ export function useChatNavigation({
       return;
     }
     if (suppressedExternalThreadIdRef.current && threadId === suppressedExternalThreadIdRef.current) {
+      return;
+    }
+    if (requestedThread) {
+      void handleSelectThread(requestedThread);
       return;
     }
     void openThreadById(threadId);
@@ -305,9 +328,13 @@ export function useChatNavigation({
         }
         if (requestedThreadId) {
           suppressedExternalThreadIdRef.current = requestedThreadId;
+          resetActiveConversation();
+          setTargetConversationResolved(false);
+          setError(THREAD_NOT_FOUND_MESSAGE);
+          return;
         }
         createDraftChat({ activeAppContext, resetView: false });
-        setError(requestedThreadId ? THREAD_NOT_FOUND_MESSAGE : null);
+        setError(null);
         return;
       }
       await selectThreadWithoutHttp(firstThread);
@@ -331,6 +358,7 @@ export function useChatNavigation({
     setIsOlderHistoryLoading(false);
     setActiveTurn(null);
     setActiveInterAgentGraphRunId(null);
+    setTargetConversationResolved(false);
     setComposer("");
     setSelectedReferences([]);
     clearAttachments();
@@ -352,6 +380,7 @@ export function useChatNavigation({
     const draft = { draftId: ACTIVE_DRAFT_ID, projectId, systemPrompt: "" };
     const conversationKey = conversationKeyFor(null, draft);
     setDraftChat(draft);
+    setTargetConversationResolved(true);
     setPendingUserMessagesForConversation(conversationKey, []);
     setQueuedMessagesForConversation(conversationKey, readPersistedRecoverableQueuedMessages(queueStorageKey(navigationScope, conversationKey)));
     setActiveInterAgentGraphRunId(null);
@@ -389,6 +418,7 @@ export function useChatNavigation({
       setQueuedMessagesForConversation(conversationKey, readPersistedQueuedMessages(storageKey));
     }
     setActiveTurn(cachedActiveTurnForThread(thread, cachedTranscript));
+    setTargetConversationResolved(Boolean(thread));
     if (!thread?.runtime_session_id) {
       setIsHistoryLoading(false);
     }
@@ -448,6 +478,7 @@ export function useChatNavigation({
       }
     }
     navigationRequestRef.current = navigationRequestKey;
+    setTargetConversationResolved(false);
     setIsBootstrapping(true);
     try {
       if (requestedRuntimeSessionId) {
@@ -496,6 +527,7 @@ export function useChatNavigation({
       const payload = await createThread(runtimeSessionId, null, metadata);
       setThreads(payload.threads);
       setActiveThread(payload.thread);
+      setTargetConversationResolved(true);
       setActiveRuntimeSessionId(runtimeSessionId);
       setActiveSession(null);
       setEvents([]);
@@ -528,7 +560,8 @@ export function useChatNavigation({
       return true;
     }
     suppressedExternalThreadIdRef.current = threadId;
-    createDraftChat({ resetView: false });
+    resetActiveConversation();
+    setTargetConversationResolved(false);
     setError(THREAD_NOT_FOUND_MESSAGE);
     return false;
   }

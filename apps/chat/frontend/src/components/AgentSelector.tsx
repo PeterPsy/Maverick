@@ -58,12 +58,14 @@ function buildMenuOptions(agents: AgentTypeSummary[]) {
 export function AgentSelector({
   agents,
   disabled,
+  loading = false,
   locked,
   onSelect,
   selectedAgentTypeId,
 }: {
   agents: AgentTypeSummary[];
   disabled: boolean;
+  loading?: boolean;
   locked: boolean;
   onSelect: (agentTypeId: string) => void;
   selectedAgentTypeId: string;
@@ -79,7 +81,7 @@ export function AgentSelector({
   const suppressNextClickRef = useRef(false);
   const suppressClickResetRef = useRef<number | null>(null);
   const selectedAgent = agents.find((agent) => agent.id === selectedAgentTypeId) || null;
-  const label = selectedAgent?.name || "Default Chat";
+  const label = loading && !selectedAgent ? "Loading agents..." : selectedAgent?.name || "Default Chat";
   const isDisabled = disabled || locked;
   const normalizedQuery = normalizeAgentQuery(query);
   const filteredAgents = useMemo(

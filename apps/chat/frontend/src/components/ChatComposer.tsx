@@ -20,6 +20,7 @@ export type ExecutionMode = "sandbox" | "full-access";
 
 export type ChatComposerProps = {
   activeProviderId: string;
+  agentCatalogLoading?: boolean;
   agentSelectorLocked?: boolean;
   agents: AgentTypeSummary[];
   attachments: ComposerAttachment[];
@@ -61,6 +62,7 @@ export type ChatComposerProps = {
 
 export function ChatComposer({
   activeProviderId,
+  agentCatalogLoading = false,
   agentSelectorLocked = false,
   agents,
   attachments,
@@ -278,6 +280,7 @@ export function ChatComposer({
                 <AgentSelector
                   agents={agents}
                   disabled={disabled || isSending}
+                  loading={agentCatalogLoading}
                   locked={agentSelectorLocked}
                   onSelect={onSelectAgent}
                   selectedAgentTypeId={selectedAgentTypeId}

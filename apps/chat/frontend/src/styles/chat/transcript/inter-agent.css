@@ -478,7 +478,7 @@
     var(--maverick-surface);
   box-shadow:
     var(--chatapp-inner-edge),
-    0 18px 50px rgba(0, 0, 0, 0.34);
+    var(--maverick-popover-shadow);
   text-align: left;
   cursor: grab;
   transition:
@@ -513,7 +513,7 @@
   box-shadow:
     var(--chatapp-inner-edge),
     0 0 0 4px var(--maverick-accent-soft),
-    0 18px 50px rgba(0, 0, 0, 0.34);
+    var(--maverick-popover-shadow);
 }
 
 .chatapp-inter-agent-graph__node .material-symbols-rounded {
@@ -903,8 +903,8 @@
   inset: 0;
   z-index: 1;
   background:
-    linear-gradient(180deg, rgba(0, 0, 0, 0.42), transparent 16%, transparent 78%, rgba(0, 0, 0, 0.46)),
-    linear-gradient(90deg, rgba(0, 0, 0, 0.38), transparent 18%, transparent 82%, rgba(0, 0, 0, 0.38));
+    linear-gradient(180deg, rgba(var(--maverick-contrast-rgb), 0.42), transparent 16%, transparent 78%, rgba(var(--maverick-contrast-rgb), 0.46)),
+    linear-gradient(90deg, rgba(var(--maverick-contrast-rgb), 0.38), transparent 18%, transparent 82%, rgba(var(--maverick-contrast-rgb), 0.38));
   pointer-events: none;
 }
 

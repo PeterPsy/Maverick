@@ -33,7 +33,10 @@ type UseChatControllerPresentationParams = {
   activeInterAgentGraphRunId: string | null;
   activeThread: ChatThread | null;
   activeTurn: RuntimeTurn | null;
+  agentCatalogLoaded: boolean;
+  agentCatalogLoading: boolean;
   agentOptions: AgentTypeSummary[];
+  composerReady: boolean;
   attachments: ComposerAttachment[];
   canStopTurn: boolean;
   composer: string;
@@ -99,7 +102,10 @@ export function useChatControllerPresentation({
   activeInterAgentGraphRunId,
   activeThread,
   activeTurn,
+  agentCatalogLoaded,
+  agentCatalogLoading,
   agentOptions,
+  composerReady,
   attachments,
   canStopTurn,
   composer,
@@ -170,11 +176,11 @@ export function useChatControllerPresentation({
     messages.length === 0 &&
     !isRuntimeBusy &&
     !isSending &&
-    !isBootstrapping &&
+    composerReady &&
     !isHistoryLoading &&
     !isTranscriptHistoryPending &&
     !error;
-  const isThreadLoading = isBootstrapping || isHistoryLoading || isTranscriptHistoryPending;
+  const isThreadLoading = !composerReady || isHistoryLoading || isTranscriptHistoryPending;
   const { chatMainStyle, dockedComposerHeight, dockedComposerRef } = useDockedComposerHeight({
     attachmentCount: attachments.length,
     composerError,
@@ -182,17 +188,18 @@ export function useChatControllerPresentation({
     isEmptyChatView,
     queuedMessageCount: queuedMessages.length,
   });
+  const isCriticalBootstrapping = isBootstrapping && !composerReady;
   const loadingLabel = useMemo(
     () =>
       runtimeActivityLabel({
         activeTurn,
         events,
-        isBootstrapping,
+        isBootstrapping: isCriticalBootstrapping,
         isHistoryLoading,
         isRuntimeBusy,
         isSending,
       }),
-    [activeTurn, events, isBootstrapping, isHistoryLoading, isRuntimeBusy, isSending],
+    [activeTurn, events, isCriticalBootstrapping, isHistoryLoading, isRuntimeBusy, isSending],
   );
   const multiAgentBudgetLabel = useMemo(() => {
     return interAgentComposerBudgetLabel(multiAgentMode);
@@ -204,6 +211,7 @@ export function useChatControllerPresentation({
   const surfaceProps: ChatSurfaceProps = {
     composerProps: {
       activeProviderId,
+      agentCatalogLoading: agentCatalogLoading && !agentCatalogLoaded,
       agentSelectorLocked: Boolean(activeThread),
       agents: agentOptions,
       attachments,

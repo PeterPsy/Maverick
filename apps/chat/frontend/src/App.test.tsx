@@ -477,12 +477,37 @@ describe("App agent catalog dependency refresh", () => {
 });
 
 describe("App thread navigation", () => {
-  it("shows a draft with an error when a requested thread is missing", async () => {
+  it("does not allow sending to a draft when a requested thread is missing", async () => {
     const element = await renderApp({ runtimeThreads: [] as ChatThread[], runtimeThreadsLoaded: true, threadId: "missing-thread" });
 
     await waitForAssertion(() => {
       expect(element.textContent).toContain("This chat is no longer available.");
-      expect(element.querySelector('[role="textbox"]')).not.toBeNull();
+      expect(element.querySelector('[role="textbox"]')?.getAttribute("aria-disabled")).toBe("true");
+      expect((element.querySelector('[aria-label="Send message"]') as HTMLButtonElement | null)?.disabled).toBe(true);
+    });
+  });
+
+  it("starts a new-chat draft before runtime threads and agent catalog finish loading", async () => {
+    const catalog = deferred<Awaited<ReturnType<typeof listAgentCatalog>>>();
+    vi.mocked(listAgentCatalog).mockReturnValue(catalog.promise);
+
+    const element = await renderApp({
+      navigationScope: "floating-window",
+      newChatRequestId: "request-fast-draft",
+      runtimeThreads: [] as ChatThread[],
+      runtimeThreadsLoaded: false,
+    });
+
+    await waitForAssertion(() => {
+      expect(listAgentCatalog).toHaveBeenCalled();
+      expect(element.textContent).toContain("How can I help today?");
+      expect(element.querySelector('[role="textbox"]')?.getAttribute("aria-disabled")).toBe("false");
+      expect(element.querySelector('[aria-label="Agent runner: Loading agents..."]')).toBeTruthy();
+    });
+
+    catalog.resolve({ agent_types: [socialVideoAgent] });
+    await act(async () => {
+      await catalog.promise;
     });
   });
 

@@ -167,8 +167,10 @@ async function renderComposer({
   transcriptionChunkedDictationSupported = false,
   transcriptionProviderAppId = "",
   transcriptionProviderAvailable = false,
+  agentCatalogLoading = false,
 }: {
   agentOptions?: AgentTypeSummary[];
+  agentCatalogLoading?: boolean;
   mentionItems?: MentionItem[];
   onAddAttachments?: (files: File[]) => void;
   onReferenceAdd?: (reference: AppReference) => void;
@@ -194,6 +196,7 @@ async function renderComposer({
     return (
       <ChatComposer
         activeProviderId="codex"
+        agentCatalogLoading={agentCatalogLoading}
         agents={agentOptions}
         attachments={[]}
         canStopTurn={false}
@@ -244,6 +247,15 @@ async function renderComposer({
     getValue: () => latestValue,
   };
 }
+
+describe("agent selector loading", () => {
+  it("shows a loading label without disabling the composer", async () => {
+    const { element } = await renderComposer({ agentCatalogLoading: true, agentOptions: [] });
+
+    expect(element.querySelector('[aria-label="Agent runner: Loading agents..."]')).toBeTruthy();
+    expect(element.querySelector('[role="textbox"]')?.getAttribute("aria-disabled")).toBe("false");
+  });
+});
 
 function mockMediaRecorder() {
   const stopTrack = vi.fn();

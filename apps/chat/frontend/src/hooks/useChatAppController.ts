@@ -148,6 +148,8 @@ export function useChatAppController({
 }: UseChatAppControllerParams) {
   const {
     activeProviderId,
+    agentCatalogLoaded,
+    agentCatalogLoading,
     agentCatalogAppId,
     agentOptions,
     loadAgentOptionsFromDependencies,
@@ -200,6 +202,8 @@ export function useChatAppController({
   const { addAttachments, attachments, clearAttachments, removeAttachment } = useComposerAttachments({ allowedInputModalities: allowedAttachmentInputModalities });
   const [activeTurn, setActiveTurn] = useState<RuntimeTurn | null>(null);
   const [isBootstrapping, setIsBootstrapping] = useState(true);
+  const [initialDependenciesReady, setInitialDependenciesReady] = useState(false);
+  const [targetConversationResolved, setTargetConversationResolved] = useState(false);
   const [isHistoryLoading, setIsHistoryLoading] = useState(false);
   const [isOlderHistoryLoading, setIsOlderHistoryLoading] = useState(false);
   const [hasLoadedHistory, setHasLoadedHistory] = useState(false);
@@ -410,7 +414,7 @@ export function useChatAppController({
     composer,
     composerMentionItems,
     draftChat,
-    isBootstrapping,
+    isBootstrapping: isBootstrapping || !initialDependenciesReady || !targetConversationResolved,
     isHistoryLoading,
     isRuntimeBusy,
     multiAgentMode,
@@ -475,6 +479,7 @@ export function useChatAppController({
     setQueuedMessages,
     setQueuedMessagesForConversation,
     setSelectedReferences,
+    setTargetConversationResolved,
     setThreads,
     threadId,
     threads,
@@ -502,12 +507,15 @@ export function useChatAppController({
 
   const loadInitialState = useCallback(async () => {
     setIsBootstrapping(true);
+    setInitialDependenciesReady(false);
     try {
       const widgetActiveAppContext = await loadWidgetActiveAppContext();
       setActiveAppContext(widgetActiveAppContext);
       await loadInitialChatDependencies();
+      setInitialDependenciesReady(true);
     } catch (loadError) {
       setError(loadError instanceof Error ? loadError.message : "Unable to load chat.");
+      setInitialDependenciesReady(false);
     }
   }, [loadInitialChatDependencies]);
 
@@ -532,7 +540,15 @@ export function useChatAppController({
     postActiveThreadChanged({ activeThread, activeThreadId, navigationScope, threadId });
   }
 
-  useQueuedMessagePersistence({ activeConversationKey, isBootstrapping, navigationScope, pendingUserMessages, queuedMessages });
+  const composerReady = initialDependenciesReady && targetConversationResolved;
+
+  useQueuedMessagePersistence({
+    activeConversationKey,
+    isBootstrapping: isBootstrapping || !composerReady,
+    navigationScope,
+    pendingUserMessages,
+    queuedMessages,
+  });
 
   const presentation = useChatControllerPresentation({
     activeProviderId: composerActiveProviderId,
@@ -541,6 +557,9 @@ export function useChatAppController({
     activeThread,
     activeTurn,
     agentOptions,
+    agentCatalogLoaded,
+    agentCatalogLoading,
+    composerReady,
     attachments,
     canStopTurn,
     composer,

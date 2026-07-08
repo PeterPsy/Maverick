@@ -90,3 +90,19 @@ and 92,104 gzip bytes to
 and 84,768 gzip bytes. The login shader now lives in
 `LoginPaperBackground-DhP0-1ON.js` at 25,087 raw bytes and 8,096 gzip bytes,
 so authenticated refreshes no longer pay that code in the initial shell chunk.
+
+## PR1b Measurement
+
+After decoupling initial Chat readiness from the agent catalog and noncritical
+capability probes, `python3 scripts/startup_performance_baseline.py` reported:
+
+| App | Raw bytes | Gzip bytes | Files |
+| --- | ---: | ---: | ---: |
+| `base-shell` | 374,321 | 105,848 | 4 |
+| `chat` | 1,227,854 | 344,289 | 20 |
+
+The main Chat JS asset changed to
+`apps/chat/frontend/dist/assets/main-BCFBFO6-.js` at 668,954 raw bytes and
+208,141 gzip bytes. The composer can now become interactive after the
+conversation target and core dependencies resolve, while the agent catalog
+continues loading in the background.

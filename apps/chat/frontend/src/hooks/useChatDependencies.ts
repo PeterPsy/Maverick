@@ -35,12 +35,18 @@ export function useChatDependencies() {
   const [transcriptionContentTypes, setTranscriptionContentTypes] = useState<string[]>([]);
   const [transcriptionChunkedDictationSupported, setTranscriptionChunkedDictationSupported] = useState(false);
   const [agentOptions, setAgentOptions] = useState<AgentTypeSummary[]>([]);
+  const [agentCatalogLoaded, setAgentCatalogLoaded] = useState(false);
+  const [agentCatalogLoading, setAgentCatalogLoading] = useState(false);
   const [selectedAgentTypeId, setSelectedAgentTypeId] = useState("");
   const prewarmedTranscriptionProviderRef = useRef("");
 
-  const clearAgentOptions = useCallback(() => {
+  const clearAgentOptions = useCallback((options: { resetStatus?: boolean } = {}) => {
     clearAgentRuntimeConfigCache();
     setAgentCatalogAppId("");
+    if (options.resetStatus !== false) {
+      setAgentCatalogLoaded(false);
+      setAgentCatalogLoading(false);
+    }
     setAgentOptions([]);
     setSelectedAgentTypeId("");
   }, []);
@@ -63,6 +69,8 @@ export function useChatDependencies() {
 
   const loadAgentOptionsFromDependencies = useCallback(
     async (dependencies: AppDependenciesPayload) => {
+      setAgentCatalogLoading(true);
+      setAgentCatalogLoaded(false);
       try {
         const providerAppId = selectedSharedDependencyProviderAppId(dependencies, [
           AGENT_CATALOG_DEPENDENCY_ALIAS,
@@ -70,7 +78,10 @@ export function useChatDependencies() {
         ]);
         await loadAgentOptionsFromProvider(providerAppId);
       } catch {
-        clearAgentOptions();
+        clearAgentOptions({ resetStatus: false });
+      } finally {
+        setAgentCatalogLoading(false);
+        setAgentCatalogLoaded(true);
       }
     },
     [clearAgentOptions, loadAgentOptionsFromProvider],
@@ -232,7 +243,7 @@ export function useChatDependencies() {
       clearTranscriptionProvider();
       return;
     }
-    await loadAgentOptionsFromDependencies(dependencies);
+    void loadAgentOptionsFromDependencies(dependencies);
     void Promise.all([loadSpeechProviderFromDependencies(dependencies), loadTranscriptionProviderFromDependencies(dependencies)]);
   }, [
     clearAgentOptions,
@@ -245,6 +256,8 @@ export function useChatDependencies() {
 
   return {
     activeProviderId,
+    agentCatalogLoaded,
+    agentCatalogLoading,
     agentCatalogAppId,
     agentOptions,
     loadAgentOptionsFromDependencies,

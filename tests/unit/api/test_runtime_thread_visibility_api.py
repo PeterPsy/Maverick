@@ -8,11 +8,28 @@ from unittest.mock import patch
 from core.api.platform_host import PlatformHost
 from core.api.platform_state import bootstrap_platform_state
 from core.runtime.runtime_thread import RuntimeThreadRecord
+from core.runtime.runtime_threads import create_runtime_thread
 from core.runtime.service import create_runtime_session, queue_runtime_turn
 from tests.unit.api.app_reference_test_support import AppReferenceApiTestSupport
 
 
 class RuntimeThreadVisibilityApiTestCase(AppReferenceApiTestSupport, unittest.TestCase):
+    def _create_thread_for_session(self, state, session, *, title: str = "New chat"):
+        return create_runtime_thread(
+            state.runtime_store,
+            workspace_id=session.workspace_id,
+            thread_id=session.session_id,
+            runtime_session_id=session.session_id,
+            title=title,
+            agent_label=session.agent_id,
+            agent_type_id=session.agent_type_id,
+            agent_role_id=session.agent_role_id,
+            source_app_id=session.source_app_id or session.agent_id,
+            system_prompt=session.system_prompt or "",
+            project_id=session.project_id,
+            now=session.updated_at,
+        )
+
     def _insert_corrupt_session(self, state, repo_root, *, session_id: str = "corrupt-session") -> datetime:
         now = datetime(2026, 6, 16, 12, 0, tzinfo=UTC)
         state.runtime_store.collections.sessions.update_one(
@@ -59,7 +76,7 @@ class RuntimeThreadVisibilityApiTestCase(AppReferenceApiTestSupport, unittest.Te
                 },
             ):
                 state = bootstrap_platform_state(start_path=repo_root)
-            create_runtime_session(
+            visible_session = create_runtime_session(
                 state.runtime_store,
                 session_id="visible-session",
                 workspace_id="default",
@@ -67,6 +84,7 @@ class RuntimeThreadVisibilityApiTestCase(AppReferenceApiTestSupport, unittest.Te
                 source_app_id="chat",
                 start_path=repo_root,
             )
+            self._create_thread_for_session(state, visible_session)
             create_runtime_session(
                 state.runtime_store,
                 session_id="hidden-session",
@@ -199,7 +217,7 @@ class RuntimeThreadVisibilityApiTestCase(AppReferenceApiTestSupport, unittest.Te
                 },
             ):
                 state = bootstrap_platform_state(start_path=repo_root)
-            create_runtime_session(
+            visible_session = create_runtime_session(
                 state.runtime_store,
                 session_id="visible-session",
                 workspace_id="default",
@@ -207,6 +225,7 @@ class RuntimeThreadVisibilityApiTestCase(AppReferenceApiTestSupport, unittest.Te
                 source_app_id="chat",
                 start_path=repo_root,
             )
+            self._create_thread_for_session(state, visible_session)
             now = self._insert_corrupt_session(state, repo_root)
             state.runtime_store.save_thread(
                 RuntimeThreadRecord(
@@ -261,7 +280,7 @@ class RuntimeThreadVisibilityApiTestCase(AppReferenceApiTestSupport, unittest.Te
             ):
                 state = bootstrap_platform_state(start_path=repo_root)
             for index in range(55):
-                create_runtime_session(
+                session = create_runtime_session(
                     state.runtime_store,
                     session_id=f"visible-session-{index:02d}",
                     workspace_id="default",
@@ -271,6 +290,22 @@ class RuntimeThreadVisibilityApiTestCase(AppReferenceApiTestSupport, unittest.Te
                     thread_title=f"Archive thread {index:02d}",
                     start_path=repo_root,
                 )
+                create_runtime_thread(
+                    state.runtime_store,
+                    workspace_id="default",
+                    thread_id=session.session_id,
+                    runtime_session_id=session.session_id,
+                    title=f"Archive thread {index:02d}",
+                    agent_label="chat",
+                    source_app_id="chat",
+                    system_prompt=session.system_prompt or "",
+                    now=session.updated_at,
+                )
+
+            def fail_list_turns(_session_id: str):
+                raise AssertionError("REST thread catalogs must not scan runtime turns")
+
+            state.runtime_store.list_turns = fail_list_turns  # type: ignore[method-assign]
             app = PlatformHost(state, start_path=repo_root)
             cookie = self._login(app)
 

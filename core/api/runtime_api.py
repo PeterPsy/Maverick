@@ -32,8 +32,8 @@ from core.runtime.runtime_threads import (
     clear_runtime_threads_complete,
     create_runtime_thread,
     delete_runtime_thread_complete,
-    ensure_runtime_threads_for_sessions,
     find_runtime_thread_by_session,
+    list_runtime_threads,
     mark_runtime_thread_completed_response_read,
     thread_detail_payload,
     thread_summary_payload,
@@ -122,12 +122,7 @@ def _runtime_thread_page(
     cursor: str | None = None,
 ) -> dict[str, object]:
     with startup_timer("runtime.threads.rest_payload", workspace_id=workspace_id) as timing:
-        sessions = state.runtime_store.list_sessions(workspace_id)
-        threads = ensure_runtime_threads_for_sessions(
-            state.runtime_store,
-            workspace_id=workspace_id,
-            sessions=sessions,
-        )
+        threads = list_runtime_threads(state.runtime_store, workspace_id=workspace_id)
         normalized_query = (query or "").strip()
         total_thread_count = len(threads)
         if normalized_query:
@@ -160,7 +155,6 @@ def _runtime_thread_page(
                 "filtered_total": len(threads),
             },
         }
-        timing["session_count"] = len(sessions)
         timing["thread_count"] = len(items)
         timing["filtered_thread_count"] = len(threads)
         timing["total_thread_count"] = total_thread_count
@@ -1112,11 +1106,7 @@ def _handle_thread_clear(
 ):
     if method != "POST":
         return json_response(start_response, {"error": "method_not_allowed"}, status="405 Method Not Allowed")
-    threads = ensure_runtime_threads_for_sessions(
-        state.runtime_store,
-        workspace_id=context.workspace_id,
-        sessions=state.runtime_store.list_sessions(context.workspace_id),
-    )
+    threads = list_runtime_threads(state.runtime_store, workspace_id=context.workspace_id)
     for thread in threads:
         forbidden_reason = _thread_cleanup_forbidden_reason(
             state,

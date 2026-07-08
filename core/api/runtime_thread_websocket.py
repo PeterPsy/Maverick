@@ -11,7 +11,7 @@ from typing import TYPE_CHECKING, Any, Awaitable, Callable
 from core.api.http import json_default
 from core.api.session_api import resolve_request_session
 from core.observability.startup_performance import startup_timer
-from core.runtime.runtime_threads import ensure_runtime_threads_for_sessions, thread_recency_key, thread_summary_payload
+from core.runtime.runtime_threads import list_runtime_threads, thread_summary_payload
 from core.shared.entrypoints import EntrypointShutdownController
 
 if TYPE_CHECKING:
@@ -65,8 +65,7 @@ def _websocket_environ(scope: dict[str, Any]) -> dict[str, str]:
 def runtime_thread_snapshot_frame(state: PlatformState, *, workspace_id: str, viewer_user_id: str | None = None) -> dict[str, Any]:
     """Build the current workspace runtime thread catalog snapshot."""
     with startup_timer("runtime.threads.websocket_snapshot", workspace_id=workspace_id) as timing:
-        sessions = state.runtime_store.list_sessions(workspace_id)
-        threads = _ordered_runtime_threads(state, workspace_id=workspace_id, sessions=sessions)
+        threads = list_runtime_threads(state.runtime_store, workspace_id=workspace_id)
         items = [
             thread_summary_payload(
                 thread,
@@ -89,7 +88,6 @@ def runtime_thread_snapshot_frame(state: PlatformState, *, workspace_id: str, vi
             },
             "at": datetime.now(tz=UTC),
         }
-        timing["session_count"] = len(sessions)
         timing["thread_count"] = len(items)
         timing["total_thread_count"] = len(threads)
         timing["encoded_bytes"] = len(encode_thread_websocket_frame(frame).encode("utf-8"))
@@ -120,16 +118,6 @@ def runtime_thread_changed_frame(
             if thread.workspace_id == workspace_id:
                 frame["thread"] = thread_summary_payload(thread, viewer_user_id=viewer_user_id)
     return frame
-
-
-def _ordered_runtime_threads(state: PlatformState, *, workspace_id: str, sessions=None):
-    runtime_sessions = sessions if sessions is not None else state.runtime_store.list_sessions(workspace_id)
-    threads = ensure_runtime_threads_for_sessions(
-        state.runtime_store,
-        workspace_id=workspace_id,
-        sessions=runtime_sessions,
-    )
-    return sorted(threads, key=thread_recency_key, reverse=True)
 
 
 def _event_thread_id(event: dict[str, Any]) -> str:

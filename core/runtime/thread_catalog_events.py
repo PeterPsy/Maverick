@@ -11,12 +11,12 @@ from core.runtime.runtime_threads import (
     mark_runtime_thread_response_completed,
     mark_runtime_thread_user_message,
     runtime_thread_availability_for_session,
-    thread_payload,
+    thread_summary_payload,
     update_runtime_thread_availability,
 )
 from core.runtime.errors import RuntimeSessionNotFoundError
 from core.runtime.runtime_session import runtime_session_allows_user_thread
-from core.runtime.thread_titles import DEFAULT_THREAD_TITLE
+from core.runtime.thread_titles import runtime_thread_title_for_session
 
 if TYPE_CHECKING:
     from core.api.platform_state import PlatformState
@@ -37,7 +37,7 @@ def publish_runtime_thread_catalog_change(
         "action": action,
     }
     if thread is not None:
-        payload["thread"] = thread_payload(thread)
+        payload["thread"] = thread_summary_payload(thread)
         payload["thread_id"] = thread.thread_id
     thread_bus.publish(workspace_id=workspace_id, event=payload)
 
@@ -174,14 +174,21 @@ def _ensure_thread_for_runtime_session(
     if not runtime_session_allows_user_thread(session):
         return None
     pending_hash = title_generation_input_hash.strip()
+    title = runtime_thread_title_for_session(
+        state.runtime_store,
+        session,
+        input_text=input_text,
+        attachments=attachments,
+        app_references=app_references,
+    )
     return create_runtime_thread(
         state.runtime_store,
         workspace_id=workspace_id,
         thread_id=session.session_id,
         runtime_session_id=session.session_id,
-        title=DEFAULT_THREAD_TITLE,
+        title=title,
         title_pending=bool(pending_hash),
-        title_source="pending" if pending_hash else "placeholder",
+        title_source="pending" if pending_hash else "",
         title_generation_input_hash=pending_hash,
         agent_label=session.agent_id,
         agent_type_id=getattr(session, "agent_type_id", ""),

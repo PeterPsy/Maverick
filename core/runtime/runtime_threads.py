@@ -80,21 +80,11 @@ def thread_recency_key(thread: RuntimeThreadRecord) -> tuple[bool, datetime, dat
 
 
 def list_runtime_threads(store: RuntimeStore, *, workspace_id: str) -> list[RuntimeThreadRecord]:
-    stored_threads = _user_visible_runtime_threads(
+    threads = _user_visible_runtime_threads(
         store,
         workspace_id=workspace_id,
         threads=store.list_threads(workspace_id),
     )
-    facts_by_session_id = _turn_facts_by_session_id(store, stored_threads)
-    threads = [
-        _reconcile_runtime_thread_with_facts(
-            store,
-            workspace_id=workspace_id,
-            thread=thread,
-            facts=facts_by_session_id.get(thread.runtime_session_id),
-        )
-        for thread in stored_threads
-    ]
     return sorted(
         threads,
         key=thread_recency_key,
@@ -110,6 +100,7 @@ def ensure_runtime_threads_for_sessions(
 ) -> list[RuntimeThreadRecord]:
     """Ensure every user-visible runtime session in a workspace has one thread."""
     threads = store.list_threads(workspace_id)
+    by_thread_id = {thread.thread_id: thread for thread in threads}
     by_session_id = {thread.runtime_session_id: thread for thread in threads if thread.runtime_session_id}
     for session in sessions:
         if (
@@ -130,7 +121,12 @@ def ensure_runtime_threads_for_sessions(
             now=session.started_at or session.updated_at,
         )
         by_session_id[session.session_id] = thread
-    return list_runtime_threads(store, workspace_id=workspace_id)
+        by_thread_id[thread.thread_id] = thread
+    return sorted(
+        _user_visible_runtime_threads(store, workspace_id=workspace_id, threads=list(by_thread_id.values())),
+        key=thread_recency_key,
+        reverse=True,
+    )
 
 
 def create_runtime_thread(
@@ -380,13 +376,6 @@ def _reconcile_runtime_thread_with_facts(
         return thread
     patch["updated_at"] = now or utcnow()
     return _save_latest_runtime_thread_patch(store, workspace_id=workspace_id, thread=thread, patch=patch)
-
-
-def _turn_facts_by_session_id(store: RuntimeStore, threads: list[RuntimeThreadRecord]) -> dict[str, _ThreadTurnFacts]:
-    facts_by_session_id: dict[str, _ThreadTurnFacts] = {}
-    for session_id in {thread.runtime_session_id for thread in threads if thread.runtime_session_id}:
-        facts_by_session_id[session_id] = _turn_facts_for_session(store.list_turns(session_id))
-    return facts_by_session_id
 
 
 def _user_visible_runtime_threads(

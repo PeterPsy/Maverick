@@ -12,6 +12,12 @@ from core.runtime.client_message_claims import RuntimeClientMessageClaim
 from core.runtime.routing import build_runtime_routing
 from core.runtime.runtime_session import RuntimeSessionRecord, RuntimeSessionStatus
 from core.runtime.runtime_turns import RuntimeTurnRecord, RuntimeTurnStatus
+from core.runtime.runtime_threads import (
+    mark_runtime_thread_response_completed,
+    mark_runtime_thread_user_message,
+    runtime_thread_availability_for_session,
+    update_runtime_thread_availability,
+)
 from core.runtime.store import RuntimeStore
 from core.workspaces.models import WorkspaceGovernanceRecord
 
@@ -157,7 +163,7 @@ def queue_runtime_turn(
     """Create one queued runtime turn."""
     timestamp = now or utcnow()
     session = store.get_session(session_id)
-    return store.save_turn(
+    record = store.save_turn(
         RuntimeTurnRecord(
             turn_id=turn_id,
             session_id=session_id,
@@ -173,6 +179,8 @@ def queue_runtime_turn(
             client_message_id=client_message_id.strip() if isinstance(client_message_id, str) and client_message_id.strip() else None,
         )
     )
+    _update_thread_for_queued_turn(store, record)
+    return record
 
 
 def queue_runtime_turn_if_client_message_absent(
@@ -204,11 +212,18 @@ def queue_runtime_turn_if_client_message_absent(
     )
     save_claimed = getattr(store, "save_turn_if_current_client_message_claim", None)
     if client_message_claim is not None and callable(save_claimed):
-        return save_claimed(record, client_message_claim, now=timestamp)
+        turn, created = save_claimed(record, client_message_claim, now=timestamp)
+        if created:
+            _update_thread_for_queued_turn(store, turn)
+        return turn, created
     save_once = getattr(store, "save_turn_if_client_message_absent", None)
     if callable(save_once):
-        return save_once(record)
+        turn, created = save_once(record)
+        if created:
+            _update_thread_for_queued_turn(store, turn)
+        return turn, created
     store.save_turn(record)
+    _update_thread_for_queued_turn(store, record)
     return record, True
 
 
@@ -254,4 +269,36 @@ def transition_runtime_turn(
     )
     session = store.get_session(turn.session_id)
     store.save_session(replace(session, last_progress_at=timestamp, updated_at=timestamp))
-    return store.save_turn(updated)
+    saved = store.save_turn(updated)
+    _update_thread_for_turn_transition(store, saved)
+    return saved
+
+
+def _update_thread_for_queued_turn(store: RuntimeStore, turn: RuntimeTurnRecord) -> None:
+    mark_runtime_thread_user_message(
+        store,
+        workspace_id=turn.workspace_id,
+        runtime_session_id=turn.session_id,
+        input_text=turn.input_text or "",
+        now=turn.created_at,
+    )
+
+
+def _update_thread_for_turn_transition(store: RuntimeStore, turn: RuntimeTurnRecord) -> None:
+    if turn.status == "completed":
+        mark_runtime_thread_response_completed(
+            store,
+            workspace_id=turn.workspace_id,
+            runtime_session_id=turn.session_id,
+            turn_id=turn.turn_id,
+            now=turn.completed_at or turn.updated_at,
+        )
+        return
+    availability = runtime_thread_availability_for_session(store, runtime_session_id=turn.session_id)
+    update_runtime_thread_availability(
+        store,
+        workspace_id=turn.workspace_id,
+        runtime_session_id=turn.session_id,
+        availability=availability,
+        now=turn.updated_at,
+    )

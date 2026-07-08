@@ -945,7 +945,7 @@ class RuntimeLifecycleTestCase(unittest.TestCase):
             ["thread-a", "thread-b"],
         )
 
-    def test_runtime_thread_list_backfills_latest_user_message_from_turns(self) -> None:
+    def test_runtime_thread_queue_write_updates_latest_user_message_fact(self) -> None:
         store = self.make_store()
         repo_root = self.make_repo_root()
         now = datetime(2026, 4, 19, 10, 0, tzinfo=UTC)
@@ -1106,7 +1106,7 @@ class RuntimeLifecycleTestCase(unittest.TestCase):
         self.assertFalse(thread_payload(read, viewer_user_id="user-a")["has_unread_completed_response"])
         self.assertTrue(thread_payload(read, viewer_user_id="user-b")["has_unread_completed_response"])
 
-    def test_runtime_thread_list_reconciles_stale_busyness_from_turns(self) -> None:
+    def test_runtime_thread_turn_write_path_updates_busyness_facts(self) -> None:
         store = self.make_store()
         repo_root = self.make_repo_root()
         now = datetime(2026, 4, 19, 10, 0, tzinfo=UTC)
@@ -1134,7 +1134,7 @@ class RuntimeLifecycleTestCase(unittest.TestCase):
             now=now + timedelta(minutes=1),
         )
 
-        self.assertEqual(list_runtime_threads(store, workspace_id="acme")[0].availability, "free")
+        self.assertEqual(list_runtime_threads(store, workspace_id="acme")[0].availability, "active")
 
         turn = queue_runtime_turn(store, turn_id="turn-a", session_id=session.session_id, input_text="hello")
         self.assertEqual(list_runtime_threads(store, workspace_id="acme")[0].availability, "queued")
@@ -1260,7 +1260,8 @@ class RuntimeLifecycleTestCase(unittest.TestCase):
         self.assertIsNotNone(updated)
         assert updated is not None
         self.assertEqual(updated.last_completed_turn_id, turn.turn_id)
-        self.assertEqual(event_bus.events[-1]["thread"]["last_completed_turn_id"], turn.turn_id)
+        self.assertEqual(event_bus.events[-1]["thread"]["last_completed_response_at"], now + timedelta(seconds=3))
+        self.assertNotIn("last_completed_turn_id", event_bus.events[-1]["thread"])
         self.assertIn("has_unread_completed_response", event_bus.events[-1]["thread"])
 
     def test_thread_catalog_event_preserves_user_renamed_title(self) -> None:

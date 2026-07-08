@@ -27,7 +27,7 @@ class RuntimeThreadWebSocketFrameTest(unittest.TestCase):
             )
         )
 
-    def test_snapshot_reconciles_stale_thread_availability(self) -> None:
+    def test_snapshot_uses_stored_thread_facts_without_scanning_turns(self) -> None:
         store = self.make_store()
         state = SimpleNamespace(runtime_store=store)
         started_at = datetime(2026, 4, 19, 10, 0, tzinfo=UTC)
@@ -82,13 +82,18 @@ class RuntimeThreadWebSocketFrameTest(unittest.TestCase):
             )
         )
 
+        def fail_list_turns(_session_id: str):
+            raise AssertionError("catalog snapshots must not scan runtime turns")
+
+        store.list_turns = fail_list_turns  # type: ignore[method-assign]
+
         frame = runtime_thread_snapshot_frame(state, workspace_id="default", viewer_user_id=None)
 
-        self.assertEqual(frame["threads"][0]["availability"], "free")
+        self.assertEqual(frame["threads"][0]["availability"], "active")
         self.assertNotIn("last_completed_turn_id", frame["threads"][0])
         self.assertNotIn("system_prompt", frame["threads"][0])
-        self.assertEqual(store.get_thread("thread-stale").availability, "free")
-        self.assertEqual(store.get_thread("thread-stale").last_completed_turn_id, "turn-completed")
+        self.assertEqual(store.get_thread("thread-stale").availability, "active")
+        self.assertIsNone(store.get_thread("thread-stale").last_completed_turn_id)
 
     def test_snapshot_covers_complete_thread_catalog_with_summary_payload(self) -> None:
         store = self.make_store()
@@ -113,6 +118,24 @@ class RuntimeThreadWebSocketFrameTest(unittest.TestCase):
                     ended_at=None,
                     last_progress_at=updated_at,
                     system_prompt=long_system_prompt,
+                )
+            )
+            store.save_thread(
+                RuntimeThreadRecord(
+                    thread_id=f"thread-{index:03d}",
+                    workspace_id="default",
+                    runtime_session_id=f"session-{index:02d}",
+                    title=f"Thread {index:03d}",
+                    agent_label="test-agent",
+                    agent_type_id="",
+                    agent_role_id="",
+                    source_app_id="test-agent",
+                    system_prompt=long_system_prompt,
+                    project_id=None,
+                    archived=False,
+                    availability="free",
+                    created_at=started_at,
+                    updated_at=updated_at,
                 )
             )
 

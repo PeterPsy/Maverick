@@ -146,7 +146,7 @@ def write_synthetic_platform_app(
     if frontend:
         dist_root = app_root / "frontend" / "dist"
         (dist_root / "assets").mkdir(parents=True, exist_ok=True)
-        asset_name = f"app-{app_id}.js"
+        asset_name = f"app-{app_id}-fixture01.js"
         (dist_root / "assets" / asset_name).write_text(
             (
                 f"const syntheticAppId = {app_id!r};\n"

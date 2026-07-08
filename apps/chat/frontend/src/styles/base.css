@@ -1,5 +1,13 @@
 @import "./maverickBrandTokens.css";
 
+@font-face {
+  font-family: "Material Symbols Rounded";
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url("/apps/chat/material-symbols-rounded.woff2") format("woff2");
+}
+
 :root,
 :root[data-maverick-theme="dark"],
 :root[data-theme="dark"] {

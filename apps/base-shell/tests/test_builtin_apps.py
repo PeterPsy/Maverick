@@ -534,9 +534,9 @@ class BuiltinAppsTestCase(unittest.TestCase):
         self.assertEqual(status_favicon, 200)
         self.assertEqual(status_manifest, 200)
         self.assertEqual(status_worker, 200)
-        self.assertEqual(favicon_headers["Cache-Control"], "public, max-age=31536000, immutable")
-        self.assertEqual(manifest_headers["Cache-Control"], "public, max-age=31536000, immutable")
-        self.assertEqual(worker_headers["Cache-Control"], "public, max-age=31536000, immutable")
+        self.assertEqual(favicon_headers["Cache-Control"], "public, max-age=86400, must-revalidate")
+        self.assertEqual(manifest_headers["Cache-Control"], "public, max-age=300, must-revalidate")
+        self.assertEqual(worker_headers["Cache-Control"], "no-cache")
         self.assertEqual(favicon_headers["Access-Control-Allow-Origin"], "*")
         self.assertEqual(manifest_headers["Access-Control-Allow-Origin"], "*")
         self.assertEqual(worker_headers["Access-Control-Allow-Origin"], "*")
@@ -794,6 +794,7 @@ class BuiltinAppsTestCase(unittest.TestCase):
         chat_script_path = next((repo_root / "apps" / "chat" / "frontend" / "dist" / "assets").glob("app-*.js")).name
         status_index, index_body, _index_headers = self.invoke(app, path="/apps/chat/")
         status_script, script_body, script_headers = self.invoke(app, path=f"/apps/chat/assets/{chat_script_path}")
+        status_unhashed, unhashed_body, _unhashed_headers = self.invoke(app, path="/apps/chat/assets/app.js")
 
         self.assertEqual(status_index, 401)
         self.assertIn(b"authentication_required", index_body)
@@ -802,6 +803,21 @@ class BuiltinAppsTestCase(unittest.TestCase):
         self.assertEqual(script_headers["Access-Control-Allow-Origin"], "*")
         self.assertEqual(script_headers["Cross-Origin-Resource-Policy"], "cross-origin")
         self.assertGreater(len(script_body), 100)
+        self.assertEqual(status_unhashed, 401)
+        self.assertIn(b"authentication_required", unhashed_body)
+
+    def test_chat_local_material_symbols_font_is_public_for_sandboxed_iframes(self) -> None:
+        repo_root = self.make_product_repo_root()
+        state = bootstrap_platform_state(start_path=repo_root)
+        app = PlatformHost(state, start_path=repo_root)
+
+        status_font, font_body, font_headers = self.invoke(app, path="/apps/chat/material-symbols-rounded.woff2")
+
+        self.assertEqual(status_font, 200)
+        self.assertEqual(font_headers["Cache-Control"], "public, max-age=86400, must-revalidate")
+        self.assertEqual(font_headers["Access-Control-Allow-Origin"], "*")
+        self.assertEqual(font_headers["Cross-Origin-Resource-Policy"], "cross-origin")
+        self.assertGreater(len(font_body), 100_000)
 
     def test_chat_backend_owns_projects_not_threads(self) -> None:
         repo_root = self.make_repo_root()

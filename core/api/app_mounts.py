@@ -95,6 +95,22 @@ _PUBLIC_STATIC_EXTENSIONS = {
     ".woff",
     ".woff2",
 }
+_PUBLIC_APP_STATIC_MANIFEST = {
+    "app-icon-lightcolor.png",
+    "favicon.ico",
+    "manifest.webmanifest",
+    "material-symbols-rounded.woff2",
+    "pwa-apple-touch-icon.png",
+    "pwa-logo-192.png",
+    "pwa-logo.png",
+    "pwa-maskable-logo.png",
+}
+_ROOT_REVALIDATED_CACHE_CONTROL = {
+    "manifest.webmanifest": "public, max-age=300, must-revalidate",
+    "sw.js": "no-cache",
+}
+_PUBLIC_UNHASHED_CACHE_CONTROL = "public, max-age=86400, must-revalidate"
+_PUBLIC_IMMUTABLE_CACHE_CONTROL = "public, max-age=31536000, immutable"
 _PRIVATE_SOURCE_EXTENSIONS = {
     ".env",
     ".jsx",
@@ -113,6 +129,7 @@ _COMPRESSIBLE_CONTENT_TYPE_PREFIXES = (
     "text/",
 )
 _MIN_COMPRESSIBLE_BYTES = 1024
+_HASHED_PUBLIC_ASSET_PATTERN = re.compile(r"^[A-Za-z0-9_.-]+-[A-Za-z0-9_-]{8,}\.[A-Za-z0-9]+$")
 
 
 def _accepted_content_encodings(environ: Mapping[str, str] | None) -> set[str]:
@@ -145,6 +162,27 @@ def _encoded_frontend_body(body: bytes, *, content_type: str, environ: Mapping[s
     if "gzip" in encodings:
         return gzip.compress(body, compresslevel=6), "gzip"
     return body, ""
+
+
+def _is_hashed_public_frontend_asset(subpath: str) -> bool:
+    normalized = subpath.lstrip("/")
+    suffix = Path(normalized).suffix.lower()
+    if suffix not in _PUBLIC_STATIC_EXTENSIONS:
+        return False
+    return normalized.startswith("assets/") and bool(_HASHED_PUBLIC_ASSET_PATTERN.match(Path(normalized).name))
+
+
+def _frontend_cache_control(*, content_type: str, served_subpath: str, cross_origin: bool) -> str:
+    if content_type.startswith("text/html"):
+        return "no-store"
+    asset_name = Path(served_subpath).name
+    if asset_name in _ROOT_REVALIDATED_CACHE_CONTROL:
+        return _ROOT_REVALIDATED_CACHE_CONTROL[asset_name]
+    if _is_hashed_public_frontend_asset(served_subpath):
+        return _PUBLIC_IMMUTABLE_CACHE_CONTROL
+    if cross_origin:
+        return _PUBLIC_UNHASHED_CACHE_CONTROL
+    return ""
 
 
 def serve_frontend(
@@ -181,12 +219,16 @@ def serve_frontend(
         if content_encoding:
             headers.append(("Content-Encoding", content_encoding))
             headers.append(("Vary", "Accept-Encoding"))
-        cache_control = ""
-        if content_type.startswith("text/html"):
-            cache_control = "no-store"
-            headers.append(("Cache-Control", cache_control))
-        elif cross_origin:
-            cache_control = "public, max-age=31536000, immutable"
+        try:
+            served_subpath = candidate.relative_to(root).as_posix()
+        except ValueError:
+            served_subpath = candidate.name
+        cache_control = _frontend_cache_control(
+            content_type=content_type,
+            served_subpath=served_subpath,
+            cross_origin=cross_origin,
+        )
+        if cache_control:
             headers.append(("Cache-Control", cache_control))
         if cross_origin:
             headers.extend(
@@ -216,7 +258,9 @@ def is_public_app_static_asset(subpath: str) -> bool:
     suffix = Path(normalized).suffix.lower()
     if suffix in _PRIVATE_SOURCE_EXTENSIONS:
         return False
-    return normalized.startswith("assets/") or (bool(suffix) and suffix in _PUBLIC_STATIC_EXTENSIONS)
+    if _is_hashed_public_frontend_asset(normalized):
+        return True
+    return "/" not in normalized and normalized in _PUBLIC_APP_STATIC_MANIFEST
 
 
 def handle_root_shell(

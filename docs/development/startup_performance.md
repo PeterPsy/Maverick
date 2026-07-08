@@ -46,3 +46,29 @@ python3 scripts/startup_performance_baseline.py --json
 The script reports raw and gzip sizes for committed `base-shell` and `chat`
 frontend `dist` assets. Use it before and after compression and code-splitting
 work so bundle changes stay comparable.
+
+## Browser Baseline
+
+Run against an existing authenticated host:
+
+```bash
+MAVERICK_STARTUP_USERNAME=<username> MAVERICK_STARTUP_PASSWORD=<password> \
+  python3 scripts/startup_browser_baseline.py --base-url http://127.0.0.1:8014 --json
+```
+
+For local repeatable test runs, the script can start a temporary core host with
+insecure test credentials:
+
+```bash
+python3 scripts/startup_browser_baseline.py --use-insecure-test-defaults --json
+```
+
+The browser baseline measures desktop and mobile cold page loads for `/app/chat`:
+shell visible time, Chat iframe loaded time, composer ready time, HTTP request
+count, WebSocket count, time to first WebSocket, first
+`runtime.thread.snapshot` time/bytes/thread count, iframe count, widget iframe
+count, and external request count.
+
+When credentials or the local Playwright browser executable are not available,
+the script returns a JSON payload with `skipped: true` and a concrete reason so
+CI and manual runs can distinguish environment gaps from regressions.

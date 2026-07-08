@@ -30,14 +30,14 @@ class AppMountsTestCase(unittest.TestCase):
         self.assertEqual(status, "200 OK")
         self.assertEqual(headers["Cache-Control"], "no-store")
 
-    def test_cross_origin_static_assets_are_cacheable(self) -> None:
+    def test_hashed_cross_origin_static_assets_are_immutable(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             asset_dir = root / "assets"
             asset_dir.mkdir()
-            (asset_dir / "app-abc123.js").write_text("console.log('app')", encoding="utf-8")
+            (asset_dir / "app-abc12345.js").write_text("console.log('app')", encoding="utf-8")
 
-            status, headers = _serve(root, "/assets/app-abc123.js", cross_origin=True)
+            status, headers = _serve(root, "/assets/app-abc12345.js", cross_origin=True)
 
         self.assertEqual(status, "200 OK")
         self.assertEqual(headers["Cache-Control"], "public, max-age=31536000, immutable")
@@ -50,17 +50,17 @@ class AppMountsTestCase(unittest.TestCase):
             asset_dir = root / "assets"
             asset_dir.mkdir()
             source = ("const message = 'startup-cache';\n" * 200).encode("utf-8")
-            (asset_dir / "app-abc123.js").write_bytes(source)
+            (asset_dir / "app-abc12345.js").write_bytes(source)
 
             status, headers, body = _serve_body(
                 root,
-                "/assets/app-abc123.js",
+                "/assets/app-abc12345.js",
                 cross_origin=True,
                 environ={"HTTP_ACCEPT_ENCODING": "br, gzip"},
             )
             status_identity, headers_identity, body_identity = _serve_body(
                 root,
-                "/assets/app-abc123.js",
+                "/assets/app-abc12345.js",
                 cross_origin=True,
                 environ={"HTTP_ACCEPT_ENCODING": "gzip;q=0"},
             )
@@ -92,6 +92,11 @@ class AppMountsTestCase(unittest.TestCase):
         self.assertEqual(status_source, "404 Not Found")
         self.assertNotIn(b"root", body_map)
         self.assertNotIn(b"root", body_source)
+
+    def test_unhashed_assets_are_not_public_by_extension_only(self) -> None:
+        self.assertFalse(is_public_app_static_asset("assets/app.js"))
+        self.assertFalse(is_public_app_static_asset("assets/app-abc123.js"))
+        self.assertTrue(is_public_app_static_asset("assets/app-abc12345.js"))
 
     def test_backend_entrypoint_timeout_comes_from_app_contract(self) -> None:
         parsed = build_parsed_app_contract(

@@ -5,8 +5,10 @@ import {
   RuntimeEvent,
   RuntimeSession,
   RuntimeTurn,
+  ApiError,
   applyThreadCatalogPayload,
   createThread,
+  getRuntimeThread,
   isRuntimeSessionUnavailableError,
 } from "../api/client";
 import { ActiveAppContext, loadDefaultSystemPrompt } from "../lib/activeAppContext";
@@ -328,10 +330,10 @@ export function useChatNavigation({
           return;
         }
         if (requestedThreadId) {
-          suppressedExternalThreadIdRef.current = requestedThreadId;
-          resetActiveConversation();
-          setTargetConversationResolved(false);
-          setError(THREAD_NOT_FOUND_MESSAGE);
+          if (await openThreadById(requestedThreadId)) {
+            setActiveInterAgentGraphRunId(requestedGraphRunId || null);
+            setError(null);
+          }
           return;
         }
         createDraftChat({ activeAppContext, resetView: false });
@@ -559,6 +561,17 @@ export function useChatNavigation({
     if (existingThread) {
       await handleSelectThread(existingThread);
       return true;
+    }
+    try {
+      const fetchedThread = await getRuntimeThread(threadId);
+      setThreads((current) => applyThreadCatalogPayload(current, { changed_thread: fetchedThread }));
+      await handleSelectThread(fetchedThread);
+      return true;
+    } catch (loadError) {
+      if (!(loadError instanceof ApiError) || loadError.status !== 404) {
+        setError(loadError instanceof Error ? loadError.message : "Unable to open chat.");
+        return false;
+      }
     }
     suppressedExternalThreadIdRef.current = threadId;
     resetActiveConversation();

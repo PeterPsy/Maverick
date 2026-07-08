@@ -137,6 +137,13 @@ export function listRuntimeThreads(options: { cursor?: string | null; limit?: nu
   });
 }
 
+export async function getRuntimeThread(threadId: string, options: { signal?: AbortSignal } = {}): Promise<ChatThread> {
+  const payload = await requestJson<{ thread: ChatThread }>(`/api/runtime/threads/${encodeURIComponent(threadId)}`, {
+    signal: options.signal,
+  });
+  return payload.thread;
+}
+
 export function listRuntimeSessionEvents(
   sessionId: string,
   options: { limit?: number; signal?: AbortSignal } = {},

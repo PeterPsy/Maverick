@@ -6,6 +6,7 @@ import {
   deleteProject,
   executeInterAgentRun,
   getInterAgentRun,
+  getRuntimeThread,
   getSpeechCapabilities,
   interruptInterAgentRun,
   listInterAgentRunArtifacts,
@@ -201,6 +202,22 @@ describe("runtime event client calls", () => {
 
     expect(fetchMock).toHaveBeenCalledWith(
       "/api/runtime/threads?cursor=thread-50&limit=50",
+      expect.objectContaining({
+        credentials: "same-origin",
+        headers: expect.objectContaining({ Accept: "application/json" }),
+      }),
+    );
+  });
+
+  it("loads one runtime thread detail by id", async () => {
+    const thread = { thread_id: "thread/1", runtime_session_id: "session-1" };
+    const fetchMock = vi.fn(async () => jsonResponse({ thread }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(getRuntimeThread("thread/1")).resolves.toEqual(thread);
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/api/runtime/threads/thread%2F1",
       expect.objectContaining({
         credentials: "same-origin",
         headers: expect.objectContaining({ Accept: "application/json" }),

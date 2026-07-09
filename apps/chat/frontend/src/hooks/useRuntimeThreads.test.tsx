@@ -5,7 +5,7 @@ import { act, useEffect, useState } from "react";
 import { createRoot } from "react-dom/client";
 import type { Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { ChatThread } from "../api/client";
+import type { ChatThread, RuntimeThreadWebSocketFrame } from "../api/client";
 import { resetRuntimeThreadSourceForTests } from "./runtimeThreadSource";
 import { useRuntimeThreads } from "./useRuntimeThreads";
 
@@ -28,11 +28,27 @@ class MockWebSocket {
   }
 }
 
-function RuntimeThreadsProbe({ onError, onThreads }: { onError: (error: string | null) => void; onThreads?: (threads: ChatThread[]) => void }) {
+function okJson(payload: unknown): Response {
+  return {
+    ok: true,
+    status: 200,
+    json: async () => payload,
+  } as Response;
+}
+
+function RuntimeThreadsProbe({
+  onError,
+  onSnapshot,
+  onThreads,
+}: {
+  onError: (error: string | null) => void;
+  onSnapshot?: (frame: Extract<RuntimeThreadWebSocketFrame, { type: "runtime.thread.snapshot" }>) => void;
+  onThreads?: (threads: ChatThread[]) => void;
+}) {
   const [threads, setThreads] = useState<ChatThread[]>([]);
   const [error, setError] = useState<string | null>(null);
 
-  useRuntimeThreads({ setError, setThreads });
+  useRuntimeThreads({ onSnapshot, setError, setThreads });
 
   useEffect(() => {
     onError(error);
@@ -58,6 +74,16 @@ describe("useRuntimeThreads", () => {
     originalWebSocket = globalThis.WebSocket;
     globalThis.BroadcastChannel = undefined as unknown as typeof BroadcastChannel;
     globalThis.WebSocket = MockWebSocket as unknown as typeof WebSocket;
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () =>
+        okJson({
+          workspace_id: "default",
+          threads: [],
+          threads_page: { limit: 50, has_more: false, cursor: null, sort: "recency_desc" },
+        }),
+      ),
+    );
     container = document.createElement("div");
     document.body.append(container);
     root = createRoot(container);
@@ -70,12 +96,52 @@ describe("useRuntimeThreads", () => {
     container.remove();
     globalThis.BroadcastChannel = originalBroadcastChannel as typeof BroadcastChannel;
     globalThis.WebSocket = originalWebSocket as typeof WebSocket;
+    vi.unstubAllGlobals();
     resetRuntimeThreadSourceForTests();
     vi.useRealTimers();
   });
 
+  it("loads the initial thread catalog through REST before a WebSocket snapshot arrives", async () => {
+    const onError = vi.fn();
+    const onSnapshot = vi.fn();
+    const onThreads = vi.fn();
+    const firstThread = thread({ thread_id: "thread-1", runtime_session_id: "session-1", title: "First" });
+    vi.mocked(fetch).mockResolvedValueOnce(
+      okJson({
+        workspace_id: "default",
+        threads: [firstThread],
+        threads_page: { limit: 50, has_more: false, cursor: null, sort: "recency_desc" },
+      }),
+    );
+
+    await act(async () => {
+      root.render(<RuntimeThreadsProbe onError={onError} onSnapshot={onSnapshot} onThreads={onThreads} />);
+    });
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(MockWebSocket.instances).toHaveLength(1);
+    expect(onSnapshot).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        type: "runtime.thread.snapshot",
+        workspace_id: "default",
+        threads: [firstThread],
+      }),
+    );
+    expect(onThreads).toHaveBeenLastCalledWith([firstThread]);
+
+    await act(async () => {
+      MockWebSocket.instances[0].onerror?.();
+    });
+
+    expect(onError).not.toHaveBeenCalledWith("Runtime thread WebSocket is unavailable.");
+  });
+
   it("does not reconnect after authorization or missing-route close codes", async () => {
     const onError = vi.fn();
+    vi.mocked(fetch).mockReturnValueOnce(new Promise<Response>(() => undefined));
     await act(async () => {
       root.render(<RuntimeThreadsProbe onError={onError} />);
     });

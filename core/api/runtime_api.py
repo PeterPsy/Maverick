@@ -143,6 +143,7 @@ def _runtime_thread_page(
             for thread in page_threads
         ]
         payload = {
+            "workspace_id": workspace_id,
             "threads": items,
             "threads_page": {
                 "limit": bounded_limit,

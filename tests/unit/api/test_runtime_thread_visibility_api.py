@@ -336,6 +336,7 @@ class RuntimeThreadVisibilityApiTestCase(AppReferenceApiTestSupport, unittest.Te
             )
 
         self.assertEqual(list_status, 200)
+        self.assertEqual(list_payload["workspace_id"], "default")
         self.assertEqual(len(list_payload["threads"]), 50)
         self.assertNotIn("items", list_payload["threads_page"])
         self.assertEqual(list_payload["threads_page"]["limit"], 50)

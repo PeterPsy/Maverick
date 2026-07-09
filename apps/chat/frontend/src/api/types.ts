@@ -275,6 +275,7 @@ export type ChatSidebarPayload = {
 };
 
 export type RuntimeThreadsPayload = {
+  workspace_id?: string;
   threads: ChatThread[];
   threads_page?: RuntimeThreadsPage;
 };

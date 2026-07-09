@@ -1,6 +1,7 @@
 import { useEffect, useRef } from "react";
 import type { Dispatch, SetStateAction } from "react";
-import { ChatThread, orderChatThreads, RuntimeThreadWebSocketFrame } from "../api/client";
+import { listRuntimeThreads, orderChatThreads } from "../api/client";
+import type { ChatThread, RuntimeThreadWebSocketFrame, RuntimeThreadsPayload } from "../api/client";
 import { getRuntimeThreadSource } from "./runtimeThreadSource";
 
 type RuntimeThreadSnapshotFrame = Extract<RuntimeThreadWebSocketFrame, { type: "runtime.thread.snapshot" }>;
@@ -11,6 +12,10 @@ type RuntimeThreadsArgs = {
   setError: Dispatch<SetStateAction<string | null>>;
   setThreads: Dispatch<SetStateAction<ChatThread[]>>;
 };
+
+function isRuntimeThreadStreamError(message: string): boolean {
+  return message.startsWith("Runtime thread ");
+}
 
 export function useRuntimeThreads({ enabled = true, onSnapshot, setError, setThreads }: RuntimeThreadsArgs) {
   const onSnapshotRef = useRef<typeof onSnapshot>(onSnapshot);
@@ -24,6 +29,38 @@ export function useRuntimeThreads({ enabled = true, onSnapshot, setError, setThr
     }
     function applyThreads(threads: ChatThread[]) {
       setThreads(orderChatThreads(threads || []));
+    }
+
+    function snapshotFrameFromPayload(payload: RuntimeThreadsPayload): RuntimeThreadSnapshotFrame {
+      return {
+        type: "runtime.thread.snapshot",
+        workspace_id: payload.workspace_id || "",
+        threads: payload.threads || [],
+        threads_page: payload.threads_page,
+        at: new Date().toISOString(),
+      };
+    }
+
+    let disposed = false;
+    let hasLoadedSnapshot = false;
+    let hasWebSocketSnapshot = false;
+    const fallbackController = new AbortController();
+
+    function applyThreadSnapshot(frame: RuntimeThreadSnapshotFrame, source: "rest" | "websocket") {
+      if (source === "websocket") {
+        hasWebSocketSnapshot = true;
+      }
+      hasLoadedSnapshot = true;
+      applyThreads(frame.threads);
+      onSnapshotRef.current?.(frame);
+    }
+
+    function handleStreamError(message: string | null) {
+      if (message && hasLoadedSnapshot && isRuntimeThreadStreamError(message)) {
+        setError(null);
+        return;
+      }
+      setError(message);
     }
 
     function applyThreadDelta(frame: Extract<RuntimeThreadWebSocketFrame, { type: "runtime.thread.changed" }>) {
@@ -47,11 +84,10 @@ export function useRuntimeThreads({ enabled = true, onSnapshot, setError, setThr
     }
 
     const unsubscribe = getRuntimeThreadSource().subscribe({
-      onError: setError,
+      onError: handleStreamError,
       onFrame: (frame) => {
         if (frame.type === "runtime.thread.snapshot") {
-          applyThreads(frame.threads);
-          onSnapshotRef.current?.(frame);
+          applyThreadSnapshot(frame, "websocket");
           return;
         }
         if (frame.type === "runtime.thread.changed") {
@@ -59,6 +95,23 @@ export function useRuntimeThreads({ enabled = true, onSnapshot, setError, setThr
         }
       },
     });
-    return unsubscribe;
+    listRuntimeThreads({ signal: fallbackController.signal })
+      .then((payload) => {
+        if (disposed || hasWebSocketSnapshot) {
+          return;
+        }
+        applyThreadSnapshot(snapshotFrameFromPayload(payload), "rest");
+        setError(null);
+      })
+      .catch((loadError: Error) => {
+        if (!disposed && loadError.name !== "AbortError") {
+          setError(loadError.message);
+        }
+      });
+    return () => {
+      disposed = true;
+      fallbackController.abort();
+      unsubscribe();
+    };
   }, [enabled, setError, setThreads]);
 }

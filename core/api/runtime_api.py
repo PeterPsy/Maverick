@@ -35,6 +35,7 @@ from core.runtime.runtime_threads import (
     find_runtime_thread_by_session,
     list_runtime_threads,
     mark_runtime_thread_completed_response_read,
+    promote_hidden_chat_root_session_with_turns,
     thread_detail_payload,
     thread_summary_payload,
     update_runtime_thread,
@@ -102,6 +103,17 @@ def _reconciled_session(state: PlatformState, session: RuntimeSessionRecord, *, 
         platform_allows_full_access=session.workspace_id == "default",
         start_path=start_path,
     )
+
+
+def _visibility_reconciled_session(state: PlatformState, session: RuntimeSessionRecord) -> RuntimeSessionRecord:
+    if runtime_session_allows_user_thread(session):
+        return session
+    promoted = promote_hidden_chat_root_session_with_turns(
+        state.runtime_store,
+        workspace_id=session.workspace_id,
+        runtime_session_id=session.session_id,
+    )
+    return promoted or session
 
 
 def _turn_payload(turn: RuntimeTurnRecord) -> dict[str, object]:
@@ -251,6 +263,7 @@ def _publish_thread_change(
 
 def _list_session_payloads(state: PlatformState, *, workspace_id: str, start_path) -> list[dict[str, object]]:
     sessions = state.runtime_store.list_sessions(workspace_id)
+    sessions = [_visibility_reconciled_session(state, session) for session in sessions]
     reconciled = [_reconciled_session(state, session, start_path=start_path) for session in sessions]
     return [
         _session_payload(session, provider_id=_resolved_provider_id(state, session))
@@ -429,6 +442,7 @@ def _pending_client_message_claim_response(
     }
     with suppress(Exception):
         session = state.runtime_store.get_session(claim.session_id)
+        session = _visibility_reconciled_session(state, session)
         if session.workspace_id == context.workspace_id and runtime_session_allows_user_thread(session):
             payload["session"] = _session_payload(session, provider_id=_response_provider_id(session))
     return json_response(start_response, payload, status="202 Accepted")
@@ -479,6 +493,7 @@ def _idempotent_runtime_turn_response(
         return _hidden_runtime_session_response(start_response, runtime_session_id=turn.session_id, thread_visibility="invalid")
     if session.workspace_id != context.workspace_id:
         return json_response(start_response, {"error": "runtime_session_not_found"}, status="404 Not Found")
+    session = _visibility_reconciled_session(state, session)
     if not runtime_session_allows_user_thread(session):
         return _hidden_runtime_session_response(start_response, session)
     return json_response(
@@ -525,6 +540,7 @@ def _thread_references_hidden_session(state: PlatformState, thread) -> bool:
         return False
     except ValueError:
         return True
+    session = _visibility_reconciled_session(state, session)
     return not runtime_session_allows_user_thread(session)
 
 
@@ -858,6 +874,7 @@ def _handle_thread_collection(state: PlatformState, context: RequestSession, met
         return _hidden_runtime_session_response(start_response, runtime_session_id=runtime_session_id, thread_visibility="invalid")
     if session.workspace_id != context.workspace_id:
         return json_response(start_response, {"error": "runtime_session_not_found"}, status="404 Not Found")
+    session = _visibility_reconciled_session(state, session)
     if not runtime_session_allows_user_thread(session):
         return _hidden_runtime_session_response(start_response, session)
     existing = None
@@ -947,6 +964,7 @@ def _handle_thread_item(
             return json_response(start_response, {"error": "runtime_thread_not_found"}, status="404 Not Found")
         if session.workspace_id != context.workspace_id:
             return json_response(start_response, {"error": "runtime_thread_not_found"}, status="404 Not Found")
+        session = _visibility_reconciled_session(state, session)
         if not runtime_session_allows_user_thread(session):
             return _hidden_runtime_session_response(start_response, session)
         thread = create_runtime_thread(
@@ -1062,6 +1080,7 @@ def _handle_thread_read(
             return json_response(start_response, {"error": "runtime_thread_not_found"}, status="404 Not Found")
         if session.workspace_id != context.workspace_id:
             return json_response(start_response, {"error": "runtime_thread_not_found"}, status="404 Not Found")
+        session = _visibility_reconciled_session(state, session)
         if not runtime_session_allows_user_thread(session):
             return _hidden_runtime_session_response(start_response, session)
         thread = create_runtime_thread(
@@ -1155,6 +1174,7 @@ def _handle_session_item(state: PlatformState, context: RequestSession, session_
         return json_response(start_response, {"error": "runtime_session_not_found"}, status="404 Not Found")
     if session.workspace_id != context.workspace_id:
         return json_response(start_response, {"error": "runtime_session_not_found"}, status="404 Not Found")
+    session = _visibility_reconciled_session(state, session)
     if not runtime_session_allows_user_thread(session):
         return _hidden_runtime_session_response(start_response, session)
     session = _reconciled_session(state, session, start_path=start_path)
@@ -1180,6 +1200,7 @@ def _handle_session_events(state: PlatformState, context: RequestSession, sessio
         return json_response(start_response, {"error": "runtime_session_not_found"}, status="404 Not Found")
     if session.workspace_id != context.workspace_id:
         return json_response(start_response, {"error": "runtime_session_not_found"}, status="404 Not Found")
+    session = _visibility_reconciled_session(state, session)
     if not runtime_session_allows_user_thread(session):
         return _hidden_runtime_session_response(start_response, session)
     _reconciled_session(state, session, start_path=start_path)
@@ -1213,6 +1234,7 @@ def _handle_session_turns(
         return json_response(start_response, {"error": "runtime_session_not_found"}, status="404 Not Found")
     if session.workspace_id != context.workspace_id:
         return json_response(start_response, {"error": "runtime_session_not_found"}, status="404 Not Found")
+    session = _visibility_reconciled_session(state, session)
     if not runtime_session_allows_user_thread(session):
         if method == "POST" and _runtime_turn_requested(body) and _prepared_session_can_be_promoted(session, context):
             try:
@@ -1519,6 +1541,7 @@ def _handle_session_cleanup(
         return json_response(start_response, {"error": "runtime_session_not_found"}, status="404 Not Found")
     if session.workspace_id != context.workspace_id:
         return json_response(start_response, {"error": "runtime_session_not_found"}, status="404 Not Found")
+    session = _visibility_reconciled_session(state, session)
     if not runtime_session_allows_user_thread(session):
         return _hidden_runtime_session_response(start_response, session)
     try:
@@ -1551,6 +1574,7 @@ def _handle_turn_item(state: PlatformState, context: RequestSession, turn_id: st
         session = state.runtime_store.get_session(turn.session_id)
     except (RuntimeSessionNotFoundError, ValueError):
         return json_response(start_response, {"error": "runtime_turn_not_found"}, status="404 Not Found")
+    session = _visibility_reconciled_session(state, session)
     if not runtime_session_allows_user_thread(session):
         return _hidden_runtime_session_response(start_response, session)
     return json_response(start_response, _turn_payload(turn))
@@ -1574,6 +1598,7 @@ def _handle_turn_interrupt(
         session = state.runtime_store.get_session(turn.session_id)
     except (RuntimeSessionNotFoundError, ValueError):
         return json_response(start_response, {"error": "runtime_turn_not_found"}, status="404 Not Found")
+    session = _visibility_reconciled_session(state, session)
     if not runtime_session_allows_user_thread(session):
         return _hidden_runtime_session_response(start_response, session)
     try:

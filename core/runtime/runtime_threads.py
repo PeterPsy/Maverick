@@ -79,11 +79,83 @@ def thread_recency_key(thread: RuntimeThreadRecord) -> tuple[bool, datetime, dat
     )
 
 
+def promote_hidden_chat_root_session_with_turns(
+    store: RuntimeStore,
+    *,
+    workspace_id: str,
+    runtime_session_id: str,
+) -> RuntimeSessionRecord | None:
+    """Promote a prepared chat session once it has accepted runtime work.
+
+    Prepared chat sessions are intentionally hidden before first send. If a
+    turn exists, the session is no longer only prepared and must be visible in
+    the user thread catalog even if an earlier path missed the explicit
+    first-send promotion.
+    """
+    normalized_session_id = runtime_session_id.strip()
+    if not normalized_session_id:
+        return None
+    try:
+        session = store.get_session(normalized_session_id)
+    except (RuntimeSessionNotFoundError, ValueError):
+        return None
+    if session.workspace_id != workspace_id:
+        return None
+    if runtime_session_allows_user_thread(session):
+        return session
+    if session.session_kind != "chat_root" or session.thread_visibility != "hidden":
+        return None
+    if not store.list_turns(normalized_session_id):
+        return None
+    return store.save_session(replace(session, thread_visibility="user", updated_at=utcnow()))
+
+
+def promote_hidden_chat_root_sessions_with_turns(
+    store: RuntimeStore,
+    *,
+    workspace_id: str,
+    runtime_session_ids: Iterable[str] | None = None,
+) -> list[RuntimeSessionRecord]:
+    promoted: list[RuntimeSessionRecord] = []
+    if runtime_session_ids is not None:
+        candidates = sorted({str(session_id or "").strip() for session_id in runtime_session_ids})
+        candidate_ids = {session_id for session_id in candidates if session_id}
+        if not candidate_ids:
+            return promoted
+        for session in store.list_sessions(workspace_id):
+            if (
+                session.session_id not in candidate_ids
+                or session.session_kind != "chat_root"
+                or session.thread_visibility != "hidden"
+                or not store.list_turns(session.session_id)
+            ):
+                continue
+            promoted.append(store.save_session(replace(session, thread_visibility="user", updated_at=utcnow())))
+        return promoted
+    for session in store.list_sessions(workspace_id):
+        if session.session_kind != "chat_root" or session.thread_visibility != "hidden":
+            continue
+        updated = promote_hidden_chat_root_session_with_turns(
+            store,
+            workspace_id=workspace_id,
+            runtime_session_id=session.session_id,
+        )
+        if updated is not None and runtime_session_allows_user_thread(updated):
+            promoted.append(updated)
+    return promoted
+
+
 def list_runtime_threads(store: RuntimeStore, *, workspace_id: str) -> list[RuntimeThreadRecord]:
+    stored_threads = store.list_threads(workspace_id)
+    promote_hidden_chat_root_sessions_with_turns(
+        store,
+        workspace_id=workspace_id,
+        runtime_session_ids=[thread.runtime_session_id for thread in stored_threads if thread.runtime_session_id],
+    )
     threads = _user_visible_runtime_threads(
         store,
         workspace_id=workspace_id,
-        threads=store.list_threads(workspace_id),
+        threads=stored_threads,
     )
     return sorted(
         threads,
@@ -446,6 +518,13 @@ def _runtime_session_is_hidden(store: RuntimeStore, *, runtime_session_id: str) 
         return False
     except ValueError:
         return True
+    promoted = promote_hidden_chat_root_session_with_turns(
+        store,
+        workspace_id=session.workspace_id,
+        runtime_session_id=runtime_session_id,
+    )
+    if promoted is not None:
+        session = promoted
     return not runtime_session_allows_user_thread(session)
 
 

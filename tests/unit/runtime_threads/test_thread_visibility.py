@@ -15,6 +15,7 @@ from core.runtime.service import create_child_runtime_session, create_runtime_se
 from core.runtime.runtime_threads import (
     create_runtime_thread,
     ensure_runtime_threads_for_sessions,
+    find_runtime_thread_by_session,
     list_runtime_threads,
 )
 from core.runtime.store import RuntimeCollections, RuntimeDocumentStore
@@ -335,6 +336,72 @@ class RuntimeThreadVisibilityTest(unittest.TestCase):
         self.assertEqual([thread.runtime_session_id for thread in threads], ["visible"])
         self.assertEqual([thread.runtime_session_id for thread in list_runtime_threads(store, workspace_id="default")], ["visible"])
         self.assertEqual([thread["runtime_session_id"] for thread in frame["threads"]], ["visible"])
+
+    def test_runtime_thread_lists_use_workspace_visibility_map_without_per_thread_session_lookups(self) -> None:
+        store = self.make_store()
+        now = datetime(2026, 6, 15, 12, 0, tzinfo=UTC)
+        store.save_session(self.session("visible"))
+        store.save_session(self.session("hidden", session_kind="inter_agent_participant", thread_visibility="hidden"))
+        for session_id in ("visible", "hidden"):
+            store.save_thread(
+                RuntimeThreadRecord(
+                    thread_id=f"thread-{session_id}",
+                    workspace_id="default",
+                    runtime_session_id=session_id,
+                    title=session_id.title(),
+                    agent_label="chat",
+                    agent_type_id="",
+                    agent_role_id="",
+                    source_app_id="chat",
+                    system_prompt="",
+                    project_id=None,
+                    archived=False,
+                    availability="free",
+                    created_at=now,
+                    updated_at=now,
+                )
+            )
+
+        def fail_get_session(_session_id: str):
+            raise AssertionError("thread catalog list must not fetch each runtime session")
+
+        store.get_session = fail_get_session  # type: ignore[method-assign]
+
+        self.assertEqual([thread.runtime_session_id for thread in list_runtime_threads(store, workspace_id="default")], ["visible"])
+
+    def test_find_runtime_thread_by_session_uses_runtime_session_index(self) -> None:
+        store = self.make_store()
+        now = datetime(2026, 6, 15, 12, 0, tzinfo=UTC)
+        store.save_session(self.session("visible"))
+        store.save_thread(
+            RuntimeThreadRecord(
+                thread_id="thread-visible",
+                workspace_id="default",
+                runtime_session_id="visible",
+                title="Visible",
+                agent_label="chat",
+                agent_type_id="",
+                agent_role_id="",
+                source_app_id="chat",
+                system_prompt="",
+                project_id=None,
+                archived=False,
+                availability="free",
+                created_at=now,
+                updated_at=now,
+            )
+        )
+
+        def fail_list_threads(_workspace_id: str):
+            raise AssertionError("session lookup must use the runtime_session_id thread index")
+
+        store.list_threads = fail_list_threads  # type: ignore[method-assign]
+
+        thread = find_runtime_thread_by_session(store, workspace_id="default", runtime_session_id="visible")
+
+        self.assertIsNotNone(thread)
+        assert thread is not None
+        self.assertEqual(thread.thread_id, "thread-visible")
 
     def test_invalid_thread_visibility_fails_closed_for_thread_catalog(self) -> None:
         store = self.make_store()

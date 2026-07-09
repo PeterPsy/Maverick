@@ -23,7 +23,7 @@ from core.runtime.models import RuntimeLocation
 from core.runtime.paths import workspace_runtime_root
 from core.runtime.runtime_events import RuntimeEventRecord
 from core.runtime.runtime_process import RuntimeProcessRecord
-from core.runtime.runtime_session import RuntimeApiTokenRecord, RuntimeSessionRecord, runtime_session_from_document
+from core.runtime.runtime_session import RuntimeApiTokenRecord, RuntimeSessionRecord, runtime_session_allows_user_thread, runtime_session_from_document
 from core.runtime.runtime_state import RuntimeStateRecord
 from core.runtime.runtime_thread import RuntimeThreadRecord
 from core.runtime.runtime_turns import RuntimeTurnRecord
@@ -88,6 +88,9 @@ class RuntimeStore(Protocol):
     def list_sessions(self, workspace_id: str) -> list[RuntimeSessionRecord]:
         ...
 
+    def runtime_session_thread_visibility_map(self, workspace_id: str) -> dict[str, bool]:
+        ...
+
     def list_all_sessions(self) -> list[RuntimeSessionRecord]:
         ...
 
@@ -110,6 +113,9 @@ class RuntimeStore(Protocol):
         ...
 
     def list_turns(self, session_id: str) -> list[RuntimeTurnRecord]:
+        ...
+
+    def has_turn_with_status(self, session_id: str, statuses: set[str]) -> bool:
         ...
 
     def list_recent_turns(self, session_id: str, *, limit: int) -> list[RuntimeTurnRecord]:
@@ -170,6 +176,9 @@ class RuntimeStore(Protocol):
         ...
 
     def get_thread(self, thread_id: str) -> RuntimeThreadRecord:
+        ...
+
+    def get_thread_by_runtime_session_id(self, *, workspace_id: str, runtime_session_id: str) -> RuntimeThreadRecord | None:
         ...
 
     def list_threads(self, workspace_id: str) -> list[RuntimeThreadRecord]:
@@ -261,6 +270,18 @@ class RuntimeDocumentStore:
 
     def list_sessions(self, workspace_id: str) -> list[RuntimeSessionRecord]:
         return _valid_runtime_sessions(self.collections.sessions.find({"workspace_id": workspace_id}))
+
+    def runtime_session_thread_visibility_map(self, workspace_id: str) -> dict[str, bool]:
+        visibility: dict[str, bool] = {}
+        for document in self.collections.sessions.find({"workspace_id": workspace_id}):
+            session_id = str(document.get("session_id") or "").strip()
+            if not session_id:
+                continue
+            try:
+                visibility[session_id] = runtime_session_allows_user_thread(runtime_session_from_document(document))
+            except ValueError:
+                visibility[session_id] = False
+        return visibility
 
     def list_all_sessions(self) -> list[RuntimeSessionRecord]:
         return _valid_runtime_sessions(self.collections.sessions.find({}))
@@ -386,6 +407,12 @@ class RuntimeDocumentStore:
 
     def list_turns(self, session_id: str) -> list[RuntimeTurnRecord]:
         return [RuntimeTurnRecord(**document) for document in self.collections.turns.find({"session_id": session_id})]
+
+    def has_turn_with_status(self, session_id: str, statuses: set[str]) -> bool:
+        for status in statuses:
+            if self.collections.turns.find_one({"session_id": session_id, "status": status}) is not None:
+                return True
+        return False
 
     def list_recent_turns(self, session_id: str, *, limit: int) -> list[RuntimeTurnRecord]:
         if limit < 1:
@@ -648,6 +675,15 @@ class RuntimeDocumentStore:
         if document is None:
             raise RuntimeThreadNotFoundError(f"Runtime thread `{thread_id}` was not found.")
         return RuntimeThreadRecord(**document)
+
+    def get_thread_by_runtime_session_id(self, *, workspace_id: str, runtime_session_id: str) -> RuntimeThreadRecord | None:
+        document = self.collections.threads.find_one(
+            {
+                "workspace_id": workspace_id,
+                "runtime_session_id": runtime_session_id,
+            }
+        )
+        return RuntimeThreadRecord(**document) if document is not None else None
 
     def list_threads(self, workspace_id: str) -> list[RuntimeThreadRecord]:
         return [RuntimeThreadRecord(**document) for document in self.collections.threads.find({"workspace_id": workspace_id})]

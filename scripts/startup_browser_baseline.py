@@ -62,6 +62,10 @@ def main() -> int:
     parser.add_argument("--json", action="store_true", help="print machine-readable JSON")
     parser.add_argument("--base-url", help="use an already-running Maverick host")
     parser.add_argument("--port", type=int, help="local port to use when starting a host")
+    parser.add_argument("--runs", type=int, default=1, help="cold browser runs per profile")
+    parser.add_argument("--warm-reloads", type=int, default=1, help="warm reloads to measure after each cold run")
+    parser.add_argument("--max-composer-ready-p95-ms", type=float, help="fail when composer p95 exceeds this threshold")
+    parser.add_argument("--max-runtime-thread-websocket-p95", type=float, help="fail when runtime thread WebSocket count p95 exceeds this threshold")
     parser.add_argument("--username", help="login username; defaults to MAVERICK_STARTUP_USERNAME or MAVERICK_ADMIN_USERNAME")
     parser.add_argument("--password", help="login password; defaults to MAVERICK_STARTUP_PASSWORD or MAVERICK_ADMIN_PASSWORD")
     parser.add_argument(
@@ -70,6 +74,10 @@ def main() -> int:
         help="start the local host with admin/maverick test credentials when no credentials are provided",
     )
     args = parser.parse_args()
+    if args.runs < 1:
+        parser.error("--runs must be a positive integer")
+    if args.warm_reloads < 0:
+        parser.error("--warm-reloads must be zero or greater")
 
     env = os.environ.copy()
     credentials = _credentials(args, env)
@@ -110,7 +118,15 @@ def main() -> int:
             username,
             "--password",
             password,
+            "--runs",
+            str(args.runs),
+            "--warm-reloads",
+            str(args.warm_reloads),
         ]
+        if args.max_composer_ready_p95_ms is not None:
+            cmd.extend(["--max-composer-ready-p95-ms", str(args.max_composer_ready_p95_ms)])
+        if args.max_runtime_thread_websocket_p95 is not None:
+            cmd.extend(["--max-runtime-thread-websocket-p95", str(args.max_runtime_thread_websocket_p95)])
         if args.json:
             cmd.append("--json")
         completed = subprocess.run(cmd, cwd=ROOT, env=env, check=False)

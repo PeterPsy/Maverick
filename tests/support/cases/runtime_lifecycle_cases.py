@@ -1126,6 +1126,12 @@ class RuntimeLifecycleTestCase(unittest.TestCase):
             title="A",
             now=now,
         )
+
+        def fail_list_turns(_session_id: str):
+            raise AssertionError("runtime thread turn write path must use transition facts instead of scanning turns")
+
+        store.list_turns = fail_list_turns  # type: ignore[method-assign]
+
         update_runtime_thread_availability(
             store,
             workspace_id="acme",
@@ -1167,10 +1173,16 @@ class RuntimeLifecycleTestCase(unittest.TestCase):
         )
         state = SimpleNamespace(runtime_store=store, runtime_thread_event_bus=event_bus)
 
+        def fail_list_turns(_session_id: str):
+            raise AssertionError("thread catalog event write path must use known turn facts instead of scanning turns")
+
+        store.list_turns = fail_list_turns  # type: ignore[method-assign]
+
         thread = mark_thread_user_message_queued(
             state,
             workspace_id="acme",
             runtime_session_id=session.session_id,
+            input_text=turn.input_text or "",
             now=turn.created_at,
         )
 

@@ -5,7 +5,6 @@ from __future__ import annotations
 from dataclasses import replace
 from datetime import datetime
 from pathlib import Path
-from typing import TYPE_CHECKING
 
 from core.observability.service import append_platform_log, record_platform_audit, record_platform_event
 from core.runtime.client_message_claims import RuntimeClientMessageClaim
@@ -15,14 +14,10 @@ from core.runtime.runtime_turns import RuntimeTurnRecord, RuntimeTurnStatus
 from core.runtime.runtime_threads import (
     mark_runtime_thread_response_completed,
     mark_runtime_thread_user_message,
-    runtime_thread_availability_for_session,
     update_runtime_thread_availability,
 )
 from core.runtime.store import RuntimeStore
 from core.workspaces.models import WorkspaceGovernanceRecord
-
-if TYPE_CHECKING:
-    from core.runtime.event_bus import RuntimeEventBus
 
 
 def transition_runtime_session(
@@ -109,9 +104,6 @@ def transition_runtime_session(
             now=timestamp,
         )
     return saved
-
-
-
 def reconcile_runtime_session_policy(
     store: RuntimeStore,
     session: RuntimeSessionRecord,
@@ -148,9 +140,6 @@ def reconcile_runtime_session_policy(
         updated_at=timestamp,
     )
     return store.save_session(reconciled)
-
-
-
 def queue_runtime_turn(
     store: RuntimeStore,
     *,
@@ -225,9 +214,6 @@ def queue_runtime_turn_if_client_message_absent(
     store.save_turn(record)
     _update_thread_for_queued_turn(store, record)
     return record, True
-
-
-
 def transition_runtime_turn(
     store: RuntimeStore,
     *,
@@ -280,6 +266,7 @@ def _update_thread_for_queued_turn(store: RuntimeStore, turn: RuntimeTurnRecord)
         workspace_id=turn.workspace_id,
         runtime_session_id=turn.session_id,
         input_text=turn.input_text or "",
+        availability="queued",
         now=turn.created_at,
     )
 
@@ -291,10 +278,11 @@ def _update_thread_for_turn_transition(store: RuntimeStore, turn: RuntimeTurnRec
             workspace_id=turn.workspace_id,
             runtime_session_id=turn.session_id,
             turn_id=turn.turn_id,
+            availability="free",
             now=turn.completed_at or turn.updated_at,
         )
         return
-    availability = runtime_thread_availability_for_session(store, runtime_session_id=turn.session_id)
+    availability = "active" if turn.status == "active" else "queued" if turn.status == "queued" else "free"
     update_runtime_thread_availability(
         store,
         workspace_id=turn.workspace_id,

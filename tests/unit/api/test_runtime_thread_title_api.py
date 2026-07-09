@@ -98,9 +98,9 @@ class RuntimeThreadTitleApiTestCase(AppReferenceApiTestSupport, unittest.TestCas
         created_thread = published_events[0]["thread"]
         self.assertEqual(created_thread["title"], DEFAULT_THREAD_TITLE)
         self.assertFalse(created_thread["title_pending"])
-        self.assertEqual(created_thread["title_source"], "placeholder")
-        self.assertTrue(all(event.get("thread", {}).get("title_source") != "deterministic" for event in published_events))
-        self.assertEqual(published_events[-1]["thread"]["title_source"], "pending")
+        self.assertNotIn("title_source", created_thread)
+        self.assertTrue(all("title_generation_input_hash" not in event.get("thread", {}) for event in published_events))
+        self.assertTrue(published_events[-1]["thread"]["title_pending"])
         schedule_call = captured["schedule_call"]
         self.assertIsNotNone(schedule_call)
         assert schedule_call is not None

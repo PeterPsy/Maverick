@@ -199,12 +199,14 @@ reported:
 | App | Raw bytes | Gzip bytes | Files |
 | --- | ---: | ---: | ---: |
 | `base-shell` | 789,156 | 520,014 | 5 |
-| `chat` | 1,652,904 | 761,249 | 24 |
+| `chat` | 1,240,429 | 347,725 | 23 |
 
-The asset totals now include a self-hosted `material-symbols-rounded.woff2`
-font in each app (`414,656` raw bytes, `414,080` gzip bytes). This increases
-committed dist size while removing Google Fonts/Material Symbols network
-requests from the startup HTML and widget HTML path.
+The asset totals now include one self-hosted
+`material-symbols-rounded.woff2` font in `base-shell` (`414,656` raw bytes,
+`414,080` gzip bytes). Chat and its widgets reference the shell-level font at
+`/apps/base-shell/material-symbols-rounded.woff2`, removing the duplicate Chat
+font file while keeping Google Fonts/Material Symbols off the startup HTML and
+widget HTML path.
 
 Startup-relevant chunks after the changes:
 
@@ -212,9 +214,9 @@ Startup-relevant chunks after the changes:
 | --- | ---: | ---: |
 | `apps/base-shell/frontend/dist/assets/index-Uf_i05jZ.js` | 276,443 | 84,768 |
 | `apps/base-shell/frontend/dist/assets/index-BnBmXTwD.css` | 70,015 | 12,126 |
-| `apps/chat/frontend/dist/assets/main-DvK_zeSb.js` | 307,359 | 94,452 |
-| `apps/chat/frontend/dist/assets/main-J3cygK7D.css` | 183,991 | 27,505 |
-| `apps/chat/frontend/dist/assets/useRuntimeThreads-CbOiFtRf.js` | 9,937 | 2,864 |
+| `apps/chat/frontend/dist/assets/main-DGe9SKhr.js` | 307,359 | 94,455 |
+| `apps/chat/frontend/dist/assets/main-BjGrU349.css` | 183,997 | 27,508 |
+| `apps/chat/frontend/dist/assets/useRuntimeThreads-Bj6WiPa2.js` | 12,106 | 3,419 |
 
 Static serving policy is now:
 
@@ -228,10 +230,12 @@ Static serving policy is now:
 
 `python3 scripts/startup_browser_baseline.py --json` without credentials
 reported `skipped: true` with reason `missing credentials`.
-`python3 scripts/startup_browser_baseline.py --use-insecure-test-defaults --json`
+`python3 scripts/startup_browser_baseline.py --use-insecure-test-defaults --runs 1 --warm-reloads 0 --max-runtime-thread-websocket-p95 1 --json`
 started a temporary local host, then reported `skipped: true` because the local
 Playwright Chromium executable is not installed in this environment. Use
 `MAVERICK_STARTUP_USERNAME` and `MAVERICK_STARTUP_PASSWORD`, or
 `--use-insecure-test-defaults` for a local temporary host, plus an installed
 Playwright Chromium browser, to collect authenticated desktop/mobile browser
-metrics.
+metrics. For statistical browser baselines, use `--runs` and `--warm-reloads`;
+CI can pass `--max-composer-ready-p95-ms` and
+`--max-runtime-thread-websocket-p95` thresholds.

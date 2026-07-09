@@ -148,6 +148,10 @@ def create_runtime_thread(
     title_generation_failure: str | None = None,
     title_generation_provider_id: str = "",
     title_generation_model_id: str = "",
+    turn_facts_known: bool = False,
+    availability: str | None = None,
+    last_user_message_at: datetime | None = None,
+    last_completed_response: tuple[str, datetime] | None = None,
     now: datetime | None = None,
 ) -> RuntimeThreadRecord:
     normalized_session_id = runtime_session_id.strip()
@@ -155,13 +159,32 @@ def create_runtime_thread(
         raise ValueError("runtime_session_id is required")
     _raise_if_runtime_session_hidden(store, runtime_session_id=normalized_session_id)
     timestamp = now or utcnow()
+    known_facts = (
+        _ThreadTurnFacts(
+            availability=_normalized_thread_availability(str(availability or "free")),
+            last_user_message_at=last_user_message_at,
+            latest_completed_response=last_completed_response,
+        )
+        if turn_facts_known
+        else None
+    )
     existing = find_runtime_thread_by_session(store, workspace_id=workspace_id, runtime_session_id=normalized_session_id)
     if existing is not None:
         patch: dict[str, object] = {"updated_at": timestamp}
         normalized_title_source = _normalized_generated_title_source(title_source)
         normalized_title_hash = title_generation_input_hash.strip()
-        latest_user_message_at = runtime_thread_last_user_message_at_for_session(store, runtime_session_id=normalized_session_id)
-        latest_completed_response = runtime_thread_last_completed_response_for_session(store, runtime_session_id=normalized_session_id)
+        latest_user_message_at = (
+            known_facts.last_user_message_at
+            if known_facts is not None
+            else runtime_thread_last_user_message_at_for_session(store, runtime_session_id=normalized_session_id)
+        )
+        latest_completed_response = (
+            known_facts.latest_completed_response
+            if known_facts is not None
+            else runtime_thread_last_completed_response_for_session(store, runtime_session_id=normalized_session_id)
+        )
+        if known_facts is not None and existing.availability != known_facts.availability:
+            patch["availability"] = known_facts.availability
         if latest_user_message_at is not None and (existing.last_user_message_at is None or existing.last_user_message_at < latest_user_message_at):
             patch["last_user_message_at"] = latest_user_message_at
         if latest_completed_response is not None:
@@ -197,7 +220,11 @@ def create_runtime_thread(
         if len(patch) == 1:
             return existing
         return _save_latest_runtime_thread_patch(store, workspace_id=workspace_id, thread=existing, patch=patch)
-    latest_completed_response = runtime_thread_last_completed_response_for_session(store, runtime_session_id=normalized_session_id)
+    facts = known_facts or _ThreadTurnFacts(
+        availability=runtime_thread_availability_for_session(store, runtime_session_id=normalized_session_id),
+        last_user_message_at=runtime_thread_last_user_message_at_for_session(store, runtime_session_id=normalized_session_id),
+        latest_completed_response=runtime_thread_last_completed_response_for_session(store, runtime_session_id=normalized_session_id),
+    )
     thread = RuntimeThreadRecord(
         thread_id=thread_id or normalized_session_id or str(uuid4()),
         workspace_id=workspace_id,
@@ -210,12 +237,12 @@ def create_runtime_thread(
         system_prompt=system_prompt.strip(),
         project_id=project_id.strip() if isinstance(project_id, str) and project_id.strip() else None,
         archived=False,
-        availability=runtime_thread_availability_for_session(store, runtime_session_id=normalized_session_id),
+        availability=facts.availability,
         created_at=timestamp,
         updated_at=timestamp,
-        last_user_message_at=runtime_thread_last_user_message_at_for_session(store, runtime_session_id=normalized_session_id),
-        last_completed_response_at=latest_completed_response[1] if latest_completed_response is not None else None,
-        last_completed_turn_id=latest_completed_response[0] if latest_completed_response is not None else None,
+        last_user_message_at=facts.last_user_message_at,
+        last_completed_response_at=facts.latest_completed_response[1] if facts.latest_completed_response is not None else None,
+        last_completed_turn_id=facts.latest_completed_response[0] if facts.latest_completed_response is not None else None,
         title_pending=bool(title_pending),
         title_source=_thread_title_source(title.strip() or "New chat", title_source=title_source, title_pending=title_pending),
         title_generation_input_hash=title_generation_input_hash.strip(),
@@ -273,6 +300,12 @@ def find_runtime_thread_by_session(
 ) -> RuntimeThreadRecord | None:
     normalized_session_id = runtime_session_id.strip()
     if not normalized_session_id:
+        return None
+    get_by_session = getattr(store, "get_thread_by_runtime_session_id", None)
+    if callable(get_by_session):
+        thread = get_by_session(workspace_id=workspace_id, runtime_session_id=normalized_session_id)
+        if thread is not None and not _runtime_session_is_hidden(store, runtime_session_id=normalized_session_id):
+            return thread
         return None
     if _runtime_session_is_hidden(store, runtime_session_id=normalized_session_id):
         return None
@@ -384,17 +417,10 @@ def _user_visible_runtime_threads(
     workspace_id: str,
     threads: list[RuntimeThreadRecord],
 ) -> list[RuntimeThreadRecord]:
-    hidden_session_ids = {
-        session.session_id
-        for session in store.list_sessions(workspace_id)
-        if not runtime_session_allows_user_thread(session)
-    }
-    if not hidden_session_ids:
-        return [
-            thread
-            for thread in threads
-            if not thread.runtime_session_id or not _runtime_session_is_hidden(store, runtime_session_id=thread.runtime_session_id)
-        ]
+    visibility_map = _runtime_session_thread_visibility_map(store, workspace_id=workspace_id)
+    if visibility_map is not None:
+        return [thread for thread in threads if not thread.runtime_session_id or visibility_map.get(thread.runtime_session_id, True)]
+    hidden_session_ids = {session.session_id for session in store.list_sessions(workspace_id) if not runtime_session_allows_user_thread(session)}
     return [
         thread
         for thread in threads
@@ -404,6 +430,13 @@ def _user_visible_runtime_threads(
             and not _runtime_session_is_hidden(store, runtime_session_id=thread.runtime_session_id)
         )
     ]
+
+
+def _runtime_session_thread_visibility_map(store: RuntimeStore, *, workspace_id: str) -> dict[str, bool] | None:
+    visibility_map = getattr(store, "runtime_session_thread_visibility_map", None)
+    if not callable(visibility_map):
+        return None
+    return dict(visibility_map(workspace_id))
 
 
 def _runtime_session_is_hidden(store: RuntimeStore, *, runtime_session_id: str) -> bool:
@@ -446,6 +479,13 @@ def _turn_facts_for_session(turns: list[RuntimeTurnRecord]) -> _ThreadTurnFacts:
 
 
 def runtime_thread_availability_for_session(store: RuntimeStore, *, runtime_session_id: str) -> str:
+    has_turn_with_status = getattr(store, "has_turn_with_status", None)
+    if callable(has_turn_with_status):
+        if has_turn_with_status(runtime_session_id, {"active"}):
+            return "active"
+        if has_turn_with_status(runtime_session_id, {"queued"}):
+            return "queued"
+        return "free"
     statuses = {turn.status for turn in store.list_turns(runtime_session_id)}
     if "active" in statuses:
         return "active"
@@ -478,6 +518,7 @@ def mark_runtime_thread_user_message(
     attachments: Iterable[Mapping[str, object]] | None = None,
     app_references: Iterable[Mapping[str, object]] | None = None,
     title_generation_input_hash: str = "",
+    availability: str | None = None,
     now: datetime | None = None,
 ) -> RuntimeThreadRecord | None:
     thread = find_runtime_thread_by_session(store, workspace_id=workspace_id, runtime_session_id=runtime_session_id)
@@ -485,7 +526,7 @@ def mark_runtime_thread_user_message(
         return None
     timestamp = now or utcnow()
     patch: dict[str, object] = {
-        "availability": runtime_thread_availability_for_session(store, runtime_session_id=runtime_session_id),
+        "availability": _known_or_current_thread_availability(store, runtime_session_id=runtime_session_id, availability=availability),
         "last_user_message_at": timestamp,
         "updated_at": timestamp,
     }
@@ -549,6 +590,7 @@ def mark_runtime_thread_response_completed(
     workspace_id: str,
     runtime_session_id: str,
     turn_id: str,
+    availability: str | None = None,
     now: datetime | None = None,
 ) -> RuntimeThreadRecord | None:
     thread = find_runtime_thread_by_session(store, workspace_id=workspace_id, runtime_session_id=runtime_session_id)
@@ -556,7 +598,7 @@ def mark_runtime_thread_response_completed(
         return None
     timestamp = now or utcnow()
     patch: dict[str, object] = {
-        "availability": runtime_thread_availability_for_session(store, runtime_session_id=runtime_session_id),
+        "availability": _known_or_current_thread_availability(store, runtime_session_id=runtime_session_id, availability=availability),
         "updated_at": timestamp,
     }
     if thread.last_completed_response_at is None or thread.last_completed_response_at <= timestamp:
@@ -624,6 +666,20 @@ def update_runtime_thread_availability(
         thread=thread,
         patch={"availability": value, "updated_at": timestamp},
     )
+
+
+def _known_or_current_thread_availability(store: RuntimeStore, *, runtime_session_id: str, availability: str | None) -> str:
+    if availability is None:
+        return runtime_thread_availability_for_session(store, runtime_session_id=runtime_session_id)
+    value = _normalized_thread_availability(str(availability))
+    if value == "active":
+        return value
+    current = runtime_thread_availability_for_session(store, runtime_session_id=runtime_session_id)
+    if value == "queued" and current == "active":
+        return current
+    if value == "free" and current != "free":
+        return current
+    return value
 
 
 def _save_latest_runtime_thread_patch(

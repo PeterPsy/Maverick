@@ -53,7 +53,7 @@ Run against an existing authenticated host:
 
 ```bash
 MAVERICK_STARTUP_USERNAME=<username> MAVERICK_STARTUP_PASSWORD=<password> \
-  python3 scripts/startup_browser_baseline.py --base-url http://127.0.0.1:8014 --json
+  python3 scripts/startup_browser_baseline.py --base-url http://127.0.0.1:8014 --runs 5 --warm-reloads 2 --json
 ```
 
 For local repeatable test runs, the script can start a temporary core host with
@@ -63,11 +63,16 @@ insecure test credentials:
 python3 scripts/startup_browser_baseline.py --use-insecure-test-defaults --json
 ```
 
-The browser baseline measures desktop and mobile cold page loads for `/app/chat`:
-shell visible time, Chat iframe loaded time, composer ready time, HTTP request
-count, WebSocket count, time to first WebSocket, first
-`runtime.thread.snapshot` time/bytes/thread count, iframe count, widget iframe
-count, and external request count.
+The browser baseline logs in before the measured navigation, then measures
+desktop and mobile cold page loads plus optional warm reloads for `/app/chat`.
+It reports raw samples and p50/p75/p95 summaries for shell visible time, Chat
+iframe loaded time, composer ready time, HTTP request count, WebSocket count,
+time to first WebSocket, first `runtime.thread.snapshot` time/bytes/thread
+count, iframe count, widget iframe count, and external request count.
+
+CI jobs can pass threshold flags such as
+`--max-composer-ready-p95-ms 2500` and
+`--max-runtime-thread-websocket-p95 1` to fail on startup regressions.
 
 When credentials or the local Playwright browser executable are not available,
 the script returns a JSON payload with `skipped: true` and a concrete reason so

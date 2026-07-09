@@ -1,12 +1,15 @@
-import type { RuntimeThreadWebSocketFrame } from "../api/client";
-import { runtimeThreadWebSocketUrl } from "../api/client";
+import type { ChatThread, RuntimeThreadWebSocketFrame, RuntimeThreadsPage } from "../api/client";
+import { orderChatThreads, runtimeThreadWebSocketUrl } from "../api/client";
 
 type RuntimeThreadSourceMessage =
   | { kind: "hello"; client_id: string; tab_id: string }
   | { kind: "source-claim"; client_id: string; tab_id: string }
   | { kind: "source-ready"; client_id: string; tab_id: string }
   | { kind: "source-closed"; client_id: string; tab_id: string }
-  | { kind: "frame"; client_id: string; tab_id: string; frame: RuntimeThreadWebSocketFrame };
+  | { kind: "frame"; client_id: string; tab_id: string; frame: RuntimeThreadWebSocketFrame; target_client_id?: string };
+
+type RuntimeThreadSnapshotFrame = Extract<RuntimeThreadWebSocketFrame, { type: "runtime.thread.snapshot" }>;
+type RuntimeThreadChangedFrame = Extract<RuntimeThreadWebSocketFrame, { type: "runtime.thread.changed" }>;
 
 type RuntimeThreadSourceSubscriber = {
   onError: (message: string | null) => void;
@@ -68,6 +71,7 @@ export class RuntimeThreadSource {
   private started = false;
   private stopped = true;
   private tabId = "";
+  private cachedSnapshot: RuntimeThreadSnapshotFrame | null = null;
 
   constructor(options: RuntimeThreadSourceOptions = {}) {
     this.followerTimeoutMs = options.followerTimeoutMs ?? DEFAULT_FOLLOWER_TIMEOUT_MS;
@@ -81,6 +85,7 @@ export class RuntimeThreadSource {
     if (!this.started) {
       this.start();
     }
+    this.replayCachedSnapshot(subscriber);
     return () => {
       this.subscribers.delete(subscriberId);
       if (!this.subscribers.size) {
@@ -118,6 +123,7 @@ export class RuntimeThreadSource {
     }
     this.isLeader = false;
     this.sourceClientId = null;
+    this.cachedSnapshot = null;
     this.socket?.close();
     this.socket = null;
     this.channel?.close();
@@ -136,6 +142,7 @@ export class RuntimeThreadSource {
       }
       if (this.isLeader) {
         this.post({ kind: "source-ready" });
+        this.postCachedSnapshot(message.client_id);
       }
       return;
     }
@@ -151,10 +158,14 @@ export class RuntimeThreadSource {
       return;
     }
     if (message.kind === "frame" && !this.isLeader) {
+      if (message.target_client_id && message.target_client_id !== this.clientId) {
+        return;
+      }
       this.sourceClientId = message.client_id;
       this.lastFrameAt = Date.now();
       this.clearLeaderElection();
       this.startFollowerWatchdog();
+      this.cacheFrame(message.frame);
       this.notifyFrame(message.frame);
     }
   }
@@ -251,6 +262,7 @@ export class RuntimeThreadSource {
       this.lastFrameAt = Date.now();
       try {
         const frame = JSON.parse(event.data) as RuntimeThreadWebSocketFrame;
+        this.cacheFrame(frame);
         this.notifyFrame(frame);
         this.post({ kind: "frame", frame });
       } catch (parseError) {
@@ -337,9 +349,79 @@ export class RuntimeThreadSource {
   }
 
   private notifyFrame(frame: RuntimeThreadWebSocketFrame) {
-    for (const subscriber of this.subscribers.values()) {
+    for (const subscriber of Array.from(this.subscribers.values())) {
       subscriber.onFrame(frame);
     }
+  }
+
+  private cacheFrame(frame: RuntimeThreadWebSocketFrame) {
+    if (frame.type === "runtime.thread.snapshot") {
+      this.cachedSnapshot = this.cloneSnapshot(frame);
+      return;
+    }
+    if (frame.type !== "runtime.thread.changed") {
+      return;
+    }
+    this.applyChangedFrameToCache(frame);
+  }
+
+  private applyChangedFrameToCache(frame: RuntimeThreadChangedFrame) {
+    if (Array.isArray(frame.threads)) {
+      this.cachedSnapshot = {
+        type: "runtime.thread.snapshot",
+        workspace_id: frame.workspace_id,
+        threads: orderChatThreads(frame.threads),
+        threads_page: this.cloneThreadsPage(frame.threads_page ?? this.cachedSnapshot?.threads_page),
+        at: new Date().toISOString(),
+      };
+      return;
+    }
+    if (!this.cachedSnapshot) {
+      return;
+    }
+    const deletedThreadIds = new Set(frame.deleted_thread_ids || []);
+    const deletedRuntimeSessionIds = new Set(frame.deleted_runtime_session_ids || []);
+    const retained = this.cachedSnapshot.threads.filter(
+      (thread) => !deletedThreadIds.has(thread.thread_id) && !deletedRuntimeSessionIds.has(thread.runtime_session_id),
+    );
+    const threads = frame.thread ? [...retained.filter((thread) => thread.thread_id !== frame.thread?.thread_id), frame.thread] : retained;
+    this.cachedSnapshot = {
+      ...this.cachedSnapshot,
+      workspace_id: frame.workspace_id || this.cachedSnapshot.workspace_id,
+      threads: orderChatThreads(threads),
+      threads_page: this.cloneThreadsPage(frame.threads_page ?? this.cachedSnapshot.threads_page),
+      at: new Date().toISOString(),
+    };
+  }
+
+  private replayCachedSnapshot(subscriber: RuntimeThreadSourceSubscriber) {
+    if (!this.cachedSnapshot) {
+      return;
+    }
+    subscriber.onFrame(this.cloneSnapshot(this.cachedSnapshot));
+  }
+
+  private postCachedSnapshot(targetClientId: string) {
+    if (!this.cachedSnapshot) {
+      return;
+    }
+    this.post({ kind: "frame", frame: this.cloneSnapshot(this.cachedSnapshot), target_client_id: targetClientId });
+  }
+
+  private cloneSnapshot(frame: RuntimeThreadSnapshotFrame): RuntimeThreadSnapshotFrame {
+    return {
+      ...frame,
+      threads: frame.threads.map((thread) => ({ ...thread })),
+      threads_page: this.cloneThreadsPage(frame.threads_page),
+    };
+  }
+
+  private cloneThreadsPage(page: RuntimeThreadsPage | undefined): RuntimeThreadsPage | undefined {
+    if (!page) {
+      return undefined;
+    }
+    const items = page.items?.map((thread: ChatThread) => ({ ...thread }));
+    return { ...page, items };
   }
 
   private post(
@@ -348,7 +430,7 @@ export class RuntimeThreadSource {
       | { kind: "source-claim" }
       | { kind: "source-ready" }
       | { kind: "source-closed" }
-      | { kind: "frame"; frame: RuntimeThreadWebSocketFrame },
+      | { kind: "frame"; frame: RuntimeThreadWebSocketFrame; target_client_id?: string },
   ) {
     if (!this.channel || !this.tabId) {
       return;

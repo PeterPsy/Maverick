@@ -2,6 +2,7 @@
 
 import { act, useEffect } from "react";
 import type { ComponentProps } from "react";
+import { flushSync } from "react-dom";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { AppRegistryItem, SessionUser, WorkspaceItem } from "../src/api";
@@ -68,6 +69,23 @@ describe("Sidebar widget mount gate", () => {
     expect(widgetSlotMountMock).toHaveBeenCalledTimes(2);
   });
 
+  it("mounts primary and footer widgets in the first opening render", () => {
+    renderSidebarSync(root, primaryActionStateChange, { isOpen: false, isPinned: false });
+
+    widgetSlotMock.mockClear();
+    widgetSlotMountMock.mockClear();
+    widgetSlotUnmountMock.mockClear();
+
+    act(() => {
+      flushSync(() => {
+        root.render(sidebarElement(primaryActionStateChange, { isOpen: true, isPinned: false }));
+      });
+
+      expect(widgetSlotMock).toHaveBeenCalledTimes(2);
+      expect(container.querySelectorAll("[data-testid='widget-slot']")).toHaveLength(2);
+    });
+  });
+
   it("keeps mounted sidebar widgets alive while the overlay closes and reopens", async () => {
     await renderSidebar(root, primaryActionStateChange, { isOpen: true, isPinned: false });
 
@@ -119,38 +137,57 @@ async function renderSidebar(
   overrides: Partial<ComponentProps<typeof Sidebar>>,
 ) {
   await act(async () => {
-    root.render(
-      <Sidebar
-        activeAppId="chat"
-        activeAppParams={{}}
-        activeWorkspaceId="default"
-        apps={[app("chat")]}
-        isLoading={false}
-        isMobileLayout={false}
-        isOpen={false}
-        isPinned={false}
-        mobilePrimaryActionRequestId={0}
-        mode="rail"
-        onClose={vi.fn()}
-        onModeChange={vi.fn()}
-        onOpenApp={vi.fn()}
-        onOpenSettings={vi.fn()}
-        onOpenSidebar={vi.fn()}
-        onPrimaryActionStateChange={primaryActionStateChange as (state: WidgetPrimaryActionState) => void}
-        onReorderPinnedApps={vi.fn()}
-        onSidebarDetailsWidthChange={vi.fn()}
-        onThemeModeChange={vi.fn()}
-        onWorkspaceChanged={vi.fn()}
-        pinnedAppIds={["chat"]}
-        railMetrics={{}}
-        shellTheme={shellTheme}
-        sidebarDetailsWidthPx={360}
-        themeMode="dark"
-        user={{ platform_role: "admin", username: "admin" } as SessionUser}
-        workspaces={[{ workspace_id: "default", name: "Default", description: null, status: "active", governance: {}, quota: {}, is_active: true } as WorkspaceItem]}
-        {...overrides}
-      />,
-    );
+    root.render(sidebarElement(primaryActionStateChange, overrides));
     await Promise.resolve();
   });
+}
+
+function renderSidebarSync(
+  root: Root,
+  primaryActionStateChange: ReturnType<typeof vi.fn>,
+  overrides: Partial<ComponentProps<typeof Sidebar>>,
+) {
+  act(() => {
+    flushSync(() => {
+      root.render(sidebarElement(primaryActionStateChange, overrides));
+    });
+  });
+}
+
+function sidebarElement(
+  primaryActionStateChange: ReturnType<typeof vi.fn>,
+  overrides: Partial<ComponentProps<typeof Sidebar>>,
+) {
+  return (
+    <Sidebar
+      activeAppId="chat"
+      activeAppParams={{}}
+      activeWorkspaceId="default"
+      apps={[app("chat")]}
+      isLoading={false}
+      isMobileLayout={false}
+      isOpen={false}
+      isPinned={false}
+      mobilePrimaryActionRequestId={0}
+      mode="rail"
+      onClose={vi.fn()}
+      onModeChange={vi.fn()}
+      onOpenApp={vi.fn()}
+      onOpenSettings={vi.fn()}
+      onOpenSidebar={vi.fn()}
+      onPrimaryActionStateChange={primaryActionStateChange as (state: WidgetPrimaryActionState) => void}
+      onReorderPinnedApps={vi.fn()}
+      onSidebarDetailsWidthChange={vi.fn()}
+      onThemeModeChange={vi.fn()}
+      onWorkspaceChanged={vi.fn()}
+      pinnedAppIds={["chat"]}
+      railMetrics={{}}
+      shellTheme={shellTheme}
+      sidebarDetailsWidthPx={360}
+      themeMode="dark"
+      user={{ platform_role: "admin", username: "admin" } as SessionUser}
+      workspaces={[{ workspace_id: "default", name: "Default", description: null, status: "active", governance: {}, quota: {}, is_active: true } as WorkspaceItem]}
+      {...overrides}
+    />
+  );
 }

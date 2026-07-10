@@ -98,7 +98,7 @@ export function Sidebar({
   const isInitialLoading = isLoading && railApps.length === 0;
   const isDetailLayerOpen = isOpen || isPinned;
   const [hasMountedDetailWidgets, setHasMountedDetailWidgets] = useState(isDetailLayerOpen);
-  const shouldMountDetailWidgets = hasMountedDetailWidgets;
+  const shouldMountDetailWidgets = hasMountedDetailWidgets || isDetailLayerOpen;
   const showMobileChatThemeSwitcher = isMobileLayout && activeAppId === CHAT_APP_ID;
   const sidebarFooterSlot = shouldMountDetailWidgets ? (
     <WidgetSlot

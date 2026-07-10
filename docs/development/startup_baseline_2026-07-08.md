@@ -193,13 +193,13 @@ The inter-agent graph view now loads through `InterAgentGraphView-C4RnmaDU.js`
 
 After the lightweight complete thread catalog, deep-link detail fetch, shared
 runtime thread source, write-path catalog facts, local Material Symbols font,
-and tightened static cache policy, `python3 scripts/startup_performance_baseline.py --json`
-reported:
+tightened static cache policy, and sidebar widget mount follow-up,
+`python3 scripts/startup_performance_baseline.py --json` reported:
 
 | App | Raw bytes | Gzip bytes | Files |
 | --- | ---: | ---: | ---: |
-| `base-shell` | 789,308 | 520,077 | 5 |
-| `chat` | 1,244,574 | 348,905 | 23 |
+| `base-shell` | 789,312 | 520,084 | 5 |
+| `chat` | 1,244,662 | 348,950 | 23 |
 
 The asset totals now include one self-hosted
 `material-symbols-rounded.woff2` font in `base-shell` (`414,656` raw bytes,
@@ -213,9 +213,9 @@ Startup-relevant chunks after the changes:
 
 | Chunk | Raw bytes | Gzip bytes |
 | --- | ---: | ---: |
-| `apps/base-shell/frontend/dist/assets/index-DiObYhw9.js` | 276,611 | 84,844 |
+| `apps/base-shell/frontend/dist/assets/index-BXHxvE9B.js` | 276,615 | 84,850 |
 | `apps/base-shell/frontend/dist/assets/index-BBvTKrEP.css` | 69,999 | 12,113 |
-| `apps/chat/frontend/dist/assets/main-DVK4zn6f.js` | 310,364 | 95,505 |
+| `apps/chat/frontend/dist/assets/main-kgjc5XvB.js` | 310,452 | 95,549 |
 | `apps/chat/frontend/dist/assets/main-CYtxhrAB.css` | 183,981 | 27,497 |
 | `apps/chat/frontend/dist/assets/useRuntimeThreads-DTiyzEzL.js` | 13,278 | 3,560 |
 

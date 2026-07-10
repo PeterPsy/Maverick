@@ -199,14 +199,15 @@ reported:
 | App | Raw bytes | Gzip bytes | Files |
 | --- | ---: | ---: | ---: |
 | `base-shell` | 789,156 | 520,014 | 5 |
-| `chat` | 1,240,429 | 347,725 | 23 |
+| `chat` | 1,241,569 | 347,855 | 23 |
 
 The asset totals now include one self-hosted
 `material-symbols-rounded.woff2` font in `base-shell` (`414,656` raw bytes,
-`414,080` gzip bytes). Chat and its widgets reference the shell-level font at
-`/apps/base-shell/material-symbols-rounded.woff2`, removing the duplicate Chat
-font file while keeping Google Fonts/Material Symbols off the startup HTML and
-widget HTML path.
+`414,080` gzip bytes). Chat and its widgets reference the platform root font at
+`/material-symbols-rounded.woff2`, which is served from the configured root
+shell asset set. This keeps Chat from depending on the `base-shell` app id while
+still removing the duplicate Chat font file and keeping Google Fonts/Material
+Symbols off the startup HTML and widget HTML path.
 
 Startup-relevant chunks after the changes:
 
@@ -214,9 +215,9 @@ Startup-relevant chunks after the changes:
 | --- | ---: | ---: |
 | `apps/base-shell/frontend/dist/assets/index-Uf_i05jZ.js` | 276,443 | 84,768 |
 | `apps/base-shell/frontend/dist/assets/index-BnBmXTwD.css` | 70,015 | 12,126 |
-| `apps/chat/frontend/dist/assets/main-DGe9SKhr.js` | 307,359 | 94,455 |
-| `apps/chat/frontend/dist/assets/main-BjGrU349.css` | 183,997 | 27,508 |
-| `apps/chat/frontend/dist/assets/useRuntimeThreads-Bj6WiPa2.js` | 12,106 | 3,419 |
+| `apps/chat/frontend/dist/assets/main-DniUdQ9H.js` | 307,359 | 94,456 |
+| `apps/chat/frontend/dist/assets/main-CYtxhrAB.css` | 183,981 | 27,497 |
+| `apps/chat/frontend/dist/assets/useRuntimeThreads-DTiyzEzL.js` | 13,278 | 3,560 |
 
 Static serving policy is now:
 

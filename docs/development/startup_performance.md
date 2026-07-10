@@ -47,6 +47,17 @@ The script reports raw and gzip sizes for committed `base-shell` and `chat`
 frontend `dist` assets. Use it before and after compression and code-splitting
 work so bundle changes stay comparable.
 
+## Shared Startup Assets
+
+Frontend code that needs the shared Material Symbols Rounded font should load
+`/material-symbols-rounded.woff2`. The platform serves that root-level URL from
+the configured root shell frontend assets with public CORS headers for sandboxed
+iframes.
+
+Apps should not hardcode `/apps/base-shell/material-symbols-rounded.woff2`.
+That path remains servable for older cached assets, but it is not the shared
+asset convention.
+
 ## Browser Baseline
 
 Run against an existing authenticated host:

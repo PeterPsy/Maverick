@@ -53,8 +53,17 @@ class MockBroadcastChannel {
 }
 
 async function flushChannelMessages() {
-  await Promise.resolve();
-  await Promise.resolve();
+  for (let index = 0; index < 4; index += 1) {
+    await Promise.resolve();
+  }
+}
+
+function okJson(payload: unknown): Response {
+  return {
+    ok: true,
+    status: 200,
+    json: async () => payload,
+  } as Response;
 }
 
 describe("RuntimeThreadSource", () => {
@@ -75,6 +84,7 @@ describe("RuntimeThreadSource", () => {
   afterEach(() => {
     globalThis.BroadcastChannel = originalBroadcastChannel as typeof BroadcastChannel;
     globalThis.WebSocket = originalWebSocket as typeof WebSocket;
+    vi.unstubAllGlobals();
     vi.useRealTimers();
   });
 
@@ -179,6 +189,77 @@ describe("RuntimeThreadSource", () => {
     expect(firstFrames).toEqual([snapshot]);
     expect(secondFrames).toEqual([snapshot]);
     expect(MockWebSocket.instances).toHaveLength(1);
+
+    unsubscribeFirst();
+    unsubscribeSecond();
+  });
+
+  it("cancels the REST fallback when the WebSocket snapshot arrives first", async () => {
+    const frames: unknown[] = [];
+    const source = new RuntimeThreadSource({ followerTimeoutMs: 1000, leaderElectionDelayMs: 5, restFallbackDelayMs: 20 });
+    const snapshot = { type: "runtime.thread.snapshot", workspace_id: "default", threads: [], at: "2026-07-08T12:00:00.000Z" };
+    vi.stubGlobal("fetch", vi.fn());
+
+    const unsubscribe = source.subscribe({ onError: () => undefined, onFrame: (frame) => frames.push(frame) });
+    await flushChannelMessages();
+    vi.advanceTimersByTime(5);
+    await flushChannelMessages();
+
+    expect(MockWebSocket.instances).toHaveLength(1);
+
+    MockWebSocket.instances[0].onmessage?.({ data: JSON.stringify(snapshot) } as MessageEvent);
+    vi.advanceTimersByTime(20);
+    await flushChannelMessages();
+
+    expect(fetch).not.toHaveBeenCalled();
+    expect(frames).toEqual([snapshot]);
+
+    unsubscribe();
+  });
+
+  it("shares one REST fallback from the elected source across same-tab peers", async () => {
+    const firstFrames: unknown[] = [];
+    const secondFrames: unknown[] = [];
+    const firstThread = thread({ thread_id: "thread-1", runtime_session_id: "session-1", title: "First" });
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () =>
+        okJson({
+          workspace_id: "default",
+          threads: [firstThread],
+          threads_page: { limit: 50, has_more: false, cursor: null, sort: "recency_desc" },
+        }),
+      ),
+    );
+
+    const firstSource = new RuntimeThreadSource({ followerTimeoutMs: 1000, leaderElectionDelayMs: 5, restFallbackDelayMs: 20 });
+    const secondSource = new RuntimeThreadSource({ followerTimeoutMs: 1000, leaderElectionDelayMs: 5, restFallbackDelayMs: 20 });
+
+    const unsubscribeFirst = firstSource.subscribe({ onError: () => undefined, onFrame: (frame) => firstFrames.push(frame) });
+    const unsubscribeSecond = secondSource.subscribe({ onError: () => undefined, onFrame: (frame) => secondFrames.push(frame) });
+    await flushChannelMessages();
+
+    vi.advanceTimersByTime(5);
+    await flushChannelMessages();
+    vi.advanceTimersByTime(20);
+    await flushChannelMessages();
+
+    expect(MockWebSocket.instances).toHaveLength(1);
+    expect(fetch).toHaveBeenCalledTimes(1);
+    expect(firstFrames).toEqual([
+      expect.objectContaining({
+        type: "runtime.thread.snapshot",
+        workspace_id: "default",
+        threads: [firstThread],
+      }),
+    ]);
+    expect(secondFrames).toEqual([
+      expect.objectContaining({
+        type: "runtime.thread.snapshot",
+        workspace_id: "default",
+        threads: [firstThread],
+      }),
+    ]);
 
     unsubscribeFirst();
     unsubscribeSecond();

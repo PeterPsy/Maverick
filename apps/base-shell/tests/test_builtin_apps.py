@@ -806,12 +806,12 @@ class BuiltinAppsTestCase(unittest.TestCase):
         self.assertEqual(status_unhashed, 401)
         self.assertIn(b"authentication_required", unhashed_body)
 
-    def test_shell_material_symbols_font_is_public_for_sandboxed_iframes(self) -> None:
+    def test_platform_material_symbols_font_is_public_for_sandboxed_iframes(self) -> None:
         repo_root = self.make_product_repo_root()
         state = bootstrap_platform_state(start_path=repo_root)
         app = PlatformHost(state, start_path=repo_root)
 
-        status_font, font_body, font_headers = self.invoke(app, path="/apps/base-shell/material-symbols-rounded.woff2")
+        status_font, font_body, font_headers = self.invoke(app, path="/material-symbols-rounded.woff2")
 
         self.assertEqual(status_font, 200)
         self.assertEqual(font_headers["Cache-Control"], "public, max-age=86400, must-revalidate")

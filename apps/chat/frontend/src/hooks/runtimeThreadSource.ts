@@ -1,5 +1,5 @@
-import type { ChatThread, RuntimeThreadWebSocketFrame, RuntimeThreadsPage } from "../api/client";
-import { orderChatThreads, runtimeThreadWebSocketUrl } from "../api/client";
+import type { ChatThread, RuntimeThreadWebSocketFrame, RuntimeThreadsPage, RuntimeThreadsPayload } from "../api/client";
+import { listRuntimeThreads, orderChatThreads, runtimeThreadWebSocketUrl } from "../api/client";
 
 type RuntimeThreadSourceMessage =
   | { kind: "hello"; client_id: string; tab_id: string }
@@ -19,6 +19,7 @@ type RuntimeThreadSourceSubscriber = {
 type RuntimeThreadSourceOptions = {
   followerTimeoutMs?: number;
   leaderElectionDelayMs?: number;
+  restFallbackDelayMs?: number;
 };
 
 const CHANNEL_NAME = "maverick.chat.runtime-thread-source.v1";
@@ -27,6 +28,7 @@ const INITIAL_RECONNECT_DELAY_MS = 500;
 const MAX_RECONNECT_DELAY_MS = 10000;
 const DEFAULT_LEADER_ELECTION_DELAY_MS = 80;
 const DEFAULT_FOLLOWER_TIMEOUT_MS = 65000;
+const DEFAULT_REST_FALLBACK_DELAY_MS = 125;
 
 function randomId(prefix: string): string {
   const random = typeof crypto !== "undefined" && "randomUUID" in crypto ? crypto.randomUUID() : Math.random().toString(36).slice(2);
@@ -55,6 +57,7 @@ export class RuntimeThreadSource {
   private readonly clientId = randomId("runtime-thread-source");
   private readonly followerTimeoutMs: number;
   private readonly leaderElectionDelayMs: number;
+  private readonly restFallbackDelayMs: number;
   private readonly subscribers = new Map<number, RuntimeThreadSourceSubscriber>();
   private channel: BroadcastChannel | null = null;
   private followerWatchdogTimer: number | null = null;
@@ -66,6 +69,8 @@ export class RuntimeThreadSource {
   private nextSubscriberId = 1;
   private reconnectDelayMs = INITIAL_RECONNECT_DELAY_MS;
   private reconnectTimer: number | null = null;
+  private restFallbackController: AbortController | null = null;
+  private restFallbackTimer: number | null = null;
   private socket: WebSocket | null = null;
   private sourceClientId: string | null = null;
   private started = false;
@@ -76,6 +81,7 @@ export class RuntimeThreadSource {
   constructor(options: RuntimeThreadSourceOptions = {}) {
     this.followerTimeoutMs = options.followerTimeoutMs ?? DEFAULT_FOLLOWER_TIMEOUT_MS;
     this.leaderElectionDelayMs = options.leaderElectionDelayMs ?? DEFAULT_LEADER_ELECTION_DELAY_MS;
+    this.restFallbackDelayMs = options.restFallbackDelayMs ?? DEFAULT_REST_FALLBACK_DELAY_MS;
   }
 
   subscribe(subscriber: RuntimeThreadSourceSubscriber): () => void {
@@ -117,6 +123,7 @@ export class RuntimeThreadSource {
     this.clearLeaderElection();
     this.clearFollowerWatchdog();
     this.clearReconnect();
+    this.clearRestFallback();
     this.stopHeartbeatWatchdog();
     if (this.isLeader) {
       this.post({ kind: "source-closed" });
@@ -142,7 +149,9 @@ export class RuntimeThreadSource {
       }
       if (this.isLeader) {
         this.post({ kind: "source-ready" });
-        this.postCachedSnapshot(message.client_id);
+        if (!knownPeer) {
+          this.postCachedSnapshot(message.client_id);
+        }
       }
       return;
     }
@@ -188,6 +197,7 @@ export class RuntimeThreadSource {
     this.isLeader = false;
     this.sourceClientId = sourceClientId;
     this.clearReconnect();
+    this.clearRestFallback();
     this.stopHeartbeatWatchdog();
     this.socket?.close();
     this.socket = null;
@@ -228,6 +238,7 @@ export class RuntimeThreadSource {
     this.sourceClientId = this.clientId;
     this.clearFollowerWatchdog();
     this.post({ kind: "source-claim" });
+    this.scheduleRestFallback();
     this.connect();
   }
 
@@ -237,8 +248,6 @@ export class RuntimeThreadSource {
     }
     if (typeof WebSocket === "undefined") {
       this.notifyError("Runtime thread WebSocket is unavailable.");
-      this.post({ kind: "source-closed" });
-      this.isLeader = false;
       return;
     }
     let socketOpened = false;
@@ -287,6 +296,7 @@ export class RuntimeThreadSource {
         this.notifyError(event.code === 4401 ? "Runtime thread stream is not authorized." : "Runtime thread stream is unavailable.");
         this.post({ kind: "source-closed" });
         this.isLeader = false;
+        this.clearRestFallback();
         return;
       }
       this.reconnectTimer = window.setTimeout(() => this.connect(), this.reconnectDelayMs);
@@ -342,6 +352,56 @@ export class RuntimeThreadSource {
     }
   }
 
+  private scheduleRestFallback() {
+    if (this.stopped || !this.isLeader || !this.subscribers.size || this.cachedSnapshot || this.restFallbackTimer !== null || this.restFallbackController) {
+      return;
+    }
+    this.restFallbackTimer = window.setTimeout(() => {
+      this.restFallbackTimer = null;
+      this.loadRestFallback();
+    }, this.restFallbackDelayMs);
+  }
+
+  private loadRestFallback() {
+    if (this.stopped || !this.isLeader || !this.subscribers.size || this.cachedSnapshot) {
+      return;
+    }
+    const controller = new AbortController();
+    this.restFallbackController = controller;
+    listRuntimeThreads({ signal: controller.signal })
+      .then((payload) => {
+        if (controller.signal.aborted || this.stopped || !this.isLeader || !this.subscribers.size || this.cachedSnapshot) {
+          return;
+        }
+        const frame = this.snapshotFrameFromPayload(payload);
+        this.cacheFrame(frame);
+        this.notifyFrame(frame);
+        this.notifyError(null);
+        this.post({ kind: "frame", frame });
+      })
+      .catch((loadError: Error) => {
+        if (!controller.signal.aborted && !this.stopped && this.isLeader) {
+          this.notifyError(loadError.message);
+        }
+      })
+      .finally(() => {
+        if (this.restFallbackController === controller) {
+          this.restFallbackController = null;
+        }
+      });
+  }
+
+  private clearRestFallback() {
+    if (this.restFallbackTimer !== null) {
+      window.clearTimeout(this.restFallbackTimer);
+      this.restFallbackTimer = null;
+    }
+    if (this.restFallbackController) {
+      this.restFallbackController.abort();
+      this.restFallbackController = null;
+    }
+  }
+
   private notifyError(message: string | null) {
     for (const subscriber of this.subscribers.values()) {
       subscriber.onError(message);
@@ -357,12 +417,16 @@ export class RuntimeThreadSource {
   private cacheFrame(frame: RuntimeThreadWebSocketFrame) {
     if (frame.type === "runtime.thread.snapshot") {
       this.cachedSnapshot = this.cloneSnapshot(frame);
+      this.clearRestFallback();
       return;
     }
     if (frame.type !== "runtime.thread.changed") {
       return;
     }
     this.applyChangedFrameToCache(frame);
+    if (this.cachedSnapshot) {
+      this.clearRestFallback();
+    }
   }
 
   private applyChangedFrameToCache(frame: RuntimeThreadChangedFrame) {
@@ -422,6 +486,16 @@ export class RuntimeThreadSource {
     }
     const items = page.items?.map((thread: ChatThread) => ({ ...thread }));
     return { ...page, items };
+  }
+
+  private snapshotFrameFromPayload(payload: RuntimeThreadsPayload): RuntimeThreadSnapshotFrame {
+    return {
+      type: "runtime.thread.snapshot",
+      workspace_id: payload.workspace_id || "",
+      threads: payload.threads || [],
+      threads_page: payload.threads_page,
+      at: new Date().toISOString(),
+    };
   }
 
   private post(

@@ -101,7 +101,7 @@ describe("useRuntimeThreads", () => {
     vi.useRealTimers();
   });
 
-  it("loads the initial thread catalog through REST before a WebSocket snapshot arrives", async () => {
+  it("loads the initial thread catalog through the shared REST fallback before a WebSocket snapshot arrives", async () => {
     const onError = vi.fn();
     const onSnapshot = vi.fn();
     const onThreads = vi.fn();
@@ -118,11 +118,13 @@ describe("useRuntimeThreads", () => {
       root.render(<RuntimeThreadsProbe onError={onError} onSnapshot={onSnapshot} onThreads={onThreads} />);
     });
     await act(async () => {
+      vi.advanceTimersByTime(200);
       await Promise.resolve();
       await Promise.resolve();
     });
 
     expect(MockWebSocket.instances).toHaveLength(1);
+    expect(fetch).toHaveBeenCalledTimes(1);
     expect(onSnapshot).toHaveBeenLastCalledWith(
       expect.objectContaining({
         type: "runtime.thread.snapshot",
@@ -137,6 +139,29 @@ describe("useRuntimeThreads", () => {
     });
 
     expect(onError).not.toHaveBeenCalledWith("Runtime thread WebSocket is unavailable.");
+  });
+
+  it("does not send the REST fallback when a WebSocket snapshot arrives before the fallback delay", async () => {
+    const onThreads = vi.fn();
+    const firstThread = thread({ thread_id: "thread-1", runtime_session_id: "session-1", title: "First" });
+
+    await act(async () => {
+      root.render(<RuntimeThreadsProbe onError={() => undefined} onThreads={onThreads} />);
+    });
+
+    expect(MockWebSocket.instances).toHaveLength(1);
+
+    await act(async () => {
+      MockWebSocket.instances[0].onmessage?.({
+        data: JSON.stringify({ type: "runtime.thread.snapshot", workspace_id: "default", threads: [firstThread], at: "2026-06-29T00:00:00.000Z" }),
+      } as MessageEvent);
+      vi.advanceTimersByTime(200);
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(fetch).not.toHaveBeenCalled();
+    expect(onThreads).toHaveBeenLastCalledWith([firstThread]);
   });
 
   it("does not reconnect after authorization or missing-route close codes", async () => {

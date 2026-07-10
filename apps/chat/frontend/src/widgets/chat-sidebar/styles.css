@@ -3,7 +3,7 @@
   font-style: normal;
   font-weight: 500;
   font-display: swap;
-  src: url("/apps/base-shell/material-symbols-rounded.woff2") format("woff2");
+  src: url("/material-symbols-rounded.woff2") format("woff2");
 }
 
 :root,

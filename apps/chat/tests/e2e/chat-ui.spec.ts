@@ -170,13 +170,14 @@ test.describe("Chat app browser smoke", () => {
     await expect(composer).toBeEditable();
 
     await composer.click();
-    await composer.pressSequentially("First sentence.Second sentence");
-    await setComposerCaretOffset(page, "First sentence.".length);
+    await pasteComposerText(page, "First sentence.\n\nSecond sentence");
+    await expectComposerText(page, "First sentence.\n\nSecond sentence");
+    await setComposerCaretOffset(page, "First sentence.\n".length);
     await page.keyboard.press("Shift+Enter");
-    await expectComposerText(page, "First sentence.\nSecond sentence");
+    await expectComposerText(page, "First sentence.\n\n\nSecond sentence");
 
     await composer.pressSequentially("Inserted ");
-    await expectComposerText(page, "First sentence.\nInserted Second sentence");
+    await expectComposerText(page, "First sentence.\n\nInserted \nSecond sentence");
   });
 
   test("sends a normal chat message through runtime session APIs", async ({ page }) => {

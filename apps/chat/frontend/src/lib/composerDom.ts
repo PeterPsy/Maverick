@@ -45,6 +45,14 @@ export function composerText(root: HTMLElement): string {
 function caretOffsetInNode(root: HTMLElement, target: Node, targetOffset: number): number {
   let offset = 0;
   let found = false;
+  const rootChildren = childNodes(root);
+
+  if (target === root) {
+    for (let index = 0; index < Math.min(targetOffset, rootChildren.length); index += 1) {
+      offset += textFromComposerNode(rootChildren[index]).length;
+    }
+    return offset;
+  }
 
   function visit(node: ChildNode): void {
     if (found) {
@@ -84,7 +92,7 @@ function caretOffsetInNode(root: HTMLElement, target: Node, targetOffset: number
     children.forEach(visit);
   }
 
-  childNodes(root).forEach(visit);
+  rootChildren.forEach(visit);
   return offset;
 }
 

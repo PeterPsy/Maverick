@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 
-import { act } from "react";
+import { act, useEffect } from "react";
 import type { ComponentProps } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -9,9 +9,14 @@ import { Sidebar } from "../src/components/Sidebar";
 import type { WidgetPrimaryActionState } from "../src/components/WidgetSlot";
 import type { ShellThemeState } from "../src/theme";
 
+const widgetSlotMountMock = vi.fn();
+const widgetSlotUnmountMock = vi.fn();
 const widgetSlotMock = vi.fn((props: Record<string, unknown>) => {
-  void props;
-  return <div data-testid="widget-slot" />;
+  useEffect(() => {
+    widgetSlotMountMock(props);
+    return () => widgetSlotUnmountMock(props);
+  }, []);
+  return <div data-testid="widget-slot" data-content-kind={String(props.contentKind || "")} />;
 });
 
 vi.mock("../src/components/WidgetSlot", () => ({
@@ -32,6 +37,8 @@ describe("Sidebar widget mount gate", () => {
   beforeEach(() => {
     (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
     widgetSlotMock.mockClear();
+    widgetSlotMountMock.mockClear();
+    widgetSlotUnmountMock.mockClear();
     primaryActionStateChange = vi.fn();
     container = document.createElement("div");
     document.body.append(container);
@@ -58,6 +65,30 @@ describe("Sidebar widget mount gate", () => {
     await renderSidebar(root, primaryActionStateChange, { isOpen: true, isPinned: false });
 
     expect(widgetSlotMock).toHaveBeenCalledTimes(2);
+    expect(widgetSlotMountMock).toHaveBeenCalledTimes(2);
+  });
+
+  it("keeps mounted sidebar widgets alive while the overlay closes and reopens", async () => {
+    await renderSidebar(root, primaryActionStateChange, { isOpen: true, isPinned: false });
+
+    expect(container.querySelectorAll("[data-testid='widget-slot']")).toHaveLength(2);
+    expect(widgetSlotMountMock).toHaveBeenCalledTimes(2);
+
+    widgetSlotMock.mockClear();
+    widgetSlotMountMock.mockClear();
+    widgetSlotUnmountMock.mockClear();
+
+    await renderSidebar(root, primaryActionStateChange, { isOpen: false, isPinned: false });
+
+    expect(container.querySelectorAll("[data-testid='widget-slot']")).toHaveLength(2);
+    expect(widgetSlotUnmountMock).not.toHaveBeenCalled();
+    expect(widgetSlotMountMock).not.toHaveBeenCalled();
+
+    await renderSidebar(root, primaryActionStateChange, { isOpen: true, isPinned: false });
+
+    expect(container.querySelectorAll("[data-testid='widget-slot']")).toHaveLength(2);
+    expect(widgetSlotUnmountMock).not.toHaveBeenCalled();
+    expect(widgetSlotMountMock).not.toHaveBeenCalled();
   });
 });
 

@@ -198,8 +198,8 @@ reported:
 
 | App | Raw bytes | Gzip bytes | Files |
 | --- | ---: | ---: | ---: |
-| `base-shell` | 789,156 | 520,014 | 5 |
-| `chat` | 1,241,569 | 347,855 | 23 |
+| `base-shell` | 789,308 | 520,077 | 5 |
+| `chat` | 1,244,574 | 348,905 | 23 |
 
 The asset totals now include one self-hosted
 `material-symbols-rounded.woff2` font in `base-shell` (`414,656` raw bytes,
@@ -213,9 +213,9 @@ Startup-relevant chunks after the changes:
 
 | Chunk | Raw bytes | Gzip bytes |
 | --- | ---: | ---: |
-| `apps/base-shell/frontend/dist/assets/index-Uf_i05jZ.js` | 276,443 | 84,768 |
-| `apps/base-shell/frontend/dist/assets/index-BnBmXTwD.css` | 70,015 | 12,126 |
-| `apps/chat/frontend/dist/assets/main-DniUdQ9H.js` | 307,359 | 94,456 |
+| `apps/base-shell/frontend/dist/assets/index-DiObYhw9.js` | 276,611 | 84,844 |
+| `apps/base-shell/frontend/dist/assets/index-BBvTKrEP.css` | 69,999 | 12,113 |
+| `apps/chat/frontend/dist/assets/main-DVK4zn6f.js` | 310,364 | 95,505 |
 | `apps/chat/frontend/dist/assets/main-CYtxhrAB.css` | 183,981 | 27,497 |
 | `apps/chat/frontend/dist/assets/useRuntimeThreads-DTiyzEzL.js` | 13,278 | 3,560 |
 

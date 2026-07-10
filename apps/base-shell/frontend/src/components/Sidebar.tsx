@@ -97,7 +97,8 @@ export function Sidebar({
   const settingsApp = visibleAppsById.get(SETTINGS_APP_ID) || null;
   const isInitialLoading = isLoading && railApps.length === 0;
   const isDetailLayerOpen = isOpen || isPinned;
-  const shouldMountDetailWidgets = isDetailLayerOpen;
+  const [hasMountedDetailWidgets, setHasMountedDetailWidgets] = useState(isDetailLayerOpen);
+  const shouldMountDetailWidgets = hasMountedDetailWidgets;
   const showMobileChatThemeSwitcher = isMobileLayout && activeAppId === CHAT_APP_ID;
   const sidebarFooterSlot = shouldMountDetailWidgets ? (
     <WidgetSlot
@@ -116,6 +117,12 @@ export function Sidebar({
       size="compact"
     />
   ) : null;
+
+  useEffect(() => {
+    if (isDetailLayerOpen) {
+      setHasMountedDetailWidgets(true);
+    }
+  }, [isDetailLayerOpen]);
 
   useEffect(() => {
     if (shouldMountDetailWidgets) {

@@ -511,6 +511,37 @@ describe("ChatComposer reference search", () => {
     expect(onSubmit).toHaveBeenCalledTimes(1);
   });
 
+  it("undoes and redoes coalesced composer typing", async () => {
+    const { getValue } = await renderComposer();
+    await typeInEditor("hello");
+
+    await keyDownEditor({ ctrlKey: true, key: "z" });
+    expect(getValue()).toBe("");
+
+    await keyDownEditor({ ctrlKey: true, key: "Z", shiftKey: true });
+    expect(getValue()).toBe("hello");
+
+    await keyDownEditor({ ctrlKey: true, key: "z" });
+    expect(getValue()).toBe("");
+
+    await keyDownEditor({ ctrlKey: true, key: "y" });
+    expect(getValue()).toBe("hello");
+  });
+
+  it("undoes and redoes programmatic newline edits", async () => {
+    const { getValue } = await renderComposer();
+    await typeInEditor("hello");
+    await keyDownEditor({ key: "Enter", shiftKey: true });
+
+    expect(getValue()).toBe("hello\n");
+
+    await keyDownEditor({ metaKey: true, key: "z" });
+    expect(getValue()).toBe("hello");
+
+    await keyDownEditor({ metaKey: true, key: "Z", shiftKey: true });
+    expect(getValue()).toBe("hello\n");
+  });
+
   it("keeps a completed app mention from reopening the picker before submit", async () => {
     mockMobileInput(false);
     const onSubmit = vi.fn();
@@ -541,6 +572,18 @@ describe("ChatComposer reference search", () => {
     expect(getValue()).toBe("first second\nthird");
   });
 
+  it("undoes and redoes pasted text as one composer edit", async () => {
+    const { getValue } = await renderComposer();
+    await typeInEditor("first");
+    await pasteTextInEditor(" second\r\nthird");
+
+    await keyDownEditor({ ctrlKey: true, key: "z" });
+    expect(getValue()).toBe("first");
+
+    await keyDownEditor({ ctrlKey: true, key: "y" });
+    expect(getValue()).toBe("first second\nthird");
+  });
+
   it("replaces the selected composer range with pasted plain text", async () => {
     const { getValue } = await renderComposer();
     await typeInEditor("hello world");
@@ -549,6 +592,26 @@ describe("ChatComposer reference search", () => {
     await pasteTextInEditor("Maverick");
 
     expect(getValue()).toBe("hello Maverick");
+  });
+
+  it("undoes and redoes app mention insertion", async () => {
+    const storageApp: MentionItem = {
+      id: "storage",
+      label: "Storage",
+      description: "Files and folders",
+      kind: "app",
+    };
+    const { getValue } = await renderComposer({ mentionItems: [storageApp] });
+    await typeInEditor("@Sto");
+
+    await keyDownEditor({ key: "Enter" });
+    expect(getValue()).toBe("@Storage ");
+
+    await keyDownEditor({ ctrlKey: true, key: "z" });
+    expect(getValue()).toBe("@Sto");
+
+    await keyDownEditor({ ctrlKey: true, key: "Z", shiftKey: true });
+    expect(getValue()).toBe("@Storage ");
   });
 
   it("keeps the caret visible after a long paste", async () => {

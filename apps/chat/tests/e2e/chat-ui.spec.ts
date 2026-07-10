@@ -110,6 +110,57 @@ test.describe("Chat app browser smoke", () => {
     await expect(page.getByRole("button", { name: "Agent runner: Default Chat" })).toBeVisible();
   });
 
+  test("keeps composer undo and redo reliable across rich edits", async ({ page }) => {
+    await installChatMocks(page);
+
+    await page.goto("/apps/chat/");
+    const composer = page.getByRole("textbox");
+    await expect(page.getByRole("heading", { name: "How can I help today?" })).toBeVisible();
+    await expect(composer).toBeEditable();
+
+    await composer.click();
+    await composer.pressSequentially("hello");
+    await expectComposerText(page, "hello");
+
+    await page.keyboard.press("ControlOrMeta+Z");
+    await expectComposerText(page, "");
+
+    await page.keyboard.press("ControlOrMeta+Shift+Z");
+    await expectComposerText(page, "hello");
+
+    await pasteComposerText(page, " pasted\r\nline");
+    await expectComposerText(page, "hello pasted\nline");
+
+    await page.keyboard.press("ControlOrMeta+Z");
+    await expectComposerText(page, "hello");
+
+    await page.keyboard.press("Control+Y");
+    await expectComposerText(page, "hello pasted\nline");
+
+    await page.keyboard.press("Shift+Enter");
+    await expectComposerText(page, "hello pasted\nline\n");
+
+    await page.keyboard.press("ControlOrMeta+Z");
+    await expectComposerText(page, "hello pasted\nline");
+
+    await page.keyboard.press("ControlOrMeta+Shift+Z");
+    await expectComposerText(page, "hello pasted\nline\n");
+
+    await page.keyboard.press("ControlOrMeta+Z");
+    await expectComposerText(page, "hello pasted\nline");
+
+    await composer.pressSequentially(" @Sto");
+    await expect(page.getByRole("option", { name: /Storage/ })).toBeVisible();
+    await page.keyboard.press("Enter");
+    await expectComposerText(page, "hello pasted\nline @Storage ");
+
+    await page.keyboard.press("ControlOrMeta+Z");
+    await expectComposerText(page, "hello pasted\nline @Sto");
+
+    await page.keyboard.press("ControlOrMeta+Shift+Z");
+    await expectComposerText(page, "hello pasted\nline @Storage ");
+  });
+
   test("sends a normal chat message through runtime session APIs", async ({ page }) => {
     const state = await installChatMocks(page);
 
@@ -119,14 +170,18 @@ test.describe("Chat app browser smoke", () => {
     await page.getByRole("textbox").fill("Summarize today's launch notes");
     await page.getByRole("button", { name: "Send message" }).click();
 
-    await expect(page.getByText("Runtime answer from the browser harness.")).toBeVisible();
+    await expect(page.getByText("Follow-up answer from the browser harness.")).toBeVisible();
     expect(state.createRunBodies).toHaveLength(0);
-    expect(state.createSessionBodies).toHaveLength(1);
-    expect(state.createSessionBodies[0]).toMatchObject({
-      input_text: "Summarize today's launch notes",
+    expect(state.createSessionBodies).toContainEqual(expect.objectContaining({
+      prepare_only: true,
       source_app_id: "chat",
       title: "New chat",
-    });
+    }));
+    expect(Object.values(state.runtimeSessionTurns).flat()).toContainEqual(
+      expect.objectContaining({
+        input_text: "Summarize today's launch notes",
+      }),
+    );
   });
 
   test("sends a selected-agent multi run and opens the live graph", async ({ page }) => {
@@ -362,6 +417,47 @@ async function expectReactFlowPanMovesViewport(page: Page) {
   await page.mouse.up();
 
   await expect.poll(() => viewport.evaluate((element) => getComputedStyle(element).transform)).not.toBe(before);
+}
+
+async function expectComposerText(page: Page, expected: string) {
+  await expect.poll(() => readComposerText(page)).toBe(expected);
+}
+
+async function readComposerText(page: Page): Promise<string> {
+  return page.getByRole("textbox").evaluate((root) => {
+    function textFromNode(node: ChildNode): string {
+      if (node instanceof HTMLElement && node.dataset.mentionText) {
+        return node.dataset.mentionText;
+      }
+      if (node.nodeType === Node.TEXT_NODE) {
+        return node.textContent || "";
+      }
+      if (node instanceof HTMLElement && node.tagName === "BR") {
+        return "\n";
+      }
+      return Array.from(node.childNodes)
+        .map((child) => textFromNode(child))
+        .join("");
+    }
+
+    return Array.from(root.childNodes)
+      .map((node) => textFromNode(node))
+      .join("");
+  });
+}
+
+async function pasteComposerText(page: Page, text: string) {
+  await page.getByRole("textbox").evaluate((root, pastedText) => {
+    const dataTransfer = new DataTransfer();
+    dataTransfer.setData("text/plain", pastedText);
+    root.dispatchEvent(
+      new ClipboardEvent("paste", {
+        bubbles: true,
+        cancelable: true,
+        clipboardData: dataTransfer,
+      }),
+    );
+  }, text);
 }
 
 async function installChatMocks(page: Page): Promise<MockState> {
@@ -614,17 +710,28 @@ async function handleRuntimeApi(route: Route, state: MockState) {
   if (url.pathname.includes("/turns") && request.method() === "POST") {
     const sessionId = decodeURIComponent(url.pathname.split("/")[4] || RUNTIME_SESSION_ID);
     const body = postBody(route);
-    const turn = runtimeTurn("turn-followup", sessionId, "completed", typeof body.input_text === "string" ? body.input_text : "");
+    const inputText = typeof body.input_text === "string" ? body.input_text : "";
+    const turn = runtimeTurn("turn-followup", sessionId, "completed", inputText);
     const events = runtimeTranscriptEvents(
       sessionId,
       turn.turn_id,
-      turn.input_text || "",
+      inputText,
       "Follow-up answer from the browser harness.",
       typeof body.client_message_id === "string" ? body.client_message_id : undefined,
     );
+    const thread =
+      state.threads.find((item) => item.runtime_session_id === sessionId) ||
+      chatThread({
+        availability: "free",
+        last_user_message_at: NOW,
+        runtime_session_id: sessionId,
+        thread_id: sessionId,
+        title: "Launch notes",
+      });
+    state.threads = [thread, ...state.threads.filter((item) => item.thread_id !== thread.thread_id)];
     state.runtimeSessionEvents[sessionId] = [...(state.runtimeSessionEvents[sessionId] || []), ...events];
     state.runtimeSessionTurns[sessionId] = [...(state.runtimeSessionTurns[sessionId] || []), turn];
-    await fulfillJson(route, { session: runtimeSession(sessionId), thread: state.threads[0], turn, events });
+    await fulfillJson(route, { session: runtimeSession(sessionId), thread, turn, events });
     return;
   }
   if (url.pathname.includes("/interrupt") && request.method() === "POST") {

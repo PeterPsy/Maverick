@@ -117,9 +117,8 @@ export function composerSelectionOffsets(root: HTMLElement): { start: number; en
   };
 }
 
-export function setComposerCaret(root: HTMLElement, offset: number): void {
+function rangeAtComposerOffset(root: HTMLElement, offset: number): Range {
   const range = document.createRange();
-  const selection = window.getSelection();
   let remaining = Math.max(0, offset);
   let placed = false;
 
@@ -168,6 +167,10 @@ export function setComposerCaret(root: HTMLElement, offset: number): void {
         placeBefore(node);
         return;
       }
+      if (remaining <= 1) {
+        placeAfter(node);
+        return;
+      }
       remaining -= 1;
       return;
     }
@@ -179,6 +182,25 @@ export function setComposerCaret(root: HTMLElement, offset: number): void {
     range.selectNodeContents(root);
     range.collapse(false);
   }
+  return range;
+}
+
+export function setComposerCaret(root: HTMLElement, offset: number): void {
+  const range = rangeAtComposerOffset(root, offset);
+  const selection = window.getSelection();
+  selection?.removeAllRanges();
+  selection?.addRange(range);
+}
+
+export function setComposerSelectionOffsets(root: HTMLElement, start: number, end: number): void {
+  const selectionStart = Math.max(0, Math.min(start, end));
+  const selectionEnd = Math.max(selectionStart, Math.max(start, end));
+  const startRange = rangeAtComposerOffset(root, selectionStart);
+  const endRange = rangeAtComposerOffset(root, selectionEnd);
+  const range = document.createRange();
+  range.setStart(startRange.startContainer, startRange.startOffset);
+  range.setEnd(endRange.startContainer, endRange.startOffset);
+  const selection = window.getSelection();
   selection?.removeAllRanges();
   selection?.addRange(range);
 }
@@ -254,13 +276,41 @@ function mentionChipElement(token: MentionToken, disabled: boolean, onRemove: (t
   return chip;
 }
 
+function mentionChipElements(root: HTMLElement): HTMLElement[] {
+  return Array.from(root.querySelectorAll<HTMLElement>("[data-mention-text]"));
+}
+
+function composerContentIsCurrent(root: HTMLElement, text: string, tokens: MentionToken[], disabled: boolean): boolean {
+  if (composerText(root) !== text) {
+    return false;
+  }
+  const chips = mentionChipElements(root);
+  if (chips.length !== tokens.length) {
+    return false;
+  }
+  return tokens.every((token, index) => {
+    const chip = chips[index];
+    const removeButton = chip?.querySelector<HTMLButtonElement>(".chatapp-mention-chip__remove");
+    return Boolean(
+      chip &&
+        chip.dataset.mentionText === mentionText(token.item) &&
+        chip.classList.contains(`is-${token.item.kind}`) &&
+        removeButton &&
+        removeButton.disabled === disabled,
+    );
+  });
+}
+
 export function renderComposerContent(
   root: HTMLElement,
   text: string,
   tokens: MentionToken[],
   disabled: boolean,
   onRemove: (token: MentionToken) => void,
-): void {
+): boolean {
+  if (composerContentIsCurrent(root, text, tokens, disabled)) {
+    return false;
+  }
   const fragment = document.createDocumentFragment();
   let cursor = 0;
   tokens.forEach((token) => {
@@ -274,6 +324,7 @@ export function renderComposerContent(
     appendTextSegment(fragment, text.slice(cursor));
   }
   root.replaceChildren(fragment);
+  return true;
 }
 
 export function normalizePastedComposerText(text: string): string {

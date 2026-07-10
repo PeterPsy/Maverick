@@ -161,6 +161,24 @@ test.describe("Chat app browser smoke", () => {
     await expectComposerText(page, "hello pasted\nline @Storage ");
   });
 
+  test("keeps the composer caret after Shift+Enter in the middle of text", async ({ page }) => {
+    await installChatMocks(page);
+
+    await page.goto("/apps/chat/");
+    const composer = page.getByRole("textbox");
+    await expect(page.getByRole("heading", { name: "How can I help today?" })).toBeVisible();
+    await expect(composer).toBeEditable();
+
+    await composer.click();
+    await composer.pressSequentially("First sentence.Second sentence");
+    await setComposerCaretOffset(page, "First sentence.".length);
+    await page.keyboard.press("Shift+Enter");
+    await expectComposerText(page, "First sentence.\nSecond sentence");
+
+    await composer.pressSequentially("Inserted ");
+    await expectComposerText(page, "First sentence.\nInserted Second sentence");
+  });
+
   test("sends a normal chat message through runtime session APIs", async ({ page }) => {
     const state = await installChatMocks(page);
 
@@ -458,6 +476,79 @@ async function pasteComposerText(page: Page, text: string) {
       }),
     );
   }, text);
+}
+
+async function setComposerCaretOffset(page: Page, offset: number) {
+  await page.getByRole("textbox").evaluate((root, targetOffset) => {
+    const range = document.createRange();
+    let remaining = Math.max(0, targetOffset);
+    let placed = false;
+
+    function placeBefore(node: ChildNode) {
+      range.setStartBefore(node);
+      range.collapse(true);
+      placed = true;
+    }
+
+    function placeAfter(node: ChildNode) {
+      range.setStartAfter(node);
+      range.collapse(true);
+      placed = true;
+    }
+
+    function visit(node: ChildNode): void {
+      if (placed) {
+        return;
+      }
+      const tokenText = node instanceof HTMLElement ? node.dataset.mentionText || null : null;
+      if (tokenText !== null) {
+        if (remaining <= 0) {
+          placeBefore(node);
+          return;
+        }
+        if (remaining <= tokenText.length) {
+          placeAfter(node);
+          return;
+        }
+        remaining -= tokenText.length;
+        return;
+      }
+      if (node.nodeType === Node.TEXT_NODE) {
+        const textLength = (node.textContent || "").length;
+        if (remaining <= textLength) {
+          range.setStart(node, remaining);
+          range.collapse(true);
+          placed = true;
+          return;
+        }
+        remaining -= textLength;
+        return;
+      }
+      if (node instanceof HTMLElement && node.tagName === "BR") {
+        if (remaining <= 0) {
+          placeBefore(node);
+          return;
+        }
+        if (remaining <= 1) {
+          placeAfter(node);
+          return;
+        }
+        remaining -= 1;
+        return;
+      }
+      Array.from(node.childNodes).forEach((child) => visit(child));
+    }
+
+    Array.from(root.childNodes).forEach((node) => visit(node));
+    if (!placed) {
+      range.selectNodeContents(root);
+      range.collapse(false);
+    }
+    const selection = window.getSelection();
+    selection?.removeAllRanges();
+    selection?.addRange(range);
+    (root as HTMLElement).focus();
+  }, offset);
 }
 
 async function installChatMocks(page: Page): Promise<MockState> {

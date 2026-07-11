@@ -1073,6 +1073,151 @@ class SpeechAppTests(unittest.TestCase):
         self.assertEqual(payload["text"], "")
         self.assertTrue(payload["partial"])
 
+    def test_transcribe_audio_dictation_flux_inserts_textless_turn_delta(self) -> None:
+        audio = b"not-a-standalone-webm" * 32
+
+        def fake_result(text: str, events: list[dict]) -> dict:
+            return {
+                "text": text,
+                "chunk_text": "",
+                "events": events,
+                "turn_events": [event for event in events if event.get("type") == "EndOfTurn"],
+                "duration_seconds": 0.0,
+                "engine": "deepgram",
+                "model": "flux-general-en",
+                "language": "en",
+                "language_probability": 0.0,
+                "profile": "flux",
+            }
+
+        fake_results = [
+            fake_result(
+                "first thirty seconds",
+                [
+                    {"type": "Results", "text": "first thirty seconds", "is_final": False},
+                    {"type": "EndOfTurn", "text": "", "is_final": True},
+                ],
+            ),
+            fake_result(
+                "first thirty seconds last five seconds",
+                [{"type": "Results", "text": "last five seconds", "is_final": False}],
+            ),
+            fake_result(
+                "first thirty seconds last five seconds",
+                [{"type": "EndOfTurn", "text": "", "is_final": True}],
+            ),
+        ]
+
+        with TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            write_settings(root / "data", {"transcription_engine": "deepgram"})
+            with patch("transcription.transcribe_deepgram_flux_audio_chunk", side_effect=fake_results):
+                first_status, first = handle_action(
+                    root / "data",
+                    root / "generated",
+                    {
+                        "action": "transcribe_audio",
+                        "content_type": "audio/webm",
+                        "audio_base64": base64.b64encode(audio).decode("ascii"),
+                        "dictation": True,
+                        "session_id": "chat-session",
+                        "chunk_index": 0,
+                        "_app_secrets": {"deepgram-api-key": "deepgram-token"},
+                    },
+                )
+                second_status, second = handle_action(
+                    root / "data",
+                    root / "generated",
+                    {
+                        "action": "transcribe_audio",
+                        "content_type": "audio/webm",
+                        "audio_base64": base64.b64encode(audio).decode("ascii"),
+                        "dictation": True,
+                        "session_id": "chat-session",
+                        "chunk_index": 1,
+                        "_app_secrets": {"deepgram-api-key": "deepgram-token"},
+                    },
+                )
+                final_status, final = handle_action(
+                    root / "data",
+                    root / "generated",
+                    {
+                        "action": "transcribe_audio",
+                        "content_type": "audio/webm",
+                        "audio_base64": "",
+                        "dictation": True,
+                        "session_id": "chat-session",
+                        "chunk_index": 2,
+                        "final": True,
+                        "_app_secrets": {"deepgram-api-key": "deepgram-token"},
+                    },
+                )
+
+        self.assertEqual(first_status, 200)
+        self.assertEqual(second_status, 200)
+        self.assertEqual(final_status, 200)
+        self.assertEqual(first["chunk_text"], "first thirty seconds")
+        self.assertEqual(first["text"], "first thirty seconds")
+        self.assertEqual(second["chunk_text"], "")
+        self.assertEqual(second["text"], "first thirty seconds")
+        self.assertEqual(final["chunk_text"], "last five seconds")
+        self.assertEqual(final["text"], "first thirty seconds last five seconds")
+        self.assertTrue(final["final"])
+
+    def test_transcribe_audio_dictation_flux_deduplicates_textless_turn_delta(self) -> None:
+        audio = b"not-a-standalone-webm" * 32
+        fake_result = {
+            "text": "first thirty seconds",
+            "chunk_text": "",
+            "events": [{"type": "EndOfTurn", "text": "", "is_final": True}],
+            "turn_events": [{"type": "EndOfTurn", "text": ""}],
+            "duration_seconds": 0.0,
+            "engine": "deepgram",
+            "model": "flux-general-en",
+            "language": "en",
+            "language_probability": 0.0,
+            "profile": "flux",
+        }
+        with TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            data_root = root / "data"
+            session_dir = data_root / "run" / "stt-sessions"
+            session_dir.mkdir(parents=True)
+            (session_dir / "chat-session.json").write_text(
+                json.dumps(
+                    {
+                        "schema_version": "1",
+                        "session_id": "chat-session",
+                        "created_at": time.time(),
+                        "updated_at": time.time(),
+                        "text": "first thirty seconds",
+                        "total_size_bytes": 256,
+                        "chunk_count": 1,
+                        "chunks": [{"chunk_index": 0, "text_chars": 20, "size_bytes": 256}],
+                    }
+                ),
+                encoding="utf-8",
+            )
+            write_settings(data_root, {"transcription_engine": "deepgram"})
+            with patch("transcription.transcribe_deepgram_flux_audio_chunk", return_value=fake_result):
+                status_code, payload = handle_action(
+                    data_root,
+                    root / "generated",
+                    {
+                        "action": "transcribe_audio",
+                        "content_type": "audio/webm",
+                        "audio_base64": base64.b64encode(audio).decode("ascii"),
+                        "dictation": True,
+                        "session_id": "chat-session",
+                        "chunk_index": 1,
+                        "_app_secrets": {"deepgram-api-key": "deepgram-token"},
+                    },
+                )
+
+        self.assertEqual(status_code, 200)
+        self.assertEqual(payload["chunk_text"], "")
+        self.assertEqual(payload["text"], "first thirty seconds")
+
     def test_transcribe_audio_dictation_flux_accepts_close_only_final_request(self) -> None:
         audio = b"not-a-standalone-webm" * 32
         captured_final_size: list[int] = []
@@ -1499,6 +1644,109 @@ class SpeechAppTests(unittest.TestCase):
         self.assertTrue(result["final"])
         self.assertEqual(FakeFluxClient.instances[0].binary_chunks, [])
         self.assertEqual(FakeFluxClient.instances[0].json_messages, [{"type": "CloseStream"}])
+
+    def test_flux_session_manager_promotes_textless_turn_partial_once(self) -> None:
+        class FakeFluxClient:
+            instances: list["FakeFluxClient"] = []
+
+            def __init__(self, url: str, *, headers: dict[str, str], timeout: float) -> None:
+                self.events: list[dict] = []
+                self.binary_chunks: list[bytes] = []
+                self.json_messages: list[dict] = []
+                FakeFluxClient.instances.append(self)
+
+            def connect(self) -> None:
+                return None
+
+            def send_binary(self, data: bytes) -> None:
+                self.binary_chunks.append(data)
+                if len(self.binary_chunks) == 1:
+                    self.events.extend([
+                        {"type": "Results", "text": "first thirty seconds", "is_final": False},
+                        {"type": "EndOfTurn"},
+                    ])
+                else:
+                    self.events.append({"type": "Results", "text": "last five seconds", "is_final": False})
+
+            def send_json(self, payload: dict) -> None:
+                self.json_messages.append(payload)
+                self.events.append({"type": "EndOfTurn"})
+
+            def receive_json(self, timeout: float) -> dict | None:
+                if not self.events:
+                    raise TimeoutError()
+                return self.events.pop(0)
+
+            def close(self) -> None:
+                return None
+
+        manager = flux_streaming.DeepgramFluxSessionManager(client_factory=FakeFluxClient)
+
+        first = manager.transcribe_chunk(
+            session_id="chat-session",
+            audio_bytes=b"audio-1",
+            final=False,
+            model="flux-general-en",
+            api_key="deepgram-token",
+            language="en",
+        )
+        second = manager.transcribe_chunk(
+            session_id="chat-session",
+            audio_bytes=b"audio-2",
+            final=False,
+            model="flux-general-en",
+            api_key="deepgram-token",
+            language="en",
+        )
+        final = manager.transcribe_chunk(
+            session_id="chat-session",
+            audio_bytes=b"",
+            final=True,
+            model="flux-general-en",
+            api_key="deepgram-token",
+            language="en",
+        )
+
+        self.assertEqual(first["text"], "first thirty seconds")
+        self.assertEqual(second["text"], "first thirty seconds last five seconds")
+        self.assertEqual(final["text"], "first thirty seconds last five seconds")
+        self.assertEqual(FakeFluxClient.instances[0].json_messages, [{"type": "CloseStream"}])
+
+    def test_flux_session_manager_ignores_textless_turn_after_final_result(self) -> None:
+        class FakeFluxClient:
+            def __init__(self, url: str, *, headers: dict[str, str], timeout: float) -> None:
+                self.events: list[dict] = []
+
+            def connect(self) -> None:
+                return None
+
+            def send_binary(self, data: bytes) -> None:
+                self.events.append({"type": "Results", "text": "hello", "is_final": True})
+
+            def send_json(self, payload: dict) -> None:
+                self.events.append({"type": "EndOfTurn"})
+
+            def receive_json(self, timeout: float) -> dict | None:
+                if not self.events:
+                    raise TimeoutError()
+                return self.events.pop(0)
+
+            def close(self) -> None:
+                return None
+
+        manager = flux_streaming.DeepgramFluxSessionManager(client_factory=FakeFluxClient)
+
+        result = manager.transcribe_chunk(
+            session_id="chat-session",
+            audio_bytes=b"audio",
+            final=True,
+            model="flux-general-en",
+            api_key="deepgram-token",
+            language="en",
+        )
+
+        self.assertEqual(result["text"], "hello")
+        self.assertEqual(result["chunk_text"], "hello")
 
     def test_flux_session_manager_limits_sessions_per_worker(self) -> None:
         class FakeFluxClient:

@@ -241,12 +241,12 @@ class DeepgramFluxSession:
 
     def _apply_event(self, event: dict[str, object]) -> None:
         text = _event_text(event)
-        if not text:
-            return
         if _event_is_final(event):
-            self.final_text_parts.append(text)
+            finalized_text = text or self.partial_text
+            if finalized_text:
+                self.final_text_parts.append(finalized_text)
             self.partial_text = ""
-        else:
+        elif text:
             self.partial_text = text
 
 

@@ -855,6 +855,12 @@ def finalized_flux_dictation_chunk_text(result: dict, *, existing_text: str, fin
     ]
     if finalized_texts:
         return incremental_transcript_text(existing_text, " ".join(finalized_texts).strip())
+    textless_final_event = any(
+        isinstance(event, dict) and bool(event.get("is_final")) and not str(event.get("text") or "").strip()
+        for event in events
+    )
+    if textless_final_event:
+        return incremental_transcript_text(existing_text, str(result.get("text") or ""))
     if final:
         return incremental_transcript_text(existing_text, str(result.get("text") or ""))
     return ""

@@ -857,6 +857,7 @@ export function App() {
   const [mailbox, setMailbox] = useState('inbox');
   const [connectionId, setConnectionId] = useState<string | null>(null);
   const [query, setQuery] = useState('');
+  const [searchFocused, setSearchFocused] = useState(false);
   const [page, setPage] = useState(1);
   const [notice, setNotice] = useState('');
   const [busy, setBusy] = useState(false);
@@ -1329,10 +1330,17 @@ export function App() {
 
   return (
     <main className={`mail-shell ${selectedThread || threadOpenLoading ? 'is-reading' : 'is-list-only'}`}>
-      <div className="toolbar">
+      <div className={`toolbar ${searchFocused ? 'is-search-focused' : ''}`}>
         <label className="mail-search">
           <span className="mail-search__icon" aria-hidden="true" />
-          <input aria-label="Search in Mail" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search in Mail" />
+          <input
+            aria-label="Search in Mail"
+            value={query}
+            onBlur={() => setSearchFocused(false)}
+            onChange={(event) => setQuery(event.target.value)}
+            onFocus={() => setSearchFocused(true)}
+            placeholder="Search in Mail"
+          />
         </label>
         <div className="mail-page-controls" aria-label="Mail pagination">
           <span className={`mail-page-range ${threadListLoading ? 'is-loading' : ''}`}>

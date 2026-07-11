@@ -214,6 +214,19 @@ p {
   padding: 12px;
 }
 
+.toolbar.is-search-focused {
+  grid-template-columns: minmax(0, 1fr) auto;
+}
+
+.toolbar.is-search-focused .mail-search {
+  width: 100%;
+}
+
+.toolbar.is-search-focused .mail-page-range,
+.toolbar.is-search-focused .sliding-pagination {
+  display: none;
+}
+
 .mail-icon-button {
   display: inline-flex;
   align-items: center;
@@ -1353,15 +1366,55 @@ p {
   }
 
   .toolbar {
-    grid-template-columns: 1fr;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 8px;
+  }
+
+  .mail-search {
+    width: 100%;
+    min-height: 40px;
+    grid-template-columns: 20px minmax(0, 1fr);
+    gap: 8px;
+    padding: 0 12px;
+  }
+
+  .mail-search input {
+    font-size: 0.9rem;
   }
 
   .mail-page-controls {
-    justify-content: space-between;
+    justify-content: flex-end;
+    gap: 6px;
+    overflow: hidden;
+  }
+
+  .mail-page-range {
+    font-size: 0.72rem;
+  }
+
+  .mail-icon-button {
+    width: 2rem;
+    min-height: 2rem;
+  }
+
+  .sliding-pagination {
+    gap: 0;
+  }
+
+  .sliding-pagination button {
+    min-width: 1.65rem;
+    min-height: 1.8rem;
+    padding: 0 0.35rem;
+  }
+
+  .sliding-pagination__dots {
+    padding: 0 0.15rem;
+    font-size: 0.75rem;
   }
 
   .thread-row {
     grid-template-columns: 1fr;
+    gap: 2px;
   }
 
   .thread-row__body {
@@ -1369,18 +1422,30 @@ p {
   }
 
   .thread-side {
-    flex-wrap: wrap;
+    flex-wrap: nowrap;
     justify-content: flex-start;
     max-width: none;
-    padding: 0;
+    gap: 6px;
+    padding: 0 0 0 3.2rem;
   }
 
   .thread-route {
-    width: min(20rem, 100%);
+    flex: 1 1 auto;
+    grid-template-columns: minmax(0, 1fr) 0.8rem minmax(0, 1fr);
+    width: auto;
+    min-width: 0;
   }
 
   .thread-action-row {
-    justify-content: flex-start;
+    flex: none;
+    justify-content: flex-end;
+    gap: 2px;
+  }
+
+  .thread-read-button,
+  .thread-trash-button {
+    width: 1.9rem;
+    height: 1.9rem;
   }
 
   .reader-header h1 {

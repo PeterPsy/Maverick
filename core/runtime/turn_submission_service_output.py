@@ -29,6 +29,7 @@ if TYPE_CHECKING:
 
 
 def _record_turn_started(state: PlatformState, *, session_id: str, turn_id: str, provider_id: str) -> RuntimeEventRecord:
+    started_at = time.perf_counter()
     event = record_runtime_event(
         state.runtime_store,
         event_id=str(uuid4()),
@@ -45,7 +46,10 @@ def _record_turn_started(state: PlatformState, *, session_id: str, turn_id: str,
         turn_id=turn_id,
         provider_id=provider_id,
         event_type="runtime.turn.turn_started_recorded",
-        payload={"recorded_event_id": event.event_id},
+        payload={
+            "recorded_event_id": event.event_id,
+            "turn_started_record_ms": round((time.perf_counter() - started_at) * 1000, 3),
+        },
     )
     return event
 
@@ -86,6 +90,7 @@ def _record_turn_thread_availability_active(
 
 
 def _record_turn_worker_started(state: PlatformState, *, session_id: str, turn_id: str, provider_id: str) -> RuntimeEventRecord:
+    started_at = time.perf_counter()
     event = record_runtime_event(
         state.runtime_store,
         event_id=str(uuid4()),
@@ -102,7 +107,10 @@ def _record_turn_worker_started(state: PlatformState, *, session_id: str, turn_i
         turn_id=turn_id,
         provider_id=provider_id,
         event_type="runtime.turn.worker_started_recorded",
-        payload={"recorded_event_id": event.event_id},
+        payload={
+            "recorded_event_id": event.event_id,
+            "worker_started_record_ms": round((time.perf_counter() - started_at) * 1000, 3),
+        },
     )
     return event
 
@@ -117,6 +125,44 @@ def _record_turn_worker_entered(state: PlatformState, *, session_id: str, turn_i
         event_type="runtime.turn.worker_entered",
         payload={"provider_id": provider_id},
         event_bus=state.runtime_event_bus,
+    )
+
+
+def _record_worker_turn_lookup_completed(
+    state: PlatformState,
+    *,
+    session_id: str,
+    turn_id: str,
+    provider_id: str,
+    phase: str,
+    elapsed_ms: float,
+) -> RuntimeEventRecord:
+    return _record_turn_marker(
+        state,
+        session_id=session_id,
+        turn_id=turn_id,
+        provider_id=provider_id,
+        event_type="runtime.turn.worker_turn_lookup_completed",
+        payload={"phase": phase, "worker_turn_lookup_ms": round(elapsed_ms, 3)},
+    )
+
+
+def _record_worker_session_lookup_completed(
+    state: PlatformState,
+    *,
+    session_id: str,
+    turn_id: str,
+    provider_id: str,
+    phase: str,
+    elapsed_ms: float,
+) -> RuntimeEventRecord:
+    return _record_turn_marker(
+        state,
+        session_id=session_id,
+        turn_id=turn_id,
+        provider_id=provider_id,
+        event_type="runtime.turn.worker_session_lookup_completed",
+        payload={"phase": phase, "worker_session_lookup_ms": round(elapsed_ms, 3)},
     )
 
 

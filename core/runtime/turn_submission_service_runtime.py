@@ -39,6 +39,8 @@ from core.runtime.turn_submission_service_output import (
     _record_turn_thread_availability_active,
     _record_turn_worker_entered,
     _record_turn_worker_started,
+    _record_worker_session_lookup_completed,
+    _record_worker_turn_lookup_completed,
 )
 from core.runtime.turn_submission_service_output_text import _RuntimeTurnOutputRecorder
 from core.runtime.plain_hosted_text import (
@@ -542,7 +544,16 @@ def submit_runtime_turn_async(
                 payload={"phase": "async_worker_entered"},
             )
             try:
+                turn_lookup_started_at = time.perf_counter()
                 current = state.runtime_store.get_turn(turn.turn_id)
+                _record_worker_turn_lookup_completed(
+                    state,
+                    session_id=session.session_id,
+                    turn_id=turn.turn_id,
+                    provider_id=worker_provider_id,
+                    phase="pre_cancel_check",
+                    elapsed_ms=(time.perf_counter() - turn_lookup_started_at) * 1000,
+                )
                 if current.status == "cancelled":
                     _debug_log_runtime_turn_with_timing(
                         state,
@@ -633,7 +644,16 @@ def submit_runtime_turn_async(
                         daemon=True,
                     ).start()
 
+                session_lookup_started_at = time.perf_counter()
                 current_session = state.runtime_store.get_session(session.session_id)
+                _record_worker_session_lookup_completed(
+                    state,
+                    session_id=session.session_id,
+                    turn_id=turn.turn_id,
+                    provider_id=worker_provider_id,
+                    phase="before_execution",
+                    elapsed_ms=(time.perf_counter() - session_lookup_started_at) * 1000,
+                )
                 _debug_log_runtime_turn_with_timing(
                     state,
                     session=current_session,

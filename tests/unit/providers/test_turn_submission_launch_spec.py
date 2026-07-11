@@ -318,11 +318,13 @@ class TurnSubmissionLaunchSpecTestCase(unittest.TestCase):
             "runtime.turn.session_lock_wait_started",
             "runtime.turn.session_lock_acquired",
             "runtime.turn.debug_log_completed",
+            "runtime.turn.worker_turn_lookup_completed",
             "runtime.turn.turn_activation_completed",
             "runtime.turn.turn_started_recorded",
             "runtime.turn.thread_availability_started",
             "runtime.turn.thread_availability_completed",
             "runtime.turn.worker_started_recorded",
+            "runtime.turn.worker_session_lookup_completed",
             "runtime.turn.app_references_materialize_started",
             "runtime.turn.app_references_materialize_completed",
             "runtime.turn.provider_input_started",
@@ -355,6 +357,32 @@ class TurnSubmissionLaunchSpecTestCase(unittest.TestCase):
         )
         self.assertEqual(debug_log.payload["phase"], "async_worker_entered")
         self.assertIn("debug_log_runtime_turn_ms", debug_log.payload)
+        turn_lookup = next(
+            event
+            for event in runtime_store.list_events(session.session_id)
+            if event.event_type == "runtime.turn.worker_turn_lookup_completed"
+        )
+        self.assertEqual(turn_lookup.payload["phase"], "pre_cancel_check")
+        self.assertIn("worker_turn_lookup_ms", turn_lookup.payload)
+        turn_started_recorded = next(
+            event
+            for event in runtime_store.list_events(session.session_id)
+            if event.event_type == "runtime.turn.turn_started_recorded"
+        )
+        self.assertIn("turn_started_record_ms", turn_started_recorded.payload)
+        worker_started_recorded = next(
+            event
+            for event in runtime_store.list_events(session.session_id)
+            if event.event_type == "runtime.turn.worker_started_recorded"
+        )
+        self.assertIn("worker_started_record_ms", worker_started_recorded.payload)
+        session_lookup = next(
+            event
+            for event in runtime_store.list_events(session.session_id)
+            if event.event_type == "runtime.turn.worker_session_lookup_completed"
+        )
+        self.assertEqual(session_lookup.payload["phase"], "before_execution")
+        self.assertIn("worker_session_lookup_ms", session_lookup.payload)
         materialized = next(event for event in runtime_store.list_events(session.session_id) if event.event_type == "runtime.turn.app_references_materialize_completed")
         self.assertEqual(materialized.payload["app_reference_count"], 1)
         self.assertEqual(materialized.payload["storage_reference_count"], 1)

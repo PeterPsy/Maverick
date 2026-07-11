@@ -31,6 +31,8 @@ INTERESTING_EVENT_TYPES = {
     "runtime.turn.session_lock_wait_started",
     "runtime.turn.session_lock_acquired",
     "runtime.turn.debug_log_completed",
+    "runtime.turn.worker_turn_lookup_completed",
+    "runtime.turn.worker_session_lookup_completed",
     "runtime.turn.turn_activation_completed",
     "runtime.turn.thread_availability_started",
     "runtime.turn.thread_availability_completed",
@@ -62,6 +64,8 @@ EVENT_KEYS = {
     "runtime.turn.session_lock_wait_started": "session_lock_wait_started",
     "runtime.turn.session_lock_acquired": "session_lock_acquired",
     "runtime.turn.debug_log_completed": "debug_log_completed",
+    "runtime.turn.worker_turn_lookup_completed": "worker_turn_lookup_completed",
+    "runtime.turn.worker_session_lookup_completed": "worker_session_lookup_completed",
     "runtime.turn.turn_activation_completed": "turn_activation_completed",
     "runtime.turn.thread_availability_started": "thread_availability_started",
     "runtime.turn.thread_availability_completed": "thread_availability_completed",
@@ -93,6 +97,10 @@ LATENCY_METRIC_NAMES = (
     "worker_entered_to_started_unattributed_ms",
     "source_app_queued_dispatch_ms",
     "debug_log_runtime_turn_ms",
+    "worker_turn_lookup_ms",
+    "turn_started_record_ms",
+    "worker_started_record_ms",
+    "worker_session_lookup_ms",
     "transition_active_ms",
     "save_state_ms",
     "save_session_ms",
@@ -262,8 +270,9 @@ def build_report(
             "queued_to_worker_entered_ms uses runtime.turn.worker_entered; queued_to_worker_started_ms remains as the legacy activation-adjacent span.",
             (
                 "worker_entered_to_worker_started_ms is decomposed with source_app_queued_dispatch_ms, "
-                "debug_log_runtime_turn_ms, transition_active_ms, transition store subspans, "
-                "thread_catalog_queued_ms, thread_availability_update_ms, and turn_started_to_worker_started_ms when those newer events exist."
+                "debug_log_runtime_turn_ms, worker_turn_lookup_ms, turn_started_record_ms, "
+                "transition_active_ms, transition store subspans, thread_catalog_queued_ms, "
+                "thread_availability_update_ms, and turn_started_to_worker_started_ms when those newer events exist."
             ),
             "worker_entered_to_started_unattributed_ms subtracts known worker-startup subspans from worker_entered_to_worker_started_ms and floors at zero.",
             (
@@ -678,6 +687,8 @@ def _turn_metrics(group: TurnEvents) -> dict[str, float]:
     session_lock_wait_started = events.get("session_lock_wait_started")
     session_lock_acquired = events.get("session_lock_acquired")
     debug_log_completed = events.get("debug_log_completed")
+    worker_turn_lookup_completed = events.get("worker_turn_lookup_completed")
+    worker_session_lookup_completed = events.get("worker_session_lookup_completed")
     turn_activation_completed = events.get("turn_activation_completed")
     thread_availability_started = events.get("thread_availability_started")
     thread_availability_completed = events.get("thread_availability_completed")
@@ -710,6 +721,18 @@ def _turn_metrics(group: TurnEvents) -> dict[str, float]:
     _set_metric(metrics, "worker_entered_to_worker_started_ms", _delta_ms(worker_entered, worker))
     if debug_log_completed is not None:
         _set_metric(metrics, "debug_log_runtime_turn_ms", _numeric(debug_log_completed.payload.get("debug_log_runtime_turn_ms")))
+    if worker_turn_lookup_completed is not None:
+        _set_metric(metrics, "worker_turn_lookup_ms", _numeric(worker_turn_lookup_completed.payload.get("worker_turn_lookup_ms")))
+    if turn_started_recorded is not None:
+        _set_metric(metrics, "turn_started_record_ms", _numeric(turn_started_recorded.payload.get("turn_started_record_ms")))
+    if worker_started_recorded is not None:
+        _set_metric(metrics, "worker_started_record_ms", _numeric(worker_started_recorded.payload.get("worker_started_record_ms")))
+    if worker_session_lookup_completed is not None:
+        _set_metric(
+            metrics,
+            "worker_session_lookup_ms",
+            _numeric(worker_session_lookup_completed.payload.get("worker_session_lookup_ms")),
+        )
     if turn_activation_completed is not None:
         for key in ("transition_active_ms", "save_state_ms", "save_session_ms", "save_turn_ms", "thread_update_ms"):
             _set_metric(metrics, key, _numeric(turn_activation_completed.payload.get(key)))
@@ -929,6 +952,8 @@ def _set_worker_startup_unattributed_metric(metrics: dict[str, float]) -> None:
             "prewarm_wait_ms",
             "session_lock_wait_ms",
             "debug_log_runtime_turn_ms",
+            "worker_turn_lookup_ms",
+            "turn_started_record_ms",
             "source_app_queued_dispatch_ms",
             "transition_active_ms",
             "turn_started_to_worker_started_ms",

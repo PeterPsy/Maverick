@@ -165,6 +165,15 @@ class RuntimeTurnLatencyReportTestCase(unittest.TestCase):
                         {"provider_id": "codex", "phase": "async_worker_entered", "debug_log_runtime_turn_ms": 0.5},
                     ),
                     _event(
+                        "turn-lookup",
+                        "default",
+                        "sess-refs",
+                        turn_id,
+                        "runtime.turn.worker_turn_lookup_completed",
+                        BASE + timedelta(milliseconds=130.8),
+                        {"provider_id": "codex", "phase": "pre_cancel_check", "worker_turn_lookup_ms": 1.5},
+                    ),
+                    _event(
                         "source-dispatch-start",
                         "default",
                         "sess-refs",
@@ -199,7 +208,15 @@ class RuntimeTurnLatencyReportTestCase(unittest.TestCase):
                             "thread_update_ms": 0.9,
                         },
                     ),
-                    _event("turn-started-recorded", "default", "sess-refs", turn_id, "runtime.turn.turn_started_recorded", BASE + timedelta(milliseconds=136), {"provider_id": "codex"}),
+                    _event(
+                        "turn-started-recorded",
+                        "default",
+                        "sess-refs",
+                        turn_id,
+                        "runtime.turn.turn_started_recorded",
+                        BASE + timedelta(milliseconds=136),
+                        {"provider_id": "codex", "turn_started_record_ms": 1},
+                    ),
                     _event("availability-start", "default", "sess-refs", turn_id, "runtime.turn.thread_availability_started", BASE + timedelta(milliseconds=137), {"provider_id": "codex", "availability": "active"}),
                     _event(
                         "availability-complete",
@@ -211,7 +228,24 @@ class RuntimeTurnLatencyReportTestCase(unittest.TestCase):
                         {"provider_id": "codex", "availability": "active", "thread_availability_update_ms": 7},
                     ),
                     _event("worker", "default", "sess-refs", turn_id, "runtime.turn.worker_started", BASE + timedelta(milliseconds=145), {"provider_id": "codex"}),
-                    _event("worker-started-recorded", "default", "sess-refs", turn_id, "runtime.turn.worker_started_recorded", BASE + timedelta(milliseconds=146), {"provider_id": "codex"}),
+                    _event(
+                        "worker-started-recorded",
+                        "default",
+                        "sess-refs",
+                        turn_id,
+                        "runtime.turn.worker_started_recorded",
+                        BASE + timedelta(milliseconds=146),
+                        {"provider_id": "codex", "worker_started_record_ms": 0.8},
+                    ),
+                    _event(
+                        "session-lookup",
+                        "default",
+                        "sess-refs",
+                        turn_id,
+                        "runtime.turn.worker_session_lookup_completed",
+                        BASE + timedelta(milliseconds=147),
+                        {"provider_id": "codex", "phase": "before_execution", "worker_session_lookup_ms": 1.2},
+                    ),
                     _event(
                         "refs-start",
                         "default",
@@ -267,9 +301,13 @@ class RuntimeTurnLatencyReportTestCase(unittest.TestCase):
         self.assertEqual(metrics["queued_to_worker_entered_ms"], 75)
         self.assertEqual(metrics["queued_to_worker_started_ms"], 145)
         self.assertEqual(metrics["worker_entered_to_worker_started_ms"], 70)
-        self.assertEqual(metrics["worker_entered_to_started_unattributed_ms"], 9.5)
+        self.assertEqual(metrics["worker_entered_to_started_unattributed_ms"], 7.0)
         self.assertEqual(metrics["source_app_queued_dispatch_ms"], 2)
         self.assertEqual(metrics["debug_log_runtime_turn_ms"], 0.5)
+        self.assertEqual(metrics["worker_turn_lookup_ms"], 1.5)
+        self.assertEqual(metrics["turn_started_record_ms"], 1)
+        self.assertEqual(metrics["worker_started_record_ms"], 0.8)
+        self.assertEqual(metrics["worker_session_lookup_ms"], 1.2)
         self.assertEqual(metrics["transition_active_ms"], 3)
         self.assertEqual(metrics["save_state_ms"], 0.8)
         self.assertEqual(metrics["save_session_ms"], 0.7)

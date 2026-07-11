@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from collections import OrderedDict
+from contextlib import suppress
 from copy import deepcopy
 from dataclasses import dataclass
 import hashlib
@@ -22,11 +24,21 @@ from core.api.app_reference_providers import (
 )
 from core.api.session_api import RequestSession
 from core.mcp.models import McpInvocationContext
+from core.observability.service import record_platform_metric
 
 logger = logging.getLogger(__name__)
 RUNTIME_APP_REFERENCE_CACHE_TTL_SECONDS = 300.0
-_RUNTIME_APP_REFERENCE_CACHE: dict[str, tuple[float, "RuntimeAppReferenceMaterializationResult"]] = {}
+RUNTIME_APP_REFERENCE_CACHE_MAX_ENTRIES = 1024
+_RUNTIME_APP_REFERENCE_CACHE: OrderedDict[str, tuple[float, "RuntimeAppReferenceMaterializationResult"]] = OrderedDict()
 _RUNTIME_APP_REFERENCE_CACHE_LOCK = Lock()
+_RUNTIME_APP_REFERENCE_CACHE_EVICTIONS = 0
+
+
+@dataclass(frozen=True)
+class RuntimeAppReferenceCacheStats:
+    size: int
+    evictions: int
+    max_entries: int
 
 
 @dataclass(frozen=True)
@@ -39,8 +51,20 @@ class RuntimeAppReferenceMaterializationResult:
 
 def clear_runtime_app_reference_materialization_cache() -> None:
     """Clear the non-persistent runtime app reference materialization cache."""
+    global _RUNTIME_APP_REFERENCE_CACHE_EVICTIONS
     with _RUNTIME_APP_REFERENCE_CACHE_LOCK:
         _RUNTIME_APP_REFERENCE_CACHE.clear()
+        _RUNTIME_APP_REFERENCE_CACHE_EVICTIONS = 0
+
+
+def runtime_app_reference_materialization_cache_stats() -> RuntimeAppReferenceCacheStats:
+    """Return redaction-safe runtime app reference cache stats."""
+    with _RUNTIME_APP_REFERENCE_CACHE_LOCK:
+        return RuntimeAppReferenceCacheStats(
+            size=len(_RUNTIME_APP_REFERENCE_CACHE),
+            evictions=_RUNTIME_APP_REFERENCE_CACHE_EVICTIONS,
+            max_entries=_runtime_app_reference_cache_max_entries(),
+        )
 
 
 class RuntimeAppReferenceRequestContext:
@@ -274,7 +298,12 @@ def materialize_runtime_app_references_with_metrics(
         reference_action_timings=reference_action_timings,
         reference_fingerprint=reference_fingerprint,
     )
-    _cache_runtime_app_reference_result(result)
+    _cache_runtime_app_reference_result(
+        state,
+        result,
+        workspace_id=context.workspace_id,
+        session_id=session_id,
+    )
     return result
 
 
@@ -504,6 +533,7 @@ def _append_reference_action_timing(
 
 
 def _cached_runtime_app_reference_result(reference_fingerprint: str) -> RuntimeAppReferenceMaterializationResult | None:
+    global _RUNTIME_APP_REFERENCE_CACHE_EVICTIONS
     if not reference_fingerprint:
         return None
     now = time.monotonic()
@@ -514,7 +544,9 @@ def _cached_runtime_app_reference_result(reference_fingerprint: str) -> RuntimeA
         expires_at, result = cached
         if expires_at <= now:
             _RUNTIME_APP_REFERENCE_CACHE.pop(reference_fingerprint, None)
+            _RUNTIME_APP_REFERENCE_CACHE_EVICTIONS += 1
             return None
+        _RUNTIME_APP_REFERENCE_CACHE.move_to_end(reference_fingerprint)
     return RuntimeAppReferenceMaterializationResult(
         references=deepcopy(result.references),
         reference_action_timings=[],
@@ -523,7 +555,14 @@ def _cached_runtime_app_reference_result(reference_fingerprint: str) -> RuntimeA
     )
 
 
-def _cache_runtime_app_reference_result(result: RuntimeAppReferenceMaterializationResult) -> None:
+def _cache_runtime_app_reference_result(
+    state,
+    result: RuntimeAppReferenceMaterializationResult,
+    *,
+    workspace_id: str,
+    session_id: str,
+) -> None:
+    global _RUNTIME_APP_REFERENCE_CACHE_EVICTIONS
     if not result.reference_fingerprint:
         return
     cached = RuntimeAppReferenceMaterializationResult(
@@ -532,11 +571,80 @@ def _cache_runtime_app_reference_result(result: RuntimeAppReferenceMaterializati
         reference_cache_hit=False,
         reference_fingerprint=result.reference_fingerprint,
     )
+    now = time.monotonic()
     with _RUNTIME_APP_REFERENCE_CACHE_LOCK:
+        evictions = _prune_expired_runtime_app_reference_cache_locked(now)
         _RUNTIME_APP_REFERENCE_CACHE[result.reference_fingerprint] = (
-            time.monotonic() + RUNTIME_APP_REFERENCE_CACHE_TTL_SECONDS,
+            now + RUNTIME_APP_REFERENCE_CACHE_TTL_SECONDS,
             cached,
         )
+        _RUNTIME_APP_REFERENCE_CACHE.move_to_end(result.reference_fingerprint)
+        evictions += _bound_runtime_app_reference_cache_locked()
+        _RUNTIME_APP_REFERENCE_CACHE_EVICTIONS += evictions
+        cache_size = len(_RUNTIME_APP_REFERENCE_CACHE)
+    _record_runtime_app_reference_cache_metrics(
+        state,
+        workspace_id=workspace_id,
+        session_id=session_id,
+        cache_size=cache_size,
+        evictions=evictions,
+    )
+
+
+def _runtime_app_reference_cache_max_entries() -> int:
+    with suppress(Exception):
+        return max(1, int(RUNTIME_APP_REFERENCE_CACHE_MAX_ENTRIES))
+    return 1024
+
+
+def _prune_expired_runtime_app_reference_cache_locked(now: float) -> int:
+    expired = [fingerprint for fingerprint, (expires_at, _result) in _RUNTIME_APP_REFERENCE_CACHE.items() if expires_at <= now]
+    for fingerprint in expired:
+        _RUNTIME_APP_REFERENCE_CACHE.pop(fingerprint, None)
+    return len(expired)
+
+
+def _bound_runtime_app_reference_cache_locked() -> int:
+    evictions = 0
+    max_entries = _runtime_app_reference_cache_max_entries()
+    while len(_RUNTIME_APP_REFERENCE_CACHE) > max_entries:
+        _RUNTIME_APP_REFERENCE_CACHE.popitem(last=False)
+        evictions += 1
+    return evictions
+
+
+def _record_runtime_app_reference_cache_metrics(
+    state,
+    *,
+    workspace_id: str,
+    session_id: str,
+    cache_size: int,
+    evictions: int,
+) -> None:
+    observability_store = getattr(state, "observability_store", None)
+    if observability_store is None:
+        return
+    tags = {"cache": "runtime_app_references"}
+    with suppress(Exception):
+        record_platform_metric(
+            observability_store,
+            metric_name="reference_cache_size",
+            kind="gauge",
+            value=cache_size,
+            workspace_id=workspace_id,
+            runtime_session_id=session_id or None,
+            tags=tags,
+        )
+        if evictions:
+            record_platform_metric(
+                observability_store,
+                metric_name="reference_cache_evictions",
+                kind="counter",
+                value=evictions,
+                workspace_id=workspace_id,
+                runtime_session_id=session_id or None,
+                tags=tags,
+            )
 
 
 def _runtime_reference_cache_fingerprint(

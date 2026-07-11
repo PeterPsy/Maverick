@@ -62,6 +62,58 @@ class RuntimeSubmitIdempotencyApiTestCase(AppReferenceApiTestSupport, unittest.T
         self.assertEqual(status, 403)
         self.assertEqual(payload, {"error": "runtime_session_turn_submit_forbidden"})
 
+    def test_existing_session_app_reference_prepare_requires_turn_submit_authority(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            repo_root = self._repo_root(temp_dir)
+            with patch.dict(
+                "os.environ",
+                {
+                    "MAVERICK_ALLOW_INSECURE_TEST_DEFAULTS": "1",
+                    "MAVERICK_ADMIN_USERNAME": "admin",
+                    "MAVERICK_ADMIN_PASSWORD": "maverick",
+                },
+            ):
+                state = bootstrap_platform_state(start_path=repo_root)
+            create_runtime_session(
+                state.runtime_store,
+                session_id="owner-session",
+                workspace_id="default",
+                agent_id="chat",
+                source_app_id="chat",
+                owner_user_id="user:admin",
+                governance=state.workspace_store.get_governance("default"),
+                platform_allows_full_access=True,
+                start_path=repo_root,
+            )
+            create_user(state.identity_store, username="member", password="memberpass", platform_role="member")
+            ensure_workspace_membership(
+                state.workspace_store,
+                membership_id="default:user:member",
+                workspace_id="default",
+                user_id="user:member",
+                role="member",
+            )
+            app = PlatformHost(state, start_path=repo_root)
+            member_cookie = self._login(app, username="member", password="memberpass")
+
+            with patch(
+                "core.api.runtime_api.validate_runtime_app_references",
+                side_effect=AssertionError("prepare should fail before reference validation"),
+            ), patch(
+                "core.api.runtime_api.materialize_runtime_app_references_with_metrics",
+                side_effect=AssertionError("prepare should fail before materialization"),
+            ):
+                status, payload, _headers = self._invoke(
+                    app,
+                    path="/api/runtime/sessions/owner-session/app-references/prepare",
+                    method="POST",
+                    body={"app_references": [{"type": "app", "app_id": "records"}]},
+                    cookie=member_cookie,
+                )
+
+        self.assertEqual(status, 403)
+        self.assertEqual(payload, {"error": "runtime_session_turn_submit_forbidden"})
+
     def test_new_session_turn_retry_reuses_existing_client_message_id(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             repo_root = self._repo_root(temp_dir)

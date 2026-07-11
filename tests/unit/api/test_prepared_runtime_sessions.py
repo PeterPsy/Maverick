@@ -8,7 +8,10 @@ from unittest.mock import patch
 
 from core.api.platform_host import PlatformHost
 from core.api.platform_state import bootstrap_platform_state
-from core.api.app_reference_payloads import clear_runtime_app_reference_materialization_cache
+from core.api.app_reference_payloads import (
+    clear_runtime_app_reference_materialization_cache,
+    runtime_app_reference_materialization_cache_stats,
+)
 from core.apps.service import install_store_app, register_app_source_from_contract
 from core.runtime.runtime_thread import RuntimeThreadRecord
 from core.runtime.runtime_turns import RuntimeTurnRecord
@@ -329,6 +332,66 @@ class PreparedRuntimeSessionsApiTestCase(AppReferenceApiTestSupport, unittest.Te
             self.assertEqual(turn_status, 202)
             self.assertTrue(captured["reference_cache_hit"])
             self.assertEqual(captured["materialized_app_references"][0]["label"], "Launch record")
+
+    def test_prepare_only_app_reference_cache_is_bounded_and_reports_metrics(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            repo_root = self._repo_root(temp_dir)
+            self._write_reference_app(repo_root / "apps" / "records")
+            with patch.dict(
+                "os.environ",
+                {
+                    "MAVERICK_ALLOW_INSECURE_TEST_DEFAULTS": "1",
+                    "MAVERICK_ADMIN_USERNAME": "admin",
+                    "MAVERICK_ADMIN_PASSWORD": "maverick",
+                },
+            ):
+                state = bootstrap_platform_state(start_path=repo_root)
+            source = register_app_source_from_contract(
+                state.app_store,
+                source_kind="platform",
+                source_path=str(repo_root / "apps" / "records"),
+            )
+            install_store_app(state.app_store, source_id=source.source_id, workspace_id="default", start_path=repo_root)
+            app = PlatformHost(state, start_path=repo_root)
+            cookie = self._login(app)
+            app_references = [
+                {"type": "entity", "app_id": "records", "entity_type": "record", "entity_id": "record-1"},
+            ]
+
+            with patch("core.api.runtime_api._prewarm_new_runtime_session"), patch(
+                "core.api.app_reference_payloads.RUNTIME_APP_REFERENCE_CACHE_MAX_ENTRIES",
+                2,
+            ):
+                for index in range(3):
+                    session_status, session_payload, _headers = self._invoke(
+                        app,
+                        path="/api/runtime/sessions",
+                        method="POST",
+                        body={"agent_id": "chat", "source_app_id": "chat", "prepare_only": True},
+                        cookie=cookie,
+                    )
+                    self.assertEqual(session_status, 201)
+                    prepare_status, prepare_payload, _headers = self._invoke(
+                        app,
+                        path=f"/api/runtime/sessions/{session_payload['session_id']}/app-references/prepare",
+                        method="POST",
+                        body={"app_references": app_references},
+                        cookie=cookie,
+                    )
+                    self.assertEqual(prepare_status, 200)
+                    self.assertEqual(prepare_payload["status"], "ready")
+                    self.assertFalse(prepare_payload["reference_cache_hit"], f"unexpected cache hit on insert {index}")
+
+                stats = runtime_app_reference_materialization_cache_stats()
+
+            metrics = state.observability_store.list_metrics(workspace_id="default")
+            cache_size_metrics = [metric for metric in metrics if metric.metric_name == "reference_cache_size"]
+            cache_eviction_metrics = [metric for metric in metrics if metric.metric_name == "reference_cache_evictions"]
+            self.assertEqual(stats.size, 2)
+            self.assertEqual(stats.max_entries, 2)
+            self.assertEqual(stats.evictions, 1)
+            self.assertEqual(cache_size_metrics[-1].value, 2)
+            self.assertEqual(sum(metric.value for metric in cache_eviction_metrics), 1)
 
     def test_invalid_prepare_only_first_turn_keeps_session_hidden_without_thread(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:

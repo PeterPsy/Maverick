@@ -1323,6 +1323,15 @@ def _handle_session_app_references_prepare(
         return json_response(start_response, {"error": "runtime_session_not_found"}, status="404 Not Found")
     if not runtime_session_allows_user_thread(session) and not _prepared_session_can_be_promoted(session, context):
         return _hidden_runtime_session_response(start_response, session)
+    try:
+        require_runtime_session_operation(
+            workspace_store=state.workspace_store,
+            user=context.user,
+            session=session,
+            operation="turn_submit",
+        )
+    except AuthorizationError as error:
+        return json_response(start_response, {"error": error.reason}, status="403 Forbidden")
     raw_references = body.get("app_references") if isinstance(body.get("app_references"), list) else []
     reference_items = [item for item in raw_references if isinstance(item, dict)]
     if runtime_session_is_plain_hosted_chat(session) and reference_items:

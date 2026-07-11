@@ -5,6 +5,7 @@ from __future__ import annotations
 from dataclasses import replace
 from datetime import datetime
 from pathlib import Path
+import time
 
 from core.observability.service import append_platform_log, record_platform_audit, record_platform_event
 from core.runtime.client_message_claims import RuntimeClientMessageClaim
@@ -221,6 +222,7 @@ def transition_runtime_turn(
     target_status: RuntimeTurnStatus,
     failure_reason: str | None = None,
     now: datetime | None = None,
+    timing_payload: dict[str, float] | None = None,
 ) -> RuntimeTurnRecord:
     """Transition one runtime turn between canonical lifecycle statuses."""
     timestamp = now or utcnow()
@@ -243,6 +245,7 @@ def transition_runtime_turn(
         failure_reason=failure_reason,
     )
     state = store.get_state(turn.session_id)
+    save_state_started_at = time.perf_counter()
     store.save_state(
         replace(
             state,
@@ -253,11 +256,23 @@ def transition_runtime_turn(
             updated_at=timestamp,
         )
     )
+    _record_transition_timing(timing_payload, "save_state_ms", save_state_started_at)
     session = store.get_session(turn.session_id)
+    save_session_started_at = time.perf_counter()
     store.save_session(replace(session, last_progress_at=timestamp, updated_at=timestamp))
+    _record_transition_timing(timing_payload, "save_session_ms", save_session_started_at)
+    save_turn_started_at = time.perf_counter()
     saved = store.save_turn(updated)
+    _record_transition_timing(timing_payload, "save_turn_ms", save_turn_started_at)
+    thread_update_started_at = time.perf_counter()
     _update_thread_for_turn_transition(store, saved)
+    _record_transition_timing(timing_payload, "thread_update_ms", thread_update_started_at)
     return saved
+
+
+def _record_transition_timing(timing_payload: dict[str, float] | None, key: str, started_at: float) -> None:
+    if timing_payload is not None:
+        timing_payload[key] = round((time.perf_counter() - started_at) * 1000, 3)
 
 
 def _update_thread_for_queued_turn(store: RuntimeStore, turn: RuntimeTurnRecord) -> None:

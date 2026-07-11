@@ -284,6 +284,7 @@ class TurnSubmissionLaunchSpecTestCase(unittest.TestCase):
             "runtime.turn.worker_entered",
             "runtime.turn.session_lock_wait_started",
             "runtime.turn.session_lock_acquired",
+            "runtime.turn.debug_log_completed",
             "runtime.turn.turn_activation_completed",
             "runtime.turn.turn_started_recorded",
             "runtime.turn.thread_availability_started",
@@ -299,6 +300,21 @@ class TurnSubmissionLaunchSpecTestCase(unittest.TestCase):
             event_types.index("runtime.turn.worker_started_recorded"),
             event_types.index("runtime.turn.thread_availability_started"),
         )
+        activation = next(
+            event
+            for event in runtime_store.list_events(session.session_id)
+            if event.event_type == "runtime.turn.turn_activation_completed"
+        )
+        for key in ("transition_active_ms", "save_state_ms", "save_session_ms", "save_turn_ms", "thread_update_ms"):
+            self.assertIn(key, activation.payload)
+            self.assertGreaterEqual(activation.payload[key], 0)
+        debug_log = next(
+            event
+            for event in runtime_store.list_events(session.session_id)
+            if event.event_type == "runtime.turn.debug_log_completed"
+        )
+        self.assertEqual(debug_log.payload["phase"], "async_worker_entered")
+        self.assertIn("debug_log_runtime_turn_ms", debug_log.payload)
         materialized = next(event for event in runtime_store.list_events(session.session_id) if event.event_type == "runtime.turn.app_references_materialize_completed")
         self.assertEqual(materialized.payload["app_reference_count"], 1)
         self.assertEqual(materialized.payload["storage_reference_count"], 1)

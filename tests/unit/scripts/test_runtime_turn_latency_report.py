@@ -156,6 +156,15 @@ class RuntimeTurnLatencyReportTestCase(unittest.TestCase):
                         {"provider_id": "codex", "session_lock_wait_ms": 20},
                     ),
                     _event(
+                        "debug-log",
+                        "default",
+                        "sess-refs",
+                        turn_id,
+                        "runtime.turn.debug_log_completed",
+                        BASE + timedelta(milliseconds=130.5),
+                        {"provider_id": "codex", "phase": "async_worker_entered", "debug_log_runtime_turn_ms": 0.5},
+                    ),
+                    _event(
                         "source-dispatch-start",
                         "default",
                         "sess-refs",
@@ -173,7 +182,23 @@ class RuntimeTurnLatencyReportTestCase(unittest.TestCase):
                         BASE + timedelta(milliseconds=133),
                         {"provider_id": "codex", "source_app_queued_dispatch_ms": 2},
                     ),
-                    _event("activation", "default", "sess-refs", turn_id, "runtime.turn.turn_activation_completed", BASE + timedelta(milliseconds=135), {"provider_id": "codex", "status": "active"}),
+                    _event(
+                        "activation",
+                        "default",
+                        "sess-refs",
+                        turn_id,
+                        "runtime.turn.turn_activation_completed",
+                        BASE + timedelta(milliseconds=135),
+                        {
+                            "provider_id": "codex",
+                            "status": "active",
+                            "transition_active_ms": 3,
+                            "save_state_ms": 0.8,
+                            "save_session_ms": 0.7,
+                            "save_turn_ms": 0.6,
+                            "thread_update_ms": 0.9,
+                        },
+                    ),
                     _event("turn-started-recorded", "default", "sess-refs", turn_id, "runtime.turn.turn_started_recorded", BASE + timedelta(milliseconds=136), {"provider_id": "codex"}),
                     _event("availability-start", "default", "sess-refs", turn_id, "runtime.turn.thread_availability_started", BASE + timedelta(milliseconds=137), {"provider_id": "codex", "availability": "active"}),
                     _event(
@@ -242,7 +267,14 @@ class RuntimeTurnLatencyReportTestCase(unittest.TestCase):
         self.assertEqual(metrics["queued_to_worker_entered_ms"], 75)
         self.assertEqual(metrics["queued_to_worker_started_ms"], 145)
         self.assertEqual(metrics["worker_entered_to_worker_started_ms"], 70)
+        self.assertEqual(metrics["worker_entered_to_started_unattributed_ms"], 9.5)
         self.assertEqual(metrics["source_app_queued_dispatch_ms"], 2)
+        self.assertEqual(metrics["debug_log_runtime_turn_ms"], 0.5)
+        self.assertEqual(metrics["transition_active_ms"], 3)
+        self.assertEqual(metrics["save_state_ms"], 0.8)
+        self.assertEqual(metrics["save_session_ms"], 0.7)
+        self.assertEqual(metrics["save_turn_ms"], 0.6)
+        self.assertEqual(metrics["thread_update_ms"], 0.9)
         self.assertEqual(metrics["thread_catalog_queued_ms"], 13)
         self.assertEqual(metrics["thread_availability_update_ms"], 7)
         self.assertEqual(metrics["turn_started_to_worker_started_ms"], 10)

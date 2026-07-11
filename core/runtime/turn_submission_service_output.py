@@ -144,6 +144,28 @@ def _record_turn_marker(
     )
 
 
+def _record_debug_log_completed(
+    state: PlatformState,
+    *,
+    session_id: str,
+    turn_id: str,
+    provider_id: str,
+    phase: str,
+    elapsed_ms: float,
+) -> RuntimeEventRecord:
+    return _record_turn_marker(
+        state,
+        session_id=session_id,
+        turn_id=turn_id,
+        provider_id=provider_id,
+        event_type="runtime.turn.debug_log_completed",
+        payload={
+            "phase": phase,
+            "debug_log_runtime_turn_ms": round(elapsed_ms, 3),
+        },
+    )
+
+
 def _record_source_app_queued_dispatch_started(
     state: PlatformState,
     *,
@@ -235,7 +257,14 @@ def _record_turn_activation_completed(
     turn_id: str,
     provider_id: str,
     status: str,
+    elapsed_ms: float | None = None,
+    transition_timings: dict[str, float] | None = None,
 ) -> RuntimeEventRecord:
+    payload: dict[str, object] = {"provider_id": provider_id, "status": status}
+    if elapsed_ms is not None:
+        payload["transition_active_ms"] = round(elapsed_ms, 3)
+    for key, value in (transition_timings or {}).items():
+        payload[key] = round(value, 3)
     return record_runtime_event(
         state.runtime_store,
         event_id=str(uuid4()),
@@ -243,7 +272,7 @@ def _record_turn_activation_completed(
         turn_id=turn_id,
         plane="turn",
         event_type="runtime.turn.turn_activation_completed",
-        payload={"provider_id": provider_id, "status": status},
+        payload=payload,
         event_bus=state.runtime_event_bus,
     )
 

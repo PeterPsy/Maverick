@@ -30,6 +30,7 @@ INTERESTING_EVENT_TYPES = {
     "runtime.turn.prewarm_waited",
     "runtime.turn.session_lock_wait_started",
     "runtime.turn.session_lock_acquired",
+    "runtime.turn.debug_log_completed",
     "runtime.turn.turn_activation_completed",
     "runtime.turn.thread_availability_started",
     "runtime.turn.thread_availability_completed",
@@ -60,6 +61,7 @@ EVENT_KEYS = {
     "runtime.turn.prewarm_waited": "prewarm_waited",
     "runtime.turn.session_lock_wait_started": "session_lock_wait_started",
     "runtime.turn.session_lock_acquired": "session_lock_acquired",
+    "runtime.turn.debug_log_completed": "debug_log_completed",
     "runtime.turn.turn_activation_completed": "turn_activation_completed",
     "runtime.turn.thread_availability_started": "thread_availability_started",
     "runtime.turn.thread_availability_completed": "thread_availability_completed",
@@ -88,7 +90,14 @@ LATENCY_METRIC_NAMES = (
     "queued_to_worker_entered_ms",
     "queued_to_worker_started_ms",
     "worker_entered_to_worker_started_ms",
+    "worker_entered_to_started_unattributed_ms",
     "source_app_queued_dispatch_ms",
+    "debug_log_runtime_turn_ms",
+    "transition_active_ms",
+    "save_state_ms",
+    "save_session_ms",
+    "save_turn_ms",
+    "thread_update_ms",
     "thread_catalog_queued_ms",
     "thread_availability_update_ms",
     "turn_started_to_worker_started_ms",
@@ -253,8 +262,10 @@ def build_report(
             "queued_to_worker_entered_ms uses runtime.turn.worker_entered; queued_to_worker_started_ms remains as the legacy activation-adjacent span.",
             (
                 "worker_entered_to_worker_started_ms is decomposed with source_app_queued_dispatch_ms, "
+                "debug_log_runtime_turn_ms, transition_active_ms, transition store subspans, "
                 "thread_catalog_queued_ms, thread_availability_update_ms, and turn_started_to_worker_started_ms when those newer events exist."
             ),
+            "worker_entered_to_started_unattributed_ms subtracts known worker-startup subspans from worker_entered_to_worker_started_ms and floors at zero.",
             (
                 "app_reference_count and storage_reference_count are reconstructed from runtime.turn.queued.payload.app_references; "
                 "attachment_count is reconstructed from runtime.turn.queued.payload.attachments; "
@@ -666,6 +677,8 @@ def _turn_metrics(group: TurnEvents) -> dict[str, float]:
     prewarm_waited = events.get("prewarm_wait_completed") or events.get("prewarm_waited")
     session_lock_wait_started = events.get("session_lock_wait_started")
     session_lock_acquired = events.get("session_lock_acquired")
+    debug_log_completed = events.get("debug_log_completed")
+    turn_activation_completed = events.get("turn_activation_completed")
     thread_availability_started = events.get("thread_availability_started")
     thread_availability_completed = events.get("thread_availability_completed")
     turn_started_recorded = events.get("turn_started_recorded")
@@ -695,6 +708,11 @@ def _turn_metrics(group: TurnEvents) -> dict[str, float]:
     _set_metric(metrics, "queued_to_worker_entered_ms", _delta_ms(queued, worker_entered))
     _set_metric(metrics, "queued_to_worker_started_ms", _delta_ms(queued, worker))
     _set_metric(metrics, "worker_entered_to_worker_started_ms", _delta_ms(worker_entered, worker))
+    if debug_log_completed is not None:
+        _set_metric(metrics, "debug_log_runtime_turn_ms", _numeric(debug_log_completed.payload.get("debug_log_runtime_turn_ms")))
+    if turn_activation_completed is not None:
+        for key in ("transition_active_ms", "save_state_ms", "save_session_ms", "save_turn_ms", "thread_update_ms"):
+            _set_metric(metrics, key, _numeric(turn_activation_completed.payload.get(key)))
     _set_metric(
         metrics,
         "source_app_queued_dispatch_ms",
@@ -727,6 +745,7 @@ def _turn_metrics(group: TurnEvents) -> dict[str, float]:
         "turn_started_to_worker_started_ms",
         _delta_ms(turn_started_recorded, worker_started_recorded or worker),
     )
+    _set_worker_startup_unattributed_metric(metrics)
     _set_metric(metrics, "worker_entered_to_provider_dispatching_ms", _delta_ms(worker_entered, dispatching))
     _set_metric(metrics, "worker_started_to_provider_dispatching_ms", _delta_ms(worker, dispatching))
     _set_metric(metrics, "worker_started_to_turn_start_sent_ms", _delta_ms(worker, sent))
@@ -898,6 +917,24 @@ def _turn_payload(observation: TurnObservation) -> dict[str, Any]:
         "anchor_at": observation.anchor_at.isoformat(),
         "metrics": {key: _round_ms(value) for key, value in sorted(observation.metrics.items())},
     }
+
+
+def _set_worker_startup_unattributed_metric(metrics: dict[str, float]) -> None:
+    total = metrics.get("worker_entered_to_worker_started_ms")
+    if total is None:
+        return
+    known = sum(
+        metrics.get(key, 0.0)
+        for key in (
+            "prewarm_wait_ms",
+            "session_lock_wait_ms",
+            "debug_log_runtime_turn_ms",
+            "source_app_queued_dispatch_ms",
+            "transition_active_ms",
+            "turn_started_to_worker_started_ms",
+        )
+    )
+    _set_metric(metrics, "worker_entered_to_started_unattributed_ms", max(0.0, total - known))
 
 
 def _set_metric(metrics: dict[str, float], name: str, value: float | None) -> None:

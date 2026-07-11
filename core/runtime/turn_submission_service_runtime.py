@@ -20,6 +20,7 @@ from core.runtime.turn_submission_service_events import (
 )
 from core.runtime.turn_submission_service_output import (
     _build_launch_spec_for_execution,
+    _record_debug_log_completed,
     _record_app_references_materialize_completed,
     _record_app_references_materialize_failed,
     _record_app_references_materialize_started,
@@ -78,6 +79,34 @@ _PREWARM_COMPLETIONS_LOCK = Lock()
 class _SessionPrewarmState:
     completion: Event
     started_perf_counter: float
+
+
+def _debug_log_runtime_turn_with_timing(
+    state: PlatformState,
+    *,
+    session: RuntimeSessionRecord,
+    provider_id: str,
+    turn_id: str,
+    message: str,
+    payload: dict[str, object],
+) -> None:
+    started_at = time.perf_counter()
+    _debug_log_runtime_turn(
+        state,
+        session=session,
+        provider_id=provider_id,
+        turn_id=turn_id,
+        message=message,
+        payload=payload,
+    )
+    _record_debug_log_completed(
+        state,
+        session_id=session.session_id,
+        turn_id=turn_id,
+        provider_id=provider_id,
+        phase=str(payload.get("phase") or ""),
+        elapsed_ms=(time.perf_counter() - started_at) * 1000,
+    )
 
 
 def prewarm_runtime_session_async(state: PlatformState, *, session: RuntimeSessionRecord) -> None:
@@ -504,7 +533,7 @@ def submit_runtime_turn_async(
                 provider_id=worker_provider_id,
                 elapsed_ms=(time.perf_counter() - lock_wait_started_at) * 1000,
             )
-            _debug_log_runtime_turn(
+            _debug_log_runtime_turn_with_timing(
                 state,
                 session=session,
                 provider_id=worker_provider_id,
@@ -515,7 +544,7 @@ def submit_runtime_turn_async(
             try:
                 current = state.runtime_store.get_turn(turn.turn_id)
                 if current.status == "cancelled":
-                    _debug_log_runtime_turn(
+                    _debug_log_runtime_turn_with_timing(
                         state,
                         session=session,
                         provider_id=worker_provider_id,
@@ -556,7 +585,15 @@ def submit_runtime_turn_async(
                         provider_id=worker_provider_id,
                         elapsed_ms=(time.perf_counter() - source_app_dispatch_started_at) * 1000,
                     )
-                active = transition_runtime_turn(state.runtime_store, turn_id=turn.turn_id, target_status="active")
+                transition_timings: dict[str, float] = {}
+                transition_started_at = time.perf_counter()
+                active = transition_runtime_turn(
+                    state.runtime_store,
+                    turn_id=turn.turn_id,
+                    target_status="active",
+                    timing_payload=transition_timings,
+                )
+                transition_active_ms = (time.perf_counter() - transition_started_at) * 1000
                 started_event = _record_turn_started(state, session_id=session.session_id, turn_id=active.turn_id, provider_id=worker_provider_id)
                 _record_turn_worker_started(state, session_id=session.session_id, turn_id=active.turn_id, provider_id=worker_provider_id)
                 _record_turn_thread_availability_active(
@@ -572,9 +609,11 @@ def submit_runtime_turn_async(
                     turn_id=active.turn_id,
                     provider_id=worker_provider_id,
                     status=active.status,
+                    elapsed_ms=transition_active_ms,
+                    transition_timings=transition_timings,
                 )
                 current_session = state.runtime_store.get_session(session.session_id)
-                _debug_log_runtime_turn(
+                _debug_log_runtime_turn_with_timing(
                     state,
                     session=current_session,
                     provider_id=worker_provider_id,

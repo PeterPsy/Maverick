@@ -78,7 +78,7 @@ class InterAgentExecutorRuntimeCancelTest(unittest.TestCase):
                 cancelled_turns += 1
             return {"session_id": session_id, "found": True, "cancelled_turns": cancelled_turns}
 
-        def fake_wait(state, turn_id):
+        def fake_wait(state, turn_id, **_kwargs):
             service.close_run(
                 workspace_id="default",
                 run_id=run.run_id,
@@ -87,7 +87,7 @@ class InterAgentExecutorRuntimeCancelTest(unittest.TestCase):
                 terminal_status="cancelled",
                 now=NOW,
             )
-            return state.runtime_store.get_turn(turn_id)
+            return state.runtime_store.get_turn(turn_id), []
 
         with (
             patch("core.inter_agent.service.submit_runtime_turn", side_effect=AssertionError("sync path called")),
@@ -136,7 +136,7 @@ class InterAgentExecutorRuntimeCancelTest(unittest.TestCase):
         )
         runtime_state = runtime_state_namespace(runtime_store)
 
-        def fake_wait(state, turn_id):
+        def fake_wait(state, turn_id, **_kwargs):
             transition_runtime_turn(
                 state.runtime_store,
                 turn_id=turn_id,
@@ -144,7 +144,7 @@ class InterAgentExecutorRuntimeCancelTest(unittest.TestCase):
                 failure_reason="Provider cancelled child turn.",
                 now=NOW,
             )
-            return state.runtime_store.get_turn(turn_id)
+            return state.runtime_store.get_turn(turn_id), []
 
         with (
             patch("core.inter_agent.service.submit_runtime_turn", side_effect=AssertionError("sync path called")),

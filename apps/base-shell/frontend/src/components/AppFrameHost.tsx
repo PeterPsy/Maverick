@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { AppDependenciesPayload, AppRegistryItem, getAppDependencies } from "../api";
 import { MAVERICK_IFRAME_SANDBOX, postMaverickFrameVisibility, postMaverickShellTheme, postToMaverickFrame } from "../iframePolicy";
 import { syncAppFrameShellLayout } from "../lib/appFrameShellLayout";
+import { externalHttpUrlFromMessage, openExternalUrl } from "../lib/externalUrl";
 import type { ShellThemeState } from "../theme";
 import { DEFAULT_SHELL_THEME_STATE, shellThemeSignature, urlWithShellThemeSearchParams } from "../theme";
 import { ShellPendingIndicator } from "./ShellPendingIndicator";
@@ -17,6 +18,7 @@ type AppReadyMessage = {
   params?: Record<string, string | boolean | null>;
   resource?: string;
   type?: string;
+  url?: unknown;
   workspace_id?: string;
 };
 type AppEventMessage = {
@@ -292,10 +294,20 @@ export function AppFrameHost({
         }
         return;
       }
+      const senderIsMountedApp = Object.values(frameRefs.current).some((frame) => frame?.contentWindow === event.source);
+      if (payload.type === "maverick.app.external-url") {
+        if (!senderIsMountedApp) {
+          return;
+        }
+        const url = externalHttpUrlFromMessage(payload.url);
+        if (url) {
+          openExternalUrl(url);
+        }
+        return;
+      }
       if (!payload.app_id) {
         return;
       }
-      const senderIsMountedApp = Object.values(frameRefs.current).some((frame) => frame?.contentWindow === event.source);
       if (!senderIsMountedApp) {
         return;
       }

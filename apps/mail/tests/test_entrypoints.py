@@ -8,6 +8,7 @@ from email import policy
 from email.message import EmailMessage
 from email.parser import BytesParser
 import hashlib
+from io import BytesIO
 import json
 import os
 from pathlib import Path
@@ -17,6 +18,7 @@ import tempfile
 import threading
 import unittest
 from unittest.mock import patch
+from urllib.error import HTTPError
 from urllib.parse import parse_qs, urlparse
 
 APP_ROOT = Path(__file__).resolve().parents[1]
@@ -2434,6 +2436,46 @@ class MailServiceTest(unittest.TestCase):
             self.assertEqual(payload["thread"]["subject"], "Gmail thread")
             self.assertEqual(payload["thread"]["messages"][0]["body_text"], "Hello from Gmail")
             self.assertGreaterEqual(calls.count("https://oauth2.googleapis.com/token"), 1)
+
+    def test_gmail_sync_google_http_error_returns_validation_payload(self) -> None:
+        def failing_transport(request) -> dict[str, object]:
+            body = b'{"error":"invalid_grant","error_description":"Token has been expired or revoked."}'
+            raise HTTPError(request.full_url, 400, "Bad Request", {}, BytesIO(body))
+
+        with tempfile.TemporaryDirectory() as tmp:
+            data_root = Path(tmp)
+            ensure_schema(data_root)
+            now = now_timestamp()
+            connection_id = "mail_connection_gmail_person-example.com"
+            with connect(data_root) as db:
+                db.execute(
+                    """
+                    INSERT INTO connections(id, provider, email_address, display_name, status, scopes_json, created_at, updated_at)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    (connection_id, "gmail", "person@example.com", "person@example.com", "connected", "[]", now, now),
+                )
+
+            with patch("backend.service.provider_for_connection", return_value=GmailProvider(transport=failing_transport)):
+                status, payload = handle_action(
+                    data_root,
+                    {
+                        "action": "threads.sync",
+                        "connection_id": connection_id,
+                        "_app_secrets": {
+                            "gmail-oauth-client-id": "client-id",
+                            "gmail-oauth-client-secret": "client-secret",
+                            "gmail-refresh-token": "refresh-token",
+                        },
+                    },
+                )
+
+            self.assertEqual(status, 400)
+            self.assertEqual(payload["error"], "validation_error")
+            self.assertIn("Gmail access token refresh failed (400)", payload["detail"])
+            self.assertIn("invalid_grant", payload["detail"])
+            self.assertNotIn("refresh-token", payload["detail"])
+            self.assertNotIn("client-secret", payload["detail"])
 
     def test_gmail_sync_preserves_sanitized_html_and_attachment_metadata(self) -> None:
         def encoded(value: str) -> str:

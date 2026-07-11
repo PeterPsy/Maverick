@@ -1,6 +1,7 @@
 import { type PointerEvent as ReactPointerEvent, useEffect, useRef, useState } from "react";
 import { createWidgetContext, listWidgets, WidgetRegistryItem } from "../api";
 import { MAVERICK_IFRAME_SANDBOX, postMaverickFrameVisibility, postMaverickShellTheme, postToMaverickFrame } from "../iframePolicy";
+import { externalHttpUrlFromMessage, openExternalUrl } from "../lib/externalUrl";
 import { widgetSelectionChangedMessage } from "../lib/widgetSelectionMessages";
 import { measureStartupMetric } from "../startupMetrics";
 import type { ShellThemeState } from "../theme";
@@ -688,35 +689,6 @@ function compactWidgetHeightFromMessage(payload: WidgetMessagePayload): string |
     return COMPACT_SLOT_DEFAULT_HEIGHT;
   }
   return boundedCompactSize(payload.height);
-}
-
-function externalHttpUrlFromMessage(value: unknown): string | null {
-  if (typeof value !== "string" || !value.trim()) {
-    return null;
-  }
-  try {
-    const url = new URL(value, window.location.origin);
-    if (url.protocol !== "http:" && url.protocol !== "https:") {
-      return null;
-    }
-    return url.href;
-  } catch {
-    return null;
-  }
-}
-
-function openExternalUrl(url: string): void {
-  const opened = window.open(url, "_blank", "noopener,noreferrer");
-  if (opened) {
-    try {
-      opened.opener = null;
-      opened.focus();
-    } catch {
-      // Some browsers expose a restricted WindowProxy for cross-origin popups.
-    }
-    return;
-  }
-  window.location.assign(url);
 }
 
 function boundedPixelSize(value: unknown, maxPx: number): string | null {

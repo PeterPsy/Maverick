@@ -188,6 +188,27 @@ describe("AppFrameHost app frame readiness", () => {
       },
     ]);
   });
+
+  it("opens external URLs only when requested by a mounted app frame", async () => {
+    const openedWindow = { focus: vi.fn(), opener: window } as unknown as Window;
+    const openSpy = vi.spyOn(window, "open").mockReturnValue(openedWindow);
+    await renderHost(root, chat);
+    const frame = frameByTitle(container, "Chat viewport");
+    const frameWindow = frame.contentWindow;
+    if (!frameWindow) {
+      throw new Error("Expected iframe contentWindow.");
+    }
+    const authorizationUrl = "https://accounts.google.com/o/oauth2/v2/auth?client_id=client-id";
+
+    await dispatchExternalUrl(window, authorizationUrl);
+    await dispatchExternalUrl(frameWindow, "javascript:alert(1)");
+    expect(openSpy).not.toHaveBeenCalled();
+
+    await dispatchExternalUrl(frameWindow, authorizationUrl);
+
+    expect(openSpy).toHaveBeenCalledWith(authorizationUrl, "_blank", "noopener,noreferrer");
+    expect(openedWindow.focus).toHaveBeenCalledTimes(1);
+  });
 });
 
 async function renderHost(root: Root, activeApp: AppRegistryItem, activeAppParams: AppFrameParams = {}, shellTheme: ShellThemeState = defaultTheme) {
@@ -266,6 +287,22 @@ async function dispatchAppReady(frame: HTMLIFrameElement, appId: string) {
         },
         origin: window.location.origin,
         source: frame.contentWindow,
+      }),
+    );
+    await Promise.resolve();
+  });
+}
+
+async function dispatchExternalUrl(source: MessageEventSource, url: string) {
+  await act(async () => {
+    window.dispatchEvent(
+      new MessageEvent("message", {
+        data: {
+          type: "maverick.app.external-url",
+          url,
+        },
+        origin: window.location.origin,
+        source,
       }),
     );
     await Promise.resolve();

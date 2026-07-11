@@ -12,6 +12,7 @@ import hashlib
 import json
 from pathlib import Path
 import re
+from urllib.error import HTTPError, URLError
 from urllib.parse import urlencode
 from urllib.request import Request, urlopen
 from uuid import uuid4
@@ -393,7 +394,7 @@ class GmailProvider:
             headers={"Content-Type": "application/x-www-form-urlencoded", "Accept": "application/json"},
             method="POST",
         )
-        response = self._transport(request)
+        response = self._transport_json(request, operation="Gmail access token refresh")
         access_token = str(response.get("access_token") or "").strip()
         if not access_token:
             raise ValueError("Gmail access token refresh did not return an access token")
@@ -426,12 +427,75 @@ class GmailProvider:
         headers = {"Accept": "application/json", "Authorization": f"Bearer {access_token}"}
         if payload is not None:
             headers["Content-Type"] = "application/json"
-        return self._transport(Request(url, data=data, headers=headers, method=method.upper()))
+        return self._transport_json(
+            Request(url, data=data, headers=headers, method=method.upper()),
+            operation="Gmail API request",
+        )
+
+    def _transport_json(self, request: Request, *, operation: str) -> dict[str, object]:
+        try:
+            return self._transport(request)
+        except HTTPError as error:
+            raise ValueError(_google_http_error_message(error, operation=operation)) from None
+        except URLError as error:
+            raise ValueError(f"{operation} failed: {_bounded_error_text(getattr(error, 'reason', error))}") from None
+        except TimeoutError:
+            raise ValueError(f"{operation} timed out") from None
 
 
 def _urlopen_json(request: Request) -> dict[str, object]:
     with urlopen(request, timeout=30) as response:
-        return json.loads(response.read().decode("utf-8"))
+        try:
+            return json.loads(response.read().decode("utf-8"))
+        except json.JSONDecodeError:
+            raise ValueError("Google returned an invalid JSON response") from None
+
+
+def _google_http_error_message(error: HTTPError, *, operation: str) -> str:
+    detail = _google_http_error_detail(error)
+    status = str(getattr(error, "code", "") or "").strip()
+    status_suffix = f" ({status})" if status else ""
+    return f"{operation} failed{status_suffix}: {detail}"
+
+
+def _google_http_error_detail(error: HTTPError) -> str:
+    try:
+        raw_body = error.read()
+    except Exception:
+        raw_body = b""
+    text = raw_body.decode("utf-8", errors="replace").strip()
+    if text:
+        try:
+            parsed = json.loads(text)
+        except json.JSONDecodeError:
+            return _bounded_error_text(text)
+        detail = _google_error_payload_detail(parsed)
+        if detail:
+            return detail
+    reason = str(getattr(error, "reason", "") or "").strip()
+    return _bounded_error_text(reason or "request rejected")
+
+
+def _google_error_payload_detail(payload: object) -> str:
+    if not isinstance(payload, dict):
+        return ""
+    error = payload.get("error")
+    if isinstance(error, dict):
+        status = str(error.get("status") or "").strip()
+        message = str(error.get("message") or "").strip()
+        if status and message:
+            return _bounded_error_text(f"{status}: {message}")
+        return _bounded_error_text(message or status)
+    code = str(error or "").strip()
+    description = str(payload.get("error_description") or payload.get("message") or "").strip()
+    if code and description:
+        return _bounded_error_text(f"{code}: {description}")
+    return _bounded_error_text(description or code)
+
+
+def _bounded_error_text(value: object) -> str:
+    text = re.sub(r"\s+", " ", str(value or "")).strip()
+    return text[:240] if text else "request rejected"
 
 
 def _gmail_sync_query(payload: dict[str, object], default_recent: bool = True) -> str | None:

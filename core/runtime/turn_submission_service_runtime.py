@@ -606,20 +606,32 @@ def submit_runtime_turn_async(
                     elapsed_ms=transition_active_ms,
                     transition_timings=transition_timings,
                 )
-                thread_availability_active_recorded = False
+                thread_availability_active_scheduled = False
 
-                def record_thread_availability_active_once() -> None:
-                    nonlocal thread_availability_active_recorded
-                    if thread_availability_active_recorded:
+                def schedule_thread_availability_active_once() -> None:
+                    nonlocal thread_availability_active_scheduled
+                    if thread_availability_active_scheduled:
                         return
-                    thread_availability_active_recorded = True
-                    _record_turn_thread_availability_active(
-                        state,
-                        session_id=session.session_id,
-                        turn_id=active.turn_id,
-                        provider_id=worker_provider_id,
-                        now=started_event.created_at,
-                    )
+                    thread_availability_active_scheduled = True
+
+                    def publish() -> None:
+                        with suppress(Exception):
+                            current_turn = state.runtime_store.get_turn(active.turn_id)
+                            if current_turn.status != "active":
+                                return
+                            _record_turn_thread_availability_active(
+                                state,
+                                session_id=session.session_id,
+                                turn_id=active.turn_id,
+                                provider_id=worker_provider_id,
+                                now=started_event.created_at,
+                            )
+
+                    Thread(
+                        target=publish,
+                        name=f"maverick-runtime-thread-active-{active.turn_id}",
+                        daemon=True,
+                    ).start()
 
                 current_session = state.runtime_store.get_session(session.session_id)
                 _debug_log_runtime_turn_with_timing(
@@ -641,7 +653,6 @@ def submit_runtime_turn_async(
                         provider_id=worker_provider_id,
                         runtime_mode=current_session.runtime_mode,
                     )
-                    record_thread_availability_active_once()
 
                     def record_plain_provider_turn_start_sent(metadata: dict[str, object]) -> None:
                         nonlocal turn_start_sent_at
@@ -655,10 +666,12 @@ def submit_runtime_turn_async(
                             runtime_mode=current_session.runtime_mode,
                             metadata=metadata,
                         )
+                        schedule_thread_availability_active_once()
 
                     def record_plain_provider_accepted(metadata: dict[str, object]) -> None:
                         selected_provider_id = str(metadata.get("provider_id") or worker_provider_id)
                         started_at = turn_start_sent_at if turn_start_sent_at is not None else dispatch_started_at
+                        schedule_thread_availability_active_once()
                         _record_provider_accepted(
                             state,
                             session_id=session.session_id,
@@ -743,7 +756,6 @@ def submit_runtime_turn_async(
                         runtime_mode=current_session.runtime_mode,
                         metadata=launch_metadata,
                     )
-                    record_thread_availability_active_once()
 
                     def record_provider_turn_start_sent(metadata: dict[str, object]) -> None:
                         nonlocal turn_start_sent_at
@@ -756,9 +768,11 @@ def submit_runtime_turn_async(
                             runtime_mode=current_session.runtime_mode,
                             metadata=metadata,
                         )
+                        schedule_thread_availability_active_once()
 
                     def record_provider_accepted(metadata: dict[str, object]) -> None:
                         started_at = turn_start_sent_at if turn_start_sent_at is not None else dispatch_started_at
+                        schedule_thread_availability_active_once()
                         _record_provider_accepted(
                             state,
                             session_id=session.session_id,

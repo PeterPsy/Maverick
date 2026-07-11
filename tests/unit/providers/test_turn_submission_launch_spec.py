@@ -286,6 +286,8 @@ class TurnSubmissionLaunchSpecTestCase(unittest.TestCase):
 
         def execute_turn(**kwargs):
             self.assertIn("Stored file", kwargs["input_text"])
+            kwargs["on_provider_turn_start_sent"]({"ensure_runtime_ms": 0.01})
+            kwargs["on_provider_accepted"]({})
             return SimpleNamespace(output_text="done", exit_code=0)
 
         with patch.dict(
@@ -326,6 +328,7 @@ class TurnSubmissionLaunchSpecTestCase(unittest.TestCase):
             "runtime.turn.provider_input_started",
             "runtime.turn.provider_input_completed",
             "runtime.provider.dispatching",
+            "runtime.provider.turn_start_sent",
         ):
             self.assertIn(expected, event_types)
         self.assertLess(
@@ -333,7 +336,7 @@ class TurnSubmissionLaunchSpecTestCase(unittest.TestCase):
             event_types.index("runtime.turn.thread_availability_started"),
         )
         self.assertLess(
-            event_types.index("runtime.provider.dispatching"),
+            event_types.index("runtime.provider.turn_start_sent"),
             event_types.index("runtime.turn.thread_availability_started"),
         )
         activation = next(

@@ -23,7 +23,7 @@ REFERENCE_MANIFEST = {
             "id_stability": "stable",
             "searchable": True,
             "resolvable": True,
-            "summarizable": True,
+            "summarizable": False,
             "deep_link_supported": True,
         },
         {
@@ -32,7 +32,7 @@ REFERENCE_MANIFEST = {
             "id_stability": "path",
             "searchable": True,
             "resolvable": True,
-            "summarizable": True,
+            "summarizable": False,
             "deep_link_supported": True,
         },
     ],

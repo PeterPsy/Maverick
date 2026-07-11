@@ -201,6 +201,12 @@ class StorageAppTestCase(unittest.TestCase):
         reference_entity_types = {item.entity_type for item in parsed.contract.capabilities.reference_entities}
         self.assertIn("file", reference_entity_types)
         self.assertIn("folder", reference_entity_types)
+        reference_entities = {
+            item.entity_type: item
+            for item in parsed.contract.capabilities.reference_entities
+        }
+        self.assertFalse(reference_entities["file"].summarizable)
+        self.assertFalse(reference_entities["folder"].summarizable)
         self.assertEqual(parsed.contract.capabilities.view_surfaces[0].view_id, "storage")
         self.assertEqual(parsed.contract.capabilities.view_surfaces[0].entity_types, ["file"])
         view_actions = {
@@ -671,6 +677,12 @@ class StorageAppTestCase(unittest.TestCase):
                 generated_root=generated_root,
                 body={"action": "references.summarize", "entity_type": "folder", "entity_id": "generated:Client%20Docs/Q1/"},
             )
+            manifest = self.run_backend(
+                data_root=data_root,
+                uploaded_root=uploaded_root,
+                generated_root=generated_root,
+                body={"action": "references.manifest"},
+            )
             hidden = self.run_backend(
                 data_root=data_root,
                 uploaded_root=uploaded_root,
@@ -691,6 +703,12 @@ class StorageAppTestCase(unittest.TestCase):
             self.assertTrue(resolved["json"]["exists"])
             self.assertEqual(resolved["json"]["title"], "Q1")
             self.assertEqual(summarized["json"]["safe_fields"]["kind"], "folder")
+            manifest_entities = {
+                item["entity_type"]: item
+                for item in manifest["json"]["entity_types"]
+            }
+            self.assertFalse(manifest_entities["file"]["summarizable"])
+            self.assertFalse(manifest_entities["folder"]["summarizable"])
             self.assertFalse(hidden["json"]["exists"])
 
     def test_backend_catalog_handles_legacy_inventory_and_skips_temp_files(self) -> None:

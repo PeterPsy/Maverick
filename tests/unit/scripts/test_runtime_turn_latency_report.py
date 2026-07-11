@@ -88,6 +88,120 @@ class RuntimeTurnLatencyReportTestCase(unittest.TestCase):
         self.assertEqual(hosted_metrics["turn_start_sent_to_provider_accepted_ms"]["p50_ms"], 20)
         self.assertEqual(cold_metrics["receive_to_provider_accepted_ms"]["p50_ms"], 830)
 
+    def test_calculates_worker_reference_and_provider_input_metrics(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir) / "maverick"
+            _write_session(root, "default", "sess-refs", runtime_mode="agentic", provider_id="codex")
+            turn_id = "turn-refs"
+            _write_events(
+                root,
+                "default",
+                "sess-refs",
+                [
+                    _event(
+                        "queued",
+                        "default",
+                        "sess-refs",
+                        turn_id,
+                        "runtime.turn.queued",
+                        BASE,
+                        {
+                            "provider_id": "codex",
+                            "app_references": [
+                                {"type": "entity", "app_id": "storage", "entity_type": "file", "entity_id": "file-1"},
+                                {"type": "entity", "app_id": "crm", "entity_type": "account", "entity_id": "acct-1"},
+                            ],
+                        },
+                    ),
+                    _event("worker-entered", "default", "sess-refs", turn_id, "runtime.turn.worker_entered", BASE + timedelta(milliseconds=75), {"provider_id": "codex"}),
+                    _event("prewarm-start", "default", "sess-refs", turn_id, "runtime.turn.prewarm_wait_started", BASE + timedelta(milliseconds=80), {"provider_id": "codex"}),
+                    _event(
+                        "prewarm-complete",
+                        "default",
+                        "sess-refs",
+                        turn_id,
+                        "runtime.turn.prewarm_wait_completed",
+                        BASE + timedelta(milliseconds=105),
+                        {"provider_id": "codex", "prewarm_wait_ms": 25, "prewarm_total_ms": 150, "completed": True},
+                    ),
+                    _event("lock-start", "default", "sess-refs", turn_id, "runtime.turn.session_lock_wait_started", BASE + timedelta(milliseconds=110), {"provider_id": "codex"}),
+                    _event(
+                        "lock-acquired",
+                        "default",
+                        "sess-refs",
+                        turn_id,
+                        "runtime.turn.session_lock_acquired",
+                        BASE + timedelta(milliseconds=130),
+                        {"provider_id": "codex", "session_lock_wait_ms": 20},
+                    ),
+                    _event("activation", "default", "sess-refs", turn_id, "runtime.turn.turn_activation_completed", BASE + timedelta(milliseconds=135), {"provider_id": "codex", "status": "active"}),
+                    _event("worker", "default", "sess-refs", turn_id, "runtime.turn.worker_started", BASE + timedelta(milliseconds=135), {"provider_id": "codex"}),
+                    _event(
+                        "refs-start",
+                        "default",
+                        "sess-refs",
+                        turn_id,
+                        "runtime.turn.app_references_materialize_started",
+                        BASE + timedelta(milliseconds=160),
+                        {"provider_id": "codex", "app_reference_count": 2, "storage_reference_count": 1},
+                    ),
+                    _event(
+                        "refs-complete",
+                        "default",
+                        "sess-refs",
+                        turn_id,
+                        "runtime.turn.app_references_materialize_completed",
+                        BASE + timedelta(milliseconds=220),
+                        {
+                            "provider_id": "codex",
+                            "app_reference_materialize_ms": 60,
+                            "app_reference_count": 2,
+                            "storage_reference_count": 1,
+                            "materialized_reference_count": 1,
+                            "reference_cache_hit": False,
+                        },
+                    ),
+                    _event(
+                        "input-start",
+                        "default",
+                        "sess-refs",
+                        turn_id,
+                        "runtime.turn.provider_input_started",
+                        BASE + timedelta(milliseconds=225),
+                        {"provider_id": "codex", "app_reference_count": 2, "storage_reference_count": 1, "materialized_reference_count": 1},
+                    ),
+                    _event(
+                        "input-complete",
+                        "default",
+                        "sess-refs",
+                        turn_id,
+                        "runtime.turn.provider_input_completed",
+                        BASE + timedelta(milliseconds=240),
+                        {"provider_id": "codex", "provider_input_build_ms": 15, "app_reference_count": 2, "storage_reference_count": 1, "materialized_reference_count": 1},
+                    ),
+                    _event("dispatch", "default", "sess-refs", turn_id, "runtime.provider.dispatching", BASE + timedelta(milliseconds=260), {"provider_id": "codex", "runtime_mode": "agentic"}),
+                    _event("sent", "default", "sess-refs", turn_id, "runtime.provider.turn_start_sent", BASE + timedelta(milliseconds=300), {"provider_id": "codex", "runtime_mode": "agentic", "ensure_runtime_ms": 0.01}),
+                    _event("accepted", "default", "sess-refs", turn_id, "runtime.provider.accepted", BASE + timedelta(milliseconds=330), {"provider_id": "codex", "runtime_mode": "agentic", "turn_start_to_ack_ms": 30}),
+                ],
+            )
+
+            report = runtime_turn_latency_report.build_report(root, workspaces={"default"}, limit_turns=0, include_turns=True)
+
+        metrics = report["turns"][0]["metrics"]
+        self.assertEqual(metrics["queued_to_worker_entered_ms"], 75)
+        self.assertEqual(metrics["queued_to_worker_started_ms"], 135)
+        self.assertEqual(metrics["worker_entered_to_provider_dispatching_ms"], 185)
+        self.assertEqual(metrics["session_lock_wait_ms"], 20)
+        self.assertEqual(metrics["app_reference_materialize_ms"], 60)
+        self.assertEqual(metrics["provider_input_build_ms"], 15)
+        self.assertEqual(metrics["app_reference_count"], 2)
+        self.assertEqual(metrics["storage_reference_count"], 1)
+        self.assertEqual(metrics["materialized_reference_count"], 1)
+        self.assertEqual(metrics["reference_cache_hit"], 0)
+        cohort_metrics = report["cohorts"]["codex_warm"]["metrics"]
+        self.assertEqual(cohort_metrics["app_reference_count"]["p50"], 2)
+        self.assertEqual(cohort_metrics["reference_cache_hit"]["true_rate"], 0.0)
+
     def test_reads_history_and_deduplicates_tail_events(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             root = Path(temp_dir) / "maverick"

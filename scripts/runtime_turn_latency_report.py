@@ -20,7 +20,18 @@ INTERESTING_EVENT_TYPES = {
     "runtime.turn.queued",
     "runtime.turn.receive_to_queued",
     "runtime.turn.post_queue_response",
+    "runtime.turn.worker_entered",
+    "runtime.turn.prewarm_wait_started",
+    "runtime.turn.prewarm_wait_completed",
     "runtime.turn.prewarm_waited",
+    "runtime.turn.session_lock_wait_started",
+    "runtime.turn.session_lock_acquired",
+    "runtime.turn.turn_activation_completed",
+    "runtime.turn.app_references_materialize_started",
+    "runtime.turn.app_references_materialize_completed",
+    "runtime.turn.app_references_materialize_failed",
+    "runtime.turn.provider_input_started",
+    "runtime.turn.provider_input_completed",
     "runtime.turn.worker_started",
     "runtime.prewarm.completed",
     "runtime.provider.dispatching",
@@ -31,13 +42,24 @@ EVENT_KEYS = {
     "runtime.turn.queued": "queued",
     "runtime.turn.receive_to_queued": "receive_to_queued",
     "runtime.turn.post_queue_response": "post_queue_response",
+    "runtime.turn.worker_entered": "worker_entered",
+    "runtime.turn.prewarm_wait_started": "prewarm_wait_started",
+    "runtime.turn.prewarm_wait_completed": "prewarm_wait_completed",
     "runtime.turn.prewarm_waited": "prewarm_waited",
+    "runtime.turn.session_lock_wait_started": "session_lock_wait_started",
+    "runtime.turn.session_lock_acquired": "session_lock_acquired",
+    "runtime.turn.turn_activation_completed": "turn_activation_completed",
+    "runtime.turn.app_references_materialize_started": "app_references_materialize_started",
+    "runtime.turn.app_references_materialize_completed": "app_references_materialize_completed",
+    "runtime.turn.app_references_materialize_failed": "app_references_materialize_failed",
+    "runtime.turn.provider_input_started": "provider_input_started",
+    "runtime.turn.provider_input_completed": "provider_input_completed",
     "runtime.turn.worker_started": "worker_started",
     "runtime.provider.dispatching": "provider_dispatching",
     "runtime.provider.turn_start_sent": "turn_start_sent",
     "runtime.provider.accepted": "provider_accepted",
 }
-METRIC_NAMES = (
+LATENCY_METRIC_NAMES = (
     "receive_to_queued_ms",
     "claim_ms",
     "session_create_ms",
@@ -46,10 +68,15 @@ METRIC_NAMES = (
     "post_queue_response_ms",
     "prewarm_wait_ms",
     "prewarm_total_ms",
+    "session_lock_wait_ms",
+    "queued_to_worker_entered_ms",
     "queued_to_worker_started_ms",
+    "worker_entered_to_provider_dispatching_ms",
     "worker_started_to_provider_dispatching_ms",
     "worker_started_to_turn_start_sent_ms",
     "provider_dispatching_to_turn_start_sent_ms",
+    "app_reference_materialize_ms",
+    "provider_input_build_ms",
     "launch_spec_ms",
     "skill_resolve_ms",
     "skill_prepare_ms",
@@ -60,6 +87,13 @@ METRIC_NAMES = (
     "receive_to_provider_accepted_ms",
     "first_turn_receive_to_provider_accepted_ms",
 )
+COUNT_METRIC_NAMES = (
+    "app_reference_count",
+    "storage_reference_count",
+    "materialized_reference_count",
+)
+BOOLEAN_METRIC_NAMES = ("reference_cache_hit",)
+METRIC_NAMES = LATENCY_METRIC_NAMES + COUNT_METRIC_NAMES + BOOLEAN_METRIC_NAMES
 COHORT_NAMES = ("codex_cold", "codex_warm", "plain_hosted", "other_provider")
 CODEX_PROVIDER_ID = "codex"
 HOSTED_TEXT_RUNTIME_PROVIDER_ID = "hosted-text-runtime"
@@ -194,6 +228,12 @@ def build_report(
                 "prewarm_wait_ms and prewarm_total_ms come from runtime.turn.prewarm_waited when the turn waited, "
                 "or from session-scoped runtime.prewarm.completed for the next observed turn when prewarm had already completed."
             ),
+            "queued_to_worker_entered_ms uses runtime.turn.worker_entered; queued_to_worker_started_ms remains as the legacy activation-adjacent span.",
+            (
+                "app_reference_count and storage_reference_count are reconstructed from runtime.turn.queued.payload.app_references; "
+                "materialized_reference_count and reference_cache_hit come from materialization/provider-input events when present."
+            ),
+            "app_reference_materialize_ms and provider_input_build_ms are emitted only by runtime paths with the newer granular instrumentation.",
             "claim_ms, session_create_ms, reference_validate_ms, queue_turn_ms, and post_queue_response_ms are emitted only by newer runtime submission paths.",
             "The report intentionally omits input text and provider payload bodies beyond numeric latency spans.",
         ],
@@ -265,14 +305,31 @@ def print_human_report(report: dict[str, Any]) -> None:
             metric = cohort["metrics"].get(metric_name)
             if not metric:
                 continue
-            print(
-                f"  {metric_name}: "
-                f"n={metric['count']} "
-                f"p50={metric['p50_ms']}ms "
-                f"p95={metric['p95_ms']}ms "
-                f"min={metric['min_ms']}ms "
-                f"max={metric['max_ms']}ms"
-            )
+            if metric_name in BOOLEAN_METRIC_NAMES:
+                print(
+                    f"  {metric_name}: "
+                    f"n={metric['count']} "
+                    f"true={metric['true_count']} "
+                    f"rate={metric['true_rate']}"
+                )
+            elif metric_name in COUNT_METRIC_NAMES:
+                print(
+                    f"  {metric_name}: "
+                    f"n={metric['count']} "
+                    f"p50={metric['p50']} "
+                    f"p95={metric['p95']} "
+                    f"min={metric['min']} "
+                    f"max={metric['max']}"
+                )
+            else:
+                print(
+                    f"  {metric_name}: "
+                    f"n={metric['count']} "
+                    f"p50={metric['p50_ms']}ms "
+                    f"p95={metric['p95_ms']}ms "
+                    f"min={metric['min_ms']}ms "
+                    f"max={metric['max_ms']}ms"
+                )
     print("")
     print("Notes:")
     for note in report["notes"]:
@@ -573,8 +630,13 @@ def _turn_metrics(group: TurnEvents) -> dict[str, float]:
     metrics: dict[str, float] = {}
     receive = events.get("receive_to_queued")
     post_queue_response = events.get("post_queue_response")
-    prewarm_waited = events.get("prewarm_waited")
     queued = events.get("queued")
+    worker_entered = events.get("worker_entered")
+    prewarm_waited = events.get("prewarm_wait_completed") or events.get("prewarm_waited")
+    session_lock_wait_started = events.get("session_lock_wait_started")
+    session_lock_acquired = events.get("session_lock_acquired")
+    app_references_materialized = events.get("app_references_materialize_completed") or events.get("app_references_materialize_failed")
+    provider_input_completed = events.get("provider_input_completed")
     worker = events.get("worker_started")
     dispatching = events.get("provider_dispatching")
     sent = events.get("turn_start_sent")
@@ -589,10 +651,27 @@ def _turn_metrics(group: TurnEvents) -> dict[str, float]:
     if prewarm_waited is not None:
         _set_metric(metrics, "prewarm_wait_ms", _numeric(prewarm_waited.payload.get("prewarm_wait_ms")))
         _set_metric(metrics, "prewarm_total_ms", _numeric(prewarm_waited.payload.get("prewarm_total_ms")))
+    _set_reference_metrics_from_queued(metrics, queued)
+    if session_lock_acquired is not None:
+        lock_wait_ms = _numeric(session_lock_acquired.payload.get("session_lock_wait_ms"))
+        if lock_wait_ms is None:
+            lock_wait_ms = _delta_ms(session_lock_wait_started, session_lock_acquired)
+        _set_metric(metrics, "session_lock_wait_ms", lock_wait_ms)
+    _set_metric(metrics, "queued_to_worker_entered_ms", _delta_ms(queued, worker_entered))
     _set_metric(metrics, "queued_to_worker_started_ms", _delta_ms(queued, worker))
+    _set_metric(metrics, "worker_entered_to_provider_dispatching_ms", _delta_ms(worker_entered, dispatching))
     _set_metric(metrics, "worker_started_to_provider_dispatching_ms", _delta_ms(worker, dispatching))
     _set_metric(metrics, "worker_started_to_turn_start_sent_ms", _delta_ms(worker, sent))
     _set_metric(metrics, "provider_dispatching_to_turn_start_sent_ms", _delta_ms(dispatching, sent))
+    if app_references_materialized is not None:
+        _set_metric(metrics, "app_reference_materialize_ms", _numeric(app_references_materialized.payload.get("app_reference_materialize_ms")))
+        for key in COUNT_METRIC_NAMES:
+            _set_metric(metrics, key, _numeric(app_references_materialized.payload.get(key)))
+        _set_metric(metrics, "reference_cache_hit", _bool_numeric(app_references_materialized.payload.get("reference_cache_hit")))
+    if provider_input_completed is not None:
+        _set_metric(metrics, "provider_input_build_ms", _numeric(provider_input_completed.payload.get("provider_input_build_ms")))
+        for key in COUNT_METRIC_NAMES:
+            _set_metric(metrics, key, _numeric(provider_input_completed.payload.get(key)))
     if dispatching is not None:
         for key in ("launch_spec_ms", "skill_resolve_ms", "skill_prepare_ms"):
             _set_metric(metrics, key, _numeric(dispatching.payload.get(key)))
@@ -610,6 +689,18 @@ def _turn_metrics(group: TurnEvents) -> dict[str, float]:
     if receive_to_queued is not None and queued_to_accepted is not None:
         _set_metric(metrics, "receive_to_provider_accepted_ms", receive_to_queued + queued_to_accepted)
     return metrics
+
+
+def _set_reference_metrics_from_queued(metrics: dict[str, float], queued: RuntimeEventSnapshot | None) -> None:
+    if queued is None:
+        return
+    raw_references = queued.payload.get("app_references")
+    references = [item for item in raw_references if isinstance(item, dict)] if isinstance(raw_references, list) else []
+    _set_metric(metrics, "app_reference_count", float(len(references)))
+    storage_count = sum(1 for item in references if (_optional_str(item.get("app_id")) or "").lower() == "storage")
+    _set_metric(metrics, "storage_reference_count", float(storage_count))
+    if not references:
+        _set_metric(metrics, "materialized_reference_count", 0.0)
 
 
 def _turn_order_sort_value(group: TurnEvents, *, fallback_at: datetime) -> tuple[datetime, str]:
@@ -684,13 +775,34 @@ def _summarize_cohort(cohort_name: str, observations: list[TurnObservation]) -> 
     for metric_name in METRIC_NAMES:
         values = [item.metrics[metric_name] for item in observations if metric_name in item.metrics]
         if values:
-            metric_summaries[metric_name] = _summarize_values(values)
+            metric_summaries[metric_name] = _summarize_metric_values(metric_name, values)
     return {
         "slo_scope": SLO_SCOPE_BY_COHORT.get(cohort_name, cohort_name),
         "turn_count": len(observations),
         "session_count": len({(item.workspace_id, item.session_id) for item in observations}),
         "metrics": metric_summaries,
     }
+
+
+def _summarize_metric_values(metric_name: str, values: list[float]) -> dict[str, float | int]:
+    if metric_name in BOOLEAN_METRIC_NAMES:
+        true_count = sum(1 for value in values if value >= 1)
+        return {
+            "count": len(values),
+            "true_count": true_count,
+            "false_count": len(values) - true_count,
+            "true_rate": round(true_count / len(values), 3),
+        }
+    if metric_name in COUNT_METRIC_NAMES:
+        ordered = sorted(values)
+        return {
+            "count": len(ordered),
+            "min": _round_count(ordered[0]),
+            "p50": _round_count(_median(ordered)),
+            "p95": _round_count(_nearest_rank_percentile(ordered, 95)),
+            "max": _round_count(ordered[-1]),
+        }
+    return _summarize_values(values)
 
 
 def _summarize_values(values: list[float]) -> dict[str, float | int]:
@@ -738,6 +850,12 @@ def _numeric(value: object) -> float | None:
     return None
 
 
+def _bool_numeric(value: object) -> float | None:
+    if isinstance(value, bool):
+        return 1.0 if value else 0.0
+    return None
+
+
 def _median(values: list[float]) -> float:
     midpoint = len(values) // 2
     if len(values) % 2:
@@ -754,6 +872,11 @@ def _nearest_rank_percentile(values: list[float], percentile: int) -> float:
 
 def _round_ms(value: float) -> float:
     return round(float(value), 3)
+
+
+def _round_count(value: float) -> int | float:
+    rounded = round(float(value), 3)
+    return int(rounded) if rounded.is_integer() else rounded
 
 
 def _event_sort_key(event: RuntimeEventSnapshot) -> tuple[datetime, str]:

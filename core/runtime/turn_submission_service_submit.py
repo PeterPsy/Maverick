@@ -75,6 +75,7 @@ def submit_runtime_turn(
     )
     if not created:
         return turn, events
+    events.append(_record_turn_worker_entered(state, session_id=session.session_id, turn_id=turn.turn_id, provider_id=provider_id))
     if on_queued is not None:
         try:
             on_queued(turn, events)
@@ -89,19 +90,41 @@ def submit_runtime_turn(
             turn=turn,
             provider_id=provider_id,
         )
-    turn = transition_runtime_turn(state.runtime_store, turn_id=turn.turn_id, target_status="active")
-    events.append(_record_turn_started(state, session_id=session.session_id, turn_id=turn.turn_id, provider_id=provider_id))
-    events.append(_record_turn_worker_started(state, session_id=session.session_id, turn_id=turn.turn_id, provider_id=provider_id))
-    _debug_log_runtime_turn(
-        state,
-        session=session,
-        provider_id=provider_id,
-        turn_id=turn.turn_id,
-        message="Runtime turn debug: sync execution started",
-        payload={"phase": "sync_execution_started", "turn_status": turn.status},
-    )
-    with _session_execution_lock(session.session_id):
+    lock_wait_started_at = time.perf_counter()
+    events.append(_record_session_lock_wait_started(state, session_id=session.session_id, turn_id=turn.turn_id, provider_id=provider_id))
+    lock = _session_execution_lock(session.session_id)
+    lock.acquire()
+    try:
+        events.append(
+            _record_session_lock_acquired(
+                state,
+                session_id=session.session_id,
+                turn_id=turn.turn_id,
+                provider_id=provider_id,
+                elapsed_ms=(time.perf_counter() - lock_wait_started_at) * 1000,
+            )
+        )
         try:
+            turn = transition_runtime_turn(state.runtime_store, turn_id=turn.turn_id, target_status="active")
+            events.append(_record_turn_started(state, session_id=session.session_id, turn_id=turn.turn_id, provider_id=provider_id))
+            events.append(_record_turn_worker_started(state, session_id=session.session_id, turn_id=turn.turn_id, provider_id=provider_id))
+            events.append(
+                _record_turn_activation_completed(
+                    state,
+                    session_id=session.session_id,
+                    turn_id=turn.turn_id,
+                    provider_id=provider_id,
+                    status=turn.status,
+                )
+            )
+            _debug_log_runtime_turn(
+                state,
+                session=session,
+                provider_id=provider_id,
+                turn_id=turn.turn_id,
+                message="Runtime turn debug: sync execution started",
+                payload={"phase": "sync_execution_started", "turn_status": turn.status},
+            )
             output_recorder = _RuntimeTurnOutputRecorder(state, session_id=session.session_id, turn_id=turn.turn_id)
             if plain_hosted:
                 dispatch_started_at = time.perf_counter()
@@ -165,14 +188,44 @@ def submit_runtime_turn(
                     runtime_adapter=runtime_adapter,
                 )
                 launch_spec = launch_result[0] if isinstance(launch_result, tuple) else launch_result
+                app_reference_count, storage_reference_count = _runtime_app_reference_counts(app_references)
                 execution_app_references = _materialize_app_references_for_execution(
                     app_references=app_references,
                     app_reference_materializer=app_reference_materializer,
+                    state=state,
+                    session_id=session.session_id,
+                    turn_id=turn.turn_id,
+                    provider_id=provider_id,
+                )
+                materialized_reference_count = len([item for item in execution_app_references or [] if isinstance(item, dict)])
+                provider_input_started_at = time.perf_counter()
+                events.append(
+                    _record_provider_input_started(
+                        state,
+                        session_id=session.session_id,
+                        turn_id=turn.turn_id,
+                        provider_id=provider_id,
+                        app_reference_count=app_reference_count,
+                        storage_reference_count=storage_reference_count,
+                        materialized_reference_count=materialized_reference_count,
+                    )
                 )
                 provider_input_text = input_text_with_attachment_links(
                     input_text=input_text_with_app_references(input_text=input_text, app_references=execution_app_references),
                     attachments=attachments,
                     workspace_root=session.workspace_root,
+                )
+                events.append(
+                    _record_provider_input_completed(
+                        state,
+                        session_id=session.session_id,
+                        turn_id=turn.turn_id,
+                        provider_id=provider_id,
+                        elapsed_ms=(time.perf_counter() - provider_input_started_at) * 1000,
+                        app_reference_count=app_reference_count,
+                        storage_reference_count=storage_reference_count,
+                        materialized_reference_count=materialized_reference_count,
+                    )
                 )
                 dispatch_started_at = time.perf_counter()
                 turn_start_sent_at: float | None = None
@@ -255,7 +308,6 @@ def submit_runtime_turn(
             if not plain_hosted:
                 release_idle_runtime_processes(state, session_id=session.session_id, provider_id=provider_id, reason="sync_turn_failed", idle_ttl_seconds=0)
             return turn, events
-
         _debug_log_runtime_turn(
             state,
             session=session,
@@ -297,4 +349,6 @@ def submit_runtime_turn(
         )
         if not plain_hosted:
             release_idle_runtime_processes(state, session_id=session.session_id, provider_id=provider_id, reason="sync_turn_terminal")
-    return turn, events
+        return turn, events
+    finally:
+        lock.release()

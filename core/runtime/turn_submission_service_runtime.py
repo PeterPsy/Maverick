@@ -212,10 +212,28 @@ def _wait_for_session_prewarm(
     if completion is None:
         return False
     wait_started_at = time.perf_counter()
+    if state is not None and turn is not None:
+        _record_turn_prewarm_wait_started(
+            state,
+            session_id=session_id,
+            turn_id=turn.turn_id,
+            provider_id=provider_id,
+            timeout_seconds=timeout_seconds,
+        )
     completed = completion.completion.wait(max(0.0, timeout_seconds))
     elapsed_ms = (time.perf_counter() - wait_started_at) * 1000
     prewarm_total_ms = (time.perf_counter() - completion.started_perf_counter) * 1000 if completed else None
     if state is not None and turn is not None:
+        _record_turn_prewarm_wait_completed(
+            state,
+            session_id=session_id,
+            turn_id=turn.turn_id,
+            provider_id=provider_id,
+            elapsed_ms=elapsed_ms,
+            completed=completed,
+            timeout_seconds=timeout_seconds,
+            prewarm_total_ms=prewarm_total_ms,
+        )
         _record_turn_prewarm_waited(
             state,
             session_id=session_id,
@@ -296,6 +314,66 @@ def _record_session_prewarm_failed(
     return None
 
 
+def _record_turn_prewarm_wait_started(
+    state: PlatformState,
+    *,
+    session_id: str,
+    turn_id: str,
+    provider_id: str | None,
+    timeout_seconds: float,
+) -> RuntimeEventRecord | None:
+    payload: dict[str, object] = {
+        "provider_id": provider_id or "codex",
+        "timeout_seconds": timeout_seconds,
+    }
+    with suppress(Exception):
+        return record_runtime_event(
+            state.runtime_store,
+            event_id=str(uuid4()),
+            session_id=session_id,
+            turn_id=turn_id,
+            plane="turn",
+            event_type="runtime.turn.prewarm_wait_started",
+            payload=payload,
+            event_bus=getattr(state, "runtime_event_bus", None),
+        )
+    return None
+
+
+def _record_turn_prewarm_wait_completed(
+    state: PlatformState,
+    *,
+    session_id: str,
+    turn_id: str,
+    provider_id: str | None,
+    elapsed_ms: float,
+    completed: bool,
+    timeout_seconds: float,
+    prewarm_total_ms: float | None,
+) -> RuntimeEventRecord | None:
+    payload: dict[str, object] = {
+        "provider_id": provider_id or "codex",
+        "prewarm_wait_ms": round(elapsed_ms, 3),
+        "completed": completed,
+        "timed_out": not completed,
+        "timeout_seconds": timeout_seconds,
+    }
+    if prewarm_total_ms is not None:
+        payload["prewarm_total_ms"] = round(prewarm_total_ms, 3)
+    with suppress(Exception):
+        return record_runtime_event(
+            state.runtime_store,
+            event_id=str(uuid4()),
+            session_id=session_id,
+            turn_id=turn_id,
+            plane="turn",
+            event_type="runtime.turn.prewarm_wait_completed",
+            payload=payload,
+            event_bus=getattr(state, "runtime_event_bus", None),
+        )
+    return None
+
+
 def _record_turn_prewarm_waited(
     state: PlatformState,
     *,
@@ -366,6 +444,12 @@ def submit_runtime_turn_async(
         return turn, events
 
     def worker() -> None:
+        _record_turn_worker_entered(
+            state,
+            session_id=session.session_id,
+            turn_id=turn.turn_id,
+            provider_id=queue_provider_id,
+        )
         force_idle_reap = False
         worker_provider_id = queue_provider_id
         prewarm_after_turn = False
@@ -376,7 +460,23 @@ def submit_runtime_turn_async(
                 turn=turn,
                 provider_id=worker_provider_id,
             )
-        with _session_execution_lock(session.session_id):
+        lock_wait_started_at = time.perf_counter()
+        _record_session_lock_wait_started(
+            state,
+            session_id=session.session_id,
+            turn_id=turn.turn_id,
+            provider_id=worker_provider_id,
+        )
+        lock = _session_execution_lock(session.session_id)
+        lock.acquire()
+        try:
+            _record_session_lock_acquired(
+                state,
+                session_id=session.session_id,
+                turn_id=turn.turn_id,
+                provider_id=worker_provider_id,
+                elapsed_ms=(time.perf_counter() - lock_wait_started_at) * 1000,
+            )
             _debug_log_runtime_turn(
                 state,
                 session=session,
@@ -418,6 +518,13 @@ def submit_runtime_turn_async(
                 active = transition_runtime_turn(state.runtime_store, turn_id=turn.turn_id, target_status="active")
                 _record_turn_started(state, session_id=session.session_id, turn_id=active.turn_id, provider_id=worker_provider_id)
                 _record_turn_worker_started(state, session_id=session.session_id, turn_id=active.turn_id, provider_id=worker_provider_id)
+                _record_turn_activation_completed(
+                    state,
+                    session_id=session.session_id,
+                    turn_id=active.turn_id,
+                    provider_id=worker_provider_id,
+                    status=active.status,
+                )
                 current_session = state.runtime_store.get_session(session.session_id)
                 _debug_log_runtime_turn(
                     state,
@@ -494,14 +601,40 @@ def submit_runtime_turn_async(
                         launch_spec, launch_metadata = launch_result
                     else:
                         launch_spec, launch_metadata = launch_result, {}
+                    app_reference_count, storage_reference_count = _runtime_app_reference_counts(app_references)
                     execution_app_references = _materialize_app_references_for_execution(
                         app_references=app_references,
                         app_reference_materializer=app_reference_materializer,
+                        state=state,
+                        session_id=session.session_id,
+                        turn_id=turn.turn_id,
+                        provider_id=worker_provider_id,
+                    )
+                    materialized_reference_count = len([item for item in execution_app_references or [] if isinstance(item, dict)])
+                    provider_input_started_at = time.perf_counter()
+                    _record_provider_input_started(
+                        state,
+                        session_id=session.session_id,
+                        turn_id=turn.turn_id,
+                        provider_id=worker_provider_id,
+                        app_reference_count=app_reference_count,
+                        storage_reference_count=storage_reference_count,
+                        materialized_reference_count=materialized_reference_count,
                     )
                     provider_input_text = input_text_with_attachment_links(
                         input_text=input_text_with_app_references(input_text=input_text, app_references=execution_app_references),
                         attachments=attachments,
                         workspace_root=current_session.workspace_root,
+                    )
+                    _record_provider_input_completed(
+                        state,
+                        session_id=session.session_id,
+                        turn_id=turn.turn_id,
+                        provider_id=worker_provider_id,
+                        elapsed_ms=(time.perf_counter() - provider_input_started_at) * 1000,
+                        app_reference_count=app_reference_count,
+                        storage_reference_count=storage_reference_count,
+                        materialized_reference_count=materialized_reference_count,
                     )
                     dispatch_started_at = time.perf_counter()
                     turn_start_sent_at: float | None = None
@@ -641,6 +774,8 @@ def submit_runtime_turn_async(
                         reason="async_turn_failed" if force_idle_reap else "async_turn_idle",
                         idle_ttl_seconds=0 if force_idle_reap else None,
                     )
+        finally:
+            lock.release()
         if prewarm_after_turn:
             schedule_runtime_session_prewarm(state, session=session)
 
@@ -652,11 +787,61 @@ def _materialize_app_references_for_execution(
     *,
     app_references: list[dict[str, object]] | None,
     app_reference_materializer: Callable[[list[dict[str, object]]], list[dict[str, object]]] | None,
+    state: PlatformState | None = None,
+    session_id: str | None = None,
+    turn_id: str | None = None,
+    provider_id: str | None = None,
 ) -> list[dict[str, object]] | None:
     references = [item for item in app_references or [] if isinstance(item, dict)]
     if not references or app_reference_materializer is None:
         return references
-    return app_reference_materializer(references)
+    app_reference_count, storage_reference_count = _runtime_app_reference_counts(references)
+    can_record = state is not None and session_id is not None and turn_id is not None and provider_id is not None
+    if can_record:
+        _record_app_references_materialize_started(
+            state,
+            session_id=session_id,
+            turn_id=turn_id,
+            provider_id=provider_id,
+            app_reference_count=app_reference_count,
+            storage_reference_count=storage_reference_count,
+        )
+    started_at = time.perf_counter()
+    try:
+        materialized = app_reference_materializer(references)
+    except Exception as error:
+        if can_record:
+            _record_app_references_materialize_failed(
+                state,
+                session_id=session_id,
+                turn_id=turn_id,
+                provider_id=provider_id,
+                elapsed_ms=(time.perf_counter() - started_at) * 1000,
+                app_reference_count=app_reference_count,
+                storage_reference_count=storage_reference_count,
+                error=error,
+            )
+        raise
+    materialized_references = [item for item in materialized or [] if isinstance(item, dict)]
+    if can_record:
+        _record_app_references_materialize_completed(
+            state,
+            session_id=session_id,
+            turn_id=turn_id,
+            provider_id=provider_id,
+            elapsed_ms=(time.perf_counter() - started_at) * 1000,
+            app_reference_count=app_reference_count,
+            storage_reference_count=storage_reference_count,
+            materialized_reference_count=len(materialized_references),
+            reference_cache_hit=False,
+        )
+    return materialized_references
+
+
+def _runtime_app_reference_counts(references: list[dict[str, object]] | None) -> tuple[int, int]:
+    items = [item for item in references or [] if isinstance(item, dict)]
+    storage_count = sum(1 for item in items if str(item.get("app_id") or "").strip().lower() == "storage")
+    return len(items), storage_count
 
 
 

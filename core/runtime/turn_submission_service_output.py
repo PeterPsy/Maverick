@@ -63,6 +63,219 @@ def _record_turn_worker_started(state: PlatformState, *, session_id: str, turn_i
     )
 
 
+def _record_turn_worker_entered(state: PlatformState, *, session_id: str, turn_id: str, provider_id: str) -> RuntimeEventRecord:
+    return record_runtime_event(
+        state.runtime_store,
+        event_id=str(uuid4()),
+        session_id=session_id,
+        turn_id=turn_id,
+        plane="turn",
+        event_type="runtime.turn.worker_entered",
+        payload={"provider_id": provider_id},
+        event_bus=state.runtime_event_bus,
+    )
+
+
+def _record_turn_activation_completed(
+    state: PlatformState,
+    *,
+    session_id: str,
+    turn_id: str,
+    provider_id: str,
+    status: str,
+) -> RuntimeEventRecord:
+    return record_runtime_event(
+        state.runtime_store,
+        event_id=str(uuid4()),
+        session_id=session_id,
+        turn_id=turn_id,
+        plane="turn",
+        event_type="runtime.turn.turn_activation_completed",
+        payload={"provider_id": provider_id, "status": status},
+        event_bus=state.runtime_event_bus,
+    )
+
+
+def _record_session_lock_wait_started(
+    state: PlatformState,
+    *,
+    session_id: str,
+    turn_id: str,
+    provider_id: str,
+) -> RuntimeEventRecord:
+    return record_runtime_event(
+        state.runtime_store,
+        event_id=str(uuid4()),
+        session_id=session_id,
+        turn_id=turn_id,
+        plane="turn",
+        event_type="runtime.turn.session_lock_wait_started",
+        payload={"provider_id": provider_id},
+        event_bus=state.runtime_event_bus,
+    )
+
+
+def _record_session_lock_acquired(
+    state: PlatformState,
+    *,
+    session_id: str,
+    turn_id: str,
+    provider_id: str,
+    elapsed_ms: float,
+) -> RuntimeEventRecord:
+    return record_runtime_event(
+        state.runtime_store,
+        event_id=str(uuid4()),
+        session_id=session_id,
+        turn_id=turn_id,
+        plane="turn",
+        event_type="runtime.turn.session_lock_acquired",
+        payload={"provider_id": provider_id, "session_lock_wait_ms": round(elapsed_ms, 3)},
+        event_bus=state.runtime_event_bus,
+    )
+
+
+def _record_app_references_materialize_started(
+    state: PlatformState,
+    *,
+    session_id: str,
+    turn_id: str,
+    provider_id: str,
+    app_reference_count: int,
+    storage_reference_count: int,
+) -> RuntimeEventRecord:
+    return record_runtime_event(
+        state.runtime_store,
+        event_id=str(uuid4()),
+        session_id=session_id,
+        turn_id=turn_id,
+        plane="turn",
+        event_type="runtime.turn.app_references_materialize_started",
+        payload={
+            "provider_id": provider_id,
+            "app_reference_count": app_reference_count,
+            "storage_reference_count": storage_reference_count,
+        },
+        event_bus=state.runtime_event_bus,
+    )
+
+
+def _record_app_references_materialize_completed(
+    state: PlatformState,
+    *,
+    session_id: str,
+    turn_id: str,
+    provider_id: str,
+    elapsed_ms: float,
+    app_reference_count: int,
+    storage_reference_count: int,
+    materialized_reference_count: int,
+    reference_cache_hit: bool,
+) -> RuntimeEventRecord:
+    return record_runtime_event(
+        state.runtime_store,
+        event_id=str(uuid4()),
+        session_id=session_id,
+        turn_id=turn_id,
+        plane="turn",
+        event_type="runtime.turn.app_references_materialize_completed",
+        payload={
+            "provider_id": provider_id,
+            "app_reference_materialize_ms": round(elapsed_ms, 3),
+            "app_reference_count": app_reference_count,
+            "storage_reference_count": storage_reference_count,
+            "materialized_reference_count": materialized_reference_count,
+            "reference_cache_hit": reference_cache_hit,
+        },
+        event_bus=state.runtime_event_bus,
+    )
+
+
+def _record_app_references_materialize_failed(
+    state: PlatformState,
+    *,
+    session_id: str,
+    turn_id: str,
+    provider_id: str,
+    elapsed_ms: float,
+    app_reference_count: int,
+    storage_reference_count: int,
+    error: Exception,
+) -> RuntimeEventRecord:
+    return record_runtime_event(
+        state.runtime_store,
+        event_id=str(uuid4()),
+        session_id=session_id,
+        turn_id=turn_id,
+        plane="turn",
+        event_type="runtime.turn.app_references_materialize_failed",
+        payload={
+            "provider_id": provider_id,
+            "app_reference_materialize_ms": round(elapsed_ms, 3),
+            "app_reference_count": app_reference_count,
+            "storage_reference_count": storage_reference_count,
+            "error_type": error.__class__.__name__,
+        },
+        event_bus=state.runtime_event_bus,
+    )
+
+
+def _record_provider_input_started(
+    state: PlatformState,
+    *,
+    session_id: str,
+    turn_id: str,
+    provider_id: str,
+    app_reference_count: int,
+    storage_reference_count: int,
+    materialized_reference_count: int,
+) -> RuntimeEventRecord:
+    return record_runtime_event(
+        state.runtime_store,
+        event_id=str(uuid4()),
+        session_id=session_id,
+        turn_id=turn_id,
+        plane="turn",
+        event_type="runtime.turn.provider_input_started",
+        payload={
+            "provider_id": provider_id,
+            "app_reference_count": app_reference_count,
+            "storage_reference_count": storage_reference_count,
+            "materialized_reference_count": materialized_reference_count,
+        },
+        event_bus=state.runtime_event_bus,
+    )
+
+
+def _record_provider_input_completed(
+    state: PlatformState,
+    *,
+    session_id: str,
+    turn_id: str,
+    provider_id: str,
+    elapsed_ms: float,
+    app_reference_count: int,
+    storage_reference_count: int,
+    materialized_reference_count: int,
+) -> RuntimeEventRecord:
+    return record_runtime_event(
+        state.runtime_store,
+        event_id=str(uuid4()),
+        session_id=session_id,
+        turn_id=turn_id,
+        plane="turn",
+        event_type="runtime.turn.provider_input_completed",
+        payload={
+            "provider_id": provider_id,
+            "provider_input_build_ms": round(elapsed_ms, 3),
+            "app_reference_count": app_reference_count,
+            "storage_reference_count": storage_reference_count,
+            "materialized_reference_count": materialized_reference_count,
+        },
+        event_bus=state.runtime_event_bus,
+    )
+
+
 def _record_provider_dispatching(
     state: PlatformState,
     *,

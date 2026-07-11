@@ -139,6 +139,7 @@ def backend_worker_config() -> dict:
         BACKEND_WORKER_SCRIPT,
         Path(__file__).with_name("service.py"),
         Path(__file__).with_name("engines.py"),
+        Path(__file__).with_name("flux_streaming.py"),
         Path(__file__).with_name("synthesis.py"),
         Path(__file__).with_name("transcription.py"),
         Path(__file__).with_name("settings.py"),

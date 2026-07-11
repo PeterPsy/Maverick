@@ -2189,6 +2189,11 @@ class SpeechAppTests(unittest.TestCase):
         self.assertNotIn("worker_stop", manifest["operations"])
         self.assertNotIn("worker_reload", manifest["operations"])
 
+    def test_backend_worker_config_tracks_flux_streaming_code(self) -> None:
+        file_names = {item["name"] for item in app_backend.backend_worker_config()["files"]}
+
+        self.assertIn("flux_streaming.py", file_names)
+
     def test_app_backend_reuses_persistent_worker_between_requests(self) -> None:
         with TemporaryDirectory() as temp_dir:
             root = Path(temp_dir)

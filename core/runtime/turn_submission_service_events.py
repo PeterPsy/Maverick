@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from contextlib import suppress
+import os
 from threading import Lock
 from typing import TYPE_CHECKING
 from uuid import uuid4
@@ -145,6 +146,8 @@ def _debug_log_runtime_turn(
     payload: dict[str, object],
 ) -> None:
     """Write best-effort runtime turn diagnostics without changing execution behavior."""
+    if not _runtime_turn_debug_logs_enabled():
+        return
     with suppress(Exception):
         append_platform_log(
             log_plane="runtime",
@@ -160,3 +163,7 @@ def _debug_log_runtime_turn(
             provider_id=provider_id,
             start_path=state.repository_root,
         )
+
+
+def _runtime_turn_debug_logs_enabled() -> bool:
+    return os.environ.get("MAVERICK_RUNTIME_TURN_DEBUG_LOGS", "").strip().lower() in {"1", "true", "yes", "on"}

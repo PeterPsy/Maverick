@@ -592,17 +592,11 @@ def submit_runtime_turn_async(
                     turn_id=turn.turn_id,
                     target_status="active",
                     timing_payload=transition_timings,
+                    update_thread=False,
                 )
                 transition_active_ms = (time.perf_counter() - transition_started_at) * 1000
                 started_event = _record_turn_started(state, session_id=session.session_id, turn_id=active.turn_id, provider_id=worker_provider_id)
                 _record_turn_worker_started(state, session_id=session.session_id, turn_id=active.turn_id, provider_id=worker_provider_id)
-                _record_turn_thread_availability_active(
-                    state,
-                    session_id=session.session_id,
-                    turn_id=active.turn_id,
-                    provider_id=worker_provider_id,
-                    now=started_event.created_at,
-                )
                 _record_turn_activation_completed(
                     state,
                     session_id=session.session_id,
@@ -612,6 +606,21 @@ def submit_runtime_turn_async(
                     elapsed_ms=transition_active_ms,
                     transition_timings=transition_timings,
                 )
+                thread_availability_active_recorded = False
+
+                def record_thread_availability_active_once() -> None:
+                    nonlocal thread_availability_active_recorded
+                    if thread_availability_active_recorded:
+                        return
+                    thread_availability_active_recorded = True
+                    _record_turn_thread_availability_active(
+                        state,
+                        session_id=session.session_id,
+                        turn_id=active.turn_id,
+                        provider_id=worker_provider_id,
+                        now=started_event.created_at,
+                    )
+
                 current_session = state.runtime_store.get_session(session.session_id)
                 _debug_log_runtime_turn_with_timing(
                     state,
@@ -632,6 +641,7 @@ def submit_runtime_turn_async(
                         provider_id=worker_provider_id,
                         runtime_mode=current_session.runtime_mode,
                     )
+                    record_thread_availability_active_once()
 
                     def record_plain_provider_turn_start_sent(metadata: dict[str, object]) -> None:
                         nonlocal turn_start_sent_at
@@ -733,6 +743,7 @@ def submit_runtime_turn_async(
                         runtime_mode=current_session.runtime_mode,
                         metadata=launch_metadata,
                     )
+                    record_thread_availability_active_once()
 
                     def record_provider_turn_start_sent(metadata: dict[str, object]) -> None:
                         nonlocal turn_start_sent_at

@@ -223,6 +223,7 @@ def transition_runtime_turn(
     failure_reason: str | None = None,
     now: datetime | None = None,
     timing_payload: dict[str, float] | None = None,
+    update_thread: bool = True,
 ) -> RuntimeTurnRecord:
     """Transition one runtime turn between canonical lifecycle statuses."""
     timestamp = now or utcnow()
@@ -264,9 +265,12 @@ def transition_runtime_turn(
     save_turn_started_at = time.perf_counter()
     saved = store.save_turn(updated)
     _record_transition_timing(timing_payload, "save_turn_ms", save_turn_started_at)
-    thread_update_started_at = time.perf_counter()
-    _update_thread_for_turn_transition(store, saved)
-    _record_transition_timing(timing_payload, "thread_update_ms", thread_update_started_at)
+    if update_thread:
+        thread_update_started_at = time.perf_counter()
+        _update_thread_for_turn_transition(store, saved)
+        _record_transition_timing(timing_payload, "thread_update_ms", thread_update_started_at)
+    elif timing_payload is not None:
+        timing_payload["thread_update_ms"] = 0.0
     return saved
 
 

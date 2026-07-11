@@ -11,12 +11,43 @@ from core.runtime.service import create_runtime_session, queue_runtime_turn
 from core.runtime.store import RuntimeCollections, RuntimeDocumentStore
 from core.runtime.turn_submission import prewarm_runtime_session_async, submit_runtime_turn_async
 from core.runtime.turn_submission_launch_cache import clear_cached_runtime_launch_context
+from core.runtime.turn_submission_service_events import _debug_log_runtime_turn
 from core.runtime.turn_submission_service_output import _build_launch_spec_for_execution
 from tests.support.collections import FakeCollection
 from tests.support.repo import make_temp_repo_root
 
 
 class TurnSubmissionLaunchSpecTestCase(unittest.TestCase):
+    def test_runtime_turn_debug_filesystem_log_is_opt_in(self) -> None:
+        state = SimpleNamespace(repository_root=make_temp_repo_root(self))
+        session = SimpleNamespace(session_id="sess-debug-log", workspace_id="default")
+
+        with patch.dict("os.environ", {}, clear=True), patch(
+            "core.runtime.turn_submission_service_events.append_platform_log"
+        ) as append_log:
+            _debug_log_runtime_turn(
+                state,
+                session=session,
+                provider_id="codex",
+                turn_id="turn-debug-log",
+                message="debug",
+                payload={"phase": "test"},
+            )
+            append_log.assert_not_called()
+
+        with patch.dict("os.environ", {"MAVERICK_RUNTIME_TURN_DEBUG_LOGS": "1"}), patch(
+            "core.runtime.turn_submission_service_events.append_platform_log"
+        ) as append_log:
+            _debug_log_runtime_turn(
+                state,
+                session=session,
+                provider_id="codex",
+                turn_id="turn-debug-log",
+                message="debug",
+                payload={"phase": "test"},
+            )
+            append_log.assert_called_once()
+
     def test_prewarm_accepts_brand_new_session(self) -> None:
         repo_root = make_temp_repo_root(self)
         runtime_store = _runtime_store()
@@ -294,10 +325,15 @@ class TurnSubmissionLaunchSpecTestCase(unittest.TestCase):
             "runtime.turn.app_references_materialize_completed",
             "runtime.turn.provider_input_started",
             "runtime.turn.provider_input_completed",
+            "runtime.provider.dispatching",
         ):
             self.assertIn(expected, event_types)
         self.assertLess(
             event_types.index("runtime.turn.worker_started_recorded"),
+            event_types.index("runtime.turn.thread_availability_started"),
+        )
+        self.assertLess(
+            event_types.index("runtime.provider.dispatching"),
             event_types.index("runtime.turn.thread_availability_started"),
         )
         activation = next(
@@ -305,9 +341,10 @@ class TurnSubmissionLaunchSpecTestCase(unittest.TestCase):
             for event in runtime_store.list_events(session.session_id)
             if event.event_type == "runtime.turn.turn_activation_completed"
         )
-        for key in ("transition_active_ms", "save_state_ms", "save_session_ms", "save_turn_ms", "thread_update_ms"):
+        for key in ("transition_active_ms", "save_state_ms", "save_session_ms", "save_turn_ms"):
             self.assertIn(key, activation.payload)
             self.assertGreaterEqual(activation.payload[key], 0)
+        self.assertEqual(activation.payload["thread_update_ms"], 0.0)
         debug_log = next(
             event
             for event in runtime_store.list_events(session.session_id)

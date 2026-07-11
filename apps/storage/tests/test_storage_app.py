@@ -699,9 +699,13 @@ class StorageAppTestCase(unittest.TestCase):
             self.assertEqual(search["json"]["results"][0]["entity_id"], "generated:Client%20Docs/Q1/")
             self.assertEqual(search["json"]["results"][0]["workspace_relative_path"], "storage/generated/Client Docs/Q1")
             self.assertEqual(search["json"]["results"][0]["deep_link"], "/app/storage/folders/generated/Client%20Docs/Q1")
+            self.assertIn("modified_at", search["json"]["results"][0]["metadata"])
+            self.assertIn("source_updated_at", search["json"]["results"][0]["metadata"])
             self.assertEqual(root_search["json"]["results"][0]["workspace_relative_path"], "storage/generated")
             self.assertTrue(resolved["json"]["exists"])
             self.assertEqual(resolved["json"]["title"], "Q1")
+            self.assertIn("modified_at", resolved["json"]["metadata"])
+            self.assertIn("source_updated_at", resolved["json"]["metadata"])
             self.assertEqual(summarized["json"]["safe_fields"]["kind"], "folder")
             manifest_entities = {
                 item["entity_type"]: item

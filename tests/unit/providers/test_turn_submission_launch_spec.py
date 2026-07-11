@@ -228,18 +228,30 @@ class TurnSubmissionLaunchSpecTestCase(unittest.TestCase):
             repository_root=repo_root,
         )
 
-        def materialize(references: list[dict[str, object]]) -> list[dict[str, object]]:
+        def materialize(references: list[dict[str, object]]) -> object:
             self.assertEqual(len(references), 1)
-            return [
-                {
-                    "type": "entity",
-                    "app_id": "storage",
-                    "entity_type": "file",
-                    "entity_id": "file-1",
-                    "label": "File 1",
-                    "summary": "Stored file",
-                }
-            ]
+            return SimpleNamespace(
+                references=[
+                    {
+                        "type": "entity",
+                        "app_id": "storage",
+                        "entity_type": "file",
+                        "entity_id": "file-1",
+                        "label": "File 1",
+                        "summary": "Stored file",
+                    }
+                ],
+                reference_action_timings=[
+                    {
+                        "app_id": "storage",
+                        "entity_type": "file",
+                        "action": "resolve",
+                        "status": "completed",
+                        "elapsed_ms": 12.5,
+                    }
+                ],
+                reference_cache_hit=False,
+            )
 
         def execute_turn(**kwargs):
             self.assertIn("Stored file", kwargs["input_text"])
@@ -288,6 +300,18 @@ class TurnSubmissionLaunchSpecTestCase(unittest.TestCase):
         self.assertEqual(materialized.payload["storage_reference_count"], 1)
         self.assertEqual(materialized.payload["materialized_reference_count"], 1)
         self.assertFalse(materialized.payload["reference_cache_hit"])
+        self.assertEqual(
+            materialized.payload["reference_action_timings"],
+            [
+                {
+                    "app_id": "storage",
+                    "entity_type": "file",
+                    "action": "resolve",
+                    "status": "completed",
+                    "elapsed_ms": 12.5,
+                }
+            ],
+        )
         provider_input = next(event for event in runtime_store.list_events(session.session_id) if event.event_type == "runtime.turn.provider_input_completed")
         self.assertIn("provider_input_build_ms", provider_input.payload)
         self.assertEqual(provider_input.payload["materialized_reference_count"], 1)

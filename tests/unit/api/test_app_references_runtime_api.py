@@ -100,7 +100,9 @@ class AppReferencesRuntimeApiTestCase(AppReferenceApiTestSupport, unittest.TestC
                 captured["app_references"] = kwargs.get("app_references")
                 materializer = kwargs.get("app_reference_materializer")
                 if callable(materializer):
-                    captured["materialized_app_references"] = materializer(kwargs.get("app_references") or [])
+                    materialized = materializer(kwargs.get("app_references") or [])
+                    captured["materialized_app_references"] = getattr(materialized, "references", materialized)
+                    captured["reference_action_timings"] = getattr(materialized, "reference_action_timings", [])
                 now = datetime.now(timezone.utc)
                 return RuntimeTurnRecord(
                     turn_id="turn-1",
@@ -122,6 +124,9 @@ class AppReferencesRuntimeApiTestCase(AppReferenceApiTestSupport, unittest.TestC
                 "core.api.app_reference_payloads.reference_providers",
                 wraps=app_reference_payloads.reference_providers,
             ) as provider_discovery, patch(
+                "core.api.app_reference_payloads.reference_tool_runner",
+                wraps=app_reference_payloads.reference_tool_runner,
+            ) as tool_runner, patch(
                 "core.api.runtime_api.submit_runtime_turn_async",
                 side_effect=fake_submit_runtime_turn,
             ):
@@ -158,6 +163,7 @@ class AppReferencesRuntimeApiTestCase(AppReferenceApiTestSupport, unittest.TestC
 
         self.assertEqual(status, 202)
         self.assertEqual(provider_discovery.call_count, 1)
+        self.assertEqual(tool_runner.call_count, 1)
         self.assertEqual(
             captured["app_references"],
             [
@@ -202,6 +208,17 @@ class AppReferencesRuntimeApiTestCase(AppReferenceApiTestSupport, unittest.TestC
                 },
             ],
         )
+        self.assertEqual(
+            [
+                (item["app_id"], item["entity_type"], item["action"], item["status"])
+                for item in captured["reference_action_timings"]
+            ],
+            [
+                ("records", "record", "resolve", "completed"),
+                ("records", "record", "summarize", "completed"),
+                ("records", "record", "resolve", "exists_false"),
+            ],
+        )
 
     def test_runtime_turn_rejects_empty_input_before_materializing_references(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -225,7 +242,7 @@ class AppReferencesRuntimeApiTestCase(AppReferenceApiTestSupport, unittest.TestC
             app = PlatformHost(state, start_path=repo_root)
             cookie = self._login(app)
 
-            with patch("core.api.runtime_api.materialize_runtime_app_references") as materialize:
+            with patch("core.api.runtime_api.materialize_runtime_app_references_with_metrics") as materialize:
                 status, payload, _headers = self._invoke(
                     app,
                     path="/api/runtime/sessions/sess-1/turns",

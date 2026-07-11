@@ -43,7 +43,7 @@ def submit_runtime_turn(
     client_message_id: str | None = None,
     attachments: list[dict[str, object]] | None = None,
     app_references: list[dict[str, object]] | None = None,
-    app_reference_materializer: Callable[[list[dict[str, object]]], list[dict[str, object]]] | None = None,
+    app_reference_materializer: Callable[[list[dict[str, object]]], object] | None = None,
     on_queued: Callable[[RuntimeTurnRecord, list[RuntimeEventRecord]], None] | None = None,
     turn_id: str | None = None,
     received_perf_counter: float | None = None,

@@ -2,14 +2,17 @@
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 import logging
 from pathlib import Path
+import time
 from typing import Any
 
 from core.api.app_reference_providers import (
     call_reference_tool,
     mcp_context_for_request,
     public_provider_payload,
+    reference_tool_runner,
     reference_providers,
     visible_workspace_apps,
 )
@@ -17,6 +20,13 @@ from core.api.session_api import RequestSession
 from core.mcp.models import McpInvocationContext
 
 logger = logging.getLogger(__name__)
+
+
+@dataclass(frozen=True)
+class RuntimeAppReferenceMaterializationResult:
+    references: list[dict[str, object]]
+    reference_action_timings: list[dict[str, object]]
+    reference_cache_hit: bool = False
 
 
 class RuntimeAppReferenceRequestContext:
@@ -160,8 +170,26 @@ def materialize_runtime_app_references(
     reference_context: RuntimeAppReferenceRequestContext | None = None,
 ) -> list[dict[str, object]]:
     """Verify client-submitted references and enrich entities from owning apps."""
+    return materialize_runtime_app_references_with_metrics(
+        state,
+        context=context,
+        references=references,
+        start_path=start_path,
+        reference_context=reference_context,
+    ).references
+
+
+def materialize_runtime_app_references_with_metrics(
+    state,
+    *,
+    context: RequestSession,
+    references: list[dict[str, object]],
+    start_path: Path,
+    reference_context: RuntimeAppReferenceRequestContext | None = None,
+) -> RuntimeAppReferenceMaterializationResult:
+    """Verify client-submitted references and enrich entities with redaction-safe timings."""
     if not references:
-        return []
+        return RuntimeAppReferenceMaterializationResult(references=[], reference_action_timings=[])
     runtime_reference_context = reference_context or RuntimeAppReferenceRequestContext(
         state,
         context=context,
@@ -172,6 +200,15 @@ def materialize_runtime_app_references(
     visible_apps = runtime_reference_context.visible_apps() if needs_visible_apps else {}
     providers_by_app_id = runtime_reference_context.providers_by_app_id() if needs_entity_providers else {}
     mcp_context = mcp_context_for_request(state, context)
+    reference_action_timings: list[dict[str, object]] = []
+    runner = None
+
+    def get_runner():
+        nonlocal runner
+        if runner is None:
+            runner = reference_tool_runner(state, context=mcp_context, start_path=start_path)
+        return runner
+
     materialized: list[dict[str, object]] = []
     seen: set[str] = set()
     for reference in references:
@@ -185,6 +222,8 @@ def materialize_runtime_app_references(
                 reference=reference,
                 context=mcp_context,
                 start_path=start_path,
+                runner_factory=get_runner,
+                action_timings=reference_action_timings,
             )
         else:
             app = visible_apps.get(app_id)
@@ -204,7 +243,10 @@ def materialize_runtime_app_references(
             continue
         seen.add(key)
         materialized.append(payload)
-    return materialized
+    return RuntimeAppReferenceMaterializationResult(
+        references=materialized,
+        reference_action_timings=reference_action_timings,
+    )
 
 
 def validate_runtime_app_references(
@@ -294,6 +336,8 @@ def _materialize_runtime_entity_reference(
     reference: dict[str, object],
     context: McpInvocationContext,
     start_path: Path,
+    runner_factory,
+    action_timings: list[dict[str, object]],
 ) -> dict[str, object] | None:
     if provider is None:
         return None
@@ -315,6 +359,8 @@ def _materialize_runtime_entity_reference(
             entity_id=entity_id,
             context=context,
             start_path=start_path,
+            runner_factory=runner_factory,
+            action_timings=action_timings,
         )
     if resolved is not None and resolved.get("exists") is False:
         return resolved
@@ -329,6 +375,8 @@ def _materialize_runtime_entity_reference(
             entity_id=entity_id,
             context=context,
             start_path=start_path,
+            runner_factory=runner_factory,
+            action_timings=action_timings,
         )
     if summarized is not None and summarized.get("exists") is False:
         return summarized
@@ -348,7 +396,11 @@ def _call_runtime_reference_lookup(
     entity_id: str,
     context: McpInvocationContext,
     start_path: Path,
+    runner_factory,
+    action_timings: list[dict[str, object]],
 ) -> dict[str, object] | None:
+    started_at = time.perf_counter()
+    status = "completed"
     try:
         result = call_reference_tool(
             state,
@@ -357,20 +409,68 @@ def _call_runtime_reference_lookup(
             context=context,
             arguments={"entity_type": entity_type, "entity_id": entity_id},
             start_path=start_path,
+            runner=runner_factory(),
         )
     except Exception:
+        status = "failed"
+        _append_reference_action_timing(
+            action_timings,
+            provider=provider,
+            entity_type=entity_type,
+            action=action,
+            status=status,
+            elapsed_ms=(time.perf_counter() - started_at) * 1000,
+        )
         logger.exception("Runtime reference %s failed for app `%s`.", action, provider["app_id"])
         return None
     normalized = normalize_reference_item(result, provider=provider, fallback_entity_type=entity_type)
     if normalized is None:
+        status = "invalid_payload"
+        _append_reference_action_timing(
+            action_timings,
+            provider=provider,
+            entity_type=entity_type,
+            action=action,
+            status=status,
+            elapsed_ms=(time.perf_counter() - started_at) * 1000,
+        )
         logger.warning("Runtime reference %s returned invalid payload for app `%s`.", action, provider["app_id"])
         return None
     if "exists" in result:
         if result.get("exists") is False:
             normalized["exists"] = False
+            status = "exists_false"
         else:
             normalized.pop("exists", None)
+    _append_reference_action_timing(
+        action_timings,
+        provider=provider,
+        entity_type=entity_type,
+        action=action,
+        status=status,
+        elapsed_ms=(time.perf_counter() - started_at) * 1000,
+    )
     return normalized
+
+
+def _append_reference_action_timing(
+    timings: list[dict[str, object]],
+    *,
+    provider: dict[str, Any],
+    entity_type: str,
+    action: str,
+    status: str,
+    elapsed_ms: float,
+) -> None:
+    timings.append(
+        {
+            "app_id": str(provider.get("app_id") or ""),
+            "entity_type": entity_type,
+            "action": action,
+            "status": status,
+            "elapsed_ms": round(elapsed_ms, 3),
+        }
+    )
 
 
 def _merge_reference_payloads(resolved: dict[str, object], summarized: dict[str, object]) -> dict[str, object]:

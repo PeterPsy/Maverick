@@ -416,7 +416,7 @@ def submit_runtime_turn_async(
     client_message_id: str | None = None,
     attachments: list[dict[str, object]] | None = None,
     app_references: list[dict[str, object]] | None = None,
-    app_reference_materializer: Callable[[list[dict[str, object]]], list[dict[str, object]]] | None = None,
+    app_reference_materializer: Callable[[list[dict[str, object]]], object] | None = None,
     on_queued: Callable[[RuntimeTurnRecord, list[RuntimeEventRecord]], None] | None = None,
     turn_id: str | None = None,
     received_perf_counter: float | None = None,
@@ -800,7 +800,7 @@ def submit_runtime_turn_async(
 def _materialize_app_references_for_execution(
     *,
     app_references: list[dict[str, object]] | None,
-    app_reference_materializer: Callable[[list[dict[str, object]]], list[dict[str, object]]] | None,
+    app_reference_materializer: Callable[[list[dict[str, object]]], object] | None,
     state: PlatformState | None = None,
     session_id: str | None = None,
     turn_id: str | None = None,
@@ -822,8 +822,10 @@ def _materialize_app_references_for_execution(
         )
     started_at = time.perf_counter()
     try:
-        materialized = app_reference_materializer(references)
+        raw_materialized = app_reference_materializer(references)
+        materialized, reference_action_timings, reference_cache_hit = _coerce_materialized_reference_result(raw_materialized)
     except Exception as error:
+        reference_action_timings = _materializer_reference_action_timings(locals().get("raw_materialized"))
         if can_record:
             _record_app_references_materialize_failed(
                 state,
@@ -834,6 +836,7 @@ def _materialize_app_references_for_execution(
                 app_reference_count=app_reference_count,
                 storage_reference_count=storage_reference_count,
                 error=error,
+                reference_action_timings=reference_action_timings,
             )
         raise
     materialized_references = [item for item in materialized or [] if isinstance(item, dict)]
@@ -847,9 +850,26 @@ def _materialize_app_references_for_execution(
             app_reference_count=app_reference_count,
             storage_reference_count=storage_reference_count,
             materialized_reference_count=len(materialized_references),
-            reference_cache_hit=False,
+            reference_cache_hit=reference_cache_hit,
+            reference_action_timings=reference_action_timings,
         )
     return materialized_references
+
+
+def _coerce_materialized_reference_result(raw_result: object) -> tuple[list[dict[str, object]], list[dict[str, object]], bool]:
+    references = getattr(raw_result, "references", raw_result)
+    timings = _materializer_reference_action_timings(raw_result)
+    cache_hit = bool(getattr(raw_result, "reference_cache_hit", False))
+    if not isinstance(references, list):
+        return [], timings, cache_hit
+    return [item for item in references if isinstance(item, dict)], timings, cache_hit
+
+
+def _materializer_reference_action_timings(raw_result: object) -> list[dict[str, object]]:
+    timings = getattr(raw_result, "reference_action_timings", None)
+    if not isinstance(timings, list):
+        return []
+    return [item for item in timings if isinstance(item, dict)]
 
 
 def _runtime_app_reference_counts(references: list[dict[str, object]] | None) -> tuple[int, int]:

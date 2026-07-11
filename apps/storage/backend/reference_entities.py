@@ -248,6 +248,11 @@ def _file_reference(record: dict[str, Any]) -> dict[str, Any]:
         "app_page": app_page,
         "deep_link": f"/app/storage/{app_page}",
         "workspace_relative_path": record["workspace_relative_path"],
+        "metadata": {
+            "sha256": str(record.get("sha256") or ""),
+            "modified_at": str(record.get("modified_at") or ""),
+            "source_updated_at": str(record.get("modified_at") or ""),
+        },
     }
 
 
@@ -273,6 +278,8 @@ def _folder_reference(record: dict[str, Any]) -> dict[str, Any]:
             "role": record["role"],
             "relative_path": relative_path,
             "workspace_relative_path": record["workspace_relative_path"],
+            "modified_at": str(record.get("modified_at") or ""),
+            "source_updated_at": str(record.get("modified_at") or ""),
         },
     }
 

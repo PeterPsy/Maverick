@@ -11,7 +11,7 @@ from uuid import uuid4
 
 from core.api.app_reference_payloads import (
     RuntimeAppReferenceRequestContext,
-    materialize_runtime_app_references,
+    materialize_runtime_app_references_with_metrics,
     validate_runtime_app_references,
 )
 from core.api.http import StartResponse, json_response, read_json_body, status_line
@@ -1446,8 +1446,8 @@ def _queue_runtime_turn_response(
     app_reference_context = draft.app_reference_context
     async_requested = draft.async_requested
 
-    def materialize_app_references(references: list[dict[str, object]]) -> list[dict[str, object]]:
-        return materialize_runtime_app_references(
+    def materialize_app_references(references: list[dict[str, object]]) -> object:
+        return materialize_runtime_app_references_with_metrics(
             state,
             context=context,
             references=references,

@@ -312,7 +312,18 @@ def _record_app_references_materialize_completed(
     storage_reference_count: int,
     materialized_reference_count: int,
     reference_cache_hit: bool,
+    reference_action_timings: list[dict[str, object]] | None = None,
 ) -> RuntimeEventRecord:
+    payload: dict[str, object] = {
+        "provider_id": provider_id,
+        "app_reference_materialize_ms": round(elapsed_ms, 3),
+        "app_reference_count": app_reference_count,
+        "storage_reference_count": storage_reference_count,
+        "materialized_reference_count": materialized_reference_count,
+        "reference_cache_hit": reference_cache_hit,
+    }
+    if reference_action_timings:
+        payload["reference_action_timings"] = reference_action_timings
     return record_runtime_event(
         state.runtime_store,
         event_id=str(uuid4()),
@@ -320,14 +331,7 @@ def _record_app_references_materialize_completed(
         turn_id=turn_id,
         plane="turn",
         event_type="runtime.turn.app_references_materialize_completed",
-        payload={
-            "provider_id": provider_id,
-            "app_reference_materialize_ms": round(elapsed_ms, 3),
-            "app_reference_count": app_reference_count,
-            "storage_reference_count": storage_reference_count,
-            "materialized_reference_count": materialized_reference_count,
-            "reference_cache_hit": reference_cache_hit,
-        },
+        payload=payload,
         event_bus=state.runtime_event_bus,
     )
 
@@ -342,7 +346,17 @@ def _record_app_references_materialize_failed(
     app_reference_count: int,
     storage_reference_count: int,
     error: Exception,
+    reference_action_timings: list[dict[str, object]] | None = None,
 ) -> RuntimeEventRecord:
+    payload: dict[str, object] = {
+        "provider_id": provider_id,
+        "app_reference_materialize_ms": round(elapsed_ms, 3),
+        "app_reference_count": app_reference_count,
+        "storage_reference_count": storage_reference_count,
+        "error_type": error.__class__.__name__,
+    }
+    if reference_action_timings:
+        payload["reference_action_timings"] = reference_action_timings
     return record_runtime_event(
         state.runtime_store,
         event_id=str(uuid4()),
@@ -350,13 +364,7 @@ def _record_app_references_materialize_failed(
         turn_id=turn_id,
         plane="turn",
         event_type="runtime.turn.app_references_materialize_failed",
-        payload={
-            "provider_id": provider_id,
-            "app_reference_materialize_ms": round(elapsed_ms, 3),
-            "app_reference_count": app_reference_count,
-            "storage_reference_count": storage_reference_count,
-            "error_type": error.__class__.__name__,
-        },
+        payload=payload,
         event_bus=state.runtime_event_bus,
     )
 

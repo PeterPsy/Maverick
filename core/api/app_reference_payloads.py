@@ -18,8 +18,10 @@ from core.api.app_reference_providers import (
     call_reference_tool,
     mcp_context_for_request,
     public_provider_payload,
+    reference_providers_by_app_id,
     reference_tool_runner,
     reference_providers,
+    visible_workspace_apps_by_app_id,
     visible_workspace_apps,
 )
 from core.api.session_api import RequestSession
@@ -79,7 +81,9 @@ class RuntimeAppReferenceRequestContext:
         self._context = context
         self._start_path = start_path
         self._visible_apps: dict[str, dict[str, Any]] | None = None
+        self._visible_apps_by_app_id: dict[str, dict[str, Any]] = {}
         self._providers_by_app_id: dict[str, dict[str, Any]] | None = None
+        self._targeted_providers_by_app_id: dict[str, dict[str, Any]] = {}
 
     def visible_apps(self) -> dict[str, dict[str, Any]]:
         if self._visible_apps is None:
@@ -101,6 +105,44 @@ class RuntimeAppReferenceRequestContext:
                 )
             }
         return self._providers_by_app_id
+
+    def visible_apps_for_app_ids(self, app_ids: set[str]) -> dict[str, dict[str, Any]]:
+        if not app_ids:
+            return {}
+        if self._visible_apps is not None:
+            return {app_id: self._visible_apps[app_id] for app_id in app_ids if app_id in self._visible_apps}
+        missing = {app_id for app_id in app_ids if app_id not in self._visible_apps_by_app_id}
+        if missing:
+            self._visible_apps_by_app_id.update(
+                visible_workspace_apps_by_app_id(
+                    self._state,
+                    context=self._context,
+                    start_path=self._start_path,
+                    app_ids=missing,
+                )
+            )
+        return {app_id: self._visible_apps_by_app_id[app_id] for app_id in app_ids if app_id in self._visible_apps_by_app_id}
+
+    def providers_for_app_ids(self, app_ids: set[str]) -> dict[str, dict[str, Any]]:
+        if not app_ids:
+            return {}
+        if self._providers_by_app_id is not None:
+            return {app_id: self._providers_by_app_id[app_id] for app_id in app_ids if app_id in self._providers_by_app_id}
+        missing = {app_id for app_id in app_ids if app_id not in self._targeted_providers_by_app_id}
+        if missing:
+            self._targeted_providers_by_app_id.update(
+                reference_providers_by_app_id(
+                    self._state,
+                    context=self._context,
+                    start_path=self._start_path,
+                    app_ids=missing,
+                )
+            )
+        return {
+            app_id: self._targeted_providers_by_app_id[app_id]
+            for app_id in app_ids
+            if app_id in self._targeted_providers_by_app_id
+        }
 
 
 def manifest_provider_payload(
@@ -240,8 +282,16 @@ def materialize_runtime_app_references_with_metrics(
     )
     needs_entity_providers = any(_reference_type(reference) == "entity" for reference in references)
     needs_visible_apps = any(_reference_type(reference) != "entity" for reference in references)
-    visible_apps = runtime_reference_context.visible_apps() if needs_visible_apps else {}
-    providers_by_app_id = runtime_reference_context.providers_by_app_id() if needs_entity_providers else {}
+    visible_apps = (
+        runtime_reference_context.visible_apps_for_app_ids(_reference_app_ids(references, entity_refs=False))
+        if needs_visible_apps
+        else {}
+    )
+    providers_by_app_id = (
+        runtime_reference_context.providers_for_app_ids(_reference_app_ids(references, entity_refs=True))
+        if needs_entity_providers
+        else {}
+    )
     mcp_context = mcp_context_for_request(state, context)
     reference_fingerprint = _runtime_reference_cache_fingerprint(
         context=context,
@@ -355,8 +405,16 @@ def validate_runtime_app_references(
     )
     needs_entity_providers = any(_reference_type(reference) == "entity" for reference in references)
     needs_visible_apps = any(_reference_type(reference) != "entity" for reference in references)
-    visible_apps = runtime_reference_context.visible_apps() if needs_visible_apps else {}
-    providers_by_app_id = runtime_reference_context.providers_by_app_id() if needs_entity_providers else {}
+    visible_apps = (
+        runtime_reference_context.visible_apps_for_app_ids(_reference_app_ids(references, entity_refs=False))
+        if needs_visible_apps
+        else {}
+    )
+    providers_by_app_id = (
+        runtime_reference_context.providers_for_app_ids(_reference_app_ids(references, entity_refs=True))
+        if needs_entity_providers
+        else {}
+    )
     validated: list[dict[str, object]] = []
     seen: set[str] = set()
     for reference in references:
@@ -391,6 +449,16 @@ def validate_runtime_app_references(
 
 def _reference_type(reference: dict[str, object]) -> str:
     return str(reference.get("type") or "app").strip().lower()
+
+
+def _reference_app_ids(references: list[dict[str, object]], *, entity_refs: bool) -> set[str]:
+    return {
+        app_id
+        for reference in references
+        if (_reference_type(reference) == "entity") == entity_refs
+        for app_id in [_bounded_text(reference.get("app_id"), max_length=120)]
+        if app_id
+    }
 
 
 def _validate_runtime_entity_reference(

@@ -11,7 +11,7 @@ import time
 from typing import Any
 
 from core.api.session_api import RequestSession
-from core.apps.errors import AppHostingError
+from core.apps.errors import AppHostingError, WorkspaceAppBindingNotFoundError
 from core.apps.surfaces import enabled_workspace_app_bindings, resolve_workspace_app_surface
 from core.authorization.service import can_mount_app_visibility, resolve_workspace_authorization
 from core.mcp.models import McpInvocationContext
@@ -22,7 +22,7 @@ from core.mcp.service import call_mcp_tool
 
 logger = logging.getLogger(__name__)
 REFERENCE_PROVIDER_DISCOVERY_TTL_SECONDS = 2.0
-_REFERENCE_PROVIDER_DISCOVERY_CACHE: dict[tuple[str, str, str, str], tuple[float, dict[str, dict[str, Any]], list[dict[str, Any]]]] = {}
+_REFERENCE_PROVIDER_DISCOVERY_CACHE: dict[tuple[str, str, str, str, str], tuple[float, dict[str, dict[str, Any]], list[dict[str, Any]]]] = {}
 _REFERENCE_PROVIDER_DISCOVERY_CACHE_LOCK = Lock()
 
 
@@ -35,6 +35,40 @@ def visible_workspace_apps(state, *, context: RequestSession, start_path: Path) 
 def reference_providers(state, *, context: RequestSession, start_path: Path) -> list[dict[str, Any]]:
     _visible_apps, providers = _workspace_reference_discovery(state, context=context, start_path=start_path)
     return [_copy_provider(provider) for provider in providers]
+
+
+def visible_workspace_apps_by_app_id(
+    state,
+    *,
+    context: RequestSession,
+    start_path: Path,
+    app_ids: set[str],
+) -> dict[str, dict[str, Any]]:
+    """Return visible enabled app bindings for the requested local app ids only."""
+    apps, _providers = _targeted_workspace_reference_discovery(
+        state,
+        context=context,
+        start_path=start_path,
+        app_ids=app_ids,
+    )
+    return apps
+
+
+def reference_providers_by_app_id(
+    state,
+    *,
+    context: RequestSession,
+    start_path: Path,
+    app_ids: set[str],
+) -> dict[str, dict[str, Any]]:
+    """Return reference providers for requested local app ids without workspace-wide discovery."""
+    _apps, providers = _targeted_workspace_reference_discovery(
+        state,
+        context=context,
+        start_path=start_path,
+        app_ids=app_ids,
+    )
+    return {provider["app_id"]: provider for provider in providers}
 
 
 def clear_reference_provider_discovery_cache() -> None:
@@ -78,53 +112,108 @@ def _discover_workspace_references(
     apps: dict[str, dict[str, Any]] = {}
     providers: list[dict[str, Any]] = []
     for binding in enabled_workspace_app_bindings(state.app_store, workspace_id=context.workspace_id):
-        try:
-            _source_root, parsed = resolve_workspace_app_surface(state.app_store, binding=binding, start_path=start_path)
-        except AppHostingError:
+        payloads = _reference_payloads_for_binding(state, binding=binding, context=context, start_path=start_path)
+        if payloads is None:
             continue
-        except Exception:
-            logger.exception("Skipping app `%s` after surface resolution failure.", binding.app_id)
-            continue
-        if not can_mount_app_visibility(
-            state.workspace_store,
-            user=context.user,
-            workspace_id=context.workspace_id,
-            platform_roles=parsed.contract.visibility.platform_roles,
-            workspace_roles=parsed.contract.visibility.workspace_roles,
-            capabilities=parsed.contract.visibility.capabilities,
-        ):
-            continue
-        binding_fingerprint = _binding_reference_fingerprint(binding)
-        apps[binding.app_id] = {
-            "app_id": binding.app_id,
-            "public_app_id": binding.public_app_id or parsed.app_id,
-            "mount_app_id": binding.mount_app_id or binding.app_id,
-            "name": parsed.name,
-            "description": parsed.description,
-            "binding_fingerprint": binding_fingerprint,
-        }
-        if not parsed.contract.capabilities.reference_entities:
-            continue
-        tool_names = set(parsed.contract.capabilities.mcp_tools)
-        providers.append(
-            {
-                "app_id": binding.app_id,
-                "public_app_id": binding.public_app_id or parsed.app_id,
-                "mount_app_id": binding.mount_app_id or binding.app_id,
-                "tool_owner_app_id": binding.app_id,
-                "name": parsed.name,
-                "description": parsed.description,
-                "binding_fingerprint": binding_fingerprint,
-                "entities": [asdict(entity) for entity in parsed.contract.capabilities.reference_entities],
-                "tools": {
-                    "manifest": _tool_by_suffix(tool_names, "_reference_manifest"),
-                    "search": _tool_by_suffix(tool_names, "_reference_search"),
-                    "resolve": _tool_by_suffix(tool_names, "_reference_resolve"),
-                    "summarize": _tool_by_suffix(tool_names, "_reference_summarize"),
-                },
-            }
-        )
+        app_payload, provider = payloads
+        apps[binding.app_id] = app_payload
+        if provider is not None:
+            providers.append(provider)
     return apps, providers
+
+
+def _targeted_workspace_reference_discovery(
+    state,
+    *,
+    context: RequestSession,
+    start_path: Path,
+    app_ids: set[str],
+) -> tuple[dict[str, dict[str, Any]], list[dict[str, Any]]]:
+    apps: dict[str, dict[str, Any]] = {}
+    providers: list[dict[str, Any]] = []
+    for app_id in sorted(item for item in app_ids if item):
+        binding = _enabled_workspace_app_binding_for_reference(state, context=context, app_id=app_id)
+        if binding is None:
+            continue
+        payloads = _reference_payloads_for_binding(state, binding=binding, context=context, start_path=start_path)
+        if payloads is None:
+            continue
+        app_payload, provider = payloads
+        apps[binding.app_id] = app_payload
+        if provider is not None:
+            providers.append(provider)
+    return apps, providers
+
+
+def _enabled_workspace_app_binding_for_reference(state, *, context: RequestSession, app_id: str):
+    try:
+        binding = state.app_store.get_workspace_app_binding(workspace_id=context.workspace_id, app_id=app_id)
+    except WorkspaceAppBindingNotFoundError:
+        binding = next(
+            (
+                candidate
+                for candidate in enabled_workspace_app_bindings(state.app_store, workspace_id=context.workspace_id)
+                if app_id in {candidate.mount_app_id or "", candidate.public_app_id or ""}
+            ),
+            None,
+        )
+    if binding is None or binding.status != "enabled":
+        return None
+    return binding
+
+
+def _reference_payloads_for_binding(
+    state,
+    *,
+    binding,
+    context: RequestSession,
+    start_path: Path,
+) -> tuple[dict[str, Any], dict[str, Any] | None] | None:
+    try:
+        _source_root, parsed = resolve_workspace_app_surface(state.app_store, binding=binding, start_path=start_path)
+    except AppHostingError:
+        return None
+    except Exception:
+        logger.exception("Skipping app `%s` after surface resolution failure.", binding.app_id)
+        return None
+    if not can_mount_app_visibility(
+        state.workspace_store,
+        user=context.user,
+        workspace_id=context.workspace_id,
+        platform_roles=parsed.contract.visibility.platform_roles,
+        workspace_roles=parsed.contract.visibility.workspace_roles,
+        capabilities=parsed.contract.visibility.capabilities,
+    ):
+        return None
+    binding_fingerprint = _binding_reference_fingerprint(binding)
+    app_payload = {
+        "app_id": binding.app_id,
+        "public_app_id": binding.public_app_id or parsed.app_id,
+        "mount_app_id": binding.mount_app_id or binding.app_id,
+        "name": parsed.name,
+        "description": parsed.description,
+        "binding_fingerprint": binding_fingerprint,
+    }
+    if not parsed.contract.capabilities.reference_entities:
+        return app_payload, None
+    tool_names = set(parsed.contract.capabilities.mcp_tools)
+    provider = {
+        "app_id": binding.app_id,
+        "public_app_id": binding.public_app_id or parsed.app_id,
+        "mount_app_id": binding.mount_app_id or binding.app_id,
+        "tool_owner_app_id": binding.app_id,
+        "name": parsed.name,
+        "description": parsed.description,
+        "binding_fingerprint": binding_fingerprint,
+        "entities": [asdict(entity) for entity in parsed.contract.capabilities.reference_entities],
+        "tools": {
+            "manifest": _tool_by_suffix(tool_names, "_reference_manifest"),
+            "search": _tool_by_suffix(tool_names, "_reference_search"),
+            "resolve": _tool_by_suffix(tool_names, "_reference_resolve"),
+            "summarize": _tool_by_suffix(tool_names, "_reference_summarize"),
+        },
+    }
+    return app_payload, provider
 
 
 def _binding_reference_fingerprint(binding) -> str:

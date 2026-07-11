@@ -122,8 +122,11 @@ class AppReferencesRuntimeApiTestCase(AppReferenceApiTestSupport, unittest.TestC
                 side_effect=AssertionError("entity refs should not load visible apps"),
             ), patch(
                 "core.api.app_reference_payloads.reference_providers",
-                wraps=app_reference_payloads.reference_providers,
-            ) as provider_discovery, patch(
+                side_effect=AssertionError("entity refs should not load all reference providers"),
+            ), patch(
+                "core.api.app_reference_payloads.reference_providers_by_app_id",
+                wraps=app_reference_payloads.reference_providers_by_app_id,
+            ) as targeted_provider_discovery, patch(
                 "core.api.app_reference_payloads.reference_tool_runner",
                 wraps=app_reference_payloads.reference_tool_runner,
             ) as tool_runner, patch(
@@ -162,7 +165,7 @@ class AppReferencesRuntimeApiTestCase(AppReferenceApiTestSupport, unittest.TestC
                 )
 
         self.assertEqual(status, 202)
-        self.assertEqual(provider_discovery.call_count, 1)
+        self.assertEqual(targeted_provider_discovery.call_count, 1)
         self.assertEqual(tool_runner.call_count, 1)
         self.assertEqual(
             captured["app_references"],

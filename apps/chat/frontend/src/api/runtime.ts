@@ -183,6 +183,26 @@ export function sendRuntimeTurn(
   });
 }
 
+export function prepareRuntimeSessionAppReferences(
+  sessionId: string,
+  appReferences: AppReference[] = [],
+  requestOptions: { signal?: AbortSignal } = {},
+): Promise<{
+  session_id: string;
+  status: "ready";
+  reference_count: number;
+  materialized_reference_count: number;
+  reference_cache_hit: boolean;
+  reference_fingerprint: string;
+}> {
+  return requestJson(`/api/runtime/sessions/${encodeURIComponent(sessionId)}/app-references/prepare`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    signal: requestOptions.signal,
+    body: JSON.stringify({ app_references: appReferences }),
+  });
+}
+
 export function uploadWorkspaceFile(payload: {
   filename: string;
   content_type: string;

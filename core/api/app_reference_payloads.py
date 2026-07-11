@@ -2,9 +2,13 @@
 
 from __future__ import annotations
 
+from copy import deepcopy
 from dataclasses import dataclass
+import hashlib
+import json
 import logging
 from pathlib import Path
+from threading import Lock
 import time
 from typing import Any
 
@@ -20,6 +24,9 @@ from core.api.session_api import RequestSession
 from core.mcp.models import McpInvocationContext
 
 logger = logging.getLogger(__name__)
+RUNTIME_APP_REFERENCE_CACHE_TTL_SECONDS = 300.0
+_RUNTIME_APP_REFERENCE_CACHE: dict[str, tuple[float, "RuntimeAppReferenceMaterializationResult"]] = {}
+_RUNTIME_APP_REFERENCE_CACHE_LOCK = Lock()
 
 
 @dataclass(frozen=True)
@@ -27,6 +34,13 @@ class RuntimeAppReferenceMaterializationResult:
     references: list[dict[str, object]]
     reference_action_timings: list[dict[str, object]]
     reference_cache_hit: bool = False
+    reference_fingerprint: str = ""
+
+
+def clear_runtime_app_reference_materialization_cache() -> None:
+    """Clear the non-persistent runtime app reference materialization cache."""
+    with _RUNTIME_APP_REFERENCE_CACHE_LOCK:
+        _RUNTIME_APP_REFERENCE_CACHE.clear()
 
 
 class RuntimeAppReferenceRequestContext:
@@ -186,6 +200,7 @@ def materialize_runtime_app_references_with_metrics(
     references: list[dict[str, object]],
     start_path: Path,
     reference_context: RuntimeAppReferenceRequestContext | None = None,
+    session_id: str = "",
 ) -> RuntimeAppReferenceMaterializationResult:
     """Verify client-submitted references and enrich entities with redaction-safe timings."""
     if not references:
@@ -200,6 +215,17 @@ def materialize_runtime_app_references_with_metrics(
     visible_apps = runtime_reference_context.visible_apps() if needs_visible_apps else {}
     providers_by_app_id = runtime_reference_context.providers_by_app_id() if needs_entity_providers else {}
     mcp_context = mcp_context_for_request(state, context)
+    reference_fingerprint = _runtime_reference_cache_fingerprint(
+        context=context,
+        mcp_context=mcp_context,
+        session_id=session_id,
+        references=references,
+        visible_apps=visible_apps,
+        providers_by_app_id=providers_by_app_id,
+    )
+    cached = _cached_runtime_app_reference_result(reference_fingerprint)
+    if cached is not None:
+        return cached
     reference_action_timings: list[dict[str, object]] = []
     runner = None
 
@@ -243,10 +269,13 @@ def materialize_runtime_app_references_with_metrics(
             continue
         seen.add(key)
         materialized.append(payload)
-    return RuntimeAppReferenceMaterializationResult(
+    result = RuntimeAppReferenceMaterializationResult(
         references=materialized,
         reference_action_timings=reference_action_timings,
+        reference_fingerprint=reference_fingerprint,
     )
+    _cache_runtime_app_reference_result(result)
+    return result
 
 
 def validate_runtime_app_references(
@@ -326,6 +355,7 @@ def _validate_runtime_entity_reference(
         "entity_id": entity_id,
         "label": entity_id,
         "summary": "",
+        **_safe_reference_metadata_payload(reference),
     }
 
 
@@ -471,6 +501,142 @@ def _append_reference_action_timing(
             "elapsed_ms": round(elapsed_ms, 3),
         }
     )
+
+
+def _cached_runtime_app_reference_result(reference_fingerprint: str) -> RuntimeAppReferenceMaterializationResult | None:
+    if not reference_fingerprint:
+        return None
+    now = time.monotonic()
+    with _RUNTIME_APP_REFERENCE_CACHE_LOCK:
+        cached = _RUNTIME_APP_REFERENCE_CACHE.get(reference_fingerprint)
+        if cached is None:
+            return None
+        expires_at, result = cached
+        if expires_at <= now:
+            _RUNTIME_APP_REFERENCE_CACHE.pop(reference_fingerprint, None)
+            return None
+    return RuntimeAppReferenceMaterializationResult(
+        references=deepcopy(result.references),
+        reference_action_timings=[],
+        reference_cache_hit=True,
+        reference_fingerprint=result.reference_fingerprint,
+    )
+
+
+def _cache_runtime_app_reference_result(result: RuntimeAppReferenceMaterializationResult) -> None:
+    if not result.reference_fingerprint:
+        return
+    cached = RuntimeAppReferenceMaterializationResult(
+        references=deepcopy(result.references),
+        reference_action_timings=[],
+        reference_cache_hit=False,
+        reference_fingerprint=result.reference_fingerprint,
+    )
+    with _RUNTIME_APP_REFERENCE_CACHE_LOCK:
+        _RUNTIME_APP_REFERENCE_CACHE[result.reference_fingerprint] = (
+            time.monotonic() + RUNTIME_APP_REFERENCE_CACHE_TTL_SECONDS,
+            cached,
+        )
+
+
+def _runtime_reference_cache_fingerprint(
+    *,
+    context: RequestSession,
+    mcp_context: McpInvocationContext,
+    session_id: str,
+    references: list[dict[str, object]],
+    visible_apps: dict[str, dict[str, Any]],
+    providers_by_app_id: dict[str, dict[str, Any]],
+) -> str:
+    payload = {
+        "workspace_id": context.workspace_id,
+        "user_id": context.user.user_id,
+        "platform_role": context.user.platform_role,
+        "workspace_role": mcp_context.workspace_role or "",
+        "effective_mode": mcp_context.effective_mode,
+        "session_id": session_id,
+        "references": [
+            _reference_cache_key_payload(
+                reference,
+                visible_apps=visible_apps,
+                providers_by_app_id=providers_by_app_id,
+            )
+            for reference in references
+            if isinstance(reference, dict)
+        ],
+    }
+    encoded = json.dumps(payload, sort_keys=True, separators=(",", ":")).encode("utf-8")
+    return hashlib.sha256(encoded).hexdigest()
+
+
+def _reference_cache_key_payload(
+    reference: dict[str, object],
+    *,
+    visible_apps: dict[str, dict[str, Any]],
+    providers_by_app_id: dict[str, dict[str, Any]],
+) -> dict[str, object]:
+    app_id = _bounded_text(reference.get("app_id"), max_length=120)
+    entity_type = _bounded_text(reference.get("entity_type"), max_length=120)
+    provider = providers_by_app_id.get(app_id)
+    return {
+        "type": _reference_type(reference),
+        "app_id": app_id,
+        "entity_type": entity_type,
+        "entity_id": _bounded_text(reference.get("entity_id") or reference.get("id"), max_length=240),
+        "action": "runtime_materialize",
+        "app": _visible_app_cache_key_payload(visible_apps.get(app_id)),
+        "provider": _provider_cache_key_payload(provider, entity_type=entity_type),
+        "metadata": _safe_reference_metadata(reference),
+    }
+
+
+def _visible_app_cache_key_payload(app: dict[str, Any] | None) -> dict[str, object]:
+    if app is None:
+        return {}
+    return {
+        "app_id": app.get("app_id") or "",
+        "public_app_id": app.get("public_app_id") or "",
+        "mount_app_id": app.get("mount_app_id") or "",
+        "binding_fingerprint": app.get("binding_fingerprint") or "",
+        "name": app.get("name") or "",
+    }
+
+
+def _provider_cache_key_payload(provider: dict[str, Any] | None, *, entity_type: str) -> dict[str, object]:
+    if provider is None:
+        return {}
+    declaration = next((item for item in provider.get("entities", []) if item.get("entity_type") == entity_type), {})
+    return {
+        "app_id": provider.get("app_id") or "",
+        "public_app_id": provider.get("public_app_id") or "",
+        "mount_app_id": provider.get("mount_app_id") or "",
+        "tool_owner_app_id": provider.get("tool_owner_app_id") or "",
+        "binding_fingerprint": provider.get("binding_fingerprint") or "",
+        "tools": dict(provider.get("tools") if isinstance(provider.get("tools"), dict) else {}),
+        "entity": {
+            "entity_type": declaration.get("entity_type") or "",
+            "resolvable": bool(declaration.get("resolvable")),
+            "summarizable": bool(declaration.get("summarizable")),
+            "deep_link_supported": bool(declaration.get("deep_link_supported")),
+        },
+    }
+
+
+def _safe_reference_metadata_payload(reference: dict[str, object]) -> dict[str, object]:
+    metadata = _safe_reference_metadata(reference)
+    return {"metadata": metadata} if metadata else {}
+
+
+def _safe_reference_metadata(reference: dict[str, object]) -> dict[str, str]:
+    raw_metadata = reference.get("metadata")
+    if not isinstance(raw_metadata, dict):
+        return {}
+    safe: dict[str, str] = {}
+    for key in ("sha256", "modified_at", "source_updated_at", "fingerprint"):
+        value = _bounded_text(raw_metadata.get(key), max_length=240)
+        if value:
+            safe[key] = value
+    return safe
 
 
 def _merge_reference_payloads(resolved: dict[str, object], summarized: dict[str, object]) -> dict[str, object]:

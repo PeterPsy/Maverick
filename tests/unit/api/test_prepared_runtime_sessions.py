@@ -8,13 +8,19 @@ from unittest.mock import patch
 
 from core.api.platform_host import PlatformHost
 from core.api.platform_state import bootstrap_platform_state
+from core.api.app_reference_payloads import clear_runtime_app_reference_materialization_cache
+from core.apps.service import install_store_app, register_app_source_from_contract
 from core.runtime.runtime_thread import RuntimeThreadRecord
+from core.runtime.runtime_turns import RuntimeTurnRecord
 from core.runtime.service import queue_runtime_turn
 from core.runtime.turn_submission_service_queue import _queue_turn_with_event
 from tests.unit.api.app_reference_test_support import AppReferenceApiTestSupport
 
 
 class PreparedRuntimeSessionsApiTestCase(AppReferenceApiTestSupport, unittest.TestCase):
+    def setUp(self) -> None:
+        clear_runtime_app_reference_materialization_cache()
+
     def test_prepare_only_session_promotes_on_first_turn_with_draft_metadata(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             repo_root = self._repo_root(temp_dir)
@@ -199,6 +205,130 @@ class PreparedRuntimeSessionsApiTestCase(AppReferenceApiTestSupport, unittest.Te
             self.assertTrue(interrupt_payload["interrupted"])
             self.assertEqual(state.runtime_store.get_session(session_id).thread_visibility, "user")
             self.assertEqual(state.runtime_store.get_turn(turn.turn_id).status, "cancelled")
+
+    def test_prepare_only_app_references_are_cached_for_first_turn(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            repo_root = self._repo_root(temp_dir)
+            self._write_reference_app(repo_root / "apps" / "records")
+            with patch.dict(
+                "os.environ",
+                {
+                    "MAVERICK_ALLOW_INSECURE_TEST_DEFAULTS": "1",
+                    "MAVERICK_ADMIN_USERNAME": "admin",
+                    "MAVERICK_ADMIN_PASSWORD": "maverick",
+                },
+            ):
+                state = bootstrap_platform_state(start_path=repo_root)
+            source = register_app_source_from_contract(
+                state.app_store,
+                source_kind="platform",
+                source_path=str(repo_root / "apps" / "records"),
+            )
+            install_store_app(state.app_store, source_id=source.source_id, workspace_id="default", start_path=repo_root)
+            app = PlatformHost(state, start_path=repo_root)
+            cookie = self._login(app)
+
+            with patch("core.api.runtime_api._prewarm_new_runtime_session"):
+                status, payload, _headers = self._invoke(
+                    app,
+                    path="/api/runtime/sessions",
+                    method="POST",
+                    body={"agent_id": "chat", "source_app_id": "chat", "prepare_only": True},
+                    cookie=cookie,
+                )
+
+            self.assertEqual(status, 201)
+            session_id = payload["session_id"]
+            app_references = [
+                {"type": "entity", "app_id": "records", "entity_type": "record", "entity_id": "record-1"},
+            ]
+            prepare_status, prepare_payload, _headers = self._invoke(
+                app,
+                path=f"/api/runtime/sessions/{session_id}/app-references/prepare",
+                method="POST",
+                body={"app_references": app_references},
+                cookie=cookie,
+            )
+            second_prepare_status, second_prepare_payload, _headers = self._invoke(
+                app,
+                path=f"/api/runtime/sessions/{session_id}/app-references/prepare",
+                method="POST",
+                body={"app_references": app_references},
+                cookie=cookie,
+            )
+            changed_fingerprint_references = [
+                {
+                    "type": "entity",
+                    "app_id": "records",
+                    "entity_type": "record",
+                    "entity_id": "record-1",
+                    "metadata": {"sha256": "changed"},
+                },
+            ]
+            changed_prepare_status, changed_prepare_payload, _headers = self._invoke(
+                app,
+                path=f"/api/runtime/sessions/{session_id}/app-references/prepare",
+                method="POST",
+                body={"app_references": changed_fingerprint_references},
+                cookie=cookie,
+            )
+            captured: dict[str, object] = {}
+
+            def fake_submit_runtime_turn_async(
+                _submit_state,
+                *,
+                session,
+                input_text,
+                app_references=None,
+                app_reference_materializer=None,
+                **_kwargs,
+            ):
+                if callable(app_reference_materializer):
+                    materialized = app_reference_materializer(app_references or [])
+                    captured["reference_cache_hit"] = getattr(materialized, "reference_cache_hit", False)
+                    captured["materialized_app_references"] = getattr(materialized, "references", materialized)
+                now = datetime.now(tz=UTC)
+                return RuntimeTurnRecord(
+                    turn_id="turn-prepared-refs",
+                    session_id=session.session_id,
+                    workspace_id=session.workspace_id,
+                    status="queued",
+                    input_text=input_text,
+                    created_at=now,
+                    updated_at=now,
+                    started_at=None,
+                    completed_at=None,
+                    failure_reason=None,
+                ), []
+
+            with patch("core.api.runtime_api.submit_runtime_turn_async", side_effect=fake_submit_runtime_turn_async):
+                turn_status, _turn_payload, _headers = self._invoke(
+                    app,
+                    path=f"/api/runtime/sessions/{session_id}/turns",
+                    method="POST",
+                    body={
+                        "input_text": "Review @Launch record [ref:records/record/record-1]",
+                        "client_message_id": "client-prepared-refs",
+                        "app_references": app_references,
+                        "async": True,
+                    },
+                    cookie=cookie,
+                )
+
+            self.assertEqual(prepare_status, 200)
+            self.assertEqual(prepare_payload["status"], "ready")
+            self.assertEqual(prepare_payload["reference_count"], 1)
+            self.assertEqual(prepare_payload["materialized_reference_count"], 1)
+            self.assertFalse(prepare_payload["reference_cache_hit"])
+            self.assertEqual(second_prepare_status, 200)
+            self.assertTrue(second_prepare_payload["reference_cache_hit"])
+            self.assertEqual(second_prepare_payload["reference_fingerprint"], prepare_payload["reference_fingerprint"])
+            self.assertEqual(changed_prepare_status, 200)
+            self.assertFalse(changed_prepare_payload["reference_cache_hit"])
+            self.assertNotEqual(changed_prepare_payload["reference_fingerprint"], prepare_payload["reference_fingerprint"])
+            self.assertEqual(turn_status, 202)
+            self.assertTrue(captured["reference_cache_hit"])
+            self.assertEqual(captured["materialized_app_references"][0]["label"], "Launch record")
 
     def test_invalid_prepare_only_first_turn_keeps_session_hidden_without_thread(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:

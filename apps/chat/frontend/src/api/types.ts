@@ -415,6 +415,7 @@ export type AppEntityReference = {
   summary?: string;
   deep_link?: string;
   exists?: boolean;
+  metadata?: Record<string, unknown>;
 };
 
 export type AppReference = AppAppReference | AppEntityReference;

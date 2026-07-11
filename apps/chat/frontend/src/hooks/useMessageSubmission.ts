@@ -16,6 +16,7 @@ import {
   executeInterAgentRun,
   interruptRuntimeTurn,
   isRuntimeSessionUnavailableError,
+  prepareRuntimeSessionAppReferences,
   sendRuntimeTurn,
 } from "../api/client";
 import type { ComposerAttachment } from "../lib/attachments";
@@ -114,6 +115,13 @@ type PreparedRuntimeSessionRequest = {
   conversationKey: string;
   key: string;
   promise: Promise<PreparedRuntimeSession | null>;
+};
+
+type PreparedAppReferencesRequest = {
+  abortController: AbortController;
+  key: string;
+  sessionId: string;
+  promise: Promise<void>;
 };
 
 export function conversationKeyFor(activeThread: ChatThread | null, draftChat: DraftChat | null): string {
@@ -256,6 +264,24 @@ function preparedRuntimeSessionKey(conversationKey: string, options: RuntimeSess
   });
 }
 
+function stableJson(value: unknown): string {
+  if (Array.isArray(value)) {
+    return `[${value.map(stableJson).join(",")}]`;
+  }
+  if (value && typeof value === "object") {
+    const record = value as Record<string, unknown>;
+    return `{${Object.keys(record)
+      .sort()
+      .map((key) => `${JSON.stringify(key)}:${stableJson(record[key])}`)
+      .join(",")}}`;
+  }
+  return JSON.stringify(value) ?? "null";
+}
+
+function preparedAppReferencesKey(sessionId: string, appReferences: AppReference[]): string {
+  return stableJson({ app_references: appReferences, session_id: sessionId });
+}
+
 export function useMessageSubmission({
   activeAppContext,
   activeThread,
@@ -294,6 +320,7 @@ export function useMessageSubmission({
   const inFlightSubmissionsRef = useRef<Record<string, InFlightSubmission>>({});
   const preparedRuntimeSessionRef = useRef<PreparedRuntimeSession | null>(null);
   const preparedRuntimeSessionRequestRef = useRef<PreparedRuntimeSessionRequest | null>(null);
+  const preparedAppReferencesRequestRef = useRef<PreparedAppReferencesRequest | null>(null);
   const [pendingUserMessagesByConversationKey, setPendingUserMessagesByConversationKey] = useState<ConversationItems<PendingMessage>>({});
   const [failedUserMessagesByConversationKey, setFailedUserMessagesByConversationKey] = useState<ConversationItems<PendingMessage>>({});
   const [queuedMessagesByConversationKey, setQueuedMessagesByConversationKey] = useState<ConversationItems<QueuedMessage>>({});
@@ -345,6 +372,69 @@ export function useMessageSubmission({
       })
       .catch(() => undefined);
   }, [activeAppContext, activeConversationKey, activeThread, draftChat, isBootstrapping, selectedAgentRuntimeConfig, threads]);
+
+  useEffect(() => {
+    if (!draftChat || activeThread || isBootstrapping || !activeConversationKey) {
+      cancelPreparedAppReferencesRequest();
+      return;
+    }
+    const input = composer.trim();
+    if (!input) {
+      return;
+    }
+    const appReferences = mergeAppReferences(appReferencesFromText(input, composerMentionItems), activeAppContext);
+    if (!appReferences.length) {
+      return;
+    }
+    const target: SubmissionTarget = {
+      activeAppContext,
+      conversationKey: activeConversationKey,
+      draftChat,
+      thread: null,
+      threadIds: new Set(threads.map((item) => item.thread_id)),
+    };
+    const abortController = new AbortController();
+    const timeout = window.setTimeout(() => {
+      void buildRuntimeSessionOptions(target, abortController.signal)
+        .then(({ options }) => {
+          throwIfAborted(abortController.signal);
+          const key = preparedRuntimeSessionKey(activeConversationKey, options);
+          const prepared = preparedRuntimeSessionRef.current;
+          if (prepared?.key === key) {
+            startPreparedAppReferencesRequest(prepared.session.session_id, appReferences);
+            return null;
+          }
+          const pending = preparedRuntimeSessionRequestRef.current;
+          if (pending?.key === key) {
+            return waitForPreparedRuntimeSession(pending, abortController.signal);
+          }
+          return requestPreparedRuntimeSession(activeConversationKey, key, options);
+        })
+        .then((prepared) => {
+          throwIfAborted(abortController.signal);
+          if (prepared) {
+            startPreparedAppReferencesRequest(prepared.session.session_id, appReferences);
+          }
+        })
+        .catch((error) => {
+          void error;
+        });
+    }, 300);
+    return () => {
+      window.clearTimeout(timeout);
+      abortController.abort();
+    };
+  }, [
+    activeAppContext,
+    activeConversationKey,
+    activeThread,
+    composer,
+    composerMentionItems,
+    draftChat,
+    isBootstrapping,
+    selectedAgentRuntimeConfig,
+    threads,
+  ]);
 
   const setPendingUserMessages = useCallback<Dispatch<SetStateAction<PendingMessage[]>>>((action) => {
     setItemsForConversation(setPendingUserMessagesByConversationKey, activeConversationKeyRef.current, action);
@@ -474,6 +564,7 @@ export function useMessageSubmission({
     if (preserveInFlight && preparedRuntimeSessionHasInFlightConsumer()) {
       return;
     }
+    cancelPreparedAppReferencesRequest();
     if (pending) {
       pending.abortController.abort();
       preparedRuntimeSessionRequestRef.current = null;
@@ -578,9 +669,97 @@ export function useMessageSubmission({
     if (!prepared) {
       return;
     }
+    if (preparedAppReferencesRequestRef.current?.sessionId === prepared.session.session_id) {
+      cancelPreparedAppReferencesRequest();
+    }
     if (preparedRuntimeSessionRef.current?.key === prepared.key) {
       preparedRuntimeSessionRef.current = null;
     }
+  }
+
+  function cancelPreparedAppReferencesRequest() {
+    const pending = preparedAppReferencesRequestRef.current;
+    if (pending) {
+      pending.abortController.abort();
+      preparedAppReferencesRequestRef.current = null;
+    }
+  }
+
+  function startPreparedAppReferencesRequest(sessionId: string, appReferences: AppReference[]): PreparedAppReferencesRequest | null {
+    if (!appReferences.length) {
+      cancelPreparedAppReferencesRequest();
+      return null;
+    }
+    const key = preparedAppReferencesKey(sessionId, appReferences);
+    const existing = preparedAppReferencesRequestRef.current;
+    if (existing?.key === key) {
+      return existing;
+    }
+    cancelPreparedAppReferencesRequest();
+    const abortController = new AbortController();
+    const request: PreparedAppReferencesRequest = {
+      abortController,
+      key,
+      sessionId,
+      promise: prepareRuntimeSessionAppReferences(sessionId, appReferences, { signal: abortController.signal })
+        .then(() => undefined)
+        .catch((error) => {
+          if (!isAbortError(error)) {
+            return undefined;
+          }
+          return undefined;
+        })
+        .finally(() => {
+          if (preparedAppReferencesRequestRef.current?.key === key) {
+            preparedAppReferencesRequestRef.current = null;
+          }
+        }),
+    };
+    preparedAppReferencesRequestRef.current = request;
+    return request;
+  }
+
+  async function waitForPreparedAppReferencesRequest(
+    request: PreparedAppReferencesRequest,
+    signal: AbortSignal,
+    timeoutMs: number,
+  ): Promise<boolean> {
+    throwIfAborted(signal);
+    return new Promise((resolve, reject) => {
+      let settled = false;
+      let timer: number | undefined;
+      const cleanup = () => {
+        signal.removeEventListener("abort", abort);
+        if (timer !== undefined) {
+          window.clearTimeout(timer);
+        }
+      };
+      const finish = (action: () => void) => {
+        if (settled) {
+          return;
+        }
+        settled = true;
+        cleanup();
+        action();
+      };
+      const abort = () => finish(() => reject(abortError()));
+      signal.addEventListener("abort", abort, { once: true });
+      if (timeoutMs > 0) {
+        timer = window.setTimeout(() => finish(() => resolve(false)), timeoutMs);
+      }
+      void request.promise.then(
+        () => finish(() => resolve(true)),
+        () => finish(() => resolve(false)),
+      );
+    });
+  }
+
+  async function waitForPreparedAppReferencesIfInFlight(sessionId: string, appReferences: AppReference[], signal: AbortSignal) {
+    const pending = preparedAppReferencesRequestRef.current;
+    if (!pending || pending.key !== preparedAppReferencesKey(sessionId, appReferences)) {
+      return;
+    }
+    await waitForPreparedAppReferencesRequest(pending, signal, 250);
   }
 
   function migrateConversationState(fromConversationKey: string, toConversationKey: string) {
@@ -818,6 +997,11 @@ export function useMessageSubmission({
         const prepared = await preparedRuntimeSessionForOptions(target.conversationKey, runtimeOptions.options, abortController.signal);
         if (prepared) {
           try {
+            await waitForPreparedAppReferencesIfInFlight(
+              prepared.session.session_id,
+              message.appReferences,
+              abortController.signal,
+            );
             response = await sendRuntimeTurn(
               prepared.session.session_id,
               message.content,

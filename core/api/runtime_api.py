@@ -1303,6 +1303,63 @@ def _handle_session_turns(
     )
 
 
+def _handle_session_app_references_prepare(
+    state: PlatformState,
+    context: RequestSession,
+    session_id: str,
+    method: str,
+    body: dict,
+    start_response: StartResponse,
+    *,
+    start_path,
+):
+    if method != "POST":
+        return json_response(start_response, {"error": "method_not_allowed"}, status="405 Method Not Allowed")
+    try:
+        session = state.runtime_store.get_session(session_id)
+    except (RuntimeSessionNotFoundError, ValueError):
+        return json_response(start_response, {"error": "runtime_session_not_found"}, status="404 Not Found")
+    if session.workspace_id != context.workspace_id:
+        return json_response(start_response, {"error": "runtime_session_not_found"}, status="404 Not Found")
+    if not runtime_session_allows_user_thread(session) and not _prepared_session_can_be_promoted(session, context):
+        return _hidden_runtime_session_response(start_response, session)
+    raw_references = body.get("app_references") if isinstance(body.get("app_references"), list) else []
+    reference_items = [item for item in raw_references if isinstance(item, dict)]
+    if runtime_session_is_plain_hosted_chat(session) and reference_items:
+        return json_response(start_response, {"error": "plain_hosted_chat_blocks_app_references"}, status="400 Bad Request")
+    reference_context = RuntimeAppReferenceRequestContext(
+        state,
+        context=context,
+        start_path=start_path,
+    )
+    validated = validate_runtime_app_references(
+        state,
+        context=context,
+        references=reference_items,
+        start_path=start_path,
+        reference_context=reference_context,
+    )
+    materialized = materialize_runtime_app_references_with_metrics(
+        state,
+        context=context,
+        references=validated,
+        start_path=start_path,
+        reference_context=reference_context,
+        session_id=session.session_id,
+    )
+    return json_response(
+        start_response,
+        {
+            "session_id": session.session_id,
+            "status": "ready",
+            "reference_count": len(validated),
+            "materialized_reference_count": len(materialized.references),
+            "reference_cache_hit": materialized.reference_cache_hit,
+            "reference_fingerprint": materialized.reference_fingerprint,
+        },
+    )
+
+
 def _runtime_turn_requested(body: dict) -> bool:
     attachments = body.get("attachments") if isinstance(body.get("attachments"), list) else []
     return bool(str(body.get("input_text") or body.get("message") or "").strip() or attachments)
@@ -1453,6 +1510,7 @@ def _queue_runtime_turn_response(
             references=references,
             start_path=start_path,
             reference_context=app_reference_context,
+            session_id=session.session_id,
         )
 
     def notify_source_app_queued(queued_turn: RuntimeTurnRecord, _events: list[RuntimeEventRecord]) -> None:
@@ -1779,6 +1837,23 @@ def handle_runtime_api(state: PlatformState, environ: dict, start_response: Star
                 start_response,
                 start_path=start_path,
                 received_perf_counter=received_perf_counter,
+            ),
+        )
+    if len(parts) == 4 and parts[0] == "sessions" and parts[2] == "app-references" and parts[3] == "prepare":
+        return _timed_runtime_api_response(
+            state,
+            context,
+            route="/api/runtime/sessions/:id/app-references/prepare",
+            method=method,
+            runtime_session_id=parts[1],
+            handler=lambda: _handle_session_app_references_prepare(
+                state,
+                context,
+                parts[1],
+                method,
+                body,
+                start_response,
+                start_path=start_path,
             ),
         )
     if len(parts) == 3 and parts[0] == "sessions" and parts[2] == "cleanup":

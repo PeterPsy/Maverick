@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import asdict
+import hashlib
 import logging
 from pathlib import Path
 from threading import Lock
@@ -93,12 +94,14 @@ def _discover_workspace_references(
             capabilities=parsed.contract.visibility.capabilities,
         ):
             continue
+        binding_fingerprint = _binding_reference_fingerprint(binding)
         apps[binding.app_id] = {
             "app_id": binding.app_id,
             "public_app_id": binding.public_app_id or parsed.app_id,
             "mount_app_id": binding.mount_app_id or binding.app_id,
             "name": parsed.name,
             "description": parsed.description,
+            "binding_fingerprint": binding_fingerprint,
         }
         if not parsed.contract.capabilities.reference_entities:
             continue
@@ -111,6 +114,7 @@ def _discover_workspace_references(
                 "tool_owner_app_id": binding.app_id,
                 "name": parsed.name,
                 "description": parsed.description,
+                "binding_fingerprint": binding_fingerprint,
                 "entities": [asdict(entity) for entity in parsed.contract.capabilities.reference_entities],
                 "tools": {
                     "manifest": _tool_by_suffix(tool_names, "_reference_manifest"),
@@ -121,6 +125,21 @@ def _discover_workspace_references(
             }
         )
     return apps, providers
+
+
+def _binding_reference_fingerprint(binding) -> str:
+    raw = "|".join(
+        (
+            binding.app_id,
+            binding.public_app_id or "",
+            binding.mount_app_id or "",
+            binding.source_record_id,
+            binding.status,
+            binding.active_version,
+            binding.updated_at,
+        )
+    )
+    return hashlib.sha256(raw.encode("utf-8")).hexdigest()
 
 
 def public_provider_payload(provider: dict[str, Any]) -> dict[str, Any]:

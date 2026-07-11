@@ -224,10 +224,12 @@ def transition_runtime_turn(
     now: datetime | None = None,
     timing_payload: dict[str, float] | None = None,
     update_thread: bool = True,
+    current_turn: RuntimeTurnRecord | None = None,
+    current_session: RuntimeSessionRecord | None = None,
 ) -> RuntimeTurnRecord:
     """Transition one runtime turn between canonical lifecycle statuses."""
     timestamp = now or utcnow()
-    turn = store.get_turn(turn_id)
+    turn = current_turn if current_turn is not None and current_turn.turn_id == turn_id else store.get_turn(turn_id)
     allowed: dict[RuntimeTurnStatus, set[RuntimeTurnStatus]] = {
         "queued": {"active", "failed", "cancelled", "timed-out"},
         "active": {"completed", "failed", "cancelled", "timed-out"},
@@ -258,7 +260,11 @@ def transition_runtime_turn(
         )
     )
     _record_transition_timing(timing_payload, "save_state_ms", save_state_started_at)
-    session = store.get_session(turn.session_id)
+    session = (
+        current_session
+        if current_session is not None and current_session.session_id == turn.session_id
+        else store.get_session(turn.session_id)
+    )
     save_session_started_at = time.perf_counter()
     store.save_session(replace(session, last_progress_at=timestamp, updated_at=timestamp))
     _record_transition_timing(timing_payload, "save_session_ms", save_session_started_at)

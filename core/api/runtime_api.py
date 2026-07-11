@@ -68,6 +68,7 @@ from core.runtime.turn_submission import (
     release_idle_runtime_processes,
     submit_runtime_turn,
     submit_runtime_turn_async,
+    wait_for_runtime_session_prewarm,
 )
 from core.runtime.turn_submission_service_queue import (
     RuntimeTurnSubmissionTiming,
@@ -79,6 +80,7 @@ from core.skills.runtime_catalog import runtime_skill_catalog_app_id_for_request
 
 IDEMPOTENT_CLAIM_WAIT_SECONDS = 5.0
 PREPARED_SESSION_TTL_SECONDS = 30 * 60
+PREPARED_SESSION_PREWARM_WAIT_SECONDS = 2.0
 RUNTIME_THREAD_PAGE_DEFAULT_LIMIT = 50
 RUNTIME_THREAD_PAGE_MAX_LIMIT = 100
 
@@ -374,9 +376,16 @@ def _record_timing_duration(
         timing.record_duration_ms(name, started_perf_counter)
 
 
-def _prewarm_new_runtime_session(state: PlatformState, session: RuntimeSessionRecord) -> None:
+def _prewarm_new_runtime_session(
+    state: PlatformState,
+    session: RuntimeSessionRecord,
+    *,
+    wait_seconds: float = 0.0,
+) -> None:
     with suppress(Exception):
         prewarm_runtime_session_async(state, session=session)
+        if wait_seconds > 0:
+            wait_for_runtime_session_prewarm(session.session_id, timeout_seconds=wait_seconds)
 
 
 def _mark_client_message_claim_queued(state: PlatformState, claim: RuntimeClientMessageClaim | None) -> None:
@@ -824,7 +833,12 @@ def _handle_session_collection(
                 {"error": "runtime_skill_catalog_unavailable", "detail": str(error)},
                 status="400 Bad Request",
             )
-        _prewarm_new_runtime_session(state, session)
+        if not turn_requested:
+            _prewarm_new_runtime_session(
+                state,
+                session,
+                wait_seconds=PREPARED_SESSION_PREWARM_WAIT_SECONDS if prepare_only else 0.0,
+            )
         if turn_requested:
             try:
                 return _submit_runtime_turn_response(

@@ -70,7 +70,7 @@ _SESSION_EXECUTION_LOCKS_LOCK = Lock()
 _ACTIVE_TURN_STATUSES = {"queued", "active"}
 _IDLE_RUNTIME_REAP_TTL_SECONDS = 180.0
 _PREWARM_AFTER_TURN_DELAY_SECONDS = 0.05
-_PREWARM_JOIN_TIMEOUT_SECONDS = 2.0
+_PREWARM_JOIN_TIMEOUT_SECONDS = 0.25
 _IDLE_REAP_TIMERS: dict[str, Timer] = {}
 _IDLE_REAP_TIMERS_LOCK = Lock()
 _PREWARM_COMPLETIONS: dict[str, "_SessionPrewarmState"] = {}
@@ -303,6 +303,11 @@ def _wait_for_session_prewarm(
             prewarm_total_ms=prewarm_total_ms,
         )
     return completed
+
+
+def wait_for_runtime_session_prewarm(session_id: str, *, timeout_seconds: float = _PREWARM_JOIN_TIMEOUT_SECONDS) -> bool:
+    """Wait briefly for an in-flight best-effort prewarm without recording turn events."""
+    return _wait_for_session_prewarm(session_id, timeout_seconds=timeout_seconds)
 
 
 def _record_session_prewarm_started(state: PlatformState, *, session: RuntimeSessionRecord) -> RuntimeEventRecord | None:
@@ -580,6 +585,8 @@ def submit_runtime_turn_async(
                             turn_id=turn.turn_id,
                             target_status="failed",
                             failure_reason=str(error),
+                            current_turn=current,
+                            current_session=session,
                         )
                         _record_turn_failed(
                             state,
@@ -604,6 +611,8 @@ def submit_runtime_turn_async(
                     target_status="active",
                     timing_payload=transition_timings,
                     update_thread=False,
+                    current_turn=current,
+                    current_session=session,
                 )
                 transition_active_ms = (time.perf_counter() - transition_started_at) * 1000
                 started_event = _record_turn_started(state, session_id=session.session_id, turn_id=active.turn_id, provider_id=worker_provider_id)
@@ -881,7 +890,14 @@ def submit_runtime_turn_async(
                 force_idle_reap = not plain_hosted
                 current = state.runtime_store.get_turn(turn.turn_id)
                 if current.status not in {"completed", "failed", "cancelled", "timed-out"}:
-                    failed = transition_runtime_turn(state.runtime_store, turn_id=turn.turn_id, target_status="failed", failure_reason=failure_reason)
+                    failed = transition_runtime_turn(
+                        state.runtime_store,
+                        turn_id=turn.turn_id,
+                        target_status="failed",
+                        failure_reason=failure_reason,
+                        current_turn=current,
+                        current_session=session,
+                    )
                     _record_turn_failed(
                         state,
                         session_id=session.session_id,

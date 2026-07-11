@@ -754,12 +754,12 @@ export function useMessageSubmission({
     });
   }
 
-  async function waitForPreparedAppReferencesIfInFlight(sessionId: string, appReferences: AppReference[], signal: AbortSignal) {
-    const pending = preparedAppReferencesRequestRef.current;
-    if (!pending || pending.key !== preparedAppReferencesKey(sessionId, appReferences)) {
+  async function prepareAppReferencesForSubmit(sessionId: string, appReferences: AppReference[], signal: AbortSignal) {
+    const request = startPreparedAppReferencesRequest(sessionId, appReferences);
+    if (!request) {
       return;
     }
-    await waitForPreparedAppReferencesRequest(pending, signal, 250);
+    await waitForPreparedAppReferencesRequest(request, signal, 0);
   }
 
   function migrateConversationState(fromConversationKey: string, toConversationKey: string) {
@@ -997,7 +997,7 @@ export function useMessageSubmission({
         const prepared = await preparedRuntimeSessionForOptions(target.conversationKey, runtimeOptions.options, abortController.signal);
         if (prepared) {
           try {
-            await waitForPreparedAppReferencesIfInFlight(
+            await prepareAppReferencesForSubmit(
               prepared.session.session_id,
               message.appReferences,
               abortController.signal,
@@ -1044,6 +1044,7 @@ export function useMessageSubmission({
             });
           }
           if (session) {
+            await prepareAppReferencesForSubmit(session.session_id, message.appReferences, abortController.signal);
             response = await sendRuntimeTurn(
               session.session_id,
               message.content,
@@ -1060,6 +1061,7 @@ export function useMessageSubmission({
         if (!thread.runtime_session_id) {
           throw new Error("This chat does not have a runtime session.");
         }
+        await prepareAppReferencesForSubmit(thread.runtime_session_id, message.appReferences, abortController.signal);
         response = await sendRuntimeTurn(
           thread.runtime_session_id,
           message.content,

@@ -235,9 +235,17 @@ class RuntimeDocumentStore:
     def __init__(self, collections: RuntimeCollections) -> None:
         self.collections = collections
         self._fallback_lock = RLock()
+        self._partition_index_lock = RLock()
+        self._session_workspace_index: dict[str, str] = {}
+        self._turn_partition_index: dict[str, tuple[str, str]] = {}
 
     def save_session(self, record: RuntimeSessionRecord) -> RuntimeSessionRecord:
-        self.collections.sessions.update_one({"session_id": record.session_id}, {"$set": asdict(record)}, upsert=True)
+        self.collections.sessions.update_one(
+            {"session_id": record.session_id, "workspace_id": record.workspace_id},
+            {"$set": asdict(record)},
+            upsert=True,
+        )
+        self._remember_session_partition(record.session_id, record.workspace_id)
         return record
 
     def save_api_token(self, record: RuntimeApiTokenRecord) -> RuntimeApiTokenRecord:
@@ -263,10 +271,16 @@ class RuntimeDocumentStore:
         return revoked
 
     def get_session(self, session_id: str) -> RuntimeSessionRecord:
-        document = self.collections.sessions.find_one({"session_id": session_id})
+        query = self._session_query(session_id)
+        document = self.collections.sessions.find_one(query)
+        if document is None and "workspace_id" in query:
+            self._forget_session_partition(session_id)
+            document = self.collections.sessions.find_one({"session_id": session_id})
         if document is None:
             raise RuntimeSessionNotFoundError(f"Runtime session `{session_id}` was not found.")
-        return runtime_session_from_document(document)
+        session = runtime_session_from_document(document)
+        self._remember_session_partition(session.session_id, session.workspace_id)
+        return session
 
     def list_sessions(self, workspace_id: str) -> list[RuntimeSessionRecord]:
         return _valid_runtime_sessions(self.collections.sessions.find({"workspace_id": workspace_id}))
@@ -340,10 +354,17 @@ class RuntimeDocumentStore:
         if workspace_id:
             session_delete_query["workspace_id"] = workspace_id
         self.collections.sessions.delete_one(session_delete_query)
+        self._forget_session_partition(session_id)
+        self._forget_turns_for_session(session_id)
         return deleted
 
     def save_turn(self, record: RuntimeTurnRecord) -> RuntimeTurnRecord:
-        self.collections.turns.update_one({"turn_id": record.turn_id}, {"$set": asdict(record)}, upsert=True)
+        self.collections.turns.update_one(
+            {"turn_id": record.turn_id, "workspace_id": record.workspace_id, "session_id": record.session_id},
+            {"$set": asdict(record)},
+            upsert=True,
+        )
+        self._remember_turn_partition(record)
         return record
 
     def save_turn_if_client_message_absent(self, record: RuntimeTurnRecord) -> tuple[RuntimeTurnRecord, bool]:
@@ -356,7 +377,9 @@ class RuntimeDocumentStore:
             "client_message_id": normalized_client_message_id,
         }
         document, inserted = self._insert_one_if_absent(self.collections.turns, query, asdict(record))
-        return RuntimeTurnRecord(**document), inserted
+        turn = RuntimeTurnRecord(**document)
+        self._remember_turn_partition(turn)
+        return turn, inserted
 
     def save_turn_if_current_client_message_claim(
         self,
@@ -390,6 +413,7 @@ class RuntimeDocumentStore:
             turn = RuntimeTurnRecord(**document)
             if turn.session_id != record.session_id or turn.turn_id != record.turn_id:
                 raise RuntimeClientMessageClaimConflictError(current_claim)
+            self._remember_turn_partition(turn)
             self.mark_client_message_claim_queued(
                 workspace_id=claim.workspace_id,
                 client_message_id=claim.client_message_id,
@@ -400,17 +424,27 @@ class RuntimeDocumentStore:
             return turn, inserted
 
     def get_turn(self, turn_id: str) -> RuntimeTurnRecord:
-        document = self.collections.turns.find_one({"turn_id": turn_id})
+        query = self._turn_query(turn_id)
+        document = self.collections.turns.find_one(query)
+        if document is None and "workspace_id" in query:
+            self._forget_turn_partition(turn_id)
+            document = self.collections.turns.find_one({"turn_id": turn_id})
         if document is None:
             raise RuntimeTurnNotFoundError(f"Runtime turn `{turn_id}` was not found.")
-        return RuntimeTurnRecord(**document)
+        turn = RuntimeTurnRecord(**document)
+        self._remember_turn_partition(turn)
+        return turn
 
     def list_turns(self, session_id: str) -> list[RuntimeTurnRecord]:
-        return [RuntimeTurnRecord(**document) for document in self.collections.turns.find({"session_id": session_id})]
+        turns = [RuntimeTurnRecord(**document) for document in self.collections.turns.find(self._session_query(session_id))]
+        for turn in turns:
+            self._remember_turn_partition(turn)
+        return turns
 
     def has_turn_with_status(self, session_id: str, statuses: set[str]) -> bool:
+        base_query = self._session_query(session_id)
         for status in statuses:
-            if self.collections.turns.find_one({"session_id": session_id, "status": status}) is not None:
+            if self.collections.turns.find_one({**base_query, "status": status}) is not None:
                 return True
         return False
 
@@ -418,13 +452,17 @@ class RuntimeDocumentStore:
         if limit < 1:
             return []
         find_recent = getattr(self.collections.turns, "find_recent", None)
+        query = self._session_query(session_id)
         if callable(find_recent):
-            documents = find_recent({"session_id": session_id}, limit=limit)
+            documents = find_recent(query, limit=limit)
         else:
-            documents = self.collections.turns.find({"session_id": session_id})
+            documents = self.collections.turns.find(query)
             documents.sort(key=lambda item: (str(item.get("created_at") or ""), str(item.get("turn_id") or "")))
             documents = documents[-limit:]
-        return [RuntimeTurnRecord(**document) for document in documents]
+        turns = [RuntimeTurnRecord(**document) for document in documents]
+        for turn in turns:
+            self._remember_turn_partition(turn)
+        return turns
 
     def find_turn_by_client_message_id(
         self,
@@ -443,7 +481,11 @@ class RuntimeDocumentStore:
         if session_id:
             query["session_id"] = session_id
         document = self.collections.turns.find_one(query)
-        return RuntimeTurnRecord(**document) if document is not None else None
+        if document is None:
+            return None
+        turn = RuntimeTurnRecord(**document)
+        self._remember_turn_partition(turn)
+        return turn
 
     def claim_client_message_id(
         self,
@@ -555,6 +597,7 @@ class RuntimeDocumentStore:
         )
 
     def save_event(self, record: RuntimeEventRecord) -> RuntimeEventRecord:
+        self._remember_session_partition(record.session_id, record.workspace_id)
         append_history_upsert = getattr(self.collections.events, "append_history_upsert", None)
         if callable(append_history_upsert):
             append_history_upsert(
@@ -574,14 +617,15 @@ class RuntimeDocumentStore:
         return record
 
     def list_events(self, session_id: str) -> list[RuntimeEventRecord]:
-        return [RuntimeEventRecord(**document) for document in self.collections.events.find({"session_id": session_id})]
+        return [RuntimeEventRecord(**document) for document in self.collections.events.find(self._session_query(session_id))]
 
     def list_recent_events(self, session_id: str, *, limit: int) -> list[RuntimeEventRecord]:
         find_recent = getattr(self.collections.events, "find_recent", None)
+        query = self._session_query(session_id)
         if callable(find_recent):
-            documents = find_recent({"session_id": session_id}, limit=limit)
+            documents = find_recent(query, limit=limit)
         else:
-            documents = self.collections.events.find({"session_id": session_id})
+            documents = self.collections.events.find(query)
             documents.sort(key=lambda item: str(item.get("created_at") or ""))
             documents = documents[-limit:]
         return [RuntimeEventRecord(**document) for document in documents]
@@ -594,9 +638,10 @@ class RuntimeDocumentStore:
         limit: int = 200,
     ) -> RuntimeEventPage:
         bounded_limit = max(1, min(int(limit), MAX_RUNTIME_EVENTS_PER_SESSION))
+        query = self._session_query(session_id)
         find_event_page = getattr(self.collections.events, "find_event_page", None)
         if callable(find_event_page):
-            page = find_event_page({"session_id": session_id}, before_event_id=before_event_id, limit=bounded_limit)
+            page = find_event_page(query, before_event_id=before_event_id, limit=bounded_limit)
             events = [RuntimeEventRecord(**document) for document in page["documents"]]
             return RuntimeEventPage(
                 events=events,
@@ -605,7 +650,7 @@ class RuntimeDocumentStore:
                 oldest_event_id=events[0].event_id if events else None,
                 newest_event_id=events[-1].event_id if events else None,
             )
-        documents = self.collections.events.find({"session_id": session_id})
+        documents = self.collections.events.find(query)
         documents.sort(key=lambda item: (str(item.get("created_at") or ""), str(item.get("event_id") or "")))
         if before_event_id:
             cursor_found = False
@@ -630,10 +675,11 @@ class RuntimeDocumentStore:
     def has_events_before(self, session_id: str, *, before_event_id: str | None) -> bool:
         if not before_event_id:
             return False
+        query = self._session_query(session_id)
         has_event_before = getattr(self.collections.events, "has_event_before", None)
         if callable(has_event_before):
-            return bool(has_event_before({"session_id": session_id}, before_event_id=before_event_id))
-        documents = self.collections.events.find({"session_id": session_id})
+            return bool(has_event_before(query, before_event_id=before_event_id))
+        documents = self.collections.events.find(query)
         documents.sort(key=lambda item: (str(item.get("created_at") or ""), str(item.get("event_id") or "")))
         for index, document in enumerate(documents):
             if document.get("event_id") == before_event_id:
@@ -645,6 +691,7 @@ class RuntimeDocumentStore:
 
     def save_process(self, record: RuntimeProcessRecord) -> RuntimeProcessRecord:
         self.collections.processes.update_one({"process_id": record.process_id}, {"$set": asdict(record)}, upsert=True)
+        self._remember_session_partition(record.session_id, record.workspace_id)
         return record
 
     def get_process(self, process_id: str) -> RuntimeProcessRecord:
@@ -654,17 +701,28 @@ class RuntimeDocumentStore:
         return RuntimeProcessRecord(**document)
 
     def list_processes(self, session_id: str) -> list[RuntimeProcessRecord]:
-        return [RuntimeProcessRecord(**document) for document in self.collections.processes.find({"session_id": session_id})]
+        return [RuntimeProcessRecord(**document) for document in self.collections.processes.find(self._session_query(session_id))]
 
     def save_state(self, record: RuntimeStateRecord) -> RuntimeStateRecord:
-        self.collections.states.update_one({"session_id": record.session_id}, {"$set": asdict(record)}, upsert=True)
+        self.collections.states.update_one(
+            {"session_id": record.session_id, "workspace_id": record.workspace_id},
+            {"$set": asdict(record)},
+            upsert=True,
+        )
+        self._remember_session_partition(record.session_id, record.workspace_id)
         return record
 
     def get_state(self, session_id: str) -> RuntimeStateRecord:
-        document = self.collections.states.find_one({"session_id": session_id})
+        query = self._session_query(session_id)
+        document = self.collections.states.find_one(query)
+        if document is None and "workspace_id" in query:
+            self._forget_session_partition(session_id)
+            document = self.collections.states.find_one({"session_id": session_id})
         if document is None:
             raise RuntimeStateNotFoundError(f"Runtime state for session `{session_id}` was not found.")
-        return RuntimeStateRecord(**document)
+        state = RuntimeStateRecord(**document)
+        self._remember_session_partition(state.session_id, state.workspace_id)
+        return state
 
     def save_thread(self, record: RuntimeThreadRecord) -> RuntimeThreadRecord:
         self.collections.threads.update_one({"thread_id": record.thread_id}, {"$set": asdict(record)}, upsert=True)
@@ -713,7 +771,7 @@ class RuntimeDocumentStore:
 
     def _prune_session_events(self, session_id: str) -> None:
         try:
-            documents = list(self.collections.events.find({"session_id": session_id}))
+            documents = list(self.collections.events.find(self._session_query(session_id)))
         except ValueError:
             return
         excess_count = len(documents) - MAX_RUNTIME_EVENTS_PER_SESSION
@@ -734,6 +792,55 @@ class RuntimeDocumentStore:
             event_id = document.get("event_id")
             if isinstance(event_id, str):
                 self.collections.events.delete_one({"event_id": event_id})
+
+    def _session_query(self, session_id: str) -> dict[str, str]:
+        query = {"session_id": session_id}
+        with self._partition_index_lock:
+            workspace_id = self._session_workspace_index.get(session_id)
+        if workspace_id:
+            query["workspace_id"] = workspace_id
+        return query
+
+    def _turn_query(self, turn_id: str) -> dict[str, str]:
+        query = {"turn_id": turn_id}
+        with self._partition_index_lock:
+            partition = self._turn_partition_index.get(turn_id)
+        if partition is not None:
+            workspace_id, session_id = partition
+            query["workspace_id"] = workspace_id
+            query["session_id"] = session_id
+        return query
+
+    def _remember_session_partition(self, session_id: str, workspace_id: str) -> None:
+        if not session_id or not workspace_id:
+            return
+        with self._partition_index_lock:
+            self._session_workspace_index[session_id] = workspace_id
+
+    def _forget_session_partition(self, session_id: str) -> None:
+        with self._partition_index_lock:
+            self._session_workspace_index.pop(session_id, None)
+
+    def _remember_turn_partition(self, turn: RuntimeTurnRecord) -> None:
+        if not turn.turn_id or not turn.workspace_id or not turn.session_id:
+            return
+        with self._partition_index_lock:
+            self._session_workspace_index[turn.session_id] = turn.workspace_id
+            self._turn_partition_index[turn.turn_id] = (turn.workspace_id, turn.session_id)
+
+    def _forget_turn_partition(self, turn_id: str) -> None:
+        with self._partition_index_lock:
+            self._turn_partition_index.pop(turn_id, None)
+
+    def _forget_turns_for_session(self, session_id: str) -> None:
+        with self._partition_index_lock:
+            stale_turn_ids = [
+                turn_id
+                for turn_id, (_workspace_id, indexed_session_id) in self._turn_partition_index.items()
+                if indexed_session_id == session_id
+            ]
+            for turn_id in stale_turn_ids:
+                self._turn_partition_index.pop(turn_id, None)
 
 
 def runtime_location(workspace_id: str, start_path=None) -> RuntimeLocation:

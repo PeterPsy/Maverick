@@ -22,6 +22,7 @@ import {
   listInterAgentRuns,
   listProviders,
   listSkills,
+  prepareRuntimeSessionAppReferences,
   prewarmSpeechWorker,
   previewAgentPrompt,
   sendRuntimeTurn,
@@ -103,6 +104,7 @@ vi.mock("./api/client", () => ({
   listSkills: vi.fn(),
   markThreadRead: vi.fn(),
   orderChatThreads: vi.fn((threads: unknown[]) => threads),
+  prepareRuntimeSessionAppReferences: vi.fn(),
   prewarmSpeechWorker: vi.fn(),
   previewAgentPrompt: vi.fn(),
   closeInterAgentRun: vi.fn(),
@@ -299,6 +301,14 @@ beforeEach(() => {
   vi.mocked(listAgentCatalog).mockResolvedValue({ agent_types: [socialVideoAgent] });
   vi.mocked(getAgentDefinition).mockResolvedValue({ exists: true, agent_definition: socialVideoAgent });
   vi.mocked(previewAgentPrompt).mockResolvedValue({ rendered: "Agent prompt" });
+  vi.mocked(prepareRuntimeSessionAppReferences).mockResolvedValue({
+    session_id: "session-prepared",
+    status: "ready",
+    reference_count: 0,
+    materialized_reference_count: 0,
+    reference_cache_hit: false,
+    reference_fingerprint: "",
+  });
   vi.mocked(prewarmSpeechWorker).mockResolvedValue({});
   vi.mocked(createRuntimeSession).mockResolvedValue(runtimeSession("session-prepared"));
   vi.mocked(sendRuntimeTurn).mockResolvedValue({
@@ -718,6 +728,72 @@ describe("App thread navigation", () => {
         type: "maverick.chat.active-thread-changed",
       }),
       window.location.origin,
+    );
+  });
+
+  it("prepares app references before submitting a prepared first turn", async () => {
+    const prepareReferences = deferred<Awaited<ReturnType<typeof prepareRuntimeSessionAppReferences>>>();
+    vi.mocked(prepareRuntimeSessionAppReferences).mockReturnValue(prepareReferences.promise);
+    const element = await renderApp({
+      navigationScope: "floating-window",
+      newChatRequestId: "request-reference-prepare",
+      runtimeThreads: [],
+      runtimeThreadsLoaded: true,
+    });
+
+    await waitForAssertion(() => {
+      expect(element.textContent).toContain("How can I help today?");
+    });
+    await typeComposerMessage(element, "review @Notes [ref:storage/file/file_1]");
+    await clickSend(element);
+
+    await waitForAssertion(() => {
+      expect(prepareRuntimeSessionAppReferences).toHaveBeenCalledWith(
+        "session-prepared",
+        [
+          expect.objectContaining({
+            app_id: "storage",
+            entity_id: "file_1",
+            entity_type: "file",
+            type: "entity",
+          }),
+        ],
+        expect.any(Object),
+      );
+    });
+    expect(sendRuntimeTurn).not.toHaveBeenCalled();
+
+    await act(async () => {
+      prepareReferences.resolve({
+        session_id: "session-prepared",
+        status: "ready",
+        reference_count: 1,
+        materialized_reference_count: 1,
+        reference_cache_hit: false,
+        reference_fingerprint: "fingerprint-1",
+      });
+      await prepareReferences.promise;
+    });
+
+    await waitForAssertion(() => {
+      expect(sendRuntimeTurn).toHaveBeenCalledWith(
+        "session-prepared",
+        "review @Notes [ref:storage/file/file_1]",
+        expect.any(String),
+        [],
+        [
+          expect.objectContaining({
+            app_id: "storage",
+            entity_id: "file_1",
+            entity_type: "file",
+            type: "entity",
+          }),
+        ],
+        expect.any(Object),
+      );
+    });
+    expect(vi.mocked(prepareRuntimeSessionAppReferences).mock.invocationCallOrder[0]).toBeLessThan(
+      vi.mocked(sendRuntimeTurn).mock.invocationCallOrder[0],
     );
   });
 

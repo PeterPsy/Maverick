@@ -10,7 +10,7 @@ import hashlib
 import json
 import logging
 from pathlib import Path
-from threading import Lock
+from threading import Event, Lock
 import time
 from typing import Any
 
@@ -32,6 +32,8 @@ RUNTIME_APP_REFERENCE_CACHE_MAX_ENTRIES = 1024
 _RUNTIME_APP_REFERENCE_CACHE: OrderedDict[str, tuple[float, "RuntimeAppReferenceMaterializationResult"]] = OrderedDict()
 _RUNTIME_APP_REFERENCE_CACHE_LOCK = Lock()
 _RUNTIME_APP_REFERENCE_CACHE_EVICTIONS = 0
+_RUNTIME_APP_REFERENCE_IN_FLIGHT: dict[str, Event] = {}
+_RUNTIME_APP_REFERENCE_IN_FLIGHT_LOCK = Lock()
 
 
 @dataclass(frozen=True)
@@ -55,6 +57,8 @@ def clear_runtime_app_reference_materialization_cache() -> None:
     with _RUNTIME_APP_REFERENCE_CACHE_LOCK:
         _RUNTIME_APP_REFERENCE_CACHE.clear()
         _RUNTIME_APP_REFERENCE_CACHE_EVICTIONS = 0
+    with _RUNTIME_APP_REFERENCE_IN_FLIGHT_LOCK:
+        _RUNTIME_APP_REFERENCE_IN_FLIGHT.clear()
 
 
 def runtime_app_reference_materialization_cache_stats() -> RuntimeAppReferenceCacheStats:
@@ -247,64 +251,90 @@ def materialize_runtime_app_references_with_metrics(
         visible_apps=visible_apps,
         providers_by_app_id=providers_by_app_id,
     )
-    cached = _cached_runtime_app_reference_result(reference_fingerprint)
-    if cached is not None:
-        return cached
-    reference_action_timings: list[dict[str, object]] = []
-    runner = None
+    while True:
+        cached = _cached_runtime_app_reference_result(reference_fingerprint)
+        if cached is not None:
+            return cached
+        owns_materialization, in_flight = _claim_runtime_app_reference_materialization(reference_fingerprint)
+        if owns_materialization:
+            break
+        in_flight.wait()
 
-    def get_runner():
-        nonlocal runner
-        if runner is None:
-            runner = reference_tool_runner(state, context=mcp_context, start_path=start_path)
-        return runner
+    try:
+        reference_action_timings: list[dict[str, object]] = []
+        runner = None
 
-    materialized: list[dict[str, object]] = []
-    seen: set[str] = set()
-    for reference in references:
-        app_id = _bounded_text(reference.get("app_id"), max_length=120)
-        if not app_id:
-            continue
-        if _reference_type(reference) == "entity":
-            payload = _materialize_runtime_entity_reference(
-                state,
-                provider=providers_by_app_id.get(app_id),
-                reference=reference,
-                context=mcp_context,
-                start_path=start_path,
-                runner_factory=get_runner,
-                action_timings=reference_action_timings,
-            )
-        else:
-            app = visible_apps.get(app_id)
-            payload = (
-                {
-                    "type": "app",
-                    "app_id": app_id,
-                    "label": _bounded_text(app.get("name"), max_length=240),
-                }
-                if app is not None
-                else None
-            )
-        if payload is None:
-            continue
-        key = _reference_key(payload)
-        if key in seen:
-            continue
-        seen.add(key)
-        materialized.append(payload)
-    result = RuntimeAppReferenceMaterializationResult(
-        references=materialized,
-        reference_action_timings=reference_action_timings,
-        reference_fingerprint=reference_fingerprint,
-    )
-    _cache_runtime_app_reference_result(
-        state,
-        result,
-        workspace_id=context.workspace_id,
-        session_id=session_id,
-    )
-    return result
+        def get_runner():
+            nonlocal runner
+            if runner is None:
+                runner = reference_tool_runner(state, context=mcp_context, start_path=start_path)
+            return runner
+
+        materialized: list[dict[str, object]] = []
+        seen: set[str] = set()
+        for reference in references:
+            app_id = _bounded_text(reference.get("app_id"), max_length=120)
+            if not app_id:
+                continue
+            if _reference_type(reference) == "entity":
+                payload = _materialize_runtime_entity_reference(
+                    state,
+                    provider=providers_by_app_id.get(app_id),
+                    reference=reference,
+                    context=mcp_context,
+                    start_path=start_path,
+                    runner_factory=get_runner,
+                    action_timings=reference_action_timings,
+                )
+            else:
+                app = visible_apps.get(app_id)
+                payload = (
+                    {
+                        "type": "app",
+                        "app_id": app_id,
+                        "label": _bounded_text(app.get("name"), max_length=240),
+                    }
+                    if app is not None
+                    else None
+                )
+            if payload is None:
+                continue
+            key = _reference_key(payload)
+            if key in seen:
+                continue
+            seen.add(key)
+            materialized.append(payload)
+        result = RuntimeAppReferenceMaterializationResult(
+            references=materialized,
+            reference_action_timings=reference_action_timings,
+            reference_fingerprint=reference_fingerprint,
+        )
+        _cache_runtime_app_reference_result(
+            state,
+            result,
+            workspace_id=context.workspace_id,
+            session_id=session_id,
+        )
+        return result
+    finally:
+        _release_runtime_app_reference_materialization(reference_fingerprint)
+
+
+def _claim_runtime_app_reference_materialization(reference_fingerprint: str) -> tuple[bool, Event]:
+    with _RUNTIME_APP_REFERENCE_IN_FLIGHT_LOCK:
+        in_flight = _RUNTIME_APP_REFERENCE_IN_FLIGHT.get(reference_fingerprint)
+        if in_flight is not None:
+            return False, in_flight
+        in_flight = Event()
+        _RUNTIME_APP_REFERENCE_IN_FLIGHT[reference_fingerprint] = in_flight
+        return True, in_flight
+
+
+def _release_runtime_app_reference_materialization(reference_fingerprint: str) -> None:
+    with _RUNTIME_APP_REFERENCE_IN_FLIGHT_LOCK:
+        in_flight = _RUNTIME_APP_REFERENCE_IN_FLIGHT.pop(reference_fingerprint, None)
+    if in_flight is not None:
+        in_flight.set()
 
 
 def validate_runtime_app_references(

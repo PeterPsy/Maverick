@@ -2,7 +2,9 @@ from __future__ import annotations
 
 from dataclasses import replace
 from datetime import UTC, datetime, timedelta
+from threading import Event, Thread
 import tempfile
+import time
 import unittest
 from unittest.mock import patch
 
@@ -392,6 +394,100 @@ class PreparedRuntimeSessionsApiTestCase(AppReferenceApiTestSupport, unittest.Te
             self.assertEqual(stats.evictions, 1)
             self.assertEqual(cache_size_metrics[-1].value, 2)
             self.assertEqual(sum(metric.value for metric in cache_eviction_metrics), 1)
+
+    def test_prepare_only_app_reference_materialization_is_single_flight(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            repo_root = self._repo_root(temp_dir)
+            self._write_reference_app(repo_root / "apps" / "records")
+            with patch.dict(
+                "os.environ",
+                {
+                    "MAVERICK_ALLOW_INSECURE_TEST_DEFAULTS": "1",
+                    "MAVERICK_ADMIN_USERNAME": "admin",
+                    "MAVERICK_ADMIN_PASSWORD": "maverick",
+                },
+            ):
+                state = bootstrap_platform_state(start_path=repo_root)
+            source = register_app_source_from_contract(
+                state.app_store,
+                source_kind="platform",
+                source_path=str(repo_root / "apps" / "records"),
+            )
+            install_store_app(state.app_store, source_id=source.source_id, workspace_id="default", start_path=repo_root)
+            app = PlatformHost(state, start_path=repo_root)
+            cookie = self._login(app)
+
+            with patch("core.api.runtime_api._prewarm_new_runtime_session"):
+                session_status, session_payload, _headers = self._invoke(
+                    app,
+                    path="/api/runtime/sessions",
+                    method="POST",
+                    body={"agent_id": "chat", "source_app_id": "chat", "prepare_only": True},
+                    cookie=cookie,
+                )
+            self.assertEqual(session_status, 201)
+            session_id = session_payload["session_id"]
+            app_references = [
+                {"type": "entity", "app_id": "records", "entity_type": "record", "entity_id": "record-1"},
+            ]
+            first_materialize_entered = Event()
+            release_materialize = Event()
+            calls = 0
+            results: list[tuple[int, dict] | None] = [None, None]
+            errors: list[BaseException] = []
+
+            def fake_materialize_entity_reference(*_args, **_kwargs):
+                nonlocal calls
+                calls += 1
+                first_materialize_entered.set()
+                self.assertTrue(release_materialize.wait(2), "single-flight test materialization was not released")
+                return {
+                    "type": "entity",
+                    "app_id": "records",
+                    "entity_type": "record",
+                    "entity_id": "record-1",
+                    "label": "Launch record",
+                    "summary": "Safe summary",
+                }
+
+            def invoke(index: int) -> None:
+                try:
+                    status, payload, _headers = self._invoke(
+                        app,
+                        path=f"/api/runtime/sessions/{session_id}/app-references/prepare",
+                        method="POST",
+                        body={"app_references": app_references},
+                        cookie=cookie,
+                    )
+                    results[index] = (status, payload)
+                except BaseException as error:
+                    errors.append(error)
+
+            with patch(
+                "core.api.app_reference_payloads._materialize_runtime_entity_reference",
+                side_effect=fake_materialize_entity_reference,
+            ):
+                first = Thread(target=invoke, args=(0,))
+                second = Thread(target=invoke, args=(1,))
+                first.start()
+                self.assertTrue(first_materialize_entered.wait(2), "first prepare did not begin materializing")
+                second.start()
+                time.sleep(0.05)
+                release_materialize.set()
+                first.join(2)
+                second.join(2)
+
+            if errors:
+                raise errors[0]
+            self.assertTrue(all(result is not None for result in results))
+            prepared_payloads = [result[1] for result in results if result is not None]
+            self.assertEqual([result[0] for result in results if result is not None], [200, 200])
+            self.assertEqual(calls, 1)
+            self.assertEqual(sorted(payload["reference_cache_hit"] for payload in prepared_payloads), [False, True])
+            self.assertEqual(
+                {payload["reference_fingerprint"] for payload in prepared_payloads},
+                {prepared_payloads[0]["reference_fingerprint"]},
+            )
 
     def test_invalid_prepare_only_first_turn_keeps_session_hidden_without_thread(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:

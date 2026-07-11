@@ -21,18 +21,26 @@ INTERESTING_EVENT_TYPES = {
     "runtime.turn.receive_to_queued",
     "runtime.turn.post_queue_response",
     "runtime.turn.worker_entered",
+    "runtime.turn.source_app_queued_dispatch_started",
+    "runtime.turn.source_app_queued_dispatch_completed",
+    "runtime.turn.thread_user_message_queued_started",
+    "runtime.turn.thread_user_message_queued_completed",
     "runtime.turn.prewarm_wait_started",
     "runtime.turn.prewarm_wait_completed",
     "runtime.turn.prewarm_waited",
     "runtime.turn.session_lock_wait_started",
     "runtime.turn.session_lock_acquired",
     "runtime.turn.turn_activation_completed",
+    "runtime.turn.thread_availability_started",
+    "runtime.turn.thread_availability_completed",
+    "runtime.turn.turn_started_recorded",
     "runtime.turn.app_references_materialize_started",
     "runtime.turn.app_references_materialize_completed",
     "runtime.turn.app_references_materialize_failed",
     "runtime.turn.provider_input_started",
     "runtime.turn.provider_input_completed",
     "runtime.turn.worker_started",
+    "runtime.turn.worker_started_recorded",
     "runtime.prewarm.completed",
     "runtime.provider.dispatching",
     "runtime.provider.turn_start_sent",
@@ -43,18 +51,26 @@ EVENT_KEYS = {
     "runtime.turn.receive_to_queued": "receive_to_queued",
     "runtime.turn.post_queue_response": "post_queue_response",
     "runtime.turn.worker_entered": "worker_entered",
+    "runtime.turn.source_app_queued_dispatch_started": "source_app_queued_dispatch_started",
+    "runtime.turn.source_app_queued_dispatch_completed": "source_app_queued_dispatch_completed",
+    "runtime.turn.thread_user_message_queued_started": "thread_user_message_queued_started",
+    "runtime.turn.thread_user_message_queued_completed": "thread_user_message_queued_completed",
     "runtime.turn.prewarm_wait_started": "prewarm_wait_started",
     "runtime.turn.prewarm_wait_completed": "prewarm_wait_completed",
     "runtime.turn.prewarm_waited": "prewarm_waited",
     "runtime.turn.session_lock_wait_started": "session_lock_wait_started",
     "runtime.turn.session_lock_acquired": "session_lock_acquired",
     "runtime.turn.turn_activation_completed": "turn_activation_completed",
+    "runtime.turn.thread_availability_started": "thread_availability_started",
+    "runtime.turn.thread_availability_completed": "thread_availability_completed",
+    "runtime.turn.turn_started_recorded": "turn_started_recorded",
     "runtime.turn.app_references_materialize_started": "app_references_materialize_started",
     "runtime.turn.app_references_materialize_completed": "app_references_materialize_completed",
     "runtime.turn.app_references_materialize_failed": "app_references_materialize_failed",
     "runtime.turn.provider_input_started": "provider_input_started",
     "runtime.turn.provider_input_completed": "provider_input_completed",
     "runtime.turn.worker_started": "worker_started",
+    "runtime.turn.worker_started_recorded": "worker_started_recorded",
     "runtime.provider.dispatching": "provider_dispatching",
     "runtime.provider.turn_start_sent": "turn_start_sent",
     "runtime.provider.accepted": "provider_accepted",
@@ -71,6 +87,11 @@ LATENCY_METRIC_NAMES = (
     "session_lock_wait_ms",
     "queued_to_worker_entered_ms",
     "queued_to_worker_started_ms",
+    "worker_entered_to_worker_started_ms",
+    "source_app_queued_dispatch_ms",
+    "thread_catalog_queued_ms",
+    "thread_availability_update_ms",
+    "turn_started_to_worker_started_ms",
     "worker_entered_to_provider_dispatching_ms",
     "worker_started_to_provider_dispatching_ms",
     "worker_started_to_turn_start_sent_ms",
@@ -91,6 +112,7 @@ COUNT_METRIC_NAMES = (
     "app_reference_count",
     "storage_reference_count",
     "materialized_reference_count",
+    "attachment_count",
 )
 BOOLEAN_METRIC_NAMES = ("reference_cache_hit",)
 METRIC_NAMES = LATENCY_METRIC_NAMES + COUNT_METRIC_NAMES + BOOLEAN_METRIC_NAMES
@@ -230,7 +252,12 @@ def build_report(
             ),
             "queued_to_worker_entered_ms uses runtime.turn.worker_entered; queued_to_worker_started_ms remains as the legacy activation-adjacent span.",
             (
+                "worker_entered_to_worker_started_ms is decomposed with source_app_queued_dispatch_ms, "
+                "thread_catalog_queued_ms, thread_availability_update_ms, and turn_started_to_worker_started_ms when those newer events exist."
+            ),
+            (
                 "app_reference_count and storage_reference_count are reconstructed from runtime.turn.queued.payload.app_references; "
+                "attachment_count is reconstructed from runtime.turn.queued.payload.attachments; "
                 "materialized_reference_count and reference_cache_hit come from materialization/provider-input events when present."
             ),
             "app_reference_materialize_ms and provider_input_build_ms are emitted only by runtime paths with the newer granular instrumentation.",
@@ -632,12 +659,20 @@ def _turn_metrics(group: TurnEvents) -> dict[str, float]:
     post_queue_response = events.get("post_queue_response")
     queued = events.get("queued")
     worker_entered = events.get("worker_entered")
+    source_app_queued_dispatch_started = events.get("source_app_queued_dispatch_started")
+    source_app_queued_dispatch_completed = events.get("source_app_queued_dispatch_completed")
+    thread_user_message_queued_started = events.get("thread_user_message_queued_started")
+    thread_user_message_queued_completed = events.get("thread_user_message_queued_completed")
     prewarm_waited = events.get("prewarm_wait_completed") or events.get("prewarm_waited")
     session_lock_wait_started = events.get("session_lock_wait_started")
     session_lock_acquired = events.get("session_lock_acquired")
+    thread_availability_started = events.get("thread_availability_started")
+    thread_availability_completed = events.get("thread_availability_completed")
+    turn_started_recorded = events.get("turn_started_recorded")
     app_references_materialized = events.get("app_references_materialize_completed") or events.get("app_references_materialize_failed")
     provider_input_completed = events.get("provider_input_completed")
     worker = events.get("worker_started")
+    worker_started_recorded = events.get("worker_started_recorded")
     dispatching = events.get("provider_dispatching")
     sent = events.get("turn_start_sent")
     accepted = events.get("provider_accepted")
@@ -659,6 +694,39 @@ def _turn_metrics(group: TurnEvents) -> dict[str, float]:
         _set_metric(metrics, "session_lock_wait_ms", lock_wait_ms)
     _set_metric(metrics, "queued_to_worker_entered_ms", _delta_ms(queued, worker_entered))
     _set_metric(metrics, "queued_to_worker_started_ms", _delta_ms(queued, worker))
+    _set_metric(metrics, "worker_entered_to_worker_started_ms", _delta_ms(worker_entered, worker))
+    _set_metric(
+        metrics,
+        "source_app_queued_dispatch_ms",
+        _payload_metric_or_delta(
+            source_app_queued_dispatch_completed,
+            "source_app_queued_dispatch_ms",
+            source_app_queued_dispatch_started,
+        ),
+    )
+    _set_metric(
+        metrics,
+        "thread_catalog_queued_ms",
+        _payload_metric_or_delta(
+            thread_user_message_queued_completed,
+            "thread_catalog_queued_ms",
+            thread_user_message_queued_started,
+        ),
+    )
+    _set_metric(
+        metrics,
+        "thread_availability_update_ms",
+        _payload_metric_or_delta(
+            thread_availability_completed,
+            "thread_availability_update_ms",
+            thread_availability_started,
+        ),
+    )
+    _set_metric(
+        metrics,
+        "turn_started_to_worker_started_ms",
+        _delta_ms(turn_started_recorded, worker_started_recorded or worker),
+    )
     _set_metric(metrics, "worker_entered_to_provider_dispatching_ms", _delta_ms(worker_entered, dispatching))
     _set_metric(metrics, "worker_started_to_provider_dispatching_ms", _delta_ms(worker, dispatching))
     _set_metric(metrics, "worker_started_to_turn_start_sent_ms", _delta_ms(worker, sent))
@@ -701,6 +769,9 @@ def _set_reference_metrics_from_queued(metrics: dict[str, float], queued: Runtim
     _set_metric(metrics, "storage_reference_count", float(storage_count))
     if not references:
         _set_metric(metrics, "materialized_reference_count", 0.0)
+    raw_attachments = queued.payload.get("attachments")
+    attachments = [item for item in raw_attachments if isinstance(item, dict)] if isinstance(raw_attachments, list) else []
+    _set_metric(metrics, "attachment_count", float(len(attachments)))
 
 
 def _turn_order_sort_value(group: TurnEvents, *, fallback_at: datetime) -> tuple[datetime, str]:
@@ -839,6 +910,19 @@ def _delta_ms(start: RuntimeEventSnapshot | None, end: RuntimeEventSnapshot | No
     if start is None or end is None:
         return None
     return (end.created_at - start.created_at).total_seconds() * 1000
+
+
+def _payload_metric_or_delta(
+    event: RuntimeEventSnapshot | None,
+    payload_key: str,
+    start_event: RuntimeEventSnapshot | None,
+) -> float | None:
+    if event is None:
+        return None
+    payload_value = _numeric(event.payload.get(payload_key))
+    if payload_value is not None:
+        return payload_value
+    return _delta_ms(start_event, event)
 
 
 def _numeric(value: object) -> float | None:

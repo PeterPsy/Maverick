@@ -149,6 +149,15 @@ def _queue_turn_with_event_result(
         attachments=attachments,
         app_references=app_references,
     )
+    thread_catalog_started_at = time.perf_counter()
+    _record_thread_user_message_queued_started(
+        state,
+        session=session,
+        turn=turn,
+        provider_id=normalized_provider_id,
+        attachments=attachments,
+        app_references=app_references,
+    )
     thread = mark_thread_user_message_queued(
         state,
         workspace_id=session.workspace_id,
@@ -158,6 +167,16 @@ def _queue_turn_with_event_result(
         app_references=app_references,
         title_generation_input_hash=title_input_hash,
         now=turn.created_at,
+    )
+    _record_thread_user_message_queued_completed(
+        state,
+        session=session,
+        turn=turn,
+        provider_id=normalized_provider_id,
+        elapsed_ms=(time.perf_counter() - thread_catalog_started_at) * 1000,
+        thread_id=thread.thread_id if thread is not None else "",
+        attachments=attachments,
+        app_references=app_references,
     )
     schedule_runtime_thread_title_generation(
         state,
@@ -217,6 +236,76 @@ def _record_receive_to_queued_metric(
         payload=payload,
         event_bus=state.runtime_event_bus,
     )
+
+
+def _record_thread_user_message_queued_started(
+    state: PlatformState,
+    *,
+    session: RuntimeSessionRecord,
+    turn: RuntimeTurnRecord,
+    provider_id: str,
+    attachments: list[dict[str, object]] | None,
+    app_references: list[dict[str, object]] | None,
+) -> RuntimeEventRecord:
+    app_reference_count, storage_reference_count = _reference_counts(app_references)
+    return record_runtime_event(
+        state.runtime_store,
+        event_id=str(uuid4()),
+        session_id=session.session_id,
+        turn_id=turn.turn_id,
+        plane="turn",
+        event_type="runtime.turn.thread_user_message_queued_started",
+        payload={
+            "provider_id": provider_id,
+            "attachment_count": _attachment_count(attachments),
+            "app_reference_count": app_reference_count,
+            "storage_reference_count": storage_reference_count,
+        },
+        event_bus=state.runtime_event_bus,
+    )
+
+
+def _record_thread_user_message_queued_completed(
+    state: PlatformState,
+    *,
+    session: RuntimeSessionRecord,
+    turn: RuntimeTurnRecord,
+    provider_id: str,
+    elapsed_ms: float,
+    thread_id: str,
+    attachments: list[dict[str, object]] | None,
+    app_references: list[dict[str, object]] | None,
+) -> RuntimeEventRecord:
+    app_reference_count, storage_reference_count = _reference_counts(app_references)
+    payload: dict[str, object] = {
+        "provider_id": provider_id,
+        "thread_catalog_queued_ms": round(elapsed_ms, 3),
+        "attachment_count": _attachment_count(attachments),
+        "app_reference_count": app_reference_count,
+        "storage_reference_count": storage_reference_count,
+    }
+    if thread_id:
+        payload["thread_id"] = thread_id
+    return record_runtime_event(
+        state.runtime_store,
+        event_id=str(uuid4()),
+        session_id=session.session_id,
+        turn_id=turn.turn_id,
+        plane="turn",
+        event_type="runtime.turn.thread_user_message_queued_completed",
+        payload=payload,
+        event_bus=state.runtime_event_bus,
+    )
+
+
+def _reference_counts(app_references: list[dict[str, object]] | None) -> tuple[int, int]:
+    references = [item for item in app_references or [] if isinstance(item, dict)]
+    storage_count = sum(1 for item in references if str(item.get("app_id") or "").strip().lower() == "storage")
+    return len(references), storage_count
+
+
+def _attachment_count(attachments: list[dict[str, object]] | None) -> int:
+    return len([item for item in attachments or [] if isinstance(item, dict)])
 
 
 def record_turn_post_queue_response_metric(

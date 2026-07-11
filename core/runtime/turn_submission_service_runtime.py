@@ -498,6 +498,13 @@ def submit_runtime_turn_async(
                     )
                     return
                 if on_queued is not None:
+                    source_app_dispatch_started_at = time.perf_counter()
+                    _record_source_app_queued_dispatch_started(
+                        state,
+                        session_id=session.session_id,
+                        turn_id=turn.turn_id,
+                        provider_id=worker_provider_id,
+                    )
                     try:
                         on_queued(turn, events)
                     except Exception as error:
@@ -515,6 +522,13 @@ def submit_runtime_turn_async(
                             error=str(error),
                         )
                         return
+                    _record_source_app_queued_dispatch_completed(
+                        state,
+                        session_id=session.session_id,
+                        turn_id=turn.turn_id,
+                        provider_id=worker_provider_id,
+                        elapsed_ms=(time.perf_counter() - source_app_dispatch_started_at) * 1000,
+                    )
                 active = transition_runtime_turn(state.runtime_store, turn_id=turn.turn_id, target_status="active")
                 _record_turn_started(state, session_id=session.session_id, turn_id=active.turn_id, provider_id=worker_provider_id)
                 _record_turn_worker_started(state, session_id=session.session_id, turn_id=active.turn_id, provider_id=worker_provider_id)

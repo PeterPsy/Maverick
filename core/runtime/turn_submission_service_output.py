@@ -39,7 +39,23 @@ def _record_turn_started(state: PlatformState, *, session_id: str, turn_id: str,
         payload={"provider_id": provider_id},
         event_bus=state.runtime_event_bus,
     )
+    _record_turn_marker(
+        state,
+        session_id=session_id,
+        turn_id=turn_id,
+        provider_id=provider_id,
+        event_type="runtime.turn.turn_started_recorded",
+        payload={"recorded_event_id": event.event_id},
+    )
     turn = state.runtime_store.get_turn(turn_id)
+    availability_started_at = time.perf_counter()
+    _record_thread_availability_started(
+        state,
+        session_id=session_id,
+        turn_id=turn_id,
+        provider_id=provider_id,
+        availability="active",
+    )
     set_thread_availability(
         state,
         workspace_id=turn.workspace_id,
@@ -47,11 +63,19 @@ def _record_turn_started(state: PlatformState, *, session_id: str, turn_id: str,
         availability="active",
         now=event.created_at,
     )
+    _record_thread_availability_completed(
+        state,
+        session_id=session_id,
+        turn_id=turn_id,
+        provider_id=provider_id,
+        availability="active",
+        elapsed_ms=(time.perf_counter() - availability_started_at) * 1000,
+    )
     return event
 
 
 def _record_turn_worker_started(state: PlatformState, *, session_id: str, turn_id: str, provider_id: str) -> RuntimeEventRecord:
-    return record_runtime_event(
+    event = record_runtime_event(
         state.runtime_store,
         event_id=str(uuid4()),
         session_id=session_id,
@@ -61,6 +85,15 @@ def _record_turn_worker_started(state: PlatformState, *, session_id: str, turn_i
         payload={"provider_id": provider_id},
         event_bus=state.runtime_event_bus,
     )
+    _record_turn_marker(
+        state,
+        session_id=session_id,
+        turn_id=turn_id,
+        provider_id=provider_id,
+        event_type="runtime.turn.worker_started_recorded",
+        payload={"recorded_event_id": event.event_id},
+    )
+    return event
 
 
 def _record_turn_worker_entered(state: PlatformState, *, session_id: str, turn_id: str, provider_id: str) -> RuntimeEventRecord:
@@ -72,6 +105,114 @@ def _record_turn_worker_entered(state: PlatformState, *, session_id: str, turn_i
         plane="turn",
         event_type="runtime.turn.worker_entered",
         payload={"provider_id": provider_id},
+        event_bus=state.runtime_event_bus,
+    )
+
+
+def _record_turn_marker(
+    state: PlatformState,
+    *,
+    session_id: str,
+    turn_id: str,
+    provider_id: str,
+    event_type: str,
+    payload: dict[str, object] | None = None,
+) -> RuntimeEventRecord:
+    marker_payload: dict[str, object] = {"provider_id": provider_id}
+    if payload:
+        marker_payload.update(payload)
+    return record_runtime_event(
+        state.runtime_store,
+        event_id=str(uuid4()),
+        session_id=session_id,
+        turn_id=turn_id,
+        plane="turn",
+        event_type=event_type,
+        payload=marker_payload,
+        event_bus=state.runtime_event_bus,
+    )
+
+
+def _record_source_app_queued_dispatch_started(
+    state: PlatformState,
+    *,
+    session_id: str,
+    turn_id: str,
+    provider_id: str,
+) -> RuntimeEventRecord:
+    return record_runtime_event(
+        state.runtime_store,
+        event_id=str(uuid4()),
+        session_id=session_id,
+        turn_id=turn_id,
+        plane="turn",
+        event_type="runtime.turn.source_app_queued_dispatch_started",
+        payload={"provider_id": provider_id},
+        event_bus=state.runtime_event_bus,
+    )
+
+
+def _record_source_app_queued_dispatch_completed(
+    state: PlatformState,
+    *,
+    session_id: str,
+    turn_id: str,
+    provider_id: str,
+    elapsed_ms: float,
+) -> RuntimeEventRecord:
+    return record_runtime_event(
+        state.runtime_store,
+        event_id=str(uuid4()),
+        session_id=session_id,
+        turn_id=turn_id,
+        plane="turn",
+        event_type="runtime.turn.source_app_queued_dispatch_completed",
+        payload={"provider_id": provider_id, "source_app_queued_dispatch_ms": round(elapsed_ms, 3)},
+        event_bus=state.runtime_event_bus,
+    )
+
+
+def _record_thread_availability_started(
+    state: PlatformState,
+    *,
+    session_id: str,
+    turn_id: str,
+    provider_id: str,
+    availability: str,
+) -> RuntimeEventRecord:
+    return record_runtime_event(
+        state.runtime_store,
+        event_id=str(uuid4()),
+        session_id=session_id,
+        turn_id=turn_id,
+        plane="turn",
+        event_type="runtime.turn.thread_availability_started",
+        payload={"provider_id": provider_id, "availability": availability},
+        event_bus=state.runtime_event_bus,
+    )
+
+
+def _record_thread_availability_completed(
+    state: PlatformState,
+    *,
+    session_id: str,
+    turn_id: str,
+    provider_id: str,
+    availability: str,
+    elapsed_ms: float,
+) -> RuntimeEventRecord:
+    return record_runtime_event(
+        state.runtime_store,
+        event_id=str(uuid4()),
+        session_id=session_id,
+        turn_id=turn_id,
+        plane="turn",
+        event_type="runtime.turn.thread_availability_completed",
+        payload={
+            "provider_id": provider_id,
+            "availability": availability,
+            "thread_availability_update_ms": round(elapsed_ms, 3),
+        },
         event_bus=state.runtime_event_bus,
     )
 

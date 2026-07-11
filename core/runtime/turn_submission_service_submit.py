@@ -77,12 +77,30 @@ def submit_runtime_turn(
         return turn, events
     events.append(_record_turn_worker_entered(state, session_id=session.session_id, turn_id=turn.turn_id, provider_id=provider_id))
     if on_queued is not None:
+        source_app_dispatch_started_at = time.perf_counter()
+        events.append(
+            _record_source_app_queued_dispatch_started(
+                state,
+                session_id=session.session_id,
+                turn_id=turn.turn_id,
+                provider_id=provider_id,
+            )
+        )
         try:
             on_queued(turn, events)
         except Exception as error:
             failed = transition_runtime_turn(state.runtime_store, turn_id=turn.turn_id, target_status="failed", failure_reason=str(error))
             _record_turn_failed(state, session_id=session.session_id, turn_id=failed.turn_id, provider_id=provider_id, error=str(error))
             raise
+        events.append(
+            _record_source_app_queued_dispatch_completed(
+                state,
+                session_id=session.session_id,
+                turn_id=turn.turn_id,
+                provider_id=provider_id,
+                elapsed_ms=(time.perf_counter() - source_app_dispatch_started_at) * 1000,
+            )
+        )
     if not plain_hosted:
         _wait_for_session_prewarm(
             session.session_id,

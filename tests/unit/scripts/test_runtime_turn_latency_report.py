@@ -111,7 +111,28 @@ class RuntimeTurnLatencyReportTestCase(unittest.TestCase):
                                 {"type": "entity", "app_id": "storage", "entity_type": "file", "entity_id": "file-1"},
                                 {"type": "entity", "app_id": "crm", "entity_type": "account", "entity_id": "acct-1"},
                             ],
+                            "attachments": [
+                                {"kind": "image", "workspace_relative_path": "storage/uploaded/photo.jpg"},
+                            ],
                         },
+                    ),
+                    _event(
+                        "thread-catalog-start",
+                        "default",
+                        "sess-refs",
+                        turn_id,
+                        "runtime.turn.thread_user_message_queued_started",
+                        BASE + timedelta(milliseconds=10),
+                        {"provider_id": "codex", "attachment_count": 1, "app_reference_count": 2, "storage_reference_count": 1},
+                    ),
+                    _event(
+                        "thread-catalog-complete",
+                        "default",
+                        "sess-refs",
+                        turn_id,
+                        "runtime.turn.thread_user_message_queued_completed",
+                        BASE + timedelta(milliseconds=23),
+                        {"provider_id": "codex", "thread_catalog_queued_ms": 13, "attachment_count": 1, "app_reference_count": 2, "storage_reference_count": 1},
                     ),
                     _event("worker-entered", "default", "sess-refs", turn_id, "runtime.turn.worker_entered", BASE + timedelta(milliseconds=75), {"provider_id": "codex"}),
                     _event("prewarm-start", "default", "sess-refs", turn_id, "runtime.turn.prewarm_wait_started", BASE + timedelta(milliseconds=80), {"provider_id": "codex"}),
@@ -134,8 +155,38 @@ class RuntimeTurnLatencyReportTestCase(unittest.TestCase):
                         BASE + timedelta(milliseconds=130),
                         {"provider_id": "codex", "session_lock_wait_ms": 20},
                     ),
+                    _event(
+                        "source-dispatch-start",
+                        "default",
+                        "sess-refs",
+                        turn_id,
+                        "runtime.turn.source_app_queued_dispatch_started",
+                        BASE + timedelta(milliseconds=131),
+                        {"provider_id": "codex"},
+                    ),
+                    _event(
+                        "source-dispatch-complete",
+                        "default",
+                        "sess-refs",
+                        turn_id,
+                        "runtime.turn.source_app_queued_dispatch_completed",
+                        BASE + timedelta(milliseconds=133),
+                        {"provider_id": "codex", "source_app_queued_dispatch_ms": 2},
+                    ),
                     _event("activation", "default", "sess-refs", turn_id, "runtime.turn.turn_activation_completed", BASE + timedelta(milliseconds=135), {"provider_id": "codex", "status": "active"}),
-                    _event("worker", "default", "sess-refs", turn_id, "runtime.turn.worker_started", BASE + timedelta(milliseconds=135), {"provider_id": "codex"}),
+                    _event("turn-started-recorded", "default", "sess-refs", turn_id, "runtime.turn.turn_started_recorded", BASE + timedelta(milliseconds=136), {"provider_id": "codex"}),
+                    _event("availability-start", "default", "sess-refs", turn_id, "runtime.turn.thread_availability_started", BASE + timedelta(milliseconds=137), {"provider_id": "codex", "availability": "active"}),
+                    _event(
+                        "availability-complete",
+                        "default",
+                        "sess-refs",
+                        turn_id,
+                        "runtime.turn.thread_availability_completed",
+                        BASE + timedelta(milliseconds=144),
+                        {"provider_id": "codex", "availability": "active", "thread_availability_update_ms": 7},
+                    ),
+                    _event("worker", "default", "sess-refs", turn_id, "runtime.turn.worker_started", BASE + timedelta(milliseconds=145), {"provider_id": "codex"}),
+                    _event("worker-started-recorded", "default", "sess-refs", turn_id, "runtime.turn.worker_started_recorded", BASE + timedelta(milliseconds=146), {"provider_id": "codex"}),
                     _event(
                         "refs-start",
                         "default",
@@ -189,7 +240,12 @@ class RuntimeTurnLatencyReportTestCase(unittest.TestCase):
 
         metrics = report["turns"][0]["metrics"]
         self.assertEqual(metrics["queued_to_worker_entered_ms"], 75)
-        self.assertEqual(metrics["queued_to_worker_started_ms"], 135)
+        self.assertEqual(metrics["queued_to_worker_started_ms"], 145)
+        self.assertEqual(metrics["worker_entered_to_worker_started_ms"], 70)
+        self.assertEqual(metrics["source_app_queued_dispatch_ms"], 2)
+        self.assertEqual(metrics["thread_catalog_queued_ms"], 13)
+        self.assertEqual(metrics["thread_availability_update_ms"], 7)
+        self.assertEqual(metrics["turn_started_to_worker_started_ms"], 10)
         self.assertEqual(metrics["worker_entered_to_provider_dispatching_ms"], 185)
         self.assertEqual(metrics["session_lock_wait_ms"], 20)
         self.assertEqual(metrics["app_reference_materialize_ms"], 60)
@@ -197,6 +253,7 @@ class RuntimeTurnLatencyReportTestCase(unittest.TestCase):
         self.assertEqual(metrics["app_reference_count"], 2)
         self.assertEqual(metrics["storage_reference_count"], 1)
         self.assertEqual(metrics["materialized_reference_count"], 1)
+        self.assertEqual(metrics["attachment_count"], 1)
         self.assertEqual(metrics["reference_cache_hit"], 0)
         cohort_metrics = report["cohorts"]["codex_warm"]["metrics"]
         self.assertEqual(cohort_metrics["app_reference_count"]["p50"], 2)

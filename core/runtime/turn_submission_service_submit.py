@@ -23,6 +23,31 @@ from core.runtime.runtime_events import RuntimeEventRecord
 from core.runtime.runtime_session import RuntimeSessionRecord
 from core.runtime.runtime_turns import RuntimeTurnRecord
 from core.runtime.service import transition_runtime_turn
+from core.runtime.turn_submission_service_events import (
+    _complete_turn_from_exit_code,
+    _debug_log_runtime_turn,
+    _record_final_output,
+    _record_turn_failed,
+)
+from core.runtime.turn_submission_service_output import (
+    _build_launch_spec_for_execution,
+    _record_provider_accepted,
+    _record_provider_dispatching,
+    _record_provider_input_completed,
+    _record_provider_input_started,
+    _record_provider_thread_id,
+    _record_provider_turn_start_sent,
+    _record_session_lock_acquired,
+    _record_session_lock_wait_started,
+    _record_source_app_queued_dispatch_completed,
+    _record_source_app_queued_dispatch_started,
+    _record_turn_activation_completed,
+    _record_turn_started,
+    _record_turn_thread_availability_active,
+    _record_turn_worker_entered,
+    _record_turn_worker_started,
+)
+from core.runtime.turn_submission_service_output_text import _RuntimeTurnOutputRecorder
 from core.runtime.turn_submission_service_runtime import _wait_for_session_prewarm
 
 if TYPE_CHECKING:
@@ -124,8 +149,18 @@ def submit_runtime_turn(
         )
         try:
             turn = transition_runtime_turn(state.runtime_store, turn_id=turn.turn_id, target_status="active")
-            events.append(_record_turn_started(state, session_id=session.session_id, turn_id=turn.turn_id, provider_id=provider_id))
+            started_event = _record_turn_started(state, session_id=session.session_id, turn_id=turn.turn_id, provider_id=provider_id)
+            events.append(started_event)
             events.append(_record_turn_worker_started(state, session_id=session.session_id, turn_id=turn.turn_id, provider_id=provider_id))
+            events.extend(
+                _record_turn_thread_availability_active(
+                    state,
+                    session_id=session.session_id,
+                    turn_id=turn.turn_id,
+                    provider_id=provider_id,
+                    now=started_event.created_at,
+                )
+            )
             events.append(
                 _record_turn_activation_completed(
                     state,

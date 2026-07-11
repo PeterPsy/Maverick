@@ -47,9 +47,20 @@ def _record_turn_started(state: PlatformState, *, session_id: str, turn_id: str,
         event_type="runtime.turn.turn_started_recorded",
         payload={"recorded_event_id": event.event_id},
     )
+    return event
+
+
+def _record_turn_thread_availability_active(
+    state: PlatformState,
+    *,
+    session_id: str,
+    turn_id: str,
+    provider_id: str,
+    now=None,
+) -> list[RuntimeEventRecord]:
     turn = state.runtime_store.get_turn(turn_id)
     availability_started_at = time.perf_counter()
-    _record_thread_availability_started(
+    started = _record_thread_availability_started(
         state,
         session_id=session_id,
         turn_id=turn_id,
@@ -61,9 +72,9 @@ def _record_turn_started(state: PlatformState, *, session_id: str, turn_id: str,
         workspace_id=turn.workspace_id,
         runtime_session_id=session_id,
         availability="active",
-        now=event.created_at,
+        now=now,
     )
-    _record_thread_availability_completed(
+    completed = _record_thread_availability_completed(
         state,
         session_id=session_id,
         turn_id=turn_id,
@@ -71,7 +82,7 @@ def _record_turn_started(state: PlatformState, *, session_id: str, turn_id: str,
         availability="active",
         elapsed_ms=(time.perf_counter() - availability_started_at) * 1000,
     )
-    return event
+    return [started, completed]
 
 
 def _record_turn_worker_started(state: PlatformState, *, session_id: str, turn_id: str, provider_id: str) -> RuntimeEventRecord:

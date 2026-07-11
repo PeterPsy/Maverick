@@ -12,7 +12,34 @@ from uuid import uuid4
 from core.apps.runtime_event_hooks import dispatch_source_app_runtime_event
 from core.providers.service import resolve_runtime_backend_for_session
 from core.runtime.turn_submission_launch_cache import clear_cached_runtime_launch_context
-from core.runtime.turn_submission_service_output import _build_launch_spec_for_execution, _record_provider_thread_id
+from core.runtime.turn_submission_service_events import (
+    _complete_turn_from_exit_code,
+    _debug_log_runtime_turn,
+    _record_final_output,
+    _record_turn_failed,
+)
+from core.runtime.turn_submission_service_output import (
+    _build_launch_spec_for_execution,
+    _record_app_references_materialize_completed,
+    _record_app_references_materialize_failed,
+    _record_app_references_materialize_started,
+    _record_provider_accepted,
+    _record_provider_dispatching,
+    _record_provider_input_completed,
+    _record_provider_input_started,
+    _record_provider_thread_id,
+    _record_provider_turn_start_sent,
+    _record_session_lock_acquired,
+    _record_session_lock_wait_started,
+    _record_source_app_queued_dispatch_completed,
+    _record_source_app_queued_dispatch_started,
+    _record_turn_activation_completed,
+    _record_turn_started,
+    _record_turn_thread_availability_active,
+    _record_turn_worker_entered,
+    _record_turn_worker_started,
+)
+from core.runtime.turn_submission_service_output_text import _RuntimeTurnOutputRecorder
 from core.runtime.plain_hosted_text import (
     HOSTED_TEXT_RUNTIME_PROVIDER_ID,
     assert_plain_hosted_chat_input_allowed,
@@ -530,8 +557,15 @@ def submit_runtime_turn_async(
                         elapsed_ms=(time.perf_counter() - source_app_dispatch_started_at) * 1000,
                     )
                 active = transition_runtime_turn(state.runtime_store, turn_id=turn.turn_id, target_status="active")
-                _record_turn_started(state, session_id=session.session_id, turn_id=active.turn_id, provider_id=worker_provider_id)
+                started_event = _record_turn_started(state, session_id=session.session_id, turn_id=active.turn_id, provider_id=worker_provider_id)
                 _record_turn_worker_started(state, session_id=session.session_id, turn_id=active.turn_id, provider_id=worker_provider_id)
+                _record_turn_thread_availability_active(
+                    state,
+                    session_id=session.session_id,
+                    turn_id=active.turn_id,
+                    provider_id=worker_provider_id,
+                    now=started_event.created_at,
+                )
                 _record_turn_activation_completed(
                     state,
                     session_id=session.session_id,

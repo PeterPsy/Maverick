@@ -295,6 +295,10 @@ class TurnSubmissionLaunchSpecTestCase(unittest.TestCase):
             "runtime.turn.provider_input_completed",
         ):
             self.assertIn(expected, event_types)
+        self.assertLess(
+            event_types.index("runtime.turn.worker_started_recorded"),
+            event_types.index("runtime.turn.thread_availability_started"),
+        )
         materialized = next(event for event in runtime_store.list_events(session.session_id) if event.event_type == "runtime.turn.app_references_materialize_completed")
         self.assertEqual(materialized.payload["app_reference_count"], 1)
         self.assertEqual(materialized.payload["storage_reference_count"], 1)

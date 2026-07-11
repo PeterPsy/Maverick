@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from threading import Thread
 from typing import TYPE_CHECKING, Any
 from uuid import uuid4
 
@@ -18,6 +19,38 @@ if TYPE_CHECKING:
     from core.api.platform_state import PlatformState
     from core.runtime.runtime_session import RuntimeSessionRecord
     from core.runtime.runtime_turns import RuntimeTurnRecord
+
+
+def dispatch_source_app_runtime_event_async(
+    state: "PlatformState",
+    *,
+    session: "RuntimeSessionRecord",
+    turn: "RuntimeTurnRecord",
+    event_type: str,
+    output_text: str = "",
+    failure_reason: str = "",
+    start_path: Path | None = None,
+) -> bool:
+    """Schedule a source app runtime hook without keeping the turn worker on the hook path."""
+    if not (session.source_app_id or "").strip():
+        return False
+
+    def run() -> None:
+        try:
+            dispatch_source_app_runtime_event(
+                state,
+                session=session,
+                turn=turn,
+                event_type=event_type,
+                output_text=output_text,
+                failure_reason=failure_reason,
+                start_path=start_path,
+            )
+        except Exception as error:
+            _record_source_app_hook_failure(state, session=session, turn=turn, detail=str(error))
+
+    Thread(target=run, name=f"runtime-source-app-hook-{event_type}", daemon=True).start()
+    return True
 
 
 def dispatch_source_app_runtime_event(
@@ -75,16 +108,7 @@ def dispatch_source_app_runtime_event(
     try:
         result = run_json_entrypoint(source_root / hook_path, payload=payload, cwd=source_root, timeout_seconds=30)
     except Exception as error:
-        record_runtime_event(
-            state.runtime_store,
-            event_id=str(uuid4()),
-            session_id=session.session_id,
-            turn_id=turn.turn_id,
-            plane="runtime",
-            event_type="runtime.source_app_hook.failed",
-            payload={"source_app_id": app_id, "hook": "runtime_event", "detail": str(error)},
-            event_bus=state.runtime_event_bus,
-        )
+        _record_source_app_hook_failure(state, session=session, turn=turn, detail=str(error))
         return None
     publish_declared_app_events(
         state.app_event_bus,
@@ -106,6 +130,28 @@ def dispatch_source_app_runtime_event(
         start_path=start_path,
     )
     return result
+
+
+def _record_source_app_hook_failure(
+    state: "PlatformState",
+    *,
+    session: "RuntimeSessionRecord",
+    turn: "RuntimeTurnRecord",
+    detail: str,
+) -> None:
+    try:
+        record_runtime_event(
+            state.runtime_store,
+            event_id=str(uuid4()),
+            session_id=session.session_id,
+            turn_id=turn.turn_id,
+            plane="runtime",
+            event_type="runtime.source_app_hook.failed",
+            payload={"source_app_id": session.source_app_id or "", "hook": "runtime_event", "detail": detail},
+            event_bus=state.runtime_event_bus,
+        )
+    except Exception:
+        return
 
 
 def dispatch_workspace_app_background_hooks(

@@ -20,7 +20,7 @@ from core.api.provider_api import workspace_provider_status
 from core.api.runtime_cleanup import cleanup_runtime_session
 from core.api.session_api import RequestSession, require_session
 from core.apps.errors import AppHostingError
-from core.apps.runtime_event_hooks import dispatch_source_app_runtime_event
+from core.apps.runtime_event_hooks import dispatch_source_app_runtime_event, dispatch_source_app_runtime_event_async
 from core.authorization.errors import AuthorizationError
 from core.authorization.service import authorize_runtime_session_create, require_runtime_session_operation
 from core.inter_agent.errors import InterAgentRunNotFoundError
@@ -1514,7 +1514,7 @@ def _queue_runtime_turn_response(
         )
 
     def notify_source_app_queued(queued_turn: RuntimeTurnRecord, _events: list[RuntimeEventRecord]) -> None:
-        dispatch_source_app_runtime_event(
+        dispatch_source_app_runtime_event_async(
             state,
             session=session,
             turn=queued_turn,

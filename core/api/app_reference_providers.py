@@ -5,6 +5,8 @@ from __future__ import annotations
 from dataclasses import asdict
 import logging
 from pathlib import Path
+from threading import Lock
+import time
 from typing import Any
 
 from core.api.session_api import RequestSession
@@ -18,11 +20,62 @@ from core.mcp.service import call_mcp_tool
 
 
 logger = logging.getLogger(__name__)
+REFERENCE_PROVIDER_DISCOVERY_TTL_SECONDS = 2.0
+_REFERENCE_PROVIDER_DISCOVERY_CACHE: dict[tuple[str, str, str, str], tuple[float, dict[str, dict[str, Any]], list[dict[str, Any]]]] = {}
+_REFERENCE_PROVIDER_DISCOVERY_CACHE_LOCK = Lock()
 
 
 def visible_workspace_apps(state, *, context: RequestSession, start_path: Path) -> dict[str, dict[str, Any]]:
     """Return enabled app bindings visible to the caller, keyed by local app id."""
+    visible_apps, _providers = _workspace_reference_discovery(state, context=context, start_path=start_path)
+    return {app_id: dict(payload) for app_id, payload in visible_apps.items()}
+
+
+def reference_providers(state, *, context: RequestSession, start_path: Path) -> list[dict[str, Any]]:
+    _visible_apps, providers = _workspace_reference_discovery(state, context=context, start_path=start_path)
+    return [_copy_provider(provider) for provider in providers]
+
+
+def clear_reference_provider_discovery_cache() -> None:
+    """Clear the short-lived reference provider discovery cache."""
+    with _REFERENCE_PROVIDER_DISCOVERY_CACHE_LOCK:
+        _REFERENCE_PROVIDER_DISCOVERY_CACHE.clear()
+
+
+def _workspace_reference_discovery(
+    state,
+    *,
+    context: RequestSession,
+    start_path: Path,
+) -> tuple[dict[str, dict[str, Any]], list[dict[str, Any]]]:
+    key = _reference_discovery_cache_key(state, context=context, start_path=start_path)
+    now = time.monotonic()
+    with _REFERENCE_PROVIDER_DISCOVERY_CACHE_LOCK:
+        cached = _REFERENCE_PROVIDER_DISCOVERY_CACHE.get(key)
+        if cached is not None and cached[0] > now:
+            return (
+                {app_id: dict(payload) for app_id, payload in cached[1].items()},
+                [_copy_provider(provider) for provider in cached[2]],
+            )
+    visible_apps, providers = _discover_workspace_references(state, context=context, start_path=start_path)
+    expires_at = now + REFERENCE_PROVIDER_DISCOVERY_TTL_SECONDS
+    with _REFERENCE_PROVIDER_DISCOVERY_CACHE_LOCK:
+        _REFERENCE_PROVIDER_DISCOVERY_CACHE[key] = (
+            expires_at,
+            {app_id: dict(payload) for app_id, payload in visible_apps.items()},
+            [_copy_provider(provider) for provider in providers],
+        )
+    return visible_apps, providers
+
+
+def _discover_workspace_references(
+    state,
+    *,
+    context: RequestSession,
+    start_path: Path,
+) -> tuple[dict[str, dict[str, Any]], list[dict[str, Any]]]:
     apps: dict[str, dict[str, Any]] = {}
+    providers: list[dict[str, Any]] = []
     for binding in enabled_workspace_app_bindings(state.app_store, workspace_id=context.workspace_id):
         try:
             _source_root, parsed = resolve_workspace_app_surface(state.app_store, binding=binding, start_path=start_path)
@@ -47,29 +100,7 @@ def visible_workspace_apps(state, *, context: RequestSession, start_path: Path) 
             "name": parsed.name,
             "description": parsed.description,
         }
-    return apps
-
-
-def reference_providers(state, *, context: RequestSession, start_path: Path) -> list[dict[str, Any]]:
-    providers: list[dict[str, Any]] = []
-    for binding in enabled_workspace_app_bindings(state.app_store, workspace_id=context.workspace_id):
-        try:
-            _source_root, parsed = resolve_workspace_app_surface(state.app_store, binding=binding, start_path=start_path)
-        except AppHostingError:
-            continue
-        except Exception:
-            logger.exception("Skipping app `%s` reference provider after surface resolution failure.", binding.app_id)
-            continue
         if not parsed.contract.capabilities.reference_entities:
-            continue
-        if not can_mount_app_visibility(
-            state.workspace_store,
-            user=context.user,
-            workspace_id=context.workspace_id,
-            platform_roles=parsed.contract.visibility.platform_roles,
-            workspace_roles=parsed.contract.visibility.workspace_roles,
-            capabilities=parsed.contract.visibility.capabilities,
-        ):
             continue
         tool_names = set(parsed.contract.capabilities.mcp_tools)
         providers.append(
@@ -89,7 +120,7 @@ def reference_providers(state, *, context: RequestSession, start_path: Path) -> 
                 },
             }
         )
-    return providers
+    return apps, providers
 
 
 def public_provider_payload(provider: dict[str, Any]) -> dict[str, Any]:
@@ -101,6 +132,44 @@ def public_provider_payload(provider: dict[str, Any]) -> dict[str, Any]:
         "description": provider["description"],
         "entity_types": provider["entities"],
     }
+
+
+def _copy_provider(provider: dict[str, Any]) -> dict[str, Any]:
+    copied = dict(provider)
+    copied["entities"] = [dict(entity) for entity in provider.get("entities", []) if isinstance(entity, dict)]
+    copied["tools"] = dict(provider.get("tools") if isinstance(provider.get("tools"), dict) else {})
+    return copied
+
+
+def _reference_discovery_cache_key(
+    state,
+    *,
+    context: RequestSession,
+    start_path: Path,
+) -> tuple[str, str, str, str, str]:
+    try:
+        root_key = str(start_path.resolve())
+    except OSError:
+        root_key = str(start_path)
+    binding_fingerprint = "|".join(
+        ":".join(
+            (
+                binding.app_id,
+                binding.source_record_id,
+                binding.status,
+                binding.active_version,
+                binding.updated_at,
+            )
+        )
+        for binding in enabled_workspace_app_bindings(state.app_store, workspace_id=context.workspace_id)
+    )
+    return (
+        root_key,
+        context.workspace_id,
+        context.user.user_id,
+        context.user.platform_role,
+        binding_fingerprint,
+    )
 
 
 def call_reference_tool(

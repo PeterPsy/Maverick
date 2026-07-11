@@ -19,6 +19,38 @@ from core.mcp.models import McpInvocationContext
 logger = logging.getLogger(__name__)
 
 
+class RuntimeAppReferenceRequestContext:
+    """Request-local discovery cache for runtime app reference handling."""
+
+    def __init__(self, state, *, context: RequestSession, start_path: Path) -> None:
+        self._state = state
+        self._context = context
+        self._start_path = start_path
+        self._visible_apps: dict[str, dict[str, Any]] | None = None
+        self._providers_by_app_id: dict[str, dict[str, Any]] | None = None
+
+    def visible_apps(self) -> dict[str, dict[str, Any]]:
+        if self._visible_apps is None:
+            self._visible_apps = visible_workspace_apps(
+                self._state,
+                context=self._context,
+                start_path=self._start_path,
+            )
+        return self._visible_apps
+
+    def providers_by_app_id(self) -> dict[str, dict[str, Any]]:
+        if self._providers_by_app_id is None:
+            self._providers_by_app_id = {
+                provider["app_id"]: provider
+                for provider in reference_providers(
+                    self._state,
+                    context=self._context,
+                    start_path=self._start_path,
+                )
+            }
+        return self._providers_by_app_id
+
+
 def manifest_provider_payload(
     state,
     provider: dict[str, Any],
@@ -125,13 +157,20 @@ def materialize_runtime_app_references(
     context: RequestSession,
     references: list[dict[str, object]],
     start_path: Path,
+    reference_context: RuntimeAppReferenceRequestContext | None = None,
 ) -> list[dict[str, object]]:
     """Verify client-submitted references and enrich entities from owning apps."""
-    visible_apps = visible_workspace_apps(state, context=context, start_path=start_path)
-    providers_by_app_id = {
-        provider["app_id"]: provider
-        for provider in reference_providers(state, context=context, start_path=start_path)
-    }
+    if not references:
+        return []
+    runtime_reference_context = reference_context or RuntimeAppReferenceRequestContext(
+        state,
+        context=context,
+        start_path=start_path,
+    )
+    needs_entity_providers = any(_reference_type(reference) == "entity" for reference in references)
+    needs_visible_apps = any(_reference_type(reference) != "entity" for reference in references)
+    visible_apps = runtime_reference_context.visible_apps() if needs_visible_apps else {}
+    providers_by_app_id = runtime_reference_context.providers_by_app_id() if needs_entity_providers else {}
     mcp_context = mcp_context_for_request(state, context)
     materialized: list[dict[str, object]] = []
     seen: set[str] = set()
@@ -139,7 +178,7 @@ def materialize_runtime_app_references(
         app_id = _bounded_text(reference.get("app_id"), max_length=120)
         if not app_id:
             continue
-        if str(reference.get("type") or "app").strip().lower() == "entity":
+        if _reference_type(reference) == "entity":
             payload = _materialize_runtime_entity_reference(
                 state,
                 provider=providers_by_app_id.get(app_id),
@@ -174,22 +213,27 @@ def validate_runtime_app_references(
     context: RequestSession,
     references: list[dict[str, object]],
     start_path: Path,
+    reference_context: RuntimeAppReferenceRequestContext | None = None,
 ) -> list[dict[str, object]]:
     """Verify client-submitted references without invoking app-owned MCP tools."""
     if not references:
         return []
-    visible_apps = visible_workspace_apps(state, context=context, start_path=start_path)
-    providers_by_app_id = {
-        provider["app_id"]: provider
-        for provider in reference_providers(state, context=context, start_path=start_path)
-    }
+    runtime_reference_context = reference_context or RuntimeAppReferenceRequestContext(
+        state,
+        context=context,
+        start_path=start_path,
+    )
+    needs_entity_providers = any(_reference_type(reference) == "entity" for reference in references)
+    needs_visible_apps = any(_reference_type(reference) != "entity" for reference in references)
+    visible_apps = runtime_reference_context.visible_apps() if needs_visible_apps else {}
+    providers_by_app_id = runtime_reference_context.providers_by_app_id() if needs_entity_providers else {}
     validated: list[dict[str, object]] = []
     seen: set[str] = set()
     for reference in references:
         app_id = _bounded_text(reference.get("app_id"), max_length=120)
         if not app_id:
             continue
-        if str(reference.get("type") or "app").strip().lower() == "entity":
+        if _reference_type(reference) == "entity":
             payload = _validate_runtime_entity_reference(
                 provider=providers_by_app_id.get(app_id),
                 reference=reference,
@@ -213,6 +257,10 @@ def validate_runtime_app_references(
         seen.add(key)
         validated.append(payload)
     return validated
+
+
+def _reference_type(reference: dict[str, object]) -> str:
+    return str(reference.get("type") or "app").strip().lower()
 
 
 def _validate_runtime_entity_reference(

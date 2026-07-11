@@ -9,7 +9,11 @@ import time
 from urllib.parse import parse_qs
 from uuid import uuid4
 
-from core.api.app_reference_payloads import materialize_runtime_app_references, validate_runtime_app_references
+from core.api.app_reference_payloads import (
+    RuntimeAppReferenceRequestContext,
+    materialize_runtime_app_references,
+    validate_runtime_app_references,
+)
 from core.api.http import StartResponse, json_response, read_json_body, status_line
 from core.api.platform_state import PlatformState
 from core.api.provider_api import workspace_provider_status
@@ -86,6 +90,7 @@ class RuntimeTurnSubmissionDraft:
     attachment_items: list[dict[str, object]]
     input_text: str
     app_reference_items: list[dict[str, object]]
+    app_reference_context: RuntimeAppReferenceRequestContext
     async_requested: bool
 
 
@@ -1397,11 +1402,17 @@ def _prepare_runtime_turn_submission(
             _release_client_message_claim(state, release_claim_on_failure)
             return None, json_response(start_response, {"error": attachment_limit_error}, status="400 Bad Request")
     reference_validate_started_at = time.perf_counter()
+    app_reference_context = RuntimeAppReferenceRequestContext(
+        state,
+        context=context,
+        start_path=start_path,
+    )
     app_reference_items = validate_runtime_app_references(
         state,
         context=context,
         references=[item for item in app_references if isinstance(item, dict)],
         start_path=start_path,
+        reference_context=app_reference_context,
     )
     _record_timing_duration(timing, "reference_validate_ms", reference_validate_started_at)
     return RuntimeTurnSubmissionDraft(
@@ -1410,6 +1421,7 @@ def _prepare_runtime_turn_submission(
         attachment_items=attachment_items,
         input_text=input_text,
         app_reference_items=app_reference_items,
+        app_reference_context=app_reference_context,
         async_requested=bool(body.get("async")),
     ), None
 
@@ -1431,6 +1443,7 @@ def _queue_runtime_turn_response(
     attachment_items = draft.attachment_items
     input_text = draft.input_text
     app_reference_items = draft.app_reference_items
+    app_reference_context = draft.app_reference_context
     async_requested = draft.async_requested
 
     def materialize_app_references(references: list[dict[str, object]]) -> list[dict[str, object]]:
@@ -1439,6 +1452,7 @@ def _queue_runtime_turn_response(
             context=context,
             references=references,
             start_path=start_path,
+            reference_context=app_reference_context,
         )
 
     def notify_source_app_queued(queued_turn: RuntimeTurnRecord, _events: list[RuntimeEventRecord]) -> None:

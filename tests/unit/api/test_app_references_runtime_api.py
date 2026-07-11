@@ -5,6 +5,7 @@ import tempfile
 import unittest
 from unittest.mock import patch
 
+from core.api import app_reference_payloads
 from core.api.platform_host import PlatformHost
 from core.api.platform_state import bootstrap_platform_state
 from core.apps.service import install_store_app, register_app_source_from_contract
@@ -114,7 +115,16 @@ class AppReferencesRuntimeApiTestCase(AppReferenceApiTestSupport, unittest.TestC
                     failure_reason=None,
                 ), []
 
-            with patch("core.api.runtime_api.submit_runtime_turn_async", side_effect=fake_submit_runtime_turn):
+            with patch(
+                "core.api.app_reference_payloads.visible_workspace_apps",
+                side_effect=AssertionError("entity refs should not load visible apps"),
+            ), patch(
+                "core.api.app_reference_payloads.reference_providers",
+                wraps=app_reference_payloads.reference_providers,
+            ) as provider_discovery, patch(
+                "core.api.runtime_api.submit_runtime_turn_async",
+                side_effect=fake_submit_runtime_turn,
+            ):
                 status, _payload, _headers = self._invoke(
                     app,
                     path="/api/runtime/sessions/sess-1/turns",
@@ -147,6 +157,7 @@ class AppReferencesRuntimeApiTestCase(AppReferenceApiTestSupport, unittest.TestC
                 )
 
         self.assertEqual(status, 202)
+        self.assertEqual(provider_discovery.call_count, 1)
         self.assertEqual(
             captured["app_references"],
             [

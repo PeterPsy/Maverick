@@ -62,7 +62,7 @@ class RuntimeSubmitIdempotencyApiTestCase(AppReferenceApiTestSupport, unittest.T
         self.assertEqual(status, 403)
         self.assertEqual(payload, {"error": "runtime_session_turn_submit_forbidden"})
 
-    def test_existing_session_app_reference_prepare_requires_turn_submit_authority(self) -> None:
+    def test_app_references_prepare_rejects_visible_non_owner_without_turn_submit_authority(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             repo_root = self._repo_root(temp_dir)
             with patch.dict(
@@ -74,7 +74,7 @@ class RuntimeSubmitIdempotencyApiTestCase(AppReferenceApiTestSupport, unittest.T
                 },
             ):
                 state = bootstrap_platform_state(start_path=repo_root)
-            create_runtime_session(
+            owner_session = create_runtime_session(
                 state.runtime_store,
                 session_id="owner-session",
                 workspace_id="default",
@@ -95,6 +95,11 @@ class RuntimeSubmitIdempotencyApiTestCase(AppReferenceApiTestSupport, unittest.T
             )
             app = PlatformHost(state, start_path=repo_root)
             member_cookie = self._login(app, username="member", password="memberpass")
+            self.assertEqual(owner_session.owner_user_id, "user:admin")
+            self.assertEqual(
+                state.workspace_store.get_membership(user_id="user:member", workspace_id="default").role,
+                "member",
+            )
 
             with patch(
                 "core.api.runtime_api.validate_runtime_app_references",

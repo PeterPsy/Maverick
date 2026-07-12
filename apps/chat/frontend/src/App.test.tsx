@@ -25,6 +25,7 @@ import {
   prepareRuntimeSessionAppReferences,
   prewarmSpeechWorker,
   previewAgentPrompt,
+  recordRuntimeTurnClientMetrics,
   sendRuntimeTurn,
   uploadWorkspaceFile,
 } from "./api/client";
@@ -107,6 +108,7 @@ vi.mock("./api/client", () => ({
   prepareRuntimeSessionAppReferences: vi.fn(),
   prewarmSpeechWorker: vi.fn(),
   previewAgentPrompt: vi.fn(),
+  recordRuntimeTurnClientMetrics: vi.fn(),
   closeInterAgentRun: vi.fn(),
   selectProvider: vi.fn(),
   resolveInterAgentApproval: vi.fn(),
@@ -311,6 +313,17 @@ beforeEach(() => {
   });
   vi.mocked(prewarmSpeechWorker).mockResolvedValue({});
   vi.mocked(createRuntimeSession).mockResolvedValue(runtimeSession("session-prepared"));
+  vi.mocked(createRuntimeSessionWithTurn).mockResolvedValue({
+    session: runtimeSession("session-prepared"),
+    thread: thread("session-prepared", "session-prepared"),
+    turn: runtimeTurn("turn-prepared", "session-prepared"),
+    events: [],
+  });
+  vi.mocked(recordRuntimeTurnClientMetrics).mockResolvedValue({
+    status: "recorded",
+    turn_id: "turn-prepared",
+    metric_count: 1,
+  });
   vi.mocked(sendRuntimeTurn).mockResolvedValue({
     session: runtimeSession("session-prepared"),
     thread: thread("session-prepared", "session-prepared"),
@@ -658,9 +671,9 @@ describe("App thread navigation", () => {
   it("does not let a slow draft submit steal the active thread after navigation", async () => {
     const existingThread = thread("thread-existing", "session-existing", { title: "Existing thread" });
     const createdThread = thread("thread-created", "session-created", { title: "Created thread" });
-    const submitTurn = deferred<Awaited<ReturnType<typeof sendRuntimeTurn>>>();
+    const submitTurn = deferred<Awaited<ReturnType<typeof createRuntimeSessionWithTurn>>>();
     vi.mocked(createRuntimeSession).mockResolvedValue(runtimeSession("session-created"));
-    vi.mocked(sendRuntimeTurn).mockReturnValue(submitTurn.promise);
+    vi.mocked(createRuntimeSessionWithTurn).mockReturnValue(submitTurn.promise);
     const postMessageSpy = vi.spyOn(window.parent, "postMessage");
     const element = await renderApp({
       navigationScope: "floating-window",
@@ -676,13 +689,10 @@ describe("App thread navigation", () => {
     await clickSend(element);
 
     await waitForAssertion(() => {
-      expect(sendRuntimeTurn).toHaveBeenCalledWith(
-        "session-created",
-        "hello",
-        expect.any(String),
-        [],
-        expect.any(Array),
-        expect.any(Object),
+      expect(createRuntimeSessionWithTurn).toHaveBeenCalledWith(
+        expect.objectContaining({
+          inputText: "hello",
+        }),
       );
       expect(element.textContent).toContain("hello");
       expect(element.textContent).toContain("Starting");
@@ -731,12 +741,19 @@ describe("App thread navigation", () => {
     );
   });
 
-  it("prepares app references before submitting a prepared first turn", async () => {
-    const prepareReferences = deferred<Awaited<ReturnType<typeof prepareRuntimeSessionAppReferences>>>();
-    vi.mocked(prepareRuntimeSessionAppReferences).mockReturnValue(prepareReferences.promise);
+  it("submits first-turn app references without waiting for pending reference preparation", async () => {
+    const preparedSession = deferred<RuntimeSession>();
+    const createdThread = thread("thread-created", "session-created", { title: "Created thread" });
+    vi.mocked(createRuntimeSession).mockReturnValue(preparedSession.promise);
+    vi.mocked(createRuntimeSessionWithTurn).mockResolvedValue({
+      session: runtimeSession("session-created"),
+      thread: createdThread,
+      turn: runtimeTurn("turn-created", "session-created"),
+      events: [],
+    });
     const element = await renderApp({
       navigationScope: "floating-window",
-      newChatRequestId: "request-reference-prepare",
+      newChatRequestId: "request-reference-submit",
       runtimeThreads: [],
       runtimeThreadsLoaded: true,
     });
@@ -748,63 +765,32 @@ describe("App thread navigation", () => {
     await clickSend(element);
 
     await waitForAssertion(() => {
-      expect(prepareRuntimeSessionAppReferences).toHaveBeenCalledWith(
-        "session-prepared",
-        [
-          expect.objectContaining({
-            app_id: "storage",
-            entity_id: "file_1",
-            entity_type: "file",
-            type: "entity",
-          }),
-        ],
-        expect.any(Object),
+      expect(createRuntimeSessionWithTurn).toHaveBeenCalledWith(
+        expect.objectContaining({
+          inputText: "review @Notes [ref:storage/file/file_1]",
+          appReferences: [
+            expect.objectContaining({
+              app_id: "storage",
+              entity_id: "file_1",
+              entity_type: "file",
+              type: "entity",
+            }),
+          ],
+        }),
       );
     });
+    expect(prepareRuntimeSessionAppReferences).not.toHaveBeenCalled();
     expect(sendRuntimeTurn).not.toHaveBeenCalled();
-
-    await act(async () => {
-      prepareReferences.resolve({
-        session_id: "session-prepared",
-        status: "ready",
-        reference_count: 1,
-        materialized_reference_count: 1,
-        reference_cache_hit: false,
-        reference_fingerprint: "fingerprint-1",
-      });
-      await prepareReferences.promise;
-    });
-
-    await waitForAssertion(() => {
-      expect(sendRuntimeTurn).toHaveBeenCalledWith(
-        "session-prepared",
-        "review @Notes [ref:storage/file/file_1]",
-        expect.any(String),
-        [],
-        [
-          expect.objectContaining({
-            app_id: "storage",
-            entity_id: "file_1",
-            entity_type: "file",
-            type: "entity",
-          }),
-        ],
-        expect.any(Object),
-      );
-    });
-    expect(vi.mocked(prepareRuntimeSessionAppReferences).mock.invocationCallOrder[0]).toBeLessThan(
-      vi.mocked(sendRuntimeTurn).mock.invocationCallOrder[0],
-    );
   });
 
   it("keeps uploaded draft attachments bound to the original draft after navigation", async () => {
     const existingThread = thread("thread-existing", "session-existing", { title: "Existing thread" });
     const createdThread = thread("thread-created", "session-created", { title: "Created thread" });
     const upload = deferred<Awaited<ReturnType<typeof uploadWorkspaceFile>>>();
-    const submitTurn = deferred<Awaited<ReturnType<typeof sendRuntimeTurn>>>();
+    const submitTurn = deferred<Awaited<ReturnType<typeof createRuntimeSessionWithTurn>>>();
     vi.mocked(uploadWorkspaceFile).mockReturnValue(upload.promise);
     vi.mocked(createRuntimeSession).mockResolvedValue(runtimeSession("session-created"));
-    vi.mocked(sendRuntimeTurn).mockReturnValue(submitTurn.promise);
+    vi.mocked(createRuntimeSessionWithTurn).mockReturnValue(submitTurn.promise);
     const element = await renderApp({
       navigationScope: "floating-window",
       newChatRequestId: "request-upload",
@@ -843,18 +829,16 @@ describe("App thread navigation", () => {
     });
 
     await waitForAssertion(() => {
-      expect(sendRuntimeTurn).toHaveBeenCalledWith(
-        "session-created",
-        "hello with attachment",
-        expect.any(String),
-        expect.arrayContaining([
-          expect.objectContaining({
-            fileId: "file-notes.txt",
-            relativePath: "storage/uploads/notes.txt",
-          }),
-        ]),
-        expect.any(Array),
-        expect.any(Object),
+      expect(createRuntimeSessionWithTurn).toHaveBeenCalledWith(
+        expect.objectContaining({
+          inputText: "hello with attachment",
+          attachments: expect.arrayContaining([
+            expect.objectContaining({
+              fileId: "file-notes.txt",
+              relativePath: "storage/uploads/notes.txt",
+            }),
+          ]),
+        }),
       );
     });
     expect(sendRuntimeTurn).not.toHaveBeenCalledWith(
@@ -880,11 +864,11 @@ describe("App thread navigation", () => {
   it("sends a queued attachment after its upload resolves behind draft migration", async () => {
     const createdThread = thread("thread-created", "session-created", { title: "Created thread" });
     const upload = deferred<Awaited<ReturnType<typeof uploadWorkspaceFile>>>();
-    const firstTurn = deferred<Awaited<ReturnType<typeof sendRuntimeTurn>>>();
+    const firstTurn = deferred<Awaited<ReturnType<typeof createRuntimeSessionWithTurn>>>();
     vi.mocked(uploadWorkspaceFile).mockReturnValue(upload.promise);
     vi.mocked(createRuntimeSession).mockResolvedValue(runtimeSession("session-created"));
+    vi.mocked(createRuntimeSessionWithTurn).mockReturnValueOnce(firstTurn.promise);
     vi.mocked(sendRuntimeTurn)
-      .mockReturnValueOnce(firstTurn.promise)
       .mockResolvedValueOnce({
         session: runtimeSession("session-created"),
         thread: createdThread,
@@ -904,13 +888,10 @@ describe("App thread navigation", () => {
     await typeComposerMessage(element, "first message");
     await clickSend(element);
     await waitForAssertion(() => {
-      expect(sendRuntimeTurn).toHaveBeenCalledWith(
-        "session-created",
-        "first message",
-        expect.any(String),
-        [],
-        expect.any(Array),
-        expect.any(Object),
+      expect(createRuntimeSessionWithTurn).toHaveBeenCalledWith(
+        expect.objectContaining({
+          inputText: "first message",
+        }),
       );
       expect(element.textContent).toContain("Starting");
     });
@@ -931,7 +912,7 @@ describe("App thread navigation", () => {
       });
       await firstTurn.promise;
     });
-    expect(sendRuntimeTurn).toHaveBeenCalledTimes(1);
+    expect(sendRuntimeTurn).not.toHaveBeenCalled();
 
     await act(async () => {
       upload.resolve(uploadedWorkspaceFile("notes.txt"));
@@ -958,11 +939,11 @@ describe("App thread navigation", () => {
   it("aborts a draft submit before the runtime ack arrives", async () => {
     let submitSignal: AbortSignal | undefined;
     vi.mocked(createRuntimeSession).mockResolvedValue(runtimeSession("session-created"));
-    vi.mocked(sendRuntimeTurn).mockImplementation(
-      (_sessionId, _inputText, _clientMessageId, _attachments, _appReferences, requestOptions) =>
+    vi.mocked(createRuntimeSessionWithTurn).mockImplementation(
+      ({ signal }) =>
         new Promise((resolve, reject) => {
-          submitSignal = requestOptions?.signal;
-          requestOptions?.signal?.addEventListener("abort", () => {
+          submitSignal = signal;
+          signal?.addEventListener("abort", () => {
             reject(new DOMException("Stopped", "AbortError"));
           });
           void resolve;
@@ -1065,10 +1046,49 @@ describe("App thread navigation", () => {
     expect(sendRuntimeTurn).not.toHaveBeenCalled();
   });
 
+  it("does not wait for a pending prepared session before a plain first submit", async () => {
+    const preparedSession = deferred<RuntimeSession>();
+    const createdThread = thread("thread-created", "session-created", { title: "Created thread" });
+    vi.mocked(createRuntimeSession).mockReturnValue(preparedSession.promise);
+    vi.mocked(createRuntimeSessionWithTurn).mockResolvedValue({
+      session: runtimeSession("session-created"),
+      thread: createdThread,
+      turn: runtimeTurn("turn-created", "session-created"),
+      events: [],
+    });
+    const element = await renderApp({
+      navigationScope: "floating-window",
+      newChatRequestId: "request-pending-prepared",
+      runtimeThreads: [],
+      runtimeThreadsLoaded: true,
+    });
+
+    await waitForAssertion(() => {
+      expect(element.textContent).toContain("How can I help today?");
+    });
+    await typeComposerMessage(element, "fast first message");
+    await clickSend(element);
+
+    await waitForAssertion(() => {
+      expect(createRuntimeSessionWithTurn).toHaveBeenCalledWith(
+        expect.objectContaining({
+          inputText: "fast first message",
+          clientMetrics: expect.objectContaining({
+            attachment_upload_ms: expect.any(Number),
+            prepare_refs_wait_on_submit_ms: 0,
+            prepared_session_ready_before_submit: false,
+            prepared_session_wait_on_submit_ms: expect.any(Number),
+          }),
+        }),
+      );
+    });
+    expect(sendRuntimeTurn).not.toHaveBeenCalled();
+  });
+
   it("interrupts the submitted turn id after the runtime ack arrives", async () => {
     const createdThread = thread("thread-created", "session-created", { title: "Created thread" });
     vi.mocked(createRuntimeSession).mockResolvedValue(runtimeSession("session-created"));
-    vi.mocked(sendRuntimeTurn).mockResolvedValue({
+    vi.mocked(createRuntimeSessionWithTurn).mockResolvedValue({
       session: runtimeSession("session-created"),
       thread: createdThread,
       turn: runtimeTurn("turn-created", "session-created"),

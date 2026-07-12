@@ -174,6 +174,14 @@ class RuntimeSubmitIdempotencyApiTestCase(AppReferenceApiTestSupport, unittest.T
                 "input_text": "retry once",
                 "client_message_id": "client-retry",
                 "client_submission_started_at": datetime.now(tz=UTC).isoformat(),
+                "client_submission_metrics": {
+                    "attachment_upload_ms": 0,
+                    "prepare_refs_wait_on_submit_ms": 12.25,
+                    "prepared_session_ready_before_submit": False,
+                    "prepared_session_wait_on_submit_ms": 0,
+                    "submit_post_ms": 123.456,
+                    "ignored": "nope",
+                },
                 "async": True,
             }
             with patch("core.api.runtime_api.submit_runtime_turn_async", side_effect=fake_submit_runtime_turn_async), patch(
@@ -212,6 +220,12 @@ class RuntimeSubmitIdempotencyApiTestCase(AppReferenceApiTestSupport, unittest.T
             for metric_name in ("claim_ms", "session_create_ms", "reference_validate_ms", "queue_turn_ms"):
                 self.assertGreaterEqual(metric_payload[metric_name], 0)
             self.assertGreaterEqual(metric_payload["client_click_to_queued_ms"], 0)
+            self.assertEqual(metric_payload["attachment_upload_ms"], 0)
+            self.assertEqual(metric_payload["prepare_refs_wait_on_submit_ms"], 12.25)
+            self.assertEqual(metric_payload["prepared_session_ready_before_submit"], False)
+            self.assertEqual(metric_payload["prepared_session_wait_on_submit_ms"], 0)
+            self.assertNotIn("submit_post_ms", metric_payload)
+            self.assertNotIn("ignored", metric_payload)
             post_queue_events = [
                 event
                 for event in state.runtime_store.list_events(first_payload["session"]["session_id"])
@@ -219,6 +233,24 @@ class RuntimeSubmitIdempotencyApiTestCase(AppReferenceApiTestSupport, unittest.T
             ]
             self.assertEqual(len(post_queue_events), 1)
             self.assertGreaterEqual(post_queue_events[0].payload["post_queue_response_ms"], 0)
+
+            metrics_status, metrics_payload, _headers = self._invoke(
+                app,
+                path=f"/api/runtime/turns/{first_payload['turn']['turn_id']}/client-metrics",
+                method="POST",
+                body={"metrics": {"submit_post_ms": 42.25, "prepared_session_ready_before_submit": True}},
+                cookie=cookie,
+            )
+            self.assertEqual(metrics_status, 200)
+            self.assertEqual(metrics_payload["metric_count"], 2)
+            client_metric_events = [
+                event
+                for event in state.runtime_store.list_events(first_payload["session"]["session_id"])
+                if event.event_type == "runtime.turn.client_submit_metrics"
+            ]
+            self.assertEqual(len(client_metric_events), 1)
+            self.assertEqual(client_metric_events[0].payload["submit_post_ms"], 42.25)
+            self.assertEqual(client_metric_events[0].payload["prepared_session_ready_before_submit"], True)
 
     def test_new_session_turn_concurrent_retry_reuses_claimed_turn(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:

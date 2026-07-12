@@ -1,4 +1,4 @@
-import type { AppReference, ChatMessageAttachment, MultiAgentComposerMode } from "../api/client";
+import type { AppReference, ChatMessageAttachment, MultiAgentComposerMode, RuntimeTurnClientMetrics } from "../api/client";
 import { uploadWorkspaceFile } from "../api/client";
 import type { ComposerAttachment } from "./attachments";
 
@@ -10,6 +10,7 @@ export type PendingMessage = {
   appReferences: AppReference[];
   multiAgentMode?: MultiAgentComposerMode;
   clientSubmissionStartedAt?: string;
+  clientSubmissionMetrics?: RuntimeTurnClientMetrics;
 };
 
 export type QueuedMessage = {
@@ -19,6 +20,7 @@ export type QueuedMessage = {
   appReferences: AppReference[];
   multiAgentMode?: MultiAgentComposerMode;
   clientSubmissionStartedAt?: string;
+  clientSubmissionMetrics?: RuntimeTurnClientMetrics;
 };
 
 export function attachmentToMessageAttachment(attachment: ComposerAttachment): ChatMessageAttachment {

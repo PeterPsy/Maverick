@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { createRuntimeSession, createRuntimeSessionWithTurn, sendRuntimeTurn } from "./runtime";
+import { createRuntimeSession, createRuntimeSessionWithTurn, recordRuntimeTurnClientMetrics, sendRuntimeTurn } from "./runtime";
 
 function okJson(payload: unknown): Response {
   return {
@@ -112,22 +112,64 @@ describe("runtime API client", () => {
     await createRuntimeSessionWithTurn({
       inputText: "hello",
       clientSubmissionStartedAt: "2026-07-12T10:00:00.000Z",
+      clientMetrics: {
+        attachment_upload_ms: 0,
+        prepared_session_ready_before_submit: false,
+        prepared_session_wait_on_submit_ms: 0,
+        prepare_refs_wait_on_submit_ms: 0,
+      },
     });
 
     expect(requestBody()).toMatchObject({
       input_text: "hello",
       client_submission_started_at: "2026-07-12T10:00:00.000Z",
+      client_submission_metrics: {
+        attachment_upload_ms: 0,
+        prepared_session_ready_before_submit: false,
+        prepared_session_wait_on_submit_ms: 0,
+        prepare_refs_wait_on_submit_ms: 0,
+      },
     });
 
     vi.mocked(fetch).mockClear();
     await sendRuntimeTurn("session-1", "next", "client-1", [], [], {
       clientSubmissionStartedAt: "2026-07-12T10:00:01.000Z",
+      clientMetrics: {
+        prepared_session_ready_before_submit: true,
+        prepared_session_wait_on_submit_ms: 0,
+        prepare_refs_wait_on_submit_ms: 12.5,
+      },
     });
 
     expect(requestBody()).toMatchObject({
       input_text: "next",
       client_message_id: "client-1",
       client_submission_started_at: "2026-07-12T10:00:01.000Z",
+      client_submission_metrics: {
+        prepared_session_ready_before_submit: true,
+        prepared_session_wait_on_submit_ms: 0,
+        prepare_refs_wait_on_submit_ms: 12.5,
+      },
+    });
+  });
+
+  it("records post-submit client metrics after the turn ack", async () => {
+    vi.mocked(fetch).mockResolvedValueOnce(okJson({ status: "recorded", turn_id: "turn-1", metric_count: 1 }));
+
+    await recordRuntimeTurnClientMetrics("turn-1", {
+      submit_post_ms: 42.25,
+    });
+
+    expect(fetch).toHaveBeenCalledWith(
+      "/api/runtime/turns/turn-1/client-metrics",
+      expect.objectContaining({
+        method: "POST",
+      }),
+    );
+    expect(requestBody()).toMatchObject({
+      metrics: {
+        submit_post_ms: 42.25,
+      },
     });
   });
 });

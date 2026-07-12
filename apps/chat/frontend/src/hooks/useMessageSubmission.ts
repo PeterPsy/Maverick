@@ -17,10 +17,11 @@ import {
   interruptRuntimeTurn,
   isRuntimeSessionUnavailableError,
   prepareRuntimeSessionAppReferences,
+  recordRuntimeTurnClientMetrics,
   sendRuntimeTurn,
 } from "../api/client";
 import type { ComposerAttachment } from "../lib/attachments";
-import type { RuntimeSessionOptions } from "../api/client";
+import type { RuntimeSessionOptions, RuntimeTurnClientMetrics } from "../api/client";
 import { hasInvalidAttachments } from "../lib/attachments";
 import { ActiveAppContext, mergeAppReferences } from "../lib/activeAppContext";
 import { appReferencesFromText } from "../lib/mentions";
@@ -123,6 +124,16 @@ type PreparedAppReferencesRequest = {
   sessionId: string;
   promise: Promise<void>;
 };
+
+type PreparedRuntimeSessionLookup = {
+  key: string;
+  prepared: PreparedRuntimeSession | null;
+  readyBeforeSubmit: boolean;
+  waitOnSubmitMs: number;
+};
+
+const PREPARED_RUNTIME_SESSION_SUBMIT_WAIT_MS = 200;
+const PREPARED_APP_REFERENCES_SUBMIT_WAIT_MS = 200;
 
 export function conversationKeyFor(activeThread: ChatThread | null, draftChat: DraftChat | null): string {
   if (activeThread?.thread_id) {
@@ -280,6 +291,21 @@ function stableJson(value: unknown): string {
 
 function preparedAppReferencesKey(sessionId: string, appReferences: AppReference[]): string {
   return stableJson({ app_references: appReferences, session_id: sessionId });
+}
+
+function elapsedMs(startedAt: number): number {
+  return Math.max(0, performance.now() - startedAt);
+}
+
+function preparedRuntimeSessionSubmitWaitMs(message: QueuedMessage): number {
+  if (!message.appReferences.length && !message.attachments.length) {
+    return 0;
+  }
+  return PREPARED_RUNTIME_SESSION_SUBMIT_WAIT_MS;
+}
+
+function turnIdForSubmitResponse(response: RuntimeTurnSubmitResponse | null): string {
+  return response?.turn?.turn_id || response?.idempotency?.turn_id || "";
 }
 
 export function useMessageSubmission({
@@ -503,6 +529,7 @@ export function useMessageSubmission({
               content: message.content,
               multiAgentMode: message.multiAgentMode,
               clientSubmissionStartedAt: message.clientSubmissionStartedAt,
+              clientSubmissionMetrics: message.clientSubmissionMetrics,
             }
           : item,
       ),
@@ -520,6 +547,7 @@ export function useMessageSubmission({
         appReferences: message.appReferences,
         multiAgentMode: message.multiAgentMode,
         clientSubmissionStartedAt: message.clientSubmissionStartedAt,
+        clientSubmissionMetrics: message.clientSubmissionMetrics,
       },
     ]);
   }
@@ -535,12 +563,18 @@ export function useMessageSubmission({
     if (signal) {
       throwIfAborted(signal);
     }
-    const agentRuntimeConfig = await selectedAgentRuntimeConfig(target.activeAppContext);
+    const agentRuntimeConfigPromise = selectedAgentRuntimeConfig(target.activeAppContext);
+    const defaultSystemPromptPromise = target.draftChat?.systemPrompt
+      ? Promise.resolve(target.draftChat.systemPrompt)
+      : loadDefaultSystemPrompt(target.activeAppContext);
+    const [agentRuntimeConfig, defaultSystemPrompt] = await Promise.all([
+      agentRuntimeConfigPromise,
+      defaultSystemPromptPromise,
+    ]);
     if (signal) {
       throwIfAborted(signal);
     }
-    const systemPrompt =
-      agentRuntimeConfig?.system_prompt || target.draftChat?.systemPrompt || (await loadDefaultSystemPrompt(target.activeAppContext));
+    const systemPrompt = agentRuntimeConfig?.system_prompt || target.draftChat?.systemPrompt || defaultSystemPrompt;
     if (signal) {
       throwIfAborted(signal);
     }
@@ -626,12 +660,17 @@ export function useMessageSubmission({
   async function waitForPreparedRuntimeSession(
     request: PreparedRuntimeSessionRequest,
     signal: AbortSignal,
+    timeoutMs = 0,
   ): Promise<PreparedRuntimeSession | null> {
     throwIfAborted(signal);
     return new Promise((resolve, reject) => {
       let settled = false;
+      let timer: number | undefined;
       const cleanup = () => {
         signal.removeEventListener("abort", abort);
+        if (timer !== undefined) {
+          window.clearTimeout(timer);
+        }
       };
       const finish = (action: () => void) => {
         if (settled) {
@@ -643,6 +682,9 @@ export function useMessageSubmission({
       };
       const abort = () => finish(() => reject(abortError()));
       signal.addEventListener("abort", abort, { once: true });
+      if (timeoutMs > 0) {
+        timer = window.setTimeout(() => finish(() => resolve(null)), timeoutMs);
+      }
       void request.promise.then(
         (prepared) => finish(() => resolve(prepared)),
         (error) => finish(() => reject(error)),
@@ -654,17 +696,54 @@ export function useMessageSubmission({
     conversationKey: string,
     options: RuntimeSessionOptions,
     signal: AbortSignal,
-  ): Promise<PreparedRuntimeSession | null> {
+    timeoutMs: number,
+  ): Promise<PreparedRuntimeSessionLookup> {
     const key = preparedRuntimeSessionKey(conversationKey, options);
     const prepared = preparedRuntimeSessionRef.current;
     if (prepared?.key === key) {
-      return prepared;
+      return {
+        key,
+        prepared,
+        readyBeforeSubmit: true,
+        waitOnSubmitMs: 0,
+      };
     }
     const pending = preparedRuntimeSessionRequestRef.current;
     if (pending?.key === key) {
-      return waitForPreparedRuntimeSession(pending, signal);
+      if (timeoutMs <= 0) {
+        return {
+          key,
+          prepared: null,
+          readyBeforeSubmit: false,
+          waitOnSubmitMs: 0,
+        };
+      }
+      const startedAt = performance.now();
+      const pendingPrepared = await waitForPreparedRuntimeSession(pending, signal, timeoutMs);
+      return {
+        key,
+        prepared: pendingPrepared,
+        readyBeforeSubmit: false,
+        waitOnSubmitMs: elapsedMs(startedAt),
+      };
     }
-    return null;
+    return {
+      key,
+      prepared: null,
+      readyBeforeSubmit: false,
+      waitOnSubmitMs: 0,
+    };
+  }
+
+  function cancelPreparedRuntimeSessionRequestForKey(key: string) {
+    const pending = preparedRuntimeSessionRequestRef.current;
+    if (pending?.key === key) {
+      pending.abortController.abort();
+      preparedRuntimeSessionRequestRef.current = null;
+    }
+    if (preparedRuntimeSessionRef.current?.key === key) {
+      preparedRuntimeSessionRef.current = null;
+    }
   }
 
   function forgetPreparedRuntimeSession(prepared: PreparedRuntimeSession | null) {
@@ -756,12 +835,14 @@ export function useMessageSubmission({
     });
   }
 
-  async function prepareAppReferencesForSubmit(sessionId: string, appReferences: AppReference[], signal: AbortSignal) {
+  async function prepareAppReferencesForSubmit(sessionId: string, appReferences: AppReference[], signal: AbortSignal): Promise<number> {
     const request = startPreparedAppReferencesRequest(sessionId, appReferences);
     if (!request) {
-      return;
+      return 0;
     }
-    await waitForPreparedAppReferencesRequest(request, signal, 0);
+    const startedAt = performance.now();
+    await waitForPreparedAppReferencesRequest(request, signal, PREPARED_APP_REFERENCES_SUBMIT_WAIT_MS);
+    return elapsedMs(startedAt);
   }
 
   function migrateConversationState(fromConversationKey: string, toConversationKey: string) {
@@ -859,6 +940,7 @@ export function useMessageSubmission({
         appReferences: message.appReferences,
         multiAgentMode: message.multiAgentMode,
         clientSubmissionStartedAt: message.clientSubmissionStartedAt,
+        clientSubmissionMetrics: message.clientSubmissionMetrics,
       },
     ]);
     setItemsForConversation(setFailedUserMessagesByConversationKey, target.conversationKey, (current) =>
@@ -938,6 +1020,23 @@ export function useMessageSubmission({
     return uploadedAttachments;
   }
 
+  async function submitWithPostMetric<T>(metrics: RuntimeTurnClientMetrics, action: () => Promise<T>): Promise<T> {
+    const startedAt = performance.now();
+    try {
+      return await action();
+    } finally {
+      metrics.submit_post_ms = elapsedMs(startedAt);
+    }
+  }
+
+  function recordSubmitPostMetric(response: RuntimeTurnSubmitResponse | null, metrics: RuntimeTurnClientMetrics) {
+    const turnId = turnIdForSubmitResponse(response);
+    if (!turnId || typeof metrics.submit_post_ms !== "number") {
+      return;
+    }
+    void recordRuntimeTurnClientMetrics(turnId, metrics).catch(() => undefined);
+  }
+
   async function stopActiveSubmission(): Promise<boolean> {
     const conversationKey = activeConversationKeyRef.current;
     const inFlightSubmission = inFlightSubmissionsRef.current[conversationKey];
@@ -993,25 +1092,40 @@ export function useMessageSubmission({
       let agentRuntimeConfig: AgentRuntimeConfig | null = null;
       let systemPrompt = targetDraftChat?.systemPrompt || "";
       let response: RuntimeTurnSubmitResponse | null = null;
+      const clientMetrics: RuntimeTurnClientMetrics = { ...(message.clientSubmissionMetrics || {}) };
       if (!thread) {
         const runtimeOptions = await buildRuntimeSessionOptions(target, abortController.signal);
         agentRuntimeConfig = runtimeOptions.agentRuntimeConfig;
         systemPrompt = runtimeOptions.systemPrompt;
-        const prepared = await preparedRuntimeSessionForOptions(target.conversationKey, runtimeOptions.options, abortController.signal);
+        const preparedLookup = await preparedRuntimeSessionForOptions(
+          target.conversationKey,
+          runtimeOptions.options,
+          abortController.signal,
+          preparedRuntimeSessionSubmitWaitMs(message),
+        );
+        clientMetrics.prepared_session_ready_before_submit = preparedLookup.readyBeforeSubmit;
+        clientMetrics.prepared_session_wait_on_submit_ms = preparedLookup.waitOnSubmitMs;
+        const prepared = preparedLookup.prepared;
         if (prepared) {
           try {
-            await prepareAppReferencesForSubmit(
+            clientMetrics.prepare_refs_wait_on_submit_ms = await prepareAppReferencesForSubmit(
               prepared.session.session_id,
               message.appReferences,
               abortController.signal,
             );
-            response = await sendRuntimeTurn(
-              prepared.session.session_id,
-              message.content,
-              message.clientMessageId,
-              message.attachments,
-              message.appReferences,
-              { signal: abortController.signal, clientSubmissionStartedAt: message.clientSubmissionStartedAt },
+            response = await submitWithPostMetric(clientMetrics, () =>
+              sendRuntimeTurn(
+                prepared.session.session_id,
+                message.content,
+                message.clientMessageId,
+                message.attachments,
+                message.appReferences,
+                {
+                  signal: abortController.signal,
+                  clientMetrics,
+                  clientSubmissionStartedAt: message.clientSubmissionStartedAt,
+                },
+              ),
             );
             forgetPreparedRuntimeSession(prepared);
           } catch (sendPreparedError) {
@@ -1019,46 +1133,34 @@ export function useMessageSubmission({
             if (!isRuntimeSessionUnavailableError(sendPreparedError, prepared.session.session_id)) {
               throw sendPreparedError;
             }
-            response = await createRuntimeSessionWithTurn({
-              appReferences: message.appReferences,
-              attachments: message.attachments,
-              clientSubmissionStartedAt: message.clientSubmissionStartedAt,
-              clientMessageId: message.clientMessageId,
-              inputText: message.content,
-              options: runtimeOptions.options,
-              signal: abortController.signal,
-            });
-          }
-        } else {
-          let session: RuntimeSession | null = null;
-          try {
-            session = await createRuntimeSession(runtimeOptions.options, { signal: abortController.signal });
-          } catch (sessionError) {
-            throwIfAborted(abortController.signal);
-            if (!(sessionError instanceof Error)) {
-              throw sessionError;
-            }
-            response = await createRuntimeSessionWithTurn({
-              appReferences: message.appReferences,
-              attachments: message.attachments,
-              clientSubmissionStartedAt: message.clientSubmissionStartedAt,
-              clientMessageId: message.clientMessageId,
-              inputText: message.content,
-              options: runtimeOptions.options,
-              signal: abortController.signal,
-            });
-          }
-          if (session) {
-            await prepareAppReferencesForSubmit(session.session_id, message.appReferences, abortController.signal);
-            response = await sendRuntimeTurn(
-              session.session_id,
-              message.content,
-              message.clientMessageId,
-              message.attachments,
-              message.appReferences,
-              { signal: abortController.signal, clientSubmissionStartedAt: message.clientSubmissionStartedAt },
+            response = await submitWithPostMetric(clientMetrics, () =>
+              createRuntimeSessionWithTurn({
+                appReferences: message.appReferences,
+                attachments: message.attachments,
+                clientMetrics,
+                clientSubmissionStartedAt: message.clientSubmissionStartedAt,
+                clientMessageId: message.clientMessageId,
+                inputText: message.content,
+                options: runtimeOptions.options,
+                signal: abortController.signal,
+              }),
             );
           }
+        } else {
+          clientMetrics.prepare_refs_wait_on_submit_ms = 0;
+          cancelPreparedRuntimeSessionRequestForKey(preparedLookup.key);
+          response = await submitWithPostMetric(clientMetrics, () =>
+            createRuntimeSessionWithTurn({
+              appReferences: message.appReferences,
+              attachments: message.attachments,
+              clientMetrics,
+              clientSubmissionStartedAt: message.clientSubmissionStartedAt,
+              clientMessageId: message.clientMessageId,
+              inputText: message.content,
+              options: runtimeOptions.options,
+              signal: abortController.signal,
+            }),
+          );
         }
       } else if (!hasTargetThread(target, thread)) {
         throw new Error("This chat no longer exists.");
@@ -1066,20 +1168,31 @@ export function useMessageSubmission({
         if (!thread.runtime_session_id) {
           throw new Error("This chat does not have a runtime session.");
         }
-        await prepareAppReferencesForSubmit(thread.runtime_session_id, message.appReferences, abortController.signal);
-        response = await sendRuntimeTurn(
+        clientMetrics.prepare_refs_wait_on_submit_ms = await prepareAppReferencesForSubmit(
           thread.runtime_session_id,
-          message.content,
-          message.clientMessageId,
-          message.attachments,
           message.appReferences,
-          { signal: abortController.signal, clientSubmissionStartedAt: message.clientSubmissionStartedAt },
+          abortController.signal,
+        );
+        response = await submitWithPostMetric(clientMetrics, () =>
+          sendRuntimeTurn(
+            thread.runtime_session_id,
+            message.content,
+            message.clientMessageId,
+            message.attachments,
+            message.appReferences,
+            {
+              signal: abortController.signal,
+              clientMetrics,
+              clientSubmissionStartedAt: message.clientSubmissionStartedAt,
+            },
+          ),
         );
       }
       throwIfAborted(abortController.signal);
       if (!response) {
         throw new Error("Runtime turn was not created.");
       }
+      recordSubmitPostMetric(response, clientMetrics);
       if (isPendingIdempotencyResponse(response)) {
         const pending = response.idempotency;
         const pendingSession = response.session;
@@ -1333,9 +1446,11 @@ export function useMessageSubmission({
     const clientMessageId = crypto.randomUUID();
     const clientSubmissionStartedAt = new Date().toISOString();
     const appReferences = mergeAppReferences(appReferencesFromText(input, composerMentionItems), target.activeAppContext);
+    const clientSubmissionMetrics: RuntimeTurnClientMetrics = {};
     const localMessage: QueuedMessage = {
       clientMessageId,
       clientSubmissionStartedAt,
+      clientSubmissionMetrics,
       content: input,
       attachments: targetAttachments.map(attachmentToMessageAttachment),
       appReferences,
@@ -1349,7 +1464,9 @@ export function useMessageSubmission({
     if (shouldQueue) {
       let messageAttachments;
       try {
+        const attachmentUploadStartedAt = performance.now();
         messageAttachments = await Promise.all(targetAttachments.map(uploadComposerAttachment));
+        clientSubmissionMetrics.attachment_upload_ms = elapsedMs(attachmentUploadStartedAt);
       } catch (uploadError) {
         if (isConversationStillActive(resolveConversationKeyAlias(target.conversationKey))) {
           setComposerError(uploadError instanceof Error ? uploadError.message : "Unable to upload attachments.");
@@ -1362,6 +1479,7 @@ export function useMessageSubmission({
       const queuedMessage = {
         clientMessageId,
         clientSubmissionStartedAt,
+        clientSubmissionMetrics: { ...clientSubmissionMetrics },
         content: input,
         attachments: messageAttachments,
         appReferences,
@@ -1381,9 +1499,15 @@ export function useMessageSubmission({
     }
     const abortController = startSubmission(target, localMessage);
     try {
+      const attachmentUploadStartedAt = performance.now();
+      const uploadedAttachments = await uploadAttachmentsWithAbort(targetAttachments, abortController.signal);
       const message = {
         ...localMessage,
-        attachments: await uploadAttachmentsWithAbort(targetAttachments, abortController.signal),
+        attachments: uploadedAttachments,
+        clientSubmissionMetrics: {
+          ...clientSubmissionMetrics,
+          attachment_upload_ms: elapsedMs(attachmentUploadStartedAt),
+        },
       };
       replacePendingMessage(target.conversationKey, message);
       await submitMessage(message, target, abortController);

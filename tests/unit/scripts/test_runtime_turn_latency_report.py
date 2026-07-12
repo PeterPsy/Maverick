@@ -79,6 +79,8 @@ class RuntimeTurnLatencyReportTestCase(unittest.TestCase):
         warm_metrics = report["cohorts"]["codex_warm"]["metrics"]
         hosted_metrics = report["cohorts"]["plain_hosted"]["metrics"]
         self.assertEqual(cold_metrics["ensure_runtime_ms"]["p50_ms"], 250)
+        self.assertEqual(cold_metrics["prepared_session_wait_on_submit_ms"]["p50_ms"], 0)
+        self.assertEqual(cold_metrics["submit_post_ms"]["p50_ms"], 42)
         self.assertEqual(cold_metrics["claim_ms"]["p50_ms"], 1)
         self.assertEqual(cold_metrics["post_queue_response_ms"]["p50_ms"], 10)
         self.assertEqual(cold_metrics["prewarm_wait_ms"]["p50_ms"], 175)
@@ -347,7 +349,7 @@ class RuntimeTurnLatencyReportTestCase(unittest.TestCase):
 
             report = runtime_turn_latency_report.build_report(root, workspaces={"default"}, limit_turns=0, include_turns=True)
 
-        self.assertEqual(report["summary"]["events_loaded"], 7)
+        self.assertEqual(report["summary"]["events_loaded"], 8)
         self.assertEqual(report["summary"]["duplicate_events_skipped"], 2)
         self.assertEqual(report["summary"]["turns_reported"], 1)
         self.assertEqual(report["turns"][0]["metrics"]["queued_to_worker_started_ms"], 200)
@@ -519,6 +521,10 @@ def _turn_events(
             receive_metric_at,
             {
                 "receive_to_queued_ms": 50,
+                "prepared_session_ready_before_submit": False,
+                "prepared_session_wait_on_submit_ms": 0,
+                "prepare_refs_wait_on_submit_ms": 0,
+                "attachment_upload_ms": 0,
                 "claim_ms": 1,
                 "session_create_ms": 2,
                 "reference_validate_ms": 3,
@@ -533,6 +539,15 @@ def _turn_events(
             "runtime.turn.post_queue_response",
             post_queue_at,
             {"post_queue_response_ms": 10},
+        ),
+        _event(
+            "client-submit",
+            workspace_id,
+            session_id,
+            turn_id,
+            "runtime.turn.client_submit_metrics",
+            post_queue_at + timedelta(milliseconds=5),
+            {"submit_post_ms": 42},
         ),
     ]
     if prewarm_wait_ms is not None:

@@ -281,10 +281,11 @@ class BaseShellAppMountingTests(unittest.TestCase):
         submit_end = submission_source.index("async function handleSend", submit_start)
         submit_source = submission_source[submit_start:submit_end]
 
-        self.assertIn("response = await createRuntimeSessionWithTurn({", submit_source)
+        self.assertIn("response = await submitWithPostMetric(clientMetrics, () =>", submit_source)
+        self.assertIn("createRuntimeSessionWithTurn({", submit_source)
         self.assertIn("project_id: targetDraftChat?.projectId ?? null", submit_source)
         self.assertIn("inputText: message.content", submit_source)
-        self.assertIn("response = await sendRuntimeTurn(", submit_source)
+        self.assertIn("sendRuntimeTurn(", submit_source)
         self.assertIn("if (!thread.runtime_session_id)", submit_source)
         self.assertIn('throw new Error("This chat does not have a runtime session.")', submit_source)
         self.assertIn("getWidgetContext", (REPO_ROOT / "apps/chat/frontend/src/lib/activeAppContext.ts").read_text())

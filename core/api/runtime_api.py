@@ -5,6 +5,7 @@ from __future__ import annotations
 from contextlib import suppress
 from dataclasses import asdict, dataclass, replace
 from datetime import UTC, datetime, timedelta
+import math
 import time
 from urllib.parse import parse_qs
 from uuid import uuid4
@@ -80,9 +81,17 @@ from core.skills.runtime_catalog import runtime_skill_catalog_app_id_for_request
 
 IDEMPOTENT_CLAIM_WAIT_SECONDS = 5.0
 PREPARED_SESSION_TTL_SECONDS = 30 * 60
-PREPARED_SESSION_PREWARM_WAIT_SECONDS = 2.0
+PREPARED_SESSION_PREWARM_WAIT_SECONDS = 0.0
 RUNTIME_THREAD_PAGE_DEFAULT_LIMIT = 50
 RUNTIME_THREAD_PAGE_MAX_LIMIT = 100
+CLIENT_SUBMISSION_NUMERIC_METRICS = {
+    "attachment_upload_ms",
+    "prepare_refs_wait_on_submit_ms",
+    "prepared_session_wait_on_submit_ms",
+    "submit_post_ms",
+}
+CLIENT_SUBMISSION_INITIAL_NUMERIC_METRICS = CLIENT_SUBMISSION_NUMERIC_METRICS - {"submit_post_ms"}
+CLIENT_SUBMISSION_BOOLEAN_METRICS = {"prepared_session_ready_before_submit"}
 
 
 @dataclass(frozen=True)
@@ -390,6 +399,26 @@ def _client_submission_started_at(body: dict) -> datetime | None:
     if parsed.tzinfo is None:
         return None
     return parsed.astimezone(UTC)
+
+
+def _client_submission_metrics(body: dict, *, include_submit_post_ms: bool = False) -> dict[str, object]:
+    raw_metrics = body.get("client_submission_metrics")
+    if not isinstance(raw_metrics, dict):
+        return {}
+    metrics: dict[str, object] = {}
+    numeric_metric_names = CLIENT_SUBMISSION_NUMERIC_METRICS if include_submit_post_ms else CLIENT_SUBMISSION_INITIAL_NUMERIC_METRICS
+    for name in numeric_metric_names:
+        value = raw_metrics.get(name)
+        if isinstance(value, bool) or not isinstance(value, (int, float)):
+            continue
+        numeric = float(value)
+        if math.isfinite(numeric) and 0 <= numeric <= 300_000:
+            metrics[name] = round(numeric, 3)
+    for name in CLIENT_SUBMISSION_BOOLEAN_METRICS:
+        value = raw_metrics.get(name)
+        if isinstance(value, bool):
+            metrics[name] = value
+    return metrics
 
 
 def _prewarm_new_runtime_session(
@@ -1531,6 +1560,7 @@ def _prepare_runtime_turn_submission(
         return None, _idempotent_runtime_turn_response(state, context, existing_turn, start_response)
     if timing is not None:
         timing.client_submission_started_at = _client_submission_started_at(body)
+        timing.client_submission_metrics.update(_client_submission_metrics(body))
     attachments = body.get("attachments") if isinstance(body.get("attachments"), list) else []
     attachment_items = [item for item in attachments if isinstance(item, dict)]
     input_text = str(body.get("input_text") or body.get("message") or "").strip()
@@ -1743,6 +1773,57 @@ def _handle_turn_item(state: PlatformState, context: RequestSession, turn_id: st
     return json_response(start_response, _turn_payload(turn))
 
 
+def _handle_turn_client_metrics(
+    state: PlatformState,
+    context: RequestSession,
+    turn_id: str,
+    method: str,
+    body: dict,
+    start_response: StartResponse,
+):
+    if method != "POST":
+        return json_response(start_response, {"error": "method_not_allowed"}, status="405 Method Not Allowed")
+    try:
+        turn = state.runtime_store.get_turn(turn_id)
+    except RuntimeTurnNotFoundError:
+        return json_response(start_response, {"error": "runtime_turn_not_found"}, status="404 Not Found")
+    if turn.workspace_id != context.workspace_id:
+        return json_response(start_response, {"error": "runtime_turn_not_found"}, status="404 Not Found")
+    try:
+        session = state.runtime_store.get_session(turn.session_id)
+    except (RuntimeSessionNotFoundError, ValueError):
+        return json_response(start_response, {"error": "runtime_turn_not_found"}, status="404 Not Found")
+    session = _visibility_reconciled_session(state, session)
+    if not runtime_session_allows_user_thread(session):
+        return _hidden_runtime_session_response(start_response, session)
+    try:
+        require_runtime_session_operation(
+            workspace_store=state.workspace_store,
+            user=context.user,
+            session=session,
+            operation="turn_submit",
+        )
+    except AuthorizationError as error:
+        return json_response(start_response, {"error": error.reason}, status="403 Forbidden")
+    raw_metrics = body.get("metrics") if isinstance(body.get("metrics"), dict) else {}
+    metrics = _client_submission_metrics({"client_submission_metrics": raw_metrics}, include_submit_post_ms=True)
+    if metrics:
+        record_runtime_event(
+            state.runtime_store,
+            event_id=str(uuid4()),
+            session_id=turn.session_id,
+            turn_id=turn.turn_id,
+            plane="turn",
+            event_type="runtime.turn.client_submit_metrics",
+            payload=metrics,
+            event_bus=state.runtime_event_bus,
+        )
+    return json_response(
+        start_response,
+        {"status": "recorded", "turn_id": turn.turn_id, "metric_count": len(metrics)},
+    )
+
+
 def _handle_turn_interrupt(
     state: PlatformState,
     context: RequestSession,
@@ -1951,6 +2032,8 @@ def handle_runtime_api(state: PlatformState, environ: dict, start_response: Star
         return _handle_session_cleanup(state, context, parts[1], method, body, start_response, start_path=start_path)
     if len(parts) == 2 and parts[0] == "turns" and method == "GET":
         return _handle_turn_item(state, context, parts[1], start_response)
+    if len(parts) == 3 and parts[0] == "turns" and parts[2] == "client-metrics":
+        return _handle_turn_client_metrics(state, context, parts[1], method, body, start_response)
     if len(parts) == 3 and parts[0] == "turns" and parts[2] == "interrupt" and method == "POST":
         return _handle_turn_interrupt(state, context, parts[1], start_response, start_path=start_path)
     return json_response(start_response, {"error": "runtime_route_not_found"}, status="404 Not Found")

@@ -26,6 +26,36 @@ class PreparedRuntimeSessionsApiTestCase(AppReferenceApiTestSupport, unittest.Te
     def setUp(self) -> None:
         clear_runtime_app_reference_materialization_cache()
 
+    def test_prepare_only_session_schedules_prewarm_without_waiting(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            repo_root = self._repo_root(temp_dir)
+            with patch.dict(
+                "os.environ",
+                {
+                    "MAVERICK_ALLOW_INSECURE_TEST_DEFAULTS": "1",
+                    "MAVERICK_ADMIN_USERNAME": "admin",
+                    "MAVERICK_ADMIN_PASSWORD": "maverick",
+                },
+            ):
+                state = bootstrap_platform_state(start_path=repo_root)
+            app = PlatformHost(state, start_path=repo_root)
+            cookie = self._login(app)
+
+            with patch("core.api.runtime_api.prewarm_runtime_session_async") as prewarm, patch(
+                "core.api.runtime_api.wait_for_runtime_session_prewarm"
+            ) as wait_for_prewarm:
+                status, _payload, _headers = self._invoke(
+                    app,
+                    path="/api/runtime/sessions",
+                    method="POST",
+                    body={"agent_id": "chat", "source_app_id": "chat", "prepare_only": True, "title": "New chat"},
+                    cookie=cookie,
+                )
+
+            self.assertEqual(status, 201)
+            prewarm.assert_called_once()
+            wait_for_prewarm.assert_not_called()
+
     def test_prepare_only_session_promotes_on_first_turn_with_draft_metadata(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             repo_root = self._repo_root(temp_dir)

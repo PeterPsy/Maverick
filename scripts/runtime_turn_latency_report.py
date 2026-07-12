@@ -20,6 +20,7 @@ INTERESTING_EVENT_TYPES = {
     "runtime.turn.queued",
     "runtime.turn.receive_to_queued",
     "runtime.turn.post_queue_response",
+    "runtime.turn.client_submit_metrics",
     "runtime.turn.worker_entered",
     "runtime.turn.source_app_queued_dispatch_started",
     "runtime.turn.source_app_queued_dispatch_completed",
@@ -54,6 +55,7 @@ EVENT_KEYS = {
     "runtime.turn.queued": "queued",
     "runtime.turn.receive_to_queued": "receive_to_queued",
     "runtime.turn.post_queue_response": "post_queue_response",
+    "runtime.turn.client_submit_metrics": "client_submit_metrics",
     "runtime.turn.worker_entered": "worker_entered",
     "runtime.turn.source_app_queued_dispatch_started": "source_app_queued_dispatch_started",
     "runtime.turn.source_app_queued_dispatch_completed": "source_app_queued_dispatch_completed",
@@ -85,6 +87,10 @@ EVENT_KEYS = {
 LATENCY_METRIC_NAMES = (
     "receive_to_queued_ms",
     "client_click_to_queued_ms",
+    "prepared_session_wait_on_submit_ms",
+    "prepare_refs_wait_on_submit_ms",
+    "attachment_upload_ms",
+    "submit_post_ms",
     "claim_ms",
     "session_create_ms",
     "reference_validate_ms",
@@ -138,7 +144,12 @@ COUNT_METRIC_NAMES = (
     "attachment_count",
     "skill_count",
 )
-BOOLEAN_METRIC_NAMES = ("reference_cache_hit", "launch_cache_hit", "app_reference_prepare_cache_hit")
+BOOLEAN_METRIC_NAMES = (
+    "reference_cache_hit",
+    "launch_cache_hit",
+    "app_reference_prepare_cache_hit",
+    "prepared_session_ready_before_submit",
+)
 ATTRIBUTE_NAMES = ("launch_cache_fingerprint_prefix",)
 METRIC_NAMES = LATENCY_METRIC_NAMES + COUNT_METRIC_NAMES + BOOLEAN_METRIC_NAMES
 COHORT_NAMES = ("codex_cold", "codex_warm", "plain_hosted", "other_provider")
@@ -272,6 +283,8 @@ def build_report(
             ),
             "receive_to_provider_accepted_ms is reconstructed as receive_to_queued_ms plus queued_to_provider_accepted_ms when both components are available.",
             "client_click_to_queued_ms comes from client_submission_started_at when Chat includes it in the submit payload; bad client clock values are ignored.",
+            "prepared_session_wait_on_submit_ms, prepare_refs_wait_on_submit_ms, attachment_upload_ms, and prepared_session_ready_before_submit come from Chat client submit instrumentation.",
+            "submit_post_ms comes from a best-effort client metric event recorded after the runtime submit ack.",
             "first_turn_receive_to_provider_accepted_ms is populated only for the first observed provider turn in each session.",
             (
                 "prewarm_wait_ms and prewarm_total_ms come from runtime.turn.prewarm_waited when the turn waited, "
@@ -740,6 +753,7 @@ def _turn_metrics(group: TurnEvents) -> dict[str, float]:
     metrics: dict[str, float] = {}
     receive = events.get("receive_to_queued")
     post_queue_response = events.get("post_queue_response")
+    client_submit_metrics = events.get("client_submit_metrics")
     queued = events.get("queued")
     worker_entered = events.get("worker_entered")
     source_app_queued_dispatch_started = events.get("source_app_queued_dispatch_started")
@@ -767,10 +781,30 @@ def _turn_metrics(group: TurnEvents) -> dict[str, float]:
     if receive is not None:
         _set_metric(metrics, "receive_to_queued_ms", _numeric(receive.payload.get("receive_to_queued_ms")))
         _set_metric(metrics, "client_click_to_queued_ms", _numeric(receive.payload.get("client_click_to_queued_ms")))
+        for key in ("prepared_session_wait_on_submit_ms", "prepare_refs_wait_on_submit_ms", "attachment_upload_ms"):
+            _set_metric(metrics, key, _numeric(receive.payload.get(key)))
+        _set_metric(
+            metrics,
+            "prepared_session_ready_before_submit",
+            _bool_numeric(receive.payload.get("prepared_session_ready_before_submit")),
+        )
         for key in ("claim_ms", "session_create_ms", "reference_validate_ms", "queue_turn_ms"):
             _set_metric(metrics, key, _numeric(receive.payload.get(key)))
     if post_queue_response is not None:
         _set_metric(metrics, "post_queue_response_ms", _numeric(post_queue_response.payload.get("post_queue_response_ms")))
+    if client_submit_metrics is not None:
+        for key in (
+            "prepared_session_wait_on_submit_ms",
+            "prepare_refs_wait_on_submit_ms",
+            "attachment_upload_ms",
+            "submit_post_ms",
+        ):
+            _set_metric(metrics, key, _numeric(client_submit_metrics.payload.get(key)))
+        _set_metric(
+            metrics,
+            "prepared_session_ready_before_submit",
+            _bool_numeric(client_submit_metrics.payload.get("prepared_session_ready_before_submit")),
+        )
     if prewarm_waited is not None:
         _set_metric(metrics, "prewarm_wait_ms", _numeric(prewarm_waited.payload.get("prewarm_wait_ms")))
         _set_metric(metrics, "prewarm_total_ms", _numeric(prewarm_waited.payload.get("prewarm_total_ms")))

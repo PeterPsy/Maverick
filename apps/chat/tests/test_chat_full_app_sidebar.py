@@ -50,8 +50,8 @@ class ChatFullAppSidebarTests(unittest.TestCase):
     def test_first_draft_send_queues_turn_before_thread_navigation(self) -> None:
         submission_source = (CHAT_ROOT / "frontend" / "src" / "hooks" / "useMessageSubmission.ts").read_text()
         submit_start = submission_source.index("async function submitMessage")
-        first_draft_turn = submission_source.index("response = await createRuntimeSessionWithTurn", submit_start)
-        send_turn = submission_source.index("response = await sendRuntimeTurn", submit_start)
+        first_draft_turn = submission_source.index("createRuntimeSessionWithTurn({", submit_start)
+        send_turn = submission_source.index("sendRuntimeTurn(", submit_start)
         thread_navigation = submission_source.index("openChatThreadRouteInShell(optimisticThread.thread_id", submit_start)
 
         self.assertLess(first_draft_turn, thread_navigation)

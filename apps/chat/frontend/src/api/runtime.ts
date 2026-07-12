@@ -8,6 +8,7 @@ import type {
   RuntimeSessionOptions,
   RuntimeThreadsPayload,
   RuntimeTurn,
+  RuntimeTurnClientMetrics,
   RuntimeTurnSubmitResponse,
   RuntimeWebSocketFrame,
   UploadedWorkspaceFile,
@@ -54,11 +55,42 @@ function serializableMessageAttachments(attachments: ChatMessageAttachment[]) {
   return attachments.map(({ objectUrl: _objectUrl, ...attachment }) => attachment);
 }
 
+function serializableClientMetrics(
+  metrics?: RuntimeTurnClientMetrics,
+  { includeSubmitPostMs = true }: { includeSubmitPostMs?: boolean } = {},
+): RuntimeTurnClientMetrics | undefined {
+  if (!metrics) {
+    return undefined;
+  }
+  const payload: RuntimeTurnClientMetrics = {};
+  const numericKeys: Array<
+    "attachment_upload_ms" | "prepare_refs_wait_on_submit_ms" | "prepared_session_wait_on_submit_ms" | "submit_post_ms"
+  > = [
+    "attachment_upload_ms",
+    "prepare_refs_wait_on_submit_ms",
+    "prepared_session_wait_on_submit_ms",
+  ];
+  if (includeSubmitPostMs) {
+    numericKeys.push("submit_post_ms");
+  }
+  for (const key of numericKeys) {
+    const value = metrics[key];
+    if (typeof value === "number" && Number.isFinite(value) && value >= 0) {
+      payload[key] = value;
+    }
+  }
+  if (typeof metrics.prepared_session_ready_before_submit === "boolean") {
+    payload.prepared_session_ready_before_submit = metrics.prepared_session_ready_before_submit;
+  }
+  return Object.keys(payload).length ? payload : undefined;
+}
+
 export function createRuntimeSessionWithTurn({
   appReferences = [],
   attachments = [],
   clientMessageId,
   clientSubmissionStartedAt,
+  clientMetrics,
   inputText,
   options = {},
   signal,
@@ -67,6 +99,7 @@ export function createRuntimeSessionWithTurn({
   attachments?: ChatMessageAttachment[];
   clientMessageId?: string;
   clientSubmissionStartedAt?: string;
+  clientMetrics?: RuntimeTurnClientMetrics;
   inputText: string;
   options?: RuntimeSessionOptions;
   signal?: AbortSignal;
@@ -91,6 +124,10 @@ export function createRuntimeSessionWithTurn({
     attachments: serializableMessageAttachments(attachments),
     async: true,
   };
+  const serializedClientMetrics = serializableClientMetrics(clientMetrics, { includeSubmitPostMs: false });
+  if (serializedClientMetrics) {
+    body.client_submission_metrics = serializedClientMetrics;
+  }
   if (appReferences.length) {
     body.app_references = appReferences;
   }
@@ -167,7 +204,7 @@ export function sendRuntimeTurn(
   clientMessageId?: string,
   attachments: ChatMessageAttachment[] = [],
   appReferences: AppReference[] = [],
-  requestOptions: { signal?: AbortSignal; clientSubmissionStartedAt?: string } = {},
+  requestOptions: { signal?: AbortSignal; clientMetrics?: RuntimeTurnClientMetrics; clientSubmissionStartedAt?: string } = {},
 ): Promise<RuntimeTurnSubmitResponse> {
   const body: Record<string, unknown> = {
     input_text: inputText,
@@ -176,6 +213,10 @@ export function sendRuntimeTurn(
     attachments: serializableMessageAttachments(attachments),
     async: true,
   };
+  const serializedClientMetrics = serializableClientMetrics(requestOptions.clientMetrics, { includeSubmitPostMs: false });
+  if (serializedClientMetrics) {
+    body.client_submission_metrics = serializedClientMetrics;
+  }
   if (appReferences.length) {
     body.app_references = appReferences;
   }
@@ -184,6 +225,19 @@ export function sendRuntimeTurn(
     headers: { "Content-Type": "application/json" },
     signal: requestOptions.signal,
     body: JSON.stringify(body),
+  });
+}
+
+export function recordRuntimeTurnClientMetrics(
+  turnId: string,
+  metrics: RuntimeTurnClientMetrics,
+  requestOptions: { signal?: AbortSignal } = {},
+): Promise<{ status: "recorded"; metric_count: number; turn_id: string }> {
+  return requestJson(`/api/runtime/turns/${encodeURIComponent(turnId)}/client-metrics`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    signal: requestOptions.signal,
+    body: JSON.stringify({ metrics: serializableClientMetrics(metrics) || {} }),
   });
 }
 

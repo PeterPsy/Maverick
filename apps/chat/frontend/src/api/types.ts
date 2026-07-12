@@ -340,6 +340,14 @@ export type RuntimeTurnSubmitResponse = {
   idempotency?: RuntimeTurnIdempotency;
 };
 
+export type RuntimeTurnClientMetrics = {
+  attachment_upload_ms?: number;
+  prepare_refs_wait_on_submit_ms?: number;
+  prepared_session_ready_before_submit?: boolean;
+  prepared_session_wait_on_submit_ms?: number;
+  submit_post_ms?: number;
+};
+
 export type RuntimeEvent = {
   event_id: string;
   session_id: string;

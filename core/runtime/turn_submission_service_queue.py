@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from datetime import datetime
 import time
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 from uuid import uuid4
 
 from core.runtime.plain_hosted_text import queue_provider_id_for_session
@@ -27,6 +27,7 @@ class RuntimeTurnSubmissionTiming:
 
     received_perf_counter: float | None = None
     client_submission_started_at: datetime | None = None
+    client_submission_metrics: dict[str, Any] = field(default_factory=dict)
     _durations_ms: dict[str, float] = field(default_factory=dict)
     _queue_recorded_perf_counter: float | None = None
 
@@ -228,6 +229,7 @@ def _record_receive_to_queued_metric(
             "queue_turn_ms",
         )
     )
+    payload.update(timing.client_submission_metrics)
     click_to_queued_ms = _client_click_to_queued_ms(
         queued_event_created_at=queued_event.created_at,
         client_submission_started_at=timing.client_submission_started_at,

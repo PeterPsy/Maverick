@@ -136,6 +136,7 @@ function parsePersistedMessages(items: unknown[]): PersistedMessage[] {
           ...(typeof record.clientSubmissionStartedAt === "string"
             ? { clientSubmissionStartedAt: record.clientSubmissionStartedAt }
             : {}),
+          clientSubmissionMetrics: persistedClientSubmissionMetrics(record.clientSubmissionMetrics),
           appReferences: persistedAppReferences(record.appReferences),
           attachments,
           ...(multiAgentMode ? { multiAgentMode } : {}),
@@ -165,6 +166,29 @@ function serializableQueuedMessage(message: QueuedMessage) {
 
 function persistedMultiAgentMode(value: unknown): QueuedMessage["multiAgentMode"] | undefined {
   return value === "auto" || value === "multi" || value === "group_chat" || value === "off" ? value : undefined;
+}
+
+function persistedClientSubmissionMetrics(value: unknown): QueuedMessage["clientSubmissionMetrics"] | undefined {
+  if (!value || typeof value !== "object") {
+    return undefined;
+  }
+  const record = value as Record<string, unknown>;
+  const metrics: QueuedMessage["clientSubmissionMetrics"] = {};
+  for (const key of [
+    "attachment_upload_ms",
+    "prepare_refs_wait_on_submit_ms",
+    "prepared_session_wait_on_submit_ms",
+    "submit_post_ms",
+  ] as const) {
+    const metricValue = record[key];
+    if (typeof metricValue === "number" && Number.isFinite(metricValue) && metricValue >= 0) {
+      metrics[key] = metricValue;
+    }
+  }
+  if (typeof record.prepared_session_ready_before_submit === "boolean") {
+    metrics.prepared_session_ready_before_submit = record.prepared_session_ready_before_submit;
+  }
+  return Object.keys(metrics).length ? metrics : undefined;
 }
 
 function persistedAppReferences(value: unknown): AppReference[] {

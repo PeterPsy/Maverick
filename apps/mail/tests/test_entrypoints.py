@@ -3955,6 +3955,8 @@ class MailServiceTest(unittest.TestCase):
         self.assertIn("mail-account-modal", app_source)
         self.assertIn("Open OAuth", app_source)
         self.assertIn("Open Vault", app_source)
+        self.assertIn("const GMAIL_OAUTH_START_SECRETS = ['gmail-oauth-client-id'];", app_source)
+        self.assertIn("logical_names: GMAIL_OAUTH_START_SECRETS", app_source)
         self.assertIn("action: MAIL_BACKEND_ACTIONS.connectionsPrepareImapSmtp", app_source)
         self.assertIn("openBlankAuthorizationWindow()", app_source)
         self.assertIn("maverick.app.external-url", app_source)

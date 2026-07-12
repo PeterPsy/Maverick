@@ -32,6 +32,7 @@ import {
 } from './mailboxScopes';
 
 const MAIL_DATA_RESOURCES = new Set(['connections', 'drafts', 'threads', 'view-state']);
+const GMAIL_OAUTH_START_SECRETS = ['gmail-oauth-client-id'];
 const GMAIL_OAUTH_SECRETS = ['gmail-oauth-client-id', 'gmail-oauth-client-secret'];
 const GMAIL_REFRESH_SECRET = 'gmail-refresh-token';
 const IMAP_SMTP_SECRET = 'mailbox-password';
@@ -1162,7 +1163,7 @@ export function App() {
         provider: 'gmail',
         redirect_uri: `${window.location.origin}/apps/mail/oauth/callback`,
         _app_secret_request: {
-          logical_names: GMAIL_OAUTH_SECRETS,
+          logical_names: GMAIL_OAUTH_START_SECRETS,
           required: true
         }
       });

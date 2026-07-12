@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from datetime import UTC, datetime
 import tempfile
 import time
 from threading import Event, Thread
@@ -172,6 +173,7 @@ class RuntimeSubmitIdempotencyApiTestCase(AppReferenceApiTestSupport, unittest.T
                 "source_app_id": "chat",
                 "input_text": "retry once",
                 "client_message_id": "client-retry",
+                "client_submission_started_at": datetime.now(tz=UTC).isoformat(),
                 "async": True,
             }
             with patch("core.api.runtime_api.submit_runtime_turn_async", side_effect=fake_submit_runtime_turn_async), patch(
@@ -209,6 +211,7 @@ class RuntimeSubmitIdempotencyApiTestCase(AppReferenceApiTestSupport, unittest.T
             self.assertGreaterEqual(metric_payload["receive_to_queued_ms"], 0)
             for metric_name in ("claim_ms", "session_create_ms", "reference_validate_ms", "queue_turn_ms"):
                 self.assertGreaterEqual(metric_payload[metric_name], 0)
+            self.assertGreaterEqual(metric_payload["client_click_to_queued_ms"], 0)
             post_queue_events = [
                 event
                 for event in state.runtime_store.list_events(first_payload["session"]["session_id"])

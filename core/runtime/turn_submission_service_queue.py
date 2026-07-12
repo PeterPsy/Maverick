@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from datetime import datetime
 import time
 from typing import TYPE_CHECKING
 from uuid import uuid4
@@ -25,6 +26,7 @@ class RuntimeTurnSubmissionTiming:
     """Request-local latency spans for the HTTP receive to queue path."""
 
     received_perf_counter: float | None = None
+    client_submission_started_at: datetime | None = None
     _durations_ms: dict[str, float] = field(default_factory=dict)
     _queue_recorded_perf_counter: float | None = None
 
@@ -226,6 +228,12 @@ def _record_receive_to_queued_metric(
             "queue_turn_ms",
         )
     )
+    click_to_queued_ms = _client_click_to_queued_ms(
+        queued_event_created_at=queued_event.created_at,
+        client_submission_started_at=timing.client_submission_started_at,
+    )
+    if click_to_queued_ms is not None:
+        payload["client_click_to_queued_ms"] = round(click_to_queued_ms, 3)
     return record_runtime_event(
         state.runtime_store,
         event_id=str(uuid4()),
@@ -236,6 +244,19 @@ def _record_receive_to_queued_metric(
         payload=payload,
         event_bus=state.runtime_event_bus,
     )
+
+
+def _client_click_to_queued_ms(
+    *,
+    queued_event_created_at,
+    client_submission_started_at: datetime | None,
+) -> float | None:
+    if client_submission_started_at is None:
+        return None
+    elapsed_ms = (queued_event_created_at - client_submission_started_at).total_seconds() * 1000
+    if elapsed_ms < 0 or elapsed_ms > 300_000:
+        return None
+    return elapsed_ms
 
 
 def _record_thread_user_message_queued_started(

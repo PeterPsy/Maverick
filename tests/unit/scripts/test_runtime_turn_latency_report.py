@@ -289,7 +289,15 @@ class RuntimeTurnLatencyReportTestCase(unittest.TestCase):
                         BASE + timedelta(milliseconds=240),
                         {"provider_id": "codex", "provider_input_build_ms": 15, "app_reference_count": 2, "storage_reference_count": 1, "materialized_reference_count": 1},
                     ),
-                    _event("dispatch", "default", "sess-refs", turn_id, "runtime.provider.dispatching", BASE + timedelta(milliseconds=260), {"provider_id": "codex", "runtime_mode": "agentic"}),
+                    _event(
+                        "dispatch",
+                        "default",
+                        "sess-refs",
+                        turn_id,
+                        "runtime.provider.dispatching",
+                        BASE + timedelta(milliseconds=260),
+                        {"provider_id": "codex", "runtime_mode": "agentic"},
+                    ),
                     _event("sent", "default", "sess-refs", turn_id, "runtime.provider.turn_start_sent", BASE + timedelta(milliseconds=300), {"provider_id": "codex", "runtime_mode": "agentic", "ensure_runtime_ms": 0.01}),
                     _event("accepted", "default", "sess-refs", turn_id, "runtime.provider.accepted", BASE + timedelta(milliseconds=330), {"provider_id": "codex", "runtime_mode": "agentic", "turn_start_to_ack_ms": 30}),
                 ],
@@ -493,7 +501,13 @@ def _turn_events(
     accepted_at = start + timedelta(milliseconds=780)
     dispatch_payload: dict[str, object] = {"provider_id": provider_id, "runtime_mode": runtime_mode}
     if include_launch_metrics:
-        dispatch_payload.update({"launch_spec_ms": 25, "skill_resolve_ms": 5, "skill_prepare_ms": 15})
+        dispatch_payload.update(
+            {
+                "launch_spec_ms": 25,
+                "skill_resolve_ms": 5,
+                "skill_prepare_ms": 15,
+            }
+        )
     events = [
         _event("queued", workspace_id, session_id, turn_id, "runtime.turn.queued", queued_at, {"provider_id": provider_id}),
         _event(

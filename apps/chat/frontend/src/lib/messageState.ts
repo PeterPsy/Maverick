@@ -9,6 +9,7 @@ export type PendingMessage = {
   attachments: ChatMessageAttachment[];
   appReferences: AppReference[];
   multiAgentMode?: MultiAgentComposerMode;
+  clientSubmissionStartedAt?: string;
 };
 
 export type QueuedMessage = {
@@ -17,6 +18,7 @@ export type QueuedMessage = {
   attachments: ChatMessageAttachment[];
   appReferences: AppReference[];
   multiAgentMode?: MultiAgentComposerMode;
+  clientSubmissionStartedAt?: string;
 };
 
 export function attachmentToMessageAttachment(attachment: ComposerAttachment): ChatMessageAttachment {

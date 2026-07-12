@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { createRuntimeSession, createRuntimeSessionWithTurn } from "./runtime";
+import { createRuntimeSession, createRuntimeSessionWithTurn, sendRuntimeTurn } from "./runtime";
 
 function okJson(payload: unknown): Response {
   return {
@@ -105,6 +105,29 @@ describe("runtime API client", () => {
       hosted_provider_id: "openrouter",
       hosted_model_id: "google/gemma-4-31b-it:free",
       async: true,
+    });
+  });
+
+  it("serializes client submission timing for turn creation", async () => {
+    await createRuntimeSessionWithTurn({
+      inputText: "hello",
+      clientSubmissionStartedAt: "2026-07-12T10:00:00.000Z",
+    });
+
+    expect(requestBody()).toMatchObject({
+      input_text: "hello",
+      client_submission_started_at: "2026-07-12T10:00:00.000Z",
+    });
+
+    vi.mocked(fetch).mockClear();
+    await sendRuntimeTurn("session-1", "next", "client-1", [], [], {
+      clientSubmissionStartedAt: "2026-07-12T10:00:01.000Z",
+    });
+
+    expect(requestBody()).toMatchObject({
+      input_text: "next",
+      client_message_id: "client-1",
+      client_submission_started_at: "2026-07-12T10:00:01.000Z",
     });
   });
 });

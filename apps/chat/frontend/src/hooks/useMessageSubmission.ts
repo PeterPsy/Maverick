@@ -502,6 +502,7 @@ export function useMessageSubmission({
               appReferences: message.appReferences,
               content: message.content,
               multiAgentMode: message.multiAgentMode,
+              clientSubmissionStartedAt: message.clientSubmissionStartedAt,
             }
           : item,
       ),
@@ -518,6 +519,7 @@ export function useMessageSubmission({
         attachments: message.attachments,
         appReferences: message.appReferences,
         multiAgentMode: message.multiAgentMode,
+        clientSubmissionStartedAt: message.clientSubmissionStartedAt,
       },
     ]);
   }
@@ -856,6 +858,7 @@ export function useMessageSubmission({
         attachments: message.attachments,
         appReferences: message.appReferences,
         multiAgentMode: message.multiAgentMode,
+        clientSubmissionStartedAt: message.clientSubmissionStartedAt,
       },
     ]);
     setItemsForConversation(setFailedUserMessagesByConversationKey, target.conversationKey, (current) =>
@@ -1008,7 +1011,7 @@ export function useMessageSubmission({
               message.clientMessageId,
               message.attachments,
               message.appReferences,
-              { signal: abortController.signal },
+              { signal: abortController.signal, clientSubmissionStartedAt: message.clientSubmissionStartedAt },
             );
             forgetPreparedRuntimeSession(prepared);
           } catch (sendPreparedError) {
@@ -1019,6 +1022,7 @@ export function useMessageSubmission({
             response = await createRuntimeSessionWithTurn({
               appReferences: message.appReferences,
               attachments: message.attachments,
+              clientSubmissionStartedAt: message.clientSubmissionStartedAt,
               clientMessageId: message.clientMessageId,
               inputText: message.content,
               options: runtimeOptions.options,
@@ -1037,6 +1041,7 @@ export function useMessageSubmission({
             response = await createRuntimeSessionWithTurn({
               appReferences: message.appReferences,
               attachments: message.attachments,
+              clientSubmissionStartedAt: message.clientSubmissionStartedAt,
               clientMessageId: message.clientMessageId,
               inputText: message.content,
               options: runtimeOptions.options,
@@ -1051,7 +1056,7 @@ export function useMessageSubmission({
               message.clientMessageId,
               message.attachments,
               message.appReferences,
-              { signal: abortController.signal },
+              { signal: abortController.signal, clientSubmissionStartedAt: message.clientSubmissionStartedAt },
             );
           }
         }
@@ -1068,7 +1073,7 @@ export function useMessageSubmission({
           message.clientMessageId,
           message.attachments,
           message.appReferences,
-          { signal: abortController.signal },
+          { signal: abortController.signal, clientSubmissionStartedAt: message.clientSubmissionStartedAt },
         );
       }
       throwIfAborted(abortController.signal);
@@ -1326,9 +1331,11 @@ export function useMessageSubmission({
       return;
     }
     const clientMessageId = crypto.randomUUID();
+    const clientSubmissionStartedAt = new Date().toISOString();
     const appReferences = mergeAppReferences(appReferencesFromText(input, composerMentionItems), target.activeAppContext);
     const localMessage: QueuedMessage = {
       clientMessageId,
+      clientSubmissionStartedAt,
       content: input,
       attachments: targetAttachments.map(attachmentToMessageAttachment),
       appReferences,
@@ -1352,7 +1359,14 @@ export function useMessageSubmission({
         return;
       }
       const queueConversationKey = resolveConversationKeyAlias(target.conversationKey);
-      const queuedMessage = { clientMessageId, content: input, attachments: messageAttachments, appReferences, multiAgentMode };
+      const queuedMessage = {
+        clientMessageId,
+        clientSubmissionStartedAt,
+        content: input,
+        attachments: messageAttachments,
+        appReferences,
+        multiAgentMode,
+      };
       const immediateTarget = currentSubmissionTarget(queueConversationKey);
       if (immediateTarget && !isRuntimeBusyRef.current && !sendingByConversationKeyRef.current[queueConversationKey]) {
         const abortController = startSubmission(immediateTarget, queuedMessage);

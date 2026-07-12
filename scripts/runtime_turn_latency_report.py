@@ -44,6 +44,7 @@ INTERESTING_EVENT_TYPES = {
     "runtime.turn.provider_input_completed",
     "runtime.turn.worker_started",
     "runtime.turn.worker_started_recorded",
+    "runtime.app_references.prepare_completed",
     "runtime.prewarm.completed",
     "runtime.provider.dispatching",
     "runtime.provider.turn_start_sent",
@@ -83,6 +84,7 @@ EVENT_KEYS = {
 }
 LATENCY_METRIC_NAMES = (
     "receive_to_queued_ms",
+    "client_click_to_queued_ms",
     "claim_ms",
     "session_create_ms",
     "reference_validate_ms",
@@ -116,8 +118,12 @@ LATENCY_METRIC_NAMES = (
     "app_reference_materialize_ms",
     "provider_input_build_ms",
     "launch_spec_ms",
+    "launch_cache_fingerprint_ms",
     "skill_resolve_ms",
     "skill_prepare_ms",
+    "app_reference_prepare_ms",
+    "app_reference_prepare_validate_ms",
+    "app_reference_prepare_materialize_ms",
     "ensure_runtime_ms",
     "ensure_provider_thread_ms",
     "turn_start_sent_to_provider_accepted_ms",
@@ -130,8 +136,10 @@ COUNT_METRIC_NAMES = (
     "storage_reference_count",
     "materialized_reference_count",
     "attachment_count",
+    "skill_count",
 )
-BOOLEAN_METRIC_NAMES = ("reference_cache_hit",)
+BOOLEAN_METRIC_NAMES = ("reference_cache_hit", "launch_cache_hit", "app_reference_prepare_cache_hit")
+ATTRIBUTE_NAMES = ("launch_cache_fingerprint_prefix",)
 METRIC_NAMES = LATENCY_METRIC_NAMES + COUNT_METRIC_NAMES + BOOLEAN_METRIC_NAMES
 COHORT_NAMES = ("codex_cold", "codex_warm", "plain_hosted", "other_provider")
 CODEX_PROVIDER_ID = "codex"
@@ -189,6 +197,7 @@ class TurnObservation:
     runtime_mode: str | None
     anchor_at: datetime
     metrics: dict[str, float]
+    attributes: dict[str, str] = field(default_factory=dict)
 
 
 @dataclass
@@ -262,6 +271,7 @@ def build_report(
                 "external hosted HTTP network latency."
             ),
             "receive_to_provider_accepted_ms is reconstructed as receive_to_queued_ms plus queued_to_provider_accepted_ms when both components are available.",
+            "client_click_to_queued_ms comes from client_submission_started_at when Chat includes it in the submit payload; bad client clock values are ignored.",
             "first_turn_receive_to_provider_accepted_ms is populated only for the first observed provider turn in each session.",
             (
                 "prewarm_wait_ms and prewarm_total_ms come from runtime.turn.prewarm_waited when the turn waited, "
@@ -281,6 +291,8 @@ def build_report(
                 "materialized_reference_count and reference_cache_hit come from materialization/provider-input events when present."
             ),
             "app_reference_materialize_ms and provider_input_build_ms are emitted only by runtime paths with the newer granular instrumentation.",
+            "app_reference_prepare_ms fields come from /app-references/prepare and are assigned to the next observed turn in that session when present.",
+            "launch_cache_hit, launch_cache_fingerprint_ms, skill_count, and launch_cache_fingerprint_prefix come from runtime.provider.dispatching when present.",
             "claim_ms, session_create_ms, reference_validate_ms, queue_turn_ms, and post_queue_response_ms are emitted only by newer runtime submission paths.",
             "The report intentionally omits input text and provider payload bodies beyond numeric latency spans.",
         ],
@@ -531,7 +543,7 @@ def _event_snapshot(document: dict[str, Any]) -> RuntimeEventSnapshot | None:
     created_at = _coerce_datetime(document.get("created_at"))
     if not event_id or not session_id or not event_type or created_at is None:
         return None
-    if not turn_id and event_type != "runtime.prewarm.completed":
+    if not turn_id and event_type not in {"runtime.prewarm.completed", "runtime.app_references.prepare_completed"}:
         return None
     payload = document.get("payload")
     return RuntimeEventSnapshot(
@@ -554,10 +566,13 @@ def _build_observations(
     sessions_by_id = {session.session_id: session for session in sessions.values()}
     grouped: dict[tuple[str, str, str], TurnEvents] = {}
     prewarm_completed_by_session: dict[tuple[str, str], list[RuntimeEventSnapshot]] = {}
+    app_reference_prepare_completed_by_session: dict[tuple[str, str], list[RuntimeEventSnapshot]] = {}
     for event in events:
         if event.turn_id is None:
             if _is_completed_session_prewarm(event):
                 prewarm_completed_by_session.setdefault((event.workspace_id, event.session_id), []).append(event)
+            elif _is_completed_session_app_reference_prepare(event):
+                app_reference_prepare_completed_by_session.setdefault((event.workspace_id, event.session_id), []).append(event)
             continue
         key = (event.workspace_id, event.session_id, event.turn_id)
         group = grouped.setdefault(
@@ -578,6 +593,10 @@ def _build_observations(
         preliminary.append((group, metrics, provider_id, runtime_mode, anchor_at))
 
     completed_prewarm_by_turn = _completed_prewarm_by_turn(preliminary, prewarm_completed_by_session)
+    completed_prepare_by_turn = _completed_app_reference_prepare_by_turn(
+        preliminary,
+        app_reference_prepare_completed_by_session,
+    )
 
     first_codex_by_session: dict[tuple[str, str], tuple[datetime, str]] = {}
     for group, _metrics, provider_id, runtime_mode, anchor_at in preliminary:
@@ -604,6 +623,10 @@ def _build_observations(
             metrics = dict(metrics)
             _set_metric(metrics, "prewarm_wait_ms", 0.0)
             _set_metric(metrics, "prewarm_total_ms", _numeric(completed_prewarm.payload.get("prewarm_total_ms")))
+        completed_prepare = completed_prepare_by_turn.get((group.workspace_id, group.session_id, group.turn_id))
+        if completed_prepare is not None and "app_reference_prepare_ms" not in metrics:
+            metrics = dict(metrics)
+            _set_app_reference_prepare_metrics(metrics, completed_prepare)
         if first_turn_by_session.get((group.workspace_id, group.session_id)) == _turn_order_sort_value(group, fallback_at=anchor_at):
             first_turn_e2e = metrics.get("receive_to_provider_accepted_ms")
             if first_turn_e2e is not None:
@@ -627,6 +650,7 @@ def _build_observations(
                 runtime_mode=runtime_mode,
                 anchor_at=anchor_at,
                 metrics=metrics,
+                attributes=_turn_attributes(group),
             )
         )
     return sorted(observations, key=lambda item: (item.anchor_at, item.session_id, item.turn_id))
@@ -638,6 +662,14 @@ def _is_completed_session_prewarm(event: RuntimeEventSnapshot) -> bool:
         and event.turn_id is None
         and event.payload.get("status") == "completed"
         and _numeric(event.payload.get("prewarm_total_ms")) is not None
+    )
+
+
+def _is_completed_session_app_reference_prepare(event: RuntimeEventSnapshot) -> bool:
+    return (
+        event.event_type == "runtime.app_references.prepare_completed"
+        and event.turn_id is None
+        and _numeric(event.payload.get("app_reference_prepare_ms")) is not None
     )
 
 
@@ -672,6 +704,37 @@ def _completed_prewarm_by_turn(
     return assigned
 
 
+def _completed_app_reference_prepare_by_turn(
+    preliminary: list[tuple[TurnEvents, dict[str, float], str | None, str | None, datetime]],
+    prepare_completed_by_session: dict[tuple[str, str], list[RuntimeEventSnapshot]],
+) -> dict[tuple[str, str, str], RuntimeEventSnapshot]:
+    for session_events in prepare_completed_by_session.values():
+        session_events.sort(key=_event_sort_key)
+    next_index_by_session = {session_key: 0 for session_key in prepare_completed_by_session}
+    assigned: dict[tuple[str, str, str], RuntimeEventSnapshot] = {}
+    ordered_groups = sorted(
+        preliminary,
+        key=lambda item: (_turn_order_sort_value(item[0], fallback_at=item[4]), item[0].session_id, item[0].turn_id),
+    )
+    for group, metrics, _provider_id, _runtime_mode, anchor_at in ordered_groups:
+        if "app_reference_prepare_ms" in metrics:
+            continue
+        session_key = (group.workspace_id, group.session_id)
+        session_events = prepare_completed_by_session.get(session_key)
+        if not session_events:
+            continue
+        event_deadline = _turn_order_sort_value(group, fallback_at=anchor_at)[0]
+        index = next_index_by_session.get(session_key, 0)
+        eligible_index = index - 1
+        while index < len(session_events) and session_events[index].created_at <= event_deadline:
+            eligible_index = index
+            index += 1
+        if eligible_index >= next_index_by_session.get(session_key, 0):
+            next_index_by_session[session_key] = eligible_index + 1
+            assigned[(group.workspace_id, group.session_id, group.turn_id)] = session_events[eligible_index]
+    return assigned
+
+
 def _turn_metrics(group: TurnEvents) -> dict[str, float]:
     events = group.events
     metrics: dict[str, float] = {}
@@ -703,6 +766,7 @@ def _turn_metrics(group: TurnEvents) -> dict[str, float]:
 
     if receive is not None:
         _set_metric(metrics, "receive_to_queued_ms", _numeric(receive.payload.get("receive_to_queued_ms")))
+        _set_metric(metrics, "client_click_to_queued_ms", _numeric(receive.payload.get("client_click_to_queued_ms")))
         for key in ("claim_ms", "session_create_ms", "reference_validate_ms", "queue_turn_ms"):
             _set_metric(metrics, key, _numeric(receive.payload.get(key)))
     if post_queue_response is not None:
@@ -783,8 +847,10 @@ def _turn_metrics(group: TurnEvents) -> dict[str, float]:
         for key in COUNT_METRIC_NAMES:
             _set_metric(metrics, key, _numeric(provider_input_completed.payload.get(key)))
     if dispatching is not None:
-        for key in ("launch_spec_ms", "skill_resolve_ms", "skill_prepare_ms"):
+        for key in ("launch_spec_ms", "launch_cache_fingerprint_ms", "skill_resolve_ms", "skill_prepare_ms"):
             _set_metric(metrics, key, _numeric(dispatching.payload.get(key)))
+        _set_metric(metrics, "skill_count", _numeric(dispatching.payload.get("skill_count")))
+        _set_metric(metrics, "launch_cache_hit", _bool_numeric(dispatching.payload.get("launch_cache_hit")))
     ensure_source = sent or accepted
     if ensure_source is not None:
         for key in ("ensure_runtime_ms", "ensure_provider_thread_ms"):
@@ -799,6 +865,31 @@ def _turn_metrics(group: TurnEvents) -> dict[str, float]:
     if receive_to_queued is not None and queued_to_accepted is not None:
         _set_metric(metrics, "receive_to_provider_accepted_ms", receive_to_queued + queued_to_accepted)
     return metrics
+
+
+def _set_app_reference_prepare_metrics(metrics: dict[str, float], event: RuntimeEventSnapshot) -> None:
+    for key in (
+        "app_reference_prepare_ms",
+        "app_reference_prepare_validate_ms",
+        "app_reference_prepare_materialize_ms",
+        "app_reference_count",
+        "storage_reference_count",
+        "materialized_reference_count",
+    ):
+        _set_metric(metrics, key, _numeric(event.payload.get(key)))
+    _set_metric(metrics, "app_reference_prepare_cache_hit", _bool_numeric(event.payload.get("reference_cache_hit")))
+
+
+def _turn_attributes(group: TurnEvents) -> dict[str, str]:
+    dispatching = group.events.get("provider_dispatching")
+    if dispatching is None:
+        return {}
+    attributes: dict[str, str] = {}
+    for name in ATTRIBUTE_NAMES:
+        value = _optional_str(dispatching.payload.get(name))
+        if value:
+            attributes[name] = value
+    return attributes
 
 
 def _set_reference_metrics_from_queued(metrics: dict[str, float], queued: RuntimeEventSnapshot | None) -> None:
@@ -930,7 +1021,7 @@ def _summarize_values(values: list[float]) -> dict[str, float | int]:
 
 
 def _turn_payload(observation: TurnObservation) -> dict[str, Any]:
-    return {
+    payload = {
         "workspace_id": observation.workspace_id,
         "session_id": observation.session_id,
         "turn_id": observation.turn_id,
@@ -940,6 +1031,9 @@ def _turn_payload(observation: TurnObservation) -> dict[str, Any]:
         "anchor_at": observation.anchor_at.isoformat(),
         "metrics": {key: _round_ms(value) for key, value in sorted(observation.metrics.items())},
     }
+    if observation.attributes:
+        payload["attributes"] = dict(sorted(observation.attributes.items()))
+    return payload
 
 
 def _set_worker_startup_unattributed_metric(metrics: dict[str, float]) -> None:

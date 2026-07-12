@@ -133,6 +133,9 @@ function parsePersistedMessages(items: unknown[]): PersistedMessage[] {
           clientMessageId,
           content,
           ...(typeof record.createdAt === "string" ? { createdAt: record.createdAt } : {}),
+          ...(typeof record.clientSubmissionStartedAt === "string"
+            ? { clientSubmissionStartedAt: record.clientSubmissionStartedAt }
+            : {}),
           appReferences: persistedAppReferences(record.appReferences),
           attachments,
           ...(multiAgentMode ? { multiAgentMode } : {}),

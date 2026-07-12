@@ -58,6 +58,7 @@ export function createRuntimeSessionWithTurn({
   appReferences = [],
   attachments = [],
   clientMessageId,
+  clientSubmissionStartedAt,
   inputText,
   options = {},
   signal,
@@ -65,6 +66,7 @@ export function createRuntimeSessionWithTurn({
   appReferences?: AppReference[];
   attachments?: ChatMessageAttachment[];
   clientMessageId?: string;
+  clientSubmissionStartedAt?: string;
   inputText: string;
   options?: RuntimeSessionOptions;
   signal?: AbortSignal;
@@ -85,6 +87,7 @@ export function createRuntimeSessionWithTurn({
     title: options.title || "New chat",
     input_text: inputText,
     client_message_id: clientMessageId,
+    client_submission_started_at: clientSubmissionStartedAt || undefined,
     attachments: serializableMessageAttachments(attachments),
     async: true,
   };
@@ -164,11 +167,12 @@ export function sendRuntimeTurn(
   clientMessageId?: string,
   attachments: ChatMessageAttachment[] = [],
   appReferences: AppReference[] = [],
-  requestOptions: { signal?: AbortSignal } = {},
+  requestOptions: { signal?: AbortSignal; clientSubmissionStartedAt?: string } = {},
 ): Promise<RuntimeTurnSubmitResponse> {
   const body: Record<string, unknown> = {
     input_text: inputText,
     client_message_id: clientMessageId,
+    client_submission_started_at: requestOptions.clientSubmissionStartedAt || undefined,
     attachments: serializableMessageAttachments(attachments),
     async: true,
   };

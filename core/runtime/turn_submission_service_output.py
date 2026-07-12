@@ -524,7 +524,12 @@ def _record_provider_dispatching(
     for key, value in (metadata or {}).items():
         if key.endswith("_ms") and isinstance(value, int | float):
             payload[key] = round(float(value), 3)
-        elif key in {"skill_count", "provider_id_resolved", "launch_cache_hit"} and value is not None:
+        elif key in {
+            "skill_count",
+            "provider_id_resolved",
+            "launch_cache_hit",
+            "launch_cache_fingerprint_prefix",
+        } and value is not None:
             payload[key] = value
     return record_runtime_event(
         state.runtime_store,
@@ -644,6 +649,7 @@ def _build_launch_spec_for_execution(
     )
     cache_fingerprint_ms = (time.perf_counter() - cache_fingerprint_started_at) * 1000
     if cache_fingerprint is not None:
+        cache_fingerprint_prefix = cache_fingerprint[:12]
         cached = get_cached_runtime_launch_context(
             session_id=session.session_id,
             fingerprint=cache_fingerprint,
@@ -656,6 +662,7 @@ def _build_launch_spec_for_execution(
                 "skill_prepare_ms": 0.0,
                 "launch_cache_hit": True,
                 "launch_cache_fingerprint_ms": cache_fingerprint_ms,
+                "launch_cache_fingerprint_prefix": cache_fingerprint_prefix,
             }
     started_at = time.perf_counter()
     if provider_definition is not None and runtime_adapter is not None:
@@ -705,6 +712,7 @@ def _build_launch_spec_for_execution(
         "launch_cache_fingerprint_ms": cache_fingerprint_ms,
     }
     if cache_fingerprint is not None:
+        metadata["launch_cache_fingerprint_prefix"] = cache_fingerprint[:12]
         cache_runtime_launch_context(
             session_id=session.session_id,
             fingerprint=cache_fingerprint,

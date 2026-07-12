@@ -376,6 +376,22 @@ def _record_timing_duration(
         timing.record_duration_ms(name, started_perf_counter)
 
 
+def _client_submission_started_at(body: dict) -> datetime | None:
+    raw_value = body.get("client_submission_started_at")
+    if not isinstance(raw_value, str) or not raw_value.strip():
+        return None
+    normalized = raw_value.strip()
+    if normalized.endswith("Z"):
+        normalized = f"{normalized[:-1]}+00:00"
+    try:
+        parsed = datetime.fromisoformat(normalized)
+    except ValueError:
+        return None
+    if parsed.tzinfo is None:
+        return None
+    return parsed.astimezone(UTC)
+
+
 def _prewarm_new_runtime_session(
     state: PlatformState,
     session: RuntimeSessionRecord,
@@ -1355,6 +1371,8 @@ def _handle_session_app_references_prepare(
         context=context,
         start_path=start_path,
     )
+    total_started_at = time.perf_counter()
+    validate_started_at = time.perf_counter()
     validated = validate_runtime_app_references(
         state,
         context=context,
@@ -1362,6 +1380,8 @@ def _handle_session_app_references_prepare(
         start_path=start_path,
         reference_context=reference_context,
     )
+    validate_ms = (time.perf_counter() - validate_started_at) * 1000
+    materialize_started_at = time.perf_counter()
     materialized = materialize_runtime_app_references_with_metrics(
         state,
         context=context,
@@ -1369,6 +1389,18 @@ def _handle_session_app_references_prepare(
         start_path=start_path,
         reference_context=reference_context,
         session_id=session.session_id,
+    )
+    materialize_ms = (time.perf_counter() - materialize_started_at) * 1000
+    _record_session_app_references_prepare_completed(
+        state,
+        session=session,
+        elapsed_ms=(time.perf_counter() - total_started_at) * 1000,
+        validate_ms=validate_ms,
+        materialize_ms=materialize_ms,
+        reference_count=len(validated),
+        storage_reference_count=sum(1 for item in validated if str(item.get("app_id") or "").strip().lower() == "storage"),
+        materialized_reference_count=len(materialized.references),
+        reference_cache_hit=materialized.reference_cache_hit,
     )
     return json_response(
         start_response,
@@ -1381,6 +1413,40 @@ def _handle_session_app_references_prepare(
             "reference_fingerprint": materialized.reference_fingerprint,
         },
     )
+
+
+def _record_session_app_references_prepare_completed(
+    state: PlatformState,
+    *,
+    session: RuntimeSessionRecord,
+    elapsed_ms: float,
+    validate_ms: float,
+    materialize_ms: float,
+    reference_count: int,
+    storage_reference_count: int,
+    materialized_reference_count: int,
+    reference_cache_hit: bool,
+) -> RuntimeEventRecord | None:
+    with suppress(Exception):
+        return record_runtime_event(
+            state.runtime_store,
+            event_id=str(uuid4()),
+            session_id=session.session_id,
+            plane="runtime",
+            event_type="runtime.app_references.prepare_completed",
+            payload={
+                "provider_id": session.provider_id or "codex",
+                "app_reference_prepare_ms": round(elapsed_ms, 3),
+                "app_reference_prepare_validate_ms": round(validate_ms, 3),
+                "app_reference_prepare_materialize_ms": round(materialize_ms, 3),
+                "app_reference_count": reference_count,
+                "storage_reference_count": storage_reference_count,
+                "materialized_reference_count": materialized_reference_count,
+                "reference_cache_hit": reference_cache_hit,
+            },
+            event_bus=state.runtime_event_bus,
+        )
+    return None
 
 
 def _runtime_turn_requested(body: dict) -> bool:
@@ -1463,6 +1529,8 @@ def _prepare_runtime_turn_submission(
     )
     if existing_turn is not None:
         return None, _idempotent_runtime_turn_response(state, context, existing_turn, start_response)
+    if timing is not None:
+        timing.client_submission_started_at = _client_submission_started_at(body)
     attachments = body.get("attachments") if isinstance(body.get("attachments"), list) else []
     attachment_items = [item for item in attachments if isinstance(item, dict)]
     input_text = str(body.get("input_text") or body.get("message") or "").strip()

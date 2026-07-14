@@ -373,7 +373,13 @@ def _wait_for_session_prewarm(
         )
     completed = completion.completion.wait(max(0.0, timeout_seconds))
     elapsed_ms = (time.perf_counter() - wait_started_at) * 1000
-    prewarm_total_ms = (time.perf_counter() - completion.started_perf_counter) * 1000 if completed else None
+    prewarm_total_ms: float | None = None
+    if completed:
+        with _PREWARM_COMPLETIONS_LOCK:
+            prewarm_total_ms = completion.elapsed_ms
+        if prewarm_total_ms is None:
+            # Compatibility for callers that only signal the completion event.
+            prewarm_total_ms = (time.perf_counter() - completion.started_perf_counter) * 1000
     if state is not None and turn is not None:
         _record_turn_prewarm_wait_completed(
             state,

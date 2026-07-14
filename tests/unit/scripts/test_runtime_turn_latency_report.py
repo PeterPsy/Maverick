@@ -563,6 +563,32 @@ class RuntimeTurnLatencyReportTestCase(unittest.TestCase):
 
         self.assertNotIn("prewarm_total_ms", report["turns"][0]["metrics"])
 
+    def test_ignores_corrupt_turn_scoped_prewarm_total(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir) / "maverick"
+            _write_session(root, "default", "sess-corrupt-prewarm", runtime_mode="agentic", provider_id="codex")
+            _write_events(
+                root,
+                "default",
+                "sess-corrupt-prewarm",
+                _turn_events(
+                    "sess-corrupt-prewarm",
+                    "turn-corrupt-prewarm",
+                    BASE,
+                    provider_id="codex",
+                    prewarm_total_ms=999_999,
+                ),
+            )
+
+            report = runtime_turn_latency_report.build_report(
+                root,
+                workspaces={"default"},
+                limit_turns=0,
+                include_turns=True,
+            )
+
+        self.assertNotIn("prewarm_total_ms", report["turns"][0]["metrics"])
+
     def test_reports_prepared_ready_as_explicit_overlapping_cohort(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             root = Path(temp_dir) / "maverick"

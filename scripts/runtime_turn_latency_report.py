@@ -183,6 +183,7 @@ REPORT_COHORT_NAMES = COHORT_NAMES + ("prepared_ready",)
 CODEX_PROVIDER_ID = "codex"
 HOSTED_TEXT_RUNTIME_PROVIDER_ID = "hosted-text-runtime"
 SESSION_SCOPED_EVENT_ASSOCIATION_WINDOW = timedelta(seconds=30)
+PREWARM_TOTAL_METRIC_MAX_MS = SESSION_SCOPED_EVENT_ASSOCIATION_WINDOW.total_seconds() * 1000
 SLO_SCOPE_BY_COHORT = {
     "codex_cold": "codex_runtime_cold",
     "codex_warm": "codex_runtime_warm",
@@ -681,7 +682,11 @@ def _build_observations(
         if completed_prewarm is not None and "prewarm_total_ms" not in metrics:
             metrics = dict(metrics)
             _set_metric(metrics, "prewarm_wait_ms", 0.0)
-            _set_metric(metrics, "prewarm_total_ms", _numeric(completed_prewarm.payload.get("prewarm_total_ms")))
+            _set_metric(
+                metrics,
+                "prewarm_total_ms",
+                _bounded_prewarm_total_ms(completed_prewarm.payload.get("prewarm_total_ms")),
+            )
         completed_prepare = completed_prepare_by_turn.get((group.workspace_id, group.session_id, group.turn_id))
         if completed_prepare is not None and "app_reference_prepare_ms" not in metrics:
             metrics = dict(metrics)
@@ -720,7 +725,7 @@ def _is_completed_session_prewarm(event: RuntimeEventSnapshot) -> bool:
         event.event_type == "runtime.prewarm.completed"
         and event.turn_id is None
         and event.payload.get("status") == "completed"
-        and _numeric(event.payload.get("prewarm_total_ms")) is not None
+        and _bounded_prewarm_total_ms(event.payload.get("prewarm_total_ms")) is not None
     )
 
 
@@ -887,7 +892,11 @@ def _turn_metrics(group: TurnEvents) -> dict[str, float]:
         )
     if prewarm_waited is not None:
         _set_metric(metrics, "prewarm_wait_ms", _numeric(prewarm_waited.payload.get("prewarm_wait_ms")))
-        _set_metric(metrics, "prewarm_total_ms", _numeric(prewarm_waited.payload.get("prewarm_total_ms")))
+        _set_metric(
+            metrics,
+            "prewarm_total_ms",
+            _bounded_prewarm_total_ms(prewarm_waited.payload.get("prewarm_total_ms")),
+        )
     _set_reference_metrics_from_queued(metrics, queued)
     if session_lock_acquired is not None:
         lock_wait_ms = _numeric(session_lock_acquired.payload.get("session_lock_wait_ms"))
@@ -1231,6 +1240,13 @@ def _numeric(value: object) -> float | None:
         number = float(value)
         return number if math.isfinite(number) else None
     return None
+
+
+def _bounded_prewarm_total_ms(value: object) -> float | None:
+    numeric = _numeric(value)
+    if numeric is None or numeric > PREWARM_TOTAL_METRIC_MAX_MS:
+        return None
+    return numeric
 
 
 def _bool_numeric(value: object) -> float | None:

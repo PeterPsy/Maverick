@@ -194,6 +194,7 @@ class TurnSubmissionLaunchSpecTestCase(unittest.TestCase):
             submit_runtime_turn_async.__globals__,
             {
                 "Thread": _ImmediateThread,
+                "Timer": lambda delay, target: _CapturingTimer(delay, target, []),
                 "_wait_for_session_prewarm": wait_for_prewarm,
                 "resolve_runtime_backend_for_session": Mock(return_value=(provider, None, adapter)),
                 "_build_launch_spec_for_execution": Mock(return_value=(launch_spec, {})),
@@ -224,20 +225,18 @@ class TurnSubmissionLaunchSpecTestCase(unittest.TestCase):
         prewarm = register_prewarm(session.session_id)
         self.assertIsNotNone(prewarm)
         assert prewarm is not None
-        prewarm.completion.set()
+        prewarm.started_perf_counter -= 120
+        complete_prewarm(session.session_id, prewarm, elapsed_ms=321.5)
 
-        try:
-            self.assertTrue(
-                wait_for_prewarm(
-                    session.session_id,
-                    state=state,
-                    turn=turn,
-                    provider_id="codex",
-                    timeout_seconds=0.01,
-                )
+        self.assertTrue(
+            wait_for_prewarm(
+                session.session_id,
+                state=state,
+                turn=turn,
+                provider_id="codex",
+                timeout_seconds=0.01,
             )
-        finally:
-            complete_prewarm(session.session_id, prewarm)
+        )
 
         event_types = [event.event_type for event in runtime_store.list_events(session.session_id) if event.turn_id == turn.turn_id]
         self.assertIn("runtime.turn.prewarm_wait_started", event_types)
@@ -246,7 +245,7 @@ class TurnSubmissionLaunchSpecTestCase(unittest.TestCase):
         completed = next(event for event in runtime_store.list_events(session.session_id) if event.event_type == "runtime.turn.prewarm_wait_completed")
         self.assertTrue(completed.payload["completed"])
         self.assertIn("prewarm_wait_ms", completed.payload)
-        self.assertIn("prewarm_total_ms", completed.payload)
+        self.assertEqual(completed.payload["prewarm_total_ms"], 321.5)
 
     def test_async_turn_records_worker_reference_and_provider_input_events(self) -> None:
         repo_root = make_temp_repo_root(self)

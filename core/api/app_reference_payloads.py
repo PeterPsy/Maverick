@@ -760,7 +760,7 @@ def _runtime_reference_cache_fingerprint(
         "platform_role": context.user.platform_role,
         "workspace_role": mcp_context.workspace_role or "",
         "effective_mode": mcp_context.effective_mode,
-        "session_id": session_id,
+        "session_id": session_id if _references_require_session_cache_scope(references, providers_by_app_id) else "",
         "references": [
             _reference_cache_key_payload(
                 reference,
@@ -773,6 +773,31 @@ def _runtime_reference_cache_fingerprint(
     }
     encoded = json.dumps(payload, sort_keys=True, separators=(",", ":")).encode("utf-8")
     return hashlib.sha256(encoded).hexdigest()
+
+
+def _references_require_session_cache_scope(
+    references: list[dict[str, object]],
+    providers_by_app_id: dict[str, dict[str, Any]],
+) -> bool:
+    if not references:
+        return True
+    for reference in references:
+        if _reference_type(reference) != "entity":
+            return True
+        app_id = _bounded_text(reference.get("app_id"), max_length=120)
+        entity_type = _bounded_text(reference.get("entity_type"), max_length=120)
+        provider = providers_by_app_id.get(app_id)
+        declaration = next(
+            (
+                item
+                for item in (provider or {}).get("entities", [])
+                if isinstance(item, dict) and item.get("entity_type") == entity_type
+            ),
+            None,
+        )
+        if not isinstance(declaration, dict) or declaration.get("cache_scope") != "workspace_user":
+            return True
+    return False
 
 
 def _reference_cache_key_payload(
@@ -824,6 +849,7 @@ def _provider_cache_key_payload(provider: dict[str, Any] | None, *, entity_type:
             "resolvable": bool(declaration.get("resolvable")),
             "summarizable": bool(declaration.get("summarizable")),
             "deep_link_supported": bool(declaration.get("deep_link_supported")),
+            "cache_scope": declaration.get("cache_scope") or "session",
         },
     }
 

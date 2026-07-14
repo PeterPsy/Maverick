@@ -35,6 +35,7 @@ def execute_runtime_turn(
     launch_spec: RuntimeBackendLaunchSpec | None = None,
     runtime_adapter: RuntimeBackendAdapter | None = None,
     on_provider_thread_id: Callable[[str], None] | None = None,
+    on_provider_startup_event: Callable[[str, dict[str, object]], None] | None = None,
     on_provider_turn_start_sent: Callable[[dict[str, object]], None] | None = None,
     on_provider_accepted: Callable[[dict[str, object]], None] | None = None,
     command_runner=subprocess.Popen,
@@ -42,6 +43,16 @@ def execute_runtime_turn(
     """Execute one turn through the selected provider."""
     fake_response = os.environ.get("MAVERICK_RUNTIME_FAKE_RESPONSE")
     if fake_response is not None:
+        if on_provider_startup_event is not None:
+            for phase in (
+                "ensure_runtime_started",
+                "ensure_runtime_completed",
+                "ensure_thread_started",
+                "ensure_thread_completed",
+                "turn_start_write_started",
+                "turn_start_write_sent",
+            ):
+                on_provider_startup_event(phase, {"provider_id": provider.provider_id, "source": "fake"})
         if on_provider_turn_start_sent is not None:
             on_provider_turn_start_sent({"provider_id": provider.provider_id, "source": "fake"})
         if on_provider_accepted is not None:
@@ -64,6 +75,7 @@ def execute_runtime_turn(
             event_sink=coalesced_sink.emit,
             timeout_seconds=timeout_seconds,
             on_provider_thread_id=on_provider_thread_id,
+            on_provider_startup_event=on_provider_startup_event,
             on_provider_turn_start_sent=on_provider_turn_start_sent,
             on_provider_accepted=on_provider_accepted,
             command_runner=command_runner,

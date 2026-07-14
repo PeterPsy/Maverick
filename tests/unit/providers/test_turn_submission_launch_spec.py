@@ -9,7 +9,7 @@ from core.providers.models import ProviderSelection, RuntimeBackendLaunchSpec
 from core.providers.provider_codex import build_codex_definition
 from core.runtime.service import create_runtime_session, queue_runtime_turn
 from core.runtime.store import RuntimeCollections, RuntimeDocumentStore
-from core.runtime.turn_submission import prewarm_runtime_session_async, submit_runtime_turn_async
+from core.runtime.turn_submission import prewarm_runtime_session_async, runtime_session_prewarm_status, submit_runtime_turn_async
 from core.runtime.turn_submission_launch_cache import clear_cached_runtime_launch_context
 from core.runtime.turn_submission_service_events import _debug_log_runtime_turn
 from core.runtime.turn_submission_service_output import _build_launch_spec_for_execution
@@ -149,6 +149,16 @@ class TurnSubmissionLaunchSpecTestCase(unittest.TestCase):
         event_types = [event.event_type for event in runtime_store.list_events(session.session_id)]
         self.assertIn("runtime.prewarm.started", event_types)
         self.assertIn("runtime.prewarm.completed", event_types)
+        completed_event = next(
+            event for event in runtime_store.list_events(session.session_id) if event.event_type == "runtime.prewarm.completed"
+        )
+        self.assertEqual(completed_event.payload["status"], "completed")
+        self.assertTrue(completed_event.payload["prewarm_completed"])
+        self.assertTrue(completed_event.payload["provider_thread_ready"])
+        prewarm_status = runtime_session_prewarm_status(session.session_id)
+        self.assertEqual(prewarm_status.status, "completed")
+        self.assertTrue(prewarm_status.prewarm_completed)
+        self.assertTrue(prewarm_status.provider_thread_ready)
 
     def test_async_worker_waits_for_session_prewarm_before_execution(self) -> None:
         repo_root = make_temp_repo_root(self)
@@ -286,6 +296,15 @@ class TurnSubmissionLaunchSpecTestCase(unittest.TestCase):
 
         def execute_turn(**kwargs):
             self.assertIn("Stored file", kwargs["input_text"])
+            for phase in (
+                "ensure_runtime_started",
+                "ensure_runtime_completed",
+                "ensure_thread_started",
+                "ensure_thread_completed",
+                "turn_start_write_started",
+                "turn_start_write_sent",
+            ):
+                kwargs["on_provider_startup_event"](phase, {})
             kwargs["on_provider_turn_start_sent"]({"ensure_runtime_ms": 0.01})
             kwargs["on_provider_accepted"]({})
             return SimpleNamespace(output_text="done", exit_code=0)
@@ -330,6 +349,12 @@ class TurnSubmissionLaunchSpecTestCase(unittest.TestCase):
             "runtime.turn.provider_input_started",
             "runtime.turn.provider_input_completed",
             "runtime.provider.dispatching",
+            "runtime.provider.ensure_runtime_started",
+            "runtime.provider.ensure_runtime_completed",
+            "runtime.provider.ensure_thread_started",
+            "runtime.provider.ensure_thread_completed",
+            "runtime.provider.turn_start_write_started",
+            "runtime.provider.turn_start_write_sent",
             "runtime.provider.turn_start_sent",
         ):
             self.assertIn(expected, event_types)

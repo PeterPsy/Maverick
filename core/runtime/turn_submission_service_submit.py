@@ -35,6 +35,7 @@ from core.runtime.turn_submission_service_output import (
     _record_provider_dispatching,
     _record_provider_input_completed,
     _record_provider_input_started,
+    _record_provider_startup_event,
     _record_provider_thread_id,
     _record_provider_turn_start_sent,
     _record_session_lock_acquired,
@@ -292,6 +293,19 @@ def submit_runtime_turn(
                     )
                 )
 
+                def record_provider_startup_event(phase: str, metadata: dict[str, object]) -> None:
+                    events.append(
+                        _record_provider_startup_event(
+                            state,
+                            session_id=session.session_id,
+                            turn_id=turn.turn_id,
+                            provider_id=provider_id,
+                            runtime_mode=session.runtime_mode,
+                            phase=phase,
+                            metadata=metadata,
+                        )
+                    )
+
                 def record_provider_turn_start_sent(metadata: dict[str, object]) -> None:
                     nonlocal turn_start_sent_at
                     turn_start_sent_at = time.perf_counter()
@@ -325,6 +339,7 @@ def submit_runtime_turn(
                     launch_spec=launch_spec,
                     runtime_adapter=runtime_adapter,
                     on_provider_thread_id=lambda provider_thread_id: _record_provider_thread_id(state, session=session, provider_id=provider_id, provider_thread_id=provider_thread_id),
+                    on_provider_startup_event=record_provider_startup_event,
                     on_provider_turn_start_sent=record_provider_turn_start_sent,
                     on_provider_accepted=record_provider_accepted,
                     event_sink=output_recorder.record,

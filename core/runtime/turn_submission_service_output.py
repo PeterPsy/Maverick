@@ -543,6 +543,46 @@ def _record_provider_dispatching(
     )
 
 
+_PROVIDER_STARTUP_PHASES = {
+    "ensure_runtime_started",
+    "ensure_runtime_completed",
+    "ensure_thread_started",
+    "ensure_thread_completed",
+    "turn_start_write_started",
+    "turn_start_write_sent",
+}
+
+
+def _record_provider_startup_event(
+    state: PlatformState,
+    *,
+    session_id: str,
+    turn_id: str,
+    provider_id: str,
+    runtime_mode: str,
+    phase: str,
+    metadata: dict[str, object] | None = None,
+) -> RuntimeEventRecord:
+    if phase not in _PROVIDER_STARTUP_PHASES:
+        raise ValueError(f"Unsupported provider startup phase `{phase}`.")
+    payload: dict[str, object] = {"provider_id": provider_id, "runtime_mode": runtime_mode}
+    for key, value in (metadata or {}).items():
+        if key in {"provider_thread_id", "source"} and value is not None and value != "":
+            payload[key] = value
+        elif key.endswith("_ms") and isinstance(value, int | float):
+            payload[key] = round(float(value), 3)
+    return record_runtime_event(
+        state.runtime_store,
+        event_id=str(uuid4()),
+        session_id=session_id,
+        turn_id=turn_id,
+        plane="turn",
+        event_type=f"runtime.provider.{phase}",
+        payload=payload,
+        event_bus=state.runtime_event_bus,
+    )
+
+
 def _record_provider_turn_start_sent(
     state: PlatformState,
     *,

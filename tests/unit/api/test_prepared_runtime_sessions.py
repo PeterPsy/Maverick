@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 from threading import Event, Thread
+from types import SimpleNamespace
 import tempfile
 import time
 import unittest
@@ -11,6 +12,7 @@ from unittest.mock import patch
 from core.api.platform_host import PlatformHost
 from core.api.platform_state import bootstrap_platform_state
 from core.api.app_reference_payloads import (
+    _runtime_reference_cache_fingerprint,
     clear_runtime_app_reference_materialization_cache,
     runtime_app_reference_materialization_cache_stats,
 )
@@ -18,6 +20,7 @@ from core.apps.service import install_store_app, register_app_source_from_contra
 from core.runtime.runtime_thread import RuntimeThreadRecord
 from core.runtime.runtime_turns import RuntimeTurnRecord
 from core.runtime.service import queue_runtime_turn
+from core.runtime.turn_submission import RuntimeSessionPrewarmResult
 from core.runtime.turn_submission_service_queue import _queue_turn_with_event
 from tests.unit.api.app_reference_test_support import AppReferenceApiTestSupport
 
@@ -26,7 +29,66 @@ class PreparedRuntimeSessionsApiTestCase(AppReferenceApiTestSupport, unittest.Te
     def setUp(self) -> None:
         clear_runtime_app_reference_materialization_cache()
 
-    def test_prepare_only_session_schedules_prewarm_without_waiting(self) -> None:
+    def test_workspace_user_reference_cache_scope_reuses_fingerprint_across_sessions(self) -> None:
+        context = SimpleNamespace(
+            workspace_id="default",
+            user=SimpleNamespace(user_id="user-1", platform_role="member"),
+        )
+        mcp_context = SimpleNamespace(workspace_role="member", effective_mode="sandbox")
+        references = [{"type": "entity", "app_id": "storage", "entity_type": "file", "entity_id": "file-1"}]
+        provider = {
+            "storage": {
+                "app_id": "storage",
+                "entities": [
+                    {
+                        "entity_type": "file",
+                        "resolvable": True,
+                        "summarizable": False,
+                        "deep_link_supported": True,
+                        "cache_scope": "workspace_user",
+                    }
+                ],
+            }
+        }
+
+        first = _runtime_reference_cache_fingerprint(
+            context=context,
+            mcp_context=mcp_context,
+            session_id="session-1",
+            references=references,
+            visible_apps={},
+            providers_by_app_id=provider,
+        )
+        second = _runtime_reference_cache_fingerprint(
+            context=context,
+            mcp_context=mcp_context,
+            session_id="session-2",
+            references=references,
+            visible_apps={},
+            providers_by_app_id=provider,
+        )
+        provider["storage"]["entities"][0]["cache_scope"] = "session"
+        session_scoped_first = _runtime_reference_cache_fingerprint(
+            context=context,
+            mcp_context=mcp_context,
+            session_id="session-1",
+            references=references,
+            visible_apps={},
+            providers_by_app_id=provider,
+        )
+        session_scoped_second = _runtime_reference_cache_fingerprint(
+            context=context,
+            mcp_context=mcp_context,
+            session_id="session-2",
+            references=references,
+            visible_apps={},
+            providers_by_app_id=provider,
+        )
+
+        self.assertEqual(first, second)
+        self.assertNotEqual(session_scoped_first, session_scoped_second)
+
+    def test_prepare_only_session_waits_for_hot_provider_and_reports_readiness(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             repo_root = self._repo_root(temp_dir)
             with patch.dict(
@@ -42,9 +104,20 @@ class PreparedRuntimeSessionsApiTestCase(AppReferenceApiTestSupport, unittest.Te
             cookie = self._login(app)
 
             with patch("core.api.runtime_api.prewarm_runtime_session_async") as prewarm, patch(
-                "core.api.runtime_api.wait_for_runtime_session_prewarm"
-            ) as wait_for_prewarm:
-                status, _payload, _headers = self._invoke(
+                "core.api.runtime_api.wait_for_runtime_session_prewarm",
+                return_value=True,
+            ) as wait_for_prewarm, patch(
+                "core.api.runtime_api.runtime_session_prewarm_status",
+                return_value=RuntimeSessionPrewarmResult(
+                    status="completed",
+                    prewarm_completed=True,
+                    provider_thread_ready=True,
+                    provider_id="codex",
+                    provider_thread_id="provider-thread-1",
+                    prewarm_total_ms=321.5,
+                ),
+            ):
+                status, payload, _headers = self._invoke(
                     app,
                     path="/api/runtime/sessions",
                     method="POST",
@@ -54,7 +127,12 @@ class PreparedRuntimeSessionsApiTestCase(AppReferenceApiTestSupport, unittest.Te
 
             self.assertEqual(status, 201)
             prewarm.assert_called_once()
-            wait_for_prewarm.assert_not_called()
+            wait_for_prewarm.assert_called_once()
+            self.assertEqual(wait_for_prewarm.call_args.kwargs["timeout_seconds"], 2.0)
+            self.assertEqual(payload["prewarm_status"], "completed")
+            self.assertTrue(payload["prewarm_completed"])
+            self.assertTrue(payload["provider_thread_ready"])
+            self.assertEqual(payload["prewarm_total_ms"], 321.5)
 
     def test_prepare_only_session_promotes_on_first_turn_with_draft_metadata(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:

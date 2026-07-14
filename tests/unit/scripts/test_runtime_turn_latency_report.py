@@ -22,6 +22,83 @@ BASE = datetime(2026, 7, 3, 12, 0, tzinfo=UTC)
 
 
 class RuntimeTurnLatencyReportTestCase(unittest.TestCase):
+    def test_reports_separate_provider_startup_spans(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir) / "maverick"
+            _write_session(root, "default", "sess-spans", runtime_mode="agentic", provider_id="codex")
+            events = _turn_events("sess-spans", "turn-spans", BASE, provider_id="codex")
+            events.extend(
+                [
+                    _event(
+                        "ensure-runtime-started",
+                        "default",
+                        "sess-spans",
+                        "turn-spans",
+                        "runtime.provider.ensure_runtime_started",
+                        BASE + timedelta(milliseconds=500),
+                        {"provider_id": "codex"},
+                    ),
+                    _event(
+                        "ensure-runtime-completed",
+                        "default",
+                        "sess-spans",
+                        "turn-spans",
+                        "runtime.provider.ensure_runtime_completed",
+                        BASE + timedelta(milliseconds=510),
+                        {"provider_id": "codex", "ensure_runtime_ms": 10},
+                    ),
+                    _event(
+                        "ensure-thread-started",
+                        "default",
+                        "sess-spans",
+                        "turn-spans",
+                        "runtime.provider.ensure_thread_started",
+                        BASE + timedelta(milliseconds=520),
+                        {"provider_id": "codex"},
+                    ),
+                    _event(
+                        "ensure-thread-completed",
+                        "default",
+                        "sess-spans",
+                        "turn-spans",
+                        "runtime.provider.ensure_thread_completed",
+                        BASE + timedelta(milliseconds=535),
+                        {"provider_id": "codex", "ensure_provider_thread_ms": 15},
+                    ),
+                    _event(
+                        "turn-write-started",
+                        "default",
+                        "sess-spans",
+                        "turn-spans",
+                        "runtime.provider.turn_start_write_started",
+                        BASE + timedelta(milliseconds=750),
+                        {"provider_id": "codex"},
+                    ),
+                    _event(
+                        "turn-write-sent",
+                        "default",
+                        "sess-spans",
+                        "turn-spans",
+                        "runtime.provider.turn_start_write_sent",
+                        BASE + timedelta(milliseconds=760),
+                        {"provider_id": "codex"},
+                    ),
+                ]
+            )
+            _write_events(root, "default", "sess-spans", events)
+
+            report = runtime_turn_latency_report.build_report(
+                root,
+                workspaces={"default"},
+                limit_turns=0,
+                include_turns=True,
+            )
+
+        metrics = report["turns"][0]["metrics"]
+        self.assertEqual(metrics["ensure_runtime_ms"], 10)
+        self.assertEqual(metrics["ensure_provider_thread_ms"], 15)
+        self.assertEqual(metrics["turn_start_write_ms"], 10)
+
     def test_groups_codex_cold_warm_and_plain_hosted_metrics(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             root = Path(temp_dir) / "maverick"

@@ -410,6 +410,7 @@ export function useChatAppController({
     activeAppContext,
     activeThread,
     attachments,
+    canPreloadRuntime: initialDependenciesReady,
     clearAttachments,
     composer,
     composerMentionItems,

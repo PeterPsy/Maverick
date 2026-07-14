@@ -52,6 +52,7 @@ class RuntimeBackendAdapter(Protocol):
         event_sink: "RuntimeExecutionEventSink | None" = None,
         timeout_seconds: int | None = None,
         on_provider_thread_id: Callable[[str], None] | None = None,
+        on_provider_startup_event: Callable[[str, dict[str, object]], None] | None = None,
         on_provider_turn_start_sent: Callable[[dict[str, object]], None] | None = None,
         on_provider_accepted: Callable[[dict[str, object]], None] | None = None,
         command_runner: Callable[..., Any] | None = None,

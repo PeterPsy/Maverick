@@ -56,6 +56,7 @@ class RuntimeExecutionCommandTest(unittest.TestCase):
         session = _session("sandbox", root=temp_dir.name)
         emitted = []
         provider_threads = []
+        startup_events = []
 
         result = execute_runtime_turn(
             session=session,
@@ -65,6 +66,7 @@ class RuntimeExecutionCommandTest(unittest.TestCase):
             runtime_adapter=_codex_adapter(),
             event_sink=emitted.append,
             on_provider_thread_id=provider_threads.append,
+            on_provider_startup_event=lambda phase, metadata: startup_events.append((phase, metadata)),
             command_runner=FakeCodexProcess,
             timeout_seconds=2,
         )
@@ -75,6 +77,19 @@ class RuntimeExecutionCommandTest(unittest.TestCase):
         self.assertEqual([event.event_type for event in emitted], ["runtime.output.delta"])
         self.assertEqual(emitted[0].payload["text"], "hello")
         self.assertEqual(FakeCodexProcess.requests[-3:], ["initialize", "thread/start", "turn/start"])
+        self.assertEqual(
+            [phase for phase, _metadata in startup_events],
+            [
+                "ensure_runtime_started",
+                "ensure_runtime_completed",
+                "ensure_thread_started",
+                "ensure_thread_completed",
+                "turn_start_write_started",
+                "turn_start_write_sent",
+            ],
+        )
+        self.assertGreaterEqual(startup_events[1][1]["ensure_runtime_ms"], 0)
+        self.assertGreaterEqual(startup_events[3][1]["ensure_provider_thread_ms"], 0)
 
     def test_codex_execution_removes_provider_generated_system_skills_before_thread_start(self) -> None:
         temp_dir = tempfile.TemporaryDirectory()
@@ -468,12 +483,15 @@ class FakeRuntimeAdapter:
         event_sink=None,
         timeout_seconds: int | None = None,
         on_provider_thread_id=None,
+        on_provider_startup_event=None,
         on_provider_turn_start_sent=None,
         on_provider_accepted=None,
         command_runner=None,
     ) -> RuntimeExecutionResult:
         self.inputs.append(input_text)
         output = f"fake: {input_text}"
+        if on_provider_startup_event is not None:
+            on_provider_startup_event("turn_start_write_started", {"provider_id": "fake-runtime", "source": "fake"})
         if on_provider_turn_start_sent is not None:
             on_provider_turn_start_sent({"provider_id": "fake-runtime", "source": "fake"})
         if on_provider_accepted is not None:

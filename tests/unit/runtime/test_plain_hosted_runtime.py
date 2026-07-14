@@ -323,7 +323,7 @@ class PlainHostedRuntimeTest(unittest.TestCase):
             captured["status"] = status
             captured["headers"] = headers
 
-        with patch("core.api.runtime_api.materialize_runtime_app_references") as materialize:
+        with patch("core.api.runtime_api.materialize_runtime_app_references_with_metrics") as materialize:
             body = _submit_runtime_turn_response(
                 state,
                 context,

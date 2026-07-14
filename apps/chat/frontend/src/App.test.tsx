@@ -229,6 +229,15 @@ function runtimeSession(sessionId: string): RuntimeSession {
   };
 }
 
+function hotRuntimeSession(sessionId: string): RuntimeSession {
+  return {
+    ...runtimeSession(sessionId),
+    prewarm_status: "completed",
+    prewarm_completed: true,
+    provider_thread_ready: true,
+  };
+}
+
 function runtimeTurn(turnId: string, sessionId: string, status = "queued"): RuntimeTurn {
   return {
     turn_id: turnId,
@@ -763,6 +772,9 @@ describe("App thread navigation", () => {
     });
     await typeComposerMessage(element, "review @Notes [ref:storage/file/file_1]");
     await clickSend(element);
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 225));
+    });
 
     await waitForAssertion(() => {
       expect(createRuntimeSessionWithTurn).toHaveBeenCalledWith(
@@ -781,6 +793,37 @@ describe("App thread navigation", () => {
     });
     expect(prepareRuntimeSessionAppReferences).not.toHaveBeenCalled();
     expect(sendRuntimeTurn).not.toHaveBeenCalled();
+  });
+
+  it("prepares app references while typing in an existing thread", async () => {
+    const existingThread = thread("thread-existing", "session-existing", { title: "Existing thread" });
+    const element = await renderApp({
+      runtimeThreads: [existingThread],
+      runtimeThreadsLoaded: true,
+      threadId: existingThread.thread_id,
+    });
+
+    await waitForAssertion(() => {
+      expect(element.querySelector('[role="textbox"]')).not.toBeNull();
+    });
+    await typeComposerMessage(element, "review @Notes [ref:storage/file/file_1]");
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 350));
+    });
+
+    await waitForAssertion(() => {
+      expect(prepareRuntimeSessionAppReferences).toHaveBeenCalledWith(
+        "session-existing",
+        [
+          expect.objectContaining({
+            app_id: "storage",
+            entity_id: "file_1",
+            entity_type: "file",
+          }),
+        ],
+        expect.objectContaining({ signal: expect.any(AbortSignal) }),
+      );
+    });
   });
 
   it("keeps uploaded draft attachments bound to the original draft after navigation", async () => {
@@ -1065,6 +1108,7 @@ describe("App thread navigation", () => {
 
     await waitForAssertion(() => {
       expect(element.textContent).toContain("How can I help today?");
+      expect(createRuntimeSession).toHaveBeenCalled();
     });
     await typeComposerMessage(element, "fast first message");
     await clickSend(element);
@@ -1074,7 +1118,6 @@ describe("App thread navigation", () => {
         expect.objectContaining({
           inputText: "fast first message",
           clientMetrics: expect.objectContaining({
-            attachment_upload_ms: expect.any(Number),
             prepare_refs_wait_on_submit_ms: 0,
             prepared_session_ready_before_submit: false,
             prepared_session_wait_on_submit_ms: expect.any(Number),
@@ -1082,7 +1125,72 @@ describe("App thread navigation", () => {
         }),
       );
     });
+    const prepareSignal = vi.mocked(createRuntimeSession).mock.calls[0]?.[1]?.signal;
+    expect(prepareSignal?.aborted).toBe(false);
+    const submittedMetrics = vi.mocked(createRuntimeSessionWithTurn).mock.calls[0]?.[0].clientMetrics;
+    expect(submittedMetrics).not.toHaveProperty("attachment_upload_ms");
     expect(sendRuntimeTurn).not.toHaveBeenCalled();
+    await act(async () => {
+      preparedSession.resolve(hotRuntimeSession("session-background-hot"));
+      await preparedSession.promise;
+    });
+    expect(prepareSignal?.aborted).toBe(false);
+  });
+
+  it("uses a prepared session only after provider prewarm is hot", async () => {
+    vi.mocked(createRuntimeSession).mockResolvedValue(hotRuntimeSession("session-hot"));
+    const element = await renderApp({
+      navigationScope: "floating-window",
+      newChatRequestId: "request-hot-prepared",
+      runtimeThreads: [],
+      runtimeThreadsLoaded: true,
+    });
+
+    await waitForAssertion(() => {
+      expect(createRuntimeSession).toHaveBeenCalled();
+    });
+    await typeComposerMessage(element, "use hot session");
+    await clickSend(element);
+
+    await waitForAssertion(() => {
+      expect(sendRuntimeTurn).toHaveBeenCalledWith(
+        "session-hot",
+        "use hot session",
+        expect.any(String),
+        [],
+        [],
+        expect.any(Object),
+      );
+    });
+    expect(createRuntimeSessionWithTurn).not.toHaveBeenCalled();
+  });
+
+  it("starts and reuses runtime preload before a draft chat exists", async () => {
+    vi.mocked(createRuntimeSession).mockResolvedValue(hotRuntimeSession("session-early-hot"));
+    const element = await renderApp({
+      navigationScope: "floating-window",
+      runtimeThreads: [],
+      runtimeThreadsLoaded: true,
+    });
+
+    await waitForAssertion(() => {
+      expect(createRuntimeSession).toHaveBeenCalledTimes(1);
+    });
+    await typeComposerMessage(element, "reuse early preload");
+    await clickSend(element);
+
+    await waitForAssertion(() => {
+      expect(sendRuntimeTurn).toHaveBeenCalledWith(
+        "session-early-hot",
+        "reuse early preload",
+        expect.any(String),
+        [],
+        [],
+        expect.any(Object),
+      );
+    });
+    expect(createRuntimeSession).toHaveBeenCalledTimes(1);
+    expect(createRuntimeSessionWithTurn).not.toHaveBeenCalled();
   });
 
   it("interrupts the submitted turn id after the runtime ack arrives", async () => {

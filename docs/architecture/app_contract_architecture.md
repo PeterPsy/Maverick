@@ -586,7 +586,8 @@ The app contract may declare referenceable entity metadata under `capabilities`.
       "searchable": true,
       "resolvable": true,
       "summarizable": true,
-      "deep_link_supported": true
+      "deep_link_supported": true,
+      "cache_scope": "session"
     }
   ]
 }
@@ -603,6 +604,8 @@ Rules:
 - referenceable entities must have stable `app_id`, `entity_type`, and `entity_id` identity
 - safe summaries must omit private fields the owning app does not intend to expose
 - authorization remains governed by the core and by the owning app surface being called
+- `cache_scope` defaults to `session`; an entity provider may declare `workspace_user` only when its redaction-safe resolve/materialize result is independent of the runtime session for the same workspace user and effective authorization context
+- the runtime reference cache may reuse `workspace_user` results across sessions, but it must retain workspace, user, role, effective-mode, provider-binding, entity identity, and safe version metadata in the fingerprint
 
 Mounted app frontends should use the platform host's generic `/api/app-references/manifest`, `/api/app-references/search`, `/api/app-references/resolve`, and `/api/app-references/summarize` routes when building interactive reference pickers. The routes are app-agnostic: they discover enabled providers from `capabilities.reference_entities`, invoke the owning app's reference MCP tools, and return normalized `type: "entity"` references that can be stored or sent as runtime `app_references`.
 

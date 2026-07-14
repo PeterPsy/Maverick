@@ -195,6 +195,7 @@ class AppContractTestCase(unittest.TestCase):
             self.assertTrue(loaded.contract.capabilities.view_surfaces[0].supports_custom_view)
             self.assertEqual(loaded.contract.capabilities.reference_entities[0].entity_type, "reservation")
             self.assertTrue(loaded.contract.capabilities.reference_entities[0].searchable)
+            self.assertEqual(loaded.contract.capabilities.reference_entities[0].cache_scope, "session")
             self.assertEqual(loaded.contract.distribution.mode, "sealed")
             self.assertEqual(loaded.contract.distribution.source_access, "none")
             self.assertTrue(loaded.contract.lifecycle.validate_after_import)

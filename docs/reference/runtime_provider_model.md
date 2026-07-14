@@ -33,6 +33,10 @@ Important implications:
 - network access for providers is not equivalent to unconstrained filesystem access
 - shell settings can list runtime sessions across workspaces visible to the authenticated user, terminate individual sessions, and clear visible session records in batch through controlled settings runtime-session endpoints
 
+Chat may create hidden `prepare_only` runtime sessions before the first message. The create response waits for provider prewarm for at most two seconds and reports `prewarm_status`, `prewarm_completed`, and `provider_thread_ready`. A client must treat the session as ready only when prewarm completed and the provider thread is ready; a session record existing is not sufficient. Plain hosted chat reports prewarm as `not_required` and ready because it has no local provider process or thread to warm.
+
+Codex turn startup emits separate runtime events for `ensure_runtime`, `ensure_thread`, and the `turn/start` write boundary. Each start/completed pair is persisted under `runtime.provider.*`, while `runtime.provider.turn_start_sent` remains the write-complete marker. This keeps cold-process, cold-thread, request-write, and provider-ack latency distinguishable.
+
 ## Hosted Model Providers And Plain Hosted Chat
 
 Provider records distinguish `provider_role` from the lower-level provider `kind`.

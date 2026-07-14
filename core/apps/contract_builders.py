@@ -23,6 +23,7 @@ from core.apps.models import (
     AppProviderCredentialSource,
     AppProviderPermissionDeclaration,
     AppProvidedInterfaceDeclaration,
+    AppReferenceCacheScope,
     AppReferenceEntityDeclaration,
     AppRequiredInterfaceDeclaration,
     AppRollbackSupport,
@@ -146,6 +147,7 @@ def build_reference_entity_declaration(
     resolvable: bool = True,
     summarizable: bool = True,
     deep_link_supported: bool = True,
+    cache_scope: AppReferenceCacheScope = "session",
 ) -> AppReferenceEntityDeclaration:
     """Build one referenceable entity capability declaration."""
     return AppReferenceEntityDeclaration(
@@ -155,6 +157,7 @@ def build_reference_entity_declaration(
         resolvable=resolvable,
         summarizable=summarizable,
         deep_link_supported=deep_link_supported,
+        cache_scope=cache_scope,
     )
 
 def build_app_distribution(

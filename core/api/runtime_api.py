@@ -64,9 +64,11 @@ from core.runtime.plain_hosted_text import (
 )
 from core.runtime.runtime_turns import RuntimeTurnRecord
 from core.runtime.turn_submission import (
+    RuntimeSessionPrewarmResult,
     interrupt_runtime_provider_turn,
     prewarm_runtime_session_async,
     release_idle_runtime_processes,
+    runtime_session_prewarm_status,
     submit_runtime_turn,
     submit_runtime_turn_async,
     wait_for_runtime_session_prewarm,
@@ -81,7 +83,7 @@ from core.skills.runtime_catalog import runtime_skill_catalog_app_id_for_request
 
 IDEMPOTENT_CLAIM_WAIT_SECONDS = 5.0
 PREPARED_SESSION_TTL_SECONDS = 30 * 60
-PREPARED_SESSION_PREWARM_WAIT_SECONDS = 0.0
+PREPARED_SESSION_PREWARM_WAIT_SECONDS = 2.0
 RUNTIME_THREAD_PAGE_DEFAULT_LIMIT = 50
 RUNTIME_THREAD_PAGE_MAX_LIMIT = 100
 CLIENT_SUBMISSION_NUMERIC_METRICS = {
@@ -105,9 +107,24 @@ class RuntimeTurnSubmissionDraft:
     async_requested: bool
 
 
-def _session_payload(session: RuntimeSessionRecord, *, provider_id: str | None = None) -> dict[str, object]:
+def _session_payload(
+    session: RuntimeSessionRecord,
+    *,
+    provider_id: str | None = None,
+    prewarm: RuntimeSessionPrewarmResult | None = None,
+) -> dict[str, object]:
     payload = asdict(session)
     payload["provider_id"] = provider_id
+    if prewarm is not None:
+        payload.update(
+            {
+                "prewarm_status": prewarm.status,
+                "prewarm_completed": prewarm.prewarm_completed,
+                "provider_thread_ready": prewarm.provider_thread_ready,
+            }
+        )
+        if prewarm.prewarm_total_ms is not None:
+            payload["prewarm_total_ms"] = prewarm.prewarm_total_ms
     return payload
 
 
@@ -426,11 +443,25 @@ def _prewarm_new_runtime_session(
     session: RuntimeSessionRecord,
     *,
     wait_seconds: float = 0.0,
-) -> None:
-    with suppress(Exception):
+) -> RuntimeSessionPrewarmResult:
+    if runtime_session_is_plain_hosted_chat(session):
+        return RuntimeSessionPrewarmResult(
+            status="not_required",
+            prewarm_completed=True,
+            provider_thread_ready=True,
+            provider_id=HOSTED_TEXT_RUNTIME_PROVIDER_ID,
+        )
+    try:
         prewarm_runtime_session_async(state, session=session)
         if wait_seconds > 0:
             wait_for_runtime_session_prewarm(session.session_id, timeout_seconds=wait_seconds)
+        return runtime_session_prewarm_status(session.session_id)
+    except Exception:
+        return RuntimeSessionPrewarmResult(
+            status="failed",
+            prewarm_completed=True,
+            provider_thread_ready=False,
+        )
 
 
 def _mark_client_message_claim_queued(state: PlatformState, claim: RuntimeClientMessageClaim | None) -> None:
@@ -878,8 +909,9 @@ def _handle_session_collection(
                 {"error": "runtime_skill_catalog_unavailable", "detail": str(error)},
                 status="400 Bad Request",
             )
+        prewarm_result: RuntimeSessionPrewarmResult | None = None
         if not turn_requested:
-            _prewarm_new_runtime_session(
+            prewarm_result = _prewarm_new_runtime_session(
                 state,
                 session,
                 wait_seconds=PREPARED_SESSION_PREWARM_WAIT_SECONDS if prepare_only else 0.0,
@@ -904,7 +936,15 @@ def _handle_session_collection(
                     client_message_claim if client_message_claim_created else None,
                 )
                 raise
-        return json_response(start_response, _session_payload(session, provider_id=_resolved_provider_id(state, session)), status="201 Created")
+        return json_response(
+            start_response,
+            _session_payload(
+                session,
+                provider_id=_resolved_provider_id(state, session),
+                prewarm=prewarm_result if prepare_only else None,
+            ),
+            status="201 Created",
+        )
     return json_response(start_response, {"error": "method_not_allowed"}, status="405 Method Not Allowed")
 
 

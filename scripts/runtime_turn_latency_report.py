@@ -48,6 +48,12 @@ INTERESTING_EVENT_TYPES = {
     "runtime.app_references.prepare_completed",
     "runtime.prewarm.completed",
     "runtime.provider.dispatching",
+    "runtime.provider.ensure_runtime_started",
+    "runtime.provider.ensure_runtime_completed",
+    "runtime.provider.ensure_thread_started",
+    "runtime.provider.ensure_thread_completed",
+    "runtime.provider.turn_start_write_started",
+    "runtime.provider.turn_start_write_sent",
     "runtime.provider.turn_start_sent",
     "runtime.provider.accepted",
 }
@@ -81,6 +87,12 @@ EVENT_KEYS = {
     "runtime.turn.worker_started": "worker_started",
     "runtime.turn.worker_started_recorded": "worker_started_recorded",
     "runtime.provider.dispatching": "provider_dispatching",
+    "runtime.provider.ensure_runtime_started": "ensure_runtime_started",
+    "runtime.provider.ensure_runtime_completed": "ensure_runtime_completed",
+    "runtime.provider.ensure_thread_started": "ensure_thread_started",
+    "runtime.provider.ensure_thread_completed": "ensure_thread_completed",
+    "runtime.provider.turn_start_write_started": "turn_start_write_started",
+    "runtime.provider.turn_start_write_sent": "turn_start_write_sent",
     "runtime.provider.turn_start_sent": "turn_start_sent",
     "runtime.provider.accepted": "provider_accepted",
 }
@@ -132,6 +144,7 @@ LATENCY_METRIC_NAMES = (
     "app_reference_prepare_materialize_ms",
     "ensure_runtime_ms",
     "ensure_provider_thread_ms",
+    "turn_start_write_ms",
     "turn_start_sent_to_provider_accepted_ms",
     "queued_to_provider_accepted_ms",
     "receive_to_provider_accepted_ms",
@@ -304,6 +317,7 @@ def build_report(
                 "materialized_reference_count and reference_cache_hit come from materialization/provider-input events when present."
             ),
             "app_reference_materialize_ms and provider_input_build_ms are emitted only by runtime paths with the newer granular instrumentation.",
+            "ensure_runtime_ms, ensure_provider_thread_ms, and turn_start_write_ms are backed by separate provider startup start/completed events when available.",
             "app_reference_prepare_ms fields come from /app-references/prepare and are assigned to the next observed turn in that session when present.",
             "launch_cache_hit, launch_cache_fingerprint_ms, skill_count, and launch_cache_fingerprint_prefix come from runtime.provider.dispatching when present.",
             "claim_ms, session_create_ms, reference_validate_ms, queue_turn_ms, and post_queue_response_ms are emitted only by newer runtime submission paths.",
@@ -775,6 +789,12 @@ def _turn_metrics(group: TurnEvents) -> dict[str, float]:
     worker = events.get("worker_started")
     worker_started_recorded = events.get("worker_started_recorded")
     dispatching = events.get("provider_dispatching")
+    ensure_runtime_started = events.get("ensure_runtime_started")
+    ensure_runtime_completed = events.get("ensure_runtime_completed")
+    ensure_thread_started = events.get("ensure_thread_started")
+    ensure_thread_completed = events.get("ensure_thread_completed")
+    turn_start_write_started = events.get("turn_start_write_started")
+    turn_start_write_sent = events.get("turn_start_write_sent")
     sent = events.get("turn_start_sent")
     accepted = events.get("provider_accepted")
 
@@ -889,6 +909,17 @@ def _turn_metrics(group: TurnEvents) -> dict[str, float]:
     if ensure_source is not None:
         for key in ("ensure_runtime_ms", "ensure_provider_thread_ms"):
             _set_metric(metrics, key, _numeric(ensure_source.payload.get(key)))
+    _set_metric(
+        metrics,
+        "ensure_runtime_ms",
+        _payload_metric_or_delta(ensure_runtime_completed, "ensure_runtime_ms", ensure_runtime_started),
+    )
+    _set_metric(
+        metrics,
+        "ensure_provider_thread_ms",
+        _payload_metric_or_delta(ensure_thread_completed, "ensure_provider_thread_ms", ensure_thread_started),
+    )
+    _set_metric(metrics, "turn_start_write_ms", _delta_ms(turn_start_write_started, turn_start_write_sent or sent))
     ack_ms = _numeric(accepted.payload.get("turn_start_to_ack_ms")) if accepted is not None else None
     if ack_ms is None:
         ack_ms = _delta_ms(sent, accepted)

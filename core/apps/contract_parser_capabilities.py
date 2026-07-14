@@ -72,11 +72,17 @@ def _parse_reference_entities(payload: dict[str, object]) -> list[AppReferenceEn
             "resolvable",
             "summarizable",
             "deep_link_supported",
+            "cache_scope",
         }
         if unexpected_keys:
             unexpected = ", ".join(sorted(unexpected_keys))
             raise AppContractValidationError(
                 f"Unsupported capabilities.reference_entities[{index}] field(s): {unexpected}."
+            )
+        cache_scope = _expect_string(item_payload, "cache_scope") if "cache_scope" in item_payload else "session"
+        if cache_scope not in {"session", "workspace_user"}:
+            raise AppContractValidationError(
+                f"`capabilities.reference_entities[{index}].cache_scope` must be `session` or `workspace_user`."
             )
         reference_entities.append(
             AppReferenceEntityDeclaration(
@@ -86,6 +92,7 @@ def _parse_reference_entities(payload: dict[str, object]) -> list[AppReferenceEn
                 resolvable=_expect_bool(item_payload, "resolvable", default=False),
                 summarizable=_expect_bool(item_payload, "summarizable", default=False),
                 deep_link_supported=_expect_bool(item_payload, "deep_link_supported", default=False),
+                cache_scope=cache_scope,
             )
         )
     return reference_entities

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections import OrderedDict
 from contextlib import suppress
 from dataclasses import dataclass, replace
 from threading import Event, Lock, Thread, Timer
@@ -28,6 +29,7 @@ from core.runtime.turn_submission_service_output import (
     _record_provider_dispatching,
     _record_provider_input_completed,
     _record_provider_input_started,
+    _record_provider_startup_event,
     _record_provider_thread_id,
     _record_provider_turn_start_sent,
     _record_session_lock_acquired,
@@ -73,14 +75,31 @@ _PREWARM_AFTER_TURN_DELAY_SECONDS = 0.05
 _PREWARM_JOIN_TIMEOUT_SECONDS = 0.25
 _IDLE_REAP_TIMERS: dict[str, Timer] = {}
 _IDLE_REAP_TIMERS_LOCK = Lock()
-_PREWARM_COMPLETIONS: dict[str, "_SessionPrewarmState"] = {}
+_PREWARM_COMPLETIONS: OrderedDict[str, "_SessionPrewarmState"] = OrderedDict()
 _PREWARM_COMPLETIONS_LOCK = Lock()
+_PREWARM_STATUS_MAX_ENTRIES = 2048
 
 
-@dataclass(frozen=True)
+@dataclass
 class _SessionPrewarmState:
     completion: Event
     started_perf_counter: float
+    status: str = "pending"
+    provider_id: str | None = None
+    provider_thread_id: str | None = None
+    elapsed_ms: float | None = None
+
+
+@dataclass(frozen=True)
+class RuntimeSessionPrewarmResult:
+    """Redaction-safe readiness state for one runtime session prewarm."""
+
+    status: str
+    prewarm_completed: bool
+    provider_thread_ready: bool
+    provider_id: str | None = None
+    provider_thread_id: str | None = None
+    prewarm_total_ms: float | None = None
 
 
 def _debug_log_runtime_turn_with_timing(
@@ -126,6 +145,7 @@ def prewarm_runtime_session_async(state: PlatformState, *, session: RuntimeSessi
     def worker() -> None:
         status = "completed"
         provider_id = ""
+        provider_thread_id = ""
         try:
             lock = _session_execution_lock(session.session_id)
             if not lock.acquire(blocking=False):
@@ -166,6 +186,9 @@ def prewarm_runtime_session_async(state: PlatformState, *, session: RuntimeSessi
                     session=current_session,
                     launch_spec=launch_spec,
                 )
+                if not provider_thread_id:
+                    status = "missing_provider_thread"
+                    return
                 if provider_thread_id and provider_thread_id != (current_session.provider_thread_id or ""):
                     _record_provider_thread_id(
                         state,
@@ -186,27 +209,42 @@ def prewarm_runtime_session_async(state: PlatformState, *, session: RuntimeSessi
             )
             return
         finally:
-            _complete_session_prewarm(session.session_id, completion)
+            elapsed_ms = (time.perf_counter() - started_at) * 1000
+            _complete_session_prewarm(
+                session.session_id,
+                completion,
+                status=status,
+                provider_id=provider_id or None,
+                provider_thread_id=provider_thread_id or None,
+                elapsed_ms=elapsed_ms,
+            )
             if status != "failed":
                 _record_session_prewarm_completed(
                     state,
                     session_id=session.session_id,
                     provider_id=provider_id or None,
-                    elapsed_ms=(time.perf_counter() - started_at) * 1000,
+                    elapsed_ms=elapsed_ms,
                     status=status,
+                    provider_thread_ready=bool(status == "completed" and provider_thread_id),
                 )
 
     try:
         Thread(target=worker, name=f"maverick-runtime-prewarm-{session.session_id}", daemon=True).start()
     except Exception as error:
+        elapsed_ms = (time.perf_counter() - started_at) * 1000
         _record_session_prewarm_failed(
             state,
             session_id=session.session_id,
             provider_id=None,
-            elapsed_ms=(time.perf_counter() - started_at) * 1000,
+            elapsed_ms=elapsed_ms,
             error=error,
         )
-        _complete_session_prewarm(session.session_id, completion)
+        _complete_session_prewarm(
+            session.session_id,
+            completion,
+            status="failed",
+            elapsed_ms=elapsed_ms,
+        )
         raise
 
 
@@ -247,14 +285,69 @@ def _register_session_prewarm(session_id: str) -> _SessionPrewarmState | None:
             return None
         state = _SessionPrewarmState(completion=Event(), started_perf_counter=time.perf_counter())
         _PREWARM_COMPLETIONS[session_id] = state
+        _PREWARM_COMPLETIONS.move_to_end(session_id)
+        _bound_session_prewarm_states_locked()
         return state
 
 
-def _complete_session_prewarm(session_id: str, completion: _SessionPrewarmState) -> None:
-    completion.completion.set()
+def _complete_session_prewarm(
+    session_id: str,
+    completion: _SessionPrewarmState,
+    *,
+    status: str = "completed",
+    provider_id: str | None = None,
+    provider_thread_id: str | None = None,
+    elapsed_ms: float | None = None,
+) -> None:
     with _PREWARM_COMPLETIONS_LOCK:
+        completion.status = status
+        completion.provider_id = provider_id
+        completion.provider_thread_id = provider_thread_id
+        completion.elapsed_ms = elapsed_ms
+        completion.completion.set()
         if _PREWARM_COMPLETIONS.get(session_id) is completion:
-            _PREWARM_COMPLETIONS.pop(session_id, None)
+            _PREWARM_COMPLETIONS.move_to_end(session_id)
+        _bound_session_prewarm_states_locked()
+
+
+def _bound_session_prewarm_states_locked() -> None:
+    while len(_PREWARM_COMPLETIONS) > _PREWARM_STATUS_MAX_ENTRIES:
+        removable_session_id = next(
+            (
+                candidate_session_id
+                for candidate_session_id, state in _PREWARM_COMPLETIONS.items()
+                if state.completion.is_set()
+            ),
+            None,
+        )
+        if removable_session_id is None:
+            return
+        _PREWARM_COMPLETIONS.pop(removable_session_id, None)
+
+
+def runtime_session_prewarm_status(session_id: str) -> RuntimeSessionPrewarmResult:
+    """Return the latest in-process prewarm state for a runtime session."""
+    with _PREWARM_COMPLETIONS_LOCK:
+        state = _PREWARM_COMPLETIONS.get(session_id)
+        if state is None:
+            return RuntimeSessionPrewarmResult(
+                status="not_started",
+                prewarm_completed=False,
+                provider_thread_ready=False,
+            )
+        completed = state.completion.is_set()
+        status = state.status
+        provider_id = state.provider_id
+        provider_thread_id = state.provider_thread_id
+        elapsed_ms = state.elapsed_ms
+    return RuntimeSessionPrewarmResult(
+        status=status,
+        prewarm_completed=completed,
+        provider_thread_ready=bool(completed and status == "completed" and provider_thread_id),
+        provider_id=provider_id,
+        provider_thread_id=provider_thread_id,
+        prewarm_total_ms=round(elapsed_ms, 3) if elapsed_ms is not None else None,
+    )
 
 
 def _wait_for_session_prewarm(
@@ -334,6 +427,7 @@ def _record_session_prewarm_completed(
     provider_id: str | None,
     elapsed_ms: float,
     status: str,
+    provider_thread_ready: bool,
 ) -> RuntimeEventRecord | None:
     with suppress(Exception):
         return record_runtime_event(
@@ -346,6 +440,8 @@ def _record_session_prewarm_completed(
                 "provider_id": provider_id or "codex",
                 "prewarm_total_ms": round(elapsed_ms, 3),
                 "status": status,
+                "prewarm_completed": True,
+                "provider_thread_ready": provider_thread_ready,
             },
             event_bus=getattr(state, "runtime_event_bus", None),
         )
@@ -786,6 +882,17 @@ def submit_runtime_turn_async(
                         metadata=launch_metadata,
                     )
 
+                    def record_provider_startup_event(phase: str, metadata: dict[str, object]) -> None:
+                        _record_provider_startup_event(
+                            state,
+                            session_id=session.session_id,
+                            turn_id=turn.turn_id,
+                            provider_id=worker_provider_id,
+                            runtime_mode=current_session.runtime_mode,
+                            phase=phase,
+                            metadata=metadata,
+                        )
+
                     def record_provider_turn_start_sent(metadata: dict[str, object]) -> None:
                         nonlocal turn_start_sent_at
                         turn_start_sent_at = time.perf_counter()
@@ -824,6 +931,7 @@ def submit_runtime_turn_async(
                             provider_id=worker_provider_id,
                             provider_thread_id=provider_thread_id,
                         ),
+                        on_provider_startup_event=record_provider_startup_event,
                         on_provider_turn_start_sent=record_provider_turn_start_sent,
                         on_provider_accepted=record_provider_accepted,
                         event_sink=output_recorder.record,

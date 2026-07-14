@@ -76,18 +76,33 @@ def execute_codex_app_server_turn(
     event_sink: RuntimeExecutionEventSink | None,
     timeout_seconds: int | None,
     on_provider_thread_id: Callable[[str], None] | None = None,
+    on_provider_startup_event: Callable[[str, dict[str, object]], None] | None = None,
     on_provider_turn_start_sent: Callable[[dict[str, object]], None] | None = None,
     on_provider_accepted: Callable[[dict[str, object]], None] | None = None,
     command_runner=subprocess.Popen,
 ) -> CodexAppServerTurnResult:
     """Execute one turn against a persistent Codex app-server thread."""
+    if on_provider_startup_event is not None:
+        on_provider_startup_event("ensure_runtime_started", {})
     ensure_runtime_started_at = time.perf_counter()
     runtime = _ensure_runtime(session=session, launch_spec=launch_spec, command_runner=command_runner)
     ensure_runtime_ms = (time.perf_counter() - ensure_runtime_started_at) * 1000
+    if on_provider_startup_event is not None:
+        on_provider_startup_event("ensure_runtime_completed", {"ensure_runtime_ms": ensure_runtime_ms})
     _remove_generated_system_skills(launch_spec=launch_spec, session=session)
+    if on_provider_startup_event is not None:
+        on_provider_startup_event("ensure_thread_started", {})
     ensure_thread_started_at = time.perf_counter()
     provider_thread_id = _ensure_provider_thread(runtime=runtime, session=session, launch_spec=launch_spec, on_provider_thread_id=on_provider_thread_id)
     ensure_provider_thread_ms = (time.perf_counter() - ensure_thread_started_at) * 1000
+    if on_provider_startup_event is not None:
+        on_provider_startup_event(
+            "ensure_thread_completed",
+            {
+                "ensure_provider_thread_ms": ensure_provider_thread_ms,
+                "provider_thread_id": provider_thread_id,
+            },
+        )
     with runtime.event_lock:
         runtime.current_event_sink = event_sink
         runtime.current_chunks = []
@@ -108,6 +123,21 @@ def execute_codex_app_server_turn(
             "process_returncode": runtime.process.poll(),
         },
     )
+    if on_provider_startup_event is not None:
+        on_provider_startup_event("turn_start_write_started", {"provider_thread_id": provider_thread_id})
+
+    def record_turn_start_sent(metadata: dict[str, object]) -> None:
+        enriched_metadata = {
+            **metadata,
+            "provider_thread_id": provider_thread_id,
+            "ensure_runtime_ms": ensure_runtime_ms,
+            "ensure_provider_thread_ms": ensure_provider_thread_ms,
+        }
+        if on_provider_startup_event is not None:
+            on_provider_startup_event("turn_start_write_sent", enriched_metadata)
+        if on_provider_turn_start_sent is not None:
+            on_provider_turn_start_sent(enriched_metadata)
+
     turn = _send_request(
         runtime,
         "turn/start",
@@ -119,16 +149,7 @@ def execute_codex_app_server_turn(
             "cwd": launch_spec.working_directory,
         },
         timeout=20.0,
-        on_sent=lambda metadata: on_provider_turn_start_sent(
-            {
-                **metadata,
-                "provider_thread_id": provider_thread_id,
-                "ensure_runtime_ms": ensure_runtime_ms,
-                "ensure_provider_thread_ms": ensure_provider_thread_ms,
-            }
-        )
-        if on_provider_turn_start_sent is not None
-        else None,
+        on_sent=record_turn_start_sent if on_provider_startup_event is not None or on_provider_turn_start_sent is not None else None,
     ).get("turn")
     if isinstance(turn, dict):
         provider_turn_id = str(turn.get("id") or "").strip()

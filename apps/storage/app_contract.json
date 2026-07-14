@@ -244,7 +244,8 @@
         "searchable": true,
         "resolvable": true,
         "summarizable": false,
-        "deep_link_supported": true
+        "deep_link_supported": true,
+        "cache_scope": "workspace_user"
       },
       {
         "entity_type": "folder",
@@ -252,7 +253,8 @@
         "searchable": true,
         "resolvable": true,
         "summarizable": false,
-        "deep_link_supported": true
+        "deep_link_supported": true,
+        "cache_scope": "workspace_user"
       }
     ]
   },

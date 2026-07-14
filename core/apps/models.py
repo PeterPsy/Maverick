@@ -25,6 +25,7 @@ AppRequiredInterfaceCardinality = Literal["one", "many"]
 HttpSidecarRuntime = Literal["python", "node", "generic"]
 HttpSidecarPort = int | Literal["auto"]
 AppProviderCredentialSource = Literal["none", "core-vault"]
+AppReferenceCacheScope = Literal["session", "workspace_user"]
 
 
 @dataclass(frozen=True)
@@ -108,6 +109,7 @@ class AppReferenceEntityDeclaration:
     resolvable: bool
     summarizable: bool
     deep_link_supported: bool
+    cache_scope: AppReferenceCacheScope = "session"
 
 
 @dataclass(frozen=True)

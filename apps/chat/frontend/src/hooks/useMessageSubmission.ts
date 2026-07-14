@@ -68,6 +68,7 @@ type UseMessageSubmissionParams = {
   composer: string;
   composerMentionItems: MentionItem[];
   draftChat: DraftChat | null;
+  canPreloadRuntime: boolean;
   isBootstrapping: boolean;
   isHistoryLoading: boolean;
   isRuntimeBusy: boolean;
@@ -134,6 +135,7 @@ type PreparedRuntimeSessionLookup = {
 
 const PREPARED_RUNTIME_SESSION_SUBMIT_WAIT_MS = 200;
 const PREPARED_APP_REFERENCES_SUBMIT_WAIT_MS = 200;
+const NEW_CHAT_PRELOAD_CONVERSATION_KEY = "draft:active";
 
 export function conversationKeyFor(activeThread: ChatThread | null, draftChat: DraftChat | null): string {
   if (activeThread?.thread_id) {
@@ -316,6 +318,7 @@ export function useMessageSubmission({
   composer,
   composerMentionItems,
   draftChat,
+  canPreloadRuntime,
   isBootstrapping,
   isHistoryLoading,
   isRuntimeBusy,
@@ -374,33 +377,30 @@ export function useMessageSubmission({
   }, [activeAppContext, activeConversationKey, activeThread, draftChat, threads]);
 
   useEffect(() => {
-    if (!draftChat || activeThread || isBootstrapping || !activeConversationKey) {
-      cancelPreparedRuntimeSession({ preserveInFlight: true });
-      if (!draftChat && !preparedRuntimeSessionHasInFlightConsumer()) {
-        preparedRuntimeSessionRef.current = null;
-      }
+    const preloadConversationKey = !activeThread ? NEW_CHAT_PRELOAD_CONVERSATION_KEY : "";
+    if (activeThread || !canPreloadRuntime || !preloadConversationKey) {
       return;
     }
     const target: SubmissionTarget = {
       activeAppContext,
-      conversationKey: activeConversationKey,
+      conversationKey: preloadConversationKey,
       draftChat,
       thread: null,
       threadIds: new Set(threads.map((item) => item.thread_id)),
     };
     void buildRuntimeSessionOptions(target)
       .then(({ options }) => {
-        const key = preparedRuntimeSessionKey(activeConversationKey, options);
+        const key = preparedRuntimeSessionKey(preloadConversationKey, options);
         if (preparedRuntimeSessionRef.current?.key === key || preparedRuntimeSessionRequestRef.current?.key === key) {
           return;
         }
-        requestPreparedRuntimeSession(activeConversationKey, key, options);
+        requestPreparedRuntimeSession(preloadConversationKey, key, options);
       })
       .catch(() => undefined);
-  }, [activeAppContext, activeConversationKey, activeThread, draftChat, isBootstrapping, selectedAgentRuntimeConfig, threads]);
+  }, [activeAppContext, activeConversationKey, activeThread, canPreloadRuntime, draftChat, selectedAgentRuntimeConfig, threads]);
 
   useEffect(() => {
-    if (!draftChat || activeThread || isBootstrapping || !activeConversationKey) {
+    if (isBootstrapping || (!activeThread && (!draftChat || !activeConversationKey))) {
       cancelPreparedAppReferencesRequest();
       return;
     }
@@ -421,10 +421,14 @@ export function useMessageSubmission({
     };
     const abortController = new AbortController();
     const timeout = window.setTimeout(() => {
+      if (activeThread?.runtime_session_id) {
+        startPreparedAppReferencesRequest(activeThread.runtime_session_id, appReferences);
+        return;
+      }
       void buildRuntimeSessionOptions(target, abortController.signal)
         .then(({ options }) => {
           throwIfAborted(abortController.signal);
-          const key = preparedRuntimeSessionKey(activeConversationKey, options);
+          const key = preparedRuntimeSessionKey(NEW_CHAT_PRELOAD_CONVERSATION_KEY, options);
           const prepared = preparedRuntimeSessionRef.current;
           if (prepared?.key === key) {
             startPreparedAppReferencesRequest(prepared.session.session_id, appReferences);
@@ -434,7 +438,7 @@ export function useMessageSubmission({
           if (pending?.key === key) {
             return waitForPreparedRuntimeSession(pending, abortController.signal);
           }
-          return requestPreparedRuntimeSession(activeConversationKey, key, options);
+          return requestPreparedRuntimeSession(NEW_CHAT_PRELOAD_CONVERSATION_KEY, key, options);
         })
         .then((prepared) => {
           throwIfAborted(abortController.signal);
@@ -589,24 +593,6 @@ export function useMessageSubmission({
     };
   }
 
-  function preparedRuntimeSessionHasInFlightConsumer(): boolean {
-    const conversationKey =
-      preparedRuntimeSessionRequestRef.current?.conversationKey || preparedRuntimeSessionRef.current?.conversationKey || "";
-    return Boolean(conversationKey && inFlightSubmissionsRef.current[conversationKey]);
-  }
-
-  function cancelPreparedRuntimeSession({ preserveInFlight = false }: { preserveInFlight?: boolean } = {}) {
-    const pending = preparedRuntimeSessionRequestRef.current;
-    if (preserveInFlight && preparedRuntimeSessionHasInFlightConsumer()) {
-      return;
-    }
-    cancelPreparedAppReferencesRequest();
-    if (pending) {
-      pending.abortController.abort();
-      preparedRuntimeSessionRequestRef.current = null;
-    }
-  }
-
   function requestPreparedRuntimeSession(
     conversationKey: string,
     key: string,
@@ -628,6 +614,9 @@ export function useMessageSubmission({
       { signal: abortController.signal },
     )
       .then((session) => {
+        if (!session.prewarm_completed || !session.provider_thread_ready) {
+          return null;
+        }
         const prepared = { conversationKey, key, session };
         if (preparedRuntimeSessionRequestRef.current?.key === key) {
           preparedRuntimeSessionRef.current = prepared;
@@ -698,7 +687,10 @@ export function useMessageSubmission({
     signal: AbortSignal,
     timeoutMs: number,
   ): Promise<PreparedRuntimeSessionLookup> {
-    const key = preparedRuntimeSessionKey(conversationKey, options);
+    const preparedConversationKey = conversationKey.startsWith("draft:")
+      ? NEW_CHAT_PRELOAD_CONVERSATION_KEY
+      : conversationKey;
+    const key = preparedRuntimeSessionKey(preparedConversationKey, options);
     const prepared = preparedRuntimeSessionRef.current;
     if (prepared?.key === key) {
       return {
@@ -733,17 +725,6 @@ export function useMessageSubmission({
       readyBeforeSubmit: false,
       waitOnSubmitMs: 0,
     };
-  }
-
-  function cancelPreparedRuntimeSessionRequestForKey(key: string) {
-    const pending = preparedRuntimeSessionRequestRef.current;
-    if (pending?.key === key) {
-      pending.abortController.abort();
-      preparedRuntimeSessionRequestRef.current = null;
-    }
-    if (preparedRuntimeSessionRef.current?.key === key) {
-      preparedRuntimeSessionRef.current = null;
-    }
   }
 
   function forgetPreparedRuntimeSession(prepared: PreparedRuntimeSession | null) {
@@ -1148,7 +1129,6 @@ export function useMessageSubmission({
           }
         } else {
           clientMetrics.prepare_refs_wait_on_submit_ms = 0;
-          cancelPreparedRuntimeSessionRequestForKey(preparedLookup.key);
           response = await submitWithPostMetric(clientMetrics, () =>
             createRuntimeSessionWithTurn({
               appReferences: message.appReferences,
@@ -1462,11 +1442,15 @@ export function useMessageSubmission({
     setSelectedReferences([]);
     clearAttachments();
     if (shouldQueue) {
-      let messageAttachments;
+      let messageAttachments: QueuedMessage["attachments"];
       try {
-        const attachmentUploadStartedAt = performance.now();
-        messageAttachments = await Promise.all(targetAttachments.map(uploadComposerAttachment));
-        clientSubmissionMetrics.attachment_upload_ms = elapsedMs(attachmentUploadStartedAt);
+        if (targetAttachments.length) {
+          const attachmentUploadStartedAt = performance.now();
+          messageAttachments = await Promise.all(targetAttachments.map(uploadComposerAttachment));
+          clientSubmissionMetrics.attachment_upload_ms = elapsedMs(attachmentUploadStartedAt);
+        } else {
+          messageAttachments = [];
+        }
       } catch (uploadError) {
         if (isConversationStillActive(resolveConversationKeyAlias(target.conversationKey))) {
           setComposerError(uploadError instanceof Error ? uploadError.message : "Unable to upload attachments.");
@@ -1499,15 +1483,16 @@ export function useMessageSubmission({
     }
     const abortController = startSubmission(target, localMessage);
     try {
-      const attachmentUploadStartedAt = performance.now();
-      const uploadedAttachments = await uploadAttachmentsWithAbort(targetAttachments, abortController.signal);
+      let uploadedAttachments: QueuedMessage["attachments"] = [];
+      if (targetAttachments.length) {
+        const attachmentUploadStartedAt = performance.now();
+        uploadedAttachments = await uploadAttachmentsWithAbort(targetAttachments, abortController.signal);
+        clientSubmissionMetrics.attachment_upload_ms = elapsedMs(attachmentUploadStartedAt);
+      }
       const message = {
         ...localMessage,
         attachments: uploadedAttachments,
-        clientSubmissionMetrics: {
-          ...clientSubmissionMetrics,
-          attachment_upload_ms: elapsedMs(attachmentUploadStartedAt),
-        },
+        clientSubmissionMetrics: { ...clientSubmissionMetrics },
       };
       replacePendingMessage(target.conversationKey, message);
       await submitMessage(message, target, abortController);

@@ -310,6 +310,10 @@ export type RuntimeSession = {
   provider_id?: string;
   hosted_provider_id?: string | null;
   hosted_model_id?: string | null;
+  prewarm_status?: string;
+  prewarm_completed?: boolean;
+  provider_thread_ready?: boolean;
+  prewarm_total_ms?: number;
 };
 
 export type RuntimeTurn = {

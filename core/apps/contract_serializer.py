@@ -104,6 +104,7 @@ def app_contract_payload(parsed: ParsedAppContract) -> dict[str, Any]:
                     "resolvable": entity.resolvable,
                     "summarizable": entity.summarizable,
                     "deep_link_supported": entity.deep_link_supported,
+                    **({"cache_scope": entity.cache_scope} if entity.cache_scope != "session" else {}),
                 }
                 for entity in parsed.contract.capabilities.reference_entities
             ],

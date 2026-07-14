@@ -49,7 +49,20 @@ describe("runtime API client", () => {
   });
 
   it("serializes prepared session creation without a turn", async () => {
-    await createRuntimeSession({ prepare_only: true, title: "New chat" });
+    vi.mocked(fetch).mockResolvedValueOnce(
+      okJson({
+        session_id: "session-hot",
+        workspace_id: "default",
+        agent_id: "chat",
+        status: "running",
+        effective_mode: "sandbox",
+        prewarm_status: "completed",
+        prewarm_completed: true,
+        provider_thread_ready: true,
+      }),
+    );
+
+    const session = await createRuntimeSession({ prepare_only: true, title: "New chat" });
 
     expect(requestBody()).toMatchObject({
       agent_id: "chat",
@@ -58,6 +71,11 @@ describe("runtime API client", () => {
     });
     expect(requestBody()).not.toHaveProperty("input_text");
     expect(requestBody()).not.toHaveProperty("async");
+    expect(session).toMatchObject({
+      prewarm_status: "completed",
+      prewarm_completed: true,
+      provider_thread_ready: true,
+    });
   });
 
   it("serializes plain hosted Chat session options for runtime creation with a turn", async () => {

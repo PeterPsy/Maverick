@@ -9,7 +9,7 @@ from io import BytesIO
 from pathlib import Path
 from types import SimpleNamespace
 
-from core.api.app_mounts import _apply_app_secret_writes, _backend_request_headers, _backend_secret_request_body, _read_backend_body, _resolve_app_secret_payload, _serve_app_file_gateway_manifest, _serve_app_file_response, backend_entrypoint_timeout_seconds, is_public_app_static_asset, serve_frontend
+from core.api.app_mounts import _apply_app_secret_writes, _backend_request_headers, _backend_route_supports_streaming, _backend_secret_request_body, _read_backend_body, _resolve_app_secret_payload, _serve_app_file_gateway_manifest, _serve_app_file_response, _serve_app_stream_response, backend_entrypoint_timeout_seconds, is_public_app_static_asset, serve_frontend
 from core.apps.contracts import build_app_contract, build_app_hook_timeouts, build_parsed_app_contract
 from core.observability.store import ObservabilityCollections, ObservabilityDocumentStore
 from core.secrets.app_delivery import app_secret_target
@@ -109,6 +109,83 @@ class AppMountsTestCase(unittest.TestCase):
         )
 
         self.assertEqual(backend_entrypoint_timeout_seconds(parsed), 300)
+
+    def test_backend_streaming_requires_an_explicit_post_response_mode(self) -> None:
+        route_path = "/api/apps/speech/backend"
+
+        self.assertTrue(
+            _backend_route_supports_streaming(
+                method="POST",
+                route_path=route_path,
+                body={"action": "synthesize", "response_mode": "stream"},
+            )
+        )
+        self.assertFalse(
+            _backend_route_supports_streaming(
+                method="POST",
+                route_path=route_path,
+                body={"action": "synthesize"},
+            )
+        )
+        self.assertTrue(
+            _backend_route_supports_streaming(
+                method="GET",
+                route_path="/api/apps/storage/media",
+                body={},
+            )
+        )
+
+    def test_post_stream_response_exposes_allowlisted_audio_and_timing_metadata(self) -> None:
+        class FakeStream:
+            def iter_stream(self, *, chunk_bytes: int):
+                self.chunk_bytes = chunk_bytes
+                yield b"pcm-one"
+                yield b"pcm-two"
+
+            def close(self) -> None:
+                raise AssertionError("Successful stream should be iterated instead of closed early.")
+
+        status_holder: dict[str, object] = {}
+
+        def start_response(status: str, headers: list[tuple[str, str]]) -> None:
+            status_holder["status"] = status
+            status_holder["headers"] = dict(headers)
+
+        body = b"".join(
+            _serve_app_stream_response(
+                environ={"REQUEST_METHOD": "POST"},
+                start_response=start_response,
+                stream_response={
+                    "content_type": "audio/pcm",
+                    "file_name": "speech.pcm",
+                    "cache_control": "no-store",
+                    "generation_id": "gen_test_123",
+                    "audio": {"sample_rate": 24000, "channels": 1, "sample_format": "s16le"},
+                    "timings": {
+                        "backend_entrypoint_ms": 82.25,
+                        "upstream_connect_ms": 31.5,
+                        "upstream_headers_ms": 110.75,
+                        "upstream_first_audio_byte_ms": 128.125,
+                    },
+                },
+                stream=FakeStream(),
+            )
+        )
+
+        headers = status_holder["headers"]
+        assert isinstance(headers, dict)
+        self.assertEqual(status_holder["status"], "200 OK")
+        self.assertEqual(body, b"pcm-onepcm-two")
+        self.assertEqual(headers["Content-Type"], "audio/pcm")
+        self.assertEqual(headers["Cache-Control"], "no-store")
+        self.assertEqual(headers["X-Generation-Id"], "gen_test_123")
+        self.assertEqual(headers["X-Audio-Sample-Rate"], "24000")
+        self.assertEqual(headers["X-Audio-Channels"], "1")
+        self.assertEqual(headers["X-Audio-Sample-Format"], "s16le")
+        self.assertIn("backend_entrypoint;dur=82.25", headers["Server-Timing"])
+        self.assertIn("upstream_first_audio_byte;dur=128.125", headers["Server-Timing"])
+        self.assertNotIn("Accept-Ranges", headers)
+        self.assertNotIn("ETag", headers)
 
     def test_non_json_backend_body_is_spooled_to_app_data_root(self) -> None:
         with tempfile.TemporaryDirectory() as directory:

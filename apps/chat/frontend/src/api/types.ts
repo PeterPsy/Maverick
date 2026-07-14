@@ -150,6 +150,8 @@ export type SpeechCapabilitiesPayload = {
       quality_profile?: string;
       latency_profile?: string;
       prewarm_supported?: boolean;
+      streaming_content_type?: string;
+      streaming_supported?: boolean;
     };
     "speech.transcription"?: {
       available?: boolean;

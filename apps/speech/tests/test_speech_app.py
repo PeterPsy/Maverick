@@ -339,7 +339,11 @@ class SpeechAppTests(unittest.TestCase):
         self.assertIn({"voice_id": "if_sara", "name": "Sara", "language": "it", "gender": "female"}, synthesis["voices"])
         self.assertIn({"voice_id": "im_nicola", "name": "Nicola", "language": "it", "gender": "male"}, synthesis["voices"])
         self.assertEqual(synthesis["quality_profile"], "natural")
-        self.assertEqual(synthesis["content_types"], ["audio/mpeg"])
+        self.assertEqual(synthesis["content_types"], ["audio/mpeg", "audio/pcm"])
+        self.assertTrue(synthesis["streaming_supported"])
+        self.assertEqual(synthesis["streaming_content_type"], "audio/pcm")
+        self.assertEqual(synthesis["streaming_audio"], {"sample_rate": 24000, "channels": 1, "sample_format": "s16le"})
+        self.assertTrue(synthesis["output"]["http_binary_stream"])
         self.assertEqual(synthesis["cache"], {"enabled": False, "scope": "none"})
         self.assertEqual(synthesis["output"]["retention"], "provider_response")
         self.assertTrue(transcription["available"])
@@ -720,7 +724,7 @@ class SpeechAppTests(unittest.TestCase):
         self.assertEqual(transcription["deepgram"]["conversation_model"], "flux-general-multi")
         self.assertTrue(synthesis["kokoro-openrouter"]["available"])
         self.assertEqual(synthesis["kokoro-openrouter"]["model"], "hexgrad/kokoro-82m")
-        self.assertEqual(synthesis["kokoro-openrouter"]["supported_formats"], ["audio/mpeg"])
+        self.assertEqual(synthesis["kokoro-openrouter"]["supported_formats"], ["audio/mpeg", "audio/pcm"])
         self.assertIn({"voice_id": "if_sara", "name": "Sara", "language": "it", "gender": "female"}, synthesis["kokoro-openrouter"]["voices"])
         self.assertIn({"voice_id": "im_nicola", "name": "Nicola", "language": "it", "gender": "male"}, synthesis["kokoro-openrouter"]["voices"])
 
@@ -1898,26 +1902,16 @@ class SpeechAppTests(unittest.TestCase):
         self.assertIn("second-session", manager.sessions)
 
     def test_kokoro_openrouter_synthesis_uses_delivered_openrouter_secret(self) -> None:
-        class FakeResponse:
-            def __enter__(self) -> "FakeResponse":
-                return self
-
-            def __exit__(self, *args: object) -> None:
-                return None
-
-            def read(self) -> bytes:
-                return b"ID3kokoro"
-
         captured: dict[str, object] = {}
 
-        def fake_urlopen(request, timeout: float):
-            captured["url"] = request.full_url
-            captured["headers"] = dict(request.header_items())
-            captured["body"] = json.loads(request.data.decode("utf-8"))
-            captured["timeout"] = timeout
-            return FakeResponse()
+        def fake_collect(*, text: str, voice: str, settings: dict, response_format: str) -> bytes:
+            captured["text"] = text
+            captured["voice"] = voice
+            captured["settings"] = settings
+            captured["response_format"] = response_format
+            return b"ID3kokoro"
 
-        with patch("engines.urllib_request.urlopen", side_effect=fake_urlopen):
+        with patch("engines.collect_kokoro_openrouter_audio", side_effect=fake_collect):
             audio = engines.run_kokoro_openrouter(
                 text="hello",
                 voice="af_heart",
@@ -1925,12 +1919,10 @@ class SpeechAppTests(unittest.TestCase):
             )
 
         self.assertEqual(audio, b"ID3kokoro")
-        self.assertEqual(captured["url"], "https://openrouter.ai/api/v1/audio/speech")
-        self.assertEqual(captured["body"]["model"], "hexgrad/kokoro-82m")
-        self.assertEqual(captured["body"]["input"], "hello")
-        self.assertEqual(captured["body"]["voice"], "af_heart")
-        self.assertEqual(captured["body"]["response_format"], "mp3")
-        self.assertEqual(captured["headers"]["Authorization"], "Bearer openrouter-token")
+        self.assertEqual(captured["text"], "hello")
+        self.assertEqual(captured["voice"], "af_heart")
+        self.assertEqual(captured["response_format"], "mp3")
+        self.assertEqual(captured["settings"]["_app_secrets"]["openrouter-api-key"], "openrouter-token")
 
     def test_kokoro_openrouter_synthesis_returns_mpeg_payload(self) -> None:
         captured: dict[str, object] = {}
@@ -2288,6 +2280,8 @@ class SpeechAppTests(unittest.TestCase):
         file_names = {item["name"] for item in app_backend.backend_worker_config()["files"]}
 
         self.assertIn("flux_streaming.py", file_names)
+        self.assertIn("kokoro_streaming.py", file_names)
+        self.assertIn("streaming_synthesis.py", file_names)
 
     def test_app_backend_reuses_persistent_worker_between_requests(self) -> None:
         with TemporaryDirectory() as temp_dir:

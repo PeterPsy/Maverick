@@ -28,6 +28,7 @@ export function useChatDependencies() {
   const [speechProviderAppId, setSpeechProviderAppId] = useState("");
   const [speechProviderAvailable, setSpeechProviderAvailable] = useState(false);
   const [speechProviderQualityProfile, setSpeechProviderQualityProfile] = useState("");
+  const [speechProviderStreamingSupported, setSpeechProviderStreamingSupported] = useState(false);
   const [speechMaxTextChars, setSpeechMaxTextChars] = useState(0);
   const [transcriptionProviderAppId, setTranscriptionProviderAppId] = useState("");
   const [transcriptionProviderAvailable, setTranscriptionProviderAvailable] = useState(false);
@@ -93,6 +94,7 @@ export function useChatDependencies() {
     setSpeechProviderAppId("");
     setSpeechProviderAvailable(false);
     setSpeechProviderQualityProfile("");
+    setSpeechProviderStreamingSupported(false);
     setSpeechMaxTextChars(0);
     prewarmedSynthesisProviderRef.current = "";
   }, []);
@@ -101,6 +103,7 @@ export function useChatDependencies() {
     setSpeechProviderAppId(providerAppId);
     setSpeechProviderAvailable(false);
     setSpeechProviderQualityProfile("");
+    setSpeechProviderStreamingSupported(false);
     setSpeechMaxTextChars(0);
     prewarmedSynthesisProviderRef.current = "";
   }, []);
@@ -126,6 +129,9 @@ export function useChatDependencies() {
         const providerAvailable = Boolean(synthesis.available && synthesis.provider_available !== false && qualityProfile !== "diagnostic");
         setSpeechProviderAvailable(providerAvailable);
         setSpeechProviderQualityProfile(qualityProfile);
+        setSpeechProviderStreamingSupported(
+          synthesis.streaming_supported === true && synthesis.streaming_content_type === "audio/pcm",
+        );
         setSpeechMaxTextChars(maxTextChars);
         const synthesisPrewarmKey = [
           providerAppId,
@@ -290,6 +296,7 @@ export function useChatDependencies() {
     speechProviderAppId,
     speechProviderAvailable,
     speechProviderQualityProfile,
+    speechProviderStreamingSupported,
     transcriptionContentTypes,
     transcriptionChunkedDictationSupported,
     transcriptionMaxAudioBytes,

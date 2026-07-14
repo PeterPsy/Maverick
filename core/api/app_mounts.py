@@ -70,6 +70,12 @@ FILE_RESPONSE_EXTRA_HEADERS = {
     "cross-origin-resource-policy": "Cross-Origin-Resource-Policy",
     "timing-allow-origin": "Timing-Allow-Origin",
 }
+STREAM_RESPONSE_TIMING_FIELDS = {
+    "backend_entrypoint_ms": "backend_entrypoint",
+    "upstream_connect_ms": "upstream_connect",
+    "upstream_headers_ms": "upstream_headers",
+    "upstream_first_audio_byte_ms": "upstream_first_audio_byte",
+}
 UNSAFE_INLINE_CONTENT_TYPES = {
     "application/ecmascript",
     "application/javascript",
@@ -601,6 +607,7 @@ def handle_app_backend(
                 pass
         return json_response(start_response, {"error": "app_secret_unavailable", "detail": str(error)}, status=status_line(500))
     try:
+        entrypoint_invocation_started = time.monotonic()
         entrypoint_payload = {
             "surface": "backend",
             "workspace_id": workspace_id,
@@ -640,9 +647,14 @@ def handle_app_backend(
             "turn_id": "",
             "app_secrets": app_secret_result.secrets,
             "app_secret_errors": app_secret_result.errors,
+            "backend_entrypoint_started_monotonic": entrypoint_invocation_started,
         }
         streaming_entrypoint = None
-        if _backend_route_supports_streaming(method=method, route_path=str(environ.get("PATH_INFO") or "")):
+        if _backend_route_supports_streaming(
+            method=method,
+            route_path=str(environ.get("PATH_INFO") or ""),
+            body=body,
+        ):
             streaming_entrypoint = run_streaming_json_entrypoint(
                 source_root / backend,
                 payload={**entrypoint_payload, "stream_response_protocol": "maverick.backend.stream.v1"},
@@ -1034,27 +1046,28 @@ def _serve_app_stream_response(
             stream.close()
         return json_response(start_response, {"error": "stream_response_failed"}, status=status_line(status_code))
     method = str(environ.get("REQUEST_METHOD") or "GET").upper()
-    if method not in {"GET", "HEAD"}:
+    if method not in {"GET", "HEAD", "POST"}:
         if stream is not None:
             stream.close()
         return json_response(
             start_response,
             {"error": "method_not_allowed"},
             status=status_line(405),
-            headers=[("Allow", "GET, HEAD")],
+            headers=[("Allow", "GET, HEAD, POST")],
         )
     content_type = str(stream_response.get("content_type") or "application/octet-stream")
     file_name = _safe_header_filename(str(stream_response.get("file_name") or "download"))
     disposition = "attachment" if _truthy(stream_response.get("download")) or not _safe_inline_file_response_type(content_type) else "inline"
-    etag = _quoted_etag(str(stream_response.get("etag") or "stream"))
     headers = [
         ("Content-Type", content_type),
-        ("Accept-Ranges", "bytes"),
-        ("ETag", etag),
         ("Cache-Control", str(stream_response.get("cache_control") or "private, max-age=60")),
         ("X-Content-Type-Options", "nosniff"),
         ("Content-Disposition", f'{disposition}; filename="{file_name}"'),
+        *_stream_response_observability_headers(stream_response),
     ]
+    if method in {"GET", "HEAD"}:
+        headers.append(("ETag", _quoted_etag(str(stream_response.get("etag") or "stream"))))
+        headers.append(("Accept-Ranges", "bytes"))
     content_length = _optional_non_negative_int(stream_response.get("content_length"))
     if content_length is not None:
         headers.append(("Content-Length", str(content_length)))
@@ -1182,8 +1195,62 @@ def _truthy(value: object) -> bool:
     return str(value or "").strip().lower() in {"1", "true", "yes", "on"}
 
 
-def _backend_route_supports_streaming(*, method: str, route_path: str) -> bool:
-    return method.upper() in {"GET", "HEAD"} and _is_app_backend_media_route(route_path)
+def _stream_response_observability_headers(stream_response: dict[str, Any]) -> list[tuple[str, str]]:
+    headers: list[tuple[str, str]] = []
+    generation_id = _safe_stream_header_value(stream_response.get("generation_id"), max_length=256)
+    if generation_id:
+        headers.append(("X-Generation-Id", generation_id))
+    audio = stream_response.get("audio") if isinstance(stream_response.get("audio"), dict) else {}
+    sample_rate = _optional_positive_int(audio.get("sample_rate"))
+    channels = _optional_positive_int(audio.get("channels"))
+    sample_format = _safe_stream_header_value(audio.get("sample_format"), max_length=32)
+    if sample_rate is not None:
+        headers.append(("X-Audio-Sample-Rate", str(sample_rate)))
+    if channels is not None:
+        headers.append(("X-Audio-Channels", str(channels)))
+    if sample_format:
+        headers.append(("X-Audio-Sample-Format", sample_format))
+    timings = stream_response.get("timings") if isinstance(stream_response.get("timings"), dict) else {}
+    server_timings: list[str] = []
+    for payload_name, header_name in STREAM_RESPONSE_TIMING_FIELDS.items():
+        duration = _optional_non_negative_float(timings.get(payload_name))
+        if duration is not None:
+            server_timings.append(f"{header_name};dur={duration:g}")
+    if server_timings:
+        headers.append(("Server-Timing", ", ".join(server_timings)))
+    return headers
+
+
+def _safe_stream_header_value(value: object, *, max_length: int) -> str:
+    text = str(value or "").strip()
+    if not text or not re.fullmatch(r"[A-Za-z0-9._:-]+", text):
+        return ""
+    return text[:max_length]
+
+
+def _optional_positive_int(value: object) -> int | None:
+    parsed = _optional_non_negative_int(value)
+    return parsed if parsed is not None and parsed > 0 else None
+
+
+def _optional_non_negative_float(value: object) -> float | None:
+    try:
+        parsed = float(value)
+    except (TypeError, ValueError):
+        return None
+    if parsed < 0 or parsed != parsed or parsed in {float("inf"), float("-inf")}:
+        return None
+    return parsed
+
+
+def _backend_route_supports_streaming(*, method: str, route_path: str, body: Mapping[str, Any] | None = None) -> bool:
+    normalized_method = method.upper()
+    if normalized_method in {"GET", "HEAD"}:
+        return _is_app_backend_media_route(route_path)
+    if normalized_method != "POST" or not route_path.startswith("/api/apps/") or not route_path.endswith("/backend"):
+        return False
+    app_id = route_path.removeprefix("/api/apps/").removesuffix("/backend").strip("/")
+    return bool(app_id and "/" not in app_id and str((body or {}).get("response_mode") or "").strip().lower() == "stream")
 
 
 def _backend_request_headers(environ: Mapping[str, Any]) -> dict[str, str]:

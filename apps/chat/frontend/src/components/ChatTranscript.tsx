@@ -34,6 +34,7 @@ export type ChatTranscriptProps = {
   speechProviderAvailable?: boolean;
   speechProviderAppId?: string;
   speechProviderQualityProfile?: string;
+  speechProviderStreamingSupported?: boolean;
 };
 
 export function ChatTranscript({
@@ -56,6 +57,7 @@ export function ChatTranscript({
   speechProviderAvailable = true,
   speechProviderAppId = "",
   speechProviderQualityProfile = "",
+  speechProviderStreamingSupported = false,
 }: ChatTranscriptProps) {
   const viewportRef = useRef<HTMLDivElement | null>(null);
   const scrollAnchorRef = useRef<{ height: number; top: number } | null>(null);
@@ -251,6 +253,7 @@ export function ChatTranscript({
           speechProviderAppId={speechProviderAppId}
           speechProviderAvailable={speechProviderAvailable}
           speechProviderQualityProfile={speechProviderQualityProfile}
+          speechProviderStreamingSupported={speechProviderStreamingSupported}
         />
         {isLoading ? (
           <article className="chatapp-bubble is-agent">

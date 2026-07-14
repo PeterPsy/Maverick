@@ -216,6 +216,34 @@ describe("useChatDependencies", () => {
     });
     expect(prewarmSpeechSynthesisWorker).toHaveBeenCalledTimes(2);
   });
+
+  it("enables PCM playback only when the synthesis capability advertises the governed stream", async () => {
+    const snapshots: Array<ReturnType<typeof useChatDependencies>> = [];
+    vi.mocked(getSpeechCapabilities).mockResolvedValue({
+      interfaces: {
+        "speech.synthesis": {
+          available: true,
+          engine: "kokoro-openrouter",
+          provider_available: true,
+          quality_profile: "natural",
+          streaming_content_type: "audio/pcm",
+          streaming_supported: true,
+        },
+      },
+    });
+
+    container = document.createElement("div");
+    document.body.append(container);
+    root = createRoot(container);
+    await act(async () => {
+      root?.render(<DependencyProbe onSnapshot={(snapshot) => snapshots.push(snapshot)} />);
+    });
+
+    await waitForAssertion(() => {
+      expect(snapshots.at(-1)?.speechProviderAvailable).toBe(true);
+      expect(snapshots.at(-1)?.speechProviderStreamingSupported).toBe(true);
+    });
+  });
 });
 
 function DependencyProbe({ onSnapshot }: { onSnapshot: (snapshot: ReturnType<typeof useChatDependencies>) => void }) {

@@ -31,6 +31,7 @@ export function MessageBubble({
   speechProviderAppId,
   speechProviderAvailable,
   speechProviderQualityProfile,
+  speechProviderStreamingSupported,
 }: {
   expanded: boolean;
   interAgentBoardLink?: InterAgentBoardLink;
@@ -46,6 +47,7 @@ export function MessageBubble({
   speechProviderAppId: string;
   speechProviderAvailable: boolean;
   speechProviderQualityProfile: string;
+  speechProviderStreamingSupported: boolean;
 }) {
   const shouldCollapse = message.role === "agent" && message.content.length > 3200 && !expanded;
   const visibleContent = shouldCollapse ? `${message.content.slice(0, 3200)}\n\n...` : message.content;
@@ -90,6 +92,7 @@ export function MessageBubble({
           speechProviderAppId={speechProviderAppId}
           speechProviderAvailable={speechProviderAvailable}
           speechProviderQualityProfile={speechProviderQualityProfile}
+          speechProviderStreamingSupported={speechProviderStreamingSupported}
           visibleContent={visibleContent}
         />
       )}
@@ -122,6 +125,7 @@ function AgentMessage({
   speechProviderAppId,
   speechProviderAvailable,
   speechProviderQualityProfile,
+  speechProviderStreamingSupported,
   visibleContent,
 }: {
   expanded: boolean;
@@ -136,6 +140,7 @@ function AgentMessage({
   speechProviderAppId: string;
   speechProviderAvailable: boolean;
   speechProviderQualityProfile: string;
+  speechProviderStreamingSupported: boolean;
   visibleContent: string;
 }) {
   return (
@@ -176,6 +181,7 @@ function AgentMessage({
               providerAvailable={speechProviderAvailable}
               providerAppId={speechProviderAppId}
               providerQualityProfile={speechProviderQualityProfile}
+              providerStreamingSupported={speechProviderStreamingSupported}
             />
           }
         />

@@ -87,6 +87,7 @@ type UseChatControllerPresentationParams = {
   speechProviderAppId: string;
   speechProviderAvailable: boolean;
   speechProviderQualityProfile: string;
+  speechProviderStreamingSupported: boolean;
   transcriptionChunkedDictationSupported: boolean;
   transcriptionContentTypes: string[];
   transcriptionMaxAudioBytes: number;
@@ -156,6 +157,7 @@ export function useChatControllerPresentation({
   speechProviderAppId,
   speechProviderAvailable,
   speechProviderQualityProfile,
+  speechProviderStreamingSupported,
   transcriptionChunkedDictationSupported,
   transcriptionContentTypes,
   transcriptionMaxAudioBytes,
@@ -277,6 +279,7 @@ export function useChatControllerPresentation({
       speechProviderAppId,
       speechProviderAvailable,
       speechProviderQualityProfile,
+      speechProviderStreamingSupported,
     },
   };
 

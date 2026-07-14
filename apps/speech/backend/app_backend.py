@@ -17,12 +17,21 @@ BACKEND_WORKER_SCRIPT = Path(__file__).with_name("backend_worker.py")
 _BACKEND_WORKER_PROCESSES: dict[int, subprocess.Popen] = {}
 
 
+class StreamingRelayError(RuntimeError):
+    def __init__(self, message: str, *, response_started: bool) -> None:
+        super().__init__(message)
+        self.response_started = response_started
+
+
 def _response(status_code: int, payload: dict) -> None:
     print(json.dumps({"status_code": status_code, "json": payload}, ensure_ascii=False))
 
 
 def main() -> None:
     payload = json.loads(sys.stdin.read() or "{}")
+    if streaming_response_requested(payload):
+        handle_streaming_entrypoint_payload(payload)
+        return
     try:
         response = handle_entrypoint_payload(payload)
     except Exception as error:
@@ -80,12 +89,85 @@ def handle_inline_payload(payload: dict, fallback_error: Exception | None = None
     return {"status_code": status_code, "json": response}
 
 
+def handle_streaming_entrypoint_payload(payload: dict) -> None:
+    if persistent_backend_worker_enabled() and payload.get("data_root"):
+        try:
+            relay_backend_worker_stream(payload)
+            return
+        except StreamingRelayError as error:
+            if error.response_started or strict_backend_worker_enabled():
+                raise
+        except Exception:
+            if strict_backend_worker_enabled():
+                raise
+    handle_inline_stream(payload)
+
+
+def handle_inline_stream(payload: dict) -> None:
+    from errors import SpeechProviderUnavailableError, SpeechValidationError, validation_error_payload
+    from streaming_synthesis import prepare_synthesis_stream
+
+    body = body_from_payload(payload)
+    try:
+        plan = prepare_synthesis_stream(data_root=Path(payload["data_root"]), body=body)
+    except SpeechValidationError as error:
+        _response(400, validation_error_payload(error))
+        return
+    except SpeechProviderUnavailableError as error:
+        _response(503, {"error": "provider_unavailable", "detail": str(error)})
+        return
+    header = {"status_code": 200, "stream_response": plan.stream_response}
+    sys.stdout.buffer.write(json.dumps(header, ensure_ascii=False).encode("utf-8") + b"\n")
+    sys.stdout.buffer.flush()
+    for chunk in plan.iter_chunks():
+        sys.stdout.buffer.write(chunk)
+        sys.stdout.buffer.flush()
+
+
+def streaming_response_requested(payload: dict) -> bool:
+    body = payload.get("body") if isinstance(payload.get("body"), dict) else {}
+    return (
+        str(payload.get("stream_response_protocol") or "") == "maverick.backend.stream.v1"
+        and str(body.get("response_mode") or "").strip().lower() == "stream"
+    )
+
+
+def relay_backend_worker_stream(payload: dict) -> None:
+    data_root = Path(str(payload.get("data_root") or "")).expanduser()
+    paths = backend_worker_paths(data_root)
+    ensure_backend_worker(socket_path=paths["socket"], pid_path=paths["pid"], lock_path=paths["lock"], log_path=paths["log"])
+    deadline = time.monotonic() + BACKEND_WORKER_REQUEST_TIMEOUT_SECONDS
+    response_started = False
+    try:
+        with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as client:
+            client.settimeout(5)
+            client.connect(str(paths["socket"]))
+            client.sendall((json.dumps(payload, sort_keys=True) + "\n").encode("utf-8"))
+            client.shutdown(socket.SHUT_WR)
+            while time.monotonic() < deadline:
+                client.settimeout(min(1.0, max(0.1, deadline - time.monotonic())))
+                try:
+                    chunk = client.recv(64 * 1024)
+                except socket.timeout:
+                    continue
+                if not chunk:
+                    break
+                response_started = True
+                sys.stdout.buffer.write(chunk)
+                sys.stdout.buffer.flush()
+    except Exception as error:
+        raise StreamingRelayError(str(error), response_started=response_started) from error
+    if not response_started:
+        raise StreamingRelayError("Speech backend worker returned an empty stream response.", response_started=False)
+
+
 def body_from_payload(payload: dict) -> dict:
     body = dict(payload.get("body")) if isinstance(payload.get("body"), dict) else {}
     if isinstance(payload.get("app_secrets"), dict):
         body["_app_secrets"] = dict(payload["app_secrets"])
     if isinstance(payload.get("provider_config"), dict):
         body["_provider_config"] = dict(payload["provider_config"])
+    body["_backend_entrypoint_ms"] = backend_entrypoint_milliseconds(payload)
     body_file = payload.get("body_file") if isinstance(payload.get("body_file"), dict) else {}
     if not body_file:
         return body
@@ -101,6 +183,16 @@ def body_from_payload(payload: dict) -> dict:
         if query.get(key):
             body[key] = str(query[key])
     return body
+
+
+def backend_entrypoint_milliseconds(payload: dict) -> float:
+    try:
+        started = float(payload.get("backend_entrypoint_started_monotonic") or 0.0)
+    except (TypeError, ValueError):
+        return 0.0
+    if started <= 0:
+        return 0.0
+    return round(max(0.0, time.monotonic() - started) * 1000, 3)
 
 
 def backend_worker_mode() -> str:
@@ -140,7 +232,9 @@ def backend_worker_config() -> dict:
         Path(__file__).with_name("service.py"),
         Path(__file__).with_name("engines.py"),
         Path(__file__).with_name("flux_streaming.py"),
+        Path(__file__).with_name("kokoro_streaming.py"),
         Path(__file__).with_name("synthesis.py"),
+        Path(__file__).with_name("streaming_synthesis.py"),
         Path(__file__).with_name("transcription.py"),
         Path(__file__).with_name("settings.py"),
         Path(__file__).with_name("store.py"),

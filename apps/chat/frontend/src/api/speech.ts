@@ -1,4 +1,4 @@
-import { requestJson } from "./http";
+import { ApiError, requestJson } from "./http";
 import type {
   SpeechCapabilitiesPayload,
   SpeechSynthesizeOptions,
@@ -29,6 +29,48 @@ export function synthesizeSpeech(providerAppId: string, text: string, options: S
     body: JSON.stringify(body),
     signal: options.signal,
   });
+}
+
+export async function synthesizeSpeechStream(
+  providerAppId: string,
+  text: string,
+  options: SpeechSynthesizeOptions = {},
+): Promise<Response> {
+  const path = `/api/apps/${encodeURIComponent(providerAppId)}/backend`;
+  const body: Record<string, string> = {
+    action: "synthesize",
+    format: "pcm",
+    response_mode: "stream",
+    text,
+  };
+  if (options.language) {
+    body.language = options.language;
+  }
+  if (options.voice) {
+    body.voice = options.voice;
+  }
+  const response = await fetch(path, {
+    method: "POST",
+    credentials: "same-origin",
+    headers: { Accept: "audio/pcm", "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+    signal: options.signal,
+  });
+  if (!response.ok) {
+    let detail = `Request failed ${response.status}: ${path}`;
+    try {
+      const payload = (await response.json()) as { detail?: string; error?: string };
+      detail = payload.detail || payload.error || detail;
+    } catch {
+      // Keep the HTTP fallback detail.
+    }
+    throw new ApiError(detail, { path, status: response.status });
+  }
+  const contentType = response.headers.get("Content-Type")?.split(";", 1)[0].trim().toLowerCase();
+  if (contentType !== "audio/pcm" || !response.body) {
+    throw new ApiError("Speech provider did not return a PCM audio stream.", { path, status: response.status });
+  }
+  return response;
 }
 
 export function prewarmSpeechSynthesisWorker(providerAppId: string): Promise<unknown> {

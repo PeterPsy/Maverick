@@ -13,6 +13,7 @@ import time
 
 from errors import SpeechProviderUnavailableError, SpeechTranscriptionError, SpeechValidationError, validation_error_payload
 from service import app_events_for_action, handle_action
+from streaming_synthesis import prepare_synthesis_stream
 
 DEFAULT_IDLE_TIMEOUT_SECONDS = 6 * 60 * 60
 
@@ -100,6 +101,12 @@ def _handle_connection(connection: socket.socket, finish_request) -> None:
             payload = _read_request(connection)
             if not payload:
                 return
+            if streaming_response_requested(payload):
+                try:
+                    send_streaming_payload(connection, payload)
+                except Exception as error:
+                    _log_event("stream_failed", error_type=error.__class__.__name__, detail=str(error))
+                return
             try:
                 response = handle_payload(payload)
             except Exception as error:
@@ -136,6 +143,7 @@ def body_from_payload(payload: dict) -> dict:
         body["_app_secrets"] = dict(payload["app_secrets"])
     if isinstance(payload.get("provider_config"), dict):
         body["_provider_config"] = dict(payload["provider_config"])
+    body["_backend_entrypoint_ms"] = backend_entrypoint_milliseconds(payload)
     body_file = payload.get("body_file") if isinstance(payload.get("body_file"), dict) else {}
     if not body_file:
         return body
@@ -151,6 +159,48 @@ def body_from_payload(payload: dict) -> dict:
         if query.get(key):
             body[key] = str(query[key])
     return body
+
+
+def streaming_response_requested(payload: dict) -> bool:
+    body = payload.get("body") if isinstance(payload.get("body"), dict) else {}
+    return (
+        str(payload.get("stream_response_protocol") or "") == "maverick.backend.stream.v1"
+        and str(body.get("response_mode") or "").strip().lower() == "stream"
+    )
+
+
+def send_streaming_payload(connection: socket.socket, payload: dict) -> None:
+    """Write the JSON stream header, then relay raw PCM bytes over the worker socket."""
+    body = body_from_payload(payload)
+    try:
+        plan = prepare_synthesis_stream(data_root=Path(payload["data_root"]), body=body)
+    except SpeechValidationError as error:
+        _send_json_response(connection, {"status_code": 400, "json": validation_error_payload(error)})
+        return
+    except SpeechProviderUnavailableError as error:
+        _send_json_response(
+            connection,
+            {"status_code": 503, "json": {"error": "provider_unavailable", "detail": str(error)}},
+        )
+        return
+    header = {"status_code": 200, "stream_response": plan.stream_response}
+    connection.sendall(json.dumps(header, ensure_ascii=False).encode("utf-8") + b"\n")
+    for chunk in plan.iter_chunks():
+        connection.sendall(chunk)
+
+
+def _send_json_response(connection: socket.socket, response: dict) -> None:
+    connection.sendall(json.dumps(response, ensure_ascii=False).encode("utf-8") + b"\n")
+
+
+def backend_entrypoint_milliseconds(payload: dict) -> float:
+    try:
+        started = float(payload.get("backend_entrypoint_started_monotonic") or 0.0)
+    except (TypeError, ValueError):
+        return 0.0
+    if started <= 0:
+        return 0.0
+    return round(max(0.0, time.monotonic() - started) * 1000, 3)
 
 
 def _read_request(connection: socket.socket) -> dict:

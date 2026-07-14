@@ -5,12 +5,14 @@ import { act, useState } from "react";
 import { createRoot } from "react-dom/client";
 import type { Root } from "react-dom/client";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { synthesizeSpeech } from "../api/client";
+import { synthesizeSpeech, synthesizeSpeechStream } from "../api/client";
 import { speechChunks, speechLanguageHint, speechLanguageTextFromMarkdown, speechTextFromMarkdown } from "../lib/messageSpeech";
+import * as speechPcmPlayback from "../lib/speechPcmPlayback";
 import { MessageSpeechButton } from "./MessageSpeechButton";
 
 vi.mock("../api/client", () => ({
   synthesizeSpeech: vi.fn(),
+  synthesizeSpeechStream: vi.fn(),
 }));
 
 let container: HTMLDivElement | null = null;
@@ -18,6 +20,7 @@ let root: Root | null = null;
 
 afterEach(() => {
   vi.mocked(synthesizeSpeech).mockReset();
+  vi.mocked(synthesizeSpeechStream).mockReset();
   root?.unmount();
   root = null;
   container?.remove();
@@ -81,6 +84,57 @@ describe("MessageSpeechButton", () => {
     expect(objectUrlMock.revokeObjectURL).toHaveBeenCalledWith("blob:speech-audio");
     expect(button?.getAttribute("aria-label")).toBe("Read response aloud");
     expect(button?.textContent?.trim()).toBe("volume_up");
+  });
+
+  it("uses the PCM stream when both Speech and the browser advertise support", async () => {
+    let onPlaying: (() => void) | undefined;
+    const fakePlayer = {
+      append: vi.fn(),
+      decoder: { sourceSampleRate: 24000 },
+      finish: vi.fn(async () => onPlaying?.()),
+      started: false,
+      stop: vi.fn(),
+      underrunCount: 0,
+    };
+    vi.spyOn(speechPcmPlayback, "supportsPcmStreamingPlayback").mockReturnValue(true);
+    vi.spyOn(speechPcmPlayback.PcmStreamPlayer, "create").mockImplementation(async (options) => {
+      onPlaying = options.onPlaying;
+      return fakePlayer as unknown as speechPcmPlayback.PcmStreamPlayer;
+    });
+    vi.mocked(synthesizeSpeechStream).mockResolvedValue(
+      new Response(new Uint8Array([0, 0, 1, 0]), {
+        status: 200,
+        headers: {
+          "Content-Type": "audio/pcm",
+          "X-Audio-Channels": "1",
+          "X-Audio-Sample-Format": "s16le",
+          "X-Audio-Sample-Rate": "24000",
+          "X-Generation-Id": "gen_component",
+        },
+      }),
+    );
+    container = document.createElement("div");
+    document.body.appendChild(container);
+    root = createRoot(container);
+
+    await act(async () => {
+      root?.render(<SpeechButtonHost providerStreamingSupported />);
+    });
+    await act(async () => {
+      container?.querySelector("button")?.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+
+    expect(synthesizeSpeechStream).toHaveBeenCalledWith(
+      "speech",
+      "Agent response",
+      expect.objectContaining({ signal: expect.any(AbortSignal) }),
+    );
+    expect(fakePlayer.append).toHaveBeenCalled();
+    expect(fakePlayer.finish).toHaveBeenCalled();
+    expect(fakePlayer.stop).toHaveBeenCalled();
+    expect(synthesizeSpeech).not.toHaveBeenCalled();
   });
 
   it("aborts pending synthesis when playback is stopped", async () => {
@@ -493,7 +547,7 @@ describe("MessageSpeechButton", () => {
   });
 });
 
-function SpeechButtonHost() {
+function SpeechButtonHost({ providerStreamingSupported = false }: { providerStreamingSupported?: boolean } = {}) {
   const [activeMessageId, setActiveMessageId] = useState<string | null>(null);
 
   return (
@@ -503,6 +557,7 @@ function SpeechButtonHost() {
       messageId="agent-1"
       onActiveMessageChange={setActiveMessageId}
       providerAppId="speech"
+      providerStreamingSupported={providerStreamingSupported}
     />
   );
 }

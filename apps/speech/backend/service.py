@@ -13,6 +13,12 @@ from engines import (
 )
 from engines import synthesis_engine_statuses, transcription_engine_statuses
 from flux_streaming import flux_streaming_supported
+from kokoro_streaming import (
+    KOKORO_PCM_CHANNELS,
+    KOKORO_PCM_CONTENT_TYPE,
+    KOKORO_PCM_SAMPLE_FORMAT,
+    KOKORO_PCM_SAMPLE_RATE,
+)
 from models import (
     DEFAULT_INLINE_TRANSCRIPTION_PROFILE,
     MAX_INLINE_TRANSCRIPTION_AUDIO_BYTES,
@@ -119,7 +125,7 @@ def operations_manifest() -> dict:
             },
             "synthesize": {
                 "description": (
-                    "Synthesize plain text into bounded inline audio using the configured provider; "
+                    "Synthesize plain text into bounded inline audio or governed progressive PCM using the configured provider; "
                     "inspect capabilities for content type, cache, and retention behavior."
                 ),
                 "required_fields": ["text"],
@@ -239,6 +245,15 @@ def capabilities_payload(data_root: Path, app_secrets: dict | None = None) -> di
                 "language_preference": synthesis_language,
                 "language_hint_supported": True,
                 "languages": public_voice_languages(synthesis_voices),
+                "streaming_supported": synthesis_available and synthesis_engine == "kokoro-openrouter",
+                "streaming_content_type": KOKORO_PCM_CONTENT_TYPE if synthesis_available and synthesis_engine == "kokoro-openrouter" else "",
+                "streaming_audio": {
+                    "sample_rate": KOKORO_PCM_SAMPLE_RATE,
+                    "channels": KOKORO_PCM_CHANNELS,
+                    "sample_format": KOKORO_PCM_SAMPLE_FORMAT,
+                }
+                if synthesis_available and synthesis_engine == "kokoro-openrouter"
+                else None,
                 "prewarm_supported": bool(
                     synthesis_available
                     and synthesis_engine == "piper"
@@ -254,6 +269,7 @@ def capabilities_payload(data_root: Path, app_secrets: dict | None = None) -> di
                 "cache": synthesis_cache,
                 "output": {
                     "audio_base64": True,
+                    "http_binary_stream": synthesis_available and synthesis_engine == "kokoro-openrouter",
                     "workspace_relative_path": False,
                     "absolute_paths": False,
                     "retention": synthesis_retention,

@@ -20,6 +20,7 @@ export function MessageList({
   speechProviderAppId,
   speechProviderAvailable,
   speechProviderQualityProfile,
+  speechProviderStreamingSupported,
 }: {
   expandedMessages: Set<string>;
   interAgentBoardLinksByMessageId?: Record<string, InterAgentBoardLink>;
@@ -35,6 +36,7 @@ export function MessageList({
   speechProviderAppId: string;
   speechProviderAvailable: boolean;
   speechProviderQualityProfile: string;
+  speechProviderStreamingSupported: boolean;
 }) {
   return (
     <>
@@ -55,6 +57,7 @@ export function MessageList({
           speechProviderAppId={speechProviderAppId}
           speechProviderAvailable={speechProviderAvailable}
           speechProviderQualityProfile={speechProviderQualityProfile}
+          speechProviderStreamingSupported={speechProviderStreamingSupported}
         />
       ))}
     </>

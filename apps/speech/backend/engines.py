@@ -26,6 +26,12 @@ from urllib import error as urllib_error
 from urllib import request as urllib_request
 
 from errors import SpeechProviderUnavailableError, SpeechTranscriptionError
+from kokoro_streaming import (
+    KOKORO_OPENROUTER_DEFAULT_VOICE,
+    KOKORO_OPENROUTER_MODEL,
+    KOKORO_PCM_CONTENT_TYPE,
+    collect_kokoro_openrouter_audio,
+)
 from models import (
     DEFAULT_FASTER_WHISPER_COMPUTE_TYPE,
     DEFAULT_FASTER_WHISPER_DEVICE,
@@ -41,10 +47,8 @@ from models import (
 
 DEEPGRAM_AUDIO_TRANSCRIPTION_MODEL = "nova-3"
 DEEPGRAM_CONVERSATION_MODEL = "flux-general-multi"
-KOKORO_OPENROUTER_MODEL = "hexgrad/kokoro-82m"
 KOKORO_OPENROUTER_RESPONSE_FORMAT = "mp3"
 KOKORO_OPENROUTER_CONTENT_TYPE = "audio/mpeg"
-KOKORO_OPENROUTER_DEFAULT_VOICE = "af_heart"
 KOKORO_OPENROUTER_LANGUAGE_DEFAULT_VOICES = {
     "en": KOKORO_OPENROUTER_DEFAULT_VOICE,
     "it": "if_sara",
@@ -193,28 +197,12 @@ def run_local_tts_engine(engine: LocalEngine, *, text: str, voice: str, rate: in
 
 
 def run_kokoro_openrouter(*, text: str, voice: str, settings: dict) -> bytes:
-    api_key = _runtime_secret(settings, "openrouter_api_key")
-    if not api_key:
-        raise SpeechProviderUnavailableError("OpenRouter API key was not delivered to Speech.")
-    payload = {
-        "model": KOKORO_OPENROUTER_MODEL,
-        "input": text,
-        "voice": voice or KOKORO_OPENROUTER_DEFAULT_VOICE,
-        "response_format": KOKORO_OPENROUTER_RESPONSE_FORMAT,
-    }
-    request = urllib_request.Request(
-        "https://openrouter.ai/api/v1/audio/speech",
-        data=json.dumps(payload).encode("utf-8"),
-        headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
-        method="POST",
+    return collect_kokoro_openrouter_audio(
+        text=text,
+        voice=voice,
+        settings=settings,
+        response_format=KOKORO_OPENROUTER_RESPONSE_FORMAT,
     )
-    try:
-        with urllib_request.urlopen(request, timeout=REMOTE_PROVIDER_TIMEOUT_SECONDS) as response:
-            return response.read()
-    except urllib_error.HTTPError as error:
-        raise SpeechProviderUnavailableError(f"Kokoro OpenRouter synthesis failed with HTTP {error.code}.") from error
-    except (urllib_error.URLError, TimeoutError) as error:
-        raise SpeechProviderUnavailableError("Kokoro OpenRouter synthesis failed.") from error
 
 
 def _run_espeak_tts_engine(engine: LocalEngine, *, text: str, voice: str, rate: int) -> bytes:
@@ -710,7 +698,7 @@ def _remote_kokoro_status(settings: dict) -> dict:
         "model": KOKORO_OPENROUTER_MODEL,
         "quality_profile": "natural",
         "latency_profile": "remote",
-        "supported_formats": [KOKORO_OPENROUTER_CONTENT_TYPE],
+        "supported_formats": [KOKORO_OPENROUTER_CONTENT_TYPE, KOKORO_PCM_CONTENT_TYPE],
         "voices": [dict(voice) for voice in KOKORO_OPENROUTER_VOICES],
     }
 

@@ -9,7 +9,7 @@ import sys
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "backend"))
 
 from errors import SpeechProviderUnavailableError, SpeechTranscriptionError, SpeechValidationError, validation_error_payload
-from service import handle_action, operations_manifest
+from service import app_events_for_action, handle_action, operations_manifest
 
 
 CLI_ACTIONS = {
@@ -17,7 +17,9 @@ CLI_ACTIONS = {
     "get_settings",
     "list_engines",
     "operations.manifest",
+    "prewarm_synthesis_worker",
     "prewarm_worker",
+    "set_engine",
     "transcribe_file",
     "worker_status",
 }
@@ -26,7 +28,9 @@ CLI_ARGUMENT_FIELDS_BY_ACTION = {
     "get_settings": {"action"},
     "list_engines": {"action", "include_voices"},
     "operations.manifest": {"action"},
+    "prewarm_synthesis_worker": {"action"},
     "prewarm_worker": {"action"},
+    "set_engine": {"action", "synthesis_engine", "synthesis_language", "transcription_engine", "transcription_profile"},
     "transcribe_file": {"action", "workspace_relative_path", "content_type", "language"},
     "worker_status": {"action"},
 }
@@ -56,13 +60,15 @@ def _agent_manifest() -> dict:
             "get_settings": manifest["operations"]["get_settings"],
             "list_engines": manifest["operations"]["list_engines"],
             "operations.manifest": {"description": "Describe Speech CLI operations.", "required_fields": []},
+            "prewarm_synthesis_worker": manifest["operations"]["prewarm_synthesis_worker"],
             "prewarm_worker": manifest["operations"]["prewarm_worker"],
+            "set_engine": manifest["operations"]["set_engine"],
             "transcribe_file": manifest["operations"]["transcribe_file"],
             "worker_status": manifest["operations"]["worker_status"],
         },
         "notes": [
-            "CLI exposes engine inspection, persistent worker status, and file transcription for workspace Storage audio only.",
-            "worker_status is observational by default; use prewarm_worker when you explicitly want to load the Chat inline STT worker.",
+            "CLI exposes workspace engine/language selection, engine inspection, persistent worker status, and file transcription for workspace Storage audio only.",
+            "worker_status is observational by default; use prewarm_worker or prewarm_synthesis_worker when you explicitly want to load a local speech worker.",
             "Persistent worker stop/reload are backend administrative actions, not agent-facing CLI operations.",
             "Engine inspection omits voice arrays by default; pass include_voices=true when full voice metadata is needed.",
             "Inline microphone audio and live streaming are backend/UI surfaces, not CLI surfaces.",
@@ -121,4 +127,6 @@ else:
         status_code, result = 503, {"error": "provider_unavailable", "detail": str(error)}
     except SpeechTranscriptionError as error:
         status_code, result = 502, {"error": "transcription_failed", "detail": str(error)}
+    result = dict(result)
+    result["app_events"] = app_events_for_action(action)
     _response(status_code, result, payload)

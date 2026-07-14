@@ -6,6 +6,7 @@ import {
   getSpeechCapabilities,
   listAgentCatalog,
   listProviders,
+  prewarmSpeechSynthesisWorker,
   prewarmSpeechWorker,
   ProviderItem,
   selectedDependencyProviderAppId,
@@ -39,6 +40,7 @@ export function useChatDependencies() {
   const [agentCatalogLoading, setAgentCatalogLoading] = useState(false);
   const [selectedAgentTypeId, setSelectedAgentTypeId] = useState("");
   const prewarmedTranscriptionProviderRef = useRef("");
+  const prewarmedSynthesisProviderRef = useRef("");
 
   const clearAgentOptions = useCallback((options: { resetStatus?: boolean } = {}) => {
     clearAgentRuntimeConfigCache();
@@ -92,6 +94,7 @@ export function useChatDependencies() {
     setSpeechProviderAvailable(false);
     setSpeechProviderQualityProfile("");
     setSpeechMaxTextChars(0);
+    prewarmedSynthesisProviderRef.current = "";
   }, []);
 
   const markSpeechProviderUnavailable = useCallback((providerAppId: string) => {
@@ -99,6 +102,7 @@ export function useChatDependencies() {
     setSpeechProviderAvailable(false);
     setSpeechProviderQualityProfile("");
     setSpeechMaxTextChars(0);
+    prewarmedSynthesisProviderRef.current = "";
   }, []);
 
   const loadSpeechProviderFromDependencies = useCallback(
@@ -119,9 +123,24 @@ export function useChatDependencies() {
         const maxTextChars = typeof synthesis.max_text_chars === "number" && synthesis.max_text_chars > 0 ? synthesis.max_text_chars : 0;
         const qualityProfile = typeof synthesis.quality_profile === "string" ? synthesis.quality_profile : "";
         setSpeechProviderAppId(providerAppId);
-        setSpeechProviderAvailable(Boolean(synthesis.available && synthesis.provider_available !== false && qualityProfile !== "diagnostic"));
+        const providerAvailable = Boolean(synthesis.available && synthesis.provider_available !== false && qualityProfile !== "diagnostic");
+        setSpeechProviderAvailable(providerAvailable);
         setSpeechProviderQualityProfile(qualityProfile);
         setSpeechMaxTextChars(maxTextChars);
+        const synthesisPrewarmKey = [
+          providerAppId,
+          typeof synthesis.engine === "string" ? synthesis.engine : "",
+          typeof synthesis.default_voice === "string" ? synthesis.default_voice : "",
+          typeof synthesis.language_preference === "string" ? synthesis.language_preference : "",
+        ].join(":");
+        if (providerAvailable && synthesis.prewarm_supported === true && prewarmedSynthesisProviderRef.current !== synthesisPrewarmKey) {
+          prewarmedSynthesisProviderRef.current = synthesisPrewarmKey;
+          void prewarmSpeechSynthesisWorker(providerAppId).catch(() => {
+            if (prewarmedSynthesisProviderRef.current === synthesisPrewarmKey) {
+              prewarmedSynthesisProviderRef.current = "";
+            }
+          });
+        }
       } catch {
         if (providerAppId) {
           markSpeechProviderUnavailable(providerAppId);

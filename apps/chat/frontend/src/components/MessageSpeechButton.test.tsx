@@ -6,7 +6,8 @@ import { createRoot } from "react-dom/client";
 import type { Root } from "react-dom/client";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { synthesizeSpeech } from "../api/client";
-import { MessageSpeechButton, speechChunks, speechLanguageHint, speechTextFromMarkdown } from "./MessageSpeechButton";
+import { speechChunks, speechLanguageHint, speechLanguageTextFromMarkdown, speechTextFromMarkdown } from "../lib/messageSpeech";
+import { MessageSpeechButton } from "./MessageSpeechButton";
 
 vi.mock("../api/client", () => ({
   synthesizeSpeech: vi.fn(),
@@ -65,7 +66,7 @@ describe("MessageSpeechButton", () => {
       button?.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
     });
 
-    expect(synthesizeSpeech).toHaveBeenCalledWith("speech", "Agent response");
+    expect(synthesizeSpeech).toHaveBeenCalledWith("speech", "Agent response", expect.objectContaining({ signal: expect.any(AbortSignal) }));
     expect(objectUrlMock.createObjectURL).toHaveBeenCalled();
     expect(audioMock.instances[0]?.src).toBe("blob:speech-audio");
     expect(audioMock.instances[0]?.play).toHaveBeenCalled();
@@ -80,6 +81,35 @@ describe("MessageSpeechButton", () => {
     expect(objectUrlMock.revokeObjectURL).toHaveBeenCalledWith("blob:speech-audio");
     expect(button?.getAttribute("aria-label")).toBe("Read response aloud");
     expect(button?.textContent?.trim()).toBe("volume_up");
+  });
+
+  it("aborts pending synthesis when playback is stopped", async () => {
+    let requestSignal: AbortSignal | undefined;
+    vi.mocked(synthesizeSpeech).mockImplementation((_providerAppId, _text, options) => {
+      requestSignal = options?.signal;
+      return new Promise(() => undefined);
+    });
+    container = document.createElement("div");
+    document.body.appendChild(container);
+    root = createRoot(container);
+
+    await act(async () => {
+      root?.render(<SpeechButtonHost />);
+    });
+
+    const button = container.querySelector("button");
+    await act(async () => {
+      button?.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
+      await Promise.resolve();
+    });
+    expect(requestSignal?.aborted).toBe(false);
+
+    await act(async () => {
+      button?.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
+    });
+
+    expect(requestSignal?.aborted).toBe(true);
+    expect(button?.getAttribute("aria-label")).toBe("Read response aloud");
   });
 
   it("passes an Italian language hint inferred from the full response to every speech chunk", async () => {
@@ -186,8 +216,8 @@ describe("MessageSpeechButton", () => {
       buttons[1]?.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
     });
 
-    expect(synthesizeSpeech).toHaveBeenCalledWith("speech", "First response");
-    expect(synthesizeSpeech).toHaveBeenCalledWith("speech", "Second response");
+    expect(synthesizeSpeech).toHaveBeenCalledWith("speech", "First response", expect.objectContaining({ signal: expect.any(AbortSignal) }));
+    expect(synthesizeSpeech).toHaveBeenCalledWith("speech", "Second response", expect.objectContaining({ signal: expect.any(AbortSignal) }));
     expect(audioMock.instances[0]?.pause).toHaveBeenCalled();
     expect(buttons[0]?.getAttribute("aria-label")).toBe("Read response aloud");
     expect(buttons[1]?.getAttribute("aria-label")).toBe("Stop reading response");
@@ -220,19 +250,51 @@ describe("MessageSpeechButton", () => {
       button?.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
     });
 
-    expect(synthesizeSpeech).toHaveBeenCalledWith("speech", "First sentence.");
+    expect(synthesizeSpeech).toHaveBeenCalledWith("speech", "First sentence.", expect.objectContaining({ signal: expect.any(AbortSignal) }));
     for (let attempt = 0; attempt < 5 && !audioMock.instances[0]?.onended; attempt += 1) {
       await act(async () => {
         await new Promise((resolve) => setTimeout(resolve, 0));
       });
     }
-    expect(synthesizeSpeech).toHaveBeenCalledWith("speech", "Second sentence.");
+    expect(synthesizeSpeech).toHaveBeenCalledWith("speech", "Second sentence.", expect.objectContaining({ signal: expect.any(AbortSignal) }));
     expect(audioMock.instances[0]?.onended).toBeTruthy();
     await act(async () => {
       audioMock.instances[0]?.onended?.();
       await Promise.resolve();
       await Promise.resolve();
       await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+  });
+
+  it("limits synthesis prefetch to two ordered chunks", async () => {
+    installAudioMock();
+    const pending = [deferredSpeechResult(), deferredSpeechResult(), deferredSpeechResult()];
+    let requestIndex = 0;
+    vi.mocked(synthesizeSpeech).mockImplementation(() => pending[requestIndex++].promise);
+    container = document.createElement("div");
+    document.body.appendChild(container);
+    root = createRoot(container);
+
+    await act(async () => {
+      root?.render(<PrefetchSpeechButtonHost />);
+    });
+
+    const button = container.querySelector("button");
+    await act(async () => {
+      button?.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
+      await Promise.resolve();
+    });
+    expect(synthesizeSpeech).toHaveBeenCalledTimes(2);
+
+    await act(async () => {
+      pending[0].resolve({ audio_data_url: "data:audio/wav;base64,UklGRg==", content_type: "audio/wav" });
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    expect(synthesizeSpeech).toHaveBeenCalledTimes(3);
+
+    await act(async () => {
+      button?.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
     });
   });
 
@@ -263,16 +325,21 @@ describe("MessageSpeechButton", () => {
       await new Promise((resolve) => setTimeout(resolve, 0));
     });
 
-    expect(synthesizeSpeech).toHaveBeenCalledWith("speech", "First sentence.");
-    expect(synthesizeSpeech).toHaveBeenCalledWith("speech", "Second sentence.");
+    expect(synthesizeSpeech).toHaveBeenCalledWith("speech", "First sentence.", expect.objectContaining({ signal: expect.any(AbortSignal) }));
+    expect(synthesizeSpeech).toHaveBeenCalledWith("speech", "Second sentence.", expect.objectContaining({ signal: expect.any(AbortSignal) }));
   });
 
   it("splits and retries a chunk when synthesized audio exceeds the backend response limit", async () => {
     installAudioMock({ endDuringPlay: true });
     const longChunk = "Alpha bravo charlie delta echo foxtrot golf hotel india juliet kilo lima. ".repeat(4).trim();
-    vi.mocked(synthesizeSpeech)
-      .mockRejectedValueOnce(new Error("Synthesized audio exceeds the response size limit."))
-      .mockResolvedValue({ audio_data_url: "data:audio/wav;base64,UklGRg==", content_type: "audio/wav" });
+    let rejectedLongChunk = false;
+    vi.mocked(synthesizeSpeech).mockImplementation((_providerAppId, text) => {
+      if (text.length > 120 && !rejectedLongChunk) {
+        rejectedLongChunk = true;
+        return Promise.reject(new Error("Synthesized audio exceeds the response size limit."));
+      }
+      return Promise.resolve({ audio_data_url: "data:audio/wav;base64,UklGRg==", content_type: "audio/wav" });
+    });
     container = document.createElement("div");
     document.body.appendChild(container);
     root = createRoot(container);
@@ -298,10 +365,11 @@ describe("MessageSpeechButton", () => {
       }
     });
 
-    expect(synthesizeSpeech).toHaveBeenCalledTimes(3);
-    expect(vi.mocked(synthesizeSpeech).mock.calls[0]?.[1]).toBe(longChunk);
-    expect(String(vi.mocked(synthesizeSpeech).mock.calls[1]?.[1] || "").length).toBeLessThan(longChunk.length);
-    expect(String(vi.mocked(synthesizeSpeech).mock.calls[2]?.[1] || "").length).toBeLessThan(longChunk.length);
+    expect(synthesizeSpeech).toHaveBeenCalledTimes(4);
+    const failedChunk = String(vi.mocked(synthesizeSpeech).mock.calls[1]?.[1] || "");
+    expect(failedChunk.length).toBeGreaterThan(120);
+    expect(String(vi.mocked(synthesizeSpeech).mock.calls[2]?.[1] || "").length).toBeLessThan(failedChunk.length);
+    expect(String(vi.mocked(synthesizeSpeech).mock.calls[3]?.[1] || "").length).toBeLessThan(failedChunk.length);
   });
 
   it("renders a disabled control instead of disappearing when the provider is linked but unavailable", async () => {
@@ -373,7 +441,7 @@ describe("MessageSpeechButton", () => {
           "| Total | **42** |",
         ].join("\n"),
       ),
-    ).toBe(["Result", "", "Open report", "", "const answer = 42;", "", "Name Value", "", "Total 42"].join("\n"));
+    ).toBe(["Result", "", "Open report", "", "Name Value", "", "Total 42"].join("\n"));
   });
 
   it("preserves visible punctuation that is not Markdown markup", () => {
@@ -396,10 +464,29 @@ describe("MessageSpeechButton", () => {
     expect(chunks.every((chunk) => chunk.length <= 450)).toBe(true);
   });
 
+  it("uses a short initial chunk for medium responses", () => {
+    const text = "Questa risposta deve iniziare rapidamente e poi continuare senza pause percepibili. ".repeat(4).trim();
+    expect(text.length).toBeGreaterThan(180);
+    expect(text.length).toBeLessThanOrEqual(450);
+
+    const chunks = speechChunks(text);
+
+    expect(chunks.length).toBeGreaterThan(1);
+    expect(chunks[0].length).toBeLessThanOrEqual(120);
+    expect(chunks.join(" ")).toBe(text);
+  });
+
   it("infers Italian speech language from a technical Italian response", () => {
     expect(
       speechLanguageHint(
         "Fix applicato e verificato. Ho cambiato core/api/provider_api.py. Dopo il restart la rotta reale risponde correttamente.",
+      ),
+    ).toBe("it");
+    expect(speechLanguageHint("Ho ridotto la latenza iniziale e ora parte subito.")).toBe("it");
+    expect(speechLanguageHint("La lettura deve partire subito e usare una pronuncia corretta.")).toBe("it");
+    expect(
+      speechLanguageHint(
+        speechLanguageTextFromMarkdown("La lettura deve partire subito. `the message response speech`\n```ts\nconst voice = 'english';\n```"),
       ),
     ).toBe("it");
     expect(speechLanguageHint("Implemented and verified the provider_config update. The route now responds correctly.")).toBe("");
@@ -443,6 +530,20 @@ function TwoSpeechButtonsHost() {
   );
 }
 
+function PrefetchSpeechButtonHost() {
+  const [activeMessageId, setActiveMessageId] = useState<string | null>(null);
+  return (
+    <MessageSpeechButton
+      activeMessageId={activeMessageId}
+      content="First sentence. Second sentence. Third sentence."
+      maxTextChars={16}
+      messageId="agent-1"
+      onActiveMessageChange={setActiveMessageId}
+      providerAppId="speech"
+    />
+  );
+}
+
 function installAudioMock(options: { endDuringPlay?: boolean; playError?: Error } = {}) {
   const instances: Array<{ src: string; play: ReturnType<typeof vi.fn>; pause: ReturnType<typeof vi.fn>; onended: (() => void) | null; onerror: (() => void) | null }> = [];
   class MockAudio {
@@ -480,4 +581,12 @@ function installObjectUrlMock() {
     revokeObjectURL,
   });
   return { createObjectURL, revokeObjectURL };
+}
+
+function deferredSpeechResult() {
+  let resolve!: (value: { audio_data_url?: string; audio_base64?: string; content_type?: string }) => void;
+  const promise = new Promise<{ audio_data_url?: string; audio_base64?: string; content_type?: string }>((resolvePromise) => {
+    resolve = resolvePromise;
+  });
+  return { promise, resolve };
 }

@@ -1,63 +1,17 @@
 import type { Dispatch, SetStateAction } from "react";
 import { useEffect, useRef, useState } from "react";
 import { synthesizeSpeech } from "../api/client";
+import {
+  isSplittableSynthesisError,
+  retrySpeechChunks,
+  speechChunks,
+  speechLanguageHint,
+  speechLanguageTextFromMarkdown,
+  speechTextFromMarkdown,
+} from "../lib/messageSpeech";
+import { audioCompletion, playAudioWithTimeout, speechPlaybackErrorMessage } from "../lib/speechAudioPlayback";
 
-const DEFAULT_TTS_CHUNK_CHARS = 450;
-const INITIAL_TTS_CHUNK_CHARS = 180;
-const MIN_RETRY_TTS_CHUNK_CHARS = 180;
-const AUDIO_PLAY_START_TIMEOUT_MS = 8000;
-const AUDIO_CHUNK_END_TIMEOUT_MS = 180000;
-const TTS_WORD_RE = /[A-Za-zÀ-ÿ']+/g;
-const ITALIAN_TTS_MARKERS = new Set([
-  "abbiamo",
-  "adesso",
-  "aiutarti",
-  "applicato",
-  "audio",
-  "cambiato",
-  "chiamata",
-  "controlla",
-  "correttamente",
-  "dopo",
-  "fatto",
-  "funziona",
-  "funzionano",
-  "italiana",
-  "italiano",
-  "messaggio",
-  "modello",
-  "passate",
-  "processi",
-  "reale",
-  "risponde",
-  "rotta",
-  "solo",
-  "sono",
-  "testo",
-  "verificato",
-  "verifiche",
-  "voce",
-]);
-const ENGLISH_TTS_MARKERS = new Set([
-  "about",
-  "and",
-  "because",
-  "can",
-  "done",
-  "for",
-  "from",
-  "hello",
-  "message",
-  "not",
-  "response",
-  "speech",
-  "that",
-  "the",
-  "this",
-  "voice",
-  "with",
-  "you",
-]);
+const TTS_PREFETCH_CONCURRENCY = 2;
 
 type MessageSpeechButtonProps = {
   activeMessageId: string | null;
@@ -109,6 +63,7 @@ function DisabledSpeechButton({ ariaLabel, title }: { ariaLabel: string; title: 
 
 function SupportedMessageSpeechButton({
   activeMessageId,
+  content,
   messageId,
   onActiveMessageChange,
   providerAppId,
@@ -119,6 +74,7 @@ function SupportedMessageSpeechButton({
   const [errorMessage, setErrorMessage] = useState("");
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const objectUrlRef = useRef<string | null>(null);
+  const abortControllerRef = useRef<AbortController | null>(null);
   const requestIdRef = useRef(0);
   const selfActivationRef = useRef(false);
   const isActive = activeMessageId === messageId;
@@ -149,25 +105,38 @@ function SupportedMessageSpeechButton({
     setErrorMessage("");
     const requestId = requestIdRef.current + 1;
     requestIdRef.current = requestId;
+    const abortController = new AbortController();
+    abortControllerRef.current?.abort();
+    abortControllerRef.current = abortController;
     const chunks = speechChunks(speechText, maxTextChars);
-    const language = speechLanguageHint(speechText);
-    let chunkIndex = 0;
+    const language = speechLanguageHint(speechLanguageTextFromMarkdown(content));
+    let nextChunkIndex = 0;
+    const prefetchedChunks = new Map<number, Promise<SpeechAudioResult[]>>();
 
-    function synthesizeNextChunk(): Promise<SpeechAudioResult[]> | null {
-      const chunk = chunks[chunkIndex];
-      chunkIndex += 1;
-      return chunk ? synthesizeChunkWithFallback(chunk, requestId, language) : null;
+    function fillPrefetchQueue() {
+      while (nextChunkIndex < chunks.length && prefetchedChunks.size < TTS_PREFETCH_CONCURRENCY) {
+        const index = nextChunkIndex;
+        nextChunkIndex += 1;
+        const promise = synthesizeChunkWithFallback(chunks[index], requestId, language, abortController.signal);
+        void promise.catch(() => undefined);
+        prefetchedChunks.set(index, promise);
+      }
     }
 
     try {
-      let prefetched = synthesizeNextChunk();
-      while (prefetched) {
+      fillPrefetchQueue();
+      for (let index = 0; index < chunks.length; index += 1) {
         if (requestIdRef.current !== requestId) {
           return;
         }
         setStatus(audioRef.current ? "playing" : "loading");
+        const prefetched = prefetchedChunks.get(index);
+        if (!prefetched) {
+          throw new Error("Speech prefetch queue lost a chunk.");
+        }
         const results = await prefetched;
-        prefetched = synthesizeNextChunk();
+        prefetchedChunks.delete(index);
+        fillPrefetchQueue();
         for (const result of results) {
           if (requestIdRef.current !== requestId) {
             return;
@@ -188,6 +157,8 @@ function SupportedMessageSpeechButton({
       return;
     }
     selfActivationRef.current = false;
+    abortControllerRef.current?.abort();
+    abortControllerRef.current = null;
     setErrorMessage(message);
     setStatus("error");
     clearActiveMessage(onActiveMessageChange, messageId);
@@ -199,6 +170,7 @@ function SupportedMessageSpeechButton({
       return;
     }
     selfActivationRef.current = false;
+    abortControllerRef.current = null;
     audioRef.current = null;
     releaseAudioUrl();
     setErrorMessage("");
@@ -209,6 +181,8 @@ function SupportedMessageSpeechButton({
   function stopPlayback() {
     requestIdRef.current += 1;
     selfActivationRef.current = false;
+    abortControllerRef.current?.abort();
+    abortControllerRef.current = null;
     const audio = audioRef.current;
     audio?.pause();
     if (audio?.onended) {
@@ -241,10 +215,18 @@ function SupportedMessageSpeechButton({
     return objectUrl;
   }
 
-  async function synthesizeChunkWithFallback(chunk: string, requestId: number, language: string): Promise<SpeechAudioResult[]> {
+  async function synthesizeChunkWithFallback(
+    chunk: string,
+    requestId: number,
+    language: string,
+    signal: AbortSignal,
+  ): Promise<SpeechAudioResult[]> {
     try {
-      return [await synthesizeSpeechChunk(providerAppId, chunk, language)];
+      return [await synthesizeSpeechChunk(providerAppId, chunk, language, signal)];
     } catch (error) {
+      if (signal.aborted) {
+        throw error;
+      }
       const retryChunks = retrySpeechChunks(chunk);
       if (isSplittableSynthesisError(error) && retryChunks.length > 1) {
         const results: SpeechAudioResult[] = [];
@@ -252,7 +234,7 @@ function SupportedMessageSpeechButton({
           if (requestIdRef.current !== requestId) {
             return results;
           }
-          results.push(...(await synthesizeChunkWithFallback(retryChunk, requestId, language)));
+          results.push(...(await synthesizeChunkWithFallback(retryChunk, requestId, language, signal)));
         }
         return results;
       }
@@ -311,226 +293,10 @@ function SupportedMessageSpeechButton({
   );
 }
 
-function audioCompletion(audio: HTMLAudioElement): { cancel: () => void; promise: Promise<void> } {
-  let timeout: number | null = null;
-  let settled = false;
-  const clearCompletion = () => {
-    if (timeout !== null) {
-      window.clearTimeout(timeout);
-      timeout = null;
-    }
-  };
-  const promise = new Promise<void>((resolve, reject) => {
-    const finish = () => {
-      if (settled) {
-        return;
-      }
-      settled = true;
-      clearCompletion();
-      resolve();
-    };
-    const fail = (message: string) => {
-      if (settled) {
-        return;
-      }
-      settled = true;
-      clearCompletion();
-      reject(new Error(message));
-    };
-    audio.onended = finish;
-    audio.onerror = () => fail("Browser audio playback failed.");
-    timeout = window.setTimeout(() => fail("Audio playback did not finish."), AUDIO_CHUNK_END_TIMEOUT_MS);
-    if (audio.ended) {
-      finish();
-    }
-  });
-  return {
-    cancel: () => {
-      settled = true;
-      clearCompletion();
-    },
-    promise,
-  };
-}
-
-function playAudioWithTimeout(audio: HTMLAudioElement): Promise<void> {
-  const playback = audio.play();
-  return new Promise((resolve, reject) => {
-    const timeout = window.setTimeout(() => {
-      reject(new Error("Audio playback did not start."));
-    }, AUDIO_PLAY_START_TIMEOUT_MS);
-    playback.then(
-      () => {
-        window.clearTimeout(timeout);
-        resolve();
-      },
-      (error) => {
-        window.clearTimeout(timeout);
-        reject(error);
-      },
-    );
-  });
-}
-
-function speechPlaybackErrorMessage(error: unknown): string {
-  if (error instanceof Error && error.message) {
-    if (error.name === "NotAllowedError") {
-      return "Browser blocked speech playback. Click read aloud again.";
-    }
-    if (error.name === "ApiError") {
-      return `Speech synthesis failed: ${error.message}`;
-    }
-    return `Speech playback failed: ${error.message}`;
-  }
-  return "Speech playback failed.";
-}
-
 function clearActiveMessage(onActiveMessageChange: Dispatch<SetStateAction<string | null>>, messageId: string) {
   onActiveMessageChange((currentMessageId) => (currentMessageId === messageId ? null : currentMessageId));
 }
 
-function synthesizeSpeechChunk(providerAppId: string, chunk: string, language: string): Promise<SpeechAudioResult> {
-  return language ? synthesizeSpeech(providerAppId, chunk, { language }) : synthesizeSpeech(providerAppId, chunk);
+function synthesizeSpeechChunk(providerAppId: string, chunk: string, language: string, signal: AbortSignal): Promise<SpeechAudioResult> {
+  return synthesizeSpeech(providerAppId, chunk, language ? { language, signal } : { signal });
 }
-
-export function speechLanguageHint(text: string): string {
-  const normalized = text.toLowerCase();
-  const tokens = new Set(
-    Array.from(normalized.matchAll(TTS_WORD_RE), ([token]) => token.replace(/^'+|'+$/g, "")).filter((token) => token.length > 1),
-  );
-  let italianScore = 0;
-  let englishScore = 0;
-  for (const token of tokens) {
-    if (ITALIAN_TTS_MARKERS.has(token)) {
-      italianScore += 1;
-    }
-    if (ENGLISH_TTS_MARKERS.has(token)) {
-      englishScore += 1;
-    }
-  }
-  if (/[àèéìòù]/.test(normalized)) {
-    italianScore += 2;
-  }
-  return italianScore >= 2 && italianScore > englishScore ? "it" : "";
-}
-
-export function speechChunks(text: string, maxTextChars = 0): string[] {
-  const limit = maxTextChars > 0 ? Math.min(maxTextChars, DEFAULT_TTS_CHUNK_CHARS) : DEFAULT_TTS_CHUNK_CHARS;
-  const initialLimit = Math.min(limit, INITIAL_TTS_CHUNK_CHARS);
-  const normalized = text.trim();
-  if (!normalized || normalized.length <= limit) {
-    return normalized ? [normalized] : [];
-  }
-  const chunks = speechChunksWithLimit(normalized, limit);
-  if (chunks.length > 1 && chunks[0].length > initialLimit) {
-    return [...splitInitialSpeechChunk(chunks[0], initialLimit), ...chunks.slice(1)];
-  }
-  return chunks;
-}
-
-function speechChunksWithLimit(text: string, limit: number): string[] {
-  const chunks: string[] = [];
-  let current = "";
-  for (const piece of speechPieces(text)) {
-    const next = current ? `${current} ${piece}` : piece;
-    if (next.length <= limit) {
-      current = next;
-      continue;
-    }
-    if (current) {
-      chunks.push(current);
-      current = "";
-    }
-    chunks.push(...hardSplitSpeechPiece(piece, limit));
-  }
-  if (current) {
-    chunks.push(current);
-  }
-  return chunks;
-}
-
-function splitInitialSpeechChunk(text: string, limit: number): string[] {
-  if (text.length <= limit) {
-    return [text];
-  }
-  const splitAt = Math.max(text.lastIndexOf(" ", limit), Math.min(limit, text.length));
-  return [text.slice(0, splitAt).trim(), text.slice(splitAt).trim()].filter(Boolean);
-}
-
-function speechPieces(text: string): string[] {
-  return text
-    .replace(/\n{2,}/g, ". ")
-    .split(/(?<=[.!?])\s+/)
-    .map((piece) => piece.trim())
-    .filter(Boolean);
-}
-
-function hardSplitSpeechPiece(piece: string, limit: number): string[] {
-  const chunks: string[] = [];
-  let remaining = piece.trim();
-  while (remaining.length > limit) {
-    const splitAt = Math.max(remaining.lastIndexOf(" ", limit), Math.min(limit, remaining.length));
-    chunks.push(remaining.slice(0, splitAt).trim());
-    remaining = remaining.slice(splitAt).trim();
-  }
-  if (remaining) {
-    chunks.push(remaining);
-  }
-  return chunks;
-}
-
-function retrySpeechChunks(text: string): string[] {
-  if (text.length <= MIN_RETRY_TTS_CHUNK_CHARS) {
-    return [text];
-  }
-  const midpoint = Math.floor(text.length / 2);
-  const before = text.lastIndexOf(" ", midpoint);
-  const after = text.indexOf(" ", midpoint);
-  const splitAt = before >= MIN_RETRY_TTS_CHUNK_CHARS ? before : after > 0 ? after : midpoint;
-  const left = text.slice(0, splitAt).trim();
-  const right = text.slice(splitAt).trim();
-  return [left, right].filter(Boolean);
-}
-
-function isSplittableSynthesisError(error: unknown): boolean {
-  const message = error instanceof Error ? error.message.toLowerCase() : "";
-  return (
-    message.includes("synthesized audio exceeds") ||
-    message.includes("response size limit") ||
-    message.includes("text must contain at most") ||
-    message.includes("max_text_chars")
-  );
-}
-
-export function speechTextFromMarkdown(content: string) {
-  return content
-    .replace(/\r\n?/g, "\n")
-    .replace(/```[^\n]*\n([\s\S]*?)```/g, "$1")
-    .replace(/```([\s\S]*?)```/g, "$1")
-    .replace(/`([^`]+)`/g, "$1")
-    .replace(/!\[([^\]]*)\]\([^)]+\)/g, "$1")
-    .replace(/\[([^\]]+)\]\([^)]+\)/g, "$1")
-    .replace(/\[ref:[^\]]+\]/g, "")
-    .replace(/^\s{0,3}#{1,6}\s+/gm, "")
-    .replace(/^\s{0,3}>\s?/gm, "")
-    .replace(/^\s*[-*+]\s+/gm, "")
-    .replace(/^\s*\d+[.)]\s+/gm, "")
-    .replace(/^\s*\|?[\s:-]+\|[\s|:-]*$/gm, "")
-    .replace(/\|/g, " ")
-    .replace(MARKDOWN_STRONG_ASTERISK, "$1$2")
-    .replace(MARKDOWN_EMPHASIS_ASTERISK, "$1$2")
-    .replace(MARKDOWN_STRIKE, "$1$2")
-    .replace(MARKDOWN_STRONG_UNDERSCORE, "$1$2")
-    .replace(MARKDOWN_EMPHASIS_UNDERSCORE, "$1$2")
-    .replace(/[ \t]+/g, " ")
-    .replace(/^[ \t]+|[ \t]+$/gm, "")
-    .replace(/\n{3,}/g, "\n\n")
-    .trim();
-}
-
-const MARKDOWN_STRONG_ASTERISK = /(^|[^\w*])\*\*([^\s*](?:[\s\S]*?[^\s*])?)\*\*(?=$|[^\w*])/g;
-const MARKDOWN_EMPHASIS_ASTERISK = /(^|[^\w*])\*([^\s*](?:[^*\n]*?[^\s*])?)\*(?=$|[^\w*])/g;
-const MARKDOWN_STRIKE = /(^|[^\w~])~~([^\s~](?:[\s\S]*?[^\s~])?)~~(?=$|[^\w~])/g;
-const MARKDOWN_STRONG_UNDERSCORE =
-  /(^|[^\w_])__(?!(?:init|name|main|file|doc|class|module|dict|repr|str|call|enter|exit|iter|next|len|new|del)__)([^\s_](?:[\s\S]*?[^\s_])?)__(?=$|[^\w_])/g;
-const MARKDOWN_EMPHASIS_UNDERSCORE = /(^|[^\w_])_(?!_)([^\s_](?:[^_\n]*?[^\s_])?)_(?!_)(?=$|[^\w_])/g;

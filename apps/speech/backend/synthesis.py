@@ -20,6 +20,7 @@ from engines import KOKORO_OPENROUTER_CONTENT_TYPE
 from engines import KOKORO_OPENROUTER_DEFAULT_VOICE
 from engines import KOKORO_OPENROUTER_LANGUAGE_DEFAULT_VOICES
 from engines import KOKORO_OPENROUTER_VOICES
+from engines import default_tts_voice_id
 from engines import run_kokoro_openrouter
 from engines import run_local_tts_engine as run_local_engine
 from engines import tts_engine_cache_fingerprint
@@ -40,6 +41,7 @@ from store import append_job, read_settings
 
 
 def synthesize_payload(*, data_root: Path, generated_storage_root: Path, body: dict) -> dict:
+    request_started = time.monotonic()
     text = normalized_text(body.get("text"))
     requested_voice = normalized_voice(body.get("voice"), default="")
     rate = normalized_rate(body.get("rate"))
@@ -47,11 +49,12 @@ def synthesize_payload(*, data_root: Path, generated_storage_root: Path, body: d
     if isinstance(body.get("_app_secrets"), dict):
         settings = {**settings, "_app_secrets": dict(body["_app_secrets"])}
     requested_engine = str(settings.get("synthesis_engine") or "auto")
+    language = selected_synthesis_language(settings, requested=body.get("language"), text=text)
     if requested_engine == "kokoro-openrouter":
         voice = selected_kokoro_voice_id(
             requested_voice,
             text=text,
-            language=body.get("language"),
+            language=language,
         )
         output_format = normalized_output_format(
             body.get("format"),
@@ -62,7 +65,9 @@ def synthesize_payload(*, data_root: Path, generated_storage_root: Path, body: d
                 "mp3": KOKORO_OPENROUTER_CONTENT_TYPE,
             },
         )
+        engine_started = time.monotonic()
         audio = run_kokoro_openrouter(text=text, voice=voice, settings=settings)
+        engine_seconds = time.monotonic() - engine_started
         content_type = output_format
         validate_audio_size(audio)
         job_id = f"tts_{uuid.uuid4().hex}"
@@ -81,9 +86,12 @@ def synthesize_payload(*, data_root: Path, generated_storage_root: Path, body: d
                 "content_type": content_type,
                 "size_bytes": len(audio),
                 "cache_hit": False,
+                "engine_seconds": round(engine_seconds, 6),
+                "language": language,
                 "retention": "provider_response",
             },
         )
+        request_total_seconds = time.monotonic() - request_started
         return {
             "job_id": job_id,
             "created_at": created_at,
@@ -93,11 +101,16 @@ def synthesize_payload(*, data_root: Path, generated_storage_root: Path, body: d
             "text_chars": len(text),
             "engine": "kokoro-openrouter",
             "voice": voice,
+            "language": language,
             "rate": rate,
             "format": output_format,
             "quality_profile": "natural",
             "latency_profile": "remote",
             "cache_hit": False,
+            "metrics": {
+                "engine_seconds": round(engine_seconds, 6),
+                "request_total_seconds": round(request_total_seconds, 6),
+            },
             "cache": {"enabled": False, "retention": "provider_response", "exportable": False},
             "retention": "provider_response",
         }
@@ -110,7 +123,7 @@ def synthesize_payload(*, data_root: Path, generated_storage_root: Path, body: d
         default="audio/wav",
         formats={"audio/wav": "audio/wav", "wav": "audio/wav"},
     )
-    voice = selected_voice_id(engine, requested_voice)
+    voice = selected_voice_id(engine, requested_voice, language=language)
     cache_fingerprint = tts_engine_cache_fingerprint(engine, voice=voice)
     cache_key = synthesis_cache_key(
         engine=engine.name,
@@ -122,8 +135,11 @@ def synthesize_payload(*, data_root: Path, generated_storage_root: Path, body: d
     )
     audio = read_cached_synthesis(data_root, cache_key)
     cache_hit = audio is not None
+    engine_seconds = 0.0
     if audio is None:
+        engine_started = time.monotonic()
         audio = run_local_engine(engine, text=text, voice=voice or engine.voice_id or DEFAULT_VOICE, rate=rate, data_root=data_root)
+        engine_seconds = time.monotonic() - engine_started
         validate_audio_size(audio)
         write_cached_synthesis(data_root, cache_key, audio)
         cache_cleaned = maybe_evict_synthesis_cache(data_root)
@@ -149,10 +165,13 @@ def synthesize_payload(*, data_root: Path, generated_storage_root: Path, body: d
             "content_type": "audio/wav",
             "size_bytes": len(audio),
             "cache_hit": cache_hit,
+            "engine_seconds": round(engine_seconds, 6),
+            "language": language,
             "retention": "derived_cache",
         },
     )
     audio_base64 = base64.b64encode(audio).decode("ascii")
+    request_total_seconds = time.monotonic() - request_started
     return {
         "job_id": job_id,
         "created_at": created_at,
@@ -162,11 +181,16 @@ def synthesize_payload(*, data_root: Path, generated_storage_root: Path, body: d
         "text_chars": len(text),
         "engine": engine.name,
         "voice": voice,
+        "language": language,
         "rate": rate,
         "format": output_format,
         "quality_profile": engine.quality_profile,
         "latency_profile": engine.latency_profile,
         "cache_hit": cache_hit,
+        "metrics": {
+            "engine_seconds": round(engine_seconds, 6),
+            "request_total_seconds": round(request_total_seconds, 6),
+        },
         "cache": {"enabled": True, "retention": "derived", "exportable": False},
         "retention": "derived_cache",
     }
@@ -195,18 +219,21 @@ def normalized_voice(value: object, *, default: str = DEFAULT_VOICE) -> str:
     return voice[:40]
 
 
-def selected_voice_id(engine: object, requested_voice: str) -> str:
+def selected_voice_id(engine: object, requested_voice: str, *, language: str = "") -> str:
     voices = [item for item in getattr(engine, "voices", ()) if isinstance(item, dict)]
     voice_ids = [str(item.get("voice_id") or "") for item in voices]
     if requested_voice:
+        requested_key = requested_voice.lower().replace("_", "-")
         for item in voices:
             voice_id = str(item.get("voice_id") or "")
+            profile_language = str(item.get("language") or "").lower().replace("_", "-")
             aliases = {
-                voice_id,
-                str(item.get("language") or ""),
-                str(item.get("name") or ""),
+                voice_id.lower().replace("_", "-"),
+                profile_language,
+                profile_language.split("-", 1)[0],
+                str(item.get("name") or "").lower().replace("_", "-"),
             }
-            if requested_voice in aliases:
+            if requested_key in aliases:
                 return voice_id
         if voice_ids:
             raise SpeechValidationError(
@@ -215,7 +242,9 @@ def selected_voice_id(engine: object, requested_voice: str) -> str:
                 allowed_values={"voice": voice_ids},
             )
         return requested_voice
-    return str(getattr(engine, "voice_id", "") or DEFAULT_VOICE)
+    if not voices:
+        return str(getattr(engine, "voice_id", "") or DEFAULT_VOICE)
+    return default_tts_voice_id(str(getattr(engine, "name", "") or ""), voices, language=language)
 
 
 WORD_RE = re.compile(r"[A-Za-z\u00c0-\u00ff']+")
@@ -231,6 +260,7 @@ ITALIAN_TTS_MARKERS = frozenset(
         "come",
         "con",
         "cosa",
+        "corretta",
         "della",
         "delle",
         "degli",
@@ -243,22 +273,32 @@ ITALIAN_TTS_MARKERS = frozenset(
         "grazie",
         "italiana",
         "italiano",
+        "iniziale",
+        "la",
+        "latenza",
+        "lettura",
         "messaggio",
         "modifica",
         "nel",
         "non",
+        "ora",
+        "parte",
+        "partire",
         "parlare",
         "per",
         "perche",
         "posso",
+        "pronuncia",
         "questa",
         "queste",
         "questi",
         "questo",
         "risposta",
         "sono",
+        "subito",
         "tutto",
         "una",
+        "usare",
         "voce",
         "vocale",
     }
@@ -274,8 +314,12 @@ ITALIAN_STRONG_TTS_MARKERS = frozenset(
         "grazie",
         "italiana",
         "italiano",
+        "latenza",
+        "lettura",
         "perche",
         "posso",
+        "pronuncia",
+        "subito",
     }
 )
 ENGLISH_TTS_MARKERS = frozenset(
@@ -301,6 +345,7 @@ ENGLISH_TTS_MARKERS = frozenset(
         "you",
     }
 )
+ENGLISH_STRONG_TTS_MARKERS = frozenset({"hello", "please", "thanks", "this"})
 
 
 def selected_kokoro_voice_id(requested_voice: str, *, text: str, language: object = "") -> str:
@@ -327,6 +372,13 @@ def normalized_language_code(value: object) -> str:
     return language.split("-", 1)[0]
 
 
+def selected_synthesis_language(settings: dict, *, requested: object = "", text: str = "") -> str:
+    preference = str(settings.get("synthesis_language") or "auto").strip().lower().replace("_", "-")
+    if preference and preference != "auto":
+        return normalized_language_code(preference)
+    return normalized_language_code(requested) or inferred_tts_language(text)
+
+
 def inferred_tts_language(text: str) -> str:
     normalized = text.lower()
     tokens = {token.strip("'") for token in WORD_RE.findall(normalized)}
@@ -337,8 +389,12 @@ def inferred_tts_language(text: str) -> str:
         italian_score += 2
     if english_score == 0 and tokens.intersection(ITALIAN_STRONG_TTS_MARKERS):
         return "it"
+    if italian_score == 0 and tokens.intersection(ENGLISH_STRONG_TTS_MARKERS):
+        return "en"
     if italian_score >= 2 and italian_score > english_score:
         return "it"
+    if english_score >= 2 and english_score > italian_score:
+        return "en"
     return ""
 
 

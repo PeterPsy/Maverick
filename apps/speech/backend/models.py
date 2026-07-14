@@ -34,6 +34,7 @@ SUPPORTED_ACTIONS = [
     "health.check",
     "list_engines",
     "operations.manifest",
+    "prewarm_synthesis_worker",
     "prewarm_worker",
     "set_engine",
     "synthesize",
@@ -42,6 +43,7 @@ SUPPORTED_ACTIONS = [
     "worker_status",
 ]
 DEFAULT_SYNTHESIS_ENGINE = "auto"
+DEFAULT_SYNTHESIS_LANGUAGE = "auto"
 DEFAULT_VOICE = "en"
 DEFAULT_RATE = 175
 MIN_RATE = 80

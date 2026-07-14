@@ -10,6 +10,7 @@ import {
   getSpeechCapabilities,
   listAgentCatalog,
   listProviders,
+  prewarmSpeechSynthesisWorker,
   prewarmSpeechWorker,
 } from "../api/client";
 import type { AppDependenciesPayload } from "../api/client";
@@ -20,6 +21,7 @@ vi.mock("../api/client", () => ({
   getSpeechCapabilities: vi.fn(),
   listAgentCatalog: vi.fn(),
   listProviders: vi.fn(),
+  prewarmSpeechSynthesisWorker: vi.fn(),
   prewarmSpeechWorker: vi.fn(),
   selectedDependencyProviderAppId: (payload: AppDependenciesPayload, alias: string) =>
     payload.dependencies.find((dependency) => dependency.alias === alias)?.selected_provider_app_ids[0] || "",
@@ -45,6 +47,7 @@ beforeEach(() => {
   vi.mocked(getAppDependencies).mockResolvedValue(dependencyPayload());
   vi.mocked(getSpeechCapabilities).mockRejectedValue(new Error("capability denied"));
   vi.mocked(listAgentCatalog).mockResolvedValue({ agent_types: [] });
+  vi.mocked(prewarmSpeechSynthesisWorker).mockResolvedValue({});
   vi.mocked(prewarmSpeechWorker).mockResolvedValue({});
 });
 
@@ -160,6 +163,58 @@ describe("useChatDependencies", () => {
       expect(snapshots.at(-1)?.transcriptionProviderAvailable).toBe(true);
       expect(snapshots.at(-1)?.transcriptionChunkedDictationSupported).toBe(true);
     });
+  });
+
+  it("prewarms an available synthesis worker once per engine, voice, and language selection", async () => {
+    const snapshots: Array<ReturnType<typeof useChatDependencies>> = [];
+    vi.mocked(getSpeechCapabilities).mockResolvedValue({
+      interfaces: {
+        "speech.synthesis": {
+          available: true,
+          default_voice: "it_IT-paola-medium",
+          engine: "piper",
+          language_preference: "it-it",
+          provider_available: true,
+          prewarm_supported: true,
+          quality_profile: "natural",
+        },
+      },
+    });
+
+    container = document.createElement("div");
+    document.body.append(container);
+    root = createRoot(container);
+    await act(async () => {
+      root?.render(<DependencyProbe onSnapshot={(snapshot) => snapshots.push(snapshot)} />);
+    });
+
+    await waitForAssertion(() => {
+      expect(snapshots.at(-1)?.speechProviderAvailable).toBe(true);
+      expect(prewarmSpeechSynthesisWorker).toHaveBeenCalledTimes(1);
+      expect(prewarmSpeechSynthesisWorker).toHaveBeenCalledWith("speech");
+    });
+    await act(async () => {
+      await snapshots.at(-1)?.loadSpeechProviderFromDependencies(dependencyPayload());
+    });
+    expect(prewarmSpeechSynthesisWorker).toHaveBeenCalledTimes(1);
+
+    vi.mocked(getSpeechCapabilities).mockResolvedValue({
+      interfaces: {
+        "speech.synthesis": {
+          available: true,
+          default_voice: "en_US-lessac-medium",
+          engine: "piper",
+          language_preference: "en-us",
+          prewarm_supported: true,
+          provider_available: true,
+          quality_profile: "natural",
+        },
+      },
+    });
+    await act(async () => {
+      await snapshots.at(-1)?.loadSpeechProviderFromDependencies(dependencyPayload());
+    });
+    expect(prewarmSpeechSynthesisWorker).toHaveBeenCalledTimes(2);
   });
 });
 

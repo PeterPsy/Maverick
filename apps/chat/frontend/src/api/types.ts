@@ -139,10 +139,17 @@ export type SpeechCapabilitiesPayload = {
     "speech.synthesis"?: {
       available?: boolean;
       provider_available?: boolean;
+      engine?: string;
       content_types?: string[];
       max_text_chars?: number;
+      voices?: Array<{ voice_id?: string; language?: string; name?: string; gender?: string }>;
+      default_voice?: string;
+      language_preference?: string;
+      language_hint_supported?: boolean;
+      languages?: string[];
       quality_profile?: string;
       latency_profile?: string;
+      prewarm_supported?: boolean;
     };
     "speech.transcription"?: {
       available?: boolean;
@@ -174,10 +181,16 @@ export type SpeechSynthesizePayload = {
   audio_data_url?: string;
   retention?: string;
   size_bytes?: number;
+  engine?: string;
+  voice?: string;
+  language?: string;
+  cache_hit?: boolean;
+  metrics?: { engine_seconds?: number; request_total_seconds?: number };
 };
 
 export type SpeechSynthesizeOptions = {
   language?: string;
+  signal?: AbortSignal;
   voice?: string;
 };
 

@@ -9,6 +9,7 @@ import tempfile
 
 from models import (
     DEFAULT_SYNTHESIS_ENGINE,
+    DEFAULT_SYNTHESIS_LANGUAGE,
     DEFAULT_TRANSCRIPTION_ENGINE,
     DEFAULT_TRANSCRIPTION_PROFILE,
 )
@@ -18,6 +19,7 @@ SETTINGS_SCHEMA_VERSION = "1"
 DEFAULT_SETTINGS = {
     "schema_version": SETTINGS_SCHEMA_VERSION,
     "synthesis_engine": DEFAULT_SYNTHESIS_ENGINE,
+    "synthesis_language": DEFAULT_SYNTHESIS_LANGUAGE,
     "transcription_engine": DEFAULT_TRANSCRIPTION_ENGINE,
     "transcription_profile": DEFAULT_TRANSCRIPTION_PROFILE,
 }

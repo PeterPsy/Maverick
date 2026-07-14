@@ -4,7 +4,13 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from engines import default_tts_voice_id, faster_whisper_worker_status, resolve_transcription_engine
+from engines import (
+    default_tts_voice_id,
+    faster_whisper_worker_status,
+    prewarm_local_tts_worker,
+    resolve_local_tts_engine,
+    resolve_transcription_engine,
+)
 from engines import synthesis_engine_statuses, transcription_engine_statuses
 from flux_streaming import flux_streaming_supported
 from models import (
@@ -31,7 +37,7 @@ from settings import (
     settings_with_app_secrets,
 )
 from store import read_jobs, read_settings
-from synthesis import synthesize_payload
+from synthesis import selected_synthesis_language, selected_voice_id, synthesize_payload
 from transcription import transcribe_audio_payload, transcribe_file_payload
 
 DATA_CHANGED_ACTIONS = {"set_engine"}
@@ -76,6 +82,8 @@ def handle_action(
         return 200, worker_status_payload(data_root, ensure_warm=ensure_warm_setting(body))
     if action == "prewarm_worker":
         return 200, worker_status_payload(data_root, ensure_warm=True)
+    if action == "prewarm_synthesis_worker":
+        return 200, synthesis_worker_status_payload(data_root, ensure_warm=True)
     if action == "synthesize":
         return 200, synthesize_payload(
             data_root=data_root,
@@ -148,6 +156,10 @@ def operations_manifest() -> dict:
                 "description": "Explicitly warm the Chat inline default faster-whisper worker and return worker lifecycle status.",
                 "required_fields": [],
             },
+            "prewarm_synthesis_worker": {
+                "description": "Explicitly warm the selected persistent local TTS worker and voice without synthesizing user text.",
+                "required_fields": [],
+            },
             "health.check": {
                 "description": "Report backend health and local engine availability.",
                 "required_fields": [],
@@ -199,6 +211,8 @@ def capabilities_payload(data_root: Path, app_secrets: dict | None = None) -> di
     synthesis_content_types = public_supported_formats_from_status(synthesis_status)
     synthesis_cache = public_synthesis_cache_from_status(synthesis_status)
     synthesis_retention = public_synthesis_retention_from_status(synthesis_status)
+    synthesis_language = str(settings.get("synthesis_language") or "auto")
+    effective_default_language = selected_synthesis_language(settings)
     transcription_selection = engine_selection_summary(
         transcription_engine_statuses(settings),
         requested_engine=str(settings.get("transcription_engine") or "auto"),
@@ -219,7 +233,17 @@ def capabilities_payload(data_root: Path, app_secrets: dict | None = None) -> di
                 "content_types": synthesis_content_types,
                 "max_text_chars": MAX_TEXT_CHARS,
                 "voices": synthesis_voices,
-                "default_voice": default_tts_voice_id(synthesis_engine, synthesis_voices) if synthesis_available else "",
+                "default_voice": default_tts_voice_id(synthesis_engine, synthesis_voices, language=effective_default_language)
+                if synthesis_available
+                else "",
+                "language_preference": synthesis_language,
+                "language_hint_supported": True,
+                "languages": public_voice_languages(synthesis_voices),
+                "prewarm_supported": bool(
+                    synthesis_available
+                    and synthesis_engine == "piper"
+                    and (synthesis_status or {}).get("persistent_worker")
+                ),
                 "selected_engine": settings.get("synthesis_engine", "auto"),
                 "effective_engine": synthesis_selection["effective_engine"],
                 "selected_available": synthesis_available,
@@ -295,6 +319,15 @@ def public_voice_profiles_from_status(status: dict | None) -> list[dict]:
     return profiles
 
 
+def public_voice_languages(voices: list[dict]) -> list[str]:
+    languages: list[str] = []
+    for voice in voices:
+        language = str(voice.get("language") or "").strip().lower().replace("_", "-")
+        if language and language not in languages:
+            languages.append(language)
+    return languages
+
+
 def public_supported_formats_from_status(status: dict | None) -> list[str]:
     formats = (status or {}).get("supported_formats")
     if not isinstance(formats, list):
@@ -331,6 +364,32 @@ def status_for_effective_engine(statuses: list[dict], selection: dict) -> dict |
 def worker_status_payload(data_root: Path, *, ensure_warm: bool = False) -> dict:
     settings = read_settings(data_root)
     return {"worker_status": faster_whisper_worker_status(data_root, settings, ensure_warm=ensure_warm)}
+
+
+def synthesis_worker_status_payload(data_root: Path, *, ensure_warm: bool = False) -> dict:
+    settings = read_settings(data_root)
+    engine = resolve_local_tts_engine(settings)
+    if engine is None:
+        return {
+            "worker_status": {
+                "supported": False,
+                "warmed": False,
+                "engine": str(settings.get("synthesis_engine") or "auto"),
+                "reason": "selected_synthesis_engine_is_not_an_available_local_engine",
+            }
+        }
+    language = selected_synthesis_language(settings)
+    voice = selected_voice_id(engine, "", language=language)
+    if not ensure_warm:
+        return {
+            "worker_status": {
+                "supported": engine.name == "piper",
+                "warmed": False,
+                "engine": engine.name,
+                "voice": voice,
+            }
+        }
+    return {"worker_status": prewarm_local_tts_worker(data_root, engine, voice=voice)}
 
 
 def health_payload(data_root: Path, app_secrets: dict | None = None) -> dict:

@@ -15,6 +15,7 @@ import {
   listInterAgentRuns,
   listRuntimeSessionEvents,
   listRuntimeThreads,
+  prewarmSpeechSynthesisWorker,
   prewarmSpeechWorker,
   resolveInterAgentApproval,
   resumeInterAgentRun,
@@ -339,7 +340,7 @@ describe("speech provider client calls", () => {
     vi.unstubAllGlobals();
   });
 
-  it("calls the selected provider backend for capabilities, prewarm, synthesis, and transcription", async () => {
+  it("calls the selected provider backend for capabilities, worker prewarm, synthesis, and transcription", async () => {
     const fetchMock = vi.fn(async (path: string, init?: RequestInit) => {
       const body = JSON.parse(String(init?.body || "{}"));
       if (body.action === "capabilities") {
@@ -360,8 +361,10 @@ describe("speech provider client calls", () => {
     await expect(getSpeechCapabilities("speech")).resolves.toMatchObject({
       interfaces: { "speech.synthesis": { available: true } },
     });
+    await expect(prewarmSpeechSynthesisWorker("speech")).resolves.toMatchObject({});
     await expect(prewarmSpeechWorker("speech")).resolves.toMatchObject({});
-    await expect(synthesizeSpeech("speech", "Hello", { language: "it" })).resolves.toMatchObject({
+    const synthesisController = new AbortController();
+    await expect(synthesizeSpeech("speech", "Hello", { language: "it", signal: synthesisController.signal })).resolves.toMatchObject({
       audio_base64: "UklGRg==",
     });
     await expect(transcribeSpeech("speech", "UklGRg==", "audio/wav", { profile: "fast" })).resolves.toMatchObject({
@@ -377,16 +380,19 @@ describe("speech provider client calls", () => {
       "/api/apps/speech/backend",
       "/api/apps/speech/backend",
       "/api/apps/speech/backend",
+      "/api/apps/speech/backend",
     ]);
-    expect(JSON.parse(String(fetchMock.mock.calls[1]?.[1]?.body || "{}"))).toEqual({ action: "prewarm_worker" });
-    expect(JSON.parse(String(fetchMock.mock.calls[2]?.[1]?.body || "{}"))).toEqual({ action: "synthesize", text: "Hello", language: "it" });
-    expect(JSON.parse(String(fetchMock.mock.calls[3]?.[1]?.body || "{}"))).toEqual({
+    expect(JSON.parse(String(fetchMock.mock.calls[1]?.[1]?.body || "{}"))).toEqual({ action: "prewarm_synthesis_worker" });
+    expect(JSON.parse(String(fetchMock.mock.calls[2]?.[1]?.body || "{}"))).toEqual({ action: "prewarm_worker" });
+    expect(JSON.parse(String(fetchMock.mock.calls[3]?.[1]?.body || "{}"))).toEqual({ action: "synthesize", text: "Hello", language: "it" });
+    expect(fetchMock.mock.calls[3]?.[1]?.signal).toBe(synthesisController.signal);
+    expect(JSON.parse(String(fetchMock.mock.calls[4]?.[1]?.body || "{}"))).toEqual({
       action: "transcribe_audio",
       audio_base64: "UklGRg==",
       content_type: "audio/wav",
       profile: "fast",
     });
-    expect(JSON.parse(String(fetchMock.mock.calls[4]?.[1]?.body || "{}"))).toEqual({
+    expect(JSON.parse(String(fetchMock.mock.calls[5]?.[1]?.body || "{}"))).toEqual({
       action: "transcribe_audio",
       audio_base64: "UklGRg==",
       content_type: "audio/wav",

@@ -264,6 +264,48 @@ def _run_piper_tts_engine(engine: LocalEngine, *, text: str, voice: str, data_ro
         return output_path.read_bytes()
 
 
+def prewarm_local_tts_worker(data_root: Path, engine: LocalEngine, *, voice: str) -> dict:
+    if engine.name != "piper":
+        return {
+            "supported": False,
+            "warmed": False,
+            "engine": engine.name,
+            "voice": voice,
+            "reason": "selected_engine_does_not_use_a_persistent_tts_worker",
+        }
+    if not persistent_piper_worker_enabled() or not piper_python_available():
+        return {
+            "supported": False,
+            "warmed": False,
+            "engine": engine.name,
+            "voice": voice,
+            "reason": "persistent_piper_worker_unavailable",
+        }
+    voice_profile = piper_voice_profile(engine, voice)
+    if voice_profile.get("_from_registry") and not voice_profile.get("_model_path"):
+        raise SpeechProviderUnavailableError(f"Piper voice `{voice}` does not have a configured local model.")
+    config = _piper_worker_config(engine, voice_profile)
+    paths = _piper_worker_paths(data_root, config)
+    ready_before_request = _external_worker_accepts_connection(paths["socket"])
+    started = time.monotonic()
+    _ensure_external_piper_worker(
+        config,
+        socket_path=paths["socket"],
+        pid_path=paths["pid"],
+        lock_path=paths["lock"],
+    )
+    return {
+        "supported": True,
+        "warmed": True,
+        "engine": engine.name,
+        "voice": str(voice_profile.get("voice_id") or voice),
+        "scope": "workspace_daemon",
+        "worker_id": paths["socket"].stem,
+        "ready_before_request": ready_before_request,
+        "prewarm_seconds": round(time.monotonic() - started, 6),
+    }
+
+
 def piper_worker_mode() -> str:
     return os.environ.get("MAVERICK_SPEECH_PIPER_WORKER", "auto").strip().lower() or "auto"
 
@@ -719,9 +761,12 @@ def _synthesis_engine_status(candidate: str, *, include_path: bool) -> dict:
     return payload
 
 
-def default_tts_voice_id(engine_name: str, voices: tuple[dict, ...] | list[dict]) -> str:
+def default_tts_voice_id(engine_name: str, voices: tuple[dict, ...] | list[dict], *, language: str = "") -> str:
     if not voices:
         return "piper-local" if engine_name == "piper" else "en"
+    language_voice = tts_voice_id_for_language(voices, language)
+    if language_voice:
+        return language_voice
     if engine_name == "piper":
         for profile in voices:
             if profile.get("model_configured"):
@@ -730,6 +775,27 @@ def default_tts_voice_id(engine_name: str, voices: tuple[dict, ...] | list[dict]
     ranked = sorted(((_english_voice_rank(profile), index, profile) for index, profile in enumerate(voices)), key=lambda item: (item[0], item[1]))
     best = ranked[0][2]
     return str(best.get("voice_id") or "en") if ranked[0][0] < 100 else str(voices[0].get("voice_id") or "en")
+
+
+def tts_voice_id_for_language(voices: tuple[dict, ...] | list[dict], language: str) -> str:
+    requested = language.strip().lower().replace("_", "-")
+    if not requested or requested == "auto":
+        return ""
+    primary = requested.split("-", 1)[0]
+    ranked: list[tuple[int, int, str]] = []
+    for index, profile in enumerate(voices):
+        profile_language = str(profile.get("language") or "").strip().lower().replace("_", "-")
+        voice_id = str(profile.get("voice_id") or "")
+        if not profile_language or not voice_id:
+            continue
+        profile_primary = profile_language.split("-", 1)[0]
+        if profile_language == requested:
+            ranked.append((0, index, voice_id))
+        elif profile_primary == primary:
+            ranked.append((1, index, voice_id))
+    if not ranked:
+        return ""
+    return min(ranked, key=lambda item: (item[0], item[1]))[2]
 
 
 def _english_voice_rank(profile: dict) -> int:

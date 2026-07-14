@@ -27,6 +27,15 @@ export function synthesizeSpeech(providerAppId: string, text: string, options: S
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body),
+    signal: options.signal,
+  });
+}
+
+export function prewarmSpeechSynthesisWorker(providerAppId: string): Promise<unknown> {
+  return requestJson<unknown>(`/api/apps/${encodeURIComponent(providerAppId)}/backend`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ action: "prewarm_synthesis_worker" }),
   });
 }
 

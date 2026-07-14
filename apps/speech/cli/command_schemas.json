@@ -1,7 +1,7 @@
 {
   "commands": {
     "speech": {
-      "description": "Inspect Speech engine health/settings, report or explicitly prewarm persistent STT worker status, and transcribe bounded workspace Storage audio files. Live microphone streaming, inline audio payloads, and worker stop/reload are not exposed through CLI.",
+      "description": "Configure workspace Speech engine/language preferences, inspect health/settings, prewarm persistent workers, and transcribe bounded workspace Storage audio files. Live microphone streaming, inline audio payloads, and worker stop/reload are not exposed through CLI.",
       "secret_selectors": [
         {
           "when": {"action": "list_engines"},
@@ -27,7 +27,9 @@
               "engine_health",
               "get_settings",
               "worker_status",
+              "prewarm_synthesis_worker",
               "prewarm_worker",
+              "set_engine",
               "transcribe_file"
             ],
             "default": "operations.manifest",
@@ -49,6 +51,25 @@
             "type": "boolean",
             "default": false,
             "description": "Include full voice metadata for list_engines and engine_health. Defaults to false for compact CLI output."
+          },
+          "synthesis_engine": {
+            "type": "string",
+            "enum": ["auto", "piper", "espeak", "espeak-ng", "kokoro-openrouter"],
+            "description": "Workspace synthesis engine selection used by set_engine."
+          },
+          "synthesis_language": {
+            "type": "string",
+            "description": "Workspace synthesis language preference: auto or a BCP-47 tag such as it-IT or en-US."
+          },
+          "transcription_engine": {
+            "type": "string",
+            "enum": ["auto", "faster-whisper", "whisper.cpp", "deepgram"],
+            "description": "Workspace transcription engine selection used by set_engine."
+          },
+          "transcription_profile": {
+            "type": "string",
+            "enum": ["fast", "balanced", "accurate"],
+            "description": "Workspace transcription profile used by set_engine."
           }
         },
         "required": [],

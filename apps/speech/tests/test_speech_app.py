@@ -45,7 +45,7 @@ from models import (
 )
 from service import app_events_for_action, handle_action, operations_manifest
 from store import append_job, read_jobs, write_settings
-from synthesis import evict_synthesis_cache, read_cached_synthesis
+from synthesis import evict_synthesis_cache, inferred_tts_language, read_cached_synthesis
 from transcription import (
     MAX_TRANSCRIPTION_SESSION_CHUNKS,
     STT_SESSION_LOCK_BUCKETS,
@@ -376,6 +376,34 @@ class SpeechAppTests(unittest.TestCase):
         self.assertFalse(transcription["chunked_dictation_supported"])
         self.assertFalse(transcription["dictation_streaming_supported"])
 
+    def test_capabilities_expose_workspace_synthesis_language_and_prewarm(self) -> None:
+        synthesis_statuses = [
+            {
+                "engine": "piper",
+                "kind": "tts",
+                "available": True,
+                "persistent_worker": True,
+                "voices": [
+                    {"voice_id": "en_US-lessac-medium", "language": "en-us", "model_configured": True},
+                    {"voice_id": "it_IT-paola-medium", "language": "it-it", "model_configured": True},
+                ],
+            }
+        ]
+        with TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            write_settings(root / "data", {"synthesis_engine": "piper", "synthesis_language": "it-IT"})
+            with patch("service.synthesis_engine_statuses", return_value=synthesis_statuses):
+                with patch("service.transcription_engine_statuses", return_value=[]):
+                    with patch("service.resolve_transcription_engine", return_value=""):
+                        status_code, payload = handle_action(root / "data", root / "generated", {"action": "capabilities"})
+
+        synthesis = payload["interfaces"]["speech.synthesis"]
+        self.assertEqual(status_code, 200)
+        self.assertEqual(synthesis["language_preference"], "it-IT")
+        self.assertEqual(synthesis["languages"], ["en-us", "it-it"])
+        self.assertEqual(synthesis["default_voice"], "it_IT-paola-medium")
+        self.assertTrue(synthesis["prewarm_supported"])
+
     def test_synthesize_rejects_empty_or_too_long_text(self) -> None:
         with self.assertRaises(SpeechValidationError):
             handle_action(Path("data"), Path("generated"), {"action": "synthesize", "text": ""})
@@ -423,6 +451,73 @@ class SpeechAppTests(unittest.TestCase):
             self.assertIn(payload["job_id"], jobs)
             self.assertIn('"retention": "derived_cache"', jobs)
             self.assertNotIn("workspace_relative_path", jobs)
+
+    def test_synthesize_selects_local_voice_from_workspace_language_preference(self) -> None:
+        engine = LocalEngine(
+            name="piper",
+            path="/usr/bin/piper",
+            quality_profile="natural",
+            latency_profile="medium",
+            voice_id="en_US-lessac-medium",
+            voices=(
+                {"voice_id": "en_US-lessac-medium", "language": "en-us", "model_configured": True},
+                {"voice_id": "it_IT-paola-medium", "language": "it-it", "model_configured": True},
+            ),
+        )
+        with TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            write_settings(
+                root / "data",
+                {"synthesis_engine": "piper", "synthesis_language": "it-IT"},
+            )
+            with patch("synthesis.resolve_local_engine", return_value=engine):
+                with patch("synthesis.tts_engine_cache_fingerprint", return_value={"engine": "fake"}):
+                    with patch("synthesis.run_local_engine", return_value=b"RIFFaudio") as run_local:
+                        status_code, payload = handle_action(
+                            root / "data",
+                            root / "generated",
+                            {"action": "synthesize", "text": "Ok.", "language": "en-US"},
+                        )
+
+        self.assertEqual(status_code, 200)
+        self.assertEqual(payload["language"], "it")
+        self.assertEqual(payload["voice"], "it_IT-paola-medium")
+        self.assertEqual(run_local.call_args.kwargs["voice"], "it_IT-paola-medium")
+
+    def test_prewarm_synthesis_worker_uses_selected_language_voice(self) -> None:
+        engine = LocalEngine(
+            name="piper",
+            path="/usr/bin/piper",
+            quality_profile="natural",
+            latency_profile="medium",
+            voice_id="en_US-lessac-medium",
+            voices=(
+                {"voice_id": "en_US-lessac-medium", "language": "en-us", "model_configured": True},
+                {"voice_id": "it_IT-paola-medium", "language": "it-it", "model_configured": True},
+            ),
+        )
+        with TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            write_settings(root / "data", {"synthesis_engine": "piper", "synthesis_language": "it-IT"})
+            with patch("service.resolve_local_tts_engine", return_value=engine):
+                with patch(
+                    "service.prewarm_local_tts_worker",
+                    return_value={"supported": True, "warmed": True, "engine": "piper"},
+                ) as prewarm:
+                    status_code, payload = handle_action(
+                        root / "data",
+                        root / "generated",
+                        {"action": "prewarm_synthesis_worker"},
+                    )
+
+        self.assertEqual(status_code, 200)
+        self.assertTrue(payload["worker_status"]["warmed"])
+        self.assertEqual(prewarm.call_args.kwargs["voice"], "it_IT-paola-medium")
+
+    def test_italian_language_inference_handles_common_latency_phrases(self) -> None:
+        self.assertEqual(inferred_tts_language("Ho ridotto la latenza iniziale e ora parte subito."), "it")
+        self.assertEqual(inferred_tts_language("La lettura deve partire subito e usare una pronuncia corretta."), "it")
+        self.assertEqual(inferred_tts_language("Hello, this response is ready."), "en")
 
     def test_local_synthesize_rejects_mpeg_format(self) -> None:
         engine = SimpleNamespace(
@@ -2749,13 +2844,29 @@ class SpeechAppTests(unittest.TestCase):
                         "whisper_cpp_model_path": "/host/model.bin",
                     },
                 )
+            with self.assertRaises(SpeechValidationError):
+                handle_action(
+                    root / "data",
+                    root / "generated",
+                    {"action": "set_engine", "synthesis_language": "italiano!"},
+                )
             status_code, payload = handle_action(root / "data", root / "generated", {"action": "set_engine", "transcription_engine": "whisper.cpp"})
 
             self.assertEqual(status_code, 200)
             self.assertEqual(payload["settings"]["transcription_engine"], "whisper.cpp")
-            status_code, payload = handle_action(root / "data", root / "generated", {"action": "set_engine", "synthesis_engine": "piper", "transcription_profile": "accurate"})
+            status_code, payload = handle_action(
+                root / "data",
+                root / "generated",
+                {
+                    "action": "set_engine",
+                    "synthesis_engine": "piper",
+                    "synthesis_language": "it_IT",
+                    "transcription_profile": "accurate",
+                },
+            )
             self.assertEqual(status_code, 200)
             self.assertEqual(payload["settings"]["synthesis_engine"], "piper")
+            self.assertEqual(payload["settings"]["synthesis_language"], "it-it")
             self.assertEqual(payload["settings"]["transcription_profile"], "accurate")
             settings_json = (root / "data" / "settings.json").read_text(encoding="utf-8")
             self.assertNotIn("whisper_cpp_model_path", settings_json)
@@ -3404,6 +3515,36 @@ class SpeechAppTests(unittest.TestCase):
         self.assertTrue(all("voices" in item for item in payload["synthesis"]))
         self.assertTrue(all("voice_count" not in item for item in payload["synthesis"]))
 
+    def test_cli_can_set_workspace_synthesis_engine_and_language(self) -> None:
+        with TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            result = subprocess.run(
+                [sys.executable, str(APP_ROOT / "cli" / "app_cli.py")],
+                input=json.dumps(
+                    {
+                        "workspace_id": "default",
+                        "app_id": "speech",
+                        "data_root": str(root / "data"),
+                        "generated_storage_root": str(root / "storage" / "generated"),
+                        "uploaded_storage_root": str(root / "storage" / "uploaded"),
+                        "arguments": {
+                            "action": "set_engine",
+                            "synthesis_engine": "piper",
+                            "synthesis_language": "it-IT",
+                        },
+                    }
+                ),
+                text=True,
+                capture_output=True,
+                check=True,
+            )
+
+        payload = json.loads(result.stdout)
+        self.assertEqual(payload["status_code"], 200)
+        self.assertEqual(payload["settings"]["synthesis_engine"], "piper")
+        self.assertEqual(payload["settings"]["synthesis_language"], "it-it")
+        self.assertEqual(payload["app_events"], [{"type": "maverick.app.data-changed", "resource": "configuration"}])
+
     def test_deepgram_benchmark_script_dry_run_reports_nova_and_flux_plan(self) -> None:
         result = subprocess.run(
             [sys.executable, str(APP_ROOT / "scripts" / "benchmark_deepgram.py"), "--dry-run"],
@@ -3535,11 +3676,15 @@ class SpeechAppTests(unittest.TestCase):
                 "engine_health",
                 "get_settings",
                 "worker_status",
+                "prewarm_synthesis_worker",
                 "prewarm_worker",
+                "set_engine",
                 "transcribe_file",
             ],
         )
         self.assertEqual(properties["include_voices"]["type"], "boolean")
+        self.assertEqual(properties["synthesis_engine"]["enum"][1], "piper")
+        self.assertEqual(properties["synthesis_language"]["type"], "string")
         self.assertNotIn("synthesize", actions)
         self.assertNotIn("transcribe_audio", actions)
         selectors = command["secret_selectors"]

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from pathlib import Path
 
 from engines import (
@@ -120,7 +121,7 @@ def interface_health_summary(selection: dict) -> dict:
 
 
 def set_engine_payload(data_root: Path, body: dict) -> dict:
-    allowed_fields = {"action", "synthesis_engine", "transcription_engine", "transcription_profile", "_app_secrets"}
+    allowed_fields = {"action", "synthesis_engine", "synthesis_language", "transcription_engine", "transcription_profile", "_app_secrets"}
     unexpected_fields = sorted(set(body) - allowed_fields)
     if unexpected_fields:
         raise SpeechValidationError(
@@ -131,6 +132,7 @@ def set_engine_payload(data_root: Path, body: dict) -> dict:
     updates: dict[str, str] = {}
     for key in (
         "synthesis_engine",
+        "synthesis_language",
         "transcription_engine",
         "transcription_profile",
     ):
@@ -145,6 +147,7 @@ def public_settings(settings: dict) -> dict:
     return {
         "schema_version": settings.get("schema_version", "1"),
         "synthesis_engine": settings.get("synthesis_engine", "auto"),
+        "synthesis_language": settings.get("synthesis_language", "auto"),
         "transcription_engine": settings.get("transcription_engine", "auto"),
         "transcription_profile": settings.get("transcription_profile", "balanced"),
         "faster_whisper_model_configured": faster_whisper_model_configured(settings),
@@ -161,6 +164,15 @@ def normalized_setting(key: str, value: object) -> str:
             operation="set_engine",
             allowed_values={key: ["auto", "piper", "espeak", "espeak-ng", "kokoro-openrouter"]},
         )
+    if key == "synthesis_language":
+        normalized = text.lower().replace("_", "-")
+        if normalized != "auto" and not re.fullmatch(r"[a-z]{2,3}(?:-[a-z0-9]{2,8})*", normalized):
+            raise SpeechValidationError(
+                "Unsupported synthesis_language.",
+                operation="set_engine",
+                allowed_values={key: ["auto", "BCP-47 language tag such as it-IT or en-US"]},
+            )
+        return normalized
     if key == "transcription_engine" and text not in {"auto", "faster-whisper", "whisper.cpp", "deepgram"}:
         raise SpeechValidationError(
             "Unsupported transcription_engine.",

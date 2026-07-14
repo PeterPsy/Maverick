@@ -11,6 +11,8 @@ _SELECTED = {
     'test_builtin_registry_exposes_remote_providers_as_disabled_metadata',
     'test_provider_settings_can_refresh_codex_model_catalog',
     'test_provider_settings_refresh_bypasses_cached_codex_model_catalog',
+    'test_non_refresh_registration_preserves_refreshed_codex_model_catalog',
+    'test_non_refresh_registration_updates_stale_codex_fallback_model',
     'test_codex_model_catalog_is_cached_after_first_probe',
     'test_codex_model_catalog_fallback_is_not_cached',
     'test_application_bootstrap_registers_builtin_providers',

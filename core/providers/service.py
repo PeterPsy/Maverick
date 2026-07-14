@@ -99,15 +99,52 @@ def register_builtin_providers(
         except ProviderNotFoundError:
             store.save_provider_definition(definition)
             continue
+        refreshed_model_options = definition.model_options
+        refreshed_default_model_family = definition.default_model_family
+        if _should_preserve_existing_codex_model_catalog(
+            existing,
+            definition,
+            refresh_model_catalog=refresh_model_catalog,
+        ):
+            refreshed_model_options = existing.model_options
+            refreshed_default_model_family = existing.default_model_family
         refreshed_definition = replace(
             definition,
             status=existing.status,
             created_at=existing.created_at,
             updated_at=existing.updated_at,
+            default_model_family=refreshed_default_model_family,
+            model_options=refreshed_model_options,
         )
         if refreshed_definition != existing:
             store.save_provider_definition(refreshed_definition)
     return definitions
+
+
+def _should_preserve_existing_codex_model_catalog(
+    existing: ProviderDefinition,
+    incoming: ProviderDefinition,
+    *,
+    refresh_model_catalog: bool,
+) -> bool:
+    if refresh_model_catalog or incoming.provider_id != "codex":
+        return False
+    incoming_model_ids = [option.model_id for option in incoming.model_options]
+    existing_model_ids = [option.model_id for option in existing.model_options]
+    if len(incoming_model_ids) != 1 or not _is_codex_fallback_model_catalog(incoming):
+        return False
+    return bool(
+        existing_model_ids
+        and existing_model_ids != incoming_model_ids
+        and not _is_codex_fallback_model_catalog(existing)
+    )
+
+
+def _is_codex_fallback_model_catalog(definition: ProviderDefinition) -> bool:
+    if definition.provider_id != "codex" or len(definition.model_options) != 1:
+        return False
+    description = definition.model_options[0].description or ""
+    return description.startswith("Default Codex model configured")
 
 
 def effective_provider_registry(

@@ -237,7 +237,7 @@ class RuntimeThreadTitleJobTest(unittest.TestCase):
 
         with patch(
             "core.runtime.thread_title_jobs.generate_codex_thread_title",
-            return_value=ThreadTitleGenerationResult(title="Fallback Codex Title", provider_id="codex", model_id="gpt-5.5"),
+            return_value=ThreadTitleGenerationResult(title="Fallback Codex Title", provider_id="codex", model_id="gpt-5.6-sol"),
         ) as codex:
             result = generate_ai_thread_title(
                 state=state,
@@ -247,7 +247,7 @@ class RuntimeThreadTitleJobTest(unittest.TestCase):
 
         self.assertEqual(result.title, "Fallback Codex Title")
         self.assertEqual(result.provider_id, "codex")
-        self.assertEqual(result.model_id, "gpt-5.5")
+        self.assertEqual(result.model_id, "gpt-5.6-sol")
         codex.assert_called_once()
 
     def test_ai_title_generation_falls_back_to_codex_when_hosted_returns_invalid_json(self) -> None:
@@ -265,7 +265,7 @@ class RuntimeThreadTitleJobTest(unittest.TestCase):
             ),
             patch(
                 "core.runtime.thread_title_jobs.generate_codex_thread_title",
-                return_value=ThreadTitleGenerationResult(title="Fallback Codex Title", provider_id="codex", model_id="gpt-5.5"),
+                return_value=ThreadTitleGenerationResult(title="Fallback Codex Title", provider_id="codex", model_id="gpt-5.6-sol"),
             ) as codex,
         ):
             result = generate_ai_thread_title(
@@ -276,7 +276,7 @@ class RuntimeThreadTitleJobTest(unittest.TestCase):
 
         self.assertEqual(result.title, "Fallback Codex Title")
         self.assertEqual(result.provider_id, "codex")
-        self.assertEqual(result.model_id, "gpt-5.5")
+        self.assertEqual(result.model_id, "gpt-5.6-sol")
         codex.assert_called_once()
 
     def test_ai_title_job_does_not_overwrite_manual_rename(self) -> None:

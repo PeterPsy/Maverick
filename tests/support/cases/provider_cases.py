@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from dataclasses import replace
 from datetime import UTC, datetime
 import json
 import os
@@ -109,7 +110,7 @@ class ProvidersTestCase(unittest.TestCase):
         )
         self.assertEqual(codex.kind, "runtime_backend")
         self.assertEqual(codex.provider_role, "runtime_engine")
-        self.assertEqual(codex.default_model_family, "gpt-5.5")
+        self.assertEqual(codex.default_model_family, "gpt-5.6-sol")
         self.assertTrue(codex.capabilities.supports_interactive_runtime)
 
     def test_builtin_registry_does_not_probe_codex_model_catalog(self) -> None:
@@ -219,6 +220,58 @@ class ProvidersTestCase(unittest.TestCase):
         self.assertEqual(self.provider_by_id(providers, "codex").model_options[0].model_id, "gpt-refreshed")
         self.assertEqual(provider_store.get_provider_definition("codex").model_options[0].model_id, "gpt-refreshed")
 
+    def test_non_refresh_registration_preserves_refreshed_codex_model_catalog(self) -> None:
+        provider_store = self.make_provider_store()
+        payload = {
+            "models": [
+                {
+                    "slug": "gpt-5.6-sol",
+                    "display_name": "GPT-5.6 Sol",
+                    "visibility": "list",
+                    "default_reasoning_level": "xhigh",
+                    "supported_reasoning_levels": [{"effort": "xhigh"}],
+                },
+                {
+                    "slug": "gpt-5.5",
+                    "display_name": "GPT-5.5",
+                    "visibility": "list",
+                    "default_reasoning_level": "medium",
+                    "supported_reasoning_levels": [{"effort": "medium"}],
+                },
+            ]
+        }
+        result = type("Result", (), {"stdout": json.dumps(payload)})()
+        command = "/tmp/codex-preserve-refreshed"
+
+        with patch("core.providers.provider_codex_models.subprocess.run", return_value=result) as run:
+            register_builtin_providers(provider_store, codex_command=command, refresh_model_catalog=True)
+        register_builtin_providers(provider_store, codex_command=command)
+        providers = list_available_providers(provider_store, codex_command=command)
+
+        self.assertEqual(run.call_count, 1)
+        self.assertEqual(
+            [option.model_id for option in provider_store.get_provider_definition("codex").model_options],
+            ["gpt-5.6-sol", "gpt-5.5"],
+        )
+        self.assertEqual(
+            [option.model_id for option in self.provider_by_id(providers, "codex").model_options],
+            ["gpt-5.6-sol", "gpt-5.5"],
+        )
+
+    def test_non_refresh_registration_updates_stale_codex_fallback_model(self) -> None:
+        provider_store = self.make_provider_store()
+        codex = self.provider_by_id(builtin_provider_registry().list_provider_definitions(), "codex")
+        stale_option = replace(codex.model_options[0], model_id="gpt-5.5", label="gpt-5.5")
+        provider_store.save_provider_definition(
+            replace(codex, default_model_family="gpt-5.5", model_options=[stale_option])
+        )
+
+        register_builtin_providers(provider_store)
+
+        refreshed = provider_store.get_provider_definition("codex")
+        self.assertEqual(refreshed.default_model_family, "gpt-5.6-sol")
+        self.assertEqual([option.model_id for option in refreshed.model_options], ["gpt-5.6-sol"])
+
     def test_codex_model_catalog_is_cached_after_first_probe(self) -> None:
         payload = {
             "models": [
@@ -282,7 +335,7 @@ class ProvidersTestCase(unittest.TestCase):
         with patch("core.providers.provider_codex_models.subprocess.run", return_value=result) as run:
             second = adapter.model_options()
 
-        self.assertEqual([option.model_id for option in first], ["gpt-5.5"])
+        self.assertEqual([option.model_id for option in first], ["gpt-5.6-sol"])
         self.assertEqual(run.call_count, 1)
         self.assertEqual([option.model_id for option in second], ["gpt-after-error"])
 
@@ -958,7 +1011,7 @@ class ProvidersTestCase(unittest.TestCase):
         self.assertFalse((runtime_home / "rules").is_symlink())
         self.assertFalse((runtime_home / "skills" / ".system" / "SKILL.md").exists())
         runtime_config = (runtime_home / "config.toml").read_text(encoding="utf-8")
-        self.assertIn('model = "gpt-5.5"', runtime_config)
+        self.assertIn('model = "gpt-5.6-sol"', runtime_config)
         self.assertIn('model_reasoning_effort = "high"', runtime_config)
         self.assertNotIn('model = "gpt-5.4"', runtime_config)
         self.assertNotIn('model_reasoning_effort = "medium"', runtime_config)
@@ -1066,7 +1119,7 @@ class ProvidersTestCase(unittest.TestCase):
             spec = CodexProviderAdapter(codex_command="/bin/echo").build_launch_spec(session)
 
         runtime_config = (Path(spec.env_overrides["CODEX_HOME"]) / "config.toml").read_text(encoding="utf-8")
-        self.assertIn('model = "gpt-5.5"', runtime_config)
+        self.assertIn('model = "gpt-5.6-sol"', runtime_config)
         self.assertNotIn("gpt-5.4", runtime_config)
 
     def test_disable_binding_preserves_record_but_makes_it_inactive(self) -> None:

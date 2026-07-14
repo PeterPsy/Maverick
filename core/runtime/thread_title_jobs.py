@@ -401,7 +401,7 @@ def _codex_model_settings(state: "PlatformState", *, workspace_id: str) -> tuple
         raise ThreadTitleGenerationError(str(error)) from error
     if definition.provider_id != "codex":
         raise ThreadTitleGenerationError(f"Provider `{definition.provider_id}` does not support title micro-tasks.")
-    model_id = (None if selection is None else selection.model_id) or definition.default_model_family or "gpt-5.5"
+    model_id = (None if selection is None else selection.model_id) or definition.default_model_family or "gpt-5.6-sol"
     option = next((item for item in definition.model_options if item.model_id == model_id), None)
     supported = {item.effort for item in option.supported_reasoning_efforts} if option is not None else set()
     if "low" in supported:

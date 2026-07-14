@@ -374,12 +374,16 @@ def _wait_for_session_prewarm(
     completed = completion.completion.wait(max(0.0, timeout_seconds))
     elapsed_ms = (time.perf_counter() - wait_started_at) * 1000
     prewarm_total_ms: float | None = None
+    prewarm_total_source: str | None = None
     if completed:
         with _PREWARM_COMPLETIONS_LOCK:
             prewarm_total_ms = completion.elapsed_ms
         if prewarm_total_ms is None:
             # Compatibility for callers that only signal the completion event.
             prewarm_total_ms = (time.perf_counter() - completion.started_perf_counter) * 1000
+            prewarm_total_source = "elapsed_since_started"
+        else:
+            prewarm_total_source = "completion_elapsed"
     if state is not None and turn is not None:
         _record_turn_prewarm_wait_completed(
             state,
@@ -390,6 +394,7 @@ def _wait_for_session_prewarm(
             completed=completed,
             timeout_seconds=timeout_seconds,
             prewarm_total_ms=prewarm_total_ms,
+            prewarm_total_source=prewarm_total_source,
         )
         _record_turn_prewarm_waited(
             state,
@@ -400,6 +405,7 @@ def _wait_for_session_prewarm(
             completed=completed,
             timeout_seconds=timeout_seconds,
             prewarm_total_ms=prewarm_total_ms,
+            prewarm_total_source=prewarm_total_source,
         )
     return completed
 
@@ -515,6 +521,7 @@ def _record_turn_prewarm_wait_completed(
     completed: bool,
     timeout_seconds: float,
     prewarm_total_ms: float | None,
+    prewarm_total_source: str | None,
 ) -> RuntimeEventRecord | None:
     payload: dict[str, object] = {
         "provider_id": provider_id or "codex",
@@ -525,6 +532,8 @@ def _record_turn_prewarm_wait_completed(
     }
     if prewarm_total_ms is not None:
         payload["prewarm_total_ms"] = round(prewarm_total_ms, 3)
+    if prewarm_total_source is not None:
+        payload["prewarm_total_source"] = prewarm_total_source
     with suppress(Exception):
         return record_runtime_event(
             state.runtime_store,
@@ -549,6 +558,7 @@ def _record_turn_prewarm_waited(
     completed: bool,
     timeout_seconds: float,
     prewarm_total_ms: float | None,
+    prewarm_total_source: str | None,
 ) -> RuntimeEventRecord | None:
     payload: dict[str, object] = {
         "provider_id": provider_id or "codex",
@@ -559,6 +569,8 @@ def _record_turn_prewarm_waited(
     }
     if prewarm_total_ms is not None:
         payload["prewarm_total_ms"] = round(prewarm_total_ms, 3)
+    if prewarm_total_source is not None:
+        payload["prewarm_total_source"] = prewarm_total_source
     with suppress(Exception):
         return record_runtime_event(
             state.runtime_store,

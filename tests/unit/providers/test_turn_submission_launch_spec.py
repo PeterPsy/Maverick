@@ -246,6 +246,7 @@ class TurnSubmissionLaunchSpecTestCase(unittest.TestCase):
         self.assertTrue(completed.payload["completed"])
         self.assertIn("prewarm_wait_ms", completed.payload)
         self.assertEqual(completed.payload["prewarm_total_ms"], 321.5)
+        self.assertEqual(completed.payload["prewarm_total_source"], "completion_elapsed")
 
     def test_async_turn_records_worker_reference_and_provider_input_events(self) -> None:
         repo_root = make_temp_repo_root(self)

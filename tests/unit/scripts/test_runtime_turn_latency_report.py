@@ -589,6 +589,31 @@ class RuntimeTurnLatencyReportTestCase(unittest.TestCase):
 
         self.assertNotIn("prewarm_total_ms", report["turns"][0]["metrics"])
 
+    def test_keeps_long_prewarm_total_from_corrected_runtime(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir) / "maverick"
+            _write_session(root, "default", "sess-long-prewarm", runtime_mode="agentic", provider_id="codex")
+            events = _turn_events(
+                "sess-long-prewarm",
+                "turn-long-prewarm",
+                BASE,
+                provider_id="codex",
+                prewarm_wait_ms=0,
+                prewarm_total_ms=45_000,
+            )
+            prewarm_waited = next(event for event in events if event["event_type"] == "runtime.turn.prewarm_waited")
+            prewarm_waited["payload"]["prewarm_total_source"] = "completion_elapsed"
+            _write_events(root, "default", "sess-long-prewarm", events)
+
+            report = runtime_turn_latency_report.build_report(
+                root,
+                workspaces={"default"},
+                limit_turns=0,
+                include_turns=True,
+            )
+
+        self.assertEqual(report["turns"][0]["metrics"]["prewarm_total_ms"], 45_000)
+
     def test_reports_prepared_ready_as_explicit_overlapping_cohort(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             root = Path(temp_dir) / "maverick"

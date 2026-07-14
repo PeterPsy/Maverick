@@ -1979,8 +1979,8 @@ select:focus {
     grid-template-columns: 5rem minmax(0, 1fr);
     grid-template-areas:
       "media details"
-      "actions";
-    align-items: center;
+      "actions actions";
+    align-items: start;
   }
 
   .exercise-preview-button {

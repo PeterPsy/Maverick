@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import type { ToolCallMessage } from "../api/client";
 import { isNoisyRuntimeLabel } from "../lib/runtimeStepLabels";
+import { ActivityDisclosure } from "./ActivityDisclosure";
 
 type ToolCallInlineMessageProps = {
   createdAt?: string;
@@ -9,14 +10,9 @@ type ToolCallInlineMessageProps = {
 };
 
 export function ToolCallInlineMessage({ createdAt, defaultExpanded = true, toolCalls }: ToolCallInlineMessageProps) {
-  const [isExpanded, setIsExpanded] = useState(defaultExpanded);
   const [selectedToolKey, setSelectedToolKey] = useState<string | null>(null);
   const toolCount = toolCalls.length;
-  const timestamp = toolTimestamp(createdAt, toolCalls);
-
-  useEffect(() => {
-    setIsExpanded(defaultExpanded);
-  }, [defaultExpanded]);
+  const activityCreatedAt = createdAt || toolCalls.find((toolCall) => toolCall.createdAt)?.createdAt;
 
   useEffect(() => {
     if (selectedToolKey && !toolCalls.some((toolCall, index) => toolRenderKey(toolCall, index) === selectedToolKey)) {
@@ -25,50 +21,39 @@ export function ToolCallInlineMessage({ createdAt, defaultExpanded = true, toolC
   }, [selectedToolKey, toolCalls]);
 
   return (
-    <div className="chatapp-tool-inline">
-      <button className="chatapp-tool-inline__toggle" onClick={() => setIsExpanded((current) => !current)} type="button">
-        <span className={`chatapp-tool-inline__chevron ${isExpanded ? "is-expanded" : ""}`} aria-hidden="true">
-          <span className="material-symbols-rounded">expand_more</span>
-        </span>
-        <span className="chatapp-tool-inline__toggle-label">Tool Used{toolCount > 1 ? ` (${toolCount})` : ""}</span>
-        {timestamp ? (
-          <time className="chatapp-tool-inline__time" dateTime={createdAt || toolCalls.find((toolCall) => toolCall.createdAt)?.createdAt}>
-            {timestamp}
-          </time>
-        ) : null}
-      </button>
-      <div className={`chatapp-tool-inline__body ${isExpanded ? "" : "is-collapsed"}`}>
-        <div className="chatapp-tool-inline__body-inner">
-          {toolCalls.map((toolCall, index) => {
-            const renderKey = toolRenderKey(toolCall, index);
-            const isSelected = selectedToolKey === renderKey;
-            const panelId = `chatapp-tool-call-panel-${renderKey.replace(/[^A-Za-z0-9_-]/g, "-")}`;
-            return (
-              <div className="chatapp-tool-inline__item" key={renderKey}>
-                <button
-                  aria-controls={panelId}
-                  aria-expanded={isSelected}
-                  className={`chatapp-tool-inline__row ${toolCall.status === "failed" ? "is-failed" : ""} ${
-                    toolCall.status === "started" || toolCall.status === "updated" ? "is-active" : ""
-                  } ${isSelected ? "is-selected" : ""}`}
-                  onClick={() => {
-                    setSelectedToolKey(isSelected ? null : renderKey);
-                  }}
-                  type="button"
-                >
-                  <ToolStatusIcon status={toolCall.status} />
-                  <span className="chatapp-tool-inline__label">{displayToolName(toolCall)}</span>
-                  <span className={`chatapp-tool-inline__row-chevron ${isSelected ? "is-expanded" : ""}`} aria-hidden="true">
-                    <span className="material-symbols-rounded">expand_more</span>
-                  </span>
-                </button>
-                {isSelected ? <ToolCallPanel id={panelId} toolCall={toolCall} /> : null}
-              </div>
-            );
-          })}
-        </div>
-      </div>
-    </div>
+    <ActivityDisclosure
+      createdAt={activityCreatedAt}
+      defaultExpanded={defaultExpanded}
+      label={`Tool Used${toolCount > 1 ? ` (${toolCount})` : ""}`}
+    >
+      {toolCalls.map((toolCall, index) => {
+        const renderKey = toolRenderKey(toolCall, index);
+        const isSelected = selectedToolKey === renderKey;
+        const panelId = `chatapp-tool-call-panel-${renderKey.replace(/[^A-Za-z0-9_-]/g, "-")}`;
+        return (
+          <div className="chatapp-tool-inline__item" key={renderKey}>
+            <button
+              aria-controls={panelId}
+              aria-expanded={isSelected}
+              className={`chatapp-tool-inline__row ${toolCall.status === "failed" ? "is-failed" : ""} ${
+                toolCall.status === "started" || toolCall.status === "updated" ? "is-active" : ""
+              } ${isSelected ? "is-selected" : ""}`}
+              onClick={() => {
+                setSelectedToolKey(isSelected ? null : renderKey);
+              }}
+              type="button"
+            >
+              <ToolStatusIcon status={toolCall.status} />
+              <span className="chatapp-tool-inline__label">{displayToolName(toolCall)}</span>
+              <span className={`chatapp-tool-inline__row-chevron ${isSelected ? "is-expanded" : ""}`} aria-hidden="true">
+                <span className="material-symbols-rounded">expand_more</span>
+              </span>
+            </button>
+            {isSelected ? <ToolCallPanel id={panelId} toolCall={toolCall} /> : null}
+          </div>
+        );
+      })}
+    </ActivityDisclosure>
   );
 }
 
@@ -263,11 +248,6 @@ function arrayRecords(value: unknown): Record<string, unknown>[] {
 
 function toolRenderKey(toolCall: ToolCallMessage, index: number): string {
   return toolCall.id || `${toolCall.name}-${index}`;
-}
-
-function toolTimestamp(createdAt: string | undefined, toolCalls: ToolCallMessage[]): string {
-  const firstToolTimestamp = toolCalls.find((toolCall) => toolCall.createdAt)?.createdAt;
-  return formatToolTime(createdAt || firstToolTimestamp || "");
 }
 
 function formatToolTime(value: string): string {

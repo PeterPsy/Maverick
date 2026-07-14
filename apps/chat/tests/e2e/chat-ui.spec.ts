@@ -110,6 +110,61 @@ test.describe("Chat app browser smoke", () => {
     await expect(page.getByRole("button", { name: "Agent runner: Default Chat" })).toBeVisible();
   });
 
+  test("expands structured goal lifecycle details without presenting them as a tool call", async ({ page }) => {
+    const state = await installChatMocks(page);
+    const turn = runtimeTurn("turn-goal", RUNTIME_SESSION_ID, "completed", "Inspect the active goal");
+    state.threads = [chatThread({ title: "Goal inspection", last_user_message_at: NOW })];
+    state.runtimeSessionTurns[RUNTIME_SESSION_ID] = [turn];
+    state.runtimeSessionEvents[RUNTIME_SESSION_ID] = [
+      {
+        event_id: "turn-goal-queued",
+        session_id: RUNTIME_SESSION_ID,
+        turn_id: turn.turn_id,
+        event_type: "runtime.turn.queued",
+        payload: { input_text: "Inspect the active goal", client_message_id: "client-turn-goal" },
+        created_at: NOW,
+      },
+      {
+        event_id: "turn-goal-cleared",
+        session_id: RUNTIME_SESSION_ID,
+        turn_id: turn.turn_id,
+        event_type: "runtime.step.updated",
+        payload: {
+          label: "thread goal cleared",
+          provider_event_type: "thread.goal.cleared",
+          raw: {
+            type: "thread.goal.cleared",
+            item: { threadId: "provider-thread-1" },
+          },
+        },
+        created_at: NOW,
+      },
+      {
+        event_id: "turn-goal-final",
+        session_id: RUNTIME_SESSION_ID,
+        turn_id: turn.turn_id,
+        event_type: "runtime.output.final",
+        payload: { text: "Goal state inspected." },
+        created_at: NOW,
+      },
+    ];
+
+    await page.goto("/apps/chat/");
+
+    const disclosure = page.getByRole("button", { name: /Goal status · No active goal/ });
+    await expect(disclosure).toBeVisible();
+    await expect(disclosure).toHaveAttribute("aria-expanded", "false");
+    await expect(page.getByRole("button", { name: /Tool Used/ })).toHaveCount(0);
+
+    await disclosure.click();
+    await expect(disclosure).toHaveAttribute("aria-expanded", "true");
+    await expect(page.getByRole("region", { name: "Goal status details" })).toContainText(
+      "No active goal is currently associated with this provider thread.",
+    );
+    await page.getByText("Technical details", { exact: true }).click();
+    await expect(page.getByRole("region", { name: "Goal status details" })).toContainText("provider-thread-1");
+  });
+
   test("keeps composer undo and redo reliable across rich edits", async ({ page }) => {
     await installChatMocks(page);
 

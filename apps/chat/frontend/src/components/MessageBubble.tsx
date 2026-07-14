@@ -7,7 +7,7 @@ import { InterAgentBoardButton } from "./InterAgentBoardButton";
 import { CopyMessageButton, type CopyMessageHandler } from "./MessageCopyButton";
 import { MessageFooter, formatMessageTime } from "./MessageFooter";
 import { MessageSpeechButton } from "./MessageSpeechButton";
-import { RuntimeStepMessage } from "./RuntimeStepMessage";
+import { isExpandableRuntimeStep, RuntimeStepMessage } from "./RuntimeStepMessage";
 import { StructuredContentMessage } from "./StructuredContentMessage";
 import { ToolCallInlineMessage } from "./ToolCallInlineMessage";
 
@@ -52,6 +52,7 @@ export function MessageBubble({
   const hasMobileFooter = message.role === "human" || message.role === "agent";
   const toolCalls = message.role === "tool" ? (message.toolCalls?.length ? message.toolCalls : message.toolCall ? [message.toolCall] : []) : [];
   const isToolMessage = toolCalls.length > 0;
+  const isExpandableStepMessage = message.role === "step" && message.step ? isExpandableRuntimeStep(message.step) : false;
 
   return (
     <article
@@ -72,7 +73,7 @@ export function MessageBubble({
       ) : isToolMessage ? (
         <ToolCallInlineMessage createdAt={message.createdAt} defaultExpanded={message.id === latestToolMessageId} toolCalls={toolCalls} />
       ) : message.role === "step" && message.step ? (
-        <RuntimeStepMessage step={message.step} />
+        <RuntimeStepMessage createdAt={message.createdAt} step={message.step} />
       ) : message.role === "structured" && message.structuredContent ? (
         <StructuredContentMessage content={message.structuredContent} messageId={message.id} />
       ) : (
@@ -92,7 +93,7 @@ export function MessageBubble({
           visibleContent={visibleContent}
         />
       )}
-      {isToolMessage ? null : <MessageMeta message={message} onCopyMessage={onCopyMessage} />}
+      {isToolMessage || isExpandableStepMessage ? null : <MessageMeta message={message} onCopyMessage={onCopyMessage} />}
     </article>
   );
 }

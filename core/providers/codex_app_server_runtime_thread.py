@@ -10,6 +10,7 @@ import threading
 from typing import Any, Callable
 
 from core.providers.models import RuntimeBackendLaunchSpec
+from core.providers.codex_app_server_runtime_state import _CodexAppServerRuntime, _RUNTIMES, _RUNTIMES_LOCK
 from core.providers.provider_codex import remove_codex_system_skills
 from core.runtime.process_control import register_runtime_process, unregister_runtime_process
 from core.runtime.runtime_session import RuntimeSessionRecord
@@ -52,7 +53,6 @@ def _ensure_runtime(
         runtime.reader_thread.start()
 
     _send_request(runtime, "initialize", {"clientInfo": {"name": "maverick", "version": "3.0.0"}}, timeout=10.0)
-    _remove_generated_system_skills(launch_spec=launch_spec, session=session)
     return runtime
 
 
@@ -98,10 +98,23 @@ def _thread_params(*, session: RuntimeSessionRecord, launch_spec: RuntimeBackend
 
 
 
-def _remove_generated_system_skills(*, launch_spec: RuntimeBackendLaunchSpec, session: RuntimeSessionRecord) -> None:
+def _remove_generated_system_skills_if_needed(
+    *,
+    runtime: _CodexAppServerRuntime,
+    launch_spec: RuntimeBackendLaunchSpec,
+    session: RuntimeSessionRecord,
+) -> bool:
+    """Remove provider-generated system skills only when this runtime home needs cleanup."""
     raw_runtime_home = str(launch_spec.env_overrides.get("CODEX_HOME") or "").strip()
     runtime_home = raw_runtime_home or f"{session.runtime_root}/codex-home"
-    remove_codex_system_skills(Path(runtime_home))
+    system_root = Path(runtime_home) / "skills" / ".system"
+    with runtime.generated_system_skills_lock:
+        already_clean = runtime.generated_system_skills_cleaned_home == runtime_home
+        if already_clean and not system_root.is_symlink() and not system_root.exists():
+            return False
+        remove_codex_system_skills(Path(runtime_home))
+        runtime.generated_system_skills_cleaned_home = runtime_home
+        return True
 
 
 

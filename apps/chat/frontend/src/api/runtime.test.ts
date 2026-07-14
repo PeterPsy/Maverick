@@ -132,6 +132,8 @@ describe("runtime API client", () => {
       clientSubmissionStartedAt: "2026-07-12T10:00:00.000Z",
       clientMetrics: {
         attachment_upload_ms: 0,
+        attachment_upload_ready_before_submit: true,
+        attachment_upload_wait_on_submit_ms: 0,
         prepared_session_ready_before_submit: false,
         prepared_session_wait_on_submit_ms: 0,
         prepare_refs_wait_on_submit_ms: 0,
@@ -143,6 +145,8 @@ describe("runtime API client", () => {
       client_submission_started_at: "2026-07-12T10:00:00.000Z",
       client_submission_metrics: {
         attachment_upload_ms: 0,
+        attachment_upload_ready_before_submit: true,
+        attachment_upload_wait_on_submit_ms: 0,
         prepared_session_ready_before_submit: false,
         prepared_session_wait_on_submit_ms: 0,
         prepare_refs_wait_on_submit_ms: 0,

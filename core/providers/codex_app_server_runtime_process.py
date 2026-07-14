@@ -2,14 +2,14 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 import queue
 import subprocess
-import threading
 import time
 from typing import Callable
 
 from core.providers.models import RuntimeBackendLaunchSpec
+from core.providers.codex_app_server_runtime_state import _RUNTIMES, _RUNTIMES_LOCK
 from core.runtime.execution_events import RuntimeExecutionEventSink
 from core.runtime.process_control import terminate_runtime_process, unregister_runtime_process
 from core.runtime.runtime_session import RuntimeSessionRecord
@@ -23,38 +23,6 @@ class CodexAppServerTurnResult:
     exit_code: int
     provider_thread_id: str
 
-
-
-@dataclass
-class _CodexAppServerRuntime:
-    """Live app-server process and request state for one runtime session."""
-
-    session_id: str
-    workspace_id: str
-    runtime_root: str
-    process: subprocess.Popen
-    request_lock: threading.Lock = field(default_factory=threading.Lock)
-    event_lock: threading.Lock = field(default_factory=threading.Lock)
-    provider_thread_lock: threading.Lock = field(default_factory=threading.Lock)
-    response_waiters: dict[int, queue.Queue] = field(default_factory=dict)
-    next_request_id: int = 1
-    provider_thread_id: str | None = None
-    current_provider_turn_id: str | None = None
-    current_event_sink: RuntimeExecutionEventSink | None = None
-    current_chunks: list[str] = field(default_factory=list)
-    streamed_agent_item_ids: set[str] = field(default_factory=set)
-    pending_agent_json_chunks: dict[str, list[str]] = field(default_factory=dict)
-    emitted_structured_keys: set[str] = field(default_factory=set)
-    current_error_text: str | None = None
-    current_completion_received: bool = False
-    completion_queue: queue.Queue = field(default_factory=lambda: queue.Queue(maxsize=1))
-    reader_thread: threading.Thread | None = None
-
-
-_RUNTIMES: dict[str, _CodexAppServerRuntime] = {}
-_RUNTIMES_LOCK = threading.Lock()
-
-
 def prewarm_codex_app_server_runtime(
     *,
     session: RuntimeSessionRecord,
@@ -63,7 +31,7 @@ def prewarm_codex_app_server_runtime(
 ) -> str:
     """Start the Codex app-server and bind a provider thread before the next turn."""
     runtime = _ensure_runtime(session=session, launch_spec=launch_spec, command_runner=command_runner)
-    _remove_generated_system_skills(launch_spec=launch_spec, session=session)
+    _remove_generated_system_skills_if_needed(runtime=runtime, launch_spec=launch_spec, session=session)
     return _ensure_provider_thread(runtime=runtime, session=session, launch_spec=launch_spec, on_provider_thread_id=None)
 
 
@@ -89,7 +57,23 @@ def execute_codex_app_server_turn(
     ensure_runtime_ms = (time.perf_counter() - ensure_runtime_started_at) * 1000
     if on_provider_startup_event is not None:
         on_provider_startup_event("ensure_runtime_completed", {"ensure_runtime_ms": ensure_runtime_ms})
-    _remove_generated_system_skills(launch_spec=launch_spec, session=session)
+    if on_provider_startup_event is not None:
+        on_provider_startup_event("remove_generated_skills_started", {})
+    remove_generated_skills_started_at = time.perf_counter()
+    generated_skills_removed = _remove_generated_system_skills_if_needed(
+        runtime=runtime,
+        launch_spec=launch_spec,
+        session=session,
+    )
+    remove_generated_skills_ms = (time.perf_counter() - remove_generated_skills_started_at) * 1000
+    if on_provider_startup_event is not None:
+        on_provider_startup_event(
+            "remove_generated_skills_completed",
+            {
+                "remove_generated_skills_ms": remove_generated_skills_ms,
+                "source": "removed" if generated_skills_removed else "already_clean",
+            },
+        )
     if on_provider_startup_event is not None:
         on_provider_startup_event("ensure_thread_started", {})
     ensure_thread_started_at = time.perf_counter()
@@ -103,6 +87,9 @@ def execute_codex_app_server_turn(
                 "provider_thread_id": provider_thread_id,
             },
         )
+    if on_provider_startup_event is not None:
+        on_provider_startup_event("event_sink_reset_started", {})
+    event_sink_reset_started_at = time.perf_counter()
     with runtime.event_lock:
         runtime.current_event_sink = event_sink
         runtime.current_chunks = []
@@ -112,6 +99,9 @@ def execute_codex_app_server_turn(
         runtime.current_error_text = None
         runtime.current_completion_received = False
         runtime.completion_queue = queue.Queue(maxsize=1)
+    event_sink_reset_ms = (time.perf_counter() - event_sink_reset_started_at) * 1000
+    if on_provider_startup_event is not None:
+        on_provider_startup_event("event_sink_reset_completed", {"event_sink_reset_ms": event_sink_reset_ms})
 
     _debug_log(
         runtime,
@@ -126,7 +116,11 @@ def execute_codex_app_server_turn(
     if on_provider_startup_event is not None:
         on_provider_startup_event("turn_start_write_started", {"provider_thread_id": provider_thread_id})
 
+    turn_start_sent_at: float | None = None
+
     def record_turn_start_sent(metadata: dict[str, object]) -> None:
+        nonlocal turn_start_sent_at
+        turn_start_sent_at = time.perf_counter()
         enriched_metadata = {
             **metadata,
             "provider_thread_id": provider_thread_id,
@@ -138,6 +132,7 @@ def execute_codex_app_server_turn(
         if on_provider_turn_start_sent is not None:
             on_provider_turn_start_sent(enriched_metadata)
 
+    turn_start_request_started_at = time.perf_counter()
     turn = _send_request(
         runtime,
         "turn/start",
@@ -151,6 +146,9 @@ def execute_codex_app_server_turn(
         timeout=20.0,
         on_sent=record_turn_start_sent if on_provider_startup_event is not None or on_provider_turn_start_sent is not None else None,
     ).get("turn")
+    turn_start_request_ack_ms = (
+        time.perf_counter() - (turn_start_sent_at or turn_start_request_started_at)
+    ) * 1000
     if isinstance(turn, dict):
         provider_turn_id = str(turn.get("id") or "").strip()
         if provider_turn_id:
@@ -162,6 +160,9 @@ def execute_codex_app_server_turn(
                 "provider_turn_id": runtime.current_provider_turn_id or "",
                 "ensure_runtime_ms": ensure_runtime_ms,
                 "ensure_provider_thread_ms": ensure_provider_thread_ms,
+                "event_sink_reset_ms": event_sink_reset_ms,
+                "remove_generated_skills_ms": remove_generated_skills_ms,
+                "turn_start_request_ack_ms": turn_start_request_ack_ms,
             }
         )
     _debug_log(

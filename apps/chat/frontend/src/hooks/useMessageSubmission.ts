@@ -26,7 +26,13 @@ import { hasInvalidAttachments } from "../lib/attachments";
 import { ActiveAppContext, mergeAppReferences } from "../lib/activeAppContext";
 import { appReferencesFromText } from "../lib/mentions";
 import type { MentionItem } from "../lib/mentions";
-import { PendingMessage, QueuedMessage, attachmentToMessageAttachment, uploadComposerAttachment } from "../lib/messageState";
+import {
+  PendingMessage,
+  QueuedMessage,
+  attachmentToMessageAttachment,
+  composerAttachmentsUploadSnapshot,
+  uploadComposerAttachment,
+} from "../lib/messageState";
 import { mergeRuntimeEvents } from "../lib/runtimeEvents";
 import { loadDefaultSystemPrompt } from "../lib/activeAppContext";
 import { migratePersistedQueuedMessages } from "../lib/queuedMessages";
@@ -420,6 +426,7 @@ export function useMessageSubmission({
       threadIds: new Set(threads.map((item) => item.thread_id)),
     };
     const abortController = new AbortController();
+    const prepareDelayMs = appReferences.some((reference) => reference.app_id === "storage") ? 0 : 300;
     const timeout = window.setTimeout(() => {
       if (activeThread?.runtime_session_id) {
         startPreparedAppReferencesRequest(activeThread.runtime_session_id, appReferences);
@@ -449,7 +456,7 @@ export function useMessageSubmission({
         .catch((error) => {
           void error;
         });
-    }, 300);
+    }, prepareDelayMs);
     return () => {
       window.clearTimeout(timeout);
       abortController.abort();
@@ -465,6 +472,14 @@ export function useMessageSubmission({
     selectedAgentRuntimeConfig,
     threads,
   ]);
+
+  useEffect(() => {
+    attachments.forEach((attachment) => {
+      if (attachment.isImage && !attachment.warning) {
+        void uploadComposerAttachment(attachment).catch(() => undefined);
+      }
+    });
+  }, [attachments]);
 
   const setPendingUserMessages = useCallback<Dispatch<SetStateAction<PendingMessage[]>>>((action) => {
     setItemsForConversation(setPendingUserMessagesByConversationKey, activeConversationKeyRef.current, action);
@@ -1001,6 +1016,20 @@ export function useMessageSubmission({
     return uploadedAttachments;
   }
 
+  function recordAttachmentUploadMetrics(
+    metrics: RuntimeTurnClientMetrics,
+    attachmentsToUpload: ComposerAttachment[],
+    readyBeforeSubmit: boolean,
+    waitOnSubmitMs: number,
+  ) {
+    const completed = composerAttachmentsUploadSnapshot(attachmentsToUpload);
+    metrics.attachment_upload_ready_before_submit = readyBeforeSubmit;
+    metrics.attachment_upload_wait_on_submit_ms = waitOnSubmitMs;
+    if (typeof completed.uploadMs === "number") {
+      metrics.attachment_upload_ms = completed.uploadMs;
+    }
+  }
+
   async function submitWithPostMetric<T>(metrics: RuntimeTurnClientMetrics, action: () => Promise<T>): Promise<T> {
     const startedAt = performance.now();
     try {
@@ -1445,9 +1474,15 @@ export function useMessageSubmission({
       let messageAttachments: QueuedMessage["attachments"];
       try {
         if (targetAttachments.length) {
+          const readyBeforeSubmit = composerAttachmentsUploadSnapshot(targetAttachments).readyBeforeSubmit;
           const attachmentUploadStartedAt = performance.now();
           messageAttachments = await Promise.all(targetAttachments.map(uploadComposerAttachment));
-          clientSubmissionMetrics.attachment_upload_ms = elapsedMs(attachmentUploadStartedAt);
+          recordAttachmentUploadMetrics(
+            clientSubmissionMetrics,
+            targetAttachments,
+            readyBeforeSubmit,
+            elapsedMs(attachmentUploadStartedAt),
+          );
         } else {
           messageAttachments = [];
         }
@@ -1485,9 +1520,15 @@ export function useMessageSubmission({
     try {
       let uploadedAttachments: QueuedMessage["attachments"] = [];
       if (targetAttachments.length) {
+        const readyBeforeSubmit = composerAttachmentsUploadSnapshot(targetAttachments).readyBeforeSubmit;
         const attachmentUploadStartedAt = performance.now();
         uploadedAttachments = await uploadAttachmentsWithAbort(targetAttachments, abortController.signal);
-        clientSubmissionMetrics.attachment_upload_ms = elapsedMs(attachmentUploadStartedAt);
+        recordAttachmentUploadMetrics(
+          clientSubmissionMetrics,
+          targetAttachments,
+          readyBeforeSubmit,
+          elapsedMs(attachmentUploadStartedAt),
+        );
       }
       const message = {
         ...localMessage,

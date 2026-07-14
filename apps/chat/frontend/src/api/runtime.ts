@@ -64,9 +64,14 @@ function serializableClientMetrics(
   }
   const payload: RuntimeTurnClientMetrics = {};
   const numericKeys: Array<
-    "attachment_upload_ms" | "prepare_refs_wait_on_submit_ms" | "prepared_session_wait_on_submit_ms" | "submit_post_ms"
+    | "attachment_upload_ms"
+    | "attachment_upload_wait_on_submit_ms"
+    | "prepare_refs_wait_on_submit_ms"
+    | "prepared_session_wait_on_submit_ms"
+    | "submit_post_ms"
   > = [
     "attachment_upload_ms",
+    "attachment_upload_wait_on_submit_ms",
     "prepare_refs_wait_on_submit_ms",
     "prepared_session_wait_on_submit_ms",
   ];
@@ -81,6 +86,9 @@ function serializableClientMetrics(
   }
   if (typeof metrics.prepared_session_ready_before_submit === "boolean") {
     payload.prepared_session_ready_before_submit = metrics.prepared_session_ready_before_submit;
+  }
+  if (typeof metrics.attachment_upload_ready_before_submit === "boolean") {
+    payload.attachment_upload_ready_before_submit = metrics.attachment_upload_ready_before_submit;
   }
   return Object.keys(payload).length ? payload : undefined;
 }

@@ -59,8 +59,6 @@ def clear_runtime_app_reference_materialization_cache() -> None:
     with _RUNTIME_APP_REFERENCE_CACHE_LOCK:
         _RUNTIME_APP_REFERENCE_CACHE.clear()
         _RUNTIME_APP_REFERENCE_CACHE_EVICTIONS = 0
-    with _RUNTIME_APP_REFERENCE_IN_FLIGHT_LOCK:
-        _RUNTIME_APP_REFERENCE_IN_FLIGHT.clear()
 
 
 def runtime_app_reference_materialization_cache_stats() -> RuntimeAppReferenceCacheStats:

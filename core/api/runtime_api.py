@@ -88,12 +88,16 @@ RUNTIME_THREAD_PAGE_DEFAULT_LIMIT = 50
 RUNTIME_THREAD_PAGE_MAX_LIMIT = 100
 CLIENT_SUBMISSION_NUMERIC_METRICS = {
     "attachment_upload_ms",
+    "attachment_upload_wait_on_submit_ms",
     "prepare_refs_wait_on_submit_ms",
     "prepared_session_wait_on_submit_ms",
     "submit_post_ms",
 }
 CLIENT_SUBMISSION_INITIAL_NUMERIC_METRICS = CLIENT_SUBMISSION_NUMERIC_METRICS - {"submit_post_ms"}
-CLIENT_SUBMISSION_BOOLEAN_METRICS = {"prepared_session_ready_before_submit"}
+CLIENT_SUBMISSION_BOOLEAN_METRICS = {
+    "attachment_upload_ready_before_submit",
+    "prepared_session_ready_before_submit",
+}
 
 
 @dataclass(frozen=True)

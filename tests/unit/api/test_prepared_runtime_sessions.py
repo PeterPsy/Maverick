@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import replace
 from datetime import UTC, datetime, timedelta
+from pathlib import Path
 from threading import Event, Thread
 from types import SimpleNamespace
 import tempfile
@@ -14,6 +15,7 @@ from core.api.platform_state import bootstrap_platform_state
 from core.api.app_reference_payloads import (
     _runtime_reference_cache_fingerprint,
     clear_runtime_app_reference_materialization_cache,
+    materialize_runtime_app_references_with_metrics,
     runtime_app_reference_materialization_cache_stats,
 )
 from core.apps.service import install_store_app, register_app_source_from_contract
@@ -87,6 +89,79 @@ class PreparedRuntimeSessionsApiTestCase(AppReferenceApiTestSupport, unittest.Te
 
         self.assertEqual(first, second)
         self.assertNotEqual(session_scoped_first, session_scoped_second)
+
+    def test_workspace_user_prepare_and_worker_materialization_share_single_flight_across_sessions(self) -> None:
+        context = SimpleNamespace(
+            workspace_id="default",
+            user=SimpleNamespace(user_id="user-1", platform_role="member"),
+        )
+        mcp_context = SimpleNamespace(workspace_role="member", effective_mode="sandbox")
+        references = [{"type": "entity", "app_id": "storage", "entity_type": "file", "entity_id": "file-1"}]
+        provider = {
+            "app_id": "storage",
+            "public_app_id": "storage",
+            "mount_app_id": "storage",
+            "binding_fingerprint": "storage-binding",
+            "tools": {"resolve": "storage_reference_resolve"},
+            "entities": [
+                {
+                    "entity_type": "file",
+                    "resolvable": True,
+                    "summarizable": False,
+                    "deep_link_supported": True,
+                    "cache_scope": "workspace_user",
+                }
+            ],
+        }
+        reference_context = SimpleNamespace(
+            providers_for_app_ids=lambda _app_ids: {"storage": provider},
+            visible_apps_for_app_ids=lambda _app_ids: {},
+        )
+        first_materialize_entered = Event()
+        release_materialize = Event()
+        calls = 0
+        results: list[object | None] = [None, None]
+
+        def fake_materialize(*_args, **_kwargs):
+            nonlocal calls
+            calls += 1
+            first_materialize_entered.set()
+            self.assertTrue(release_materialize.wait(2), "prepare materialization was not released")
+            return {
+                "type": "entity",
+                "app_id": "storage",
+                "entity_type": "file",
+                "entity_id": "file-1",
+                "label": "Stored file",
+            }
+
+        def materialize(index: int, session_id: str) -> None:
+            results[index] = materialize_runtime_app_references_with_metrics(
+                SimpleNamespace(observability_store=None),
+                context=context,
+                references=references,
+                start_path=Path("/tmp"),
+                reference_context=reference_context,
+                session_id=session_id,
+            )
+
+        with patch("core.api.app_reference_payloads.mcp_context_for_request", return_value=mcp_context), patch(
+            "core.api.app_reference_payloads._materialize_runtime_entity_reference",
+            side_effect=fake_materialize,
+        ):
+            prepare_thread = Thread(target=materialize, args=(0, "prepared-session"))
+            worker_thread = Thread(target=materialize, args=(1, "existing-session"))
+            prepare_thread.start()
+            self.assertTrue(first_materialize_entered.wait(2), "prepare did not enter materialization")
+            worker_thread.start()
+            time.sleep(0.05)
+            release_materialize.set()
+            prepare_thread.join(2)
+            worker_thread.join(2)
+
+        self.assertEqual(calls, 1)
+        self.assertTrue(all(result is not None for result in results))
+        self.assertEqual(sorted(getattr(result, "reference_cache_hit") for result in results), [False, True])
 
     def test_prepare_only_session_waits_for_hot_provider_and_reports_readiness(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:

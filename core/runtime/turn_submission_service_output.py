@@ -546,8 +546,12 @@ def _record_provider_dispatching(
 _PROVIDER_STARTUP_PHASES = {
     "ensure_runtime_started",
     "ensure_runtime_completed",
+    "remove_generated_skills_started",
+    "remove_generated_skills_completed",
     "ensure_thread_started",
     "ensure_thread_completed",
+    "event_sink_reset_started",
+    "event_sink_reset_completed",
     "turn_start_write_started",
     "turn_start_write_sent",
 }

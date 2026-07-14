@@ -176,6 +176,8 @@ class RuntimeSubmitIdempotencyApiTestCase(AppReferenceApiTestSupport, unittest.T
                 "client_submission_started_at": datetime.now(tz=UTC).isoformat(),
                 "client_submission_metrics": {
                     "attachment_upload_ms": 0,
+                    "attachment_upload_ready_before_submit": True,
+                    "attachment_upload_wait_on_submit_ms": 0,
                     "prepare_refs_wait_on_submit_ms": 12.25,
                     "prepared_session_ready_before_submit": False,
                     "prepared_session_wait_on_submit_ms": 0,
@@ -221,6 +223,8 @@ class RuntimeSubmitIdempotencyApiTestCase(AppReferenceApiTestSupport, unittest.T
                 self.assertGreaterEqual(metric_payload[metric_name], 0)
             self.assertGreaterEqual(metric_payload["client_click_to_queued_ms"], 0)
             self.assertEqual(metric_payload["attachment_upload_ms"], 0)
+            self.assertEqual(metric_payload["attachment_upload_ready_before_submit"], True)
+            self.assertEqual(metric_payload["attachment_upload_wait_on_submit_ms"], 0)
             self.assertEqual(metric_payload["prepare_refs_wait_on_submit_ms"], 12.25)
             self.assertEqual(metric_payload["prepared_session_ready_before_submit"], False)
             self.assertEqual(metric_payload["prepared_session_wait_on_submit_ms"], 0)

@@ -403,12 +403,12 @@ async function clickSend(element: HTMLElement) {
   });
 }
 
-async function addTextAttachment(element: HTMLElement, filename = "notes.txt") {
+async function addAttachment(element: HTMLElement, filename: string, contentType: string) {
   const fileInput = element.querySelector('input[type="file"]') as HTMLInputElement | null;
   if (!fileInput) {
     throw new Error("Attachment file input was not rendered.");
   }
-  const file = new File(["attachment"], filename, { type: "text/plain" });
+  const file = new File(["attachment"], filename, { type: contentType });
   Object.defineProperty(fileInput, "files", {
     configurable: true,
     value: [file],
@@ -416,6 +416,14 @@ async function addTextAttachment(element: HTMLElement, filename = "notes.txt") {
   await act(async () => {
     fileInput.dispatchEvent(new Event("change", { bubbles: true }));
   });
+}
+
+async function addTextAttachment(element: HTMLElement, filename = "notes.txt") {
+  await addAttachment(element, filename, "text/plain");
+}
+
+async function addImageAttachment(element: HTMLElement, filename = "photo.png") {
+  await addAttachment(element, filename, "image/png");
 }
 
 function deferred<T>() {
@@ -807,9 +815,6 @@ describe("App thread navigation", () => {
       expect(element.querySelector('[role="textbox"]')).not.toBeNull();
     });
     await typeComposerMessage(element, "review @Notes [ref:storage/file/file_1]");
-    await act(async () => {
-      await new Promise((resolve) => setTimeout(resolve, 350));
-    });
 
     await waitForAssertion(() => {
       expect(prepareRuntimeSessionAppReferences).toHaveBeenCalledWith(
@@ -824,6 +829,54 @@ describe("App thread navigation", () => {
         expect.objectContaining({ signal: expect.any(AbortSignal) }),
       );
     });
+  });
+
+  it("uploads an image immediately after selection and reuses it on submit", async () => {
+    const upload = deferred<Awaited<ReturnType<typeof uploadWorkspaceFile>>>();
+    vi.mocked(uploadWorkspaceFile).mockReturnValue(upload.promise);
+    const element = await renderApp({
+      navigationScope: "floating-window",
+      newChatRequestId: "request-image-preupload",
+      runtimeThreads: [],
+      runtimeThreadsLoaded: true,
+    });
+
+    await waitForAssertion(() => {
+      expect(element.textContent).toContain("How can I help today?");
+    });
+    await addImageAttachment(element);
+
+    await waitForAssertion(() => {
+      expect(uploadWorkspaceFile).toHaveBeenCalledTimes(1);
+    });
+    expect(createRuntimeSessionWithTurn).not.toHaveBeenCalled();
+
+    await act(async () => {
+      upload.resolve(uploadedWorkspaceFile("photo.png"));
+      await upload.promise;
+      await Promise.resolve();
+    });
+    await typeComposerMessage(element, "review this photo");
+    await clickSend(element);
+
+    await waitForAssertion(() => {
+      expect(createRuntimeSessionWithTurn).toHaveBeenCalledWith(
+        expect.objectContaining({
+          attachments: [
+            expect.objectContaining({
+              fileId: "file-photo.png",
+              relativePath: "storage/uploads/photo.png",
+            }),
+          ],
+          clientMetrics: expect.objectContaining({
+            attachment_upload_ready_before_submit: true,
+            attachment_upload_wait_on_submit_ms: expect.any(Number),
+            attachment_upload_ms: expect.any(Number),
+          }),
+        }),
+      );
+    });
+    expect(uploadWorkspaceFile).toHaveBeenCalledTimes(1);
   });
 
   it("keeps uploaded draft attachments bound to the original draft after navigation", async () => {

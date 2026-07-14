@@ -359,6 +359,8 @@ export type RuntimeTurnSubmitResponse = {
 
 export type RuntimeTurnClientMetrics = {
   attachment_upload_ms?: number;
+  attachment_upload_ready_before_submit?: boolean;
+  attachment_upload_wait_on_submit_ms?: number;
   prepare_refs_wait_on_submit_ms?: number;
   prepared_session_ready_before_submit?: boolean;
   prepared_session_wait_on_submit_ms?: number;

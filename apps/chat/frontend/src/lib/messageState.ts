@@ -23,6 +23,14 @@ export type QueuedMessage = {
   clientSubmissionMetrics?: RuntimeTurnClientMetrics;
 };
 
+type ComposerAttachmentUploadRecord = {
+  startedAt: number;
+  completedAt: number | null;
+  promise: Promise<ChatMessageAttachment>;
+};
+
+const composerAttachmentUploads = new WeakMap<File, ComposerAttachmentUploadRecord>();
+
 export function attachmentToMessageAttachment(attachment: ComposerAttachment): ChatMessageAttachment {
   return {
     id: attachment.id,
@@ -49,14 +57,59 @@ function fileToBase64(file: File): Promise<string> {
 }
 
 export async function uploadComposerAttachment(attachment: ComposerAttachment): Promise<ChatMessageAttachment> {
-  const uploaded = await uploadWorkspaceFile({
-    filename: attachment.name,
-    content_type: attachment.type,
-    content_base64: await fileToBase64(attachment.file),
-  });
-  return {
-    ...attachmentToMessageAttachment(attachment),
-    fileId: uploaded.file.file_id,
-    relativePath: uploaded.file.relative_path,
+  const existing = composerAttachmentUploads.get(attachment.file);
+  if (existing) {
+    return existing.promise;
+  }
+  const record: ComposerAttachmentUploadRecord = {
+    startedAt: performance.now(),
+    completedAt: null,
+    promise: Promise.resolve({} as ChatMessageAttachment),
   };
+  record.promise = fileToBase64(attachment.file)
+    .then((contentBase64) =>
+      uploadWorkspaceFile({
+        filename: attachment.name,
+        content_type: attachment.type,
+        content_base64: contentBase64,
+      }),
+    )
+    .then((uploaded) => {
+      record.completedAt = performance.now();
+      return {
+        ...attachmentToMessageAttachment(attachment),
+        fileId: uploaded.file.file_id,
+        relativePath: uploaded.file.relative_path,
+      };
+    })
+    .catch((error) => {
+      if (composerAttachmentUploads.get(attachment.file) === record) {
+        composerAttachmentUploads.delete(attachment.file);
+      }
+      throw error;
+    });
+  composerAttachmentUploads.set(attachment.file, record);
+  return record.promise;
+}
+
+export function composerAttachmentsUploadSnapshot(attachments: ComposerAttachment[]): {
+  readyBeforeSubmit: boolean;
+  uploadMs?: number;
+} {
+  const records = attachments.map((attachment) => composerAttachmentUploads.get(attachment.file));
+  const completedRecords = records.filter(
+    (record): record is ComposerAttachmentUploadRecord => record !== undefined && record.completedAt !== null,
+  );
+  if (!attachments.length) {
+    return { readyBeforeSubmit: false };
+  }
+  const snapshot: { readyBeforeSubmit: boolean; uploadMs?: number } = {
+    readyBeforeSubmit: completedRecords.length === attachments.length,
+  };
+  if (completedRecords.length === attachments.length) {
+    const startedAt = Math.min(...completedRecords.map((record) => record.startedAt));
+    const completedAt = Math.max(...completedRecords.map((record) => record.completedAt as number));
+    snapshot.uploadMs = Math.max(0, completedAt - startedAt);
+  }
+  return snapshot;
 }

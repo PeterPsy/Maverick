@@ -50,8 +50,12 @@ INTERESTING_EVENT_TYPES = {
     "runtime.provider.dispatching",
     "runtime.provider.ensure_runtime_started",
     "runtime.provider.ensure_runtime_completed",
+    "runtime.provider.remove_generated_skills_started",
+    "runtime.provider.remove_generated_skills_completed",
     "runtime.provider.ensure_thread_started",
     "runtime.provider.ensure_thread_completed",
+    "runtime.provider.event_sink_reset_started",
+    "runtime.provider.event_sink_reset_completed",
     "runtime.provider.turn_start_write_started",
     "runtime.provider.turn_start_write_sent",
     "runtime.provider.turn_start_sent",
@@ -89,8 +93,12 @@ EVENT_KEYS = {
     "runtime.provider.dispatching": "provider_dispatching",
     "runtime.provider.ensure_runtime_started": "ensure_runtime_started",
     "runtime.provider.ensure_runtime_completed": "ensure_runtime_completed",
+    "runtime.provider.remove_generated_skills_started": "remove_generated_skills_started",
+    "runtime.provider.remove_generated_skills_completed": "remove_generated_skills_completed",
     "runtime.provider.ensure_thread_started": "ensure_thread_started",
     "runtime.provider.ensure_thread_completed": "ensure_thread_completed",
+    "runtime.provider.event_sink_reset_started": "event_sink_reset_started",
+    "runtime.provider.event_sink_reset_completed": "event_sink_reset_completed",
     "runtime.provider.turn_start_write_started": "turn_start_write_started",
     "runtime.provider.turn_start_write_sent": "turn_start_write_sent",
     "runtime.provider.turn_start_sent": "turn_start_sent",
@@ -102,6 +110,7 @@ LATENCY_METRIC_NAMES = (
     "prepared_session_wait_on_submit_ms",
     "prepare_refs_wait_on_submit_ms",
     "attachment_upload_ms",
+    "attachment_upload_wait_on_submit_ms",
     "submit_post_ms",
     "claim_ms",
     "session_create_ms",
@@ -143,8 +152,11 @@ LATENCY_METRIC_NAMES = (
     "app_reference_prepare_validate_ms",
     "app_reference_prepare_materialize_ms",
     "ensure_runtime_ms",
+    "remove_generated_skills_ms",
     "ensure_provider_thread_ms",
+    "event_sink_reset_ms",
     "turn_start_write_ms",
+    "turn_start_request_ack_ms",
     "turn_start_sent_to_provider_accepted_ms",
     "queued_to_provider_accepted_ms",
     "receive_to_provider_accepted_ms",
@@ -161,18 +173,22 @@ BOOLEAN_METRIC_NAMES = (
     "reference_cache_hit",
     "launch_cache_hit",
     "app_reference_prepare_cache_hit",
+    "attachment_upload_ready_before_submit",
     "prepared_session_ready_before_submit",
 )
 ATTRIBUTE_NAMES = ("launch_cache_fingerprint_prefix",)
 METRIC_NAMES = LATENCY_METRIC_NAMES + COUNT_METRIC_NAMES + BOOLEAN_METRIC_NAMES
 COHORT_NAMES = ("codex_cold", "codex_warm", "plain_hosted", "other_provider")
+REPORT_COHORT_NAMES = COHORT_NAMES + ("prepared_ready",)
 CODEX_PROVIDER_ID = "codex"
 HOSTED_TEXT_RUNTIME_PROVIDER_ID = "hosted-text-runtime"
+SESSION_SCOPED_EVENT_ASSOCIATION_WINDOW = timedelta(seconds=30)
 SLO_SCOPE_BY_COHORT = {
     "codex_cold": "codex_runtime_cold",
     "codex_warm": "codex_runtime_warm",
     "plain_hosted": "hosted_http_provider",
     "other_provider": "other_provider",
+    "prepared_ready": "prepared_runtime_session",
 }
 
 
@@ -270,6 +286,10 @@ def build_report(
         cohort_name: _summarize_cohort(cohort_name, [item for item in filtered if item.cohort == cohort_name])
         for cohort_name in COHORT_NAMES
     }
+    cohorts["prepared_ready"] = _summarize_cohort(
+        "prepared_ready",
+        [item for item in filtered if item.metrics.get("prepared_session_ready_before_submit", 0.0) >= 1.0],
+    )
     report: dict[str, Any] = {
         "repository_root": str(repository_root),
         "generated_at": datetime.now(tz=UTC).isoformat(),
@@ -296,12 +316,18 @@ def build_report(
             ),
             "receive_to_provider_accepted_ms is reconstructed as receive_to_queued_ms plus queued_to_provider_accepted_ms when both components are available.",
             "client_click_to_queued_ms comes from client_submission_started_at when Chat includes it in the submit payload; bad client clock values are ignored.",
-            "prepared_session_wait_on_submit_ms, prepare_refs_wait_on_submit_ms, attachment_upload_ms, and prepared_session_ready_before_submit come from Chat client submit instrumentation.",
+            (
+                "prepared_session_wait_on_submit_ms, prepare_refs_wait_on_submit_ms, attachment upload timing, "
+                "and prepared_session_ready_before_submit come from Chat client submit instrumentation. "
+                "attachment_upload_ms measures the upload itself, while attachment_upload_wait_on_submit_ms "
+                "isolates the part still paid after the user submits."
+            ),
             "submit_post_ms comes from a best-effort client metric event recorded after the runtime submit ack.",
             "first_turn_receive_to_provider_accepted_ms is populated only for the first observed provider turn in each session.",
             (
                 "prewarm_wait_ms and prewarm_total_ms come from runtime.turn.prewarm_waited when the turn waited, "
-                "or from session-scoped runtime.prewarm.completed for the next observed turn when prewarm had already completed."
+                "or from session-scoped runtime.prewarm.completed for the next observed turn when prewarm had already completed. "
+                "Session-scoped events are associated only when they precede the turn queue marker by at most 30 seconds."
             ),
             "queued_to_worker_entered_ms uses runtime.turn.worker_entered; queued_to_worker_started_ms remains as the legacy activation-adjacent span.",
             (
@@ -317,8 +343,14 @@ def build_report(
                 "materialized_reference_count and reference_cache_hit come from materialization/provider-input events when present."
             ),
             "app_reference_materialize_ms and provider_input_build_ms are emitted only by runtime paths with the newer granular instrumentation.",
-            "ensure_runtime_ms, ensure_provider_thread_ms, and turn_start_write_ms are backed by separate provider startup start/completed events when available.",
-            "app_reference_prepare_ms fields come from /app-references/prepare and are assigned to the next observed turn in that session when present.",
+            (
+                "ensure_runtime_ms, remove_generated_skills_ms, ensure_provider_thread_ms, event_sink_reset_ms, "
+                "turn_start_write_ms, and turn_start_request_ack_ms are backed by separate provider startup events when available."
+            ),
+            (
+                "app_reference_prepare_ms fields come from /app-references/prepare and are assigned to the next observed turn "
+                "in that session only when preparation preceded the queue marker by at most 30 seconds."
+            ),
             "launch_cache_hit, launch_cache_fingerprint_ms, skill_count, and launch_cache_fingerprint_prefix come from runtime.provider.dispatching when present.",
             "claim_ms, session_create_ms, reference_validate_ms, queue_turn_ms, and post_queue_response_ms are emitted only by newer runtime submission paths.",
             "The report intentionally omits input text and provider payload bodies beyond numeric latency spans.",
@@ -380,7 +412,7 @@ def print_human_report(report: dict[str, Any]) -> None:
         if len(summary["warnings"]) > 5:
             print(f"  ... {len(summary['warnings']) - 5} more")
 
-    for cohort_name in COHORT_NAMES:
+    for cohort_name in REPORT_COHORT_NAMES:
         cohort = report["cohorts"][cohort_name]
         print("")
         print(
@@ -718,7 +750,7 @@ def _completed_prewarm_by_turn(
         if not session_events:
             continue
         has_turn_prewarm_metric = "prewarm_total_ms" in metrics
-        event_deadline = anchor_at if has_turn_prewarm_metric else _turn_order_sort_value(group, fallback_at=anchor_at)[0]
+        event_deadline = _turn_order_sort_value(group, fallback_at=anchor_at)[0]
         index = next_index_by_session.get(session_key, 0)
         eligible_index = index - 1
         while index < len(session_events) and session_events[index].created_at <= event_deadline:
@@ -726,8 +758,9 @@ def _completed_prewarm_by_turn(
             index += 1
         if eligible_index >= next_index_by_session.get(session_key, 0):
             next_index_by_session[session_key] = eligible_index + 1
-            if not has_turn_prewarm_metric:
-                assigned[(group.workspace_id, group.session_id, group.turn_id)] = session_events[eligible_index]
+            candidate = session_events[eligible_index]
+            if not has_turn_prewarm_metric and _session_event_is_close_to_turn(candidate, turn_at=event_deadline):
+                assigned[(group.workspace_id, group.session_id, group.turn_id)] = candidate
     return assigned
 
 
@@ -758,8 +791,15 @@ def _completed_app_reference_prepare_by_turn(
             index += 1
         if eligible_index >= next_index_by_session.get(session_key, 0):
             next_index_by_session[session_key] = eligible_index + 1
-            assigned[(group.workspace_id, group.session_id, group.turn_id)] = session_events[eligible_index]
+            candidate = session_events[eligible_index]
+            if _session_event_is_close_to_turn(candidate, turn_at=event_deadline):
+                assigned[(group.workspace_id, group.session_id, group.turn_id)] = candidate
     return assigned
+
+
+def _session_event_is_close_to_turn(event: RuntimeEventSnapshot, *, turn_at: datetime) -> bool:
+    elapsed = turn_at - event.created_at
+    return timedelta(0) <= elapsed <= SESSION_SCOPED_EVENT_ASSOCIATION_WINDOW
 
 
 def _turn_metrics(group: TurnEvents) -> dict[str, float]:
@@ -791,8 +831,12 @@ def _turn_metrics(group: TurnEvents) -> dict[str, float]:
     dispatching = events.get("provider_dispatching")
     ensure_runtime_started = events.get("ensure_runtime_started")
     ensure_runtime_completed = events.get("ensure_runtime_completed")
+    remove_generated_skills_started = events.get("remove_generated_skills_started")
+    remove_generated_skills_completed = events.get("remove_generated_skills_completed")
     ensure_thread_started = events.get("ensure_thread_started")
     ensure_thread_completed = events.get("ensure_thread_completed")
+    event_sink_reset_started = events.get("event_sink_reset_started")
+    event_sink_reset_completed = events.get("event_sink_reset_completed")
     turn_start_write_started = events.get("turn_start_write_started")
     turn_start_write_sent = events.get("turn_start_write_sent")
     sent = events.get("turn_start_sent")
@@ -801,8 +845,18 @@ def _turn_metrics(group: TurnEvents) -> dict[str, float]:
     if receive is not None:
         _set_metric(metrics, "receive_to_queued_ms", _numeric(receive.payload.get("receive_to_queued_ms")))
         _set_metric(metrics, "client_click_to_queued_ms", _numeric(receive.payload.get("client_click_to_queued_ms")))
-        for key in ("prepared_session_wait_on_submit_ms", "prepare_refs_wait_on_submit_ms", "attachment_upload_ms"):
+        for key in (
+            "prepared_session_wait_on_submit_ms",
+            "prepare_refs_wait_on_submit_ms",
+            "attachment_upload_ms",
+            "attachment_upload_wait_on_submit_ms",
+        ):
             _set_metric(metrics, key, _numeric(receive.payload.get(key)))
+        _set_metric(
+            metrics,
+            "attachment_upload_ready_before_submit",
+            _bool_numeric(receive.payload.get("attachment_upload_ready_before_submit")),
+        )
         _set_metric(
             metrics,
             "prepared_session_ready_before_submit",
@@ -817,9 +871,15 @@ def _turn_metrics(group: TurnEvents) -> dict[str, float]:
             "prepared_session_wait_on_submit_ms",
             "prepare_refs_wait_on_submit_ms",
             "attachment_upload_ms",
+            "attachment_upload_wait_on_submit_ms",
             "submit_post_ms",
         ):
             _set_metric(metrics, key, _numeric(client_submit_metrics.payload.get(key)))
+        _set_metric(
+            metrics,
+            "attachment_upload_ready_before_submit",
+            _bool_numeric(client_submit_metrics.payload.get("attachment_upload_ready_before_submit")),
+        )
         _set_metric(
             metrics,
             "prepared_session_ready_before_submit",
@@ -916,13 +976,31 @@ def _turn_metrics(group: TurnEvents) -> dict[str, float]:
     )
     _set_metric(
         metrics,
+        "remove_generated_skills_ms",
+        _payload_metric_or_delta(
+            remove_generated_skills_completed,
+            "remove_generated_skills_ms",
+            remove_generated_skills_started,
+        ),
+    )
+    _set_metric(
+        metrics,
         "ensure_provider_thread_ms",
         _payload_metric_or_delta(ensure_thread_completed, "ensure_provider_thread_ms", ensure_thread_started),
     )
+    _set_metric(
+        metrics,
+        "event_sink_reset_ms",
+        _payload_metric_or_delta(event_sink_reset_completed, "event_sink_reset_ms", event_sink_reset_started),
+    )
     _set_metric(metrics, "turn_start_write_ms", _delta_ms(turn_start_write_started, turn_start_write_sent or sent))
+    request_ack_ms = _numeric(accepted.payload.get("turn_start_request_ack_ms")) if accepted is not None else None
+    if request_ack_ms is None:
+        request_ack_ms = _delta_ms(sent, accepted)
+    _set_metric(metrics, "turn_start_request_ack_ms", request_ack_ms)
     ack_ms = _numeric(accepted.payload.get("turn_start_to_ack_ms")) if accepted is not None else None
     if ack_ms is None:
-        ack_ms = _delta_ms(sent, accepted)
+        ack_ms = request_ack_ms
     _set_metric(metrics, "turn_start_sent_to_provider_accepted_ms", ack_ms)
     queued_to_accepted = _delta_ms(queued, accepted)
     _set_metric(metrics, "queued_to_provider_accepted_ms", queued_to_accepted)

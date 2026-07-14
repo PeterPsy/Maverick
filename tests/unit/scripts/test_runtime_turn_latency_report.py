@@ -48,6 +48,24 @@ class RuntimeTurnLatencyReportTestCase(unittest.TestCase):
                         {"provider_id": "codex", "ensure_runtime_ms": 10},
                     ),
                     _event(
+                        "remove-skills-started",
+                        "default",
+                        "sess-spans",
+                        "turn-spans",
+                        "runtime.provider.remove_generated_skills_started",
+                        BASE + timedelta(milliseconds=511),
+                        {"provider_id": "codex"},
+                    ),
+                    _event(
+                        "remove-skills-completed",
+                        "default",
+                        "sess-spans",
+                        "turn-spans",
+                        "runtime.provider.remove_generated_skills_completed",
+                        BASE + timedelta(milliseconds=516),
+                        {"provider_id": "codex", "remove_generated_skills_ms": 5},
+                    ),
+                    _event(
                         "ensure-thread-started",
                         "default",
                         "sess-spans",
@@ -64,6 +82,24 @@ class RuntimeTurnLatencyReportTestCase(unittest.TestCase):
                         "runtime.provider.ensure_thread_completed",
                         BASE + timedelta(milliseconds=535),
                         {"provider_id": "codex", "ensure_provider_thread_ms": 15},
+                    ),
+                    _event(
+                        "event-sink-started",
+                        "default",
+                        "sess-spans",
+                        "turn-spans",
+                        "runtime.provider.event_sink_reset_started",
+                        BASE + timedelta(milliseconds=536),
+                        {"provider_id": "codex"},
+                    ),
+                    _event(
+                        "event-sink-completed",
+                        "default",
+                        "sess-spans",
+                        "turn-spans",
+                        "runtime.provider.event_sink_reset_completed",
+                        BASE + timedelta(milliseconds=540),
+                        {"provider_id": "codex", "event_sink_reset_ms": 4},
                     ),
                     _event(
                         "turn-write-started",
@@ -96,8 +132,11 @@ class RuntimeTurnLatencyReportTestCase(unittest.TestCase):
 
         metrics = report["turns"][0]["metrics"]
         self.assertEqual(metrics["ensure_runtime_ms"], 10)
+        self.assertEqual(metrics["remove_generated_skills_ms"], 5)
         self.assertEqual(metrics["ensure_provider_thread_ms"], 15)
+        self.assertEqual(metrics["event_sink_reset_ms"], 4)
         self.assertEqual(metrics["turn_start_write_ms"], 10)
+        self.assertEqual(metrics["turn_start_request_ack_ms"], 20)
 
     def test_groups_codex_cold_warm_and_plain_hosted_metrics(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -157,6 +196,8 @@ class RuntimeTurnLatencyReportTestCase(unittest.TestCase):
         hosted_metrics = report["cohorts"]["plain_hosted"]["metrics"]
         self.assertEqual(cold_metrics["ensure_runtime_ms"]["p50_ms"], 250)
         self.assertEqual(cold_metrics["prepared_session_wait_on_submit_ms"]["p50_ms"], 0)
+        self.assertEqual(cold_metrics["attachment_upload_wait_on_submit_ms"]["p50_ms"], 0)
+        self.assertEqual(cold_metrics["attachment_upload_ready_before_submit"]["true_rate"], 0.0)
         self.assertEqual(cold_metrics["submit_post_ms"]["p50_ms"], 42)
         self.assertEqual(cold_metrics["claim_ms"]["p50_ms"], 1)
         self.assertEqual(cold_metrics["post_queue_response_ms"]["p50_ms"], 10)
@@ -491,6 +532,52 @@ class RuntimeTurnLatencyReportTestCase(unittest.TestCase):
         self.assertEqual(metrics["prewarm_wait_ms"], 0)
         self.assertEqual(metrics["prewarm_total_ms"], 321.5)
 
+    def test_ignores_session_prewarm_older_than_association_window(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir) / "maverick"
+            _write_session(root, "default", "sess-stale-prewarm", runtime_mode="agentic", provider_id="codex")
+            _write_events(
+                root,
+                "default",
+                "sess-stale-prewarm",
+                [
+                    _event(
+                        "stale-prewarm-completed",
+                        "default",
+                        "sess-stale-prewarm",
+                        None,
+                        "runtime.prewarm.completed",
+                        BASE - timedelta(seconds=31),
+                        {"provider_id": "codex", "prewarm_total_ms": 999_999, "status": "completed"},
+                    ),
+                    *_turn_events("sess-stale-prewarm", "turn-after-stale-prewarm", BASE, provider_id="codex"),
+                ],
+            )
+
+            report = runtime_turn_latency_report.build_report(
+                root,
+                workspaces={"default"},
+                limit_turns=0,
+                include_turns=True,
+            )
+
+        self.assertNotIn("prewarm_total_ms", report["turns"][0]["metrics"])
+
+    def test_reports_prepared_ready_as_explicit_overlapping_cohort(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir) / "maverick"
+            _write_session(root, "default", "sess-prepared", runtime_mode="agentic", provider_id="codex")
+            events = _turn_events("sess-prepared", "turn-prepared", BASE, provider_id="codex")
+            receive = next(event for event in events if event["event_type"] == "runtime.turn.receive_to_queued")
+            receive["payload"]["prepared_session_ready_before_submit"] = True
+            _write_events(root, "default", "sess-prepared", events)
+
+            report = runtime_turn_latency_report.build_report(root, workspaces={"default"}, limit_turns=0)
+
+        self.assertEqual(report["cohorts"]["codex_warm"]["turn_count"], 1)
+        self.assertEqual(report["cohorts"]["prepared_ready"]["turn_count"], 1)
+        self.assertEqual(report["cohorts"]["prepared_ready"]["slo_scope"], "prepared_runtime_session")
+
     def test_does_not_reuse_completed_session_prewarm_already_reported_by_turn_wait(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             root = Path(temp_dir) / "maverick"
@@ -602,6 +689,8 @@ def _turn_events(
                 "prepared_session_wait_on_submit_ms": 0,
                 "prepare_refs_wait_on_submit_ms": 0,
                 "attachment_upload_ms": 0,
+                "attachment_upload_wait_on_submit_ms": 0,
+                "attachment_upload_ready_before_submit": False,
                 "claim_ms": 1,
                 "session_create_ms": 2,
                 "reference_validate_ms": 3,

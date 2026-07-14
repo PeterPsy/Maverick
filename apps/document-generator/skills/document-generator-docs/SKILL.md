@@ -1,15 +1,21 @@
 ---
 name: document-generator-docs
-description: "Use the Document Generator app CLI or MCP tool to create DOCX, PPTX, PDF, and XLSX files in workspace generated storage, edit PDF text, extract text from workspace documents, or convert workspace documents to Markdown."
+description: "Use the Document Generator app CLI or MCP tool first for workspace document operations: create DOCX, PPTX, PDF, and XLSX files, edit PDFs, transform XLSX/CSV/TSV spreadsheets, extract text, or convert documents to Markdown."
 ---
 
 # Document Generator Docs
 
-Use this skill when a user asks an agent to create a document file, modify text in a workspace PDF, read text from a workspace document, or convert a workspace document into Markdown.
+Use this skill when a user asks an agent to create, edit, transform, inspect, read, extract from, or convert a workspace document or spreadsheet.
+
+## Default Document Path
+
+For files under `storage/uploaded/` or `storage/generated/`, use Document Generator before checking for or installing ad hoc packages such as `openpyxl`, `xlsxwriter`, `pandas`, `xlsx`, `xlsx2csv`, LibreOffice, or `soffice`.
+
+Fallback to direct libraries or temporary virtualenvs only when the official Document Generator CLI/MCP surface cannot express the requested operation, or when the Document Generator call fails with a concrete unsupported-operation error. If you fallback, state which Document Generator action was tried or why it does not apply.
 
 ## App Scripts
 
-The app exposes one official CLI command plus MCP tools for generation, PDF text patching, extraction, Markdown conversion, references, and view state. Use those surfaces for real work.
+The app exposes one official CLI command plus MCP tools for generation, PDF text patching, spreadsheet transforms, extraction, Markdown conversion, references, and view state. Use those surfaces for real work.
 
 Implementation scripts behind those surfaces:
 
@@ -19,6 +25,7 @@ Implementation scripts behind those surfaces:
 - text extractor: `<repo>/apps/document-generator/backend/extractors.py`
 - PDF text editor: `<repo>/apps/document-generator/backend/pdf_editor.py`
 - Markdown converter: `<repo>/apps/document-generator/backend/markdown_converter.py`
+- spreadsheet transformer: `<repo>/apps/document-generator/backend/spreadsheet_transform.py`
 - DOCX writer: `<repo>/apps/document-generator/backend/generators/docx_generator.py`
 - PPTX writer: `<repo>/apps/document-generator/backend/generators/pptx_generator.py`
 - PDF writer: `<repo>/apps/document-generator/backend/generators/pdf_generator.py`
@@ -65,11 +72,19 @@ Use command id:
 app.document-generator.document-generator
 ```
 
+From a repository shell, call the app-owned CLI surface:
+
+```bash
+./scripts/maverick app document-generator cli run document-generator --arguments-json '<json>' --json
+```
+
+Do not use `core cli run` for this app command.
+
 Call the command with action `validate_spec` before generation when the document structure is non-trivial. Then call it again with action `generate_document`.
 
 The generated file is written under `storage/generated/`. Report the returned `workspace_relative_path` to the user.
 
-The CLI arguments are JSON. In a Maverick CLI tool invocation, pass the JSON object as the command arguments. If you need a shell smoke test inside the repository, invoke the core CLI service rather than the private generator scripts.
+The CLI arguments are JSON. In a Maverick CLI tool invocation, pass the JSON object as the command arguments.
 
 ### DOCX
 
@@ -215,6 +230,31 @@ Generate:
 }
 ```
 
+Transform an existing workspace XLSX, CSV, or TSV with `spreadsheet.transform` before using direct spreadsheet libraries:
+
+```json
+{
+  "action": "spreadsheet.transform",
+  "target_file": "storage/generated/budget-tracker.xlsx",
+  "mode": "versioned",
+  "operations": [
+    {
+      "type": "write_cells",
+      "sheet": 0,
+      "cells": [
+        {"row": 2, "column": "C", "value": 4200}
+      ]
+    }
+  ]
+}
+```
+
+Supported spreadsheet operations:
+
+- `write_cells` writes explicit cell values.
+- `lookup_and_copy` copies values between workbooks by key columns.
+- `find_values` audits matching values without changing cells.
+
 ## MCP Procedure
 
 Use `app.document-generator.maverick_document_generator` with the same arguments as the CLI.
@@ -277,6 +317,45 @@ Conversion inputs should identify a workspace file under `storage/uploaded/` or 
 }
 ```
 
+For spreadsheet transforms, prefer:
+
+- CLI command `app.document-generator.document-generator` with action `spreadsheet.transform`
+- MCP tool `app.document-generator.document_generator_spreadsheet_transform`
+
+Spreadsheet transform inputs should identify files under `storage/uploaded/` or `storage/generated/`, and outputs must target `storage/generated/`:
+
+```json
+{
+  "action": "spreadsheet.transform",
+  "target_file": "storage/generated/output.xlsx",
+  "mode": "versioned",
+  "source_files": ["storage/generated/source.xlsx", "storage/generated/output.xlsx"],
+  "operations": [
+    {
+      "type": "lookup_and_copy",
+      "source": {"file": "source", "sheet": 0, "key_column": "A", "columns": ["B"]},
+      "target": {"file": "output", "sheet": 0, "key_column": "A", "columns": ["C"]}
+    }
+  ]
+}
+```
+
+Expected spreadsheet transform shape:
+
+```json
+{
+  "status_code": 200,
+  "status": "transformed",
+  "workspace_relative_path": "storage/generated/output.v2.xlsx",
+  "audit": {
+    "operations": [
+      {"type": "lookup_and_copy", "changed_cells": 2}
+    ],
+    "report_path": "storage/generated/document-generator/spreadsheet-reports/job.md"
+  }
+}
+```
+
 Expected conversion shape:
 
 ```json
@@ -334,6 +413,8 @@ After generation:
 4. Return the workspace-relative path to the user.
 
 After PDF patching, also check `patches[].remaining_old_match_count`, `patches[].new_match_count`, and `visual_diff_artifact` when present. Prefer returning the generated PDF Storage path plus the verification result, not raw local filesystem paths.
+
+After spreadsheet transforms, also check `audit.operations[].changed_cells`, `audit.warnings`, `sha256_before`, `sha256_after`, and `report_path`. Prefer returning the generated spreadsheet Storage path and audit summary, not raw local filesystem paths.
 
 Expected success shape:
 

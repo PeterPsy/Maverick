@@ -131,20 +131,36 @@ class DocumentGeneratorAppTestCase(unittest.TestCase):
         self.assertTrue((APP_ROOT / "mcp" / "tool_schemas.json").is_file())
         self.assertTrue((APP_ROOT / "frontend" / "dist" / "index.html").is_file())
 
-    def test_descriptor_sidecars_describe_markdown_conversion_and_pdf_edits(self) -> None:
+    def test_skill_guides_agents_to_document_generator_first_for_document_work(self) -> None:
+        skill_markdown = (APP_ROOT / "skills" / "document-generator-docs" / "SKILL.md").read_text(encoding="utf-8")
+
+        self.assertIn("Use the Document Generator app CLI or MCP tool first", skill_markdown)
+        self.assertIn("transform XLSX/CSV/TSV spreadsheets", skill_markdown)
+        self.assertIn("use Document Generator before checking for or installing ad hoc packages", skill_markdown)
+        self.assertIn("openpyxl", skill_markdown)
+        self.assertIn("spreadsheet.transform", skill_markdown)
+        self.assertIn("document_generator_spreadsheet_transform", skill_markdown)
+
+    def test_descriptor_sidecars_describe_markdown_conversion_pdf_edits_and_spreadsheets(self) -> None:
         cli_schema = json.loads((APP_ROOT / "cli" / "command_schemas.json").read_text(encoding="utf-8"))
         mcp_schema = json.loads((APP_ROOT / "mcp" / "tool_schemas.json").read_text(encoding="utf-8"))
 
+        command = cli_schema["commands"]["document-generator"]
         command_properties = cli_schema["commands"]["document-generator"]["argument_schema"]["properties"]
+        generic_tool = mcp_schema["tools"]["maverick_document_generator"]
         tool = mcp_schema["tools"]["document_generator_convert_to_markdown"]
         patch_tool = mcp_schema["tools"]["document_generator_patch_pdf_text"]
         workflow_tool = mcp_schema["tools"]["document_generator_modify_uploaded_document"]
+        spreadsheet_tool = mcp_schema["tools"]["document_generator_spreadsheet_transform"]
         tool_input_properties = tool["input_schema"]["properties"]
         tool_output_properties = tool["output_schema"]["properties"]
 
+        self.assertIn("transform XLSX/CSV/TSV spreadsheets", command["description"])
+        self.assertIn("spreadsheet transforms", generic_tool["description"])
         self.assertIn("convert_to_markdown", command_properties["action"]["enum"])
         self.assertIn("patch_pdf_text", command_properties["action"]["enum"])
         self.assertIn("modify_uploaded_document", command_properties["action"]["enum"])
+        self.assertIn("spreadsheet.transform", command_properties["action"]["enum"])
         self.assertIn("workspace_relative_path", command_properties)
         self.assertIn("patches", command_properties)
         self.assertIn("replacement_text", command_properties)
@@ -161,6 +177,7 @@ class DocumentGeneratorAppTestCase(unittest.TestCase):
         self.assertEqual(patch_tool["input_schema"]["required"], ["workspace_relative_path", "patches"])
         self.assertIn("visual_diff_artifact", patch_tool["output_schema"]["properties"])
         self.assertEqual(workflow_tool["input_schema"]["required"], ["workspace_relative_path", "replacement_text"])
+        self.assertEqual(spreadsheet_tool["input_schema"]["required"], ["target_file", "operations"])
 
     def test_dedicated_mcp_tool_action_cannot_be_overridden_by_arguments(self) -> None:
         with tempfile.TemporaryDirectory() as temp:

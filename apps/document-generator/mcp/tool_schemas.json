@@ -1,7 +1,7 @@
 {
   "tools": {
     "maverick_document_generator": {
-      "description": "Generic Document Generator operations tool. Use dedicated tools for PDF text patching, document text extraction, Markdown conversion, references, and view-state actions when available.",
+      "description": "Generic Document Generator operations tool. Use dedicated tools for spreadsheet transforms, PDF text patching, document text extraction, Markdown conversion, references, and view-state actions when available.",
       "input_schema": {
         "type": "object",
         "properties": {

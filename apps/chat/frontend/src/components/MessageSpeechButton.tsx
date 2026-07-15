@@ -1,6 +1,6 @@
 import type { Dispatch, SetStateAction } from "react";
 import { useEffect, useRef, useState } from "react";
-import { synthesizeSpeech, synthesizeSpeechStream } from "../api/client";
+import { recordSpeechPlaybackMetrics, synthesizeSpeech, synthesizeSpeechStream } from "../api/client";
 import {
   isSplittableSynthesisError,
   retrySpeechChunks,
@@ -121,11 +121,13 @@ function SupportedMessageSpeechButton({
     const chunks = speechChunks(speechText, maxTextChars);
     const language = speechLanguageHint(speechLanguageTextFromMarkdown(content));
     const tapStartedAt = nowMilliseconds();
+    const playbackId = createSpeechPlaybackId();
+    let playbackMode: SpeechPcmPlaybackMetrics["mode"] = "pcm-stream";
 
     try {
       if (providerStreamingSupported && supportsPcmStreamingPlayback()) {
         try {
-          await playStreamingChunks(chunks, requestId, language, abortController.signal, tapStartedAt);
+          await playStreamingChunks(chunks, requestId, language, abortController.signal, tapStartedAt, playbackId);
           completePlayback(requestId);
           return;
         } catch (error) {
@@ -140,6 +142,7 @@ function SupportedMessageSpeechButton({
           }
         }
       }
+      playbackMode = "buffered";
       let nextChunkIndex = 0;
       const prefetchedChunks = new Map<number, Promise<SpeechAudioResult[]>>();
       const requestStartedAt = nowMilliseconds();
@@ -175,8 +178,10 @@ function SupportedMessageSpeechButton({
           await playSynthesizedChunk(result, requestId, () => {
             if (!bufferedPlaybackStarted) {
               bufferedPlaybackStarted = true;
-              publishSpeechPlaybackMetrics({
+              reportSpeechPlaybackMetrics(providerAppId, {
                 mode: "buffered",
+                outcome: "playing",
+                playback_id: playbackId,
                 tap_to_request_ms: roundedMilliseconds(requestStartedAt - tapStartedAt),
                 tap_to_audio_playing_ms: roundedMilliseconds(nowMilliseconds() - tapStartedAt),
               });
@@ -184,9 +189,20 @@ function SupportedMessageSpeechButton({
           });
         }
       }
+      reportSpeechPlaybackMetrics(providerAppId, {
+        mode: "buffered",
+        outcome: "completed",
+        playback_id: playbackId,
+      });
       completePlayback(requestId);
     } catch (error) {
       if (requestIdRef.current === requestId) {
+        reportSpeechPlaybackMetrics(providerAppId, {
+          mode: playbackMode,
+          outcome: abortController.signal.aborted ? "cancelled" : "failed",
+          playback_id: playbackId,
+          failure_code: speechPlaybackFailureCode(error),
+        });
         failPlayback(requestId, speechPlaybackErrorMessage(error));
       }
     }
@@ -198,11 +214,13 @@ function SupportedMessageSpeechButton({
     language: string,
     signal: AbortSignal,
     tapStartedAt: number,
+    playbackId: string,
   ) {
     let nextChunkIndex = 0;
     const prefetchedChunks = new Map<number, Promise<Response[]>>();
     const metrics: SpeechPcmPlaybackMetrics = {
       mode: "pcm-stream",
+      playback_id: playbackId,
     };
     let player: PcmStreamPlayer | null = null;
     let serverMetadataRead = false;
@@ -223,15 +241,16 @@ function SupportedMessageSpeechButton({
         setStatus("playing");
         metrics.tap_to_audio_playing_ms = roundedMilliseconds(nowMilliseconds() - tapStartedAt);
         metrics.underrun_count = player?.underrunCount || 0;
-        publishSpeechPlaybackMetrics({ ...metrics });
+        reportSpeechPlaybackMetrics(providerAppId, { ...metrics, outcome: "playing" });
       },
     });
     const requestStartedAt = nowMilliseconds();
     metrics.tap_to_request_ms = roundedMilliseconds(requestStartedAt - tapStartedAt);
     let firstBrowserChunkSeen = false;
+    let prefetchLimit = 1;
 
     function fillPrefetchQueue() {
-      while (nextChunkIndex < chunks.length && prefetchedChunks.size < TTS_PREFETCH_CONCURRENCY) {
+      while (nextChunkIndex < chunks.length && prefetchedChunks.size < prefetchLimit) {
         const index = nextChunkIndex;
         nextChunkIndex += 1;
         const promise = synthesizeStreamChunkWithFallback(chunks[index], requestId, language, streamAbortController.signal);
@@ -259,7 +278,6 @@ function SupportedMessageSpeechButton({
         }
         const responses = await prefetched;
         prefetchedChunks.delete(index);
-        fillPrefetchQueue();
         for (const response of responses) {
           const sampleRate = Number(response.headers.get("X-Audio-Sample-Rate") || "24000");
           const channels = Number(response.headers.get("X-Audio-Channels") || "1");
@@ -287,14 +305,17 @@ function SupportedMessageSpeechButton({
             if (!firstBrowserChunkSeen) {
               firstBrowserChunkSeen = true;
               metrics.browser_first_chunk_ms = roundedMilliseconds(nowMilliseconds() - requestStartedAt);
+              prefetchLimit = TTS_PREFETCH_CONCURRENCY;
+              fillPrefetchQueue();
             }
             player.append(value);
           }
         }
+        fillPrefetchQueue();
       }
       await player.finish();
       metrics.underrun_count = player.underrunCount;
-      publishSpeechPlaybackMetrics({ ...metrics });
+      reportSpeechPlaybackMetrics(providerAppId, { ...metrics, outcome: "completed" });
       player.stop();
       pcmPlayerRef.current = null;
     } catch (error) {
@@ -494,4 +515,24 @@ function nowMilliseconds(): number {
 
 function roundedMilliseconds(value: number): number {
   return Math.round(Math.max(0, value) * 1000) / 1000;
+}
+
+function reportSpeechPlaybackMetrics(providerAppId: string, metrics: SpeechPcmPlaybackMetrics): void {
+  publishSpeechPlaybackMetrics(metrics);
+  void recordSpeechPlaybackMetrics(providerAppId, { ...metrics }).catch(() => undefined);
+}
+
+function createSpeechPlaybackId(): string {
+  const randomUuid = globalThis.crypto?.randomUUID?.();
+  if (randomUuid) {
+    return randomUuid;
+  }
+  return `browser-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 14)}`;
+}
+
+function speechPlaybackFailureCode(error: unknown): string {
+  if (error instanceof DOMException && error.name) {
+    return error.name.toLowerCase().replace(/[^a-z0-9._:-]+/g, "-").slice(0, 64) || "dom-exception";
+  }
+  return "playback-failed";
 }

@@ -5,6 +5,8 @@ from pathlib import Path
 import socket
 import sys
 from tempfile import TemporaryDirectory
+import threading
+import time
 import unittest
 from unittest.mock import patch
 
@@ -97,6 +99,7 @@ class KokoroStreamingTestCase(unittest.TestCase):
             settings=settings,
             pool=pool,
         )
+        self.assertNotIn("upstream_first_audio_byte_ms", first.timings)
         first_audio = b"".join(first.iter_chunks())
         second = kokoro_streaming.open_kokoro_openrouter_stream(
             text="again",
@@ -118,6 +121,75 @@ class KokoroStreamingTestCase(unittest.TestCase):
         self.assertEqual(connection.headers["Authorization"], "Bearer openrouter-token")
         self.assertGreaterEqual(first.timings["upstream_first_audio_byte_ms"], first.timings["upstream_headers_ms"])
 
+    def test_deepinfra_stream_uses_dedicated_voice_endpoint_and_pcm_body(self) -> None:
+        class FakeResponse:
+            status = 200
+            will_close = False
+
+            def __init__(self) -> None:
+                self.payload = bytearray(b"\x01\x02")
+
+            def getheader(self, name: str, default: str = "") -> str:
+                return "req_deepinfra_1" if name.lower() == "x-request-id" else default
+
+            def read1(self, size: int = -1) -> bytes:
+                result = bytes(self.payload[:size])
+                del self.payload[:size]
+                return result
+
+            def close(self) -> None:
+                return None
+
+        class FakeConnection:
+            def connect(self) -> None:
+                return None
+
+            def request(self, method: str, path: str, *, body: bytes, headers: dict[str, str]) -> None:
+                self.method = method
+                self.path = path
+                self.body = json.loads(body.decode("utf-8"))
+                self.headers = headers
+
+            def getresponse(self) -> FakeResponse:
+                return FakeResponse()
+
+            def close(self) -> None:
+                return None
+
+        requested_hosts: list[str] = []
+        connection = FakeConnection()
+
+        def connection_factory(host: str, _timeout: float) -> FakeConnection:
+            requested_hosts.append(host)
+            return connection
+
+        pool = kokoro_streaming.KokoroConnectionPool(
+            host=kokoro_streaming.KOKORO_DEEPINFRA_HOST,
+            connection_factory=connection_factory,
+        )
+        stream = kokoro_streaming.open_kokoro_deepinfra_stream(
+            text="Ciao",
+            voice="if_sara",
+            language="it-IT",
+            settings={"_app_secrets": {"deepinfra-api-key": "deepinfra-token"}},
+            pool=pool,
+        )
+
+        self.assertEqual(b"".join(stream.iter_chunks()), b"\x01\x02")
+        self.assertEqual(requested_hosts, ["api.deepinfra.com"])
+        self.assertEqual(connection.path, "/v1/text-to-speech/if_sara/stream")
+        self.assertEqual(
+            connection.body,
+            {
+                "text": "Ciao",
+                "model_id": "hexgrad/Kokoro-82M",
+                "output_format": "pcm",
+                "language_code": "it",
+            },
+        )
+        self.assertEqual(connection.headers["Authorization"], "Bearer deepinfra-token")
+        self.assertEqual(stream.generation_id, "req_deepinfra_1")
+
     def test_streaming_synthesis_records_generation_and_upstream_phase_metrics(self) -> None:
         class FakeUpstream:
             generation_id = "gen_job_123"
@@ -136,7 +208,11 @@ class KokoroStreamingTestCase(unittest.TestCase):
         with TemporaryDirectory() as temp_dir:
             data_root = Path(temp_dir) / "data"
             write_settings(data_root, {"synthesis_engine": "kokoro-openrouter"})
-            with patch("streaming_synthesis.open_kokoro_openrouter_stream", return_value=FakeUpstream()):
+            def delayed_open(**_kwargs):
+                time.sleep(0.02)
+                return FakeUpstream()
+
+            with patch("streaming_synthesis.open_kokoro_openrouter_stream", side_effect=delayed_open):
                 plan = streaming_synthesis.prepare_synthesis_stream(
                     data_root=data_root,
                     body={
@@ -160,6 +236,7 @@ class KokoroStreamingTestCase(unittest.TestCase):
         self.assertEqual(jobs[0]["upstream_first_audio_byte_ms"], 91.25)
         self.assertIn("upstream_last_audio_byte_ms", jobs[0])
         self.assertTrue(jobs[0]["stream_completed"])
+        self.assertGreaterEqual(jobs[0]["request_total_seconds"], 0.015)
 
     def test_backend_worker_writes_stream_header_before_pcm_bytes(self) -> None:
         class FakePlan:
@@ -199,6 +276,45 @@ class KokoroStreamingTestCase(unittest.TestCase):
         self.assertEqual(header["status_code"], 200)
         self.assertEqual(header["stream_response"]["generation_id"], "gen_socket")
         self.assertEqual(audio, b"pcm-onepcm-two")
+
+    def test_backend_worker_cancels_provider_stream_when_relay_disconnects(self) -> None:
+        class BlockingPlan:
+            stream_response = {
+                "content_type": "audio/pcm",
+                "generation_id": "gen_cancel",
+                "audio": {"sample_rate": 24000, "channels": 1, "sample_format": "s16le"},
+            }
+
+            def __init__(self) -> None:
+                self.cancelled = threading.Event()
+
+            def iter_chunks(self):
+                self.cancelled.wait(timeout=2)
+                if False:
+                    yield b""
+
+            def cancel(self) -> None:
+                self.cancelled.set()
+
+        plan = BlockingPlan()
+        server, client = socket.socketpair()
+        worker = threading.Thread(
+            target=backend_worker.send_streaming_payload,
+            args=(server, {"data_root": "/tmp/speech-data", "body": {"action": "synthesize"}}),
+        )
+        try:
+            with patch("backend_worker.prepare_synthesis_stream", return_value=plan):
+                worker.start()
+                header = client.recv(4096)
+                self.assertIn(b"gen_cancel", header)
+                client.close()
+                worker.join(timeout=3)
+        finally:
+            server.close()
+            client.close()
+
+        self.assertFalse(worker.is_alive())
+        self.assertTrue(plan.cancelled.is_set())
 
 
 if __name__ == "__main__":

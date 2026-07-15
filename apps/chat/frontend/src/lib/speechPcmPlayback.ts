@@ -78,6 +78,9 @@ export type SpeechPcmPlaybackMetrics = {
   browser_first_chunk_ms?: number;
   generation_id?: string;
   mode: "pcm-stream" | "buffered";
+  outcome?: "playing" | "completed" | "cancelled" | "failed";
+  playback_id: string;
+  failure_code?: string;
   tap_to_audio_playing_ms?: number;
   tap_to_request_ms?: number;
   underrun_count?: number;

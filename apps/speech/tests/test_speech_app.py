@@ -712,6 +712,7 @@ class SpeechAppTests(unittest.TestCase):
         settings = {
             "_app_secrets": {
                 "deepgram-api-key": "deepgram-token",
+                "deepinfra-api-key": "deepinfra-token",
                 "openrouter-api-key": "openrouter-token",
             }
         }
@@ -727,6 +728,9 @@ class SpeechAppTests(unittest.TestCase):
         self.assertEqual(synthesis["kokoro-openrouter"]["supported_formats"], ["audio/mpeg", "audio/pcm"])
         self.assertIn({"voice_id": "if_sara", "name": "Sara", "language": "it", "gender": "female"}, synthesis["kokoro-openrouter"]["voices"])
         self.assertIn({"voice_id": "im_nicola", "name": "Nicola", "language": "it", "gender": "male"}, synthesis["kokoro-openrouter"]["voices"])
+        self.assertTrue(synthesis["kokoro-deepinfra"]["available"])
+        self.assertEqual(synthesis["kokoro-deepinfra"]["model"], "hexgrad/Kokoro-82M")
+        self.assertEqual(synthesis["kokoro-deepinfra"]["latency_profile"], "remote_streaming")
 
     def test_deepgram_transcription_engine_is_explicit_remote_choice(self) -> None:
         settings = {
@@ -1957,6 +1961,34 @@ class SpeechAppTests(unittest.TestCase):
         self.assertEqual(payload["retention"], "provider_response")
         self.assertEqual(jobs[0]["content_type"], "audio/mpeg")
         self.assertEqual(jobs[0]["voice"], "af_heart")
+
+    def test_kokoro_deepinfra_synthesis_uses_direct_engine_and_language(self) -> None:
+        captured: dict[str, object] = {}
+
+        def fake_synthesis(*, text: str, voice: str, language: str, settings: dict) -> bytes:
+            captured.update(text=text, voice=voice, language=language)
+            return b"ID3deepinfra"
+
+        with TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            write_settings(root / "data", {"synthesis_engine": "kokoro-deepinfra"})
+            with patch("synthesis.run_kokoro_deepinfra", side_effect=fake_synthesis):
+                status_code, payload = handle_action(
+                    root / "data",
+                    root / "generated",
+                    {
+                        "action": "synthesize",
+                        "text": "Ciao dal percorso diretto.",
+                        "language": "it-IT",
+                        "_app_secrets": {"deepinfra-api-key": "deepinfra-token"},
+                    },
+                )
+
+        self.assertEqual(status_code, 200)
+        self.assertEqual(captured["voice"], "if_sara")
+        self.assertEqual(captured["language"], "it")
+        self.assertEqual(payload["engine"], "kokoro-deepinfra")
+        self.assertEqual(payload["latency_profile"], "remote_streaming")
 
     def test_kokoro_openrouter_synthesis_selects_italian_voice_from_text(self) -> None:
         captured: dict[str, object] = {}

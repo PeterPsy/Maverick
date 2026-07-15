@@ -111,7 +111,7 @@ class AppMountsTestCase(unittest.TestCase):
         self.assertEqual(backend_entrypoint_timeout_seconds(parsed), 300)
 
     def test_backend_streaming_requires_an_explicit_post_response_mode(self) -> None:
-        route_path = "/api/apps/speech/backend"
+        route_path = "/api/apps/example-provider/backend"
 
         self.assertTrue(
             _backend_route_supports_streaming(
@@ -531,6 +531,18 @@ class AppMountsTestCase(unittest.TestCase):
 
                 self.assertEqual(body["stable_storage_file_id"], "file_123")
                 self.assertEqual(body["_app_secret_request"], secret_request)
+
+    def test_post_backend_secret_resolution_accepts_encoded_query_request(self) -> None:
+        secret_request = {"required": False, "logical_names": ["deepgram-api-key"]}
+
+        body = _backend_secret_request_body(
+            body={},
+            method="POST",
+            route_path="/api/apps/example-provider/backend",
+            query={"action": "transcribe_audio", "_app_secret_request": json.dumps(secret_request)},
+        )
+
+        self.assertEqual(body, {"_app_secret_request": secret_request})
 
     def test_backend_request_headers_include_safe_browser_context(self) -> None:
         headers = _backend_request_headers(

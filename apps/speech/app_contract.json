@@ -41,6 +41,7 @@
     "secrets": {
       "read": [
         "deepgram-api-key",
+        "deepinfra-api-key",
         "openrouter-api-key"
       ],
       "write": []
@@ -48,6 +49,7 @@
     "network": {
       "outbound": [
         "api.deepgram.com",
+        "api.deepinfra.com",
         "openrouter.ai"
       ]
     },

@@ -54,7 +54,7 @@
           },
           "synthesis_engine": {
             "type": "string",
-            "enum": ["auto", "piper", "espeak", "espeak-ng", "kokoro-openrouter"],
+            "enum": ["auto", "piper", "espeak", "espeak-ng", "kokoro-openrouter", "kokoro-deepinfra"],
             "description": "Workspace synthesis engine selection used by set_engine."
           },
           "synthesis_language": {

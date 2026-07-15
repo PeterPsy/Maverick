@@ -30,6 +30,7 @@ from models import (
     SUPPORTED_CONTENT_TYPES,
     SUPPORTED_TRANSCRIPTION_CONTENT_TYPES,
 )
+from playback_metrics import record_playback_metrics_payload
 from settings import (
     SYNTHESIS_AUTO_ENGINES,
     TRANSCRIPTION_AUTO_ENGINES,
@@ -47,6 +48,7 @@ from synthesis import selected_synthesis_language, selected_voice_id, synthesize
 from transcription import transcribe_audio_payload, transcribe_file_payload
 
 DATA_CHANGED_ACTIONS = {"set_engine"}
+REMOTE_KOKORO_ENGINES = {"kokoro-openrouter", "kokoro-deepinfra"}
 
 
 def app_events_for_action(action: str) -> list[dict[str, str]]:
@@ -90,6 +92,8 @@ def handle_action(
         return 200, worker_status_payload(data_root, ensure_warm=True)
     if action == "prewarm_synthesis_worker":
         return 200, synthesis_worker_status_payload(data_root, ensure_warm=True)
+    if action == "record_playback_metrics":
+        return 200, record_playback_metrics_payload(data_root, body)
     if action == "synthesize":
         return 200, synthesize_payload(
             data_root=data_root,
@@ -165,6 +169,10 @@ def operations_manifest() -> dict:
             "prewarm_synthesis_worker": {
                 "description": "Explicitly warm the selected persistent local TTS worker and voice without synthesizing user text.",
                 "required_fields": [],
+            },
+            "record_playback_metrics": {
+                "description": "Persist bounded redaction-safe browser playback timing and outcome metadata.",
+                "required_fields": ["playback_id", "mode"],
             },
             "health.check": {
                 "description": "Report backend health and local engine availability.",
@@ -245,14 +253,14 @@ def capabilities_payload(data_root: Path, app_secrets: dict | None = None) -> di
                 "language_preference": synthesis_language,
                 "language_hint_supported": True,
                 "languages": public_voice_languages(synthesis_voices),
-                "streaming_supported": synthesis_available and synthesis_engine == "kokoro-openrouter",
-                "streaming_content_type": KOKORO_PCM_CONTENT_TYPE if synthesis_available and synthesis_engine == "kokoro-openrouter" else "",
+                "streaming_supported": synthesis_available and synthesis_engine in REMOTE_KOKORO_ENGINES,
+                "streaming_content_type": KOKORO_PCM_CONTENT_TYPE if synthesis_available and synthesis_engine in REMOTE_KOKORO_ENGINES else "",
                 "streaming_audio": {
                     "sample_rate": KOKORO_PCM_SAMPLE_RATE,
                     "channels": KOKORO_PCM_CHANNELS,
                     "sample_format": KOKORO_PCM_SAMPLE_FORMAT,
                 }
-                if synthesis_available and synthesis_engine == "kokoro-openrouter"
+                if synthesis_available and synthesis_engine in REMOTE_KOKORO_ENGINES
                 else None,
                 "prewarm_supported": bool(
                     synthesis_available
@@ -269,7 +277,7 @@ def capabilities_payload(data_root: Path, app_secrets: dict | None = None) -> di
                 "cache": synthesis_cache,
                 "output": {
                     "audio_base64": True,
-                    "http_binary_stream": synthesis_available and synthesis_engine == "kokoro-openrouter",
+                    "http_binary_stream": synthesis_available and synthesis_engine in REMOTE_KOKORO_ENGINES,
                     "workspace_relative_path": False,
                     "absolute_paths": False,
                     "retention": synthesis_retention,
@@ -356,13 +364,13 @@ def public_supported_formats_from_status(status: dict | None) -> list[str]:
 
 
 def public_synthesis_cache_from_status(status: dict | None) -> dict[str, object]:
-    if (status or {}).get("engine") == "kokoro-openrouter":
+    if (status or {}).get("engine") in REMOTE_KOKORO_ENGINES:
         return {"enabled": False, "scope": "none"}
     return {"enabled": True, "scope": "workspace"}
 
 
 def public_synthesis_retention_from_status(status: dict | None) -> str:
-    if (status or {}).get("engine") == "kokoro-openrouter":
+    if (status or {}).get("engine") in REMOTE_KOKORO_ENGINES:
         return "provider_response"
     return "derived_cache"
 

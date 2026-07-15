@@ -7,16 +7,19 @@ import type {
   SpeechTranscribePayload,
 } from "./types";
 
+const SYNTHESIS_SECRET_NAMES = ["deepinfra-api-key", "openrouter-api-key"];
+const CAPABILITY_SECRET_NAMES = ["deepgram-api-key", ...SYNTHESIS_SECRET_NAMES];
+
 export function getSpeechCapabilities(providerAppId: string): Promise<SpeechCapabilitiesPayload> {
   return requestJson<SpeechCapabilitiesPayload>(`/api/apps/${encodeURIComponent(providerAppId)}/backend`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ action: "capabilities" }),
+    body: JSON.stringify(withOptionalSpeechSecrets({ action: "capabilities" }, CAPABILITY_SECRET_NAMES)),
   });
 }
 
 export function synthesizeSpeech(providerAppId: string, text: string, options: SpeechSynthesizeOptions = {}): Promise<SpeechSynthesizePayload> {
-  const body: Record<string, string> = { action: "synthesize", text };
+  const body: Record<string, unknown> = withOptionalSpeechSecrets({ action: "synthesize", text }, SYNTHESIS_SECRET_NAMES);
   if (options.language) {
     body.language = options.language;
   }
@@ -37,12 +40,12 @@ export async function synthesizeSpeechStream(
   options: SpeechSynthesizeOptions = {},
 ): Promise<Response> {
   const path = `/api/apps/${encodeURIComponent(providerAppId)}/backend`;
-  const body: Record<string, string> = {
+  const body: Record<string, unknown> = withOptionalSpeechSecrets({
     action: "synthesize",
     format: "pcm",
     response_mode: "stream",
     text,
-  };
+  }, SYNTHESIS_SECRET_NAMES);
   if (options.language) {
     body.language = options.language;
   }
@@ -77,7 +80,7 @@ export function prewarmSpeechSynthesisWorker(providerAppId: string): Promise<unk
   return requestJson<unknown>(`/api/apps/${encodeURIComponent(providerAppId)}/backend`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ action: "prewarm_synthesis_worker" }),
+    body: JSON.stringify(withOptionalSpeechSecrets({ action: "prewarm_synthesis_worker" }, [])),
   });
 }
 
@@ -85,7 +88,18 @@ export function prewarmSpeechWorker(providerAppId: string): Promise<unknown> {
   return requestJson<unknown>(`/api/apps/${encodeURIComponent(providerAppId)}/backend`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ action: "prewarm_worker" }),
+    body: JSON.stringify(withOptionalSpeechSecrets({ action: "prewarm_worker" }, [])),
+  });
+}
+
+export function recordSpeechPlaybackMetrics(
+  providerAppId: string,
+  metrics: Record<string, unknown>,
+): Promise<unknown> {
+  return requestJson<unknown>(`/api/apps/${encodeURIComponent(providerAppId)}/backend`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(withOptionalSpeechSecrets({ action: "record_playback_metrics", ...metrics }, [])),
   });
 }
 
@@ -95,7 +109,10 @@ export function transcribeSpeech(
   contentType: string,
   optionsOrLanguage?: SpeechTranscribeOptions | string,
 ): Promise<SpeechTranscribePayload> {
-  const body: Record<string, string> = { action: "transcribe_audio", audio_base64: audioBase64, content_type: contentType };
+  const body: Record<string, unknown> = withOptionalSpeechSecrets(
+    { action: "transcribe_audio", audio_base64: audioBase64, content_type: contentType },
+    ["deepgram-api-key"],
+  );
   const options = typeof optionsOrLanguage === "string" ? { language: optionsOrLanguage } : optionsOrLanguage || {};
   if (options.language) {
     body.language = options.language;
@@ -132,6 +149,10 @@ export function transcribeSpeechBlob(
 ): Promise<SpeechTranscribePayload> {
   const options = typeof optionsOrLanguage === "string" ? { language: optionsOrLanguage } : optionsOrLanguage || {};
   const params = new URLSearchParams({ action: "transcribe_audio" });
+  params.set(
+    "_app_secret_request",
+    JSON.stringify({ logical_names: ["deepgram-api-key"], required: false }),
+  );
   if (options.language) {
     params.set("language", options.language);
   }
@@ -158,4 +179,14 @@ export function transcribeSpeechBlob(
     headers: { "Content-Type": audioBlob.type || "application/octet-stream" },
     body: audioBlob,
   });
+}
+
+function withOptionalSpeechSecrets(body: Record<string, unknown>, logicalNames: string[]): Record<string, unknown> {
+  return {
+    ...body,
+    _app_secret_request: {
+      logical_names: logicalNames,
+      required: false,
+    },
+  };
 }

@@ -1291,11 +1291,14 @@ def backend_entrypoint_timeout_seconds(parsed: ParsedAppContract) -> int:
 
 
 def _backend_secret_request_body(*, body: dict[str, Any], method: str, route_path: str, query: dict[str, str] | None = None) -> dict[str, Any]:
+    params = query or {}
+    encoded_secret_request = _app_secret_request_from_query(params)
+    if encoded_secret_request is not None:
+        if method.upper() in {"GET", "HEAD"} and _is_app_backend_media_route(route_path):
+            return {**body, **params, "_app_secret_request": encoded_secret_request}
+        return {**body, "_app_secret_request": encoded_secret_request}
     if method.upper() in {"GET", "HEAD"} and _is_app_backend_media_route(route_path):
-        params = query or {}
-        secret_request = _app_secret_request_from_query(params)
-        if secret_request is None:
-            secret_request = {"logical_names": [], "required": False}
+        secret_request = {"logical_names": [], "required": False}
         return {**body, **params, "_app_secret_request": secret_request}
     return body
 

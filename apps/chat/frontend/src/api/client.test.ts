@@ -382,18 +382,31 @@ describe("speech provider client calls", () => {
       "/api/apps/speech/backend",
       "/api/apps/speech/backend",
     ]);
-    expect(JSON.parse(String(fetchMock.mock.calls[1]?.[1]?.body || "{}"))).toEqual({ action: "prewarm_synthesis_worker" });
-    expect(JSON.parse(String(fetchMock.mock.calls[2]?.[1]?.body || "{}"))).toEqual({ action: "prewarm_worker" });
-    expect(JSON.parse(String(fetchMock.mock.calls[3]?.[1]?.body || "{}"))).toEqual({ action: "synthesize", text: "Hello", language: "it" });
+    expect(JSON.parse(String(fetchMock.mock.calls[1]?.[1]?.body || "{}"))).toEqual({
+      action: "prewarm_synthesis_worker",
+      _app_secret_request: { logical_names: [], required: false },
+    });
+    expect(JSON.parse(String(fetchMock.mock.calls[2]?.[1]?.body || "{}"))).toEqual({
+      action: "prewarm_worker",
+      _app_secret_request: { logical_names: [], required: false },
+    });
+    expect(JSON.parse(String(fetchMock.mock.calls[3]?.[1]?.body || "{}"))).toEqual({
+      action: "synthesize",
+      text: "Hello",
+      language: "it",
+      _app_secret_request: { logical_names: ["deepinfra-api-key", "openrouter-api-key"], required: false },
+    });
     expect(fetchMock.mock.calls[3]?.[1]?.signal).toBe(synthesisController.signal);
     expect(JSON.parse(String(fetchMock.mock.calls[4]?.[1]?.body || "{}"))).toEqual({
       action: "transcribe_audio",
+      _app_secret_request: { logical_names: ["deepgram-api-key"], required: false },
       audio_base64: "UklGRg==",
       content_type: "audio/wav",
       profile: "fast",
     });
     expect(JSON.parse(String(fetchMock.mock.calls[5]?.[1]?.body || "{}"))).toEqual({
       action: "transcribe_audio",
+      _app_secret_request: { logical_names: ["deepgram-api-key"], required: false },
       audio_base64: "UklGRg==",
       content_type: "audio/wav",
       conversation: "true",
@@ -424,9 +437,18 @@ describe("speech provider client calls", () => {
 
     expect(fetchMock).toHaveBeenCalledTimes(1);
     const [path, init] = fetchMock.mock.calls[0] as unknown as [string, RequestInit];
-    expect(path).toBe(
-      "/api/apps/speech/backend?action=transcribe_audio&language=it&profile=fast&session_id=chat-session&chunk_index=2&final=true&dictation=true",
-    );
+    const parsedUrl = new URL(path, "https://maverick.test");
+    expect(parsedUrl.pathname).toBe("/api/apps/speech/backend");
+    expect(Object.fromEntries(parsedUrl.searchParams.entries())).toEqual({
+      action: "transcribe_audio",
+      _app_secret_request: JSON.stringify({ logical_names: ["deepgram-api-key"], required: false }),
+      language: "it",
+      profile: "fast",
+      session_id: "chat-session",
+      chunk_index: "2",
+      final: "true",
+      dictation: "true",
+    });
     expect(init.method).toBe("POST");
     expect(init.headers).toMatchObject({ Accept: "application/json", "Content-Type": "audio/webm" });
     expect(init.body).toBe(audio);

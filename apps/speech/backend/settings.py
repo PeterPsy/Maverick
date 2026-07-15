@@ -158,11 +158,11 @@ def public_settings(settings: dict) -> dict:
 
 def normalized_setting(key: str, value: object) -> str:
     text = str(value or "").strip()
-    if key == "synthesis_engine" and text not in {"auto", "piper", "espeak", "espeak-ng", "kokoro-openrouter"}:
+    if key == "synthesis_engine" and text not in {"auto", "piper", "espeak", "espeak-ng", "kokoro-openrouter", "kokoro-deepinfra"}:
         raise SpeechValidationError(
             "Unsupported synthesis_engine.",
             operation="set_engine",
-            allowed_values={key: ["auto", "piper", "espeak", "espeak-ng", "kokoro-openrouter"]},
+            allowed_values={key: ["auto", "piper", "espeak", "espeak-ng", "kokoro-openrouter", "kokoro-deepinfra"]},
         )
     if key == "synthesis_language":
         normalized = text.lower().replace("_", "-")

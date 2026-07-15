@@ -36,6 +36,7 @@ SUPPORTED_ACTIONS = [
     "operations.manifest",
     "prewarm_synthesis_worker",
     "prewarm_worker",
+    "record_playback_metrics",
     "set_engine",
     "synthesize",
     "transcribe_audio",

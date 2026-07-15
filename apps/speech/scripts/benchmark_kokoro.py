@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Benchmark OpenRouter Kokoro first-byte and full-stream latency."""
+"""Benchmark Kokoro first-byte and full-stream latency by provider route."""
 
 from __future__ import annotations
 
@@ -14,7 +14,15 @@ import time
 BACKEND_ROOT = Path(__file__).resolve().parents[1] / "backend"
 sys.path.insert(0, str(BACKEND_ROOT))
 
-from kokoro_streaming import KokoroConnectionPool, open_kokoro_openrouter_stream
+from kokoro_streaming import (
+    KOKORO_DEEPINFRA_HOST,
+    KOKORO_DEEPINFRA_MODEL,
+    KOKORO_OPENROUTER_HOST,
+    KOKORO_OPENROUTER_MODEL,
+    KokoroConnectionPool,
+    open_kokoro_deepinfra_stream,
+    open_kokoro_openrouter_stream,
+)
 
 
 DEFAULT_LENGTHS = (40, 80, 120, 450)
@@ -30,12 +38,18 @@ def main() -> int:
         connection_modes=comma_separated_values(args.connection_modes),
     )
     if args.dry_run:
+        endpoint = (
+            "https://api.deepinfra.com/v1/text-to-speech/{voice_id}/stream"
+            if args.provider == "deepinfra"
+            else "https://openrouter.ai/api/v1/audio/speech"
+        )
         print(
             json.dumps(
                 {
                     "dry_run": True,
-                    "endpoint": "https://openrouter.ai/api/v1/audio/speech",
-                    "model": "hexgrad/kokoro-82m",
+                    "provider": args.provider,
+                    "endpoint": endpoint,
+                    "model": KOKORO_DEEPINFRA_MODEL if args.provider == "deepinfra" else KOKORO_OPENROUTER_MODEL,
                     "request_count": args.requests,
                     "interval_seconds": args.interval_seconds,
                     "cases": cases,
@@ -44,18 +58,22 @@ def main() -> int:
             )
         )
         return 0
-    api_key = os.environ.get("OPENROUTER_API_KEY", "").strip()
+    secret_environment = "DEEPINFRA_API_KEY" if args.provider == "deepinfra" else "OPENROUTER_API_KEY"
+    api_key = os.environ.get(secret_environment, "").strip()
     if not api_key:
-        print("OPENROUTER_API_KEY is required unless --dry-run is used.", file=sys.stderr)
+        print(f"{secret_environment} is required unless --dry-run is used.", file=sys.stderr)
         return 2
     results = run_benchmark(
         cases=cases,
         request_count=max(1, args.requests),
         interval_seconds=max(0.0, args.interval_seconds),
         api_key=api_key,
+        provider=args.provider,
         voice=args.voice,
+        language=args.language,
     )
     payload = {
+        "provider": args.provider,
         "request_count": len(results),
         "success_count": sum(1 for result in results if result.get("ok")),
         "error_count": sum(1 for result in results if not result.get("ok")),
@@ -75,7 +93,9 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--lengths", default=",".join(str(value) for value in DEFAULT_LENGTHS))
     parser.add_argument("--formats", default=",".join(DEFAULT_FORMATS))
     parser.add_argument("--connection-modes", default=",".join(DEFAULT_CONNECTION_MODES))
+    parser.add_argument("--provider", choices=("openrouter", "deepinfra"), default="openrouter")
     parser.add_argument("--voice", default="af_heart")
+    parser.add_argument("--language", default="en")
     parser.add_argument("--include-requests", action="store_true", help="Include every request record in JSON output.")
     parser.add_argument("--dry-run", action="store_true")
     return parser.parse_args()
@@ -103,25 +123,38 @@ def run_benchmark(
     request_count: int,
     interval_seconds: float,
     api_key: str,
+    provider: str,
     voice: str,
+    language: str,
 ) -> list[dict]:
     if not cases:
         raise ValueError("At least one benchmark case is required.")
-    pooled = KokoroConnectionPool()
+    host = KOKORO_DEEPINFRA_HOST if provider == "deepinfra" else KOKORO_OPENROUTER_HOST
+    pooled = KokoroConnectionPool(host=host)
     results: list[dict] = []
     try:
         for request_index in range(request_count):
             case = cases[request_index % len(cases)]
-            pool = pooled if case["connection_mode"] == "pooled" else KokoroConnectionPool()
+            pool = pooled if case["connection_mode"] == "pooled" else KokoroConnectionPool(host=host)
             started = time.monotonic()
             try:
-                stream = open_kokoro_openrouter_stream(
-                    text=benchmark_text(int(case["text_chars"])),
-                    voice=voice,
-                    settings={"_app_secrets": {"openrouter-api-key": api_key}},
-                    response_format=str(case["format"]),
-                    pool=pool,
-                )
+                if provider == "deepinfra":
+                    stream = open_kokoro_deepinfra_stream(
+                        text=benchmark_text(int(case["text_chars"])),
+                        voice=voice,
+                        language=language,
+                        settings={"_app_secrets": {"deepinfra-api-key": api_key}},
+                        response_format=str(case["format"]),
+                        pool=pool,
+                    )
+                else:
+                    stream = open_kokoro_openrouter_stream(
+                        text=benchmark_text(int(case["text_chars"])),
+                        voice=voice,
+                        settings={"_app_secrets": {"openrouter-api-key": api_key}},
+                        response_format=str(case["format"]),
+                        pool=pool,
+                    )
                 size_bytes = sum(len(chunk) for chunk in stream.iter_chunks())
                 result = {
                     **case,

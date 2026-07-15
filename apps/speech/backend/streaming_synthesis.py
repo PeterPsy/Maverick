@@ -14,6 +14,7 @@ from kokoro_streaming import (
     KOKORO_PCM_CONTENT_TYPE,
     KOKORO_PCM_SAMPLE_FORMAT,
     KOKORO_PCM_SAMPLE_RATE,
+    open_kokoro_deepinfra_stream,
     open_kokoro_openrouter_stream,
 )
 from models import MAX_AUDIO_BYTES
@@ -42,6 +43,8 @@ class StreamingSynthesisPlan:
         language: str,
         rate: int,
         backend_entrypoint_ms: float,
+        request_started: float,
+        engine: str,
     ) -> None:
         self._data_root = data_root
         self._upstream = upstream
@@ -51,7 +54,8 @@ class StreamingSynthesisPlan:
         self._voice = voice
         self._language = language
         self._rate = rate
-        self._started = time.monotonic()
+        self._engine = engine
+        self._started = request_started
         timings = {
             "backend_entrypoint_ms": backend_entrypoint_ms,
             **upstream.timings,
@@ -82,6 +86,10 @@ class StreamingSynthesisPlan:
         finally:
             self._record_job(size_bytes=size_bytes, completed=completed)
 
+    def cancel(self) -> None:
+        """Close the active provider response when the downstream client leaves."""
+        self._upstream.close()
+
     def _record_job(self, *, size_bytes: int, completed: bool) -> None:
         upstream_timings = dict(self._upstream.timings)
         request_total_seconds = max(0.0, time.monotonic() - self._started)
@@ -92,7 +100,7 @@ class StreamingSynthesisPlan:
             "text_chars": self._text_chars,
             "voice": self._voice,
             "rate": self._rate,
-            "engine": "kokoro-openrouter",
+            "engine": self._engine,
             "quality_profile": "natural",
             "latency_profile": "remote_streaming",
             "content_type": KOKORO_PCM_CONTENT_TYPE,
@@ -118,7 +126,8 @@ class StreamingSynthesisPlan:
 
 
 def prepare_synthesis_stream(*, data_root: Path, body: dict) -> StreamingSynthesisPlan:
-    """Validate one Kokoro request and open its first PCM byte before returning headers."""
+    """Validate one Kokoro request and open its upstream response headers."""
+    request_started = time.monotonic()
     text = normalized_text(body.get("text"))
     requested_voice = normalized_voice(body.get("voice"), default="")
     rate = normalized_rate(body.get("rate"))
@@ -133,13 +142,21 @@ def prepare_synthesis_stream(*, data_root: Path, body: dict) -> StreamingSynthes
     if isinstance(body.get("_app_secrets"), dict):
         settings = {**settings, "_app_secrets": dict(body["_app_secrets"])}
     requested_engine = str(settings.get("synthesis_engine") or "auto")
-    if requested_engine != "kokoro-openrouter":
+    if requested_engine not in {"kokoro-openrouter", "kokoro-deepinfra"}:
         raise SpeechProviderUnavailableError(
-            "Progressive PCM synthesis is currently available only when kokoro-openrouter is selected."
+            "Progressive PCM synthesis requires a configured Kokoro remote engine."
         )
     language = selected_synthesis_language(settings, requested=body.get("language"), text=text)
     voice = selected_kokoro_voice_id(requested_voice, text=text, language=language)
-    upstream = open_kokoro_openrouter_stream(text=text, voice=voice, settings=settings)
+    if requested_engine == "kokoro-deepinfra":
+        upstream = open_kokoro_deepinfra_stream(
+            text=text,
+            voice=voice,
+            language=language,
+            settings=settings,
+        )
+    else:
+        upstream = open_kokoro_openrouter_stream(text=text, voice=voice, settings=settings)
     return StreamingSynthesisPlan(
         data_root=data_root,
         upstream=upstream,
@@ -150,6 +167,8 @@ def prepare_synthesis_stream(*, data_root: Path, body: dict) -> StreamingSynthes
         language=language,
         rate=rate,
         backend_entrypoint_ms=_non_negative_milliseconds(body.get("_backend_entrypoint_ms")),
+        request_started=request_started,
+        engine=requested_engine,
     )
 
 

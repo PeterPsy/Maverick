@@ -25,7 +25,7 @@ Keep persistence in `store.py` or `database.py`.
 
 Mounted backend entrypoints receive a bounded `headers` object in their payload for browser context that may affect generated URLs or range handling. The core includes only safe request metadata such as `content-type`, `range`, `origin`, `host`, and forwarded host/proto fields; cookies, authorization headers, and arbitrary request headers are not passed through.
 
-Most backend entrypoints should keep returning one JSON object on stdout. Mounted `GET` or `HEAD` media routes may opt in to binary streaming when the core payload includes:
+Most backend entrypoints should keep returning one JSON object on stdout. Mounted `GET` or `HEAD` media routes and explicit progressive `POST` operations may opt in to binary streaming when the core payload includes:
 
 ```json
 {"stream_response_protocol": "maverick.backend.stream.v1"}
@@ -40,6 +40,8 @@ In that mode the entrypoint emits one UTF-8 JSON header line followed by optiona
 After the newline, remaining stdout is streamed to the HTTP client. Use this only for backend-approved response bytes; keep secrets in entrypoint input and never put local host paths or bearer tokens in the stream header.
 
 The core forwards each available stdout pipe chunk immediately, adds `X-Accel-Buffering: no`, and closes the request entrypoint when the HTTP client disconnects. Entrypoints should flush after the header and after latency-sensitive chunks, stop upstream work when their stdout consumer closes, and must not rely on the platform accumulating a requested chunk size before delivery.
+
+Mounted backend callers may request a bounded subset of the app's declared secrets with `_app_secret_request`. JSON operations put that object in the request body. Binary-body operations and other calls that cannot add JSON fields may send its compact JSON encoding in the `_app_secret_request` query parameter. The core validates both forms against the app contract and active grants before it delivers any secret; callers should mark alternative provider credentials optional when only one configured route is required.
 
 Mounted `GET` or `HEAD` media routes may also return an app-approved local file through `file_response`. The core validates the path against the app's allowed roots and serves it with range support. `file_response.headers` is optional and supports only a small safe allowlist for browser loading requirements, currently `Access-Control-Allow-Origin`, `Cross-Origin-Resource-Policy`, and `Timing-Allow-Origin`; arbitrary headers, cookies, and content overrides are ignored by the core.
 

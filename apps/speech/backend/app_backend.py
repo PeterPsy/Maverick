@@ -143,7 +143,6 @@ def relay_backend_worker_stream(payload: dict) -> None:
             client.settimeout(5)
             client.connect(str(paths["socket"]))
             client.sendall((json.dumps(payload, sort_keys=True) + "\n").encode("utf-8"))
-            client.shutdown(socket.SHUT_WR)
             while time.monotonic() < deadline:
                 client.settimeout(min(1.0, max(0.1, deadline - time.monotonic())))
                 try:

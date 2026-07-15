@@ -27,9 +27,11 @@ from urllib import request as urllib_request
 
 from errors import SpeechProviderUnavailableError, SpeechTranscriptionError
 from kokoro_streaming import (
+    KOKORO_DEEPINFRA_MODEL,
     KOKORO_OPENROUTER_DEFAULT_VOICE,
     KOKORO_OPENROUTER_MODEL,
     KOKORO_PCM_CONTENT_TYPE,
+    collect_kokoro_deepinfra_audio,
     collect_kokoro_openrouter_audio,
 )
 from models import (
@@ -200,6 +202,16 @@ def run_kokoro_openrouter(*, text: str, voice: str, settings: dict) -> bytes:
     return collect_kokoro_openrouter_audio(
         text=text,
         voice=voice,
+        settings=settings,
+        response_format=KOKORO_OPENROUTER_RESPONSE_FORMAT,
+    )
+
+
+def run_kokoro_deepinfra(*, text: str, voice: str, language: str, settings: dict) -> bytes:
+    return collect_kokoro_deepinfra_audio(
+        text=text,
+        voice=voice,
+        language=language,
         settings=settings,
         response_format=KOKORO_OPENROUTER_RESPONSE_FORMAT,
     )
@@ -664,7 +676,8 @@ def synthesis_engine_statuses(settings: dict | None = None, *, include_paths: bo
         return copy.deepcopy(cached[1])
     statuses = [
         *[_synthesis_engine_status(candidate, include_path=include_paths) for candidate in LOCAL_TTS_ENGINE_CANDIDATES],
-        _remote_kokoro_status(settings or {}),
+        _remote_kokoro_openrouter_status(settings or {}),
+        _remote_kokoro_deepinfra_status(settings or {}),
     ]
     _SYNTHESIS_STATUS_CACHE[key] = (now, copy.deepcopy(statuses))
     return statuses
@@ -682,10 +695,11 @@ def _synthesis_status_cache_key(*, include_paths: bool, settings: dict | None = 
         os.environ.get("MAVERICK_SPEECH_PIPER_LANGUAGE", ""),
         os.environ.get("MAVERICK_SPEECH_PIPER_VOICES_JSON", ""),
         bool(_runtime_secret(settings or {}, "openrouter_api_key")),
+        bool(_runtime_secret(settings or {}, "deepinfra_api_key")),
     )
 
 
-def _remote_kokoro_status(settings: dict) -> dict:
+def _remote_kokoro_openrouter_status(settings: dict) -> dict:
     configured = bool(_runtime_secret(settings, "openrouter_api_key"))
     return {
         "engine": "kokoro-openrouter",
@@ -698,6 +712,24 @@ def _remote_kokoro_status(settings: dict) -> dict:
         "model": KOKORO_OPENROUTER_MODEL,
         "quality_profile": "natural",
         "latency_profile": "remote",
+        "supported_formats": [KOKORO_OPENROUTER_CONTENT_TYPE, KOKORO_PCM_CONTENT_TYPE],
+        "voices": [dict(voice) for voice in KOKORO_OPENROUTER_VOICES],
+    }
+
+
+def _remote_kokoro_deepinfra_status(settings: dict) -> dict:
+    configured = bool(_runtime_secret(settings, "deepinfra_api_key"))
+    return {
+        "engine": "kokoro-deepinfra",
+        "kind": "tts",
+        "available": configured,
+        "configured": configured,
+        "detail": "DeepInfra API key was delivered by Core Secrets."
+        if configured
+        else "Grant logical secret deepinfra-api-key to the Speech backend.",
+        "model": KOKORO_DEEPINFRA_MODEL,
+        "quality_profile": "natural",
+        "latency_profile": "remote_streaming",
         "supported_formats": [KOKORO_OPENROUTER_CONTENT_TYPE, KOKORO_PCM_CONTENT_TYPE],
         "voices": [dict(voice) for voice in KOKORO_OPENROUTER_VOICES],
     }

@@ -21,6 +21,7 @@ from engines import KOKORO_OPENROUTER_DEFAULT_VOICE
 from engines import KOKORO_OPENROUTER_LANGUAGE_DEFAULT_VOICES
 from engines import KOKORO_OPENROUTER_VOICES
 from engines import default_tts_voice_id
+from engines import run_kokoro_deepinfra
 from engines import run_kokoro_openrouter
 from engines import run_local_tts_engine as run_local_engine
 from engines import tts_engine_cache_fingerprint
@@ -50,7 +51,7 @@ def synthesize_payload(*, data_root: Path, generated_storage_root: Path, body: d
         settings = {**settings, "_app_secrets": dict(body["_app_secrets"])}
     requested_engine = str(settings.get("synthesis_engine") or "auto")
     language = selected_synthesis_language(settings, requested=body.get("language"), text=text)
-    if requested_engine == "kokoro-openrouter":
+    if requested_engine in {"kokoro-openrouter", "kokoro-deepinfra"}:
         voice = selected_kokoro_voice_id(
             requested_voice,
             text=text,
@@ -66,7 +67,15 @@ def synthesize_payload(*, data_root: Path, generated_storage_root: Path, body: d
             },
         )
         engine_started = time.monotonic()
-        audio = run_kokoro_openrouter(text=text, voice=voice, settings=settings)
+        if requested_engine == "kokoro-deepinfra":
+            audio = run_kokoro_deepinfra(
+                text=text,
+                voice=voice,
+                language=language,
+                settings=settings,
+            )
+        else:
+            audio = run_kokoro_openrouter(text=text, voice=voice, settings=settings)
         engine_seconds = time.monotonic() - engine_started
         content_type = output_format
         validate_audio_size(audio)
@@ -80,9 +89,9 @@ def synthesize_payload(*, data_root: Path, generated_storage_root: Path, body: d
                 "created_at": created_at,
                 "text_chars": len(text),
                 "voice": voice,
-                "engine": "kokoro-openrouter",
+                "engine": requested_engine,
                 "quality_profile": "natural",
-                "latency_profile": "remote",
+                "latency_profile": "remote_streaming" if requested_engine == "kokoro-deepinfra" else "remote",
                 "content_type": content_type,
                 "size_bytes": len(audio),
                 "cache_hit": False,
@@ -99,13 +108,13 @@ def synthesize_payload(*, data_root: Path, generated_storage_root: Path, body: d
             "audio_base64": base64.b64encode(audio).decode("ascii"),
             "size_bytes": len(audio),
             "text_chars": len(text),
-            "engine": "kokoro-openrouter",
+            "engine": requested_engine,
             "voice": voice,
             "language": language,
             "rate": rate,
             "format": output_format,
             "quality_profile": "natural",
-            "latency_profile": "remote",
+            "latency_profile": "remote_streaming" if requested_engine == "kokoro-deepinfra" else "remote",
             "cache_hit": False,
             "metrics": {
                 "engine_seconds": round(engine_seconds, 6),

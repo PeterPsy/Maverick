@@ -6,6 +6,7 @@ import argparse
 import json
 import os
 from pathlib import Path
+import select
 import socket
 import sys
 import threading
@@ -184,9 +185,41 @@ def send_streaming_payload(connection: socket.socket, payload: dict) -> None:
         )
         return
     header = {"status_code": 200, "stream_response": plan.stream_response}
-    connection.sendall(json.dumps(header, ensure_ascii=False).encode("utf-8") + b"\n")
-    for chunk in plan.iter_chunks():
-        connection.sendall(chunk)
+    finished = threading.Event()
+    watcher = threading.Thread(
+        target=_cancel_stream_on_client_disconnect,
+        args=(connection, plan, finished),
+        daemon=True,
+    )
+    watcher.start()
+    try:
+        connection.sendall(json.dumps(header, ensure_ascii=False).encode("utf-8") + b"\n")
+        for chunk in plan.iter_chunks():
+            connection.sendall(chunk)
+    finally:
+        finished.set()
+
+
+def _cancel_stream_on_client_disconnect(connection: socket.socket, plan: object, finished: threading.Event) -> None:
+    """Close the upstream provider response when the relay socket disappears."""
+    while not finished.wait(0.1):
+        try:
+            readable, _writable, _exceptional = select.select([connection], [], [], 0)
+        except (OSError, ValueError):
+            return
+        if not readable:
+            continue
+        try:
+            incoming = connection.recv(1, socket.MSG_PEEK)
+        except OSError:
+            incoming = b""
+        if incoming:
+            connection.recv(len(incoming))
+            continue
+        cancel = getattr(plan, "cancel", None)
+        if callable(cancel):
+            cancel()
+        return
 
 
 def _send_json_response(connection: socket.socket, response: dict) -> None:

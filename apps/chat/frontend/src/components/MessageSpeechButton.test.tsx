@@ -5,12 +5,13 @@ import { act, useState } from "react";
 import { createRoot } from "react-dom/client";
 import type { Root } from "react-dom/client";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { synthesizeSpeech, synthesizeSpeechStream } from "../api/client";
+import { recordSpeechPlaybackMetrics, synthesizeSpeech, synthesizeSpeechStream } from "../api/client";
 import { speechChunks, speechLanguageHint, speechLanguageTextFromMarkdown, speechTextFromMarkdown } from "../lib/messageSpeech";
 import * as speechPcmPlayback from "../lib/speechPcmPlayback";
 import { MessageSpeechButton } from "./MessageSpeechButton";
 
 vi.mock("../api/client", () => ({
+  recordSpeechPlaybackMetrics: vi.fn(async () => ({})),
   synthesizeSpeech: vi.fn(),
   synthesizeSpeechStream: vi.fn(),
 }));
@@ -21,6 +22,7 @@ let root: Root | null = null;
 afterEach(() => {
   vi.mocked(synthesizeSpeech).mockReset();
   vi.mocked(synthesizeSpeechStream).mockReset();
+  vi.mocked(recordSpeechPlaybackMetrics).mockClear();
   root?.unmount();
   root = null;
   container?.remove();
@@ -135,6 +137,60 @@ describe("MessageSpeechButton", () => {
     expect(fakePlayer.finish).toHaveBeenCalled();
     expect(fakePlayer.stop).toHaveBeenCalled();
     expect(synthesizeSpeech).not.toHaveBeenCalled();
+    expect(recordSpeechPlaybackMetrics).toHaveBeenCalledWith(
+      "speech",
+      expect.objectContaining({ mode: "pcm-stream", outcome: "playing", playback_id: expect.any(String) }),
+    );
+    expect(recordSpeechPlaybackMetrics).toHaveBeenCalledWith(
+      "speech",
+      expect.objectContaining({ mode: "pcm-stream", outcome: "completed", generation_id: "gen_component" }),
+    );
+  });
+
+  it("prioritizes the first PCM chunk before starting stream prefetch", async () => {
+    const fakePlayer = {
+      append: vi.fn(),
+      decoder: { sourceSampleRate: 24000 },
+      finish: vi.fn(async () => undefined),
+      started: false,
+      stop: vi.fn(),
+      underrunCount: 0,
+    };
+    vi.spyOn(speechPcmPlayback, "supportsPcmStreamingPlayback").mockReturnValue(true);
+    vi.spyOn(speechPcmPlayback.PcmStreamPlayer, "create").mockResolvedValue(
+      fakePlayer as unknown as speechPcmPlayback.PcmStreamPlayer,
+    );
+    let resolveFirstResponse: ((response: Response) => void) | undefined;
+    vi.mocked(synthesizeSpeechStream).mockImplementationOnce(
+      () => new Promise<Response>((resolve) => {
+        resolveFirstResponse = resolve;
+      }),
+    );
+    vi.mocked(synthesizeSpeechStream).mockImplementation(() => new Promise<Response>(() => undefined));
+    container = document.createElement("div");
+    document.body.appendChild(container);
+    root = createRoot(container);
+
+    await act(async () => {
+      root?.render(<PrefetchSpeechButtonHost providerStreamingSupported />);
+    });
+    const button = container.querySelector("button");
+    await act(async () => {
+      button?.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
+      await Promise.resolve();
+    });
+    expect(synthesizeSpeechStream).toHaveBeenCalledTimes(1);
+
+    await act(async () => {
+      resolveFirstResponse?.(pcmResponse());
+      await Promise.resolve();
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+    expect(synthesizeSpeechStream).toHaveBeenCalledTimes(3);
+
+    await act(async () => {
+      button?.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
+    });
   });
 
   it("aborts pending synthesis when playback is stopped", async () => {
@@ -585,7 +641,7 @@ function TwoSpeechButtonsHost() {
   );
 }
 
-function PrefetchSpeechButtonHost() {
+function PrefetchSpeechButtonHost({ providerStreamingSupported = false }: { providerStreamingSupported?: boolean } = {}) {
   const [activeMessageId, setActiveMessageId] = useState<string | null>(null);
   return (
     <MessageSpeechButton
@@ -595,8 +651,21 @@ function PrefetchSpeechButtonHost() {
       messageId="agent-1"
       onActiveMessageChange={setActiveMessageId}
       providerAppId="speech"
+      providerStreamingSupported={providerStreamingSupported}
     />
   );
+}
+
+function pcmResponse(): Response {
+  return new Response(new Uint8Array([0, 0, 1, 0]), {
+    status: 200,
+    headers: {
+      "Content-Type": "audio/pcm",
+      "X-Audio-Channels": "1",
+      "X-Audio-Sample-Format": "s16le",
+      "X-Audio-Sample-Rate": "24000",
+    },
+  });
 }
 
 function installAudioMock(options: { endDuringPlay?: boolean; playError?: Error } = {}) {

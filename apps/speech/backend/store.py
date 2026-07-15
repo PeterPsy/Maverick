@@ -53,6 +53,31 @@ def append_job(data_root: Path, job: dict) -> None:
         _atomic_write_json(path, payload)
 
 
+def upsert_job(data_root: Path, job: dict) -> None:
+    """Insert or replace one bounded metadata job by job id."""
+    data_root.mkdir(parents=True, exist_ok=True)
+    path = jobs_path(data_root)
+    job_id = str(job.get("job_id") or "")
+    with _locked_file(data_root / ".jobs.lock"):
+        payload = read_jobs(data_root)
+        existing = next(
+            (
+                item
+                for item in payload["jobs"]
+                if isinstance(item, dict) and str(item.get("job_id") or "") == job_id
+            ),
+            {},
+        )
+        jobs = [item for item in payload["jobs"] if not isinstance(item, dict) or str(item.get("job_id") or "") != job_id]
+        merged = {**existing, **job}
+        if existing.get("created_at"):
+            merged["created_at"] = existing["created_at"]
+            merged["updated_at"] = job.get("created_at")
+        payload["schema_version"] = "1"
+        payload["jobs"] = [merged, *jobs][:MAX_JOBS]
+        _atomic_write_json(path, payload)
+
+
 def settings_path(data_root: Path) -> Path:
     return data_root / "settings.json"
 

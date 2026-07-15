@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 import json
 import os
 import selectors
@@ -23,10 +23,11 @@ STREAMING_ENTRYPOINT_HEADER_MAX_BYTES = 1024 * 1024
 class EntrypointShutdownController:
     """Track live entrypoint subprocesses so a host can terminate them during shutdown."""
 
-    def __init__(self) -> None:
+    def __init__(self, *, parent: EntrypointShutdownController | None = None) -> None:
         self._shutting_down = Event()
         self._lock = Lock()
         self._processes: set[subprocess.Popen[str]] = set()
+        self._parent = parent
 
     def begin_shutdown(self) -> None:
         """Mark shutdown started and terminate registered subprocesses."""
@@ -38,7 +39,7 @@ class EntrypointShutdownController:
 
     def is_shutting_down(self) -> bool:
         """Return whether the host has started shutdown."""
-        return self._shutting_down.is_set()
+        return self._shutting_down.is_set() or bool(self._parent and self._parent.is_shutting_down())
 
     def active_process_count(self) -> int:
         """Return how many entrypoint subprocesses are still registered."""
@@ -49,11 +50,17 @@ class EntrypointShutdownController:
         """Track one live subprocess until it exits."""
         with self._lock:
             self._processes.add(process)
+        if self._parent is not None:
+            self._parent.register(process)
+        if self._shutting_down.is_set():
+            _terminate_process_tree(process)
 
     def unregister(self, process: subprocess.Popen[str]) -> None:
         """Stop tracking one subprocess."""
         with self._lock:
             self._processes.discard(process)
+        if self._parent is not None:
+            self._parent.unregister(process)
 
 
 @dataclass
@@ -67,49 +74,35 @@ class StreamingJsonEntrypointResult:
     shutdown_controller: EntrypointShutdownController | None = None
     entrypoint_path: str = ""
     _closed: bool = False
+    _close_lock: Lock = field(default_factory=Lock, repr=False)
 
     @property
     def has_stream(self) -> bool:
         return self.process is not None
 
     def iter_stream(self, *, chunk_bytes: int):
-        """Yield binary stdout chunks and clean up the subprocess when complete."""
-        if self.process is None or self.process.stdout is None:
-            if self.stdout_prefix:
-                yield self.stdout_prefix
-                self.stdout_prefix = b""
-            return
-        try:
-            if self.stdout_prefix:
-                yield self.stdout_prefix
-                self.stdout_prefix = b""
-            while True:
-                chunk = self.process.stdout.read(chunk_bytes)
-                if not chunk:
-                    break
-                yield chunk
-            self._wait_for_exit()
-        finally:
-            self.close()
+        """Return an iterator that forwards each available stdout chunk immediately."""
+        return _StreamingEntrypointIterator(self, chunk_bytes=chunk_bytes)
 
     def close(self) -> None:
-        if self._closed:
-            return
-        self._closed = True
-        process = self.process
-        if process is not None and process.poll() is None:
-            _terminate_process_tree(process)
-            try:
-                process.wait(timeout=5)
-            except subprocess.TimeoutExpired:
-                process.kill()
-                process.wait()
-        if self.shutdown_controller is not None and process is not None:
-            self.shutdown_controller.unregister(process)  # type: ignore[arg-type]
-        if process is not None and process.stdout is not None:
-            process.stdout.close()
-        if self.stderr_file is not None:
-            self.stderr_file.close()
+        with self._close_lock:
+            if self._closed:
+                return
+            self._closed = True
+            process = self.process
+            if process is not None and process.poll() is None:
+                _terminate_process_tree(process)
+                try:
+                    process.wait(timeout=5)
+                except subprocess.TimeoutExpired:
+                    process.kill()
+                    process.wait()
+            if self.shutdown_controller is not None and process is not None:
+                self.shutdown_controller.unregister(process)  # type: ignore[arg-type]
+            if process is not None and process.stdout is not None:
+                process.stdout.close()
+            if self.stderr_file is not None:
+                self.stderr_file.close()
 
     def _wait_for_exit(self) -> None:
         process = self.process
@@ -126,6 +119,49 @@ class StreamingJsonEntrypointResult:
                 f"Entrypoint `{self.entrypoint_path}` failed with exit code {returncode}: "
                 f"{redact_entrypoint_stderr(stderr) or 'no stderr'}"
             )
+
+
+class _StreamingEntrypointIterator:
+    """Read one available pipe buffer at a time and support concurrent cancellation."""
+
+    def __init__(self, result: StreamingJsonEntrypointResult, *, chunk_bytes: int) -> None:
+        if chunk_bytes <= 0:
+            raise ValueError("Streaming entrypoint chunk size must be positive.")
+        self._result = result
+        self._chunk_bytes = chunk_bytes
+        self._finished = False
+
+    def __iter__(self) -> _StreamingEntrypointIterator:
+        return self
+
+    def __next__(self) -> bytes:
+        if self._finished:
+            raise StopIteration
+        if self._result.stdout_prefix:
+            chunk = self._result.stdout_prefix
+            self._result.stdout_prefix = b""
+            return chunk
+        process = self._result.process
+        stdout = None if process is None else process.stdout
+        if stdout is None:
+            self.close()
+            raise StopIteration
+        read_available = getattr(stdout, "read1", stdout.read)
+        chunk = read_available(self._chunk_bytes)
+        if chunk:
+            return chunk
+        self._finished = True
+        try:
+            self._result._wait_for_exit()
+        finally:
+            self._result.close()
+        raise StopIteration
+
+    def close(self) -> None:
+        if self._finished and self._result._closed:
+            return
+        self._finished = True
+        self._result.close()
 
 
 def run_json_entrypoint(

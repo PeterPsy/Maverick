@@ -67,6 +67,9 @@ class PlatformHost:
 
     def __call__(self, environ: dict, start_response: StartResponse) -> Iterable[bytes]:
         path = environ.get("PATH_INFO", "/")
+        request_shutdown_controller = environ.get("maverick.entrypoint_shutdown_controller")
+        if not isinstance(request_shutdown_controller, EntrypointShutdownController):
+            request_shutdown_controller = self.shutdown_controller
         try:
             method = environ.get("REQUEST_METHOD", "GET").upper()
             enforce_same_origin_for_unsafe_request(environ)
@@ -214,7 +217,7 @@ class PlatformHost:
                     user=user,
                     start_path=self.start_path,
                     start_response=start_response,
-                    shutdown_controller=self.shutdown_controller,
+                    shutdown_controller=request_shutdown_controller,
                 )
             if path.startswith("/api/apps/") and path.endswith("/backend") and method == "POST":
                 if context is None:
@@ -228,7 +231,7 @@ class PlatformHost:
                     user=user,
                     start_path=self.start_path,
                     start_response=start_response,
-                    shutdown_controller=self.shutdown_controller,
+                    shutdown_controller=request_shutdown_controller,
                 )
             backend_file_gateway = _backend_file_gateway_route(path)
             if backend_file_gateway and method in {"GET", "HEAD"}:
@@ -255,7 +258,7 @@ class PlatformHost:
                     user=user,
                     start_path=self.start_path,
                     start_response=start_response,
-                    shutdown_controller=self.shutdown_controller,
+                    shutdown_controller=request_shutdown_controller,
                 )
             return text_response(start_response, "Not found", status="404 Not Found")
         except HttpRequestError as error:

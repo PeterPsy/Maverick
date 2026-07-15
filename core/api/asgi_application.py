@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 from concurrent.futures import ThreadPoolExecutor
+from contextlib import suppress
 from functools import partial
 from io import BytesIO
 import json
@@ -158,11 +159,25 @@ class PlatformAsgiHost:
         environ = _wsgi_environ(scope, body)
         use_app_backend_executor = _is_app_backend_request(scope)
         loop = asyncio.get_running_loop()
+        request_shutdown_controller: EntrypointShutdownController | None = None
+        disconnect_task: asyncio.Task[bool] | None = None
         if use_app_backend_executor:
-            response_iterable = await loop.run_in_executor(
+            request_shutdown_controller = EntrypointShutdownController(parent=self.shutdown_controller)
+            environ["maverick.entrypoint_shutdown_controller"] = request_shutdown_controller
+            disconnect_task = asyncio.create_task(_wait_for_http_disconnect(receive))
+            response_future = loop.run_in_executor(
                 self.app_backend_executor,
                 partial(_open_wsgi_http, self.http_host, environ, start_response),
             )
+            done, _pending = await asyncio.wait(
+                {response_future, disconnect_task},
+                return_when=asyncio.FIRST_COMPLETED,
+            )
+            if disconnect_task in done and disconnect_task.result():
+                request_shutdown_controller.begin_shutdown()
+                await _consume_future(response_future)
+                return
+            response_iterable = await response_future
         else:
             response_iterable = await asyncio.to_thread(
                 _open_wsgi_http,
@@ -177,21 +192,16 @@ class PlatformAsgiHost:
                 "headers": status_holder.get("headers", []),
             }
         )
-        try:
-            while True:
-                if use_app_backend_executor:
-                    chunk = await loop.run_in_executor(self.app_backend_executor, partial(_next_wsgi_chunk, response_iterable))
-                else:
-                    chunk = await asyncio.to_thread(_next_wsgi_chunk, response_iterable)
-                if chunk is None:
-                    break
-                await send({"type": "http.response.body", "body": chunk, "more_body": True})
-        finally:
-            if use_app_backend_executor:
-                await loop.run_in_executor(self.app_backend_executor, partial(_close_wsgi_iterable, response_iterable))
-            else:
-                await asyncio.to_thread(_close_wsgi_iterable, response_iterable)
-        await send({"type": "http.response.body", "body": b"", "more_body": False})
+        disconnected = await _forward_wsgi_response_body(
+            response_iterable,
+            receive=receive,
+            send=send,
+            executor=self.app_backend_executor if use_app_backend_executor else None,
+            disconnect_task=disconnect_task,
+            request_shutdown_controller=request_shutdown_controller,
+        )
+        if not disconnected:
+            await send({"type": "http.response.body", "body": b"", "more_body": False})
 
     async def _handle_sidecar_http(
         self,
@@ -375,6 +385,63 @@ def _close_wsgi_iterable(iterator: Iterable[bytes]) -> None:
     close = getattr(iterator, "close", None)
     if callable(close):
         close()
+
+
+async def _forward_wsgi_response_body(
+    response_iterable: Iterator[bytes],
+    *,
+    receive: AsgiReceive,
+    send: AsgiSend,
+    executor: ThreadPoolExecutor | None,
+    disconnect_task: asyncio.Task[bool] | None = None,
+    request_shutdown_controller: EntrypointShutdownController | None = None,
+) -> bool:
+    """Forward WSGI chunks while terminating app entrypoints on client disconnect."""
+    loop = asyncio.get_running_loop()
+    if request_shutdown_controller is not None and disconnect_task is None:
+        disconnect_task = asyncio.create_task(_wait_for_http_disconnect(receive))
+    disconnected = False
+    try:
+        while True:
+            chunk_future = loop.run_in_executor(executor, partial(_next_wsgi_chunk, response_iterable))
+            if disconnect_task is not None:
+                done, _pending = await asyncio.wait(
+                    {chunk_future, disconnect_task},
+                    return_when=asyncio.FIRST_COMPLETED,
+                )
+                if disconnect_task in done:
+                    if disconnect_task.result():
+                        disconnected = True
+                        if request_shutdown_controller is not None:
+                            request_shutdown_controller.begin_shutdown()
+                        await _consume_future(chunk_future)
+                        break
+                    disconnect_task = None
+            chunk = await chunk_future
+            if chunk is None:
+                break
+            await send({"type": "http.response.body", "body": chunk, "more_body": True})
+    finally:
+        if disconnect_task is not None and not disconnect_task.done():
+            disconnect_task.cancel()
+            with suppress(asyncio.CancelledError):
+                await disconnect_task
+        await loop.run_in_executor(executor, partial(_close_wsgi_iterable, response_iterable))
+    return disconnected
+
+
+async def _wait_for_http_disconnect(receive: AsgiReceive) -> bool:
+    """Wait until the ASGI server reports that the HTTP client disconnected."""
+    while True:
+        message = await receive()
+        if message.get("type") == "http.disconnect":
+            return True
+
+
+async def _consume_future(future: asyncio.Future[Any]) -> None:
+    """Observe a worker future after cancellation without leaking its exception."""
+    with suppress(asyncio.CancelledError, Exception):
+        await future
 
 
 def json_error_body(error: str) -> bytes:

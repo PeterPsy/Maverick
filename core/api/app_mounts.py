@@ -65,6 +65,7 @@ APP_BACKEND_BINARY_BODY_LIMITS = {
 }
 
 FILE_RESPONSE_CHUNK_BYTES = 1024 * 1024
+STREAM_RESPONSE_CHUNK_BYTES = 64 * 1024
 FILE_RESPONSE_EXTRA_HEADERS = {
     "access-control-allow-origin": "Access-Control-Allow-Origin",
     "cross-origin-resource-policy": "Cross-Origin-Resource-Policy",
@@ -1061,6 +1062,7 @@ def _serve_app_stream_response(
     headers = [
         ("Content-Type", content_type),
         ("Cache-Control", str(stream_response.get("cache_control") or "private, max-age=60")),
+        ("X-Accel-Buffering", "no"),
         ("X-Content-Type-Options", "nosniff"),
         ("Content-Disposition", f'{disposition}; filename="{file_name}"'),
         *_stream_response_observability_headers(stream_response),
@@ -1076,7 +1078,7 @@ def _serve_app_stream_response(
         if stream is not None:
             stream.close()
         return [b""]
-    return stream.iter_stream(chunk_bytes=FILE_RESPONSE_CHUNK_BYTES)
+    return stream.iter_stream(chunk_bytes=STREAM_RESPONSE_CHUNK_BYTES)
 
 
 def _optional_non_negative_int(value: object) -> int | None:

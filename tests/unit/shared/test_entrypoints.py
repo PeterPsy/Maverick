@@ -8,7 +8,13 @@ import time
 import unittest
 from unittest.mock import patch
 
-from core.shared.entrypoints import EntrypointShutdownController, redact_entrypoint_stderr, run_json_entrypoint, run_streaming_json_entrypoint
+from core.shared.entrypoints import (
+    EntrypointShutdownController,
+    StreamingJsonEntrypointResult,
+    redact_entrypoint_stderr,
+    run_json_entrypoint,
+    run_streaming_json_entrypoint,
+)
 
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
@@ -157,6 +163,42 @@ class SharedEntrypointTests(unittest.TestCase):
         self.assertEqual(result.result["status_code"], 200)
         self.assertEqual(result.result["stream_response"]["content_length"], 6)
         self.assertEqual(body, b"abcdef")
+
+    def test_streaming_iterator_reads_available_pipe_bytes_without_filling_requested_chunk(self) -> None:
+        class FakeStdout:
+            def __init__(self) -> None:
+                self.chunks = [b"first", b"second", b""]
+                self.read1_sizes: list[int] = []
+                self.closed = False
+
+            def read1(self, size: int) -> bytes:
+                self.read1_sizes.append(size)
+                return self.chunks.pop(0)
+
+            def read(self, _size: int) -> bytes:
+                raise AssertionError("Buffered read would wait to fill the requested chunk.")
+
+            def close(self) -> None:
+                self.closed = True
+
+        class FakeProcess:
+            def __init__(self) -> None:
+                self.stdout = FakeStdout()
+
+            def poll(self) -> int:
+                return 0
+
+            def wait(self, timeout: float | None = None) -> int:
+                return 0
+
+        process = FakeProcess()
+        result = StreamingJsonEntrypointResult(result={"stream_response": {}}, process=process)  # type: ignore[arg-type]
+
+        body = b"".join(result.iter_stream(chunk_bytes=1024 * 1024))
+
+        self.assertEqual(body, b"firstsecond")
+        self.assertEqual(process.stdout.read1_sizes, [1024 * 1024, 1024 * 1024, 1024 * 1024])
+        self.assertTrue(process.stdout.closed)
 
 
 if __name__ == "__main__":

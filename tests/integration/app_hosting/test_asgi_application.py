@@ -6,11 +6,12 @@ import json
 from pathlib import Path
 import os
 import tempfile
+from threading import Event
 from types import SimpleNamespace
 from unittest.mock import patch
 import unittest
 
-from core.api.asgi_application import LazyAsgiApplication, PlatformAsgiHost, _is_app_backend_request, app
+from core.api.asgi_application import LazyAsgiApplication, PlatformAsgiHost, _forward_wsgi_response_body, _is_app_backend_request, app
 from core.api.app_events import APP_EVENTS_WS_PATH
 from core.api.platform_host import PlatformHost
 from core.api.platform_state import bootstrap_platform_state
@@ -118,6 +119,51 @@ class AsgiApplicationTests(unittest.TestCase):
         self.assertEqual(sent[0]["type"], "http.response.start")
         self.assertEqual(sent[0]["status"], 200)
         self.assertEqual(json.loads(sent[1]["body"].decode("utf-8")), {"status": "ok", "service": "maverick-core"})
+
+    def test_streaming_app_response_closes_blocked_iterator_on_client_disconnect(self) -> None:
+        class BlockingIterator:
+            def __init__(self) -> None:
+                self.started = Event()
+                self.released = Event()
+                self.closed = False
+
+            def __iter__(self):
+                return self
+
+            def __next__(self) -> bytes:
+                self.started.set()
+                self.released.wait(timeout=2)
+                raise StopIteration
+
+            def close(self) -> None:
+                self.closed = True
+                self.released.set()
+
+        iterator = BlockingIterator()
+        sent: list[dict[str, object]] = []
+
+        async def receive() -> dict[str, object]:
+            while not iterator.started.is_set():
+                await asyncio.sleep(0)
+            return {"type": "http.disconnect"}
+
+        async def send(message: dict[str, object]) -> None:
+            sent.append(message)
+
+        controller = SimpleNamespace(begin_shutdown=iterator.close)
+        disconnected = asyncio.run(
+            _forward_wsgi_response_body(
+                iterator,
+                receive=receive,
+                send=send,
+                executor=None,
+                request_shutdown_controller=controller,  # type: ignore[arg-type]
+            )
+        )
+
+        self.assertTrue(disconnected)
+        self.assertTrue(iterator.closed)
+        self.assertEqual(sent, [])
 
     def test_app_events_websocket_rejects_anonymous_handshake(self) -> None:
         host = PlatformAsgiHost(state=SimpleNamespace(repository_root=REPO_ROOT))

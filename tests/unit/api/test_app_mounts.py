@@ -9,7 +9,7 @@ from io import BytesIO
 from pathlib import Path
 from types import SimpleNamespace
 
-from core.api.app_mounts import _apply_app_secret_writes, _backend_request_headers, _backend_route_supports_streaming, _backend_secret_request_body, _read_backend_body, _resolve_app_secret_payload, _serve_app_file_gateway_manifest, _serve_app_file_response, _serve_app_stream_response, backend_entrypoint_timeout_seconds, is_public_app_static_asset, serve_frontend
+from core.api.app_mounts import STREAM_RESPONSE_CHUNK_BYTES, _apply_app_secret_writes, _backend_request_headers, _backend_route_supports_streaming, _backend_secret_request_body, _read_backend_body, _resolve_app_secret_payload, _serve_app_file_gateway_manifest, _serve_app_file_response, _serve_app_stream_response, backend_entrypoint_timeout_seconds, is_public_app_static_asset, serve_frontend
 from core.apps.contracts import build_app_contract, build_app_hook_timeouts, build_parsed_app_contract
 from core.observability.store import ObservabilityCollections, ObservabilityDocumentStore
 from core.secrets.app_delivery import app_secret_target
@@ -151,6 +151,7 @@ class AppMountsTestCase(unittest.TestCase):
             status_holder["status"] = status
             status_holder["headers"] = dict(headers)
 
+        stream = FakeStream()
         body = b"".join(
             _serve_app_stream_response(
                 environ={"REQUEST_METHOD": "POST"},
@@ -168,7 +169,7 @@ class AppMountsTestCase(unittest.TestCase):
                         "upstream_first_audio_byte_ms": 128.125,
                     },
                 },
-                stream=FakeStream(),
+                stream=stream,
             )
         )
 
@@ -176,8 +177,10 @@ class AppMountsTestCase(unittest.TestCase):
         assert isinstance(headers, dict)
         self.assertEqual(status_holder["status"], "200 OK")
         self.assertEqual(body, b"pcm-onepcm-two")
+        self.assertEqual(stream.chunk_bytes, STREAM_RESPONSE_CHUNK_BYTES)
         self.assertEqual(headers["Content-Type"], "audio/pcm")
         self.assertEqual(headers["Cache-Control"], "no-store")
+        self.assertEqual(headers["X-Accel-Buffering"], "no")
         self.assertEqual(headers["X-Generation-Id"], "gen_test_123")
         self.assertEqual(headers["X-Audio-Sample-Rate"], "24000")
         self.assertEqual(headers["X-Audio-Channels"], "1")

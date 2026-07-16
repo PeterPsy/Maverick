@@ -19,11 +19,13 @@ from core.api.app_reference_payloads import (
     runtime_app_reference_materialization_cache_stats,
 )
 from core.apps.service import install_store_app, register_app_source_from_contract
+from core.identity.service import create_user
 from core.runtime.runtime_thread import RuntimeThreadRecord
 from core.runtime.runtime_turns import RuntimeTurnRecord
 from core.runtime.service import queue_runtime_turn
 from core.runtime.turn_submission import RuntimeSessionPrewarmResult
 from core.runtime.turn_submission_service_queue import _queue_turn_with_event
+from core.workspaces.service import ensure_workspace_membership
 from tests.unit.api.app_reference_test_support import AppReferenceApiTestSupport
 
 
@@ -208,6 +210,107 @@ class PreparedRuntimeSessionsApiTestCase(AppReferenceApiTestSupport, unittest.Te
             self.assertTrue(payload["prewarm_completed"])
             self.assertTrue(payload["provider_thread_ready"])
             self.assertEqual(payload["prewarm_total_ms"], 321.5)
+
+    def test_runtime_session_prewarm_endpoint_waits_for_hot_provider_and_reports_readiness(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            repo_root = self._repo_root(temp_dir)
+            with patch.dict(
+                "os.environ",
+                {
+                    "MAVERICK_ALLOW_INSECURE_TEST_DEFAULTS": "1",
+                    "MAVERICK_ADMIN_USERNAME": "admin",
+                    "MAVERICK_ADMIN_PASSWORD": "maverick",
+                },
+            ):
+                state = bootstrap_platform_state(start_path=repo_root)
+            app = PlatformHost(state, start_path=repo_root)
+            cookie = self._login(app)
+
+            with patch("core.api.runtime_api._prewarm_new_runtime_session"):
+                create_status, create_payload, _headers = self._invoke(
+                    app,
+                    path="/api/runtime/sessions",
+                    method="POST",
+                    body={"agent_id": "chat", "source_app_id": "chat", "title": "Existing chat"},
+                    cookie=cookie,
+                )
+
+            self.assertEqual(create_status, 201)
+            session_id = create_payload["session_id"]
+            with patch(
+                "core.api.runtime_api._prewarm_new_runtime_session",
+                return_value=RuntimeSessionPrewarmResult(
+                    status="completed",
+                    prewarm_completed=True,
+                    provider_thread_ready=True,
+                    provider_id="codex",
+                    provider_thread_id="provider-thread-1",
+                    prewarm_total_ms=212.5,
+                ),
+            ) as prewarm:
+                status, payload, _headers = self._invoke(
+                    app,
+                    path=f"/api/runtime/sessions/{session_id}/prewarm",
+                    method="POST",
+                    body={},
+                    cookie=cookie,
+                )
+
+            self.assertEqual(status, 200)
+            prewarm.assert_called_once()
+            self.assertEqual(prewarm.call_args.kwargs["wait_seconds"], 2.0)
+            self.assertEqual(payload["session_id"], session_id)
+            self.assertEqual(payload["prewarm_status"], "completed")
+            self.assertTrue(payload["prewarm_completed"])
+            self.assertTrue(payload["provider_thread_ready"])
+            self.assertEqual(payload["prewarm_total_ms"], 212.5)
+
+    def test_runtime_session_prewarm_endpoint_requires_turn_submit_authority(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            repo_root = self._repo_root(temp_dir)
+            with patch.dict(
+                "os.environ",
+                {
+                    "MAVERICK_ALLOW_INSECURE_TEST_DEFAULTS": "1",
+                    "MAVERICK_ADMIN_USERNAME": "admin",
+                    "MAVERICK_ADMIN_PASSWORD": "maverick",
+                },
+            ):
+                state = bootstrap_platform_state(start_path=repo_root)
+            app = PlatformHost(state, start_path=repo_root)
+            admin_cookie = self._login(app)
+            member = create_user(state.identity_store, username="member", password="member-pass", platform_role="member")
+            ensure_workspace_membership(
+                state.workspace_store,
+                membership_id=f"default:{member.user_id}",
+                workspace_id="default",
+                user_id=member.user_id,
+                role="member",
+            )
+            member_cookie = self._login(app, username="member", password="member-pass")
+
+            with patch("core.api.runtime_api._prewarm_new_runtime_session"):
+                create_status, create_payload, _headers = self._invoke(
+                    app,
+                    path="/api/runtime/sessions",
+                    method="POST",
+                    body={"agent_id": "chat", "source_app_id": "chat", "title": "Owner chat"},
+                    cookie=admin_cookie,
+                )
+
+            self.assertEqual(create_status, 201)
+            with patch("core.api.runtime_api._prewarm_new_runtime_session") as prewarm:
+                status, payload, _headers = self._invoke(
+                    app,
+                    path=f"/api/runtime/sessions/{create_payload['session_id']}/prewarm",
+                    method="POST",
+                    body={},
+                    cookie=member_cookie,
+                )
+
+            self.assertEqual(status, 403)
+            self.assertEqual(payload["error"], "runtime_session_turn_submit_forbidden")
+            prewarm.assert_not_called()
 
     def test_prepare_only_session_promotes_on_first_turn_with_draft_metadata(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:

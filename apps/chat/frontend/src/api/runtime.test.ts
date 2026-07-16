@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { createRuntimeSession, createRuntimeSessionWithTurn, recordRuntimeTurnClientMetrics, sendRuntimeTurn } from "./runtime";
+import { createRuntimeSession, createRuntimeSessionWithTurn, prewarmRuntimeSession, recordRuntimeTurnClientMetrics, sendRuntimeTurn } from "./runtime";
 
 function okJson(payload: unknown): Response {
   return {
@@ -76,6 +76,18 @@ describe("runtime API client", () => {
       prewarm_completed: true,
       provider_thread_ready: true,
     });
+  });
+
+  it("posts runtime session prewarm requests", async () => {
+    await prewarmRuntimeSession("session-hot");
+
+    expect(fetch).toHaveBeenCalledWith(
+      "/api/runtime/sessions/session-hot/prewarm",
+      expect.objectContaining({
+        method: "POST",
+      }),
+    );
+    expect(requestBody()).toEqual({});
   });
 
   it("serializes plain hosted Chat session options for runtime creation with a turn", async () => {

@@ -17,6 +17,7 @@ import {
   interruptRuntimeTurn,
   isRuntimeSessionUnavailableError,
   prepareRuntimeSessionAppReferences,
+  prewarmRuntimeSession,
   recordRuntimeTurnClientMetrics,
   sendRuntimeTurn,
 } from "../api/client";
@@ -140,6 +141,7 @@ type PreparedRuntimeSessionLookup = {
 };
 
 const PREPARED_RUNTIME_SESSION_SUBMIT_WAIT_MS = 200;
+const PREPARED_RUNTIME_SESSION_PLAIN_SUBMIT_WAIT_MS = 350;
 const PREPARED_APP_REFERENCES_SUBMIT_WAIT_MS = 200;
 const NEW_CHAT_PRELOAD_CONVERSATION_KEY = "draft:active";
 
@@ -307,7 +309,7 @@ function elapsedMs(startedAt: number): number {
 
 function preparedRuntimeSessionSubmitWaitMs(message: QueuedMessage): number {
   if (!message.appReferences.length && !message.attachments.length) {
-    return 0;
+    return PREPARED_RUNTIME_SESSION_PLAIN_SUBMIT_WAIT_MS;
   }
   return PREPARED_RUNTIME_SESSION_SUBMIT_WAIT_MS;
 }
@@ -356,6 +358,7 @@ export function useMessageSubmission({
   const preparedRuntimeSessionRef = useRef<PreparedRuntimeSession | null>(null);
   const preparedRuntimeSessionRequestRef = useRef<PreparedRuntimeSessionRequest | null>(null);
   const preparedAppReferencesRequestRef = useRef<PreparedAppReferencesRequest | null>(null);
+  const activeThreadPrewarmRef = useRef("");
   const [pendingUserMessagesByConversationKey, setPendingUserMessagesByConversationKey] = useState<ConversationItems<PendingMessage>>({});
   const [failedUserMessagesByConversationKey, setFailedUserMessagesByConversationKey] = useState<ConversationItems<PendingMessage>>({});
   const [queuedMessagesByConversationKey, setQueuedMessagesByConversationKey] = useState<ConversationItems<QueuedMessage>>({});
@@ -404,6 +407,26 @@ export function useMessageSubmission({
       })
       .catch(() => undefined);
   }, [activeAppContext, activeConversationKey, activeThread, canPreloadRuntime, draftChat, selectedAgentRuntimeConfig, threads]);
+
+  useEffect(() => {
+    const runtimeSessionId = activeThread?.runtime_session_id || "";
+    if (!runtimeSessionId || !canPreloadRuntime || isRuntimeBusy) {
+      return;
+    }
+    if (activeThreadPrewarmRef.current === runtimeSessionId) {
+      return;
+    }
+    activeThreadPrewarmRef.current = runtimeSessionId;
+    const abortController = new AbortController();
+    void prewarmRuntimeSession(runtimeSessionId, { signal: abortController.signal }).catch((error) => {
+      if (!isAbortError(error) && activeThreadPrewarmRef.current === runtimeSessionId) {
+        activeThreadPrewarmRef.current = "";
+      }
+    });
+    return () => {
+      abortController.abort();
+    };
+  }, [activeThread?.runtime_session_id, canPreloadRuntime, isRuntimeBusy]);
 
   useEffect(() => {
     if (isBootstrapping || (!activeThread && (!draftChat || !activeConversationKey))) {

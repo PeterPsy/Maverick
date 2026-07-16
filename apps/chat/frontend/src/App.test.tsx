@@ -23,6 +23,7 @@ import {
   listProviders,
   listSkills,
   prepareRuntimeSessionAppReferences,
+  prewarmRuntimeSession,
   prewarmSpeechWorker,
   previewAgentPrompt,
   recordRuntimeTurnClientMetrics,
@@ -106,6 +107,7 @@ vi.mock("./api/client", () => ({
   markThreadRead: vi.fn(),
   orderChatThreads: vi.fn((threads: unknown[]) => threads),
   prepareRuntimeSessionAppReferences: vi.fn(),
+  prewarmRuntimeSession: vi.fn(),
   prewarmSpeechWorker: vi.fn(),
   previewAgentPrompt: vi.fn(),
   recordRuntimeTurnClientMetrics: vi.fn(),
@@ -320,6 +322,7 @@ beforeEach(() => {
     reference_cache_hit: false,
     reference_fingerprint: "",
   });
+  vi.mocked(prewarmRuntimeSession).mockResolvedValue(hotRuntimeSession("session-prewarmed"));
   vi.mocked(prewarmSpeechWorker).mockResolvedValue({});
   vi.mocked(createRuntimeSession).mockResolvedValue(runtimeSession("session-prepared"));
   vi.mocked(createRuntimeSessionWithTurn).mockResolvedValue({
@@ -557,6 +560,23 @@ describe("App thread navigation", () => {
       expect(element.querySelector('[role="textbox"]')?.getAttribute("aria-disabled")).toBe("true");
       expect((element.querySelector('[aria-label="Send message"]') as HTMLButtonElement | null)?.disabled).toBe(true);
     });
+  });
+
+  it("prewarms the active runtime thread when an existing chat is opened", async () => {
+    const existingThread = thread("thread-existing", "session-existing", { title: "Existing thread" });
+    await renderApp({
+      runtimeThreads: [existingThread],
+      runtimeThreadsLoaded: true,
+      threadId: existingThread.thread_id,
+    });
+
+    await waitForAssertion(() => {
+      expect(prewarmRuntimeSession).toHaveBeenCalledWith(
+        "session-existing",
+        expect.objectContaining({ signal: expect.any(AbortSignal) }),
+      );
+    });
+    expect(createRuntimeSession).not.toHaveBeenCalled();
   });
 
   it("starts a new-chat draft before runtime threads and agent catalog finish loading", async () => {
@@ -1142,7 +1162,7 @@ describe("App thread navigation", () => {
     expect(sendRuntimeTurn).not.toHaveBeenCalled();
   });
 
-  it("does not wait for a pending prepared session before a plain first submit", async () => {
+  it("waits briefly for a pending prepared session before a plain first submit", async () => {
     const preparedSession = deferred<RuntimeSession>();
     const createdThread = thread("thread-created", "session-created", { title: "Created thread" });
     vi.mocked(createRuntimeSession).mockReturnValue(preparedSession.promise);
@@ -1164,20 +1184,29 @@ describe("App thread navigation", () => {
       expect(createRuntimeSession).toHaveBeenCalled();
     });
     await typeComposerMessage(element, "fast first message");
+    vi.useFakeTimers();
     await clickSend(element);
 
-    await waitForAssertion(() => {
-      expect(createRuntimeSessionWithTurn).toHaveBeenCalledWith(
-        expect.objectContaining({
-          inputText: "fast first message",
-          clientMetrics: expect.objectContaining({
-            prepare_refs_wait_on_submit_ms: 0,
-            prepared_session_ready_before_submit: false,
-            prepared_session_wait_on_submit_ms: expect.any(Number),
-          }),
-        }),
-      );
+    expect(createRuntimeSessionWithTurn).not.toHaveBeenCalled();
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(349);
     });
+    expect(createRuntimeSessionWithTurn).not.toHaveBeenCalled();
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(1);
+      await Promise.resolve();
+    });
+    expect(createRuntimeSessionWithTurn).toHaveBeenCalledWith(
+      expect.objectContaining({
+        inputText: "fast first message",
+        clientMetrics: expect.objectContaining({
+          prepare_refs_wait_on_submit_ms: 0,
+          prepared_session_ready_before_submit: false,
+          prepared_session_wait_on_submit_ms: expect.any(Number),
+        }),
+      }),
+    );
+    vi.useRealTimers();
     const prepareSignal = vi.mocked(createRuntimeSession).mock.calls[0]?.[1]?.signal;
     expect(prepareSignal?.aborted).toBe(false);
     const submittedMetrics = vi.mocked(createRuntimeSessionWithTurn).mock.calls[0]?.[0].clientMetrics;

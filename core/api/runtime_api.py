@@ -1522,6 +1522,47 @@ def _record_session_app_references_prepare_completed(
     return None
 
 
+def _handle_session_prewarm(
+    state: PlatformState,
+    context: RequestSession,
+    session_id: str,
+    method: str,
+    start_response: StartResponse,
+    *,
+    start_path,
+):
+    if method != "POST":
+        return json_response(start_response, {"error": "method_not_allowed"}, status="405 Method Not Allowed")
+    try:
+        session = state.runtime_store.get_session(session_id)
+    except (RuntimeSessionNotFoundError, ValueError):
+        return json_response(start_response, {"error": "runtime_session_not_found"}, status="404 Not Found")
+    if session.workspace_id != context.workspace_id:
+        return json_response(start_response, {"error": "runtime_session_not_found"}, status="404 Not Found")
+    session = _visibility_reconciled_session(state, session)
+    if not runtime_session_allows_user_thread(session) and not _prepared_session_can_be_promoted(session, context):
+        return _hidden_runtime_session_response(start_response, session)
+    try:
+        require_runtime_session_operation(
+            workspace_store=state.workspace_store,
+            user=context.user,
+            session=session,
+            operation="turn_submit",
+        )
+    except AuthorizationError as error:
+        return json_response(start_response, {"error": error.reason}, status="403 Forbidden")
+    session = _reconciled_session(state, session, start_path=start_path)
+    prewarm_result = _prewarm_new_runtime_session(
+        state,
+        session,
+        wait_seconds=PREPARED_SESSION_PREWARM_WAIT_SECONDS,
+    )
+    return json_response(
+        start_response,
+        _session_payload(session, provider_id=_resolved_provider_id(state, session), prewarm=prewarm_result),
+    )
+
+
 def _runtime_turn_requested(body: dict) -> bool:
     attachments = body.get("attachments") if isinstance(body.get("attachments"), list) else []
     return bool(str(body.get("input_text") or body.get("message") or "").strip() or attachments)
@@ -2068,6 +2109,22 @@ def handle_runtime_api(state: PlatformState, environ: dict, start_response: Star
                 parts[1],
                 method,
                 body,
+                start_response,
+                start_path=start_path,
+            ),
+        )
+    if len(parts) == 3 and parts[0] == "sessions" and parts[2] == "prewarm":
+        return _timed_runtime_api_response(
+            state,
+            context,
+            route="/api/runtime/sessions/:id/prewarm",
+            method=method,
+            runtime_session_id=parts[1],
+            handler=lambda: _handle_session_prewarm(
+                state,
+                context,
+                parts[1],
+                method,
                 start_response,
                 start_path=start_path,
             ),

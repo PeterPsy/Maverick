@@ -206,6 +206,18 @@ export function listRuntimeSessionEvents(
   });
 }
 
+export function prewarmRuntimeSession(
+  sessionId: string,
+  requestOptions: { signal?: AbortSignal } = {},
+): Promise<RuntimeSession> {
+  return requestJson<RuntimeSession>(`/api/runtime/sessions/${encodeURIComponent(sessionId)}/prewarm`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    signal: requestOptions.signal,
+    body: JSON.stringify({}),
+  });
+}
+
 export function sendRuntimeTurn(
   sessionId: string,
   inputText: string,

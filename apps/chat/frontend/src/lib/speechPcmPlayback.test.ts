@@ -1,5 +1,13 @@
-import { describe, expect, it } from "vitest";
-import { Pcm16StreamDecoder, parseSpeechServerTiming } from "./speechPcmPlayback";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import {
+  Pcm16StreamDecoder,
+  parseSpeechServerTiming,
+  prepareSpeechPlaybackSession,
+} from "./speechPcmPlayback";
+
+afterEach(() => {
+  vi.unstubAllGlobals();
+});
 
 describe("Pcm16StreamDecoder", () => {
   it("preserves samples split across odd network chunk boundaries", () => {
@@ -39,6 +47,50 @@ describe("parseSpeechServerTiming", () => {
       backend_entrypoint_ms: 84.5,
       upstream_connect_ms: 0,
       upstream_headers_ms: 92.25,
+    });
+  });
+});
+
+describe("prepareSpeechPlaybackSession", () => {
+  it("promotes iPhone Web Audio to the playback session", () => {
+    const audioSession = { type: "ambient" };
+    vi.stubGlobal("navigator", {
+      audioSession,
+      maxTouchPoints: 5,
+      platform: "iPhone",
+      userAgent: "Mozilla/5.0 (iPhone; CPU iPhone OS 18_7 like Mac OS X)",
+    });
+
+    expect(prepareSpeechPlaybackSession()).toEqual({
+      audioSessionType: "playback",
+      streamingAllowed: true,
+    });
+    expect(audioSession.type).toBe("playback");
+  });
+
+  it("requires the media-element fallback on iOS without Audio Session support", () => {
+    vi.stubGlobal("navigator", {
+      maxTouchPoints: 5,
+      platform: "iPhone",
+      userAgent: "Mozilla/5.0 (iPhone; CPU iPhone OS 16_7 like Mac OS X)",
+    });
+
+    expect(prepareSpeechPlaybackSession()).toEqual({
+      audioSessionType: "unavailable",
+      streamingAllowed: false,
+    });
+  });
+
+  it("keeps Web Audio available on non-Apple browsers without Audio Session support", () => {
+    vi.stubGlobal("navigator", {
+      maxTouchPoints: 0,
+      platform: "Linux x86_64",
+      userAgent: "Mozilla/5.0 (X11; Linux x86_64)",
+    });
+
+    expect(prepareSpeechPlaybackSession()).toEqual({
+      audioSessionType: "unavailable",
+      streamingAllowed: true,
     });
   });
 });

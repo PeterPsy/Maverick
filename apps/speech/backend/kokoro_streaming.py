@@ -107,8 +107,17 @@ class KokoroHttpStream:
         first_audio_byte_seen = False
         try:
             while True:
-                chunk = self._response.read1(KOKORO_STREAM_CHUNK_BYTES)
+                try:
+                    chunk = self._response.read1(KOKORO_STREAM_CHUNK_BYTES)
+                except (AttributeError, OSError, ValueError, http.client.HTTPException) as error:
+                    if self.closed:
+                        return
+                    raise SpeechProviderUnavailableError(
+                        f"Kokoro {self._provider_name} audio stream was interrupted."
+                    ) from error
                 if not chunk:
+                    if self.closed:
+                        return
                     if not first_audio_byte_seen:
                         raise SpeechProviderUnavailableError(f"Kokoro {self._provider_name} returned an empty audio stream.")
                     completed = True
@@ -134,6 +143,11 @@ class KokoroHttpStream:
                 # currently blocked in HTTPResponse.read1().
                 self._pool.discard(self._connection)
                 self._response.close()
+
+    @property
+    def closed(self) -> bool:
+        with self._close_lock:
+            return self._closed
 
 
 def open_kokoro_openrouter_stream(

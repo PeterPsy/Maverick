@@ -190,6 +190,63 @@ class KokoroStreamingTestCase(unittest.TestCase):
         self.assertEqual(connection.headers["Authorization"], "Bearer deepinfra-token")
         self.assertEqual(stream.generation_id, "req_deepinfra_1")
 
+    def test_concurrent_close_ends_a_blocked_provider_read_without_an_error(self) -> None:
+        class BlockingResponse:
+            status = 200
+            will_close = False
+
+            def __init__(self) -> None:
+                self.closed = False
+                self.read_started = threading.Event()
+                self.release_read = threading.Event()
+
+            def read1(self, _size: int = -1) -> bytes:
+                self.read_started.set()
+                self.release_read.wait(timeout=2)
+                if self.closed:
+                    raise AttributeError("'NoneType' object has no attribute 'read1'")
+                return b""
+
+            def close(self) -> None:
+                self.closed = True
+                self.release_read.set()
+
+        class FakeConnection:
+            def close(self) -> None:
+                return None
+
+        response = BlockingResponse()
+        connection = FakeConnection()
+        stream = kokoro_streaming.KokoroHttpStream(
+            pool=kokoro_streaming.KokoroConnectionPool(
+                connection_factory=lambda _host, _timeout: connection,
+            ),
+            connection=connection,
+            response=response,
+            generation_id="gen_cancelled",
+            connection_reused=False,
+            response_format="pcm",
+            request_started=time.monotonic(),
+            timings={"upstream_headers_ms": 10.0},
+            provider_name="OpenRouter",
+        )
+        errors: list[Exception] = []
+
+        def consume() -> None:
+            try:
+                list(stream.iter_chunks())
+            except Exception as error:
+                errors.append(error)
+
+        consumer = threading.Thread(target=consume)
+        consumer.start()
+        self.assertTrue(response.read_started.wait(timeout=1))
+        stream.close()
+        consumer.join(timeout=2)
+
+        self.assertFalse(consumer.is_alive())
+        self.assertEqual(errors, [])
+
     def test_streaming_synthesis_records_generation_and_upstream_phase_metrics(self) -> None:
         class FakeUpstream:
             generation_id = "gen_job_123"
@@ -237,6 +294,52 @@ class KokoroStreamingTestCase(unittest.TestCase):
         self.assertIn("upstream_last_audio_byte_ms", jobs[0])
         self.assertTrue(jobs[0]["stream_completed"])
         self.assertGreaterEqual(jobs[0]["request_total_seconds"], 0.015)
+
+    def test_cancelled_synthesis_plan_is_recorded_as_incomplete(self) -> None:
+        class BlockingUpstream:
+            generation_id = "gen_cancelled_job"
+            connection_reused = True
+            timings = {"upstream_connect_ms": 0.0, "upstream_headers_ms": 15.0}
+
+            def __init__(self) -> None:
+                self.read_started = threading.Event()
+                self.closed = threading.Event()
+
+            def iter_chunks(self):
+                self.read_started.set()
+                self.closed.wait(timeout=2)
+                if False:
+                    yield b""
+
+            def close(self) -> None:
+                self.closed.set()
+
+        with TemporaryDirectory() as temp_dir:
+            data_root = Path(temp_dir)
+            upstream = BlockingUpstream()
+            plan = streaming_synthesis.StreamingSynthesisPlan(
+                data_root=data_root,
+                upstream=upstream,
+                job_id="tts_cancelled_test",
+                created_at="2026-07-16T00:00:00+00:00",
+                text_chars=10,
+                voice="if_sara",
+                language="it",
+                rate=175,
+                backend_entrypoint_ms=12.0,
+                request_started=time.monotonic(),
+                engine="kokoro-openrouter",
+            )
+            consumer = threading.Thread(target=lambda: list(plan.iter_chunks()))
+            consumer.start()
+            self.assertTrue(upstream.read_started.wait(timeout=1))
+            plan.cancel()
+            consumer.join(timeout=2)
+            jobs = read_jobs(data_root)["jobs"]
+
+        self.assertFalse(consumer.is_alive())
+        self.assertFalse(jobs[0]["stream_completed"])
+        self.assertEqual(jobs[0]["size_bytes"], 0)
 
     def test_backend_worker_writes_stream_header_before_pcm_bytes(self) -> None:
         class FakePlan:

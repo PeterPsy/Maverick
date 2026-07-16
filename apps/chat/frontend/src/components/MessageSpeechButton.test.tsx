@@ -91,7 +91,9 @@ describe("MessageSpeechButton", () => {
   it("uses the PCM stream when both Speech and the browser advertise support", async () => {
     let onPlaying: (() => void) | undefined;
     const fakePlayer = {
+      audioSessionType: "playback",
       append: vi.fn(),
+      contextState: "running",
       decoder: { sourceSampleRate: 24000 },
       finish: vi.fn(async () => onPlaying?.()),
       started: false,
@@ -139,7 +141,13 @@ describe("MessageSpeechButton", () => {
     expect(synthesizeSpeech).not.toHaveBeenCalled();
     expect(recordSpeechPlaybackMetrics).toHaveBeenCalledWith(
       "speech",
-      expect.objectContaining({ mode: "pcm-stream", outcome: "playing", playback_id: expect.any(String) }),
+      expect.objectContaining({
+        audio_context_state: "running",
+        audio_session_type: "playback",
+        mode: "pcm-stream",
+        outcome: "playing",
+        playback_id: expect.any(String),
+      }),
     );
     expect(recordSpeechPlaybackMetrics).toHaveBeenCalledWith(
       "speech",
@@ -256,7 +264,7 @@ describe("MessageSpeechButton", () => {
       }
     });
 
-    expect(synthesizeSpeech).toHaveBeenCalledTimes(2);
+    expect(synthesizeSpeech).toHaveBeenCalledTimes(speechChunks(content, 90).length);
     expect(vi.mocked(synthesizeSpeech).mock.calls.every((call) => call[2]?.language === "it")).toBe(true);
   });
 
@@ -582,7 +590,7 @@ describe("MessageSpeechButton", () => {
     const chunks = speechChunks(text);
 
     expect(chunks.length).toBeGreaterThan(1);
-    expect(chunks[0].length).toBeLessThanOrEqual(120);
+    expect(chunks[0].length).toBeLessThanOrEqual(80);
     expect(chunks.join(" ")).toBe(text);
   });
 

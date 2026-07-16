@@ -239,6 +239,8 @@ function SupportedMessageSpeechButton({
           return;
         }
         setStatus("playing");
+        metrics.audio_context_state = player?.contextState || metrics.audio_context_state;
+        metrics.audio_session_type = player?.audioSessionType || metrics.audio_session_type;
         metrics.tap_to_audio_playing_ms = roundedMilliseconds(nowMilliseconds() - tapStartedAt);
         metrics.underrun_count = player?.underrunCount || 0;
         reportSpeechPlaybackMetrics(providerAppId, { ...metrics, outcome: "playing" });
@@ -263,6 +265,8 @@ function SupportedMessageSpeechButton({
     try {
       player = await playerPromise;
       pcmPlayerRef.current = player;
+      metrics.audio_context_state = player.contextState;
+      metrics.audio_session_type = player.audioSessionType;
       if (requestIdRef.current !== requestId) {
         player.stop();
         pcmPlayerRef.current = null;
@@ -314,6 +318,7 @@ function SupportedMessageSpeechButton({
         fillPrefetchQueue();
       }
       await player.finish();
+      metrics.audio_context_state = player.contextState;
       metrics.underrun_count = player.underrunCount;
       reportSpeechPlaybackMetrics(providerAppId, { ...metrics, outcome: "completed" });
       player.stop();

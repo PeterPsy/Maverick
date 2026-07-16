@@ -196,6 +196,8 @@ def send_streaming_payload(connection: socket.socket, payload: dict) -> None:
         connection.sendall(json.dumps(header, ensure_ascii=False).encode("utf-8") + b"\n")
         for chunk in plan.iter_chunks():
             connection.sendall(chunk)
+    except (BrokenPipeError, ConnectionResetError):
+        plan.cancel()
     finally:
         finished.set()
 

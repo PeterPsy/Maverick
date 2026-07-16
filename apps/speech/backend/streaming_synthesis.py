@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 from pathlib import Path
+from threading import Event
 import time
 from typing import Iterator
 import uuid
@@ -56,6 +57,7 @@ class StreamingSynthesisPlan:
         self._rate = rate
         self._engine = engine
         self._started = request_started
+        self._cancelled = Event()
         timings = {
             "backend_entrypoint_ms": backend_entrypoint_ms,
             **upstream.timings,
@@ -82,12 +84,13 @@ class StreamingSynthesisPlan:
                 if size_bytes > MAX_AUDIO_BYTES:
                     raise SpeechProviderUnavailableError("Synthesized audio exceeds the streaming response size limit.")
                 yield chunk
-            completed = True
+            completed = not self._cancelled.is_set()
         finally:
             self._record_job(size_bytes=size_bytes, completed=completed)
 
     def cancel(self) -> None:
         """Close the active provider response when the downstream client leaves."""
+        self._cancelled.set()
         self._upstream.close()
 
     def _record_job(self, *, size_bytes: int, completed: bool) -> None:

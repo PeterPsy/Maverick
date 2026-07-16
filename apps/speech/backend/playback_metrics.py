@@ -22,6 +22,17 @@ PLAYBACK_METRIC_FIELDS = (
 )
 PLAYBACK_MODES = {"buffered", "pcm-stream"}
 PLAYBACK_OUTCOMES = {"playing", "completed", "cancelled", "failed"}
+AUDIO_CONTEXT_STATES = {"closed", "interrupted", "running", "suspended", "unknown"}
+AUDIO_SESSION_TYPES = {
+    "ambient",
+    "auto",
+    "play-and-record",
+    "playback",
+    "transient",
+    "transient-solo",
+    "unavailable",
+    "unknown",
+}
 
 
 def record_playback_metrics_payload(data_root: Path, body: dict) -> dict:
@@ -56,6 +67,12 @@ def record_playback_metrics_payload(data_root: Path, body: dict) -> dict:
         job["generation_id"] = generation_id
     if "underrun_count" in metrics:
         job["underrun_count"] = _bounded_count(metrics.get("underrun_count"))
+    audio_context_state = str(metrics.get("audio_context_state") or "").strip().lower()
+    if audio_context_state in AUDIO_CONTEXT_STATES:
+        job["audio_context_state"] = audio_context_state
+    audio_session_type = str(metrics.get("audio_session_type") or "").strip().lower()
+    if audio_session_type in AUDIO_SESSION_TYPES:
+        job["audio_session_type"] = audio_session_type
     failure_code = _optional_identifier(body.get("failure_code"), max_length=64)
     if failure_code:
         job["failure_code"] = failure_code

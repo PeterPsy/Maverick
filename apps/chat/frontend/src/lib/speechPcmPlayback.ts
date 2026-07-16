@@ -72,8 +72,17 @@ registerProcessor("${PCM_WORKLET_NAME}", MaverickPcmStreamPlayer);
 `;
 
 type AudioContextConstructor = new (options?: AudioContextOptions) => AudioContext;
+type BrowserAudioSession = { type?: string };
+type NavigatorWithAudioSession = Navigator & { audioSession?: BrowserAudioSession };
+
+export type SpeechPlaybackSession = {
+  audioSessionType: string;
+  streamingAllowed: boolean;
+};
 
 export type SpeechPcmPlaybackMetrics = {
+  audio_context_state?: string;
+  audio_session_type?: string;
   backend_entrypoint_ms?: number;
   browser_first_chunk_ms?: number;
   generation_id?: string;
@@ -173,6 +182,7 @@ export class Pcm16StreamDecoder {
 }
 
 export class PcmStreamPlayer {
+  readonly audioSessionType: string;
   readonly context: AudioContext;
   readonly decoder: Pcm16StreamDecoder;
   private readonly node: AudioWorkletNode;
@@ -183,7 +193,14 @@ export class PcmStreamPlayer {
   private _started = false;
   private _underrunCount = 0;
 
-  private constructor(context: AudioContext, node: AudioWorkletNode, sourceSampleRate: number, onPlaying?: () => void) {
+  private constructor(
+    context: AudioContext,
+    node: AudioWorkletNode,
+    sourceSampleRate: number,
+    audioSessionType: string,
+    onPlaying?: () => void,
+  ) {
+    this.audioSessionType = audioSessionType;
     this.context = context;
     this.node = node;
     this.decoder = new Pcm16StreamDecoder(sourceSampleRate, context.sampleRate);
@@ -214,13 +231,17 @@ export class PcmStreamPlayer {
     initialBufferMs?: number;
     onPlaying?: () => void;
   }): Promise<PcmStreamPlayer> {
+    const playbackSession = prepareSpeechPlaybackSession();
     const Context = audioContextConstructor();
-    if (!Context || typeof AudioWorkletNode === "undefined") {
+    if (!playbackSession.streamingAllowed || !Context || typeof AudioWorkletNode === "undefined") {
       throw new Error("Progressive PCM playback is unavailable in this browser.");
     }
     const context = new Context({ latencyHint: "interactive" });
     try {
       await context.resume();
+      if (context.state !== "running") {
+        throw new Error("Progressive PCM playback could not activate the browser audio context.");
+      }
       const moduleUrl = URL.createObjectURL(new Blob([PCM_WORKLET_SOURCE], { type: "text/javascript" }));
       try {
         await context.audioWorklet.addModule(moduleUrl);
@@ -234,7 +255,13 @@ export class PcmStreamPlayer {
         processorOptions: { initialBufferMs },
       });
       node.connect(context.destination);
-      return new PcmStreamPlayer(context, node, sourceSampleRate, onPlaying);
+      return new PcmStreamPlayer(
+        context,
+        node,
+        sourceSampleRate,
+        playbackSession.audioSessionType,
+        onPlaying,
+      );
     } catch (error) {
       await context.close();
       throw error;
@@ -247,6 +274,10 @@ export class PcmStreamPlayer {
 
   get underrunCount(): number {
     return this._underrunCount;
+  }
+
+  get contextState(): string {
+    return String(this.context.state || "unknown");
   }
 
   append(chunk: Uint8Array): void {
@@ -285,7 +316,32 @@ export class PcmStreamPlayer {
 }
 
 export function supportsPcmStreamingPlayback(): boolean {
-  return Boolean(audioContextConstructor() && typeof AudioWorkletNode !== "undefined" && typeof ReadableStream !== "undefined");
+  const playbackSession = prepareSpeechPlaybackSession();
+  return Boolean(
+    playbackSession.streamingAllowed
+      && audioContextConstructor()
+      && typeof AudioWorkletNode !== "undefined"
+      && typeof ReadableStream !== "undefined",
+  );
+}
+
+export function prepareSpeechPlaybackSession(): SpeechPlaybackSession {
+  const navigatorObject = typeof navigator === "undefined"
+    ? null
+    : navigator as NavigatorWithAudioSession;
+  const audioSession = navigatorObject?.audioSession;
+  if (audioSession) {
+    try {
+      audioSession.type = "playback";
+    } catch {
+      // Older WebKit builds may expose a read-only or partial Audio Session API.
+    }
+  }
+  const audioSessionType = normalizedAudioSessionType(audioSession?.type);
+  return {
+    audioSessionType,
+    streamingAllowed: !isAppleMobileBrowser(navigatorObject) || audioSessionType === "playback",
+  };
 }
 
 export function parseSpeechServerTiming(value: string): Partial<SpeechPcmPlaybackMetrics> {
@@ -318,4 +374,21 @@ export function publishSpeechPlaybackMetrics(metrics: SpeechPcmPlaybackMetrics):
 function audioContextConstructor(): AudioContextConstructor | null {
   const scope = globalThis as typeof globalThis & { webkitAudioContext?: AudioContextConstructor };
   return scope.AudioContext || scope.webkitAudioContext || null;
+}
+
+function isAppleMobileBrowser(navigatorObject: NavigatorWithAudioSession | null): boolean {
+  if (!navigatorObject) {
+    return false;
+  }
+  const userAgent = String(navigatorObject.userAgent || "");
+  const platform = String(navigatorObject.platform || "");
+  return /iPad|iPhone|iPod/i.test(userAgent)
+    || (platform === "MacIntel" && Number(navigatorObject.maxTouchPoints || 0) > 1);
+}
+
+function normalizedAudioSessionType(value: unknown): string {
+  const normalized = String(value || "").trim().toLowerCase();
+  return /^[a-z]+(?:-[a-z]+)*$/.test(normalized)
+    ? normalized.slice(0, 32)
+    : "unavailable";
 }

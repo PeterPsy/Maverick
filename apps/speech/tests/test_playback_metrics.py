@@ -30,6 +30,8 @@ class PlaybackMetricsTestCase(unittest.TestCase):
                     "browser_first_chunk_ms": 181.5,
                     "tap_to_audio_playing_ms": 246.75,
                     "underrun_count": 0,
+                    "audio_context_state": "running",
+                    "audio_session_type": "playback",
                 },
             )
             record_playback_metrics_payload(
@@ -49,6 +51,8 @@ class PlaybackMetricsTestCase(unittest.TestCase):
         self.assertEqual(jobs[0]["generation_id"], "gen_test_123")
         self.assertEqual(jobs[0]["tap_to_audio_playing_ms"], 246.75)
         self.assertEqual(jobs[0]["underrun_count"], 1)
+        self.assertEqual(jobs[0]["audio_context_state"], "running")
+        self.assertEqual(jobs[0]["audio_session_type"], "playback")
         self.assertIn("updated_at", jobs[0])
 
     def test_playback_metrics_reject_unbounded_client_identifier(self) -> None:

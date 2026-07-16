@@ -154,10 +154,15 @@ export function useComposerEditor({
   function replaceComposerSelectionWithText(editor: HTMLDivElement, text: string, kind: ComposerEditKind) {
     const currentValue = composerText(editor);
     const selection = composerSelectionOffsets(editor);
-    const nextValue = `${currentValue.slice(0, selection.start)}${text}${currentValue.slice(selection.end)}`;
-    const nextCaret = selection.start + text.length;
+    replaceComposerRangeWithText(currentValue, selection, text, kind);
+  }
+
+  function replaceComposerRangeWithText(currentValue: string, selection: ComposerSelection, text: string, kind: ComposerEditKind) {
+    const boundedSelection = boundComposerSelection(currentValue, selection);
+    const nextValue = `${currentValue.slice(0, boundedSelection.start)}${text}${currentValue.slice(boundedSelection.end)}`;
+    const nextCaret = boundedSelection.start + text.length;
     const nextSelection = collapsedComposerSelection(nextValue, nextCaret);
-    updateCurrentHistorySelection(selection);
+    updateCurrentHistorySelection(boundedSelection);
     recordComposerChange(nextValue, nextSelection, kind);
     setPendingSelection(nextValue, nextSelection, true);
     onChange(nextValue);
@@ -185,27 +190,24 @@ export function useComposerEditor({
       setDictationError("No speech detected.");
       return;
     }
-    const editor = editorRef.current;
-    if (!editor) {
-      const prefix = value && !/\s$/.test(value) && !transcript.startsWith("\n") ? " " : "";
-      const nextValue = `${value}${prefix}${transcript}`;
-      const nextSelection = collapsedComposerSelection(nextValue, nextValue.length);
-      recordComposerChange(nextValue, nextSelection, "dictation");
-      setPendingSelection(nextValue, nextSelection, true);
-      onChange(nextValue);
-      return;
-    }
-    const suffix = value && caretIndex < value.length && !/\s$/.test(transcript) && !transcript.endsWith("\n") ? " " : "";
-    replaceComposerSelectionWithText(editor, `${transcript}${suffix}`, "dictation");
+    const currentSnapshot = historyRef.current.current;
+    const currentValue = currentSnapshot.value;
+    const selection = boundComposerSelection(currentValue, currentSnapshot);
+    replaceComposerRangeWithText(
+      currentValue,
+      selection,
+      dictationInsertionForSelection(currentValue, selection, transcript),
+      "dictation",
+    );
   }
 
   function applyDictationCommands(commands: DictationCommand[]): boolean {
     if (!commands.some((command) => command.type === "delete_last_sentence")) {
       return false;
     }
-    const editor = editorRef.current;
-    const currentValue = editor ? composerText(editor) : value;
-    const selection = editor ? composerSelectionOffsets(editor) : { start: currentValue.length, end: currentValue.length };
+    const currentSnapshot = historyRef.current.current;
+    const currentValue = currentSnapshot.value;
+    const selection = boundComposerSelection(currentValue, currentSnapshot);
     const before = deleteLastSentence(currentValue.slice(0, selection.start));
     const nextValue = `${before}${currentValue.slice(selection.end)}`;
     const nextSelection = collapsedComposerSelection(nextValue, before.length);
@@ -480,6 +482,14 @@ function normalizedDictationInsertion(text: string): string {
     return text;
   }
   return text.trim();
+}
+
+function dictationInsertionForSelection(value: string, selection: ComposerSelection, transcript: string): string {
+  const before = value.slice(0, selection.start);
+  const after = value.slice(selection.end);
+  const prefix = before && !/\s$/.test(before) && !transcript.startsWith("\n") && !/^[.,;:!?]/.test(transcript) ? " " : "";
+  const suffix = after && !/^\s/.test(after) && !transcript.endsWith("\n") && !/^[.,;:!?]/.test(after) ? " " : "";
+  return `${prefix}${transcript}${suffix}`;
 }
 
 function deleteLastSentence(text: string): string {

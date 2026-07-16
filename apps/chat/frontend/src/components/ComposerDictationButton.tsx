@@ -245,6 +245,7 @@ export function ComposerDictationButton({
         const languageHint = adaptiveLanguageForRequest(adaptiveLanguageRef.current);
         const result = await transcribeSpeechBlob(providerAppId, audioBlob, {
           chunkIndex,
+          dictation: true,
           final,
           language: languageHint || undefined,
           profile: DICTATION_TRANSCRIPTION_PROFILE,

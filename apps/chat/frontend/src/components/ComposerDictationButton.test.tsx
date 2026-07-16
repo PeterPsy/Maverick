@@ -139,7 +139,7 @@ describe("ComposerDictationButton", () => {
     expect(transcribeSpeechBlob).toHaveBeenCalledWith(
       "speech",
       expect.any(Blob),
-      expect.objectContaining({ chunkIndex: 0, language: undefined, profile: "fast", sessionId: expect.any(String) }),
+      expect.objectContaining({ chunkIndex: 0, dictation: true, language: undefined, profile: "fast", sessionId: expect.any(String) }),
     );
     const firstOptions = (vi.mocked(transcribeSpeechBlob).mock.calls[0]?.[2] || {}) as { sessionId?: string };
     expect(transcribeSpeech).toHaveBeenCalledWith(
@@ -184,8 +184,13 @@ describe("ComposerDictationButton", () => {
 
     expect(transcribeSpeechBlob).toHaveBeenCalledTimes(2);
     const firstOptions = (vi.mocked(transcribeSpeechBlob).mock.calls[0]?.[2] || {}) as { sessionId?: string };
-    const secondOptions = (vi.mocked(transcribeSpeechBlob).mock.calls[1]?.[2] || {}) as { chunkIndex?: number; profile?: string; sessionId?: string };
-    expect(secondOptions).toMatchObject({ chunkIndex: 1, profile: "fast", sessionId: firstOptions.sessionId });
+    const secondOptions = (vi.mocked(transcribeSpeechBlob).mock.calls[1]?.[2] || {}) as {
+      chunkIndex?: number;
+      dictation?: boolean;
+      profile?: string;
+      sessionId?: string;
+    };
+    expect(secondOptions).toMatchObject({ chunkIndex: 1, dictation: true, profile: "fast", sessionId: firstOptions.sessionId });
     expect(onTranscript).toHaveBeenCalledWith("first", expect.objectContaining({ chunk_text: "first" }));
     expect(onTranscript).toHaveBeenCalledWith("second", expect.objectContaining({ chunk_text: "second" }));
   });

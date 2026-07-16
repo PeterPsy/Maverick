@@ -5,7 +5,7 @@ import { act, useState } from "react";
 import { createRoot } from "react-dom/client";
 import type { Root } from "react-dom/client";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { ApiError, transcribeSpeechBlob } from "../api/client";
+import { ApiError, transcribeSpeech, transcribeSpeechBlob } from "../api/client";
 import type { AgentTypeSummary, AppReference, MultiAgentComposerMode, ProviderItem } from "../api/client";
 import type { MentionItem } from "../lib/mentions";
 import { ChatComposer, type ExecutionMode } from "./ChatComposer";
@@ -14,6 +14,7 @@ vi.mock("../api/client", async () => {
   const actual = await vi.importActual<typeof import("../api/client")>("../api/client");
   return {
     ...actual,
+    transcribeSpeech: vi.fn(),
     transcribeSpeechBlob: vi.fn(),
   };
 });
@@ -131,6 +132,7 @@ let root: Root | null = null;
 let container: HTMLDivElement | null = null;
 
 afterEach(() => {
+  vi.mocked(transcribeSpeech).mockReset();
   vi.mocked(transcribeSpeechBlob).mockReset();
   root?.unmount();
   root = null;
@@ -286,6 +288,54 @@ function mockMediaRecorder() {
   return { getUserMedia, stopTrack };
 }
 
+function mockChunkedMediaRecorder() {
+  const stopTrack = vi.fn();
+  const stream = { getTracks: () => [{ stop: stopTrack }] };
+  const getUserMedia = vi.fn(async () => stream);
+  let recorder: FakeMediaRecorder | null = null;
+
+  class FakeMediaRecorder {
+    static isTypeSupported = vi.fn((mimeType: string) => mimeType === "audio/webm");
+    mimeType = "audio/webm";
+    ondataavailable: ((event: { data: Blob }) => void) | null = null;
+    onerror: (() => void) | null = null;
+    onstop: (() => void) | null = null;
+    state: RecordingState = "inactive";
+
+    constructor() {
+      recorder = this;
+    }
+
+    start() {
+      this.state = "recording";
+      this.emit([1, 2, 3, 4, 5]);
+    }
+
+    emit(bytes: number[]) {
+      this.ondataavailable?.({ data: new Blob([new Uint8Array(bytes)], { type: "audio/webm" }) });
+    }
+
+    stop() {
+      this.emit([6, 7, 8, 9, 10]);
+      this.state = "inactive";
+      this.onstop?.();
+    }
+  }
+
+  vi.stubGlobal("MediaRecorder", FakeMediaRecorder);
+  Object.defineProperty(navigator, "mediaDevices", {
+    configurable: true,
+    value: { getUserMedia },
+  });
+  return {
+    emit(bytes: number[]) {
+      recorder?.emit(bytes);
+    },
+    getUserMedia,
+    stopTrack,
+  };
+}
+
 function mockMicrophoneDenied() {
   class FakeMediaRecorder {
     static isTypeSupported = vi.fn((mimeType: string) => mimeType === "audio/webm");
@@ -433,6 +483,13 @@ function deferred<T>() {
     reject = rejectPromise;
   });
   return { promise, reject, resolve };
+}
+
+async function waitForPendingTranscription<T>(pending: T[], count: number) {
+  for (let attempt = 0; attempt < 20 && pending.length < count; attempt += 1) {
+    await Promise.resolve();
+  }
+  expect(pending).toHaveLength(count);
 }
 
 async function waitForComposerAssertion(assertion: () => void) {
@@ -669,6 +726,52 @@ describe("ChatComposer reference search", () => {
     });
     expect(media.stopTrack).toHaveBeenCalled();
     expect(onSubmit).not.toHaveBeenCalled();
+  });
+
+  it("keeps every ordered transcript when chunked dictation responses settle before React renders", async () => {
+    const pendingResults: Array<(result: { chunk_text: string; text: string; retention: string }) => void> = [];
+    vi.mocked(transcribeSpeechBlob).mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          pendingResults.push(resolve);
+        }),
+    );
+    const { element, getValue } = await renderComposer({
+      transcriptionChunkedDictationSupported: true,
+      transcriptionProviderAppId: "speech",
+      transcriptionProviderAvailable: true,
+    });
+    const media = mockChunkedMediaRecorder();
+
+    await act(async () => {
+      element.querySelector<HTMLButtonElement>('[aria-label="Dictate"]')?.click();
+      await Promise.resolve();
+    });
+    expect(pendingResults).toHaveLength(1);
+
+    await act(async () => {
+      media.emit([11, 12, 13, 14, 15]);
+      element.querySelector<HTMLButtonElement>('[aria-label="Stop dictation"]')?.click();
+
+      pendingResults[0]?.({ chunk_text: "Prima frase.", text: "Prima frase.", retention: "metadata_only" });
+      await waitForPendingTranscription(pendingResults, 2);
+      pendingResults[1]?.({ chunk_text: "Seconda frase.", text: "Prima frase. Seconda frase.", retention: "metadata_only" });
+      await waitForPendingTranscription(pendingResults, 3);
+      pendingResults[2]?.({
+        chunk_text: "Terza frase.",
+        text: "Prima frase. Seconda frase. Terza frase.",
+        retention: "metadata_only",
+      });
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    await waitForComposerAssertion(() => {
+      expect(transcribeSpeechBlob).toHaveBeenCalledTimes(3);
+      expect(transcribeSpeech).not.toHaveBeenCalled();
+      expect(getValue()).toBe("Prima frase. Seconda frase. Terza frase.");
+    });
+    expect(media.stopTrack).toHaveBeenCalled();
   });
 
   it("reuses a high-confidence detected dictation language on the next recording", async () => {

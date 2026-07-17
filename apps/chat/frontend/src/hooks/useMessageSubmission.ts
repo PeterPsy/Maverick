@@ -357,8 +357,10 @@ export function useMessageSubmission({
   const inFlightSubmissionsRef = useRef<Record<string, InFlightSubmission>>({});
   const preparedRuntimeSessionRef = useRef<PreparedRuntimeSession | null>(null);
   const preparedRuntimeSessionRequestRef = useRef<PreparedRuntimeSessionRequest | null>(null);
+  const preparedRuntimeSessionRefillTimerRef = useRef<number | null>(null);
   const preparedAppReferencesRequestRef = useRef<PreparedAppReferencesRequest | null>(null);
   const activeThreadPrewarmRef = useRef("");
+  const canPreloadRuntimeRef = useRef(canPreloadRuntime);
   const [pendingUserMessagesByConversationKey, setPendingUserMessagesByConversationKey] = useState<ConversationItems<PendingMessage>>({});
   const [failedUserMessagesByConversationKey, setFailedUserMessagesByConversationKey] = useState<ConversationItems<PendingMessage>>({});
   const [queuedMessagesByConversationKey, setQueuedMessagesByConversationKey] = useState<ConversationItems<QueuedMessage>>({});
@@ -378,6 +380,10 @@ export function useMessageSubmission({
   }, [isRuntimeBusy, sendingByConversationKey]);
 
   useEffect(() => {
+    canPreloadRuntimeRef.current = canPreloadRuntime;
+  }, [canPreloadRuntime]);
+
+  useEffect(() => {
     activeConversationKeyRef.current = activeConversationKey;
     activeAppContextRef.current = activeAppContext;
     activeThreadRef.current = activeThread;
@@ -386,27 +392,27 @@ export function useMessageSubmission({
   }, [activeAppContext, activeConversationKey, activeThread, draftChat, threads]);
 
   useEffect(() => {
-    const preloadConversationKey = !activeThread ? NEW_CHAT_PRELOAD_CONVERSATION_KEY : "";
-    if (activeThread || !canPreloadRuntime || !preloadConversationKey) {
+    if (!canPreloadRuntime) {
       return;
     }
-    const target: SubmissionTarget = {
-      activeAppContext,
-      conversationKey: preloadConversationKey,
-      draftChat,
-      thread: null,
-      threadIds: new Set(threads.map((item) => item.thread_id)),
+    const abortController = new AbortController();
+    void ensurePreparedRuntimeSessionForNextChat(abortController.signal).catch(() => undefined);
+    return () => {
+      abortController.abort();
     };
-    void buildRuntimeSessionOptions(target)
-      .then(({ options }) => {
-        const key = preparedRuntimeSessionKey(preloadConversationKey, options);
-        if (preparedRuntimeSessionRef.current?.key === key || preparedRuntimeSessionRequestRef.current?.key === key) {
-          return;
-        }
-        requestPreparedRuntimeSession(preloadConversationKey, key, options);
-      })
-      .catch(() => undefined);
-  }, [activeAppContext, activeConversationKey, activeThread, canPreloadRuntime, draftChat, selectedAgentRuntimeConfig, threads]);
+  }, [activeAppContext, activeThread?.thread_id, canPreloadRuntime, draftChat, selectedAgentRuntimeConfig, threads]);
+
+  useEffect(
+    () => () => {
+      if (preparedRuntimeSessionRefillTimerRef.current !== null) {
+        window.clearTimeout(preparedRuntimeSessionRefillTimerRef.current);
+        preparedRuntimeSessionRefillTimerRef.current = null;
+      }
+      preparedRuntimeSessionRequestRef.current?.abortController.abort();
+      cancelPreparedAppReferencesRequest();
+    },
+    [],
+  );
 
   useEffect(() => {
     const runtimeSessionId = activeThread?.runtime_session_id || "";
@@ -629,6 +635,47 @@ export function useMessageSubmission({
       }),
       systemPrompt,
     };
+  }
+
+  function newChatPreloadTarget(): SubmissionTarget {
+    return {
+      activeAppContext: activeAppContextRef.current,
+      conversationKey: NEW_CHAT_PRELOAD_CONVERSATION_KEY,
+      draftChat: activeThreadRef.current ? null : draftChatRef.current,
+      thread: null,
+      threadIds: new Set(threadsRef.current.map((item) => item.thread_id)),
+    };
+  }
+
+  async function ensurePreparedRuntimeSessionForNextChat(signal?: AbortSignal): Promise<PreparedRuntimeSession | null> {
+    if (!canPreloadRuntimeRef.current) {
+      return null;
+    }
+    const target = newChatPreloadTarget();
+    const { options } = await buildRuntimeSessionOptions(target, signal);
+    if (signal) {
+      throwIfAborted(signal);
+    }
+    const key = preparedRuntimeSessionKey(NEW_CHAT_PRELOAD_CONVERSATION_KEY, options);
+    const prepared = preparedRuntimeSessionRef.current;
+    if (prepared?.key === key) {
+      return prepared;
+    }
+    const pending = preparedRuntimeSessionRequestRef.current;
+    if (pending?.key === key) {
+      return pending.promise;
+    }
+    return requestPreparedRuntimeSession(NEW_CHAT_PRELOAD_CONVERSATION_KEY, key, options);
+  }
+
+  function schedulePreparedRuntimeSessionRefill() {
+    if (!canPreloadRuntimeRef.current || preparedRuntimeSessionRefillTimerRef.current !== null) {
+      return;
+    }
+    preparedRuntimeSessionRefillTimerRef.current = window.setTimeout(() => {
+      preparedRuntimeSessionRefillTimerRef.current = null;
+      void ensurePreparedRuntimeSessionForNextChat().catch(() => undefined);
+    }, 0);
   }
 
   function requestPreparedRuntimeSession(
@@ -1332,6 +1379,9 @@ export function useMessageSubmission({
         }
       }
     } finally {
+      if (!targetThread) {
+        schedulePreparedRuntimeSessionRefill();
+      }
       if (!inFlightSubmissionsRef.current[conversationKey]?.turnId) {
         delete inFlightSubmissionsRef.current[conversationKey];
       }

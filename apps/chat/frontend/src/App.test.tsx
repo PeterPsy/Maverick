@@ -562,7 +562,7 @@ describe("App thread navigation", () => {
     });
   });
 
-  it("prewarms the active runtime thread when an existing chat is opened", async () => {
+  it("prewarms the active runtime thread and keeps a next-chat session ready", async () => {
     const existingThread = thread("thread-existing", "session-existing", { title: "Existing thread" });
     await renderApp({
       runtimeThreads: [existingThread],
@@ -576,7 +576,13 @@ describe("App thread navigation", () => {
         expect.objectContaining({ signal: expect.any(AbortSignal) }),
       );
     });
-    expect(createRuntimeSession).not.toHaveBeenCalled();
+    expect(createRuntimeSession).toHaveBeenCalledWith(
+      expect.objectContaining({
+        prepare_only: true,
+        title: "New chat",
+      }),
+      expect.objectContaining({ signal: expect.any(AbortSignal) }),
+    );
   });
 
   it("starts a new-chat draft before runtime threads and agent catalog finish loading", async () => {
@@ -1271,7 +1277,17 @@ describe("App thread navigation", () => {
         expect.any(Object),
       );
     });
-    expect(createRuntimeSession).toHaveBeenCalledTimes(1);
+    await waitForAssertion(() => {
+      expect(createRuntimeSession).toHaveBeenCalledTimes(2);
+    });
+    expect(createRuntimeSession).toHaveBeenNthCalledWith(
+      2,
+      expect.objectContaining({
+        prepare_only: true,
+        title: "New chat",
+      }),
+      expect.objectContaining({ signal: expect.any(AbortSignal) }),
+    );
     expect(createRuntimeSessionWithTurn).not.toHaveBeenCalled();
   });
 

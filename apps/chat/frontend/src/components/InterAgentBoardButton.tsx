@@ -1,3 +1,5 @@
+import { LiveBorderGlow } from "./LiveBorderGlow";
+
 export type InterAgentBoardButtonState = "live" | "pending" | "normal";
 
 export function InterAgentBoardButton({
@@ -20,24 +22,11 @@ export function InterAgentBoardButton({
       onClick={() => onOpen?.(runId)}
       type="button"
     >
-      {state === "live" ? <LiveBoardButtonGlow /> : null}
+      {state === "live" ? <LiveBorderGlow /> : null}
       <span aria-hidden="true" className="material-symbols-rounded chatapp-inter-agent-board-button__icon">
         account_tree
       </span>
       <span className="chatapp-inter-agent-board-button__label">Multi-agent board</span>
     </button>
-  );
-}
-
-function LiveBoardButtonGlow() {
-  return (
-    <span aria-hidden="true" className="chatapp-live-board-glow">
-      <span className="chatapp-live-board-glow__layer chatapp-live-board-glow__layer--outer" />
-      <span className="chatapp-live-board-glow__layer chatapp-live-board-glow__layer--a" />
-      <span className="chatapp-live-board-glow__layer chatapp-live-board-glow__layer--b" />
-      <span className="chatapp-live-board-glow__layer chatapp-live-board-glow__layer--c" />
-      <span className="chatapp-live-board-glow__layer chatapp-live-board-glow__layer--bright" />
-      <span className="chatapp-live-board-glow__layer chatapp-live-board-glow__layer--rim" />
-    </span>
   );
 }

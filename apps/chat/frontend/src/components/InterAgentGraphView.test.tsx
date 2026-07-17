@@ -6,6 +6,7 @@ import { createRoot } from "react-dom/client";
 import type { Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type {
+  ChatMessage,
   InterAgentApprovalRecord,
   InterAgentEventRecord,
   InterAgentParticipantTranscriptPayload,
@@ -193,6 +194,38 @@ function approvalRecord(overrides: Partial<InterAgentApprovalRecord> = {}): Inte
   };
 }
 
+function projectedResearcherMessages(): ChatMessage[] {
+  return [
+    {
+      id: "researcher:agent:1",
+      role: "agent",
+      content: "Checking the primary sources.",
+      createdAt: "2026-06-18T10:01:00Z",
+      status: "complete",
+      sourceLabel: "Researcher",
+      sourceParticipantId: "researcher",
+      sourceRunId: "run-1",
+    },
+    {
+      id: "researcher:tool:1",
+      role: "tool",
+      content: "Tool Used",
+      createdAt: "2026-06-18T10:01:01Z",
+      status: "complete",
+      sourceLabel: "Researcher",
+      sourceParticipantId: "researcher",
+      sourceRunId: "run-1",
+      toolCall: {
+        id: "web-search-1",
+        name: "web_search",
+        status: "started",
+        detail: { tool_kind: "web_search", query: "Maverick launch" },
+        createdAt: "2026-06-18T10:01:01Z",
+      },
+    },
+  ];
+}
+
 function artifactEvent(overrides: Partial<InterAgentEventRecord> = {}): InterAgentEventRecord {
   return {
     event_id: "event-artifact-1",
@@ -344,6 +377,29 @@ describe("InterAgentGraphView", () => {
     expect(element.querySelector("pre")).toBeNull();
   });
 
+  it("shows the shared working border and expandable latest activity inside agent nodes", async () => {
+    const element = await renderGraph({ messages: projectedResearcherMessages() });
+    const researcherNodeButton = element.querySelector('[data-participant-id="researcher"]') as HTMLButtonElement | null;
+    const researcherNode = researcherNodeButton?.closest(".chatapp-inter-agent-graph__node");
+    const activityToggle = researcherNode?.querySelector(
+      '[aria-label="Expand Researcher latest activity"]',
+    ) as HTMLButtonElement | null;
+
+    expect(researcherNode?.classList.contains("is-working")).toBe(true);
+    expect(researcherNode?.querySelector(".chatapp-live-border-glow")).not.toBeNull();
+    expect(researcherNode?.querySelector(".chatapp-inter-agent-graph__node-activity")?.textContent).toContain("Tool in progress");
+    expect(researcherNode?.querySelector(".chatapp-inter-agent-graph__node-activity")?.textContent).toContain("Web search");
+    expect(activityToggle?.getAttribute("aria-expanded")).toBe("false");
+
+    await act(async () => {
+      activityToggle?.click();
+      await settle();
+    });
+
+    expect(activityToggle?.getAttribute("aria-expanded")).toBe("true");
+    expect(researcherNode?.querySelector(".chatapp-inter-agent-graph__node-activity")?.classList.contains("is-expanded")).toBe(true);
+  });
+
   it("loads a safe transcript when an agent node is selected", async () => {
     const element = await renderGraph();
     const researcherNode = element.querySelector('[data-participant-id="researcher"]') as HTMLButtonElement | null;
@@ -359,12 +415,51 @@ describe("InterAgentGraphView", () => {
     expect(element.querySelector(".chatapp-inter-agent-graph__input-summary")?.textContent).toContain("Find launch facts.");
     expect(element.querySelector(".chatapp-inter-agent-graph__transcript-title summary")).not.toBeNull();
     expect(element.querySelector(".chatapp-inter-agent-graph__transcript-list .chatapp-agent-block")).not.toBeNull();
-    const outputText = Array.from(element.querySelectorAll(".chatapp-inter-agent-graph__transcript-message"))
-      .map((message) => message.textContent || "")
-      .join(" ");
+    const outputText = element.querySelector(".chatapp-inter-agent-graph__transcript-list")?.textContent || "";
     expect(outputText).toContain("Research complete.");
     expect(outputText).not.toContain("Find launch facts.");
     expect(element.textContent).not.toContain("child-1");
+  });
+
+  it("keeps the complete input summary available for the scrollable participant header", async () => {
+    const longInput = `Review the complete request. ${"Keep this operational detail visible. ".repeat(14)}Final input marker.`;
+    vi.mocked(getInterAgentParticipantTranscript).mockResolvedValue({
+      ...transcriptPayload("researcher"),
+      items: [
+        {
+          ...transcriptPayload("researcher").items[0],
+          text: longInput,
+        },
+      ],
+      item_count: 1,
+    });
+    const element = await renderGraph();
+
+    await act(async () => {
+      (element.querySelector('[data-participant-id="researcher"]') as HTMLButtonElement | null)?.click();
+      await settle();
+    });
+
+    const summary = element.querySelector(".chatapp-inter-agent-graph__input-summary p");
+    expect(summary?.textContent).toBe(longInput);
+    expect(summary?.textContent).toContain("Final input marker.");
+  });
+
+  it("renders projected participant text and tools with the normal chat blocks", async () => {
+    const element = await renderGraph({ messages: projectedResearcherMessages() });
+
+    await act(async () => {
+      (element.querySelector('[data-participant-id="researcher"]') as HTMLButtonElement | null)?.click();
+      await settle();
+    });
+
+    const transcript = element.querySelector('[aria-label="Researcher transcript"]');
+    expect(transcript?.textContent).toContain("Checking the primary sources.");
+    expect(transcript?.textContent).toContain("Tool Used");
+    expect(transcript?.textContent).toContain("Web search");
+    expect(transcript?.querySelectorAll(".chatapp-bubble").length).toBe(2);
+    expect(transcript?.querySelector(".chatapp-tool-inline__row")).not.toBeNull();
+    expect(transcript?.querySelector(".chatapp-agent-block")).not.toBeNull();
   });
 
   it("renders participant artifacts as product-facing records with Storage links", async () => {

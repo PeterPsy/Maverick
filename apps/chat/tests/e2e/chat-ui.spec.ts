@@ -275,10 +275,15 @@ test.describe("Chat app browser smoke", () => {
     await page.getByRole("textbox").fill("Research the launch risks and review the answer");
     await page.getByRole("button", { name: "Send message" }).click();
 
-    await expect(page.getByText("Staged multi-agent run started.")).toBeVisible();
-    await expect(page.getByRole("button", { name: /Agent nodes/ })).toBeVisible();
+    await expect(page.getByText("Final risk review ready.")).toBeVisible();
 
-    expect(state.createSessionBodies).toHaveLength(1);
+    expect(state.createSessionBodies).toContainEqual(
+      expect.objectContaining({
+        agent_id: "Researcher",
+        agent_type_id: RESEARCHER_AGENT_ID,
+        source_app_id: "agents",
+      }),
+    );
     expect(state.createRunBodies).toHaveLength(1);
     expect(state.createRunBodies[0]).toMatchObject({
       mode: "sequential",
@@ -332,37 +337,44 @@ test.describe("Chat app browser smoke", () => {
       async: true,
     });
 
-    await page.getByRole("button", { name: /Agent nodes/ }).click();
-    await expect(page.getByRole("region", { name: "Agent nodes view" })).toBeVisible();
-    await expect(page.getByText("3 nodes")).toBeVisible();
+    await page.evaluate((runId) => {
+      window.postMessage(
+        {
+          type: "maverick.app.navigate",
+          app_id: "chat",
+          params: { app_page: `graph/${runId}` },
+        },
+        window.location.origin,
+      );
+    }, RUN_ID);
+    const agentNodesRegion = page.getByRole("region", { name: "Agent nodes view" });
+    await expect(agentNodesRegion).toBeVisible();
+    const agentNodesRegionBox = await agentNodesRegion.boundingBox();
+    expect(agentNodesRegionBox?.width || 0).toBeGreaterThan(700);
+    expect(agentNodesRegionBox?.height || 0).toBeGreaterThan(500);
     await expect(page.getByText("Implementer")).toBeVisible();
     await expect(page.getByText("Reviewer")).toBeVisible();
     await expectReactFlowGraphRendered(page, 3);
     await expectReactFlowPanMovesViewport(page);
-    await page.getByLabel("Zoom in").click();
-    await page.getByLabel("Fit graph").click();
+    const reviewerNode = page.locator(".chatapp-inter-agent-graph__node").filter({
+      has: page.locator('[data-participant-id="reviewer"]'),
+    });
+    await expect(reviewerNode).toHaveClass(/is-working/);
+    await expect(reviewerNode.locator(".chatapp-live-border-glow")).toBeVisible();
+    await expect(reviewerNode.getByText("Final risk review ready.")).toBeVisible();
+    await reviewerNode.getByRole("button", { name: "Expand Reviewer latest activity" }).click();
+    await expect(reviewerNode.locator(".chatapp-inter-agent-graph__node-activity")).toHaveClass(/is-expanded/);
 
-    await expect.poll(() => state.interAgentSockets.length).toBeGreaterThan(0);
-    state.interAgentSockets.at(-1)?.send(
-      JSON.stringify({
-        type: "inter_agent.event",
-        event: interAgentEvent({
-          event_id: "event-live-review",
-          event_type: "inter_agent.task.completed",
-          participant_id: "reviewer",
-          runtime_session_id: "child-reviewer",
-          runtime_turn_id: "turn-reviewer",
-          sequence: 3,
-          payload: { summary: "Reviewer completed browser-observed final review." },
-        }),
-      }),
-    );
-
-    await expect(page.getByText("Reviewer completed browser-observed final review.")).toBeVisible();
-    await page.getByRole("button", { name: /Stop/ }).click();
-    await expect
-      .poll(() => state.runDetail.run.status)
-      .toBe("cancelled");
+    await page.locator('[data-participant-id="reviewer"]').click();
+    const participantTranscript = page.getByRole("complementary", { name: "Reviewer transcript" });
+    await expect(participantTranscript.getByText("Reviewing launch sources.")).toBeVisible();
+    await expect(participantTranscript.getByText("Final risk review ready.")).toBeVisible();
+    await expect(participantTranscript.getByText("Tool Used")).toBeVisible();
+    await expect(participantTranscript.getByText("Web search")).toBeVisible();
+    await expect(participantTranscript.locator(".chatapp-tool-inline__row")).toBeVisible();
+    await expect(participantTranscript.locator(".chatapp-agent-block")).toHaveCount(2);
+    const participantHeaderBox = await participantTranscript.locator(".chatapp-inter-agent-graph__transcript-title summary").boundingBox();
+    expect(participantHeaderBox?.height || 0).toBeGreaterThanOrEqual(68);
   });
 
   test("exposes gated group chat mode and opens its graph", async ({ page }) => {
@@ -437,10 +449,16 @@ test.describe("Chat app browser smoke", () => {
       );
     }, RUN_ID);
 
-    await expect(page.getByRole("region", { name: "Agent nodes view" })).toBeVisible();
+    const mobileAgentNodesRegion = page.getByRole("region", { name: "Agent nodes view" });
+    await expect(mobileAgentNodesRegion).toBeVisible();
+    const mobileAgentNodesRegionBox = await mobileAgentNodesRegion.boundingBox();
+    expect(mobileAgentNodesRegionBox?.width || 0).toBeGreaterThan(320);
+    expect(mobileAgentNodesRegionBox?.height || 0).toBeGreaterThan(600);
     await expect(page.locator('[data-react-flow-agent-graph="true"]')).toBeVisible();
-    await expect(page.getByText("3 nodes")).toBeVisible();
+    await expect(page.locator("[data-participant-id]")).toHaveCount(3);
     await expectReactFlowGraphRendered(page, 3);
+    await expect(page.locator(".chatapp-inter-agent-graph__node.is-working .chatapp-live-border-glow")).toHaveCount(2);
+    await expect(page.getByText("Reviewer draft before final synthesis.")).toBeVisible();
 
     await page.locator('[data-participant-id="implementer"]').click();
     await expect(page.getByText("Implementer accepted browser-observed task.")).toBeHidden();
@@ -448,8 +466,7 @@ test.describe("Chat app browser smoke", () => {
     await page.locator(".chatapp-inter-agent-graph__transcript-title summary").click();
     await expect(page.getByText("Implementer accepted browser-observed task.")).toBeVisible();
     await expect(page.getByText("child-implementer")).toHaveCount(0);
-    await page.getByLabel("Zoom out").click();
-    await page.getByLabel("Fit graph").click();
+    await expect(page.getByRole("complementary", { name: "Implementer transcript" })).toBeVisible();
   });
 });
 
@@ -920,16 +937,20 @@ async function handleInterAgentApi(route: Route, state: MockState) {
       state.executeRunBodies.push(body);
       state.runCreated = true;
       const mode = String(state.runDetail.run.mode || "sequential");
-      state.runDetail = interAgentRunDetail({
-        run: { status: "running", mode },
-        root_runtime_turn: runtimeTurn("turn-root", RUNTIME_SESSION_ID, "active", typeof body.input_text === "string" ? body.input_text : ""),
-        root_runtime_events: runtimeTranscriptEvents(
+      const rootRuntimeEvents = [
+        ...runtimeTranscriptEvents(
           RUNTIME_SESSION_ID,
           "turn-root",
           typeof body.input_text === "string" ? body.input_text : "",
           "Root orchestrator accepted the multi-agent request.",
           typeof body.client_message_id === "string" ? body.client_message_id : undefined,
         ),
+        ...projectedParticipantRuntimeEvents(RUNTIME_SESSION_ID, "turn-root", "reviewer", "Reviewer"),
+      ];
+      state.runDetail = interAgentRunDetail({
+        run: { status: "running", mode },
+        root_runtime_turn: runtimeTurn("turn-root", RUNTIME_SESSION_ID, "active", typeof body.input_text === "string" ? body.input_text : ""),
+        root_runtime_events: rootRuntimeEvents,
       });
       state.threads = [
         chatThread({
@@ -1166,6 +1187,47 @@ function runtimeTranscriptEvents(sessionId: string, turnId: string, inputText: s
       event_type: "runtime.output.final",
       payload: { text: outputText },
       created_at: NOW,
+    },
+  ];
+}
+
+function projectedParticipantRuntimeEvents(
+  sessionId: string,
+  turnId: string,
+  participantId: string,
+  participantLabel: string,
+): RuntimeEvent[] {
+  const projection = {
+    inter_agent_projection: "participant_runtime_event",
+    inter_agent_run_id: RUN_ID,
+    inter_agent_participant_id: participantId,
+    inter_agent_participant_label: participantLabel,
+    inter_agent_participant_block_id: `${participantId}-block`,
+  };
+  return [
+    {
+      event_id: `${participantId}-tool`,
+      session_id: sessionId,
+      turn_id: turnId,
+      event_type: "runtime.tool_call.completed",
+      payload: { ...projection, name: "web_search", tool_kind: "web_search", query: "launch risks" },
+      created_at: "2026-06-18T10:00:01Z",
+    },
+    {
+      event_id: `${participantId}-delta`,
+      session_id: sessionId,
+      turn_id: turnId,
+      event_type: "runtime.output.delta",
+      payload: { ...projection, text: "Reviewing launch sources. " },
+      created_at: "2026-06-18T10:00:02Z",
+    },
+    {
+      event_id: `${participantId}-final`,
+      session_id: sessionId,
+      turn_id: turnId,
+      event_type: "runtime.output.final",
+      payload: { ...projection, text: "Reviewing launch sources. Final risk review ready." },
+      created_at: "2026-06-18T10:00:03Z",
     },
   ];
 }

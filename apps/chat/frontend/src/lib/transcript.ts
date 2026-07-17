@@ -66,13 +66,20 @@ function messageTurnId(event: RuntimeEvent): string {
   return blockId ? `${turnId}:inter-agent:${blockId}` : turnId;
 }
 
-function sourceLabelForEvent(event: RuntimeEvent): string {
-  return isInterAgentParticipantProjection(event) ? stringPayload(event.payload.inter_agent_participant_label) : "";
-}
+type MessageSourceFields = Pick<ChatMessage, "sourceLabel" | "sourceParticipantId" | "sourceRunId">;
 
-function sourceFieldsForEvent(event: RuntimeEvent): Pick<ChatMessage, "sourceLabel"> {
-  const sourceLabel = sourceLabelForEvent(event);
-  return sourceLabel ? { sourceLabel } : {};
+function sourceFieldsForEvent(event: RuntimeEvent): MessageSourceFields {
+  if (!isInterAgentParticipantProjection(event)) {
+    return {};
+  }
+  const sourceLabel = stringPayload(event.payload.inter_agent_participant_label);
+  const sourceParticipantId = stringPayload(event.payload.inter_agent_participant_id);
+  const sourceRunId = stringPayload(event.payload.inter_agent_run_id);
+  return {
+    ...(sourceLabel ? { sourceLabel } : {}),
+    ...(sourceParticipantId ? { sourceParticipantId } : {}),
+    ...(sourceRunId ? { sourceRunId } : {}),
+  };
 }
 
 function structuredPayloadKey(turnId: string, structured: StructuredContent): string {
@@ -249,12 +256,15 @@ function projectEventsToMessages(events: RuntimeEvent[]): ChatMessage[] {
   let messageSequence = 0;
   const seenUserTurns = new Set<string>();
   const finalTurnIds = new Set(events.filter((event) => event.event_type === "runtime.output.final").map(messageTurnId));
-  const outputSegmentsByTurn = new Map<string, { text: string; createdAt: string; index: number; order: number; sourceLabel: string }>();
+  const outputSegmentsByTurn = new Map<
+    string,
+    { text: string; createdAt: string; index: number; order: number; sourceFields: MessageSourceFields }
+  >();
   const nextOutputSegmentIndexByTurn = new Map<string, number>();
   const renderedOutputByTurn = new Map<string, string>();
   const toolSegmentsByTurn = new Map<
     string,
-    { createdAt: string; itemsByKey: Map<string, ToolCallMessage>; index: number; order: number; sourceLabel: string }
+    { createdAt: string; itemsByKey: Map<string, ToolCallMessage>; index: number; order: number; sourceFields: MessageSourceFields }
   >();
   const nextToolSegmentIndexByTurn = new Map<string, number>();
   const renderedStructuredOutput = new Set<string>();
@@ -291,16 +301,23 @@ function projectEventsToMessages(events: RuntimeEvent[]): ChatMessage[] {
       content: segment.text,
       createdAt: segment.createdAt,
       status: closeActive ? "complete" : "pending",
-      ...(segment.sourceLabel ? { sourceLabel: segment.sourceLabel } : {}),
+      ...segment.sourceFields,
     }, segment.order);
     appendRenderedOutput(turnId, segment.text);
     if (closeActive) {
-      pushLinkPreviews(turnId, `stream:${segment.index}`, segment.text, segment.order, segment.createdAt);
+      pushLinkPreviews(turnId, `stream:${segment.index}`, segment.text, segment.order, segment.createdAt, segment.sourceFields);
     }
     outputSegmentsByTurn.delete(turnId);
   }
 
-  function pushLinkPreviews(turnId: string, sourceId: string, text: string, order: number, createdAt: string) {
+  function pushLinkPreviews(
+    turnId: string,
+    sourceId: string,
+    text: string,
+    order: number,
+    createdAt: string,
+    sourceFields: MessageSourceFields = {},
+  ) {
     structuredContentFromAgentLinks(text).forEach((linkPreview, index) => {
       const structuredKey = structuredPayloadKey(turnId, linkPreview);
       if (renderedStructuredOutput.has(structuredKey)) {
@@ -314,6 +331,7 @@ function projectEventsToMessages(events: RuntimeEvent[]): ChatMessage[] {
         createdAt,
         status: "complete",
         structuredContent: linkPreview,
+        ...sourceFields,
       }, order);
     });
   }
@@ -336,7 +354,7 @@ function projectEventsToMessages(events: RuntimeEvent[]): ChatMessage[] {
         status: hasFailedTool ? "failed" : "complete",
         toolCalls: items,
         toolCall: items[0],
-        ...(segment.sourceLabel ? { sourceLabel: segment.sourceLabel } : {}),
+        ...segment.sourceFields,
       }, segment.order);
     }
     toolSegmentsByTurn.delete(turnId);
@@ -379,7 +397,7 @@ function projectEventsToMessages(events: RuntimeEvent[]): ChatMessage[] {
           createdAt: event.created_at,
           order: current ? current.order : eventIndex,
           index: current ? current.index : index,
-          sourceLabel: current?.sourceLabel || sourceLabelForEvent(event),
+          sourceFields: current?.sourceFields || sourceFields,
         });
       }
     }
@@ -435,7 +453,7 @@ function projectEventsToMessages(events: RuntimeEvent[]): ChatMessage[] {
           ...sourceFields,
         }, eventIndex);
       }
-      pushLinkPreviews(turnId, event.event_id, finalText, eventIndex, event.created_at);
+      pushLinkPreviews(turnId, event.event_id, finalText, eventIndex, event.created_at, sourceFields);
     }
     const toolCall = toolCallPayload(event);
     if (toolCall) {
@@ -454,7 +472,7 @@ function projectEventsToMessages(events: RuntimeEvent[]): ChatMessage[] {
           itemsByKey: new Map([[key, toolCall]]),
           index,
           order: eventIndex,
-          sourceLabel: sourceLabelForEvent(event),
+          sourceFields,
         });
       }
       continue;

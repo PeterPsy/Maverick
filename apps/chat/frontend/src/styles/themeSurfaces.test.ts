@@ -122,11 +122,22 @@ describe("chat multi-agent board control", () => {
     const styles = readStyleFile(resolve(currentDir, "chat/transcript/loading.css"));
 
     expect(styles).toMatch(
-      /\.chatapp-live-board-glow::after\s*{[\s\S]*inset:\s*1px;[\s\S]*background:\s*var\(--chatapp-inter-agent-board-live-fill\);/,
+      /\.chatapp-live-border-glow::after\s*{[\s\S]*inset:\s*1px;[\s\S]*background:\s*var\(--chatapp-live-border-fill,\s*var\(--chatapp-solid-surface\)\);/,
     );
     expect(styles).toMatch(/\.chatapp-inter-agent-board-button\.is-live\s*{[\s\S]*background:\s*transparent;/);
-    expect(styles).toMatch(/\.chatapp-live-board-glow__layer--bright\s*{[\s\S]*border-radius:\s*inherit;/);
-    expect(styles).toMatch(/\.chatapp-live-board-glow__layer--rim\s*{[\s\S]*border-radius:\s*inherit;/);
+    expect(styles).toMatch(/\.chatapp-live-border-glow__layer--bright\s*{[\s\S]*border-radius:\s*inherit;/);
+    expect(styles).toMatch(/\.chatapp-live-border-glow__layer--rim\s*{[\s\S]*border-radius:\s*inherit;/);
+  });
+
+  it("keeps the participant input header large and bounds only long summaries", () => {
+    const styles = readStyleFile(resolve(currentDir, "chat/transcript/inter-agent.css"));
+
+    expect(styles).toMatch(
+      /\.chatapp-inter-agent-graph__transcript-title summary\s*{[\s\S]*min-height:\s*4\.25rem;/,
+    );
+    expect(styles).toMatch(
+      /\.chatapp-inter-agent-graph__input-summary p\s*{[\s\S]*max-height:\s*min\(14rem, 35vh\);[\s\S]*overflow:\s*auto;/,
+    );
   });
 });
 

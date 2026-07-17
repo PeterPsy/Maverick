@@ -19,10 +19,10 @@ import {
 import "@xyflow/react/dist/style.css";
 import {
   getInterAgentParticipantTranscript,
+  type ChatMessage,
   type InterAgentApprovalRecord,
   type InterAgentArtifactRecord,
   type InterAgentEventRecord,
-  type InterAgentParticipantTranscriptItem,
   type InterAgentParticipantTranscriptPayload,
   type InterAgentRunDetail,
   type InterAgentVisibilityPlane,
@@ -31,23 +31,24 @@ import { useInterAgentGraph } from "../hooks/useInterAgentGraph";
 import { participantIcon, runStatusLabel } from "../lib/interAgentGraph";
 import { openAppRouteInShell, openStoragePathInShell } from "../lib/shellNavigation";
 import { storageAppPageShellHref, storageLinkTargetFromHref, storageShellHref } from "../lib/storageLinks";
-import { MarkdownMessage } from "./MarkdownMessage";
-import { formatMessageTime } from "./MessageFooter";
+import { LiveBorderGlow } from "./LiveBorderGlow";
+import { MessageList } from "./MessageList";
 
 type InterAgentGraphViewProps = {
   initialApprovals?: InterAgentApprovalRecord[];
   initialEvents?: InterAgentEventRecord[];
   initialRunDetail?: InterAgentRunDetail | null;
+  messages?: ChatMessage[];
   onClose: () => void;
   runId: string;
 };
 
 const GRAPH_VISIBILITY_PLANE: InterAgentVisibilityPlane = "detail";
 const TRANSCRIPT_LIMIT = 80;
-const GRAPH_NODE_WIDTH = 236;
-const GRAPH_NODE_HEIGHT = 78;
-const GRAPH_COLUMN_GAP = 116;
-const GRAPH_ROW_GAP = 138;
+const GRAPH_NODE_WIDTH = 272;
+const GRAPH_NODE_HEIGHT = 142;
+const GRAPH_COLUMN_GAP = 104;
+const GRAPH_ROW_GAP = 128;
 const GRAPH_PADDING = 56;
 const GRAPH_MAX_ROW_COLUMNS = 4;
 const GRAPH_EDGE_DIRECT_OFFSET = 26;
@@ -60,6 +61,7 @@ export function InterAgentGraphView({
   initialApprovals = [],
   initialEvents = [],
   initialRunDetail = null,
+  messages = [],
   onClose,
   runId,
 }: InterAgentGraphViewProps) {
@@ -84,6 +86,7 @@ export function InterAgentGraphView({
   });
 
   const participants = runDetail?.participants || [];
+  const participantMessagesById = useMemo(() => participantMessagesForRun(messages, runId), [messages, runId]);
   const selectedParticipant =
     participants.find((participant) => participant.participant_id === selectedParticipantId) || null;
   const hasSelectedParticipant = Boolean(selectedParticipant);
@@ -167,7 +170,9 @@ export function InterAgentGraphView({
 
       <div className={`chatapp-inter-agent-graph__body ${hasSelectedParticipant ? "has-transcript" : ""}`}>
         <GraphCanvas
+          events={events}
           hasTranscript={hasSelectedParticipant}
+          messagesByParticipantId={participantMessagesById}
           onSelectParticipant={setSelectedParticipantId}
           runDetail={runDetail}
           selectedParticipantId={selectedParticipantId}
@@ -177,6 +182,7 @@ export function InterAgentGraphView({
             artifacts={selectedParticipantArtifacts}
             error={transcriptError}
             isLoading={transcriptLoading}
+            messages={participantMessagesById.get(selectedParticipant.participant_id) || []}
             onClose={() => setSelectedParticipantId(null)}
             participant={selectedParticipant}
             transcript={transcript}
@@ -196,12 +202,16 @@ export function InterAgentGraphView({
 }
 
 function GraphCanvas({
+  events,
   hasTranscript,
+  messagesByParticipantId,
   onSelectParticipant,
   runDetail,
   selectedParticipantId,
 }: {
+  events: InterAgentEventRecord[];
   hasTranscript: boolean;
+  messagesByParticipantId: Map<string, ChatMessage[]>;
   onSelectParticipant: (participantId: string) => void;
   runDetail: InterAgentRunDetail | null;
   selectedParticipantId: string | null;
@@ -212,9 +222,13 @@ function GraphCanvas({
     () => graphBoardLayout(participants, edges, runDetail?.run.orchestrator_participant_id),
     [edges, participants, runDetail?.run.orchestrator_participant_id],
   );
+  const activitiesByParticipantId = useMemo(
+    () => participantActivityMap(participants, messagesByParticipantId, events),
+    [events, messagesByParticipantId, participants],
+  );
   const flowNodes = useMemo(
-    () => graphFlowNodes(layout, selectedParticipantId, onSelectParticipant),
-    [layout, onSelectParticipant, selectedParticipantId],
+    () => graphFlowNodes(layout, activitiesByParticipantId, selectedParticipantId, onSelectParticipant),
+    [activitiesByParticipantId, layout, onSelectParticipant, selectedParticipantId],
   );
   const flowEdges = useMemo(() => graphFlowEdges(edges, layout.nodesById), [edges, layout.nodesById]);
   const missingConnectionCount = Math.max(0, edges.length - flowEdges.length);
@@ -243,10 +257,150 @@ function GraphCanvas({
   );
 }
 
+function participantMessagesForRun(messages: ChatMessage[], runId: string): Map<string, ChatMessage[]> {
+  const messagesByParticipantId = new Map<string, ChatMessage[]>();
+  for (const message of messages) {
+    const participantId = message.sourceParticipantId?.trim();
+    if (!participantId || message.sourceRunId !== runId) {
+      continue;
+    }
+    const participantMessages = messagesByParticipantId.get(participantId) || [];
+    participantMessages.push(message);
+    messagesByParticipantId.set(participantId, participantMessages);
+  }
+  for (const participantMessages of messagesByParticipantId.values()) {
+    participantMessages.sort((left, right) => messageTimestamp(left) - messageTimestamp(right));
+  }
+  return messagesByParticipantId;
+}
+
+function messageTimestamp(message: ChatMessage): number {
+  const timestamp = Date.parse(message.createdAt);
+  return Number.isFinite(timestamp) ? timestamp : 0;
+}
+
+function participantActivityMap(
+  participants: GraphParticipant[],
+  messagesByParticipantId: Map<string, ChatMessage[]>,
+  events: InterAgentEventRecord[],
+): Map<string, ParticipantNodeActivity> {
+  const latestEventsByParticipantId = new Map<string, InterAgentEventRecord>();
+  for (const event of events) {
+    const participantId = eventParticipantId(event);
+    if (!participantId) {
+      continue;
+    }
+    const current = latestEventsByParticipantId.get(participantId);
+    if (!current || event.sequence >= current.sequence) {
+      latestEventsByParticipantId.set(participantId, event);
+    }
+  }
+  return new Map(
+    participants.map((participant) => {
+      const activity =
+        latestMessageActivity(messagesByParticipantId.get(participant.participant_id) || []) ||
+        eventActivity(latestEventsByParticipantId.get(participant.participant_id)) ||
+        participantStatusActivity(participant);
+      return [participant.participant_id, activity];
+    }),
+  );
+}
+
+function latestMessageActivity(messages: ChatMessage[]): ParticipantNodeActivity | null {
+  for (let index = messages.length - 1; index >= 0; index -= 1) {
+    const message = messages[index];
+    if (message.role === "tool") {
+      const toolCall = message.toolCalls?.at(-1) || message.toolCall;
+      if (toolCall) {
+        const active = toolCall.status === "started" || toolCall.status === "updated";
+        return {
+          kind: "tool",
+          label: active ? "Tool in progress" : "Last tool",
+          text: participantToolName(toolCall.name, toolCall.detail),
+        };
+      }
+    }
+    if (message.role === "agent" && message.content.trim()) {
+      return { kind: "message", label: "Latest message", text: message.content.trim() };
+    }
+    if (message.role === "step" && (message.step?.label || message.content).trim()) {
+      return { kind: "step", label: "Current activity", text: (message.step?.label || message.content).trim() };
+    }
+    if ((message.role === "system" || message.role === "structured") && message.content.trim()) {
+      return { kind: "status", label: "Latest update", text: message.content.trim() };
+    }
+  }
+  return null;
+}
+
+function eventActivity(event: InterAgentEventRecord | undefined): ParticipantNodeActivity | null {
+  if (!event) {
+    return null;
+  }
+  const payloadText = ["summary", "text", "partial_output", "label", "operation_kind", "task"]
+    .map((key) => stringRecordField(event.payload[key]))
+    .find(Boolean);
+  const eventLabel = event.event_type.split(".").at(-1)?.replace(/_/g, " ") || "Updated";
+  return {
+    kind: event.event_type.includes("tool") ? "tool" : "status",
+    label: "Latest update",
+    text: payloadText || eventLabel.charAt(0).toUpperCase() + eventLabel.slice(1),
+  };
+}
+
+function participantStatusActivity(participant: GraphParticipant): ParticipantNodeActivity {
+  return {
+    kind: "status",
+    label: "Status",
+    text: participant.status.replace(/_/g, " "),
+  };
+}
+
+function eventParticipantId(event: InterAgentEventRecord): string {
+  return stringRecordField(event.participant_id) || stringRecordField(event.payload.participant_id);
+}
+
+function participantToolName(name: string, detail: Record<string, unknown>): string {
+  const toolKind = stringRecordField(detail.tool_kind);
+  if (toolKind === "web_search" || name.includes("web")) {
+    return "Web search";
+  }
+  if (toolKind === "file_change") {
+    return "File changes";
+  }
+  if (toolKind === "skill_change") {
+    return "Skills changed";
+  }
+  const command = stringRecordField(detail.command);
+  return command || name.replace(/[._-]+/g, " ");
+}
+
+function stringRecordField(value: unknown): string {
+  return typeof value === "string" ? value.trim() : "";
+}
+
+function activityIcon(kind: ParticipantNodeActivity["kind"]): string {
+  if (kind === "tool") {
+    return "build";
+  }
+  if (kind === "message") {
+    return "chat_bubble";
+  }
+  if (kind === "step") {
+    return "progress_activity";
+  }
+  return "info";
+}
+
+function isWorkingParticipantStatus(status: string): boolean {
+  return status === "planning" || status === "running" || status === "reviewing" || status === "working";
+}
+
 function ParticipantTranscript({
   artifacts,
   error,
   isLoading,
+  messages,
   onClose,
   participant,
   transcript,
@@ -254,12 +408,44 @@ function ParticipantTranscript({
   artifacts: InterAgentArtifactRecord[];
   error: string | null;
   isLoading: boolean;
+  messages: ChatMessage[];
   onClose: () => void;
   participant: NonNullable<InterAgentRunDetail>["participants"][number];
   transcript: InterAgentParticipantTranscriptPayload | null;
 }) {
   const inputSummary = participantInputSummary(transcript);
-  const outputItems = participantOutputItems(transcript);
+  const fallbackMessages = useMemo(() => participantFallbackMessages(transcript, participant), [participant, transcript]);
+  const displayedMessages = messages.length ? messages : fallbackMessages;
+  const [expandedMessages, setExpandedMessages] = useState<Set<string>>(new Set());
+  const [speakingMessageId, setSpeakingMessageId] = useState<string | null>(null);
+  const latestToolMessageId =
+    [...displayedMessages]
+      .reverse()
+      .find((message) => message.role === "tool" && (message.toolCalls?.length || message.toolCall))?.id || null;
+  const copyMessage = useCallback(async (content: string) => {
+    if (!content || !navigator.clipboard?.writeText) {
+      return false;
+    }
+    await navigator.clipboard.writeText(content);
+    return true;
+  }, []);
+
+  useEffect(() => {
+    setExpandedMessages(new Set());
+    setSpeakingMessageId(null);
+  }, [participant.participant_id]);
+
+  const toggleExpanded = useCallback((messageId: string) => {
+    setExpandedMessages((current) => {
+      const next = new Set(current);
+      if (next.has(messageId)) {
+        next.delete(messageId);
+      } else {
+        next.add(messageId);
+      }
+      return next;
+    });
+  }, []);
 
   return (
     <aside className="chatapp-inter-agent-graph__transcript" aria-label={`${participant.label} transcript`}>
@@ -287,43 +473,39 @@ function ParticipantTranscript({
         </button>
       </div>
       <div className="chatapp-inter-agent-graph__transcript-content">
-        {isLoading ? (
+        {isLoading && !displayedMessages.length ? (
           <div className="chatapp-inter-agent-graph__loading is-compact" role="status" aria-live="polite">
             <span className="chatapp-inter-agent-graph__loading-dot" />
             <span>Loading transcript</span>
           </div>
         ) : null}
-        {error ? (
+        {error && !displayedMessages.length ? (
           <div className="chatapp-inter-agent-graph__notice is-error" role="alert">
             <span className="material-symbols-rounded" aria-hidden="true">error</span>
             <span>{error}</span>
           </div>
         ) : null}
-        {!isLoading && !error && outputItems.length ? (
-          <ol className="chatapp-inter-agent-graph__transcript-list">
-            {outputItems.map((item) => (
-              <li className="chatapp-inter-agent-graph__transcript-message" key={item.message_id}>
-                <article className="chatapp-bubble is-agent">
-                  <div className="chatapp-agent-trace">
-                    <section className="chatapp-agent-block chatapp-agent-block--action">
-                      <div className="chatapp-agent-block__body">
-                        <MarkdownMessage content={item.text || "_No text output._"} />
-                      </div>
-                      <div className="chatapp-message-mobile-footer chatapp-inter-agent-graph__message-footer">
-                        <span>{transcriptOutputLabel(item)}</span>
-                        <time className="chatapp-bubble__time" dateTime={item.created_at}>
-                          {formatMessageTime(item.created_at)}
-                        </time>
-                      </div>
-                    </section>
-                  </div>
-                </article>
-              </li>
-            ))}
-          </ol>
+        {displayedMessages.length ? (
+          <div className="chatapp-inter-agent-graph__transcript-list">
+            <MessageList
+              expandedMessages={expandedMessages}
+              latestToolMessageId={latestToolMessageId}
+              mentionItems={[]}
+              messages={displayedMessages}
+              onActiveSpeechMessageChange={setSpeakingMessageId}
+              onCopyMessage={copyMessage}
+              onToggleExpanded={toggleExpanded}
+              speakingMessageId={speakingMessageId}
+              speechMaxTextChars={0}
+              speechProviderAppId=""
+              speechProviderAvailable={false}
+              speechProviderQualityProfile=""
+              speechProviderStreamingSupported={false}
+            />
+          </div>
         ) : null}
-        {!isLoading && !error && artifacts.length ? <ParticipantArtifacts artifacts={artifacts} /> : null}
-        {!isLoading && !error && !outputItems.length && !artifacts.length ? (
+        {!isLoading && artifacts.length ? <ParticipantArtifacts artifacts={artifacts} /> : null}
+        {!isLoading && !error && !displayedMessages.length && !artifacts.length ? (
           <div className="chatapp-inter-agent-graph__empty is-compact">No transcript yet.</div>
         ) : null}
       </div>
@@ -332,44 +514,31 @@ function ParticipantTranscript({
 }
 
 function participantInputSummary(transcript: InterAgentParticipantTranscriptPayload | null): string {
-  const inputText = (transcript?.items || [])
+  return (transcript?.items || [])
     .filter((item) => item.kind === "input" || item.role === "user")
-    .map((item) => item.text)
+    .map((item) => item.text.trim())
     .filter(Boolean)
-    .join(" ");
-  return compactInputSummary(inputText);
+    .join("\n\n");
 }
 
-function participantOutputItems(
+function participantFallbackMessages(
   transcript: InterAgentParticipantTranscriptPayload | null,
-): InterAgentParticipantTranscriptItem[] {
-  return (transcript?.items || []).filter(
-    (item) => item.role === "participant" && (item.kind === "output" || item.kind === "summary") && Boolean(item.text.trim()),
-  );
-}
-
-function transcriptOutputLabel(item: InterAgentParticipantTranscriptItem): string {
-  const kind = item.kind === "summary" ? "Summary" : "Output";
-  const status = item.status ? ` - ${item.status.replace(/_/g, " ")}` : "";
-  return `${kind}${status}`;
-}
-
-function compactInputSummary(value: string): string {
-  const normalized = value
-    .replace(/```[\s\S]*?```/g, " technical details ")
-    .replace(/\{[\s\S]{180,}\}/g, " technical details ")
-    .replace(/\[[\s\S]{180,}\]/g, " technical details ")
-    .replace(/\s+/g, " ")
-    .trim();
-  if (!normalized) {
-    return "";
-  }
-  if (normalized.length <= 180) {
-    return normalized;
-  }
-  const sentenceBoundary = normalized.slice(0, 180).search(/[.!?](?=\s)[^.!?]*$/);
-  const candidate = sentenceBoundary > 80 ? normalized.slice(0, sentenceBoundary + 1) : normalized.slice(0, 180);
-  return `${candidate.replace(/[,;:\s]+$/, "")}...`;
+  participant: GraphParticipant,
+): ChatMessage[] {
+  return (transcript?.items || [])
+    .filter(
+      (item) => item.role === "participant" && (item.kind === "output" || item.kind === "summary") && Boolean(item.text.trim()),
+    )
+    .map((item) => ({
+      id: item.message_id,
+      role: "agent" as const,
+      content: item.text,
+      createdAt: item.created_at,
+      status: item.status === "failed" ? "failed" as const : "complete" as const,
+      sourceLabel: participant.label,
+      sourceParticipantId: participant.participant_id,
+      sourceRunId: participant.run_id,
+    }));
 }
 
 function ParticipantArtifacts({ artifacts }: { artifacts: InterAgentArtifactRecord[] }) {
@@ -615,7 +784,13 @@ function ApprovalShelf({
 
 type GraphParticipant = NonNullable<InterAgentRunDetail>["participants"][number];
 type GraphEdge = NonNullable<InterAgentRunDetail>["edges"][number];
+type ParticipantNodeActivity = {
+  kind: "message" | "status" | "step" | "tool";
+  label: string;
+  text: string;
+};
 type AgentNodeData = Record<string, unknown> & {
+  activity: ParticipantNodeActivity;
   onSelect: (participantId: string) => void;
   participant: GraphParticipant;
 };
@@ -769,15 +944,11 @@ function GraphFlowCanvas({
 function AgentParticipantNode({ data, selected }: NodeProps) {
   const nodeData = data as AgentNodeData;
   const participant = nodeData.participant;
+  const [activityExpanded, setActivityExpanded] = useState(false);
+  const isWorking = isWorkingParticipantStatus(participant.status);
   return (
-    <button
-      className={`chatapp-inter-agent-graph__node is-${participant.status} ${selected ? "is-selected" : ""}`}
-      data-participant-id={participant.participant_id}
-      onClick={(event) => {
-        event.stopPropagation();
-        nodeData.onSelect(participant.participant_id);
-      }}
-      type="button"
+    <div
+      className={`chatapp-inter-agent-graph__node is-${participant.status} ${selected ? "is-selected" : ""} ${isWorking ? "is-working" : ""}`}
     >
       {GRAPH_HANDLES.map(({ position, side }) => (
         <Handle
@@ -788,11 +959,44 @@ function AgentParticipantNode({ data, selected }: NodeProps) {
           type="target"
         />
       ))}
-      <span className="material-symbols-rounded" aria-hidden="true">{participantIcon(participant.kind)}</span>
-      <span className="chatapp-inter-agent-graph__node-copy">
-        <strong>{participant.label}</strong>
-        <span>{participantStatusLabel(participant.kind, participant.status)}</span>
-      </span>
+      {isWorking ? <LiveBorderGlow className="chatapp-inter-agent-graph__node-glow" /> : null}
+      <button
+        className="chatapp-inter-agent-graph__node-select nodrag"
+        data-participant-id={participant.participant_id}
+        onClick={(event) => {
+          event.stopPropagation();
+          nodeData.onSelect(participant.participant_id);
+        }}
+        type="button"
+      >
+        <span className="material-symbols-rounded chatapp-inter-agent-graph__node-icon" aria-hidden="true">
+          {participantIcon(participant.kind)}
+        </span>
+        <span className="chatapp-inter-agent-graph__node-copy">
+          <strong>{participant.label}</strong>
+          <span>{participantStatusLabel(participant.kind, participant.status)}</span>
+        </span>
+      </button>
+      <div className={`chatapp-inter-agent-graph__node-activity nodrag ${activityExpanded ? "is-expanded" : ""}`}>
+        <button
+          aria-expanded={activityExpanded}
+          aria-label={`${activityExpanded ? "Collapse" : "Expand"} ${participant.label} latest activity`}
+          className="chatapp-inter-agent-graph__node-activity-toggle"
+          onClick={(event) => {
+            event.stopPropagation();
+            setActivityExpanded((current) => !current);
+          }}
+          onPointerDown={(event) => event.stopPropagation()}
+          type="button"
+        >
+          <span className="material-symbols-rounded" aria-hidden="true">{activityIcon(nodeData.activity.kind)}</span>
+          <span>{nodeData.activity.label}</span>
+          <span className="material-symbols-rounded chatapp-inter-agent-graph__node-activity-caret" aria-hidden="true">
+            expand_more
+          </span>
+        </button>
+        <p title={nodeData.activity.text}>{nodeData.activity.text}</p>
+      </div>
       {GRAPH_HANDLES.map(({ position, side }) => (
         <Handle
           className={`chatapp-inter-agent-graph__handle is-${side}`}
@@ -802,17 +1006,19 @@ function AgentParticipantNode({ data, selected }: NodeProps) {
           type="source"
         />
       ))}
-    </button>
+    </div>
   );
 }
 
 function graphFlowNodes(
   layout: GraphBoardLayout,
+  activitiesByParticipantId: Map<string, ParticipantNodeActivity>,
   selectedParticipantId: string | null,
   onSelectParticipant: (participantId: string) => void,
 ): AgentFlowNode[] {
   return layout.nodes.map((node) => ({
     data: {
+      activity: activitiesByParticipantId.get(node.participant.participant_id) || participantStatusActivity(node.participant),
       onSelect: onSelectParticipant,
       participant: node.participant,
     },

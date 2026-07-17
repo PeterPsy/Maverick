@@ -427,6 +427,8 @@ export type ChatMessage = {
   toolCalls?: ToolCallMessage[];
   step?: RuntimeStepMessage;
   sourceLabel?: string;
+  sourceParticipantId?: string;
+  sourceRunId?: string;
 };
 
 export type AppAppReference = {

@@ -123,7 +123,7 @@
   --chatapp-inter-agent-board-badge-text: #0a0a0b;
   --chatapp-inter-agent-board-fill: var(--chatapp-soft-surface);
   --chatapp-inter-agent-board-fill-hover: var(--chatapp-soft-surface-hover);
-  --chatapp-inter-agent-board-live-fill: var(--chatapp-solid-surface);
+  --chatapp-live-border-fill: var(--chatapp-solid-surface);
   position: relative;
   isolation: isolate;
   display: inline-flex;
@@ -244,7 +244,7 @@
   font-size: 0.84rem;
 }
 
-.chatapp-live-board-glow {
+.chatapp-live-border-glow {
   position: absolute;
   inset: 0;
   z-index: 0;
@@ -253,17 +253,17 @@
   pointer-events: none;
 }
 
-.chatapp-live-board-glow::after {
+.chatapp-live-border-glow::after {
   content: "";
   position: absolute;
   inset: 1px;
   z-index: 4;
   border-radius: inherit;
-  background: var(--chatapp-inter-agent-board-live-fill);
+  background: var(--chatapp-live-border-fill, var(--chatapp-solid-surface));
   box-shadow: var(--chatapp-inner-edge);
 }
 
-.chatapp-live-board-glow__layer {
+.chatapp-live-border-glow__layer {
   position: absolute;
   inset: 0;
   z-index: 0;
@@ -272,7 +272,7 @@
   pointer-events: none;
 }
 
-.chatapp-live-board-glow__layer::before {
+.chatapp-live-border-glow__layer::before {
   content: "";
   position: absolute;
   left: 50%;
@@ -280,59 +280,59 @@
   width: 600px;
   height: 600px;
   background-repeat: no-repeat;
-  transform: translate(-50%, -50%) rotate(var(--chatapp-live-board-glow-start));
-  animation: chatapp-live-board-glow-rotate 4000ms linear infinite;
+  transform: translate(-50%, -50%) rotate(var(--chatapp-live-border-glow-start));
+  animation: chatapp-live-border-glow-rotate 4000ms linear infinite;
 }
 
-.chatapp-live-board-glow__layer--outer {
+.chatapp-live-border-glow__layer--outer {
   inset: -2px;
   filter: blur(3px);
 }
 
-.chatapp-live-board-glow__layer--outer::before {
+.chatapp-live-border-glow__layer--outer::before {
   width: 999px;
   height: 999px;
-  --chatapp-live-board-glow-start: 60deg;
-  --chatapp-live-board-glow-end: 420deg;
+  --chatapp-live-border-glow-start: 60deg;
+  --chatapp-live-border-glow-end: 420deg;
   background-image: conic-gradient(#000, #ffffff 5%, #000 38%, #000 50%, #ffffff 60%, #000 87%);
 }
 
-.chatapp-live-board-glow__layer--a,
-.chatapp-live-board-glow__layer--b,
-.chatapp-live-board-glow__layer--c {
+.chatapp-live-border-glow__layer--a,
+.chatapp-live-border-glow__layer--b,
+.chatapp-live-border-glow__layer--c {
   filter: blur(3px);
 }
 
-.chatapp-live-board-glow__layer--a::before,
-.chatapp-live-board-glow__layer--b::before,
-.chatapp-live-board-glow__layer--c::before {
-  --chatapp-live-board-glow-start: 82deg;
-  --chatapp-live-board-glow-end: 442deg;
+.chatapp-live-border-glow__layer--a::before,
+.chatapp-live-border-glow__layer--b::before,
+.chatapp-live-border-glow__layer--c::before {
+  --chatapp-live-border-glow-start: 82deg;
+  --chatapp-live-border-glow-end: 442deg;
   background-image: conic-gradient(transparent, #ffffff, transparent 10%, transparent 50%, #ffffff, transparent 60%);
 }
 
-.chatapp-live-board-glow__layer--bright {
+.chatapp-live-border-glow__layer--bright {
   inset: 1px;
   border-radius: inherit;
   filter: blur(2px);
 }
 
-.chatapp-live-board-glow__layer--bright::before {
-  --chatapp-live-board-glow-start: 83deg;
-  --chatapp-live-board-glow-end: 443deg;
+.chatapp-live-border-glow__layer--bright::before {
+  --chatapp-live-border-glow-start: 83deg;
+  --chatapp-live-border-glow-end: 443deg;
   background-image: conic-gradient(transparent 0%, #ffffff, transparent 8%, transparent 50%, #ffffff, transparent 58%);
   filter: brightness(1.4);
 }
 
-.chatapp-live-board-glow__layer--rim {
+.chatapp-live-border-glow__layer--rim {
   inset: 2px;
   border-radius: inherit;
   filter: blur(0.5px);
 }
 
-.chatapp-live-board-glow__layer--rim::before {
-  --chatapp-live-board-glow-start: 70deg;
-  --chatapp-live-board-glow-end: 430deg;
+.chatapp-live-border-glow__layer--rim::before {
+  --chatapp-live-border-glow-start: 70deg;
+  --chatapp-live-border-glow-end: 430deg;
   background-image: conic-gradient(#1c191c, #402fb5 5%, #1c191c 14%, #1c191c 50%, #cf30aa 60%, #1c191c 64%);
   filter: brightness(1.3);
 }
@@ -424,13 +424,13 @@
   }
 }
 
-@keyframes chatapp-live-board-glow-rotate {
+@keyframes chatapp-live-border-glow-rotate {
   from {
-    transform: translate(-50%, -50%) rotate(var(--chatapp-live-board-glow-start));
+    transform: translate(-50%, -50%) rotate(var(--chatapp-live-border-glow-start));
   }
 
   to {
-    transform: translate(-50%, -50%) rotate(var(--chatapp-live-board-glow-end));
+    transform: translate(-50%, -50%) rotate(var(--chatapp-live-border-glow-end));
   }
 }
 
@@ -440,7 +440,7 @@
     border-radius: 50%;
   }
 
-  .chatapp-live-board-glow__layer::before {
+  .chatapp-live-border-glow__layer::before {
     animation: none;
   }
 }

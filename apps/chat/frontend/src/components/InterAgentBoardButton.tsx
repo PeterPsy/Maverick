@@ -24,7 +24,7 @@ export function InterAgentBoardButton({
       <span aria-hidden="true" className="material-symbols-rounded chatapp-inter-agent-board-button__icon">
         account_tree
       </span>
-      <span className="chatapp-inter-agent-board-button__label">Open multi-agent board</span>
+      <span className="chatapp-inter-agent-board-button__label">Multi-agent board</span>
     </button>
   );
 }

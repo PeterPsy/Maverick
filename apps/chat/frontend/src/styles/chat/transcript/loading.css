@@ -121,6 +121,9 @@
   --chatapp-inter-agent-board-badge-bg: #ffffff;
   --chatapp-inter-agent-board-badge-border: rgba(255, 255, 255, 0.26);
   --chatapp-inter-agent-board-badge-text: #0a0a0b;
+  --chatapp-inter-agent-board-fill: var(--chatapp-soft-surface);
+  --chatapp-inter-agent-board-fill-hover: var(--chatapp-soft-surface-hover);
+  --chatapp-inter-agent-board-live-fill: var(--chatapp-solid-surface);
   position: relative;
   isolation: isolate;
   display: inline-flex;
@@ -130,18 +133,21 @@
   min-width: 0;
   max-width: 100%;
   overflow: hidden;
-  border: 0;
+  min-height: 1.7rem;
+  border: 1px solid rgba(var(--maverick-contrast-rgb), 0.1);
   border-radius: 999px;
-  background: transparent;
+  background: var(--chatapp-inter-agent-board-fill);
   color: rgba(var(--maverick-contrast-rgb), 0.72);
   cursor: pointer;
   font: inherit;
   font-size: 0.76rem;
-  font-weight: 650;
+  font-weight: 600;
   line-height: 1;
-  padding: 0 0.34rem 0 0;
+  padding: 0.12rem 0.58rem 0.12rem 0.14rem;
   white-space: nowrap;
   transition:
+    background-color 140ms ease,
+    border-color 140ms ease,
     color 140ms ease,
     opacity 140ms ease;
 }
@@ -157,18 +163,17 @@
 }
 
 .chatapp-pending-turn__board {
-  min-height: 1.55rem;
   margin-left: 0.12rem;
   flex: 0 1 auto;
 }
 
 .chatapp-agent-message-board {
-  min-height: 1.55rem;
   font-size: 0.78rem;
-  padding-right: 0.4rem;
 }
 
 .chatapp-inter-agent-board-button:hover {
+  border-color: rgba(var(--maverick-contrast-rgb), 0.16);
+  background: var(--chatapp-inter-agent-board-fill-hover);
   color: var(--maverick-text);
 }
 
@@ -214,6 +219,11 @@
   white-space: nowrap;
 }
 
+.chatapp-inter-agent-board-button.is-live {
+  border-color: transparent;
+  background: transparent;
+}
+
 .chatapp-inter-agent-board-button.is-normal {
   color: rgba(var(--maverick-contrast-rgb), 0.58);
 }
@@ -241,6 +251,16 @@
   overflow: hidden;
   border-radius: inherit;
   pointer-events: none;
+}
+
+.chatapp-live-board-glow::after {
+  content: "";
+  position: absolute;
+  inset: 1px;
+  z-index: 4;
+  border-radius: inherit;
+  background: var(--chatapp-inter-agent-board-live-fill);
+  box-shadow: var(--chatapp-inner-edge);
 }
 
 .chatapp-live-board-glow__layer {
@@ -293,7 +313,7 @@
 
 .chatapp-live-board-glow__layer--bright {
   inset: 1px;
-  border-radius: calc(0.62rem - 2px);
+  border-radius: inherit;
   filter: blur(2px);
 }
 
@@ -306,7 +326,7 @@
 
 .chatapp-live-board-glow__layer--rim {
   inset: 2px;
-  border-radius: calc(0.62rem - 3px);
+  border-radius: inherit;
   filter: blur(0.5px);
 }
 

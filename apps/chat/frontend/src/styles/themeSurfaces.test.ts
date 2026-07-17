@@ -117,6 +117,19 @@ describe("chat theme token governance", () => {
   });
 });
 
+describe("chat multi-agent board control", () => {
+  it("masks the live animation so it remains a border glow", () => {
+    const styles = readStyleFile(resolve(currentDir, "chat/transcript/loading.css"));
+
+    expect(styles).toMatch(
+      /\.chatapp-live-board-glow::after\s*{[\s\S]*inset:\s*1px;[\s\S]*background:\s*var\(--chatapp-inter-agent-board-live-fill\);/,
+    );
+    expect(styles).toMatch(/\.chatapp-inter-agent-board-button\.is-live\s*{[\s\S]*background:\s*transparent;/);
+    expect(styles).toMatch(/\.chatapp-live-board-glow__layer--bright\s*{[\s\S]*border-radius:\s*inherit;/);
+    expect(styles).toMatch(/\.chatapp-live-board-glow__layer--rim\s*{[\s\S]*border-radius:\s*inherit;/);
+  });
+});
+
 function installStyles(filePath: string): void {
   const styleElement = document.createElement("style");
   styleElement.textContent = readStyleFile(filePath);

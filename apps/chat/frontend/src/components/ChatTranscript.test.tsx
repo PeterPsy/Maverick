@@ -41,7 +41,8 @@ describe("ChatTranscript inter-agent board entry", () => {
     });
 
     const boardButton = container.querySelector<HTMLButtonElement>(".chatapp-pending-turn__board");
-    expect(boardButton?.textContent).toContain("Open multi-agent board");
+    expect(boardButton?.textContent).toContain("Multi-agent board");
+    expect(boardButton?.getAttribute("aria-label")).toBe("Open multi-agent board");
     expect(boardButton?.classList.contains("is-live")).toBe(true);
     expect(boardButton?.querySelector(".chatapp-live-board-glow")).not.toBeNull();
     expect(container.querySelector(".chatapp-inter-agent-banner")).toBeNull();
@@ -102,7 +103,7 @@ describe("ChatTranscript inter-agent board entry", () => {
     expect(container.textContent).toContain("Final assistant answer.");
 
     let boardButton = container.querySelector<HTMLButtonElement>(".chatapp-agent-message-board");
-    expect(boardButton?.textContent).toContain("Open multi-agent board");
+    expect(boardButton?.textContent).toContain("Multi-agent board");
     expect(boardButton?.classList.contains("is-pending")).toBe(true);
     expect(boardButton?.querySelector(".chatapp-live-board-glow")).toBeNull();
     const footer = boardButton?.closest(".chatapp-message-mobile-footer");

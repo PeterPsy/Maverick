@@ -21,28 +21,18 @@ from core.runtime.turn_submission_service_events import (
 )
 from core.runtime.turn_submission_service_output import (
     _build_launch_spec_for_execution,
-    _record_debug_log_completed,
     _record_app_references_materialize_completed,
     _record_app_references_materialize_failed,
     _record_app_references_materialize_started,
     _record_provider_accepted,
     _record_provider_dispatching,
-    _record_provider_input_completed,
-    _record_provider_input_started,
-    _record_provider_startup_event,
     _record_provider_thread_id,
     _record_provider_turn_start_sent,
-    _record_session_lock_acquired,
-    _record_session_lock_wait_started,
-    _record_source_app_queued_dispatch_completed,
-    _record_source_app_queued_dispatch_started,
     _record_turn_activation_completed,
     _record_turn_started,
     _record_turn_thread_availability_active,
     _record_turn_worker_entered,
     _record_turn_worker_started,
-    _record_worker_session_lookup_completed,
-    _record_worker_turn_lookup_completed,
 )
 from core.runtime.turn_submission_service_output_text import _RuntimeTurnOutputRecorder
 from core.runtime.plain_hosted_text import (
@@ -111,7 +101,6 @@ def _debug_log_runtime_turn_with_timing(
     message: str,
     payload: dict[str, object],
 ) -> None:
-    started_at = time.perf_counter()
     _debug_log_runtime_turn(
         state,
         session=session,
@@ -119,14 +108,6 @@ def _debug_log_runtime_turn_with_timing(
         turn_id=turn_id,
         message=message,
         payload=payload,
-    )
-    _record_debug_log_completed(
-        state,
-        session_id=session.session_id,
-        turn_id=turn_id,
-        provider_id=provider_id,
-        phase=str(payload.get("phase") or ""),
-        elapsed_ms=(time.perf_counter() - started_at) * 1000,
     )
 
 
@@ -363,14 +344,6 @@ def _wait_for_session_prewarm(
     if completion is None:
         return False
     wait_started_at = time.perf_counter()
-    if state is not None and turn is not None:
-        _record_turn_prewarm_wait_started(
-            state,
-            session_id=session_id,
-            turn_id=turn.turn_id,
-            provider_id=provider_id,
-            timeout_seconds=timeout_seconds,
-        )
     completed = completion.completion.wait(max(0.0, timeout_seconds))
     elapsed_ms = (time.perf_counter() - wait_started_at) * 1000
     prewarm_total_ms: float | None = None
@@ -385,17 +358,6 @@ def _wait_for_session_prewarm(
         else:
             prewarm_total_source = "completion_elapsed"
     if state is not None and turn is not None:
-        _record_turn_prewarm_wait_completed(
-            state,
-            session_id=session_id,
-            turn_id=turn.turn_id,
-            provider_id=provider_id,
-            elapsed_ms=elapsed_ms,
-            completed=completed,
-            timeout_seconds=timeout_seconds,
-            prewarm_total_ms=prewarm_total_ms,
-            prewarm_total_source=prewarm_total_source,
-        )
         _record_turn_prewarm_waited(
             state,
             session_id=session_id,
@@ -627,6 +589,7 @@ def submit_runtime_turn_async(
             turn_id=turn.turn_id,
             provider_id=queue_provider_id,
         )
+        worker_metrics: dict[str, float] = {}
         force_idle_reap = False
         worker_provider_id = queue_provider_id
         prewarm_after_turn = False
@@ -638,22 +601,10 @@ def submit_runtime_turn_async(
                 provider_id=worker_provider_id,
             )
         lock_wait_started_at = time.perf_counter()
-        _record_session_lock_wait_started(
-            state,
-            session_id=session.session_id,
-            turn_id=turn.turn_id,
-            provider_id=worker_provider_id,
-        )
         lock = _session_execution_lock(session.session_id)
         lock.acquire()
         try:
-            _record_session_lock_acquired(
-                state,
-                session_id=session.session_id,
-                turn_id=turn.turn_id,
-                provider_id=worker_provider_id,
-                elapsed_ms=(time.perf_counter() - lock_wait_started_at) * 1000,
-            )
+            worker_metrics["session_lock_wait_ms"] = (time.perf_counter() - lock_wait_started_at) * 1000
             _debug_log_runtime_turn_with_timing(
                 state,
                 session=session,
@@ -665,14 +616,7 @@ def submit_runtime_turn_async(
             try:
                 turn_lookup_started_at = time.perf_counter()
                 current = state.runtime_store.get_turn(turn.turn_id)
-                _record_worker_turn_lookup_completed(
-                    state,
-                    session_id=session.session_id,
-                    turn_id=turn.turn_id,
-                    provider_id=worker_provider_id,
-                    phase="pre_cancel_check",
-                    elapsed_ms=(time.perf_counter() - turn_lookup_started_at) * 1000,
-                )
+                worker_metrics["worker_turn_lookup_ms"] = (time.perf_counter() - turn_lookup_started_at) * 1000
                 if current.status == "cancelled":
                     _debug_log_runtime_turn_with_timing(
                         state,
@@ -685,12 +629,6 @@ def submit_runtime_turn_async(
                     return
                 if on_queued is not None:
                     source_app_dispatch_started_at = time.perf_counter()
-                    _record_source_app_queued_dispatch_started(
-                        state,
-                        session_id=session.session_id,
-                        turn_id=turn.turn_id,
-                        provider_id=worker_provider_id,
-                    )
                     try:
                         on_queued(turn, events)
                     except Exception as error:
@@ -710,13 +648,7 @@ def submit_runtime_turn_async(
                             error=str(error),
                         )
                         return
-                    _record_source_app_queued_dispatch_completed(
-                        state,
-                        session_id=session.session_id,
-                        turn_id=turn.turn_id,
-                        provider_id=worker_provider_id,
-                        elapsed_ms=(time.perf_counter() - source_app_dispatch_started_at) * 1000,
-                    )
+                    worker_metrics["source_app_queued_dispatch_ms"] = (time.perf_counter() - source_app_dispatch_started_at) * 1000
                 transition_timings: dict[str, float] = {}
                 transition_started_at = time.perf_counter()
                 active = transition_runtime_turn(
@@ -730,7 +662,13 @@ def submit_runtime_turn_async(
                 )
                 transition_active_ms = (time.perf_counter() - transition_started_at) * 1000
                 started_event = _record_turn_started(state, session_id=session.session_id, turn_id=active.turn_id, provider_id=worker_provider_id)
-                _record_turn_worker_started(state, session_id=session.session_id, turn_id=active.turn_id, provider_id=worker_provider_id)
+                _record_turn_worker_started(
+                    state,
+                    session_id=session.session_id,
+                    turn_id=active.turn_id,
+                    provider_id=worker_provider_id,
+                    metadata=worker_metrics,
+                )
                 _record_turn_activation_completed(
                     state,
                     session_id=session.session_id,
@@ -769,14 +707,7 @@ def submit_runtime_turn_async(
 
                 session_lookup_started_at = time.perf_counter()
                 current_session = state.runtime_store.get_session(session.session_id)
-                _record_worker_session_lookup_completed(
-                    state,
-                    session_id=session.session_id,
-                    turn_id=turn.turn_id,
-                    provider_id=worker_provider_id,
-                    phase="before_execution",
-                    elapsed_ms=(time.perf_counter() - session_lookup_started_at) * 1000,
-                )
+                worker_metrics["worker_session_lookup_ms"] = (time.perf_counter() - session_lookup_started_at) * 1000
                 _debug_log_runtime_turn_with_timing(
                     state,
                     session=current_session,
@@ -865,68 +796,74 @@ def submit_runtime_turn_async(
                     )
                     materialized_reference_count = len([item for item in execution_app_references or [] if isinstance(item, dict)])
                     provider_input_started_at = time.perf_counter()
-                    _record_provider_input_started(
-                        state,
-                        session_id=session.session_id,
-                        turn_id=turn.turn_id,
-                        provider_id=worker_provider_id,
-                        app_reference_count=app_reference_count,
-                        storage_reference_count=storage_reference_count,
-                        materialized_reference_count=materialized_reference_count,
-                    )
                     provider_input_text = input_text_with_attachment_links(
                         input_text=input_text_with_app_references(input_text=input_text, app_references=execution_app_references),
                         attachments=attachments,
                         workspace_root=current_session.workspace_root,
                     )
-                    _record_provider_input_completed(
-                        state,
-                        session_id=session.session_id,
-                        turn_id=turn.turn_id,
-                        provider_id=worker_provider_id,
-                        elapsed_ms=(time.perf_counter() - provider_input_started_at) * 1000,
-                        app_reference_count=app_reference_count,
-                        storage_reference_count=storage_reference_count,
-                        materialized_reference_count=materialized_reference_count,
-                    )
+                    provider_input_metadata = {
+                        "provider_input_build_ms": (time.perf_counter() - provider_input_started_at) * 1000,
+                        "app_reference_count": app_reference_count,
+                        "storage_reference_count": storage_reference_count,
+                        "materialized_reference_count": materialized_reference_count,
+                    }
                     dispatch_started_at = time.perf_counter()
                     turn_start_sent_at: float | None = None
+                    provider_startup_metrics: dict[str, object] = {}
+                    provider_startup_started_at: dict[str, float] = {}
                     _record_provider_dispatching(
                         state,
                         session_id=session.session_id,
                         turn_id=turn.turn_id,
                         provider_id=worker_provider_id,
                         runtime_mode=current_session.runtime_mode,
-                        metadata=launch_metadata,
+                        metadata={**worker_metrics, **provider_input_metadata, **launch_metadata},
                     )
 
                     def record_provider_startup_event(phase: str, metadata: dict[str, object]) -> None:
-                        _record_provider_startup_event(
-                            state,
-                            session_id=session.session_id,
-                            turn_id=turn.turn_id,
-                            provider_id=worker_provider_id,
-                            runtime_mode=current_session.runtime_mode,
-                            phase=phase,
-                            metadata=metadata,
-                        )
+                        if phase.endswith("_started"):
+                            provider_startup_started_at[phase.removesuffix("_started")] = time.perf_counter()
+                        if phase.endswith("_completed"):
+                            base_phase = phase.removesuffix("_completed")
+                            started_at = provider_startup_started_at.get(base_phase)
+                            metric_name = {
+                                "ensure_runtime": "ensure_runtime_ms",
+                                "remove_generated_skills": "remove_generated_skills_ms",
+                                "ensure_thread": "ensure_provider_thread_ms",
+                                "event_sink_reset": "event_sink_reset_ms",
+                            }.get(base_phase)
+                            if metric_name and metric_name not in metadata and started_at is not None:
+                                provider_startup_metrics[metric_name] = (time.perf_counter() - started_at) * 1000
+                        if phase == "turn_start_write_started":
+                            provider_startup_started_at["turn_start_write"] = time.perf_counter()
+                        if phase == "turn_start_write_sent":
+                            started_at = provider_startup_started_at.get("turn_start_write")
+                            if "turn_start_write_ms" not in metadata and started_at is not None:
+                                provider_startup_metrics["turn_start_write_ms"] = (time.perf_counter() - started_at) * 1000
+                        for key, value in metadata.items():
+                            if key.endswith("_ms") and isinstance(value, int | float):
+                                provider_startup_metrics[key] = float(value)
+                            elif key in {"provider_thread_id", "source"} and value is not None and value != "":
+                                provider_startup_metrics[key] = value
 
                     def record_provider_turn_start_sent(metadata: dict[str, object]) -> None:
                         nonlocal turn_start_sent_at
                         turn_start_sent_at = time.perf_counter()
+                        enriched_metadata = {**provider_startup_metrics, **metadata}
                         _record_provider_turn_start_sent(
                             state,
                             session_id=session.session_id,
                             turn_id=turn.turn_id,
                             provider_id=worker_provider_id,
                             runtime_mode=current_session.runtime_mode,
-                            metadata=metadata,
+                            metadata=enriched_metadata,
                         )
                         schedule_thread_availability_active_once()
 
                     def record_provider_accepted(metadata: dict[str, object]) -> None:
                         started_at = turn_start_sent_at if turn_start_sent_at is not None else dispatch_started_at
                         schedule_thread_availability_active_once()
+                        enriched_metadata = {**provider_startup_metrics, **metadata}
                         _record_provider_accepted(
                             state,
                             session_id=session.session_id,
@@ -934,7 +871,7 @@ def submit_runtime_turn_async(
                             provider_id=worker_provider_id,
                             runtime_mode=current_session.runtime_mode,
                             elapsed_ms=(time.perf_counter() - started_at) * 1000,
-                            metadata=metadata,
+                            metadata=enriched_metadata,
                         )
 
                     result = execute_runtime_turn(

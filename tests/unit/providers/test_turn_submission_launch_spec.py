@@ -207,7 +207,7 @@ class TurnSubmissionLaunchSpecTestCase(unittest.TestCase):
         self.assertEqual(runtime_store.get_turn(turn.turn_id).status, "completed")
         self.assertEqual(calls[:2], [f"wait:{session.session_id}", "execute"])
 
-    def test_wait_for_session_prewarm_records_started_completed_and_legacy_waited(self) -> None:
+    def test_wait_for_session_prewarm_records_single_wait_metric(self) -> None:
         repo_root = make_temp_repo_root(self)
         runtime_store = _runtime_store()
         session = create_runtime_session(
@@ -239,14 +239,12 @@ class TurnSubmissionLaunchSpecTestCase(unittest.TestCase):
         )
 
         event_types = [event.event_type for event in runtime_store.list_events(session.session_id) if event.turn_id == turn.turn_id]
-        self.assertIn("runtime.turn.prewarm_wait_started", event_types)
-        self.assertIn("runtime.turn.prewarm_wait_completed", event_types)
         self.assertIn("runtime.turn.prewarm_waited", event_types)
-        completed = next(event for event in runtime_store.list_events(session.session_id) if event.event_type == "runtime.turn.prewarm_wait_completed")
-        self.assertTrue(completed.payload["completed"])
-        self.assertIn("prewarm_wait_ms", completed.payload)
-        self.assertEqual(completed.payload["prewarm_total_ms"], 321.5)
-        self.assertEqual(completed.payload["prewarm_total_source"], "completion_elapsed")
+        waited = next(event for event in runtime_store.list_events(session.session_id) if event.event_type == "runtime.turn.prewarm_waited")
+        self.assertTrue(waited.payload["completed"])
+        self.assertIn("prewarm_wait_ms", waited.payload)
+        self.assertEqual(waited.payload["prewarm_total_ms"], 321.5)
+        self.assertEqual(waited.payload["prewarm_total_source"], "completion_elapsed")
 
     def test_async_turn_records_worker_reference_and_provider_input_events(self) -> None:
         repo_root = make_temp_repo_root(self)
@@ -338,41 +336,18 @@ class TurnSubmissionLaunchSpecTestCase(unittest.TestCase):
         event_types = [event.event_type for event in runtime_store.list_events(session.session_id) if event.turn_id == turn.turn_id]
         for expected in (
             "runtime.turn.worker_entered",
-            "runtime.turn.session_lock_wait_started",
-            "runtime.turn.session_lock_acquired",
-            "runtime.turn.debug_log_completed",
-            "runtime.turn.worker_turn_lookup_completed",
             "runtime.turn.turn_activation_completed",
-            "runtime.turn.turn_started_recorded",
-            "runtime.turn.thread_availability_started",
             "runtime.turn.thread_availability_completed",
-            "runtime.turn.worker_started_recorded",
-            "runtime.turn.worker_session_lookup_completed",
             "runtime.turn.app_references_materialize_started",
             "runtime.turn.app_references_materialize_completed",
-            "runtime.turn.provider_input_started",
-            "runtime.turn.provider_input_completed",
             "runtime.provider.dispatching",
-            "runtime.provider.ensure_runtime_started",
-            "runtime.provider.ensure_runtime_completed",
-            "runtime.provider.remove_generated_skills_started",
-            "runtime.provider.remove_generated_skills_completed",
-            "runtime.provider.ensure_thread_started",
-            "runtime.provider.ensure_thread_completed",
-            "runtime.provider.event_sink_reset_started",
-            "runtime.provider.event_sink_reset_completed",
-            "runtime.provider.turn_start_write_started",
-            "runtime.provider.turn_start_write_sent",
             "runtime.provider.turn_start_sent",
+            "runtime.provider.accepted",
         ):
             self.assertIn(expected, event_types)
         self.assertLess(
-            event_types.index("runtime.turn.worker_started_recorded"),
-            event_types.index("runtime.turn.thread_availability_started"),
-        )
-        self.assertLess(
             event_types.index("runtime.provider.turn_start_sent"),
-            event_types.index("runtime.turn.thread_availability_started"),
+            event_types.index("runtime.turn.thread_availability_completed"),
         )
         activation = next(
             event
@@ -383,39 +358,13 @@ class TurnSubmissionLaunchSpecTestCase(unittest.TestCase):
             self.assertIn(key, activation.payload)
             self.assertGreaterEqual(activation.payload[key], 0)
         self.assertEqual(activation.payload["thread_update_ms"], 0.0)
-        debug_log = next(
+        worker_started = next(
             event
             for event in runtime_store.list_events(session.session_id)
-            if event.event_type == "runtime.turn.debug_log_completed"
+            if event.event_type == "runtime.turn.worker_started"
         )
-        self.assertEqual(debug_log.payload["phase"], "async_worker_entered")
-        self.assertIn("debug_log_runtime_turn_ms", debug_log.payload)
-        turn_lookup = next(
-            event
-            for event in runtime_store.list_events(session.session_id)
-            if event.event_type == "runtime.turn.worker_turn_lookup_completed"
-        )
-        self.assertEqual(turn_lookup.payload["phase"], "pre_cancel_check")
-        self.assertIn("worker_turn_lookup_ms", turn_lookup.payload)
-        turn_started_recorded = next(
-            event
-            for event in runtime_store.list_events(session.session_id)
-            if event.event_type == "runtime.turn.turn_started_recorded"
-        )
-        self.assertIn("turn_started_record_ms", turn_started_recorded.payload)
-        worker_started_recorded = next(
-            event
-            for event in runtime_store.list_events(session.session_id)
-            if event.event_type == "runtime.turn.worker_started_recorded"
-        )
-        self.assertIn("worker_started_record_ms", worker_started_recorded.payload)
-        session_lookup = next(
-            event
-            for event in runtime_store.list_events(session.session_id)
-            if event.event_type == "runtime.turn.worker_session_lookup_completed"
-        )
-        self.assertEqual(session_lookup.payload["phase"], "before_execution")
-        self.assertIn("worker_session_lookup_ms", session_lookup.payload)
+        self.assertIn("session_lock_wait_ms", worker_started.payload)
+        self.assertIn("worker_turn_lookup_ms", worker_started.payload)
         materialized = next(event for event in runtime_store.list_events(session.session_id) if event.event_type == "runtime.turn.app_references_materialize_completed")
         self.assertEqual(materialized.payload["app_reference_count"], 1)
         self.assertEqual(materialized.payload["storage_reference_count"], 1)
@@ -433,9 +382,16 @@ class TurnSubmissionLaunchSpecTestCase(unittest.TestCase):
                 }
             ],
         )
-        provider_input = next(event for event in runtime_store.list_events(session.session_id) if event.event_type == "runtime.turn.provider_input_completed")
-        self.assertIn("provider_input_build_ms", provider_input.payload)
-        self.assertEqual(provider_input.payload["materialized_reference_count"], 1)
+        dispatching = next(event for event in runtime_store.list_events(session.session_id) if event.event_type == "runtime.provider.dispatching")
+        self.assertIn("provider_input_build_ms", dispatching.payload)
+        self.assertEqual(dispatching.payload["materialized_reference_count"], 1)
+        self.assertIn("worker_session_lookup_ms", dispatching.payload)
+        sent = next(event for event in runtime_store.list_events(session.session_id) if event.event_type == "runtime.provider.turn_start_sent")
+        self.assertIn("ensure_runtime_ms", sent.payload)
+        self.assertIn("turn_start_write_ms", sent.payload)
+        accepted = next(event for event in runtime_store.list_events(session.session_id) if event.event_type == "runtime.provider.accepted")
+        self.assertIn("ensure_runtime_ms", accepted.payload)
+        self.assertIn("event_sink_reset_ms", accepted.payload)
 
     def test_execution_launch_spec_uses_resolved_runtime_adapter(self) -> None:
         repo_root = make_temp_repo_root(self)

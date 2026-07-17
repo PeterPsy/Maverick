@@ -45,14 +45,14 @@ class TurnSubmissionPrewarmWaitTestCase(unittest.TestCase):
         finally:
             complete_prewarm(session.session_id, prewarm)
 
-        completed = next(
+        waited = next(
             event
             for event in runtime_store.list_events(session.session_id)
-            if event.event_type == "runtime.turn.prewarm_wait_completed"
+            if event.event_type == "runtime.turn.prewarm_waited"
         )
-        self.assertFalse(completed.payload["completed"])
-        self.assertTrue(completed.payload["timed_out"])
-        self.assertEqual(completed.payload["timeout_seconds"], 0.001)
+        self.assertFalse(waited.payload["completed"])
+        self.assertTrue(waited.payload["timed_out"])
+        self.assertEqual(waited.payload["timeout_seconds"], 0.001)
 
 
 def _runtime_store() -> RuntimeDocumentStore:

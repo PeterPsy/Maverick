@@ -902,6 +902,9 @@ def _turn_metrics(group: TurnEvents) -> dict[str, float]:
     _set_metric(metrics, "queued_to_worker_entered_ms", _delta_ms(queued, worker_entered))
     _set_metric(metrics, "queued_to_worker_started_ms", _delta_ms(queued, worker))
     _set_metric(metrics, "worker_entered_to_worker_started_ms", _delta_ms(worker_entered, worker))
+    if worker is not None:
+        for key in ("session_lock_wait_ms", "worker_turn_lookup_ms", "source_app_queued_dispatch_ms"):
+            _set_metric(metrics, key, _numeric(worker.payload.get(key)))
     if debug_log_completed is not None:
         _set_metric(metrics, "debug_log_runtime_turn_ms", _numeric(debug_log_completed.payload.get("debug_log_runtime_turn_ms")))
     if worker_turn_lookup_completed is not None:
@@ -916,6 +919,8 @@ def _turn_metrics(group: TurnEvents) -> dict[str, float]:
             "worker_session_lookup_ms",
             _numeric(worker_session_lookup_completed.payload.get("worker_session_lookup_ms")),
         )
+    if dispatching is not None:
+        _set_metric(metrics, "worker_session_lookup_ms", _numeric(dispatching.payload.get("worker_session_lookup_ms")))
     if turn_activation_completed is not None:
         for key in ("transition_active_ms", "save_state_ms", "save_session_ms", "save_turn_ms", "thread_update_ms"):
             _set_metric(metrics, key, _numeric(turn_activation_completed.payload.get(key)))
@@ -966,6 +971,9 @@ def _turn_metrics(group: TurnEvents) -> dict[str, float]:
         for key in COUNT_METRIC_NAMES:
             _set_metric(metrics, key, _numeric(provider_input_completed.payload.get(key)))
     if dispatching is not None:
+        _set_metric(metrics, "provider_input_build_ms", _numeric(dispatching.payload.get("provider_input_build_ms")))
+        for key in COUNT_METRIC_NAMES:
+            _set_metric(metrics, key, _numeric(dispatching.payload.get(key)))
         for key in ("launch_spec_ms", "launch_cache_fingerprint_ms", "skill_resolve_ms", "skill_prepare_ms"):
             _set_metric(metrics, key, _numeric(dispatching.payload.get(key)))
         _set_metric(metrics, "skill_count", _numeric(dispatching.payload.get("skill_count")))
@@ -978,6 +986,11 @@ def _turn_metrics(group: TurnEvents) -> dict[str, float]:
         metrics,
         "ensure_runtime_ms",
         _payload_metric_or_delta(ensure_runtime_completed, "ensure_runtime_ms", ensure_runtime_started),
+    )
+    _set_metric(
+        metrics,
+        "remove_generated_skills_ms",
+        _first_payload_metric("remove_generated_skills_ms", accepted, sent),
     )
     _set_metric(
         metrics,
@@ -996,8 +1009,14 @@ def _turn_metrics(group: TurnEvents) -> dict[str, float]:
     _set_metric(
         metrics,
         "event_sink_reset_ms",
+        _first_payload_metric("event_sink_reset_ms", accepted, sent),
+    )
+    _set_metric(
+        metrics,
+        "event_sink_reset_ms",
         _payload_metric_or_delta(event_sink_reset_completed, "event_sink_reset_ms", event_sink_reset_started),
     )
+    _set_metric(metrics, "turn_start_write_ms", _first_payload_metric("turn_start_write_ms", sent, accepted))
     _set_metric(metrics, "turn_start_write_ms", _delta_ms(turn_start_write_started, turn_start_write_sent or sent))
     request_ack_ms = _numeric(accepted.payload.get("turn_start_request_ack_ms")) if accepted is not None else None
     if request_ack_ms is None:
@@ -1227,6 +1246,16 @@ def _payload_metric_or_delta(
     if payload_value is not None:
         return payload_value
     return _delta_ms(start_event, event)
+
+
+def _first_payload_metric(payload_key: str, *events: RuntimeEventSnapshot | None) -> float | None:
+    for event in events:
+        if event is None:
+            continue
+        value = _numeric(event.payload.get(payload_key))
+        if value is not None:
+            return value
+    return None
 
 
 def _numeric(value: object) -> float | None:

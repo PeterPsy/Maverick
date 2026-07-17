@@ -138,6 +138,114 @@ class RuntimeTurnLatencyReportTestCase(unittest.TestCase):
         self.assertEqual(metrics["turn_start_write_ms"], 10)
         self.assertEqual(metrics["turn_start_request_ack_ms"], 20)
 
+    def test_reports_aggregated_hot_path_metrics_without_started_events(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir) / "maverick"
+            _write_session(root, "default", "sess-aggregated", runtime_mode="agentic", provider_id="codex")
+            turn_id = "turn-aggregated"
+            _write_events(
+                root,
+                "default",
+                "sess-aggregated",
+                [
+                    _event("queued", "default", "sess-aggregated", turn_id, "runtime.turn.queued", BASE, {"provider_id": "codex"}),
+                    _event(
+                        "receive",
+                        "default",
+                        "sess-aggregated",
+                        turn_id,
+                        "runtime.turn.receive_to_queued",
+                        BASE + timedelta(milliseconds=10),
+                        {"provider_id": "codex", "receive_to_queued_ms": 10},
+                    ),
+                    _event("worker-entered", "default", "sess-aggregated", turn_id, "runtime.turn.worker_entered", BASE + timedelta(milliseconds=20), {"provider_id": "codex"}),
+                    _event(
+                        "worker-started",
+                        "default",
+                        "sess-aggregated",
+                        turn_id,
+                        "runtime.turn.worker_started",
+                        BASE + timedelta(milliseconds=50),
+                        {
+                            "provider_id": "codex",
+                            "session_lock_wait_ms": 3,
+                            "worker_turn_lookup_ms": 4,
+                            "source_app_queued_dispatch_ms": 5,
+                        },
+                    ),
+                    _event(
+                        "activation",
+                        "default",
+                        "sess-aggregated",
+                        turn_id,
+                        "runtime.turn.turn_activation_completed",
+                        BASE + timedelta(milliseconds=60),
+                        {"provider_id": "codex", "transition_active_ms": 6},
+                    ),
+                    _event(
+                        "dispatch",
+                        "default",
+                        "sess-aggregated",
+                        turn_id,
+                        "runtime.provider.dispatching",
+                        BASE + timedelta(milliseconds=70),
+                        {
+                            "provider_id": "codex",
+                            "runtime_mode": "agentic",
+                            "worker_session_lookup_ms": 7,
+                            "provider_input_build_ms": 8,
+                            "app_reference_count": 0,
+                            "storage_reference_count": 0,
+                            "materialized_reference_count": 0,
+                            "launch_cache_hit": True,
+                        },
+                    ),
+                    _event(
+                        "sent",
+                        "default",
+                        "sess-aggregated",
+                        turn_id,
+                        "runtime.provider.turn_start_sent",
+                        BASE + timedelta(milliseconds=90),
+                        {
+                            "provider_id": "codex",
+                            "runtime_mode": "agentic",
+                            "ensure_runtime_ms": 0.1,
+                            "ensure_provider_thread_ms": 0.2,
+                            "turn_start_write_ms": 9,
+                        },
+                    ),
+                    _event(
+                        "accepted",
+                        "default",
+                        "sess-aggregated",
+                        turn_id,
+                        "runtime.provider.accepted",
+                        BASE + timedelta(milliseconds=100),
+                        {
+                            "provider_id": "codex",
+                            "runtime_mode": "agentic",
+                            "turn_start_to_ack_ms": 10,
+                            "remove_generated_skills_ms": 1,
+                            "event_sink_reset_ms": 2,
+                        },
+                    ),
+                ],
+            )
+
+            report = runtime_turn_latency_report.build_report(root, workspaces={"default"}, limit_turns=0, include_turns=True)
+
+        metrics = report["turns"][0]["metrics"]
+        self.assertEqual(metrics["session_lock_wait_ms"], 3)
+        self.assertEqual(metrics["worker_turn_lookup_ms"], 4)
+        self.assertEqual(metrics["source_app_queued_dispatch_ms"], 5)
+        self.assertEqual(metrics["worker_session_lookup_ms"], 7)
+        self.assertEqual(metrics["provider_input_build_ms"], 8)
+        self.assertEqual(metrics["turn_start_write_ms"], 9)
+        self.assertEqual(metrics["remove_generated_skills_ms"], 1)
+        self.assertEqual(metrics["event_sink_reset_ms"], 2)
+        self.assertEqual(metrics["receive_to_provider_accepted_ms"], 110)
+
     def test_groups_codex_cold_warm_and_plain_hosted_metrics(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             root = Path(temp_dir) / "maverick"

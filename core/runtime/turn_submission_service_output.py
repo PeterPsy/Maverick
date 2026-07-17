@@ -29,8 +29,7 @@ if TYPE_CHECKING:
 
 
 def _record_turn_started(state: PlatformState, *, session_id: str, turn_id: str, provider_id: str) -> RuntimeEventRecord:
-    started_at = time.perf_counter()
-    event = record_runtime_event(
+    return record_runtime_event(
         state.runtime_store,
         event_id=str(uuid4()),
         session_id=session_id,
@@ -40,18 +39,6 @@ def _record_turn_started(state: PlatformState, *, session_id: str, turn_id: str,
         payload={"provider_id": provider_id},
         event_bus=state.runtime_event_bus,
     )
-    _record_turn_marker(
-        state,
-        session_id=session_id,
-        turn_id=turn_id,
-        provider_id=provider_id,
-        event_type="runtime.turn.turn_started_recorded",
-        payload={
-            "recorded_event_id": event.event_id,
-            "turn_started_record_ms": round((time.perf_counter() - started_at) * 1000, 3),
-        },
-    )
-    return event
 
 
 def _record_turn_thread_availability_active(
@@ -64,13 +51,6 @@ def _record_turn_thread_availability_active(
 ) -> list[RuntimeEventRecord]:
     turn = state.runtime_store.get_turn(turn_id)
     availability_started_at = time.perf_counter()
-    started = _record_thread_availability_started(
-        state,
-        session_id=session_id,
-        turn_id=turn_id,
-        provider_id=provider_id,
-        availability="active",
-    )
     set_thread_availability(
         state,
         workspace_id=turn.workspace_id,
@@ -86,33 +66,33 @@ def _record_turn_thread_availability_active(
         availability="active",
         elapsed_ms=(time.perf_counter() - availability_started_at) * 1000,
     )
-    return [started, completed]
+    return [completed]
 
 
-def _record_turn_worker_started(state: PlatformState, *, session_id: str, turn_id: str, provider_id: str) -> RuntimeEventRecord:
-    started_at = time.perf_counter()
-    event = record_runtime_event(
+def _record_turn_worker_started(
+    state: PlatformState,
+    *,
+    session_id: str,
+    turn_id: str,
+    provider_id: str,
+    metadata: dict[str, object] | None = None,
+) -> RuntimeEventRecord:
+    payload: dict[str, object] = {"provider_id": provider_id}
+    for key, value in (metadata or {}).items():
+        if key.endswith("_ms") and isinstance(value, int | float):
+            payload[key] = round(float(value), 3)
+        elif value is not None:
+            payload[key] = value
+    return record_runtime_event(
         state.runtime_store,
         event_id=str(uuid4()),
         session_id=session_id,
         turn_id=turn_id,
         plane="turn",
         event_type="runtime.turn.worker_started",
-        payload={"provider_id": provider_id},
+        payload=payload,
         event_bus=state.runtime_event_bus,
     )
-    _record_turn_marker(
-        state,
-        session_id=session_id,
-        turn_id=turn_id,
-        provider_id=provider_id,
-        event_type="runtime.turn.worker_started_recorded",
-        payload={
-            "recorded_event_id": event.event_id,
-            "worker_started_record_ms": round((time.perf_counter() - started_at) * 1000, 3),
-        },
-    )
-    return event
 
 
 def _record_turn_worker_entered(state: PlatformState, *, session_id: str, turn_id: str, provider_id: str) -> RuntimeEventRecord:
@@ -526,8 +506,12 @@ def _record_provider_dispatching(
             payload[key] = round(float(value), 3)
         elif key in {
             "skill_count",
+            "app_reference_count",
+            "storage_reference_count",
+            "materialized_reference_count",
             "provider_id_resolved",
             "launch_cache_hit",
+            "reference_cache_hit",
             "launch_cache_fingerprint_prefix",
         } and value is not None:
             payload[key] = value

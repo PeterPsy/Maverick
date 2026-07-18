@@ -244,7 +244,7 @@ test.describe("Chat app browser smoke", () => {
     await page.getByRole("textbox").fill("Summarize today's launch notes");
     await page.getByRole("button", { name: "Send message" }).click();
 
-    await expect(page.getByText("Follow-up answer from the browser harness.")).toBeVisible();
+    await expect(page.getByText(/^(?:Runtime|Follow-up) answer from the browser harness\.$/)).toBeVisible();
     expect(state.createRunBodies).toHaveLength(0);
     expect(state.createSessionBodies).toContainEqual(expect.objectContaining({
       prepare_only: true,
@@ -276,6 +276,8 @@ test.describe("Chat app browser smoke", () => {
     await page.getByRole("button", { name: "Send message" }).click();
 
     await expect(page.getByText("Final risk review ready.")).toBeVisible();
+    const openAgentNodes = page.getByRole("button", { name: "Open multi-agent board" });
+    await expect(openAgentNodes).toBeVisible();
 
     expect(state.createSessionBodies).toContainEqual(
       expect.objectContaining({
@@ -337,16 +339,7 @@ test.describe("Chat app browser smoke", () => {
       async: true,
     });
 
-    await page.evaluate((runId) => {
-      window.postMessage(
-        {
-          type: "maverick.app.navigate",
-          app_id: "chat",
-          params: { app_page: `graph/${runId}` },
-        },
-        window.location.origin,
-      );
-    }, RUN_ID);
+    await openAgentNodes.click();
     const agentNodesRegion = page.getByRole("region", { name: "Agent nodes view" });
     await expect(agentNodesRegion).toBeVisible();
     const agentNodesRegionBox = await agentNodesRegion.boundingBox();
@@ -393,7 +386,9 @@ test.describe("Chat app browser smoke", () => {
     await page.getByRole("textbox").fill("Compare the rollout options as a group");
     await page.getByRole("button", { name: "Send message" }).click();
 
-    await expect(page.getByRole("button", { name: /Agent nodes/ })).toBeVisible();
+    await expect(page.getByText("Final risk review ready.")).toBeVisible();
+    const openAgentNodes = page.getByRole("button", { name: "Open multi-agent board" });
+    await expect(openAgentNodes).toBeVisible();
     expect(state.createRunBodies).toHaveLength(1);
     expect(state.createRunBodies[0]).toMatchObject({
       mode: "group_chat",
@@ -422,11 +417,11 @@ test.describe("Chat app browser smoke", () => {
       { source_id: "synthesizer", target_id: "orchestrator", kind: "produced" },
     ]);
 
-    await page.getByRole("button", { name: /Agent nodes/ }).click();
+    await openAgentNodes.click();
     await expect(page.getByRole("region", { name: "Agent nodes view" })).toBeVisible();
-    await expect(page.getByText("4 nodes")).toBeVisible();
-    await expect(page.getByText("Analyst")).toBeVisible();
-    await expect(page.getByText("Synthesizer")).toBeVisible();
+    await expect(page.locator("[data-participant-id]")).toHaveCount(4);
+    await expect(page.locator('[data-participant-id="analyst"]')).toBeVisible();
+    await expect(page.locator('[data-participant-id="synthesizer"]')).toBeVisible();
   });
 
   test("renders React Flow Agent nodes on mobile and loads transcript on node click", async ({ page }) => {
@@ -939,13 +934,13 @@ async function handleInterAgentApi(route: Route, state: MockState) {
       state.runCreated = true;
       const mode = String(state.runDetail.run.mode || "sequential");
       const rootRuntimeEvents = [
-        ...runtimeTranscriptEvents(
+        runtimeTranscriptEvents(
           RUNTIME_SESSION_ID,
           "turn-root",
           typeof body.input_text === "string" ? body.input_text : "",
           "Root orchestrator accepted the multi-agent request.",
           typeof body.client_message_id === "string" ? body.client_message_id : undefined,
-        ),
+        )[0],
         ...projectedParticipantRuntimeEvents(RUNTIME_SESSION_ID, "turn-root", "reviewer", "Reviewer"),
       ];
       state.runDetail = interAgentRunDetail({

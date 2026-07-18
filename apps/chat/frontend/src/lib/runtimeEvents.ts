@@ -56,7 +56,7 @@ export function hydrateMissingTurnAnchors(events: RuntimeEvent[], turns: Runtime
   );
   const terminalTurnIds = new Set(
     events
-      .filter((event) => event.turn_id && isTerminalRuntimeEvent(event.event_type))
+      .filter((event) => event.turn_id && isTerminalRuntimeEvent(event))
       .map((event) => event.turn_id as string),
   );
   const syntheticEvents: RuntimeEvent[] = [];
@@ -123,7 +123,7 @@ export function inferActiveRuntimeTurn(events: RuntimeEvent[], sessionId: string
   const turns = new Map<string, RuntimeTurn>();
   for (const event of events) {
     if (!event.turn_id) {
-      const eventStatus = event.session_id === sessionId ? turnStatusFromEvent(event.event_type) : null;
+      const eventStatus = event.session_id === sessionId ? runtimeTurnStatusFromEvent(event) : null;
       if (eventStatus && turnStatusRank(eventStatus) >= turnStatusRank("completed")) {
         const activeTurn = [...turns.values()].filter((turn) => turn.status === "queued" || turn.status === "active").at(-1);
         if (activeTurn) {
@@ -138,7 +138,7 @@ export function inferActiveRuntimeTurn(events: RuntimeEvent[], sessionId: string
       continue;
     }
     const previous = turns.get(event.turn_id);
-    const eventStatus = turnStatusFromEvent(event.event_type);
+    const eventStatus = runtimeTurnStatusFromEvent(event);
     const status = selectRuntimeTurnStatus(previous?.status || null, eventStatus) || "queued";
     turns.set(event.turn_id, {
       turn_id: event.turn_id,
@@ -175,7 +175,14 @@ function turnStatusRank(status: RuntimeTurn["status"]): number {
   return 3;
 }
 
-function turnStatusFromEvent(eventType: string): RuntimeTurn["status"] | null {
+export function runtimeTurnStatusFromEvent(event: RuntimeEvent): RuntimeTurn["status"] | null {
+  if (event.payload.inter_agent_projection === "participant_runtime_event") {
+    return null;
+  }
+  return turnStatusFromEventType(event.event_type);
+}
+
+function turnStatusFromEventType(eventType: string): RuntimeTurn["status"] | null {
   if (eventType === "runtime.turn.queued") {
     return "queued";
   }
@@ -200,8 +207,8 @@ function turnStatusFromEvent(eventType: string): RuntimeTurn["status"] | null {
   return null;
 }
 
-function isTerminalRuntimeEvent(eventType: string): boolean {
-  const status = turnStatusFromEvent(eventType);
+function isTerminalRuntimeEvent(event: RuntimeEvent): boolean {
+  const status = runtimeTurnStatusFromEvent(event);
   return Boolean(status && turnStatusRank(status) >= turnStatusRank("completed"));
 }
 

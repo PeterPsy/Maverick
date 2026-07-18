@@ -174,6 +174,52 @@ describe("runtime websocket helpers", () => {
     expect(activeTurn).toBeNull();
   });
 
+  it("keeps the root turn active when a participant projection emits final output", () => {
+    const activeTurn = inferActiveRuntimeTurn(
+      [
+        { ...event("queued", "2026-04-19T10:00:00Z"), event_type: "runtime.turn.queued", payload: { input_text: "work" } },
+        { ...event("started", "2026-04-19T10:00:01Z"), event_type: "runtime.turn.started" },
+        {
+          ...event("participant-final", "2026-04-19T10:00:02Z"),
+          event_type: "runtime.output.final",
+          payload: {
+            text: "Participant finished its block.",
+            inter_agent_projection: "participant_runtime_event",
+            inter_agent_run_id: "run-1",
+            inter_agent_participant_id: "researcher",
+          },
+        },
+      ],
+      "session-1",
+    );
+
+    expect(activeTurn).toMatchObject({ turn_id: "turn-1", status: "active" });
+  });
+
+  it("hydrates the real root terminal status when only participant final output is present", () => {
+    const hydrated = hydrateMissingTurnAnchors(
+      [
+        { ...event("queued", "2026-04-19T10:00:00Z"), event_type: "runtime.turn.queued", payload: { input_text: "work" } },
+        {
+          ...event("participant-final", "2026-04-19T10:00:01Z"),
+          event_type: "runtime.output.final",
+          payload: {
+            text: "Participant finished its block.",
+            inter_agent_projection: "participant_runtime_event",
+            inter_agent_run_id: "run-1",
+            inter_agent_participant_id: "researcher",
+          },
+        },
+      ],
+      [turn("completed", { input_text: "work", updated_at: "2026-04-19T10:00:02Z" })],
+    );
+
+    expect(hydrated.at(-1)).toMatchObject({
+      event_id: "synthetic-turn-status:turn-1",
+      event_type: "runtime.turn.completed",
+    });
+  });
+
   it("does not let a late started event reactivate a terminal turn", () => {
     const activeTurn = inferActiveRuntimeTurn(
       [

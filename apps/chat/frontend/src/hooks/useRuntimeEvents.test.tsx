@@ -361,4 +361,69 @@ describe("useRuntimeEvents", () => {
     expect(state?.activeTurn).toBeNull();
     expect(state?.pendingUserMessages).toEqual([]);
   });
+
+  it("does not complete the root turn or clear its pending message for participant final output", async () => {
+    let latestState: RuntimeEventsHarnessState | null = null;
+    const onState = (state: RuntimeEventsHarnessState) => {
+      latestState = state;
+    };
+
+    await act(async () => {
+      root?.render(
+        <RuntimeEventsHarness
+          initialEvents={[]}
+          initialPendingUserMessages={[
+            {
+              clientMessageId: "client-root",
+              content: "Coordinate the run",
+              createdAt: "2026-04-19T09:59:59Z",
+              appReferences: [],
+              attachments: [],
+            },
+          ]}
+          onState={onState}
+        />,
+      );
+    });
+
+    await act(async () => {
+      MockWebSocket.instances[0].onmessage?.({
+        data: JSON.stringify({
+          type: "runtime.snapshot",
+          session,
+          events: [
+            {
+              ...event("queued-root"),
+              event_type: "runtime.turn.queued",
+              payload: { input_text: "Coordinate the run", client_message_id: "client-root" },
+              created_at: "2026-04-19T10:00:00.000Z",
+            },
+            {
+              ...event("started-root"),
+              event_type: "runtime.turn.started",
+              created_at: "2026-04-19T10:00:01.000Z",
+            },
+            {
+              ...event("participant-final"),
+              event_type: "runtime.output.final",
+              payload: {
+                text: "Participant finished its block.",
+                inter_agent_projection: "participant_runtime_event",
+                inter_agent_run_id: "run-1",
+                inter_agent_participant_id: "researcher",
+              },
+              created_at: "2026-04-19T10:00:02.000Z",
+            },
+          ],
+          last_event_id: "participant-final",
+          has_more_before: false,
+          oldest_event_id: "queued-root",
+        }),
+      } as MessageEvent);
+    });
+
+    const state = latestState as RuntimeEventsHarnessState | null;
+    expect(state?.activeTurn).toMatchObject({ turn_id: "turn-1", status: "active" });
+    expect(state?.pendingUserMessages).toMatchObject([{ clientMessageId: "client-root" }]);
+  });
 });

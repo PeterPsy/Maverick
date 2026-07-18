@@ -17,6 +17,7 @@ import {
   isSyntheticRuntimeEvent,
   lastRuntimeEventId,
   mergeRuntimeEvents,
+  runtimeTurnStatusFromEvent,
 } from "../lib/runtimeEvents";
 
 type RuntimeEventsArgs = {
@@ -35,23 +36,9 @@ type RuntimeEventsArgs = {
   setPendingUserMessages: Dispatch<SetStateAction<PendingMessage[]>>;
 };
 
-function terminalStatus(eventType: string): RuntimeTurn["status"] | null {
-  if (eventType === "runtime.output.final") {
-    return "completed";
-  }
-  if (eventType === "runtime.turn.completed") {
-    return "completed";
-  }
-  if (eventType === "runtime.turn.failed") {
-    return "failed";
-  }
-  if (eventType === "runtime.turn.cancelled") {
-    return "cancelled";
-  }
-  if (eventType === "runtime.turn.timed-out") {
-    return "timed-out";
-  }
-  return null;
+function terminalStatus(event: RuntimeEvent): RuntimeTurn["status"] | null {
+  const status = runtimeTurnStatusFromEvent(event);
+  return status && status !== "queued" && status !== "active" ? status : null;
 }
 
 export function applyRuntimeEventEffects(
@@ -67,18 +54,18 @@ export function applyRuntimeEventEffects(
   if (!activeTurn) {
     return;
   }
-  const terminalEvent = events.find((event) => event.turn_id === activeTurn.turn_id && terminalStatus(event.event_type));
+  const terminalEvent = events.find((event) => event.turn_id === activeTurn.turn_id && terminalStatus(event));
   if (!terminalEvent) {
     return;
   }
-  const status = terminalStatus(terminalEvent.event_type);
+  const status = terminalStatus(terminalEvent);
   setActiveTurn((current) => (current?.turn_id === activeTurn.turn_id && status ? { ...current, status } : current));
 }
 
 function completedClientMessageIdsForEvents(events: RuntimeEvent[]): Set<string> {
   const terminalTurnIds = new Set(
     events
-      .filter((event) => event.turn_id && terminalStatus(event.event_type))
+      .filter((event) => event.turn_id && terminalStatus(event))
       .map((event) => event.turn_id as string),
   );
   return new Set(

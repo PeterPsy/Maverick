@@ -362,8 +362,9 @@ test.describe("Chat app browser smoke", () => {
     await expect(reviewerNode).toHaveClass(/is-working/);
     await expect(reviewerNode.locator(".chatapp-live-border-glow")).toBeVisible();
     await expect(reviewerNode.getByText("Final risk review ready.")).toBeVisible();
-    await reviewerNode.getByRole("button", { name: "Expand Reviewer latest activity" }).click();
-    await expect(reviewerNode.locator(".chatapp-inter-agent-graph__node-activity")).toHaveClass(/is-expanded/);
+    await expect(reviewerNode.locator(".chatapp-inter-agent-graph__node-activity-heading")).toBeVisible();
+    await expect(reviewerNode.getByRole("button", { name: /Reviewer latest activity/ })).toHaveCount(0);
+    await expect(reviewerNode.locator(".chatapp-inter-agent-graph__node-activity-caret")).toHaveCount(0);
 
     await page.locator('[data-participant-id="reviewer"]').click();
     const participantTranscript = page.getByRole("complementary", { name: "Reviewer transcript" });

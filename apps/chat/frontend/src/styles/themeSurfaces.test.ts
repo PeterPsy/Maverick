@@ -139,6 +139,21 @@ describe("chat multi-agent board control", () => {
       /\.chatapp-inter-agent-graph__input-summary p\s*{[\s\S]*max-height:\s*min\(14rem, 35vh\);[\s\S]*overflow:\s*auto;/,
     );
   });
+
+  it("uses the chat background behind dots and keeps node activity as a bounded preview", () => {
+    const styles = readStyleFile(resolve(currentDir, "chat/transcript/inter-agent.css"));
+
+    expect(styles).toMatch(
+      /\.chatapp-inter-agent-graph\.chatapp-agent-nodes-view \.chatapp-inter-agent-graph__canvas\s*{[\s\S]*background:\s*var\(--maverick-bg\);/,
+    );
+    expect(styles).toMatch(
+      /\.chatapp-inter-agent-graph\.chatapp-agent-nodes-view \.chatapp-inter-agent-graph__board\s*{[\s\S]*background:\s*var\(--maverick-bg\);/,
+    );
+    expect(styles).not.toMatch(/\.chatapp-inter-agent-graph\.chatapp-agent-nodes-view \.chatapp-inter-agent-graph__board::after/);
+    expect(styles).toMatch(
+      /\.chatapp-inter-agent-graph__node-activity p\s*{[\s\S]*max-height:\s*2\.1rem;[\s\S]*-webkit-line-clamp:\s*2;/,
+    );
+  });
 });
 
 function installStyles(filePath: string): void {

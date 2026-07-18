@@ -377,27 +377,18 @@ describe("InterAgentGraphView", () => {
     expect(element.querySelector("pre")).toBeNull();
   });
 
-  it("shows the shared working border and expandable latest activity inside agent nodes", async () => {
+  it("shows the shared working border and a bounded static latest activity inside agent nodes", async () => {
     const element = await renderGraph({ messages: projectedResearcherMessages() });
     const researcherNodeButton = element.querySelector('[data-participant-id="researcher"]') as HTMLButtonElement | null;
     const researcherNode = researcherNodeButton?.closest(".chatapp-inter-agent-graph__node");
-    const activityToggle = researcherNode?.querySelector(
-      '[aria-label="Expand Researcher latest activity"]',
-    ) as HTMLButtonElement | null;
 
     expect(researcherNode?.classList.contains("is-working")).toBe(true);
     expect(researcherNode?.querySelector(".chatapp-live-border-glow")).not.toBeNull();
     expect(researcherNode?.querySelector(".chatapp-inter-agent-graph__node-activity")?.textContent).toContain("Tool in progress");
     expect(researcherNode?.querySelector(".chatapp-inter-agent-graph__node-activity")?.textContent).toContain("Web search");
-    expect(activityToggle?.getAttribute("aria-expanded")).toBe("false");
-
-    await act(async () => {
-      activityToggle?.click();
-      await settle();
-    });
-
-    expect(activityToggle?.getAttribute("aria-expanded")).toBe("true");
-    expect(researcherNode?.querySelector(".chatapp-inter-agent-graph__node-activity")?.classList.contains("is-expanded")).toBe(true);
+    expect(researcherNode?.querySelector(".chatapp-inter-agent-graph__node-activity-heading")).not.toBeNull();
+    expect(researcherNode?.querySelector('[aria-label*="latest activity"]')).toBeNull();
+    expect(researcherNode?.querySelector(".chatapp-inter-agent-graph__node-activity-caret")).toBeNull();
   });
 
   it("loads a safe transcript when an agent node is selected", async () => {

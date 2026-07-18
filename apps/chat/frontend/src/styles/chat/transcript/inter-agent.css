@@ -592,32 +592,26 @@
   border-top: 1px solid rgba(var(--maverick-contrast-rgb), 0.08);
 }
 
-.chatapp-inter-agent-graph__node-activity-toggle {
+.chatapp-inter-agent-graph__node-activity-heading {
   display: grid;
-  grid-template-columns: auto minmax(0, 1fr) auto;
+  grid-template-columns: auto minmax(0, 1fr);
   align-items: center;
   gap: 0.3rem;
   min-width: 0;
   width: 100%;
-  padding: 0;
-  border: 0;
-  background: transparent;
   color: var(--maverick-text-soft);
-  cursor: pointer;
-  font: inherit;
   font-size: 0.68rem;
   font-weight: 720;
   line-height: 1.2;
-  text-align: left;
 }
 
-.chatapp-inter-agent-graph__node-activity-toggle > span:nth-child(2) {
+.chatapp-inter-agent-graph__node-activity-heading > span:nth-child(2) {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.chatapp-inter-agent-graph__node-activity-toggle > .material-symbols-rounded {
+.chatapp-inter-agent-graph__node-activity-heading > .material-symbols-rounded {
   width: auto;
   height: auto;
   border-radius: 0;
@@ -627,33 +621,18 @@
   font-size: 0.84rem;
 }
 
-.chatapp-inter-agent-graph__node-activity-toggle > .chatapp-inter-agent-graph__node-activity-caret {
-  color: var(--maverick-text-soft);
-  transition: transform 150ms ease;
-}
-
-.chatapp-inter-agent-graph__node-activity.is-expanded .chatapp-inter-agent-graph__node-activity-caret {
-  transform: rotate(180deg);
-}
-
 .chatapp-inter-agent-graph__node-activity p {
   display: -webkit-box;
+  max-height: 2.1rem;
   min-width: 0;
   margin: 0;
   overflow: hidden;
   -webkit-box-orient: vertical;
-  -webkit-line-clamp: 1;
+  -webkit-line-clamp: 2;
   overflow-wrap: anywhere;
   color: rgba(var(--maverick-contrast-rgb), 0.76);
   font-size: 0.74rem;
   line-height: 1.35;
-}
-
-.chatapp-inter-agent-graph__node-activity.is-expanded p {
-  display: block;
-  max-height: 3.1rem;
-  overflow: auto;
-  scrollbar-width: thin;
 }
 
 .chatapp-inter-agent-graph__node strong {
@@ -981,9 +960,7 @@
   padding: 0;
   border: 0;
   border-radius: 0;
-  background:
-    linear-gradient(180deg, rgba(var(--maverick-contrast-rgb), 0.018), transparent 34%),
-    var(--maverick-bg);
+  background: var(--maverick-bg);
   box-shadow: none;
   overflow: hidden;
   backdrop-filter: none;
@@ -997,35 +974,8 @@
   height: 100%;
   min-height: 100%;
   border-radius: 0;
-  background:
-    linear-gradient(rgba(var(--maverick-contrast-rgb), 0.026) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(var(--maverick-contrast-rgb), 0.026) 1px, transparent 1px),
-    var(--maverick-bg);
-  background-size: 112px 112px, 112px 112px, auto;
+  background: var(--maverick-bg);
   overflow: hidden;
-}
-
-.chatapp-inter-agent-graph.chatapp-agent-nodes-view .chatapp-inter-agent-graph__board::after {
-  content: "";
-  position: absolute;
-  inset: 0;
-  z-index: 1;
-  background:
-    linear-gradient(
-      180deg,
-      color-mix(in srgb, var(--maverick-bg) 94%, transparent),
-      transparent 16%,
-      transparent 78%,
-      color-mix(in srgb, var(--maverick-bg) 96%, transparent)
-    ),
-    linear-gradient(
-      90deg,
-      color-mix(in srgb, var(--maverick-bg) 90%, transparent),
-      transparent 18%,
-      transparent 82%,
-      color-mix(in srgb, var(--maverick-bg) 90%, transparent)
-    );
-  pointer-events: none;
 }
 
 .chatapp-inter-agent-graph.chatapp-agent-nodes-view .chatapp-inter-agent-graph__flow,

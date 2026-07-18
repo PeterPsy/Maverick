@@ -944,7 +944,6 @@ function GraphFlowCanvas({
 function AgentParticipantNode({ data, selected }: NodeProps) {
   const nodeData = data as AgentNodeData;
   const participant = nodeData.participant;
-  const [activityExpanded, setActivityExpanded] = useState(false);
   const isWorking = isWorkingParticipantStatus(participant.status);
   return (
     <div
@@ -977,24 +976,11 @@ function AgentParticipantNode({ data, selected }: NodeProps) {
           <span>{participantStatusLabel(participant.kind, participant.status)}</span>
         </span>
       </button>
-      <div className={`chatapp-inter-agent-graph__node-activity nodrag ${activityExpanded ? "is-expanded" : ""}`}>
-        <button
-          aria-expanded={activityExpanded}
-          aria-label={`${activityExpanded ? "Collapse" : "Expand"} ${participant.label} latest activity`}
-          className="chatapp-inter-agent-graph__node-activity-toggle"
-          onClick={(event) => {
-            event.stopPropagation();
-            setActivityExpanded((current) => !current);
-          }}
-          onPointerDown={(event) => event.stopPropagation()}
-          type="button"
-        >
+      <div className="chatapp-inter-agent-graph__node-activity">
+        <div className="chatapp-inter-agent-graph__node-activity-heading">
           <span className="material-symbols-rounded" aria-hidden="true">{activityIcon(nodeData.activity.kind)}</span>
           <span>{nodeData.activity.label}</span>
-          <span className="material-symbols-rounded chatapp-inter-agent-graph__node-activity-caret" aria-hidden="true">
-            expand_more
-          </span>
-        </button>
+        </div>
         <p title={nodeData.activity.text}>{nodeData.activity.text}</p>
       </div>
       {GRAPH_HANDLES.map(({ position, side }) => (

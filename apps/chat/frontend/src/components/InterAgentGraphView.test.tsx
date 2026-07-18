@@ -453,6 +453,43 @@ describe("InterAgentGraphView", () => {
     expect(transcript?.querySelector(".chatapp-agent-block")).not.toBeNull();
   });
 
+  it("keeps projected participant activity scoped to the selected run and participant", async () => {
+    const messages: ChatMessage[] = [
+      ...projectedResearcherMessages(),
+      {
+        id: "orchestrator:agent:private",
+        role: "agent",
+        content: "Orchestrator-only update.",
+        createdAt: "2026-06-18T10:01:02Z",
+        status: "complete",
+        sourceLabel: "Orchestrator",
+        sourceParticipantId: "orchestrator",
+        sourceRunId: "run-1",
+      },
+      {
+        id: "researcher:agent:other-run",
+        role: "agent",
+        content: "Different-run researcher update.",
+        createdAt: "2026-06-18T10:01:03Z",
+        status: "complete",
+        sourceLabel: "Researcher",
+        sourceParticipantId: "researcher",
+        sourceRunId: "run-2",
+      },
+    ];
+    const element = await renderGraph({ messages });
+
+    await act(async () => {
+      (element.querySelector('[data-participant-id="researcher"]') as HTMLButtonElement | null)?.click();
+      await settle();
+    });
+
+    const transcriptText = element.querySelector('[aria-label="Researcher transcript"]')?.textContent || "";
+    expect(transcriptText).toContain("Checking the primary sources.");
+    expect(transcriptText).not.toContain("Orchestrator-only update.");
+    expect(transcriptText).not.toContain("Different-run researcher update.");
+  });
+
   it("renders participant artifacts as product-facing records with Storage links", async () => {
     const element = await renderGraph({ initialEvents: [artifactEvent()] });
     const researcherNode = element.querySelector('[data-participant-id="researcher"]') as HTMLButtonElement | null;

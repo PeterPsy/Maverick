@@ -342,6 +342,7 @@ test.describe("Chat app browser smoke", () => {
     await openAgentNodes.click();
     const agentNodesRegion = page.getByRole("region", { name: "Agent nodes view" });
     await expect(agentNodesRegion).toBeVisible();
+    await expect.poll(() => page.evaluate(() => document.fonts.check('12px "Material Symbols Rounded"'))).toBe(true);
     const agentNodesRegionBox = await agentNodesRegion.boundingBox();
     expect(agentNodesRegionBox?.width || 0).toBeGreaterThan(700);
     expect(agentNodesRegionBox?.height || 0).toBeGreaterThan(500);
@@ -369,6 +370,8 @@ test.describe("Chat app browser smoke", () => {
     await expect(participantTranscript.locator(".chatapp-agent-block")).toHaveCount(2);
     const participantHeaderBox = await participantTranscript.locator(".chatapp-inter-agent-graph__transcript-title summary").boundingBox();
     expect(participantHeaderBox?.height || 0).toBeGreaterThanOrEqual(68);
+    await participantTranscript.locator(".chatapp-inter-agent-graph__transcript-title summary").click();
+    await expect(participantTranscript.getByText("Reviewer accepted browser-observed task.")).toBeVisible();
   });
 
   test("exposes gated group chat mode and opens its graph", async ({ page }) => {
@@ -623,6 +626,12 @@ async function setComposerCaretOffset(page: Page, offset: number) {
 async function installChatMocks(page: Page): Promise<MockState> {
   const state = createMockState();
 
+  await page.route("**/material-symbols-rounded.woff2", (route) =>
+    route.fulfill({
+      path: "../base-shell/frontend/public/material-symbols-rounded.woff2",
+      contentType: "font/woff2",
+    }),
+  );
   await page.route("https://fonts.googleapis.com/**", (route) => route.fulfill({ status: 200, contentType: "text/css", body: "" }));
   await page.route("https://fonts.gstatic.com/**", (route) => route.fulfill({ status: 204, body: "" }));
   await page.route("**/api/providers", (route) => fulfillJson(route, providerPayload()));

@@ -20,6 +20,7 @@ from core.inter_agent.events import (
     InterAgentVisibilityPlane,
 )
 from core.inter_agent.models import (
+    EDGE_KINDS,
     ApprovalRequestRecord,
     EdgeSpec,
     InterAgentEdgeRecord,
@@ -29,6 +30,7 @@ from core.inter_agent.models import (
     ParticipantSpec,
     budget_policy_from_spec,
     empty_budget_ledger,
+    validate_participant_spec,
     validate_run_spec,
 )
 from core.inter_agent.store import InterAgentRunCreateBundle, InterAgentStore
@@ -110,6 +112,8 @@ class InterAgentService:
             spec_fingerprint=spec_fingerprint,
             aggregator_participant_id=_clean_optional(validated.aggregator_participant_id),
             merge_policy=_clean_optional(validated.merge_policy),
+            source_runtime_turn_id=_clean_optional(validated.source_runtime_turn_id),
+            orchestration_policy=_clean_optional(validated.orchestration_policy),
         )
         budget_ledger = empty_budget_ledger(
             budget_ledger_id=budget_ledger_id,
@@ -174,6 +178,301 @@ class InterAgentService:
                 initial_events=initial_events,
             )
         )
+
+    def add_participant(
+        self,
+        *,
+        workspace_id: str,
+        run_id: str,
+        spec: ParticipantSpec,
+        now: datetime | None = None,
+    ) -> InterAgentParticipantRecord:
+        """Persist one core-authorized dynamic worker before it can be scheduled."""
+        timestamp = now or datetime.now(tz=UTC)
+        run = self.store.get_run(run_id, workspace_id=workspace_id)
+        if run.mode != "orchestrated":
+            raise InterAgentOperationError("Dynamic participants are available only for orchestrated runs.")
+        if run.status in TERMINAL_RUN_STATUSES:
+            raise InterAgentOperationError("Terminal orchestrated runs cannot add participants.")
+        validated = validate_participant_spec(spec)
+        participant_id = _clean_optional(validated.participant_id)
+        if not participant_id:
+            raise InterAgentValidationError("Dynamic participants require participant_id.")
+        if validated.kind == "orchestrator":
+            raise InterAgentValidationError("An orchestrated run cannot add another orchestrator.")
+        existing_participants = self.store.list_participants(run.run_id, workspace_id=workspace_id)
+        existing = next((item for item in existing_participants if item.participant_id == participant_id), None)
+        if existing is not None:
+            if (
+                existing.kind == validated.kind
+                and existing.execution_mode == validated.execution_mode
+                and existing.label == validated.label
+                and existing.agent_type_id == validated.agent_type_id
+            ):
+                return existing
+            raise InterAgentValidationError(f"Dynamic participant `{participant_id}` already exists with different material.")
+        policy = self.store.get_budget_policy(run.budget_policy_id, workspace_id=workspace_id)
+        if len(existing_participants) >= policy.max_participants:
+            raise InterAgentValidationError("Dynamic participant would exceed max_participants.")
+        record = _participant_records_from_specs(
+            [validated],
+            participant_ids={0: participant_id},
+            run=run,
+            created_at=timestamp,
+        )[0]
+        next_sequence = max((item.sequence_index for item in existing_participants), default=-1) + 1
+        record = replace(record, sequence_index=next_sequence)
+        self.store.save_participant(record)
+        self.record_event(
+            run,
+            event_type="inter_agent.participant.added",
+            participant_id=record.participant_id,
+            visibility_plane="detail",
+            correlation_id=f"{run.run_id}:participant:{record.participant_id}",
+            idempotency_key=f"{run.run_id}:dynamic.participant:{record.participant_id}",
+            payload={
+                "participant_id": record.participant_id,
+                "kind": record.kind,
+                "label": record.label,
+                "dynamic": True,
+            },
+            now=timestamp,
+        )
+        return record
+
+    def add_edge(
+        self,
+        *,
+        workspace_id: str,
+        run_id: str,
+        spec: EdgeSpec,
+        now: datetime | None = None,
+    ) -> InterAgentEdgeRecord:
+        """Persist one dynamic dependency edge after both endpoints exist."""
+        timestamp = now or datetime.now(tz=UTC)
+        run = self.store.get_run(run_id, workspace_id=workspace_id)
+        if run.mode != "orchestrated":
+            raise InterAgentOperationError("Dynamic edges are available only for orchestrated runs.")
+        if run.status in TERMINAL_RUN_STATUSES:
+            raise InterAgentOperationError("Terminal orchestrated runs cannot add edges.")
+        source_id = str(spec.source_id or "").strip()
+        target_id = str(spec.target_id or "").strip()
+        label = str(spec.label or "").strip()
+        if spec.kind not in EDGE_KINDS:
+            raise InterAgentValidationError(f"Unsupported inter-agent edge kind `{spec.kind}`.")
+        participant_ids = {
+            item.participant_id for item in self.store.list_participants(run.run_id, workspace_id=workspace_id)
+        }
+        if source_id not in participant_ids or target_id not in participant_ids:
+            raise InterAgentValidationError("Dynamic edges must reference existing run participants.")
+        edge_id = _stable_id("iaedge", run.run_id, source_id, target_id, spec.kind, label)
+        existing = next(
+            (item for item in self.store.list_edges(run.run_id, workspace_id=workspace_id) if item.edge_id == edge_id),
+            None,
+        )
+        if existing is not None:
+            return existing
+        record = InterAgentEdgeRecord(
+            edge_id=edge_id,
+            workspace_id=workspace_id,
+            run_id=run.run_id,
+            source_id=source_id,
+            target_id=target_id,
+            kind=spec.kind,
+            label=label,
+            status="created",
+            created_at=timestamp,
+        )
+        self.store.save_edge(record)
+        self.record_event(
+            run,
+            event_type="inter_agent.graph.edge_added",
+            participant_id=run.orchestrator_participant_id,
+            visibility_plane="detail",
+            correlation_id=edge_id,
+            idempotency_key=f"{run.run_id}:dynamic.edge:{edge_id}",
+            payload={
+                "edge_id": edge_id,
+                "source_id": source_id,
+                "target_id": target_id,
+                "kind": spec.kind,
+                "label": label,
+            },
+            now=timestamp,
+        )
+        return record
+
+    def record_directive(
+        self,
+        *,
+        workspace_id: str,
+        run_id: str,
+        text: str,
+        source_kind: str,
+        source_runtime_event_id: str | None = None,
+        source_runtime_turn_id: str | None = None,
+        idempotency_key: str | None = None,
+        now: datetime | None = None,
+    ) -> InterAgentEventRecord:
+        """Append bounded live steering for later orchestrator delivery."""
+        timestamp = now or datetime.now(tz=UTC)
+        run = self.store.get_run(run_id, workspace_id=workspace_id)
+        if run.mode != "orchestrated":
+            raise InterAgentOperationError("Directives are available only for orchestrated runs.")
+        if run.status in TERMINAL_RUN_STATUSES:
+            raise InterAgentOperationError("Terminal orchestrated runs do not accept directives.")
+        if source_kind not in {"root_generalist", "user"}:
+            raise InterAgentValidationError("Directive source_kind must be root_generalist or user.")
+        directive_text = str(text or "").strip()
+        if not directive_text:
+            raise InterAgentValidationError("Directives require non-empty text.")
+        if len(directive_text) > 6000:
+            raise InterAgentValidationError("Directives must be 6000 characters or fewer.")
+        turn_id = _clean_optional(source_runtime_turn_id)
+        if source_kind == "root_generalist" and turn_id != run.source_runtime_turn_id:
+            raise InterAgentValidationError("Generalist directives must belong to the run source turn.")
+        directive_id = _stable_id(
+            "iadirective",
+            run.run_id,
+            source_kind,
+            _clean_optional(source_runtime_event_id) or turn_id or idempotency_key or directive_text,
+        )
+        return self.record_event(
+            run,
+            event_type="inter_agent.directive.received",
+            participant_id=run.orchestrator_participant_id,
+            runtime_turn_id=turn_id,
+            runtime_event_id=_clean_optional(source_runtime_event_id),
+            visibility_plane="detail",
+            correlation_id=directive_id,
+            idempotency_key=_clean_optional(idempotency_key) or f"{run.run_id}:directive:{directive_id}",
+            payload={
+                "directive_id": directive_id,
+                "source_kind": source_kind,
+                "text": directive_text,
+            },
+            now=timestamp,
+        )
+
+    def pending_directives(self, run: InterAgentRunRecord) -> list[InterAgentEventRecord]:
+        """Return received directive events not yet delivered to the orchestrator."""
+        events = self.store.list_event_page(
+            run.run_id,
+            workspace_id=run.workspace_id,
+            visibility_plane="detail",
+            limit=DEFAULT_DETAIL_EVENT_LIMIT,
+        ).events
+        delivered = {
+            str(event.payload.get("directive_id") or "")
+            for event in events
+            if event.event_type == "inter_agent.directive.delivered"
+        }
+        return [
+            event
+            for event in events
+            if event.event_type == "inter_agent.directive.received"
+            and str(event.payload.get("directive_id") or "") not in delivered
+        ]
+
+    def mark_directives_delivered(
+        self,
+        run: InterAgentRunRecord,
+        directives: list[InterAgentEventRecord],
+        *,
+        now: datetime | None = None,
+    ) -> None:
+        """Record directive delivery after it is included in an orchestrator turn."""
+        timestamp = now or datetime.now(tz=UTC)
+        for directive in directives:
+            directive_id = str(directive.payload.get("directive_id") or "").strip()
+            if not directive_id:
+                continue
+            self.record_event(
+                run,
+                event_type="inter_agent.directive.delivered",
+                participant_id=run.orchestrator_participant_id,
+                visibility_plane="detail",
+                correlation_id=directive_id,
+                idempotency_key=f"{run.run_id}:directive.delivered:{directive_id}",
+                payload={"directive_id": directive_id},
+                now=timestamp,
+            )
+
+    def decide_completion(
+        self,
+        *,
+        workspace_id: str,
+        run_id: str,
+        participant_id: str,
+        complete: bool,
+        quality_passed: bool,
+        summary: str,
+        final_answer: str = "",
+        now: datetime | None = None,
+    ) -> InterAgentRunRecord:
+        """Apply the only valid completion gate for a dynamic orchestration."""
+        timestamp = now or datetime.now(tz=UTC)
+        run = self.store.get_run(run_id, workspace_id=workspace_id)
+        if run.mode != "orchestrated":
+            raise InterAgentOperationError("Completion decisions apply only to orchestrated runs.")
+        if participant_id != run.orchestrator_participant_id:
+            raise InterAgentOperationError("Only the orchestrator may decide run completion.")
+        if complete and not quality_passed:
+            raise InterAgentValidationError("Completion requires a passing quality decision.")
+        answer = str(final_answer or "").strip()
+        if complete and not answer:
+            raise InterAgentValidationError("Completed orchestrations require a final answer.")
+        decision_summary = str(summary or "").strip() or ("Quality accepted." if quality_passed else "Revision required.")
+        summary_digest = hashlib.sha256(decision_summary.encode()).hexdigest()[:16]
+        answer_digest = hashlib.sha256(answer.encode()).hexdigest()[:16]
+        self.record_event(
+            run,
+            event_type="inter_agent.quality.assessed",
+            participant_id=participant_id,
+            visibility_plane="summary",
+            correlation_id=f"{run.run_id}:quality",
+            idempotency_key=f"{run.run_id}:quality:{int(complete)}:{summary_digest}",
+            payload={"passed": quality_passed, "summary": decision_summary},
+            now=timestamp,
+        )
+        self.record_event(
+            run,
+            event_type="inter_agent.completion.decided",
+            participant_id=participant_id,
+            visibility_plane="summary",
+            correlation_id=f"{run.run_id}:completion",
+            idempotency_key=f"{run.run_id}:completion:{int(complete)}:{answer_digest}",
+            payload={
+                "complete": complete,
+                "quality_passed": quality_passed,
+                "summary": decision_summary,
+                "final_answer": answer if complete else "",
+            },
+            now=timestamp,
+        )
+        if not complete:
+            updated = replace(run, status="running", updated_at=timestamp)
+            self.store.save_run(updated)
+            return updated
+        orchestrator = self.store.get_participant(
+            participant_id,
+            workspace_id=workspace_id,
+            run_id=run.run_id,
+        )
+        self.store.save_participant(replace(orchestrator, status="completed", updated_at=timestamp))
+        completed = replace(run, status="completed", updated_at=timestamp, ended_at=timestamp)
+        self.store.save_run(completed)
+        self.record_event(
+            completed,
+            event_type="inter_agent.run.completed",
+            participant_id=participant_id,
+            visibility_plane="summary",
+            correlation_id=completed.run_id,
+            idempotency_key=f"{completed.run_id}:orchestrator.completed",
+            payload={"status": "completed", "summary": decision_summary, "final_answer": answer},
+            now=timestamp,
+        )
+        return completed
 
     def record_event(
         self,
@@ -989,6 +1288,8 @@ def _run_spec_fingerprint(spec: InterAgentRunSpec) -> str:
         "aggregator_participant_id": spec.aggregator_participant_id,
         "merge_policy": spec.merge_policy,
         "visibility_level": spec.visibility_level,
+        "source_runtime_turn_id": spec.source_runtime_turn_id,
+        "orchestration_policy": spec.orchestration_policy,
     }
     encoded = json.dumps(_canonical_fingerprint_value(payload), sort_keys=True, separators=(",", ":"))
     return hashlib.sha256(encoded.encode("utf-8")).hexdigest()
@@ -1025,9 +1326,9 @@ def _canonical_fingerprint_value(value: Any) -> Any:
 
 def _first_root_orchestrator_id(specs: list[ParticipantSpec], participant_ids: dict[int, str]) -> str:
     for index, spec in enumerate(specs):
-        if spec.kind == "orchestrator" and spec.execution_mode == "root_orchestrator":
+        if spec.kind == "orchestrator":
             return participant_ids[index]
-    raise ValueError("validated run spec did not include a root orchestrator")
+    raise ValueError("validated run spec did not include an orchestrator")
 
 
 def _materialized_system_prompt(participant: InterAgentParticipantRecord, *, explicit_prompt: str | None) -> str | None:

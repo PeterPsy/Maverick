@@ -22,6 +22,7 @@ InterAgentRunMode = Literal[
     "handoff",
     "group_chat",
     "magentic_like",
+    "orchestrated",
 ]
 InterAgentRunStatus = Literal[
     "created",
@@ -74,6 +75,7 @@ RUN_MODES: set[str] = {
     "handoff",
     "group_chat",
     "magentic_like",
+    "orchestrated",
 }
 PARTICIPANT_KINDS: set[str] = {"orchestrator", "agent", "tool", "human", "system"}
 PARTICIPANT_EXECUTION_MODES: set[str] = {
@@ -93,7 +95,7 @@ EDGE_KINDS: set[str] = {
 }
 
 PARTICIPANT_EXECUTION_BY_KIND: dict[str, set[str]] = {
-    "orchestrator": {"root_orchestrator", "embedded_executor"},
+    "orchestrator": {"root_orchestrator", "child_runtime_session", "embedded_executor"},
     "agent": {"child_runtime_session", "embedded_executor"},
     "tool": {"tool_proxy"},
     "human": {"human_gate"},
@@ -194,6 +196,8 @@ class InterAgentRunSpec:
     merge_policy: str | None = None
     visibility_level: InterAgentVisibilityPlane = "summary"
     idempotency_key: str | None = None
+    source_runtime_turn_id: str | None = None
+    orchestration_policy: str | None = None
 
 
 @dataclass(frozen=True)
@@ -221,6 +225,8 @@ class InterAgentRunRecord:
     spec_fingerprint: str | None = None
     aggregator_participant_id: str | None = None
     merge_policy: str | None = None
+    source_runtime_turn_id: str | None = None
+    orchestration_policy: str | None = None
 
 
 @dataclass(frozen=True)
@@ -363,13 +369,20 @@ def validate_run_spec(spec: InterAgentRunSpec) -> InterAgentRunSpec:
         raise InterAgentValidationError("Participant ids must be unique within an inter-agent run spec.")
     if len(normalized_participants) > spec.budget.max_participants:
         raise InterAgentValidationError("Inter-agent run spec exceeds max_participants.")
-    orchestrators = [
-        participant
-        for participant in normalized_participants
-        if participant.kind == "orchestrator" and participant.execution_mode == "root_orchestrator"
-    ]
+    orchestrators = [participant for participant in normalized_participants if participant.kind == "orchestrator"]
     if len(orchestrators) != 1:
-        raise InterAgentValidationError("Inter-agent run specs require exactly one root orchestrator participant.")
+        raise InterAgentValidationError("Inter-agent run specs require exactly one orchestrator participant.")
+    if spec.mode == "orchestrated":
+        if len(normalized_participants) != 1:
+            raise InterAgentValidationError("Orchestrated runs must start with only the orchestrator participant.")
+        if orchestrators[0].execution_mode != "child_runtime_session":
+            raise InterAgentValidationError("Orchestrated runs require a hidden child runtime orchestrator.")
+        if not _clean_optional(spec.source_runtime_turn_id):
+            raise InterAgentValidationError("Orchestrated runs require source_runtime_turn_id.")
+        if spec.edges:
+            raise InterAgentValidationError("Orchestrated runs must start without static edges.")
+    elif orchestrators[0].execution_mode != "root_orchestrator":
+        raise InterAgentValidationError("Static inter-agent runs require a root orchestrator participant.")
     if spec.orchestrator_participant_id and spec.orchestrator_participant_id not in set(participant_ids):
         raise InterAgentValidationError("orchestrator_participant_id must reference an existing participant.")
     if spec.mode != "single_agent":

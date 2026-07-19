@@ -1200,6 +1200,8 @@ def _run_from_document(document: dict[str, Any]) -> InterAgentRunRecord:
     payload.setdefault("spec_fingerprint", None)
     payload.setdefault("aggregator_participant_id", None)
     payload.setdefault("merge_policy", None)
+    payload.setdefault("source_runtime_turn_id", None)
+    payload.setdefault("orchestration_policy", None)
     return InterAgentRunRecord(**payload)
 
 

@@ -143,6 +143,8 @@ def run_spec_from_payload(
         merge_policy=_text(payload.get("merge_policy")) or None,
         visibility_level=_text(payload.get("visibility_level")) or "summary",  # type: ignore[arg-type]
         idempotency_key=_text(payload.get("idempotency_key")) or None,
+        source_runtime_turn_id=_text(payload.get("source_runtime_turn_id")) or None,
+        orchestration_policy=_text(payload.get("orchestration_policy")) or None,
     )
 
 

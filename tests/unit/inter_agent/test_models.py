@@ -58,6 +58,60 @@ class InterAgentModelValidationTest(unittest.TestCase):
         self.assertEqual(spec.participants[0].thread_visibility, "user")
         self.assertEqual(spec.participants[1].thread_visibility, "hidden")
 
+    def test_orchestrated_run_starts_with_one_hidden_runtime_orchestrator(self) -> None:
+        spec = InterAgentRunSpec(
+            workspace_id="default",
+            thread_id="thread-1",
+            root_runtime_session_id="root-session",
+            source_app_id="chat",
+            mode="orchestrated",
+            created_by_user_id="user-1",
+            participants=[
+                ParticipantSpec(
+                    participant_id="orchestrator",
+                    kind="orchestrator",
+                    execution_mode="child_runtime_session",
+                    label="Orchestrator",
+                )
+            ],
+            budget=BudgetPolicySpec(max_participants=5, max_total_turns=8, max_turns_per_participant=4),
+            source_runtime_turn_id="generalist-turn-1",
+            orchestration_policy="multi",
+        )
+
+        validated = validate_run_spec(spec)
+
+        self.assertEqual(validated.participants[0].thread_visibility, "hidden")
+
+    def test_orchestrated_run_rejects_static_workers_and_edges(self) -> None:
+        base = InterAgentRunSpec(
+            workspace_id="default",
+            thread_id="thread-1",
+            root_runtime_session_id="root-session",
+            source_app_id="chat",
+            mode="orchestrated",
+            created_by_user_id="user-1",
+            participants=[
+                ParticipantSpec(
+                    participant_id="orchestrator",
+                    kind="orchestrator",
+                    execution_mode="child_runtime_session",
+                    label="Orchestrator",
+                ),
+                ParticipantSpec(
+                    participant_id="worker",
+                    kind="agent",
+                    execution_mode="child_runtime_session",
+                    label="Worker",
+                ),
+            ],
+            budget=BudgetPolicySpec(max_participants=5, max_total_turns=8, max_turns_per_participant=4),
+            source_runtime_turn_id="generalist-turn-1",
+        )
+
+        with self.assertRaisesRegex(InterAgentValidationError, "start with only"):
+            validate_run_spec(base)
+
     def test_concurrent_requires_aggregator_and_merge_policy(self) -> None:
         invalid = self.valid_spec()
         invalid = InterAgentRunSpec(

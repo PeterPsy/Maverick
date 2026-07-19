@@ -375,6 +375,18 @@ def _create_orchestration(
     policy = _text(body.get("policy")) or "auto"
     if policy not in {"auto", "multi", "group_chat"}:
         raise InterAgentValidationError("Orchestration policy must be auto, multi, or group_chat.")
+    idempotency_key = _text(body.get("idempotency_key")) or f"chat-orchestration:{source_turn.turn_id}:{policy}"
+    existing = service.store.find_run_by_idempotency_key(context.workspace_id, idempotency_key)
+    if existing is not None:
+        if (
+            existing.mode != "orchestrated"
+            or existing.root_runtime_session_id != root_session.session_id
+            or existing.source_runtime_turn_id != source_turn.turn_id
+            or existing.orchestration_policy != policy
+            or existing.created_by_user_id != context.user.user_id
+        ):
+            raise InterAgentValidationError("Orchestration idempotency key was reused with a different intent.")
+        return json_response(start_response, run_detail_payload(state.inter_agent_store, existing))
     snapshot = _orchestrator_snapshot_from_root(root_session)
     run = service.create_run(
         InterAgentRunSpec(
@@ -396,7 +408,7 @@ def _create_orchestration(
             ],
             budget=_orchestration_budget(policy),
             visibility_level="detail",
-            idempotency_key=_text(body.get("idempotency_key")) or f"chat-orchestration:{source_turn.turn_id}:{policy}",
+            idempotency_key=idempotency_key,
             source_runtime_turn_id=source_turn.turn_id,
             orchestration_policy=policy,
         )

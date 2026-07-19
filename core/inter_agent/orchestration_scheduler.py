@@ -78,7 +78,11 @@ def execute_orchestrated_run(
         )
         service.mark_directives_delivered(run, planning_directives)
         budget = service.store.get_budget_policy(run.budget_policy_id, workspace_id=workspace_id)
-        plan = parse_orchestration_plan(plan_output, max_tasks=budget.max_participants - 1)
+        revision_slots = 2 * max(0, budget.max_rounds - 1)
+        max_initial_tasks = budget.max_participants - 1 - revision_slots
+        if max_initial_tasks < 2:
+            raise InterAgentValidationError("Orchestration budget cannot reserve an implementer/reviewer revision loop.")
+        plan = parse_orchestration_plan(plan_output, max_tasks=max_initial_tasks)
         _record_plan(service, run, plan)
         task_participants = _materialize_plan(service, run, orchestrator, plan)
         run = replace(run, status="running", updated_at=datetime.now(tz=UTC))

@@ -37,9 +37,15 @@ class OrchestrationSchedulerTest(unittest.TestCase):
             }
             return outputs[client_message_id]
 
+        generalist_event = SimpleNamespace(
+            event_id="generalist-final-1",
+            turn_id="generalist-turn-1",
+            event_type="runtime.output.final",
+            payload={"text": "Preserve the public API and prioritize regression coverage."},
+        )
         result = execute_orchestrated_run(
             service,
-            SimpleNamespace(runtime_store=None),
+            SimpleNamespace(runtime_store=SimpleNamespace(list_events=lambda _session_id: [generalist_event])),
             workspace_id="default",
             run_id=run.run_id,
             input_text="Implement the requested redesign.",
@@ -61,8 +67,11 @@ class OrchestrationSchedulerTest(unittest.TestCase):
             ["orchestrator", "implement", "review", "implement-r2", "review-r2"],
         )
         self.assertEqual(len(edges), 4)
+        self.assertIn("Preserve the public API", prompts[f"{run.run_id}:orchestrator:plan"])
         self.assertIn("Reviewer feedback", prompts[f"{run.run_id}:task:implement-r2"])
         self.assertIn("inter_agent.completion.decided", [event.event_type for event in events])
+        self.assertIn("inter_agent.directive.received", [event.event_type for event in events])
+        self.assertIn("inter_agent.directive.delivered", [event.event_type for event in events])
         self.assertEqual(
             next(event for event in events if event.event_type == "inter_agent.run.completed").participant_id,
             "orchestrator",

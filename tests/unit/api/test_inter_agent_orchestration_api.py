@@ -33,17 +33,25 @@ class InterAgentOrchestrationApiTest(InterAgentApiSupport):
             app = PlatformHost(state, start_path=repo_root)
             cookie = self._login(app)
 
+            request_body = {
+                "root_runtime_session_id": "root-session",
+                "source_runtime_turn_id": "generalist-turn-1",
+                "policy": "multi",
+                "idempotency_key": "chat-orchestration-1",
+            }
             with patch("core.api.inter_agent_api._start_orchestrated_execution_worker") as start_worker:
                 status, payload, _headers = self._invoke(
                     app,
                     path="/api/inter-agent/orchestrations",
                     method="POST",
-                    body={
-                        "root_runtime_session_id": "root-session",
-                        "source_runtime_turn_id": "generalist-turn-1",
-                        "policy": "multi",
-                        "idempotency_key": "chat-orchestration-1",
-                    },
+                    body=request_body,
+                    cookie=cookie,
+                )
+                retry_status, retry_payload, _headers = self._invoke(
+                    app,
+                    path="/api/inter-agent/orchestrations",
+                    method="POST",
+                    body=request_body,
                     cookie=cookie,
                 )
 
@@ -57,6 +65,8 @@ class InterAgentOrchestrationApiTest(InterAgentApiSupport):
             )
 
             self.assertEqual(status, 202)
+            self.assertEqual(retry_status, 200)
+            self.assertEqual(retry_payload["run"]["run_id"], run_id)
             self.assertEqual(payload["run"]["mode"], "orchestrated")
             self.assertEqual(payload["run"]["source_runtime_turn_id"], "generalist-turn-1")
             self.assertEqual([item["participant_id"] for item in payload["participants"]], ["orchestrator"])

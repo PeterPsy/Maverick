@@ -4,9 +4,6 @@ from __future__ import annotations
 
 from threading import Thread
 from urllib.parse import parse_qs
-from uuid import uuid4
-
-from core.api.app_reference_payloads import materialize_runtime_app_references
 from core.api.app_registry import enabled_app_items
 from core.api.http import StartResponse, json_response, read_json_body
 from core.api.platform_state import PlatformState
@@ -37,6 +34,8 @@ from core.inter_agent.errors import (
 from core.inter_agent.events import validate_visibility_plane
 from core.inter_agent.executor import execute_inter_agent_run
 from core.inter_agent.feature_flags import validate_product_inter_agent_run_mode
+from core.inter_agent.models import AgentParticipantSnapshot, BudgetPolicySpec, InterAgentRunSpec, ParticipantSpec
+from core.inter_agent.orchestration_scheduler import execute_orchestrated_run
 from core.inter_agent.service import InterAgentService
 from core.inter_agent.store import DEFAULT_INTER_AGENT_EVENT_LIMIT, MAX_INTER_AGENT_EVENT_LIMIT
 from core.inter_agent.surfaces import (
@@ -48,15 +47,8 @@ from core.inter_agent.surfaces import (
     run_spec_from_payload,
 )
 from core.providers.errors import ProviderError
-from core.runtime.errors import RuntimeSessionNotFoundError
+from core.runtime.errors import RuntimeSessionNotFoundError, RuntimeTurnNotFoundError
 from core.runtime.runtime_session import runtime_session_allows_user_thread
-from core.runtime.service import queue_runtime_turn, record_runtime_event, transition_runtime_turn
-from core.runtime.thread_catalog_events import (
-    mark_thread_response_completed,
-    mark_thread_user_message_queued,
-    set_thread_availability,
-)
-from core.runtime.thread_title_jobs import schedule_runtime_thread_title_generation, thread_title_input_hash
 from core.skills.runtime_catalog import (
     selected_runtime_skill_catalog_app_id_for_source_app,
     validate_runtime_skill_catalog_provider_app_id,
@@ -140,6 +132,10 @@ def _handle_inter_agent_route(
     start_response: StartResponse,
     start_path,
 ) -> list[bytes]:
+    if path == "/api/inter-agent/orchestrations":
+        if method == "POST":
+            return _create_orchestration(state, context, service, body, start_response)
+        return json_response(start_response, {"error": "method_not_allowed"}, status="405 Method Not Allowed")
     if path == "/api/inter-agent/runs":
         if method == "POST":
             return _create_run(state, context, service, body, start_response, start_path=start_path)
@@ -291,8 +287,17 @@ def _handle_inter_agent_route(
     )
     if action == "messages" and method == "POST":
         return _send_message(state, context, service, run.run_id, body, start_response)
+    if action == "directives" and method == "POST":
+        directive = service.record_directive(
+            workspace_id=context.workspace_id,
+            run_id=run.run_id,
+            text=_text(body.get("text")) or _text(body.get("message")),
+            source_kind="user",
+            idempotency_key=_text(body.get("idempotency_key")) or None,
+        )
+        return json_response(start_response, {"directive": inter_agent_payload(directive)}, status="201 Created")
     if action == "execute" and method == "POST":
-        return _execute_run(state, context, service, run, body, start_response, start_path=start_path)
+        return _execute_run(state, context, service, run, body, start_response)
     if action == "wait" and method in {"GET", "POST"}:
         timeout = float(body.get("timeout_seconds") or _query_text(parse_qs(query_string), "timeout_seconds") or 0)
         waited = service.wait_for_run(workspace_id=context.workspace_id, run_id=run.run_id, timeout_seconds=timeout)
@@ -330,6 +335,137 @@ def _handle_inter_agent_route(
         )
         return json_response(start_response, inter_agent_payload(result))
     return json_response(start_response, {"error": "inter_agent_route_not_found"}, status="404 Not Found")
+
+
+def _create_orchestration(
+    state: PlatformState,
+    context: RequestSession,
+    service: InterAgentService,
+    body: dict,
+    start_response: StartResponse,
+) -> list[bytes]:
+    """Create the orchestrator-only board linked to an accepted generalist turn."""
+    forbidden_fields = {"participants", "edges", "participant_inputs", "controlled_participants"} & set(body)
+    if forbidden_fields:
+        raise InterAgentValidationError("Chat orchestration intent cannot declare participants, edges, or executor inputs.")
+    root_session_id = _text(body.get("root_runtime_session_id"))
+    source_turn_id = _text(body.get("source_runtime_turn_id"))
+    try:
+        root_session = state.runtime_store.get_session(root_session_id)
+        source_turn = state.runtime_store.get_turn(source_turn_id)
+    except (RuntimeSessionNotFoundError, RuntimeTurnNotFoundError, ValueError):
+        return json_response(start_response, {"error": "orchestration_source_not_found"}, status="404 Not Found")
+    if (
+        root_session.workspace_id != context.workspace_id
+        or source_turn.workspace_id != context.workspace_id
+        or source_turn.session_id != root_session.session_id
+    ):
+        return json_response(start_response, {"error": "orchestration_source_not_found"}, status="404 Not Found")
+    if not runtime_session_allows_user_thread(root_session):
+        return json_response(start_response, {"error": "root_runtime_session_hidden"}, status="409 Conflict")
+    authorize_inter_agent_root_session_use(
+        workspace_store=state.workspace_store,
+        user=context.user,
+        context_workspace_id=context.workspace_id,
+        caller_kind="http",
+        root_session=root_session,
+        user_id=context.user.user_id,
+        platform_role=context.user.platform_role,
+    )
+    policy = _text(body.get("policy")) or "auto"
+    if policy not in {"auto", "multi", "group_chat"}:
+        raise InterAgentValidationError("Orchestration policy must be auto, multi, or group_chat.")
+    snapshot = _orchestrator_snapshot_from_root(root_session)
+    run = service.create_run(
+        InterAgentRunSpec(
+            workspace_id=context.workspace_id,
+            thread_id=root_session.session_id,
+            root_runtime_session_id=root_session.session_id,
+            source_app_id=root_session.source_app_id or CHAT_APP_ID,
+            mode="orchestrated",
+            created_by_user_id=context.user.user_id,
+            participants=[
+                ParticipantSpec(
+                    participant_id="orchestrator",
+                    kind="orchestrator",
+                    execution_mode="child_runtime_session",
+                    label="Orchestrator",
+                    agent_type_id=snapshot.agent_type_id,
+                    agent_snapshot=snapshot,
+                )
+            ],
+            budget=_orchestration_budget(policy),
+            visibility_level="detail",
+            idempotency_key=_text(body.get("idempotency_key")) or f"chat-orchestration:{source_turn.turn_id}:{policy}",
+            source_runtime_turn_id=source_turn.turn_id,
+            orchestration_policy=policy,
+        )
+    )
+    _start_orchestrated_execution_worker(
+        state,
+        service,
+        workspace_id=context.workspace_id,
+        run_id=run.run_id,
+        input_text=source_turn.input_text,
+    )
+    return json_response(start_response, run_detail_payload(state.inter_agent_store, run), status="202 Accepted")
+
+
+def _orchestrator_snapshot_from_root(root_session) -> AgentParticipantSnapshot:
+    """Copy only server-persisted agent material into the hidden orchestrator."""
+    agent_type_id = _text(root_session.agent_type_id) or _text(root_session.agent_id) or "chat"
+    return AgentParticipantSnapshot(
+        agent_type_id=agent_type_id,
+        label=_text(root_session.agent_label) or "Orchestrator",
+        system_prompt=_text(root_session.system_prompt),
+        skill_ids=[str(item).strip() for item in root_session.skill_ids if str(item).strip()],
+        skill_catalog_app_id=_text(root_session.skill_catalog_app_id) or "skills",
+        provider_id=_text(root_session.source_app_id) or CHAT_APP_ID,
+        metadata={"source": "root_runtime_session", "root_runtime_session_id": root_session.session_id},
+    )
+
+
+def _orchestration_budget(policy: str) -> BudgetPolicySpec:
+    if policy == "group_chat":
+        return BudgetPolicySpec(
+            max_participants=9,
+            max_concurrent_participants=3,
+            max_rounds=3,
+            max_total_turns=14,
+            max_turns_per_participant=4,
+            max_tool_calls=24,
+        )
+    return BudgetPolicySpec(
+        max_participants=7,
+        max_concurrent_participants=2,
+        max_rounds=3,
+        max_total_turns=12,
+        max_turns_per_participant=4,
+        max_tool_calls=20,
+    )
+
+
+def _start_orchestrated_execution_worker(
+    state: PlatformState,
+    service: InterAgentService,
+    *,
+    workspace_id: str,
+    run_id: str,
+    input_text: str,
+) -> None:
+    def worker() -> None:
+        try:
+            execute_orchestrated_run(
+                service,
+                state,
+                workspace_id=workspace_id,
+                run_id=run_id,
+                input_text=input_text,
+            )
+        except Exception:
+            return
+
+    Thread(target=worker, name=f"maverick-orchestration-{run_id}", daemon=True).start()
 
 
 def _create_run(
@@ -532,6 +668,7 @@ def _runtime_participant_transcript_items(state: PlatformState, participant, *, 
                     source=f"runtime-turn-input:{turn.turn_id}",
                 )
             )
+        items.extend(_runtime_tool_transcript_items(events_by_turn.get(turn.turn_id, [])))
         output_text = _runtime_turn_output_text(events_by_turn.get(turn.turn_id, []))
         if output_text:
             turn_ids_with_output.add(turn.turn_id)
@@ -557,6 +694,75 @@ def _runtime_participant_transcript_items(state: PlatformState, participant, *, 
                 )
             )
     return items, turn_ids_with_output
+
+
+_TRANSCRIPT_TOOL_DETAIL_FIELDS = {
+    "changes",
+    "cmd",
+    "command",
+    "error",
+    "exit_code",
+    "label",
+    "message",
+    "name",
+    "output",
+    "patch",
+    "provider_event_type",
+    "query",
+    "results",
+    "status",
+    "stderr",
+    "stdout",
+    "summary",
+    "tool_call_id",
+    "tool_kind",
+}
+
+
+def _runtime_tool_transcript_items(events: list) -> list[dict]:
+    tools_by_key: dict[str, dict] = {}
+    tool_order: list[str] = []
+    for event in events:
+        if not event.event_type.startswith("runtime.tool_call."):
+            continue
+        status = event.event_type.rsplit(".", 1)[-1]
+        if status not in {"started", "updated", "completed", "failed"}:
+            continue
+        payload = event.payload if isinstance(event.payload, dict) else {}
+        key = _text(payload.get("tool_call_id")) or event.event_id
+        if key not in tools_by_key:
+            tool_order.append(key)
+            tools_by_key[key] = {
+                "created_at": event.created_at,
+                "detail": {},
+                "name": _text(payload.get("name")) or _text(payload.get("tool_name")) or "tool",
+                "status": status,
+            }
+        tool = tools_by_key[key]
+        tool["status"] = status
+        tool["name"] = _text(payload.get("name")) or _text(payload.get("tool_name")) or tool["name"]
+        tool["detail"].update(
+            {field: payload[field] for field in _TRANSCRIPT_TOOL_DETAIL_FIELDS if field in payload}
+        )
+    items: list[dict] = []
+    for index, key in enumerate(tool_order, start=1):
+        tool = tools_by_key[key]
+        item = _safe_transcript_item(
+            kind="tool",
+            role="tool",
+            text="Tool Used",
+            created_at=tool["created_at"],
+            status=tool["status"],
+            source=f"runtime-tool:{index}",
+        )
+        item["tool_call"] = {
+            "id": f"tool-{index}",
+            "name": tool["name"],
+            "status": tool["status"],
+            "detail": tool["detail"],
+        }
+        items.append(item)
+    return items
 
 
 def _inter_agent_participant_transcript_items(
@@ -771,8 +977,6 @@ def _execute_run(
     run,
     body: dict,
     start_response: StartResponse,
-    *,
-    start_path,
 ) -> list[bytes]:
     _authorize_public_run_mode(run.mode)
     try:
@@ -802,28 +1006,16 @@ def _execute_run(
         )
     if isinstance(body.get("controlled_participants"), dict):
         raise AuthorizationError("inter_agent_controlled_participants_forbidden")
-    input_text = _text(body.get("input_text")) or _text(body.get("message"))
-    client_message_id = _text(body.get("client_message_id")) or None
-    participant_inputs = body.get("participant_inputs") if isinstance(body.get("participant_inputs"), dict) else None
-    project_summaries = _bool(body.get("project_summaries"), default=True)
-    async_requested = _bool(body.get("async"), default=False)
-    root_projection = None
-    if client_message_id:
-        root_projection = _record_root_inter_agent_turn_queued(
-            state,
-            context,
-            run,
-            body,
-            input_text=input_text,
-            client_message_id=client_message_id,
-            start_path=start_path,
+    if _text(body.get("client_message_id")) or body.get("attachments") or body.get("app_references"):
+        raise InterAgentValidationError(
+            "Low-level inter-agent execution cannot write to the root Chat transcript; submit the generalist turn separately."
         )
+    input_text = _text(body.get("input_text")) or _text(body.get("message"))
+    participant_inputs = body.get("participant_inputs") if isinstance(body.get("participant_inputs"), dict) else None
+    async_requested = _bool(body.get("async"), default=False)
     if async_requested:
         run = service.mark_run_planning(workspace_id=context.workspace_id, run_id=run.run_id)
         payload = run_detail_payload(state.inter_agent_store, run)
-        if root_projection is not None:
-            payload["root_runtime_turn"] = inter_agent_payload(root_projection["turn"])
-            payload["root_runtime_events"] = inter_agent_payload(root_projection["events"])
         _start_inter_agent_execution_worker(
             state,
             service,
@@ -831,26 +1023,20 @@ def _execute_run(
             run_id=run.run_id,
             input_text=input_text,
             participant_inputs=participant_inputs,
-            project_summaries=project_summaries,
-            root_projection=root_projection,
         )
         return json_response(start_response, payload, status="202 Accepted")
-    result, root_projection = _execute_inter_agent_run_with_root_projection(
-        state,
+    result = execute_inter_agent_run(
         service,
+        state,
         workspace_id=context.workspace_id,
         run_id=run.run_id,
         input_text=input_text,
         participant_inputs=participant_inputs,
-        project_summaries=project_summaries,
-        root_projection=root_projection,
+        controlled_participants=None,
+        allow_synthetic_participants=False,
         async_runtime_turns=False,
     )
-    payload = execution_result_payload(state.inter_agent_store, result)
-    if root_projection is not None:
-        payload["root_runtime_turn"] = inter_agent_payload(root_projection["turn"])
-        payload["root_runtime_events"] = inter_agent_payload(root_projection["events"] + result.root_runtime_events)
-    return json_response(start_response, payload)
+    return json_response(start_response, execution_result_payload(state.inter_agent_store, result))
 
 
 def _materialize_agent_snapshots_for_payload(
@@ -1302,260 +1488,24 @@ def _start_inter_agent_execution_worker(
     run_id: str,
     input_text: str,
     participant_inputs: dict[str, object] | None,
-    project_summaries: bool,
-    root_projection: dict[str, object] | None,
 ) -> None:
     def worker() -> None:
         try:
-            _execute_inter_agent_run_with_root_projection(
-                state,
+            execute_inter_agent_run(
                 service,
+                state,
                 workspace_id=workspace_id,
                 run_id=run_id,
                 input_text=input_text,
                 participant_inputs=participant_inputs,
-                project_summaries=project_summaries,
-                root_projection=root_projection,
+                controlled_participants=None,
+                allow_synthetic_participants=False,
                 async_runtime_turns=True,
             )
         except Exception:
             return
 
     Thread(target=worker, name=f"maverick-inter-agent-run-{run_id}", daemon=True).start()
-
-
-def _execute_inter_agent_run_with_root_projection(
-    state: PlatformState,
-    service: InterAgentService,
-    *,
-    workspace_id: str,
-    run_id: str,
-    input_text: str,
-    participant_inputs: dict[str, object] | None,
-    project_summaries: bool,
-    root_projection: dict[str, object] | None,
-    async_runtime_turns: bool,
-):
-    try:
-        if root_projection is not None:
-            _mark_root_inter_agent_turn_active(state, workspace_id=workspace_id, root_projection=root_projection)
-        result = execute_inter_agent_run(
-            service,
-            state,
-            workspace_id=workspace_id,
-            run_id=run_id,
-            input_text=input_text,
-            participant_inputs=participant_inputs,
-            controlled_participants=None,
-            allow_synthetic_participants=False,
-            project_summaries=project_summaries,
-            async_runtime_turns=async_runtime_turns,
-            root_runtime_turn_id=(
-                root_projection["turn"].turn_id
-                if root_projection is not None and hasattr(root_projection.get("turn"), "turn_id")
-                else None
-            ),
-        )
-        if root_projection is not None:
-            _mark_root_inter_agent_turn_completed(
-                state,
-                workspace_id=workspace_id,
-                root_projection=root_projection,
-                status=result.run.status,
-                final_answer=result.final_answer,
-            )
-    except Exception as error:
-        if root_projection is not None:
-            _mark_root_inter_agent_turn_failed(state, workspace_id=workspace_id, root_projection=root_projection, error=error)
-        raise
-    return result, root_projection
-
-
-def _mark_root_inter_agent_turn_active(
-    state: PlatformState,
-    *,
-    workspace_id: str,
-    root_projection: dict[str, object],
-) -> None:
-    turn = root_projection["turn"]
-    turn_id = turn.turn_id
-    current = state.runtime_store.get_turn(turn_id)
-    if current.status == "queued":
-        current = transition_runtime_turn(
-            state.runtime_store,
-            turn_id=turn_id,
-            target_status="active",
-        )
-    if current.status != "active":
-        raise InterAgentOperationError("Inter-agent root turn is not runnable.")
-    root_projection["turn"] = current
-    events = root_projection["events"]
-    events.append(
-        record_runtime_event(
-            state.runtime_store,
-            event_id=str(uuid4()),
-            session_id=current.session_id,
-            turn_id=current.turn_id,
-            plane="turn",
-            event_type="runtime.turn.started",
-            payload={"inter_agent_run_id": _root_projection_run_id(root_projection)},
-            event_bus=state.runtime_event_bus,
-        )
-    )
-    set_thread_availability(
-        state,
-        workspace_id=workspace_id,
-        runtime_session_id=current.session_id,
-        availability="active",
-    )
-
-
-def _mark_root_inter_agent_turn_completed(
-    state: PlatformState,
-    *,
-    workspace_id: str,
-    root_projection: dict[str, object],
-    status: str,
-    final_answer: str,
-) -> None:
-    turn = root_projection["turn"]
-    current = state.runtime_store.get_turn(turn.turn_id)
-    if current.status in {"completed", "failed", "cancelled", "timed-out"}:
-        root_projection["turn"] = current
-        set_thread_availability(
-            state,
-            workspace_id=workspace_id,
-            runtime_session_id=current.session_id,
-            availability="free",
-        )
-        return
-    if status == "cancelled":
-        cancelled_turn = transition_runtime_turn(
-            state.runtime_store,
-            turn_id=current.turn_id,
-            target_status="cancelled",
-            failure_reason="Inter-agent run cancelled.",
-        )
-        root_projection["turn"] = cancelled_turn
-        cancelled_event = record_runtime_event(
-            state.runtime_store,
-            event_id=str(uuid4()),
-            session_id=cancelled_turn.session_id,
-            turn_id=cancelled_turn.turn_id,
-            plane="turn",
-            event_type="runtime.turn.cancelled",
-            payload={
-                "inter_agent_run_id": _root_projection_run_id(root_projection),
-                "reason": "inter_agent_run_cancelled",
-            },
-            event_bus=state.runtime_event_bus,
-        )
-        root_projection["events"].append(cancelled_event)
-        set_thread_availability(
-            state,
-            workspace_id=workspace_id,
-            runtime_session_id=cancelled_turn.session_id,
-            availability="free",
-            now=cancelled_event.created_at,
-        )
-        return
-    answer = _text(final_answer)
-    if answer:
-        output_event = record_runtime_event(
-            state.runtime_store,
-            event_id=str(uuid4()),
-            session_id=current.session_id,
-            turn_id=current.turn_id,
-            plane="turn",
-            event_type="runtime.output.final",
-            payload={
-                "inter_agent_run_id": _root_projection_run_id(root_projection),
-                "text": answer,
-                "complete_text": answer,
-            },
-            event_bus=state.runtime_event_bus,
-        )
-        root_projection["events"].append(output_event)
-    completed_turn = transition_runtime_turn(
-        state.runtime_store,
-        turn_id=current.turn_id,
-        target_status="completed",
-    )
-    root_projection["turn"] = completed_turn
-    completed_event = record_runtime_event(
-        state.runtime_store,
-        event_id=str(uuid4()),
-        session_id=completed_turn.session_id,
-        turn_id=completed_turn.turn_id,
-        plane="turn",
-        event_type="runtime.turn.completed",
-        payload={"inter_agent_run_id": _root_projection_run_id(root_projection), "status": status},
-        event_bus=state.runtime_event_bus,
-    )
-    root_projection["events"].append(completed_event)
-    mark_thread_response_completed(
-        state,
-        workspace_id=workspace_id,
-        runtime_session_id=completed_turn.session_id,
-        turn_id=completed_turn.turn_id,
-        now=completed_event.created_at,
-    )
-
-
-def _mark_root_inter_agent_turn_failed(
-    state: PlatformState,
-    *,
-    workspace_id: str,
-    root_projection: dict[str, object],
-    error: Exception,
-) -> None:
-    turn = root_projection["turn"]
-    current = state.runtime_store.get_turn(turn.turn_id)
-    if current.status in {"completed", "failed", "cancelled", "timed-out"}:
-        root_projection["turn"] = current
-        set_thread_availability(
-            state,
-            workspace_id=workspace_id,
-            runtime_session_id=current.session_id,
-            availability="free",
-        )
-        return
-    failed_turn = transition_runtime_turn(
-        state.runtime_store,
-        turn_id=current.turn_id,
-        target_status="failed",
-        failure_reason=str(error),
-    )
-    root_projection["turn"] = failed_turn
-    failed_event = record_runtime_event(
-        state.runtime_store,
-        event_id=str(uuid4()),
-        session_id=failed_turn.session_id,
-        turn_id=failed_turn.turn_id,
-        plane="turn",
-        event_type="runtime.turn.failed",
-        payload={"inter_agent_run_id": _root_projection_run_id(root_projection), "error": str(error)},
-        event_bus=state.runtime_event_bus,
-    )
-    root_projection["events"].append(failed_event)
-    set_thread_availability(
-        state,
-        workspace_id=workspace_id,
-        runtime_session_id=failed_turn.session_id,
-        availability="free",
-        now=failed_event.created_at,
-    )
-
-
-def _root_projection_run_id(root_projection: dict[str, object]) -> str:
-    events = root_projection.get("events") if isinstance(root_projection.get("events"), list) else []
-    for event in events:
-        payload = getattr(event, "payload", None)
-        if isinstance(payload, dict):
-            run_id = _text(payload.get("inter_agent_run_id"))
-            if run_id:
-                return run_id
-    return ""
 
 
 def _approval_resolver_role_ids(state: PlatformState, context: RequestSession, run) -> list[str]:
@@ -1572,80 +1522,6 @@ def _approval_resolver_role_ids(state: PlatformState, context: RequestSession, r
         if role:
             roles.extend([role, f"workspace:{role}"])
     return roles
-
-
-def _record_root_inter_agent_turn_queued(
-    state: PlatformState,
-    context: RequestSession,
-    run,
-    body: dict,
-    *,
-    input_text: str,
-    client_message_id: str,
-    start_path,
-) -> dict[str, object]:
-    attachments = body.get("attachments") if isinstance(body.get("attachments"), list) else []
-    attachment_items = [_serializable_attachment_item(item) for item in attachments if isinstance(item, dict)]
-    app_references = body.get("app_references") if isinstance(body.get("app_references"), list) else []
-    app_reference_items = materialize_runtime_app_references(
-        state,
-        context=context,
-        references=[item for item in app_references if isinstance(item, dict)],
-        start_path=start_path,
-    )
-    turn = queue_runtime_turn(
-        state.runtime_store,
-        turn_id=str(uuid4()),
-        session_id=run.root_runtime_session_id,
-        input_text=input_text,
-    )
-    payload: dict[str, object] = {
-        "input_text": input_text,
-        "client_message_id": client_message_id,
-        "inter_agent_run_id": run.run_id,
-    }
-    if attachment_items:
-        payload["attachments"] = attachment_items
-    if app_reference_items:
-        payload["app_references"] = app_reference_items
-    event = record_runtime_event(
-        state.runtime_store,
-        event_id=str(uuid4()),
-        session_id=run.root_runtime_session_id,
-        turn_id=turn.turn_id,
-        plane="turn",
-        event_type="runtime.turn.queued",
-        payload=payload,
-        event_bus=state.runtime_event_bus,
-    )
-    title_hash = thread_title_input_hash(
-        input_text,
-        attachments=attachment_items,
-        app_references=app_reference_items,
-    )
-    thread = mark_thread_user_message_queued(
-        state,
-        workspace_id=context.workspace_id,
-        runtime_session_id=run.root_runtime_session_id,
-        input_text=input_text,
-        attachments=attachment_items,
-        app_references=app_reference_items,
-        title_generation_input_hash=title_hash,
-        now=event.created_at,
-    )
-    if thread is not None:
-        schedule_runtime_thread_title_generation(
-            state,
-            thread=thread,
-            input_text=input_text,
-            attachments=attachment_items,
-            app_references=app_reference_items,
-        )
-    return {"turn": turn, "events": [event]}
-
-
-def _serializable_attachment_item(item: dict) -> dict[str, object]:
-    return {str(key): value for key, value in item.items() if key != "objectUrl"}
 
 
 def _resolve_approval(

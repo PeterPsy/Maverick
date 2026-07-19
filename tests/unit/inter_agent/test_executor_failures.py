@@ -53,7 +53,6 @@ class InterAgentExecutorFailureTest(unittest.TestCase):
                     "reviewer": {"output_text": "second"},
                 },
                 allow_synthetic_participants=True,
-                project_summaries=False,
                 now=NOW,
             )
         ledger = store.get_budget_ledger(run.budget_ledger_id, workspace_id="default")

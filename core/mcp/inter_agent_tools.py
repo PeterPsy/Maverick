@@ -213,7 +213,6 @@ def inter_agent_tool_specs(
             participant_inputs=arguments.get("participant_inputs") if isinstance(arguments.get("participant_inputs"), dict) else None,
             controlled_participants=controlled_participants,
             allow_synthetic_participants=allow_synthetic,
-            project_summaries=_bool(arguments.get("project_summaries"), default=True),
         )
         return execution_result_payload(inter_agent_store, result)  # type: ignore[arg-type]
 

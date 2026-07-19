@@ -24,9 +24,6 @@ from core.apps.errors import AppHostingError
 from core.apps.runtime_event_hooks import dispatch_source_app_runtime_event, dispatch_source_app_runtime_event_async
 from core.authorization.errors import AuthorizationError
 from core.authorization.service import authorize_runtime_session_create, require_runtime_session_operation
-from core.inter_agent.errors import InterAgentRunNotFoundError
-from core.inter_agent.service import InterAgentService, TERMINAL_RUN_STATUSES
-from core.inter_agent.surfaces import inter_agent_payload
 from core.observability.service import append_platform_log
 from core.observability.startup_performance import startup_timer
 from core.providers.errors import ProviderError
@@ -1969,69 +1966,13 @@ def _handle_turn_interrupt(
         event_type="runtime.turn.failed",
         failure_reason="Interrupted by user.",
     )
-    inter_agent_cleanup = _cancel_inter_agent_runs_for_root_turn(
-        state,
-        workspace_id=context.workspace_id,
-        turn=updated,
-        reason="root_runtime_turn_interrupted",
-        start_path=start_path,
-    )
     payload = {
         "turn": _turn_payload(updated),
         "event": _event_payload(event),
         "interrupted": True,
         "provider_interrupted": provider_interrupted,
     }
-    if inter_agent_cleanup:
-        payload["inter_agent_cleanup"] = inter_agent_cleanup
     return json_response(start_response, payload)
-
-
-def _cancel_inter_agent_runs_for_root_turn(
-    state: PlatformState,
-    *,
-    workspace_id: str,
-    turn: RuntimeTurnRecord,
-    reason: str,
-    start_path,
-) -> list[dict[str, object]]:
-    run_id = _inter_agent_run_id_for_root_turn(state, turn)
-    if not run_id:
-        return []
-    try:
-        run = state.inter_agent_store.get_run(run_id, workspace_id=workspace_id)
-    except InterAgentRunNotFoundError:
-        return []
-    if run.root_runtime_session_id != turn.session_id or run.status in TERMINAL_RUN_STATUSES:
-        return []
-    service = InterAgentService(state.inter_agent_store)
-    result = service.close_run(
-        workspace_id=workspace_id,
-        run_id=run.run_id,
-        cleanup_runtime_session=lambda session_id, cleanup_reason: cleanup_runtime_session(
-            state,
-            session_id=session_id,
-            reason=cleanup_reason,
-            start_path=start_path,
-            publish_thread_events=False,
-            allow_hidden_inter_agent_cleanup=True,
-        ),
-        reason=reason,
-        terminal_status="cancelled",
-        delete_records=False,
-    )
-    return [inter_agent_payload({"run_id": run.run_id, **result})]
-
-
-def _inter_agent_run_id_for_root_turn(state: PlatformState, turn: RuntimeTurnRecord) -> str:
-    for event in state.runtime_store.list_events(turn.session_id):
-        if event.turn_id != turn.turn_id:
-            continue
-        payload = event.payload if isinstance(event.payload, dict) else {}
-        run_id = str(payload.get("inter_agent_run_id") or "").strip()
-        if run_id:
-            return run_id
-    return ""
 
 
 def handle_runtime_api(state: PlatformState, environ: dict, start_response: StartResponse, *, start_path) -> list[bytes] | None:

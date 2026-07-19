@@ -1,16 +1,11 @@
 from __future__ import annotations
 
-from datetime import UTC, datetime
 import tempfile
 import unittest
 from unittest.mock import patch
 
-from core.api.inter_agent_api import _mark_root_inter_agent_turn_completed
 from core.api.platform_host import PlatformHost
 from core.apps.dependencies import save_app_dependency_selection
-from core.runtime.runtime_events import RuntimeEventRecord
-from core.runtime.runtime_turns import RuntimeTurnRecord
-from core.runtime.service import queue_runtime_turn, record_runtime_event, transition_runtime_turn
 from tests.unit.api.inter_agent_api_f4_support import InterAgentApiF4Fixture, run_payload_without_snapshot
 from tests.unit.api.test_inter_agent_api import _run_payload
 
@@ -21,40 +16,13 @@ def _run_payload_without_snapshot(*, run_id: str) -> dict:
 
 class InterAgentApiF4TestCase(InterAgentApiF4Fixture, unittest.TestCase):
 
-    def test_execute_with_client_message_projects_root_turn(self) -> None:
+    def test_low_level_execute_rejects_root_transcript_projection_fields(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             repo_root = self._repo_root(temp_dir)
             state = self._bootstrap_state(repo_root)
             self._create_root_session(state, repo_root)
             app = PlatformHost(state, start_path=repo_root)
             cookie = self._login(app)
-            now = datetime(2026, 6, 16, 12, 0, tzinfo=UTC)
-
-            def fake_submit(_state, *, session, input_text, client_message_id=None, async_requested=False):
-                turn = RuntimeTurnRecord(
-                    turn_id="turn-root-projection-child",
-                    session_id=session.session_id,
-                    workspace_id="default",
-                    status="completed",
-                    input_text=input_text,
-                    created_at=now,
-                    updated_at=now,
-                    started_at=now,
-                    completed_at=now,
-                    failure_reason=None,
-                )
-                event = RuntimeEventRecord(
-                    event_id="event-root-projection-final",
-                    workspace_id="default",
-                    session_id=session.session_id,
-                    plane="turn",
-                    event_type="runtime.output.final",
-                    turn_id=turn.turn_id,
-                    process_id=None,
-                    payload={"text": "Projected result."},
-                    created_at=now,
-                )
-                return turn, [event]
 
             create_status, _create_payload, _headers = self._invoke(
                 app,
@@ -63,92 +31,23 @@ class InterAgentApiF4TestCase(InterAgentApiF4Fixture, unittest.TestCase):
                 body=_run_payload_without_snapshot(run_id="run-root-projection"),
                 cookie=cookie,
             )
-            with (
-                patch("core.inter_agent.service.submit_runtime_turn", side_effect=fake_submit),
-                patch("core.api.inter_agent_api.schedule_runtime_thread_title_generation"),
-            ):
-                execute_status, execute_payload, _headers = self._invoke(
-                    app,
-                    path="/api/inter-agent/runs/run-root-projection/execute",
-                    method="POST",
-                    body={
-                        "input_text": "Research the projection.",
-                        "client_message_id": "client-root-projection",
-                        "attachments": [{"id": "att-1", "name": "brief.md", "objectUrl": "blob:http://local/att-1"}],
-                    },
-                    cookie=cookie,
-                )
+            execute_status, execute_payload, _headers = self._invoke(
+                app,
+                path="/api/inter-agent/runs/run-root-projection/execute",
+                method="POST",
+                body={
+                    "input_text": "Research the projection.",
+                    "client_message_id": "client-root-projection",
+                    "attachments": [{"id": "att-1", "name": "brief.md"}],
+                },
+                cookie=cookie,
+            )
             root_events = state.runtime_store.list_events("root-session")
-            root_turn = state.runtime_store.get_turn(execute_payload["root_runtime_turn"]["turn_id"])
-            root_thread = state.runtime_store.get_thread("root-session")
 
         self.assertEqual(create_status, 201)
-        self.assertEqual(execute_status, 200)
-        self.assertEqual(execute_payload["final_answer"], "Projected result.")
-        self.assertEqual(root_turn.status, "completed")
-        self.assertEqual(root_turn.input_text, "Research the projection.")
-        self.assertEqual(
-            [event.event_type for event in root_events],
-            [
-                "runtime.turn.queued",
-                "runtime.turn.started",
-                "runtime.step.updated",
-                "runtime.step.updated",
-                "runtime.output.final",
-                "runtime.turn.completed",
-            ],
-        )
-        self.assertEqual(root_events[-2].payload["text"], "Projected result.")
-        self.assertEqual(root_events[-2].payload["complete_text"], "Projected result.")
-        self.assertEqual(root_events[0].payload["client_message_id"], "client-root-projection")
-        self.assertEqual(root_events[0].payload["attachments"][0]["name"], "brief.md")
-        self.assertNotIn("objectUrl", root_events[0].payload["attachments"][0])
-        self.assertEqual(execute_payload["root_runtime_events"][0]["event_type"], "runtime.turn.queued")
-        self.assertEqual(root_thread.availability, "free")
-        self.assertEqual(root_thread.last_completed_turn_id, root_turn.turn_id)
-
-    def test_root_projection_completion_ignores_already_cancelled_turn(self) -> None:
-        with tempfile.TemporaryDirectory() as temp_dir:
-            repo_root = self._repo_root(temp_dir)
-            state = self._bootstrap_state(repo_root)
-            self._create_root_session(state, repo_root)
-            turn = queue_runtime_turn(
-                state.runtime_store,
-                turn_id="turn-cancelled-projection",
-                session_id="root-session",
-                input_text="Cancel before completion.",
-            )
-            queued_event = record_runtime_event(
-                state.runtime_store,
-                event_id="event-cancelled-projection-queued",
-                session_id="root-session",
-                turn_id=turn.turn_id,
-                plane="turn",
-                event_type="runtime.turn.queued",
-                payload={"input_text": turn.input_text, "inter_agent_run_id": "run-cancelled-projection"},
-                event_bus=state.runtime_event_bus,
-            )
-            active = transition_runtime_turn(state.runtime_store, turn_id=turn.turn_id, target_status="active")
-            cancelled = transition_runtime_turn(
-                state.runtime_store,
-                turn_id=active.turn_id,
-                target_status="cancelled",
-                failure_reason="Interrupted by user.",
-            )
-            root_projection = {"turn": active, "events": [queued_event]}
-
-            _mark_root_inter_agent_turn_completed(
-                state,
-                workspace_id="default",
-                root_projection=root_projection,
-                status="completed",
-                final_answer="This must not be projected.",
-            )
-            root_events = state.runtime_store.list_events("root-session")
-
-        self.assertEqual(root_projection["turn"], cancelled)
-        self.assertNotIn("runtime.output.final", [event.event_type for event in root_events])
-        self.assertNotIn("runtime.turn.completed", [event.event_type for event in root_events])
+        self.assertEqual(execute_status, 400)
+        self.assertEqual(execute_payload["error"], "inter_agent_validation_failed")
+        self.assertEqual(root_events, [])
 
     def test_create_chat_root_rejects_untrusted_agent_snapshot(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -408,7 +307,7 @@ class InterAgentApiF4TestCase(InterAgentApiF4Fixture, unittest.TestCase):
         self.assertEqual(create_payload["error"], "inter_agent_validation_failed")
         self.assertIn("skill.catalog", create_payload["detail"])
 
-    def test_execute_async_returns_queued_root_turn_without_inline_worker(self) -> None:
+    def test_execute_async_schedules_board_without_root_turn(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             repo_root = self._repo_root(temp_dir)
             state = self._bootstrap_state(repo_root)
@@ -423,32 +322,26 @@ class InterAgentApiF4TestCase(InterAgentApiF4Fixture, unittest.TestCase):
                 body=_run_payload_without_snapshot(run_id="run-async-execute"),
                 cookie=cookie,
             )
-            with (
-                patch("core.api.inter_agent_api._start_inter_agent_execution_worker") as start_worker,
-                patch("core.api.inter_agent_api.schedule_runtime_thread_title_generation"),
-            ):
+            with patch("core.api.inter_agent_api._start_inter_agent_execution_worker") as start_worker:
                 execute_status, execute_payload, _headers = self._invoke(
                     app,
                     path="/api/inter-agent/runs/run-async-execute/execute",
                     method="POST",
                     body={
                         "input_text": "Research without blocking.",
-                        "client_message_id": "client-async-execute",
                         "async": True,
                     },
                     cookie=cookie,
                 )
-            root_turn = state.runtime_store.get_turn(execute_payload["root_runtime_turn"]["turn_id"])
-            root_thread = state.runtime_store.get_thread("root-session")
+            root_events = state.runtime_store.list_events("root-session")
             run_status = state.inter_agent_store.get_run("run-async-execute", workspace_id="default").status
 
         self.assertEqual(create_status, 201)
         self.assertEqual(execute_status, 202)
         self.assertEqual(execute_payload["run"]["status"], "planning")
         self.assertEqual(run_status, "planning")
-        self.assertEqual(execute_payload["root_runtime_turn"]["status"], "queued")
-        self.assertEqual(root_turn.status, "queued")
-        self.assertEqual(root_thread.availability, "queued")
+        self.assertNotIn("root_runtime_turn", execute_payload)
+        self.assertEqual(root_events, [])
         start_worker.assert_called_once()
 
 if __name__ == "__main__":

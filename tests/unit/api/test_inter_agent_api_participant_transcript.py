@@ -84,6 +84,24 @@ class InterAgentParticipantTranscriptApiTestCase(AppReferenceApiTestSupport, uni
             transition_runtime_turn(state.runtime_store, turn_id=turn.turn_id, target_status="completed", now=now)
             record_runtime_event(
                 state.runtime_store,
+                event_id="runtime-tool-transcript-1",
+                session_id="transcript-child",
+                turn_id=turn.turn_id,
+                plane="turn",
+                event_type="runtime.tool_call.completed",
+                payload={
+                    "name": "web_search",
+                    "tool_kind": "web_search",
+                    "tool_call_id": "call-safe-1",
+                    "query": "Maverick launch",
+                    "summary": "Web search completed",
+                    "raw_debug_payload": "must not leak",
+                    "runtime_session_id": "must-not-leak",
+                },
+                now=now,
+            )
+            record_runtime_event(
+                state.runtime_store,
                 event_id="runtime-final-transcript-1",
                 session_id="transcript-child",
                 turn_id=turn.turn_id,
@@ -151,6 +169,11 @@ class InterAgentParticipantTranscriptApiTestCase(AppReferenceApiTestSupport, uni
         self.assertIn("Find launch facts.", item_texts)
         self.assertIn("Research complete.", item_texts)
         self.assertTrue(any("Research notes" in text and "Draft note summary." in text for text in item_texts))
+        tool_items = [item for item in transcript_payload["items"] if item["kind"] == "tool"]
+        self.assertEqual(len(tool_items), 1)
+        self.assertEqual(tool_items[0]["role"], "tool")
+        self.assertEqual(tool_items[0]["tool_call"]["name"], "web_search")
+        self.assertEqual(tool_items[0]["tool_call"]["detail"]["query"], "Maverick launch")
         self.assertNotIn("transcript-child", serialized)
         self.assertNotIn("turn-transcript-1", serialized)
         self.assertNotIn("runtime_session_id", serialized)

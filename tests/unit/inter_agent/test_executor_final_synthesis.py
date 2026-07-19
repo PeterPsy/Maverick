@@ -59,7 +59,6 @@ class InterAgentExecutorFinalSynthesisTest(unittest.TestCase):
                 },
             },
             allow_synthetic_participants=True,
-            project_summaries=False,
             now=NOW,
         )
         events = store.list_event_page(run.run_id, workspace_id="default", visibility_plane="debug", limit=100).events
@@ -117,7 +116,6 @@ class InterAgentExecutorFinalSynthesisTest(unittest.TestCase):
                 "reviewer": {"output_text": "Final.", "summary": "Final done."},
             },
             allow_synthetic_participants=True,
-            project_summaries=False,
             now=NOW,
         )
         message_events = [
@@ -171,7 +169,6 @@ class InterAgentExecutorFinalSynthesisTest(unittest.TestCase):
                 "reviewer": {"output_text": "Finale.", "summary": "Finale pronta."},
             },
             allow_synthetic_participants=True,
-            project_summaries=False,
             now=NOW,
         )
         message_events = [
@@ -227,7 +224,6 @@ class InterAgentExecutorFinalSynthesisTest(unittest.TestCase):
                     participant_inputs={"implementer": "Prepara il documento richiesto."},
                     controlled_participants={"implementer": {"output_text": "Documento pronto.", "summary": "Documento pronto."}},
                     allow_synthetic_participants=True,
-                    project_summaries=False,
                     now=NOW,
                 )
                 message_event = next(

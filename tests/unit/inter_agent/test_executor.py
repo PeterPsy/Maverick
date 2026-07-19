@@ -21,7 +21,7 @@ class InterAgentExecutorTest(unittest.TestCase):
     def _stores(self):
         return build_executor_stores(self)
 
-    def test_manager_tools_controlled_run_projects_root_summary_and_graph_events(self) -> None:
+    def test_manager_tools_controlled_run_keeps_summaries_in_graph_events(self) -> None:
         _repo_root, store, runtime_store = self._stores()
         service = InterAgentService(store)
         run = service.create_run(
@@ -66,18 +66,13 @@ class InterAgentExecutorTest(unittest.TestCase):
         self.assertIn("inter_agent.plan.summary_created", [event.event_type for event in events])
         self.assertIn("inter_agent.artifact.created", [event.event_type for event in events])
         self.assertIn("inter_agent.run.completed", [event.event_type for event in events])
-        self.assertEqual([event.event_type for event in root_events], ["runtime.step.updated", "runtime.step.updated"])
-        self.assertEqual(root_events[0].payload["label"], "Orchestrator started a delegated multi-agent run with 2 worker nodes.")
-        self.assertNotIn("participant(s)", root_events[0].payload["label"])
-        self.assertIn("Multi-agent run completed", root_events[-1].payload["label"])
+        self.assertEqual(root_events, [])
         self.assertTrue(result.participant_results[0].synthetic)
         self.assertEqual(result.participant_results[0].synthetic_source, "controlled_payload")
         self.assertTrue(all(event.payload.get("synthetic") is True for event in summary_events))
         self.assertEqual({event.payload.get("synthetic_source") for event in summary_events}, {"controlled_payload"})
         self.assertTrue(run_completed.payload.get("synthetic"))
         self.assertEqual(run_completed.payload.get("synthetic_source"), "controlled_payload")
-        self.assertEqual([event.payload.get("synthetic") for event in root_events], [True, True])
-        self.assertEqual([event.payload.get("synthetic_source") for event in root_events], ["controlled_payload", "controlled_payload"])
 
     def test_controlled_participants_require_synthetic_execution_allowance(self) -> None:
         _repo_root, store, runtime_store = self._stores()
@@ -91,7 +86,6 @@ class InterAgentExecutorTest(unittest.TestCase):
                 workspace_id="default",
                 run_id=run.run_id,
                 controlled_participants={"researcher": {"output_text": "synthetic"}},
-                project_summaries=False,
                 now=NOW,
             )
 
@@ -111,7 +105,6 @@ class InterAgentExecutorTest(unittest.TestCase):
             input_text=original_prompt,
             controlled_participants={"researcher": {"output_text": "Worker result.", "summary": "Worker completed."}},
             allow_synthetic_participants=True,
-            project_summaries=False,
             now=NOW,
         )
         message_event = next(
@@ -158,7 +151,6 @@ class InterAgentExecutorTest(unittest.TestCase):
                 "synthesizer": {"output_text": "Synthesis used evidence A.", "summary": "Synthesis completed."},
             },
             allow_synthetic_participants=True,
-            project_summaries=False,
             now=NOW,
         )
 
@@ -238,7 +230,6 @@ class InterAgentExecutorTest(unittest.TestCase):
                 workspace_id="default",
                 run_id=run.run_id,
                 input_text="Run both checks.",
-                project_summaries=False,
                 now=NOW,
             )
 
@@ -333,9 +324,7 @@ class InterAgentExecutorTest(unittest.TestCase):
                 workspace_id="default",
                 run_id=run.run_id,
                 input_text="Run the async child.",
-                project_summaries=False,
                 async_runtime_turns=True,
-                root_runtime_turn_id="root-turn-async",
                 now=NOW,
             )
 
@@ -346,11 +335,9 @@ class InterAgentExecutorTest(unittest.TestCase):
         self.assertEqual(len(result.participant_results), 1)
         self.assertEqual(result.participant_results[0].output_text, "Async child completed.")
         self.assertEqual(result.participant_results[0].status, "completed")
-        self.assertEqual([event.event_type for event in root_events], ["runtime.output.final"])
-        self.assertEqual(root_events[0].turn_id, "root-turn-async")
-        self.assertEqual(root_events[0].payload["inter_agent_participant_label"], "Researcher")
+        self.assertEqual(root_events, [])
 
-    def test_async_runtime_participant_projects_chat_facing_events_to_root_turn(self) -> None:
+    def test_async_runtime_participant_events_stay_out_of_root_turn(self) -> None:
         _repo_root, store, runtime_store = self._stores()
         service = InterAgentService(store)
         run = service.create_run(
@@ -448,27 +435,19 @@ class InterAgentExecutorTest(unittest.TestCase):
                 workspace_id="default",
                 run_id=run.run_id,
                 input_text="Research projection.",
-                project_summaries=False,
                 async_runtime_turns=True,
-                root_runtime_turn_id="root-turn-projection",
                 now=NOW,
             )
 
         root_events = runtime_store.list_events("root-session")
-        root_payload = root_events[0].payload
+        participant_events = runtime_store.list_events(result.participant_results[0].runtime_session_id or "")
 
         self.assertEqual(result.run.status, "completed")
         self.assertEqual(
-            [event.event_type for event in root_events],
+            [event.event_type for event in participant_events if event.event_type.startswith(("runtime.tool_call", "runtime.output"))],
             ["runtime.tool_call.completed", "runtime.output.delta", "runtime.output.final"],
         )
-        self.assertTrue(all(event.turn_id == "root-turn-projection" for event in root_events))
-        self.assertEqual(root_payload["inter_agent_projection"], "participant_runtime_event")
-        self.assertEqual(root_payload["inter_agent_participant_id"], "researcher")
-        self.assertEqual(root_payload["inter_agent_participant_label"], "Researcher")
-        self.assertIn("inter_agent_participant_block_id", root_payload)
-        self.assertNotIn("runtime_session_id", root_payload)
-        self.assertNotIn("runtime_turn_id", root_payload)
+        self.assertEqual(root_events, [])
 
     def test_runtime_participant_requires_explicit_final_output_for_final_answer(self) -> None:
         _repo_root, store, runtime_store = self._stores()
@@ -529,7 +508,6 @@ class InterAgentExecutorTest(unittest.TestCase):
                 workspace_id="default",
                 run_id=run.run_id,
                 input_text="Review readiness.",
-                project_summaries=False,
                 now=NOW,
             )
 

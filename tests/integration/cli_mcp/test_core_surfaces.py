@@ -529,7 +529,6 @@ class TestMcpCliSurfaces(SurfaceTestBase):
                 "run_id": "controlled-cli-run",
                 "allow_synthetic_participants": True,
                 "controlled_participants": {"researcher": {"output_text": "synthetic cli"}},
-                "project_summaries": False,
             },
         )
         mcp_result = call_mcp_tool(
@@ -543,7 +542,6 @@ class TestMcpCliSurfaces(SurfaceTestBase):
                 "run_id": "controlled-mcp-run",
                 "allow_synthetic_participants": True,
                 "controlled_participants": {"researcher": {"output_text": "synthetic mcp"}},
-                "project_summaries": False,
             },
         )
 

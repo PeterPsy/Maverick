@@ -5,18 +5,15 @@ from __future__ import annotations
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass, field, replace
 from datetime import UTC, datetime, timedelta
-import hashlib
 import re
 from threading import Lock
 from typing import Any
 import time
-import uuid
 
 from core.inter_agent.errors import InterAgentOperationError
 from core.inter_agent.models import InterAgentParticipantRecord, InterAgentRunRecord
 from core.inter_agent.service import InterAgentService, RUNTIME_CHILD_EXECUTION_MODE
 from core.runtime.runtime_events import RuntimeEventRecord
-from core.runtime.service import record_runtime_event
 
 
 EXECUTABLE_MODES = {"manager_tools", "sequential", "concurrent", "group_chat"}
@@ -64,7 +61,6 @@ class InterAgentExecutionResult:
 
     run: InterAgentRunRecord
     participant_results: list[ParticipantExecutionResult]
-    root_runtime_events: list[RuntimeEventRecord]
     final_answer: str = ""
 
 
@@ -77,15 +73,6 @@ class FinalAnswerProjection:
     strategy: str = ""
 
 
-@dataclass
-class RootRuntimeProjectionContext:
-    """Collect user-visible participant runtime events copied onto the root turn."""
-
-    root_turn_id: str
-    events: list[RuntimeEventRecord]
-    lock: Lock = field(default_factory=Lock)
-
-
 def execute_inter_agent_run(
     service: InterAgentService,
     state: Any,
@@ -96,16 +83,14 @@ def execute_inter_agent_run(
     participant_inputs: dict[str, str] | None = None,
     controlled_participants: dict[str, Any] | None = None,
     allow_synthetic_participants: bool = False,
-    project_summaries: bool = True,
     async_runtime_turns: bool = False,
-    root_runtime_turn_id: str | None = None,
     now: datetime | None = None,
 ) -> InterAgentExecutionResult:
     """Execute one F3-native inter-agent run without external adapters."""
     clock = _clock(now)
     run = service.store.get_run(run_id, workspace_id=workspace_id)
     if run.status in TERMINAL_RUN_STATUSES:
-        return InterAgentExecutionResult(run=run, participant_results=[], root_runtime_events=[], final_answer="")
+        return InterAgentExecutionResult(run=run, participant_results=[], final_answer="")
     if run.mode == "single_agent":
         raise InterAgentOperationError("single_agent runs execute through the normal runtime turn path.")
     if run.mode in SCHEMA_ONLY_MODES:
@@ -148,25 +133,6 @@ def execute_inter_agent_run(
         },
         now=started_at,
     )
-    root_runtime_events: list[RuntimeEventRecord] = []
-    root_projection = (
-        RootRuntimeProjectionContext(root_turn_id=root_runtime_turn_id, events=root_runtime_events)
-        if root_runtime_turn_id and async_runtime_turns
-        else None
-    )
-    if project_summaries:
-        root_runtime_events.append(
-            _project_root_summary(
-                state,
-                run,
-                text=plan_summary,
-                summary_kind="plan",
-                synthetic=planned_synthetic,
-                synthetic_source=planned_synthetic_source,
-                now=started_at,
-            )
-        )
-
     run = replace(run, status="running", updated_at=clock())
     service.store.save_run(run)
     inputs = {str(key): str(value) for key, value in dict(participant_inputs or {}).items()}
@@ -183,7 +149,6 @@ def execute_inter_agent_run(
                 controlled_participants=controlled,
                 allow_synthetic_participants=allow_synthetic_participants,
                 async_runtime_turns=async_runtime_turns,
-                root_projection=root_projection,
                 clock=clock,
             )
         elif run.mode == "sequential":
@@ -197,7 +162,6 @@ def execute_inter_agent_run(
                 controlled_participants=controlled,
                 allow_synthetic_participants=allow_synthetic_participants,
                 async_runtime_turns=async_runtime_turns,
-                root_projection=root_projection,
                 clock=clock,
             )
         elif run.mode == "group_chat":
@@ -211,7 +175,6 @@ def execute_inter_agent_run(
                 controlled_participants=controlled,
                 allow_synthetic_participants=allow_synthetic_participants,
                 async_runtime_turns=async_runtime_turns,
-                root_projection=root_projection,
                 clock=clock,
             )
         else:
@@ -225,14 +188,13 @@ def execute_inter_agent_run(
                 controlled_participants=controlled,
                 allow_synthetic_participants=allow_synthetic_participants,
                 async_runtime_turns=async_runtime_turns,
-                root_projection=root_projection,
                 clock=clock,
             )
     except Exception as error:
         failed_at = clock()
         latest_run = service.store.get_run(run.run_id, workspace_id=workspace_id)
         if latest_run.status == "cancelled":
-            return InterAgentExecutionResult(run=latest_run, participant_results=[], root_runtime_events=root_runtime_events, final_answer="")
+            return InterAgentExecutionResult(run=latest_run, participant_results=[], final_answer="")
         failed = replace(latest_run, status="failed", updated_at=failed_at, ended_at=failed_at)
         service.store.save_run(failed)
         service.record_event(
@@ -250,18 +212,6 @@ def execute_inter_agent_run(
             },
             now=failed_at,
         )
-        if project_summaries:
-            root_runtime_events.append(
-                _project_root_summary(
-                    state,
-                    failed,
-                    text=f"Multi-agent run failed: {str(error)}",
-                    summary_kind="failed",
-                    synthetic=planned_synthetic,
-                    synthetic_source=planned_synthetic_source,
-                    now=failed_at,
-                )
-            )
         if isinstance(error, InterAgentOperationError):
             raise
         raise InterAgentOperationError(str(error)) from error
@@ -287,7 +237,6 @@ def execute_inter_agent_run(
         return InterAgentExecutionResult(
             run=latest_run,
             participant_results=participant_results,
-            root_runtime_events=root_runtime_events,
             final_answer=final_answer,
         )
     completed_run = replace(latest_run, status=final_status, updated_at=ended_at, ended_at=ended_at)
@@ -341,22 +290,9 @@ def execute_inter_agent_run(
         },
         now=ended_at,
     )
-    if project_summaries:
-        root_runtime_events.append(
-            _project_root_summary(
-                state,
-                completed_run,
-                text=final_summary,
-                summary_kind=final_status,
-                synthetic=final_synthetic,
-                synthetic_source=final_synthetic_source,
-                now=ended_at,
-            )
-        )
     return InterAgentExecutionResult(
         run=completed_run,
         participant_results=participant_results,
-        root_runtime_events=root_runtime_events,
         final_answer=final_answer,
     )
 
@@ -372,7 +308,6 @@ def _execute_manager_tools(
     controlled_participants: dict[str, ControlledParticipantOutput],
     allow_synthetic_participants: bool,
     async_runtime_turns: bool,
-    root_projection: RootRuntimeProjectionContext | None,
     clock,
 ) -> list[ParticipantExecutionResult]:
     results: list[ParticipantExecutionResult] = []
@@ -391,7 +326,6 @@ def _execute_manager_tools(
             controlled=controlled_participants.get(participant.participant_id),
             allow_synthetic_participants=allow_synthetic_participants,
             async_runtime_turns=async_runtime_turns,
-            root_projection=root_projection,
             clock=clock,
         )
         results.append(result)
@@ -409,7 +343,6 @@ def _execute_sequential(
     controlled_participants: dict[str, ControlledParticipantOutput],
     allow_synthetic_participants: bool,
     async_runtime_turns: bool,
-    root_projection: RootRuntimeProjectionContext | None,
     clock,
 ) -> list[ParticipantExecutionResult]:
     results: list[ParticipantExecutionResult] = []
@@ -431,7 +364,6 @@ def _execute_sequential(
             controlled=controlled_participants.get(participant.participant_id),
             allow_synthetic_participants=allow_synthetic_participants,
             async_runtime_turns=async_runtime_turns,
-            root_projection=root_projection,
             clock=clock,
         )
         results.append(result)
@@ -452,7 +384,6 @@ def _execute_group_chat(
     controlled_participants: dict[str, ControlledParticipantOutput],
     allow_synthetic_participants: bool,
     async_runtime_turns: bool,
-    root_projection: RootRuntimeProjectionContext | None,
     clock,
 ) -> list[ParticipantExecutionResult]:
     """Execute the F7 group_chat MVP as one bounded shared-context round."""
@@ -481,7 +412,6 @@ def _execute_group_chat(
             controlled=controlled_participants.get(participant.participant_id),
             allow_synthetic_participants=allow_synthetic_participants,
             async_runtime_turns=async_runtime_turns,
-            root_projection=root_projection,
             clock=clock,
         )
         results.append(result)
@@ -504,7 +434,6 @@ def _execute_group_chat(
             controlled=controlled_participants.get(aggregator.participant_id),
             allow_synthetic_participants=allow_synthetic_participants,
             async_runtime_turns=async_runtime_turns,
-            root_projection=root_projection,
             clock=clock,
         )
         results.append(result)
@@ -522,7 +451,6 @@ def _execute_concurrent(
     controlled_participants: dict[str, ControlledParticipantOutput],
     allow_synthetic_participants: bool,
     async_runtime_turns: bool,
-    root_projection: RootRuntimeProjectionContext | None,
     clock,
 ) -> list[ParticipantExecutionResult]:
     aggregator_id = run.aggregator_participant_id or run.orchestrator_participant_id
@@ -550,7 +478,6 @@ def _execute_concurrent(
                 controlled=controlled_participants.get(participant.participant_id),
                 allow_synthetic_participants=allow_synthetic_participants,
                 async_runtime_turns=async_runtime_turns,
-                root_projection=root_projection,
                 clock=clock,
             ): participant.participant_id
             for index, participant in enumerate(fanout)
@@ -577,7 +504,6 @@ def _execute_concurrent(
                 controlled=controlled_participants.get(aggregator.participant_id),
                 allow_synthetic_participants=allow_synthetic_participants,
                 async_runtime_turns=async_runtime_turns,
-                root_projection=root_projection,
                 clock=clock,
             )
         )
@@ -595,7 +521,6 @@ def _execute_one_participant(
     controlled: ControlledParticipantOutput | None,
     allow_synthetic_participants: bool,
     async_runtime_turns: bool,
-    root_projection: RootRuntimeProjectionContext | None,
     clock,
 ) -> ParticipantExecutionResult:
     task_id = f"task:{run.mode}:{task_index}:{participant.participant_id}"
@@ -641,7 +566,6 @@ def _execute_one_participant(
         task_id=task_id,
         input_text=input_text,
         async_runtime_turns=async_runtime_turns,
-        root_projection=root_projection,
         clock=clock,
     )
 
@@ -766,7 +690,6 @@ def _execute_runtime_participant(
     task_id: str,
     input_text: str,
     async_runtime_turns: bool,
-    root_projection: RootRuntimeProjectionContext | None,
     clock,
 ) -> ParticipantExecutionResult:
     runtime_session_id: str | None = None
@@ -787,7 +710,6 @@ def _execute_runtime_participant(
             now=clock(),
         )
         runtime_session_id = session.session_id
-        projection_seen_event_ids: set[str] = set()
         _participant, turn, events = service.send_runtime_message(
             state,
             workspace_id=run.workspace_id,
@@ -798,33 +720,10 @@ def _execute_runtime_participant(
             async_requested=async_runtime_turns,
             now=clock(),
         )
-        _project_runtime_events_to_root(
-            state,
-            run,
-            participant=spawned,
-            root_projection=root_projection,
-            source_events=events,
-            seen_event_ids=projection_seen_event_ids,
-        )
         if async_runtime_turns and turn.status not in TERMINAL_RUNTIME_TURN_STATUSES:
-            turn, events = _wait_for_runtime_turn(
-                state,
-                turn.turn_id,
-                run=run,
-                participant=spawned,
-                root_projection=root_projection,
-                seen_event_ids=projection_seen_event_ids,
-            )
+            turn, events = _wait_for_runtime_turn(state, turn.turn_id)
         elif not events:
             events = _runtime_events_for_turn(state, session_id=session.session_id, turn_id=turn.turn_id)
-            _project_runtime_events_to_root(
-                state,
-                run,
-                participant=spawned,
-                root_projection=root_projection,
-                source_events=events,
-                seen_event_ids=projection_seen_event_ids,
-            )
     except Exception as error:
         latest_run = service.store.get_run(run.run_id, workspace_id=run.workspace_id)
         latest = service.store.get_participant(participant.participant_id, workspace_id=run.workspace_id, run_id=run.run_id)
@@ -968,24 +867,11 @@ def _execute_runtime_participant(
 def _wait_for_runtime_turn(
     state: Any,
     turn_id: str,
-    *,
-    run: InterAgentRunRecord,
-    participant: InterAgentParticipantRecord,
-    root_projection: RootRuntimeProjectionContext | None,
-    seen_event_ids: set[str],
 ) -> tuple[Any, list[RuntimeEventRecord]]:
     deadline = time.monotonic() + ASYNC_RUNTIME_TURN_WAIT_TIMEOUT_SECONDS
     while True:
         turn = state.runtime_store.get_turn(turn_id)
         events = _runtime_events_for_turn(state, session_id=turn.session_id, turn_id=turn.turn_id)
-        _project_runtime_events_to_root(
-            state,
-            run,
-            participant=participant,
-            root_projection=root_projection,
-            source_events=events,
-            seen_event_ids=seen_event_ids,
-        )
         if turn.status in TERMINAL_RUNTIME_TURN_STATUSES:
             return turn, events
         if time.monotonic() >= deadline:
@@ -995,105 +881,6 @@ def _wait_for_runtime_turn(
 
 def _runtime_events_for_turn(state: Any, *, session_id: str, turn_id: str) -> list[RuntimeEventRecord]:
     return [event for event in state.runtime_store.list_events(session_id) if event.turn_id == turn_id]
-
-
-def _project_runtime_events_to_root(
-    state: Any,
-    run: InterAgentRunRecord,
-    *,
-    participant: InterAgentParticipantRecord,
-    root_projection: RootRuntimeProjectionContext | None,
-    source_events: list[RuntimeEventRecord],
-    seen_event_ids: set[str],
-) -> None:
-    if root_projection is None:
-        return
-    ordered_events = sorted(source_events, key=lambda event: (event.created_at, event.event_id))
-    for source_event in ordered_events:
-        if source_event.event_id in seen_event_ids:
-            continue
-        seen_event_ids.add(source_event.event_id)
-        if not _is_chat_facing_participant_runtime_event(source_event):
-            continue
-        projected = record_runtime_event(
-            state.runtime_store,
-            event_id=_root_projection_event_id(
-                run_id=run.run_id,
-                participant_id=participant.participant_id,
-                source_event_id=source_event.event_id,
-            ),
-            session_id=run.root_runtime_session_id,
-            turn_id=root_projection.root_turn_id,
-            plane="turn",
-            event_type=source_event.event_type,
-            payload=_root_projection_payload(
-                run=run,
-                participant=participant,
-                source_event=source_event,
-            ),
-            now=source_event.created_at,
-            event_bus=getattr(state, "runtime_event_bus", None),
-        )
-        with root_projection.lock:
-            if not any(event.event_id == projected.event_id for event in root_projection.events):
-                root_projection.events.append(projected)
-
-
-def _is_chat_facing_participant_runtime_event(event: RuntimeEventRecord) -> bool:
-    payload = event.payload if isinstance(event.payload, dict) else {}
-    if event.event_type == "runtime.output.final":
-        return bool(_payload_text(payload, "text") or _payload_text(payload, "complete_text") or payload.get("structured_content") or payload.get("structuredContent"))
-    if event.event_type.startswith("runtime.output."):
-        return True
-    if event.event_type.startswith("runtime.tool_call."):
-        return True
-    return event.event_type in {"runtime.step.updated", "runtime.turn.failed", "runtime.turn.cancelled", "runtime.turn.timed-out"}
-
-
-def _payload_text(payload: dict[str, Any], key: str) -> str:
-    value = payload.get(key)
-    return value.strip() if isinstance(value, str) else ""
-
-
-def _root_projection_payload(
-    *,
-    run: InterAgentRunRecord,
-    participant: InterAgentParticipantRecord,
-    source_event: RuntimeEventRecord,
-) -> dict[str, Any]:
-    payload = dict(source_event.payload) if isinstance(source_event.payload, dict) else {}
-    for hidden_key in ("runtime_session_id", "runtime_turn_id", "session_id", "turn_id"):
-        payload.pop(hidden_key, None)
-    payload.update(
-        {
-            "inter_agent_run_id": run.run_id,
-            "inter_agent_projection": "participant_runtime_event",
-            "inter_agent_participant_id": participant.participant_id,
-            "inter_agent_participant_label": participant.label,
-            "inter_agent_participant_block_id": _participant_projection_block_id(
-                run_id=run.run_id,
-                participant_id=participant.participant_id,
-                runtime_turn_id=source_event.turn_id,
-            ),
-            "inter_agent_original_event_type": source_event.event_type,
-        }
-    )
-    return payload
-
-
-def _root_projection_event_id(*, run_id: str, participant_id: str, source_event_id: str) -> str:
-    digest = hashlib.sha256(f"{run_id}:{participant_id}:{source_event_id}".encode("utf-8")).hexdigest()[:24]
-    return f"iarp-{digest}"
-
-
-def _participant_projection_block_id(
-    *,
-    run_id: str,
-    participant_id: str,
-    runtime_turn_id: str | None,
-) -> str:
-    digest = hashlib.sha256(f"{run_id}:{participant_id}:{runtime_turn_id or ''}".encode("utf-8")).hexdigest()[:16]
-    return f"{participant_id}-{digest}"
 
 
 def _finish_participant(
@@ -1205,36 +992,6 @@ def _record_artifacts(
             "synthetic_source": synthetic_source,
         },
         now=clock(),
-    )
-
-
-def _project_root_summary(
-    state: Any,
-    run: InterAgentRunRecord,
-    *,
-    text: str,
-    summary_kind: str,
-    synthetic: bool,
-    synthetic_source: str | None,
-    now: datetime,
-) -> RuntimeEventRecord:
-    return record_runtime_event(
-        state.runtime_store,
-        event_id=str(uuid.uuid4()),
-        session_id=run.root_runtime_session_id,
-        plane="runtime",
-        event_type="runtime.step.updated",
-        payload={
-            "label": text,
-            "summary": text,
-            "step_kind": "inter_agent_summary",
-            "inter_agent_run_id": run.run_id,
-            "summary_kind": summary_kind,
-            "synthetic": synthetic,
-            "synthetic_source": synthetic_source,
-        },
-        now=now,
-        event_bus=getattr(state, "runtime_event_bus", None),
     )
 
 

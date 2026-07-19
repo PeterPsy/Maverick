@@ -88,7 +88,6 @@ class InterAgentExecutorRuntimeFinalTest(unittest.TestCase):
                 workspace_id="default",
                 run_id=run.run_id,
                 input_text="Review readiness.",
-                project_summaries=False,
                 now=NOW,
             )
 

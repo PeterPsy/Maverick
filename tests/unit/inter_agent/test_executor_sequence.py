@@ -40,7 +40,6 @@ class InterAgentExecutorSequenceTest(unittest.TestCase):
                 "a_second": {"output_text": "Second output.", "summary": "Second completed."},
             },
             allow_synthetic_participants=True,
-            project_summaries=False,
             now=NOW,
         )
 

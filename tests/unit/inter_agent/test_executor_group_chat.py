@@ -57,7 +57,6 @@ class InterAgentGroupChatExecutorTest(unittest.TestCase):
                 "synthesizer": {"output_text": "Choose option B with a staged rollout.", "summary": "Synthesis is ready."},
             },
             allow_synthetic_participants=True,
-            project_summaries=True,
             now=NOW,
         )
 
@@ -116,7 +115,6 @@ class InterAgentGroupChatExecutorTest(unittest.TestCase):
                 "synthesizer": {"output_text": "Choose option B with a staged rollout.", "summary": "Synthesis is ready."},
             },
             allow_synthetic_participants=True,
-            project_summaries=True,
             now=NOW,
         )
 

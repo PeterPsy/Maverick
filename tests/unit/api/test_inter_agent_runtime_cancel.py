@@ -9,7 +9,7 @@ from tests.unit.api.inter_agent_api_f4_support import InterAgentApiF4Fixture, ru
 
 
 class InterAgentRuntimeCancelTestCase(InterAgentApiF4Fixture, unittest.TestCase):
-    def test_runtime_turn_interrupt_cancels_linked_inter_agent_run(self) -> None:
+    def test_runtime_turn_interrupt_does_not_cancel_independent_inter_agent_run(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             repo_root = self._repo_root(temp_dir)
             state = self._bootstrap_state(repo_root)
@@ -62,9 +62,9 @@ class InterAgentRuntimeCancelTestCase(InterAgentApiF4Fixture, unittest.TestCase)
         self.assertEqual(create_status, 201)
         self.assertEqual(interrupt_status, 200)
         self.assertTrue(interrupt_payload["interrupted"])
-        self.assertEqual(interrupt_payload["inter_agent_cleanup"][0]["run"]["status"], "cancelled")
-        self.assertEqual(run.status, "cancelled")
-        self.assertIn("inter_agent.run.cancelled", event_types)
+        self.assertNotIn("inter_agent_cleanup", interrupt_payload)
+        self.assertEqual(run.status, "created")
+        self.assertNotIn("inter_agent.run.cancelled", event_types)
 
 
 if __name__ == "__main__":

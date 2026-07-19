@@ -100,7 +100,6 @@ class InterAgentExecutorRuntimeCancelTest(unittest.TestCase):
                 workspace_id="default",
                 run_id=run.run_id,
                 input_text="Run the async child until the root turn is stopped.",
-                project_summaries=False,
                 async_runtime_turns=True,
                 now=NOW,
             )
@@ -157,7 +156,6 @@ class InterAgentExecutorRuntimeCancelTest(unittest.TestCase):
                 workspace_id="default",
                 run_id=run.run_id,
                 input_text="Run the async child until the runtime turn is cancelled.",
-                project_summaries=False,
                 async_runtime_turns=True,
                 now=NOW,
             )

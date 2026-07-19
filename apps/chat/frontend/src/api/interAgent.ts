@@ -1,7 +1,5 @@
 import { requestJson } from "./http";
 import type {
-  ChatMessageAttachment,
-  AppReference,
   InterAgentApprovalRecord,
   InterAgentArtifactPage,
   InterAgentEventRecord,
@@ -10,70 +8,21 @@ import type {
   InterAgentRunDetail,
   InterAgentVisibilityPlane,
   InterAgentWebSocketFrame,
-  RuntimeEvent,
-  RuntimeTurn,
+  MultiAgentComposerMode,
 } from "./types";
 
-export type InterAgentParticipantSpecPayload = {
-  participant_id: string;
-  kind: "orchestrator" | "agent" | "tool" | "human" | "system";
-  execution_mode: "root_orchestrator" | "child_runtime_session" | "embedded_executor" | "human_gate" | "tool_proxy";
-  label: string;
-  agent_type_id?: string;
-  agent_snapshot?: {
-    agent_type_id: string;
-    label: string;
-    system_prompt: string;
-    skill_ids: string[];
-    skill_catalog_app_id: string;
-  };
-};
-
-export type InterAgentEdgeSpecPayload = {
-  source_id: string;
-  target_id: string;
-  kind: "delegated" | "handed_off" | "reviewed_by" | "produced" | "depends_on" | "requested_approval";
-  label?: string;
-};
-
-export type CreateInterAgentRunPayload = {
-  thread_id: string;
+export type CreateInterAgentOrchestrationPayload = {
   root_runtime_session_id: string;
-  mode: "manager_tools" | "sequential" | "concurrent" | "group_chat";
+  source_runtime_turn_id: string;
+  policy: Exclude<MultiAgentComposerMode, "off">;
   idempotency_key: string;
-  aggregator_participant_id?: string;
-  visibility_level?: InterAgentVisibilityPlane;
-  participants: InterAgentParticipantSpecPayload[];
-  edges?: InterAgentEdgeSpecPayload[];
-  budget: {
-    max_participants: number;
-    max_concurrent_participants: number;
-    max_rounds?: number;
-    max_total_turns: number;
-    max_turns_per_participant: number;
-    max_tool_calls: number;
-  };
 };
 
-export type ExecuteInterAgentRunPayload = {
-  input_text: string;
-  client_message_id?: string;
-  participant_inputs?: Record<string, string>;
-  attachments?: ChatMessageAttachment[];
-  app_references?: AppReference[];
-  async?: boolean;
-};
-
-export function listInterAgentRuns(): Promise<{ items: InterAgentRunDetail[] }> {
-  return requestJson<{ items: InterAgentRunDetail[] }>("/api/inter-agent/runs");
-}
-
-export function getInterAgentRun(runId: string): Promise<InterAgentRunDetail> {
-  return requestJson<InterAgentRunDetail>(`/api/inter-agent/runs/${encodeURIComponent(runId)}`);
-}
-
-export function createInterAgentRun(payload: CreateInterAgentRunPayload, requestOptions: { signal?: AbortSignal } = {}): Promise<InterAgentRunDetail> {
-  return requestJson<InterAgentRunDetail>("/api/inter-agent/runs", {
+export function createInterAgentOrchestration(
+  payload: CreateInterAgentOrchestrationPayload,
+  requestOptions: { signal?: AbortSignal } = {},
+): Promise<InterAgentRunDetail> {
+  return requestJson<InterAgentRunDetail>("/api/inter-agent/orchestrations", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     signal: requestOptions.signal,
@@ -81,29 +30,23 @@ export function createInterAgentRun(payload: CreateInterAgentRunPayload, request
   });
 }
 
-export function executeInterAgentRun(
+export function sendInterAgentDirective(
   runId: string,
-  payload: ExecuteInterAgentRunPayload,
-  requestOptions: { signal?: AbortSignal } = {},
-): Promise<
-  InterAgentRunDetail & {
-    root_runtime_events?: RuntimeEvent[];
-    root_runtime_turn?: RuntimeTurn;
-  }
-> {
-  return requestJson(`/api/inter-agent/runs/${encodeURIComponent(runId)}/execute`, {
+  payload: { text: string; idempotency_key?: string },
+): Promise<{ directive: InterAgentEventRecord }> {
+  return requestJson(`/api/inter-agent/runs/${encodeURIComponent(runId)}/directives`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    signal: requestOptions.signal,
-    body: JSON.stringify({
-      ...payload,
-      attachments: payload.attachments ? serializableMessageAttachments(payload.attachments) : undefined,
-    }),
+    body: JSON.stringify(payload),
   });
 }
 
-function serializableMessageAttachments(attachments: ChatMessageAttachment[]) {
-  return attachments.map(({ objectUrl: _objectUrl, ...attachment }) => attachment);
+export function listInterAgentRuns(): Promise<{ items: InterAgentRunDetail[] }> {
+  return requestJson<{ items: InterAgentRunDetail[] }>("/api/inter-agent/runs");
+}
+
+export function getInterAgentRun(runId: string): Promise<InterAgentRunDetail> {
+  return requestJson<InterAgentRunDetail>(`/api/inter-agent/runs/${encodeURIComponent(runId)}`);
 }
 
 export function listInterAgentRunEvents(

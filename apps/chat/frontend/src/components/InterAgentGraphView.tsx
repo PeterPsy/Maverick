@@ -38,7 +38,6 @@ type InterAgentGraphViewProps = {
   initialApprovals?: InterAgentApprovalRecord[];
   initialEvents?: InterAgentEventRecord[];
   initialRunDetail?: InterAgentRunDetail | null;
-  messages?: ChatMessage[];
   onClose: () => void;
   runId: string;
 };
@@ -46,9 +45,9 @@ type InterAgentGraphViewProps = {
 const GRAPH_VISIBILITY_PLANE: InterAgentVisibilityPlane = "detail";
 const TRANSCRIPT_LIMIT = 80;
 const GRAPH_NODE_WIDTH = 272;
-const GRAPH_NODE_HEIGHT = 142;
+const GRAPH_NODE_HEIGHT = 170;
 const GRAPH_COLUMN_GAP = 104;
-const GRAPH_ROW_GAP = 128;
+const GRAPH_ROW_GAP = 112;
 const GRAPH_PADDING = 56;
 const GRAPH_MAX_ROW_COLUMNS = 4;
 const GRAPH_EDGE_DIRECT_OFFSET = 26;
@@ -61,7 +60,6 @@ export function InterAgentGraphView({
   initialApprovals = [],
   initialEvents = [],
   initialRunDetail = null,
-  messages = [],
   onClose,
   runId,
 }: InterAgentGraphViewProps) {
@@ -86,7 +84,6 @@ export function InterAgentGraphView({
   });
 
   const participants = runDetail?.participants || [];
-  const participantMessagesById = useMemo(() => participantMessagesForRun(messages, runId), [messages, runId]);
   const selectedParticipant =
     participants.find((participant) => participant.participant_id === selectedParticipantId) || null;
   const hasSelectedParticipant = Boolean(selectedParticipant);
@@ -172,7 +169,6 @@ export function InterAgentGraphView({
         <GraphCanvas
           events={events}
           hasTranscript={hasSelectedParticipant}
-          messagesByParticipantId={participantMessagesById}
           onSelectParticipant={setSelectedParticipantId}
           runDetail={runDetail}
           selectedParticipantId={selectedParticipantId}
@@ -182,7 +178,6 @@ export function InterAgentGraphView({
             artifacts={selectedParticipantArtifacts}
             error={transcriptError}
             isLoading={transcriptLoading}
-            messages={participantMessagesById.get(selectedParticipant.participant_id) || []}
             onClose={() => setSelectedParticipantId(null)}
             participant={selectedParticipant}
             transcript={transcript}
@@ -204,14 +199,12 @@ export function InterAgentGraphView({
 function GraphCanvas({
   events,
   hasTranscript,
-  messagesByParticipantId,
   onSelectParticipant,
   runDetail,
   selectedParticipantId,
 }: {
   events: InterAgentEventRecord[];
   hasTranscript: boolean;
-  messagesByParticipantId: Map<string, ChatMessage[]>;
   onSelectParticipant: (participantId: string) => void;
   runDetail: InterAgentRunDetail | null;
   selectedParticipantId: string | null;
@@ -223,8 +216,8 @@ function GraphCanvas({
     [edges, participants, runDetail?.run.orchestrator_participant_id],
   );
   const activitiesByParticipantId = useMemo(
-    () => participantActivityMap(participants, messagesByParticipantId, events),
-    [events, messagesByParticipantId, participants],
+    () => participantActivityMap(participants, events),
+    [events, participants],
   );
   const flowNodes = useMemo(
     () => graphFlowNodes(layout, activitiesByParticipantId, selectedParticipantId, onSelectParticipant),
@@ -257,37 +250,15 @@ function GraphCanvas({
   );
 }
 
-function participantMessagesForRun(messages: ChatMessage[], runId: string): Map<string, ChatMessage[]> {
-  const messagesByParticipantId = new Map<string, ChatMessage[]>();
-  for (const message of messages) {
-    const participantId = message.sourceParticipantId?.trim();
-    if (!participantId || message.sourceRunId !== runId) {
-      continue;
-    }
-    const participantMessages = messagesByParticipantId.get(participantId) || [];
-    participantMessages.push(message);
-    messagesByParticipantId.set(participantId, participantMessages);
-  }
-  for (const participantMessages of messagesByParticipantId.values()) {
-    participantMessages.sort((left, right) => messageTimestamp(left) - messageTimestamp(right));
-  }
-  return messagesByParticipantId;
-}
-
-function messageTimestamp(message: ChatMessage): number {
-  const timestamp = Date.parse(message.createdAt);
-  return Number.isFinite(timestamp) ? timestamp : 0;
-}
-
 function participantActivityMap(
   participants: GraphParticipant[],
-  messagesByParticipantId: Map<string, ChatMessage[]>,
   events: InterAgentEventRecord[],
 ): Map<string, ParticipantNodeActivity> {
   const latestEventsByParticipantId = new Map<string, InterAgentEventRecord>();
+  const participantRunIds = new Map(participants.map((participant) => [participant.participant_id, participant.run_id]));
   for (const event of events) {
     const participantId = eventParticipantId(event);
-    if (!participantId) {
+    if (!participantId || participantRunIds.get(participantId) !== event.run_id) {
       continue;
     }
     const current = latestEventsByParticipantId.get(participantId);
@@ -298,7 +269,6 @@ function participantActivityMap(
   return new Map(
     participants.map((participant) => {
       const activity =
-        latestMessageActivity(messagesByParticipantId.get(participant.participant_id) || []) ||
         eventActivity(latestEventsByParticipantId.get(participant.participant_id)) ||
         participantStatusActivity(participant);
       return [participant.participant_id, activity];
@@ -306,46 +276,33 @@ function participantActivityMap(
   );
 }
 
-function latestMessageActivity(messages: ChatMessage[]): ParticipantNodeActivity | null {
-  for (let index = messages.length - 1; index >= 0; index -= 1) {
-    const message = messages[index];
-    if (message.role === "tool") {
-      const toolCall = message.toolCalls?.at(-1) || message.toolCall;
-      if (toolCall) {
-        const active = toolCall.status === "started" || toolCall.status === "updated";
-        return {
-          kind: "tool",
-          label: active ? "Tool in progress" : "Last tool",
-          text: participantToolName(toolCall.name, toolCall.detail),
-        };
-      }
-    }
-    if (message.role === "agent" && message.content.trim()) {
-      return { kind: "message", label: "Latest message", text: message.content.trim() };
-    }
-    if (message.role === "step" && (message.step?.label || message.content).trim()) {
-      return { kind: "step", label: "Current activity", text: (message.step?.label || message.content).trim() };
-    }
-    if ((message.role === "system" || message.role === "structured") && message.content.trim()) {
-      return { kind: "status", label: "Latest update", text: message.content.trim() };
-    }
-  }
-  return null;
-}
-
 function eventActivity(event: InterAgentEventRecord | undefined): ParticipantNodeActivity | null {
   if (!event) {
     return null;
   }
-  const payloadText = ["summary", "text", "partial_output", "label", "operation_kind", "task"]
+  const payloadText = ["summary", "output_text", "text", "partial_output", "objective", "label", "operation_kind", "task"]
     .map((key) => stringRecordField(event.payload[key]))
     .find(Boolean);
   const eventLabel = event.event_type.split(".").at(-1)?.replace(/_/g, " ") || "Updated";
+  const isToolEvent = event.event_type.includes("tool");
   return {
-    kind: event.event_type.includes("tool") ? "tool" : "status",
-    label: "Latest update",
+    kind: isToolEvent ? "tool" : "status",
+    label: isToolEvent ? toolActivityLabel(event.event_type) : "",
     text: payloadText || eventLabel.charAt(0).toUpperCase() + eventLabel.slice(1),
   };
+}
+
+function toolActivityLabel(eventType: string): string {
+  if (eventType.endsWith(".started")) {
+    return "Tool in progress";
+  }
+  if (eventType.endsWith(".failed")) {
+    return "Tool failed";
+  }
+  if (eventType.endsWith(".completed")) {
+    return "Tool completed";
+  }
+  return "Tool activity";
 }
 
 function participantStatusActivity(participant: GraphParticipant): ParticipantNodeActivity {
@@ -358,21 +315,6 @@ function participantStatusActivity(participant: GraphParticipant): ParticipantNo
 
 function eventParticipantId(event: InterAgentEventRecord): string {
   return stringRecordField(event.participant_id) || stringRecordField(event.payload.participant_id);
-}
-
-function participantToolName(name: string, detail: Record<string, unknown>): string {
-  const toolKind = stringRecordField(detail.tool_kind);
-  if (toolKind === "web_search" || name.includes("web")) {
-    return "Web search";
-  }
-  if (toolKind === "file_change") {
-    return "File changes";
-  }
-  if (toolKind === "skill_change") {
-    return "Skills changed";
-  }
-  const command = stringRecordField(detail.command);
-  return command || name.replace(/[._-]+/g, " ");
 }
 
 function stringRecordField(value: unknown): string {
@@ -400,7 +342,6 @@ function ParticipantTranscript({
   artifacts,
   error,
   isLoading,
-  messages,
   onClose,
   participant,
   transcript,
@@ -408,14 +349,13 @@ function ParticipantTranscript({
   artifacts: InterAgentArtifactRecord[];
   error: string | null;
   isLoading: boolean;
-  messages: ChatMessage[];
   onClose: () => void;
   participant: NonNullable<InterAgentRunDetail>["participants"][number];
   transcript: InterAgentParticipantTranscriptPayload | null;
 }) {
   const inputSummary = participantInputSummary(transcript);
   const fallbackMessages = useMemo(() => participantFallbackMessages(transcript, participant), [participant, transcript]);
-  const displayedMessages = messages.length ? messages : fallbackMessages;
+  const displayedMessages = fallbackMessages;
   const [expandedMessages, setExpandedMessages] = useState<Set<string>>(new Set());
   const [speakingMessageId, setSpeakingMessageId] = useState<string | null>(null);
   const latestToolMessageId =
@@ -527,18 +467,41 @@ function participantFallbackMessages(
 ): ChatMessage[] {
   return (transcript?.items || [])
     .filter(
-      (item) => item.role === "participant" && (item.kind === "output" || item.kind === "summary") && Boolean(item.text.trim()),
+      (item) =>
+        (item.role === "participant" && (item.kind === "output" || item.kind === "summary") && Boolean(item.text.trim())) ||
+        (item.role === "tool" && item.kind === "tool" && Boolean(item.tool_call)),
     )
-    .map((item) => ({
-      id: item.message_id,
-      role: "agent" as const,
-      content: item.text,
-      createdAt: item.created_at,
-      status: item.status === "failed" ? "failed" as const : "complete" as const,
-      sourceLabel: participant.label,
-      sourceParticipantId: participant.participant_id,
-      sourceRunId: participant.run_id,
-    }));
+    .map((item) => {
+      const source = {
+        sourceLabel: participant.label,
+        sourceParticipantId: participant.participant_id,
+        sourceRunId: participant.run_id,
+      };
+      if (item.role === "tool" && item.tool_call) {
+        const toolCall = {
+          ...item.tool_call,
+          createdAt: item.created_at,
+        };
+        return {
+          id: item.message_id,
+          role: "tool" as const,
+          content: item.text || "Tool Used",
+          createdAt: item.created_at,
+          status: item.tool_call.status === "failed" ? "failed" as const : "complete" as const,
+          toolCall,
+          toolCalls: [toolCall],
+          ...source,
+        };
+      }
+      return {
+        id: item.message_id,
+        role: "agent" as const,
+        content: item.text,
+        createdAt: item.created_at,
+        status: item.status === "failed" ? "failed" as const : "complete" as const,
+        ...source,
+      };
+    });
 }
 
 function ParticipantArtifacts({ artifacts }: { artifacts: InterAgentArtifactRecord[] }) {
@@ -977,10 +940,12 @@ function AgentParticipantNode({ data, selected }: NodeProps) {
         </span>
       </button>
       <div className="chatapp-inter-agent-graph__node-activity">
-        <div className="chatapp-inter-agent-graph__node-activity-heading">
-          <span className="material-symbols-rounded" aria-hidden="true">{activityIcon(nodeData.activity.kind)}</span>
-          <span>{nodeData.activity.label}</span>
-        </div>
+        {nodeData.activity.label ? (
+          <div className="chatapp-inter-agent-graph__node-activity-heading">
+            <span className="material-symbols-rounded" aria-hidden="true">{activityIcon(nodeData.activity.kind)}</span>
+            <span>{nodeData.activity.label}</span>
+          </div>
+        ) : null}
         <p title={nodeData.activity.text}>{nodeData.activity.text}</p>
       </div>
       {GRAPH_HANDLES.map(({ position, side }) => (
@@ -1017,7 +982,6 @@ function graphFlowNodes(
     selectable: true,
     selected: selectedParticipantId === node.participant.participant_id,
     style: {
-      height: GRAPH_NODE_HEIGHT,
       width: GRAPH_NODE_WIDTH,
     },
     type: "agentParticipant",

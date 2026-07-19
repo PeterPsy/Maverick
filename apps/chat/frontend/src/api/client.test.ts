@@ -2,9 +2,8 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   ApiError,
   closeInterAgentRun,
-  createInterAgentRun,
+  createInterAgentOrchestration,
   deleteProject,
-  executeInterAgentRun,
   getInterAgentRun,
   getRuntimeThread,
   getSpeechCapabilities,
@@ -19,6 +18,7 @@ import {
   prewarmSpeechWorker,
   resolveInterAgentApproval,
   resumeInterAgentRun,
+  sendInterAgentDirective,
   selectedDependencyProviderAppId,
   selectedSharedDependencyProviderAppId,
   synthesizeSpeech,
@@ -237,14 +237,14 @@ describe("inter-agent client calls", () => {
       if (path === "/api/inter-agent/runs" && !init?.method) {
         return jsonResponse({ items: [] });
       }
-      if (path === "/api/inter-agent/runs" && init?.method === "POST") {
-        return jsonResponse({ run: { run_id: "run-1" }, participants: [] }, 201);
+      if (path === "/api/inter-agent/orchestrations" && init?.method === "POST") {
+        return jsonResponse({ run: { run_id: "run-1" }, participants: [{ participant_id: "orchestrator" }] }, 202);
       }
       if (path === "/api/inter-agent/runs/run-1" && !init?.method) {
         return jsonResponse({ run: { run_id: "run-1", status: "created" }, participants: [] });
       }
-      if (path === "/api/inter-agent/runs/run-1/execute") {
-        return jsonResponse({ run: { run_id: "run-1", status: "completed" }, participants: [], root_runtime_events: [] });
+      if (path === "/api/inter-agent/runs/run-1/directives") {
+        return jsonResponse({ directive: { event_id: "directive-1" } }, 201);
       }
       if (path === "/api/inter-agent/runs/run-1/events?visibility_plane=summary&limit=10") {
         return jsonResponse({ items: [] });
@@ -273,35 +273,16 @@ describe("inter-agent client calls", () => {
 
     await expect(listInterAgentRuns()).resolves.toEqual({ items: [] });
     await expect(
-      createInterAgentRun({
-        thread_id: "thread-1",
+      createInterAgentOrchestration({
         root_runtime_session_id: "session-1",
-        mode: "manager_tools",
+        source_runtime_turn_id: "turn-1",
+        policy: "multi",
         idempotency_key: "key-1",
-        participants: [
-          { participant_id: "orchestrator", kind: "orchestrator", execution_mode: "root_orchestrator", label: "Orchestrator" },
-          { participant_id: "assistant", kind: "agent", execution_mode: "child_runtime_session", label: "Assistant" },
-        ],
-        budget: {
-          max_participants: 2,
-          max_concurrent_participants: 1,
-          max_total_turns: 2,
-          max_turns_per_participant: 1,
-          max_tool_calls: 1,
-        },
       }),
     ).resolves.toMatchObject({ run: { run_id: "run-1" } });
     await expect(getInterAgentRun("run-1")).resolves.toMatchObject({ run: { run_id: "run-1", status: "created" } });
-    await expect(
-      executeInterAgentRun("run-1", {
-        input_text: "Plan",
-        client_message_id: "client-1",
-        participant_inputs: { implementer: "Implement", reviewer: "Review" },
-        async: true,
-        attachments: [{ id: "att-1", name: "brief.md", size: 12, type: "text/markdown", isImage: false, objectUrl: "blob:http://local/att-1" }],
-      }),
-    ).resolves.toMatchObject({
-      run: { status: "completed" },
+    await expect(sendInterAgentDirective("run-1", { text: "Preserve the public API.", idempotency_key: "directive-1" })).resolves.toMatchObject({
+      directive: { event_id: "directive-1" },
     });
     await expect(listInterAgentRunEvents("run-1", { visibilityPlane: "summary", limit: 10 })).resolves.toEqual({ items: [] });
     await expect(listInterAgentRunArtifacts("run-1", { visibilityPlane: "detail", limit: 10 })).resolves.toEqual({
@@ -317,18 +298,18 @@ describe("inter-agent client calls", () => {
       run: { status: "cancelled" },
     });
 
-    expect(JSON.parse(String(fetchMock.mock.calls[1]?.[1]?.body || "{}"))).toMatchObject({
+    const orchestrationCall = fetchMock.mock.calls.find(([path]) => path === "/api/inter-agent/orchestrations");
+    const directiveCall = fetchMock.mock.calls.find(([path]) => path === "/api/inter-agent/runs/run-1/directives");
+    expect(JSON.parse(String(orchestrationCall?.[1]?.body || "{}"))).toEqual({
       root_runtime_session_id: "session-1",
-      mode: "manager_tools",
+      source_runtime_turn_id: "turn-1",
+      policy: "multi",
+      idempotency_key: "key-1",
     });
-    expect(JSON.parse(String(fetchMock.mock.calls[3]?.[1]?.body || "{}"))).toMatchObject({
-      input_text: "Plan",
-      client_message_id: "client-1",
-      participant_inputs: { implementer: "Implement", reviewer: "Review" },
-      async: true,
-      attachments: [{ id: "att-1", name: "brief.md" }],
+    expect(JSON.parse(String(directiveCall?.[1]?.body || "{}"))).toEqual({
+      text: "Preserve the public API.",
+      idempotency_key: "directive-1",
     });
-    expect(JSON.parse(String(fetchMock.mock.calls[3]?.[1]?.body || "{}")).attachments[0]).not.toHaveProperty("objectUrl");
     expect(JSON.parse(String(fetchMock.mock.calls.at(-3)?.[1]?.body || "{}"))).toEqual({ reason: "pause" });
     expect(JSON.parse(String(fetchMock.mock.calls.at(-2)?.[1]?.body || "{}"))).toEqual({ reason: "resume" });
     expect(JSON.parse(String(fetchMock.mock.calls.at(-1)?.[1]?.body || "{}"))).toEqual({ reason: "stop", terminal_status: "cancelled" });

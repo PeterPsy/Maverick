@@ -53,8 +53,6 @@ type InterAgentRunDetail = {
   edges: JsonRecord[];
   budget_policy: JsonRecord | null;
   budget_ledger: JsonRecord | null;
-  root_runtime_events?: RuntimeEvent[];
-  root_runtime_turn?: RuntimeTurn;
 };
 
 type InterAgentEvent = {
@@ -77,6 +75,7 @@ type InterAgentEvent = {
 };
 
 type MockState = {
+  createOrchestrationBodies: JsonRecord[];
   createRunBodies: JsonRecord[];
   createSessionBodies: JsonRecord[];
   executeRunBodies: JsonRecord[];
@@ -245,6 +244,7 @@ test.describe("Chat app browser smoke", () => {
     await page.getByRole("button", { name: "Send message" }).click();
 
     await expect(page.getByText(/^(?:Runtime|Follow-up) answer from the browser harness\.$/)).toBeVisible();
+    expect(state.createOrchestrationBodies).toHaveLength(0);
     expect(state.createRunBodies).toHaveLength(0);
     expect(state.createSessionBodies).toContainEqual(expect.objectContaining({
       prepare_only: true,
@@ -275,7 +275,8 @@ test.describe("Chat app browser smoke", () => {
     await page.getByRole("textbox").fill("Research the launch risks and review the answer");
     await page.getByRole("button", { name: "Send message" }).click();
 
-    await expect(page.getByText("Final risk review ready.")).toBeVisible();
+    await expect(page.getByText(/^(?:Runtime|Follow-up) answer from the browser harness\.$/)).toBeVisible();
+    await expect(page.locator(".chatapp-chat-scroll").getByText("Final risk review ready.")).toHaveCount(0);
     const openAgentNodes = page.getByRole("button", { name: "Open multi-agent board" });
     await expect(openAgentNodes).toBeVisible();
 
@@ -286,58 +287,23 @@ test.describe("Chat app browser smoke", () => {
         source_app_id: "agents",
       }),
     );
-    expect(state.createRunBodies).toHaveLength(1);
-    expect(state.createRunBodies[0]).toMatchObject({
-      mode: "sequential",
-      thread_id: THREAD_ID,
+    expect(state.createOrchestrationBodies).toHaveLength(1);
+    expect(state.createOrchestrationBodies[0]).toMatchObject({
       root_runtime_session_id: RUNTIME_SESSION_ID,
-      visibility_level: "detail",
-      budget: {
-        max_participants: 3,
-        max_concurrent_participants: 1,
-        max_total_turns: 2,
-        max_turns_per_participant: 1,
-        max_tool_calls: 2,
-      },
+      policy: "multi",
     });
-    expect(state.createRunBodies[0].participants).toMatchObject([
-      { participant_id: "orchestrator", kind: "orchestrator" },
-      {
-        participant_id: "implementer",
-        kind: "agent",
-        agent_type_id: RESEARCHER_AGENT_ID,
-        agent_snapshot: {
-          label: "Implementer",
-          skill_ids: ["storage", "browser"],
-          system_prompt: "Research with citations.",
-        },
-      },
-      {
-        participant_id: "reviewer",
-        kind: "agent",
-        agent_type_id: RESEARCHER_AGENT_ID,
-        agent_snapshot: {
-          label: "Reviewer",
-          skill_ids: ["storage", "browser"],
-          system_prompt: "Research with citations.",
-        },
-      },
+    const multiGeneralistTurn = Object.values(state.runtimeSessionTurns)
+      .flat()
+      .find((turn) => turn.input_text === "Research the launch risks and review the answer");
+    expect(state.createOrchestrationBodies[0].source_runtime_turn_id).toBe(multiGeneralistTurn?.turn_id);
+    expect(Object.keys(state.createOrchestrationBodies[0]).sort()).toEqual([
+      "idempotency_key",
+      "policy",
+      "root_runtime_session_id",
+      "source_runtime_turn_id",
     ]);
-    expect(state.createRunBodies[0].edges).toMatchObject([
-      { source_id: "orchestrator", target_id: "implementer", kind: "delegated", label: "Implementation" },
-      { source_id: "implementer", target_id: "reviewer", kind: "reviewed_by", label: "Review" },
-      { source_id: "reviewer", target_id: "orchestrator", kind: "produced", label: "Final review" },
-    ]);
-
-    await expect.poll(() => state.executeRunBodies.length).toBe(1);
-    expect(state.executeRunBodies[0]).toMatchObject({
-      input_text: "Research the launch risks and review the answer",
-      participant_inputs: {
-        implementer: /Produce the concrete user-facing answer/,
-        reviewer: /Review the implementer's output/,
-      },
-      async: true,
-    });
+    expect(state.createRunBodies).toHaveLength(0);
+    expect(state.executeRunBodies).toHaveLength(0);
 
     await openAgentNodes.click();
     const agentNodesRegion = page.getByRole("region", { name: "Agent nodes view" });
@@ -356,9 +322,10 @@ test.describe("Chat app browser smoke", () => {
     await expect(reviewerNode).toHaveClass(/is-working/);
     await expect(reviewerNode.locator(".chatapp-live-border-glow")).toBeVisible();
     await expect(reviewerNode.getByText("Final risk review ready.")).toBeVisible();
-    await expect(reviewerNode.locator(".chatapp-inter-agent-graph__node-activity-heading")).toBeVisible();
+    await expect(reviewerNode.locator(".chatapp-inter-agent-graph__node-activity-heading")).toHaveCount(0);
     await expect(reviewerNode.getByRole("button", { name: /Reviewer latest activity/ })).toHaveCount(0);
     await expect(reviewerNode.locator(".chatapp-inter-agent-graph__node-activity-caret")).toHaveCount(0);
+    await expect(agentNodesRegion.getByText("Latest update")).toHaveCount(0);
 
     await page.locator('[data-participant-id="reviewer"]').click();
     const participantTranscript = page.getByRole("complementary", { name: "Reviewer transcript" });
@@ -389,36 +356,21 @@ test.describe("Chat app browser smoke", () => {
     await page.getByRole("textbox").fill("Compare the rollout options as a group");
     await page.getByRole("button", { name: "Send message" }).click();
 
-    await expect(page.getByText("Final risk review ready.")).toBeVisible();
+    await expect(page.getByText(/^(?:Runtime|Follow-up) answer from the browser harness\.$/)).toBeVisible();
+    await expect(page.locator(".chatapp-chat-scroll").getByText("Final risk review ready.")).toHaveCount(0);
     const openAgentNodes = page.getByRole("button", { name: "Open multi-agent board" });
     await expect(openAgentNodes).toBeVisible();
-    expect(state.createRunBodies).toHaveLength(1);
-    expect(state.createRunBodies[0]).toMatchObject({
-      mode: "group_chat",
-      aggregator_participant_id: "synthesizer",
-      visibility_level: "detail",
-      budget: {
-        max_participants: 4,
-        max_concurrent_participants: 1,
-        max_rounds: 1,
-        max_total_turns: 3,
-        max_turns_per_participant: 1,
-        max_tool_calls: 3,
-      },
+    expect(state.createOrchestrationBodies).toHaveLength(1);
+    expect(state.createOrchestrationBodies[0]).toMatchObject({
+      root_runtime_session_id: RUNTIME_SESSION_ID,
+      policy: "group_chat",
     });
-    expect(state.createRunBodies[0].participants).toMatchObject([
-      { participant_id: "orchestrator", kind: "orchestrator" },
-      { participant_id: "analyst", kind: "agent", agent_snapshot: { label: "Analyst" } },
-      { participant_id: "reviewer", kind: "agent", agent_snapshot: { label: "Reviewer" } },
-      { participant_id: "synthesizer", kind: "agent", agent_snapshot: { label: "Synthesizer" } },
-    ]);
-    expect(state.createRunBodies[0].edges).toMatchObject([
-      { source_id: "orchestrator", target_id: "analyst", kind: "delegated" },
-      { source_id: "orchestrator", target_id: "reviewer", kind: "delegated" },
-      { source_id: "analyst", target_id: "synthesizer", kind: "depends_on" },
-      { source_id: "reviewer", target_id: "synthesizer", kind: "depends_on" },
-      { source_id: "synthesizer", target_id: "orchestrator", kind: "produced" },
-    ]);
+    const groupGeneralistTurn = Object.values(state.runtimeSessionTurns)
+      .flat()
+      .find((turn) => turn.input_text === "Compare the rollout options as a group");
+    expect(state.createOrchestrationBodies[0].source_runtime_turn_id).toBe(groupGeneralistTurn?.turn_id);
+    expect(state.createRunBodies).toHaveLength(0);
+    expect(state.executeRunBodies).toHaveLength(0);
 
     await openAgentNodes.click();
     await expect(page.getByRole("region", { name: "Agent nodes view" })).toBeVisible();
@@ -430,9 +382,9 @@ test.describe("Chat app browser smoke", () => {
   test("renders React Flow Agent nodes on mobile and loads transcript on node click", async ({ page }) => {
     const state = await installChatMocks(page);
     state.runCreated = true;
-    state.runDetail = interAgentRunDetail({ run: { status: "running", mode: "sequential" } });
-    state.runEvents = interAgentEventsForMode("sequential");
-    state.runArtifacts = interAgentArtifactsForMode("sequential");
+    state.runDetail = interAgentRunDetail({ run: { status: "running", orchestration_policy: "multi" } });
+    state.runEvents = interAgentEventsForMode("multi");
+    state.runArtifacts = interAgentArtifactsForMode("multi");
 
     await page.setViewportSize({ width: 390, height: 844 });
     await page.goto("/apps/chat/");
@@ -457,7 +409,7 @@ test.describe("Chat app browser smoke", () => {
     await expect(page.locator("[data-participant-id]")).toHaveCount(3);
     await expectReactFlowGraphRendered(page, 3);
     await expect(page.locator(".chatapp-inter-agent-graph__node.is-working .chatapp-live-border-glow")).toHaveCount(2);
-    await expect(page.getByText("Reviewer draft before final synthesis.")).toBeVisible();
+    await expect(page.getByText("Final risk review ready.")).toBeVisible();
 
     await page.locator('[data-participant-id="implementer"]').click();
     await expect(page.getByText("Implementer accepted browser-observed task.")).toBeHidden();
@@ -711,6 +663,7 @@ async function installChatMocks(page: Page): Promise<MockState> {
 
 function createMockState(): MockState {
   return {
+    createOrchestrationBodies: [],
     createRunBodies: [],
     createSessionBodies: [],
     executeRunBodies: [],
@@ -720,8 +673,8 @@ function createMockState(): MockState {
     threads: [],
     runCreated: false,
     runDetail: interAgentRunDetail(),
-    runEvents: interAgentEventsForMode("sequential"),
-    runArtifacts: interAgentArtifactsForMode("sequential"),
+    runEvents: interAgentEventsForMode("multi"),
+    runArtifacts: interAgentArtifactsForMode("multi"),
   };
 }
 
@@ -750,6 +703,18 @@ function interAgentEventsForMode(mode: string): InterAgentEvent[] {
         status: "created",
       },
       sequence: 2,
+    }),
+    interAgentEvent({
+      event_id: "event-final-review",
+      event_type: "inter_agent.task.completed",
+      participant_id: artifactParticipantId,
+      runtime_session_id: artifactSessionId,
+      runtime_turn_id: artifactTurnId,
+      payload: {
+        output_text: groupChat ? "Final group synthesis ready." : "Final risk review ready.",
+        status: "completed",
+      },
+      sequence: 3,
     }),
   ];
 }
@@ -919,14 +884,28 @@ async function handleInterAgentApi(route: Route, state: MockState) {
     await fulfillJson(route, { items: state.runCreated ? [state.runDetail] : [] });
     return;
   }
+  if (url.pathname === "/api/inter-agent/orchestrations" && request.method() === "POST") {
+    const body = postBody(route);
+    const policy = typeof body.policy === "string" ? body.policy : "auto";
+    const sourceTurnId = typeof body.source_runtime_turn_id === "string" ? body.source_runtime_turn_id : "turn-normal";
+    state.createOrchestrationBodies.push(body);
+    state.runCreated = true;
+    const initialDetail = interAgentRunDetail({
+      materialized: false,
+      run: { status: "planning", orchestration_policy: policy, source_runtime_turn_id: sourceTurnId },
+    });
+    state.runDetail = interAgentRunDetail({
+      run: { status: "running", orchestration_policy: policy, source_runtime_turn_id: sourceTurnId },
+    });
+    state.runEvents = interAgentEventsForMode(policy);
+    state.runArtifacts = interAgentArtifactsForMode(policy);
+    await fulfillJson(route, initialDetail, 202);
+    return;
+  }
   if (url.pathname === "/api/inter-agent/runs" && request.method() === "POST") {
     const body = postBody(route);
     state.createRunBodies.push(body);
-    state.runCreated = true;
-    state.runDetail = interAgentRunDetail({ run: { status: "created", mode: body.mode || "sequential" } });
-    state.runEvents = interAgentEventsForMode(String(body.mode || "sequential"));
-    state.runArtifacts = interAgentArtifactsForMode(String(body.mode || "sequential"));
-    await fulfillJson(route, state.runDetail);
+    await fulfillJson(route, { error: "legacy_static_run_api_forbidden" }, 410);
     return;
   }
 
@@ -940,34 +919,7 @@ async function handleInterAgentApi(route: Route, state: MockState) {
     if (action === "execute" && request.method() === "POST") {
       const body = postBody(route);
       state.executeRunBodies.push(body);
-      state.runCreated = true;
-      const mode = String(state.runDetail.run.mode || "sequential");
-      const rootRuntimeEvents = [
-        runtimeTranscriptEvents(
-          RUNTIME_SESSION_ID,
-          "turn-root",
-          typeof body.input_text === "string" ? body.input_text : "",
-          "Root orchestrator accepted the multi-agent request.",
-          typeof body.client_message_id === "string" ? body.client_message_id : undefined,
-        )[0],
-        ...projectedParticipantRuntimeEvents(RUNTIME_SESSION_ID, "turn-root", "reviewer", "Reviewer"),
-      ];
-      state.runDetail = interAgentRunDetail({
-        run: { status: "running", mode },
-        root_runtime_turn: runtimeTurn("turn-root", RUNTIME_SESSION_ID, "active", typeof body.input_text === "string" ? body.input_text : ""),
-        root_runtime_events: rootRuntimeEvents,
-      });
-      state.threads = [
-        chatThread({
-          availability: "active",
-          runtime_session_id: RUNTIME_SESSION_ID,
-          thread_id: THREAD_ID,
-          title: "Multi-agent launch risks",
-        }),
-      ];
-      state.runtimeSessionEvents[RUNTIME_SESSION_ID] = state.runDetail.root_runtime_events || [];
-      state.runtimeSessionTurns[RUNTIME_SESSION_ID] = [state.runDetail.root_runtime_turn as RuntimeTurn];
-      await fulfillJson(route, state.runDetail);
+      await fulfillJson(route, { error: "root_projection_execution_forbidden" }, 410);
       return;
     }
     if (action === "events" && request.method() === "GET") {
@@ -1196,55 +1148,16 @@ function runtimeTranscriptEvents(sessionId: string, turnId: string, inputText: s
   ];
 }
 
-function projectedParticipantRuntimeEvents(
-  sessionId: string,
-  turnId: string,
-  participantId: string,
-  participantLabel: string,
-): RuntimeEvent[] {
-  const projection = {
-    inter_agent_projection: "participant_runtime_event",
-    inter_agent_run_id: RUN_ID,
-    inter_agent_participant_id: participantId,
-    inter_agent_participant_label: participantLabel,
-    inter_agent_participant_block_id: `${participantId}-block`,
-  };
-  return [
-    {
-      event_id: `${participantId}-tool`,
-      session_id: sessionId,
-      turn_id: turnId,
-      event_type: "runtime.tool_call.completed",
-      payload: { ...projection, name: "web_search", tool_kind: "web_search", query: "launch risks" },
-      created_at: "2026-06-18T10:00:01Z",
-    },
-    {
-      event_id: `${participantId}-delta`,
-      session_id: sessionId,
-      turn_id: turnId,
-      event_type: "runtime.output.delta",
-      payload: { ...projection, text: "Reviewing launch sources. " },
-      created_at: "2026-06-18T10:00:02Z",
-    },
-    {
-      event_id: `${participantId}-final`,
-      session_id: sessionId,
-      turn_id: turnId,
-      event_type: "runtime.output.final",
-      payload: { ...projection, text: "Reviewing launch sources. Final risk review ready." },
-      created_at: "2026-06-18T10:00:03Z",
-    },
-  ];
-}
-
-function interAgentRunDetail(overrides: { run?: JsonRecord; root_runtime_events?: RuntimeEvent[]; root_runtime_turn?: RuntimeTurn } = {}): InterAgentRunDetail {
+function interAgentRunDetail(overrides: { materialized?: boolean; run?: JsonRecord } = {}): InterAgentRunDetail {
   const run = {
     run_id: RUN_ID,
     workspace_id: WORKSPACE_ID,
     thread_id: THREAD_ID,
     root_runtime_session_id: RUNTIME_SESSION_ID,
+    source_runtime_turn_id: "turn-normal",
     source_app_id: "chat",
-    mode: "sequential",
+    mode: "orchestrated",
+    orchestration_policy: "multi",
     status: "running",
     created_by_user_id: "user:admin",
     orchestrator_participant_id: "orchestrator",
@@ -1256,22 +1169,35 @@ function interAgentRunDetail(overrides: { run?: JsonRecord; root_runtime_events?
     ended_at: null,
     ...(overrides.run || {}),
   };
-  const groupChat = run.mode === "group_chat";
+  const groupChat = run.orchestration_policy === "group_chat";
+  const orchestrator = interAgentParticipant(
+    "orchestrator",
+    "orchestrator",
+    "child_runtime_session",
+    "Orchestrator",
+    overrides.materialized === false ? null : "child-orchestrator",
+    "running",
+    0,
+  );
   return {
     run,
-    participants: groupChat
+    participants: overrides.materialized === false
+      ? [orchestrator]
+      : groupChat
       ? [
-          interAgentParticipant("orchestrator", "orchestrator", "root_orchestrator", "Orchestrator", null, "running", 0),
+          orchestrator,
           interAgentParticipant("analyst", "agent", "child_runtime_session", "Analyst", "child-analyst", "completed", 1),
           interAgentParticipant("reviewer", "agent", "child_runtime_session", "Reviewer", "child-reviewer", "completed", 2),
           interAgentParticipant("synthesizer", "agent", "child_runtime_session", "Synthesizer", "child-synthesizer", "running", 3),
         ]
       : [
-          interAgentParticipant("orchestrator", "orchestrator", "root_orchestrator", "Orchestrator", null, "running", 0),
+          orchestrator,
           interAgentParticipant("implementer", "agent", "child_runtime_session", "Implementer", "child-implementer", "completed", 1),
           interAgentParticipant("reviewer", "agent", "child_runtime_session", "Reviewer", "child-reviewer", "running", 2),
         ],
-    edges: groupChat
+    edges: overrides.materialized === false
+      ? []
+      : groupChat
       ? [
           interAgentEdge("edge-analysis", "orchestrator", "analyst", "delegated", "Analysis"),
           interAgentEdge("edge-review", "orchestrator", "reviewer", "delegated", "Review"),
@@ -1287,13 +1213,13 @@ function interAgentRunDetail(overrides: { run?: JsonRecord; root_runtime_events?
     budget_policy: {
       budget_policy_id: "budget-chat-e2e",
       workspace_id: WORKSPACE_ID,
-      max_participants: groupChat ? 4 : 3,
-      max_concurrent_participants: 1,
+      max_participants: groupChat ? 9 : 7,
+      max_concurrent_participants: groupChat ? 3 : 2,
       max_handoffs: 3,
-      max_rounds: 1,
-      max_total_turns: groupChat ? 3 : 2,
-      max_turns_per_participant: 1,
-      max_tool_calls: groupChat ? 3 : 2,
+      max_rounds: 3,
+      max_total_turns: groupChat ? 14 : 12,
+      max_turns_per_participant: 4,
+      max_tool_calls: groupChat ? 24 : 20,
       max_estimated_tokens: 0,
       max_estimated_cost: "0",
       max_idle_seconds: 60,
@@ -1314,8 +1240,6 @@ function interAgentRunDetail(overrides: { run?: JsonRecord; root_runtime_events?
       estimated_cost_used: "0",
       updated_at: NOW,
     },
-    root_runtime_events: overrides.root_runtime_events,
-    root_runtime_turn: overrides.root_runtime_turn,
   };
 }
 
@@ -1339,7 +1263,7 @@ function interAgentParticipant(
     runtime_session_id: runtimeSessionId,
     status,
     current_task_id: null,
-    thread_visibility: kind === "agent" ? "hidden" : "user",
+    thread_visibility: executionMode === "child_runtime_session" ? "hidden" : "user",
     created_at: NOW,
     updated_at: NOW,
     sequence_index: sequenceIndex,
@@ -1365,6 +1289,60 @@ function participantTranscriptPayload(state: MockState, participantId: string) {
     state.runDetail.participants.find((item) => item.participant_id === participantId) ||
     interAgentParticipant(participantId, "agent", "child_runtime_session", participantId, null, "running", 99);
   const label = String(participant.label || participantId);
+  const outputItems = participantId === "reviewer"
+    ? [
+        {
+          message_id: `${participantId}:output:research`,
+          kind: "output",
+          role: "participant",
+          text: "Reviewing launch sources.",
+          status: "completed",
+          created_at: "2026-06-18T10:00:01Z",
+        },
+        {
+          message_id: `${participantId}:tool:web-search`,
+          kind: "tool",
+          role: "tool",
+          text: "Tool Used",
+          status: "completed",
+          created_at: "2026-06-18T10:00:02Z",
+          tool_call: {
+            id: "tool-1",
+            name: "web_search",
+            status: "completed",
+            detail: { tool_kind: "web_search", query: "launch risks", summary: "Web search" },
+          },
+        },
+        {
+          message_id: `${participantId}:output:final`,
+          kind: "output",
+          role: "participant",
+          text: "Final risk review ready.",
+          status: "completed",
+          created_at: "2026-06-18T10:00:03Z",
+        },
+      ]
+    : [
+        {
+          message_id: `${participantId}:output`,
+          kind: "output",
+          role: "participant",
+          text: `${label} produced a safe participant summary.`,
+          status: "completed",
+          created_at: NOW,
+        },
+      ];
+  const items = [
+    {
+      message_id: `${participantId}:input`,
+      kind: "input",
+      role: "user",
+      text: `${label} accepted browser-observed task.`,
+      status: "completed",
+      created_at: NOW,
+    },
+    ...outputItems,
+  ];
   return {
     run_id: RUN_ID,
     participant: {
@@ -1374,25 +1352,8 @@ function participantTranscriptPayload(state: MockState, participantId: string) {
       status: participant.status,
     },
     visibility_plane: "detail",
-    items: [
-      {
-        message_id: `${participantId}:input`,
-        kind: "input",
-        role: "user",
-        text: `${label} accepted browser-observed task.`,
-        status: "completed",
-        created_at: NOW,
-      },
-      {
-        message_id: `${participantId}:output`,
-        kind: "output",
-        role: "participant",
-        text: `${label} produced a safe participant summary.`,
-        status: "completed",
-        created_at: NOW,
-      },
-    ],
-    item_count: 2,
+    items,
+    item_count: items.length,
     truncated: false,
   };
 }

@@ -47,7 +47,6 @@ export function ChatSurface({ composerProps, surfaceActions, surfaceState, trans
                 initialApprovals={transcriptProps.interAgentApprovalsByRunId?.[activeInterAgentGraphRunId] || []}
                 initialEvents={transcriptProps.interAgentEventsByRunId?.[activeInterAgentGraphRunId] || []}
                 initialRunDetail={activeGraphRun}
-                messages={transcriptProps.messages}
                 onClose={transcriptProps.onCloseInterAgentGraph || (() => undefined)}
                 runId={activeInterAgentGraphRunId}
               />

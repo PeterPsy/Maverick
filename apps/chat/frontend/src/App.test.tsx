@@ -78,9 +78,7 @@ vi.mock("./api/client", () => ({
   }),
   createRuntimeSession: vi.fn(),
   createRuntimeSessionWithTurn: vi.fn(),
-  createInterAgentRun: vi.fn(),
   createThread: vi.fn(),
-  executeInterAgentRun: vi.fn(),
   getAgentDefinition: vi.fn(),
   getAppDependencies: vi.fn(),
   getRuntimeThread: vi.fn(async (threadId: string) => {

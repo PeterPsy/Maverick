@@ -518,8 +518,10 @@ export type InterAgentRunRecord = {
   workspace_id: string;
   thread_id: string;
   root_runtime_session_id: string;
+  source_runtime_turn_id?: string | null;
   source_app_id: string;
   mode: string;
+  orchestration_policy?: string | null;
   status: InterAgentRunStatus;
   created_by_user_id: string;
   orchestrator_participant_id: string;
@@ -648,12 +650,18 @@ export type InterAgentArtifactRecord = {
 
 export type InterAgentParticipantTranscriptItem = {
   message_id: string;
-  kind: "input" | "output" | "summary" | "artifact" | "approval" | "status";
-  role: "user" | "participant" | "system";
+  kind: "input" | "output" | "summary" | "tool" | "artifact" | "approval" | "status";
+  role: "user" | "participant" | "tool" | "system";
   text: string;
   status: string;
   created_at: string;
   truncated?: boolean;
+  tool_call?: {
+    id: string;
+    name: string;
+    status: "started" | "updated" | "completed" | "failed";
+    detail: Record<string, unknown>;
+  };
 };
 
 export type InterAgentParticipantTranscriptPayload = {
@@ -694,8 +702,6 @@ export type InterAgentRunDetail = {
   budget_ledger: InterAgentBudgetLedgerRecord | null;
   final_answer?: string;
   participant_results?: Array<Record<string, unknown>>;
-  root_runtime_events?: RuntimeEvent[];
-  root_runtime_turn?: RuntimeTurn;
 };
 
 export type InterAgentWebSocketFrame =

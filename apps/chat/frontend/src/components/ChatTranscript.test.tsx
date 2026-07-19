@@ -124,7 +124,7 @@ describe("ChatTranscript inter-agent board entry", () => {
     expect(boardButton?.classList.contains("is-pending")).toBe(false);
   });
 
-  it("attaches the board opener to projected participant agent blocks", async () => {
+  it("attaches the board opener to the generalist response and hides participant blocks", async () => {
     container = document.createElement("div");
     document.body.append(container);
     root = createRoot(container);
@@ -138,11 +138,14 @@ describe("ChatTranscript inter-agent board entry", () => {
           loadingLabel="Thinking"
           mentionItems={[]}
           messages={[
-            interAgentStepMessage("completed", "turn-1:step:summary-event"),
+            agentMessage(),
             {
               ...agentMessage(),
               id: "turn-1:inter-agent:researcher-block:agent",
+              content: "Hidden participant output.",
               sourceLabel: "Researcher",
+              sourceParticipantId: "researcher",
+              sourceRunId: "run-1",
             },
           ]}
           onOpenInterAgentGraph={vi.fn()}
@@ -151,7 +154,9 @@ describe("ChatTranscript inter-agent board entry", () => {
     });
 
     expect(container.querySelector(".chatapp-agent-message-board")).not.toBeNull();
-    expect(container.querySelector(".chatapp-message-source")?.textContent).toContain("Researcher");
+    expect(container.querySelector(".chatapp-message-source")).toBeNull();
+    expect(container.textContent).toContain("Final assistant answer.");
+    expect(container.textContent).not.toContain("Hidden participant output.");
   });
 });
 
@@ -257,8 +262,10 @@ function runDetail(status: InterAgentRunDetail["run"]["status"]): InterAgentRunD
       workspace_id: "default",
       thread_id: "thread-1",
       root_runtime_session_id: "session-1",
+      source_runtime_turn_id: "turn-1",
       source_app_id: "chat",
-      mode: "manager_tools",
+      mode: "orchestrated",
+      orchestration_policy: "multi",
       status,
       created_by_user_id: "user:admin",
       orchestrator_participant_id: "orchestrator",
@@ -275,13 +282,13 @@ function runDetail(status: InterAgentRunDetail["run"]["status"]): InterAgentRunD
         workspace_id: "default",
         run_id: "run-1",
         kind: "orchestrator",
-        execution_mode: "root_orchestrator",
+        execution_mode: "child_runtime_session",
         agent_type_id: null,
         label: "Orchestrator",
         runtime_session_id: null,
         status: "completed",
         current_task_id: null,
-        thread_visibility: "user",
+        thread_visibility: "hidden",
         created_at: "2026-06-18T10:00:00Z",
         updated_at: "2026-06-18T10:02:00Z",
         sequence_index: 0,

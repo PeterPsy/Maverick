@@ -6,7 +6,6 @@ import { createRoot } from "react-dom/client";
 import type { Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type {
-  ChatMessage,
   InterAgentApprovalRecord,
   InterAgentEventRecord,
   InterAgentParticipantTranscriptPayload,
@@ -163,14 +162,28 @@ function transcriptPayload(participantId: string): InterAgentParticipantTranscri
       },
       {
         message_id: `${participantId}:message:2`,
+        kind: "tool",
+        role: "tool",
+        text: "Tool Used",
+        status: "completed",
+        created_at: "2026-06-18T10:00:02Z",
+        tool_call: {
+          id: "tool-1",
+          name: "web_search",
+          status: "completed",
+          detail: { tool_kind: "web_search", query: "Maverick launch", summary: "Web search" },
+        },
+      },
+      {
+        message_id: `${participantId}:message:3`,
         kind: "output",
         role: "participant",
         text: participantId === "researcher" ? "Research complete." : "Plan created.",
         status: "completed",
-        created_at: "2026-06-18T10:00:02Z",
+        created_at: "2026-06-18T10:00:03Z",
       },
     ],
-    item_count: 2,
+    item_count: 3,
     truncated: false,
   };
 }
@@ -194,36 +207,15 @@ function approvalRecord(overrides: Partial<InterAgentApprovalRecord> = {}): Inte
   };
 }
 
-function projectedResearcherMessages(): ChatMessage[] {
-  return [
-    {
-      id: "researcher:agent:1",
-      role: "agent",
-      content: "Checking the primary sources.",
-      createdAt: "2026-06-18T10:01:00Z",
-      status: "complete",
-      sourceLabel: "Researcher",
-      sourceParticipantId: "researcher",
-      sourceRunId: "run-1",
-    },
-    {
-      id: "researcher:tool:1",
-      role: "tool",
-      content: "Tool Used",
-      createdAt: "2026-06-18T10:01:01Z",
-      status: "complete",
-      sourceLabel: "Researcher",
-      sourceParticipantId: "researcher",
-      sourceRunId: "run-1",
-      toolCall: {
-        id: "web-search-1",
-        name: "web_search",
-        status: "started",
-        detail: { tool_kind: "web_search", query: "Maverick launch" },
-        createdAt: "2026-06-18T10:01:01Z",
-      },
-    },
-  ];
+function toolEvent(overrides: Partial<InterAgentEventRecord> = {}): InterAgentEventRecord {
+  return artifactEvent({
+    event_id: "event-tool-1",
+    event_type: "inter_agent.tool.started",
+    sequence: 2,
+    payload: { summary: "Web search" },
+    created_at: "2026-06-18T10:02:00Z",
+    ...overrides,
+  });
 }
 
 function artifactEvent(overrides: Partial<InterAgentEventRecord> = {}): InterAgentEventRecord {
@@ -378,7 +370,7 @@ describe("InterAgentGraphView", () => {
   });
 
   it("shows the shared working border and a bounded static latest activity inside agent nodes", async () => {
-    const element = await renderGraph({ messages: projectedResearcherMessages() });
+    const element = await renderGraph({ initialEvents: [toolEvent()] });
     const researcherNodeButton = element.querySelector('[data-participant-id="researcher"]') as HTMLButtonElement | null;
     const researcherNode = researcherNodeButton?.closest(".chatapp-inter-agent-graph__node");
 
@@ -389,6 +381,18 @@ describe("InterAgentGraphView", () => {
     expect(researcherNode?.querySelector(".chatapp-inter-agent-graph__node-activity-heading")).not.toBeNull();
     expect(researcherNode?.querySelector('[aria-label*="latest activity"]')).toBeNull();
     expect(researcherNode?.querySelector(".chatapp-inter-agent-graph__node-activity-caret")).toBeNull();
+  });
+
+  it("shows generic runtime updates without a redundant heading", async () => {
+    const element = await renderGraph({ initialEvents: [artifactEvent()] });
+    const researcherNodeButton = element.querySelector('[data-participant-id="researcher"]') as HTMLButtonElement | null;
+    const researcherActivity = researcherNodeButton
+      ?.closest(".chatapp-inter-agent-graph__node")
+      ?.querySelector(".chatapp-inter-agent-graph__node-activity");
+
+    expect(researcherActivity?.textContent).toContain("Draft report summary.");
+    expect(researcherActivity?.textContent).not.toContain("Latest update");
+    expect(researcherActivity?.querySelector(".chatapp-inter-agent-graph__node-activity-heading")).toBeNull();
   });
 
   it("loads a safe transcript when an agent node is selected", async () => {
@@ -436,8 +440,8 @@ describe("InterAgentGraphView", () => {
     expect(summary?.textContent).toContain("Final input marker.");
   });
 
-  it("renders projected participant text and tools with the normal chat blocks", async () => {
-    const element = await renderGraph({ messages: projectedResearcherMessages() });
+  it("renders isolated participant text and tools with the normal chat blocks", async () => {
+    const element = await renderGraph();
 
     await act(async () => {
       (element.querySelector('[data-participant-id="researcher"]') as HTMLButtonElement | null)?.click();
@@ -445,7 +449,7 @@ describe("InterAgentGraphView", () => {
     });
 
     const transcript = element.querySelector('[aria-label="Researcher transcript"]');
-    expect(transcript?.textContent).toContain("Checking the primary sources.");
+    expect(transcript?.textContent).toContain("Research complete.");
     expect(transcript?.textContent).toContain("Tool Used");
     expect(transcript?.textContent).toContain("Web search");
     expect(transcript?.querySelectorAll(".chatapp-bubble").length).toBe(2);
@@ -453,31 +457,33 @@ describe("InterAgentGraphView", () => {
     expect(transcript?.querySelector(".chatapp-agent-block")).not.toBeNull();
   });
 
-  it("keeps projected participant activity scoped to the selected run and participant", async () => {
-    const messages: ChatMessage[] = [
-      ...projectedResearcherMessages(),
-      {
-        id: "orchestrator:agent:private",
-        role: "agent",
-        content: "Orchestrator-only update.",
-        createdAt: "2026-06-18T10:01:02Z",
-        status: "complete",
-        sourceLabel: "Orchestrator",
-        sourceParticipantId: "orchestrator",
-        sourceRunId: "run-1",
-      },
-      {
-        id: "researcher:agent:other-run",
-        role: "agent",
-        content: "Different-run researcher update.",
-        createdAt: "2026-06-18T10:01:03Z",
-        status: "complete",
-        sourceLabel: "Researcher",
-        sourceParticipantId: "researcher",
-        sourceRunId: "run-2",
-      },
-    ];
-    const element = await renderGraph({ messages });
+  it("keeps board activity scoped to run and participant", async () => {
+    const element = await renderGraph({
+      initialEvents: [
+        toolEvent(),
+        toolEvent({
+          event_id: "event-orchestrator",
+          participant_id: "orchestrator",
+          sequence: 30,
+          payload: { summary: "Orchestrator-only update." },
+        }),
+        toolEvent({
+          event_id: "event-other-run",
+          run_id: "run-2",
+          sequence: 40,
+          payload: { summary: "Different-run researcher update." },
+        }),
+      ],
+    });
+
+    const activityText = element
+      .querySelector('[data-participant-id="researcher"]')
+      ?.closest(".chatapp-inter-agent-graph__node")
+      ?.querySelector(".chatapp-inter-agent-graph__node-activity")?.textContent || "";
+    expect(activityText).toContain("Tool in progress");
+    expect(activityText).toContain("Web search");
+    expect(activityText).not.toContain("Orchestrator-only update.");
+    expect(activityText).not.toContain("Different-run researcher update.");
 
     await act(async () => {
       (element.querySelector('[data-participant-id="researcher"]') as HTMLButtonElement | null)?.click();
@@ -485,7 +491,7 @@ describe("InterAgentGraphView", () => {
     });
 
     const transcriptText = element.querySelector('[aria-label="Researcher transcript"]')?.textContent || "";
-    expect(transcriptText).toContain("Checking the primary sources.");
+    expect(transcriptText).toContain("Research complete.");
     expect(transcriptText).not.toContain("Orchestrator-only update.");
     expect(transcriptText).not.toContain("Different-run researcher update.");
   });

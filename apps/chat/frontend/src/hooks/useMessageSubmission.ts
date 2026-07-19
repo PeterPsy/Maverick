@@ -8,12 +8,9 @@ import {
   RuntimeSession,
   RuntimeTurn,
   RuntimeTurnSubmitResponse,
-  type CreateInterAgentRunPayload,
-  type InterAgentParticipantSpecPayload,
-  createInterAgentRun,
+  createInterAgentOrchestration,
   createRuntimeSession,
   createRuntimeSessionWithTurn,
-  executeInterAgentRun,
   interruptRuntimeTurn,
   isRuntimeSessionUnavailableError,
   prepareRuntimeSessionAppReferences,
@@ -59,12 +56,6 @@ export type AgentRuntimeConfig = {
   source_app_id: string;
   system_prompt: string;
   title: string;
-};
-
-type InterAgentWorkerPlan = {
-  participantId: string;
-  label: string;
-  task: string;
 };
 
 type UseMessageSubmissionParams = {
@@ -1164,10 +1155,6 @@ export function useMessageSubmission({
     const targetDraftChat = target.draftChat;
     try {
       throwIfAborted(abortController.signal);
-      if (message.multiAgentMode && message.multiAgentMode !== "off") {
-        await submitInterAgentMessage(message, target, abortController.signal);
-        return;
-      }
       let thread = targetThread;
       let agentRuntimeConfig: AgentRuntimeConfig | null = null;
       let systemPrompt = targetDraftChat?.systemPrompt || "";
@@ -1361,6 +1348,30 @@ export function useMessageSubmission({
         notifyActiveThreadChanged(optimisticThread.thread_id);
         openChatThreadRouteInShell(optimisticThread.thread_id, { navigationScope });
       }
+      if (message.multiAgentMode && message.multiAgentMode !== "off") {
+        try {
+          const orchestration = await createInterAgentOrchestration(
+            interAgentOrchestrationIntent({
+              clientMessageId: message.clientMessageId,
+              mode: message.multiAgentMode,
+              rootRuntimeSessionId: response.session.session_id,
+              sourceRuntimeTurnId: response.turn.turn_id,
+            }),
+            { signal: abortController.signal },
+          );
+          if (isConversationStillActive(conversationKey)) {
+            onInterAgentRunChanged?.(orchestration);
+          }
+        } catch (orchestrationError) {
+          if (!isAbortError(orchestrationError) && isConversationStillActive(conversationKey)) {
+            setError(
+              orchestrationError instanceof Error
+                ? `Generalist turn accepted; Agent nodes could not start: ${orchestrationError.message}`
+                : "Generalist turn accepted; Agent nodes could not start.",
+            );
+          }
+        }
+      }
       if (response.turn.status !== "queued" && response.turn.status !== "active") {
         delete inFlightSubmissionsRef.current[threadKey];
         removePendingMessage(threadKey, message.clientMessageId);
@@ -1386,132 +1397,6 @@ export function useMessageSubmission({
         delete inFlightSubmissionsRef.current[conversationKey];
       }
       setConversationSending(conversationKey, false);
-    }
-  }
-
-  async function submitInterAgentMessage(
-    message: QueuedMessage,
-    target: SubmissionTarget,
-    signal: AbortSignal,
-  ) {
-    const conversationKey = target.conversationKey;
-    const targetThread = target.thread;
-    const targetDraftChat = target.draftChat;
-    let thread = targetThread;
-    let session: RuntimeSession | null = null;
-    const agentRuntimeConfig = await selectedAgentRuntimeConfig(target.activeAppContext);
-    throwIfAborted(signal);
-    if (!thread) {
-      const systemPrompt =
-        agentRuntimeConfig?.system_prompt || targetDraftChat?.systemPrompt || (await loadDefaultSystemPrompt(target.activeAppContext));
-      throwIfAborted(signal);
-      session = await createRuntimeSession(
-        {
-          agent_id: agentRuntimeConfig?.agent_id,
-          agent_role_id: agentRuntimeConfig?.agent_role_id,
-          agent_type_id: agentRuntimeConfig?.agent_type_id,
-          project_id: targetDraftChat?.projectId ?? null,
-          source_app_id: agentRuntimeConfig?.source_app_id || "chat",
-          system_prompt: systemPrompt,
-          skill_catalog_app_id: agentRuntimeConfig?.skill_catalog_app_id,
-          skill_ids: agentRuntimeConfig?.skill_ids || [],
-          runtime_mode: agentRuntimeConfig?.runtime_mode,
-          routing_profile: agentRuntimeConfig?.routing_profile,
-          hosted_provider_id: agentRuntimeConfig?.hosted_provider_id,
-          hosted_model_id: agentRuntimeConfig?.hosted_model_id,
-          title: "New chat",
-        },
-        { signal },
-      );
-      const now = new Date().toISOString();
-      thread = {
-        thread_id: session.session_id,
-        runtime_session_id: session.session_id,
-        title: "New chat",
-        title_pending: true,
-        title_source: "pending",
-        agent_label: agentRuntimeConfig?.agent_id || "chat",
-        agent_type_id: agentRuntimeConfig?.agent_type_id || "",
-        agent_role_id: agentRuntimeConfig?.agent_role_id || "",
-        source_app_id: agentRuntimeConfig?.source_app_id || "chat",
-        system_prompt: systemPrompt,
-        project_id: targetDraftChat?.projectId ?? null,
-        archived: false,
-        availability: "queued",
-        created_at: now,
-        updated_at: now,
-        last_user_message_at: now,
-      };
-    } else if (!hasTargetThread(target, thread)) {
-      throw new Error("This chat no longer exists.");
-    }
-    if (!thread.runtime_session_id) {
-      throw new Error("This chat does not have a runtime session.");
-    }
-
-    const runPlan = interAgentRunPlan({
-      agentRuntimeConfig,
-      mode: message.multiAgentMode || "auto",
-      thread,
-      clientMessageId: message.clientMessageId,
-    });
-    const runDetail = await createInterAgentRun(runPlan.payload, { signal });
-    throwIfAborted(signal);
-    if (isConversationStillActive(conversationKey)) {
-      onInterAgentRunChanged?.(runDetail);
-    }
-    const executed = await executeInterAgentRun(runDetail.run.run_id, {
-      input_text: message.content,
-      client_message_id: message.clientMessageId,
-      participant_inputs: runPlan.participantInputs,
-      attachments: message.attachments,
-      app_references: message.appReferences,
-      async: true,
-    }, { signal });
-    throwIfAborted(signal);
-    const userMessageAt = executed.root_runtime_turn?.created_at || new Date().toISOString();
-    const availability =
-      executed.root_runtime_turn?.status === "queued" || executed.root_runtime_turn?.status === "active" ? executed.root_runtime_turn.status : "free";
-    const optimisticThread = {
-      ...thread,
-      availability,
-      last_user_message_at: userMessageAt,
-      updated_at: userMessageAt,
-    };
-    const threadKey = threadConversationKey(optimisticThread.thread_id);
-    migrateConversationState(conversationKey, threadKey);
-    if (executed.root_runtime_turn) {
-      inFlightSubmissionsRef.current[threadKey] = {
-        ...(inFlightSubmissionsRef.current[threadKey] || {
-          abortController: inFlightSubmissionsRef.current[conversationKey]?.abortController || new AbortController(),
-          clientMessageId: message.clientMessageId,
-        }),
-        turnId: executed.root_runtime_turn.turn_id,
-      };
-      setSubmittedTurnForConversation(threadKey, executed.root_runtime_turn.turn_id);
-    }
-    setThreads((current) => upsertOrderedThread(current, optimisticThread));
-    if (isConversationStillActive(conversationKey)) {
-      onInterAgentRunChanged?.(executed);
-      if (session) {
-        setActiveSession(session);
-        setDraftChat(null);
-      }
-      if (executed.root_runtime_turn) {
-        setActiveTurn(executed.root_runtime_turn);
-      }
-      if (executed.root_runtime_events?.length) {
-        setEvents((current) => mergeRuntimeEvents(current, executed.root_runtime_events || []));
-      }
-      setActiveThread((current) => (current?.thread_id === optimisticThread.thread_id ? { ...current, ...optimisticThread } : optimisticThread));
-    }
-    if (!targetThread && isConversationStillActive(conversationKey)) {
-      notifyActiveThreadChanged(optimisticThread.thread_id);
-      openChatThreadRouteInShell(optimisticThread.thread_id, { navigationScope });
-    }
-    if (!executed.root_runtime_turn || (executed.root_runtime_turn.status !== "queued" && executed.root_runtime_turn.status !== "active")) {
-      removePendingMessage(threadKey, message.clientMessageId);
-      setSubmittedTurnForConversation(threadKey, null);
     }
   }
 
@@ -1665,288 +1550,34 @@ export function useMessageSubmission({
   };
 }
 
-export function interAgentRunPayload({
-  agentRuntimeConfig,
+export function interAgentOrchestrationIntent({
   clientMessageId,
   mode,
-  thread,
+  rootRuntimeSessionId,
+  sourceRuntimeTurnId,
 }: {
-  agentRuntimeConfig: AgentRuntimeConfig | null;
   clientMessageId: string;
-  mode: MultiAgentComposerMode;
-  thread: ChatThread;
+  mode: Exclude<MultiAgentComposerMode, "off">;
+  rootRuntimeSessionId: string;
+  sourceRuntimeTurnId: string;
 }) {
-  return interAgentRunPlan({ agentRuntimeConfig, clientMessageId, mode, thread }).payload;
-}
-
-export function interAgentRunParticipantInputs({
-  agentRuntimeConfig,
-  clientMessageId,
-  mode,
-  thread,
-}: {
-  agentRuntimeConfig: AgentRuntimeConfig | null;
-  clientMessageId: string;
-  mode: MultiAgentComposerMode;
-  thread: ChatThread;
-}): Record<string, string> {
-  return interAgentRunPlan({ agentRuntimeConfig, clientMessageId, mode, thread }).participantInputs || {};
+  return {
+    root_runtime_session_id: rootRuntimeSessionId,
+    source_runtime_turn_id: sourceRuntimeTurnId,
+    policy: mode,
+    idempotency_key: `chat:${clientMessageId}:orchestration:${mode}`,
+  };
 }
 
 export function interAgentComposerBudgetLabel(mode: MultiAgentComposerMode): string {
   if (mode === "off") {
     return "";
   }
-  const budget = interAgentBudget(mode);
-  const workerCount = interAgentWorkerPlans(mode).length;
-  return [
-    pluralLabel(workerCount, "worker"),
-    pluralLabel(budget.max_total_turns, "turn"),
-    pluralLabel(budget.max_tool_calls, "tool call"),
-  ].join(" · ");
-}
-
-function interAgentRunPlan({
-  agentRuntimeConfig,
-  clientMessageId,
-  mode,
-  thread,
-}: {
-  agentRuntimeConfig: AgentRuntimeConfig | null;
-  clientMessageId: string;
-  mode: MultiAgentComposerMode;
-  thread: ChatThread;
-}): { payload: CreateInterAgentRunPayload; participantInputs?: Record<string, string> } {
-  const participantLabel = agentRuntimeConfig?.title || thread.agent_label || "Maverick agent";
-  const agentTypeId = agentRuntimeConfig?.agent_type_id || thread.agent_type_id || "";
-  const workerPlans = interAgentWorkerPlans(mode);
-  const participants: InterAgentParticipantSpecPayload[] = [
-    {
-      participant_id: "orchestrator",
-      kind: "orchestrator",
-      execution_mode: "root_orchestrator",
-      label: "Orchestrator",
-    },
-    ...workerPlans.map((worker) =>
-      interAgentWorkerParticipant({
-        agentRuntimeConfig,
-        agentTypeId,
-        fallbackLabel: participantLabel,
-        worker,
-      }),
-    ),
-  ];
-  return {
-    payload: {
-      thread_id: thread.thread_id,
-      root_runtime_session_id: thread.runtime_session_id,
-      mode: interAgentRunMode(mode),
-      idempotency_key: `chat:${clientMessageId}:${mode}`,
-      ...(mode === "group_chat" ? { aggregator_participant_id: "synthesizer" } : {}),
-      visibility_level: "detail",
-      participants,
-      edges: interAgentEdges(mode, participantLabel),
-      budget: interAgentBudget(mode),
-    },
-    participantInputs:
-      mode === "multi" || mode === "group_chat"
-        ? Object.fromEntries(workerPlans.map((worker) => [worker.participantId, worker.task]))
-        : undefined,
-  };
-}
-
-function interAgentRunMode(mode: MultiAgentComposerMode): CreateInterAgentRunPayload["mode"] {
   if (mode === "multi") {
-    return "sequential";
+    return "Implement · review · revise";
   }
   if (mode === "group_chat") {
-    return "group_chat";
+    return "Dynamic group · quality gated";
   }
-  return "manager_tools";
-}
-
-function interAgentWorkerParticipant({
-  agentRuntimeConfig,
-  agentTypeId,
-  fallbackLabel,
-  worker,
-}: {
-  agentRuntimeConfig: AgentRuntimeConfig | null;
-  agentTypeId: string;
-  fallbackLabel: string;
-  worker: InterAgentWorkerPlan;
-}): InterAgentParticipantSpecPayload {
-  const agentSnapshot =
-    agentRuntimeConfig?.agent_type_id
-      ? {
-          agent_type_id: agentRuntimeConfig.agent_type_id,
-          label: worker.label || fallbackLabel,
-          system_prompt: agentRuntimeConfig.system_prompt || "",
-          skill_ids: agentRuntimeConfig.skill_ids || [],
-          skill_catalog_app_id: agentRuntimeConfig.skill_catalog_app_id || "skills",
-        }
-      : undefined;
-  return {
-    participant_id: worker.participantId,
-    kind: "agent",
-    execution_mode: "child_runtime_session",
-    label: worker.label || fallbackLabel,
-    ...(agentTypeId ? { agent_type_id: agentTypeId } : {}),
-    ...(agentSnapshot ? { agent_snapshot: agentSnapshot } : {}),
-  };
-}
-
-function interAgentWorkerPlans(mode: MultiAgentComposerMode): InterAgentWorkerPlan[] {
-  if (mode === "group_chat") {
-    return [
-      {
-        participantId: "analyst",
-        label: "Analyst",
-        task:
-          "Analyze the request and contribute the strongest direct answer, evidence, or implementation direction. " +
-          "Do not mention internal workers, routing, orchestration, or group-chat mechanics.",
-      },
-      {
-        participantId: "reviewer",
-        label: "Reviewer",
-        task:
-          "Review the request and prior contribution for gaps, risks, or corrections. " +
-          "Return only user-facing improvements or corrections, without narrating internal review mechanics.",
-      },
-      {
-        participantId: "synthesizer",
-        label: "Synthesizer",
-        task:
-          "Synthesize the group chat contributions into the final user-facing answer. " +
-          "Do not mention participants, internal workers, routing, orchestration, or group-chat mechanics.",
-      },
-    ];
-  }
-  if (mode === "multi") {
-    return [
-      {
-        participantId: "implementer",
-        label: "Implementer",
-        task:
-          "Produce the concrete user-facing answer or implementation plan for the request. " +
-          "Treat any wording about worker counts, reviewers, orchestrators, handoffs, routing, or multi-agent setup as Maverick control context. " +
-          "Do not mention internal workers or orchestration in the answer.",
-      },
-      {
-        participantId: "reviewer",
-        label: "Reviewer",
-        task:
-          "Review the implementer's output against the user request, then return one orchestrator-ready final answer. " +
-          "If the output is correct, return the polished answer. If it has gaps, return the corrected final answer. " +
-          "Do not narrate the review process or mention internal workers, reviewers, handoffs, routing, or orchestration.",
-      },
-    ];
-  }
-  return [
-    {
-      participantId: "assistant",
-      label: "",
-      task: "",
-    },
-  ];
-}
-
-function interAgentEdges(mode: MultiAgentComposerMode, participantLabel: string): CreateInterAgentRunPayload["edges"] {
-  if (mode === "group_chat") {
-    return [
-      {
-        source_id: "orchestrator",
-        target_id: "analyst",
-        kind: "delegated",
-        label: "Analysis",
-      },
-      {
-        source_id: "orchestrator",
-        target_id: "reviewer",
-        kind: "delegated",
-        label: "Review",
-      },
-      {
-        source_id: "analyst",
-        target_id: "synthesizer",
-        kind: "depends_on",
-        label: "Contribution",
-      },
-      {
-        source_id: "reviewer",
-        target_id: "synthesizer",
-        kind: "depends_on",
-        label: "Correction",
-      },
-      {
-        source_id: "synthesizer",
-        target_id: "orchestrator",
-        kind: "produced",
-        label: "Final synthesis",
-      },
-    ];
-  }
-  if (mode === "multi") {
-    return [
-      {
-        source_id: "orchestrator",
-        target_id: "implementer",
-        kind: "delegated",
-        label: "Implementation",
-      },
-      {
-        source_id: "implementer",
-        target_id: "reviewer",
-        kind: "reviewed_by",
-        label: "Review",
-      },
-      {
-        source_id: "reviewer",
-        target_id: "orchestrator",
-        kind: "produced",
-        label: "Final review",
-      },
-    ];
-  }
-  return [
-    {
-      source_id: "orchestrator",
-      target_id: "assistant",
-      kind: "delegated",
-      label: participantLabel,
-    },
-  ];
-}
-
-function interAgentBudget(mode: MultiAgentComposerMode): CreateInterAgentRunPayload["budget"] {
-  if (mode === "group_chat") {
-    return {
-      max_participants: 4,
-      max_concurrent_participants: 1,
-      max_rounds: 1,
-      max_total_turns: 3,
-      max_turns_per_participant: 1,
-      max_tool_calls: 3,
-    };
-  }
-  if (mode === "multi") {
-    return {
-      max_participants: 3,
-      max_concurrent_participants: 1,
-      max_total_turns: 2,
-      max_turns_per_participant: 1,
-      max_tool_calls: 2,
-    };
-  }
-  return {
-    max_participants: 2,
-    max_concurrent_participants: 1,
-    max_total_turns: 1,
-    max_turns_per_participant: 1,
-    max_tool_calls: 1,
-  };
-}
-
-function pluralLabel(count: number, singular: string): string {
-  return `${count} ${singular}${count === 1 ? "" : "s"}`;
+  return "Dynamic plan · quality gated";
 }

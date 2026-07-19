@@ -441,7 +441,7 @@ Acceptance signal: graph execution can resume from checkpoint after restart with
 5. Human approval remains Maverick-owned through `ApprovalRequestRecord`; LangGraph-style interrupts inform the resume/checkpoint mechanics only.
 6. Task-level writes are required for partial recovery before a native graph engine is stabilized.
 7. Graph execution persistence requires an explicit graph super-step commit boundary.
-8. Any F6 adapter must map immediately into current Maverick run, participant, edge, event, budget, approval, artifact, and root transcript projection contracts. It must not own sessions, secrets, providers, retention, approval, replay, workspace isolation, or any deferred native graph records.
+8. Any F6 adapter must map immediately into current Maverick run, participant, edge, event, budget, approval, and artifact contracts. It must not write participant output to the root transcript or own sessions, secrets, providers, retention, approval, replay, workspace isolation, or any deferred native graph records.
 9. Checkpoint, task-write, generic interrupt, executable routing, graph super-step, and replay/fork concepts remain Maverick-native future contracts unless explicitly implemented by a later ADR. F6 may expose only safe observed adapter decisions through existing `InterAgentEventRecord` payloads.
 
 ## F6 Scope Decision Table

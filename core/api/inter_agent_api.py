@@ -375,6 +375,8 @@ def _create_orchestration(
     policy = _text(body.get("policy")) or "auto"
     if policy not in {"auto", "multi", "group_chat"}:
         raise InterAgentValidationError("Orchestration policy must be auto, multi, or group_chat.")
+    if policy == "group_chat":
+        _authorize_public_run_mode("group_chat")
     idempotency_key = _text(body.get("idempotency_key")) or f"chat-orchestration:{source_turn.turn_id}:{policy}"
     existing = service.store.find_run_by_idempotency_key(context.workspace_id, idempotency_key)
     if existing is not None:

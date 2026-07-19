@@ -332,33 +332,30 @@ F5 exposes the same replay contract to Chat graph mode through
 `GET /api/inter-agent/runs/<run_id>/artifacts`; both surfaces cap
 `summary`/`detail`/`debug` server-side by caller authority and run visibility.
 
-F1-level inter-agent services did not spawn provider sessions, create hidden
-runtime sessions, invoke an LLM, or expose HTTP/CLI/MCP executor operations. F2
-adds the first policy-aware runtime bridge: core inter-agent surfaces may spawn a
-declared `child_runtime_session` participant into a hidden
+The policy-aware runtime bridge lets core inter-agent services spawn a declared
+`child_runtime_session` participant into a hidden
 `session_kind=inter_agent_participant` runtime session, send turns to that child,
-wait, interrupt, resume, close, and recover runs. F3 adds the native MVP
-executor for `manager_tools`, `sequential`, and `concurrent` runs. The executor
-can run deterministic synthetic participants only for tests or explicit
-operator-controlled execution, or use the F2 bridge to spawn real hidden child
-runtime sessions and send runtime turns. Public HTTP execution must not accept
-caller-supplied controlled participant output; CLI and MCP may use it only for an
-operator caller that opts into synthetic execution. Synthetic events, results,
-summary-plane updates, and root transcript projections must be marked explicitly
-with their synthetic source. The executor emits normalized inter-agent events for
-plan, task, message, participant status, artifact, summary, and terminal run
-state, and projects only selected operational summaries to the root runtime
-session transcript as non-terminal runtime step updates. `runtime.output.final`
-remains reserved for real assistant final answers. `handoff` remains
-schema/event-only until F7.
+wait, interrupt, resume, close, and recover runs. The low-level native executors
+for `manager_tools`, `sequential`, and `concurrent` remain operator and internal
+surfaces. Deterministic synthetic participants are limited to tests or explicit
+operator-controlled execution; public HTTP cannot supply controlled output.
 
-F5 root answer projection must publish one orchestrator-owned final answer, not
-a concatenation of worker logs or participant labels. When topology declares a
-terminal producer back to the orchestrator, such as a `produced` edge from a
-reviewer, the executor uses that participant output as the orchestrator final
-answer and records the source participant ids in the final summary payload.
-Fallback synthesis may compact participant summaries, but primary Chat must not
-show raw Implementer/Reviewer transcript blocks as the final assistant answer.
+Chat product orchestration uses the separate `orchestrated` mode. After the
+normal generalist turn is accepted, Chat sends only the root session, source
+turn, product policy, and idempotency key to
+`POST /api/inter-agent/orchestrations`. Core creates a real hidden child
+orchestrator as the only initial board participant. That orchestrator produces a
+structured plan; core then materializes workers and edges dynamically, schedules
+dependency-ready work under the concurrency budget, runs bounded
+implementer/reviewer revision loops, and accepts completion only through the
+orchestrator quality gate. Root-generalist runtime updates become bounded
+directives in the inter-agent event store.
+
+Participant, tool, task, summary, and final-answer events are never written to
+the root runtime store. The normal Chat transcript belongs exclusively to the
+generalist. Agent nodes consumes run detail, inter-agent replay, artifacts,
+approvals, and the bounded participant transcript endpoint; participant
+transcripts and orchestrator completion answers remain inside that board.
 
 Those surfaces must materialize prompt, skill ids, skill catalog, source app,
 owner, creator, and grants only from core policy or authorized materialized
@@ -1552,7 +1549,7 @@ Streamed assistant output is part of that same event timeline. When a later `run
 
 The runtime must not persist the same assistant text twice as transcript segments. `runtime.output.delta` carries progressive assistant text. `runtime.output.final.payload.text` is terminal transcript evidence and may carry only the text suffix that was not already emitted through deltas. If the provider's final text is exactly the concatenation of streamed deltas, the final event must use an empty `text` field.
 
-`runtime.output.final.payload.complete_text`, when present, is a separate consumer contract rather than an additional transcript segment. It carries the complete final assistant answer assembled from streamed deltas and final text for consumers that need one explicit final value, such as inter-agent final projection, backend restart recovery, and source-app lifecycle hooks. Renderers must not append `complete_text` to the transcript after already rendering deltas; they should continue to use `text` for the terminal suffix behavior above.
+`runtime.output.final.payload.complete_text`, when present, is a separate consumer contract rather than an additional transcript segment. It carries the complete final assistant answer assembled from streamed deltas and final text for consumers that need one explicit final value, such as inter-agent participant completion readers, backend restart recovery, and source-app lifecycle hooks. Renderers must not append `complete_text` to the transcript after already rendering deltas; they should continue to use `text` for the terminal suffix behavior above.
 
 This deliberately allows a final event to be larger than the suffix-only transcript payload, because `complete_text` can duplicate assistant text already stored in prior deltas. Generic runtime output compaction currently targets `runtime.tool_call.*` payloads, not `runtime.output.final`; the accepted tradeoff is that final-answer consumers get an explicit complete value while transcript renderers preserve non-duplicating delta/final chronology. Any future compaction or size cap for `complete_text` must preserve the suffix-only `text` contract and provide an equally explicit complete-answer source for inter-agent and recovery consumers.
 

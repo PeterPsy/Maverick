@@ -1,7 +1,12 @@
 # Inter-Agent Group Chat F7 ADR
 
-Date: 2026-06-22
-Status: Accepted for F7.0/F7.1 MVP
+Date: 2026-07-19
+Status: Superseded as a Chat execution design
+
+The static Chat topology and root-transcript behavior in the original F7
+decision are superseded by
+[Generalist And Multi-Agent Orchestration](inter_agent_orchestration_redesign.md).
+The feature flags and low-level executor constraints remain applicable.
 
 ## Decision
 
@@ -40,19 +45,16 @@ provider access, secrets, replay, retention, budget, approvals, or UI payloads.
 
 ## Product Surface
 
-F7.1 exposes `group_chat` through Chat as a gated composer mode named
-`Group chat`. Chat-created runs:
-
-- call `POST /api/inter-agent/runs` with `mode="group_chat"`
-- request `visibility_level="detail"` so Agent nodes can show safe participant
-  outputs and replayable run history
-- declare a bounded participant graph with root orchestrator, group participants,
-  and an aggregator participant for final answer projection
-- execute through `POST /api/inter-agent/runs/<run_id>/execute` with async root
-  transcript projection
-- use existing Agent nodes controls for status, participant transcript,
-  artifacts, approvals, pause/resume, stop/cancel, WebSocket replay, and older
-  history pages
+Chat exposes `Group chat` as a gated orchestration policy. It first submits the
+message to the independent generalist, then calls
+`POST /api/inter-agent/orchestrations` with `policy="group_chat"`, the root
+session, the accepted source turn, and an idempotency key. The request contains
+no participant graph, executor input, or budget. The core starts an
+orchestrator-only board and materializes the group participants and edges from
+the orchestrator's validated plan. Agent nodes uses its existing transcript,
+artifact, approval, pause/resume, stop/cancel, WebSocket replay, and older
+history surfaces. Nothing from that board is projected onto the root Chat
+transcript.
 
 The core HTTP API and core CLI/MCP public inter-agent surfaces allow
 `group_chat` only when `MAVERICK_FEATURE_GROUP_CHAT=1`. The existing
@@ -60,19 +62,19 @@ product-facing modes `manager_tools`, `sequential`, and `concurrent` remain
 available. Public creation of `handoff` and `magentic_like` is rejected because
 those modes are not product-facing.
 
-## MVP Runtime Semantics
+## Legacy Low-Level Runtime Semantics
 
-The F7.1 native executor runs `group_chat` as one bounded shared-context round
+The retained low-level native executor runs `group_chat` as one bounded shared-context round
 over the declared non-orchestrator participants. Each participant receives:
 
 - the shared user request
 - its participant-specific focus
 - safe summaries of earlier participant outputs in the same round
 
-The existing budget ledger reserves participant slots and turns. Chat sets
-`max_rounds=1`, `max_turns_per_participant=1`, and `max_total_turns` equal to
-the number of group participants for the MVP. Later multi-round behavior
-requires a separate graph/checkpoint decision.
+The existing budget ledger reserves participant slots and turns. This executor
+is not the Chat product path; product group orchestration uses dynamic budgets,
+dependency scheduling, and the bounded quality-review loop defined by the
+superseding ADR.
 
 ## Requirements
 

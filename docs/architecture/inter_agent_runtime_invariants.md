@@ -1,7 +1,13 @@
 # Inter-Agent Runtime Invariants
 
-Date: 2026-06-17
-Status: Accepted through F7
+Date: 2026-07-19
+Status: Partially superseded
+
+The transcript-projection, Chat-owned topology, and static executor decisions
+in the earlier F3-F7 rollout are superseded by
+[Generalist And Multi-Agent Orchestration](inter_agent_orchestration_redesign.md).
+The hidden-session, authority, budget, retention, and raw-runtime-access
+invariants below remain in force.
 
 ## Purpose
 
@@ -20,25 +26,20 @@ It started with names, visibility, legacy compatibility, and initial policy defa
 7. `thread_visibility="hidden"` sessions may have runtime turns, runtime events, runtime processes, provider state, and runtime roots, but they must not create, update, or appear as user-visible runtime threads.
 8. `session_kind="inter_agent_participant"` requires `thread_visibility="hidden"`; omitted visibility on an explicit participant is normalized to hidden, while explicit `user` visibility is invalid.
 9. Invalid persisted visibility values fail closed: they are rejected on direct session hydration and must not make an existing thread appear in user-facing thread catalogs.
-10. `group_chat` is the first advanced mode promoted for F7 product use, but
-    only behind `MAVERICK_FEATURE_GROUP_CHAT=1` for public HTTP/CLI/MCP
-    inter-agent surfaces and `VITE_MAVERICK_FEATURE_GROUP_CHAT=1` for the Chat
-    frontend build. The
-    accepted F7 decision is recorded in
-    [inter_agent_group_chat_f7.md](inter_agent_group_chat_f7.md). `handoff`
-    and `magentic_like` remain schema/event-only and are not executable product
-    behavior unless a later ADR explicitly promotes them. The F6 MAF
-    source-backed adapter evaluation may execute `handoff`, `group_chat`, and
-    `magentic_like` fixtures only behind
-    `MAVERICK_EXPERIMENTAL_AGENT_FRAMEWORK=1`; that exception is not default-on,
-    not product-facing Chat behavior, and must still project only
-    Maverick-owned run, participant, edge, event, budget, approval, artifact,
-    and root transcript records.
+10. `group_chat`, `handoff`, and `magentic_like` remain low-level or
+    experimental modes. Chat product orchestration uses the dynamic
+    `orchestrated` mode and does not select a static executor topology.
 11. The F3 native executor may run deterministic synthetic participants only for tests or explicit operator-controlled execution, or real hidden child runtime sessions through the F2 service. It must not bypass inter-agent spawn, message, budget, or root-session authority checks.
-12. The root Chat transcript receives selected operational summaries from the executor as non-terminal `runtime.step.updated` projections. When Chat requests a persisted root turn projection, the final assistant answer must be projected as `runtime.output.final` on that root turn, while detailed participant work remains in `inter_agent` events.
+12. The root Chat transcript receives no participant, status, tool, summary, or
+    final-answer projection from an inter-agent run. The root runtime belongs
+    exclusively to the independent generalist.
 13. Full participant detail remains in `inter_agent` events for graph replay and audit, but event replay and run detail require creator, root-session owner, admin, operator, or explicit `inter_agent_root` grant authority and must cap `summary`/`detail`/`debug` server-side.
-14. Chat may request a persisted root transcript projection for an inter-agent execution by sending a `client_message_id` to `POST /api/inter-agent/runs/<run_id>/execute`. The projection records the user's root turn, bounded runtime lifecycle events, and the final answer on the visible root session; it does not expose hidden participant sessions or duplicate the full inter-agent event log.
-15. Graph mode consumes `inter_agent` events, run detail, approvals, and artifacts through core-owned replay and live surfaces. It must not read hidden runtime sessions directly.
+14. Chat starts a board through a minimal orchestration-intent surface after a
+    normal generalist turn is accepted. Chat does not create low-level runs,
+    participants, edges, or executor inputs.
+15. Graph mode consumes `inter_agent` events, run detail, approvals, artifacts,
+    and bounded participant transcript endpoints. It must not receive the root
+    Chat message array or read hidden runtime sessions directly.
 
 ## Initial Policy Defaults
 
@@ -121,14 +122,14 @@ Execution rules:
 
 - deterministic synthetic participants are allowed only for tests or explicit operator-controlled execution
 - public HTTP execution must not accept caller-supplied controlled participant output; CLI and MCP require an operator caller plus explicit synthetic opt-in
-- synthetic participant events, execution results, summary-plane updates, and root transcript projections must be marked explicitly with their synthetic source
+- synthetic participant events, execution results, and summary-plane updates must be marked explicitly with their synthetic source
 - real participant work must use hidden `child_runtime_session` sessions spawned through `InterAgentService`
 - `manager_tools` must send child workers a delegated task frame, not the raw user prompt alone; workers must be told to complete the assigned work and not role-play the orchestrator or re-delegate
 - `sequential` passes declared output from one participant into the next participant input
 - `concurrent` fans out participants under `max_concurrent_participants` and then aggregates through the root orchestrator or declared aggregator participant
 - participant/task/artifact/summary/run lifecycle events are persisted as normalized `inter_agent` events
 - artifact refs and partial output must be persisted before a participant failure is recorded
-- root runtime projection uses non-terminal runtime step updates for selected plan/status summaries and `runtime.output.final` for the final answer when a root turn projection exists
+- participant runtime events and inter-agent summaries are never written to the root runtime store
 - successfully consumed turns stay counted in the budget ledger; only active participant/concurrency reservations are released on participant completion or failure
 - pre-participant-ledger turn reservations and matching `inter_agent.budget.reserved` events without `participant_id` must remain idempotent on retry and must still count toward per-participant turn enforcement, using reservation id inference where possible and conservative counting otherwise
 
@@ -136,18 +137,27 @@ The F3 HTTP surface is `POST /api/inter-agent/runs/<run_id>/execute`. The matchi
 
 ## F4 Chat UX Policy
 
-The initial Chat UX is a client of the core-owned inter-agent surfaces. It may create runs, execute runs, list summary-plane run events, list approvals, resolve approvals, and open graph links. It must not create participant runtime sessions directly, read hidden runtime session APIs, or implement a parallel executor in the frontend.
+The Chat UX submits every user message to the normal generalist runtime. It may
+request an orchestration, list run events, resolve approvals, steer the
+orchestrator, and open graph links. It must not create runs, participants,
+edges, participant runtime sessions, executor inputs, or a parallel scheduler
+in the frontend.
 
 HTTP additions for F4:
 
 - `GET /api/inter-agent/runs/<run_id>/approvals` lists approval records for an authorized run viewer and expires stale pending approvals fail-closed before returning records.
 - `POST /api/inter-agent/approvals/<approval_id>/resolve` approves or rejects one pending approval through `InterAgentService.resolve_approval`; missing approvals return `inter_agent_approval_not_found`.
-- `POST /api/inter-agent/runs/<run_id>/execute` may include `client_message_id`, `attachments`, and `app_references` for Chat root transcript projection. Without `client_message_id`, the F3 execute response shape remains unchanged.
+- `POST /api/inter-agent/orchestrations` accepts only a root session, source
+  turn, orchestration policy, and idempotency key; the core owns topology and
+  execution.
+- `POST /api/inter-agent/runs/<run_id>/directives` appends authorized live
+  steering without touching the root transcript.
 
 Chat transcript rendering remains summary-first:
 
-- composer state is a UI selector for Off, Auto, or Multi; non-Off submissions still call core `inter_agent` APIs
-- run banners and orchestrator messages render only core-provided summaries
+- composer state may request orchestration, but submission always starts with a
+  normal generalist runtime turn
+- run banners and orchestrator messages render only inside Agent nodes
 - inline approvals read and resolve core approval records
 - graph links carry `inter_agent_run_id` for the F5 graph surface; F4 does not implement graph replay or WebSocket graph streaming
 - raw chain-of-thought, debug events, and hidden participant transcripts remain out of the primary Chat transcript
@@ -164,21 +174,30 @@ Core additions for F5:
 - `GET /api/inter-agent/runs/<run_id>/artifacts` projects artifact records from authorized `inter_agent.artifact.created` events and supports the same paging and visibility parameters as event replay.
 - `GET /api/inter-agent/runs/<run_id>/participants/<participant_id>/transcript` serves the product-facing participant transcript from the inter-agent projection and, when present, safe runtime turn input/output. It must not expose hidden child runtime session ids, raw runtime endpoints, debug payloads, or uncapped detail/debug events. The effective event plane is capped server-side by caller authority and by the run's `visibility_level`.
 
-Chat Agent nodes view renders graph nodes, edges, participant transcripts, approvals, empty/loading/error states, and essential pause/resume/stop controls. It must not make timeline, JSON inspector, sequence number, visibility plane, debug payload, or Summary/Detail/Debug tabs part of the primary product-facing UX. Pause uses `POST /api/inter-agent/runs/<run_id>/interrupt`; stop uses `POST /api/inter-agent/runs/<run_id>/close` with `terminal_status=cancelled`; resume uses `POST /api/inter-agent/runs/<run_id>/resume`. Chat-created multi-agent runs request `visibility_level=detail` so Agent nodes can show tasks, declared participant input, final output, participant state, and artifacts by default without exposing debug-plane data.
+Chat Agent nodes view renders graph nodes, edges, participant transcripts,
+approvals, empty/loading/error states, and essential pause/resume/stop controls.
+It must not make timeline, JSON inspector, sequence number, visibility plane,
+debug payload, or Summary/Detail/Debug tabs part of the primary product-facing
+UX. Pause uses `POST /api/inter-agent/runs/<run_id>/interrupt`; stop uses
+`POST /api/inter-agent/runs/<run_id>/close` with
+`terminal_status=cancelled`; resume uses
+`POST /api/inter-agent/runs/<run_id>/resume`. Core-created orchestrated runs
+use `visibility_level=detail` so Agent nodes can show tasks, declared
+participant input, final output, participant state, and artifacts by default
+without exposing debug-plane data.
 
-If the visible root runtime turn for a Chat-projected inter-agent run is interrupted through the generic runtime turn API, the core must close the linked inter-agent run as `cancelled`, clean up active hidden child participant sessions through the inter-agent close path, and avoid any later `cancelled -> completed` root turn transition.
+Interrupting a generalist turn does not infer a participant lifecycle
+transition. Board pause/stop remains explicit through inter-agent controls.
 
 The F5 WebSocket may poll the inter-agent event store for the MVP. A dedicated inter-agent event bus can be introduced later if run event volume requires fanout semantics comparable to runtime session events.
 
-## F7 Group Chat Policy
+## Legacy F7 Group Chat Policy
 
-F7 starts with `group_chat` and does not promote `handoff` or `magentic_like` as product modes.
-
-The `group_chat` MVP remains Maverick-native. Chat and the HTTP inter-agent API use the existing `InterAgentRun`, participants, edges, events, budget ledger, approvals, retention, replay, hidden participant sessions, and Agent nodes UI. MAF remains source-backed evaluation/reference material and does not own product runtime state.
-
-The Chat composer shows `Group chat` only when `VITE_MAVERICK_FEATURE_GROUP_CHAT=1`. Public HTTP/CLI/MCP creation and execution of `mode="group_chat"` require `MAVERICK_FEATURE_GROUP_CHAT=1`; public creation of `handoff` and `magentic_like` is rejected as not product-facing. Chat-created group chat runs request `visibility_level=detail`, declare a non-orchestrator aggregator participant, set bounded one-round budget defaults, and rely on the existing Agent nodes view for run status, participant outputs, cancel/stop, replay, and history.
-
-The F7.1 executor semantics are intentionally narrow: one bounded shared-context round over declared group participants, with an explicit aggregator participant for final answer projection. Checkpointing, replay-fork, graph super-steps, task writes, native conditional routing, raw adapter payload UI, and MAF-owned sessions remain non-goals.
+The static `group_chat` executor remains a low-level feature-flagged evaluation
+surface. It is not the Chat product submission path after the orchestration
+redesign. `handoff`, `group_chat`, and `magentic_like` adapters must still map
+to Maverick-owned run, participant, edge, event, budget, approval, and artifact
+records and must never project their output into a root transcript.
 
 ## Gate
 

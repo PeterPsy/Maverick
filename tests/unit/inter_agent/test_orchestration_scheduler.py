@@ -53,13 +53,26 @@ class OrchestrationSchedulerTest(unittest.TestCase):
                     '"final_answer":"The implementation is complete and verified."}'
                 ),
             }
-            return outputs[client_message_id]
+            output = outputs[client_message_id]
+            if client_message_id == f"{run.run_id}:task:implement":
+                service.link_generalist_directive(
+                    workspace_id="default",
+                    run_id=run.run_id,
+                    source_runtime_turn_id="generalist-turn-2",
+                )
+            return output
 
         generalist_event = SimpleNamespace(
             event_id="generalist-final-1",
             turn_id="generalist-turn-1",
             event_type="runtime.output.final",
             payload={"text": "Preserve the public API and prioritize regression coverage."},
+        )
+        steering_event = SimpleNamespace(
+            event_id="generalist-final-2",
+            turn_id="generalist-turn-2",
+            event_type="runtime.output.final",
+            payload={"text": "Keep the revision small and finish quickly."},
         )
         source_turn = SimpleNamespace(
             turn_id="generalist-turn-1",
@@ -71,13 +84,15 @@ class OrchestrationSchedulerTest(unittest.TestCase):
             polls = 0
 
             def get_turn(self, _turn_id):
+                if _turn_id == "generalist-turn-2":
+                    return SimpleNamespace(turn_id=_turn_id, status="completed", input_text="Change direction.")
                 self.polls += 1
                 if self.polls > 1:
                     source_turn.status = "completed"
                 return source_turn
 
             def list_events(self, _session_id):
-                return [generalist_event] if self.polls > 1 else []
+                return [generalist_event, steering_event] if self.polls > 1 else []
 
         result = execute_orchestrated_run(
             service,
@@ -104,6 +119,7 @@ class OrchestrationSchedulerTest(unittest.TestCase):
         self.assertEqual(len(edges), 4)
         self.assertIn("Preserve the public API", prompts[f"{run.run_id}:orchestrator:plan"])
         self.assertIn("Implement the requested redesign", prompts[f"{run.run_id}:orchestrator:plan"])
+        self.assertIn("Keep the revision small", prompts[f"{run.run_id}:orchestrator:control:1"])
         self.assertIn("Add the missing regression coverage", prompts[f"{run.run_id}:orchestrator:control:2"])
         self.assertIn("Dependency review", prompts[f"{run.run_id}:task:implement-r2"])
         self.assertIn("inter_agent.completion.decided", [event.event_type for event in events])

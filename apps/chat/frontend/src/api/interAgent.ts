@@ -32,7 +32,7 @@ export function createInterAgentOrchestration(
 
 export function sendInterAgentDirective(
   runId: string,
-  payload: { text: string; idempotency_key?: string },
+  payload: { text?: string; source_runtime_turn_id?: string; idempotency_key?: string },
 ): Promise<{ directive: InterAgentEventRecord }> {
   return requestJson(`/api/inter-agent/runs/${encodeURIComponent(runId)}/directives`, {
     method: "POST",

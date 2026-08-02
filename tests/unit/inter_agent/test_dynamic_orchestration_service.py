@@ -135,13 +135,21 @@ class DynamicOrchestrationServiceTest(unittest.TestCase):
         self.service.mark_directives_delivered(self.run, [directive], now=NOW)
 
         self.assertEqual(self.service.pending_directives(self.run), [])
-        with self.assertRaisesRegex(InterAgentValidationError, "source turn"):
+        later_link = self.service.link_generalist_directive(
+            workspace_id="default",
+            run_id=self.run.run_id,
+            source_runtime_turn_id="other-turn",
+            now=NOW,
+        )
+        self.assertEqual(self.service.pending_generalist_directive_links(self.run), [later_link])
+        self.service.resolve_generalist_directive_link(self.run, later_link, status="ignored", now=NOW)
+        self.assertEqual(self.service.pending_generalist_directive_links(self.run), [])
+        with self.assertRaisesRegex(InterAgentValidationError, "linked runtime turn"):
             self.service.record_directive(
                 workspace_id="default",
                 run_id=self.run.run_id,
                 text="Wrong turn.",
                 source_kind="root_generalist",
-                source_runtime_turn_id="other-turn",
             )
 
     def test_only_orchestrator_can_complete_after_quality_passes(self) -> None:

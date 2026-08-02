@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState, type MouseEvent } from "react";
+import { useCallback, useEffect, useMemo, useState, type FormEvent, type MouseEvent } from "react";
 import {
   applyNodeChanges,
   Background,
@@ -19,6 +19,7 @@ import {
 import "@xyflow/react/dist/style.css";
 import {
   getInterAgentParticipantTranscript,
+  sendInterAgentDirective,
   type ChatMessage,
   type InterAgentApprovalRecord,
   type InterAgentArtifactRecord,
@@ -67,6 +68,8 @@ export function InterAgentGraphView({
   const [transcript, setTranscript] = useState<InterAgentParticipantTranscriptPayload | null>(null);
   const [transcriptError, setTranscriptError] = useState<string | null>(null);
   const [transcriptLoading, setTranscriptLoading] = useState(false);
+  const [directiveText, setDirectiveText] = useState("");
+  const [directiveStatus, setDirectiveStatus] = useState<"idle" | "sending" | "sent" | "error">("idle");
   const {
     approvals,
     artifacts,
@@ -104,6 +107,26 @@ export function InterAgentGraphView({
     [artifacts, runDetail?.run.orchestrator_participant_id, selectedParticipant?.kind, selectedParticipantId],
   );
   const pendingApprovals = approvals.filter((approval) => approval.status === "pending");
+  const acceptsDirectives = Boolean(runDetail && !["completed", "failed", "cancelled"].includes(runDetail.run.status));
+
+  async function submitDirective(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const text = directiveText.trim();
+    if (!text || !acceptsDirectives || directiveStatus === "sending") {
+      return;
+    }
+    setDirectiveStatus("sending");
+    try {
+      await sendInterAgentDirective(runId, {
+        text,
+        idempotency_key: `agent-nodes-directive:${crypto.randomUUID()}`,
+      });
+      setDirectiveText("");
+      setDirectiveStatus("sent");
+    } catch {
+      setDirectiveStatus("error");
+    }
+  }
 
   useEffect(() => {
     if (selectedParticipantId && !participants.some((participant) => participant.participant_id === selectedParticipantId)) {
@@ -184,6 +207,27 @@ export function InterAgentGraphView({
           />
         ) : null}
       </div>
+
+      {acceptsDirectives ? (
+        <form className="chatapp-inter-agent-graph__directive" aria-label="Direct the orchestrator" onSubmit={submitDirective}>
+          <textarea
+            aria-label="Direction for the orchestrator"
+            maxLength={6000}
+            onChange={(event) => {
+              setDirectiveText(event.target.value);
+              setDirectiveStatus("idle");
+            }}
+            placeholder="Change direction, reduce scope, or prioritize speed…"
+            rows={1}
+            value={directiveText}
+          />
+          <button aria-label="Send direction" disabled={!directiveText.trim() || directiveStatus === "sending"} type="submit">
+            <span className="material-symbols-rounded" aria-hidden="true">arrow_upward</span>
+          </button>
+          {directiveStatus === "sent" ? <span className="chatapp-inter-agent-graph__directive-status">Direction sent</span> : null}
+          {directiveStatus === "error" ? <span className="chatapp-inter-agent-graph__directive-status is-error" role="alert">Direction failed</span> : null}
+        </form>
+      ) : null}
 
       {pendingApprovals.length ? (
         <ApprovalShelf

@@ -18,6 +18,7 @@ import {
   listInterAgentRunArtifacts,
   listInterAgentRunEvents,
   resolveInterAgentApproval,
+  sendInterAgentDirective,
 } from "../api/client";
 import { InterAgentGraphView, graphBoardLayout, graphFlowEdges } from "./InterAgentGraphView";
 
@@ -30,6 +31,7 @@ vi.mock("../api/client", () => ({
   listInterAgentRunEvents: vi.fn(),
   resumeInterAgentRun: vi.fn(),
   resolveInterAgentApproval: vi.fn(),
+  sendInterAgentDirective: vi.fn(),
 }));
 
 class FakeWebSocket {
@@ -321,6 +323,7 @@ beforeEach(() => {
     newest_event_id: null,
   });
   vi.mocked(resolveInterAgentApproval).mockResolvedValue({ approval: approvalRecord({ status: "approved" }) });
+  vi.mocked(sendInterAgentDirective).mockResolvedValue({ directive: toolEvent({ event_type: "inter_agent.directive.received" }) });
 });
 
 afterEach(() => {
@@ -367,6 +370,31 @@ describe("InterAgentGraphView", () => {
     expect(element.textContent).not.toContain("Inspector");
     expect(element.textContent).not.toContain("Runtime session");
     expect(element.querySelector("pre")).toBeNull();
+  });
+
+  it("sends live steering from the Agent nodes view", async () => {
+    const element = await renderGraph();
+    const input = element.querySelector('[aria-label="Direction for the orchestrator"]') as HTMLTextAreaElement;
+    const form = element.querySelector('[aria-label="Direct the orchestrator"]') as HTMLFormElement;
+
+    await act(async () => {
+      Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value")?.set?.call(
+        input,
+        "Reduce scope and prioritize the regression fix.",
+      );
+      input.dispatchEvent(new Event("input", { bubbles: true }));
+      input.dispatchEvent(new Event("change", { bubbles: true }));
+      await settle();
+    });
+    await act(async () => {
+      form.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
+      await settle();
+    });
+
+    expect(sendInterAgentDirective).toHaveBeenCalledWith("run-1", expect.objectContaining({
+      text: "Reduce scope and prioritize the regression fix.",
+    }));
+    expect(element.textContent).toContain("Direction sent");
   });
 
   it("shows the shared working border and a bounded static latest activity inside agent nodes", async () => {

@@ -121,6 +121,59 @@ def prepare_generalist_handoff(
         time.sleep(max(0.0, poll_seconds))
 
 
+def sync_generalist_directives(
+    service: InterAgentService,
+    state: Any,
+    run: Any,
+    *,
+    timeout_seconds: float = GENERALIST_HANDOFF_WAIT_TIMEOUT_SECONDS,
+    poll_seconds: float = GENERALIST_HANDOFF_POLL_SECONDS,
+) -> None:
+    """Resolve linked later generalist turns before an orchestrator safe point."""
+    runtime_store = getattr(state, "runtime_store", None)
+    if runtime_store is None:
+        return
+    for link in service.pending_generalist_directive_links(run):
+        turn_id = str(link.runtime_turn_id or "").strip()
+        deadline = time.monotonic() + max(0.0, timeout_seconds)
+        while True:
+            latest_run = service.store.get_run(run.run_id, workspace_id=run.workspace_id)
+            if latest_run.status in {"cancelled", "failed"}:
+                raise InterAgentOperationError("Orchestration stopped while waiting for generalist steering.")
+            turn = runtime_store.get_turn(turn_id)
+            if turn.status in TERMINAL_RUNTIME_TURN_STATUSES:
+                if turn.status == "completed":
+                    events = [
+                        event
+                        for event in runtime_store.list_events(run.root_runtime_session_id)
+                        if event.turn_id == turn_id
+                    ]
+                    final_event = _last_final_event(events)
+                    text = _runtime_event_text(final_event) if final_event is not None else ""
+                    if text:
+                        directive = service.record_directive(
+                            workspace_id=run.workspace_id,
+                            run_id=run.run_id,
+                            text=text[:6000],
+                            source_kind="root_generalist",
+                            source_runtime_event_id=str(final_event.event_id),
+                            source_runtime_turn_id=turn_id,
+                            idempotency_key=f"{run.run_id}:root-directive:{final_event.event_id}",
+                        )
+                        service.resolve_generalist_directive_link(
+                            latest_run,
+                            link,
+                            status="delivered",
+                            directive_id=str(directive.payload.get("directive_id") or ""),
+                        )
+                        break
+                service.resolve_generalist_directive_link(latest_run, link, status="ignored")
+                break
+            if time.monotonic() >= deadline:
+                raise InterAgentOperationError("Timed out waiting for linked generalist steering.")
+            time.sleep(max(0.0, poll_seconds))
+
+
 def _runtime_output_text(events: list[Any]) -> str:
     final = ""
     for event in events:

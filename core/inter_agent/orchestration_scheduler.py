@@ -76,6 +76,7 @@ def execute_orchestrated_run(
                 handoff.input_text,
                 handoff.analysis_text,
                 execute_turn,
+                state,
                 max_initial_tasks=_initial_task_limit(budget.max_participants),
                 available_agent_type_ids=available_agent_type_ids,
             )
@@ -107,6 +108,7 @@ def execute_orchestrated_run(
             if ready:
                 completion = _execute_ready_wave(
                     service,
+                    state,
                     latest_run,
                     orchestrator,
                     control,
@@ -131,6 +133,7 @@ def execute_orchestrated_run(
                 input_text=handoff.input_text,
                 trigger_task_id=None,
                 execute_turn=execute_turn,
+                runtime_state=state,
                 max_participants=budget.max_participants,
                 available_agent_type_ids=available_agent_type_ids,
             )
@@ -157,6 +160,7 @@ def execute_orchestrated_run(
 
 def _execute_ready_wave(
     service: InterAgentService,
+    runtime_state: Any,
     run: Any,
     orchestrator: Any,
     control: OrchestrationControlState,
@@ -199,6 +203,7 @@ def _execute_ready_wave(
                 input_text=input_text,
                 trigger_task_id=task.task_id,
                 execute_turn=execute_turn,
+                runtime_state=runtime_state,
                 max_participants=max_participants,
                 available_agent_type_ids=available_agent_type_ids,
             )

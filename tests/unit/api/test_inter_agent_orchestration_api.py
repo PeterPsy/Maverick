@@ -63,6 +63,27 @@ class InterAgentOrchestrationApiTest(InterAgentApiSupport):
                 body={"text": "Prioritize regression coverage.", "idempotency_key": "steer-1"},
                 cookie=cookie,
             )
+            state.runtime_store.save_turn(
+                RuntimeTurnRecord(
+                    turn_id="generalist-turn-2",
+                    session_id="root-session",
+                    workspace_id="default",
+                    status="queued",
+                    input_text="Adjust the active run.",
+                    created_at=now,
+                    updated_at=now,
+                    started_at=None,
+                    completed_at=None,
+                    failure_reason=None,
+                )
+            )
+            linked_status, linked_payload, _headers = self._invoke(
+                app,
+                path=f"/api/inter-agent/runs/{run_id}/directives",
+                method="POST",
+                body={"source_runtime_turn_id": "generalist-turn-2", "idempotency_key": "steer-2"},
+                cookie=cookie,
+            )
 
             self.assertEqual(status, 202)
             self.assertEqual(retry_status, 200)
@@ -76,6 +97,8 @@ class InterAgentOrchestrationApiTest(InterAgentApiSupport):
             start_worker.assert_called_once()
             self.assertEqual(directive_status, 201)
             self.assertEqual(directive_payload["directive"]["payload"]["source_kind"], "user")
+            self.assertEqual(linked_status, 201)
+            self.assertEqual(linked_payload["directive"]["event_type"], "inter_agent.generalist.directive_linked")
 
     def test_chat_intent_rejects_client_owned_topology(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:

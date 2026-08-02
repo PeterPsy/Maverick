@@ -288,13 +288,28 @@ def _handle_inter_agent_route(
     if action == "messages" and method == "POST":
         return _send_message(state, context, service, run.run_id, body, start_response)
     if action == "directives" and method == "POST":
-        directive = service.record_directive(
-            workspace_id=context.workspace_id,
-            run_id=run.run_id,
-            text=_text(body.get("text")) or _text(body.get("message")),
-            source_kind="user",
-            idempotency_key=_text(body.get("idempotency_key")) or None,
-        )
+        source_turn_id = _text(body.get("source_runtime_turn_id"))
+        if source_turn_id:
+            try:
+                source_turn = state.runtime_store.get_turn(source_turn_id)
+            except (RuntimeTurnNotFoundError, ValueError):
+                return json_response(start_response, {"error": "generalist_directive_turn_not_found"}, status="404 Not Found")
+            if source_turn.workspace_id != context.workspace_id or source_turn.session_id != run.root_runtime_session_id:
+                return json_response(start_response, {"error": "generalist_directive_turn_not_found"}, status="404 Not Found")
+            directive = service.link_generalist_directive(
+                workspace_id=context.workspace_id,
+                run_id=run.run_id,
+                source_runtime_turn_id=source_turn.turn_id,
+                idempotency_key=_text(body.get("idempotency_key")) or None,
+            )
+        else:
+            directive = service.record_directive(
+                workspace_id=context.workspace_id,
+                run_id=run.run_id,
+                text=_text(body.get("text")) or _text(body.get("message")),
+                source_kind="user",
+                idempotency_key=_text(body.get("idempotency_key")) or None,
+            )
         return json_response(start_response, {"directive": inter_agent_payload(directive)}, status="201 Created")
     if action == "execute" and method == "POST":
         return _execute_run(state, context, service, run, body, start_response)

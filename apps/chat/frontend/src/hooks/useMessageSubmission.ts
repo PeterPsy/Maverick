@@ -16,6 +16,7 @@ import {
   prepareRuntimeSessionAppReferences,
   prewarmRuntimeSession,
   recordRuntimeTurnClientMetrics,
+  sendInterAgentDirective,
   sendRuntimeTurn,
 } from "../api/client";
 import type { ComposerAttachment } from "../lib/attachments";
@@ -59,6 +60,7 @@ export type AgentRuntimeConfig = {
 };
 
 type UseMessageSubmissionParams = {
+  activeInterAgentRun: InterAgentRunDetail | null;
   activeAppContext: ActiveAppContext | null;
   activeThread: ChatThread | null;
   attachments: ComposerAttachment[];
@@ -310,6 +312,7 @@ function turnIdForSubmitResponse(response: RuntimeTurnSubmitResponse | null): st
 }
 
 export function useMessageSubmission({
+  activeInterAgentRun,
   activeAppContext,
   activeThread,
   attachments,
@@ -342,6 +345,7 @@ export function useMessageSubmission({
   const activeConversationKeyRef = useRef(activeConversationKey);
   const activeAppContextRef = useRef(activeAppContext);
   const activeThreadRef = useRef(activeThread);
+  const activeInterAgentRunRef = useRef(activeInterAgentRun);
   const draftChatRef = useRef(draftChat);
   const threadsRef = useRef(threads);
   const conversationKeyAliasesRef = useRef<Record<string, string>>({});
@@ -376,11 +380,12 @@ export function useMessageSubmission({
 
   useEffect(() => {
     activeConversationKeyRef.current = activeConversationKey;
+    activeInterAgentRunRef.current = activeInterAgentRun;
     activeAppContextRef.current = activeAppContext;
     activeThreadRef.current = activeThread;
     draftChatRef.current = draftChat;
     threadsRef.current = threads;
-  }, [activeAppContext, activeConversationKey, activeThread, draftChat, threads]);
+  }, [activeAppContext, activeConversationKey, activeInterAgentRun, activeThread, draftChat, threads]);
 
   useEffect(() => {
     if (!canPreloadRuntime) {
@@ -1348,7 +1353,28 @@ export function useMessageSubmission({
         notifyActiveThreadChanged(optimisticThread.thread_id);
         openChatThreadRouteInShell(optimisticThread.thread_id, { navigationScope });
       }
-      if (message.multiAgentMode && message.multiAgentMode !== "off") {
+      const linkedRun = activeInterAgentRunRef.current;
+      const canSteerLinkedRun = Boolean(
+        linkedRun
+        && linkedRun.run.root_runtime_session_id === response.session.session_id
+        && !["completed", "failed", "cancelled"].includes(linkedRun.run.status),
+      );
+      if (canSteerLinkedRun && linkedRun) {
+        try {
+          await sendInterAgentDirective(linkedRun.run.run_id, {
+            source_runtime_turn_id: response.turn.turn_id,
+            idempotency_key: `chat-generalist-directive:${response.turn.turn_id}`,
+          });
+        } catch (orchestrationError) {
+          if (!isAbortError(orchestrationError) && isConversationStillActive(conversationKey)) {
+            setError(
+              orchestrationError instanceof Error
+                ? `Generalist turn accepted; Agent nodes could not receive its direction: ${orchestrationError.message}`
+                : "Generalist turn accepted; Agent nodes could not receive its direction.",
+            );
+          }
+        }
+      } else if (message.multiAgentMode && message.multiAgentMode !== "off") {
         try {
           const orchestration = await createInterAgentOrchestration(
             interAgentOrchestrationIntent({

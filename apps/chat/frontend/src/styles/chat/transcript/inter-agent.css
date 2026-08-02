@@ -115,6 +115,7 @@
 }
 
 .chatapp-inter-agent-graph {
+  position: relative;
   display: grid;
   grid-template-rows: auto auto auto minmax(0, 1fr) auto;
   grid-auto-rows: max-content;
@@ -951,6 +952,68 @@
 
 .chatapp-inter-agent-graph__back .material-symbols-rounded {
   font-size: 1.18rem;
+}
+
+.chatapp-inter-agent-graph__directive {
+  position: absolute;
+  z-index: 40;
+  left: 50%;
+  bottom: 1rem;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: end;
+  gap: 0.45rem;
+  width: min(42rem, calc(100% - 2rem));
+  padding: 0.48rem;
+  border: 1px solid var(--chatapp-graph-border);
+  border-radius: 1rem;
+  background: var(--chatapp-graph-surface);
+  box-shadow: var(--maverick-floating-control-shadow);
+  transform: translateX(-50%);
+  backdrop-filter: blur(26px);
+  -webkit-backdrop-filter: blur(26px);
+}
+
+.chatapp-inter-agent-graph__directive textarea {
+  min-height: 2.5rem;
+  max-height: 8rem;
+  padding: 0.62rem 0.72rem;
+  border: 0;
+  outline: 0;
+  resize: vertical;
+  background: transparent;
+  color: var(--maverick-text);
+  font: inherit;
+  line-height: 1.35;
+}
+
+.chatapp-inter-agent-graph__directive button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.5rem;
+  height: 2.5rem;
+  border: 0;
+  border-radius: 999px;
+  background: var(--maverick-accent);
+  color: var(--maverick-text-on-accent);
+  cursor: pointer;
+}
+
+.chatapp-inter-agent-graph__directive button:disabled {
+  cursor: default;
+  opacity: 0.45;
+}
+
+.chatapp-inter-agent-graph__directive-status {
+  grid-column: 1 / -1;
+  padding: 0 0.72rem 0.15rem;
+  color: var(--maverick-text-muted);
+  font-size: 0.72rem;
+}
+
+.chatapp-inter-agent-graph__directive-status.is-error {
+  color: var(--maverick-danger);
 }
 
 .chatapp-inter-agent-graph.chatapp-agent-nodes-view .chatapp-inter-agent-graph__body {

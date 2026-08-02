@@ -13,7 +13,7 @@ from core.inter_agent.orchestration_plan import (
     parse_orchestration_plan,
 )
 from core.inter_agent.orchestration_prompts import control_prompt, planning_prompt
-from core.inter_agent.orchestration_runtime import ParticipantTurnExecutor
+from core.inter_agent.orchestration_runtime import ParticipantTurnExecutor, sync_generalist_directives
 from core.inter_agent.orchestration_state import OrchestrationControlState
 from core.inter_agent.orchestration_tasks import (
     AgentSnapshotResolver,
@@ -40,10 +40,12 @@ def create_initial_plan(
     input_text: str,
     generalist_analysis: str,
     execute_turn: ParticipantTurnExecutor,
+    runtime_state: Any,
     *,
     max_initial_tasks: int,
     available_agent_type_ids: tuple[str, ...],
 ) -> OrchestrationPlan:
+    sync_generalist_directives(service, runtime_state, run)
     directives = service.pending_directives(run)
     output = execute_turn(
         orchestrator,
@@ -71,9 +73,11 @@ def next_control_decision(
     input_text: str,
     trigger_task_id: str | None,
     execute_turn: ParticipantTurnExecutor,
+    runtime_state: Any,
     max_participants: int,
     available_agent_type_ids: tuple[str, ...],
 ) -> OrchestrationControlDecision:
+    sync_generalist_directives(service, runtime_state, run)
     directives = service.pending_directives(run)
     step = control.control_step + 1
     output = execute_turn(

@@ -329,8 +329,8 @@ class InterAgentService:
         if len(directive_text) > 6000:
             raise InterAgentValidationError("Directives must be 6000 characters or fewer.")
         turn_id = _clean_optional(source_runtime_turn_id)
-        if source_kind == "root_generalist" and turn_id != run.source_runtime_turn_id:
-            raise InterAgentValidationError("Generalist directives must belong to the run source turn.")
+        if source_kind == "root_generalist" and not turn_id:
+            raise InterAgentValidationError("Generalist directives require a linked runtime turn.")
         directive_id = _stable_id(
             "iadirective",
             run.run_id,
@@ -352,6 +352,79 @@ class InterAgentService:
                 "text": directive_text,
             },
             now=timestamp,
+        )
+
+    def link_generalist_directive(
+        self,
+        *,
+        workspace_id: str,
+        run_id: str,
+        source_runtime_turn_id: str,
+        idempotency_key: str | None = None,
+        now: datetime | None = None,
+    ) -> InterAgentEventRecord:
+        """Link a later root generalist turn for delivery at a scheduler safe point."""
+        timestamp = now or datetime.now(tz=UTC)
+        run = self.store.get_run(run_id, workspace_id=workspace_id)
+        if run.mode != "orchestrated" or run.status in TERMINAL_RUN_STATUSES:
+            raise InterAgentOperationError("Only active orchestrated runs accept generalist steering.")
+        turn_id = _clean_optional(source_runtime_turn_id)
+        if not turn_id:
+            raise InterAgentValidationError("Generalist steering requires a runtime turn id.")
+        link_id = _stable_id("ialink", run.run_id, turn_id)
+        return self.record_event(
+            run,
+            event_type="inter_agent.generalist.directive_linked",
+            participant_id=run.orchestrator_participant_id,
+            runtime_turn_id=turn_id,
+            visibility_plane="detail",
+            correlation_id=link_id,
+            idempotency_key=_clean_optional(idempotency_key) or f"{run.run_id}:generalist.link:{turn_id}",
+            payload={"link_id": link_id, "source_runtime_turn_id": turn_id},
+            now=timestamp,
+        )
+
+    def pending_generalist_directive_links(self, run: InterAgentRunRecord) -> list[InterAgentEventRecord]:
+        events = self.store.list_event_page(
+            run.run_id,
+            workspace_id=run.workspace_id,
+            visibility_plane="detail",
+            limit=DEFAULT_DETAIL_EVENT_LIMIT,
+        ).events
+        resolved = {
+            str(event.payload.get("link_id") or "")
+            for event in events
+            if event.event_type == "inter_agent.generalist.directive_resolved"
+        }
+        return [
+            event
+            for event in events
+            if event.event_type == "inter_agent.generalist.directive_linked"
+            and str(event.payload.get("link_id") or "") not in resolved
+        ]
+
+    def resolve_generalist_directive_link(
+        self,
+        run: InterAgentRunRecord,
+        link: InterAgentEventRecord,
+        *,
+        status: str,
+        directive_id: str | None = None,
+        now: datetime | None = None,
+    ) -> InterAgentEventRecord:
+        link_id = str(link.payload.get("link_id") or "").strip()
+        if status not in {"delivered", "ignored"} or not link_id:
+            raise InterAgentValidationError("Generalist directive link resolution is invalid.")
+        return self.record_event(
+            run,
+            event_type="inter_agent.generalist.directive_resolved",
+            participant_id=run.orchestrator_participant_id,
+            runtime_turn_id=link.runtime_turn_id,
+            visibility_plane="detail",
+            correlation_id=link_id,
+            idempotency_key=f"{run.run_id}:generalist.link.resolved:{link_id}",
+            payload={"link_id": link_id, "status": status, "directive_id": directive_id},
+            now=now,
         )
 
     def pending_directives(self, run: InterAgentRunRecord) -> list[InterAgentEventRecord]:

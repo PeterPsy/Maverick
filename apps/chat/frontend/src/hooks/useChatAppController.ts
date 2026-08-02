@@ -219,6 +219,13 @@ export function useChatAppController({
   const [interAgentEventsByRunId, setInterAgentEventsByRunId] = useState<Record<string, InterAgentEventRecord[]>>({});
   const [interAgentApprovalsByRunId, setInterAgentApprovalsByRunId] = useState<Record<string, InterAgentApprovalRecord[]>>({});
   const [activeInterAgentGraphRunId, setActiveInterAgentGraphRunId] = useState<string | null>(null);
+  const activeInterAgentRun = useMemo(() => {
+    const runtimeSessionId = activeThread?.runtime_session_id || "";
+    return [...interAgentRuns].reverse().find((detail) => (
+      detail.run.root_runtime_session_id === runtimeSessionId
+      && !["completed", "failed", "cancelled"].includes(detail.run.status)
+    )) || null;
+  }, [activeThread?.runtime_session_id, interAgentRuns]);
   const interAgentRefreshScopeRef = useRef("");
   const hasExternalRuntimeThreads = Array.isArray(runtimeThreads);
   const activeConversationKey = conversationKeyFor(activeThread, draftChat);
@@ -408,6 +415,7 @@ export function useChatAppController({
     setQueuedMessagesForConversation,
     stopActiveSubmission,
   } = useMessageSubmission({
+    activeInterAgentRun,
     activeAppContext,
     activeThread,
     attachments,

@@ -43,12 +43,29 @@ class OrchestrationSchedulerTest(unittest.TestCase):
             event_type="runtime.output.final",
             payload={"text": "Preserve the public API and prioritize regression coverage."},
         )
+        source_turn = SimpleNamespace(
+            turn_id="generalist-turn-1",
+            status="active",
+            input_text="Implement the requested redesign.",
+        )
+
+        class RuntimeStore:
+            polls = 0
+
+            def get_turn(self, _turn_id):
+                self.polls += 1
+                if self.polls > 1:
+                    source_turn.status = "completed"
+                return source_turn
+
+            def list_events(self, _session_id):
+                return [generalist_event] if self.polls > 1 else []
+
         result = execute_orchestrated_run(
             service,
-            SimpleNamespace(runtime_store=SimpleNamespace(list_events=lambda _session_id: [generalist_event])),
+            SimpleNamespace(runtime_store=RuntimeStore()),
             workspace_id="default",
             run_id=run.run_id,
-            input_text="Implement the requested redesign.",
             turn_executor=execute_turn,
         )
 
@@ -68,10 +85,10 @@ class OrchestrationSchedulerTest(unittest.TestCase):
         )
         self.assertEqual(len(edges), 4)
         self.assertIn("Preserve the public API", prompts[f"{run.run_id}:orchestrator:plan"])
+        self.assertIn("Implement the requested redesign", prompts[f"{run.run_id}:orchestrator:plan"])
         self.assertIn("Reviewer feedback", prompts[f"{run.run_id}:task:implement-r2"])
         self.assertIn("inter_agent.completion.decided", [event.event_type for event in events])
-        self.assertIn("inter_agent.directive.received", [event.event_type for event in events])
-        self.assertIn("inter_agent.directive.delivered", [event.event_type for event in events])
+        self.assertIn("inter_agent.generalist.handoff_prepared", [event.event_type for event in events])
         self.assertEqual(
             next(event for event in events if event.event_type == "inter_agent.run.completed").participant_id,
             "orchestrator",

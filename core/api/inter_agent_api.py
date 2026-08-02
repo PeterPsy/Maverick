@@ -420,7 +420,6 @@ def _create_orchestration(
         service,
         workspace_id=context.workspace_id,
         run_id=run.run_id,
-        input_text=source_turn.input_text,
     )
     return json_response(start_response, run_detail_payload(state.inter_agent_store, run), status="202 Accepted")
 
@@ -465,7 +464,6 @@ def _start_orchestrated_execution_worker(
     *,
     workspace_id: str,
     run_id: str,
-    input_text: str,
 ) -> None:
     def worker() -> None:
         try:
@@ -474,7 +472,6 @@ def _start_orchestrated_execution_worker(
                 state,
                 workspace_id=workspace_id,
                 run_id=run_id,
-                input_text=input_text,
             )
         except Exception:
             return

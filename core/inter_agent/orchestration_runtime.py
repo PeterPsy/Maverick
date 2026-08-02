@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from dataclasses import dataclass
+import time
 from typing import Any, Callable
 
 from core.inter_agent.errors import InterAgentOperationError
@@ -10,11 +12,16 @@ from core.inter_agent.service import InterAgentService
 
 
 ParticipantTurnExecutor = Callable[[InterAgentParticipantRecord, str, str], str]
-GENERALIST_DIRECTIVE_EVENT_TYPES = {
-    "runtime.output.final",
-    "runtime.step.updated",
-    "runtime.tool_call.completed",
-}
+TERMINAL_RUNTIME_TURN_STATUSES = {"completed", "failed", "cancelled", "timed-out"}
+GENERALIST_HANDOFF_WAIT_TIMEOUT_SECONDS = 6 * 60 * 60
+GENERALIST_HANDOFF_POLL_SECONDS = 0.1
+
+
+@dataclass(frozen=True)
+class GeneralistHandoff:
+    input_text: str
+    analysis_text: str
+    runtime_event_id: str
 
 
 def runtime_turn_executor(service: InterAgentService, state: Any, run: Any) -> ParticipantTurnExecutor:
@@ -50,25 +57,68 @@ def runtime_turn_executor(service: InterAgentService, state: Any, run: Any) -> P
     return execute
 
 
-def sync_generalist_directives(service: InterAgentService, state: Any, run: Any) -> None:
+def prepare_generalist_handoff(
+    service: InterAgentService,
+    state: Any,
+    run: Any,
+    *,
+    timeout_seconds: float = GENERALIST_HANDOFF_WAIT_TIMEOUT_SECONDS,
+    poll_seconds: float = GENERALIST_HANDOFF_POLL_SECONDS,
+) -> GeneralistHandoff:
+    """Wait for and persist the source generalist's completed launch analysis."""
     runtime_store = getattr(state, "runtime_store", None)
     if runtime_store is None or not run.source_runtime_turn_id:
-        return
-    for event in runtime_store.list_events(run.root_runtime_session_id):
-        if event.turn_id != run.source_runtime_turn_id or event.event_type not in GENERALIST_DIRECTIVE_EVENT_TYPES:
-            continue
-        text = _runtime_event_text(event)
-        if not text:
-            continue
-        service.record_directive(
-            workspace_id=run.workspace_id,
-            run_id=run.run_id,
-            text=text[:6000],
-            source_kind="root_generalist",
-            source_runtime_event_id=event.event_id,
-            source_runtime_turn_id=run.source_runtime_turn_id,
-            idempotency_key=f"{run.run_id}:root-directive:{event.event_id}",
-        )
+        raise InterAgentOperationError("Orchestrated runs require an available source generalist turn.")
+    persisted = _persisted_handoff(service, run)
+    if persisted is not None:
+        return persisted
+    deadline = time.monotonic() + max(0.0, timeout_seconds)
+    while True:
+        latest_run = service.store.get_run(run.run_id, workspace_id=run.workspace_id)
+        if latest_run.status in {"cancelled", "failed"}:
+            raise InterAgentOperationError("Orchestration stopped before the generalist handoff was ready.")
+        turn = runtime_store.get_turn(run.source_runtime_turn_id)
+        events = [
+            event
+            for event in runtime_store.list_events(run.root_runtime_session_id)
+            if event.turn_id == run.source_runtime_turn_id
+        ]
+        if turn.status in TERMINAL_RUNTIME_TURN_STATUSES:
+            if turn.status != "completed":
+                raise InterAgentOperationError(
+                    f"Source generalist turn ended with status `{turn.status}` before preparing the handoff."
+                )
+            final_event = _last_final_event(events)
+            analysis_text = _runtime_event_text(final_event) if final_event is not None else ""
+            if not analysis_text:
+                raise InterAgentOperationError("Source generalist turn completed without a final handoff output.")
+            input_text = str(getattr(turn, "input_text", "") or "").strip()
+            if not input_text:
+                raise InterAgentOperationError("Source generalist turn has no user request to orchestrate.")
+            handoff = GeneralistHandoff(
+                input_text=input_text[:20000],
+                analysis_text=analysis_text[:20000],
+                runtime_event_id=str(final_event.event_id),
+            )
+            service.record_event(
+                latest_run,
+                event_type="inter_agent.generalist.handoff_prepared",
+                participant_id=latest_run.orchestrator_participant_id,
+                runtime_turn_id=run.source_runtime_turn_id,
+                runtime_event_id=handoff.runtime_event_id,
+                visibility_plane="detail",
+                correlation_id=f"{run.run_id}:generalist-handoff",
+                idempotency_key=f"{run.run_id}:generalist.handoff:{handoff.runtime_event_id}",
+                payload={
+                    "source_runtime_turn_id": run.source_runtime_turn_id,
+                    "input_text": handoff.input_text,
+                    "analysis_text": handoff.analysis_text,
+                },
+            )
+            return handoff
+        if time.monotonic() >= deadline:
+            raise InterAgentOperationError("Timed out waiting for the source generalist handoff.")
+        time.sleep(max(0.0, poll_seconds))
 
 
 def _runtime_output_text(events: list[Any]) -> str:
@@ -90,3 +140,29 @@ def _runtime_event_text(event: Any) -> str:
         if isinstance(value, str) and value.strip():
             return value.strip()
     return ""
+
+
+def _last_final_event(events: list[Any]) -> Any | None:
+    finals = [event for event in events if getattr(event, "event_type", "") == "runtime.output.final"]
+    return finals[-1] if finals else None
+
+
+def _persisted_handoff(service: InterAgentService, run: Any) -> GeneralistHandoff | None:
+    events = service.store.list_event_page(
+        run.run_id,
+        workspace_id=run.workspace_id,
+        visibility_plane="detail",
+        limit=200,
+    ).events
+    for event in reversed(events):
+        if event.event_type != "inter_agent.generalist.handoff_prepared":
+            continue
+        input_text = str(event.payload.get("input_text") or "").strip()
+        analysis_text = str(event.payload.get("analysis_text") or "").strip()
+        if input_text and analysis_text:
+            return GeneralistHandoff(
+                input_text=input_text,
+                analysis_text=analysis_text,
+                runtime_event_id=str(event.runtime_event_id or "persisted-handoff"),
+            )
+    return None

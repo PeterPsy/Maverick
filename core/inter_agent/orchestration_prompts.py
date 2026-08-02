@@ -12,12 +12,18 @@ class TaskResultLike(Protocol):
     output_text: str
 
 
-def planning_prompt(input_text: str, policy: str | None, directives: list[Any]) -> str:
+def planning_prompt(
+    input_text: str,
+    generalist_analysis: str,
+    policy: str | None,
+    directives: list[Any],
+) -> str:
     return (
         "You are the sole orchestrator of a Maverick Agent nodes run. Produce only one JSON object with "
         'summary and tasks. Each task requires id, label, role, objective, depends_on; reviewer tasks also require review_of. '
         "Use safe lowercase ids. Include at least one implementer and a dependent reviewer. Do not execute the work yourself.\n\n"
-        f"Policy: {policy or 'auto'}\nUser request:\n{input_text}\n{directive_block(directives)}"
+        f"Policy: {policy or 'auto'}\nUser request:\n{input_text}\n\n"
+        f"Generalist launch analysis:\n{generalist_analysis}\n{directive_block(directives)}"
     )
 
 

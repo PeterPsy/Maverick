@@ -12,8 +12,8 @@ from core.inter_agent.orchestration_prompts import completion_prompt, planning_p
 from core.inter_agent.orchestration_review import run_review_revisions
 from core.inter_agent.orchestration_runtime import (
     ParticipantTurnExecutor,
+    prepare_generalist_handoff,
     runtime_turn_executor,
-    sync_generalist_directives,
 )
 from core.inter_agent.orchestration_tasks import (
     OrchestrationTaskResult,
@@ -37,7 +37,6 @@ def execute_orchestrated_run(
     *,
     workspace_id: str,
     run_id: str,
-    input_text: str,
     turn_executor: ParticipantTurnExecutor | None = None,
     now: datetime | None = None,
 ) -> OrchestrationExecutionResult:
@@ -47,9 +46,6 @@ def execute_orchestrated_run(
         raise InterAgentOperationError("Dynamic scheduler requires an orchestrated run.")
     if run.status in {"completed", "failed", "cancelled"}:
         return OrchestrationExecutionResult(run=run, task_results=())
-    timestamp = now or datetime.now(tz=UTC)
-    run = replace(run, status="planning", updated_at=timestamp)
-    service.store.save_run(run)
     orchestrator = service.store.get_participant(
         run.orchestrator_participant_id,
         workspace_id=workspace_id,
@@ -57,11 +53,15 @@ def execute_orchestrated_run(
     )
     execute_turn = turn_executor or runtime_turn_executor(service, state, run)
     try:
-        sync_generalist_directives(service, state, run)
+        handoff = prepare_generalist_handoff(service, state, run)
+        input_text = handoff.input_text
+        timestamp = now or datetime.now(tz=UTC)
+        run = replace(run, status="planning", updated_at=timestamp)
+        service.store.save_run(run)
         planning_directives = service.pending_directives(run)
         plan_output = execute_turn(
             orchestrator,
-            planning_prompt(input_text, run.orchestration_policy, planning_directives),
+            planning_prompt(input_text, handoff.analysis_text, run.orchestration_policy, planning_directives),
             f"{run.run_id}:orchestrator:plan",
         )
         service.mark_directives_delivered(run, planning_directives)
@@ -94,7 +94,6 @@ def execute_orchestrated_run(
             execute_turn=execute_turn,
             max_rounds=budget.max_rounds,
         )
-        sync_generalist_directives(service, state, run)
         completion_directives = service.pending_directives(run)
         completion_output = execute_turn(
             orchestrator,

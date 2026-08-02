@@ -11,7 +11,7 @@ from tests.unit.inter_agent.test_dynamic_orchestration_service import orchestrat
 
 
 class OrchestrationSchedulerTest(unittest.TestCase):
-    def test_dynamic_scheduler_runs_dependencies_revision_loop_and_orchestrator_gate(self) -> None:
+    def test_scheduler_waits_for_handoff_and_adapts_after_each_worker_output(self) -> None:
         store = build_inter_agent_document_store(start_path=make_temp_repo_root(self))
         service = InterAgentService(store)
         run = service.create_run(orchestrated_spec())
@@ -21,17 +21,35 @@ class OrchestrationSchedulerTest(unittest.TestCase):
             prompts[client_message_id] = prompt
             outputs = {
                 f"{run.run_id}:orchestrator:plan": (
-                    '{"summary":"Implement and review.","tasks":['
-                    '{"id":"implement","label":"Implementer","role":"implementer","objective":"Implement safely.","depends_on":[]},'
-                    '{"id":"review","label":"Reviewer","role":"reviewer","objective":"Review the implementation.",'
-                    '"depends_on":["implement"],"review_of":"implement"}]}'
+                    '{"summary":"Start with implementation.","tasks":['
+                    '{"id":"implement","label":"Implementer","role":"implementer",'
+                    '"objective":"Implement safely.","depends_on":[]}]}'
                 ),
                 f"{run.run_id}:task:implement": "First implementation.",
+                f"{run.run_id}:orchestrator:control:1": (
+                    '{"summary":"Review the first result.","tasks":['
+                    '{"id":"review","label":"Reviewer","role":"reviewer","objective":"Review the implementation.",'
+                    '"depends_on":["implement"],"review_of":"implement"}],'
+                    '"cancel_task_ids":[],"complete":false,"quality_passed":false,"final_answer":""}'
+                ),
                 f"{run.run_id}:task:review": '{"approved":false,"feedback":"Add the missing regression coverage."}',
+                f"{run.run_id}:orchestrator:control:2": (
+                    '{"summary":"Revise and review again.","tasks":['
+                    '{"id":"implement-r2","label":"Implementer R2","role":"implementer",'
+                    '"objective":"Apply reviewer feedback.","depends_on":["review"]},'
+                    '{"id":"review-r2","label":"Reviewer R2","role":"reviewer","objective":"Review the revision.",'
+                    '"depends_on":["implement-r2"],"review_of":"implement-r2"}],'
+                    '"cancel_task_ids":[],"complete":false,"quality_passed":false,"final_answer":""}'
+                ),
                 f"{run.run_id}:task:implement-r2": "Corrected implementation with regression coverage.",
+                f"{run.run_id}:orchestrator:control:3": (
+                    '{"summary":"Await the scheduled reviewer.","tasks":[],"cancel_task_ids":[],'
+                    '"complete":false,"quality_passed":false,"final_answer":""}'
+                ),
                 f"{run.run_id}:task:review-r2": '{"approved":true,"feedback":"All requirements pass."}',
-                f"{run.run_id}:orchestrator:completion": (
-                    '{"complete":true,"quality_passed":true,"summary":"Reviewed and accepted.",'
+                f"{run.run_id}:orchestrator:control:4": (
+                    '{"summary":"Reviewed and accepted.","tasks":[],"cancel_task_ids":[],'
+                    '"complete":true,"quality_passed":true,'
                     '"final_answer":"The implementation is complete and verified."}'
                 ),
             }
@@ -86,9 +104,14 @@ class OrchestrationSchedulerTest(unittest.TestCase):
         self.assertEqual(len(edges), 4)
         self.assertIn("Preserve the public API", prompts[f"{run.run_id}:orchestrator:plan"])
         self.assertIn("Implement the requested redesign", prompts[f"{run.run_id}:orchestrator:plan"])
-        self.assertIn("Reviewer feedback", prompts[f"{run.run_id}:task:implement-r2"])
+        self.assertIn("Add the missing regression coverage", prompts[f"{run.run_id}:orchestrator:control:2"])
+        self.assertIn("Dependency review", prompts[f"{run.run_id}:task:implement-r2"])
         self.assertIn("inter_agent.completion.decided", [event.event_type for event in events])
         self.assertIn("inter_agent.generalist.handoff_prepared", [event.event_type for event in events])
+        self.assertEqual(
+            [event.payload["trigger_task_id"] for event in events if event.event_type == "inter_agent.control.decision"],
+            ["implement", "review", "implement-r2", "review-r2"],
+        )
         self.assertEqual(
             next(event for event in events if event.event_type == "inter_agent.run.completed").participant_id,
             "orchestrator",

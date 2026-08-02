@@ -11,7 +11,18 @@ from core.inter_agent.errors import InterAgentValidationError
 
 
 _TASK_ID_RE = re.compile(r"^[a-z][a-z0-9_-]{0,63}$")
-_ALLOWED_ROLES = {"implementer", "reviewer", "researcher", "analyst", "synthesizer"}
+_AGENT_TYPE_ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$")
+_ALLOWED_ROLES = {
+    "analyst",
+    "implementer",
+    "planner",
+    "researcher",
+    "reviewer",
+    "security_reviewer",
+    "synthesizer",
+    "tester",
+}
+_REVIEWER_ROLES = {"reviewer", "security_reviewer"}
 
 
 @dataclass(frozen=True)
@@ -22,6 +33,7 @@ class OrchestrationTaskSpec:
     objective: str
     depends_on: tuple[str, ...] = ()
     review_of: str | None = None
+    agent_type_id: str | None = None
 
 
 @dataclass(frozen=True)
@@ -44,7 +56,22 @@ class CompletionDecision:
     final_answer: str
 
 
-def parse_orchestration_plan(value: str, *, max_tasks: int) -> OrchestrationPlan:
+@dataclass(frozen=True)
+class OrchestrationControlDecision:
+    summary: str
+    tasks: tuple[OrchestrationTaskSpec, ...]
+    cancel_task_ids: tuple[str, ...]
+    complete: bool
+    quality_passed: bool
+    final_answer: str
+
+
+def parse_orchestration_plan(
+    value: str,
+    *,
+    max_tasks: int,
+    require_review_gate: bool = True,
+) -> OrchestrationPlan:
     payload = _json_object(value, decision="plan")
     raw_tasks = payload.get("tasks")
     if not isinstance(raw_tasks, list) or not raw_tasks:
@@ -55,27 +82,59 @@ def parse_orchestration_plan(value: str, *, max_tasks: int) -> OrchestrationPlan
     task_ids = [task.task_id for task in tasks]
     if len(task_ids) != len(set(task_ids)):
         raise InterAgentValidationError("Orchestrator plan task ids must be unique.")
-    known = set(task_ids)
-    for task in tasks:
-        unknown = set(task.depends_on) - known
-        if unknown:
-            raise InterAgentValidationError(
-                f"Orchestrator task `{task.task_id}` has unknown dependencies: {', '.join(sorted(unknown))}."
-            )
-        if task.task_id in task.depends_on:
-            raise InterAgentValidationError(f"Orchestrator task `{task.task_id}` cannot depend on itself.")
-        if task.review_of:
-            if task.role != "reviewer":
-                raise InterAgentValidationError("Only reviewer tasks may declare review_of.")
-            if task.review_of not in known:
-                raise InterAgentValidationError(f"Reviewer task `{task.task_id}` references an unknown review target.")
-            if task.review_of not in task.depends_on:
-                raise InterAgentValidationError("Reviewer tasks must depend on their review target.")
+    _validate_task_references(tasks, set(task_ids))
     _assert_acyclic(tasks)
-    if not any(task.role == "reviewer" and task.review_of for task in tasks):
+    if require_review_gate and not any(task.role in _REVIEWER_ROLES and task.review_of for task in tasks):
         raise InterAgentValidationError("Orchestrated plans require at least one implementer/reviewer quality gate.")
     summary = _bounded_text(payload.get("summary"), field="plan.summary", limit=1000)
     return OrchestrationPlan(summary=summary or f"Planned {len(tasks)} tasks.", tasks=tasks)
+
+
+def parse_control_decision(
+    value: str,
+    *,
+    existing_tasks: tuple[OrchestrationTaskSpec, ...],
+    max_new_tasks: int,
+) -> OrchestrationControlDecision:
+    payload = _json_object(value, decision="control decision")
+    raw_tasks = payload.get("tasks", [])
+    if not isinstance(raw_tasks, list):
+        raise InterAgentValidationError("Orchestrator control tasks must be an array.")
+    if len(raw_tasks) > max_new_tasks:
+        raise InterAgentValidationError("Orchestrator control decision exceeds the remaining participant budget.")
+    tasks = tuple(_task_spec(item) for item in raw_tasks)
+    existing_ids = {task.task_id for task in existing_tasks}
+    new_ids = [task.task_id for task in tasks]
+    if len(new_ids) != len(set(new_ids)) or existing_ids.intersection(new_ids):
+        raise InterAgentValidationError("Orchestrator control task ids must be new and unique.")
+    all_tasks = (*existing_tasks, *tasks)
+    _validate_task_references(tasks, {task.task_id for task in all_tasks})
+    _assert_acyclic(all_tasks)
+    raw_cancel_ids = payload.get("cancel_task_ids", [])
+    if not isinstance(raw_cancel_ids, list):
+        raise InterAgentValidationError("Orchestrator cancel_task_ids must be an array.")
+    cancel_ids = tuple(dict.fromkeys(str(item or "").strip() for item in raw_cancel_ids if str(item or "").strip()))
+    unknown_cancel_ids = set(cancel_ids) - existing_ids
+    if unknown_cancel_ids:
+        raise InterAgentValidationError(
+            f"Orchestrator cannot cancel unknown tasks: {', '.join(sorted(unknown_cancel_ids))}."
+        )
+    if not isinstance(payload.get("complete"), bool) or not isinstance(payload.get("quality_passed"), bool):
+        raise InterAgentValidationError("Orchestrator control decision requires boolean complete and quality_passed.")
+    summary = _bounded_text(payload.get("summary"), field="control.summary", limit=2000)
+    final_answer = _bounded_text(payload.get("final_answer"), field="control.final_answer", limit=20000)
+    if payload["complete"] and (not payload["quality_passed"] or not final_answer):
+        raise InterAgentValidationError("A completed orchestration requires passing quality and a final answer.")
+    if not payload["complete"] and payload["quality_passed"]:
+        raise InterAgentValidationError("An incomplete orchestration cannot claim a passing final quality gate.")
+    return OrchestrationControlDecision(
+        summary=summary or "Continue orchestration.",
+        tasks=tasks,
+        cancel_task_ids=cancel_ids,
+        complete=payload["complete"],
+        quality_passed=payload["quality_passed"],
+        final_answer=final_answer,
+    )
 
 
 def parse_review_decision(value: str) -> ReviewDecision:
@@ -104,6 +163,22 @@ def parse_completion_decision(value: str) -> CompletionDecision:
     )
 
 
+def task_payload(task: OrchestrationTaskSpec) -> dict[str, Any]:
+    return {
+        "id": task.task_id,
+        "label": task.label,
+        "role": task.role,
+        "objective": task.objective,
+        "depends_on": list(task.depends_on),
+        "review_of": task.review_of,
+        "agent_type_id": task.agent_type_id,
+    }
+
+
+def task_spec_from_payload(value: Any) -> OrchestrationTaskSpec:
+    return _task_spec(value)
+
+
 def _task_spec(value: Any) -> OrchestrationTaskSpec:
     if not isinstance(value, dict):
         raise InterAgentValidationError("Orchestrator plan tasks must be objects.")
@@ -117,13 +192,14 @@ def _task_spec(value: Any) -> OrchestrationTaskSpec:
     objective = _bounded_text(value.get("objective"), field=f"task.{task_id}.objective", limit=4000)
     if not label or not objective:
         raise InterAgentValidationError("Orchestrator tasks require label and objective.")
-    raw_dependencies = value.get("depends_on")
-    if raw_dependencies is None:
-        raw_dependencies = []
+    raw_dependencies = value.get("depends_on", [])
     if not isinstance(raw_dependencies, list):
         raise InterAgentValidationError("Orchestrator task depends_on must be an array.")
     dependencies = tuple(dict.fromkeys(str(item or "").strip() for item in raw_dependencies if str(item or "").strip()))
     review_of = str(value.get("review_of") or "").strip() or None
+    agent_type_id = str(value.get("agent_type_id") or "").strip() or None
+    if agent_type_id and not _AGENT_TYPE_ID_RE.fullmatch(agent_type_id):
+        raise InterAgentValidationError(f"Task `{task_id}` has an invalid agent_type_id.")
     return OrchestrationTaskSpec(
         task_id=task_id,
         label=label,
@@ -131,7 +207,26 @@ def _task_spec(value: Any) -> OrchestrationTaskSpec:
         objective=objective,
         depends_on=dependencies,
         review_of=review_of,
+        agent_type_id=agent_type_id,
     )
+
+
+def _validate_task_references(tasks: tuple[OrchestrationTaskSpec, ...], known: set[str]) -> None:
+    for task in tasks:
+        unknown = set(task.depends_on) - known
+        if unknown:
+            raise InterAgentValidationError(
+                f"Orchestrator task `{task.task_id}` has unknown dependencies: {', '.join(sorted(unknown))}."
+            )
+        if task.task_id in task.depends_on:
+            raise InterAgentValidationError(f"Orchestrator task `{task.task_id}` cannot depend on itself.")
+        if task.review_of:
+            if task.role not in _REVIEWER_ROLES:
+                raise InterAgentValidationError("Only reviewer tasks may declare review_of.")
+            if task.review_of not in known:
+                raise InterAgentValidationError(f"Reviewer task `{task.task_id}` references an unknown review target.")
+            if task.review_of not in task.depends_on:
+                raise InterAgentValidationError("Reviewer tasks must depend on their review target.")
 
 
 def _assert_acyclic(tasks: tuple[OrchestrationTaskSpec, ...]) -> None:

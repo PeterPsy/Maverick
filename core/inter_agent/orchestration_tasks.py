@@ -2,14 +2,18 @@
 
 from __future__ import annotations
 
-from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass, replace
 from datetime import UTC, datetime
-from typing import Any, Mapping
+from typing import Any, Callable, Mapping
 
 from core.inter_agent.errors import InterAgentOperationError
 from core.inter_agent.models import AgentParticipantSnapshot, EdgeSpec, InterAgentParticipantRecord, ParticipantSpec
-from core.inter_agent.orchestration_plan import OrchestrationPlan, OrchestrationTaskSpec
+from core.inter_agent.orchestration_plan import (
+    OrchestrationControlDecision,
+    OrchestrationPlan,
+    OrchestrationTaskSpec,
+    task_payload,
+)
 from core.inter_agent.orchestration_prompts import task_prompt
 from core.inter_agent.orchestration_runtime import ParticipantTurnExecutor
 from core.inter_agent.service import InterAgentService
@@ -24,20 +28,61 @@ class OrchestrationTaskResult:
     error: str | None = None
 
 
+AgentSnapshotResolver = Callable[[str], AgentParticipantSnapshot]
+
+
 def materialize_plan(
     service: InterAgentService,
     run: Any,
     orchestrator: InterAgentParticipantRecord,
     plan: OrchestrationPlan,
+    *,
+    snapshot_resolver: AgentSnapshotResolver | None = None,
+) -> dict[str, InterAgentParticipantRecord]:
+    return materialize_tasks(
+        service,
+        run,
+        orchestrator,
+        plan.tasks,
+        snapshot_resolver=snapshot_resolver,
+    )
+
+
+def materialize_tasks(
+    service: InterAgentService,
+    run: Any,
+    orchestrator: InterAgentParticipantRecord,
+    tasks: tuple[OrchestrationTaskSpec, ...],
+    *,
+    snapshot_resolver: AgentSnapshotResolver | None = None,
 ) -> dict[str, InterAgentParticipantRecord]:
     participants: dict[str, InterAgentParticipantRecord] = {}
-    for task in plan.tasks:
+    for task in tasks:
         participants[task.task_id] = service.add_participant(
             workspace_id=run.workspace_id,
             run_id=run.run_id,
-            spec=worker_spec(orchestrator, task, participant_id=task.task_id),
+            spec=worker_spec(
+                orchestrator,
+                task,
+                participant_id=task.task_id,
+                snapshot_resolver=snapshot_resolver,
+            ),
         )
-    for task in plan.tasks:
+        service.record_event(
+            run,
+            event_type="inter_agent.task.created",
+            participant_id=task.task_id,
+            visibility_plane="detail",
+            correlation_id=task.task_id,
+            idempotency_key=f"{run.run_id}:dynamic.task.created:{task.task_id}",
+            payload={
+                "task_id": task.task_id,
+                "participant_id": task.task_id,
+                "attempt": 1,
+                "task": task_payload(task),
+            },
+        )
+    for task in tasks:
         if not task.depends_on:
             service.add_edge(
                 workspace_id=run.workspace_id,
@@ -63,46 +108,6 @@ def materialize_plan(
     return participants
 
 
-def execute_dependency_graph(
-    service: InterAgentService,
-    run: Any,
-    plan: OrchestrationPlan,
-    participants: Mapping[str, InterAgentParticipantRecord],
-    *,
-    input_text: str,
-    execute_turn: ParticipantTurnExecutor,
-    max_concurrency: int,
-) -> dict[str, OrchestrationTaskResult]:
-    pending = {task.task_id: task for task in plan.tasks}
-    results: dict[str, OrchestrationTaskResult] = {}
-    while pending:
-        ready = [task for task in pending.values() if set(task.depends_on) <= set(results)]
-        if not ready:
-            raise InterAgentOperationError("No dependency-ready orchestration tasks remain.")
-        with ThreadPoolExecutor(max_workers=max(1, min(max_concurrency, len(ready)))) as pool:
-            futures = {
-                pool.submit(
-                    execute_task,
-                    service,
-                    run,
-                    task,
-                    participants[task.task_id],
-                    input_text,
-                    {dependency: results[dependency].output_text for dependency in task.depends_on},
-                    execute_turn,
-                ): task
-                for task in ready
-            }
-            for future in as_completed(futures):
-                task = futures[future]
-                result = future.result()
-                results[task.task_id] = result
-                pending.pop(task.task_id, None)
-                if result.status != "completed":
-                    raise InterAgentOperationError(result.error or f"Task `{task.task_id}` failed.")
-    return results
-
-
 def execute_task(
     service: InterAgentService,
     run: Any,
@@ -114,22 +119,6 @@ def execute_task(
 ) -> OrchestrationTaskResult:
     now = datetime.now(tz=UTC)
     service.store.save_participant(replace(participant, status="running", current_task_id=task.task_id, updated_at=now))
-    service.record_event(
-        run,
-        event_type="inter_agent.task.created",
-        participant_id=participant.participant_id,
-        visibility_plane="detail",
-        correlation_id=task.task_id,
-        idempotency_key=f"{run.run_id}:dynamic.task.created:{task.task_id}",
-        payload={
-            "task_id": task.task_id,
-            "participant_id": participant.participant_id,
-            "role": task.role,
-            "objective": task.objective,
-            "depends_on": list(task.depends_on),
-            "review_of": task.review_of,
-        },
-    )
     service.record_event(
         run,
         event_type="inter_agent.task.started",
@@ -191,7 +180,22 @@ def worker_spec(
     task: OrchestrationTaskSpec,
     *,
     participant_id: str,
+    snapshot_resolver: AgentSnapshotResolver | None = None,
 ) -> ParticipantSpec:
+    if task.agent_type_id and snapshot_resolver is not None:
+        selected = snapshot_resolver(task.agent_type_id)
+        snapshot = replace(
+            selected,
+            metadata={**selected.metadata, "source": "server_agent_catalog", "role": task.role},
+        )
+        return ParticipantSpec(
+            participant_id=participant_id,
+            kind="agent",
+            execution_mode="child_runtime_session",
+            label=task.label,
+            agent_type_id=snapshot.agent_type_id,
+            agent_snapshot=snapshot,
+        )
     snapshot_document = orchestrator.agent_snapshot if isinstance(orchestrator.agent_snapshot, dict) else {}
     snapshot = AgentParticipantSnapshot(
         agent_type_id=str(snapshot_document.get("agent_type_id") or orchestrator.agent_type_id or "orchestrator"),
@@ -225,5 +229,72 @@ def record_plan(service: InterAgentService, run: Any, plan: OrchestrationPlan) -
             "summary": plan.summary,
             "task_count": len(plan.tasks),
             "task_ids": [task.task_id for task in plan.tasks],
+            "tasks": [task_payload(task) for task in plan.tasks],
         },
+    )
+
+
+def record_control_decision(
+    service: InterAgentService,
+    run: Any,
+    decision: OrchestrationControlDecision,
+    *,
+    control_step: int,
+    trigger_task_id: str | None,
+) -> None:
+    service.record_event(
+        run,
+        event_type="inter_agent.control.decision",
+        participant_id=run.orchestrator_participant_id,
+        visibility_plane="detail",
+        correlation_id=f"{run.run_id}:control:{control_step}",
+        idempotency_key=f"{run.run_id}:dynamic.control:{control_step}",
+        payload={
+            "control_step": control_step,
+            "trigger_task_id": trigger_task_id,
+            "summary": decision.summary,
+            "tasks": [task_payload(task) for task in decision.tasks],
+            "cancel_task_ids": list(decision.cancel_task_ids),
+            "complete": decision.complete,
+            "quality_passed": decision.quality_passed,
+            "final_answer": decision.final_answer if decision.complete else "",
+        },
+    )
+
+
+def cancel_task(
+    service: InterAgentService,
+    run: Any,
+    task: OrchestrationTaskSpec,
+    participant: InterAgentParticipantRecord,
+) -> OrchestrationTaskResult:
+    now = datetime.now(tz=UTC)
+    latest = service.store.get_participant(
+        participant.participant_id,
+        workspace_id=run.workspace_id,
+        run_id=run.run_id,
+    )
+    if latest.status not in {"completed", "failed", "cancelled"}:
+        service.store.save_participant(replace(latest, status="cancelled", current_task_id=None, updated_at=now))
+        service.release_budget(run, reservation_id=f"spawn:{participant.participant_id}")
+    service.record_event(
+        run,
+        event_type="inter_agent.task.completed",
+        participant_id=participant.participant_id,
+        visibility_plane="detail",
+        correlation_id=task.task_id,
+        idempotency_key=f"{run.run_id}:dynamic.task.cancelled:{task.task_id}",
+        payload={
+            "task_id": task.task_id,
+            "participant_id": participant.participant_id,
+            "status": "cancelled",
+            "summary": "Cancelled by orchestrator decision.",
+            "output_text": "",
+            "error": None,
+        },
+    )
+    return OrchestrationTaskResult(
+        task_id=task.task_id,
+        participant_id=participant.participant_id,
+        status="cancelled",
     )

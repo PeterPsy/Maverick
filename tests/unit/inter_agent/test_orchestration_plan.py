@@ -4,6 +4,7 @@ import unittest
 
 from core.inter_agent.errors import InterAgentValidationError
 from core.inter_agent.orchestration_plan import (
+    parse_control_decision,
     parse_completion_decision,
     parse_orchestration_plan,
     parse_review_decision,
@@ -32,6 +33,19 @@ class OrchestrationPlanTest(unittest.TestCase):
         self.assertEqual([task.task_id for task in plan.tasks], ["implement", "review"])
         self.assertFalse(review.approved)
         self.assertTrue(completion.complete)
+
+        control = parse_control_decision(
+            '{"summary":"Add revision.","tasks":['
+            '{"id":"implement-r2","label":"Implementer R2","role":"implementer","objective":"Revise.",'
+            '"depends_on":["review"],"agent_type_id":"coder"},'
+            '{"id":"review-r2","label":"Reviewer R2","role":"reviewer","objective":"Review again.",'
+            '"depends_on":["implement-r2"],"review_of":"implement-r2"}],'
+            '"cancel_task_ids":[],"complete":false,"quality_passed":false,"final_answer":""}',
+            existing_tasks=plan.tasks,
+            max_new_tasks=2,
+        )
+        self.assertEqual([task.task_id for task in control.tasks], ["implement-r2", "review-r2"])
+        self.assertEqual(control.tasks[0].agent_type_id, "coder")
 
     def test_rejects_unknown_dependencies_cycles_and_missing_review_gate(self) -> None:
         cases = [

@@ -1,24 +1,31 @@
-"""Core-owned coordinator for dynamic, dependency-aware orchestration."""
+"""Persisted adaptive scheduler for dynamic inter-agent orchestration."""
 
 from __future__ import annotations
 
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass, replace
 from datetime import UTC, datetime
 from typing import Any
 
 from core.inter_agent.errors import InterAgentOperationError, InterAgentValidationError
-from core.inter_agent.orchestration_plan import parse_completion_decision, parse_orchestration_plan
-from core.inter_agent.orchestration_prompts import completion_prompt, planning_prompt
-from core.inter_agent.orchestration_review import run_review_revisions
+from core.inter_agent.orchestration_control import (
+    ControlCompletion,
+    apply_control_decision,
+    create_initial_plan,
+    next_control_decision,
+)
 from core.inter_agent.orchestration_runtime import (
     ParticipantTurnExecutor,
     prepare_generalist_handoff,
     runtime_turn_executor,
 )
+from core.inter_agent.orchestration_state import OrchestrationControlState, load_control_state
 from core.inter_agent.orchestration_tasks import (
+    AgentSnapshotResolver,
     OrchestrationTaskResult,
-    execute_dependency_graph,
+    execute_task,
     materialize_plan,
+    materialize_tasks,
     record_plan,
 )
 from core.inter_agent.service import InterAgentService
@@ -38,9 +45,11 @@ def execute_orchestrated_run(
     workspace_id: str,
     run_id: str,
     turn_executor: ParticipantTurnExecutor | None = None,
+    agent_snapshot_resolver: AgentSnapshotResolver | None = None,
+    available_agent_type_ids: tuple[str, ...] = (),
     now: datetime | None = None,
 ) -> OrchestrationExecutionResult:
-    """Plan, materialize, schedule, review, and complete one dynamic run."""
+    """Resume or execute one adaptive orchestration from its persisted event state."""
     run = service.store.get_run(run_id, workspace_id=workspace_id)
     if run.mode != "orchestrated":
         raise InterAgentOperationError("Dynamic scheduler requires an orchestrated run.")
@@ -54,76 +63,173 @@ def execute_orchestrated_run(
     execute_turn = turn_executor or runtime_turn_executor(service, state, run)
     try:
         handoff = prepare_generalist_handoff(service, state, run)
-        input_text = handoff.input_text
-        timestamp = now or datetime.now(tz=UTC)
-        run = replace(run, status="planning", updated_at=timestamp)
-        service.store.save_run(run)
-        planning_directives = service.pending_directives(run)
-        plan_output = execute_turn(
-            orchestrator,
-            planning_prompt(input_text, handoff.analysis_text, run.orchestration_policy, planning_directives),
-            f"{run.run_id}:orchestrator:plan",
-        )
-        service.mark_directives_delivered(run, planning_directives)
         budget = service.store.get_budget_policy(run.budget_policy_id, workspace_id=workspace_id)
-        revision_slots = 2 * max(0, budget.max_rounds - 1)
-        max_initial_tasks = budget.max_participants - 1 - revision_slots
-        if max_initial_tasks < 2:
-            raise InterAgentValidationError("Orchestration budget cannot reserve an implementer/reviewer revision loop.")
-        plan = parse_orchestration_plan(plan_output, max_tasks=max_initial_tasks)
-        record_plan(service, run, plan)
-        task_participants = materialize_plan(service, run, orchestrator, plan)
-        run = replace(run, status="running", updated_at=datetime.now(tz=UTC))
+        control = load_control_state(service, run)
+        if not control.tasks:
+            run = replace(run, status="planning", updated_at=now or datetime.now(tz=UTC))
+            service.store.save_run(run)
+            plan = create_initial_plan(
+                service,
+                run,
+                orchestrator,
+                control,
+                handoff.input_text,
+                handoff.analysis_text,
+                execute_turn,
+                max_initial_tasks=_initial_task_limit(budget.max_participants),
+                available_agent_type_ids=available_agent_type_ids,
+            )
+            record_plan(service, run, plan)
+            materialize_plan(
+                service,
+                run,
+                orchestrator,
+                plan,
+                snapshot_resolver=agent_snapshot_resolver,
+            )
+            control.tasks.update((task.task_id, task) for task in plan.tasks)
+        else:
+            materialize_tasks(
+                service,
+                run,
+                orchestrator,
+                tuple(control.tasks.values()),
+                snapshot_resolver=agent_snapshot_resolver,
+            )
+        run = replace(run, status="running", updated_at=datetime.now(tz=UTC), ended_at=None)
         service.store.save_run(run)
-        results = execute_dependency_graph(
-            service,
-            run,
-            plan,
-            task_participants,
-            input_text=input_text,
-            execute_turn=execute_turn,
-            max_concurrency=budget.max_concurrent_participants,
-        )
-        results = run_review_revisions(
-            service,
-            run,
-            plan,
-            orchestrator,
-            results,
-            input_text=input_text,
-            execute_turn=execute_turn,
-            max_rounds=budget.max_rounds,
-        )
-        completion_directives = service.pending_directives(run)
-        completion_output = execute_turn(
-            orchestrator,
-            completion_prompt(input_text, results, completion_directives),
-            f"{run.run_id}:orchestrator:completion",
-        )
-        service.mark_directives_delivered(run, completion_directives)
-        decision = parse_completion_decision(completion_output)
-        completed = service.decide_completion(
-            workspace_id=workspace_id,
-            run_id=run.run_id,
-            participant_id=orchestrator.participant_id,
-            complete=decision.complete,
-            quality_passed=decision.quality_passed,
-            summary=decision.summary,
-            final_answer=decision.final_answer,
-        )
-        if not decision.complete:
-            raise InterAgentOperationError("Orchestrator requested revision after the configured review rounds.")
-        service.release_budget(completed, reservation_id=f"spawn:{orchestrator.participant_id}")
-        return OrchestrationExecutionResult(
-            run=completed,
-            task_results=tuple(results.values()),
-            final_answer=decision.final_answer,
-        )
+        max_control_steps = max(2, budget.max_total_turns)
+        while control.control_step < max_control_steps:
+            latest_run = service.store.get_run(run.run_id, workspace_id=workspace_id)
+            if latest_run.status in {"cancelled", "failed"}:
+                raise InterAgentOperationError("Orchestration stopped while scheduling work.")
+            ready = control.ready_tasks()
+            if ready:
+                completion = _execute_ready_wave(
+                    service,
+                    latest_run,
+                    orchestrator,
+                    control,
+                    ready,
+                    input_text=handoff.input_text,
+                    execute_turn=execute_turn,
+                    max_concurrency=budget.max_concurrent_participants,
+                    max_participants=budget.max_participants,
+                    max_control_steps=max_control_steps,
+                    agent_snapshot_resolver=agent_snapshot_resolver,
+                    available_agent_type_ids=available_agent_type_ids,
+                )
+                if completion is not None:
+                    return _execution_result(completion)
+                continue
+            before = (len(control.tasks), len(control.results))
+            decision = next_control_decision(
+                service,
+                latest_run,
+                orchestrator,
+                control,
+                input_text=handoff.input_text,
+                trigger_task_id=None,
+                execute_turn=execute_turn,
+                max_participants=budget.max_participants,
+                available_agent_type_ids=available_agent_type_ids,
+            )
+            completion = apply_control_decision(
+                service,
+                latest_run,
+                orchestrator,
+                control,
+                decision,
+                agent_snapshot_resolver=agent_snapshot_resolver,
+            )
+            if completion is not None:
+                return _execution_result(completion)
+            if before == (len(control.tasks), len(control.results)):
+                reason = "No dependency-ready tasks remain." if control.pending_task_ids else "No follow-up work was scheduled."
+                raise InterAgentOperationError(f"{reason} The orchestrator did not repair or complete the run.")
+        raise InterAgentOperationError("Orchestration exceeded its adaptive control-step budget.")
     except Exception as error:
         _record_failed_run(service, run, error)
         if isinstance(error, (InterAgentOperationError, InterAgentValidationError)):
             raise
         raise InterAgentOperationError(str(error)) from error
+
+
+def _execute_ready_wave(
+    service: InterAgentService,
+    run: Any,
+    orchestrator: Any,
+    control: OrchestrationControlState,
+    ready: list[Any],
+    *,
+    input_text: str,
+    execute_turn: ParticipantTurnExecutor,
+    max_concurrency: int,
+    max_participants: int,
+    max_control_steps: int,
+    agent_snapshot_resolver: AgentSnapshotResolver | None,
+    available_agent_type_ids: tuple[str, ...],
+) -> ControlCompletion | None:
+    running_ids = {task.task_id for task in ready}
+    with ThreadPoolExecutor(max_workers=max(1, min(max_concurrency, len(ready)))) as pool:
+        futures = {
+            pool.submit(
+                execute_task,
+                service,
+                run,
+                task,
+                service.store.get_participant(task.task_id, workspace_id=run.workspace_id, run_id=run.run_id),
+                input_text,
+                {dependency: control.results[dependency].output_text for dependency in task.depends_on},
+                execute_turn,
+            ): task
+            for task in ready
+        }
+        for future in as_completed(futures):
+            task = futures[future]
+            control.results[task.task_id] = future.result()
+            running_ids.discard(task.task_id)
+            if control.control_step >= max_control_steps:
+                raise InterAgentOperationError("Orchestration exceeded its adaptive control-step budget.")
+            decision = next_control_decision(
+                service,
+                run,
+                orchestrator,
+                control,
+                input_text=input_text,
+                trigger_task_id=task.task_id,
+                execute_turn=execute_turn,
+                max_participants=max_participants,
+                available_agent_type_ids=available_agent_type_ids,
+            )
+            if set(decision.cancel_task_ids).intersection(running_ids):
+                raise InterAgentValidationError("Orchestrator cannot cancel tasks already running in the current wave.")
+            completion = apply_control_decision(
+                service,
+                run,
+                orchestrator,
+                control,
+                decision,
+                agent_snapshot_resolver=agent_snapshot_resolver,
+            )
+            if completion is not None:
+                if running_ids:
+                    raise InterAgentValidationError("Orchestrator cannot complete while worker tasks are still running.")
+                return completion
+    return None
+
+
+def _initial_task_limit(max_participants: int) -> int:
+    worker_slots = max(1, max_participants - 1)
+    return max(1, min(worker_slots, round(worker_slots * 0.7)))
+
+
+def _execution_result(completion: ControlCompletion) -> OrchestrationExecutionResult:
+    return OrchestrationExecutionResult(
+        run=completion.run,
+        task_results=completion.task_results,
+        final_answer=completion.final_answer,
+    )
 
 
 def _record_failed_run(service: InterAgentService, run: Any, error: Exception) -> None:

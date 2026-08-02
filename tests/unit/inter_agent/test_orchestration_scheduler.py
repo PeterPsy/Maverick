@@ -1,9 +1,13 @@
 from __future__ import annotations
 
+from dataclasses import replace
 from types import SimpleNamespace
 import unittest
 
+from core.inter_agent.orchestration_plan import parse_orchestration_plan
+from core.inter_agent.orchestration_runtime import prepare_generalist_handoff
 from core.inter_agent.orchestration_scheduler import execute_orchestrated_run
+from core.inter_agent.orchestration_tasks import execute_task, materialize_plan, record_plan
 from core.inter_agent.service import InterAgentService
 from core.inter_agent.store import build_inter_agent_document_store
 from tests.support.repo import make_temp_repo_root
@@ -11,6 +15,78 @@ from tests.unit.inter_agent.test_dynamic_orchestration_service import orchestrat
 
 
 class OrchestrationSchedulerTest(unittest.TestCase):
+    def test_recovery_replays_persisted_tasks_without_reexecuting_completed_work(self) -> None:
+        store = build_inter_agent_document_store(start_path=make_temp_repo_root(self))
+        service = InterAgentService(store)
+        run = service.create_run(orchestrated_spec())
+        final_event = SimpleNamespace(
+            event_id="generalist-final-recovery",
+            turn_id="generalist-turn-1",
+            event_type="runtime.output.final",
+            payload={"text": "Keep completed work and resume from the next safe point."},
+        )
+        runtime_store = SimpleNamespace(
+            get_turn=lambda _turn_id: SimpleNamespace(
+                turn_id="generalist-turn-1",
+                status="completed",
+                input_text="Recover this orchestration.",
+            ),
+            list_events=lambda _session_id: [final_event],
+        )
+        runtime_state = SimpleNamespace(runtime_store=runtime_store)
+        prepare_generalist_handoff(service, runtime_state, run)
+        plan = parse_orchestration_plan(
+            '{"summary":"Persist one task.","tasks":['
+            '{"id":"implement","label":"Implementer","role":"implementer",'
+            '"objective":"Implement once.","depends_on":[]}]}',
+            max_tasks=2,
+            require_review_gate=False,
+        )
+        orchestrator = store.get_participant("orchestrator", workspace_id="default", run_id=run.run_id)
+        record_plan(service, run, plan)
+        participants = materialize_plan(service, run, orchestrator, plan)
+        store.save_run(replace(run, status="running"))
+        execute_task(
+            service,
+            store.get_run(run.run_id, workspace_id="default"),
+            plan.tasks[0],
+            participants["implement"],
+            "Recover this orchestration.",
+            {},
+            lambda _participant, _prompt, _client_message_id: "Persisted implementation output.",
+        )
+        store.save_run(replace(store.get_run(run.run_id, workspace_id="default"), status="recovering", recovery_generation=1))
+        calls: list[str] = []
+
+        def resume_turn(_participant, _prompt: str, client_message_id: str) -> str:
+            calls.append(client_message_id)
+            return {
+                f"{run.run_id}:orchestrator:control:1": (
+                    '{"summary":"Review persisted work.","tasks":['
+                    '{"id":"review","label":"Reviewer","role":"reviewer","objective":"Review persisted work.",'
+                    '"depends_on":["implement"],"review_of":"implement"}],'
+                    '"cancel_task_ids":[],"complete":false,"quality_passed":false,"final_answer":""}'
+                ),
+                f"{run.run_id}:task:review": '{"approved":true,"feedback":"Persisted work is valid."}',
+                f"{run.run_id}:orchestrator:control:2": (
+                    '{"summary":"Recovered and approved.","tasks":[],"cancel_task_ids":[],'
+                    '"complete":true,"quality_passed":true,"final_answer":"Recovered successfully."}'
+                ),
+            }[client_message_id]
+
+        result = execute_orchestrated_run(
+            service,
+            runtime_state,
+            workspace_id="default",
+            run_id=run.run_id,
+            turn_executor=resume_turn,
+        )
+
+        self.assertEqual(result.run.status, "completed")
+        self.assertNotIn(f"{run.run_id}:orchestrator:plan", calls)
+        self.assertNotIn(f"{run.run_id}:task:implement", calls)
+        self.assertIn(f"{run.run_id}:task:review", calls)
+
     def test_scheduler_waits_for_handoff_and_adapts_after_each_worker_output(self) -> None:
         store = build_inter_agent_document_store(start_path=make_temp_repo_root(self))
         service = InterAgentService(store)

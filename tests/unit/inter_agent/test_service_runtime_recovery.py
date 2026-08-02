@@ -5,6 +5,7 @@ from pathlib import Path
 import unittest
 
 from core.inter_agent.service import InterAgentService
+from core.inter_agent.models import ParticipantSpec
 from core.inter_agent.store import build_inter_agent_document_store
 from core.runtime.runtime_session import RuntimeSessionRecord
 from core.runtime.runtime_state import RuntimeStateRecord
@@ -14,9 +15,61 @@ from core.runtime.store import RuntimeCollections, RuntimeDocumentStore
 from tests.support.collections import FakeCollection
 from tests.support.repo import make_temp_repo_root
 from tests.unit.inter_agent.test_service_runtime import _run_spec
+from tests.unit.inter_agent.test_dynamic_orchestration_service import orchestrated_spec, snapshot
 
 
 class InterAgentRuntimeRecoveryTest(unittest.TestCase):
+    def test_startup_recovery_resets_orchestrated_workers_for_scheduler_replay(self) -> None:
+        repo_root = make_temp_repo_root(self)
+        store = build_inter_agent_document_store(start_path=repo_root)
+        runtime_store = _runtime_store()
+        service = InterAgentService(store)
+        now = datetime(2026, 6, 16, 12, 0, tzinfo=UTC)
+        runtime_store.save_session(_runtime_session("root-session", repo_root=repo_root))
+        runtime_store.save_state(_runtime_state("root-session"))
+        run = service.create_run(orchestrated_spec(), now=now)
+        worker = service.add_participant(
+            workspace_id="default",
+            run_id=run.run_id,
+            spec=ParticipantSpec(
+                participant_id="implement",
+                kind="agent",
+                execution_mode="child_runtime_session",
+                label="Implementer",
+                agent_type_id="generalist",
+                agent_snapshot=snapshot(),
+            ),
+            now=now,
+        )
+        store.save_participant(
+            worker.__class__(
+                **{
+                    **worker.__dict__,
+                    "runtime_session_id": "missing-worker-session",
+                    "status": "running",
+                    "current_task_id": "implement",
+                }
+            )
+        )
+        store.save_run(run.__class__(**{**run.__dict__, "status": "running"}))
+
+        result = service.recover_non_terminal_runs(
+            runtime_store,
+            workspace_id="default",
+            now=now + timedelta(seconds=1),
+        )
+
+        recovered_run = store.get_run(run.run_id, workspace_id="default")
+        recovered_worker = store.get_participant("implement", workspace_id="default", run_id=run.run_id)
+        events = store.list_event_page(run.run_id, workspace_id="default", visibility_plane="detail", limit=200).events
+        self.assertEqual(result["recovered_runs"], 1)
+        self.assertEqual(result["failed_runs"], 0)
+        self.assertEqual(recovered_run.status, "recovering")
+        self.assertEqual(recovered_run.recovery_generation, 1)
+        self.assertEqual(recovered_worker.status, "idle")
+        self.assertIsNone(recovered_worker.runtime_session_id)
+        self.assertIn("inter_agent.task.retry_scheduled", [event.event_type for event in events])
+
     def test_startup_recovery_closes_async_root_turn_for_planning_run_without_children(self) -> None:
         repo_root = make_temp_repo_root(self)
         store = build_inter_agent_document_store(start_path=repo_root)

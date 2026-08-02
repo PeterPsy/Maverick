@@ -18,6 +18,7 @@ from core.inter_agent.service import InterAgentService
 class OrchestrationControlState:
     tasks: dict[str, OrchestrationTaskSpec] = field(default_factory=dict)
     results: dict[str, OrchestrationTaskResult] = field(default_factory=dict)
+    attempts: dict[str, int] = field(default_factory=dict)
     control_step: int = 0
     plan_summary: str = ""
 
@@ -71,6 +72,13 @@ def load_control_state(service: InterAgentService, run: Any) -> OrchestrationCon
             task_payload = event.payload.get("task")
             if isinstance(task_payload, dict):
                 _add_task_payloads(state, [task_payload])
+            task_id = str(event.payload.get("task_id") or event.correlation_id or "").strip()
+            if task_id:
+                state.attempts[task_id] = max(state.attempts.get(task_id, 0), int(event.payload.get("attempt") or 1))
+        elif event.event_type == "inter_agent.task.retry_scheduled":
+            task_id = str(event.payload.get("task_id") or event.correlation_id or "").strip()
+            if task_id:
+                state.attempts[task_id] = max(state.attempts.get(task_id, 0), int(event.payload.get("attempt") or 1))
         elif event.event_type == "inter_agent.task.completed":
             task_id = str(event.payload.get("task_id") or event.correlation_id or "").strip()
             if not task_id:

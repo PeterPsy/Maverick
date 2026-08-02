@@ -7,6 +7,7 @@ from urllib.parse import parse_qs
 from core.api.app_registry import enabled_app_items
 from core.api.http import StartResponse, json_response, read_json_body
 from core.api.platform_state import PlatformState
+from core.api.orchestration_workers import start_orchestrated_execution_worker as _start_orchestrated_execution_worker
 from core.api.runtime_cleanup import cleanup_runtime_session
 from core.api.session_api import RequestSession, require_session
 from core.apps.dependencies import resolve_app_dependencies
@@ -35,7 +36,6 @@ from core.inter_agent.events import validate_visibility_plane
 from core.inter_agent.executor import execute_inter_agent_run
 from core.inter_agent.feature_flags import validate_product_inter_agent_run_mode
 from core.inter_agent.models import AgentParticipantSnapshot, BudgetPolicySpec, InterAgentRunSpec, ParticipantSpec
-from core.inter_agent.orchestration_scheduler import execute_orchestrated_run
 from core.inter_agent.service import InterAgentService
 from core.inter_agent.store import DEFAULT_INTER_AGENT_EVENT_LIMIT, MAX_INTER_AGENT_EVENT_LIMIT
 from core.inter_agent.surfaces import (
@@ -332,6 +332,13 @@ def _handle_inter_agent_route(
             run_id=run.run_id,
             reason=_text(body.get("reason")) or "inter_agent_resume",
         )
+        if resumed.mode == "orchestrated":
+            _start_orchestrated_execution_worker(
+                state,
+                service,
+                workspace_id=context.workspace_id,
+                run_id=resumed.run_id,
+            )
         return json_response(start_response, run_detail_payload(state.inter_agent_store, resumed))
     if action == "close" and method == "POST":
         result = service.close_run(
@@ -471,27 +478,6 @@ def _orchestration_budget(policy: str) -> BudgetPolicySpec:
         max_turns_per_participant=4,
         max_tool_calls=20,
     )
-
-
-def _start_orchestrated_execution_worker(
-    state: PlatformState,
-    service: InterAgentService,
-    *,
-    workspace_id: str,
-    run_id: str,
-) -> None:
-    def worker() -> None:
-        try:
-            execute_orchestrated_run(
-                service,
-                state,
-                workspace_id=workspace_id,
-                run_id=run_id,
-            )
-        except Exception:
-            return
-
-    Thread(target=worker, name=f"maverick-orchestration-{run_id}", daemon=True).start()
 
 
 def _create_run(

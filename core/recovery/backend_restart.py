@@ -103,6 +103,9 @@ def recover_interrupted_runtime_turns_after_backend_restart(
             if is_inter_agent_root_turn:
                 failure_reason = f"Interrupted by {reason}; inter-agent run recovery will close the run."
                 recovery_action = "close_inter_agent_root_turn"
+            elif session.session_kind == "inter_agent_participant":
+                failure_reason = f"Interrupted by {reason}; the persisted inter-agent scheduler will retry the task."
+                recovery_action = "close_inter_agent_participant_turn"
             elif is_recovery_resume_turn:
                 if resume_attempts >= MAX_BACKEND_RESTART_RESUME_ATTEMPTS_PER_SESSION:
                     failure_reason = f"Interrupted by {reason}; recovery resume retry limit reached."

@@ -807,7 +807,13 @@ class InterAgentService:
             participant,
             explicit_skill_catalog_app_id=skill_catalog_app_id,
         )
-        session_id = _clean_optional(child_session_id) or _stable_id("iasess", run.run_id, participant.participant_id)
+        session_generation = str(run.recovery_generation) if run.recovery_generation else "initial"
+        session_id = _clean_optional(child_session_id) or _stable_id(
+            "iasess",
+            run.run_id,
+            participant.participant_id,
+            session_generation,
+        )
         agent_id = _clean_optional(child_agent_id) or participant.agent_type_id or participant.participant_id
         reservation_id = _participant_spawn_reservation_id(participant.participant_id)
         self.reserve_budget(
@@ -1021,7 +1027,7 @@ class InterAgentService:
         reason: str = "inter_agent_resume",
         now: datetime | None = None,
     ) -> InterAgentRunRecord:
-        """Mark a paused or recovering run runnable again without queuing work."""
+        """Mark a paused or recovering run runnable; hosted surfaces enqueue execution."""
         timestamp = now or datetime.now(tz=UTC)
         run = self.store.get_run(run_id, workspace_id=workspace_id)
         if run.status in TERMINAL_RUN_STATUSES:
@@ -1123,6 +1129,82 @@ class InterAgentService:
                 continue
             inspected += 1
             participants = self.store.list_participants(run.run_id, workspace_id=workspace_id)
+            if run.mode == "orchestrated":
+                if run.status == "paused":
+                    continue
+                next_generation = run.recovery_generation + 1
+                for participant in participants:
+                    if participant.execution_mode != RUNTIME_CHILD_EXECUTION_MODE:
+                        continue
+                    if participant.status in TERMINAL_PARTICIPANT_STATUSES:
+                        continue
+                    previous_session_id = participant.runtime_session_id
+                    if previous_session_id:
+                        try:
+                            session = runtime_store.get_session(previous_session_id)
+                            if session.status in {"created", "running", "stopping"}:
+                                transition_runtime_session(
+                                    runtime_store,
+                                    session_id=session.session_id,
+                                    target_status="stopped",
+                                    forced_stop_reason="inter_agent_scheduler_recovery",
+                                    now=timestamp,
+                                )
+                        except (RuntimeSessionNotFoundError, ValueError):
+                            pass
+                    self.release_budget(
+                        run,
+                        reservation_id=_participant_spawn_reservation_id(participant.participant_id),
+                        now=timestamp,
+                    )
+                    if participant.current_task_id:
+                        self.record_event(
+                            run,
+                            event_type="inter_agent.task.retry_scheduled",
+                            participant_id=participant.participant_id,
+                            runtime_session_id=previous_session_id,
+                            visibility_plane="detail",
+                            idempotency_key=(
+                                f"{run.run_id}:task.retry:{participant.current_task_id}:{next_generation}"
+                            ),
+                            correlation_id=participant.current_task_id,
+                            payload={
+                                "task_id": participant.current_task_id,
+                                "participant_id": participant.participant_id,
+                                "attempt": next_generation + 1,
+                                "reason": "backend_restart",
+                            },
+                            now=timestamp,
+                        )
+                    self.store.save_participant(
+                        replace(
+                            participant,
+                            runtime_session_id=None,
+                            status="idle",
+                            current_task_id=None,
+                            updated_at=timestamp,
+                        )
+                    )
+                updated = replace(
+                    run,
+                    status="recovering",
+                    updated_at=timestamp,
+                    ended_at=None,
+                    recovery_generation=next_generation,
+                )
+                self.store.save_run(updated)
+                recovered += 1
+                self.record_event(
+                    updated,
+                    event_type="inter_agent.run.recovered",
+                    participant_id=updated.orchestrator_participant_id,
+                    visibility_plane="summary",
+                    idempotency_key=f"{updated.run_id}:run.recovered:{updated.recovery_generation}",
+                    correlation_id=updated.run_id,
+                    payload={"recovery_generation": updated.recovery_generation, "scheduler_resume": True},
+                    now=timestamp,
+                )
+                continue
             active_child_count = 0
             for participant in participants:
                 if participant.execution_mode != RUNTIME_CHILD_EXECUTION_MODE:

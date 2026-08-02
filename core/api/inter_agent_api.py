@@ -463,20 +463,20 @@ def _orchestrator_snapshot_from_root(root_session) -> AgentParticipantSnapshot:
 def _orchestration_budget(policy: str) -> BudgetPolicySpec:
     if policy == "group_chat":
         return BudgetPolicySpec(
-            max_participants=9,
-            max_concurrent_participants=3,
-            max_rounds=3,
-            max_total_turns=14,
-            max_turns_per_participant=4,
-            max_tool_calls=24,
+            max_participants=25,
+            max_concurrent_participants=6,
+            max_rounds=10,
+            max_total_turns=72,
+            max_turns_per_participant=10,
+            max_tool_calls=120,
         )
     return BudgetPolicySpec(
-        max_participants=7,
-        max_concurrent_participants=2,
-        max_rounds=3,
-        max_total_turns=12,
-        max_turns_per_participant=4,
-        max_tool_calls=20,
+        max_participants=17,
+        max_concurrent_participants=4,
+        max_rounds=8,
+        max_total_turns=48,
+        max_turns_per_participant=8,
+        max_tool_calls=80,
     )
 
 

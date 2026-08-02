@@ -8,6 +8,7 @@ from typing import Any, Callable
 
 from core.inter_agent.orchestration_scheduler import execute_orchestrated_run
 from core.inter_agent.service import InterAgentService
+from core.api.orchestration_agent_catalog import build_orchestration_agent_catalog
 
 
 logger = logging.getLogger(__name__)
@@ -32,11 +33,28 @@ def start_orchestrated_execution_worker(
 
     def worker() -> None:
         try:
+            run = run_service.store.get_run(run_id, workspace_id=workspace_id)
+            orchestrator = run_service.store.get_participant(
+                run.orchestrator_participant_id,
+                workspace_id=workspace_id,
+                run_id=run.run_id,
+            )
+            root_session = state.runtime_store.get_session(run.root_runtime_session_id)
+            catalog = build_orchestration_agent_catalog(
+                state,
+                workspace_id=workspace_id,
+                created_by_user_id=run.created_by_user_id,
+                root_session=root_session,
+                orchestrator=orchestrator,
+                start_path=state.repository_root,
+            )
             execute_orchestrated_run(
                 run_service,
                 state,
                 workspace_id=workspace_id,
                 run_id=run_id,
+                agent_snapshot_resolver=catalog.resolve,
+                available_agent_type_ids=catalog.prompt_entries,
             )
         except Exception:
             logger.exception("Orchestrated inter-agent worker failed for %s/%s.", workspace_id, run_id)

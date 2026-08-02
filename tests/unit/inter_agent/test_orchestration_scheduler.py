@@ -11,7 +11,7 @@ from core.inter_agent.orchestration_tasks import execute_task, materialize_plan,
 from core.inter_agent.service import InterAgentService
 from core.inter_agent.store import build_inter_agent_document_store
 from tests.support.repo import make_temp_repo_root
-from tests.unit.inter_agent.test_dynamic_orchestration_service import orchestrated_spec
+from tests.unit.inter_agent.test_dynamic_orchestration_service import orchestrated_spec, snapshot
 
 
 class OrchestrationSchedulerTest(unittest.TestCase):
@@ -99,7 +99,7 @@ class OrchestrationSchedulerTest(unittest.TestCase):
                 f"{run.run_id}:orchestrator:plan": (
                     '{"summary":"Start with implementation.","tasks":['
                     '{"id":"implement","label":"Implementer","role":"implementer",'
-                    '"objective":"Implement safely.","depends_on":[]}]}'
+                    '"objective":"Implement safely.","depends_on":[],"agent_type_id":"agent-type-coder"}]}'
                 ),
                 f"{run.run_id}:task:implement": "First implementation.",
                 f"{run.run_id}:orchestrator:control:1": (
@@ -176,6 +176,12 @@ class OrchestrationSchedulerTest(unittest.TestCase):
             workspace_id="default",
             run_id=run.run_id,
             turn_executor=execute_turn,
+            agent_snapshot_resolver=lambda agent_type_id: replace(
+                snapshot(),
+                agent_type_id=agent_type_id,
+                label="Coder Specialist",
+            ),
+            available_agent_type_ids=("agent-type-coder: Coder Specialist",),
         )
 
         participants = store.list_participants(run.run_id, workspace_id="default")
@@ -193,6 +199,11 @@ class OrchestrationSchedulerTest(unittest.TestCase):
             ["orchestrator", "implement", "review", "implement-r2", "review-r2"],
         )
         self.assertEqual(len(edges), 4)
+        self.assertEqual(
+            next(item for item in participants if item.participant_id == "implement").agent_type_id,
+            "agent-type-coder",
+        )
+        self.assertIn("agent-type-coder: Coder Specialist", prompts[f"{run.run_id}:orchestrator:plan"])
         self.assertIn("Preserve the public API", prompts[f"{run.run_id}:orchestrator:plan"])
         self.assertIn("Implement the requested redesign", prompts[f"{run.run_id}:orchestrator:plan"])
         self.assertIn("Keep the revision small", prompts[f"{run.run_id}:orchestrator:control:1"])

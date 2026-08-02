@@ -94,6 +94,8 @@ class InterAgentOrchestrationApiTest(InterAgentApiSupport):
             self.assertEqual(payload["participants"][0]["execution_mode"], "child_runtime_session")
             self.assertEqual(payload["participants"][0]["thread_visibility"], "hidden")
             self.assertEqual(payload["edges"], [])
+            self.assertEqual(payload["budget_policy"]["max_participants"], 17)
+            self.assertEqual(payload["budget_policy"]["max_concurrent_participants"], 4)
             start_worker.assert_called_once()
             self.assertEqual(directive_status, 201)
             self.assertEqual(directive_payload["directive"]["payload"]["source_kind"], "user")

@@ -21,8 +21,22 @@ Workspace chat app that talks to the selected Maverick runtime provider.
 - Multi-agent graph mode stays inside Chat. Every message is submitted first to
   the independent generalist runtime. When orchestration is requested, Chat
   sends only the accepted root turn id and policy intent to the core; the core
-  creates an orchestrator-only board, adds workers and edges dynamically, and
-  owns dependency scheduling, review loops, steering, quality, and completion.
+  creates an orchestrator-only board and waits for the generalist's terminal
+  handoff before planning. After each worker output the orchestrator may add or
+  cancel work or complete; every decision and task is persisted before the
+  graph changes. Later Chat turns steer the active run through their completed
+  generalist output, while the Agent nodes view also exposes a bounded direct
+  steering input.
+- Dynamic workers may select specialized agent types from Chat's resolved
+  agent provider. The core lists a compact authorized catalog and materializes
+  the selected prompt, skills, provider, and skill catalog server-side. The
+  default orchestration budget supports 17 participants and four concurrent
+  workers; group policy supports 25 and six, while retaining headroom for
+  adaptive follow-up work.
+- Hosted backend restart recovery replays persisted plans, decisions, attempts,
+  and task outputs. It creates a new recovery-generation hidden session only
+  for interrupted non-terminal work and does not rerun completed tasks or
+  enqueue generic participant `resume` prompts.
 - The primary transcript and Agent nodes use separate data sources. Participant
   runtime events are never projected onto the root runtime session. Agent nodes
   consumes `WS /ws/inter-agent/runs/<run_id>` plus bounded participant

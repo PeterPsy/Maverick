@@ -40,6 +40,24 @@ It started with names, visibility, legacy compatibility, and initial policy defa
 15. Graph mode consumes `inter_agent` events, run detail, approvals, artifacts,
     and bounded participant transcript endpoints. It must not receive the root
     Chat message array or read hidden runtime sessions directly.
+16. The orchestration worker must wait for and persist the successful final
+    output of the source generalist turn before initial planning; accepted or
+    active source turns are not sufficient launch input.
+17. Every worker result is an orchestrator safe point. The next structured
+    decision may add or cancel work or complete, and must be persisted before
+    topology mutation. Review revisions are not hardcoded scheduler steps.
+18. A later root Chat turn may steer the active run only through a persisted
+    generalist-turn link validated against the same root runtime session. The
+    scheduler waits for its terminal final output; direct Agent nodes text is a
+    separately identified user directive.
+19. Restart recovery for `orchestrated` runs replays full persisted task and
+    control state, assigns new recovery-generation child sessions to
+    interrupted non-terminal participants, and is enqueued only by the hosted
+    backend lifecycle.
+20. Dynamic agent type selection is constrained to Chat's selected agent
+    catalog provider. Agent definitions, prompts, skill ids, and skill catalog
+    authority are materialized server-side; orchestrator JSON cannot supply
+    those fields.
 
 ## Initial Policy Defaults
 
@@ -151,7 +169,10 @@ HTTP additions for F4:
   turn, orchestration policy, and idempotency key; the core owns topology and
   execution.
 - `POST /api/inter-agent/runs/<run_id>/directives` appends authorized live
-  steering without touching the root transcript.
+  steering without touching the root transcript. A direct board submission
+  carries bounded text; a later Chat message carries only its accepted
+  `source_runtime_turn_id`, which the core validates and resolves after the
+  generalist finishes.
 
 Chat transcript rendering remains summary-first:
 

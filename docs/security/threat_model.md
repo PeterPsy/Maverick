@@ -123,6 +123,17 @@ Relevant attackers:
 
 An agent reads hostile instructions and uses legitimate tools for unintended actions.
 
+### Orchestrator-authored authority escalation
+
+An untrusted orchestrator may attempt to create a worker with invented system
+prompt, skills, provider, grants, or a disabled agent type. Dynamic
+orchestration therefore accepts only task objective, dependency, role, review
+target, and an optional id from the compact server-authorized agent catalog.
+The core resolves the selected definition and prompt through Chat's configured
+dependency provider, validates the runtime skill catalog, and materializes an
+immutable participant snapshot. Invalid selections fail closed; they never
+fall back to model-supplied authority-bearing fields.
+
 ### Workspace escape
 
 A non-default workspace runtime or app process reads or writes outside the workspace boundary.

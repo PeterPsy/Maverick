@@ -385,12 +385,14 @@ class InterAgentService:
         )
 
     def pending_generalist_directive_links(self, run: InterAgentRunRecord) -> list[InterAgentEventRecord]:
-        events = self.store.list_event_page(
+        events = self.store.list_recovery_events(
             run.run_id,
             workspace_id=run.workspace_id,
-            visibility_plane="detail",
-            limit=DEFAULT_DETAIL_EVENT_LIMIT,
-        ).events
+            event_types={
+                "inter_agent.generalist.directive_linked",
+                "inter_agent.generalist.directive_resolved",
+            },
+        )
         resolved = {
             str(event.payload.get("link_id") or "")
             for event in events
@@ -429,12 +431,11 @@ class InterAgentService:
 
     def pending_directives(self, run: InterAgentRunRecord) -> list[InterAgentEventRecord]:
         """Return received directive events not yet delivered to the orchestrator."""
-        events = self.store.list_event_page(
+        events = self.store.list_recovery_events(
             run.run_id,
             workspace_id=run.workspace_id,
-            visibility_plane="detail",
-            limit=DEFAULT_DETAIL_EVENT_LIMIT,
-        ).events
+            event_types={"inter_agent.directive.received", "inter_agent.directive.delivered"},
+        )
         delivered = {
             str(event.payload.get("directive_id") or "")
             for event in events
@@ -1598,12 +1599,11 @@ def _close_non_terminal_root_turns_for_run(
 
 
 def _has_unapplied_completion_decision(store: Any, run: InterAgentRunRecord) -> bool:
-    events = store.list_event_page(
+    events = store.list_recovery_events(
         run.run_id,
         workspace_id=run.workspace_id,
-        visibility_plane="debug",
-        limit=500,
-    ).events
+        event_types={"inter_agent.control.decision", "inter_agent.control.decision_applied"},
+    )
     completed_steps = {
         int(event.payload.get("control_step") or 0)
         for event in events

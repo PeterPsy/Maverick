@@ -18,6 +18,110 @@ from tests.unit.inter_agent.test_dynamic_orchestration_service import orchestrat
 
 
 class OrchestrationDecisionRecoveryTest(unittest.TestCase):
+    def test_replays_plan_and_result_before_500_later_detail_events(self) -> None:
+        store = build_inter_agent_document_store(start_path=make_temp_repo_root(self))
+        service = InterAgentService(store)
+        run = service.create_run(orchestrated_spec())
+        _record_persisted_plan(
+            service,
+            run,
+            [
+                {
+                    "id": "implement",
+                    "label": "Implement",
+                    "role": "implementer",
+                    "objective": "Implement once.",
+                    "depends_on": [],
+                }
+            ],
+        )
+        _record_task_result(service, run, task_id="implement", output_text="Persisted result.")
+        for index in range(500):
+            service.record_event(
+                run,
+                event_type="inter_agent.task.started",
+                participant_id=run.orchestrator_participant_id,
+                visibility_plane="detail",
+                correlation_id=f"detail-{index}",
+                idempotency_key=f"{run.run_id}:detail:{index}",
+                payload={"task_id": f"detail-{index}", "participant_id": run.orchestrator_participant_id},
+            )
+
+        page = store.list_event_page(
+            run.run_id,
+            workspace_id=run.workspace_id,
+            visibility_plane="debug",
+            limit=500,
+        )
+        control = load_control_state(service, replace(run, status="recovering"))
+
+        self.assertTrue(page.has_more_before)
+        self.assertEqual(tuple(control.tasks), ("implement",))
+        self.assertEqual(control.results["implement"].output_text, "Persisted result.")
+
+    def test_recovery_pages_through_more_than_500_state_events(self) -> None:
+        store = build_inter_agent_document_store(start_path=make_temp_repo_root(self))
+        service = InterAgentService(store)
+        run = service.create_run(orchestrated_spec())
+        _record_persisted_plan(
+            service,
+            run,
+            [
+                {
+                    "id": "implement",
+                    "label": "Implement",
+                    "role": "implementer",
+                    "objective": "Implement once.",
+                    "depends_on": [],
+                }
+            ],
+        )
+        for attempt in range(1, 502):
+            service.record_event(
+                run,
+                event_type="inter_agent.task.retry_scheduled",
+                participant_id="implement",
+                visibility_plane="detail",
+                correlation_id="implement",
+                idempotency_key=f"{run.run_id}:retry:{attempt}",
+                payload={"task_id": "implement", "participant_id": "implement", "attempt": attempt},
+            )
+
+        recovery_events = store.list_recovery_events(
+            run.run_id,
+            workspace_id=run.workspace_id,
+            event_types={"inter_agent.plan.summary_created", "inter_agent.task.retry_scheduled"},
+        )
+        control = load_control_state(service, replace(run, status="recovering"))
+
+        self.assertEqual(len(recovery_events), 502)
+        self.assertEqual(recovery_events[0].event_type, "inter_agent.plan.summary_created")
+        self.assertEqual(
+            [event.sequence for event in recovery_events],
+            sorted(event.sequence for event in recovery_events),
+        )
+        self.assertEqual(tuple(control.tasks), ("implement",))
+        self.assertEqual(control.attempts["implement"], 501)
+
+    def test_recovery_fails_closed_when_a_terminal_task_result_is_missing(self) -> None:
+        store = build_inter_agent_document_store(start_path=make_temp_repo_root(self))
+        service = InterAgentService(store)
+        run = service.create_run(orchestrated_spec())
+        plan = parse_orchestration_plan(
+            '{"summary":"Implement once.","tasks":['
+            '{"id":"implement","label":"Implement","role":"implementer",'
+            '"objective":"Implement once.","depends_on":[]}]}',
+            max_tasks=1,
+            require_review_gate=False,
+        )
+        orchestrator = store.get_participant("orchestrator", workspace_id="default", run_id=run.run_id)
+        record_plan(service, run, plan)
+        participants = materialize_plan(service, run, orchestrator, plan)
+        store.save_participant(replace(participants["implement"], status="completed"))
+
+        with self.assertRaisesRegex(InterAgentValidationError, "missing terminal task results"):
+            load_control_state(service, replace(run, status="recovering"))
+
     def test_recovery_rejects_persisted_reviewer_without_review_of(self) -> None:
         store = build_inter_agent_document_store(start_path=make_temp_repo_root(self))
         service = InterAgentService(store)
@@ -262,6 +366,23 @@ def _record_persisted_plan(service: InterAgentService, run, tasks: list[dict[str
         participant_id=run.orchestrator_participant_id,
         visibility_plane="summary",
         payload={"summary": "Persisted orchestration plan.", "tasks": tasks},
+    )
+
+
+def _record_task_result(service: InterAgentService, run, *, task_id: str, output_text: str) -> None:
+    service.record_event(
+        run,
+        event_type="inter_agent.task.completed",
+        participant_id=task_id,
+        visibility_plane="detail",
+        correlation_id=task_id,
+        payload={
+            "task_id": task_id,
+            "participant_id": task_id,
+            "status": "completed",
+            "output_text": output_text,
+            "error": None,
+        },
     )
 
 

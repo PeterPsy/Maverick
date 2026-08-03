@@ -162,8 +162,14 @@ transcript projection behavior.
   selected agent type, task-bound snapshot metadata, digest, skills, and
   provider material match the persisted task. A mismatch fails before any edge
   or task event is added.
-- The event store is the recovery log for the full plan, adaptive decisions,
-  task attempts, directives, quality decisions, and completion. Hosted backend
+- A protected allowlist of state-bearing records in the per-run event partition
+  is the recovery ledger for the full plan, adaptive decisions, task attempts,
+  directives, quality decisions, and completion. Visibility-history retention
+  may prune operational timeline events but never these recovery records;
+  internal replay pages to the beginning instead of reading only the newest
+  event window. A terminal persisted task participant without a matching result
+  record is treated as an incomplete legacy/corrupt ledger and fails recovery
+  rather than being rescheduled. Hosted backend
   startup reconciles interrupted participant turns without queuing the generic
   runtime `resume` prompt, resets non-terminal participants onto a new
   recovery-generation child session, and enqueues one scheduler worker for

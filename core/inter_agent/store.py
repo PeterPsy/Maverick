@@ -32,6 +32,7 @@ from core.inter_agent.events import (
     InterAgentEventPage,
     InterAgentEventRecord,
     InterAgentVisibilityPlane,
+    INTER_AGENT_RECOVERY_EVENT_TYPES,
     validate_event_record,
     validate_visibility_plane,
     visible_planes_for,
@@ -242,6 +243,15 @@ class InterAgentStore(Protocol):
         before_event_id: str | None = None,
         limit: int = DEFAULT_INTER_AGENT_EVENT_LIMIT,
     ) -> InterAgentEventPage:
+        ...
+
+    def list_recovery_events(
+        self,
+        run_id: str,
+        *,
+        workspace_id: str,
+        event_types: set[str] | None = None,
+    ) -> list[InterAgentEventRecord]:
         ...
 
 
@@ -668,6 +678,49 @@ class InterAgentDocumentStore:
             oldest_event_id=events[0].event_id if events else None,
             newest_event_id=events[-1].event_id if events else None,
         )
+
+    def list_recovery_events(
+        self,
+        run_id: str,
+        *,
+        workspace_id: str,
+        event_types: set[str] | None = None,
+    ) -> list[InterAgentEventRecord]:
+        """Replay durable scheduler records completely in sequence order."""
+        requested_types = (
+            set(INTER_AGENT_RECOVERY_EVENT_TYPES) if event_types is None else set(event_types)
+        )
+        unsupported_types = requested_types - INTER_AGENT_RECOVERY_EVENT_TYPES
+        if unsupported_types:
+            raise InterAgentValidationError(
+                "Inter-agent recovery replay does not support event types: "
+                + ", ".join(sorted(unsupported_types))
+            )
+        if not requested_types:
+            return []
+        pages: list[list[InterAgentEventRecord]] = []
+        before_event_id: str | None = None
+        visited_cursors: set[str] = set()
+        while True:
+            page = self.list_event_page(
+                run_id,
+                workspace_id=workspace_id,
+                visibility_plane="debug",
+                event_types=requested_types,
+                before_event_id=before_event_id,
+                limit=MAX_INTER_AGENT_EVENT_LIMIT,
+            )
+            pages.append(page.events)
+            if not page.has_more_before:
+                break
+            next_cursor = page.oldest_event_id
+            if not next_cursor or next_cursor in visited_cursors:
+                raise InterAgentValidationError(
+                    f"Inter-agent recovery replay for run `{run_id}` could not advance its event cursor."
+                )
+            visited_cursors.add(next_cursor)
+            before_event_id = next_cursor
+        return [event for page_events in reversed(pages) for event in page_events]
 
     def _mutate_budget_ledger(
         self,
@@ -1158,9 +1211,20 @@ def _pruned_event_documents(
     for visibility_plane in ("summary", "detail", "debug"):
         plane_documents = [document for document in documents if document.get("visibility_plane") == visibility_plane]
         plane_documents.sort(key=_event_sort_key)
+        recovery_documents = [
+            document
+            for document in plane_documents
+            if document.get("event_type") in INTER_AGENT_RECOVERY_EVENT_TYPES
+        ]
+        retained_history_documents = [
+            document
+            for document in plane_documents
+            if document.get("event_type") not in INTER_AGENT_RECOVERY_EVENT_TYPES
+        ]
         max_events = retention_policy.max_events_for(visibility_plane)  # type: ignore[arg-type]
+        kept.extend(recovery_documents)
         if max_events > 0:
-            kept.extend(plane_documents[-max_events:])
+            kept.extend(retained_history_documents[-max_events:])
     kept.sort(key=_event_sort_key)
     return kept
 

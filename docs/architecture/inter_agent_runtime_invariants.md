@@ -107,6 +107,11 @@ Retention policy is separated by inter-agent visibility plane:
 - `summary` events are retained longest because they are user-facing audit material
 - `detail` events have medium retention for graph replay and operational inspection
 - `debug` events have the shortest retention and require stricter authorization
+- scheduler state records for plans, task definitions/results/retries, control
+  decisions and application markers, handoffs, and directives are a protected
+  recovery ledger; visibility-history caps do not prune them, internal recovery
+  replays every page in sequence order, and run deletion removes them with the
+  rest of the run partition
 
 ## Runtime Thread Invariant
 

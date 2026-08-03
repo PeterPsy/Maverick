@@ -327,6 +327,14 @@ visibility. Server-side replay must treat those visibility planes as an
 authorization ceiling: `summary` sees only summary events, `detail` sees summary
 and detail, and `debug` sees all three planes. Event retention is also per
 visibility plane so debug history can be shorter than user-facing summaries.
+The bounded UI/audit timeline is not the scheduler recovery source by itself.
+State-bearing orchestrated-run events for plans, control decisions and their
+application, task definitions/results/retries, handoffs, and directive delivery
+form a protected recovery ledger inside the run partition. Those records remain
+until the run is deleted, are excluded from visibility-history pruning, and are
+read by an internal allowlisted replay path that paginates to the beginning.
+If a pre-ledger or corrupted run has a terminal task participant without its
+result record, recovery fails closed instead of scheduling that task again.
 F5 exposes the same replay contract to Chat graph mode through
 `WS /ws/inter-agent/runs/<run_id>` and
 `GET /api/inter-agent/runs/<run_id>/artifacts`; both surfaces cap

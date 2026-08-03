@@ -201,12 +201,11 @@ def _last_final_event(events: list[Any]) -> Any | None:
 
 
 def _persisted_handoff(service: InterAgentService, run: Any) -> GeneralistHandoff | None:
-    events = service.store.list_event_page(
+    events = service.store.list_recovery_events(
         run.run_id,
         workspace_id=run.workspace_id,
-        visibility_plane="detail",
-        limit=200,
-    ).events
+        event_types={"inter_agent.generalist.handoff_prepared"},
+    )
     for event in reversed(events):
         if event.event_type != "inter_agent.generalist.handoff_prepared":
             continue

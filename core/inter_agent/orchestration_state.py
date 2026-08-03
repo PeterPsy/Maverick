@@ -5,6 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any
 
+from core.inter_agent.errors import InterAgentValidationError
 from core.inter_agent.orchestration_plan import (
     OrchestrationControlDecision,
     OrchestrationTaskSpec,
@@ -18,6 +19,15 @@ from core.inter_agent.orchestration_tasks import OrchestrationTaskResult
 from core.inter_agent.service import InterAgentService
 
 _REVIEW_ROLES = frozenset({"reviewer", "security_reviewer"})
+_TERMINAL_TASK_PARTICIPANT_STATUSES = frozenset({"completed", "failed", "cancelled"})
+_CONTROL_STATE_EVENT_TYPES = {
+    "inter_agent.plan.summary_created",
+    "inter_agent.control.decision",
+    "inter_agent.control.decision_applied",
+    "inter_agent.task.created",
+    "inter_agent.task.retry_scheduled",
+    "inter_agent.task.completed",
+}
 
 
 @dataclass(frozen=True)
@@ -207,12 +217,11 @@ class OrchestrationControlState:
 def load_control_state(service: InterAgentService, run: Any) -> OrchestrationControlState:
     state = OrchestrationControlState()
     reserved_task_ids = reserved_task_ids_for_run(run.orchestrator_participant_id)
-    events = service.store.list_event_page(
+    events = service.store.list_recovery_events(
         run.run_id,
         workspace_id=run.workspace_id,
-        visibility_plane="debug",
-        limit=500,
-    ).events
+        event_types=_CONTROL_STATE_EVENT_TYPES,
+    )
     for event in events:
         if event.event_type == "inter_agent.plan.summary_created":
             plan = orchestration_plan_from_payload(
@@ -261,7 +270,40 @@ def load_control_state(service: InterAgentService, run: Any) -> OrchestrationCon
                 output_text=str(event.payload.get("output_text") or ""),
                 error=str(event.payload.get("error") or "").strip() or None,
             )
+    _validate_recovery_consistency(service, run, state, reserved_task_ids=reserved_task_ids)
     return state
+
+
+def _validate_recovery_consistency(
+    service: InterAgentService,
+    run: Any,
+    state: OrchestrationControlState,
+    *,
+    reserved_task_ids: set[str] | frozenset[str],
+) -> None:
+    task_participants = {
+        participant.participant_id: participant
+        for participant in service.store.list_participants(run.run_id, workspace_id=run.workspace_id)
+        if participant.kind == "agent"
+        and participant.execution_mode == "child_runtime_session"
+        and participant.participant_id not in reserved_task_ids
+    }
+    missing_task_ids = set(task_participants) - set(state.tasks)
+    if missing_task_ids:
+        raise InterAgentValidationError(
+            "Orchestration recovery ledger is missing task definitions for persisted participants: "
+            + ", ".join(sorted(missing_task_ids))
+        )
+    missing_result_ids = {
+        task_id
+        for task_id, participant in task_participants.items()
+        if participant.status in _TERMINAL_TASK_PARTICIPANT_STATUSES and task_id not in state.results
+    }
+    if missing_result_ids:
+        raise InterAgentValidationError(
+            "Orchestration recovery ledger is missing terminal task results for persisted participants: "
+            + ", ".join(sorted(missing_result_ids))
+        )
 
 
 def _add_task_payloads(

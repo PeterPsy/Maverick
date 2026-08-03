@@ -96,6 +96,25 @@ INTER_AGENT_EVENT_TYPES: set[str] = {
     "inter_agent.run.recovered",
 }
 
+# These records are the scheduler's durable recovery ledger. They remain in the
+# per-run event partition until the run is deleted, independently of the
+# visibility-history caps used by UI and audit replay.
+INTER_AGENT_RECOVERY_EVENT_TYPES: frozenset[str] = frozenset(
+    {
+        "inter_agent.plan.summary_created",
+        "inter_agent.directive.received",
+        "inter_agent.directive.delivered",
+        "inter_agent.generalist.handoff_prepared",
+        "inter_agent.generalist.directive_linked",
+        "inter_agent.generalist.directive_resolved",
+        "inter_agent.control.decision",
+        "inter_agent.control.decision_applied",
+        "inter_agent.task.created",
+        "inter_agent.task.retry_scheduled",
+        "inter_agent.task.completed",
+    }
+)
+
 CHAIN_OF_THOUGHT_PAYLOAD_KEYS = {
     "chain_of_thought",
     "chainOfThought",

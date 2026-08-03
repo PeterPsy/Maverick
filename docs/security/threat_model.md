@@ -167,7 +167,13 @@ tasks without a `review_of` target and direct target dependency are rejected in
 both live decisions and persisted replay. Recovery also validates the complete
 persisted initial DAG before adding any task to scheduler state, preventing
 unknown review targets or dependency cycles from entering execution through a
-sequence of individually valid task records.
+sequence of individually valid task records. Operational event flooding also
+cannot evict persisted plans, task results, control application markers,
+handoffs, or directives: those allowlisted recovery records are protected from
+visibility-history retention and internal replay reads every page in causal
+order before scheduling resumes. If an older or corrupted run already lacks a
+terminal task result, recovery fails closed rather than risking duplicate task
+side effects.
 
 ### Workspace escape
 

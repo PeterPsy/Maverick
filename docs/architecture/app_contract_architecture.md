@@ -923,6 +923,17 @@ For `handled_by_core` routes, the core must not start or forward to the sidecar.
 
 When a sidecar proxy declares `streaming: true`, the hosted ASGI path must forward request bodies and response bodies in chunks rather than through the JSON app-backend request limit. When it also declares `sse: true`, `text/event-stream` responses must remain streamed and unbuffered. The core injects service credentials only on the server-side upstream request; generated technical tokens must not be forwarded back to browser clients in response headers.
 
+The mounted path above is the legacy browser shape and is insufficient for an
+upstream web application that owns root-relative routes. A sidecar may instead
+declare the generic isolated-browser-origin capability defined by
+[`sidecar_browser_origin.md`](sidecar_browser_origin.md). That capability uses
+an opaque host beneath `sidecars.<installation-domain>`, a body-only one-shot
+bootstrap ticket, and a separate host-only session cookie. The isolated host
+routes only the declared sidecar roots and never falls through to Maverick API
+routes. App contracts do not choose the opaque host, ticket, cookie, workspace,
+technical port, or generation, and the capability fails closed when local or
+hosted origin prerequisites are unavailable.
+
 The proxy must not expose terminal access, host-folder import, wildcard passthrough, arbitrary network binding, or undeclared websocket/streaming semantics for sandbox apps. If an app needs those features, the contract must mark them outside sandbox compatibility or route them through a future generic core policy surface.
 
 ## Human Surface Versus Agent Surface

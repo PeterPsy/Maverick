@@ -276,6 +276,7 @@ class BaseShellAppMountingTests(unittest.TestCase):
         runtime_cache_source = (REPO_ROOT / "apps/chat/frontend/src/hooks/useRuntimeTranscriptCache.ts").read_text()
         shell_messages_source = (REPO_ROOT / "apps/chat/frontend/src/hooks/useChatShellMessages.ts").read_text()
         submission_source = (REPO_ROOT / "apps/chat/frontend/src/hooks/useMessageSubmission.ts").read_text()
+        runtime_api_source = (REPO_ROOT / "apps/chat/frontend/src/api/runtime.ts").read_text()
 
         submit_start = submission_source.index("async function submitMessage")
         submit_end = submission_source.index("async function handleSend", submit_start)
@@ -283,7 +284,9 @@ class BaseShellAppMountingTests(unittest.TestCase):
 
         self.assertIn("response = await submitWithPostMetric(clientMetrics, () =>", submit_source)
         self.assertIn("createRuntimeSessionWithTurn({", submit_source)
-        self.assertIn("project_id: targetDraftChat?.projectId ?? null", submit_source)
+        self.assertIn("project_id: draftChat?.projectId ?? null", submission_source)
+        self.assertIn("options: runtimeOptions.options", submit_source)
+        self.assertIn("project_id: options.project_id || null", runtime_api_source)
         self.assertIn("inputText: message.content", submit_source)
         self.assertIn("sendRuntimeTurn(", submit_source)
         self.assertIn("if (!thread.runtime_session_id)", submit_source)

@@ -164,7 +164,10 @@ review depends causally on that failure. Every passing approval must still
 cover the current material frontier. An orchestrator cannot hide a negative or
 failed verdict in an unbound reviewer task: reviewer and security-reviewer
 tasks without a `review_of` target and direct target dependency are rejected in
-both live decisions and persisted replay.
+both live decisions and persisted replay. Recovery also validates the complete
+persisted initial DAG before adding any task to scheduler state, preventing
+unknown review targets or dependency cycles from entering execution through a
+sequence of individually valid task records.
 
 ### Workspace escape
 

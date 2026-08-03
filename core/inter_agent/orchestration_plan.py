@@ -83,10 +83,28 @@ def parse_orchestration_plan(
     reserved_task_ids: set[str] | frozenset[str] = frozenset(),
 ) -> OrchestrationPlan:
     payload = _json_object(value, decision="plan")
+    return orchestration_plan_from_payload(
+        payload,
+        max_tasks=max_tasks,
+        require_review_gate=require_review_gate,
+        reserved_task_ids=reserved_task_ids,
+    )
+
+
+def orchestration_plan_from_payload(
+    payload: Any,
+    *,
+    max_tasks: int | None = None,
+    require_review_gate: bool = True,
+    reserved_task_ids: set[str] | frozenset[str] = frozenset(),
+) -> OrchestrationPlan:
+    """Rehydrate and atomically validate one persisted orchestrator plan."""
+    if not isinstance(payload, dict):
+        raise InterAgentValidationError("Persisted orchestrator plans must be objects.")
     raw_tasks = payload.get("tasks")
     if not isinstance(raw_tasks, list) or not raw_tasks:
         raise InterAgentValidationError("Orchestrator plan requires a non-empty tasks array.")
-    if len(raw_tasks) > max_tasks:
+    if max_tasks is not None and len(raw_tasks) > max_tasks:
         raise InterAgentValidationError("Orchestrator plan exceeds the participant budget.")
     tasks = tuple(_task_spec(item) for item in raw_tasks)
     task_ids = [task.task_id for task in tasks]

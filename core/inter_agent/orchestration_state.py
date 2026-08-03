@@ -9,6 +9,7 @@ from core.inter_agent.orchestration_plan import (
     OrchestrationControlDecision,
     OrchestrationTaskSpec,
     control_decision_from_payload,
+    orchestration_plan_from_payload,
     parse_review_decision,
     task_spec_from_payload,
 )
@@ -214,8 +215,13 @@ def load_control_state(service: InterAgentService, run: Any) -> OrchestrationCon
     ).events
     for event in events:
         if event.event_type == "inter_agent.plan.summary_created":
-            state.plan_summary = str(event.payload.get("summary") or state.plan_summary)
-            _add_task_payloads(state, event.payload.get("tasks"), reserved_task_ids=reserved_task_ids)
+            plan = orchestration_plan_from_payload(
+                event.payload,
+                require_review_gate=False,
+                reserved_task_ids=reserved_task_ids,
+            )
+            state.plan_summary = plan.summary
+            _add_tasks(state, plan.tasks)
         elif event.event_type == "inter_agent.control.decision":
             control_step = int(event.payload.get("control_step") or 0)
             decision = control_decision_from_payload(
@@ -230,7 +236,7 @@ def load_control_state(service: InterAgentService, run: Any) -> OrchestrationCon
                 decision=decision,
             )
             state.latest_decision_summary = decision.summary
-            _add_task_payloads(state, event.payload.get("tasks"), reserved_task_ids=reserved_task_ids)
+            _add_tasks(state, decision.tasks)
         elif event.event_type == "inter_agent.control.decision_applied":
             state.applied_control_steps.add(int(event.payload.get("control_step") or 0))
         elif event.event_type == "inter_agent.task.created":
@@ -266,6 +272,10 @@ def _add_task_payloads(
 ) -> None:
     if not isinstance(value, list):
         return
-    for item in value:
-        task = task_spec_from_payload(item, reserved_task_ids=reserved_task_ids)
+    tasks = tuple(task_spec_from_payload(item, reserved_task_ids=reserved_task_ids) for item in value)
+    _add_tasks(state, tasks)
+
+
+def _add_tasks(state: OrchestrationControlState, tasks: tuple[OrchestrationTaskSpec, ...]) -> None:
+    for task in tasks:
         state.tasks.setdefault(task.task_id, task)

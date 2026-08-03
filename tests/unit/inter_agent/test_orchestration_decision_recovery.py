@@ -22,26 +22,73 @@ class OrchestrationDecisionRecoveryTest(unittest.TestCase):
         store = build_inter_agent_document_store(start_path=make_temp_repo_root(self))
         service = InterAgentService(store)
         run = service.create_run(orchestrated_spec())
-        service.record_event(
+        _record_persisted_plan(
+            service,
             run,
-            event_type="inter_agent.plan.summary_created",
-            participant_id=run.orchestrator_participant_id,
-            visibility_plane="summary",
-            payload={
-                "summary": "Persisted malformed review task.",
-                "tasks": [
-                    {
-                        "id": "security-review",
-                        "label": "Security review",
-                        "role": "security_reviewer",
-                        "objective": "Review security.",
-                        "depends_on": ["implement"],
-                    }
-                ],
-            },
+            [
+                {
+                    "id": "security-review",
+                    "label": "Security review",
+                    "role": "security_reviewer",
+                    "objective": "Review security.",
+                    "depends_on": ["implement"],
+                }
+            ],
         )
 
         with self.assertRaisesRegex(InterAgentValidationError, "review_of"):
+            load_control_state(service, replace(run, status="recovering"))
+
+    def test_recovery_rejects_persisted_plan_with_unknown_review_target(self) -> None:
+        store = build_inter_agent_document_store(start_path=make_temp_repo_root(self))
+        service = InterAgentService(store)
+        run = service.create_run(orchestrated_spec())
+        _record_persisted_plan(
+            service,
+            run,
+            [
+                {
+                    "id": "security-review",
+                    "label": "Security review",
+                    "role": "security_reviewer",
+                    "objective": "Review missing work.",
+                    "depends_on": ["ghost"],
+                    "review_of": "ghost",
+                }
+            ],
+        )
+
+        with self.assertRaisesRegex(InterAgentValidationError, "unknown dependencies"):
+            load_control_state(service, replace(run, status="recovering"))
+
+    def test_recovery_rejects_persisted_plan_with_dependency_cycle(self) -> None:
+        store = build_inter_agent_document_store(start_path=make_temp_repo_root(self))
+        service = InterAgentService(store)
+        run = service.create_run(orchestrated_spec())
+        _record_persisted_plan(
+            service,
+            run,
+            [
+                {
+                    "id": "review-a",
+                    "label": "Review A",
+                    "role": "reviewer",
+                    "objective": "Review B.",
+                    "depends_on": ["review-b"],
+                    "review_of": "review-b",
+                },
+                {
+                    "id": "review-b",
+                    "label": "Review B",
+                    "role": "reviewer",
+                    "objective": "Review A.",
+                    "depends_on": ["review-a"],
+                    "review_of": "review-a",
+                },
+            ],
+        )
+
+        with self.assertRaisesRegex(InterAgentValidationError, "cycle"):
             load_control_state(service, replace(run, status="recovering"))
 
     def test_replays_persisted_completion_without_asking_the_orchestrator_again(self) -> None:
@@ -206,6 +253,16 @@ def _prepare_handoff(service: InterAgentService, run) -> SimpleNamespace:
     state = SimpleNamespace(runtime_store=runtime_store)
     prepare_generalist_handoff(service, state, run)
     return state
+
+
+def _record_persisted_plan(service: InterAgentService, run, tasks: list[dict[str, object]]) -> None:
+    service.record_event(
+        run,
+        event_type="inter_agent.plan.summary_created",
+        participant_id=run.orchestrator_participant_id,
+        visibility_plane="summary",
+        payload={"summary": "Persisted orchestration plan.", "tasks": tasks},
+    )
 
 
 if __name__ == "__main__":

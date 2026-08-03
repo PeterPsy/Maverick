@@ -54,7 +54,9 @@ It started with names, visibility, legacy compatibility, and initial policy defa
     a failed review is superseded only by an approved, causally dependent retry
     or replacement review. Reviewer and security-reviewer tasks always declare
     `review_of` and directly depend on that target; live parsing and persisted
-    replay both reject missing or detached review targets.
+    replay both reject missing or detached review targets. Persisted initial
+    plans are revalidated atomically as complete DAGs before scheduler state is
+    mutated, so unknown references and cycles fail closed during recovery.
 18. A later root Chat turn may steer the active run only through a persisted
     generalist-turn link validated against the same root runtime session. The
     scheduler waits for its terminal final output; direct Agent nodes text is a

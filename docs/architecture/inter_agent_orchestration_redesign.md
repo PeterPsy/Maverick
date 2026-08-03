@@ -190,3 +190,7 @@ transcript projection behavior.
   directly depend on that target. The core validates this task-local invariant
   for initial plans, adaptive control decisions, and persisted replay payloads;
   an unbound reviewer task is rejected before it can enter scheduler state.
+- Recovery rehydrates a persisted initial plan as one atomic unit and reruns
+  the same whole-DAG validation used for live planning, including unique and
+  non-reserved ids, known dependencies and review targets, and cycle rejection.
+  Scheduler state is mutated only after the complete plan passes.

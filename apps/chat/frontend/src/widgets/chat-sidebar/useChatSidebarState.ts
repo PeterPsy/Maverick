@@ -30,7 +30,7 @@ import {
   type ChatSidebarSelectionChannel,
 } from "../chatSidebarSelectionChannel";
 export type { PendingProjectDeletion } from "./chatSidebarStateUtils";
-import { buildSections, filterThreadsBySource, type ThreadSourceFilter } from "./sections";
+import { buildSections, filterThreads, type ThreadFilter } from "./sections";
 import {
   buildSearchSections,
   type TranscriptSearchTextByThreadId,
@@ -49,14 +49,14 @@ const TRANSCRIPT_SEARCH_EVENT_LIMIT = 500;
 const TRANSCRIPT_SEARCH_MAX_CONCURRENT = 4;
 const THREAD_PAGE_LIMIT = 50;
 const THREAD_BACKFILL_IDLE_DELAY_MS = 320;
-const THREAD_SOURCE_FILTERS: ThreadSourceFilter[] = ["all", "senses", "multi_agent"];
+const THREAD_FILTERS: ThreadFilter[] = ["all", "senses", "multi_agent", "unread"];
 
 export function useChatSidebarState() {
   const [projects, setProjects] = useState<ChatProject[]>([]);
   const [threads, setThreads] = useState<ChatThread[]>([]);
   const [multiAgentThreadIds, setMultiAgentThreadIds] = useState<Set<string>>(() => new Set());
   const [searchQuery, setSearchQuery] = useState("");
-  const [sourceFilter, setSourceFilter] = useState<ThreadSourceFilter>("all");
+  const [threadFilter, setThreadFilter] = useState<ThreadFilter>("all");
   const [transcriptSearchTextByThreadId, setTranscriptSearchTextByThreadId] = useState<TranscriptSearchTextByThreadId>({});
   const [isTranscriptSearchLoading, setIsTranscriptSearchLoading] = useState(false);
   const [workspaceId, setWorkspaceId] = useState("");
@@ -91,15 +91,16 @@ export function useChatSidebarState() {
     () => threads.map((thread) => `${thread.thread_id}:${thread.runtime_session_id}:${thread.updated_at}:${thread.availability}`).sort().join("|"),
     [threads],
   );
-  const sourceFilteredThreads = useMemo(
-    () => filterThreadsBySource(threads, sourceFilter, multiAgentThreadIds),
-    [multiAgentThreadIds, sourceFilter, threads],
+  const filteredThreads = useMemo(
+    () => filterThreads(threads, threadFilter, multiAgentThreadIds),
+    [multiAgentThreadIds, threadFilter, threads],
   );
-  const sourceFilterCounts = useMemo(
+  const threadFilterCounts = useMemo(
     () => ({
       all: threads.length,
-      senses: filterThreadsBySource(threads, "senses").length,
-      multi_agent: filterThreadsBySource(threads, "multi_agent", multiAgentThreadIds).length,
+      senses: filterThreads(threads, "senses").length,
+      multi_agent: filterThreads(threads, "multi_agent", multiAgentThreadIds).length,
+      unread: filterThreads(threads, "unread").length,
     }),
     [multiAgentThreadIds, threads],
   );
@@ -110,11 +111,11 @@ export function useChatSidebarState() {
             emptyLabel: isTranscriptSearchLoading ? "Searching messages..." : "No chats found.",
             projects,
             query: searchTerm,
-            threads: sourceFilteredThreads,
+            threads: filteredThreads,
             transcriptTextByThreadId: transcriptSearchTextByThreadId,
           })
-        : buildSections(projects, sourceFilteredThreads),
-    [isTranscriptSearchLoading, projects, searchTerm, sourceFilteredThreads, transcriptSearchTextByThreadId],
+        : buildSections(projects, filteredThreads),
+    [filteredThreads, isTranscriptSearchLoading, projects, searchTerm, transcriptSearchTextByThreadId],
   );
   function applyProjects(nextProjects: ChatProject[]) {
     setProjects(nextProjects);
@@ -185,11 +186,11 @@ export function useChatSidebarState() {
     setSearchQuery(nextQuery);
   }
 
-  function updateSourceFilter(nextFilter: ThreadSourceFilter) {
-    if (!THREAD_SOURCE_FILTERS.includes(nextFilter)) {
+  function updateThreadFilter(nextFilter: ThreadFilter) {
+    if (!THREAD_FILTERS.includes(nextFilter)) {
       return;
     }
-    setSourceFilter(nextFilter);
+    setThreadFilter(nextFilter);
   }
 
   useEffect(() => {
@@ -671,10 +672,10 @@ export function useChatSidebarState() {
     setExpandedThreadTitle,
     searchQuery,
     setSearchQuery: updateSearchQuery,
-    setSourceFilter: updateSourceFilter,
+    setThreadFilter: updateThreadFilter,
     startProjectEdit: projectActions.startProjectEdit,
-    sourceFilter,
-    sourceFilterCounts,
+    threadFilter,
+    threadFilterCounts,
     toggleSection,
     toggleThreadEdit,
     toggleThreadSelection,

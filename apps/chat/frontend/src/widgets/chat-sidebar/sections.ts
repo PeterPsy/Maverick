@@ -11,7 +11,7 @@ export type FolderSection = {
   emptyLabel: string;
 };
 
-export type ThreadSourceFilter = "all" | "senses" | "multi_agent";
+export type ThreadFilter = "all" | "senses" | "multi_agent" | "unread";
 
 export type ThreadSourceBadge = {
   icon: string;
@@ -22,10 +22,10 @@ export type ThreadSourceBadge = {
 export function buildSections(
   projects: ChatProject[],
   threads: ChatThread[],
-  sourceFilter: ThreadSourceFilter = "all",
+  threadFilter: ThreadFilter = "all",
   multiAgentThreadIds: ReadonlySet<string> = new Set(),
 ): FolderSection[] {
-  const visibleThreads = filterThreadsBySource(threads, sourceFilter, multiAgentThreadIds);
+  const visibleThreads = filterThreads(threads, threadFilter, multiAgentThreadIds);
   const projectSections: FolderSection[] = projects
     .slice()
     .sort((left, right) => left.name.localeCompare(right.name, "en", { sensitivity: "base" }))
@@ -82,16 +82,19 @@ export function buildSections(
   return sections;
 }
 
-export function filterThreadsBySource(
+export function filterThreads(
   threads: ChatThread[],
-  sourceFilter: ThreadSourceFilter,
+  threadFilter: ThreadFilter,
   multiAgentThreadIds: ReadonlySet<string> = new Set(),
 ): ChatThread[] {
-  if (sourceFilter === "senses") {
+  if (threadFilter === "senses") {
     return threads.filter(isSensesThread);
   }
-  if (sourceFilter === "multi_agent") {
+  if (threadFilter === "multi_agent") {
     return threads.filter((thread) => isMultiAgentThread(thread, multiAgentThreadIds));
+  }
+  if (threadFilter === "unread") {
+    return threads.filter(isThreadUnread);
   }
   return threads;
 }

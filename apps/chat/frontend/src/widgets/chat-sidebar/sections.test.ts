@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { ChatProject, ChatThread } from "../../api/client";
-import { buildSections, filterThreadsBySource, isThreadBusy, isThreadUnread, threadSourceBadges } from "./sections";
+import { buildSections, filterThreads, isThreadBusy, isThreadUnread, threadSourceBadges } from "./sections";
 
 function thread(overrides: Partial<ChatThread> = {}): ChatThread {
   return {
@@ -68,7 +68,7 @@ describe("chat sidebar runtime status", () => {
     const chatThread = thread({ thread_id: "chat-thread", source_app_id: "chat" });
     const sensesThread = thread({ thread_id: "senses-thread", source_app_id: "senses" });
 
-    expect(filterThreadsBySource([chatThread, sensesThread], "senses").map((item) => item.thread_id)).toEqual(["senses-thread"]);
+    expect(filterThreads([chatThread, sensesThread], "senses").map((item) => item.thread_id)).toEqual(["senses-thread"]);
     expect(buildSections([], [chatThread, sensesThread], "senses")[0].items.map((item) => item.thread_id)).toEqual(["senses-thread"]);
   });
 
@@ -77,11 +77,26 @@ describe("chat sidebar runtime status", () => {
     const multiThread = thread({ thread_id: "multi-thread", runtime_session_id: "multi-session" });
     const multiAgentThreadIds = new Set(["multi-thread"]);
 
-    expect(filterThreadsBySource([chatThread, multiThread], "multi_agent", multiAgentThreadIds).map((item) => item.thread_id)).toEqual([
+    expect(filterThreads([chatThread, multiThread], "multi_agent", multiAgentThreadIds).map((item) => item.thread_id)).toEqual([
       "multi-thread",
     ]);
     expect(buildSections([], [chatThread, multiThread], "multi_agent", multiAgentThreadIds)[0].items.map((item) => item.thread_id)).toEqual([
       "multi-thread",
+    ]);
+  });
+
+  it("filters completed unread responses for the Unread view", () => {
+    const readThread = thread({ thread_id: "read-thread", has_unread_completed_response: false });
+    const unreadThread = thread({ thread_id: "unread-thread", has_unread_completed_response: true });
+    const busyUnreadThread = thread({
+      thread_id: "busy-unread-thread",
+      availability: "active",
+      has_unread_completed_response: true,
+    });
+
+    expect(filterThreads([readThread, unreadThread, busyUnreadThread], "unread").map((item) => item.thread_id)).toEqual(["unread-thread"]);
+    expect(buildSections([], [readThread, unreadThread, busyUnreadThread], "unread")[0].items.map((item) => item.thread_id)).toEqual([
+      "unread-thread",
     ]);
   });
 

@@ -224,7 +224,7 @@ input {
   right: 0;
   z-index: 3;
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 0.38rem;
   height: var(--chat-sidebar-source-filter-height);
   min-height: var(--chat-sidebar-source-filter-height);
@@ -288,6 +288,12 @@ input {
   background: var(--chat-sidebar-soft-surface);
   color: var(--maverick-text-muted);
   text-align: center;
+}
+
+@media (max-width: 25rem) {
+  .bs-chat-sidebar-source-filter__button.is-label-collapsible .bs-chat-sidebar-source-filter__label {
+    display: none;
+  }
 }
 
 @media (max-width: 979px) {

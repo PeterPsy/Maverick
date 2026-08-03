@@ -37,10 +37,16 @@ describe("chat sidebar search", () => {
   it("keeps the source filter buttons on blurred glass surfaces", () => {
     const styles = readStyle("styles.css");
 
-    expect(styles).toMatch(/\.bs-chat-sidebar-source-filter\s*{[\s\S]*grid-template-columns:\s*repeat\(3, minmax\(0, 1fr\)\);/);
+    expect(styles).toMatch(/\.bs-chat-sidebar-source-filter\s*{[\s\S]*grid-template-columns:\s*repeat\(4, minmax\(0, 1fr\)\);/);
     expect(styles).toMatch(/\.bs-chat-sidebar-source-filter__button\s*{[\s\S]*background:\s*var\(--chat-sidebar-glass-surface\);/);
     expect(styles).toMatch(/\.bs-chat-sidebar-source-filter__button\s*{[\s\S]*backdrop-filter:\s*blur\(26px\);/);
     expect(styles).toMatch(/\.bs-chat-sidebar-source-filter__button\s*{[\s\S]*-webkit-backdrop-filter:\s*blur\(26px\);/);
+  });
+
+  it("collapses non-All filter labels when the sidebar iframe is narrow", () => {
+    const styles = readStyle("styles.css");
+
+    expect(styles).toMatch(/@media \(max-width: 25rem\)[\s\S]*\.is-label-collapsible \.bs-chat-sidebar-source-filter__label\s*{[\s\S]*display:\s*none;/);
   });
 
   it("keeps source badges compact as icon-only pills", () => {

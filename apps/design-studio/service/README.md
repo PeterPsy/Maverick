@@ -65,3 +65,21 @@ the browser sidecar origin; app-entrypoint capabilities use a separate
 allowlist. WP5 replaces source-tree measurements with the staged runtime
 closure, SBOM, NOTICE, license inventory, native load proof, and artifact
 provenance.
+
+## Versioned data generations
+
+`opendesign_generation_control.py` defines the strict app-owned `control.json`
+used for coordinated bundle and data activation. It validates verified artifact
+digests and real `instances/<generation>/data/` directories, rejects unknown
+fields and symlinks, and writes with same-directory temp, file `fsync`, atomic
+replace, and directory `fsync`. The same module strictly validates and writes
+migration journals and reconciles them against the active triple. Migration and
+rollback orchestration are added in WP6; the current launcher must not select
+this control file early.
+
+Run the G4 filesystem and crash proof with:
+
+```bash
+.venv/bin/python -W error::ResourceWarning -m unittest \
+  tests.architecture.test_design_studio_data_generation_proof -v
+```

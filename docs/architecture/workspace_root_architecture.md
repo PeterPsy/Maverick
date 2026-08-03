@@ -138,6 +138,16 @@ This plane answers questions such as:
 
 App-owned content belongs here, not in governance.
 
+An app with forward-only data migrations may manage versioned data generations
+inside its own `data/<local_app_id>/` root. Activation must use strict app-owned
+metadata that atomically identifies the immutable artifact digest, application
+version, and data generation together. The core path layer must not select an
+active generation by symlink, modification time, or directory name. Every
+referenced generation remains workspace-scoped, and rollback must reactivate a
+previous artifact and its matching previous data generation as one pair. At
+least one complete previous pair is retained after cutover unless a stronger
+app policy applies.
+
 For example:
 
 - the app `agents` defines which agent records exist in the workspace

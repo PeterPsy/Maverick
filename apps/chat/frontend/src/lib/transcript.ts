@@ -1,5 +1,11 @@
 import type { AppReference, ChatMessage, RuntimeEvent, RuntimeStepMessage, StructuredContent, ToolCallMessage } from "../api/client";
 import type { ChatMessageAttachment } from "../api/client";
+import {
+  goalTranscriptScope,
+  goalTranscriptStep,
+  isTerminalGoalStatus,
+  mergeGoalTranscriptSteps,
+} from "./goalTranscript";
 import { structuredContentFromAgentLinks } from "./linkPreviews";
 import { isNoisyRuntimeLabel, isNonChatFacingProviderEvent, runtimeStepLabel } from "./runtimeStepLabels";
 
@@ -252,7 +258,9 @@ function transcriptProjectionCacheKey(events: RuntimeEvent[]): string {
 }
 
 function projectEventsToMessages(events: RuntimeEvent[]): ChatMessage[] {
-  const orderedMessages: Array<{ order: number; sequence: number; message: ChatMessage }> = [];
+  type OrderedMessage = { order: number; sequence: number; message: ChatMessage };
+
+  const orderedMessages: OrderedMessage[] = [];
   let messageSequence = 0;
   const seenUserTurns = new Set<string>();
   const finalTurnIds = new Set(events.filter((event) => event.event_type === "runtime.output.final").map(messageTurnId));
@@ -268,10 +276,20 @@ function projectEventsToMessages(events: RuntimeEvent[]): ChatMessage[] {
   >();
   const nextToolSegmentIndexByTurn = new Map<string, number>();
   const renderedStructuredOutput = new Set<string>();
+  const activeGoalMessages = new Map<string, OrderedMessage>();
 
-  function pushMessage(message: ChatMessage, order: number) {
-    orderedMessages.push({ order, sequence: messageSequence, message });
+  function pushMessage(message: ChatMessage, order: number): OrderedMessage {
+    const entry = { order, sequence: messageSequence, message };
+    orderedMessages.push(entry);
     messageSequence += 1;
+    return entry;
+  }
+
+  function removeMessage(entry: OrderedMessage) {
+    const index = orderedMessages.indexOf(entry);
+    if (index >= 0) {
+      orderedMessages.splice(index, 1);
+    }
   }
 
   function appendRenderedOutput(turnId: string, text: string) {
@@ -474,6 +492,48 @@ function projectEventsToMessages(events: RuntimeEvent[]): ChatMessage[] {
           order: eventIndex,
           sourceFields,
         });
+      }
+      continue;
+    }
+    const goalUpdate = goalTranscriptStep(event);
+    if (goalUpdate) {
+      const goalScope = goalTranscriptScope(event);
+      const activeGoal = activeGoalMessages.get(goalScope);
+      if (goalUpdate.cleared) {
+        if (activeGoal) {
+          removeMessage(activeGoal);
+          activeGoalMessages.delete(goalScope);
+        }
+        continue;
+      }
+      if (activeGoal) {
+        if (goalUpdate.hasDisplayState || goalUpdate.hasUsage) {
+          const mergedStep = mergeGoalTranscriptSteps(activeGoal.message.step!, goalUpdate.step);
+          activeGoal.message.content = mergedStep.label;
+          activeGoal.message.step = mergedStep;
+          const mergedStatus = goalTranscriptStep({ ...event, payload: mergedStep.detail })?.status || "";
+          if (isTerminalGoalStatus(mergedStatus)) {
+            activeGoalMessages.delete(goalScope);
+          }
+        }
+        continue;
+      }
+      if (!goalUpdate.hasDisplayState) {
+        continue;
+      }
+      flushToolSegment(turnId, true);
+      flushOutputSegment(turnId, finalTurnIds.has(turnId));
+      const goalMessage = pushMessage({
+        id: `${turnId}:step:${event.event_id}`,
+        role: "step",
+        content: goalUpdate.step.label,
+        createdAt: event.created_at,
+        status: "complete",
+        step: goalUpdate.step,
+        ...sourceFields,
+      }, eventIndex);
+      if (!isTerminalGoalStatus(goalUpdate.status)) {
+        activeGoalMessages.set(goalScope, goalMessage);
       }
       continue;
     }

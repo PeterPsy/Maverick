@@ -488,6 +488,162 @@ describe("runtime event transcript projection", () => {
     expect(messages).toEqual([]);
   });
 
+  it("suppresses empty goal updates without splitting tool groups", () => {
+    const messages = eventsToMessages([
+      event({
+        event_id: "tool-1",
+        event_type: "runtime.tool_call.completed",
+        payload: { name: "functions.exec_command", command: "pwd" },
+      }),
+      event({
+        event_id: "goal-empty",
+        event_type: "runtime.step.updated",
+        payload: { label: "thread goal updated", provider_event_type: "thread.goal.updated" },
+      }),
+      event({
+        event_id: "tool-2",
+        event_type: "runtime.tool_call.completed",
+        payload: { name: "functions.exec_command", command: "git status -sb" },
+      }),
+    ]);
+
+    expect(messages).toMatchObject([
+      {
+        role: "tool",
+        toolCalls: [{ id: "tool-1" }, { id: "tool-2" }],
+      },
+    ]);
+  });
+
+  it("coalesces goal progress into one card with the latest usage", () => {
+    const messages = eventsToMessages([
+      event({
+        event_id: "goal-active",
+        event_type: "runtime.step.updated",
+        payload: {
+          label: "thread goal updated",
+          provider_event_type: "thread.goal.updated",
+          raw: {
+            type: "thread.goal.updated",
+            item: {
+              threadId: "provider-thread-1",
+              goal: { objective: "Ship the goal transcript fix", status: "active", tokensUsed: 0, timeUsedSeconds: 0 },
+            },
+          },
+        },
+      }),
+      event({
+        event_id: "tool-1",
+        event_type: "runtime.tool_call.completed",
+        payload: { name: "functions.exec_command", command: "npm test" },
+      }),
+      event({
+        event_id: "goal-progress",
+        event_type: "runtime.step.updated",
+        payload: {
+          label: "thread goal updated",
+          provider_event_type: "thread.goal.updated",
+          raw: {
+            type: "thread.goal.updated",
+            item: {
+              threadId: "provider-thread-1",
+              goal: { tokensUsed: 1892, timeUsedSeconds: 7 },
+            },
+          },
+        },
+      }),
+      event({
+        event_id: "tool-2",
+        event_type: "runtime.tool_call.completed",
+        payload: { name: "functions.exec_command", command: "npm run build" },
+      }),
+    ]);
+
+    expect(messages.filter((message) => message.role === "step")).toHaveLength(1);
+    expect(messages).toMatchObject([
+      {
+        role: "step",
+        step: {
+          detail: {
+            raw: {
+              item: {
+                goal: {
+                  objective: "Ship the goal transcript fix",
+                  status: "active",
+                  tokensUsed: 1892,
+                  timeUsedSeconds: 7,
+                },
+              },
+            },
+          },
+        },
+      },
+      {
+        role: "tool",
+        toolCalls: [{ id: "tool-1" }, { id: "tool-2" }],
+      },
+    ]);
+  });
+
+  it("removes an active goal card when the provider clears the goal", () => {
+    const messages = eventsToMessages([
+      event({
+        event_id: "goal-active",
+        event_type: "runtime.step.updated",
+        payload: {
+          provider_event_type: "thread.goal.updated",
+          raw: { type: "thread.goal.updated", item: { goal: { objective: "Temporary goal", status: "active" } } },
+        },
+      }),
+      event({
+        event_id: "goal-cleared",
+        event_type: "runtime.step.updated",
+        payload: { provider_event_type: "thread.goal.cleared", raw: { type: "thread.goal.cleared", item: {} } },
+      }),
+    ]);
+
+    expect(messages).toEqual([]);
+  });
+
+  it("keeps a terminal goal snapshot visible after the provider clears active state", () => {
+    const messages = eventsToMessages([
+      event({
+        event_id: "goal-active",
+        event_type: "runtime.step.updated",
+        payload: {
+          provider_event_type: "thread.goal.updated",
+          raw: { type: "thread.goal.updated", item: { goal: { objective: "Finish the fix", status: "active" } } },
+        },
+      }),
+      event({
+        event_id: "goal-complete",
+        event_type: "runtime.step.updated",
+        payload: {
+          provider_event_type: "thread.goal.updated",
+          raw: { type: "thread.goal.updated", item: { goal: { status: "complete", tokensUsed: 2400 } } },
+        },
+      }),
+      event({
+        event_id: "goal-cleared",
+        event_type: "runtime.step.updated",
+        payload: { provider_event_type: "thread.goal.cleared", raw: { type: "thread.goal.cleared", item: {} } },
+      }),
+    ]);
+
+    expect(messages).toMatchObject([
+      {
+        role: "step",
+        step: {
+          detail: {
+            raw: {
+              item: { goal: { objective: "Finish the fix", status: "complete", tokensUsed: 2400 } },
+            },
+          },
+        },
+      },
+    ]);
+  });
+
   it("starts a new tool-used group after a visible runtime update", () => {
     const messages = eventsToMessages([
       event({

@@ -109,7 +109,7 @@ test.describe("Chat app browser smoke", () => {
     await expect(page.getByRole("button", { name: "Agent runner: Default Chat" })).toBeVisible();
   });
 
-  test("expands structured goal lifecycle details without presenting them as a tool call", async ({ page }) => {
+  test("coalesces structured goal progress without presenting telemetry as tool calls", async ({ page }) => {
     const state = await installChatMocks(page);
     const turn = runtimeTurn("turn-goal", RUNTIME_SESSION_ID, "completed", "Inspect the active goal");
     state.threads = [chatThread({ title: "Goal inspection", last_user_message_at: NOW })];
@@ -124,16 +124,42 @@ test.describe("Chat app browser smoke", () => {
         created_at: NOW,
       },
       {
-        event_id: "turn-goal-cleared",
+        event_id: "turn-goal-active",
         session_id: RUNTIME_SESSION_ID,
         turn_id: turn.turn_id,
         event_type: "runtime.step.updated",
         payload: {
-          label: "thread goal cleared",
-          provider_event_type: "thread.goal.cleared",
+          label: "thread goal updated",
+          provider_event_type: "thread.goal.updated",
           raw: {
-            type: "thread.goal.cleared",
-            item: { threadId: "provider-thread-1" },
+            type: "thread.goal.updated",
+            item: {
+              threadId: "provider-thread-1",
+              goal: { objective: "Inspect the active goal", status: "active", tokensUsed: 0, timeUsedSeconds: 0 },
+            },
+          },
+        },
+        created_at: NOW,
+      },
+      {
+        event_id: "turn-goal-empty-update",
+        session_id: RUNTIME_SESSION_ID,
+        turn_id: turn.turn_id,
+        event_type: "runtime.step.updated",
+        payload: { label: "thread goal updated", provider_event_type: "thread.goal.updated" },
+        created_at: NOW,
+      },
+      {
+        event_id: "turn-goal-progress",
+        session_id: RUNTIME_SESSION_ID,
+        turn_id: turn.turn_id,
+        event_type: "runtime.step.updated",
+        payload: {
+          label: "thread goal updated",
+          provider_event_type: "thread.goal.updated",
+          raw: {
+            type: "thread.goal.updated",
+            item: { threadId: "provider-thread-1", goal: { tokensUsed: 1892, timeUsedSeconds: 7 } },
           },
         },
         created_at: NOW,
@@ -150,16 +176,17 @@ test.describe("Chat app browser smoke", () => {
 
     await page.goto("/apps/chat/");
 
-    const disclosure = page.getByRole("button", { name: /Goal status · No active goal/ });
+    const disclosure = page.getByRole("button", { name: /Goal status · Active/ });
     await expect(disclosure).toBeVisible();
+    await expect(page.getByRole("button", { name: /Goal status/ })).toHaveCount(1);
     await expect(disclosure).toHaveAttribute("aria-expanded", "false");
     await expect(page.getByRole("button", { name: /Tool Used/ })).toHaveCount(0);
 
     await disclosure.click();
     await expect(disclosure).toHaveAttribute("aria-expanded", "true");
-    await expect(page.getByRole("region", { name: "Goal status details" })).toContainText(
-      "No active goal is currently associated with this provider thread.",
-    );
+    await expect(page.getByRole("region", { name: "Goal status details" })).toContainText("Inspect the active goal");
+    await expect(page.getByRole("region", { name: "Goal status details" })).toContainText("1,892");
+    await expect(page.getByRole("region", { name: "Goal status details" })).toContainText("7s");
     await page.getByText("Technical details", { exact: true }).click();
     await expect(page.getByRole("region", { name: "Goal status details" })).toContainText("provider-thread-1");
   });

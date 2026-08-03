@@ -56,6 +56,11 @@ class InterAgentOrchestrationApiTest(InterAgentApiSupport):
                 )
 
             run_id = payload["run"]["run_id"]
+            context_status, context_payload, _headers = self._invoke(
+                app,
+                path="/api/inter-agent/generalist-context?root_runtime_session_id=root-session",
+                cookie=cookie,
+            )
             directive_status, directive_payload, _headers = self._invoke(
                 app,
                 path=f"/api/inter-agent/runs/{run_id}/directives",
@@ -97,6 +102,10 @@ class InterAgentOrchestrationApiTest(InterAgentApiSupport):
             self.assertEqual(payload["budget_policy"]["max_participants"], 17)
             self.assertEqual(payload["budget_policy"]["max_concurrent_participants"], 4)
             start_worker.assert_called_once()
+            self.assertEqual(context_status, 200)
+            self.assertEqual(context_payload["context"]["run_id"], run_id)
+            self.assertEqual(context_payload["context"]["status"], "created")
+            self.assertEqual(context_payload["context"]["tasks"], [])
             self.assertEqual(directive_status, 201)
             self.assertEqual(directive_payload["directive"]["payload"]["source_kind"], "user")
             self.assertEqual(linked_status, 201)

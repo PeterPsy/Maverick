@@ -11,6 +11,7 @@ from core.inter_agent.errors import InterAgentOperationError, InterAgentValidati
 from core.inter_agent.orchestration_control import (
     ControlCompletion,
     apply_control_decision,
+    apply_pending_control_decisions,
     create_initial_plan,
     next_control_decision,
 )
@@ -53,7 +54,8 @@ def execute_orchestrated_run(
     run = service.store.get_run(run_id, workspace_id=workspace_id)
     if run.mode != "orchestrated":
         raise InterAgentOperationError("Dynamic scheduler requires an orchestrated run.")
-    if run.status in {"completed", "failed", "cancelled"}:
+    control = load_control_state(service, run)
+    if run.status in {"failed", "cancelled"} or (run.status == "completed" and not control.pending_control_decisions):
         return OrchestrationExecutionResult(run=run, task_results=())
     orchestrator = service.store.get_participant(
         run.orchestrator_participant_id,
@@ -64,7 +66,15 @@ def execute_orchestrated_run(
     try:
         handoff = prepare_generalist_handoff(service, state, run)
         budget = service.store.get_budget_policy(run.budget_policy_id, workspace_id=workspace_id)
-        control = load_control_state(service, run)
+        pending_completion = apply_pending_control_decisions(
+            service,
+            run,
+            orchestrator,
+            control,
+            agent_snapshot_resolver=agent_snapshot_resolver,
+        )
+        if pending_completion is not None:
+            return _execution_result(pending_completion)
         if not control.tasks:
             run = replace(run, status="planning", updated_at=now or datetime.now(tz=UTC))
             service.store.save_run(run)
@@ -125,7 +135,7 @@ def execute_orchestrated_run(
                     return _execution_result(completion)
                 continue
             before = (len(control.tasks), len(control.results))
-            decision = next_control_decision(
+            recorded = next_control_decision(
                 service,
                 latest_run,
                 orchestrator,
@@ -142,7 +152,7 @@ def execute_orchestrated_run(
                 latest_run,
                 orchestrator,
                 control,
-                decision,
+                recorded,
                 agent_snapshot_resolver=agent_snapshot_resolver,
             )
             if completion is not None:
@@ -195,7 +205,7 @@ def _execute_ready_wave(
             running_ids.discard(task.task_id)
             if control.control_step >= max_control_steps:
                 raise InterAgentOperationError("Orchestration exceeded its adaptive control-step budget.")
-            decision = next_control_decision(
+            recorded = next_control_decision(
                 service,
                 run,
                 orchestrator,
@@ -206,15 +216,14 @@ def _execute_ready_wave(
                 runtime_state=runtime_state,
                 max_participants=max_participants,
                 available_agent_type_ids=available_agent_type_ids,
+                non_cancellable_task_ids=running_ids,
             )
-            if set(decision.cancel_task_ids).intersection(running_ids):
-                raise InterAgentValidationError("Orchestrator cannot cancel tasks already running in the current wave.")
             completion = apply_control_decision(
                 service,
                 run,
                 orchestrator,
                 control,
-                decision,
+                recorded,
                 agent_snapshot_resolver=agent_snapshot_resolver,
             )
             if completion is not None:

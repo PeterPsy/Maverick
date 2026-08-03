@@ -51,7 +51,8 @@ The scheduler then runs a persisted adaptive control loop:
 6. validates and persists the resulting control decision before it adds new
    tasks and edges, cancels unnecessary unstarted work, or completes;
 7. repeats output → decision → topology/work until an approved dependent
-   reviewer exists and the orchestrator passes the final quality gate.
+   reviewer covers the latest completed material frontier of the task DAG and
+   the orchestrator passes the final quality gate.
 
 There is no procedural implementer/reviewer loop in the scheduler. Revisions,
 additional research, tests, synthesis, and final review are new structured
@@ -90,6 +91,16 @@ never copied into the root runtime store.
 Raw reasoning, hidden session ids, unbounded tool payloads, and secret-bearing
 runtime data are not valid directives.
 
+Before any later root-session turn is dispatched to its provider, the core
+automatically attaches a bounded read-only orchestration projection when that
+session has a linked run. The projection contains the run status and summary,
+task objectives and progress, bounded result summaries, current quality-gate
+frontier, and allowlisted artifact references. It excludes participant runtime
+session ids, raw tool payloads, raw reasoning, and artifact bodies. The stored
+user message and root transcript remain unchanged; only provider input receives
+the projection. Task and result text in the projection is explicitly treated as
+untrusted data rather than instructions.
+
 ## Transcript Isolation
 
 - The primary Chat transcript reads only the root runtime session.
@@ -110,6 +121,9 @@ runtime data are not valid directives.
 The Chat product path is:
 
 - normal runtime turn submission for the generalist;
+- `GET /api/inter-agent/generalist-context?root_runtime_session_id=<id>` for
+  the same authorized, session-linked read-only projection used automatically
+  during provider dispatch;
 - `POST /api/inter-agent/orchestrations` with a minimal orchestration intent;
 - `POST /api/inter-agent/runs/<run_id>/directives` for authorized user steering;
 - existing authorized run detail, replay, participant transcript, approval,
@@ -142,5 +156,11 @@ transcript projection behavior.
   runtime `resume` prompt, resets non-terminal participants onto a new
   recovery-generation child session, and enqueues one scheduler worker for
   each orchestrated run marked `recovering`. Completed tasks are not rerun;
-  only persisted pending/dependency-ready work resumes. Generic CLI/MCP/test
-  bootstrap does not start those workers.
+  only persisted pending/dependency-ready work resumes. Each control decision
+  is first persisted as `recorded`, then receives a separate idempotent
+  `applied` event after cancellations, new task materialization, quality, and
+  completion effects succeed. Recovery replays every recorded-but-unapplied
+  decision before it materializes or schedules any task. Existing participants
+  are recovered from their immutable persisted snapshots without consulting
+  the agent catalog; the catalog is used only when a decision introduces a new
+  participant. Generic CLI/MCP/test bootstrap does not start those workers.

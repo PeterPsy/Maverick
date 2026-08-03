@@ -97,10 +97,26 @@ def parse_control_decision(
     max_new_tasks: int,
 ) -> OrchestrationControlDecision:
     payload = _json_object(value, decision="control decision")
+    return control_decision_from_payload(
+        payload,
+        existing_tasks=existing_tasks,
+        max_new_tasks=max_new_tasks,
+    )
+
+
+def control_decision_from_payload(
+    payload: Any,
+    *,
+    existing_tasks: tuple[OrchestrationTaskSpec, ...],
+    max_new_tasks: int | None = None,
+) -> OrchestrationControlDecision:
+    """Rehydrate and validate one persisted orchestrator control decision."""
+    if not isinstance(payload, dict):
+        raise InterAgentValidationError("Persisted orchestrator control decisions must be objects.")
     raw_tasks = payload.get("tasks", [])
     if not isinstance(raw_tasks, list):
         raise InterAgentValidationError("Orchestrator control tasks must be an array.")
-    if len(raw_tasks) > max_new_tasks:
+    if max_new_tasks is not None and len(raw_tasks) > max_new_tasks:
         raise InterAgentValidationError("Orchestrator control decision exceeds the remaining participant budget.")
     tasks = tuple(_task_spec(item) for item in raw_tasks)
     existing_ids = {task.task_id for task in existing_tasks}

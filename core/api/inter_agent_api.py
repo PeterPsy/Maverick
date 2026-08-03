@@ -35,6 +35,7 @@ from core.inter_agent.errors import (
 from core.inter_agent.events import validate_visibility_plane
 from core.inter_agent.executor import execute_inter_agent_run
 from core.inter_agent.feature_flags import validate_product_inter_agent_run_mode
+from core.inter_agent.generalist_context import generalist_orchestration_context
 from core.inter_agent.models import AgentParticipantSnapshot, BudgetPolicySpec, InterAgentRunSpec, ParticipantSpec
 from core.inter_agent.service import InterAgentService
 from core.inter_agent.store import DEFAULT_INTER_AGENT_EVENT_LIMIT, MAX_INTER_AGENT_EVENT_LIMIT
@@ -132,6 +133,37 @@ def _handle_inter_agent_route(
     start_response: StartResponse,
     start_path,
 ) -> list[bytes]:
+    if path == "/api/inter-agent/generalist-context":
+        if method != "GET":
+            return json_response(start_response, {"error": "method_not_allowed"}, status="405 Method Not Allowed")
+        root_session_id = _query_text(parse_qs(query_string, keep_blank_values=False), "root_runtime_session_id")
+        try:
+            root_session = state.runtime_store.get_session(root_session_id)
+        except (RuntimeSessionNotFoundError, ValueError):
+            return json_response(start_response, {"error": "orchestration_source_not_found"}, status="404 Not Found")
+        if root_session.workspace_id != context.workspace_id:
+            return json_response(start_response, {"error": "orchestration_source_not_found"}, status="404 Not Found")
+        if not runtime_session_allows_user_thread(root_session):
+            return json_response(start_response, {"error": "root_runtime_session_hidden"}, status="409 Conflict")
+        authorize_inter_agent_root_session_use(
+            workspace_store=state.workspace_store,
+            user=context.user,
+            context_workspace_id=context.workspace_id,
+            caller_kind="http",
+            root_session=root_session,
+            user_id=context.user.user_id,
+            platform_role=context.user.platform_role,
+        )
+        return json_response(
+            start_response,
+            {
+                "context": generalist_orchestration_context(
+                    state.inter_agent_store,
+                    workspace_id=context.workspace_id,
+                    root_runtime_session_id=root_session.session_id,
+                )
+            },
+        )
     if path == "/api/inter-agent/orchestrations":
         if method == "POST":
             return _create_orchestration(state, context, service, body, start_response)

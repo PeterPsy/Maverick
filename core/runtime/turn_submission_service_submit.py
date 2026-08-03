@@ -15,10 +15,9 @@ from core.runtime.plain_hosted_text import (
     execute_plain_hosted_text_turn,
     runtime_session_is_plain_hosted_chat,
 )
-from core.runtime.app_references import input_text_with_app_references
-from core.runtime.attachments import input_text_with_attachment_links
 from core.runtime.client_message_claims import RuntimeClientMessageClaim
 from core.runtime.execution import execute_runtime_turn
+from core.runtime.provider_input_context import generalist_orchestration_input_text, runtime_provider_input_text
 from core.runtime.runtime_events import RuntimeEventRecord
 from core.runtime.runtime_session import RuntimeSessionRecord
 from core.runtime.runtime_turns import RuntimeTurnRecord
@@ -200,7 +199,7 @@ def submit_runtime_turn(
                     state,
                     session=session,
                     turn_id=turn.turn_id,
-                    input_text=input_text,
+                    input_text=generalist_orchestration_input_text(state, session=session, input_text=input_text),
                     attachments=attachments,
                     event_sink=output_recorder.record,
                     on_provider_turn_start_sent=record_plain_provider_turn_start_sent,
@@ -230,10 +229,9 @@ def submit_runtime_turn(
                 )
                 materialized_reference_count = len([item for item in execution_app_references or [] if isinstance(item, dict)])
                 provider_input_started_at = time.perf_counter()
-                provider_input_text = input_text_with_attachment_links(
-                    input_text=input_text_with_app_references(input_text=input_text, app_references=execution_app_references),
-                    attachments=attachments,
-                    workspace_root=session.workspace_root,
+                provider_input_text = runtime_provider_input_text(
+                    state, session=session, input_text=input_text,
+                    app_references=execution_app_references, attachments=attachments,
                 )
                 provider_input_metadata = {
                     "provider_input_build_ms": (time.perf_counter() - provider_input_started_at) * 1000,

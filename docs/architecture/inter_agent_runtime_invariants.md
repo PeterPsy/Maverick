@@ -45,7 +45,10 @@ It started with names, visibility, legacy compatibility, and initial policy defa
     active source turns are not sufficient launch input.
 17. Every worker result is an orchestrator safe point. The next structured
     decision may add or cancel work or complete, and must be persisted before
-    topology mutation. Review revisions are not hardcoded scheduler steps.
+    topology mutation. A separate application event is persisted only after all
+    decision effects succeed. Review revisions are not hardcoded scheduler
+    steps, and completion requires an approved review covering the latest
+    completed material frontier.
 18. A later root Chat turn may steer the active run only through a persisted
     generalist-turn link validated against the same root runtime session. The
     scheduler waits for its terminal final output; direct Agent nodes text is a
@@ -53,11 +56,18 @@ It started with names, visibility, legacy compatibility, and initial policy defa
 19. Restart recovery for `orchestrated` runs replays full persisted task and
     control state, assigns new recovery-generation child sessions to
     interrupted non-terminal participants, and is enqueued only by the hosted
-    backend lifecycle.
+    backend lifecycle. Recorded-but-unapplied decisions are replayed before any
+    task is materialized or scheduled, and existing participants reuse their
+    immutable persisted snapshots without a catalog lookup.
 20. Dynamic agent type selection is constrained to Chat's selected agent
     catalog provider. Agent definitions, prompts, skill ids, and skill catalog
     authority are materialized server-side; orchestrator JSON cannot supply
     those fields.
+21. A root generalist receives an authorized bounded orchestration read before
+    provider dispatch when its runtime session is linked to a run. The read
+    includes status, summary, task progress, bounded results, current quality
+    frontier, and allowlisted artifact references without changing the stored
+    root transcript or exposing hidden participant runtime state.
 
 ## Initial Policy Defaults
 

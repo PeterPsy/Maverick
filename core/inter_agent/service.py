@@ -1125,7 +1125,12 @@ class InterAgentService:
         failed_runs = 0
         closed_root_turns = 0
         for run in self.store.list_runs(workspace_id):
-            if run.status in TERMINAL_RUN_STATUSES:
+            recover_unapplied_completion = (
+                run.mode == "orchestrated"
+                and run.status == "completed"
+                and _has_unapplied_completion_decision(self.store, run)
+            )
+            if run.status in TERMINAL_RUN_STATUSES and not recover_unapplied_completion:
                 continue
             inspected += 1
             participants = self.store.list_participants(run.run_id, workspace_id=workspace_id)
@@ -1590,6 +1595,26 @@ def _close_non_terminal_root_turns_for_run(
             now=now,
         )
     return closed
+
+
+def _has_unapplied_completion_decision(store: Any, run: InterAgentRunRecord) -> bool:
+    events = store.list_event_page(
+        run.run_id,
+        workspace_id=run.workspace_id,
+        visibility_plane="debug",
+        limit=500,
+    ).events
+    completed_steps = {
+        int(event.payload.get("control_step") or 0)
+        for event in events
+        if event.event_type == "inter_agent.control.decision" and event.payload.get("complete") is True
+    }
+    applied_steps = {
+        int(event.payload.get("control_step") or 0)
+        for event in events
+        if event.event_type == "inter_agent.control.decision_applied"
+    }
+    return bool(completed_steps - applied_steps)
 
 
 def _selected_child_participants(

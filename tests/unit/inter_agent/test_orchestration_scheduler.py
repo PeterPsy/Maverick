@@ -38,13 +38,19 @@ class OrchestrationSchedulerTest(unittest.TestCase):
         plan = parse_orchestration_plan(
             '{"summary":"Persist one task.","tasks":['
             '{"id":"implement","label":"Implementer","role":"implementer",'
-            '"objective":"Implement once.","depends_on":[]}]}',
+            '"objective":"Implement once.","depends_on":[],"agent_type_id":"agent-type-coder"}]}',
             max_tasks=2,
             require_review_gate=False,
         )
         orchestrator = store.get_participant("orchestrator", workspace_id="default", run_id=run.run_id)
         record_plan(service, run, plan)
-        participants = materialize_plan(service, run, orchestrator, plan)
+        participants = materialize_plan(
+            service,
+            run,
+            orchestrator,
+            plan,
+            snapshot_resolver=lambda agent_type_id: replace(snapshot(), agent_type_id=agent_type_id),
+        )
         store.save_run(replace(run, status="running"))
         execute_task(
             service,
@@ -57,6 +63,11 @@ class OrchestrationSchedulerTest(unittest.TestCase):
         )
         store.save_run(replace(store.get_run(run.run_id, workspace_id="default"), status="recovering", recovery_generation=1))
         calls: list[str] = []
+        catalog_resolution_calls: list[str] = []
+
+        def unavailable_catalog(agent_type_id: str):
+            catalog_resolution_calls.append(agent_type_id)
+            raise AssertionError("persisted specialists must not be resolved from the catalog during recovery")
 
         def resume_turn(_participant, _prompt: str, client_message_id: str) -> str:
             calls.append(client_message_id)
@@ -80,12 +91,14 @@ class OrchestrationSchedulerTest(unittest.TestCase):
             workspace_id="default",
             run_id=run.run_id,
             turn_executor=resume_turn,
+            agent_snapshot_resolver=unavailable_catalog,
         )
 
         self.assertEqual(result.run.status, "completed")
         self.assertNotIn(f"{run.run_id}:orchestrator:plan", calls)
         self.assertNotIn(f"{run.run_id}:task:implement", calls)
         self.assertIn(f"{run.run_id}:task:review", calls)
+        self.assertEqual(catalog_resolution_calls, [])
 
     def test_scheduler_waits_for_handoff_and_adapts_after_each_worker_output(self) -> None:
         store = build_inter_agent_document_store(start_path=make_temp_repo_root(self))

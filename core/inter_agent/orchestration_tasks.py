@@ -9,7 +9,6 @@ from typing import Any, Callable, Mapping
 from core.inter_agent.errors import InterAgentOperationError
 from core.inter_agent.models import AgentParticipantSnapshot, EdgeSpec, InterAgentParticipantRecord, ParticipantSpec
 from core.inter_agent.orchestration_plan import (
-    OrchestrationControlDecision,
     OrchestrationPlan,
     OrchestrationTaskSpec,
     task_payload,
@@ -57,17 +56,25 @@ def materialize_tasks(
     snapshot_resolver: AgentSnapshotResolver | None = None,
 ) -> dict[str, InterAgentParticipantRecord]:
     participants: dict[str, InterAgentParticipantRecord] = {}
+    persisted_participants = {
+        participant.participant_id: participant
+        for participant in service.store.list_participants(run.run_id, workspace_id=run.workspace_id)
+    }
     for task in tasks:
-        participants[task.task_id] = service.add_participant(
-            workspace_id=run.workspace_id,
-            run_id=run.run_id,
-            spec=worker_spec(
-                orchestrator,
-                task,
-                participant_id=task.task_id,
-                snapshot_resolver=snapshot_resolver,
-            ),
-        )
+        participant = persisted_participants.get(task.task_id)
+        if participant is None:
+            participant = service.add_participant(
+                workspace_id=run.workspace_id,
+                run_id=run.run_id,
+                spec=worker_spec(
+                    orchestrator,
+                    task,
+                    participant_id=task.task_id,
+                    snapshot_resolver=snapshot_resolver,
+                ),
+            )
+            persisted_participants[task.task_id] = participant
+        participants[task.task_id] = participant
         service.record_event(
             run,
             event_type="inter_agent.task.created",
@@ -230,34 +237,6 @@ def record_plan(service: InterAgentService, run: Any, plan: OrchestrationPlan) -
             "task_count": len(plan.tasks),
             "task_ids": [task.task_id for task in plan.tasks],
             "tasks": [task_payload(task) for task in plan.tasks],
-        },
-    )
-
-
-def record_control_decision(
-    service: InterAgentService,
-    run: Any,
-    decision: OrchestrationControlDecision,
-    *,
-    control_step: int,
-    trigger_task_id: str | None,
-) -> None:
-    service.record_event(
-        run,
-        event_type="inter_agent.control.decision",
-        participant_id=run.orchestrator_participant_id,
-        visibility_plane="detail",
-        correlation_id=f"{run.run_id}:control:{control_step}",
-        idempotency_key=f"{run.run_id}:dynamic.control:{control_step}",
-        payload={
-            "control_step": control_step,
-            "trigger_task_id": trigger_task_id,
-            "summary": decision.summary,
-            "tasks": [task_payload(task) for task in decision.tasks],
-            "cancel_task_ids": list(decision.cancel_task_ids),
-            "complete": decision.complete,
-            "quality_passed": decision.quality_passed,
-            "final_answer": decision.final_answer if decision.complete else "",
         },
     )
 

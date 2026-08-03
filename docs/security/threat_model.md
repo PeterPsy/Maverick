@@ -134,6 +134,15 @@ dependency provider, validates the runtime skill catalog, and materializes an
 immutable participant snapshot. Invalid selections fail closed; they never
 fall back to model-supplied authority-bearing fields.
 
+### Participant output influencing the root generalist
+
+The root generalist may receive a session-linked orchestration status read so
+it can explain Agent nodes progress. That projection is read-only, bounded,
+redacts common secret patterns, allowlists artifact reference fields, excludes
+hidden participant runtime identifiers and raw tool payloads, and labels task
+and result text as untrusted data rather than instructions. The original root
+turn input remains the only user message persisted in the Chat transcript.
+
 ### Workspace escape
 
 A non-default workspace runtime or app process reads or writes outside the workspace boundary.

@@ -26,7 +26,10 @@ Workspace chat app that talks to the selected Maverick runtime provider.
   cancel work or complete; every decision and task is persisted before the
   graph changes. Later Chat turns steer the active run through their completed
   generalist output, while the Agent nodes view also exposes a bounded direct
-  steering input.
+  steering input. Before those later turns reach the provider, core injects an
+  authorized read-only snapshot of the linked run so the generalist can explain
+  status, task progress, current quality gate, and safe artifacts without Chat
+  copying participant events into the root transcript.
 - Dynamic workers may select specialized agent types from Chat's resolved
   agent provider. The core lists a compact authorized catalog and materializes
   the selected prompt, skills, provider, and skill catalog server-side. The
@@ -36,7 +39,10 @@ Workspace chat app that talks to the selected Maverick runtime provider.
 - Hosted backend restart recovery replays persisted plans, decisions, attempts,
   and task outputs. It creates a new recovery-generation hidden session only
   for interrupted non-terminal work and does not rerun completed tasks or
-  enqueue generic participant `resume` prompts.
+  enqueue generic participant `resume` prompts. Recorded decisions are applied
+  idempotently before scheduling; existing workers reuse their persisted agent
+  snapshots when the catalog is unavailable, and an older review cannot approve
+  material work added later in the DAG.
 - The primary transcript and Agent nodes use separate data sources. Participant
   runtime events are never projected onto the root runtime session. Agent nodes
   consumes `WS /ws/inter-agent/runs/<run_id>` plus bounded participant

@@ -16,6 +16,7 @@ from core.providers.provider_credentials import bind_provider_credential
 from core.providers.service import builtin_provider_registry, register_builtin_providers
 from core.providers.store import ProviderCollections, ProviderDocumentStore
 from core.runtime.event_bus import RuntimeEventBus
+from core.runtime.plain_hosted_text import execute_plain_hosted_text_turn
 from core.runtime.runtime_session import runtime_session_from_document
 from core.runtime.service import create_runtime_session
 from core.runtime.store import RuntimeCollections, RuntimeDocumentStore
@@ -195,6 +196,37 @@ class PlainHostedRuntimeTest(unittest.TestCase):
         self.assertEqual(final_events[-1].payload["complete_text"], "hello")
         self.assertNotIn("super-secret-token", str(state.runtime_store.list_events(session.session_id)))
         self.assertNotIn("runtime.step.updated", event_types)
+
+    def test_plain_hosted_provider_receives_governed_orchestration_context(self) -> None:
+        state = self.make_state()
+        session = create_runtime_session(
+            state.runtime_store,
+            session_id="sess-governed-context",
+            workspace_id="default",
+            agent_id="chat",
+            runtime_mode="plain_hosted_chat",
+            start_path=state.repository_root,
+        )
+        governed_input = "Come sta andando?\n\n[Maverick governed orchestration read]\nRun is active."
+
+        with (
+            patch.dict("os.environ", {"MAVERICK_HOSTED_TEXT_FAKE_RESPONSE": "status response"}, clear=False),
+            patch("core.runtime.turn_submission_service_output.schedule_runtime_thread_title_generation"),
+            patch(
+                "core.runtime.turn_submission_service_submit.generalist_orchestration_input_text",
+                return_value=governed_input,
+            ) as attach_context,
+            patch(
+                "core.runtime.turn_submission_service_submit.execute_plain_hosted_text_turn",
+                wraps=execute_plain_hosted_text_turn,
+            ) as execute_hosted,
+        ):
+            turn, _events = submit_runtime_turn(state, session=session, input_text="Come sta andando?")
+
+        self.assertEqual(turn.status, "completed")
+        attach_context.assert_called_once()
+        self.assertEqual(execute_hosted.call_args.kwargs["input_text"], governed_input)
+        self.assertEqual(state.runtime_store.get_turn(turn.turn_id).input_text, "Come sta andando?")
 
     def test_plain_hosted_turn_with_image_uses_multimodal_openrouter_model(self) -> None:
         state = self.make_state()

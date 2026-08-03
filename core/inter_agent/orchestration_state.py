@@ -6,7 +6,9 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from core.inter_agent.orchestration_plan import (
+    OrchestrationControlDecision,
     OrchestrationTaskSpec,
+    control_decision_from_payload,
     parse_review_decision,
     task_spec_from_payload,
 )
@@ -14,13 +16,31 @@ from core.inter_agent.orchestration_tasks import OrchestrationTaskResult
 from core.inter_agent.service import InterAgentService
 
 
+@dataclass(frozen=True)
+class RecordedControlDecision:
+    event_id: str
+    control_step: int
+    decision: OrchestrationControlDecision
+
+
+@dataclass(frozen=True)
+class QualityGateStatus:
+    passed: bool
+    frontier_task_ids: tuple[str, ...]
+    reviewed_frontier_task_ids: tuple[str, ...] = ()
+    review_task_id: str | None = None
+
+
 @dataclass
 class OrchestrationControlState:
     tasks: dict[str, OrchestrationTaskSpec] = field(default_factory=dict)
     results: dict[str, OrchestrationTaskResult] = field(default_factory=dict)
     attempts: dict[str, int] = field(default_factory=dict)
+    recorded_control_decisions: dict[int, RecordedControlDecision] = field(default_factory=dict)
+    applied_control_steps: set[int] = field(default_factory=set)
     control_step: int = 0
     plan_summary: str = ""
+    latest_decision_summary: str = ""
 
     @property
     def pending_task_ids(self) -> set[str]:
@@ -38,7 +58,43 @@ class OrchestrationControlState:
             if task_id in self.pending_task_ids and set(task.depends_on) <= completed
         ]
 
-    def has_approved_review(self) -> bool:
+    @property
+    def pending_control_decisions(self) -> tuple[RecordedControlDecision, ...]:
+        return tuple(
+            decision
+            for step, decision in sorted(self.recorded_control_decisions.items())
+            if step not in self.applied_control_steps
+        )
+
+    def quality_gate_status(self) -> QualityGateStatus:
+        completed = self.completed_task_ids
+        material = {
+            task_id
+            for task_id, task in self.tasks.items()
+            if task_id in completed and task.role not in {"reviewer", "security_reviewer"}
+        }
+        if not material:
+            return QualityGateStatus(passed=False, frontier_task_ids=())
+        ancestors = {task_id: self._completed_ancestors(task_id) for task_id in completed}
+        frontier = tuple(
+            task_id
+            for task_id in self.tasks
+            if task_id in material
+            and not any(task_id in ancestors.get(other_id, set()) for other_id in material if other_id != task_id)
+        )
+        for task_id in self.approved_review_task_ids():
+            reviewed = tuple(item for item in frontier if item in ancestors.get(task_id, set()))
+            if reviewed == frontier:
+                return QualityGateStatus(
+                    passed=True,
+                    frontier_task_ids=frontier,
+                    reviewed_frontier_task_ids=reviewed,
+                    review_task_id=task_id,
+                )
+        return QualityGateStatus(passed=False, frontier_task_ids=frontier)
+
+    def approved_review_task_ids(self) -> tuple[str, ...]:
+        approved: list[str] = []
         for task_id, task in self.tasks.items():
             result = self.results.get(task_id)
             if task.role not in {"reviewer", "security_reviewer"} or not task.review_of or result is None:
@@ -47,10 +103,28 @@ class OrchestrationControlState:
                 continue
             try:
                 if parse_review_decision(result.output_text).approved:
-                    return True
+                    approved.append(task_id)
             except Exception:
                 continue
-        return False
+        return tuple(approved)
+
+    def has_approved_review(self) -> bool:
+        return self.quality_gate_status().passed
+
+    def _completed_ancestors(self, task_id: str) -> set[str]:
+        completed = self.completed_task_ids
+        ancestors: set[str] = set()
+        source_task = self.tasks.get(task_id)
+        pending = list(source_task.depends_on) if source_task is not None else []
+        while pending:
+            dependency = pending.pop()
+            if dependency in ancestors or dependency not in completed:
+                continue
+            ancestors.add(dependency)
+            task = self.tasks.get(dependency)
+            if task is not None:
+                pending.extend(task.depends_on)
+        return ancestors
 
 
 def load_control_state(service: InterAgentService, run: Any) -> OrchestrationControlState:
@@ -66,8 +140,21 @@ def load_control_state(service: InterAgentService, run: Any) -> OrchestrationCon
             state.plan_summary = str(event.payload.get("summary") or state.plan_summary)
             _add_task_payloads(state, event.payload.get("tasks"))
         elif event.event_type == "inter_agent.control.decision":
-            state.control_step = max(state.control_step, int(event.payload.get("control_step") or 0))
+            control_step = int(event.payload.get("control_step") or 0)
+            decision = control_decision_from_payload(
+                event.payload,
+                existing_tasks=tuple(state.tasks.values()),
+            )
+            state.control_step = max(state.control_step, control_step)
+            state.recorded_control_decisions[control_step] = RecordedControlDecision(
+                event_id=event.event_id,
+                control_step=control_step,
+                decision=decision,
+            )
+            state.latest_decision_summary = decision.summary
             _add_task_payloads(state, event.payload.get("tasks"))
+        elif event.event_type == "inter_agent.control.decision_applied":
+            state.applied_control_steps.add(int(event.payload.get("control_step") or 0))
         elif event.event_type == "inter_agent.task.created":
             task_payload = event.payload.get("task")
             if isinstance(task_payload, dict):

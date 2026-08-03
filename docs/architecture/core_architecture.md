@@ -347,15 +347,23 @@ turn, product policy, and idempotency key to
 orchestrator as the only initial board participant. That orchestrator produces a
 structured plan; core then materializes workers and edges dynamically, schedules
 dependency-ready work under the concurrency budget, runs bounded
-implementer/reviewer revision loops, and accepts completion only through the
-orchestrator quality gate. Root-generalist runtime updates become bounded
-directives in the inter-agent event store.
+implementer/reviewer revision loops, and accepts completion only when an
+approved final review covers the latest completed material frontier of the DAG.
+Control decisions use separate persisted `recorded` and `applied` events so
+restart recovery replays cancellation, materialization, quality, and completion
+effects before scheduling work. Persisted participants are recovered from their
+immutable snapshots without re-resolving the agent catalog. Root-generalist
+runtime updates become bounded directives in the inter-agent event store.
 
 Participant, tool, task, summary, and final-answer events are never written to
 the root runtime store. The normal Chat transcript belongs exclusively to the
 generalist. Agent nodes consumes run detail, inter-agent replay, artifacts,
 approvals, and the bounded participant transcript endpoint; participant
 transcripts and orchestrator completion answers remain inside that board.
+Before a linked root-session turn is dispatched to its provider, core attaches
+the same authorized bounded status/task/progress/quality/artifact projection
+exposed by `GET /api/inter-agent/generalist-context`; the stored root transcript
+still contains only the original user and generalist messages.
 
 Those surfaces must materialize prompt, skill ids, skill catalog, source app,
 owner, creator, and grants only from core policy or authorized materialized
@@ -1226,12 +1234,15 @@ Current first-use endpoints include:
 Inter-agent F2 runtime operations are exposed through the core-owned inter-agent
 surface, not through raw hidden runtime routes:
 
+- `GET /api/inter-agent/generalist-context?root_runtime_session_id=<id>`
+- `POST /api/inter-agent/orchestrations`
 - `POST /api/inter-agent/runs`
 - `GET /api/inter-agent/runs`
 - `GET /api/inter-agent/runs/<run_id>`
 - `GET /api/inter-agent/runs/<run_id>/events`
 - `POST /api/inter-agent/runs/<run_id>/participants`
 - `POST /api/inter-agent/runs/<run_id>/messages`
+- `POST /api/inter-agent/runs/<run_id>/directives`
 - `POST /api/inter-agent/runs/<run_id>/execute`
 - `GET|POST /api/inter-agent/runs/<run_id>/wait`
 - `POST /api/inter-agent/runs/<run_id>/interrupt`

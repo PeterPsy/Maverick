@@ -70,8 +70,9 @@ def control_prompt(
         '"quality_passed": boolean, "final_answer": string}. New tasks use id, label, role, objective, '
         "depends_on and optional agent_type_id; reviewers also use review_of. Add work when evidence is insufficient, "
         "cancel only unnecessary unstarted work, and complete only after a dependent reviewer explicitly approved. "
-        "Never use orchestrator as a task id. A rejected review remains blocking until revision work and a later "
-        "approved review depend transitively on that rejection. "
+        "Never use orchestrator as a task id. A rejected or malformed review remains blocking until completed "
+        "material revision work and a later approved review both depend transitively on that rejection. A failed "
+        "review remains blocking until an approved retry or replacement review depends on it. "
         "When continuing without new work, return empty tasks and cancel_task_ids.\n\n"
         f"User request:\n{input_text}\n\nAvailable agent types: {catalog}\n\nTask ledger:\n{ledger}\n\n"
         f"Safe-point trigger: {trigger_task_id or 'scheduler'}\nLatest output:\n{trigger_output}"

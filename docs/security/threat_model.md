@@ -156,9 +156,12 @@ plain-hosted and agentic dispatch paths.
 
 An orchestrator may try to complete using an earlier approval after a later
 review reports a critical issue. A completed negative or malformed reviewer or
-security-reviewer verdict therefore vetoes approvals that are not causally
-after it. A later approval can pass only after its dependency ancestry includes
-that rejection and it covers the current material frontier.
+security-reviewer verdict therefore requires completed material revision work
+in its causal future before a later approval can pass; simply approving the
+same unchanged output does not clear the veto. A failed reviewer task is also
+fail-closed and remains unresolved until an approved retry or replacement
+review depends causally on that failure. Every passing approval must still
+cover the current material frontier.
 
 ### Workspace escape
 

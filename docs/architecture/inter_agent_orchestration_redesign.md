@@ -42,7 +42,9 @@ The orchestrator produces a bounded initial structured plan. The core validates
 that plan and materializes workers from server-authoritative agent snapshots.
 The scheduler then runs a persisted adaptive control loop:
 
-1. selects only tasks whose declared dependencies have completed;
+1. selects tasks whose declared dependencies have completed, with a narrow
+   exception allowing a retry/replacement reviewer to depend on a failed
+   reviewer;
 2. runs independent ready tasks up to the run concurrency budget;
 3. rejects unknown dependencies and dependency cycles before execution;
 4. persists task and participant transitions before dispatch;
@@ -52,8 +54,9 @@ The scheduler then runs a persisted adaptive control loop:
    tasks and edges, cancels unnecessary unstarted work, or completes;
 7. repeats output → decision → topology/work until an approved dependent
    reviewer covers the latest completed material frontier of the task DAG,
-   causally follows every rejected review that has not already been resolved,
-   and the orchestrator passes the final quality gate.
+   follows completed material revision work after every rejected or malformed
+   review, causally replaces every failed review, and the orchestrator passes
+   the final quality gate.
 
 There is no procedural implementer/reviewer loop in the scheduler. Revisions,
 additional research, tests, synthesis, and final review are new structured
@@ -174,6 +177,12 @@ transcript projection behavior.
   the agent catalog; the catalog is used only when a decision introduces a new
   participant. Generic CLI/MCP/test bootstrap does not start those workers.
 - A completed negative or malformed reviewer/security-reviewer verdict vetoes
-  earlier or parallel approvals. The gate can pass again only through a later
-  approved review that covers the current material frontier and has the
-  rejected review in its transitive dependency ancestry.
+  earlier or parallel approvals. Merely reviewing the same unchanged output
+  again is insufficient: the gate can pass only when completed material work
+  descends from every such verdict and a later approved review covers the
+  resulting frontier.
+- A failed reviewer/security-reviewer task is also an unresolved quality
+  blocker. It clears only if an approved retry or replacement review has the
+  failed task in its transitive dependency ancestry. The scheduler treats a
+  failed review as dependency-ready only for a reviewer/security-reviewer
+  replacement; material tasks and other roles do not inherit that exception.

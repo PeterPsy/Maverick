@@ -214,7 +214,8 @@ def _validate_control_decision(
         raise InterAgentValidationError("Orchestrator cannot complete while scheduled tasks remain pending.")
     if not control.has_approved_review():
         raise InterAgentValidationError(
-            "Orchestrator completion requires an approved final review covering the latest material task frontier."
+            "Orchestrator completion requires an approved final review covering the latest material task frontier "
+            "and resolving every rejected, malformed, or failed review."
         )
 
 

@@ -49,7 +49,10 @@ It started with names, visibility, legacy compatibility, and initial policy defa
     decision effects succeed. Review revisions are not hardcoded scheduler
     steps, and completion requires an approved review covering the latest
     completed material frontier and causally superseding every unresolved
-    negative or malformed review verdict.
+    negative, malformed, or failed review. A negative or malformed verdict is
+    superseded only after a completed material descendant and a later approval;
+    a failed review is superseded only by an approved, causally dependent retry
+    or replacement review.
 18. A later root Chat turn may steer the active run only through a persisted
     generalist-turn link validated against the same root runtime session. The
     scheduler waits for its terminal final output; direct Agent nodes text is a

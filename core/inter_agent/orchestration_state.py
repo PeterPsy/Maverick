@@ -16,6 +16,8 @@ from core.inter_agent.orchestration_topology import reserved_task_ids_for_run
 from core.inter_agent.orchestration_tasks import OrchestrationTaskResult
 from core.inter_agent.service import InterAgentService
 
+_REVIEW_ROLES = frozenset({"reviewer", "security_reviewer"})
+
 
 @dataclass(frozen=True)
 class RecordedControlDecision:
@@ -53,11 +55,11 @@ class OrchestrationControlState:
         return {task_id for task_id, result in self.results.items() if result.status == "completed"}
 
     def ready_tasks(self) -> list[OrchestrationTaskSpec]:
-        completed = self.completed_task_ids
         return [
             task
             for task_id, task in self.tasks.items()
-            if task_id in self.pending_task_ids and set(task.depends_on) <= completed
+            if task_id in self.pending_task_ids
+            and all(self._dependency_is_ready(task, dependency_id) for dependency_id in task.depends_on)
         ]
 
     @property
@@ -73,24 +75,44 @@ class OrchestrationControlState:
         material = {
             task_id
             for task_id, task in self.tasks.items()
-            if task_id in completed and task.role not in {"reviewer", "security_reviewer"}
+            if task_id in completed and task.role not in _REVIEW_ROLES
         }
         if not material:
             return QualityGateStatus(passed=False, frontier_task_ids=())
-        ancestors = {task_id: self._completed_ancestors(task_id) for task_id in completed}
+        completed_ancestors = {task_id: self._completed_ancestors(task_id) for task_id in completed}
+        terminal_ancestors = {task_id: self._terminal_ancestors(task_id) for task_id in completed}
         frontier = tuple(
             task_id
             for task_id in self.tasks
             if task_id in material
-            and not any(task_id in ancestors.get(other_id, set()) for other_id in material if other_id != task_id)
-        )
-        rejected_reviews = self.blocking_review_task_ids()
-        for task_id in self.approved_review_task_ids():
-            reviewed = tuple(item for item in frontier if item in ancestors.get(task_id, set()))
-            unresolved_rejections = tuple(
-                review_id for review_id in rejected_reviews if review_id not in ancestors.get(task_id, set())
+            and not any(
+                task_id in completed_ancestors.get(other_id, set())
+                for other_id in material
+                if other_id != task_id
             )
-            if reviewed == frontier and not unresolved_rejections:
+        )
+        verdict_blockers = set(self._completed_blocking_review_task_ids())
+        failed_blockers = set(self.failed_review_task_ids())
+        blocking_reviews = tuple(
+            task_id for task_id in self.tasks if task_id in verdict_blockers or task_id in failed_blockers
+        )
+        for task_id in self.approved_review_task_ids():
+            candidate_ancestors = terminal_ancestors.get(task_id, set())
+            reviewed = tuple(item for item in frontier if item in candidate_ancestors)
+            unresolved_reviews = tuple(
+                review_id
+                for review_id in blocking_reviews
+                if review_id not in candidate_ancestors
+                or (
+                    review_id in verdict_blockers
+                    and not any(
+                        review_id in terminal_ancestors.get(material_id, set())
+                        and material_id in candidate_ancestors
+                        for material_id in material
+                    )
+                )
+            )
+            if reviewed == frontier and not unresolved_reviews:
                 return QualityGateStatus(
                     passed=True,
                     frontier_task_ids=frontier,
@@ -100,7 +122,7 @@ class OrchestrationControlState:
         return QualityGateStatus(
             passed=False,
             frontier_task_ids=frontier,
-            blocking_review_task_ids=rejected_reviews,
+            blocking_review_task_ids=blocking_reviews,
         )
 
     def approved_review_task_ids(self) -> tuple[str, ...]:
@@ -110,13 +132,27 @@ class OrchestrationControlState:
         return self._review_task_ids(approved=False)
 
     def blocking_review_task_ids(self) -> tuple[str, ...]:
+        blockers = set(self._completed_blocking_review_task_ids()).union(self.failed_review_task_ids())
+        return tuple(task_id for task_id in self.tasks if task_id in blockers)
+
+    def failed_review_task_ids(self) -> tuple[str, ...]:
+        return tuple(
+            task_id
+            for task_id, task in self.tasks.items()
+            if task.role in _REVIEW_ROLES
+            and task.review_of
+            and (result := self.results.get(task_id)) is not None
+            and result.status == "failed"
+        )
+
+    def _completed_blocking_review_task_ids(self) -> tuple[str, ...]:
         return self._review_task_ids(approved=False, invalid_is_match=True)
 
     def _review_task_ids(self, *, approved: bool, invalid_is_match: bool = False) -> tuple[str, ...]:
         matching: list[str] = []
         for task_id, task in self.tasks.items():
             result = self.results.get(task_id)
-            if task.role not in {"reviewer", "security_reviewer"} or not task.review_of or result is None:
+            if task.role not in _REVIEW_ROLES or not task.review_of or result is None:
                 continue
             if result.status != "completed" or task.review_of not in self.completed_task_ids:
                 continue
@@ -131,14 +167,34 @@ class OrchestrationControlState:
     def has_approved_review(self) -> bool:
         return self.quality_gate_status().passed
 
+    def _dependency_is_ready(self, task: OrchestrationTaskSpec, dependency_id: str) -> bool:
+        result = self.results.get(dependency_id)
+        if result is None:
+            return False
+        if result.status == "completed":
+            return True
+        dependency = self.tasks.get(dependency_id)
+        return (
+            result.status == "failed"
+            and task.role in _REVIEW_ROLES
+            and dependency is not None
+            and dependency.role in _REVIEW_ROLES
+        )
+
     def _completed_ancestors(self, task_id: str) -> set[str]:
-        completed = self.completed_task_ids
+        return self._ancestors_with_statuses(task_id, {"completed"})
+
+    def _terminal_ancestors(self, task_id: str) -> set[str]:
+        return self._ancestors_with_statuses(task_id, {"completed", "failed"})
+
+    def _ancestors_with_statuses(self, task_id: str, statuses: set[str]) -> set[str]:
         ancestors: set[str] = set()
         source_task = self.tasks.get(task_id)
         pending = list(source_task.depends_on) if source_task is not None else []
         while pending:
             dependency = pending.pop()
-            if dependency in ancestors or dependency not in completed:
+            result = self.results.get(dependency)
+            if dependency in ancestors or result is None or result.status not in statuses:
                 continue
             ancestors.add(dependency)
             task = self.tasks.get(dependency)

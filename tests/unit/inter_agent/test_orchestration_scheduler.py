@@ -5,6 +5,7 @@ from types import SimpleNamespace
 import unittest
 
 from core.inter_agent.errors import InterAgentValidationError
+from core.inter_agent.orchestration_control import next_control_decision
 from core.inter_agent.orchestration_plan import (
     OrchestrationPlan,
     OrchestrationTaskSpec,
@@ -12,7 +13,13 @@ from core.inter_agent.orchestration_plan import (
 )
 from core.inter_agent.orchestration_runtime import prepare_generalist_handoff
 from core.inter_agent.orchestration_scheduler import execute_orchestrated_run
-from core.inter_agent.orchestration_tasks import execute_task, materialize_plan, record_plan
+from core.inter_agent.orchestration_state import OrchestrationControlState
+from core.inter_agent.orchestration_tasks import (
+    OrchestrationTaskResult,
+    execute_task,
+    materialize_plan,
+    record_plan,
+)
 from core.inter_agent.service import InterAgentService
 from core.inter_agent.store import build_inter_agent_document_store
 from tests.support.repo import make_temp_repo_root
@@ -20,6 +27,59 @@ from tests.unit.inter_agent.test_dynamic_orchestration_service import orchestrat
 
 
 class OrchestrationSchedulerTest(unittest.TestCase):
+    def test_completion_rejects_failed_security_review_despite_earlier_approval(self) -> None:
+        store = build_inter_agent_document_store(start_path=make_temp_repo_root(self))
+        service = InterAgentService(store)
+        run = service.create_run(orchestrated_spec())
+        orchestrator = store.get_participant("orchestrator", workspace_id="default", run_id=run.run_id)
+        plan = parse_orchestration_plan(
+            '{"summary":"Implementation with two reviews.","tasks":['
+            '{"id":"implement","label":"Implementation","role":"implementer",'
+            '"objective":"Produce the implementation.","depends_on":[]},'
+            '{"id":"review","label":"Review","role":"reviewer",'
+            '"objective":"Review correctness.","depends_on":["implement"],"review_of":"implement"},'
+            '{"id":"security-review","label":"Security review","role":"security_reviewer",'
+            '"objective":"Review security.","depends_on":["implement"],"review_of":"implement"}]}',
+            max_tasks=3,
+        )
+        control = OrchestrationControlState(tasks={task.task_id: task for task in plan.tasks})
+        control.results.update(
+            {
+                "implement": OrchestrationTaskResult("implement", "implement", "completed", "Implementation"),
+                "review": OrchestrationTaskResult(
+                    "review",
+                    "review",
+                    "completed",
+                    '{"approved":true,"feedback":"Correct."}',
+                ),
+                "security-review": OrchestrationTaskResult(
+                    "security-review",
+                    "security-review",
+                    "failed",
+                    error="Security reviewer crashed.",
+                ),
+            }
+        )
+
+        with self.assertRaisesRegex(InterAgentValidationError, "approved final review"):
+            next_control_decision(
+                service,
+                run,
+                orchestrator,
+                control,
+                input_text="Implement safely.",
+                trigger_task_id="security-review",
+                execute_turn=lambda _participant, _prompt, _client_message_id: (
+                    '{"summary":"Use the earlier approval.","tasks":[],"cancel_task_ids":[],'
+                    '"complete":true,"quality_passed":true,"final_answer":"Done."}'
+                ),
+                runtime_state=SimpleNamespace(),
+                max_participants=4,
+                available_agent_type_ids=(),
+            )
+
+        self.assertEqual(control.control_step, 0)
+
     def test_materialization_rejects_task_collision_with_orchestrator(self) -> None:
         store = build_inter_agent_document_store(start_path=make_temp_repo_root(self))
         service = InterAgentService(store)

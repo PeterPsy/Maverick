@@ -271,6 +271,16 @@
             "request_concurrency": 32
           }
         },
+        "browser_origin": {
+          "mode": "isolated",
+          "csp_profile": "self_hosted_web_app",
+          "frame_ancestors": [
+            "platform"
+          ],
+          "connect_src": [
+            "self"
+          ]
+        },
         "bind": {
           "host": "127.0.0.1",
           "port": "auto"

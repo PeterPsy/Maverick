@@ -20,6 +20,7 @@ from core.apps.errors import AppContractValidationError
 from core.apps.models import (
     AppServicesDeclaration,
     HttpSidecarBindSpec,
+    HttpSidecarBrowserOriginSpec,
     HttpSidecarHealthSpec,
     HttpSidecarLogSpec,
     HttpSidecarProcessPolicy,
@@ -112,6 +113,7 @@ def _parse_http_sidecar(
             "command",
             "env",
             "process_policy",
+            "browser_origin",
             "bind",
             "health",
             "proxy",
@@ -142,6 +144,15 @@ def _parse_http_sidecar(
         _expect_mapping(process_policy_payload, label=f"{label}.process_policy"),
         label=label,
     )
+    browser_origin_payload = payload.get("browser_origin")
+    browser_origin = (
+        _parse_browser_origin(
+            _expect_mapping(browser_origin_payload, label=f"{label}.browser_origin"),
+            label=label,
+        )
+        if browser_origin_payload is not None
+        else None
+    )
     bind = _parse_bind(_expect_mapping(payload.get("bind", {}), label=f"{label}.bind"), sandbox_compatible=sandbox_compatible, label=label)
     health = _parse_health(_expect_mapping(payload.get("health", {}), label=f"{label}.health"), label=label)
     proxy_payload = payload.get("proxy")
@@ -164,6 +175,7 @@ def _parse_http_sidecar(
             label=label,
         ),
         process_policy=process_policy,
+        browser_origin=browser_origin,
         bind=bind,
         health=health,
         proxy=proxy,
@@ -329,6 +341,35 @@ def _parse_process_policy(payload: dict[str, Any], *, label: str) -> HttpSidecar
         transport="unix_relay",
         outbound=outbound,
         limits=limits,
+    )
+
+
+def _parse_browser_origin(payload: dict[str, Any], *, label: str) -> HttpSidecarBrowserOriginSpec:
+    origin_label = f"{label}.browser_origin"
+    _reject_unexpected_fields(
+        payload,
+        {"mode", "csp_profile", "frame_ancestors", "connect_src"},
+        label=origin_label,
+    )
+    mode = _expect_string(payload, "mode")
+    if mode != "isolated":
+        raise AppContractValidationError(f"`{origin_label}.mode` must be `isolated`.")
+    csp_profile = _expect_string(payload, "csp_profile")
+    if csp_profile != "self_hosted_web_app":
+        raise AppContractValidationError(
+            f"`{origin_label}.csp_profile` must be `self_hosted_web_app`."
+        )
+    frame_ancestors = _expect_string_list(payload, "frame_ancestors")
+    if frame_ancestors != ["platform"]:
+        raise AppContractValidationError(f"`{origin_label}.frame_ancestors` must be [`platform`].")
+    connect_src = _expect_string_list(payload, "connect_src")
+    if connect_src != ["self"]:
+        raise AppContractValidationError(f"`{origin_label}.connect_src` must be [`self`].")
+    return HttpSidecarBrowserOriginSpec(
+        mode="isolated",
+        csp_profile="self_hosted_web_app",
+        frame_ancestors=frame_ancestors,
+        connect_src=connect_src,
     )
 
 

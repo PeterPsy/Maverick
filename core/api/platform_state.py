@@ -13,6 +13,7 @@ from core.api.application import create_application
 from core.api.control_store import ControlPlaneCollections, ControlStoreSettings, build_control_plane_collections
 from core.api.persistence_cleanup_worker import run_pending_cleanup_plans
 from core.apps.store import AppDocumentStore
+from core.apps.sidecar_browser_sessions import SidecarBrowserSessionStore
 from core.identity.service import bootstrap_default_admin
 from core.identity.store import IdentityDocumentStore
 from core.inter_agent.store import InterAgentDocumentStore, build_inter_agent_document_store
@@ -53,6 +54,7 @@ class PlatformState:
     secret_store: SecretDocumentStore
     recovery_store: RecoveryDocumentStore
     observability_store: ObservabilityDocumentStore
+    sidecar_browser_sessions: SidecarBrowserSessionStore
     root_shell_app_id: str
 
 
@@ -148,6 +150,7 @@ def bootstrap_platform_state(
         secret_store=secret_store,
         recovery_store=recovery_store,
         observability_store=observability_store,
+        sidecar_browser_sessions=SidecarBrowserSessionStore(),
         root_shell_app_id=os.environ.get("MAVERICK_ROOT_SHELL_APP_ID", "base-shell").strip() or "base-shell",
     )
     if recover_backend_restart:

@@ -213,6 +213,18 @@ def app_contract_payload(parsed: ParsedAppContract) -> dict[str, Any]:
                             "request_concurrency": sidecar.process_policy.limits.request_concurrency,
                         },
                     },
+                    **(
+                        {
+                            "browser_origin": {
+                                "mode": sidecar.browser_origin.mode,
+                                "csp_profile": sidecar.browser_origin.csp_profile,
+                                "frame_ancestors": sidecar.browser_origin.frame_ancestors,
+                                "connect_src": sidecar.browser_origin.connect_src,
+                            }
+                        }
+                        if sidecar.browser_origin is not None
+                        else {}
+                    ),
                     "bind": {
                         "host": sidecar.bind.host,
                         "port": sidecar.bind.port,

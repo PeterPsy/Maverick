@@ -141,6 +141,7 @@ def handle_session_api(state: PlatformState, environ: dict, start_response: Star
     if path == "/api/auth/logout" and method == "POST":
         context = resolve_request_session(state, environ)
         if context is not None:
+            state.sidecar_browser_sessions.revoke_actor(context.user.user_id)
             revoke_auth_session(state.identity_store, session=context.session)
         return json_response(start_response, {"authenticated": False}, headers=[clear_session_cookie_header(secure=_request_is_https(environ))])
     return None

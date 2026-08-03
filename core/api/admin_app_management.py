@@ -191,6 +191,7 @@ def handle_admin_app_management_api(
                 observability_store=state.observability_store,
             )
             if status == "disabled":
+                state.sidecar_browser_sessions.revoke_app(workspace_id=workspace_id, app_id=app_id)
                 stop_app_sidecars(workspace_id=workspace_id, app_id=app_id)
             return json_response(start_response, _binding_payload(binding) or {})
         if method == "DELETE":
@@ -200,6 +201,7 @@ def handle_admin_app_management_api(
                 app_id=app_id,
                 observability_store=state.observability_store,
             )
+            state.sidecar_browser_sessions.revoke_app(workspace_id=workspace_id, app_id=app_id)
             stop_app_sidecars(workspace_id=workspace_id, app_id=app_id)
             return json_response(start_response, {"workspace_id": workspace_id, "app_id": app_id, "status": "uninstalled"})
     except WorkspaceNotFoundError:

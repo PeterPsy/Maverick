@@ -59,6 +59,13 @@ bubblewrap process group, including descendants, and remove the relay directory.
 `OD_API_TOKEN` is generated as `${service.token}` and remains distinct from the
 relay capability; neither value is returned to the browser.
 
+The declared generic `browser_origin` profile gives the web app its own opaque
+host and a Maverick-brokered, host-only session. Bootstrap is a one-shot form
+POST; the ticket is absent from URLs, redirects, cookies, audit payloads, and
+sidecar requests. Core strips platform cookies, sidecar cookies, unsafe
+redirects, and technical authorization headers, applies no-store/no-referrer
+headers plus the contract CSP, and refuses to fall through to platform routes.
+
 The OpenDesign contract uses a 16 GiB virtual-address ceiling. This is a bound
 on address space, not a claim of physical allocation: Node/V8 and WebAssembly
 reserve multi-gigabyte virtual regions at startup, and the real curated daemon
@@ -68,7 +75,8 @@ Production-boundary proof:
 
 ```bash
 python3 -W error::ResourceWarning -m unittest \
-  tests.integration.app_hosting.test_sidecar_execution
+  tests.integration.app_hosting.test_sidecar_execution \
+  tests.integration.app_hosting.test_sidecar_browser_origin
 ```
 
 ## Pinned 0.16.1 inventories

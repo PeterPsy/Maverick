@@ -6,13 +6,16 @@ import json
 from pathlib import Path
 from types import SimpleNamespace
 import unittest
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 from core.api.admin_app_management import handle_admin_app_management_api
 from core.apps.models import WorkspaceAppBindingRecord, WorkspaceAppStatus
 
 
 class AdminAppManagementTestCase(unittest.TestCase):
+    def setUp(self) -> None:
+        self.revoke_app = Mock()
+
     def test_disabling_app_stops_its_live_sidecars(self) -> None:
         binding = self._binding(status="disabled")
         with (
@@ -23,6 +26,7 @@ class AdminAppManagementTestCase(unittest.TestCase):
 
         self.assertEqual(status, "200 OK")
         self.assertEqual(payload["status"], "disabled")
+        self.revoke_app.assert_called_once_with(workspace_id="default", app_id="probe")
         stop_sidecars.assert_called_once_with(workspace_id="default", app_id="probe")
 
     def test_enabling_app_does_not_stop_sidecars(self) -> None:
@@ -35,6 +39,7 @@ class AdminAppManagementTestCase(unittest.TestCase):
 
         self.assertEqual(status, "200 OK")
         self.assertEqual(payload["status"], "enabled")
+        self.revoke_app.assert_not_called()
         stop_sidecars.assert_not_called()
 
     def test_uninstalling_app_stops_its_live_sidecars(self) -> None:
@@ -47,6 +52,7 @@ class AdminAppManagementTestCase(unittest.TestCase):
         self.assertEqual(status, "200 OK")
         self.assertEqual(payload["status"], "uninstalled")
         uninstall.assert_called_once()
+        self.revoke_app.assert_called_once_with(workspace_id="default", app_id="probe")
         stop_sidecars.assert_called_once_with(workspace_id="default", app_id="probe")
 
     def _invoke(self, *, method: str, body: dict) -> tuple[str, dict]:
@@ -56,7 +62,11 @@ class AdminAppManagementTestCase(unittest.TestCase):
             captured["status"] = status
 
         response = handle_admin_app_management_api(
-            SimpleNamespace(app_store=object(), observability_store=object()),
+            SimpleNamespace(
+                app_store=object(),
+                observability_store=object(),
+                sidecar_browser_sessions=SimpleNamespace(revoke_app=self.revoke_app),
+            ),
             SimpleNamespace(),
             {
                 "PATH_INFO": "/api/admin/workspace-apps/default/probe",

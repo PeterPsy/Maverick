@@ -11,6 +11,7 @@ from core.apps.contract_serializer import app_contract_payload
 from core.apps.contracts import (
     build_app_contract,
     build_app_services,
+    build_http_sidecar_browser_origin,
     build_http_sidecar_logs,
     build_http_sidecar_process_policy,
     build_http_sidecar_proxy,
@@ -39,6 +40,8 @@ class AppContractServiceTests(unittest.TestCase):
             self.assertEqual(loaded.contract.services.http_sidecars[0].process_policy.transport, "unix_relay")
             self.assertEqual(loaded.contract.services.http_sidecars[0].process_policy.outbound, [])
             self.assertEqual(loaded.contract.services.http_sidecars[0].process_policy.limits.request_concurrency, 16)
+            self.assertEqual(loaded.contract.services.http_sidecars[0].browser_origin.mode, "isolated")
+            self.assertEqual(loaded.contract.services.http_sidecars[0].browser_origin.frame_ancestors, ["platform"])
             self.assertEqual(loaded.contract.services.http_sidecars[0].proxy.route_policy.blocked[0].path_prefix, "/api/import/folder")
             self.assertFalse(loaded.contract.permissions.providers.model_proxy)
             self.assertEqual(loaded.contract.permissions.providers.credential_source, "none")
@@ -134,6 +137,23 @@ class AppContractServiceTests(unittest.TestCase):
                 with self.assertRaisesRegex(AppContractValidationError, "env"):
                     parse_app_contract_file(app_root)
 
+    def test_parse_contract_rejects_weakened_browser_origin_policy(self) -> None:
+        mutations = (
+            ("mode", "shared"),
+            ("csp_profile", "permissive"),
+            ("frame_ancestors", ["*"]),
+            ("connect_src", ["self", "https://example.invalid"]),
+        )
+        for field, value in mutations:
+            with self.subTest(field=field), TemporaryDirectory() as temp_dir:
+                app_root = self._write_sidecar_app(Path(temp_dir))
+                payload = json.loads((app_root / "app_contract.json").read_text(encoding="utf-8"))
+                payload["services"]["http_sidecars"][0]["browser_origin"][field] = value
+                (app_root / "app_contract.json").write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
+
+                with self.assertRaisesRegex(AppContractValidationError, field):
+                    parse_app_contract_file(app_root)
+
     def test_parse_contract_rejects_non_loopback_sandbox_sidecar(self) -> None:
         with TemporaryDirectory() as temp_dir:
             app_root = self._write_sidecar_app(Path(temp_dir))
@@ -181,6 +201,7 @@ class AppContractServiceTests(unittest.TestCase):
                                 open_files=512,
                                 request_concurrency=16,
                             ),
+                            browser_origin=build_http_sidecar_browser_origin(),
                             bind=HttpSidecarBindSpec(host="127.0.0.1", port="auto"),
                             health=HttpSidecarHealthSpec(path="/api/ready", timeout_ms=5000),
                             proxy=build_http_sidecar_proxy(

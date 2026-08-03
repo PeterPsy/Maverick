@@ -936,6 +936,31 @@ routes. App contracts do not choose the opaque host, ticket, cookie, workspace,
 technical port, or generation, and the capability fails closed when local or
 hosted origin prerequisites are unavailable.
 
+The declaration is intentionally a closed profile rather than arbitrary CSP or
+host configuration:
+
+```json
+{
+  "browser_origin": {
+    "mode": "isolated",
+    "csp_profile": "self_hosted_web_app",
+    "frame_ancestors": ["platform"],
+    "connect_src": ["self"]
+  }
+}
+```
+
+Core rejects weakened or unknown values. An authenticated mounted app obtains a
+body-only launch ticket with `POST /api/app-sidecars/browser-launch`, providing
+only its app id, declared sidecar id, and a clean root-relative landing path.
+Core resolves actor/workspace/install generation from the Maverick session,
+starts the already-authorized sidecar, and returns an origin plus form bootstrap
+instructions. The browser submits the ticket to
+`/.well-known/maverick-sidecar-bootstrap` on that origin; it never selects a
+workspace, binding, technical listener, or host. Logout, workspace switch,
+disable/uninstall, sidecar restart, generation change, and core restart revoke
+the corresponding in-memory authority.
+
 Sandbox compatibility also requires the generic process boundary defined by
 [`app_sidecar_execution.md`](app_sidecar_execution.md). A sandbox-required
 sidecar starts with an allowlisted environment, a verified read-only artifact,

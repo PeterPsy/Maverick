@@ -21,6 +21,7 @@ from core.api.platform_state import PlatformState, bootstrap_platform_state
 from core.api.runtime_thread_websocket import RUNTIME_THREADS_WS_PATH, stream_runtime_thread_events
 from core.api.runtime_websocket import RUNTIME_SESSION_WS_PREFIX, stream_runtime_session_events
 from core.api.session_api import resolve_request_session
+from core.api.sidecar_browser import handle_sidecar_browser_origin, is_reserved_sidecar_browser_host
 from core.api.sidecar_proxy import handle_app_sidecar_proxy_asgi, parse_app_sidecar_proxy_route
 from core.api.http import HttpRequestError, enforce_same_origin_for_unsafe_request
 from core.shared.entrypoints import EntrypointShutdownController
@@ -127,6 +128,16 @@ class PlatformAsgiHost:
             raise RuntimeError(f"Unsupported ASGI lifespan event: {message_type}")
 
     async def _handle_http(self, scope: dict[str, Any], receive: AsgiReceive, send: AsgiSend) -> None:
+        if is_reserved_sidecar_browser_host(scope):
+            await handle_sidecar_browser_origin(
+                self.state,
+                scope=scope,
+                receive=receive,
+                send=send,
+                start_path=self.state.repository_root,
+                shutdown_controller=self.shutdown_controller,
+            )
+            return
         if scope.get("path") == "/health":
             await _send_direct_json_response(send, b'{\n  "status": "ok",\n  "service": "maverick-core"\n}')
             return

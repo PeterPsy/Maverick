@@ -83,3 +83,14 @@ bubblewrap filesystem/network namespaces, no egress, and an authenticated Unix
 relay rather than a host TCP listener. This closes that specific sidecar launch
 boundary; it does not close the unrelated application-backend, browser-origin,
 CSRF, runtime-authority, or recovery blockers listed above.
+
+Sidecars that declare the generic isolated browser-origin capability are served
+by a reserved ASGI host router, never by platform-route fallthrough. Core owns
+one-shot hashed tickets, distinct host-only sessions, actor/workspace/app/
+generation/process binding, expiry/rotation/revocation, unsafe-request Origin
+and Fetch Metadata checks, response filtering, CSP, no-referrer/no-store
+headers, and redaction-safe audit records. Maverick cookies and sidecar
+technical tokens are not forwarded. This closes the browser-origin boundary
+for the declared sidecar profile; it does not change Maverick's broader
+pre-release status or the remaining blockers in
+`docs/security/production_readiness.md`.

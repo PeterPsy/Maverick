@@ -36,6 +36,7 @@ from core.apps.models import (
     AppViewSurfaceDeclaration,
     AppVisibilityDeclaration,
     HttpSidecarBindSpec,
+    HttpSidecarBrowserOriginSpec,
     HttpSidecarHealthSpec,
     HttpSidecarLogSpec,
     HttpSidecarProcessPolicy,
@@ -352,6 +353,7 @@ def build_http_sidecar_spec(
     package_manager: str | None = None,
     env: dict[str, str] | None = None,
     process_policy: HttpSidecarProcessPolicy | None = None,
+    browser_origin: HttpSidecarBrowserOriginSpec | None = None,
     bind: HttpSidecarBindSpec | None = None,
     health: HttpSidecarHealthSpec | None = None,
     proxy: HttpSidecarProxySpec | None = None,
@@ -366,6 +368,7 @@ def build_http_sidecar_spec(
         command=command,
         env=env or {},
         process_policy=process_policy or build_http_sidecar_process_policy(),
+        browser_origin=browser_origin,
         bind=bind or HttpSidecarBindSpec(host="127.0.0.1", port="auto"),
         health=health or HttpSidecarHealthSpec(path="/health", timeout_ms=30000),
         proxy=proxy,
@@ -393,6 +396,16 @@ def build_http_sidecar_process_policy(
             open_files=open_files,
             request_concurrency=request_concurrency,
         ),
+    )
+
+
+def build_http_sidecar_browser_origin() -> HttpSidecarBrowserOriginSpec:
+    """Build the strict isolated-origin policy supported by core."""
+    return HttpSidecarBrowserOriginSpec(
+        mode="isolated",
+        csp_profile="self_hosted_web_app",
+        frame_ancestors=["platform"],
+        connect_src=["self"],
     )
 
 

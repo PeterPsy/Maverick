@@ -100,12 +100,23 @@ relay capability.
 
 The core sidecar proxy uses the ASGI streaming path for Design Studio routes. Request bodies are forwarded to the sidecar as chunks instead of through the JSON app-backend body limit, responses are streamed back to the browser, and SSE responses are preserved without exposing the generated `OD_API_TOKEN` to the client.
 
+The sidecar also declares the generic isolated `browser_origin` capability.
+Core, not Design Studio or OpenDesign, derives the opaque workspace/app/
+generation host, issues the short-lived body-only bootstrap ticket, sets the
+separate host-only session cookie, and applies the fixed
+`self_hosted_web_app` CSP profile. Root-relative OpenDesign requests therefore
+remain on the sidecar origin and never fall through to Maverick routes. Neither
+Maverick cookies nor the generated `OD_API_TOKEN` cross the browser/upstream
+boundary. The mounted frontend adopts this launch protocol in WP9; WP3 exact
+route matching remains a release prerequisite.
+
 The production confinement suite uses real bubblewrap and validates filesystem,
 environment, network, authenticated relay, concurrency and descendant cleanup:
 
 ```bash
 python3 -W error::ResourceWarning -m unittest \
-  tests.integration.app_hosting.test_sidecar_execution
+  tests.integration.app_hosting.test_sidecar_execution \
+  tests.integration.app_hosting.test_sidecar_browser_origin
 ```
 
 Routes declared as `handled_by_core` are routed to the Design Studio backend with the `sidecar_core_handler` surface instead of reaching the OpenDesign sidecar. The implemented sandbox handlers cover:

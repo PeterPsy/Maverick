@@ -27,6 +27,8 @@ HttpSidecarPort = int | Literal["auto"]
 HttpSidecarSandboxMode = Literal["required"]
 HttpSidecarNetworkMode = Literal["isolated"]
 HttpSidecarTransport = Literal["unix_relay"]
+HttpSidecarBrowserOriginMode = Literal["isolated"]
+HttpSidecarBrowserCspProfile = Literal["self_hosted_web_app"]
 AppProviderCredentialSource = Literal["none", "core-vault"]
 AppReferenceCacheScope = Literal["session", "workspace_user"]
 
@@ -362,6 +364,16 @@ class HttpSidecarProcessPolicy:
 
 
 @dataclass(frozen=True)
+class HttpSidecarBrowserOriginSpec:
+    """Declare a core-routed isolated browser origin for one sidecar."""
+
+    mode: HttpSidecarBrowserOriginMode
+    csp_profile: HttpSidecarBrowserCspProfile
+    frame_ancestors: list[str]
+    connect_src: list[str]
+
+
+@dataclass(frozen=True)
 class HttpSidecarSpec:
     """Describe one app-owned local HTTP sidecar process."""
 
@@ -372,6 +384,7 @@ class HttpSidecarSpec:
     package_manager: str | None
     env: dict[str, str]
     process_policy: HttpSidecarProcessPolicy
+    browser_origin: HttpSidecarBrowserOriginSpec | None
     bind: HttpSidecarBindSpec
     health: HttpSidecarHealthSpec
     proxy: HttpSidecarProxySpec | None

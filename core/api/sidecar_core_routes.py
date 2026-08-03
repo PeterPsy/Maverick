@@ -115,6 +115,7 @@ async def handle_core_sidecar_route_asgi(
     start_path: Path,
     shutdown_controller: EntrypointShutdownController | None,
     logger,
+    response_headers: list[tuple[str, str]] | None = None,
 ) -> None:
     """ASGI variant of handle_core_sidecar_route."""
     try:
@@ -134,7 +135,7 @@ async def handle_core_sidecar_route_asgi(
             shutdown_controller=shutdown_controller,
         )
     except HttpRequestError as error:
-        await _send_asgi_json(send, {"error": error.error}, status=error.status)
+        await _send_asgi_json(send, {"error": error.error}, status=error.status, headers=response_headers)
         return
     except AppHostingError as error:
         logger.warning("App `%s` handled ASGI sidecar route failed: %s", app_id, error)
@@ -142,13 +143,19 @@ async def handle_core_sidecar_route_asgi(
             send,
             {"error": "sidecar_core_route_failed", "detail": str(error)},
             status=status_line(500),
+            headers=response_headers,
         )
         return
     except Exception:
         logger.exception("App `%s` handled ASGI sidecar route crashed.", app_id)
-        await _send_asgi_json(send, {"error": "sidecar_core_route_failed"}, status=status_line(500))
+        await _send_asgi_json(
+            send,
+            {"error": "sidecar_core_route_failed"},
+            status=status_line(500),
+            headers=response_headers,
+        )
         return
-    await _send_core_sidecar_asgi_response(send, result)
+    await _send_core_sidecar_asgi_response(send, result, headers=response_headers)
 
 
 def _invoke_core_sidecar_route(
@@ -277,7 +284,12 @@ def _core_sidecar_wsgi_response(result: dict[str, Any], *, start_response: Start
     return json_response(start_response, result, status=status_line(status_code))
 
 
-async def _send_core_sidecar_asgi_response(send: AsgiSend, result: dict[str, Any]) -> None:
+async def _send_core_sidecar_asgi_response(
+    send: AsgiSend,
+    result: dict[str, Any],
+    *,
+    headers: list[tuple[str, str]] | None = None,
+) -> None:
     status_code = int(result.get("status_code", 200))
     if "json" in result and isinstance(result.get("json"), dict):
         body = json.dumps(result["json"], indent=2).encode("utf-8")
@@ -295,6 +307,7 @@ async def _send_core_sidecar_asgi_response(send: AsgiSend, result: dict[str, Any
             "headers": [
                 (b"content-type", content_type),
                 (b"content-length", str(len(body)).encode("ascii")),
+                *[(name.lower().encode("latin1"), value.encode("latin1")) for name, value in (headers or [])],
             ],
         }
     )
@@ -413,7 +426,13 @@ def _asgi_header(scope: dict[str, Any], header_name: str) -> str:
     return ""
 
 
-async def _send_asgi_json(send: AsgiSend, payload: dict[str, Any], *, status: str) -> None:
+async def _send_asgi_json(
+    send: AsgiSend,
+    payload: dict[str, Any],
+    *,
+    status: str,
+    headers: list[tuple[str, str]] | None = None,
+) -> None:
     body = json.dumps(payload, indent=2).encode("utf-8")
     status_code = int(status.split(" ", 1)[0])
     await send(
@@ -423,6 +442,7 @@ async def _send_asgi_json(send: AsgiSend, payload: dict[str, Any], *, status: st
             "headers": [
                 (b"content-type", b"application/json; charset=utf-8"),
                 (b"content-length", str(len(body)).encode("ascii")),
+                *[(name.lower().encode("latin1"), value.encode("latin1")) for name, value in (headers or [])],
             ],
         }
     )

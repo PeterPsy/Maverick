@@ -1,7 +1,7 @@
 # Isolated Browser Origins For App Sidecars
 
 Date: 2026-08-03
-Status: Accepted (G1)
+Status: Accepted (G1), implemented by WP2
 Owners: Maverick Core app hosting and app contract domains
 
 ## Context
@@ -108,15 +108,46 @@ Expected result: all tests pass. This proves the routing and bootstrap design is
 implementable on the supported local host model; it is not the production
 session store or router.
 
+The production implementation is the generic ASGI host router in
+`core/api/sidecar_browser.py` and the hashed, process-local authority in
+`core/apps/sidecar_browser_sessions.py`. The authority deliberately has no
+persistent secret material: restarting core constructs an empty store and
+therefore revokes every ticket and sidecar session. The production integration
+proof uses a real confined sidecar process and runs with:
+
+```bash
+python3 -W error::ResourceWarning -m unittest \
+  tests.integration.app_hosting.test_sidecar_browser_origin \
+  tests.unit.apps.test_sidecar_browser_sessions
+```
+
+It covers the absolute-path routing boundary, fail-closed local and hosted
+configuration, one-shot/expired tickets, host-only cookie issuance, cookie
+rotation bounds, CSRF and Fetch Metadata, response-header filtering, exact CSP
+frame/connect policy, unbuffered SSE, logout and process-restart revocation,
+and redaction-safe success/failure audit records.
+
+Local mode is the default and is available only when Maverick itself is
+accessed through a loopback/`.localhost` origin. Hosted mode is explicitly
+enabled with:
+
+```text
+MAVERICK_SIDECAR_ORIGIN_MODE=hosted
+MAVERICK_SIDECAR_INSTALLATION_DOMAIN=<installation-domain>
+MAVERICK_SIDECAR_PLATFORM_ORIGIN=https://<platform-host>
+```
+
+The hosted listener must terminate wildcard TLS and route
+`*.sidecars.<installation-domain>` to the same ASGI application. Missing,
+invalid, non-HTTPS, or request-mismatched configuration fails closed before a
+ticket is issued.
+
 ## Residual Risk And Closure
 
-- WP2 implements and integration-tests the production ASGI router, durable
-  revocation semantics, hosted wildcard configuration, headers, and unbuffered
-  SSE.
 - WP3 applies exact route-template matching and URL canonicalization.
 - WP9 uses only the form bootstrap and verifies `postMessage` origin/source.
-- WP10 runs Playwright, leakage searches, workspace A/B isolation, expiry,
-  restart, logout, and hosted/local failure-path tests.
+- WP10 runs Playwright, leakage searches, full workspace A/B isolation, and the
+  global browser/runtime failure matrix.
 
-Until WP2 and WP3 pass, isolated browser-origin authority must not be enabled in
-an app contract.
+WP2 is complete. Until WP3 passes, isolated browser-origin authority must not
+be released from this development branch.

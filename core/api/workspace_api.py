@@ -174,6 +174,7 @@ def handle_workspace_api(
             return json_response(start_response, {"error": "workspace_not_available"}, status="404 Not Found")
         if workspace.status != "active" or membership.status != "active":
             return json_response(start_response, {"error": "workspace_not_available"}, status="403 Forbidden")
+        state.sidecar_browser_sessions.revoke_actor(context.user.user_id)
         set_active_workspace_for_user(state.workspace_store, user_id=context.user.user_id, workspace_id=workspace_id)
         return json_response(start_response, {"active_workspace_id": workspace_id})
 

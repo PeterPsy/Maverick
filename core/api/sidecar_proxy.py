@@ -27,7 +27,12 @@ from core.api.sidecar_core_routes import (
     handle_core_sidecar_route_asgi,
 )
 from core.apps.errors import AppHostingError, WorkspaceAppBindingNotFoundError
-from core.apps.models import HttpSidecarRouteRule, HttpSidecarSpec, ParsedAppContract
+from core.apps.models import (
+    HttpSidecarRouteRule,
+    HttpSidecarSpec,
+    ParsedAppContract,
+    WorkspaceAppBindingRecord,
+)
 from core.apps.sidecar_execution import (
     ConfinedSidecarLaunch,
     MINIMAL_SIDECAR_ENV,
@@ -70,6 +75,7 @@ class RunningSidecar:
     host: str
     port: int
     token: str
+    instance_id: str
     confined_launch: ConfinedSidecarLaunch
     request_slots: BoundedSemaphore
     stdout_file: Any | None = None
@@ -90,6 +96,16 @@ class SidecarProxyTarget:
     sidecar: HttpSidecarSpec
     proxy_path: str
     route_mode: str
+
+
+@dataclass(frozen=True)
+class AuthorizedSidecarTarget:
+    """Sidecar identity authorized for one actor before route selection."""
+
+    binding: WorkspaceAppBindingRecord
+    source_root: Path
+    parsed: ParsedAppContract
+    sidecar: HttpSidecarSpec
 
 
 @dataclass(frozen=True)
@@ -259,6 +275,7 @@ class HttpSidecarManager:
             host=host,
             port=port,
             token=token,
+            instance_id=secrets.token_urlsafe(18),
             confined_launch=confined_launch,
             request_slots=BoundedSemaphore(sidecar.process_policy.limits.request_concurrency),
             stdout_file=stdout_file,
@@ -287,6 +304,22 @@ class HttpSidecarManager:
             running_sidecars = [self._running.pop(key) for key in keys]
             for running in running_sidecars:
                 self._cleanup_sidecar(running)
+
+    def current_instance_id(
+        self,
+        *,
+        workspace_id: str,
+        app_id: str,
+        sidecar_id: str,
+        data_root: str,
+    ) -> str | None:
+        """Return the live process identity without starting or restarting it."""
+        key = (workspace_id, app_id, sidecar_id, data_root)
+        with self._lock:
+            running = self._running.get(key)
+            if running is None or running.process.poll() is not None:
+                return None
+            return running.instance_id
 
     def _cleanup_sidecar(self, running: RunningSidecar) -> None:
         with running.cleanup_lock:
@@ -398,6 +431,8 @@ async def handle_app_sidecar_proxy_asgi(
     user: UserRecord | None,
     start_path: Path,
     shutdown_controller: EntrypointShutdownController | None = None,
+    enforced_response_headers: list[tuple[str, str]] | None = None,
+    expected_instance_id: str | None = None,
 ) -> None:
     """Proxy one ASGI request to a declared sidecar without pre-buffering the body."""
     method = str(scope.get("method") or "GET").upper()
@@ -412,7 +447,7 @@ async def handle_app_sidecar_proxy_asgi(
         start_path=start_path,
     )
     if error is not None:
-        await _send_asgi_json(send, error.payload, status=error.status)
+        await _send_asgi_json(send, error.payload, status=error.status, headers=enforced_response_headers)
         return
     assert target is not None
     try:
@@ -429,6 +464,7 @@ async def handle_app_sidecar_proxy_asgi(
                 start_path=start_path,
                 shutdown_controller=shutdown_controller,
                 logger=logger,
+                response_headers=enforced_response_headers,
             )
             return
         running = await asyncio.to_thread(
@@ -441,6 +477,14 @@ async def handle_app_sidecar_proxy_asgi(
             start_path=start_path,
             shutdown_controller=shutdown_controller,
         )
+        if expected_instance_id is not None and running.instance_id != expected_instance_id:
+            await _send_asgi_json(
+                send,
+                {"error": "sidecar_session_stale"},
+                status="401 Unauthorized",
+                headers=enforced_response_headers,
+            )
+            return
         await _proxy_asgi_to_running_sidecar(
             running,
             method=method,
@@ -450,13 +494,24 @@ async def handle_app_sidecar_proxy_asgi(
             sidecar=target.sidecar,
             receive=receive,
             send=send,
+            enforced_response_headers=enforced_response_headers,
         )
     except AppHostingError as error:
         logger.warning("App `%s` sidecar `%s` unavailable: %s", app_id, sidecar_id, error)
-        await _send_asgi_json(send, {"error": "sidecar_unavailable", "detail": str(error)}, status="503 Service Unavailable")
+        await _send_asgi_json(
+            send,
+            {"error": "sidecar_unavailable", "detail": str(error)},
+            status="503 Service Unavailable",
+            headers=enforced_response_headers,
+        )
     except Exception:
         logger.exception("App `%s` sidecar `%s` ASGI proxy failed.", app_id, sidecar_id)
-        await _send_asgi_json(send, {"error": "sidecar_proxy_failed"}, status="502 Bad Gateway")
+        await _send_asgi_json(
+            send,
+            {"error": "sidecar_proxy_failed"},
+            status="502 Bad Gateway",
+            headers=enforced_response_headers,
+        )
 
 
 def parse_app_sidecar_proxy_route(path: object) -> tuple[str, str, str] | None:
@@ -492,6 +547,53 @@ def _resolve_sidecar_proxy_target(
     method: str,
     start_path: Path,
 ) -> tuple[SidecarProxyTarget | None, SidecarProxyError | None]:
+    authorized, error = resolve_authorized_sidecar(
+        state,
+        workspace_id=workspace_id,
+        app_id=app_id,
+        sidecar_id=sidecar_id,
+        user=user,
+        start_path=start_path,
+    )
+    if error is not None:
+        return None, error
+    assert authorized is not None
+    binding = authorized.binding
+    source_root = authorized.source_root
+    parsed = authorized.parsed
+    sidecar = authorized.sidecar
+    proxy_path = _proxy_path(subpath)
+    route_mode = _route_mode(sidecar, method=method, path=proxy_path)
+    if route_mode == "blocked":
+        return None, SidecarProxyError(
+            {"error": "sidecar_route_blocked", "sidecar_id": sidecar.service_id},
+            "403 Forbidden",
+        )
+    if route_mode not in {"handled_by_core", "pass_through"}:
+        return None, SidecarProxyError(
+            {"error": "sidecar_route_not_allowed", "sidecar_id": sidecar.service_id},
+            "404 Not Found",
+        )
+    return SidecarProxyTarget(
+        source_root=source_root,
+        data_root=binding.data_root,
+        parsed=parsed,
+        sidecar=sidecar,
+        proxy_path=proxy_path,
+        route_mode=route_mode,
+    ), None
+
+
+def resolve_authorized_sidecar(
+    state: PlatformState,
+    *,
+    workspace_id: str,
+    app_id: str,
+    sidecar_id: str,
+    user: UserRecord | None,
+    start_path: Path,
+) -> tuple[AuthorizedSidecarTarget | None, SidecarProxyError | None]:
+    """Resolve one sidecar and actor without granting any route."""
     if user is None:
         return None, SidecarProxyError({"error": "authentication_required"}, "401 Unauthorized")
     try:
@@ -531,35 +633,40 @@ def _resolve_sidecar_proxy_target(
     sidecar = _find_sidecar(parsed.contract.services.http_sidecars, sidecar_id)
     if sidecar is None or sidecar.proxy is None:
         return None, SidecarProxyError({"error": "sidecar_not_found"}, "404 Not Found")
-    proxy_path = _proxy_path(subpath)
-    route_mode = _route_mode(sidecar, method=method, path=proxy_path)
-    if route_mode == "blocked":
-        return None, SidecarProxyError(
-            {"error": "sidecar_route_blocked", "sidecar_id": sidecar.service_id},
-            "403 Forbidden",
-        )
-    if route_mode == "handled_by_core":
-        return SidecarProxyTarget(
-            source_root=source_root,
-            data_root=binding.data_root,
-            parsed=parsed,
-            sidecar=sidecar,
-            proxy_path=proxy_path,
-            route_mode=route_mode,
-        ), None
-    if route_mode != "pass_through":
-        return None, SidecarProxyError(
-            {"error": "sidecar_route_not_allowed", "sidecar_id": sidecar.service_id},
-            "404 Not Found",
-        )
-    return SidecarProxyTarget(
+    return AuthorizedSidecarTarget(
+        binding=binding,
         source_root=source_root,
-        data_root=binding.data_root,
         parsed=parsed,
         sidecar=sidecar,
-        proxy_path=proxy_path,
-        route_mode=route_mode,
     ), None
+
+
+def ensure_authorized_sidecar_running(
+    target: AuthorizedSidecarTarget,
+    *,
+    start_path: Path,
+    shutdown_controller: EntrypointShutdownController | None,
+) -> RunningSidecar:
+    """Start or reuse an already-authorized sidecar for browser bootstrap."""
+    return _sidecar_manager().ensure_running(
+        workspace_id=target.binding.workspace_id,
+        app_id=target.binding.app_id,
+        source_root=target.source_root,
+        data_root=target.binding.data_root,
+        sidecar=target.sidecar,
+        start_path=start_path,
+        shutdown_controller=shutdown_controller,
+    )
+
+
+def current_sidecar_instance_id(target: AuthorizedSidecarTarget) -> str | None:
+    """Return the current process identity for session restart validation."""
+    return _sidecar_manager().current_instance_id(
+        workspace_id=target.binding.workspace_id,
+        app_id=target.binding.app_id,
+        sidecar_id=target.sidecar.service_id,
+        data_root=target.binding.data_root,
+    )
 
 
 def _find_sidecar(sidecars: list[HttpSidecarSpec], sidecar_id: str) -> HttpSidecarSpec | None:
@@ -660,6 +767,7 @@ async def _proxy_asgi_to_running_sidecar(
     sidecar: HttpSidecarSpec,
     receive: AsgiReceive,
     send: AsgiSend,
+    enforced_response_headers: list[tuple[str, str]] | None,
 ) -> None:
     upstream_path = f"{path}?{query_string}" if query_string else path
     if not running.request_slots.acquire(blocking=False):
@@ -689,13 +797,17 @@ async def _proxy_asgi_to_running_sidecar(
         await _stream_asgi_request_body(receive, writer, chunked=stream_request_as_chunked)
         response_status, _response_reason, response_headers = await _read_asgi_upstream_response_head(reader)
         _ensure_asgi_response_allowed_by_contract(sidecar, response_headers)
+        forwarded_headers = _merge_response_headers(
+            _forward_asgi_response_headers(response_headers),
+            enforced_response_headers,
+        )
         await send(
             {
                 "type": "http.response.start",
                 "status": response_status,
                 "headers": [
                     (name.lower().encode("latin1"), value.encode("latin1"))
-                    for name, value in _forward_asgi_response_headers(response_headers)
+                    for name, value in forwarded_headers
                 ],
             }
         )
@@ -865,7 +977,9 @@ def _forward_response_headers(headers: list[tuple[str, str]]) -> list[tuple[str,
     forwarded: list[tuple[str, str]] = []
     for name, value in headers:
         lowered = name.lower()
-        if lowered in _HOP_BY_HOP_HEADERS or lowered == "authorization":
+        if lowered in _HOP_BY_HOP_HEADERS or lowered in {"authorization", "set-cookie"}:
+            continue
+        if lowered == "location" and not _safe_redirect_location(value):
             continue
         forwarded.append((name, value))
     return forwarded
@@ -891,13 +1005,37 @@ def _forward_asgi_response_headers(headers: list[tuple[str, str]]) -> list[tuple
     forwarded: list[tuple[str, str]] = []
     for name, value in headers:
         lowered = name.lower()
-        if lowered in _HOP_BY_HOP_HEADERS or lowered == "authorization":
+        if lowered in _HOP_BY_HOP_HEADERS or lowered in {"authorization", "set-cookie"}:
+            continue
+        if lowered == "location" and not _safe_redirect_location(value):
             continue
         forwarded.append((name, value))
     return forwarded
 
 
-async def _send_asgi_json(send: AsgiSend, payload: dict[str, Any], *, status: str) -> None:
+def _safe_redirect_location(value: str) -> bool:
+    return value.startswith("/") and not value.startswith("//") and "\\" not in value and not any(
+        ord(character) < 32 for character in value
+    )
+
+
+def _merge_response_headers(
+    headers: list[tuple[str, str]],
+    enforced: list[tuple[str, str]] | None,
+) -> list[tuple[str, str]]:
+    if not enforced:
+        return headers
+    enforced_names = {name.lower() for name, _value in enforced}
+    return [(name, value) for name, value in headers if name.lower() not in enforced_names] + list(enforced)
+
+
+async def _send_asgi_json(
+    send: AsgiSend,
+    payload: dict[str, Any],
+    *,
+    status: str,
+    headers: list[tuple[str, str]] | None = None,
+) -> None:
     body = json.dumps(payload, indent=2).encode("utf-8")
     status_code = int(status.split(" ", 1)[0])
     await send(
@@ -907,6 +1045,7 @@ async def _send_asgi_json(send: AsgiSend, payload: dict[str, Any], *, status: st
             "headers": [
                 (b"content-type", b"application/json; charset=utf-8"),
                 (b"content-length", str(len(body)).encode("ascii")),
+                *[(name.lower().encode("latin1"), value.encode("latin1")) for name, value in (headers or [])],
             ],
         }
     )

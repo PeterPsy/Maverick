@@ -40,6 +40,7 @@ from core.apps.models import (
     AppViewSurfaceDeclaration,
     AppVisibilityDeclaration,
     HttpSidecarBindSpec,
+    HttpSidecarBrowserOriginSpec,
     HttpSidecarHealthSpec,
     HttpSidecarLogSpec,
     HttpSidecarProcessPolicy,
@@ -408,6 +409,7 @@ def _app_services(payload: Any) -> AppServicesDeclaration:
                 command=list(sidecar["command"]),
                 env={str(key): str(value) for key, value in sidecar.get("env", {}).items()},
                 process_policy=_app_sidecar_process_policy(sidecar.get("process_policy")),
+                browser_origin=_app_sidecar_browser_origin(sidecar.get("browser_origin")),
                 bind=HttpSidecarBindSpec(**sidecar["bind"]),
                 health=HttpSidecarHealthSpec(**sidecar["health"]),
                 proxy=_app_sidecar_proxy(sidecar.get("proxy")),
@@ -435,6 +437,17 @@ def _app_sidecar_process_policy(payload: Any) -> HttpSidecarProcessPolicy:
             open_files=int(limits.get("open_files", 1024)),
             request_concurrency=int(limits.get("request_concurrency", 32)),
         ),
+    )
+
+
+def _app_sidecar_browser_origin(payload: Any) -> HttpSidecarBrowserOriginSpec | None:
+    if not isinstance(payload, dict):
+        return None
+    return HttpSidecarBrowserOriginSpec(
+        mode="isolated",
+        csp_profile="self_hosted_web_app",
+        frame_ancestors=["platform"],
+        connect_src=["self"],
     )
 
 

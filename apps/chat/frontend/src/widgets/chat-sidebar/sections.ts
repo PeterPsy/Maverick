@@ -97,7 +97,7 @@ export function filterThreads(
     return threads.filter((thread) => isMultiAgentThread(thread, multiAgentThreadIds));
   }
   if (threadFilter === "unread") {
-    return threads.filter(isThreadUnread);
+    return threads.filter(isThreadUnreadOrInProgress);
   }
   return threads;
 }
@@ -109,7 +109,7 @@ export function filterThreadsForSidebar(
   retainedUnreadThreadId: string | null = null,
 ): ChatThread[] {
   if (threadFilter === "unread" && retainedUnreadThreadId) {
-    return threads.filter((thread) => thread.thread_id === retainedUnreadThreadId || isThreadUnread(thread));
+    return threads.filter((thread) => thread.thread_id === retainedUnreadThreadId || isThreadUnreadOrInProgress(thread));
   }
   return filterThreads(threads, threadFilter, multiAgentThreadIds);
 }
@@ -143,4 +143,8 @@ export function isThreadTitlePending(thread: ChatThread | null | undefined): boo
 
 export function isThreadUnread(thread: ChatThread): boolean {
   return Boolean(thread.has_unread_completed_response) && !isThreadBusy(thread);
+}
+
+export function isThreadUnreadOrInProgress(thread: ChatThread): boolean {
+  return isThreadUnread(thread) || isThreadBusy(thread);
 }

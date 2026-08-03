@@ -68,7 +68,7 @@ function ChatSidebarWidget() {
           <span className="bs-chat-sidebar-source-filter__count">{sidebar.threadFilterCounts.multi_agent}</span>
         </button>
         <button
-          aria-label="Unread chats"
+          aria-label="Unread or active chats"
           aria-pressed={sidebar.threadFilter === "unread"}
           className={`bs-chat-sidebar-source-filter__button is-label-collapsible ${sidebar.threadFilter === "unread" ? "is-active" : ""}`}
           onClick={() => sidebar.setThreadFilter("unread")}

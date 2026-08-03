@@ -85,19 +85,18 @@ describe("chat sidebar runtime status", () => {
     ]);
   });
 
-  it("filters completed unread responses for the Unread view", () => {
+  it("filters unread and in-progress chats for the Unread view", () => {
     const readThread = thread({ thread_id: "read-thread", has_unread_completed_response: false });
     const unreadThread = thread({ thread_id: "unread-thread", has_unread_completed_response: true });
-    const busyUnreadThread = thread({
-      thread_id: "busy-unread-thread",
-      availability: "active",
-      has_unread_completed_response: true,
-    });
+    const queuedThread = thread({ thread_id: "queued-thread", availability: "queued" });
+    const activeThread = thread({ thread_id: "active-thread", availability: "active" });
+    const busyThread = thread({ thread_id: "busy-thread", availability: "busy" });
 
-    expect(filterThreads([readThread, unreadThread, busyUnreadThread], "unread").map((item) => item.thread_id)).toEqual(["unread-thread"]);
-    expect(buildSections([], [readThread, unreadThread, busyUnreadThread], "unread")[0].items.map((item) => item.thread_id)).toEqual([
-      "unread-thread",
-    ]);
+    const threads = [readThread, unreadThread, queuedThread, activeThread, busyThread];
+    const expectedThreadIds = ["unread-thread", "queued-thread", "active-thread", "busy-thread"];
+
+    expect(filterThreads(threads, "unread").map((item) => item.thread_id)).toEqual(expectedThreadIds);
+    expect(buildSections([], threads, "unread")[0].items.map((item) => item.thread_id)).toEqual(expectedThreadIds);
   });
 
   it("retains only the selected read chat while browsing the Unread view", () => {

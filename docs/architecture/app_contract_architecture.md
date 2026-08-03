@@ -934,6 +934,16 @@ routes. App contracts do not choose the opaque host, ticket, cookie, workspace,
 technical port, or generation, and the capability fails closed when local or
 hosted origin prerequisites are unavailable.
 
+Sandbox compatibility also requires the generic process boundary defined by
+[`app_sidecar_execution.md`](app_sidecar_execution.md). A sandbox-required
+sidecar starts with an allowlisted environment, a verified read-only artifact,
+only its active app-data generation and bounded temp/relay roots writable, an
+isolated network namespace with no egress, and a core-owned Unix relay. Contract
+authors cannot provide raw sandbox flags, host mount sources, socket paths,
+network destinations, identities, or fallback commands. Missing mandatory
+namespace, mount, relay, or limit support prevents the sidecar from starting;
+host-loopback or unsandboxed fallback is invalid.
+
 The proxy must not expose terminal access, host-folder import, wildcard passthrough, arbitrary network binding, or undeclared websocket/streaming semantics for sandbox apps. If an app needs those features, the contract must mark them outside sandbox compatibility or route them through a future generic core policy surface.
 
 ## Human Surface Versus Agent Surface

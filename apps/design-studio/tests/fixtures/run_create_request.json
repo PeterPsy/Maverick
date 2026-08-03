@@ -1,0 +1,9 @@
+{
+  "projectId": "od_project_fixture",
+  "conversationId": "od_conversation_fixture",
+  "assistantMessageId": "od_message_fixture",
+  "agentId": "maverick",
+  "message": "Create an operational dashboard.",
+  "clientRequestId": "maverick:default:od_run_success:attempt-1",
+  "sessionMode": "design"
+}

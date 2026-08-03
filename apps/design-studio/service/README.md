@@ -40,3 +40,28 @@ missing, when host-only OpenDesign trees were included, or when the Maverick
 proxy cannot reach the real sidecar. If the bundle is absent or not
 installed/built, the declared Maverick runtime fails closed. There is no runtime
 compatibility fallback.
+
+## Pinned 0.16.1 inventories
+
+`inventory_opendesign.py` reads a clean checkout of the exact
+`open-design-v0.16.1` tag at commit
+`276b4d8e970bc143d7ad060181a89a834e3d9caf`. It resolves Express route
+registrations into `opendesign_routes_0_16_1.json` and records the tracked
+source tree, package manifests, declared licenses, lockfile digest, and native
+dependencies in `opendesign_supply_chain_0_16_1.json`.
+
+Regenerate both files from an exact checkout:
+
+```bash
+python3 apps/design-studio/service/inventory_opendesign.py \
+  --source /path/to/open-design-v0.16.1 \
+  --routes-output apps/design-studio/service/opendesign_routes_0_16_1.json \
+  --supply-chain-output apps/design-studio/service/opendesign_supply_chain_0_16_1.json
+```
+
+The command fails for a dirty checkout, a wrong commit/tag, or an unresolved
+route registration. The route classification is deny-by-default and scoped to
+the browser sidecar origin; app-entrypoint capabilities use a separate
+allowlist. WP5 replaces source-tree measurements with the staged runtime
+closure, SBOM, NOTICE, license inventory, native load proof, and artifact
+provenance.

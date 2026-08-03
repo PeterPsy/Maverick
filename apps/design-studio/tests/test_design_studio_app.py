@@ -25,9 +25,117 @@ from core.shared.entrypoints import EntrypointShutdownController
 
 APP_ROOT = Path(__file__).resolve().parents[1]
 REPO_ROOT = APP_ROOT.parents[1]
+FIXTURES_ROOT = APP_ROOT / "tests" / "fixtures"
 
 
 class DesignStudioAppTests(unittest.TestCase):
+    def test_wp0_pinned_route_and_supply_chain_inventories_are_complete(self) -> None:
+        routes = json.loads(
+            (APP_ROOT / "service" / "opendesign_routes_0_16_1.json").read_text(encoding="utf-8")
+        )
+        supply_chain = json.loads(
+            (APP_ROOT / "service" / "opendesign_supply_chain_0_16_1.json").read_text(encoding="utf-8")
+        )
+
+        self.assertEqual(routes["upstream"]["tag"], "open-design-v0.16.1")
+        self.assertEqual(routes["upstream"]["commit"], "276b4d8e970bc143d7ad060181a89a834e3d9caf")
+        self.assertEqual(routes["counts"]["total"], len(routes["routes"]))
+        self.assertEqual(
+            routes["counts"]["total"],
+            sum(routes["counts"][key] for key in ("blocked", "handled_by_core", "pass_through")),
+        )
+        self.assertFalse([route for route in routes["routes"] if route["path_source"] == "unresolved"])
+
+        route_policy = {
+            (route["method"], route["path_template"], route["owner"]): route["classification"]
+            for route in routes["routes"]
+        }
+        self.assertEqual(
+            route_policy[("POST", "/api/runs", "apps/daemon/src/routes/runs.ts")],
+            "pass_through",
+        )
+        self.assertEqual(
+            route_policy[("GET", "/api/runs/{id}/events", "apps/daemon/src/routes/runs.ts")],
+            "pass_through",
+        )
+        self.assertEqual(
+            route_policy[("GET", "/api/runs/{id}/result-package", "apps/daemon/src/routes/runs.ts")],
+            "pass_through",
+        )
+        self.assertEqual(
+            route_policy[("POST", "/api/projects/{id}/terminals", "apps/daemon/src/routes/terminal.ts")],
+            "blocked",
+        )
+        self.assertEqual(
+            route_policy[("POST", "/api/import/folder", "apps/daemon/src/import-export-routes.ts")],
+            "blocked",
+        )
+        self.assertEqual(
+            route_policy[("GET", "/api/media/config", "apps/daemon/src/routes/media.ts")],
+            "handled_by_core",
+        )
+
+        self.assertEqual(supply_chain["source_tree"]["tracked_file_count"], 11_458)
+        self.assertEqual(supply_chain["source_tree"]["tracked_bytes"], 310_834_646)
+        self.assertEqual(supply_chain["source_tree"]["package_count"], 27)
+        self.assertEqual(
+            supply_chain["source_tree"]["pnpm_lock_sha256"],
+            "90bbe1375eb716240bbb79215c2a12a601abd977fe88587c6c6c6b4df31f6f23",
+        )
+        self.assertEqual(
+            {dependency["name"] for dependency in supply_chain["native_runtime_dependencies"]},
+            {"better-sqlite3", "node-pty", "blake3-wasm"},
+        )
+
+    def test_wp0_protocol_fixtures_cover_project_run_stream_and_terminal_results(self) -> None:
+        create_request = self._fixture_json("project_create_request.json")
+        create_response = self._fixture_json("project_create_response.json")
+        projects_response = self._fixture_json("projects_response.json")
+        run_request = self._fixture_json("run_create_request.json")
+        run_response = self._fixture_json("run_create_response.json")
+
+        self.assertEqual(create_response["project"]["id"], create_request["id"])
+        self.assertEqual(projects_response["projects"][0]["id"], create_request["id"])
+        self.assertEqual(run_request["projectId"], create_request["id"])
+        self.assertEqual(run_response["conversationId"], create_response["conversationId"])
+        self.assertEqual(run_request["agentId"], "maverick")
+
+        event_blocks = (FIXTURES_ROOT / "run_events.sse").read_text(encoding="utf-8").strip().split("\n\n")
+        event_ids: list[int] = []
+        event_names: list[str] = []
+        for block in event_blocks:
+            fields = dict(line.split(": ", 1) for line in block.splitlines())
+            event_ids.append(int(fields["id"]))
+            event_names.append(fields["event"])
+            self.assertIsInstance(json.loads(fields["data"]), dict)
+        self.assertEqual(event_ids, sorted(event_ids))
+        self.assertEqual(event_names[0], "start")
+        self.assertEqual(event_names[-1], "end")
+
+        terminal_results = [
+            self._fixture_json("run_result_success.json"),
+            self._fixture_json("run_result_failed.json"),
+            self._fixture_json("run_result_canceled.json"),
+        ]
+        self.assertEqual(
+            [result["run"]["status"] for result in terminal_results],
+            ["succeeded", "failed", "canceled"],
+        )
+        for result in terminal_results:
+            self.assertEqual(result["schema"], "open-design.run-result-package.v1")
+            self.assertEqual(result["run"]["projectId"], create_request["id"])
+            self.assertIsNone(result["events"]["logPath"])
+        self.assertTrue(terminal_results[2]["run"]["cancelRequested"])
+
+        acp_messages = [
+            json.loads(line)
+            for line in (FIXTURES_ROOT / "acp_session_transcript.jsonl").read_text(encoding="utf-8").splitlines()
+        ]
+        methods = [message.get("method") for message in acp_messages if message.get("method")]
+        self.assertEqual(methods[:3], ["initialize", "session/new", "session/prompt"])
+        self.assertIn("session/update", methods)
+        self.assertEqual(methods[-1], "session/cancel")
+
     def test_contract_declares_sandbox_sidecar_and_surfaces(self) -> None:
         parsed = parse_app_contract_file(APP_ROOT)
 
@@ -591,6 +699,9 @@ class DesignStudioAppTests(unittest.TestCase):
             self.assertFalse(payload["secrets_persisted"])
             self.assertNotIn("provider-fixture-token", body.decode("utf-8"))
             self.assertNotIn("provider-fixture-token", media_config_text)
+
+    def _fixture_json(self, name: str) -> dict:
+        return json.loads((FIXTURES_ROOT / name).read_text(encoding="utf-8"))
 
     def _run_entrypoint(self, entrypoint: Path, payload: dict) -> dict:
         process = subprocess.run(

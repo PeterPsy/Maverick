@@ -1,0 +1,298 @@
+{
+  "build_native_dependencies": [
+    "esbuild",
+    "sharp"
+  ],
+  "declared_license_counts": {
+    "Apache-2.0": 1,
+    "MIT": 1,
+    "UNDECLARED": 25
+  },
+  "license_files": [
+    "LICENSE",
+    "apps/desktop/vendor/dom-to-pptx/LICENSE",
+    "design-templates/guizang-ppt/LICENSE",
+    "design-templates/html-ppt-zhangzara-8-bit-orbit/LICENSE",
+    "design-templates/html-ppt-zhangzara-biennale-yellow/LICENSE",
+    "design-templates/html-ppt-zhangzara-block-frame/LICENSE",
+    "design-templates/html-ppt-zhangzara-blue-professional/LICENSE",
+    "design-templates/html-ppt-zhangzara-bold-poster/LICENSE",
+    "design-templates/html-ppt-zhangzara-broadside/LICENSE",
+    "design-templates/html-ppt-zhangzara-capsule/LICENSE",
+    "design-templates/html-ppt-zhangzara-cartesian/LICENSE",
+    "design-templates/html-ppt-zhangzara-cobalt-grid/LICENSE",
+    "design-templates/html-ppt-zhangzara-coral/LICENSE",
+    "design-templates/html-ppt-zhangzara-creative-mode/LICENSE",
+    "design-templates/html-ppt-zhangzara-daisy-days/LICENSE",
+    "design-templates/html-ppt-zhangzara-editorial-tri-tone/LICENSE",
+    "design-templates/html-ppt-zhangzara-grove/LICENSE",
+    "design-templates/html-ppt-zhangzara-long-table/LICENSE",
+    "design-templates/html-ppt-zhangzara-mat/LICENSE",
+    "design-templates/html-ppt-zhangzara-monochrome/LICENSE",
+    "design-templates/html-ppt-zhangzara-neo-grid-bold/LICENSE",
+    "design-templates/html-ppt-zhangzara-peoples-platform/LICENSE",
+    "design-templates/html-ppt-zhangzara-pin-and-paper/LICENSE",
+    "design-templates/html-ppt-zhangzara-pink-script/LICENSE",
+    "design-templates/html-ppt-zhangzara-playful/LICENSE",
+    "design-templates/html-ppt-zhangzara-raw-grid/LICENSE",
+    "design-templates/html-ppt-zhangzara-retro-windows/LICENSE",
+    "design-templates/html-ppt-zhangzara-retro-zine/LICENSE",
+    "design-templates/html-ppt-zhangzara-sakura-chroma/LICENSE",
+    "design-templates/html-ppt-zhangzara-scatterbrain/LICENSE",
+    "design-templates/html-ppt-zhangzara-signal/LICENSE",
+    "design-templates/html-ppt-zhangzara-soft-editorial/LICENSE",
+    "design-templates/html-ppt-zhangzara-stencil-tablet/LICENSE",
+    "design-templates/html-ppt-zhangzara-studio/LICENSE",
+    "design-templates/html-ppt-zhangzara-vellum/LICENSE",
+    "design-templates/html-ppt/LICENSE",
+    "design-templates/last30days/LICENSE",
+    "design-templates/last30days/scripts/lib/vendor/bird-search/LICENSE",
+    "plugins/_official/examples/frontend-slides/LICENSE",
+    "plugins/_official/examples/fs-creative-voltage/LICENSE",
+    "plugins/_official/examples/fs-editorial-forest/LICENSE",
+    "plugins/_official/examples/fs-electric-studio/LICENSE",
+    "plugins/_official/examples/fs-emerald-editorial/LICENSE",
+    "plugins/_official/examples/fs-notebook-tabs/LICENSE",
+    "plugins/_official/examples/hps-academic-paper/LICENSE",
+    "plugins/_official/examples/hps-bauhaus/LICENSE",
+    "plugins/_official/examples/hps-memphis-pop/LICENSE",
+    "plugins/_official/examples/hps-retro-tv/LICENSE",
+    "plugins/_official/examples/hps-true-blueprint/LICENSE",
+    "plugins/_official/examples/hps-y2k-chrome/LICENSE",
+    "plugins/_official/examples/huashu-annual-letter/LICENSE",
+    "plugins/_official/examples/huashu-bento-insight/LICENSE",
+    "plugins/_official/examples/huashu-golden-circle/LICENSE",
+    "plugins/_official/examples/huashu-keynote-black/LICENSE",
+    "plugins/_official/examples/huashu-luxe-whitespace/LICENSE",
+    "plugins/_official/examples/huashu-pentagram-grid/LICENSE",
+    "plugins/_official/examples/huashu-slides/LICENSE",
+    "plugins/_official/examples/huashu-sparkline-arc/LICENSE",
+    "plugins/_official/examples/huashu-takram-soft-tech/LICENSE",
+    "plugins/_official/examples/ve-midnight-editorial/LICENSE",
+    "plugins/_official/examples/ve-terminal-mono/LICENSE",
+    "plugins/_official/examples/webgl-depth-gallery/LICENSE",
+    "plugins/_official/examples/webgl-distortion-grain/LICENSE",
+    "plugins/_official/examples/webgl-horizontal-parallax/LICENSE",
+    "plugins/_official/examples/webgl-pixel-reveal-gallery/LICENSE",
+    "plugins/community/hallmark/LICENSE",
+    "skills/brandkit/LICENSE",
+    "skills/brutalist-skill/LICENSE",
+    "skills/emil-design-eng/LICENSE",
+    "skills/frontend-design/LICENSE.txt",
+    "skills/gpt-tasteskill/LICENSE",
+    "skills/hatch-pet/LICENSE.txt",
+    "skills/image-to-code-skill/LICENSE",
+    "skills/imagegen-frontend-mobile/LICENSE",
+    "skills/imagegen-frontend-web/LICENSE",
+    "skills/minimalist-skill/LICENSE",
+    "skills/output-skill/LICENSE",
+    "skills/redesign-skill/LICENSE",
+    "skills/review-animations/LICENSE",
+    "skills/soft-skill/LICENSE",
+    "skills/stitch-skill/LICENSE",
+    "skills/taste-skill-v1/LICENSE",
+    "skills/taste-skill/LICENSE",
+    "skills/web-clone/LICENSE",
+    "skills/web-design-guidelines/LICENSE",
+    "skills/writing-guidelines/LICENSE",
+    "tools/pack/resources/win/7zip/License.txt"
+  ],
+  "native_runtime_dependencies": [
+    {
+      "name": "better-sqlite3",
+      "reason": "native SQLite binding used by the daemon",
+      "version": "12.10.0"
+    },
+    {
+      "name": "node-pty",
+      "reason": "native PTY binding; terminal routes are blocked but the daemon imports the package",
+      "version": "1.1.0"
+    },
+    {
+      "name": "blake3-wasm",
+      "reason": "WebAssembly runtime dependency used by the daemon",
+      "version": "2.1.5"
+    }
+  ],
+  "packages": [
+    {
+      "license": "UNDECLARED",
+      "name": "@open-design/daemon",
+      "path": "apps/daemon/package.json",
+      "version": "0.15.1"
+    },
+    {
+      "license": "UNDECLARED",
+      "name": "@open-design/desktop",
+      "path": "apps/desktop/package.json",
+      "version": "0.15.1"
+    },
+    {
+      "license": "UNDECLARED",
+      "name": "@open-design/landing-page",
+      "path": "apps/landing-page/package.json",
+      "version": "0.15.1"
+    },
+    {
+      "license": "UNDECLARED",
+      "name": "@open-design/packaged",
+      "path": "apps/packaged/package.json",
+      "version": "0.16.1"
+    },
+    {
+      "license": "UNDECLARED",
+      "name": "@open-design/web",
+      "path": "apps/web/package.json",
+      "version": "0.15.1"
+    },
+    {
+      "license": "MIT",
+      "name": "bird-search",
+      "path": "design-templates/last30days/scripts/lib/vendor/bird-search/package.json",
+      "version": "0.8.0"
+    },
+    {
+      "license": "UNDECLARED",
+      "name": "@open-design/e2e",
+      "path": "e2e/package.json",
+      "version": "0.15.1"
+    },
+    {
+      "license": "Apache-2.0",
+      "name": "open-design",
+      "path": "package.json",
+      "version": "0.15.1"
+    },
+    {
+      "license": "UNDECLARED",
+      "name": "@open-design/agui-adapter",
+      "path": "packages/agui-adapter/package.json",
+      "version": "0.5.0"
+    },
+    {
+      "license": "UNDECLARED",
+      "name": "@open-design/components",
+      "path": "packages/components/package.json",
+      "version": "0.8.0"
+    },
+    {
+      "license": "UNDECLARED",
+      "name": "@open-design/contracts",
+      "path": "packages/contracts/package.json",
+      "version": "0.15.1"
+    },
+    {
+      "license": "UNDECLARED",
+      "name": "@open-design/diagnostics",
+      "path": "packages/diagnostics/package.json",
+      "version": "0.2.0"
+    },
+    {
+      "license": "UNDECLARED",
+      "name": "@open-design/download",
+      "path": "packages/download/package.json",
+      "version": "0.15.1"
+    },
+    {
+      "license": "UNDECLARED",
+      "name": "@open-design/host",
+      "path": "packages/host/package.json",
+      "version": "0.15.1"
+    },
+    {
+      "license": "UNDECLARED",
+      "name": "@open-design/launcher-proto",
+      "path": "packages/launcher-proto/package.json",
+      "version": "0.15.1"
+    },
+    {
+      "license": "UNDECLARED",
+      "name": "@open-design/metatool",
+      "path": "packages/metatool/package.json",
+      "version": "0.1.0"
+    },
+    {
+      "license": "UNDECLARED",
+      "name": "@open-design/platform",
+      "path": "packages/platform/package.json",
+      "version": "0.15.1"
+    },
+    {
+      "license": "UNDECLARED",
+      "name": "@open-design/plugin-runtime",
+      "path": "packages/plugin-runtime/package.json",
+      "version": "0.5.0"
+    },
+    {
+      "license": "UNDECLARED",
+      "name": "@open-design/registry-protocol",
+      "path": "packages/registry-protocol/package.json",
+      "version": "0.5.0"
+    },
+    {
+      "license": "UNDECLARED",
+      "name": "@open-design/release",
+      "path": "packages/release/package.json",
+      "version": "0.15.1"
+    },
+    {
+      "license": "UNDECLARED",
+      "name": "@open-design/sidecar-proto",
+      "path": "packages/sidecar-proto/package.json",
+      "version": "0.15.1"
+    },
+    {
+      "license": "UNDECLARED",
+      "name": "@open-design/sidecar",
+      "path": "packages/sidecar/package.json",
+      "version": "0.15.1"
+    },
+    {
+      "license": "UNDECLARED",
+      "name": "chat-motion-overlay-template",
+      "path": "skills/chat-motion-overlay/assets/remotion-template/package.json",
+      "version": "1.0.0"
+    },
+    {
+      "license": "UNDECLARED",
+      "name": "@open-design/tools-dev",
+      "path": "tools/dev/package.json",
+      "version": "0.15.1"
+    },
+    {
+      "license": "UNDECLARED",
+      "name": "@open-design/tools-pack",
+      "path": "tools/pack/package.json",
+      "version": "0.15.1"
+    },
+    {
+      "license": "UNDECLARED",
+      "name": "@open-design/tools-release",
+      "path": "tools/release/package.json",
+      "version": "0.15.1"
+    },
+    {
+      "license": "UNDECLARED",
+      "name": "@open-design/tools-serve",
+      "path": "tools/serve/package.json",
+      "version": "0.6.0"
+    }
+  ],
+  "required_follow_up": [
+    "WP5 emits the staged runtime-closure file manifest, SBOM, NOTICE, and license inventory.",
+    "WP5 performs native load tests on every supported OS/architecture artifact."
+  ],
+  "schema_version": "1",
+  "source_tree": {
+    "package_count": 27,
+    "pnpm_lock_sha256": "90bbe1375eb716240bbb79215c2a12a601abd977fe88587c6c6c6b4df31f6f23",
+    "tracked_bytes": 310834646,
+    "tracked_file_count": 11458
+  },
+  "upstream": {
+    "commit": "276b4d8e970bc143d7ad060181a89a834e3d9caf",
+    "release_version": "0.16.1",
+    "root_package_version": "0.15.1",
+    "tag": "open-design-v0.16.1"
+  }
+}

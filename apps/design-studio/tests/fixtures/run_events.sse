@@ -1,0 +1,19 @@
+id: 1
+event: start
+data: {"runId":"od_run_success","status":"running"}
+
+id: 2
+event: agent
+data: {"type":"text_delta","delta":"Creating the dashboard."}
+
+id: 3
+event: agent
+data: {"type":"tool_use","id":"tool_write_1","name":"Write","input":{"file_path":"index.html"}}
+
+id: 4
+event: agent
+data: {"type":"tool_result","toolUseId":"tool_write_1","isError":false,"path":"index.html"}
+
+id: 5
+event: end
+data: {"code":0,"signal":null,"status":"succeeded","resumable":true,"endedWithUnfinishedWork":false,"artifactCount":1,"failureCategory":null,"failureDetail":null}

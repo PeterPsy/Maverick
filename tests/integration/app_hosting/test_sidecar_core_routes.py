@@ -115,7 +115,7 @@ class SidecarCoreRouteIntegrationTests(unittest.TestCase):
                             env={
                                 "OD_BIND_HOST": "127.0.0.1",
                                 "OD_PORT": "${service.port}",
-                                "OD_API_TOKEN": "${service_secret:od_api_token}",
+                                "OD_API_TOKEN": "${service.token}",
                             },
                             bind=HttpSidecarBindSpec(host="127.0.0.1", port="auto"),
                             health=HttpSidecarHealthSpec(path="/api/ready", timeout_ms=5000),

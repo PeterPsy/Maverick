@@ -199,6 +199,20 @@ def app_contract_payload(parsed: ParsedAppContract) -> dict[str, Any]:
                     "working_directory": sidecar.working_directory,
                     "command": sidecar.command,
                     "env": sidecar.env,
+                    "process_policy": {
+                        "inherit_host_env": sidecar.process_policy.inherit_host_env,
+                        "sandbox": sidecar.process_policy.sandbox,
+                        "bundle_read_only": sidecar.process_policy.bundle_read_only,
+                        "workspace_data_write": sidecar.process_policy.workspace_data_write,
+                        "network": sidecar.process_policy.network,
+                        "transport": sidecar.process_policy.transport,
+                        "outbound": sidecar.process_policy.outbound,
+                        "limits": {
+                            "memory_bytes": sidecar.process_policy.limits.memory_bytes,
+                            "open_files": sidecar.process_policy.limits.open_files,
+                            "request_concurrency": sidecar.process_policy.limits.request_concurrency,
+                        },
+                    },
                     "bind": {
                         "host": sidecar.bind.host,
                         "port": sidecar.bind.port,

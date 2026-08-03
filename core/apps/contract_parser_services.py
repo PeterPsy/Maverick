@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from pathlib import Path, PurePosixPath
+import re
 from typing import Any
 
 from core.apps.contract_validation import (
@@ -21,7 +22,9 @@ from core.apps.models import (
     HttpSidecarBindSpec,
     HttpSidecarHealthSpec,
     HttpSidecarLogSpec,
+    HttpSidecarProcessPolicy,
     HttpSidecarProxySpec,
+    HttpSidecarResourceLimits,
     HttpSidecarRoutePolicy,
     HttpSidecarRouteRule,
     HttpSidecarSpec,
@@ -31,6 +34,34 @@ from core.apps.models import (
 _ALLOWED_SERVICE_RUNTIMES = {"python", "node", "generic"}
 _ALLOWED_HTTP_METHODS = {"GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS"}
 _LOOPBACK_HOSTS = {"127.0.0.1", "localhost", "::1"}
+_SANDBOX_SUBSTITUTIONS = {
+    "${app.data_dir}",
+    "${app.source_dir}",
+    "${service.port}",
+    "${service.token}",
+}
+_SUBSTITUTION_PATTERN = re.compile(r"\$\{[^{}]+\}")
+_FORBIDDEN_ENV_NAMES = {
+    "ANTHROPIC_API_KEY",
+    "AZURE_OPENAI_API_KEY",
+    "CODEX_HOME",
+    "COOKIE",
+    "CLAUDE_CODE_OAUTH_TOKEN",
+    "GH_TOKEN",
+    "GITHUB_TOKEN",
+    "GOOGLE_APPLICATION_CREDENTIALS",
+    "HOME",
+    "MAVERICK_API_TOKEN",
+    "MAVERICK_BOOTSTRAP_SECRET",
+    "MAVERICK_RUNTIME_API_SECRET",
+    "MAVERICK_RUNTIME_API_TOKEN",
+    "MAVERICK_SECRET_STORE_KEY",
+    "OPENAI_API_KEY",
+    "VAULT_TOKEN",
+}
+_DEFAULT_MEMORY_BYTES = 4 * 1024 * 1024 * 1024
+_DEFAULT_OPEN_FILES = 1024
+_DEFAULT_REQUEST_CONCURRENCY = 32
 
 
 def parse_services_section(
@@ -73,7 +104,19 @@ def _parse_http_sidecar(
 ) -> HttpSidecarSpec:
     _reject_unexpected_fields(
         payload,
-        {"id", "runtime", "package_manager", "working_directory", "command", "env", "bind", "health", "proxy", "logs"},
+        {
+            "id",
+            "runtime",
+            "package_manager",
+            "working_directory",
+            "command",
+            "env",
+            "process_policy",
+            "bind",
+            "health",
+            "proxy",
+            "logs",
+        },
         label=label,
     )
     service_id = _expect_slug(payload, "id")
@@ -92,6 +135,13 @@ def _parse_http_sidecar(
     package_manager = payload.get("package_manager")
     if package_manager is not None and (not isinstance(package_manager, str) or not package_manager.strip()):
         raise AppContractValidationError(f"`{label}.package_manager` must be a non-empty string when provided.")
+    process_policy_payload = payload.get("process_policy")
+    if process_policy_payload is None:
+        raise AppContractValidationError(f"`{label}.process_policy` is required for HTTP sidecars.")
+    process_policy = _parse_process_policy(
+        _expect_mapping(process_policy_payload, label=f"{label}.process_policy"),
+        label=label,
+    )
     bind = _parse_bind(_expect_mapping(payload.get("bind", {}), label=f"{label}.bind"), sandbox_compatible=sandbox_compatible, label=label)
     health = _parse_health(_expect_mapping(payload.get("health", {}), label=f"{label}.health"), label=label)
     proxy_payload = payload.get("proxy")
@@ -108,7 +158,12 @@ def _parse_http_sidecar(
         package_manager=package_manager.strip() if isinstance(package_manager, str) else None,
         working_directory=working_directory,
         command=command,
-        env=_parse_env(_expect_mapping(payload.get("env", {}), label=f"{label}.env"), label=label),
+        env=_parse_env(
+            _expect_mapping(payload.get("env", {}), label=f"{label}.env"),
+            sandbox_required=process_policy.sandbox == "required",
+            label=label,
+        ),
+        process_policy=process_policy,
         bind=bind,
         health=health,
         proxy=proxy,
@@ -196,15 +251,132 @@ def _parse_logs(payload: dict[str, Any], *, app_id: str, label: str) -> HttpSide
     )
 
 
-def _parse_env(payload: dict[str, Any], *, label: str) -> dict[str, str]:
+def _parse_process_policy(payload: dict[str, Any], *, label: str) -> HttpSidecarProcessPolicy:
+    policy_label = f"{label}.process_policy"
+    _reject_unexpected_fields(
+        payload,
+        {
+            "inherit_host_env",
+            "sandbox",
+            "bundle_read_only",
+            "workspace_data_write",
+            "network",
+            "transport",
+            "outbound",
+            "limits",
+        },
+        label=policy_label,
+    )
+    inherit_host_env = _expect_bool(payload, "inherit_host_env")
+    if inherit_host_env:
+        raise AppContractValidationError(f"`{policy_label}.inherit_host_env` must be false.")
+    sandbox = _expect_string(payload, "sandbox")
+    if sandbox != "required":
+        raise AppContractValidationError(f"`{policy_label}.sandbox` must be `required`.")
+    bundle_read_only = _expect_bool(payload, "bundle_read_only")
+    if not bundle_read_only:
+        raise AppContractValidationError(f"`{policy_label}.bundle_read_only` must be true.")
+    workspace_data_write = _expect_bool(payload, "workspace_data_write")
+    if not workspace_data_write:
+        raise AppContractValidationError(f"`{policy_label}.workspace_data_write` must be true.")
+    network = _expect_string(payload, "network")
+    if network != "isolated":
+        raise AppContractValidationError(f"`{policy_label}.network` must be `isolated`.")
+    transport = _expect_string(payload, "transport")
+    if transport != "unix_relay":
+        raise AppContractValidationError(f"`{policy_label}.transport` must be `unix_relay`.")
+    outbound = _expect_string_list(payload, "outbound")
+    if outbound:
+        raise AppContractValidationError(f"`{policy_label}.outbound` must be empty for isolated sidecars.")
+    limits_payload = _expect_mapping(payload.get("limits", {}), label=f"{policy_label}.limits")
+    _reject_unexpected_fields(
+        limits_payload,
+        {"memory_bytes", "open_files", "request_concurrency"},
+        label=f"{policy_label}.limits",
+    )
+    limits = HttpSidecarResourceLimits(
+        memory_bytes=_expect_bounded_int(
+            limits_payload,
+            "memory_bytes",
+            default=_DEFAULT_MEMORY_BYTES,
+            minimum=64 * 1024 * 1024,
+            maximum=64 * 1024 * 1024 * 1024,
+            label=f"{policy_label}.limits.memory_bytes",
+        ),
+        open_files=_expect_bounded_int(
+            limits_payload,
+            "open_files",
+            default=_DEFAULT_OPEN_FILES,
+            minimum=64,
+            maximum=65536,
+            label=f"{policy_label}.limits.open_files",
+        ),
+        request_concurrency=_expect_bounded_int(
+            limits_payload,
+            "request_concurrency",
+            default=_DEFAULT_REQUEST_CONCURRENCY,
+            minimum=1,
+            maximum=1024,
+            label=f"{policy_label}.limits.request_concurrency",
+        ),
+    )
+    return HttpSidecarProcessPolicy(
+        inherit_host_env=inherit_host_env,
+        sandbox="required",
+        bundle_read_only=bundle_read_only,
+        workspace_data_write=workspace_data_write,
+        network="isolated",
+        transport="unix_relay",
+        outbound=outbound,
+        limits=limits,
+    )
+
+
+def _expect_bounded_int(
+    payload: dict[str, Any],
+    key: str,
+    *,
+    default: int,
+    minimum: int,
+    maximum: int,
+    label: str,
+) -> int:
+    value = payload.get(key, default)
+    if isinstance(value, bool) or not isinstance(value, int) or not minimum <= value <= maximum:
+        raise AppContractValidationError(f"`{label}` must be an integer from {minimum} through {maximum}.")
+    return value
+
+
+def _parse_env(payload: dict[str, Any], *, sandbox_required: bool, label: str) -> dict[str, str]:
     result: dict[str, str] = {}
     for key, value in payload.items():
         if not isinstance(key, str) or not key.strip():
             raise AppContractValidationError(f"`{label}.env` keys must be non-empty strings.")
         if not isinstance(value, str):
             raise AppContractValidationError(f"`{label}.env.{key}` must be a string.")
-        result[key.strip()] = value
+        normalized_key = key.strip()
+        if sandbox_required and _is_forbidden_sandbox_env_name(normalized_key):
+            raise AppContractValidationError(f"`{label}.env.{normalized_key}` is forbidden for sandbox-required sidecars.")
+        substitutions = set(_SUBSTITUTION_PATTERN.findall(value))
+        if sandbox_required and not substitutions.issubset(_SANDBOX_SUBSTITUTIONS):
+            raise AppContractValidationError(
+                f"`{label}.env.{normalized_key}` contains a substitution unavailable to sandbox-required sidecars."
+            )
+        result[normalized_key] = value
     return result
+
+
+def _is_forbidden_sandbox_env_name(name: str) -> bool:
+    upper = name.upper()
+    return (
+        upper in _FORBIDDEN_ENV_NAMES
+        or upper.endswith("_API_KEY")
+        or upper.endswith("_BOOTSTRAP_SECRET")
+        or upper.endswith("_COOKIE")
+        or upper.startswith("AWS_")
+        or upper.startswith("AZURE_")
+        or upper.startswith("GOOGLE_")
+    )
 
 
 def _expect_http_path_prefix(payload: dict[str, Any], key: str, *, label: str) -> str:

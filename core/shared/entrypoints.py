@@ -13,7 +13,7 @@ import sys
 import tempfile
 from threading import Event, Lock
 import time
-from typing import Any
+from typing import Any, Callable
 
 from core.shared.repository import installation_paths
 
@@ -27,6 +27,7 @@ class EntrypointShutdownController:
         self._shutting_down = Event()
         self._lock = Lock()
         self._processes: set[subprocess.Popen[str]] = set()
+        self._cleanup_callbacks: set[Callable[[], None]] = set()
         self._parent = parent
 
     def begin_shutdown(self) -> None:
@@ -34,8 +35,12 @@ class EntrypointShutdownController:
         self._shutting_down.set()
         with self._lock:
             processes = list(self._processes)
+            callbacks = list(self._cleanup_callbacks)
+            self._cleanup_callbacks.clear()
         for process in processes:
             _terminate_process_tree(process)
+        for callback in callbacks:
+            callback()
 
     def is_shutting_down(self) -> bool:
         """Return whether the host has started shutdown."""
@@ -61,6 +66,22 @@ class EntrypointShutdownController:
             self._processes.discard(process)
         if self._parent is not None:
             self._parent.unregister(process)
+
+    def register_cleanup(self, callback: Callable[[], None]) -> None:
+        """Register idempotent cleanup that runs after process-group shutdown."""
+        with self._lock:
+            self._cleanup_callbacks.add(callback)
+        if self._parent is not None:
+            self._parent.register_cleanup(callback)
+        if self._shutting_down.is_set():
+            callback()
+
+    def unregister_cleanup(self, callback: Callable[[], None]) -> None:
+        """Remove one registered lifecycle cleanup callback."""
+        with self._lock:
+            self._cleanup_callbacks.discard(callback)
+        if self._parent is not None:
+            self._parent.unregister_cleanup(callback)
 
 
 @dataclass

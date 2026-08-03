@@ -24,6 +24,9 @@ WidgetFrontendKind = Literal["iframe"]
 AppRequiredInterfaceCardinality = Literal["one", "many"]
 HttpSidecarRuntime = Literal["python", "node", "generic"]
 HttpSidecarPort = int | Literal["auto"]
+HttpSidecarSandboxMode = Literal["required"]
+HttpSidecarNetworkMode = Literal["isolated"]
+HttpSidecarTransport = Literal["unix_relay"]
 AppProviderCredentialSource = Literal["none", "core-vault"]
 AppReferenceCacheScope = Literal["session", "workspace_user"]
 
@@ -336,6 +339,29 @@ class HttpSidecarLogSpec:
 
 
 @dataclass(frozen=True)
+class HttpSidecarResourceLimits:
+    """Bound resources enforced for one confined sidecar process group."""
+
+    memory_bytes: int
+    open_files: int
+    request_concurrency: int
+
+
+@dataclass(frozen=True)
+class HttpSidecarProcessPolicy:
+    """Describe the generic fail-closed process boundary for one sidecar."""
+
+    inherit_host_env: bool
+    sandbox: HttpSidecarSandboxMode
+    bundle_read_only: bool
+    workspace_data_write: bool
+    network: HttpSidecarNetworkMode
+    transport: HttpSidecarTransport
+    outbound: list[str]
+    limits: HttpSidecarResourceLimits
+
+
+@dataclass(frozen=True)
 class HttpSidecarSpec:
     """Describe one app-owned local HTTP sidecar process."""
 
@@ -345,6 +371,7 @@ class HttpSidecarSpec:
     working_directory: str
     package_manager: str | None
     env: dict[str, str]
+    process_policy: HttpSidecarProcessPolicy
     bind: HttpSidecarBindSpec
     health: HttpSidecarHealthSpec
     proxy: HttpSidecarProxySpec | None

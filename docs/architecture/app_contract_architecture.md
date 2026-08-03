@@ -946,6 +946,26 @@ network destinations, identities, or fallback commands. Missing mandatory
 namespace, mount, relay, or limit support prevents the sidecar from starting;
 host-loopback or unsandboxed fallback is invalid.
 
+Every HTTP sidecar declaration includes `process_policy`. The supported
+sandbox contract is deliberately singular: `inherit_host_env: false`,
+`sandbox: required`, read-only bundle, writable validated app data root,
+`network: isolated`, `transport: unix_relay`, and an empty `outbound` list. Its
+`limits` object declares positive `memory_bytes`, `open_files`, and
+`request_concurrency` bounds. Missing or weakened fields are contract errors.
+Sandbox environment values may use only `${service.port}`, `${service.token}`,
+`${app.data_dir}`, and `${app.source_dir}`; `${workspace.root}`, unresolved
+host substitutions, `HOME`, provider keys, platform bootstrap/runtime tokens,
+and secret-store material are rejected. Core overrides Maverick identity fields
+and never derives the sidecar environment from `os.environ`.
+
+The internal TCP listener exists only in the sidecar network namespace. Health,
+WSGI, and streaming ASGI requests all open the workspace-bound Unix socket and
+present a per-launch relay preamble before sending HTTP with the separate
+technical token. The host does not connect to, publish, or fall back to the
+internal TCP port. Relay directories use mode `0700`, sockets use `0600`, and
+shutdown or failed health terminates the bubblewrap process group and removes
+the relay identity.
+
 The proxy must not expose terminal access, host-folder import, wildcard passthrough, arbitrary network binding, or undeclared websocket/streaming semantics for sandbox apps. If an app needs those features, the contract must mark them outside sandbox compatibility or route them through a future generic core policy surface.
 
 ## Human Surface Versus Agent Surface

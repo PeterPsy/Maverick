@@ -1,7 +1,7 @@
 # Confined Execution For App-Owned Sidecars
 
 Date: 2026-08-03
-Status: Accepted (G2)
+Status: Accepted and implemented for the generic WP1 boundary
 Owners: Maverick Core app hosting and app contract domains
 
 ## Context
@@ -25,7 +25,12 @@ launcher. The contract declares generic process policy equivalent to:
   "workspace_data_write": true,
   "network": "isolated",
   "transport": "unix_relay",
-  "outbound": []
+  "outbound": [],
+  "limits": {
+    "memory_bytes": 4294967296,
+    "open_files": 1024,
+    "request_concurrency": 32
+  }
 }
 ```
 
@@ -43,12 +48,14 @@ directory, internal bind address/port, and technical authentication. It does
 not inherit `HOME`, provider/runtime homes, secret-store keys, bootstrap
 secrets, platform cookies, provider credentials, or unrelated host variables.
 
-The mount table exposes:
+The production WP1 mount table exposes:
 
-- the verified artifact/runtime closure read-only;
-- only the active `data/<local_app_id>/opendesign/instances/<generation>/data`
-  subtree read/write;
-- a dedicated bounded temporary filesystem read/write;
+- the resolved app source and minimal runtime closure read-only; WP5 replaces
+  the source mount with the verified artifact;
+- only the validated app-owned `data_root` supplied by the lifecycle resolver
+  read/write; WP6 narrows Design Studio's value to the active
+  `opendesign/instances/<generation>/data` subtree;
+- a dedicated temporary `tmpfs` read/write;
 - a dedicated relay socket directory, with no general host path semantics;
 - the minimum runtime libraries and pseudo-filesystems required to execute.
 
@@ -66,11 +73,14 @@ creates a Unix-domain socket in the dedicated mounted socket directory and
 forwards only to the sidecar's internal loopback listener. The host never
 publishes the internal TCP port.
 
-Each socket is bound to workspace, local app id, sidecar id, and generation in
-the core registry. Its directory and socket use the narrow service identity and
-mode `0600` (or a platform-equivalent ACL). Requests still require the internal
-technical token and route policy. A socket from another workspace, identity, or
-generation is rejected and stale sockets are unlinked during lifecycle cleanup.
+Each socket is bound to workspace, local app id, sidecar id, and resolved data
+root in the core registry; WP6 makes the data root a generation identity. Its
+directory is `0700`, the socket is `0600`, and every connection must first
+present an ephemeral relay capability supplied to the relay over an inherited
+file descriptor. The relay strips that preamble before forwarding. Requests
+still require the distinct internal HTTP technical token and route policy. A
+socket from another workspace, process without the relay capability, or stale
+data-root identity is rejected, and lifecycle cleanup unlinks the socket.
 
 No generic TCP/HTTP CONNECT proxy is mounted. Any future outbound operation
 must use a separately declared Maverick broker. If G3 selects A-ACP, only the
@@ -86,10 +96,15 @@ health checks terminate the entire group, wait a bounded grace period, then
 kill remaining descendants. The relay and sockets are removed only after the
 group exits.
 
-The policy declares bounded startup/health time, request concurrency, response
-and request sizes, memory/address-space ceilings when the host supports them,
-file descriptors, process count, and temporary storage. Unsupported mandatory
-limits make a sandbox-required launch fail; they are not silently ignored.
+The health declaration bounds startup. `process_policy.limits` bounds concurrent
+requests independently at the core proxy and relay, plus address space and open
+file descriptors. The relay applies the OS limits before it starts the app
+daemon so descendants inherit them. The
+root mount is read-only; only `/data`, the private relay directory, `/tmp`, and
+required pseudo-filesystems are separate writable mounts. Future aggregate
+disk/process-count controls require a supported host quota/cgroup primitive and
+must fail closed when declared; WP1 does not pretend `RLIMIT_NPROC` is a
+per-sidecar bound on hosts where it is actually per-user.
 
 ## Ownership
 
@@ -101,28 +116,34 @@ host network destinations, Unix socket paths, uid/gid, or fallback commands.
 
 ## Proof
 
-Run:
+Run the decision proof and the production-path integration suite:
 
 ```bash
 python3 -m unittest tests.architecture.test_sidecar_confinement_proof
+python3 -W error::ResourceWarning -m unittest \
+  tests.integration.app_hosting.test_sidecar_execution
 ```
 
-The proof uses the installed bubblewrap binary and a real network namespace. It
-shows that a host sentinel and `HOME` are absent, the artifact mount is
+Both suites use the installed bubblewrap binary and a real network namespace. They
+show that a host sentinel and `HOME` are absent, the app source mount is
 read-only, only the active data root is writable, operator-home and another
 workspace are absent, no default network route exists, host loopback and an
 internet address are unreachable, and core can reach the internal health
 listener only through a mode-`0600` Unix relay. It also starts a descendant and
-verifies that terminating the wrapper leaves no orphan. A missing bubblewrap
-path is rejected explicitly by the proof launcher helper.
+verifies that terminating the wrapper leaves no orphan. The production suite also
+exercises the actual contract parser, allowlisted environment, bubblewrap launch
+plan, authenticated Unix HTTP relay, request semaphore, lifecycle callback, and
+mode cleanup. A missing bubblewrap path and an absolute app command are rejected
+explicitly before launch.
 
 Expected result: all tests pass on a supported Linux host. Failure to create a
 namespace is a failed gate, not a skip.
 
-## Residual Risk And Closure
+## Implementation And Residual Closure
 
-- WP1 implements this policy in the generic contract, launcher, relay, process
-  registry, audit, resource limits, and hostile integration suite.
+- WP1 implements the generic contract, strict serializer/store round trip,
+  empty environment, bubblewrap launcher, authenticated Unix relay, group
+  lifecycle, address-space/file-descriptor/request limits, and hostile suite.
 - WP5 verifies the read-only artifact and native runtime closure used by the
   launcher.
 - WP6 binds every launch and relay to the active artifact/data generation.
@@ -131,5 +152,5 @@ namespace is a failed gate, not a skip.
 - WP10 repeats filesystem/network/workspace A/B, timeout, restart, and orphan
   cleanup tests against the production launcher.
 
-Until WP1 passes, a sandbox-required sidecar must not claim confinement based
-only on loopback binding.
+The OpenDesign-specific launcher remains app-owned. Core contains no
+OpenDesign-specific command, route, environment key, mount path, or fallback.

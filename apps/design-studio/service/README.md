@@ -41,6 +41,36 @@ proxy cannot reach the real sidecar. If the bundle is absent or not
 installed/built, the declared Maverick runtime fails closed. There is no runtime
 compatibility fallback.
 
+## Confined process boundary
+
+The app contract opts into the mandatory generic sidecar `process_policy`.
+Core starts the launcher under bubblewrap with a fixed allowlisted environment,
+the app source mounted read-only at `/app`, the resolved Design Studio data root
+at `/data`, a read-only minimal runtime closure, an isolated network namespace,
+and no outbound targets. `HOME`, operator/provider runtime homes, provider keys,
+Maverick runtime tokens, bootstrap secrets, cookies, Storage, and other
+workspaces are not mounted or inherited.
+
+OpenDesign's TCP listener is internal to that network namespace. Core health and
+proxy traffic use an authenticated mode-`0600` Unix relay; there is no host TCP
+listener or loopback fallback. The contract bounds address space, open files,
+and concurrent proxy requests. Shutdown and failed startup terminate the whole
+bubblewrap process group, including descendants, and remove the relay directory.
+`OD_API_TOKEN` is generated as `${service.token}` and remains distinct from the
+relay capability; neither value is returned to the browser.
+
+The OpenDesign contract uses a 16 GiB virtual-address ceiling. This is a bound
+on address space, not a claim of physical allocation: Node/V8 and WebAssembly
+reserve multi-gigabyte virtual regions at startup, and the real curated daemon
+smoke proves that a smaller 4 GiB ceiling fails closed before readiness.
+
+Production-boundary proof:
+
+```bash
+python3 -W error::ResourceWarning -m unittest \
+  tests.integration.app_hosting.test_sidecar_execution
+```
+
 ## Pinned 0.16.1 inventories
 
 `inventory_opendesign.py` reads a clean checkout of the exact

@@ -88,9 +88,25 @@ The app is installed into workspaces through the generic built-in app source reg
 
 The contract declares frontend, backend, CLI, MCP, lifecycle hooks, a bundled skill, referenceable `design_project` entities, standard view-state actions, Storage dependencies, and one app-owned HTTP sidecar.
 
-The sidecar is sandbox-compatible because it binds to loopback, receives a generated technical token, writes runtime data under the app data root, writes logs under `logs/apps/design-studio/`, runs OpenDesign in sandbox mode, and exposes only routes allowed by `route_policy`.
+The sidecar is sandbox-compatible because its mandatory generic
+`process_policy` starts it under bubblewrap with an allowlisted environment,
+read-only app bundle, writable validated app data root, isolated network
+namespace, empty outbound list, resource/request limits, and an authenticated
+Unix relay. Its loopback listener exists only inside that namespace; core never
+publishes or falls back to a host TCP port. `HOME`, provider/runtime secrets,
+cookies, Storage, operator paths, and other workspaces are absent. The generated
+technical token uses the generic `${service.token}` substitution and is not the
+relay capability.
 
 The core sidecar proxy uses the ASGI streaming path for Design Studio routes. Request bodies are forwarded to the sidecar as chunks instead of through the JSON app-backend body limit, responses are streamed back to the browser, and SSE responses are preserved without exposing the generated `OD_API_TOKEN` to the client.
+
+The production confinement suite uses real bubblewrap and validates filesystem,
+environment, network, authenticated relay, concurrency and descendant cleanup:
+
+```bash
+python3 -W error::ResourceWarning -m unittest \
+  tests.integration.app_hosting.test_sidecar_execution
+```
 
 Routes declared as `handled_by_core` are routed to the Design Studio backend with the `sidecar_core_handler` surface instead of reaching the OpenDesign sidecar. The implemented sandbox handlers cover:
 

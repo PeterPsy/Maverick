@@ -42,7 +42,9 @@ from core.apps.models import (
     HttpSidecarBindSpec,
     HttpSidecarHealthSpec,
     HttpSidecarLogSpec,
+    HttpSidecarProcessPolicy,
     HttpSidecarProxySpec,
+    HttpSidecarResourceLimits,
     HttpSidecarRoutePolicy,
     HttpSidecarRouteRule,
     HttpSidecarSpec,
@@ -405,6 +407,7 @@ def _app_services(payload: Any) -> AppServicesDeclaration:
                 working_directory=sidecar["working_directory"],
                 command=list(sidecar["command"]),
                 env={str(key): str(value) for key, value in sidecar.get("env", {}).items()},
+                process_policy=_app_sidecar_process_policy(sidecar.get("process_policy")),
                 bind=HttpSidecarBindSpec(**sidecar["bind"]),
                 health=HttpSidecarHealthSpec(**sidecar["health"]),
                 proxy=_app_sidecar_proxy(sidecar.get("proxy")),
@@ -412,6 +415,26 @@ def _app_services(payload: Any) -> AppServicesDeclaration:
             )
             for sidecar in payload.get("http_sidecars", [])
         ]
+    )
+
+
+def _app_sidecar_process_policy(payload: Any) -> HttpSidecarProcessPolicy:
+    if not isinstance(payload, dict):
+        payload = {}
+    limits = payload.get("limits") if isinstance(payload.get("limits"), dict) else {}
+    return HttpSidecarProcessPolicy(
+        inherit_host_env=False,
+        sandbox="required",
+        bundle_read_only=True,
+        workspace_data_write=True,
+        network="isolated",
+        transport="unix_relay",
+        outbound=[],
+        limits=HttpSidecarResourceLimits(
+            memory_bytes=int(limits.get("memory_bytes", 4 * 1024 * 1024 * 1024)),
+            open_files=int(limits.get("open_files", 1024)),
+            request_concurrency=int(limits.get("request_concurrency", 32)),
+        ),
     )
 
 

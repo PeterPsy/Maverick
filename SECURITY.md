@@ -75,3 +75,11 @@ Maverick's intended security model is stricter than a personal-assistant trust m
 - platform control-plane state and secrets are not app-owned data
 
 This model is still being hardened. Public documentation must not claim production readiness until the audit blockers are closed.
+
+App-owned HTTP sidecars that declare sandbox compatibility use the generic
+fail-closed process boundary documented in
+`docs/architecture/app_sidecar_execution.md`: an allowlisted environment,
+bubblewrap filesystem/network namespaces, no egress, and an authenticated Unix
+relay rather than a host TCP listener. This closes that specific sidecar launch
+boundary; it does not close the unrelated application-backend, browser-origin,
+CSRF, runtime-authority, or recovery blockers listed above.

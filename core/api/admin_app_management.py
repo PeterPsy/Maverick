@@ -7,6 +7,7 @@ from pathlib import Path
 
 from core.api.http import StartResponse, json_response
 from core.api.session_api import RequestSession
+from core.api.sidecar_proxy import stop_app_sidecars
 from core.apps.errors import AppHostingError, WorkspaceAppBindingNotFoundError, WorkspaceLocalAppProjectNotFoundError
 from core.apps.models import AppContractDescriptor, AppSourceRecord, WorkspaceAppBindingRecord, WorkspaceLocalAppProjectRecord
 from core.apps.service import install_store_app, transition_workspace_app_status, uninstall_workspace_app
@@ -189,6 +190,8 @@ def handle_admin_app_management_api(
                 target_status=status,
                 observability_store=state.observability_store,
             )
+            if status == "disabled":
+                stop_app_sidecars(workspace_id=workspace_id, app_id=app_id)
             return json_response(start_response, _binding_payload(binding) or {})
         if method == "DELETE":
             uninstall_workspace_app(
@@ -197,6 +200,7 @@ def handle_admin_app_management_api(
                 app_id=app_id,
                 observability_store=state.observability_store,
             )
+            stop_app_sidecars(workspace_id=workspace_id, app_id=app_id)
             return json_response(start_response, {"workspace_id": workspace_id, "app_id": app_id, "status": "uninstalled"})
     except WorkspaceNotFoundError:
         return json_response(start_response, {"error": "workspace_not_found"}, status="404 Not Found")

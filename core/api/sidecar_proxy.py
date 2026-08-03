@@ -3,21 +3,20 @@
 from __future__ import annotations
 
 import asyncio
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 import json
 import http.client
 import logging
 import os
 from pathlib import Path
 import secrets
+import signal
 import socket
 import subprocess
-from threading import Lock
+from threading import BoundedSemaphore, Lock
 import time
-from typing import Any, AsyncIterator, Iterable, Iterator
-from urllib.error import HTTPError, URLError
+from typing import Any, AsyncIterator, Callable, Iterable, Iterator
 from urllib.parse import quote
-from urllib.request import Request, urlopen
 
 from core.api.app_registry import resolve_app_surface
 from core.api.http import StartResponse, json_response, read_request_body_bytes, status_line
@@ -29,11 +28,17 @@ from core.api.sidecar_core_routes import (
 )
 from core.apps.errors import AppHostingError, WorkspaceAppBindingNotFoundError
 from core.apps.models import HttpSidecarRouteRule, HttpSidecarSpec, ParsedAppContract
+from core.apps.sidecar_execution import (
+    ConfinedSidecarLaunch,
+    MINIMAL_SIDECAR_ENV,
+    prepare_confined_sidecar_launch,
+    relay_preamble,
+    sandbox_substitutions,
+)
 from core.authorization.errors import AuthorizationError
 from core.authorization.service import can_mount_app_visibility, require_workspace_admin, require_workspace_membership
 from core.identity.models import UserRecord
 from core.shared.entrypoints import EntrypointShutdownController
-from core.shared.repository import installation_paths
 from core.workspaces.paths import workspace_paths
 
 
@@ -65,8 +70,14 @@ class RunningSidecar:
     host: str
     port: int
     token: str
+    confined_launch: ConfinedSidecarLaunch
+    request_slots: BoundedSemaphore
     stdout_file: Any | None = None
     stderr_file: Any | None = None
+    cleanup_callback: Callable[[], None] | None = None
+    shutdown_controller: EntrypointShutdownController | None = None
+    cleanup_lock: Lock = field(default_factory=Lock)
+    cleaned: bool = False
 
 
 @dataclass(frozen=True)
@@ -92,10 +103,19 @@ class SidecarProxyError:
 class StreamingSidecarResponse:
     """Iterator that streams an open http.client response and closes it."""
 
-    def __init__(self, connection: http.client.HTTPConnection, response: http.client.HTTPResponse, *, method: str) -> None:
+    def __init__(
+        self,
+        connection: http.client.HTTPConnection,
+        response: http.client.HTTPResponse,
+        *,
+        method: str,
+        release_slot: Callable[[], None],
+    ) -> None:
         self._connection = connection
         self._response = response
         self._method = method
+        self._release_slot = release_slot
+        self._closed = False
 
     def __iter__(self) -> Iterator[bytes]:
         try:
@@ -110,7 +130,31 @@ class StreamingSidecarResponse:
             self.close()
 
     def close(self) -> None:
+        if self._closed:
+            return
+        self._closed = True
         self._connection.close()
+        self._release_slot()
+
+
+class UnixRelayHTTPConnection(http.client.HTTPConnection):
+    """HTTP connection authenticated to a private Unix relay."""
+
+    def __init__(self, running: RunningSidecar, *, timeout: float) -> None:
+        super().__init__(running.host, running.port, timeout=timeout)
+        self._relay_socket = running.confined_launch.relay_socket
+        self._relay_preamble = relay_preamble(running.confined_launch.relay_capability)
+
+    def connect(self) -> None:
+        sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+        sock.settimeout(self.timeout)
+        try:
+            sock.connect(str(self._relay_socket))
+            sock.sendall(self._relay_preamble)
+        except OSError:
+            sock.close()
+            raise
+        self.sock = sock
 
 
 class HttpSidecarManager:
@@ -137,7 +181,7 @@ class HttpSidecarManager:
             if running is not None and running.process.poll() is None:
                 return running
             if running is not None:
-                self._cleanup_sidecar(running, shutdown_controller=shutdown_controller)
+                self._cleanup_sidecar(running)
                 self._running.pop(key, None)
             running = self._start_sidecar(
                 workspace_id=workspace_id,
@@ -165,68 +209,111 @@ class HttpSidecarManager:
         host = sidecar.bind.host
         port = _allocate_loopback_port(host) if sidecar.bind.port == "auto" else int(sidecar.bind.port)
         token = secrets.token_urlsafe(32)
-        workdir = (source_root / sidecar.working_directory).resolve()
         workspace = workspace_paths(workspace_id, start_path=start_path)
         stdout_file = _open_sidecar_log(workspace.root, sidecar.logs.stdout if sidecar.logs else None)
         stderr_file = _open_sidecar_log(workspace.root, sidecar.logs.stderr if sidecar.logs else None)
-        env = _sidecar_env(
-            workspace_id=workspace_id,
-            app_id=app_id,
-            data_root=data_root,
-            source_root=source_root,
-            workspace_root=workspace.root,
-            port=port,
-            token=token,
-            sidecar=sidecar,
-            start_path=start_path,
-        )
+        try:
+            env = _sidecar_env(
+                workspace_id=workspace_id,
+                app_id=app_id,
+                data_root=data_root,
+                source_root=source_root,
+                workspace_root=workspace.root,
+                port=port,
+                token=token,
+                sidecar=sidecar,
+                start_path=start_path,
+            )
+            confined_launch = prepare_confined_sidecar_launch(
+                workspace_id=workspace_id,
+                app_id=app_id,
+                source_root=source_root,
+                data_root=Path(data_root),
+                workspace_root=workspace.root,
+                sidecar=sidecar,
+                port=port,
+                env=env,
+            )
+        except Exception:
+            _close_sidecar_logs(stdout_file, stderr_file)
+            raise
         try:
             process = subprocess.Popen(
-                sidecar.command,
-                cwd=str(workdir),
-                env=env,
+                confined_launch.command,
+                cwd="/",
+                env=confined_launch.env,
                 stdout=stdout_file or subprocess.DEVNULL,
                 stderr=stderr_file or subprocess.DEVNULL,
                 stdin=subprocess.DEVNULL,
                 start_new_session=True,
+                pass_fds=confined_launch.pass_fds,
             )
         except OSError as error:
+            confined_launch.cleanup()
             _close_sidecar_logs(stdout_file, stderr_file)
             raise AppHostingError(f"HTTP sidecar `{sidecar.service_id}` failed to start: {error}") from error
-        if shutdown_controller is not None:
-            shutdown_controller.register(process)  # type: ignore[arg-type]
+        finally:
+            confined_launch.close_parent_fds()
         running = RunningSidecar(
             process=process,
             host=host,
             port=port,
             token=token,
+            confined_launch=confined_launch,
+            request_slots=BoundedSemaphore(sidecar.process_policy.limits.request_concurrency),
             stdout_file=stdout_file,
             stderr_file=stderr_file,
+            shutdown_controller=shutdown_controller,
         )
+        if shutdown_controller is not None:
+            shutdown_controller.register(process)  # type: ignore[arg-type]
+
+            def cleanup_callback() -> None:
+                self._cleanup_sidecar(running)
+
+            running.cleanup_callback = cleanup_callback
+            shutdown_controller.register_cleanup(cleanup_callback)
         try:
             _wait_for_sidecar_health(running, sidecar=sidecar)
         except AppHostingError:
-            self._cleanup_sidecar(running, shutdown_controller=shutdown_controller)
+            self._cleanup_sidecar(running)
             raise
         return running
 
-    def _cleanup_sidecar(
-        self,
-        running: RunningSidecar,
-        *,
-        shutdown_controller: EntrypointShutdownController | None,
-    ) -> None:
-        process = running.process
-        if process.poll() is None:
-            process.terminate()
-            try:
-                process.wait(timeout=5)
-            except subprocess.TimeoutExpired:
-                process.kill()
-                process.wait(timeout=5)
-        if shutdown_controller is not None:
-            shutdown_controller.unregister(process)  # type: ignore[arg-type]
-        _close_sidecar_logs(running.stdout_file, running.stderr_file)
+    def stop_app(self, *, workspace_id: str, app_id: str) -> None:
+        """Stop every running sidecar owned by one workspace app."""
+        with self._lock:
+            keys = [key for key in self._running if key[:2] == (workspace_id, app_id)]
+            running_sidecars = [self._running.pop(key) for key in keys]
+            for running in running_sidecars:
+                self._cleanup_sidecar(running)
+
+    def _cleanup_sidecar(self, running: RunningSidecar) -> None:
+        with running.cleanup_lock:
+            if running.cleaned:
+                return
+            process = running.process
+            if process.poll() is None:
+                _signal_process_group(process, signal.SIGTERM)
+                try:
+                    process.wait(timeout=5)
+                except subprocess.TimeoutExpired:
+                    _signal_process_group(process, signal.SIGKILL)
+                    process.wait(timeout=5)
+            if running.shutdown_controller is not None:
+                running.shutdown_controller.unregister(process)  # type: ignore[arg-type]
+                if running.cleanup_callback is not None:
+                    running.shutdown_controller.unregister_cleanup(running.cleanup_callback)
+            running.confined_launch.cleanup()
+            _close_sidecar_logs(running.stdout_file, running.stderr_file)
+            running.cleaned = True
+
+
+def stop_app_sidecars(*, workspace_id: str, app_id: str) -> None:
+    """Stop an app's live sidecars without creating a manager as a side effect."""
+    manager = _SIDECAR_MANAGER
+    if manager is not None:
+        manager.stop_app(workspace_id=workspace_id, app_id=app_id)
 
 
 def handle_app_sidecar_proxy(
@@ -531,7 +618,9 @@ def _proxy_to_running_sidecar(
     start_response: StartResponse,
 ) -> Iterable[bytes]:
     upstream_path = f"{path}?{query_string}" if query_string else path
-    connection = http.client.HTTPConnection(running.host, running.port, timeout=_DEFAULT_PROXY_TIMEOUT_SECONDS)
+    if not running.request_slots.acquire(blocking=False):
+        raise AppHostingError("HTTP sidecar request concurrency limit reached.")
+    connection = UnixRelayHTTPConnection(running, timeout=_DEFAULT_PROXY_TIMEOUT_SECONDS)
     headers = _forward_request_headers(environ)
     headers["Authorization"] = f"Bearer {running.token}"
     if body:
@@ -539,12 +628,26 @@ def _proxy_to_running_sidecar(
     try:
         connection.request(method, upstream_path, body=body if body else None, headers=headers)
         response = connection.getresponse()
-    except OSError as error:
+    except (OSError, http.client.HTTPException) as error:
         connection.close()
+        running.request_slots.release()
         raise AppHostingError("HTTP sidecar is not reachable.") from error
-    response_headers = _forward_response_headers(response.getheaders())
-    start_response(f"{response.status} {response.reason or status_line(response.status).split(' ', 1)[1]}", response_headers)
-    return StreamingSidecarResponse(connection, response, method=method)
+    try:
+        response_headers = _forward_response_headers(response.getheaders())
+        start_response(
+            f"{response.status} {response.reason or status_line(response.status).split(' ', 1)[1]}",
+            response_headers,
+        )
+    except Exception:
+        connection.close()
+        running.request_slots.release()
+        raise
+    return StreamingSidecarResponse(
+        connection,
+        response,
+        method=method,
+        release_slot=running.request_slots.release,
+    )
 
 
 async def _proxy_asgi_to_running_sidecar(
@@ -559,12 +662,17 @@ async def _proxy_asgi_to_running_sidecar(
     send: AsgiSend,
 ) -> None:
     upstream_path = f"{path}?{query_string}" if query_string else path
-    reader, writer = await asyncio.wait_for(
-        asyncio.open_connection(running.host, running.port),
-        timeout=_DEFAULT_PROXY_TIMEOUT_SECONDS,
-    )
+    if not running.request_slots.acquire(blocking=False):
+        raise AppHostingError("HTTP sidecar request concurrency limit reached.")
+    writer: asyncio.StreamWriter | None = None
     response_started = False
     try:
+        reader, writer = await asyncio.wait_for(
+            asyncio.open_unix_connection(str(running.confined_launch.relay_socket)),
+            timeout=_DEFAULT_PROXY_TIMEOUT_SECONDS,
+        )
+        writer.write(relay_preamble(running.confined_launch.relay_capability))
+        await writer.drain()
         request_headers = _forward_asgi_request_headers(scope)
         stream_request_as_chunked = method in _REQUEST_BODY_METHODS and not _asgi_header_present(scope, "content-length")
         request_headers["Host"] = f"{running.host}:{running.port}"
@@ -604,11 +712,13 @@ async def _proxy_asgi_to_running_sidecar(
             raise
         logger.warning("HTTP sidecar stream ended with an upstream protocol error.", exc_info=True)
     finally:
-        writer.close()
-        try:
-            await writer.wait_closed()
-        except OSError:
-            pass
+        if writer is not None:
+            writer.close()
+            try:
+                await writer.wait_closed()
+            except OSError:
+                pass
+        running.request_slots.release()
     await send({"type": "http.response.body", "body": b"", "more_body": False})
 
 
@@ -845,22 +955,15 @@ def _sidecar_env(
     sidecar: HttpSidecarSpec,
     start_path: Path,
 ) -> dict[str, str]:
-    env = dict(os.environ)
-    repository_root = str(installation_paths(start_path=start_path).repository_root)
-    env["PYTHONPATH"] = repository_root if not env.get("PYTHONPATH") else f"{repository_root}{os.pathsep}{env['PYTHONPATH']}"
-    substitutions = {
-        "${service.port}": str(port),
-        "${service_secret:od_api_token}": token,
-        "${app.data_dir}": data_root,
-        "${app.source_dir}": str(source_root),
-        "${workspace.root}": str(workspace_root),
-    }
+    del data_root, source_root, workspace_root, start_path
+    env = dict(MINIMAL_SIDECAR_ENV)
+    substitutions = sandbox_substitutions(port=port, token=token)
     for key, value in sidecar.env.items():
         env[key] = _replace_substitutions(value, substitutions)
-    env.setdefault("MAVERICK_APP_ID", app_id)
-    env.setdefault("MAVERICK_WORKSPACE_ID", workspace_id)
-    env.setdefault("MAVERICK_SIDECAR_ID", sidecar.service_id)
-    env.setdefault("MAVERICK_SIDECAR_PORT", str(port))
+    env["MAVERICK_APP_ID"] = app_id
+    env["MAVERICK_WORKSPACE_ID"] = workspace_id
+    env["MAVERICK_SIDECAR_ID"] = sidecar.service_id
+    env["MAVERICK_SIDECAR_PORT"] = str(port)
     return env
 
 
@@ -868,27 +971,48 @@ def _replace_substitutions(value: str, substitutions: dict[str, str]) -> str:
     result = value
     for token, replacement in substitutions.items():
         result = result.replace(token, replacement)
+    if "${" in result:
+        raise AppHostingError("HTTP sidecar environment contains an unsupported substitution.")
     return result
 
 
 def _wait_for_sidecar_health(running: RunningSidecar, *, sidecar: HttpSidecarSpec) -> None:
     deadline = time.monotonic() + (sidecar.health.timeout_ms / 1000)
-    url = f"http://{running.host}:{running.port}{sidecar.health.path}"
     last_error = "not ready"
     while time.monotonic() < deadline:
         if running.process.poll() is not None:
             raise AppHostingError(f"HTTP sidecar exited with code {running.process.returncode}.")
+        connection = UnixRelayHTTPConnection(running, timeout=1.5)
         try:
-            request = Request(url, headers={"Authorization": f"Bearer {running.token}"}, method="GET")
-            with urlopen(request, timeout=1.5) as response:
-                if 200 <= response.status < 500:
-                    return
-                last_error = f"health returned HTTP {response.status}"
-        except HTTPError as error:
-            if 200 <= error.code < 500:
+            connection.request(
+                "GET",
+                sidecar.health.path,
+                headers={
+                    "Authorization": f"Bearer {running.token}",
+                    "Connection": "close",
+                    "Host": f"{running.host}:{running.port}",
+                },
+            )
+            response = connection.getresponse()
+            if 200 <= response.status < 300:
                 return
-            last_error = f"health returned HTTP {error.code}"
-        except (OSError, URLError) as error:
+            last_error = f"health returned HTTP {response.status}"
+        except (OSError, http.client.HTTPException) as error:
             last_error = str(error)
+        finally:
+            connection.close()
         time.sleep(0.1)
     raise AppHostingError(f"HTTP sidecar `{sidecar.service_id}` did not become ready: {last_error}")
+
+
+def _signal_process_group(process: subprocess.Popen[bytes], signum: signal.Signals) -> None:
+    try:
+        os.killpg(process.pid, signum)
+    except ProcessLookupError:
+        return
+    except OSError:
+        if process.poll() is None:
+            if signum == signal.SIGKILL:
+                process.kill()
+            else:
+                process.terminate()

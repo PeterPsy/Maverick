@@ -38,7 +38,9 @@ from core.apps.models import (
     HttpSidecarBindSpec,
     HttpSidecarHealthSpec,
     HttpSidecarLogSpec,
+    HttpSidecarProcessPolicy,
     HttpSidecarProxySpec,
+    HttpSidecarResourceLimits,
     HttpSidecarRoutePolicy,
     HttpSidecarRouteRule,
     HttpSidecarSpec,
@@ -349,6 +351,7 @@ def build_http_sidecar_spec(
     working_directory: str = ".",
     package_manager: str | None = None,
     env: dict[str, str] | None = None,
+    process_policy: HttpSidecarProcessPolicy | None = None,
     bind: HttpSidecarBindSpec | None = None,
     health: HttpSidecarHealthSpec | None = None,
     proxy: HttpSidecarProxySpec | None = None,
@@ -362,10 +365,34 @@ def build_http_sidecar_spec(
         working_directory=working_directory,
         command=command,
         env=env or {},
+        process_policy=process_policy or build_http_sidecar_process_policy(),
         bind=bind or HttpSidecarBindSpec(host="127.0.0.1", port="auto"),
         health=health or HttpSidecarHealthSpec(path="/health", timeout_ms=30000),
         proxy=proxy,
         logs=logs,
+    )
+
+
+def build_http_sidecar_process_policy(
+    *,
+    memory_bytes: int = 4 * 1024 * 1024 * 1024,
+    open_files: int = 1024,
+    request_concurrency: int = 32,
+) -> HttpSidecarProcessPolicy:
+    """Build the only supported fail-closed sidecar process policy."""
+    return HttpSidecarProcessPolicy(
+        inherit_host_env=False,
+        sandbox="required",
+        bundle_read_only=True,
+        workspace_data_write=True,
+        network="isolated",
+        transport="unix_relay",
+        outbound=[],
+        limits=HttpSidecarResourceLimits(
+            memory_bytes=memory_bytes,
+            open_files=open_files,
+            request_concurrency=request_concurrency,
+        ),
     )
 
 

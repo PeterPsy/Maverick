@@ -12,6 +12,7 @@ from core.apps.contracts import (
     build_app_contract,
     build_app_services,
     build_http_sidecar_logs,
+    build_http_sidecar_process_policy,
     build_http_sidecar_proxy,
     build_http_sidecar_route_policy,
     build_http_sidecar_route_rule,
@@ -34,6 +35,10 @@ class AppContractServiceTests(unittest.TestCase):
 
             self.assertEqual(loaded.contract.services.http_sidecars[0].service_id, "opendesign")
             self.assertEqual(loaded.contract.services.http_sidecars[0].bind.port, "auto")
+            self.assertEqual(loaded.contract.services.http_sidecars[0].process_policy.sandbox, "required")
+            self.assertEqual(loaded.contract.services.http_sidecars[0].process_policy.transport, "unix_relay")
+            self.assertEqual(loaded.contract.services.http_sidecars[0].process_policy.outbound, [])
+            self.assertEqual(loaded.contract.services.http_sidecars[0].process_policy.limits.request_concurrency, 16)
             self.assertEqual(loaded.contract.services.http_sidecars[0].proxy.route_policy.blocked[0].path_prefix, "/api/import/folder")
             self.assertFalse(loaded.contract.permissions.providers.model_proxy)
             self.assertEqual(loaded.contract.permissions.providers.credential_source, "none")
@@ -81,6 +86,54 @@ class AppContractServiceTests(unittest.TestCase):
             with self.assertRaisesRegex(AppContractValidationError, "route_policy"):
                 parse_app_contract_file(app_root)
 
+    def test_parse_contract_rejects_sandbox_sidecar_without_process_policy(self) -> None:
+        with TemporaryDirectory() as temp_dir:
+            app_root = self._write_sidecar_app(Path(temp_dir))
+            payload = json.loads((app_root / "app_contract.json").read_text(encoding="utf-8"))
+            del payload["services"]["http_sidecars"][0]["process_policy"]
+            (app_root / "app_contract.json").write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
+
+            with self.assertRaisesRegex(AppContractValidationError, "process_policy.*required"):
+                parse_app_contract_file(app_root)
+
+    def test_parse_contract_rejects_weakened_sandbox_process_policy(self) -> None:
+        mutations = (
+            ("inherit_host_env", True),
+            ("sandbox", "optional"),
+            ("bundle_read_only", False),
+            ("workspace_data_write", False),
+            ("network", "host"),
+            ("transport", "tcp_loopback"),
+            ("outbound", ["https://example.invalid"]),
+        )
+        for field, value in mutations:
+            with self.subTest(field=field), TemporaryDirectory() as temp_dir:
+                app_root = self._write_sidecar_app(Path(temp_dir))
+                payload = json.loads((app_root / "app_contract.json").read_text(encoding="utf-8"))
+                payload["services"]["http_sidecars"][0]["process_policy"][field] = value
+                (app_root / "app_contract.json").write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
+
+                with self.assertRaisesRegex(AppContractValidationError, field):
+                    parse_app_contract_file(app_root)
+
+    def test_parse_contract_rejects_forbidden_or_unresolved_sandbox_environment(self) -> None:
+        mutations = (
+            ("HOME", "/operator-home"),
+            ("OPENAI_API_KEY", "provider-secret"),
+            ("MAVERICK_BOOTSTRAP_SECRET", "bootstrap-secret"),
+            ("ARBITRARY", "${host.secret}"),
+            ("WORKSPACE", "${workspace.root}"),
+        )
+        for key, value in mutations:
+            with self.subTest(key=key), TemporaryDirectory() as temp_dir:
+                app_root = self._write_sidecar_app(Path(temp_dir))
+                payload = json.loads((app_root / "app_contract.json").read_text(encoding="utf-8"))
+                payload["services"]["http_sidecars"][0]["env"][key] = value
+                (app_root / "app_contract.json").write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
+
+                with self.assertRaisesRegex(AppContractValidationError, "env"):
+                    parse_app_contract_file(app_root)
+
     def test_parse_contract_rejects_non_loopback_sandbox_sidecar(self) -> None:
         with TemporaryDirectory() as temp_dir:
             app_root = self._write_sidecar_app(Path(temp_dir))
@@ -121,8 +174,13 @@ class AppContractServiceTests(unittest.TestCase):
                             env={
                                 "OD_BIND_HOST": "127.0.0.1",
                                 "OD_PORT": "${service.port}",
-                                "OD_API_TOKEN": "${service_secret:od_api_token}",
+                                "OD_API_TOKEN": "${service.token}",
                             },
+                            process_policy=build_http_sidecar_process_policy(
+                                memory_bytes=2 * 1024 * 1024 * 1024,
+                                open_files=512,
+                                request_concurrency=16,
+                            ),
                             bind=HttpSidecarBindSpec(host="127.0.0.1", port="auto"),
                             health=HttpSidecarHealthSpec(path="/api/ready", timeout_ms=5000),
                             proxy=build_http_sidecar_proxy(

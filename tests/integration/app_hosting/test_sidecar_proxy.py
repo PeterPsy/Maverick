@@ -33,7 +33,7 @@ from core.shared.entrypoints import EntrypointShutdownController
 
 
 class AppSidecarProxyIntegrationTests(unittest.TestCase):
-    def test_wp0_characterizes_host_environment_inheritance_before_process_policy(self) -> None:
+    def test_sidecar_environment_is_allowlisted_and_does_not_inherit_host_state(self) -> None:
         sidecar = build_http_sidecar_spec(
             service_id="opendesign",
             runtime="python",
@@ -45,7 +45,15 @@ class AppSidecarProxyIntegrationTests(unittest.TestCase):
         )
         sentinel = "MAVERICK_WP0_HOST_ENV_SENTINEL"
 
-        with tempfile.TemporaryDirectory() as temp, patch.dict(os.environ, {sentinel: "must-not-cross"}):
+        with tempfile.TemporaryDirectory() as temp, patch.dict(
+            os.environ,
+            {
+                sentinel: "must-not-cross",
+                "HOME": "/operator-home",
+                "OPENAI_API_KEY": "must-not-cross",
+                "PYTHONPATH": "/operator-pythonpath",
+            },
+        ):
             root = self._repo_root(temp)
             env = _sidecar_env(
                 workspace_id="default",
@@ -59,7 +67,12 @@ class AppSidecarProxyIntegrationTests(unittest.TestCase):
                 start_path=root,
             )
 
-        self.assertEqual(env[sentinel], "must-not-cross")
+        self.assertNotIn(sentinel, env)
+        self.assertNotIn("HOME", env)
+        self.assertNotIn("OPENAI_API_KEY", env)
+        self.assertNotIn("/operator-pythonpath", env.get("PYTHONPATH", ""))
+        self.assertEqual(env["PATH"], "/usr/local/bin:/usr/bin:/bin")
+        self.assertEqual(env["MAVERICK_WORKSPACE_ID"], "default")
 
     def test_sidecar_proxy_starts_process_injects_token_and_blocks_sandbox_routes(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
@@ -227,7 +240,7 @@ class AppSidecarProxyIntegrationTests(unittest.TestCase):
                             env={
                                 "OD_BIND_HOST": "127.0.0.1",
                                 "OD_PORT": "${service.port}",
-                                "OD_API_TOKEN": "${service_secret:od_api_token}",
+                                "OD_API_TOKEN": "${service.token}",
                             },
                             bind=HttpSidecarBindSpec(host="127.0.0.1", port="auto"),
                             health=HttpSidecarHealthSpec(path="/api/ready", timeout_ms=5000),

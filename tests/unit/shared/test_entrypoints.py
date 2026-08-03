@@ -21,6 +21,16 @@ REPO_ROOT = Path(__file__).resolve().parents[3]
 
 
 class SharedEntrypointTests(unittest.TestCase):
+    def test_shutdown_controller_runs_registered_cleanup_once(self) -> None:
+        controller = EntrypointShutdownController()
+        calls: list[str] = []
+        controller.register_cleanup(lambda: calls.append("cleanup"))
+
+        controller.begin_shutdown()
+        controller.begin_shutdown()
+
+        self.assertEqual(calls, ["cleanup"])
+
     def test_entrypoint_stderr_redaction_hides_secret_material(self) -> None:
         self.assertEqual(
             redact_entrypoint_stderr("raw_value=super-secret-token"),

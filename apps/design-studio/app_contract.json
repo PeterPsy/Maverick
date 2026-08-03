@@ -253,9 +253,23 @@
           "OD_PORT": "${service.port}",
           "OD_DATA_DIR": "${app.data_dir}/opendesign",
           "OD_MEDIA_CONFIG_DIR": "${app.data_dir}/opendesign/media-config",
-          "OD_API_TOKEN": "${service_secret:od_api_token}",
+          "OD_API_TOKEN": "${service.token}",
           "OD_SANDBOX_MODE": "1",
           "MAVERICK_OPENDESIGN_BUNDLE_DIR": "${app.source_dir}/service/vendor/open-design"
+        },
+        "process_policy": {
+          "inherit_host_env": false,
+          "sandbox": "required",
+          "bundle_read_only": true,
+          "workspace_data_write": true,
+          "network": "isolated",
+          "transport": "unix_relay",
+          "outbound": [],
+          "limits": {
+            "memory_bytes": 17179869184,
+            "open_files": 1024,
+            "request_concurrency": 32
+          }
         },
         "bind": {
           "host": "127.0.0.1",

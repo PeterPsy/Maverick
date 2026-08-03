@@ -30,7 +30,7 @@ import {
   type ChatSidebarSelectionChannel,
 } from "../chatSidebarSelectionChannel";
 export type { PendingProjectDeletion } from "./chatSidebarStateUtils";
-import { buildSections, filterThreads, type ThreadFilter } from "./sections";
+import { buildSections, filterThreads, filterThreadsForSidebar, type ThreadFilter } from "./sections";
 import {
   buildSearchSections,
   type TranscriptSearchTextByThreadId,
@@ -57,6 +57,7 @@ export function useChatSidebarState() {
   const [multiAgentThreadIds, setMultiAgentThreadIds] = useState<Set<string>>(() => new Set());
   const [searchQuery, setSearchQuery] = useState("");
   const [threadFilter, setThreadFilter] = useState<ThreadFilter>("all");
+  const [retainedUnreadThreadId, setRetainedUnreadThreadId] = useState<string | null>(null);
   const [transcriptSearchTextByThreadId, setTranscriptSearchTextByThreadId] = useState<TranscriptSearchTextByThreadId>({});
   const [isTranscriptSearchLoading, setIsTranscriptSearchLoading] = useState(false);
   const [workspaceId, setWorkspaceId] = useState("");
@@ -92,8 +93,8 @@ export function useChatSidebarState() {
     [threads],
   );
   const filteredThreads = useMemo(
-    () => filterThreads(threads, threadFilter, multiAgentThreadIds),
-    [multiAgentThreadIds, threadFilter, threads],
+    () => filterThreadsForSidebar(threads, threadFilter, multiAgentThreadIds, retainedUnreadThreadId),
+    [multiAgentThreadIds, retainedUnreadThreadId, threadFilter, threads],
   );
   const threadFilterCounts = useMemo(
     () => ({
@@ -114,12 +115,13 @@ export function useChatSidebarState() {
             threads: filteredThreads,
             transcriptTextByThreadId: transcriptSearchTextByThreadId,
           })
-        : buildSections(projects, threads, threadFilter, multiAgentThreadIds),
+        : buildSections(projects, threads, threadFilter, multiAgentThreadIds, retainedUnreadThreadId),
     [
       filteredThreads,
       isTranscriptSearchLoading,
       multiAgentThreadIds,
       projects,
+      retainedUnreadThreadId,
       searchTerm,
       threadFilter,
       threads,
@@ -199,6 +201,9 @@ export function useChatSidebarState() {
     if (!THREAD_FILTERS.includes(nextFilter)) {
       return;
     }
+    if (nextFilter !== "unread") {
+      setRetainedUnreadThreadId(null);
+    }
     setThreadFilter(nextFilter);
   }
 
@@ -211,6 +216,12 @@ export function useChatSidebarState() {
   useEffect(() => {
     selectedThreadIdsRef.current = selectedThreadIds;
   }, [selectedThreadIds]);
+
+  useEffect(() => {
+    if (retainedUnreadThreadId && activeThreadId !== retainedUnreadThreadId) {
+      setRetainedUnreadThreadId(null);
+    }
+  }, [activeThreadId, retainedUnreadThreadId]);
 
   useEffect(() => {
     threadsRef.current = threads;
@@ -462,6 +473,7 @@ export function useChatSidebarState() {
   async function createChat(projectId: string | null = null) {
     setIsPending(true);
     setActiveThreadId(null);
+    setRetainedUnreadThreadId(null);
     setExpandedThreadId(null);
     setExpandedThreadTitle("");
     projectActions.clearProjectEditing();
@@ -489,6 +501,7 @@ export function useChatSidebarState() {
 
   function selectThread(thread: ChatThread) {
     setActiveThreadId(thread.thread_id);
+    setRetainedUnreadThreadId(threadFilter === "unread" ? thread.thread_id : null);
     setExpandedThreadId(null);
     setExpandedThreadTitle("");
     projectActions.cancelProjectDeletion();
@@ -535,6 +548,7 @@ export function useChatSidebarState() {
       deletedThreadIds.forEach((threadId) => next.delete(threadId));
       return next.size === current.size ? current : next;
     });
+    setRetainedUnreadThreadId((current) => (current && deletedThreadIds.has(current) ? null : current));
     if (activeThreadId && deletedThreadIds.has(activeThreadId)) {
       setActiveThreadId(null);
     }

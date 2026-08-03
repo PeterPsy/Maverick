@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { ChatProject, ChatThread } from "../../api/client";
-import { buildSections, filterThreads, isThreadBusy, isThreadUnread, threadSourceBadges } from "./sections";
+import { buildSections, filterThreads, filterThreadsForSidebar, isThreadBusy, isThreadUnread, threadSourceBadges } from "./sections";
 
 function thread(overrides: Partial<ChatThread> = {}): ChatThread {
   return {
@@ -98,6 +98,28 @@ describe("chat sidebar runtime status", () => {
     expect(buildSections([], [readThread, unreadThread, busyUnreadThread], "unread")[0].items.map((item) => item.thread_id)).toEqual([
       "unread-thread",
     ]);
+  });
+
+  it("retains only the selected read chat while browsing the Unread view", () => {
+    const firstReadThread = thread({ thread_id: "first-thread", has_unread_completed_response: false });
+    const secondUnreadThread = thread({ thread_id: "second-thread", has_unread_completed_response: true });
+
+    expect(
+      filterThreadsForSidebar([firstReadThread, secondUnreadThread], "unread", new Set(), "first-thread").map(
+        (item) => item.thread_id,
+      ),
+    ).toEqual(["first-thread", "second-thread"]);
+    expect(buildSections([], [firstReadThread, secondUnreadThread], "unread", new Set(), "first-thread")[0].items).toEqual([
+      firstReadThread,
+      secondUnreadThread,
+    ]);
+
+    const secondReadThread = { ...secondUnreadThread, has_unread_completed_response: false };
+    expect(
+      filterThreadsForSidebar([firstReadThread, secondReadThread], "unread", new Set(), "second-thread").map(
+        (item) => item.thread_id,
+      ),
+    ).toEqual(["second-thread"]);
   });
 
   it("hides project sections without matching chats while a filter is active", () => {

@@ -24,8 +24,9 @@ export function buildSections(
   threads: ChatThread[],
   threadFilter: ThreadFilter = "all",
   multiAgentThreadIds: ReadonlySet<string> = new Set(),
+  retainedUnreadThreadId: string | null = null,
 ): FolderSection[] {
-  const visibleThreads = filterThreads(threads, threadFilter, multiAgentThreadIds);
+  const visibleThreads = filterThreadsForSidebar(threads, threadFilter, multiAgentThreadIds, retainedUnreadThreadId);
   const projectSections: FolderSection[] = projects
     .slice()
     .sort((left, right) => left.name.localeCompare(right.name, "en", { sensitivity: "base" }))
@@ -99,6 +100,18 @@ export function filterThreads(
     return threads.filter(isThreadUnread);
   }
   return threads;
+}
+
+export function filterThreadsForSidebar(
+  threads: ChatThread[],
+  threadFilter: ThreadFilter,
+  multiAgentThreadIds: ReadonlySet<string> = new Set(),
+  retainedUnreadThreadId: string | null = null,
+): ChatThread[] {
+  if (threadFilter === "unread" && retainedUnreadThreadId) {
+    return threads.filter((thread) => thread.thread_id === retainedUnreadThreadId || isThreadUnread(thread));
+  }
+  return filterThreads(threads, threadFilter, multiAgentThreadIds);
 }
 
 export function isSensesThread(thread: ChatThread): boolean {

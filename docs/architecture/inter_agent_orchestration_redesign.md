@@ -186,3 +186,7 @@ transcript projection behavior.
   failed task in its transitive dependency ancestry. The scheduler treats a
   failed review as dependency-ready only for a reviewer/security-reviewer
   replacement; material tasks and other roles do not inherit that exception.
+- Every `reviewer` and `security_reviewer` task must declare `review_of` and
+  directly depend on that target. The core validates this task-local invariant
+  for initial plans, adaptive control decisions, and persisted replay payloads;
+  an unbound reviewer task is rejected before it can enter scheduler state.

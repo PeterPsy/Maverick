@@ -52,7 +52,9 @@ It started with names, visibility, legacy compatibility, and initial policy defa
     negative, malformed, or failed review. A negative or malformed verdict is
     superseded only after a completed material descendant and a later approval;
     a failed review is superseded only by an approved, causally dependent retry
-    or replacement review.
+    or replacement review. Reviewer and security-reviewer tasks always declare
+    `review_of` and directly depend on that target; live parsing and persisted
+    replay both reject missing or detached review targets.
 18. A later root Chat turn may steer the active run only through a persisted
     generalist-turn link validated against the same root runtime session. The
     scheduler waits for its terminal final output; direct Agent nodes text is a

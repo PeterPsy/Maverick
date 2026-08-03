@@ -36,6 +36,14 @@ class OrchestrationTaskSpec:
     review_of: str | None = None
     agent_type_id: str | None = None
 
+    def __post_init__(self) -> None:
+        if self.role in _REVIEWER_ROLES and not self.review_of:
+            raise InterAgentValidationError("Reviewer tasks require review_of.")
+        if self.review_of and self.role not in _REVIEWER_ROLES:
+            raise InterAgentValidationError("Only reviewer tasks may declare review_of.")
+        if self.review_of and self.review_of not in self.depends_on:
+            raise InterAgentValidationError("Reviewer tasks must depend on their review target.")
+
 
 @dataclass(frozen=True)
 class OrchestrationPlan:
@@ -249,13 +257,8 @@ def _validate_task_references(tasks: tuple[OrchestrationTaskSpec, ...], known: s
             )
         if task.task_id in task.depends_on:
             raise InterAgentValidationError(f"Orchestrator task `{task.task_id}` cannot depend on itself.")
-        if task.review_of:
-            if task.role not in _REVIEWER_ROLES:
-                raise InterAgentValidationError("Only reviewer tasks may declare review_of.")
-            if task.review_of not in known:
-                raise InterAgentValidationError(f"Reviewer task `{task.task_id}` references an unknown review target.")
-            if task.review_of not in task.depends_on:
-                raise InterAgentValidationError("Reviewer tasks must depend on their review target.")
+        if task.review_of and task.review_of not in known:
+            raise InterAgentValidationError(f"Reviewer task `{task.task_id}` references an unknown review target.")
 
 
 def _assert_acyclic(tasks: tuple[OrchestrationTaskSpec, ...]) -> None:

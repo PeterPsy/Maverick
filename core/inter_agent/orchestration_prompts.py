@@ -68,7 +68,8 @@ def control_prompt(
         "You are the sole adaptive orchestrator at a persisted scheduling safe point. Respond with one JSON object: "
         '{"summary": string, "tasks": array, "cancel_task_ids": array, "complete": boolean, '
         '"quality_passed": boolean, "final_answer": string}. New tasks use id, label, role, objective, '
-        "depends_on and optional agent_type_id; reviewers also use review_of. Add work when evidence is insufficient, "
+        "depends_on and optional agent_type_id; reviewer and security_reviewer tasks must use review_of and depend "
+        "on that target. Add work when evidence is insufficient, "
         "cancel only unnecessary unstarted work, and complete only after a dependent reviewer explicitly approved. "
         "Never use orchestrator as a task id. A rejected or malformed review remains blocking until completed "
         "material revision work and a later approved review both depend transitively on that rejection. A failed "

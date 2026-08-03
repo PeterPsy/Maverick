@@ -4,10 +4,12 @@ from dataclasses import replace
 from types import SimpleNamespace
 import unittest
 
+from core.inter_agent.errors import InterAgentValidationError
 from core.inter_agent.orchestration_plan import parse_control_decision, parse_orchestration_plan
 from core.inter_agent.orchestration_decisions import record_control_decision
 from core.inter_agent.orchestration_runtime import prepare_generalist_handoff
 from core.inter_agent.orchestration_scheduler import execute_orchestrated_run
+from core.inter_agent.orchestration_state import load_control_state
 from core.inter_agent.orchestration_tasks import execute_task, materialize_plan, record_plan
 from core.inter_agent.service import InterAgentService
 from core.inter_agent.store import build_inter_agent_document_store
@@ -16,6 +18,32 @@ from tests.unit.inter_agent.test_dynamic_orchestration_service import orchestrat
 
 
 class OrchestrationDecisionRecoveryTest(unittest.TestCase):
+    def test_recovery_rejects_persisted_reviewer_without_review_of(self) -> None:
+        store = build_inter_agent_document_store(start_path=make_temp_repo_root(self))
+        service = InterAgentService(store)
+        run = service.create_run(orchestrated_spec())
+        service.record_event(
+            run,
+            event_type="inter_agent.plan.summary_created",
+            participant_id=run.orchestrator_participant_id,
+            visibility_plane="summary",
+            payload={
+                "summary": "Persisted malformed review task.",
+                "tasks": [
+                    {
+                        "id": "security-review",
+                        "label": "Security review",
+                        "role": "security_reviewer",
+                        "objective": "Review security.",
+                        "depends_on": ["implement"],
+                    }
+                ],
+            },
+        )
+
+        with self.assertRaisesRegex(InterAgentValidationError, "review_of"):
+            load_control_state(service, replace(run, status="recovering"))
+
     def test_replays_persisted_completion_without_asking_the_orchestrator_again(self) -> None:
         store = build_inter_agent_document_store(start_path=make_temp_repo_root(self))
         service = InterAgentService(store)

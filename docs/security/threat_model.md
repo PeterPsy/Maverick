@@ -161,7 +161,10 @@ in its causal future before a later approval can pass; simply approving the
 same unchanged output does not clear the veto. A failed reviewer task is also
 fail-closed and remains unresolved until an approved retry or replacement
 review depends causally on that failure. Every passing approval must still
-cover the current material frontier.
+cover the current material frontier. An orchestrator cannot hide a negative or
+failed verdict in an unbound reviewer task: reviewer and security-reviewer
+tasks without a `review_of` target and direct target dependency are rejected in
+both live decisions and persisted replay.
 
 ### Workspace escape
 

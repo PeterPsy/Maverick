@@ -80,6 +80,37 @@ class OrchestrationPlanTest(unittest.TestCase):
                     reserved_task_ids={"custom-manager"},
                 )
 
+    def test_rejects_reviewer_tasks_without_review_of_in_initial_plan(self) -> None:
+        for role in ("reviewer", "security_reviewer"):
+            with self.subTest(role=role), self.assertRaisesRegex(InterAgentValidationError, "review_of"):
+                parse_orchestration_plan(
+                    '{"tasks":['
+                    '{"id":"implement","label":"Implementer","role":"implementer",'
+                    '"objective":"Build.","depends_on":[]},'
+                    '{"id":"review","label":"Reviewer","role":"' + role + '",'
+                    '"objective":"Review.","depends_on":["implement"]}]}',
+                    max_tasks=2,
+                    require_review_gate=False,
+                )
+
+    def test_rejects_reviewer_tasks_without_review_of_in_control_decision(self) -> None:
+        plan = parse_orchestration_plan(
+            '{"tasks":[{"id":"implement","label":"Implementer","role":"implementer",'
+            '"objective":"Build.","depends_on":[]}]}',
+            max_tasks=1,
+            require_review_gate=False,
+        )
+
+        with self.assertRaisesRegex(InterAgentValidationError, "review_of"):
+            parse_control_decision(
+                '{"summary":"Add an unbound review.","tasks":['
+                '{"id":"security-review","label":"Security review","role":"security_reviewer",'
+                '"objective":"Review security.","depends_on":["implement"]}],'
+                '"cancel_task_ids":[],"complete":false,"quality_passed":false,"final_answer":""}',
+                existing_tasks=plan.tasks,
+                max_new_tasks=1,
+            )
+
 
 if __name__ == "__main__":
     unittest.main()

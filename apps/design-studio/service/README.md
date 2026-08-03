@@ -100,7 +100,22 @@ python3 apps/design-studio/service/inventory_opendesign.py \
 The command fails for a dirty checkout, a wrong commit/tag, or an unresolved
 route registration. The route classification is deny-by-default and scoped to
 the browser sidecar origin; app-entrypoint capabilities use a separate
-allowlist. WP5 replaces source-tree measurements with the staged runtime
+allowlist. Multi-segment upstream splats are classified blocked because the
+generic policy limits dynamic parameters to one segment. Provider model
+discovery is handled by Maverick rather than forwarded.
+
+After regenerating the inventory, synchronize or verify the reviewed exact
+contract policy with:
+
+```bash
+python3 apps/design-studio/service/sync_route_policy.py --write
+python3 apps/design-studio/service/sync_route_policy.py
+```
+
+The check accounts for every inventoried method/template, omits `USE /api` and
+multi-segment splats so deny-by-default applies, and adds only the approved
+safe static trees plus Maverick Storage import/export handlers. The artifact
+manifest no longer duplicates this route catalog. WP5 replaces source-tree measurements with the staged runtime
 closure, SBOM, NOTICE, license inventory, native load proof, and artifact
 provenance.
 

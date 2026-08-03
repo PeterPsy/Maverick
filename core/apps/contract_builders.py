@@ -325,9 +325,14 @@ def build_widget_declaration(
     )
 
 
-def build_http_sidecar_route_rule(*, path_prefix: str, method: str | None = None) -> HttpSidecarRouteRule:
+def build_http_sidecar_route_rule(
+    *,
+    path_template: str,
+    method: str | None = None,
+    static_tree: bool = False,
+) -> HttpSidecarRouteRule:
     """Build one HTTP sidecar route-policy rule."""
-    return HttpSidecarRouteRule(method=method, path_prefix=path_prefix)
+    return HttpSidecarRouteRule(method=method, path_template=path_template, static_tree=static_tree)
 
 
 def build_http_sidecar_route_policy(

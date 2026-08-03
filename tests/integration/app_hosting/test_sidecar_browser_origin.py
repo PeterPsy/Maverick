@@ -169,6 +169,38 @@ class SidecarBrowserOriginIntegrationTests(unittest.TestCase):
             self.assertEqual(core_status, 404)
             self.assertEqual(core_headers["referrer-policy"], "no-referrer")
 
+            prefix_collision_status, _body, _headers = await self._invoke(
+                app,
+                host=sidecar_host,
+                path="/api/projects/project-a/terminals",
+                headers={"cookie": sidecar_cookie},
+            )
+            encoded_slash_status, _body, _headers = await self._invoke(
+                app,
+                host=sidecar_host,
+                path="/api/projects/project-a/terminals",
+                raw_path=b"/api/projects/project-a%2fterminals",
+                headers={"cookie": sidecar_cookie},
+            )
+            double_encoded_status, _body, _headers = await self._invoke(
+                app,
+                host=sidecar_host,
+                path="/api/projects/%2fstatus",
+                raw_path=b"/api/projects/%252fstatus",
+                headers={"cookie": sidecar_cookie},
+            )
+            traversal_status, _body, _headers = await self._invoke(
+                app,
+                host=sidecar_host,
+                path="/api/projects/../status",
+                raw_path=b"/api/projects/%2e%2e/status",
+                headers={"cookie": sidecar_cookie},
+            )
+            self.assertEqual(prefix_collision_status, 404)
+            self.assertEqual(encoded_slash_status, 400)
+            self.assertEqual(double_encoded_status, 400)
+            self.assertEqual(traversal_status, 400)
+
             duplicate_cookie_status, _body, _headers = await self._invoke(
                 app,
                 host=sidecar_host,
@@ -526,6 +558,7 @@ class SidecarBrowserOriginIntegrationTests(unittest.TestCase):
         method: str = "GET",
         body: bytes = b"",
         headers: dict[str, str] | None = None,
+        raw_path: bytes | None = None,
     ) -> tuple[int, bytes, dict[str, str]]:
         messages: list[dict] = []
         await self._invoke_streaming(
@@ -535,6 +568,7 @@ class SidecarBrowserOriginIntegrationTests(unittest.TestCase):
             method=method,
             body=body,
             headers=headers,
+            raw_path=raw_path,
             messages=messages,
             queue=None,
         )
@@ -556,6 +590,7 @@ class SidecarBrowserOriginIntegrationTests(unittest.TestCase):
         method: str = "GET",
         body: bytes = b"",
         headers: dict[str, str] | None,
+        raw_path: bytes | None = None,
         messages: list[dict],
         queue: asyncio.Queue[dict] | None,
     ) -> None:
@@ -573,6 +608,8 @@ class SidecarBrowserOriginIntegrationTests(unittest.TestCase):
                 (name.lower().encode("latin1"), value.encode("latin1")) for name, value in header_map.items()
             ],
         }
+        if raw_path is not None:
+            scope["raw_path"] = raw_path
         delivered = False
 
         async def receive() -> dict:
@@ -637,12 +674,12 @@ class SidecarBrowserOriginIntegrationTests(unittest.TestCase):
                                 sse=True,
                                 route_policy=build_http_sidecar_route_policy(
                                     pass_through=[
-                                        build_http_sidecar_route_rule(method="GET", path_prefix="/api/projects"),
-                                        build_http_sidecar_route_rule(method="POST", path_prefix="/api/projects"),
-                                        build_http_sidecar_route_rule(method="GET", path_prefix="/api/events"),
+                                        build_http_sidecar_route_rule(method="GET", path_template="/api/projects"),
+                                        build_http_sidecar_route_rule(method="POST", path_template="/api/projects"),
+                                        build_http_sidecar_route_rule(method="GET", path_template="/api/events"),
                                     ],
                                     blocked=[
-                                        build_http_sidecar_route_rule(path_prefix="/api/import/folder"),
+                                        build_http_sidecar_route_rule(path_template="/api/import/folder"),
                                     ],
                                 ),
                             ),

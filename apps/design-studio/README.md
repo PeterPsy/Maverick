@@ -107,8 +107,16 @@ separate host-only session cookie, and applies the fixed
 `self_hosted_web_app` CSP profile. Root-relative OpenDesign requests therefore
 remain on the sidecar origin and never fall through to Maverick routes. Neither
 Maverick cookies nor the generated `OD_API_TOKEN` cross the browser/upstream
-boundary. The mounted frontend adopts this launch protocol in WP9; WP3 exact
-route matching remains a release prerequisite.
+boundary. The mounted frontend adopts this launch protocol in WP9.
+
+The browser route policy is generated from the pinned 0.16.1 method/template
+inventory and checked in CI with `service/sync_route_policy.py`. API rules are
+exact and segment-aware; unsafe allows name their method, dynamic parameters
+consume one segment, and prefix/regex/splat escalation is rejected. Only
+GET/HEAD static trees outside `/api` cover `/_next`, assets, artifacts, and
+frames. Known terminal/PTY, host-folder, external-open, deploy, connector/OAuth,
+plugin install/upload, persistent MCP, telemetry, and other inventoried routes
+are blocked explicitly; all other routes are denied by default.
 
 The production confinement suite uses real bubblewrap and validates filesystem,
 environment, network, authenticated relay, concurrency and descendant cleanup:
@@ -134,6 +142,7 @@ Useful checks:
 
 ```bash
 python3 -m unittest apps/design-studio/tests/test_design_studio_app.py
+python3 apps/design-studio/service/sync_route_policy.py
 python3 apps/design-studio/service/smoke_opendesign_sidecar.py
 maverick app design-studio frontend build --json
 maverick app design-studio mcp list --json

@@ -1,7 +1,7 @@
 # Isolated Browser Origins For App Sidecars
 
 Date: 2026-08-03
-Status: Accepted (G1), implemented by WP2
+Status: Accepted (G1), implemented by WP2 and WP3
 Owners: Maverick Core app hosting and app contract domains
 
 ## Context
@@ -127,6 +127,23 @@ rotation bounds, CSRF and Fetch Metadata, response-header filtering, exact CSP
 frame/connect policy, unbuffered SSE, logout and process-restart revocation,
 and redaction-safe success/failure audit records.
 
+Exact route and canonicalization proof:
+
+```bash
+python3 -m unittest \
+  tests.unit.apps.test_sidecar_route_policy \
+  tests.contracts.app_contract.test_services
+python3 apps/design-studio/service/sync_route_policy.py
+```
+
+Authorized API rules use literal segments and named `{parameter}` segments;
+each parameter consumes exactly one segment. Unsafe authorized routes always
+name a method. App-provided regex, prefix matching, multi-segment splats,
+encoded slash/backslash/dot traversal, double encoding, and ambiguous paths are
+rejected. A separate `static_tree` form is restricted to GET/HEAD roots outside
+`/api` for immutable web assets. Policy precedence remains blocked, then
+handled-by-core, then pass-through, with unknown routes denied.
+
 Local mode is the default and is available only when Maverick itself is
 accessed through a loopback/`.localhost` origin. Hosted mode is explicitly
 enabled with:
@@ -144,10 +161,9 @@ ticket is issued.
 
 ## Residual Risk And Closure
 
-- WP3 applies exact route-template matching and URL canonicalization.
 - WP9 uses only the form bootstrap and verifies `postMessage` origin/source.
 - WP10 runs Playwright, leakage searches, full workspace A/B isolation, and the
   global browser/runtime failure matrix.
 
-WP2 is complete. Until WP3 passes, isolated browser-origin authority must not
-be released from this development branch.
+WP2 and WP3 are complete. WP9 remains responsible for the mounted frontend's
+safe iframe and `postMessage` adoption before the capability is product-ready.

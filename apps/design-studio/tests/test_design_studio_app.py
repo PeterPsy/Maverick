@@ -19,6 +19,7 @@ from core.api.platform_state import bootstrap_platform_state
 from core.apps.dependencies import save_app_dependency_selection
 from core.apps.service import install_store_app, register_app_source_from_contract
 from core.apps.contracts import parse_app_contract_file
+from core.apps.sidecar_route_policy import route_policy_mode
 from core.providers.service import configure_workspace_provider
 from core.shared.entrypoints import EntrypointShutdownController
 
@@ -73,6 +74,17 @@ class DesignStudioAppTests(unittest.TestCase):
         self.assertEqual(
             route_policy[("GET", "/api/media/config", "apps/daemon/src/routes/media.ts")],
             "handled_by_core",
+        )
+        self.assertEqual(
+            route_policy[("POST", "/api/provider/models", "apps/daemon/src/routes/chat.ts")],
+            "handled_by_core",
+        )
+        self.assertFalse(
+            [
+                route
+                for route in routes["routes"]
+                if "{*" in route["path_template"] and route["classification"] != "blocked"
+            ]
         )
 
         self.assertEqual(supply_chain["source_tree"]["tracked_file_count"], 11_458)
@@ -156,18 +168,48 @@ class DesignStudioAppTests(unittest.TestCase):
         self.assertTrue(sidecar.proxy.streaming)
         self.assertTrue(sidecar.proxy.sse)
         self.assertFalse(sidecar.proxy.websocket)
-        pass_through = [rule.path_prefix for rule in sidecar.proxy.route_policy.pass_through]
-        blocked = [rule.path_prefix for rule in sidecar.proxy.route_policy.blocked]
-        handled_by_core = [rule.path_prefix for rule in sidecar.proxy.route_policy.handled_by_core]
+        pass_through = [rule.path_template for rule in sidecar.proxy.route_policy.pass_through]
+        blocked = [rule.path_template for rule in sidecar.proxy.route_policy.blocked]
+        handled_by_core = [rule.path_template for rule in sidecar.proxy.route_policy.handled_by_core]
         self.assertIn("/index.html", pass_through)
-        self.assertNotIn("/", pass_through)
+        self.assertIn("/", pass_through)
+        self.assertIn("/api/projects", pass_through)
         self.assertIn("/api/dialog/open-folder", blocked)
         self.assertIn("/api/media/config", handled_by_core)
-        self.assertIn("/api/projects", handled_by_core)
+        self.assertIn("/api/provider/models", handled_by_core)
+        self.assertTrue(all(rule.method for rule in sidecar.proxy.route_policy.pass_through))
+        self.assertTrue(all(rule.method for rule in sidecar.proxy.route_policy.handled_by_core))
+        policy = sidecar.proxy.route_policy
+        self.assertEqual(route_policy_mode(policy, method="GET", path="/api/status"), "not_allowed")
+        self.assertEqual(route_policy_mode(policy, method="GET", path="/api/projects/project-a"), "pass_through")
+        self.assertEqual(
+            route_policy_mode(policy, method="GET", path="/api/projects/project-a/terminals"),
+            "blocked",
+        )
+        self.assertEqual(
+            route_policy_mode(policy, method="GET", path="/api/projects/project-a/terminals/extra"),
+            "not_allowed",
+        )
+        self.assertEqual(
+            route_policy_mode(policy, method="GET", path="/_next/static/build/app.js"),
+            "pass_through",
+        )
+        self.assertEqual(
+            route_policy_mode(policy, method="POST", path="/api/system/open-external"),
+            "blocked",
+        )
 
-    def test_opendesign_bundle_manifest_matches_contract_policy(self) -> None:
-        parsed = parse_app_contract_file(APP_ROOT)
-        sidecar = parsed.contract.services.http_sidecars[0]
+    def test_opendesign_inventory_matches_exact_contract_policy(self) -> None:
+        policy_check = subprocess.run(
+            [sys.executable, str(APP_ROOT / "service" / "sync_route_policy.py")],
+            cwd=str(REPO_ROOT),
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            check=False,
+        )
+        self.assertEqual(policy_check.returncode, 0, policy_check.stderr)
+
         manifest = json.loads((APP_ROOT / "service" / "opendesign_bundle.json").read_text(encoding="utf-8"))
 
         self.assertEqual(manifest["upstream"]["commit"], "eb245799adf07e7727ad5f970485d809bad5780e")
@@ -175,18 +217,7 @@ class DesignStudioAppTests(unittest.TestCase):
         self.assertIn("apps/daemon", manifest["include_paths"])
         self.assertIn("apps/web", manifest["include_paths"])
         self.assertIn("apps/desktop", manifest["exclude_paths"])
-        self.assertEqual(
-            [rule["path_prefix"] for rule in manifest["sandbox"]["pass_through"]],
-            [rule.path_prefix for rule in sidecar.proxy.route_policy.pass_through],
-        )
-        self.assertEqual(
-            [rule["path_prefix"] for rule in manifest["sandbox"]["blocked"]],
-            [rule.path_prefix for rule in sidecar.proxy.route_policy.blocked],
-        )
-        self.assertEqual(
-            [rule["path_prefix"] for rule in manifest["sandbox"]["handled_by_core"]],
-            [rule.path_prefix for rule in sidecar.proxy.route_policy.handled_by_core],
-        )
+        self.assertEqual(set(manifest["sandbox"]), {"env"})
 
     def test_opendesign_launcher_fails_closed_without_bundle_even_if_fallback_is_requested(self) -> None:
         with TemporaryDirectory() as temp_dir:
@@ -576,11 +607,6 @@ class DesignStudioAppTests(unittest.TestCase):
                     body={"project_id": project_id},
                     cookie=cookie,
                 )
-                projects_status, projects_body, _projects_headers = self._invoke(
-                    app,
-                    path="/api/apps/design-studio/sidecars/opendesign/api/projects",
-                    cookie=cookie,
-                )
                 terminal_status, terminal_body, _terminal_headers = self._invoke(
                     app,
                     path=f"/api/apps/design-studio/sidecars/opendesign/api/projects/{project_id}/terminals",
@@ -597,7 +623,6 @@ class DesignStudioAppTests(unittest.TestCase):
             direct_provider_payload = json.loads(direct_provider_body.decode("utf-8"))
             import_payload = json.loads(import_body.decode("utf-8"))
             export_payload = json.loads(export_body.decode("utf-8"))
-            projects_payload = json.loads(projects_body.decode("utf-8"))
             terminal_payload = json.loads(terminal_body.decode("utf-8"))
             state_payload = json.loads(state_body.decode("utf-8"))
             media_config_root = repo_root / "workspaces" / "default" / "data" / "design-studio" / "opendesign" / "media-config"
@@ -620,12 +645,8 @@ class DesignStudioAppTests(unittest.TestCase):
             self.assertFalse(provider_payload["sidecar_reached"])
             self.assertFalse(provider_payload["secrets_persisted"])
             self.assertNotIn("provider-fixture-token", provider_body.decode("utf-8"))
-            self.assertEqual(direct_provider_status, 200)
-            self.assertFalse(direct_provider_payload["ok"])
-            self.assertEqual(direct_provider_payload["kind"], "unsupported_protocol")
-            self.assertEqual(direct_provider_payload["status"], 404)
-            self.assertFalse(direct_provider_payload["sidecar_reached"])
-            self.assertFalse(direct_provider_payload["secrets_persisted"])
+            self.assertEqual(direct_provider_status, 404)
+            self.assertEqual(direct_provider_payload["error"], "sidecar_route_not_allowed")
             self.assertNotIn("provider-fixture-token", direct_provider_body.decode("utf-8"))
             self.assertNotIn("provider-fixture-token", media_body.decode("utf-8"))
             self.assertNotIn("provider-fixture-token", state_body.decode("utf-8"))
@@ -642,10 +663,8 @@ class DesignStudioAppTests(unittest.TestCase):
                 [item["status"] for item in export_payload["dependency_backend_request_results"]],
                 ["completed", "completed"],
             )
-            self.assertEqual(projects_status, 200)
-            self.assertEqual(projects_payload["projects"][0]["id"], project_id)
-            self.assertEqual(terminal_status, 404)
-            self.assertEqual(terminal_payload["error"], "opendesign_project_route_not_available")
+            self.assertEqual(terminal_status, 403)
+            self.assertEqual(terminal_payload["error"], "sidecar_route_blocked")
             self.assertEqual(state_status, 200)
             self.assertEqual(final_import["status"], "imported")
             self.assertEqual(final_export["status"], "exported")

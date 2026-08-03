@@ -471,8 +471,15 @@ def _app_sidecar_proxy(payload: Any) -> HttpSidecarProxySpec | None:
 def _app_sidecar_route_rules(payload: Any) -> list[HttpSidecarRouteRule]:
     if not isinstance(payload, list):
         return []
-    return [
-        HttpSidecarRouteRule(method=rule.get("method"), path_prefix=rule["path_prefix"])
-        for rule in payload
-        if isinstance(rule, dict)
-    ]
+    rules: list[HttpSidecarRouteRule] = []
+    for rule in payload:
+        if not isinstance(rule, dict) or not isinstance(rule.get("path_template"), str):
+            continue
+        rules.append(
+            HttpSidecarRouteRule(
+                method=rule.get("method"),
+                path_template=rule["path_template"],
+                static_tree=bool(rule.get("static_tree", False)),
+            )
+        )
+    return rules

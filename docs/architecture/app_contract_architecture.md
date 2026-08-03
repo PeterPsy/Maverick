@@ -915,6 +915,17 @@ Sandbox-compatible sidecars must bind only to loopback. Apps that expose sidecar
 - `handled_by_core` for routes the app protocol needs but the Maverick host must own, such as provider proxying or Storage import/export
 - `blocked` for upstream features that are intentionally unavailable in sandbox mode
 
+Rules use `path_template`, not a prefix. Literal segments match exactly and a
+named segment such as `{project_id}` consumes one non-empty segment. Authorized
+pass-through and handled-by-core rules must declare a method; HEAD may use a GET
+rule. Regex, colon syntax, partial parameters, multi-segment splats, percent
+encoding in templates, and ambiguous/traversal forms are invalid. The only
+tree match is `static_tree: true`, restricted to GET/HEAD roots outside `/api`
+for web assets such as `/_next`. Incoming paths are canonicalized once and
+encoded slash/backslash/dot traversal or double encoding fails before policy
+selection. `blocked` takes precedence over `handled_by_core`, which takes
+precedence over `pass_through`; every unknown method/template is denied.
+
 The core owns process lifecycle, technical token injection, app data-root substitution, route-policy enforcement, auth, workspace membership, app visibility, and error translation. The sidecar owns only its app protocol behind the loopback boundary. A frontend must call a sidecar through the generic core route:
 
 ```text

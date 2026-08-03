@@ -293,7 +293,8 @@ class HttpSidecarRouteRule:
     """Describe one method/path route rule for an app-owned HTTP sidecar."""
 
     method: str | None
-    path_prefix: str
+    path_template: str
+    static_tree: bool
 
 
 @dataclass(frozen=True)

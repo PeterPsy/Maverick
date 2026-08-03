@@ -42,7 +42,7 @@ class AppContractServiceTests(unittest.TestCase):
             self.assertEqual(loaded.contract.services.http_sidecars[0].process_policy.limits.request_concurrency, 16)
             self.assertEqual(loaded.contract.services.http_sidecars[0].browser_origin.mode, "isolated")
             self.assertEqual(loaded.contract.services.http_sidecars[0].browser_origin.frame_ancestors, ["platform"])
-            self.assertEqual(loaded.contract.services.http_sidecars[0].proxy.route_policy.blocked[0].path_prefix, "/api/import/folder")
+            self.assertEqual(loaded.contract.services.http_sidecars[0].proxy.route_policy.blocked[0].path_template, "/api/import/folder")
             self.assertFalse(loaded.contract.permissions.providers.model_proxy)
             self.assertEqual(loaded.contract.permissions.providers.credential_source, "none")
             self.assertFalse(loaded.contract.permissions.providers.deliver_secrets_to_app)
@@ -88,6 +88,23 @@ class AppContractServiceTests(unittest.TestCase):
 
             with self.assertRaisesRegex(AppContractValidationError, "route_policy"):
                 parse_app_contract_file(app_root)
+
+    def test_route_policy_requires_exact_templates_and_methods_for_authorized_routes(self) -> None:
+        mutations = (
+            ({"method": "GET", "path_prefix": "/api/projects"}, "path_prefix"),
+            ({"path_template": "/api/projects/{id}"}, "method"),
+            ({"method": "POST", "path_template": "/api/projects/{*path}"}, "one segment"),
+            ({"method": "GET", "path_template": "/api/projects", "static_tree": True}, "outside"),
+        )
+        for replacement, expected in mutations:
+            with self.subTest(replacement=replacement), TemporaryDirectory() as temp_dir:
+                app_root = self._write_sidecar_app(Path(temp_dir))
+                payload = json.loads((app_root / "app_contract.json").read_text(encoding="utf-8"))
+                payload["services"]["http_sidecars"][0]["proxy"]["route_policy"]["pass_through"][0] = replacement
+                (app_root / "app_contract.json").write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
+
+                with self.assertRaisesRegex(AppContractValidationError, expected):
+                    parse_app_contract_file(app_root)
 
     def test_parse_contract_rejects_sandbox_sidecar_without_process_policy(self) -> None:
         with TemporaryDirectory() as temp_dir:
@@ -210,14 +227,17 @@ class AppContractServiceTests(unittest.TestCase):
                                 sse=False,
                                 route_policy=build_http_sidecar_route_policy(
                                     pass_through=[
-                                        build_http_sidecar_route_rule(method="GET", path_prefix="/"),
-                                        build_http_sidecar_route_rule(method="POST", path_prefix="/api/projects"),
+                                        build_http_sidecar_route_rule(method="GET", path_template="/"),
+                                        build_http_sidecar_route_rule(method="POST", path_template="/api/projects"),
                                     ],
                                     handled_by_core=[
-                                        build_http_sidecar_route_rule(path_prefix="/api/provider"),
+                                        build_http_sidecar_route_rule(
+                                            method="POST",
+                                            path_template="/api/provider/{operation}",
+                                        ),
                                     ],
                                     blocked=[
-                                        build_http_sidecar_route_rule(path_prefix="/api/import/folder"),
+                                        build_http_sidecar_route_rule(path_template="/api/import/folder"),
                                     ],
                                 ),
                             ),

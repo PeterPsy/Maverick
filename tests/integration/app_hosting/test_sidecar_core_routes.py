@@ -122,7 +122,12 @@ class SidecarCoreRouteIntegrationTests(unittest.TestCase):
                             proxy=build_http_sidecar_proxy(
                                 mount="/opendesign",
                                 route_policy=build_http_sidecar_route_policy(
-                                    handled_by_core=[build_http_sidecar_route_rule(path_prefix="/api/provider")],
+                                    handled_by_core=[
+                                        build_http_sidecar_route_rule(
+                                            method="POST",
+                                            path_template="/api/provider/{operation}",
+                                        )
+                                    ],
                                 ),
                             ),
                             logs=build_http_sidecar_logs(

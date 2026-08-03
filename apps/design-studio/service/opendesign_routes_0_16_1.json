@@ -1,8 +1,8 @@
 {
   "counts": {
-    "blocked": 255,
-    "handled_by_core": 5,
-    "pass_through": 110,
+    "blocked": 269,
+    "handled_by_core": 6,
+    "pass_through": 95,
     "total": 370
   },
   "policy": {
@@ -1814,7 +1814,7 @@
       "owner": "apps/daemon/src/routes/plugins/assets.ts",
       "path_source": "string",
       "path_template": "/api/plugins/{id}/asset/{*splat}",
-      "rationale": "owner module is outside the approved product surface"
+      "rationale": "multi-segment route parameters are forbidden by the sidecar policy"
     },
     {
       "classification": "blocked",
@@ -2204,13 +2204,13 @@
       "rationale": "project-owned upload or export surface"
     },
     {
-      "classification": "pass_through",
+      "classification": "blocked",
       "line": 1076,
       "method": "GET",
       "owner": "apps/daemon/src/import-export-routes.ts",
       "path_source": "string",
       "path_template": "/api/projects/{id}/export/{*splat}",
-      "rationale": "project-owned upload or export surface"
+      "rationale": "multi-segment route parameters are forbidden by the sidecar policy"
     },
     {
       "classification": "blocked",
@@ -2582,112 +2582,112 @@
       "rationale": "OpenDesign-owned run, event, result, or preview surface"
     },
     {
-      "classification": "pass_through",
+      "classification": "blocked",
       "line": 3665,
       "method": "GET",
       "owner": "apps/daemon/src/routes/project/index.ts",
       "path_source": "regex-normalized",
       "path_template": "/api/projects/{project_id}/files/{*project_path}",
-      "rationale": "OpenDesign-owned project, conversation, or file surface"
+      "rationale": "multi-segment route parameters are forbidden by the sidecar policy"
     },
     {
-      "classification": "pass_through",
+      "classification": "blocked",
       "line": 3442,
       "method": "GET",
       "owner": "apps/daemon/src/routes/project/index.ts",
       "path_source": "regex-normalized",
       "path_template": "/api/projects/{project_id}/files/{*project_path}/versions",
-      "rationale": "OpenDesign-owned project, conversation, or file surface"
+      "rationale": "multi-segment route parameters are forbidden by the sidecar policy"
     },
     {
-      "classification": "pass_through",
+      "classification": "blocked",
       "line": 3502,
       "method": "POST",
       "owner": "apps/daemon/src/routes/project/index.ts",
       "path_source": "regex-normalized",
       "path_template": "/api/projects/{project_id}/files/{*project_path}/versions",
-      "rationale": "OpenDesign-owned project, conversation, or file surface"
+      "rationale": "multi-segment route parameters are forbidden by the sidecar policy"
     },
     {
-      "classification": "pass_through",
+      "classification": "blocked",
       "line": 3632,
       "method": "GET",
       "owner": "apps/daemon/src/routes/project/index.ts",
       "path_source": "regex-normalized",
       "path_template": "/api/projects/{project_id}/files/{*project_path}/versions/{version_id}",
-      "rationale": "OpenDesign-owned project, conversation, or file surface"
+      "rationale": "multi-segment route parameters are forbidden by the sidecar policy"
     },
     {
-      "classification": "pass_through",
+      "classification": "blocked",
       "line": 3565,
       "method": "POST",
       "owner": "apps/daemon/src/routes/project/index.ts",
       "path_source": "regex-normalized",
       "path_template": "/api/projects/{project_id}/files/{*project_path}/versions/{version_id}/restore",
-      "rationale": "OpenDesign-owned project, conversation, or file surface"
+      "rationale": "multi-segment route parameters are forbidden by the sidecar policy"
     },
     {
-      "classification": "pass_through",
+      "classification": "blocked",
       "line": 3347,
       "method": "GET",
       "owner": "apps/daemon/src/routes/project/index.ts",
       "path_source": "regex-normalized",
       "path_template": "/api/projects/{project_id}/powered/{*project_path}",
-      "rationale": "OpenDesign-owned project, conversation, or file surface"
+      "rationale": "multi-segment route parameters are forbidden by the sidecar policy"
     },
     {
-      "classification": "pass_through",
+      "classification": "blocked",
       "line": 3337,
       "method": "OPTIONS",
       "owner": "apps/daemon/src/routes/project/index.ts",
       "path_source": "regex-normalized",
       "path_template": "/api/projects/{project_id}/powered/{*project_path}",
-      "rationale": "OpenDesign-owned project, conversation, or file surface"
+      "rationale": "multi-segment route parameters are forbidden by the sidecar policy"
     },
     {
-      "classification": "pass_through",
+      "classification": "blocked",
       "line": 3218,
       "method": "GET",
       "owner": "apps/daemon/src/routes/project/index.ts",
       "path_source": "regex-normalized",
       "path_template": "/api/projects/{project_id}/preview/{preview_id}/{*project_path}",
-      "rationale": "OpenDesign-owned project, conversation, or file surface"
+      "rationale": "multi-segment route parameters are forbidden by the sidecar policy"
     },
     {
-      "classification": "pass_through",
+      "classification": "blocked",
       "line": 3392,
       "method": "DELETE",
       "owner": "apps/daemon/src/routes/project/index.ts",
       "path_source": "regex-normalized",
       "path_template": "/api/projects/{project_id}/raw/{*project_path}",
-      "rationale": "OpenDesign-owned project, conversation, or file surface"
+      "rationale": "multi-segment route parameters are forbidden by the sidecar policy"
     },
     {
-      "classification": "pass_through",
+      "classification": "blocked",
       "line": 3280,
       "method": "GET",
       "owner": "apps/daemon/src/routes/project/index.ts",
       "path_source": "regex-normalized",
       "path_template": "/api/projects/{project_id}/raw/{*project_path}",
-      "rationale": "OpenDesign-owned project, conversation, or file surface"
+      "rationale": "multi-segment route parameters are forbidden by the sidecar policy"
     },
     {
-      "classification": "pass_through",
+      "classification": "blocked",
       "line": 3271,
       "method": "OPTIONS",
       "owner": "apps/daemon/src/routes/project/index.ts",
       "path_source": "regex-normalized",
       "path_template": "/api/projects/{project_id}/raw/{*project_path}",
-      "rationale": "OpenDesign-owned project, conversation, or file surface"
+      "rationale": "multi-segment route parameters are forbidden by the sidecar policy"
     },
     {
-      "classification": "pass_through",
+      "classification": "blocked",
       "line": 3166,
       "method": "GET",
       "owner": "apps/daemon/src/routes/project/index.ts",
       "path_source": "regex-normalized",
       "path_template": "/api/projects/{project_id}/text-preview/{*project_path}",
-      "rationale": "OpenDesign-owned project, conversation, or file surface"
+      "rationale": "multi-segment route parameters are forbidden by the sidecar policy"
     },
     {
       "classification": "pass_through",
@@ -2708,13 +2708,13 @@
       "rationale": "approved bundled read-only resource"
     },
     {
-      "classification": "blocked",
+      "classification": "handled_by_core",
       "line": 167,
       "method": "POST",
       "owner": "apps/daemon/src/routes/chat.ts",
       "path_source": "string",
       "path_template": "/api/provider/models",
-      "rationale": "provider and runtime authority remains Maverick-owned"
+      "rationale": "provider discovery remains Maverick-owned"
     },
     {
       "classification": "blocked",
@@ -3059,13 +3059,13 @@
       "rationale": "bundled resources are read-only"
     },
     {
-      "classification": "pass_through",
+      "classification": "blocked",
       "line": 579,
       "method": "GET",
       "owner": "apps/daemon/src/routes/static-resource.ts",
       "path_source": "string",
       "path_template": "/api/skills/{id}/assets/{*splat}",
-      "rationale": "approved bundled read-only resource"
+      "rationale": "multi-segment route parameters are forbidden by the sidecar policy"
     },
     {
       "classification": "pass_through",
@@ -3338,13 +3338,13 @@
       "rationale": "sidecar lifecycle or isolated static asset surface"
     },
     {
-      "classification": "pass_through",
+      "classification": "blocked",
       "line": 29,
       "method": "GET",
       "owner": "apps/daemon/src/static-spa.ts",
       "path_source": "string",
       "path_template": "/{*splat}",
-      "rationale": "OpenDesign web application shell"
+      "rationale": "multi-segment route parameters are forbidden by the sidecar policy"
     }
   ],
   "schema_version": "1",

@@ -254,10 +254,14 @@ def _classify(owner: str, method: str, path: str) -> tuple[str, str]:
     lowered = path.lower()
     if path.startswith("<unresolved:"):
         return "blocked", "unresolved registrations are denied"
+    if "{*" in path:
+        return "blocked", "multi-segment route parameters are forbidden by the sidecar policy"
     if any(part in owner for part in _BLOCKED_OWNER_PARTS):
         return "blocked", "owner module is outside the approved product surface"
     if any(part in lowered for part in _BLOCKED_PATH_PARTS):
         return "blocked", "host, network, install, control-plane, or undeclared capability"
+    if lowered == "/api/provider/models":
+        return "handled_by_core", "provider discovery remains Maverick-owned"
     if lowered.startswith("/api/provider") or lowered.startswith("/api/test/connection"):
         return "blocked", "provider and runtime authority remains Maverick-owned"
     if lowered in {"/api/media/config", "/api/app-config", "/api/attribution/claim"}:

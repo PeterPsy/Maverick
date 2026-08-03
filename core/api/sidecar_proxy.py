@@ -27,11 +27,11 @@ from core.api.sidecar_core_routes import (
     handle_core_sidecar_route_asgi,
 )
 from core.apps.errors import AppHostingError, WorkspaceAppBindingNotFoundError
-from core.apps.models import (
-    HttpSidecarRouteRule,
-    HttpSidecarSpec,
-    ParsedAppContract,
-    WorkspaceAppBindingRecord,
+from core.apps.models import HttpSidecarSpec, ParsedAppContract, WorkspaceAppBindingRecord
+from core.apps.sidecar_route_policy import (
+    canonicalize_sidecar_path,
+    route_policy_mode,
+    validate_asgi_raw_path,
 )
 from core.apps.sidecar_execution import (
     ConfinedSidecarLaunch,
@@ -436,6 +436,16 @@ async def handle_app_sidecar_proxy_asgi(
 ) -> None:
     """Proxy one ASGI request to a declared sidecar without pre-buffering the body."""
     method = str(scope.get("method") or "GET").upper()
+    try:
+        validate_asgi_raw_path(path=scope.get("path"), raw_path=scope.get("raw_path"))
+    except ValueError:
+        await _send_asgi_json(
+            send,
+            {"error": "sidecar_path_invalid"},
+            status="400 Bad Request",
+            headers=enforced_response_headers,
+        )
+        return
     target, error = _resolve_sidecar_proxy_target(
         state,
         workspace_id=workspace_id,
@@ -562,7 +572,10 @@ def _resolve_sidecar_proxy_target(
     source_root = authorized.source_root
     parsed = authorized.parsed
     sidecar = authorized.sidecar
-    proxy_path = _proxy_path(subpath)
+    try:
+        proxy_path = _proxy_path(subpath)
+    except ValueError:
+        return None, SidecarProxyError({"error": "sidecar_path_invalid"}, "400 Bad Request")
     route_mode = _route_mode(sidecar, method=method, path=proxy_path)
     if route_mode == "blocked":
         return None, SidecarProxyError(
@@ -678,30 +691,12 @@ def _find_sidecar(sidecars: list[HttpSidecarSpec], sidecar_id: str) -> HttpSidec
 
 def _route_mode(sidecar: HttpSidecarSpec, *, method: str, path: str) -> str:
     assert sidecar.proxy is not None
-    policy = sidecar.proxy.route_policy
-    if _matches_any(policy.blocked, method=method, path=path):
-        return "blocked"
-    if _matches_any(policy.handled_by_core, method=method, path=path):
-        return "handled_by_core"
-    if _matches_any(policy.pass_through, method=method, path=path):
-        return "pass_through"
-    return "not_allowed"
-
-
-def _matches_any(rules: list[HttpSidecarRouteRule], *, method: str, path: str) -> bool:
-    return any(_route_rule_matches(rule, method=method, path=path) for rule in rules)
-
-
-def _route_rule_matches(rule: HttpSidecarRouteRule, *, method: str, path: str) -> bool:
-    if rule.method is not None and rule.method != method and not (method == "HEAD" and rule.method == "GET"):
-        return False
-    prefix = rule.path_prefix.rstrip("/") or "/"
-    return path == prefix or path.startswith(f"{prefix.rstrip('/')}/")
+    return route_policy_mode(sidecar.proxy.route_policy, method=method, path=path)
 
 
 def _proxy_path(subpath: str) -> str:
-    clean = quote(str(subpath or "").lstrip("/"), safe="/:@-._~!$&'()*+,;=")
-    return f"/{clean}" if clean else "/"
+    canonical = canonicalize_sidecar_path(subpath)
+    return quote(canonical, safe="/:@-._~!$&'()*+,;=")
 
 
 def _core_route_context(target: SidecarProxyTarget) -> SidecarCoreRouteContext:

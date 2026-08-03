@@ -266,9 +266,11 @@ def _http_sidecar_proxy_payload(proxy) -> dict[str, object]:
 
 
 def _http_sidecar_route_rule_payload(rule) -> dict[str, object]:
-    payload: dict[str, object] = {"path_prefix": rule.path_prefix}
+    payload: dict[str, object] = {"path_template": rule.path_template}
     if rule.method is not None:
         payload = {"method": rule.method, **payload}
+    if rule.static_tree:
+        payload["static_tree"] = True
     return payload
 
 

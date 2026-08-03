@@ -250,15 +250,20 @@ class AppSidecarProxyIntegrationTests(unittest.TestCase):
                                 sse=True,
                                 route_policy=build_http_sidecar_route_policy(
                                     pass_through=[
-                                        build_http_sidecar_route_rule(method="GET", path_prefix="/"),
-                                        build_http_sidecar_route_rule(method="POST", path_prefix="/api/upload"),
-                                        build_http_sidecar_route_rule(method="POST", path_prefix="/api/chunked-upload"),
+                                        build_http_sidecar_route_rule(method="GET", path_template="/"),
+                                        build_http_sidecar_route_rule(method="GET", path_template="/api/events"),
+                                        build_http_sidecar_route_rule(method="GET", path_template="/api/version"),
+                                        build_http_sidecar_route_rule(method="POST", path_template="/api/upload"),
+                                        build_http_sidecar_route_rule(method="POST", path_template="/api/chunked-upload"),
                                     ],
                                     handled_by_core=[
-                                        build_http_sidecar_route_rule(path_prefix="/api/provider"),
+                                        build_http_sidecar_route_rule(
+                                            method="POST",
+                                            path_template="/api/provider/{operation}",
+                                        ),
                                     ],
                                     blocked=[
-                                        build_http_sidecar_route_rule(path_prefix="/api/import/folder"),
+                                        build_http_sidecar_route_rule(path_template="/api/import/folder"),
                                     ],
                                 ),
                             ),

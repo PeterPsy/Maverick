@@ -187,16 +187,23 @@ def _login(app: PlatformHost) -> str:
 def _smoke_proxy_routes(app: PlatformHost, *, cookie: str) -> list[dict[str, Any]]:
     next_asset = _next_asset_path()
     checks = [
-        ("/api/apps/design-studio/sidecars/opendesign/index.html", 200),
-        (f"/api/apps/design-studio/sidecars/opendesign/{next_asset}", 200),
-        ("/api/apps/design-studio/sidecars/opendesign/api/ready", 200),
-        ("/api/apps/design-studio/sidecars/opendesign/api/version", 200),
-        ("/api/apps/design-studio/sidecars/opendesign/api/import/folder", 403),
-        ("/api/apps/design-studio/sidecars/opendesign/api/media/config", 200),
+        ("/api/apps/design-studio/sidecars/opendesign/index.html", "GET", 200),
+        (f"/api/apps/design-studio/sidecars/opendesign/{next_asset}", "GET", 200),
+        ("/api/apps/design-studio/sidecars/opendesign/api/ready", "GET", 200),
+        ("/api/apps/design-studio/sidecars/opendesign/api/version", "GET", 200),
+        ("/api/apps/design-studio/sidecars/opendesign/api/import/folder", "POST", 403),
+        ("/api/apps/design-studio/sidecars/opendesign/api/media/config", "GET", 200),
     ]
     results: list[dict[str, Any]] = []
-    for path, expected_status in checks:
-        status, body, _headers = _invoke(app, path, cookie=cookie)
+    for path, method, expected_status in checks:
+        status, body, _headers = _invoke(
+            app,
+            path,
+            method=method,
+            body={} if method == "POST" else None,
+            cookie=cookie,
+            origin=method == "POST",
+        )
         if status != expected_status:
             raise SystemExit(f"{path} returned HTTP {status}, expected {expected_status}: {body[:500]!r}")
         decoded = _decode_json_object(body)
@@ -210,7 +217,7 @@ def _smoke_proxy_routes(app: PlatformHost, *, cookie: str) -> list[dict[str, Any
             raise SystemExit(f"{path} returned unexpected blocked payload: {decoded}")
         if path.endswith("/api/media/config") and decoded.get("sidecar_reached") is not False:
             raise SystemExit(f"{path} was not handled by core: {decoded}")
-        results.append({"path": path, "status": status})
+        results.append({"method": method, "path": path, "status": status})
     return results
 
 

@@ -30,6 +30,7 @@ from core.apps.models import (
     HttpSidecarRouteRule,
     HttpSidecarSpec,
 )
+from core.apps.sidecar_route_policy import validate_route_template
 
 
 _ALLOWED_SERVICE_RUNTIMES = {"python", "node", "generic"}
@@ -227,19 +228,32 @@ def _parse_proxy(payload: dict[str, Any], *, sandbox_compatible: bool, label: st
 def _parse_route_policy(payload: dict[str, Any], *, label: str) -> HttpSidecarRoutePolicy:
     _reject_unexpected_fields(payload, {"pass_through", "handled_by_core", "blocked"}, label=f"{label}.proxy.route_policy")
     return HttpSidecarRoutePolicy(
-        pass_through=_parse_route_rules(payload.get("pass_through", []), label=f"{label}.proxy.route_policy.pass_through", allow_catch_all=False),
-        handled_by_core=_parse_route_rules(payload.get("handled_by_core", []), label=f"{label}.proxy.route_policy.handled_by_core", allow_catch_all=True),
-        blocked=_parse_route_rules(payload.get("blocked", []), label=f"{label}.proxy.route_policy.blocked", allow_catch_all=True),
+        pass_through=_parse_route_rules(
+            payload.get("pass_through", []),
+            label=f"{label}.proxy.route_policy.pass_through",
+            require_method=True,
+        ),
+        handled_by_core=_parse_route_rules(
+            payload.get("handled_by_core", []),
+            label=f"{label}.proxy.route_policy.handled_by_core",
+            require_method=True,
+        ),
+        blocked=_parse_route_rules(
+            payload.get("blocked", []),
+            label=f"{label}.proxy.route_policy.blocked",
+            require_method=False,
+        ),
     )
 
 
-def _parse_route_rules(payload: Any, *, label: str, allow_catch_all: bool) -> list[HttpSidecarRouteRule]:
+def _parse_route_rules(payload: Any, *, label: str, require_method: bool) -> list[HttpSidecarRouteRule]:
     if not isinstance(payload, list):
         raise AppContractValidationError(f"`{label}` must be a list.")
     rules: list[HttpSidecarRouteRule] = []
     for index, item in enumerate(payload):
         rule = _expect_mapping(item, label=f"{label}[{index}]")
-        _reject_unexpected_fields(rule, {"method", "path_prefix"}, label=f"{label}[{index}]")
+        rule_label = f"{label}[{index}]"
+        _reject_unexpected_fields(rule, {"method", "path_template", "static_tree"}, label=rule_label)
         method = rule.get("method")
         normalized_method = None
         if method is not None:
@@ -248,10 +262,23 @@ def _parse_route_rules(payload: Any, *, label: str, allow_catch_all: bool) -> li
             normalized_method = method.strip().upper()
             if normalized_method not in _ALLOWED_HTTP_METHODS:
                 raise AppContractValidationError(f"`{label}[{index}].method` is not a supported HTTP method.")
-        path_prefix = _expect_http_path_prefix(rule, "path_prefix", label=f"{label}[{index}].path_prefix")
-        if not allow_catch_all and normalized_method is None and path_prefix == "/":
-            raise AppContractValidationError(f"`{label}[{index}]` cannot pass through every method and path.")
-        rules.append(HttpSidecarRouteRule(method=normalized_method, path_prefix=path_prefix))
+        if require_method and normalized_method is None:
+            raise AppContractValidationError(f"`{rule_label}.method` is required for authorized sidecar routes.")
+        static_tree = _expect_bool(rule, "static_tree", default=False)
+        path_template = _expect_string(rule, "path_template")
+        try:
+            path_template = validate_route_template(path_template, static_tree=static_tree)
+        except ValueError as error:
+            raise AppContractValidationError(f"`{rule_label}.path_template` {error}.") from error
+        if static_tree and normalized_method not in {"GET", "HEAD"}:
+            raise AppContractValidationError(f"`{rule_label}.static_tree` requires GET or HEAD.")
+        rules.append(
+            HttpSidecarRouteRule(
+                method=normalized_method,
+                path_template=path_template,
+                static_tree=static_tree,
+            )
+        )
     return rules
 
 

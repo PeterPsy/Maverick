@@ -94,3 +94,10 @@ technical tokens are not forwarded. This closes the browser-origin boundary
 for the declared sidecar profile; it does not change Maverick's broader
 pre-release status or the remaining blockers in
 `docs/security/production_readiness.md`.
+
+Sidecar route authorization is exact and deny-by-default. Contracts cannot
+provide prefix matchers or regex; named parameters consume one segment and
+unsafe authorized routes declare their method. Static subtree rules are limited
+to safe reads outside `/api`. Core rejects encoded slash/backslash/dot
+traversal, double encoding, ambiguous host paths, and non-canonical Unicode
+before applying `blocked > handled_by_core > pass_through` precedence.

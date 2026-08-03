@@ -114,8 +114,17 @@ export function useChatSidebarState() {
             threads: filteredThreads,
             transcriptTextByThreadId: transcriptSearchTextByThreadId,
           })
-        : buildSections(projects, filteredThreads),
-    [filteredThreads, isTranscriptSearchLoading, projects, searchTerm, transcriptSearchTextByThreadId],
+        : buildSections(projects, threads, threadFilter, multiAgentThreadIds),
+    [
+      filteredThreads,
+      isTranscriptSearchLoading,
+      multiAgentThreadIds,
+      projects,
+      searchTerm,
+      threadFilter,
+      threads,
+      transcriptSearchTextByThreadId,
+    ],
   );
   function applyProjects(nextProjects: ChatProject[]) {
     setProjects(nextProjects);

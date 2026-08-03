@@ -85,7 +85,7 @@ function ChatSidebarWidget() {
       <div className="bs-chat-list">
         {sidebar.isInitialLoading ? (
           <ChatSidebarSkeleton />
-        ) : (
+        ) : sidebar.sections.length ? (
           sidebar.sections.map((section) => (
             <ProjectSection
               activeThreadId={sidebar.activeThreadId}
@@ -125,6 +125,8 @@ function ChatSidebarWidget() {
               selectedThreadIds={sidebar.selectedThreadIds}
             />
           ))
+        ) : (
+          <p className="bs-chat-folder__empty">No chats match this filter.</p>
         )}
       </div>
     </main>

@@ -66,8 +66,10 @@ export function buildSections(
     section.items.push(thread);
   }
 
-  const sections = [...projectSections, ...placeholderSections];
-  if (unassigned.length || !sections.length) {
+  const sections = [...projectSections, ...placeholderSections].filter(
+    (section) => threadFilter === "all" || section.items.length > 0,
+  );
+  if (unassigned.length || (threadFilter === "all" && !sections.length)) {
     sections.unshift({
       id: "unassigned",
       projectId: null,

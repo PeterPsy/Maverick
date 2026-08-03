@@ -100,6 +100,36 @@ describe("chat sidebar runtime status", () => {
     ]);
   });
 
+  it("hides project sections without matching chats while a filter is active", () => {
+    const sections = buildSections(
+      [
+        project({ project_id: "senses-project", name: "Senses project" }),
+        project({ project_id: "chat-project", name: "Chat project" }),
+        project({ project_id: "empty-project", name: "Empty project" }),
+      ],
+      [
+        thread({ thread_id: "senses-thread", project_id: "senses-project", source_app_id: "senses" }),
+        thread({ thread_id: "chat-thread", project_id: "chat-project", source_app_id: "chat" }),
+        thread({ thread_id: "unassigned-chat", project_id: null, source_app_id: "chat" }),
+      ],
+      "senses",
+    );
+
+    expect(sections.map((section) => section.id)).toEqual(["senses-project"]);
+    expect(sections[0].items.map((item) => item.thread_id)).toEqual(["senses-thread"]);
+  });
+
+  it("returns no project sections when an active filter has no matching chats", () => {
+    expect(buildSections([project({ project_id: "empty-project" })], [], "unread")).toEqual([]);
+  });
+
+  it("keeps empty project sections visible in the All view", () => {
+    const sections = buildSections([project({ project_id: "empty-project" })], []);
+
+    expect(sections.map((section) => section.id)).toEqual(["empty-project"]);
+    expect(sections[0].items).toEqual([]);
+  });
+
   it("returns source badge metadata for Senses and multi-agent threads", () => {
     const multiAgentThreadIds = new Set(["multi-thread"]);
 

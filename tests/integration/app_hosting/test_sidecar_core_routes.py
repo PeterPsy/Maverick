@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 from io import BytesIO
 import json
 from pathlib import Path
@@ -11,6 +12,7 @@ import unittest
 
 from core.api.platform_host import PlatformHost
 from core.api.platform_state import bootstrap_platform_state
+from core.api.sidecar_core_routes import _send_core_sidecar_asgi_response
 from core.apps.contracts import (
     build_app_contract,
     build_app_entrypoints,
@@ -29,6 +31,29 @@ from core.shared.entrypoints import EntrypointShutdownController
 
 
 class SidecarCoreRouteIntegrationTests(unittest.TestCase):
+    def test_wp0_characterizes_handled_by_core_sse_as_one_buffered_response(self) -> None:
+        messages: list[dict] = []
+
+        async def send(message: dict) -> None:
+            messages.append(message)
+
+        asyncio.run(
+            _send_core_sidecar_asgi_response(
+                send,
+                {
+                    "status_code": 200,
+                    "body": "event: message\ndata: one\n\nevent: message\ndata: two\n\n",
+                },
+            )
+        )
+
+        start = messages[0]
+        bodies = [message for message in messages if message["type"] == "http.response.body"]
+        self.assertEqual(dict(start["headers"])[b"content-type"], b"text/plain; charset=utf-8")
+        self.assertIn(b"content-length", dict(start["headers"]))
+        self.assertEqual(len(bodies), 1)
+        self.assertFalse(bodies[0]["more_body"])
+
     def test_handled_by_core_route_invokes_app_backend_without_sidecar_passthrough(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
             repo_root = self._repo_root(temp)

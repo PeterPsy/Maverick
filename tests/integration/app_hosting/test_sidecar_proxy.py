@@ -10,10 +10,12 @@ from pathlib import Path
 import tempfile
 import textwrap
 import unittest
+from unittest.mock import patch
 
 from core.api.asgi_application import PlatformAsgiHost
 from core.api.platform_host import PlatformHost
 from core.api.platform_state import bootstrap_platform_state
+from core.api.sidecar_proxy import _sidecar_env
 from core.apps.contracts import (
     build_app_contract,
     build_app_services,
@@ -31,6 +33,34 @@ from core.shared.entrypoints import EntrypointShutdownController
 
 
 class AppSidecarProxyIntegrationTests(unittest.TestCase):
+    def test_wp0_characterizes_host_environment_inheritance_before_process_policy(self) -> None:
+        sidecar = build_http_sidecar_spec(
+            service_id="opendesign",
+            runtime="python",
+            working_directory="service",
+            command=["python3", "server.py"],
+            env={"OD_PORT": "${service.port}"},
+            bind=HttpSidecarBindSpec(host="127.0.0.1", port="auto"),
+            health=HttpSidecarHealthSpec(path="/api/ready", timeout_ms=5000),
+        )
+        sentinel = "MAVERICK_WP0_HOST_ENV_SENTINEL"
+
+        with tempfile.TemporaryDirectory() as temp, patch.dict(os.environ, {sentinel: "must-not-cross"}):
+            root = self._repo_root(temp)
+            env = _sidecar_env(
+                workspace_id="default",
+                app_id="sidecar-demo",
+                data_root=str(root / "data"),
+                source_root=root / "source",
+                workspace_root=root / "workspace",
+                port=12345,
+                token="technical-token",
+                sidecar=sidecar,
+                start_path=root,
+            )
+
+        self.assertEqual(env[sentinel], "must-not-cross")
+
     def test_sidecar_proxy_starts_process_injects_token_and_blocks_sandbox_routes(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
             repo_root = self._repo_root(temp)

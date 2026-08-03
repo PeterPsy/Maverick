@@ -20,9 +20,9 @@ from core.inter_agent.orchestration_runtime import (
     prepare_generalist_handoff,
     runtime_turn_executor,
 )
+from core.inter_agent.orchestration_participants import AgentSnapshotResolver
 from core.inter_agent.orchestration_state import OrchestrationControlState, load_control_state
 from core.inter_agent.orchestration_tasks import (
-    AgentSnapshotResolver,
     OrchestrationTaskResult,
     execute_task,
     materialize_plan,

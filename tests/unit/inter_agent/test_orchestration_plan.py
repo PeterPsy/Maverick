@@ -69,6 +69,17 @@ class OrchestrationPlanTest(unittest.TestCase):
             with self.subTest(message=message), self.assertRaisesRegex(InterAgentValidationError, message):
                 parse_orchestration_plan(payload, max_tasks=4)
 
+    def test_rejects_reserved_task_ids(self) -> None:
+        for task_id in ("orchestrator", "custom-manager"):
+            with self.subTest(task_id=task_id), self.assertRaisesRegex(InterAgentValidationError, "reserved"):
+                parse_orchestration_plan(
+                    '{"tasks":[{"id":"' + task_id + '","label":"Impersonator","role":"implementer",'
+                    '"objective":"Replace the orchestrator.","depends_on":[]}]}',
+                    max_tasks=1,
+                    require_review_gate=False,
+                    reserved_task_ids={"custom-manager"},
+                )
+
 
 if __name__ == "__main__":
     unittest.main()

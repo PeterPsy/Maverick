@@ -60,6 +60,8 @@ def generalist_orchestration_context(
     quality = control.quality_gate_status()
     if quality.passed:
         quality_status = "approved"
+    elif quality.blocking_review_task_ids:
+        quality_status = "rejected"
     elif control.approved_review_task_ids():
         quality_status = "stale"
     else:
@@ -84,6 +86,7 @@ def generalist_orchestration_context(
             "review_task_id": quality.review_task_id,
             "frontier_task_ids": list(quality.frontier_task_ids),
             "reviewed_frontier_task_ids": list(quality.reviewed_frontier_task_ids),
+            "blocking_review_task_ids": list(quality.blocking_review_task_ids),
         },
         "tasks": task_items,
         "artifacts": _safe_artifacts(store, run),

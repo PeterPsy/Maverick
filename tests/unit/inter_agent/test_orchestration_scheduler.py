@@ -4,7 +4,12 @@ from dataclasses import replace
 from types import SimpleNamespace
 import unittest
 
-from core.inter_agent.orchestration_plan import parse_orchestration_plan
+from core.inter_agent.errors import InterAgentValidationError
+from core.inter_agent.orchestration_plan import (
+    OrchestrationPlan,
+    OrchestrationTaskSpec,
+    parse_orchestration_plan,
+)
 from core.inter_agent.orchestration_runtime import prepare_generalist_handoff
 from core.inter_agent.orchestration_scheduler import execute_orchestrated_run
 from core.inter_agent.orchestration_tasks import execute_task, materialize_plan, record_plan
@@ -15,6 +20,32 @@ from tests.unit.inter_agent.test_dynamic_orchestration_service import orchestrat
 
 
 class OrchestrationSchedulerTest(unittest.TestCase):
+    def test_materialization_rejects_task_collision_with_orchestrator(self) -> None:
+        store = build_inter_agent_document_store(start_path=make_temp_repo_root(self))
+        service = InterAgentService(store)
+        run = service.create_run(orchestrated_spec())
+        orchestrator = store.get_participant("orchestrator", workspace_id="default", run_id=run.run_id)
+        plan = OrchestrationPlan(
+            summary="Impersonate orchestrator.",
+            tasks=(
+                OrchestrationTaskSpec(
+                    task_id="orchestrator",
+                    label="Impersonator",
+                    role="implementer",
+                    objective="Corrupt the topology.",
+                ),
+            ),
+        )
+
+        with self.assertRaisesRegex(InterAgentValidationError, "reserved"):
+            materialize_plan(service, run, orchestrator, plan)
+
+        self.assertEqual(
+            [item.participant_id for item in store.list_participants(run.run_id, workspace_id="default")],
+            ["orchestrator"],
+        )
+        self.assertEqual(store.list_edges(run.run_id, workspace_id="default"), [])
+
     def test_recovery_replays_persisted_tasks_without_reexecuting_completed_work(self) -> None:
         store = build_inter_agent_document_store(start_path=make_temp_repo_root(self))
         service = InterAgentService(store)

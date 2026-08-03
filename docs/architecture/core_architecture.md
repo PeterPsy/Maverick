@@ -348,7 +348,13 @@ orchestrator as the only initial board participant. That orchestrator produces a
 structured plan; core then materializes workers and edges dynamically, schedules
 dependency-ready work under the concurrency budget, runs bounded
 implementer/reviewer revision loops, and accepts completion only when an
-approved final review covers the latest completed material frontier of the DAG.
+approved final review covers the latest completed material frontier of the DAG
+and causally supersedes every unresolved negative or malformed review.
+Orchestrator-authored task ids cannot collide with reserved participant
+identities. Persisted task participants are reusable only when their hidden
+agent execution mode, label,
+agent type, task-bound immutable snapshot digest, skills, and provider material
+still match the task.
 Control decisions use separate persisted `recorded` and `applied` events so
 restart recovery replays cancellation, materialization, quality, and completion
 effects before scheduling work. Persisted participants are recovered from their
@@ -363,7 +369,9 @@ transcripts and orchestrator completion answers remain inside that board.
 Before a linked root-session turn is dispatched to its provider, core attaches
 the same authorized bounded status/task/progress/quality/artifact projection
 exposed by `GET /api/inter-agent/generalist-context`; the stored root transcript
-still contains only the original user and generalist messages.
+still contains only the original user and generalist messages. Both synchronous
+and asynchronous dispatch apply this composition for plain-hosted Chat and
+agentic runtime sessions.
 
 Those surfaces must materialize prompt, skill ids, skill catalog, source app,
 owner, creator, and grants only from core policy or authorized materialized

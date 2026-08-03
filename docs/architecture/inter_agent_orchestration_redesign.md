@@ -51,8 +51,9 @@ The scheduler then runs a persisted adaptive control loop:
 6. validates and persists the resulting control decision before it adds new
    tasks and edges, cancels unnecessary unstarted work, or completes;
 7. repeats output → decision → topology/work until an approved dependent
-   reviewer covers the latest completed material frontier of the task DAG and
-   the orchestrator passes the final quality gate.
+   reviewer covers the latest completed material frontier of the task DAG,
+   causally follows every rejected review that has not already been resolved,
+   and the orchestrator passes the final quality gate.
 
 There is no procedural implementer/reviewer loop in the scheduler. Revisions,
 additional research, tests, synthesis, and final review are new structured
@@ -99,7 +100,9 @@ frontier, and allowlisted artifact references. It excludes participant runtime
 session ids, raw tool payloads, raw reasoning, and artifact bodies. The stored
 user message and root transcript remain unchanged; only provider input receives
 the projection. Task and result text in the projection is explicitly treated as
-untrusted data rather than instructions.
+untrusted data rather than instructions. This provider-only composition is
+identical for synchronous and asynchronous turn submission and applies to both
+plain-hosted Chat and agentic runtime workers.
 
 ## Transcript Isolation
 
@@ -150,6 +153,12 @@ transcript projection behavior.
   or skill data.
 - Hidden participant sessions remain inaccessible through raw runtime HTTP,
   WebSocket, CLI, and MCP paths.
+- Orchestrator-authored task ids cannot claim reserved participant identities,
+  including the run's actual orchestrator participant id. Recovery may reuse a
+  task-id participant only when it is a hidden child-runtime agent whose label,
+  selected agent type, task-bound snapshot metadata, digest, skills, and
+  provider material match the persisted task. A mismatch fails before any edge
+  or task event is added.
 - The event store is the recovery log for the full plan, adaptive decisions,
   task attempts, directives, quality decisions, and completion. Hosted backend
   startup reconciles interrupted participant turns without queuing the generic
@@ -164,3 +173,7 @@ transcript projection behavior.
   are recovered from their immutable persisted snapshots without consulting
   the agent catalog; the catalog is used only when a decision introduces a new
   participant. Generic CLI/MCP/test bootstrap does not start those workers.
+- A completed negative or malformed reviewer/security-reviewer verdict vetoes
+  earlier or parallel approvals. The gate can pass again only through a later
+  approved review that covers the current material frontier and has the
+  rejected review in its transitive dependency ancestry.

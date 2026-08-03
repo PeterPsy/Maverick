@@ -8,6 +8,7 @@ import re
 from typing import Any
 
 from core.inter_agent.errors import InterAgentValidationError
+from core.inter_agent.orchestration_topology import validate_task_ids_not_reserved
 
 
 _TASK_ID_RE = re.compile(r"^[a-z][a-z0-9_-]{0,63}$")
@@ -71,6 +72,7 @@ def parse_orchestration_plan(
     *,
     max_tasks: int,
     require_review_gate: bool = True,
+    reserved_task_ids: set[str] | frozenset[str] = frozenset(),
 ) -> OrchestrationPlan:
     payload = _json_object(value, decision="plan")
     raw_tasks = payload.get("tasks")
@@ -82,6 +84,7 @@ def parse_orchestration_plan(
     task_ids = [task.task_id for task in tasks]
     if len(task_ids) != len(set(task_ids)):
         raise InterAgentValidationError("Orchestrator plan task ids must be unique.")
+    validate_task_ids_not_reserved(task_ids, reserved_task_ids=reserved_task_ids)
     _validate_task_references(tasks, set(task_ids))
     _assert_acyclic(tasks)
     if require_review_gate and not any(task.role in _REVIEWER_ROLES and task.review_of for task in tasks):
@@ -95,12 +98,14 @@ def parse_control_decision(
     *,
     existing_tasks: tuple[OrchestrationTaskSpec, ...],
     max_new_tasks: int,
+    reserved_task_ids: set[str] | frozenset[str] = frozenset(),
 ) -> OrchestrationControlDecision:
     payload = _json_object(value, decision="control decision")
     return control_decision_from_payload(
         payload,
         existing_tasks=existing_tasks,
         max_new_tasks=max_new_tasks,
+        reserved_task_ids=reserved_task_ids,
     )
 
 
@@ -109,6 +114,7 @@ def control_decision_from_payload(
     *,
     existing_tasks: tuple[OrchestrationTaskSpec, ...],
     max_new_tasks: int | None = None,
+    reserved_task_ids: set[str] | frozenset[str] = frozenset(),
 ) -> OrchestrationControlDecision:
     """Rehydrate and validate one persisted orchestrator control decision."""
     if not isinstance(payload, dict):
@@ -123,6 +129,7 @@ def control_decision_from_payload(
     new_ids = [task.task_id for task in tasks]
     if len(new_ids) != len(set(new_ids)) or existing_ids.intersection(new_ids):
         raise InterAgentValidationError("Orchestrator control task ids must be new and unique.")
+    validate_task_ids_not_reserved(new_ids, reserved_task_ids=reserved_task_ids)
     all_tasks = (*existing_tasks, *tasks)
     _validate_task_references(tasks, {task.task_id for task in all_tasks})
     _assert_acyclic(all_tasks)
@@ -191,8 +198,14 @@ def task_payload(task: OrchestrationTaskSpec) -> dict[str, Any]:
     }
 
 
-def task_spec_from_payload(value: Any) -> OrchestrationTaskSpec:
-    return _task_spec(value)
+def task_spec_from_payload(
+    value: Any,
+    *,
+    reserved_task_ids: set[str] | frozenset[str] = frozenset(),
+) -> OrchestrationTaskSpec:
+    task = _task_spec(value)
+    validate_task_ids_not_reserved((task.task_id,), reserved_task_ids=reserved_task_ids)
+    return task
 
 
 def _task_spec(value: Any) -> OrchestrationTaskSpec:

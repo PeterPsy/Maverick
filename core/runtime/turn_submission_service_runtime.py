@@ -42,9 +42,8 @@ from core.runtime.plain_hosted_text import (
     queue_provider_id_for_session,
     runtime_session_is_plain_hosted_chat,
 )
-from core.runtime.app_references import input_text_with_app_references
-from core.runtime.attachments import input_text_with_attachment_links
 from core.runtime.execution import execute_runtime_turn
+from core.runtime.provider_input_context import generalist_orchestration_input_text, runtime_provider_input_text
 from core.runtime.process_control import terminate_codex_app_server_processes_for_session, terminate_runtime_processes
 from core.runtime.client_message_claims import RuntimeClientMessageClaim
 from core.runtime.runtime_events import RuntimeEventRecord
@@ -760,7 +759,7 @@ def submit_runtime_turn_async(
                         state,
                         session=current_session,
                         turn_id=turn.turn_id,
-                        input_text=input_text,
+                        input_text=generalist_orchestration_input_text(state, session=current_session, input_text=input_text),
                         attachments=attachments,
                         event_sink=output_recorder.record,
                         on_provider_turn_start_sent=record_plain_provider_turn_start_sent,
@@ -796,10 +795,10 @@ def submit_runtime_turn_async(
                     )
                     materialized_reference_count = len([item for item in execution_app_references or [] if isinstance(item, dict)])
                     provider_input_started_at = time.perf_counter()
-                    provider_input_text = input_text_with_attachment_links(
-                        input_text=input_text_with_app_references(input_text=input_text, app_references=execution_app_references),
+                    provider_input_text = runtime_provider_input_text(
+                        state, session=current_session, input_text=input_text,
+                        app_references=execution_app_references,
                         attachments=attachments,
-                        workspace_root=current_session.workspace_root,
                     )
                     provider_input_metadata = {
                         "provider_input_build_ms": (time.perf_counter() - provider_input_started_at) * 1000,

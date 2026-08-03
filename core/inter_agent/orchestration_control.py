@@ -14,10 +14,11 @@ from core.inter_agent.orchestration_plan import (
     parse_orchestration_plan,
 )
 from core.inter_agent.orchestration_prompts import control_prompt, planning_prompt
+from core.inter_agent.orchestration_participants import AgentSnapshotResolver
 from core.inter_agent.orchestration_runtime import ParticipantTurnExecutor, sync_generalist_directives
 from core.inter_agent.orchestration_state import OrchestrationControlState, RecordedControlDecision
+from core.inter_agent.orchestration_topology import reserved_task_ids_for_run
 from core.inter_agent.orchestration_tasks import (
-    AgentSnapshotResolver,
     OrchestrationTaskResult,
     cancel_task,
     materialize_tasks,
@@ -58,7 +59,12 @@ def create_initial_plan(
         ),
         f"{run.run_id}:orchestrator:plan",
     )
-    plan = parse_orchestration_plan(output, max_tasks=max_initial_tasks, require_review_gate=False)
+    plan = parse_orchestration_plan(
+        output,
+        max_tasks=max_initial_tasks,
+        require_review_gate=False,
+        reserved_task_ids=reserved_task_ids_for_run(run.orchestrator_participant_id),
+    )
     service.mark_directives_delivered(run, directives)
     control.plan_summary = plan.summary
     return plan
@@ -98,6 +104,7 @@ def next_control_decision(
         output,
         existing_tasks=tuple(control.tasks.values()),
         max_new_tasks=remaining_slots,
+        reserved_task_ids=reserved_task_ids_for_run(run.orchestrator_participant_id),
     )
     _validate_control_decision(
         control,

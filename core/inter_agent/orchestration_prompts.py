@@ -25,6 +25,7 @@ def planning_prompt(
         'summary and tasks. Each task requires id, label, role, objective, depends_on and may select agent_type_id; '
         "reviewer tasks also require review_of. Use safe lowercase ids. Plan only the work that is ready to start; "
         "you may add more tasks after every worker output. A reviewer must approve before completion. "
+        "Never use orchestrator as a task id. "
         "Do not execute the work yourself.\n\n"
         f"Policy: {policy or 'auto'}\nUser request:\n{input_text}\n\n"
         f"Generalist launch analysis:\n{generalist_analysis}\n\nAvailable agent types: {catalog}"
@@ -38,7 +39,7 @@ def task_prompt(task: OrchestrationTaskSpec, input_text: str, dependency_outputs
     )
     review_contract = (
         '\nReturn only JSON {"approved": boolean, "feedback": string}. Approve only if the result fully satisfies the request.'
-        if task.role == "reviewer"
+        if task.role in {"reviewer", "security_reviewer"}
         else ""
     )
     return (
@@ -69,6 +70,8 @@ def control_prompt(
         '"quality_passed": boolean, "final_answer": string}. New tasks use id, label, role, objective, '
         "depends_on and optional agent_type_id; reviewers also use review_of. Add work when evidence is insufficient, "
         "cancel only unnecessary unstarted work, and complete only after a dependent reviewer explicitly approved. "
+        "Never use orchestrator as a task id. A rejected review remains blocking until revision work and a later "
+        "approved review depend transitively on that rejection. "
         "When continuing without new work, return empty tasks and cancel_task_ids.\n\n"
         f"User request:\n{input_text}\n\nAvailable agent types: {catalog}\n\nTask ledger:\n{ledger}\n\n"
         f"Safe-point trigger: {trigger_task_id or 'scheduler'}\nLatest output:\n{trigger_output}"

@@ -134,6 +134,13 @@ dependency provider, validates the runtime skill catalog, and materializes an
 immutable participant snapshot. Invalid selections fail closed; they never
 fall back to model-supplied authority-bearing fields.
 
+The same output also cannot claim reserved topology identities such as the
+run's orchestrator participant id. Dynamic task materialization rejects those
+ids before mutation and reuses a persisted participant only when its hidden
+agent kind, child-runtime execution mode, task label, agent type, task-bound
+snapshot digest, skill ids, and provider material all match. This keeps a model
+output from turning the root orchestrator into its own delegated worker.
+
 ### Participant output influencing the root generalist
 
 The root generalist may receive a session-linked orchestration status read so
@@ -141,7 +148,17 @@ it can explain Agent nodes progress. That projection is read-only, bounded,
 redacts common secret patterns, allowlists artifact reference fields, excludes
 hidden participant runtime identifiers and raw tool payloads, and labels task
 and result text as untrusted data rather than instructions. The original root
-turn input remains the only user message persisted in the Chat transcript.
+turn input remains the only user message persisted in the Chat transcript. The
+provider-only attachment is applied in both synchronous and asynchronous
+plain-hosted and agentic dispatch paths.
+
+### Stale quality approval
+
+An orchestrator may try to complete using an earlier approval after a later
+review reports a critical issue. A completed negative or malformed reviewer or
+security-reviewer verdict therefore vetoes approvals that are not causally
+after it. A later approval can pass only after its dependency ancestry includes
+that rejection and it covers the current material frontier.
 
 ### Workspace escape
 

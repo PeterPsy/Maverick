@@ -48,7 +48,8 @@ It started with names, visibility, legacy compatibility, and initial policy defa
     topology mutation. A separate application event is persisted only after all
     decision effects succeed. Review revisions are not hardcoded scheduler
     steps, and completion requires an approved review covering the latest
-    completed material frontier.
+    completed material frontier and causally superseding every unresolved
+    negative or malformed review verdict.
 18. A later root Chat turn may steer the active run only through a persisted
     generalist-turn link validated against the same root runtime session. The
     scheduler waits for its terminal final output; direct Agent nodes text is a
@@ -58,7 +59,11 @@ It started with names, visibility, legacy compatibility, and initial policy defa
     interrupted non-terminal participants, and is enqueued only by the hosted
     backend lifecycle. Recorded-but-unapplied decisions are replayed before any
     task is materialized or scheduled, and existing participants reuse their
-    immutable persisted snapshots without a catalog lookup.
+    immutable persisted snapshots without a catalog lookup. Reuse is allowed
+    only for task-bound hidden agent participants whose execution mode, label,
+    agent type, snapshot digest, skills, and provider material still match;
+    reserved participant ids, including the real orchestrator id, are never
+    valid task ids.
 20. Dynamic agent type selection is constrained to Chat's selected agent
     catalog provider. Agent definitions, prompts, skill ids, and skill catalog
     authority are materialized server-side; orchestrator JSON cannot supply
@@ -67,7 +72,9 @@ It started with names, visibility, legacy compatibility, and initial policy defa
     provider dispatch when its runtime session is linked to a run. The read
     includes status, summary, task progress, bounded results, current quality
     frontier, and allowlisted artifact references without changing the stored
-    root transcript or exposing hidden participant runtime state.
+    root transcript or exposing hidden participant runtime state. The same
+    composition runs inside synchronous and asynchronous plain-hosted and
+    agentic provider dispatch.
 
 ## Initial Policy Defaults
 

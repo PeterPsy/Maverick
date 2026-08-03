@@ -140,6 +140,75 @@ class GeneralistOrchestrationContextTest(unittest.TestCase):
         self.assertTrue(current.passed)
         self.assertEqual(current.review_task_id, "review-b")
 
+    def test_rejected_review_vetoes_an_older_parallel_approval(self) -> None:
+        plan = parse_orchestration_plan(
+            '{"summary":"Parallel reviews.","tasks":['
+            '{"id":"implement","label":"Implementation","role":"implementer",'
+            '"objective":"Produce the implementation.","depends_on":[]},'
+            '{"id":"review","label":"Review","role":"reviewer",'
+            '"objective":"Review correctness.","depends_on":["implement"],"review_of":"implement"},'
+            '{"id":"security-review","label":"Security review","role":"security_reviewer",'
+            '"objective":"Review security.","depends_on":["implement"],"review_of":"implement"},'
+            '{"id":"revision","label":"Security revision","role":"implementer",'
+            '"objective":"Resolve the critical issue.","depends_on":["security-review"]},'
+            '{"id":"final-review","label":"Final review","role":"security_reviewer",'
+            '"objective":"Review the security revision.","depends_on":["revision"],"review_of":"revision"}]}',
+            max_tasks=5,
+        )
+        control = OrchestrationControlState(tasks={task.task_id: task for task in plan.tasks})
+        control.results.update(
+            {
+                "implement": OrchestrationTaskResult("implement", "implement", "completed", "Implementation"),
+                "review": OrchestrationTaskResult(
+                    "review",
+                    "review",
+                    "completed",
+                    '{"approved":true,"feedback":"Correct."}',
+                ),
+                "security-review": OrchestrationTaskResult(
+                    "security-review",
+                    "security-review",
+                    "completed",
+                    '{"approved":false,"feedback":"Critical issue."}',
+                ),
+            }
+        )
+
+        status = control.quality_gate_status()
+
+        self.assertFalse(status.passed)
+        self.assertEqual(status.frontier_task_ids, ("implement",))
+        self.assertEqual(control.approved_review_task_ids(), ("review",))
+        self.assertEqual(status.blocking_review_task_ids, ("security-review",))
+
+        control.results["security-review"] = OrchestrationTaskResult(
+            "security-review",
+            "security-review",
+            "completed",
+            "malformed security verdict",
+        )
+        self.assertEqual(control.quality_gate_status().blocking_review_task_ids, ("security-review",))
+
+        control.results["revision"] = OrchestrationTaskResult(
+            "revision",
+            "revision",
+            "completed",
+            "Critical issue resolved.",
+        )
+        control.results["final-review"] = OrchestrationTaskResult(
+            "final-review",
+            "final-review",
+            "completed",
+            '{"approved":true,"feedback":"Security issue resolved."}',
+        )
+
+        resolved = control.quality_gate_status()
+
+        self.assertTrue(resolved.passed)
+        self.assertEqual(resolved.frontier_task_ids, ("revision",))
+        self.assertEqual(resolved.review_task_id, "final-review")
+        self.assertEqual(resolved.blocking_review_task_ids, ())
+
 
 if __name__ == "__main__":
     unittest.main()

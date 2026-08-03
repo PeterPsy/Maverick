@@ -1,0 +1,171 @@
+{
+  "schema_version": 1,
+  "gate": "G3",
+  "upstream": {
+    "tag": "open-design-v0.16.1",
+    "commit": "276b4d8e970bc143d7ad060181a89a834e3d9caf",
+    "source_files": {
+      "apps/daemon/src/agent-protocol/acp/session-params.ts": "b3b36e9ea6fe2bd7f63a01b7778e19a6b388d5f68e8dbbda5ed8a4395c00fe4a",
+      "apps/daemon/src/agent-protocol/acp/session.ts": "fe0000ec60a63d80ea1de522edc406ca7f2431cd7de18faae8090d14b9e82995",
+      "apps/daemon/src/runtimes/defs/kimi.ts": "f5d4aaba11ed779fabbc743c9c6093784bb9d12e8faeb80105566cd1b6e1e643",
+      "apps/daemon/src/runtimes/env.ts": "759924d04c1b784009e23e04826a87fc0763f5318e9a7454ef6e2e41a366f481",
+      "apps/daemon/src/runtimes/local-profiles.ts": "9a7c46f040aa97b2aa7d5002ea8eb1515ae45e2c6bcb12da2277c9ef9f6d2a6a",
+      "apps/daemon/tests/acp-timeout-env.test.ts": "f53d17f81e1298879e95c1aa7fbce699c85f8b4766a8168558679dc7ad355049",
+      "apps/daemon/tests/acp.test.ts": "c63c8b1f187db3573aa8e585b97126f61ff02ba43d8502ee350b3bf029b62385"
+    }
+  },
+  "option_a_acp": {
+    "attempted_first": true,
+    "fixture": "apps/design-studio/tests/fixtures/rejected_a_acp_shim.py",
+    "commands": [
+      {
+        "command": "corepack pnpm install --frozen-lockfile",
+        "result": "pass"
+      },
+      {
+        "command": "pnpm --filter @open-design/daemon exec vitest run -c vitest.config.ts tests/acp.test.ts tests/acp-timeout-env.test.ts",
+        "result": "pass: 2 files, 52 tests"
+      },
+      {
+        "command": "pnpm --filter @open-design/daemon typecheck",
+        "result": "pass"
+      },
+      {
+        "command": "pnpm --filter @open-design/web build",
+        "result": "pass"
+      },
+      {
+        "command": "node apps/design-studio/tests/spike_rejected_a_acp.mjs --upstream-root /tmp/maverick-opendesign-0-16-1",
+        "result": "pass with disqualifying ownership findings"
+      }
+    ],
+    "criteria": {
+      "real_ui_create_run": {
+        "result": "pass",
+        "evidence": "Playwright loaded the production export as Open Design and POST /api/runs returned 202 from the page origin."
+      },
+      "sse_before_terminal": {
+        "result": "pass",
+        "evidence": "The browser observed first-sse-before-terminal while the run status was running."
+      },
+      "project_file_write": {
+        "result": "pass",
+        "evidence": "maverick-spike.html appeared through the project files API."
+      },
+      "full_correlation": {
+        "result": "fail",
+        "evidence": "session/new contains only cwd and mcpServers; the custom profile receives no OpenDesign run id, Maverick runtime session id, or turn id."
+      },
+      "bidirectional_idempotent_cancel": {
+        "result": "pass",
+        "evidence": "Two cancel requests returned 200, the terminal package was canceled, and the live ACP peer received session/cancel once."
+      },
+      "timeout": {
+        "result": "pass",
+        "evidence": "A silent ACP prompt reached failed and produced a failed terminal package under the configured stage timeout."
+      },
+      "backend_restart": {
+        "result": "fail",
+        "evidence": "No durable OD-run to Maverick-session/turn mapping can be written because those identifiers never reach the custom ACP peer."
+      },
+      "no_provider_secret": {
+        "result": "pass",
+        "evidence": "The daemon launched with env -i and every shim trace recorded an empty provider_secret_names array."
+      },
+      "actor_attribution": {
+        "result": "fail",
+        "evidence": "ACP initialize, session/new, and session/prompt carry no Maverick actor or app-owned session attribution."
+      },
+      "terminal_result_packages": {
+        "result": "pass",
+        "evidence": "Result packages matched succeeded, failed, timeout-failed, and canceled terminal states."
+      },
+      "resume": {
+        "result": "fail",
+        "evidence": "A second conversation run succeeded but the custom profile started session/new again; local profiles inherit Kimi, which does not declare resumesSessionViaAcpLoad."
+      },
+      "run_scoped_capability": {
+        "result": "fail",
+        "evidence": "The custom profile can only receive static profile env; the only upstream run trace env is restricted to agent id amr."
+      }
+    },
+    "decision": "rejected",
+    "rejection_reason": "A would require a new runtime definition plus daemon spawn/env changes to carry identity and a per-run capability. That is an invasive runtime patch under the approved algorithm, and inheriting another CLI profile would be forbidden emulation."
+  },
+  "selection": "B",
+  "generic_core_contract": {
+    "request": [
+      "workspace_id",
+      "source_app_id",
+      "actor_id",
+      "request_id",
+      "idempotency_key",
+      "input_text",
+      "project_root_capability"
+    ],
+    "submission_result": [
+      "request_id",
+      "stream_id",
+      "runtime_session_id",
+      "turn_id",
+      "status"
+    ],
+    "stream_event": [
+      "stream_id",
+      "sequence",
+      "event_id",
+      "event_type",
+      "timestamp",
+      "payload",
+      "terminal"
+    ],
+    "operations": [
+      "submit",
+      "read_after_sequence",
+      "interrupt",
+      "inspect",
+      "recover"
+    ],
+    "rules": [
+      "deny cross-workspace access",
+      "verify source-app ownership for read and interrupt",
+      "deduplicate submission by workspace, source app, and idempotency key",
+      "persist correlation before dispatch",
+      "append events monotonically before delivery",
+      "make interrupt idempotent",
+      "resume after the last acknowledged sequence",
+      "redact credentials and full prompt content from audit"
+    ]
+  },
+  "app_owned_translation": {
+    "correlation": [
+      "workspace_id",
+      "od_project_id",
+      "od_run_id",
+      "runtime_session_id",
+      "turn_id"
+    ],
+    "event_mapping": {
+      "runtime.turn.queued": "run.status.queued",
+      "runtime.turn.started": "run.status.running",
+      "runtime.output.delta": "assistant.text.delta",
+      "runtime.file.changed": "project.file.changed",
+      "runtime.turn.completed": "run.terminal.succeeded",
+      "runtime.turn.failed": "run.terminal.failed",
+      "runtime.turn.cancelled": "run.terminal.canceled"
+    },
+    "terminal_packages": [
+      "succeeded",
+      "failed",
+      "canceled"
+    ],
+    "attribution": "The authenticated Maverick actor is persisted with the app-owned mapping; OpenDesign receives an app-owned session attribution, never a Maverick cookie or actor credential.",
+    "recovery": "Reload the persisted mapping, inspect the generic stream after last_sequence, reconcile exactly one terminal package, and resume SSE from the next sequence.",
+    "idempotency": "workspace_id + od_run_id is unique; submit and terminal translation use separate stable idempotency keys."
+  },
+  "follow_up": {
+    "core_primitive": "WP7 after the generic access boundary in WP4",
+    "app_translator": "WP7",
+    "full_e2e": "WP10"
+  }
+}

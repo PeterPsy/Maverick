@@ -17,7 +17,15 @@ from typing import Any, Callable
 
 from core.shared.repository import installation_paths
 
-SENSITIVE_ERROR_MARKERS = ("secret", "token", "password", "authorization", "raw_value")
+SENSITIVE_ERROR_MARKERS = (
+    "secret",
+    "token",
+    "password",
+    "authorization",
+    "raw_value",
+    "capability",
+    "broker_socket",
+)
 STREAMING_ENTRYPOINT_HEADER_MAX_BYTES = 1024 * 1024
 
 class EntrypointShutdownController:
@@ -96,6 +104,7 @@ class StreamingJsonEntrypointResult:
     entrypoint_path: str = ""
     _closed: bool = False
     _close_lock: Lock = field(default_factory=Lock, repr=False)
+    _cleanup_callbacks: list[Callable[[], None]] = field(default_factory=list, repr=False)
 
     @property
     def has_stream(self) -> bool:
@@ -124,6 +133,18 @@ class StreamingJsonEntrypointResult:
                 process.stdout.close()
             if self.stderr_file is not None:
                 self.stderr_file.close()
+            callbacks = list(self._cleanup_callbacks)
+            self._cleanup_callbacks.clear()
+            for callback in callbacks:
+                callback()
+
+    def add_cleanup(self, callback: Callable[[], None]) -> None:
+        """Run one idempotent owner cleanup when the stream process closes."""
+        with self._close_lock:
+            if self._closed:
+                callback()
+                return
+            self._cleanup_callbacks.append(callback)
 
     def _wait_for_exit(self) -> None:
         process = self.process

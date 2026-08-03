@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import Any
 
 from core.api.app_event_publication import declared_data_event_resources, publish_declared_app_events
+from core.api.sidecar_entrypoint_invocation import run_json_entrypoint_with_sidecars
 from core.apps.dependencies import resolve_app_dependencies
 from core.apps.runtime_requests import apply_app_runtime_requests
 from core.apps.surfaces import enabled_workspace_app_bindings, resolve_workspace_app_surface
@@ -107,6 +108,7 @@ def _workspace_app_tool_definitions(
                     parsed.contract.capabilities.data_events
                 ),
                 _parsed=parsed,
+                _binding=binding,
                 _secret_store: SecretStore | None = secret_store,
                 _workspace_store=workspace_store,
                 _provider_store=provider_store,
@@ -146,7 +148,7 @@ def _workspace_app_tool_definitions(
                     observability_store=_observability_store,
                     request_context={"surface": "mcp", "tool_name": _tool_name},
                 )
-                result = run_json_entrypoint(
+                result = run_json_entrypoint_with_sidecars(
                     _entrypoint_path,
                     payload={
                         "surface": "mcp",
@@ -179,6 +181,13 @@ def _workspace_app_tool_definitions(
                     },
                     cwd=_source_root,
                     timeout_seconds=app_mcp_entrypoint_timeout_seconds(context),
+                    binding=_binding,
+                    parsed=_parsed,
+                    surface=context.entrypoint_surface,
+                    start_path=_start_path or _source_root,
+                    actor_user_id=context.user_id,
+                    runtime_session_id=context.runtime_session_id,
+                    observability_store=_observability_store,
                 )
                 publish_declared_app_events(
                     _app_event_bus,

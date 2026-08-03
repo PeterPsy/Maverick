@@ -7,7 +7,7 @@ import sys
 import unittest
 
 
-ROOT = Path(__file__).resolve().parents[2]
+ROOT = Path(__file__).resolve().parents[3]
 PROOF_PATH = ROOT / "apps/design-studio/service/verify_runtime_bridge_spike.py"
 FIXTURE_PATH = ROOT / "apps/design-studio/tests/fixtures/rejected_a_acp_shim.py"
 ADR_PATH = ROOT / "docs/architecture/design_studio_runtime_bridge.md"

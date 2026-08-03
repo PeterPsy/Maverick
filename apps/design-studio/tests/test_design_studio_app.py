@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from contextlib import contextmanager
+from base64 import b64decode, b64encode
 from io import BytesIO
 import json
 import os
@@ -12,6 +13,7 @@ import socket
 import subprocess
 import sys
 from tempfile import TemporaryDirectory
+from threading import Thread
 import unittest
 
 from core.api.platform_host import PlatformHost
@@ -168,6 +170,17 @@ class DesignStudioAppTests(unittest.TestCase):
         self.assertTrue(sidecar.proxy.streaming)
         self.assertTrue(sidecar.proxy.sse)
         self.assertFalse(sidecar.proxy.websocket)
+        self.assertEqual(sidecar.entrypoint_access.ttl_seconds, 30)
+        self.assertEqual(sidecar.entrypoint_access.request_budget, 16)
+        self.assertFalse(sidecar.entrypoint_access.streaming)
+        self.assertEqual(
+            {surface.surface for surface in sidecar.entrypoint_access.surfaces},
+            {"backend", "cli", "mcp", "reference"},
+        )
+        reference_access = next(
+            surface for surface in sidecar.entrypoint_access.surfaces if surface.surface == "reference"
+        )
+        self.assertTrue(all(route.method in {"GET", "HEAD"} for route in reference_access.routes))
         pass_through = [rule.path_template for rule in sidecar.proxy.route_policy.pass_through]
         blocked = [rule.path_template for rule in sidecar.proxy.route_policy.blocked]
         handled_by_core = [rule.path_template for rule in sidecar.proxy.route_policy.handled_by_core]
@@ -408,6 +421,74 @@ class DesignStudioAppTests(unittest.TestCase):
             self.assertTrue(mcp["ok"])
             self.assertEqual(cli["state"]["schema_version"], "1")
             self.assertEqual(mcp["state"]["schema_version"], "1")
+
+    def test_backend_cli_mcp_and_reference_resolve_same_opendesign_id_through_sdk(self) -> None:
+        project_response = self._fixture_json("project_create_response.json")
+        project_id = project_response["project"]["id"]
+        requests: list[dict] = []
+        with TemporaryDirectory() as temp_dir:
+            data_root = Path(temp_dir) / "data" / "design-studio"
+            payloads = [
+                (
+                    APP_ROOT / "backend" / "app_backend.py",
+                    {
+                        "surface": "backend",
+                        "app_id": "design-studio",
+                        "workspace_id": "default",
+                        "data_root": str(data_root),
+                        "body": {"action": "get_project", "arguments": {"project_id": project_id}},
+                    },
+                    lambda result: result["json"]["od_project_id"],
+                ),
+                (
+                    APP_ROOT / "cli" / "app_cli.py",
+                    {
+                        "surface": "cli",
+                        "command_id": "app.design-studio.design-studio",
+                        "app_id": "design-studio",
+                        "workspace_id": "default",
+                        "data_root": str(data_root),
+                        "arguments": {"action": "get_project", "project_id": project_id},
+                    },
+                    lambda result: result["od_project_id"],
+                ),
+                (
+                    APP_ROOT / "mcp" / "server.py",
+                    {
+                        "surface": "mcp",
+                        "tool_name": "design_studio_get_project",
+                        "app_id": "design-studio",
+                        "workspace_id": "default",
+                        "data_root": str(data_root),
+                        "arguments": {"project_id": project_id},
+                    },
+                    lambda result: result["od_project_id"],
+                ),
+                (
+                    APP_ROOT / "mcp" / "server.py",
+                    {
+                        "surface": "mcp",
+                        "tool_name": "design_studio_reference_resolve",
+                        "app_id": "design-studio",
+                        "workspace_id": "default",
+                        "data_root": str(data_root),
+                        "arguments": {"entity_type": "design_project", "entity_id": project_id},
+                    },
+                    lambda result: result["entity_id"],
+                ),
+            ]
+            resolved_ids = []
+            for entrypoint, payload, resolve_id in payloads:
+                with self._fake_app_sidecar_broker(project_response) as (descriptor, captured):
+                    result = self._run_entrypoint(entrypoint, {**payload, "app_sidecar": descriptor})
+                requests.append(captured)
+                resolved_ids.append(resolve_id(result))
+
+        self.assertEqual(resolved_ids, [project_id] * 4)
+        self.assertEqual([request["method"] for request in requests], ["GET"] * 4)
+        self.assertEqual([request["path"] for request in requests], [f"/api/projects/{project_id}"] * 4)
+        self.assertTrue(all(request["capability"] == "fixture-capability" for request in requests))
+        self.assertNotIn("OD_API_TOKEN", json.dumps(requests))
 
     def test_hosted_backend_imports_and_exports_through_storage_dependencies(self) -> None:
         with TemporaryDirectory() as temp_dir:
@@ -721,6 +802,56 @@ class DesignStudioAppTests(unittest.TestCase):
 
     def _fixture_json(self, name: str) -> dict:
         return json.loads((FIXTURES_ROOT / name).read_text(encoding="utf-8"))
+
+    @contextmanager
+    def _fake_app_sidecar_broker(self, response_payload: dict):
+        with TemporaryDirectory() as temp_dir:
+            socket_path = str(Path(temp_dir) / "broker.sock")
+            server = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+            server.bind(socket_path)
+            server.listen(1)
+            server.settimeout(5)
+            captured: dict = {}
+
+            def serve() -> None:
+                try:
+                    connection, _address = server.accept()
+                    with connection:
+                        wire = b""
+                        while not wire.endswith(b"\n"):
+                            wire += connection.recv(65536)
+                        captured.update(json.loads(wire.decode("utf-8")))
+                        self.assertEqual(b64decode(captured["body_base64"]), b"")
+                        response = {
+                            "ok": True,
+                            "status_code": 200,
+                            "headers": {"content-type": "application/json"},
+                            "body_base64": b64encode(json.dumps(response_payload).encode("utf-8")).decode("ascii"),
+                        }
+                        connection.sendall(json.dumps(response).encode("utf-8") + b"\n")
+                finally:
+                    server.close()
+
+            thread = Thread(target=serve, daemon=True)
+            thread.start()
+            descriptor = {
+                "protocol": "maverick.app-sidecar.v1",
+                "invocation_id": "fixture-invocation",
+                "services": {
+                    "opendesign": {
+                        "broker_socket": socket_path,
+                        "capability": "fixture-capability",
+                        "expires_in_seconds": 30,
+                        "request_budget": 1,
+                        "max_request_body_bytes": 65536,
+                        "max_response_body_bytes": 8388608,
+                        "streaming": False,
+                    }
+                },
+            }
+            yield descriptor, captured
+            thread.join(timeout=6)
+            self.assertFalse(thread.is_alive())
 
     def _run_entrypoint(self, entrypoint: Path, payload: dict) -> dict:
         process = subprocess.run(

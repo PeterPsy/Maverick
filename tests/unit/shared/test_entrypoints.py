@@ -36,6 +36,20 @@ class SharedEntrypointTests(unittest.TestCase):
             redact_entrypoint_stderr("raw_value=super-secret-token"),
             "[redacted entrypoint stderr]",
         )
+        self.assertEqual(
+            redact_entrypoint_stderr("capability=opaque-value broker_socket=/tmp/private.sock"),
+            "[redacted entrypoint stderr]",
+        )
+
+    def test_streaming_result_runs_owner_cleanup_once(self) -> None:
+        calls: list[str] = []
+        result = StreamingJsonEntrypointResult(result={})
+        result.add_cleanup(lambda: calls.append("closed"))
+
+        result.close()
+        result.close()
+
+        self.assertEqual(calls, ["closed"])
 
     def test_json_entrypoint_rejects_non_json_payload_before_launch(self) -> None:
         with patch("core.shared.entrypoints.subprocess.Popen") as popen:

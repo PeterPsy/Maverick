@@ -12,12 +12,14 @@ from time import monotonic
 from typing import Any
 from uuid import uuid4
 
+from core.app_sdk.app_sidecar import AppSidecarError, app_sidecar
 from core.app_sdk.storage import safe_app_data_path
 
 from store import OPENDESIGN_COMMIT, OPENDESIGN_MODE, OPENDESIGN_VERSION, ensure_state, update_state, utc_now
 
 
 PROJECT_ID_PATTERN = re.compile(r"^design_[a-f0-9]{12}$")
+OPENDESIGN_PROJECT_ID_PATTERN = re.compile(r"^[A-Za-z0-9_][A-Za-z0-9._~-]{0,127}$")
 IMPORT_ID_PATTERN = re.compile(r"^import_[a-f0-9]{12}$")
 EXPORT_ID_PATTERN = re.compile(r"^export_[a-f0-9]{12}$")
 STORAGE_PATH_PATTERN = re.compile(r"^storage/(uploaded|generated)/(.+)$")
@@ -62,13 +64,77 @@ def list_projects(payload: dict[str, Any]) -> dict[str, Any]:
     return {"projects": _public_state(ensure_state(payload["data_root"]))["projects"]}
 
 
+def list_opendesign_projects(payload: dict[str, Any]) -> dict[str, Any]:
+    """List canonical OpenDesign projects through the invocation broker."""
+    response = _opendesign_request(payload, "/api/projects")
+    projects = response.get("projects")
+    if not isinstance(projects, list) or any(not isinstance(project, dict) for project in projects):
+        raise DesignStudioError("opendesign_response_invalid", "OpenDesign returned an invalid project list.", status_code=502)
+    return {"projects": projects}
+
+
 def get_project(payload: dict[str, Any], arguments: dict[str, Any]) -> dict[str, Any]:
     """Return one design project."""
-    project_id = _project_id(arguments.get("project_id") or arguments.get("id"))
+    raw_project_id = str(arguments.get("project_id") or arguments.get("id") or "").strip()
+    if not PROJECT_ID_PATTERN.fullmatch(raw_project_id):
+        project_id = _opendesign_project_id(raw_project_id)
+        response = _opendesign_request(payload, f"/api/projects/{project_id}")
+        project = response.get("project") if isinstance(response.get("project"), dict) else response
+        if not isinstance(project, dict) or str(project.get("id") or "") != project_id:
+            raise DesignStudioError("opendesign_response_invalid", "OpenDesign returned an invalid project.", status_code=502)
+        return {"project": project, "od_project_id": project_id}
+    project_id = _project_id(raw_project_id)
     project = _find_project(ensure_state(payload["data_root"]), project_id)
     if project is None:
         raise DesignStudioError("project_not_found", f"Design project `{project_id}` was not found.")
     return {"project": project}
+
+
+def reference_manifest(payload: dict[str, Any]) -> dict[str, Any]:
+    """Declare the canonical OpenDesign project reference type."""
+    return {
+        "app_id": str(payload.get("app_id") or "design-studio"),
+        "entity_types": [
+            {
+                "entity_type": "design_project",
+                "display_name": "OpenDesign project",
+            }
+        ],
+    }
+
+
+def reference_search(payload: dict[str, Any], arguments: dict[str, Any]) -> dict[str, Any]:
+    """Search OpenDesign projects without reading its private database."""
+    query = str(arguments.get("query") or "").strip().casefold()
+    limit = arguments.get("limit", 20)
+    limit = limit if isinstance(limit, int) and not isinstance(limit, bool) else 20
+    projects = list_opendesign_projects(payload)["projects"]
+    results = [
+        _opendesign_reference_item(payload, project)
+        for project in projects
+        if not query or query in str(project.get("name") or project.get("id") or "").casefold()
+    ]
+    return {"results": results[: max(1, min(limit, 100))]}
+
+
+def reference_resolve(payload: dict[str, Any], arguments: dict[str, Any]) -> dict[str, Any]:
+    """Resolve one OpenDesign project reference through its governed API."""
+    project_id = _opendesign_project_id(arguments.get("entity_id") or arguments.get("project_id"))
+    try:
+        project = get_project(payload, {"project_id": project_id})["project"]
+    except DesignStudioError as error:
+        if error.error == "project_not_found":
+            return {"entity_type": "design_project", "entity_id": project_id, "exists": False}
+        raise
+    return {"exists": True, **_opendesign_reference_item(payload, project)}
+
+
+def reference_summarize(payload: dict[str, Any], arguments: dict[str, Any]) -> dict[str, Any]:
+    """Return a bounded summary for one OpenDesign project reference."""
+    resolved = reference_resolve(payload, arguments)
+    if not resolved.get("exists"):
+        return {**resolved, "summary": ""}
+    return resolved
 
 
 def create_project(payload: dict[str, Any], arguments: dict[str, Any]) -> dict[str, Any]:
@@ -651,6 +717,8 @@ def dispatch(action: str, payload: dict[str, Any], arguments: dict[str, Any]) ->
         return status_payload(payload)
     if action == "list_projects":
         return list_projects(payload)
+    if action == "list_opendesign_projects":
+        return list_opendesign_projects(payload)
     if action == "get_project":
         return get_project(payload, arguments)
     if action == "create_project":
@@ -671,6 +739,14 @@ def dispatch(action: str, payload: dict[str, Any], arguments: dict[str, Any]) ->
         return set_custom_view(payload, arguments)
     if action == "clear_custom_view":
         return clear_custom_view(payload)
+    if action in {"references.manifest", "reference_manifest"}:
+        return reference_manifest(payload)
+    if action in {"references.search", "reference_search"}:
+        return reference_search(payload, arguments)
+    if action in {"references.resolve", "reference_resolve"}:
+        return reference_resolve(payload, arguments)
+    if action in {"references.summarize", "reference_summarize"}:
+        return reference_summarize(payload, arguments)
     if action == "sidecar_core_route":
         return handle_sidecar_core_route(payload, arguments)
     raise DesignStudioError("unsupported_action", f"Unsupported Design Studio action `{action}`.")
@@ -757,6 +833,64 @@ def _project_id(value: object) -> str:
     if not PROJECT_ID_PATTERN.fullmatch(project_id):
         raise DesignStudioError("project_id_invalid", "A valid design project id is required.")
     return project_id
+
+
+def _opendesign_project_id(value: object) -> str:
+    project_id = str(value or "").strip()
+    if not OPENDESIGN_PROJECT_ID_PATTERN.fullmatch(project_id) or PROJECT_ID_PATTERN.fullmatch(project_id):
+        raise DesignStudioError("invalid_opendesign_project_id", "A valid OpenDesign project id is required.")
+    return project_id
+
+
+def _opendesign_request(payload: dict[str, Any], path: str) -> dict[str, Any]:
+    try:
+        response = app_sidecar(payload, "opendesign").get(path, headers={"accept": "application/json"})
+    except AppSidecarError as error:
+        raise DesignStudioError(
+            "opendesign_unavailable",
+            "OpenDesign is unavailable through the governed app capability.",
+            status_code=503,
+        ) from error
+    if response.status_code == 404:
+        raise DesignStudioError("project_not_found", "The OpenDesign project was not found.", status_code=404)
+    if response.status_code >= 400:
+        raise DesignStudioError(
+            "opendesign_request_failed",
+            f"OpenDesign returned HTTP {response.status_code}.",
+            status_code=502,
+        )
+    try:
+        decoded = response.json()
+    except (UnicodeDecodeError, json.JSONDecodeError) as error:
+        raise DesignStudioError(
+            "opendesign_response_invalid",
+            "OpenDesign returned invalid JSON.",
+            status_code=502,
+        ) from error
+    if not isinstance(decoded, dict):
+        raise DesignStudioError("opendesign_response_invalid", "OpenDesign returned an invalid response.", status_code=502)
+    return decoded
+
+
+def _opendesign_reference_item(payload: dict[str, Any], project: dict[str, Any]) -> dict[str, Any]:
+    project_id = _opendesign_project_id(project.get("id"))
+    name = str(project.get("name") or project_id).strip()[:200]
+    status = project.get("status")
+    status_value = str(status.get("value") or "") if isinstance(status, dict) else str(status or "")
+    summary = f"OpenDesign project {name}"
+    if status_value:
+        summary = f"{summary} ({status_value})"
+    app_id = str(payload.get("app_id") or "design-studio")
+    return {
+        "app_id": app_id,
+        "entity_type": "design_project",
+        "entity_id": project_id,
+        "title": name,
+        "summary": summary,
+        "app_page": f"projects/{project_id}",
+        "deep_link": f"/app/{app_id}/projects/{project_id}",
+        "od_project_id": project_id,
+    }
 
 
 def _export_id(value: object) -> str:

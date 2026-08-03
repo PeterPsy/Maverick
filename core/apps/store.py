@@ -41,6 +41,8 @@ from core.apps.models import (
     AppVisibilityDeclaration,
     HttpSidecarBindSpec,
     HttpSidecarBrowserOriginSpec,
+    HttpSidecarEntrypointAccessSpec,
+    HttpSidecarEntrypointSurfaceSpec,
     HttpSidecarHealthSpec,
     HttpSidecarLogSpec,
     HttpSidecarProcessPolicy,
@@ -410,6 +412,10 @@ def _app_services(payload: Any) -> AppServicesDeclaration:
                 env={str(key): str(value) for key, value in sidecar.get("env", {}).items()},
                 process_policy=_app_sidecar_process_policy(sidecar.get("process_policy")),
                 browser_origin=_app_sidecar_browser_origin(sidecar.get("browser_origin")),
+                entrypoint_access=_app_sidecar_entrypoint_access(
+                    sidecar.get("entrypoint_access"),
+                    proxy_payload=sidecar.get("proxy"),
+                ),
                 bind=HttpSidecarBindSpec(**sidecar["bind"]),
                 health=HttpSidecarHealthSpec(**sidecar["health"]),
                 proxy=_app_sidecar_proxy(sidecar.get("proxy")),
@@ -448,6 +454,88 @@ def _app_sidecar_browser_origin(payload: Any) -> HttpSidecarBrowserOriginSpec | 
         csp_profile="self_hosted_web_app",
         frame_ancestors=["platform"],
         connect_src=["self"],
+    )
+
+
+def _app_sidecar_entrypoint_access(
+    payload: Any,
+    *,
+    proxy_payload: Any,
+) -> HttpSidecarEntrypointAccessSpec | None:
+    if not isinstance(payload, dict):
+        return None
+    ttl_seconds = payload.get("ttl_seconds")
+    request_budget = payload.get("request_budget")
+    max_request_body_bytes = payload.get("max_request_body_bytes")
+    max_response_body_bytes = payload.get("max_response_body_bytes")
+    if (
+        isinstance(ttl_seconds, bool)
+        or not isinstance(ttl_seconds, int)
+        or not 1 <= ttl_seconds <= 30
+        or isinstance(request_budget, bool)
+        or not isinstance(request_budget, int)
+        or not 1 <= request_budget <= 256
+        or isinstance(max_request_body_bytes, bool)
+        or not isinstance(max_request_body_bytes, int)
+        or not 0 <= max_request_body_bytes <= 16 * 1024 * 1024
+        or isinstance(max_response_body_bytes, bool)
+        or not isinstance(max_response_body_bytes, int)
+        or not 1 <= max_response_body_bytes <= 64 * 1024 * 1024
+        or payload.get("streaming") is not False
+    ):
+        return None
+    raw_surfaces = payload.get("surfaces")
+    if not isinstance(raw_surfaces, list) or not raw_surfaces:
+        return None
+    raw_pass_through = (
+        proxy_payload.get("route_policy", {}).get("pass_through", [])
+        if isinstance(proxy_payload, dict)
+        else []
+    )
+    pass_through = {
+        (
+            route.get("method"),
+            route.get("path_template"),
+            bool(route.get("static_tree", False)),
+        )
+        for route in raw_pass_through
+        if isinstance(route, dict)
+    }
+    surfaces: list[HttpSidecarEntrypointSurfaceSpec] = []
+    seen_surfaces: set[str] = set()
+    for raw_surface in raw_surfaces:
+        if not isinstance(raw_surface, dict) or raw_surface.get("surface") not in {
+            "backend",
+            "cli",
+            "mcp",
+            "reference",
+        }:
+            return None
+        if raw_surface["surface"] in seen_surfaces:
+            return None
+        seen_surfaces.add(raw_surface["surface"])
+        routes = _app_sidecar_route_rules(raw_surface.get("routes"))
+        if (
+            not routes
+            or any(route.method is None or route.static_tree for route in routes)
+            or raw_surface["surface"] == "reference"
+            and any(route.method not in {"GET", "HEAD"} for route in routes)
+            or any((route.method, route.path_template, route.static_tree) not in pass_through for route in routes)
+        ):
+            return None
+        surfaces.append(
+            HttpSidecarEntrypointSurfaceSpec(
+                surface=raw_surface["surface"],
+                routes=routes,
+            )
+        )
+    return HttpSidecarEntrypointAccessSpec(
+        ttl_seconds=ttl_seconds,
+        request_budget=request_budget,
+        max_request_body_bytes=max_request_body_bytes,
+        max_response_body_bytes=max_response_body_bytes,
+        streaming=False,
+        surfaces=surfaces,
     )
 
 

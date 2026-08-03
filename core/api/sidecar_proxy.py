@@ -116,6 +116,15 @@ class SidecarProxyError:
     status: str
 
 
+@dataclass(frozen=True)
+class BufferedSidecarResponse:
+    """One bounded response returned to a core-owned internal broker."""
+
+    status_code: int
+    headers: dict[str, str]
+    body: bytes
+
+
 class StreamingSidecarResponse:
     """Iterator that streams an open http.client response and closes it."""
 
@@ -680,6 +689,84 @@ def current_sidecar_instance_id(target: AuthorizedSidecarTarget) -> str | None:
         sidecar_id=target.sidecar.service_id,
         data_root=target.binding.data_root,
     )
+
+
+def request_authorized_sidecar_buffered(
+    target: AuthorizedSidecarTarget,
+    *,
+    method: str,
+    path: str,
+    query_string: str,
+    headers: dict[str, str],
+    body: bytes,
+    max_response_body_bytes: int,
+    timeout_seconds: float,
+    start_path: Path,
+    shutdown_controller: EntrypointShutdownController | None,
+) -> BufferedSidecarResponse:
+    """Send one bounded pass-through request without exposing technical transport details."""
+    normalized_method = str(method or "").strip().upper()
+    canonical_path = canonicalize_sidecar_path(path)
+    if target.sidecar.proxy is None or route_policy_mode(
+        target.sidecar.proxy.route_policy,
+        method=normalized_method,
+        path=canonical_path,
+    ) != "pass_through":
+        raise AppHostingError("HTTP sidecar route is not authorized for pass-through.")
+    if len(query_string) > 8192 or any(character in query_string for character in ("\r", "\n", "#")):
+        raise AppHostingError("HTTP sidecar query string is invalid.")
+    running = ensure_authorized_sidecar_running(
+        target,
+        start_path=start_path,
+        shutdown_controller=shutdown_controller,
+    )
+    if not running.request_slots.acquire(blocking=False):
+        raise AppHostingError("HTTP sidecar request concurrency limit reached.")
+    connection = UnixRelayHTTPConnection(running, timeout=max(0.1, min(timeout_seconds, 30.0)))
+    forwarded_headers: dict[str, str] = {}
+    for raw_name, raw_value in headers.items():
+        name = str(raw_name).strip().replace("_", "-").title()
+        value = str(raw_value).strip()
+        lowered = name.lower()
+        if (
+            not name
+            or any(character in name + value for character in ("\r", "\n"))
+            or lowered in _HOP_BY_HOP_HEADERS
+            or lowered in {"host", "cookie", "authorization", "content-length"}
+        ):
+            continue
+        forwarded_headers[name] = value
+    forwarded_headers["Authorization"] = f"Bearer {running.token}"
+    if body:
+        forwarded_headers["Content-Length"] = str(len(body))
+    upstream_path = quote(canonical_path, safe="/:@-._~!$&'()*+,;=")
+    if query_string:
+        upstream_path = f"{upstream_path}?{query_string}"
+    try:
+        connection.request(
+            normalized_method,
+            upstream_path,
+            body=body if body else None,
+            headers=forwarded_headers,
+        )
+        response = connection.getresponse()
+        response_body = response.read(max_response_body_bytes + 1)
+        if len(response_body) > max_response_body_bytes:
+            raise AppHostingError("HTTP sidecar response exceeded the entrypoint capability limit.")
+        response_headers = {
+            name.lower(): value
+            for name, value in _forward_response_headers(response.getheaders())
+        }
+        return BufferedSidecarResponse(
+            status_code=response.status,
+            headers=response_headers,
+            body=response_body,
+        )
+    except (OSError, http.client.HTTPException) as error:
+        raise AppHostingError("HTTP sidecar is not reachable.") from error
+    finally:
+        connection.close()
+        running.request_slots.release()
 
 
 def _find_sidecar(sidecars: list[HttpSidecarSpec], sidecar_id: str) -> HttpSidecarSpec | None:

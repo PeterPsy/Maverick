@@ -94,7 +94,11 @@
       "design_studio_view_filter",
       "design_studio_set_view_filter",
       "design_studio_set_custom_view",
-      "design_studio_clear_custom_view"
+      "design_studio_clear_custom_view",
+      "design_studio_reference_manifest",
+      "design_studio_reference_search",
+      "design_studio_reference_resolve",
+      "design_studio_reference_summarize"
     ],
     "cli_commands": [
       "design-studio"
@@ -279,6 +283,67 @@
           ],
           "connect_src": [
             "self"
+          ]
+        },
+        "entrypoint_access": {
+          "ttl_seconds": 30,
+          "request_budget": 16,
+          "max_request_body_bytes": 65536,
+          "max_response_body_bytes": 8388608,
+          "streaming": false,
+          "surfaces": [
+            {
+              "surface": "backend",
+              "routes": [
+                {
+                  "method": "GET",
+                  "path_template": "/api/projects"
+                },
+                {
+                  "method": "GET",
+                  "path_template": "/api/projects/{id}"
+                }
+              ]
+            },
+            {
+              "surface": "cli",
+              "routes": [
+                {
+                  "method": "GET",
+                  "path_template": "/api/projects"
+                },
+                {
+                  "method": "GET",
+                  "path_template": "/api/projects/{id}"
+                }
+              ]
+            },
+            {
+              "surface": "mcp",
+              "routes": [
+                {
+                  "method": "GET",
+                  "path_template": "/api/projects"
+                },
+                {
+                  "method": "GET",
+                  "path_template": "/api/projects/{id}"
+                }
+              ]
+            },
+            {
+              "surface": "reference",
+              "routes": [
+                {
+                  "method": "GET",
+                  "path_template": "/api/projects"
+                },
+                {
+                  "method": "GET",
+                  "path_template": "/api/projects/{id}"
+                }
+              ]
+            }
           ]
         },
         "bind": {

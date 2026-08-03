@@ -225,6 +225,29 @@ def app_contract_payload(parsed: ParsedAppContract) -> dict[str, Any]:
                         if sidecar.browser_origin is not None
                         else {}
                     ),
+                    **(
+                        {
+                            "entrypoint_access": {
+                                "ttl_seconds": sidecar.entrypoint_access.ttl_seconds,
+                                "request_budget": sidecar.entrypoint_access.request_budget,
+                                "max_request_body_bytes": sidecar.entrypoint_access.max_request_body_bytes,
+                                "max_response_body_bytes": sidecar.entrypoint_access.max_response_body_bytes,
+                                "streaming": sidecar.entrypoint_access.streaming,
+                                "surfaces": [
+                                    {
+                                        "surface": surface.surface,
+                                        "routes": [
+                                            _http_sidecar_route_rule_payload(rule)
+                                            for rule in surface.routes
+                                        ],
+                                    }
+                                    for surface in sidecar.entrypoint_access.surfaces
+                                ],
+                            }
+                        }
+                        if sidecar.entrypoint_access is not None
+                        else {}
+                    ),
                     "bind": {
                         "host": sidecar.bind.host,
                         "port": sidecar.bind.port,

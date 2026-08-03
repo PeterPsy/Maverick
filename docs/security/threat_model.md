@@ -189,6 +189,17 @@ Current mitigations require apps to persist only references or grant ids, keep r
 
 App frontend or backend code gains more authority than the app contract and workspace policy should allow.
 
+For app-owned sidecars, browser and app-entrypoint authority are separate.
+Entrypoints receive neither the sidecar port/technical token nor its private
+persistence path. A core-owned Unix broker issues per-invocation capabilities
+stored only by digest and bound to workspace, local app id, service, trusted
+surface, actor, exact pass-through routes, TTL no greater than 30 seconds,
+request budget, and body limits. Reference access is safe-read-only. Core strips
+cookies and authorization, injects technical authentication only upstream,
+audits issue/use/deny/revoke, and revokes at process completion. There is no
+direct loopback or file fallback. Residual app-backend subprocess sandbox risk
+remains a production blocker outside this transport boundary.
+
 ### Session and identity abuse
 
 Cookies, bearer tokens, or websocket channels are reused to perform privileged operations.

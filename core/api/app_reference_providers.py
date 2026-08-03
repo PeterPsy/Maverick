@@ -344,6 +344,7 @@ def mcp_context_for_request(state, context: RequestSession) -> McpInvocationCont
         platform_role=context.user.platform_role,
         user_id=context.user.user_id,
         workspace_role=workspace_role,
+        entrypoint_surface="reference",
     )
 
 

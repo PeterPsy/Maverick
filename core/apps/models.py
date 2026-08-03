@@ -29,6 +29,7 @@ HttpSidecarNetworkMode = Literal["isolated"]
 HttpSidecarTransport = Literal["unix_relay"]
 HttpSidecarBrowserOriginMode = Literal["isolated"]
 HttpSidecarBrowserCspProfile = Literal["self_hosted_web_app"]
+HttpSidecarEntrypointSurface = Literal["backend", "cli", "mcp", "reference"]
 AppProviderCredentialSource = Literal["none", "core-vault"]
 AppReferenceCacheScope = Literal["session", "workspace_user"]
 
@@ -375,6 +376,26 @@ class HttpSidecarBrowserOriginSpec:
 
 
 @dataclass(frozen=True)
+class HttpSidecarEntrypointSurfaceSpec:
+    """Declare exact sidecar routes available to one app entrypoint surface."""
+
+    surface: HttpSidecarEntrypointSurface
+    routes: list[HttpSidecarRouteRule]
+
+
+@dataclass(frozen=True)
+class HttpSidecarEntrypointAccessSpec:
+    """Declare one bounded, invocation-scoped sidecar capability profile."""
+
+    ttl_seconds: int
+    request_budget: int
+    max_request_body_bytes: int
+    max_response_body_bytes: int
+    streaming: bool
+    surfaces: list[HttpSidecarEntrypointSurfaceSpec]
+
+
+@dataclass(frozen=True)
 class HttpSidecarSpec:
     """Describe one app-owned local HTTP sidecar process."""
 
@@ -386,6 +407,7 @@ class HttpSidecarSpec:
     env: dict[str, str]
     process_policy: HttpSidecarProcessPolicy
     browser_origin: HttpSidecarBrowserOriginSpec | None
+    entrypoint_access: HttpSidecarEntrypointAccessSpec | None
     bind: HttpSidecarBindSpec
     health: HttpSidecarHealthSpec
     proxy: HttpSidecarProxySpec | None

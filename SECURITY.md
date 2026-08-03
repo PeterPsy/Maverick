@@ -101,3 +101,13 @@ unsafe authorized routes declare their method. Static subtree rules are limited
 to safe reads outside `/api`. Core rejects encoded slash/backslash/dot
 traversal, double encoding, ambiguous host paths, and non-canonical Unicode
 before applying `blocked > handled_by_core > pass_through` precedence.
+
+App entrypoints may reach their own sidecar only through a separately declared
+invocation-scoped broker capability. Core binds the hashed capability to the
+workspace, local app, service, trusted backend/CLI/MCP/reference surface,
+actor, exact pass-through routes, TTL of at most 30 seconds, request budget,
+and body bounds, then revokes it when the entrypoint ends. The SDK receives no
+sidecar port, technical token, relay authority, or sidecar filesystem path and
+has no direct fallback. Reference access is read-only and browser authority
+does not imply entrypoint authority. This closes that transport path; app
+backend and lifecycle-hook sandboxing remain open production blockers.

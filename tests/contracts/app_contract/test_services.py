@@ -12,6 +12,8 @@ from core.apps.contracts import (
     build_app_contract,
     build_app_services,
     build_http_sidecar_browser_origin,
+    build_http_sidecar_entrypoint_access,
+    build_http_sidecar_entrypoint_surface,
     build_http_sidecar_logs,
     build_http_sidecar_process_policy,
     build_http_sidecar_proxy,
@@ -42,6 +44,11 @@ class AppContractServiceTests(unittest.TestCase):
             self.assertEqual(loaded.contract.services.http_sidecars[0].process_policy.limits.request_concurrency, 16)
             self.assertEqual(loaded.contract.services.http_sidecars[0].browser_origin.mode, "isolated")
             self.assertEqual(loaded.contract.services.http_sidecars[0].browser_origin.frame_ancestors, ["platform"])
+            self.assertEqual(loaded.contract.services.http_sidecars[0].entrypoint_access.ttl_seconds, 30)
+            self.assertEqual(
+                [surface.surface for surface in loaded.contract.services.http_sidecars[0].entrypoint_access.surfaces],
+                ["backend", "cli", "mcp", "reference"],
+            )
             self.assertEqual(loaded.contract.services.http_sidecars[0].proxy.route_policy.blocked[0].path_template, "/api/import/folder")
             self.assertFalse(loaded.contract.permissions.providers.model_proxy)
             self.assertEqual(loaded.contract.permissions.providers.credential_source, "none")
@@ -181,6 +188,41 @@ class AppContractServiceTests(unittest.TestCase):
             with self.assertRaisesRegex(AppContractValidationError, "loopback"):
                 parse_app_contract_file(app_root)
 
+    def test_entrypoint_access_is_bounded_separate_and_read_only_for_reference(self) -> None:
+        mutations = (
+            (lambda access: access.pop("request_budget"), "request_budget.*required"),
+            (lambda access: access.pop("streaming"), "streaming.*required"),
+            (lambda access: access.__setitem__("ttl_seconds", 31), "ttl_seconds"),
+            (lambda access: access.__setitem__("streaming", True), "distinct job capability"),
+            (
+                lambda access: access["surfaces"][3]["routes"].__setitem__(
+                    0,
+                    {"method": "POST", "path_template": "/api/projects"},
+                ),
+                "only GET or HEAD",
+            ),
+            (
+                lambda access: access["surfaces"][0]["routes"].__setitem__(
+                    0,
+                    {"method": "GET", "path_template": "/api/projects/{id}/files"},
+                ),
+                "exact subset",
+            ),
+            (
+                lambda access: access["surfaces"].append(dict(access["surfaces"][0])),
+                "Duplicate entrypoint access surface",
+            ),
+        )
+        for mutate, expected in mutations:
+            with self.subTest(expected=expected), TemporaryDirectory() as temp_dir:
+                app_root = self._write_sidecar_app(Path(temp_dir))
+                payload = json.loads((app_root / "app_contract.json").read_text(encoding="utf-8"))
+                mutate(payload["services"]["http_sidecars"][0]["entrypoint_access"])
+                (app_root / "app_contract.json").write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
+
+                with self.assertRaisesRegex(AppContractValidationError, expected):
+                    parse_app_contract_file(app_root)
+
     def test_parse_contract_rejects_sidecar_logs_outside_workspace_log_root(self) -> None:
         with TemporaryDirectory() as temp_dir:
             app_root = self._write_sidecar_app(Path(temp_dir))
@@ -219,6 +261,51 @@ class AppContractServiceTests(unittest.TestCase):
                                 request_concurrency=16,
                             ),
                             browser_origin=build_http_sidecar_browser_origin(),
+                            entrypoint_access=build_http_sidecar_entrypoint_access(
+                                ttl_seconds=30,
+                                request_budget=8,
+                                max_request_body_bytes=4096,
+                                max_response_body_bytes=65536,
+                                streaming=False,
+                                surfaces=[
+                                    build_http_sidecar_entrypoint_surface(
+                                        surface="backend",
+                                        routes=[
+                                            build_http_sidecar_route_rule(
+                                                method="GET",
+                                                path_template="/api/projects",
+                                            )
+                                        ],
+                                    ),
+                                    build_http_sidecar_entrypoint_surface(
+                                        surface="cli",
+                                        routes=[
+                                            build_http_sidecar_route_rule(
+                                                method="POST",
+                                                path_template="/api/projects",
+                                            )
+                                        ],
+                                    ),
+                                    build_http_sidecar_entrypoint_surface(
+                                        surface="mcp",
+                                        routes=[
+                                            build_http_sidecar_route_rule(
+                                                method="GET",
+                                                path_template="/api/projects/{id}",
+                                            )
+                                        ],
+                                    ),
+                                    build_http_sidecar_entrypoint_surface(
+                                        surface="reference",
+                                        routes=[
+                                            build_http_sidecar_route_rule(
+                                                method="GET",
+                                                path_template="/api/projects/{id}",
+                                            )
+                                        ],
+                                    ),
+                                ],
+                            ),
                             bind=HttpSidecarBindSpec(host="127.0.0.1", port="auto"),
                             health=HttpSidecarHealthSpec(path="/api/ready", timeout_ms=5000),
                             proxy=build_http_sidecar_proxy(
@@ -228,7 +315,9 @@ class AppContractServiceTests(unittest.TestCase):
                                 route_policy=build_http_sidecar_route_policy(
                                     pass_through=[
                                         build_http_sidecar_route_rule(method="GET", path_template="/"),
+                                        build_http_sidecar_route_rule(method="GET", path_template="/api/projects"),
                                         build_http_sidecar_route_rule(method="POST", path_template="/api/projects"),
+                                        build_http_sidecar_route_rule(method="GET", path_template="/api/projects/{id}"),
                                     ],
                                     handled_by_core=[
                                         build_http_sidecar_route_rule(

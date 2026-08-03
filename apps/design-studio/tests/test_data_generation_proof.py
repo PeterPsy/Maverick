@@ -10,7 +10,7 @@ import unittest
 from unittest.mock import patch
 
 
-ROOT = Path(__file__).resolve().parents[2]
+ROOT = Path(__file__).resolve().parents[3]
 MODULE_PATH = ROOT / "apps/design-studio/service/opendesign_generation_control.py"
 ADR_PATH = ROOT / "docs/architecture/design_studio_data_generations.md"
 OLD_DIGEST = "a" * 64

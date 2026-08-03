@@ -52,6 +52,21 @@ Do not declare surfaces that are not implemented.
 
 The contract is not documentation-only metadata. It is an executable promise to the rest of Maverick.
 
+## App-Owned Sidecar Client
+
+An app that declares a governed HTTP sidecar may expose a separate
+`entrypoint_access` policy for backend, CLI, MCP, or reference entrypoints. Use
+`core.app_sdk.app_sidecar.app_sidecar(payload, service_id)` inside the invoked
+process. The client talks only to the short-lived core broker supplied in that
+invocation payload; it does not expose or discover a sidecar port, technical
+token, or private data path.
+
+Declare exact pass-through route templates, a TTL no greater than 30 seconds,
+request budget, request/response body limits, and `streaming: false`. Reference
+access is GET/HEAD-only. An expired, revoked, out-of-scope, over-budget, or
+denied capability fails without a direct loopback or filesystem fallback.
+Long-running jobs and streams require a distinct capability contract.
+
 ## Discovery-First Verification
 
 After registration and installation, verify app surfaces through scoped discovery instead of guessing:

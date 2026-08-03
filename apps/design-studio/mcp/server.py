@@ -20,6 +20,10 @@ TOOL_ACTIONS = {
     "design_studio_set_view_filter": "set_view_filter",
     "design_studio_set_custom_view": "set_custom_view",
     "design_studio_clear_custom_view": "clear_custom_view",
+    "design_studio_reference_manifest": "reference_manifest",
+    "design_studio_reference_search": "reference_search",
+    "design_studio_reference_resolve": "reference_resolve",
+    "design_studio_reference_summarize": "reference_summarize",
 }
 
 

@@ -36,6 +36,7 @@ class McpInvocationContext:
     workspace_role: str | None = None
     runtime_session_id: str | None = None
     app_mcp_timeout_seconds: float | None = None
+    entrypoint_surface: Literal["mcp", "reference"] = "mcp"
 
 
 @dataclass(frozen=True)

@@ -37,6 +37,8 @@ from core.apps.models import (
     AppVisibilityDeclaration,
     HttpSidecarBindSpec,
     HttpSidecarBrowserOriginSpec,
+    HttpSidecarEntrypointAccessSpec,
+    HttpSidecarEntrypointSurfaceSpec,
     HttpSidecarHealthSpec,
     HttpSidecarLogSpec,
     HttpSidecarProcessPolicy,
@@ -359,6 +361,7 @@ def build_http_sidecar_spec(
     env: dict[str, str] | None = None,
     process_policy: HttpSidecarProcessPolicy | None = None,
     browser_origin: HttpSidecarBrowserOriginSpec | None = None,
+    entrypoint_access: HttpSidecarEntrypointAccessSpec | None = None,
     bind: HttpSidecarBindSpec | None = None,
     health: HttpSidecarHealthSpec | None = None,
     proxy: HttpSidecarProxySpec | None = None,
@@ -374,6 +377,7 @@ def build_http_sidecar_spec(
         env=env or {},
         process_policy=process_policy or build_http_sidecar_process_policy(),
         browser_origin=browser_origin,
+        entrypoint_access=entrypoint_access,
         bind=bind or HttpSidecarBindSpec(host="127.0.0.1", port="auto"),
         health=health or HttpSidecarHealthSpec(path="/health", timeout_ms=30000),
         proxy=proxy,
@@ -411,6 +415,35 @@ def build_http_sidecar_browser_origin() -> HttpSidecarBrowserOriginSpec:
         csp_profile="self_hosted_web_app",
         frame_ancestors=["platform"],
         connect_src=["self"],
+    )
+
+
+def build_http_sidecar_entrypoint_surface(
+    *,
+    surface: str,
+    routes: list[HttpSidecarRouteRule],
+) -> HttpSidecarEntrypointSurfaceSpec:
+    """Build one entrypoint-specific exact route allowlist."""
+    return HttpSidecarEntrypointSurfaceSpec(surface=surface, routes=routes)  # type: ignore[arg-type]
+
+
+def build_http_sidecar_entrypoint_access(
+    *,
+    surfaces: list[HttpSidecarEntrypointSurfaceSpec],
+    ttl_seconds: int = 30,
+    request_budget: int = 16,
+    max_request_body_bytes: int = 1024 * 1024,
+    max_response_body_bytes: int = 8 * 1024 * 1024,
+    streaming: bool = False,
+) -> HttpSidecarEntrypointAccessSpec:
+    """Build one synchronous invocation-scoped sidecar access profile."""
+    return HttpSidecarEntrypointAccessSpec(
+        ttl_seconds=ttl_seconds,
+        request_budget=request_budget,
+        max_request_body_bytes=max_request_body_bytes,
+        max_response_body_bytes=max_response_body_bytes,
+        streaming=streaming,
+        surfaces=surfaces,
     )
 
 

@@ -48,7 +48,11 @@ from core.secrets.errors import SecretError
 from core.secrets.secret_resolution import parse_secret_ref
 from core.secrets.service import build_secret_ref, create_platform_secret, grant_app_secret_use, rotate_platform_secret
 from core.secrets.target_policy import target_allowed
-from core.shared.entrypoints import EntrypointShutdownController, run_json_entrypoint, run_streaming_json_entrypoint
+from core.api.sidecar_entrypoint_invocation import (
+    run_json_entrypoint_with_sidecars,
+    run_streaming_json_entrypoint_with_sidecars,
+)
+from core.shared.entrypoints import EntrypointShutdownController, run_json_entrypoint
 from core.workspaces.paths import workspace_paths
 from core.identity.models import UserRecord
 
@@ -656,21 +660,36 @@ def handle_app_backend(
             route_path=str(environ.get("PATH_INFO") or ""),
             body=body,
         ):
-            streaming_entrypoint = run_streaming_json_entrypoint(
+            streaming_entrypoint = run_streaming_json_entrypoint_with_sidecars(
                 source_root / backend,
                 payload={**entrypoint_payload, "stream_response_protocol": "maverick.backend.stream.v1"},
                 cwd=source_root,
                 timeout_seconds=backend_entrypoint_timeout_seconds(parsed),
                 shutdown_controller=shutdown_controller,
+                binding=binding,
+                parsed=parsed,
+                surface="backend",
+                start_path=start_path,
+                actor_user_id=None if user is None else user.user_id,
+                runtime_session_id="",
+                observability_store=state.observability_store,
             )
             result = streaming_entrypoint.result
         else:
-            result = run_json_entrypoint(
+            result = run_json_entrypoint_with_sidecars(
                 source_root / backend,
                 payload=entrypoint_payload,
                 cwd=source_root,
                 timeout_seconds=backend_entrypoint_timeout_seconds(parsed),
                 shutdown_controller=shutdown_controller,
+                binding=binding,
+                parsed=parsed,
+                surface="backend",
+                start_path=start_path,
+                actor_user_id=None if user is None else user.user_id,
+                runtime_session_id="",
+                observability_store=state.observability_store,
+                entrypoint_runner=run_json_entrypoint,
             )
     except Exception as error:
         logger.exception("App `%s` backend entrypoint failed in workspace `%s`.", app_id, workspace_id)

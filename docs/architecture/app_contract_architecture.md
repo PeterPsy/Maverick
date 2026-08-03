@@ -972,6 +972,36 @@ workspace, binding, technical listener, or host. Logout, workspace switch,
 disable/uninstall, sidecar restart, generation change, and core restart revoke
 the corresponding in-memory authority.
 
+App-owned backend, CLI, MCP, and reference entrypoints do not receive the
+sidecar listener, technical token, or sidecar filesystem. A sidecar may declare
+a separate synchronous `entrypoint_access` profile. The declaration names an
+explicit TTL from 1 through 30 seconds, request budget, request/response body
+limits, `streaming: false`, and per-surface exact route lists for `backend`,
+`cli`, `mcp`, and/or `reference`. Every entrypoint route must be an exact
+non-static subset of `proxy.route_policy.pass_through`; reference routes are
+limited to GET/HEAD. Browser policy never implies entrypoint authority.
+
+For one matching entrypoint invocation, core creates a private mode-`0600` Unix
+broker socket, issues a random capability bound to invocation, workspace,
+local app id, service id, surface, actor, route list, expiry, and budget, and
+adds only the broker descriptor to the JSON payload. The app uses
+`core.app_sdk.app_sidecar.app_sidecar(payload, service_id)` to make an HTTP-like
+request. It cannot select another workspace or service, and it never learns the
+internal TCP port, `${service.token}`, relay capability, or `OD_API_TOKEN`-style
+technical credential. Core canonicalizes and authorizes the path, strips host,
+cookie, authorization and hop-by-hop request headers, injects the technical
+credential only upstream, filters unsafe response headers, bounds the complete
+response, and records redaction-safe issue/request/deny/revoke audit events
+under one invocation correlation id.
+
+Capabilities are stored only by digest and revoked when the entrypoint exits,
+times out, is cancelled, or the host shuts down. A stale SDK client fails at the
+broker and has no loopback or direct-filesystem fallback. Long-lived streams or
+jobs require a distinct contract and capability; the synchronous profile does
+not gain a longer TTL implicitly. Reference invocation is distinguished from
+ordinary MCP invocation by trusted core context, so a reference tool cannot
+reuse the app's broader MCP policy.
+
 Sandbox compatibility also requires the generic process boundary defined by
 [`app_sidecar_execution.md`](app_sidecar_execution.md). A sandbox-required
 sidecar starts with an allowlisted environment, a verified read-only artifact,

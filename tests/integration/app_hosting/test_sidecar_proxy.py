@@ -8,14 +8,17 @@ import json
 import os
 from pathlib import Path
 import tempfile
-import textwrap
 import unittest
 from unittest.mock import patch
 
 from core.api.asgi_application import PlatformAsgiHost
 from core.api.platform_host import PlatformHost
 from core.api.platform_state import bootstrap_platform_state
-from core.api.sidecar_proxy import _sidecar_env
+from core.api.sidecar_proxy import (
+    _sidecar_env,
+    request_authorized_sidecar_buffered,
+    resolve_authorized_sidecar,
+)
 from core.apps.contracts import (
     build_app_contract,
     build_app_services,
@@ -28,11 +31,68 @@ from core.apps.contracts import (
     write_app_contract_file,
 )
 from core.apps.models import HttpSidecarBindSpec, HttpSidecarHealthSpec
+from core.apps.errors import AppHostingError
 from core.apps.service import install_store_app, register_app_source_from_contract
 from core.shared.entrypoints import EntrypointShutdownController
+from tests.integration.app_hosting.sidecar_proxy_support import TEST_SIDECAR_SERVER
 
 
 class AppSidecarProxyIntegrationTests(unittest.TestCase):
+    def test_internal_buffered_request_keeps_technical_authority_in_core_and_bounds_response(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            repo_root = self._repo_root(temp)
+            state = bootstrap_platform_state(start_path=repo_root)
+            self._install_sidecar_app(repo_root, state)
+            shutdown = EntrypointShutdownController()
+            self.addCleanup(shutdown.begin_shutdown)
+            user = state.identity_store.get_user_by_username("admin")
+            target, error = resolve_authorized_sidecar(
+                state,
+                workspace_id="default",
+                app_id="sidecar-demo",
+                sidecar_id="opendesign",
+                user=user,
+                start_path=repo_root,
+            )
+            self.assertIsNone(error)
+            self.assertIsNotNone(target)
+
+            response = request_authorized_sidecar_buffered(
+                target,
+                method="GET",
+                path="/api/version",
+                query_string="",
+                headers={
+                    "authorization": "Bearer app-controlled",
+                    "cookie": "maverick=must-not-cross",
+                    "x-test": "safe",
+                },
+                body=b"",
+                max_response_body_bytes=4096,
+                timeout_seconds=5,
+                start_path=repo_root,
+                shutdown_controller=shutdown,
+            )
+            with self.assertRaisesRegex(AppHostingError, "exceeded"):
+                request_authorized_sidecar_buffered(
+                    target,
+                    method="GET",
+                    path="/api/version",
+                    query_string="",
+                    headers={},
+                    body=b"",
+                    max_response_body_bytes=4,
+                    timeout_seconds=5,
+                    start_path=repo_root,
+                    shutdown_controller=shutdown,
+                )
+
+        payload = json.loads(response.body.decode("utf-8"))
+        self.assertTrue(payload["technical_token_seen"])
+        self.assertFalse(payload["cookie_seen"])
+        self.assertEqual(payload["safe_header"], "safe")
+        self.assertNotIn("set-cookie", response.headers)
+
     def test_sidecar_environment_is_allowlisted_and_does_not_inherit_host_state(self) -> None:
         sidecar = build_http_sidecar_spec(
             service_id="opendesign",
@@ -222,7 +282,7 @@ class AppSidecarProxyIntegrationTests(unittest.TestCase):
         app_root = repo_root / "apps" / "sidecar-demo"
         service_root = app_root / "service"
         service_root.mkdir(parents=True)
-        (service_root / "server.py").write_text(_TEST_SIDECAR_SERVER, encoding="utf-8")
+        (service_root / "server.py").write_text(TEST_SIDECAR_SERVER, encoding="utf-8")
         parsed = build_parsed_app_contract(
             app_id="sidecar-demo",
             name="Sidecar Demo",
@@ -429,105 +489,3 @@ class AppSidecarProxyIntegrationTests(unittest.TestCase):
             message = await asyncio.wait_for(queue.get(), timeout=3)
             if message["type"] == "http.response.body" and message.get("body"):
                 return message
-
-
-_TEST_SIDECAR_SERVER = textwrap.dedent(
-    """
-    from __future__ import annotations
-
-    from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
-    import json
-    import os
-    import time
-
-
-    class Handler(BaseHTTPRequestHandler):
-        def do_GET(self):
-            if self.path.startswith("/api/ready"):
-                self._json({"status": "ready"})
-                return
-            if self.path.startswith("/api/version"):
-                expected = "Bearer " + os.environ.get("OD_API_TOKEN", "")
-                self._json({
-                    "service": "opendesign-test",
-                    "technical_token_seen": self.headers.get("Authorization") == expected,
-                })
-                return
-            if self.path.startswith("/api/events"):
-                self.send_response(200)
-                self.send_header("Content-Type", "text/event-stream")
-                self.send_header("Cache-Control", "no-cache")
-                self.end_headers()
-                self.wfile.write(b"data: one\\n\\n")
-                self.wfile.flush()
-                time.sleep(0.35)
-                self.wfile.write(b"data: two\\n\\n")
-                self.wfile.flush()
-                return
-            if self.path.startswith("/api/import/folder"):
-                self._json({"blocked": False})
-                return
-            self._json({"path": self.path}, status=404)
-
-        def do_POST(self):
-            if self.path.startswith("/api/upload"):
-                expected = "Bearer " + os.environ.get("OD_API_TOKEN", "")
-                remaining = int(self.headers.get("Content-Length", "0"))
-                total = 0
-                while remaining > 0:
-                    chunk = self.rfile.read(min(11, remaining))
-                    if not chunk:
-                        break
-                    total += len(chunk)
-                    remaining -= len(chunk)
-                self._json({
-                    "bytes_read": total,
-                    "technical_token_seen": self.headers.get("Authorization") == expected,
-                })
-                return
-            if self.path.startswith("/api/chunked-upload"):
-                total = self._read_chunked_body()
-                self._json({
-                    "bytes_read": total,
-                    "chunked": self.headers.get("Transfer-Encoding", "").lower() == "chunked",
-                })
-                return
-            self._json({"path": self.path}, status=404)
-
-        def log_message(self, format, *args):
-            return
-
-        def _json(self, payload, status=200):
-            body = json.dumps(payload).encode("utf-8")
-            self.send_response(status)
-            self.send_header("Content-Type", "application/json")
-            self.send_header("Content-Length", str(len(body)))
-            self.end_headers()
-            self.wfile.write(body)
-
-        def _read_chunked_body(self):
-            total = 0
-            while True:
-                size_line = self.rfile.readline().strip().split(b";", 1)[0]
-                if not size_line:
-                    return total
-                size = int(size_line, 16)
-                if size == 0:
-                    while self.rfile.readline() not in (b"\\r\\n", b"\\n", b""):
-                        pass
-                    return total
-                remaining = size
-                while remaining > 0:
-                    chunk = self.rfile.read(remaining)
-                    if not chunk:
-                        return total
-                    total += len(chunk)
-                    remaining -= len(chunk)
-                self.rfile.read(2)
-
-
-    host = os.environ["OD_BIND_HOST"]
-    port = int(os.environ["OD_PORT"])
-    ThreadingHTTPServer((host, port), Handler).serve_forever()
-    """
-)

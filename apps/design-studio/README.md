@@ -118,13 +118,32 @@ frames. Known terminal/PTY, host-folder, external-open, deploy, connector/OAuth,
 plugin install/upload, persistent MCP, telemetry, and other inventoried routes
 are blocked explicitly; all other routes are denied by default.
 
+Backend, CLI, MCP, and reference access uses the separate generic
+`entrypoint_access` contract. Each invocation receives an opaque, per-process
+SDK capability for `GET /api/projects` and `GET /api/projects/{id}` only, with a
+30-second TTL, request budget, explicit request/response limits, and no
+streaming. `core.app_sdk.app_sidecar` calls the core-owned Unix broker; Design
+Studio never learns the OpenDesign port, `OD_API_TOKEN`, relay capability, or
+database path. The capability is bound to workspace, local app, service,
+surface, actor, and invocation and is revoked when the entrypoint finishes.
+Reference calls use their own GET-only policy and cannot inherit MCP mutation
+authority. Broker failure has no loopback or filesystem fallback.
+
+During the pre-cutover compatibility phase, an explicit OpenDesign project id
+is resolved through this SDK path by the backend (and therefore the mounted
+frontend), CLI `get_project`, MCP `design_studio_get_project`, and the standard
+Design Studio reference resolve/summarize tools. Legacy `design_*` records
+remain on the existing app catalog until the coordinated fixture migration and
+WP8 cutover; no OpenDesign data is read from `app.sqlite`.
+
 The production confinement suite uses real bubblewrap and validates filesystem,
 environment, network, authenticated relay, concurrency and descendant cleanup:
 
 ```bash
 python3 -W error::ResourceWarning -m unittest \
   tests.integration.app_hosting.test_sidecar_execution \
-  tests.integration.app_hosting.test_sidecar_browser_origin
+  tests.integration.app_hosting.test_sidecar_browser_origin \
+  tests.integration.app_hosting.test_sidecar_entrypoint_broker
 ```
 
 Routes declared as `handled_by_core` are routed to the Design Studio backend with the `sidecar_core_handler` surface instead of reaching the OpenDesign sidecar. The implemented sandbox handlers cover:

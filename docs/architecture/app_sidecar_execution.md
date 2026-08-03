@@ -88,6 +88,30 @@ curated runtime shim receives a distinct per-run Unix broker socket; it is not
 available to the OpenDesign daemon generally and cannot reach arbitrary
 destinations.
 
+## App Entrypoint Broker
+
+The relay above is sidecar transport and is never delivered to app code. When
+an app contract declares `entrypoint_access`, core creates a second temporary
+Unix socket for exactly one backend, CLI, MCP, or reference invocation. The
+app-facing socket terminates a small core-owned JSON broker; it is not a general
+network proxy and cannot choose a host, workspace, app, service, or sidecar
+technical listener.
+
+Each declared service receives a separate random capability. Core retains only
+its SHA-256 digest and binds it to the invocation correlation id, workspace,
+local app id, service id, trusted surface, actor, exact route allowlist, TTL of
+at most 30 seconds, request budget, and body bounds. The broker reuses the
+confined relay internally, so the app never receives the internal port,
+technical HTTP token, relay preamble, sidecar data path, or another workspace's
+socket. The private directory is `0700`, its socket is `0600`, and both are
+removed after atomic revocation at entrypoint completion. Expiry, revocation,
+scope mismatch, noncanonical paths, disallowed routes, budget exhaustion, and
+oversized bodies fail without a direct fallback.
+
+This capability closes only app-to-own-sidecar transport. It does not sandbox
+the app backend subprocess itself; that broader production blocker remains
+listed in `SECURITY.md` and `docs/security/production_readiness.md`.
+
 ## Process Lifecycle And Limits
 
 Core owns one process group for bubblewrap, relay, sidecar, and descendants.

@@ -162,8 +162,20 @@ The SDK exposes small Python helpers under `core.app_sdk` for generated apps:
 
 - `runtime.py` reads JSON stdin payloads and emits JSON responses
 - `storage.py` resolves app data paths under the app-owned data root and rejects traversal
+- `app_sidecar.py` calls only a same-invocation core broker capability declared
+  by the app contract; it never discovers a sidecar port, technical token, or
+  private database/file path and never falls back to direct loopback access
 
 App entrypoints run in app source roots. The generic entrypoint and lifecycle runners prepend the repository root to `PYTHONPATH` so generated apps can import official SDK helpers without copying them into every app.
+
+An entrypoint may call `app_sidecar(payload, "<service_id>")` only when its
+sidecar declares that trusted surface and exact route under
+`entrypoint_access`. The returned client accepts a root-relative path, bounded
+body, safe headers, and query parameters. Broker denial, expiry, or revocation
+is an SDK error; app code must not retry against a guessed host port or read the
+sidecar's persistence files. Synchronous capabilities have a maximum 30-second
+TTL and no streaming. Jobs and streams need a distinct future capability
+contract rather than extending the synchronous descriptor.
 
 ## Developer Kit App
 

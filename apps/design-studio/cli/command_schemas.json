@@ -10,6 +10,7 @@
             "enum": [
               "state",
               "list_projects",
+              "list_opendesign_projects",
               "get_project",
               "create_project",
               "import_from_storage",
@@ -17,7 +18,11 @@
               "view_filter",
               "set_view_filter",
               "set_custom_view",
-              "clear_custom_view"
+              "clear_custom_view",
+              "references.manifest",
+              "references.search",
+              "references.resolve",
+              "references.summarize"
             ]
           },
           "project_id": {
@@ -35,6 +40,14 @@
           },
           "query": {
             "type": "string"
+          },
+          "entity_id": {
+            "type": "string"
+          },
+          "limit": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 100
           }
         },
         "additionalProperties": false

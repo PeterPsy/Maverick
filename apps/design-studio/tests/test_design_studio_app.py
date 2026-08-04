@@ -166,6 +166,16 @@ class DesignStudioAppTests(unittest.TestCase):
         self.assertEqual(sidecar.package_manager, "corepack/pnpm")
         self.assertEqual(sidecar.command, ["python3", "opendesign_launcher.py"])
         self.assertNotIn("MAVERICK_OPENDESIGN_ALLOW_FALLBACK", sidecar.env)
+        self.assertNotIn("OD_DATA_DIR", sidecar.env)
+        self.assertNotIn("OD_MEDIA_CONFIG_DIR", sidecar.env)
+        self.assertEqual(sidecar.env["OD_REQUIRE_API_TOKEN_ON_LOOPBACK"], "1")
+        self.assertEqual(sidecar.env["DO_NOT_TRACK"], "1")
+        self.assertEqual(sidecar.env["NEXT_TELEMETRY_DISABLED"], "1")
+        self.assertEqual(sidecar.env["MAVERICK_OPENDESIGN_DATA_ROOT"], "${app.data_dir}/opendesign")
+        self.assertEqual(
+            sidecar.env["MAVERICK_OPENDESIGN_BUNDLE_ROOT"],
+            "${app.source_dir}/service/vendor/open-design",
+        )
         self.assertEqual(sidecar.bind.host, "127.0.0.1")
         self.assertTrue(sidecar.proxy.streaming)
         self.assertTrue(sidecar.proxy.sse)
@@ -242,11 +252,10 @@ class DesignStudioAppTests(unittest.TestCase):
                 "PYTHONPATH": str(REPO_ROOT),
                 "OD_BIND_HOST": "127.0.0.1",
                 "OD_PORT": str(self._free_port()),
-                "OD_DATA_DIR": str(data_dir),
-                "OD_MEDIA_CONFIG_DIR": str(data_dir / "media-config"),
                 "OD_API_TOKEN": "launcher-test-token",
                 "OD_SANDBOX_MODE": "1",
-                "MAVERICK_OPENDESIGN_BUNDLE_DIR": str(root / "missing-open-design"),
+                "MAVERICK_OPENDESIGN_DATA_ROOT": str(data_dir),
+                "MAVERICK_OPENDESIGN_BUNDLE_ROOT": str(root / "missing-open-design"),
                 "MAVERICK_OPENDESIGN_ALLOW_EXTERNAL_BUNDLE": "1",
                 "MAVERICK_OPENDESIGN_ALLOW_FALLBACK": "1",
             }

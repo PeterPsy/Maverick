@@ -23,6 +23,7 @@ from opendesign_artifact import (
 
 FILE_MANIFEST_PATH = "maverick/manifest.json"
 MATERIALIZED_MARKER_PATH = "maverick/materialized.json"
+MATERIALIZED_MARKER_SCHEMA_VERSION = "2"
 
 
 def create_file_manifest(root: Path, *, exclude: set[str] | None = None) -> dict[str, Any]:
@@ -125,11 +126,33 @@ def verify_materialized_bundle(
     *,
     expected_artifact_sha256: str,
     expected_file_manifest_sha256: str,
+    expected_version: str,
 ) -> dict[str, Any]:
     if not is_sha256(expected_artifact_sha256) or not is_sha256(expected_file_manifest_sha256):
         raise ArtifactError("Pinned OpenDesign materialization digests are invalid")
+    if (
+        not isinstance(expected_version, str)
+        or not expected_version.strip()
+        or expected_version.strip() != expected_version
+    ):
+        raise ArtifactError("Pinned OpenDesign materialization version is invalid")
     if root.is_symlink() or not root.is_dir():
         raise ArtifactError("Materialized OpenDesign root must be a real directory")
+    marker = read_materialized_marker(root)
+    if marker.get("artifact_sha256") != expected_artifact_sha256:
+        raise ArtifactError("Materialized OpenDesign artifact digest does not match the pin")
+    if marker.get("opendesign_version") != expected_version:
+        raise ArtifactError("Materialized OpenDesign version does not match the pin")
+    manifest_sha256 = sha256_file(root / FILE_MANIFEST_PATH)
+    if marker.get("file_manifest_sha256") != manifest_sha256:
+        raise ArtifactError("Materialized OpenDesign file manifest marker mismatch")
+    if manifest_sha256 != expected_file_manifest_sha256:
+        raise ArtifactError("Materialized OpenDesign file manifest digest does not match the pin")
+    verify_file_manifest(root)
+    return marker
+
+
+def read_materialized_marker(root: Path) -> dict[str, Any]:
     try:
         marker = json.loads(
             (root / MATERIALIZED_MARKER_PATH).read_text(encoding="utf-8"),
@@ -141,16 +164,25 @@ def verify_materialized_bundle(
         "schema_version",
         "artifact_sha256",
         "file_manifest_sha256",
+        "opendesign_version",
+        "upstream_commit",
     }:
         raise ArtifactError("Materialized OpenDesign artifact marker schema is invalid")
-    if marker.get("schema_version") != "1" or marker.get("artifact_sha256") != expected_artifact_sha256:
-        raise ArtifactError("Materialized OpenDesign artifact digest does not match the pin")
-    manifest_sha256 = sha256_file(root / FILE_MANIFEST_PATH)
-    if marker.get("file_manifest_sha256") != manifest_sha256:
-        raise ArtifactError("Materialized OpenDesign file manifest marker mismatch")
-    if manifest_sha256 != expected_file_manifest_sha256:
-        raise ArtifactError("Materialized OpenDesign file manifest digest does not match the pin")
-    verify_file_manifest(root)
+    if marker.get("schema_version") != MATERIALIZED_MARKER_SCHEMA_VERSION:
+        raise ArtifactError("Materialized OpenDesign artifact marker version is unsupported")
+    if not is_sha256(marker.get("artifact_sha256")) or not is_sha256(marker.get("file_manifest_sha256")):
+        raise ArtifactError("Materialized OpenDesign artifact marker digests are invalid")
+    version = marker.get("opendesign_version")
+    if not isinstance(version, str) or not version.strip() or version.strip() != version:
+        raise ArtifactError("Materialized OpenDesign artifact marker version is invalid")
+    commit = marker.get("upstream_commit")
+    if (
+        not isinstance(commit, str)
+        or len(commit) != 40
+        or commit.lower() != commit
+        or any(character not in "0123456789abcdef" for character in commit)
+    ):
+        raise ArtifactError("Materialized OpenDesign artifact marker commit is invalid")
     return marker
 
 

@@ -1,10 +1,11 @@
 # Design Studio OpenDesign Sidecar
 
 Design Studio starts `opendesign_launcher.py` as the declared Maverick sidecar.
-The launcher requires a curated OpenDesign bundle at:
+The launcher requires an immutable curated OpenDesign bundle below the verified
+registry:
 
 ```text
-service/vendor/open-design/
+service/vendor/open-design/<artifact-sha256>/
 ```
 
 The bundle must come from upstream `nexu-io/open-design` tag
@@ -61,8 +62,11 @@ The generated artifact and its external file manifest, CycloneDX SBOM, license
 inventory, NOTICE, signed provenance, signature, and public key stay under
 ignored `service/artifacts/`. The committed manifest pins every digest and the
 artifact size. `materialize_opendesign.py` verifies the complete signed set and
-atomically extracts it to ignored `service/vendor/open-design/`; the launcher
-then verifies the materialization marker and every staged file before start.
+atomically installs it into its digest-named directory below ignored
+`service/vendor/open-design/`. An existing digest directory is immutable: it is
+accepted only when every file still verifies and is never overwritten after a
+mismatch. The launcher verifies the registry, the current manifest pin, and the
+active bundle/data triple before start.
 A release verification must run:
 
 ```bash
@@ -160,9 +164,11 @@ used for coordinated bundle and data activation. It validates verified artifact
 digests and real `instances/<generation>/data/` directories, rejects unknown
 fields and symlinks, and writes with same-directory temp, file `fsync`, atomic
 replace, and directory `fsync`. The same module strictly validates and writes
-migration journals and reconciles them against the active triple. Migration and
-rollback orchestration are added in WP6; the current launcher must not select
-this control file early.
+migration journals and reconciles them against the active triple. The launcher
+uses only the exact active triple: its digest selects one verified immutable
+bundle directory and its generation selects the only directory exported as
+`OD_DATA_DIR`. It never selects a bundle or data directory by name, timestamp,
+symlink, or fallback. Migration and rollback orchestration are added in WP6.
 
 Run the G4 filesystem and crash proof with:
 

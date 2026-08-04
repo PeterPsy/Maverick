@@ -167,8 +167,8 @@
       "OD_REQUIRE_API_TOKEN_ON_LOOPBACK": "1",
       "DO_NOT_TRACK": "1",
       "NEXT_TELEMETRY_DISABLED": "1",
-      "OD_DATA_DIR": "${app.data_dir}/opendesign",
-      "OD_MEDIA_CONFIG_DIR": "${app.data_dir}/opendesign/media-config"
+      "MAVERICK_OPENDESIGN_DATA_ROOT": "${app.data_dir}/opendesign",
+      "MAVERICK_OPENDESIGN_BUNDLE_ROOT": "${app.source_dir}/service/vendor/open-design"
     }
   }
 }

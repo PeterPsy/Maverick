@@ -251,14 +251,16 @@ Expected result: nine passing tests, no resource warning.
 
 - G4 freezes the format and supplies the safe atomic control implementation; it
   does not migrate data.
-- WP5 materializes and verifies the immutable 0.16.1 artifact digest consumed
-  by this control plane.
+- WP5 materializes and verifies immutable artifacts in digest-named registry
+  directories. The launcher now resolves the bundle and data directory only
+  from the validated active triple.
 - WP6 uses the strict journal/control primitives to implement staging, API
-  migration, legacy mapping, launcher resolution, crash reconciliation,
-  rollback, and retention cleanup on fixture copies.
+  migration, legacy mapping, crash reconciliation, rollback, and retention
+  cleanup on fixture copies.
 - WP10 repeats migration, crash, and rollback scenarios through the final
   sidecar and UI topology.
 
-Residual risk until WP5/WP6: the current 0.10.1 launcher still uses its legacy
-single data root. It must not consume generation control until artifact and
-migration work packages are complete and their tests are green.
+Residual risk until WP6: no real workspace is authorized for migration, and a
+fresh installation has no active generation until the controlled migration or
+bootstrap operation writes a fully verified `control.json`. The launcher fails
+closed in either state.

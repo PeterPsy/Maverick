@@ -90,9 +90,11 @@ class OpenDesignArtifactTests(unittest.TestCase):
 
             manifest_sha256 = self.artifact.sha256_file(stage / self.archive.FILE_MANIFEST_PATH)
             marker = {
-                "schema_version": "1",
+                "schema_version": "2",
                 "artifact_sha256": "a" * 64,
                 "file_manifest_sha256": manifest_sha256,
+                "opendesign_version": "0.16.1",
+                "upstream_commit": "b" * 40,
             }
             self.artifact.write_canonical_json(stage / self.archive.MATERIALIZED_MARKER_PATH, marker)
             self.assertEqual(
@@ -100,6 +102,7 @@ class OpenDesignArtifactTests(unittest.TestCase):
                     stage,
                     expected_artifact_sha256="a" * 64,
                     expected_file_manifest_sha256=manifest_sha256,
+                    expected_version="0.16.1",
                 ),
                 marker,
             )

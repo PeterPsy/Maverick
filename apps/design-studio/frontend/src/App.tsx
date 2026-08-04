@@ -100,7 +100,7 @@ export function App() {
             <span className="design-studio-glyph">stylus_note</span>
             <div>
               <h1>Design Studio</h1>
-              <p>OpenDesign {status?.opendesign.version || "0.10.1"} in Maverick sandbox</p>
+              <p>OpenDesign {status?.opendesign.version || "unavailable"} in Maverick sandbox</p>
             </div>
           </div>
           <label className="design-studio-search">
@@ -120,7 +120,10 @@ export function App() {
         </header>
 
         <div className="design-studio-status">
-          <StatusPill label="Sidecar" value={status ? "governed" : "loading"} />
+          <StatusPill
+            label="Sidecar"
+            value={status?.opendesign.runtime.bundle_configured ? status.opendesign.runtime.mode : "unavailable"}
+          />
           <StatusPill label="Provider" value="Maverick proxy" />
           <StatusPill label="Blocked" value={(status?.state.route_policy.blocked.length || 3).toString()} />
           <StatusPill label="Exports" value="Storage" />
@@ -225,7 +228,11 @@ export function App() {
                   sandbox policy
                 </span>
               </div>
-              <iframe title="OpenDesign governed sidecar" src={status?.sidecar.proxy_url || `/api/apps/${appId}/sidecars/opendesign/`} />
+              {status?.opendesign.runtime.bundle_configured ? (
+                <iframe title="OpenDesign governed sidecar" src={status.sidecar.proxy_url} />
+              ) : (
+                <div className="design-studio-empty">Verified OpenDesign runtime unavailable</div>
+              )}
             </div>
           </section>
         </div>

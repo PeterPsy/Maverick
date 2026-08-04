@@ -769,27 +769,51 @@ def _opendesign_bundle_summary() -> dict[str, Any]:
     except (OSError, json.JSONDecodeError):
         return {}
     upstream = payload.get("upstream") if isinstance(payload.get("upstream"), dict) else {}
-    bundle = payload.get("bundle") if isinstance(payload.get("bundle"), dict) else {}
+    toolchain = payload.get("toolchain") if isinstance(payload.get("toolchain"), dict) else {}
+    artifact = payload.get("artifact") if isinstance(payload.get("artifact"), dict) else {}
     return {
         "repository": upstream.get("repository", ""),
         "tag": upstream.get("tag", ""),
         "commit": upstream.get("commit", ""),
-        "default_relative_path": bundle.get("default_relative_path", ""),
-        "node": bundle.get("node", ""),
-        "package_manager": bundle.get("package_manager", ""),
+        "default_relative_path": artifact.get("default_relative_path", ""),
+        "node": toolchain.get("node", ""),
+        "package_manager": toolchain.get("package_manager", ""),
     }
 
 
 def _opendesign_runtime_status(data_root: str) -> dict[str, Any]:
     status_path = Path(data_root) / "opendesign" / "launcher-status.json"
+    if status_path.is_symlink() or not status_path.is_file():
+        return {"bundle_configured": False, "mode": "not-started", "detail": "", "active": {}}
     try:
         payload = json.loads(status_path.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError):
-        return {"bundle_configured": False, "mode": "not-started", "detail": ""}
+        return {"bundle_configured": False, "mode": "not-started", "detail": "", "active": {}}
+    active = payload.get("active")
+    bundle = payload.get("bundle")
+    valid = (
+        payload.get("schema_version") == "2"
+        and payload.get("opendesign_version") == OPENDESIGN_VERSION
+        and payload.get("opendesign_commit") == OPENDESIGN_COMMIT
+        and isinstance(active, dict)
+        and active.get("od_version") == OPENDESIGN_VERSION
+        and isinstance(active.get("bundle_artifact_sha256"), str)
+        and re.fullmatch(r"[0-9a-f]{64}", active["bundle_artifact_sha256"]) is not None
+        and isinstance(bundle, dict)
+        and bundle.get("location") == "verified_registry"
+        and bundle.get("relative_path") == active["bundle_artifact_sha256"]
+    )
+    if not valid:
+        return {"bundle_configured": False, "mode": "invalid-status", "detail": "", "active": {}}
     return {
         "bundle_configured": bool(payload.get("bundle_configured")),
         "mode": str(payload.get("mode") or "unknown"),
         "detail": str(payload.get("detail") or ""),
+        "active": {
+            "bundle_artifact_sha256": active["bundle_artifact_sha256"],
+            "od_version": active["od_version"],
+            "data_generation": str(active.get("data_generation") or ""),
+        },
     }
 
 

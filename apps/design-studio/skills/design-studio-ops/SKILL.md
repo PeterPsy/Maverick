@@ -21,7 +21,9 @@ Common operations:
   declared Design Studio reference tools. Reference capability routes are
   GET-only and cannot be used to mutate OpenDesign.
 - Use `POST /api/provider/models` only through the mounted Design Studio sidecar route when checking OpenDesign model discovery; it is handled by Maverick core/app code and must report `sidecar_reached: false`.
-- Treat `service/opendesign_launcher.py` as the sidecar entrypoint. It starts a curated OpenDesign bundle from `service/vendor/open-design/` when that bundle has been materialized.
+- Treat `service/opendesign_launcher.py` as the sidecar entrypoint. It resolves
+  only the bundle digest and data generation named together by the validated
+  `control.json`; it never builds, migrates, or selects a "latest" directory.
 
 Sandbox policy:
 
@@ -32,5 +34,14 @@ Sandbox policy:
 - Do not guess a sidecar port, reuse a broker descriptor after the entrypoint
   ends, or fall back to `data/design-studio/opendesign/app.sqlite`. Capability
   expiry or denial is a hard failure.
+- Use `bootstrap_opendesign_generation.py` only for a new empty data root. It
+  refuses legacy or unknown content. Existing data migration requires an
+  explicitly marked fixture/controlled copy and is never implied by startup.
+- Keep full upstream certification separate from packaging. Do not resume a
+  per-file checkpoint or create shards/retries when the host lacks capacity.
 
-The app uses a governed OpenDesign launcher pinned to upstream OpenDesign `0.10.1` metadata. The declared runtime fails closed without a materialized curated bundle; there is no runtime compatibility fallback.
+The exact upstream release, commit, patch set, artifact digest, and file
+manifest come only from `service/opendesign_bundle.json`. Materialized bundles
+live in immutable `service/vendor/open-design/<artifact-sha256>/` directories.
+The declared runtime fails closed without a verified bundle and matching active
+data generation; there is no compatibility fallback.

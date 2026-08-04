@@ -301,6 +301,10 @@ class DesignStudioAppTests(unittest.TestCase):
                 },
             )
             project_id = created["json"]["project"]["id"]
+            self.assertTrue((data_root / "opendesign/instances").is_dir())
+            self.assertTrue((data_root / "opendesign/backups").is_dir())
+            self.assertTrue((data_root / "opendesign/migrations").is_dir())
+            self.assertFalse((data_root / "opendesign/db").exists())
 
             imported = self._run_entrypoint(
                 APP_ROOT / "backend" / "app_backend.py",
@@ -400,6 +404,7 @@ class DesignStudioAppTests(unittest.TestCase):
                 final_export["completed_workspace_relative_paths"],
                 export_record["workspace_relative_paths"],
             )
+            self.assertFalse(state["json"]["opendesign"]["runtime"]["bundle_configured"])
 
     def test_cli_and_mcp_state_entrypoints_return_ok(self) -> None:
         with TemporaryDirectory() as temp_dir:
@@ -431,6 +436,8 @@ class DesignStudioAppTests(unittest.TestCase):
             self.assertTrue(mcp["ok"])
             self.assertEqual(cli["state"]["schema_version"], "1")
             self.assertEqual(mcp["state"]["schema_version"], "1")
+            self.assertEqual(cli["opendesign"]["version"], "0.16.1")
+            self.assertEqual(mcp["opendesign"]["version"], "0.16.1")
 
     def test_backend_cli_mcp_and_reference_resolve_same_opendesign_id_through_sdk(self) -> None:
         project_response = self._fixture_json("project_create_response.json")

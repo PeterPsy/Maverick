@@ -14,21 +14,31 @@ from typing import Any, Iterator
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
 APP_ROOT = REPO_ROOT / "apps" / "design-studio"
-BUNDLE_ROOT = APP_ROOT / "service" / "vendor" / "open-design"
+SERVICE_ROOT = APP_ROOT / "service"
+BUNDLE_REGISTRY = SERVICE_ROOT / "vendor" / "open-design"
 WORKSPACE_ID = "default"
 APP_ID = "design-studio"
 
 sys.path.insert(0, str(REPO_ROOT))
+sys.path.insert(0, str(SERVICE_ROOT))
 
 from core.api.platform_host import PlatformHost  # noqa: E402
 from core.api.platform_state import bootstrap_platform_state  # noqa: E402
 from core.apps.dependencies import save_app_dependency_selection  # noqa: E402
 from core.apps.service import install_store_app, register_app_source_from_contract  # noqa: E402
 from core.shared.entrypoints import EntrypointShutdownController  # noqa: E402
+from opendesign_artifact import (  # noqa: E402
+    ArtifactError,
+    read_bundle_manifest,
+    selected_asset,
+    validate_bundle_manifest,
+)
+from opendesign_bootstrap import bootstrap_empty_generation  # noqa: E402
+from opendesign_materialization import discover_verified_bundles  # noqa: E402
 
 
 def main() -> None:
-    bundle_summary = _assert_bundle_materialized()
+    bundle_summary, bundle_dir = _assert_bundle_materialized()
     with TemporaryDirectory() as temp_dir:
         repo_root = Path(temp_dir) / "maverick"
         _prepare_temporary_repo(repo_root)
@@ -41,12 +51,21 @@ def main() -> None:
             _install_platform_app(state, repo_root, "storage")
             _install_platform_app(state, repo_root, APP_ID)
             _select_storage_dependencies(state, repo_root)
+            _prepare_smoke_generation(repo_root, bundle_summary)
             shutdown = EntrypointShutdownController()
             try:
                 app = PlatformHost(state, start_path=repo_root, shutdown_controller=shutdown)
                 cookie = _login(app)
-                route_results = _smoke_proxy_routes(app, cookie=cookie)
-                launcher_status = _launcher_status(repo_root)
+                route_results = _smoke_proxy_routes(
+                    app,
+                    cookie=cookie,
+                    expected_version=bundle_summary["release_version"],
+                    bundle_dir=bundle_dir,
+                )
+                launcher_status = _launcher_status(
+                    repo_root,
+                    expected_artifact_sha256=bundle_summary["artifact_sha256"],
+                )
             finally:
                 shutdown.begin_shutdown()
     print(
@@ -67,18 +86,36 @@ def main() -> None:
     )
 
 
-def _assert_bundle_materialized() -> dict[str, Any]:
+def _assert_bundle_materialized() -> tuple[dict[str, Any], Path]:
+    manifest = read_bundle_manifest(SERVICE_ROOT / "opendesign_bundle.json")
+    try:
+        validate_bundle_manifest(manifest, require_artifact_digest=True)
+        asset = selected_asset(manifest, require_artifact_digest=True)
+    except ArtifactError as error:
+        raise SystemExit(f"Pinned OpenDesign artifact is unavailable: {error}") from error
+    bundles = discover_verified_bundles(BUNDLE_REGISTRY)
+    bundle = bundles.get(asset["sha256"])
+    if bundle is None:
+        raise SystemExit("Pinned OpenDesign artifact is not materialized.")
+    if (
+        bundle.file_manifest_sha256 != asset["file_manifest_sha256"]
+        or bundle.opendesign_version != manifest["upstream"]["release_version"]
+        or bundle.upstream_commit != manifest["upstream"]["commit"]
+    ):
+        raise SystemExit("Pinned OpenDesign materialization metadata does not match the manifest.")
     required = [
-        "maverick-bundle.json",
-        "package.json",
-        "pnpm-lock.yaml",
-        "node_modules/.modules.yaml",
+        "maverick/materialized.json",
+        "maverick/manifest.json",
+        "maverick/build.json",
+        "maverick/sbom.cdx.json",
+        "maverick/licenses.json",
+        "maverick/NOTICE",
+        "apps/daemon/package.json",
+        "apps/daemon/node_modules",
         "apps/daemon/dist/cli.js",
         "apps/web/out/index.html",
     ]
-    missing = [relative for relative in required if not (BUNDLE_ROOT / relative).exists()]
-    package_dirs = sorted(path for path in (BUNDLE_ROOT / "packages").glob("*") if path.is_dir())
-    missing.extend(str(path.relative_to(BUNDLE_ROOT) / "dist") for path in package_dirs if not (path / "dist").is_dir())
+    missing = [relative for relative in required if not (bundle.path / relative).exists()]
     forbidden = [
         "apps/desktop",
         "apps/landing-page",
@@ -90,31 +127,36 @@ def _assert_bundle_materialized() -> dict[str, Any]:
         "plugins/marketplaces",
         "tools",
     ]
-    present_forbidden = [relative for relative in forbidden if (BUNDLE_ROOT / relative).exists()]
-    tool_links = sorted(
-        path.name
-        for path in (BUNDLE_ROOT / "node_modules" / "@open-design").glob("tools-*")
-        if path.exists() or path.is_symlink()
-    )
-    if missing or present_forbidden or tool_links:
+    present_forbidden = [relative for relative in forbidden if (bundle.path / relative).exists()]
+    if missing or present_forbidden:
         raise SystemExit(
             json.dumps(
                 {
                     "error": "opendesign_bundle_not_phase3_ready",
                     "missing": missing,
                     "forbidden_paths": present_forbidden,
-                    "forbidden_workspace_links": tool_links,
                 },
                 indent=2,
             )
         )
-    metadata = json.loads((BUNDLE_ROOT / "maverick-bundle.json").read_text(encoding="utf-8"))
     return {
-        "path": str(BUNDLE_ROOT.relative_to(REPO_ROOT)),
-        "mode": "generated-artifact",
-        "upstream": metadata.get("source", {}),
-        "package_count": len(package_dirs),
-    }
+        "path": str(bundle.path.relative_to(REPO_ROOT)),
+        "mode": "verified-materialized-artifact",
+        "release_version": manifest["upstream"]["release_version"],
+        "upstream_commit": manifest["upstream"]["commit"],
+        "artifact_sha256": bundle.artifact_sha256,
+        "file_manifest_sha256": bundle.file_manifest_sha256,
+    }, bundle.path
+
+
+def _prepare_smoke_generation(repo_root: Path, bundle_summary: dict[str, Any]) -> None:
+    generation_root = repo_root / "workspaces" / WORKSPACE_ID / "data" / APP_ID / "opendesign"
+    bootstrap_empty_generation(
+        generation_root,
+        artifact_sha256=bundle_summary["artifact_sha256"],
+        opendesign_version=bundle_summary["release_version"],
+        verified_artifacts={bundle_summary["artifact_sha256"]: bundle_summary["release_version"]},
+    )
 
 
 def _prepare_temporary_repo(repo_root: Path) -> None:
@@ -184,8 +226,14 @@ def _login(app: PlatformHost) -> str:
     return headers["Set-Cookie"].split(";", 1)[0]
 
 
-def _smoke_proxy_routes(app: PlatformHost, *, cookie: str) -> list[dict[str, Any]]:
-    next_asset = _next_asset_path()
+def _smoke_proxy_routes(
+    app: PlatformHost,
+    *,
+    cookie: str,
+    expected_version: str,
+    bundle_dir: Path,
+) -> list[dict[str, Any]]:
+    next_asset = _next_asset_path(bundle_dir)
     checks = [
         ("/api/apps/design-studio/sidecars/opendesign/index.html", "GET", 200),
         (f"/api/apps/design-studio/sidecars/opendesign/{next_asset}", "GET", 200),
@@ -211,7 +259,7 @@ def _smoke_proxy_routes(app: PlatformHost, *, cookie: str) -> list[dict[str, Any
             raise SystemExit(f"{path} did not return ready=true: {decoded}")
         version = decoded.get("version")
         version_text = version.get("version") if isinstance(version, dict) else version
-        if path.endswith("/api/version") and version_text != "0.10.1":
+        if path.endswith("/api/version") and version_text != expected_version:
             raise SystemExit(f"{path} returned unexpected version payload: {decoded}")
         if path.endswith("/api/import/folder") and decoded.get("error") != "sidecar_route_blocked":
             raise SystemExit(f"{path} returned unexpected blocked payload: {decoded}")
@@ -221,21 +269,24 @@ def _smoke_proxy_routes(app: PlatformHost, *, cookie: str) -> list[dict[str, Any
     return results
 
 
-def _next_asset_path() -> str:
-    static_root = BUNDLE_ROOT / "apps" / "web" / "out" / "_next"
+def _next_asset_path(bundle_dir: Path) -> str:
+    static_root = bundle_dir / "apps" / "web" / "out" / "_next"
     for path in sorted(static_root.rglob("*")):
         if path.is_file() and path.suffix in {".js", ".css"}:
-            return path.relative_to(BUNDLE_ROOT / "apps" / "web" / "out").as_posix()
+            return path.relative_to(bundle_dir / "apps" / "web" / "out").as_posix()
     raise SystemExit("OpenDesign web bundle has no _next JavaScript or CSS asset to smoke.")
 
 
-def _launcher_status(repo_root: Path) -> dict[str, Any]:
+def _launcher_status(repo_root: Path, *, expected_artifact_sha256: str) -> dict[str, Any]:
     status_path = repo_root / "workspaces" / WORKSPACE_ID / "data" / APP_ID / "opendesign" / "launcher-status.json"
     payload = json.loads(status_path.read_text(encoding="utf-8"))
     if payload.get("mode") != "curated-dist":
         raise SystemExit(f"Launcher did not use curated-dist mode: {payload}")
     if not payload.get("bundle_configured"):
         raise SystemExit(f"Launcher did not report bundle_configured=true: {payload}")
+    active = payload.get("active")
+    if not isinstance(active, dict) or active.get("bundle_artifact_sha256") != expected_artifact_sha256:
+        raise SystemExit(f"Launcher did not bind the expected artifact generation: {payload}")
     return payload
 
 

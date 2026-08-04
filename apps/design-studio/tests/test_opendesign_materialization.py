@@ -32,11 +32,11 @@ class OpenDesignMaterializationTests(unittest.TestCase):
     def setUpClass(cls) -> None:
         cls.artifact = _load_module("opendesign_artifact", SERVICE_ROOT / "opendesign_artifact.py")
         cls.archive = _load_module("opendesign_archive", SERVICE_ROOT / "opendesign_archive.py")
-        cls.generation = _load_module(
+        _load_module(
             "opendesign_generation_model",
             SERVICE_ROOT / "opendesign_generation_model.py",
         )
-        cls.generation_control = _load_module(
+        _load_module(
             "opendesign_generation_control",
             SERVICE_ROOT / "opendesign_generation_control.py",
         )
@@ -46,6 +46,7 @@ class OpenDesignMaterializationTests(unittest.TestCase):
         )
         cls.runtime = _load_module("opendesign_runtime", SERVICE_ROOT / "opendesign_runtime.py")
         cls.launcher = _load_module("opendesign_launcher", SERVICE_ROOT / "opendesign_launcher.py")
+        cls.bootstrap = _load_module("opendesign_bootstrap", SERVICE_ROOT / "opendesign_bootstrap.py")
 
     def setUp(self) -> None:
         self.temp = tempfile.TemporaryDirectory(prefix="maverick-od-materialize-")
@@ -105,25 +106,15 @@ class OpenDesignMaterializationTests(unittest.TestCase):
         registry = self.root / "registry"
         installed = self._materialize(registry)
         generation_root = self.root / "data-root"
-        data_dir = generation_root / "instances/gen_current/data"
-        data_dir.mkdir(parents=True)
-        (generation_root / "migrations").mkdir()
-        (generation_root / "backups").mkdir()
-        triple = self.generation.GenerationTriple(
-            self.archive_sha256,
-            "0.16.1",
-            "gen_current",
-        )
-        control = self.generation.GenerationControl(
-            active=triple,
-            previous=None,
-            migration_id=None,
-            updated_at="2026-08-04T00:00:00Z",
-        )
-        self.generation_control.write_generation_control(
+        generation_root.mkdir()
+        for name in ("instances", "migrations", "backups"):
+            (generation_root / name).mkdir()
+        control, data_dir = self.bootstrap.bootstrap_empty_generation(
             generation_root,
-            control,
+            artifact_sha256=self.archive_sha256,
+            opendesign_version="0.16.1",
             verified_artifacts={self.archive_sha256: "0.16.1"},
+            now=lambda: "2026-08-04T00:00:00Z",
         )
 
         binding = self.runtime.resolve_runtime_binding(
@@ -139,6 +130,7 @@ class OpenDesignMaterializationTests(unittest.TestCase):
 
         self.assertEqual(binding.bundle, installed)
         self.assertEqual(binding.data_dir, data_dir)
+        self.assertEqual(binding.active, control.active)
         self.assertEqual(plan.mode, "curated-dist")
         self.assertEqual(plan.cwd, installed.path)
         self.assertEqual(daemon_env["OD_DATA_DIR"], str(data_dir))
@@ -214,6 +206,23 @@ class OpenDesignMaterializationTests(unittest.TestCase):
 
         with self.assertRaisesRegex(SystemExit, "must be a real directory"):
             self.launcher._ensure_runtime_dirs(data_dir, data_dir / "media-config")
+
+    def test_empty_bootstrap_refuses_legacy_or_unknown_data(self) -> None:
+        generation_root = self.root / "data-root"
+        generation_root.mkdir()
+        for name in ("instances", "migrations", "backups"):
+            (generation_root / name).mkdir()
+        (generation_root / "app.sqlite").write_bytes(b"legacy")
+
+        with self.assertRaisesRegex(self.bootstrap.BootstrapError, "controlled migration"):
+            self.bootstrap.bootstrap_empty_generation(
+                generation_root,
+                artifact_sha256=self.archive_sha256,
+                opendesign_version="0.16.1",
+                verified_artifacts={self.archive_sha256: "0.16.1"},
+            )
+
+        self.assertEqual(list((generation_root / "instances").iterdir()), [])
 
     def _materialize(self, registry: Path):
         return self.materialization.materialize_archive(

@@ -13,33 +13,75 @@ It owns:
 
 ## OpenDesign Integration
 
-The app contract is shaped for upstream `nexu-io/open-design` tag `open-design-v0.10.1`, commit `eb245799adf07e7727ad5f970485d809bad5780e`.
+The app contract is shaped for upstream `nexu-io/open-design` tag
+`open-design-v0.16.1`, commit
+`276b4d8e970bc143d7ad060181a89a834e3d9caf`.
 
-Design Studio starts `service/opendesign_launcher.py` as the declared sidecar command. The launcher looks for a curated OpenDesign bundle under `service/vendor/open-design/`, validates the sandbox runtime environment, writes only redaction-safe launcher status under `data/design-studio/opendesign/launcher-status.json`, and then starts the OpenDesign daemon through its built `apps/daemon/dist/cli.js`. A successful launch records `mode: curated-dist`.
+Design Studio starts `service/opendesign_launcher.py` as the declared sidecar
+command. `control.json` selects one indivisible artifact/version/data-generation
+triple. The artifact digest resolves an immutable bundle below
+`service/vendor/open-design/<artifact-sha256>/`; the data generation resolves
+the only directory exported to OpenDesign as `OD_DATA_DIR`. A successful launch
+writes redaction-safe status under
+`data/design-studio/opendesign/launcher-status.json` and records
+`mode: curated-dist`.
 
-The packaging recipe is declared in `service/opendesign_bundle.json` and implemented by `service/package_opendesign.py`. It copies only the pinned daemon/web/runtime packages and bundled design assets needed for the sandbox sidecar, narrows the generated pnpm workspace to the curated app/package set, then runs install and recursive pnpm build so OpenDesign workspace packages have runtime `dist/` output. Desktop, Electron-packaged, deploy, e2e, broad marketplace, and host-tool trees stay out of the Maverick bundle. Runtime sidecar startup does not build OpenDesign on demand.
+The packaging recipe is declared in `service/opendesign_bundle.json` and
+implemented by `service/package_opendesign.py`. Two independent source trees
+are exported directly from the exact object in a reviewed bare Git repository,
+without checkouts or worktrees. Each receives only the digest-bound Maverick
+host-boundary patch, uses Node 24 and Corepack-pinned pnpm 10.33.2, performs one
+frozen install, runs the focused loopback-bearer guard, and builds the daemon
+and static web export. It then stages a production `pnpm deploy` closure plus
+the reviewed runtime resources. Desktop, Electron packaging, charts,
+deployment tools, E2E sources, broad marketplace trees, source maps, and build
+tooling remain out of the runtime artifact. The two deterministic archives must
+be byte-identical. Runtime startup never installs dependencies or builds.
 
-The source-control policy is generated-artifact mode: commit `service/opendesign_bundle.json`, `service/package_opendesign.py`, docs, and smoke tests; do not commit `service/vendor/open-design/` or any `node_modules`. The currently materialized local bundle was built from `nexu-io/open-design` tag `open-design-v0.10.1`, commit `eb245799adf07e7727ad5f970485d809bad5780e`, and contains `apps/daemon/dist/cli.js`, `apps/web/out`, and `packages/*/dist`.
+The complete upstream web and daemon suites are a separate acceptance run via
+`service/certify_opendesign_upstream.py`. They run once each with one worker on
+adequate capacity; the packager never expands them into per-file processes,
+checkpoints, retries, or memory-wait loops.
+
+The generated OS/architecture artifact and its file manifest, CycloneDX SBOM,
+license inventory, NOTICE, signed provenance, signature, and public key live
+under ignored `service/artifacts/`. Their names, sizes, and SHA-256 digests are
+pinned in the committed canonical manifest. `materialize_opendesign.py`
+verifies every asset and the provenance signature before atomically installing
+the closure in its digest-named registry directory. An existing digest
+directory is immutable and is never overwritten after a verification failure.
+The launcher revalidates every materialized file before each start.
 
 Fresh checkouts will not include the materialized Node bundle. Run packaging before declaring Phase 3 complete:
 
 ```bash
-git clone --depth 1 --branch open-design-v0.10.1 https://github.com/nexu-io/open-design.git /tmp/maverick-open-design-src
 python3 apps/design-studio/service/package_opendesign.py \
-  --source /tmp/maverick-open-design-src \
-  --force
+  --source-repository /path/to/reviewed-open-design-v0.16.1.git \
+  --signing-key /secure/path/opendesign-provenance-key.pem
+python3 apps/design-studio/service/materialize_opendesign.py
+python3 apps/design-studio/service/bootstrap_opendesign_generation.py \
+  --data-root /path/to/new-empty-design-studio-data/opendesign
 python3 apps/design-studio/service/smoke_opendesign_sidecar.py
 ```
 
-The launcher fails closed when the bundle is absent or not built. There is no runtime compatibility fallback.
+The explicit bootstrap command is only for a new empty data root. It refuses
+legacy or unknown content; existing data must use the controlled migration and
+is never migrated at launcher startup. The launcher fails closed when the
+bundle, control record, or generation is absent or inconsistent. There is no
+runtime compatibility fallback.
 
-The upstream tag was inspected during implementation. A full shallow checkout at the pinned commit includes web, daemon, desktop, deploy, Helm/chart, design-system, skill, and plugin trees. The daemon also depends on host-adjacent packages such as `node-pty`. Vendoring the full repository directly would mix sandbox-safe surfaces with full-access surfaces the Maverick contract must keep blocked. The curated bundle keeps the upstream pin while narrowing what is copied and what the proxy exposes.
+The upstream tag was inventoried before implementation. It includes web,
+daemon, desktop, deploy, Helm/chart, design-system, skill, and plugin trees; the
+daemon also has native dependencies including `node-pty`, `better-sqlite3`, and
+`blake3-wasm`. Packaging probes all three from the staged closure. Vendoring
+the full repository directly would mix sandbox-safe surfaces with full-access
+surfaces the Maverick contract must keep blocked.
 
 The production daemon replacement must preserve these boundaries:
 
 - bind only to loopback
-- use `OD_DATA_DIR` below the app data root
-- use `OD_MEDIA_CONFIG_DIR` below the app data root
+- derive `OD_DATA_DIR` only from the active controlled generation
+- keep `OD_MEDIA_CONFIG_DIR` inside that same active generation
 - receive only the technical `OD_API_TOKEN`
 - run with `OD_SANDBOX_MODE=1`
 - keep provider keys in Maverick/Vault-owned flows
@@ -107,7 +149,7 @@ separate host-only session cookie, and applies the fixed
 `self_hosted_web_app` CSP profile. Root-relative OpenDesign requests therefore
 remain on the sidecar origin and never fall through to Maverick routes. Neither
 Maverick cookies nor the generated `OD_API_TOKEN` cross the browser/upstream
-boundary. The mounted frontend adopts this launch protocol in WP9.
+boundary.
 
 The browser route policy is generated from the pinned 0.16.1 method/template
 inventory and checked in CI with `service/sync_route_policy.py`. API rules are
@@ -129,12 +171,12 @@ surface, actor, and invocation and is revoked when the entrypoint finishes.
 Reference calls use their own GET-only policy and cannot inherit MCP mutation
 authority. Broker failure has no loopback or filesystem fallback.
 
-During the pre-cutover compatibility phase, an explicit OpenDesign project id
-is resolved through this SDK path by the backend (and therefore the mounted
-frontend), CLI `get_project`, MCP `design_studio_get_project`, and the standard
-Design Studio reference resolve/summarize tools. Legacy `design_*` records
-remain on the existing app catalog until the coordinated fixture migration and
-WP8 cutover; no OpenDesign data is read from `app.sqlite`.
+An explicit OpenDesign project id is resolved through this SDK path by the
+backend (and therefore the mounted frontend), CLI `get_project`, MCP
+`design_studio_get_project`, and the standard Design Studio reference
+resolve/summarize tools. Legacy `design_*` records remain a read-only legacy
+catalog until a separately authorized controlled migration maps them to real
+OpenDesign ids; no OpenDesign data is read directly from `app.sqlite`.
 
 The production confinement suite uses real bubblewrap and validates filesystem,
 environment, network, authenticated relay, concurrency and descendant cleanup:
@@ -161,6 +203,8 @@ Useful checks:
 
 ```bash
 python3 -m unittest apps/design-studio/tests/test_design_studio_app.py
+python3 -m unittest apps/design-studio/tests/test_opendesign_materialization.py
+python3 -m unittest apps/design-studio/tests/test_opendesign_migration.py
 python3 apps/design-studio/service/sync_route_policy.py
 python3 apps/design-studio/service/smoke_opendesign_sidecar.py
 maverick app design-studio frontend build --json
@@ -170,6 +214,8 @@ maverick app design-studio cli list --json
 
 Current intentional omissions:
 
-- the curated OpenDesign bundle is materialized from the pinned upstream checkout by `service/package_opendesign.py`; the generated bundle and dependency installs stay out of source control
+- generated OpenDesign assets and dependency closures stay out of source control
+- real workspace migration remains unauthorized; migration tests operate only on marked fixtures and controlled copies
+- upstream acceptance certification and production artifact hashes remain pending when the current host lacks adequate build capacity
 - provider proxying is limited to OpenDesign model discovery through Maverick's active workspace provider; generation/chat provider routes remain unavailable in sandbox mode
 - full-access terminal, Local CLI, and host-folder import are not part of the sandbox MVP

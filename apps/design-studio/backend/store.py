@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime
+import json
 from pathlib import Path
 from typing import Any, Callable
 
@@ -11,8 +12,16 @@ from core.app_sdk.storage import ensure_json_state, read_json_state, update_json
 
 STATE_FILE = "state.json"
 SCHEMA_VERSION = "1"
-OPENDESIGN_VERSION = "0.10.1"
-OPENDESIGN_COMMIT = "eb245799adf07e7727ad5f970485d809bad5780e"
+_OPENDESIGN_MANIFEST_PATH = Path(__file__).resolve().parents[1] / "service" / "opendesign_bundle.json"
+
+
+def _opendesign_identity() -> tuple[str, str]:
+    payload = json.loads(_OPENDESIGN_MANIFEST_PATH.read_text(encoding="utf-8"))
+    upstream = payload["upstream"]
+    return str(upstream["release_version"]), str(upstream["commit"])
+
+
+OPENDESIGN_VERSION, OPENDESIGN_COMMIT = _opendesign_identity()
 OPENDESIGN_MODE = "curated-open-design-daemon"
 
 
@@ -75,11 +84,21 @@ def default_state() -> dict[str, Any]:
     }
 
 
+def _ensure_layout(data_root: str | Path) -> None:
+    root = Path(data_root)
+    for relative in (
+        "opendesign/instances",
+        "opendesign/backups",
+        "opendesign/migrations",
+        "imports",
+        "exports",
+    ):
+        (root / relative).mkdir(parents=True, exist_ok=True)
+
+
 def ensure_state(data_root: str | Path) -> dict[str, Any]:
     """Create state and sidecar working directories if needed, then return state."""
-    root = Path(data_root)
-    for relative in ("opendesign/db", "opendesign/projects", "opendesign/media-config", "opendesign/temp", "imports", "exports"):
-        (root / relative).mkdir(parents=True, exist_ok=True)
+    _ensure_layout(data_root)
     ensure_json_state(data_root, STATE_FILE, default_state())
     return read_state(data_root)
 
@@ -95,6 +114,8 @@ def read_state(data_root: str | Path) -> dict[str, Any]:
 
 def update_state(data_root: str | Path, updater: Callable[[dict[str, Any]], dict[str, Any] | None]) -> dict[str, Any]:
     """Update Design Studio state atomically."""
+    _ensure_layout(data_root)
+
     def wrapped(payload: dict[str, Any]) -> dict[str, Any]:
         state = migrate_state_payload(payload)
         next_state = updater(state) or state

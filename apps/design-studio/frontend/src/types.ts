@@ -60,6 +60,11 @@ export type DesignStudioStatus = {
       bundle_configured: boolean;
       mode: string;
       detail: string;
+      active: {
+        bundle_artifact_sha256?: string;
+        od_version?: string;
+        data_generation?: string;
+      };
     };
   };
 };

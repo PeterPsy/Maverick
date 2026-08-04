@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from collections import defaultdict
 import os
+from pathlib import Path
 import signal
 import subprocess
 from threading import Lock
@@ -12,6 +13,32 @@ import time
 
 _LOCK = Lock()
 _PROCESSES_BY_SESSION: dict[str, set[subprocess.Popen]] = defaultdict(set)
+RUNTIME_PROVIDER_OOM_SCORE_ADJ = 500
+
+
+def make_runtime_process_oom_kill_preferred(
+    process: subprocess.Popen,
+    *,
+    proc_root: str | Path = "/proc",
+) -> bool:
+    """Prefer a provider over the platform host when Linux must reclaim memory.
+
+    Provider descendants inherit this value. The operation is best-effort so
+    unsupported hosts or restricted procfs mounts do not prevent a turn from
+    starting.
+    """
+    try:
+        pid = int(process.pid)
+    except (AttributeError, TypeError, ValueError):
+        return False
+    if pid <= 1:
+        return False
+    score_path = Path(proc_root) / str(pid) / "oom_score_adj"
+    try:
+        score_path.write_text(f"{RUNTIME_PROVIDER_OOM_SCORE_ADJ}\n", encoding="ascii")
+    except OSError:
+        return False
+    return True
 
 
 def register_runtime_process(session_id: str, process: subprocess.Popen) -> None:

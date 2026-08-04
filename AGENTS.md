@@ -186,6 +186,22 @@ Rules:
 - do not stop with failing tests when the failure is within the current scope to fix
 - aim to leave the branch with all relevant tests passing before closing the task
 
+## Long-Running Work Safety
+
+- never detach agent-owned builds or test suites with cron, `nohup`, `tmux`,
+  `screen`, `systemd-run`, or an equivalent mechanism; cancelling the runtime
+  turn must also stop its descendants
+- an operator-managed detached job requires explicit user authorization and a
+  documented stop/status path; it must not be introduced merely to survive a
+  runtime or backend restart
+- do not start memory-intensive verification while the host is already under
+  memory pressure; use app-owned safety gates and bounded worker counts where
+  available
+- after a core change that affects persisted control-plane shapes, complete
+  focused tests and restart the backend before invoking state-mutating CLI or
+  integration flows against it; verify health after restart so a new writer
+  cannot leave an older in-memory reader serving incompatible records
+
 ## Filesystem And Workspace Discipline
 
 - `workspaces/<workspace_id>/` is the tenant root for workspace-owned material

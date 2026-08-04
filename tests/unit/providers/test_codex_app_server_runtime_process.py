@@ -9,10 +9,75 @@ from unittest.mock import patch
 
 importlib.import_module("core.providers.codex_app_server_runtime")
 from core.providers import codex_app_server_runtime_process as runtime_process
+from core.providers import codex_app_server_runtime_thread as runtime_thread
 from core.providers.models import RuntimeBackendLaunchSpec
+from core.runtime import process_control
 
 
 class CodexAppServerRuntimeProcessTestCase(unittest.TestCase):
+    def test_runtime_process_is_made_preferred_for_oom_termination(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            proc_root = Path(temp_dir)
+            score_path = proc_root / "4321" / "oom_score_adj"
+            score_path.parent.mkdir()
+            score_path.write_text("0\n", encoding="ascii")
+
+            configured = process_control.make_runtime_process_oom_kill_preferred(
+                SimpleNamespace(pid=4321),
+                proc_root=proc_root,
+            )
+            score = score_path.read_text(encoding="ascii")
+
+        self.assertTrue(configured)
+        self.assertEqual(score, "500\n")
+
+    def test_codex_runtime_launch_applies_oom_preference_before_registration(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            session = SimpleNamespace(
+                session_id="session-oom",
+                workspace_id="default",
+                runtime_root=str(Path(temp_dir) / "runtime"),
+            )
+            launch_spec = RuntimeBackendLaunchSpec(
+                provider_id="codex",
+                command=["codex", "app-server"],
+                env_overrides={},
+                credential_binding_id=None,
+                resolved_secret_refs=[],
+                working_directory=temp_dir,
+                execution_mode="sandbox",
+                readable_roots=[],
+                writable_roots=[],
+            )
+            class FakeProcess:
+                pid = 4321
+                stdout: list[str] = []
+
+                @staticmethod
+                def poll():
+                    return None
+
+            process = FakeProcess()
+            thread = SimpleNamespace(start=lambda: None)
+            runtime_thread._RUNTIMES.pop(session.session_id, None)
+
+            with patch.object(runtime_thread, "make_runtime_process_oom_kill_preferred") as prefer_oom, patch.object(
+                runtime_thread.threading,
+                "Thread",
+                return_value=thread,
+            ), patch.object(runtime_thread, "_send_request", return_value={}):
+                runtime = runtime_thread._ensure_runtime(
+                    session=session,
+                    launch_spec=launch_spec,
+                    command_runner=lambda *_args, **_kwargs: process,
+                )
+
+            runtime_thread._RUNTIMES.pop(session.session_id, None)
+            runtime_thread.unregister_runtime_process(session.session_id, process)
+
+        self.assertIs(runtime.process, process)
+        prefer_oom.assert_called_once_with(process)
+
     def test_warm_turn_skips_repeated_generated_skill_cleanup_and_reports_startup_spans(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             runtime_home = Path(temp_dir) / "codex-home"

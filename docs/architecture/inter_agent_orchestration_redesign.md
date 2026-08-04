@@ -178,8 +178,12 @@ transcript projection behavior.
   and completion commit validate both current status and the scheduler's
   captured recovery generation under the workspace transition lock. A queued
   future cannot start after pause, a late worker cannot overwrite a persisted
-  cancellation, and the control loop cannot complete a paused run. A child
-  created concurrently is rechecked, deleted, and never linked.
+  cancellation, and the control loop cannot complete a paused run. Pause and
+  participant snapshot are one locked transition, so every task claim ordered
+  before the pause is reconciled and every claim ordered after it is rejected.
+  Runtime turn persistence uses the same locked fence: queueing either precedes
+  pause and is visible to interrupt cleanup, or is rejected before any provider
+  dispatch. A child created concurrently is rechecked, deleted, and never linked.
   Immediate resume through HTTP, CLI, or MCP first waits for the previous
   hosted scheduler to unwind, resets an interrupted orchestrator onto a new
   recovery-generation child session, and then enqueues the replacement.

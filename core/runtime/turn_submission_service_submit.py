@@ -67,6 +67,7 @@ def submit_runtime_turn(
     received_perf_counter: float | None = None,
     submission_timing=None,
     client_message_claim: RuntimeClientMessageClaim | None = None,
+    queue_fence: RuntimeTurnQueueFence | None = None,
 ) -> tuple[RuntimeTurnRecord, list[RuntimeEventRecord]]:
     """Queue and execute one runtime turn synchronously."""
     plain_hosted = runtime_session_is_plain_hosted_chat(session)
@@ -78,19 +79,20 @@ def submit_runtime_turn(
     else:
         provider, selection, runtime_adapter = resolve_runtime_backend_for_session(state.provider_store, session=session)
         provider_id = provider.provider_id
-    turn, events, created = _queue_turn_with_event_result(
-        state,
-        session=session,
-        input_text=input_text,
-        provider_id=provider_id,
-        client_message_id=client_message_id,
-        attachments=attachments,
-        app_references=app_references,
-        turn_id=turn_id,
-        received_perf_counter=received_perf_counter,
-        submission_timing=submission_timing,
-        client_message_claim=client_message_claim,
-    )
+    with runtime_turn_queue_fence(queue_fence):
+        turn, events, created = _queue_turn_with_event_result(
+            state,
+            session=session,
+            input_text=input_text,
+            provider_id=provider_id,
+            client_message_id=client_message_id,
+            attachments=attachments,
+            app_references=app_references,
+            turn_id=turn_id,
+            received_perf_counter=received_perf_counter,
+            submission_timing=submission_timing,
+            client_message_claim=client_message_claim,
+        )
     if not created:
         return turn, events
     events.append(_record_turn_worker_entered(state, session_id=session.session_id, turn_id=turn.turn_id, provider_id=provider_id))

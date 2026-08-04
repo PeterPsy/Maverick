@@ -374,8 +374,12 @@ materialization, task claim/finalization, directive delivery, and completion
 commit are status-and-generation conditional under the workspace transition
 lock. A pause therefore fences already queued futures as well as active child
 session creation: stale work cannot mark a participant running, overwrite a
-persisted cancellation, or move the run from `paused` to `completed`. Resume
-advances the generation before a replacement scheduler may mutate the run.
+persisted cancellation, or move the run from `paused` to `completed`. The pause
+transition snapshots participants before releasing that lock, so a task claim
+cannot fall between pause persistence and interrupt reconciliation. Runtime turn
+queueing is enclosed by the same fence: a queued turn is either visible to the
+interrupt or is never persisted and never dispatched. Resume advances the
+generation before a replacement scheduler may mutate the run.
 
 Participant, tool, task, summary, and final-answer events are never written to
 the root runtime store. The normal Chat transcript belongs exclusively to the

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from core.runtime.app_references import *  # noqa: F401,F403
 from core.runtime.turn_submission_service_events import *  # noqa: F401,F403
+from core.runtime.turn_submission_service_fence import *  # noqa: F401,F403
 from core.runtime.turn_submission_service_queue import *  # noqa: F401,F403
 from core.runtime.turn_submission_service_output import *  # noqa: F401,F403
 from core.runtime.turn_submission_service_output_text import *  # noqa: F401,F403
@@ -11,6 +12,7 @@ from core.runtime.turn_submission_service_runtime import *  # noqa: F401,F403
 from core.runtime.turn_submission_service_submit import *  # noqa: F401,F403
 from core.runtime import app_references as _app_references
 from core.runtime import turn_submission_service_events as _turn_submission_service_events
+from core.runtime import turn_submission_service_fence as _turn_submission_service_fence
 from core.runtime import turn_submission_service_queue as _turn_submission_service_queue
 from core.runtime import turn_submission_service_output as _turn_submission_service_output
 from core.runtime import turn_submission_service_output_text as _turn_submission_service_output_text
@@ -20,6 +22,7 @@ from core.runtime import turn_submission_service_submit as _turn_submission_serv
 _modules = (
     _app_references,
     _turn_submission_service_events,
+    _turn_submission_service_fence,
     _turn_submission_service_queue,
     _turn_submission_service_output,
     _turn_submission_service_output_text,

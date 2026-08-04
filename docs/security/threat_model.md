@@ -184,7 +184,11 @@ captures one recovery generation, and every run transition, recovery-ledger
 write, task claim/finalization, and completion commit validates that generation
 and an active run status under the workspace transition lock. Queued futures
 cannot start after pause, late results cannot overwrite persisted cancellation,
-and a stale control decision cannot move a paused run to completed.
+and a stale control decision cannot move a paused run to completed. Pause and
+participant snapshot are committed under that lock, preventing a newly claimed
+task from escaping cancellation. Runtime turn queueing is guarded by the same
+status-and-generation transition: if pause wins, no turn is persisted or sent;
+if queueing wins, interrupt observes and cancels that turn and its hidden session.
 
 ### Workspace escape
 

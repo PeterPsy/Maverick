@@ -82,7 +82,14 @@ It started with names, visibility, legacy compatibility, and initial policy defa
     finalization validate both run and participant in that critical section,
     so queued futures cannot start after pause and a terminal cancellation
     cannot be overwritten by a late completion or failure. Completion commit
-    uses the same fence and cannot transition `paused` to `completed`.
+    uses the same fence and cannot transition `paused` to `completed`. Interrupt
+    persists the pause and snapshots participants under that same lock; a task
+    claim that wins first is therefore included and synchronously cancelled,
+    while a later claim is rejected by the paused status. Runtime turn creation
+    is also enclosed by the status-and-generation fence. The interrupt either
+    sees the persisted queued/active turn and cancels it with its hidden session,
+    or wins before queueing and makes submission fail without a runtime turn or
+    provider dispatch.
     Resume from HTTP, CLI, or MCP waits for the previous hosted scheduler owner
     to unwind, detaches an interrupted orchestrator session, advances the
     recovery generation, and only then starts the replacement scheduler.

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Callable
+from contextlib import contextmanager
 from dataclasses import asdict, replace
 from datetime import UTC, datetime
 from decimal import Decimal
@@ -1065,32 +1066,44 @@ class InterAgentService:
             participant_id=participant.participant_id,
             client_message_id=client_message_id,
         )
+        budget_reserved = False
+        queue_fence = None
         if run.mode == "orchestrated":
-            with self.store.scheduler_mutation(
-                workspace_id=workspace_id,
-                run_id=run.run_id,
-                expected_recovery_generation=scheduler_generation,
-                allowed_statuses={"running"},
-            ) as current_run:
-                current_participant = self.store.get_participant(
-                    participant.participant_id,
+
+            @contextmanager
+            def orchestrated_queue_fence():
+                nonlocal budget_reserved, run, participant
+                with self.store.scheduler_mutation(
                     workspace_id=workspace_id,
                     run_id=run.run_id,
-                )
-                if (
-                    current_participant.status != "running"
-                    or current_participant.runtime_session_id != runtime_session_id
-                ):
-                    raise InterAgentOperationError("Participant lost its runtime-session claim before message send.")
-                run = current_run
-                participant = current_participant
-                self.reserve_budget(
-                    run,
-                    reservation_id=reservation_id,
-                    participant_id=participant.participant_id,
-                    turns=1,
-                    now=timestamp,
-                )
+                    expected_recovery_generation=scheduler_generation,
+                    allowed_statuses={"running"},
+                ) as current_run:
+                    current_participant = self.store.get_participant(
+                        participant.participant_id,
+                        workspace_id=workspace_id,
+                        run_id=run.run_id,
+                    )
+                    if (
+                        current_participant.status != "running"
+                        or current_participant.runtime_session_id != runtime_session_id
+                    ):
+                        raise InterAgentOperationError(
+                            "Participant lost its runtime-session claim before message send."
+                        )
+                    run = current_run
+                    participant = current_participant
+                    self.reserve_budget(
+                        run,
+                        reservation_id=reservation_id,
+                        participant_id=participant.participant_id,
+                        turns=1,
+                        now=timestamp,
+                    )
+                    budget_reserved = True
+                    yield
+
+            queue_fence = orchestrated_queue_fence
         else:
             self.reserve_budget(
                 run,
@@ -1099,16 +1112,20 @@ class InterAgentService:
                 turns=1,
                 now=timestamp,
             )
+            budget_reserved = True
         submit = submit_runtime_turn_async if async_requested else submit_runtime_turn
+        submit_kwargs: dict[str, Any] = {
+            "session": session,
+            "input_text": message,
+            "client_message_id": _clean_optional(client_message_id),
+        }
+        if queue_fence is not None:
+            submit_kwargs["queue_fence"] = queue_fence
         try:
-            turn, events = submit(
-                state,
-                session=session,
-                input_text=message,
-                client_message_id=_clean_optional(client_message_id),
-            )
+            turn, events = submit(state, **submit_kwargs)
         except Exception:
-            self.release_budget(run, reservation_id=reservation_id, now=timestamp)
+            if budget_reserved:
+                self.release_budget(run, reservation_id=reservation_id, now=timestamp)
             raise
         self.record_event(
             run,
@@ -1160,28 +1177,40 @@ class InterAgentService:
     ) -> dict[str, Any]:
         """Interrupt active child participant turns without deleting sessions."""
         timestamp = now or datetime.now(tz=UTC)
-        run = self.store.get_run(run_id, workspace_id=workspace_id)
-        participants = _selected_child_participants(
-            self.store.list_participants(run.run_id, workspace_id=workspace_id),
-            participant_id=participant_id,
-        )
-        if run.status not in TERMINAL_RUN_STATUSES:
-            run, pause_applied = self.store.pause_run_if_active(
-                run.run_id,
+        self.store.get_run(run_id, workspace_id=workspace_id)
+        target_participant_id = _clean_optional(participant_id)
+        if target_participant_id is not None:
+            target = self.store.get_participant(
+                target_participant_id,
+                workspace_id=workspace_id,
+                run_id=run_id,
+            )
+            if target.execution_mode != RUNTIME_CHILD_EXECUTION_MODE:
+                raise InterAgentOperationError(
+                    f"Child runtime participant `{target_participant_id}` was not found."
+                )
+        run, pause_applied, participant_snapshot = (
+            self.store.pause_run_if_active_with_participant_snapshot(
+                run_id,
                 workspace_id=workspace_id,
                 now=timestamp,
             )
-            if pause_applied:
-                self.record_event(
-                    run,
-                    event_type="inter_agent.run.paused",
-                    participant_id=participant_id,
-                    visibility_plane="summary",
-                    idempotency_key=f"{run.run_id}:run.paused:{timestamp.isoformat()}",
-                    correlation_id=run.run_id,
-                    payload={"reason": reason, "participant_id": participant_id},
-                    now=timestamp,
-                )
+        )
+        participants = _selected_child_participants(
+            participant_snapshot,
+            participant_id=target_participant_id,
+        )
+        if pause_applied:
+            self.record_event(
+                run,
+                event_type="inter_agent.run.paused",
+                participant_id=target_participant_id,
+                visibility_plane="summary",
+                idempotency_key=f"{run.run_id}:run.paused:{timestamp.isoformat()}",
+                correlation_id=run.run_id,
+                payload={"reason": reason, "participant_id": target_participant_id},
+                now=timestamp,
+            )
         if run.status in TERMINAL_RUN_STATUSES:
             return {"run": run, "interrupted_sessions": []}
         interrupted_sessions: list[dict[str, Any]] = []

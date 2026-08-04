@@ -143,6 +143,15 @@ class InterAgentStore(Protocol):
     ) -> tuple[InterAgentRunRecord, bool]:
         ...
 
+    def pause_run_if_active_with_participant_snapshot(
+        self,
+        run_id: str,
+        *,
+        workspace_id: str,
+        now: datetime,
+    ) -> tuple[InterAgentRunRecord, bool, list[InterAgentParticipantRecord]]:
+        ...
+
     def scheduler_mutation(
         self,
         *,
@@ -394,15 +403,29 @@ class InterAgentDocumentStore:
         now: datetime,
     ) -> tuple[InterAgentRunRecord, bool]:
         """Persist the pause under the workspace transition lock."""
+        run, pause_applied, _participants = self.pause_run_if_active_with_participant_snapshot(
+            run_id,
+            workspace_id=workspace_id,
+            now=now,
+        )
+        return run, pause_applied
+
+    def pause_run_if_active_with_participant_snapshot(
+        self,
+        run_id: str,
+        *,
+        workspace_id: str,
+        now: datetime,
+    ) -> tuple[InterAgentRunRecord, bool, list[InterAgentParticipantRecord]]:
+        """Persist a pause and snapshot its participants in one transition."""
         with self._workspace_lock(workspace_id):
             run = self.get_run(run_id, workspace_id=workspace_id)
-            if run.status in {"completed", "failed", "cancelled"}:
-                return run, False
-            if run.status == "paused":
-                return run, False
-            paused = replace(run, status="paused", updated_at=now)
-            self.save_run(paused)
-            return paused, True
+            pause_applied = run.status not in {"paused", "completed", "failed", "cancelled"}
+            if pause_applied:
+                run = replace(run, status="paused", updated_at=now)
+                self.save_run(run)
+            participants = self.list_participants(run.run_id, workspace_id=workspace_id)
+            return run, pause_applied, participants
 
     @contextmanager
     def scheduler_mutation(

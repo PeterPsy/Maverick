@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import logging
-from threading import Lock, Thread
+from threading import Lock, Thread, current_thread
 from typing import Any, Callable
 
 from core.inter_agent.orchestration_scheduler import execute_orchestrated_run
@@ -12,7 +12,7 @@ from core.api.orchestration_agent_catalog import build_orchestration_agent_catal
 
 
 logger = logging.getLogger(__name__)
-_ACTIVE_WORKERS: set[tuple[str, str]] = set()
+_ACTIVE_WORKERS: dict[tuple[str, str], Thread] = {}
 _ACTIVE_WORKERS_LOCK = Lock()
 
 
@@ -28,7 +28,6 @@ def start_orchestrated_execution_worker(
     with _ACTIVE_WORKERS_LOCK:
         if key in _ACTIVE_WORKERS:
             return False
-        _ACTIVE_WORKERS.add(key)
     run_service = service or InterAgentService(state.inter_agent_store)
 
     def worker() -> None:
@@ -60,10 +59,38 @@ def start_orchestrated_execution_worker(
             logger.exception("Orchestrated inter-agent worker failed for %s/%s.", workspace_id, run_id)
         finally:
             with _ACTIVE_WORKERS_LOCK:
-                _ACTIVE_WORKERS.discard(key)
+                if _ACTIVE_WORKERS.get(key) is current_thread():
+                    _ACTIVE_WORKERS.pop(key, None)
 
-    Thread(target=worker, name=f"maverick-orchestration-{run_id}", daemon=True).start()
+    thread = Thread(target=worker, name=f"maverick-orchestration-{run_id}", daemon=True)
+    with _ACTIVE_WORKERS_LOCK:
+        if key in _ACTIVE_WORKERS:
+            return False
+        _ACTIVE_WORKERS[key] = thread
+        try:
+            thread.start()
+        except Exception:
+            _ACTIVE_WORKERS.pop(key, None)
+            raise
     return True
+
+
+def wait_for_orchestrated_execution_worker(
+    *,
+    workspace_id: str,
+    run_id: str,
+    timeout_seconds: float = 10.0,
+) -> bool:
+    """Wait for the previous in-process scheduler owner to finish its paused unwind."""
+    key = (workspace_id, run_id)
+    with _ACTIVE_WORKERS_LOCK:
+        thread = _ACTIVE_WORKERS.get(key)
+    if thread is None:
+        return True
+    if thread is current_thread():
+        return False
+    thread.join(timeout=max(0.0, timeout_seconds))
+    return not thread.is_alive()
 
 
 def resume_recovering_orchestrations(

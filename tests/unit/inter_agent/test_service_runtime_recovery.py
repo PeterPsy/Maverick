@@ -6,7 +6,11 @@ import unittest
 
 from core.inter_agent.service import InterAgentService
 from core.inter_agent.models import ParticipantSpec
+from core.inter_agent.orchestration_plan import OrchestrationPlan, OrchestrationTaskSpec
+from core.inter_agent.orchestration_state import load_control_state
+from core.inter_agent.orchestration_tasks import materialize_plan, record_plan
 from core.inter_agent.store import build_inter_agent_document_store
+from core.runtime.runtime_turns import RuntimeTurnRecord
 from core.runtime.runtime_session import RuntimeSessionRecord
 from core.runtime.runtime_state import RuntimeStateRecord
 from core.runtime.runtime_threads import create_runtime_thread
@@ -19,6 +23,78 @@ from tests.unit.inter_agent.test_dynamic_orchestration_service import orchestrat
 
 
 class InterAgentRuntimeRecoveryTest(unittest.TestCase):
+    def test_interrupt_and_immediate_resume_preserve_cancelled_task_recovery(self) -> None:
+        repo_root = make_temp_repo_root(self)
+        store = build_inter_agent_document_store(start_path=repo_root)
+        runtime_store = _runtime_store()
+        service = InterAgentService(store)
+        now = datetime(2026, 6, 16, 12, 0, tzinfo=UTC)
+        runtime_store.save_session(_runtime_session("root-session", repo_root=repo_root))
+        runtime_store.save_state(_runtime_state("root-session"))
+        run = service.create_run(orchestrated_spec(), now=now)
+        orchestrator = store.get_participant("orchestrator", workspace_id="default", run_id=run.run_id)
+        plan = _interruptible_plan()
+        record_plan(service, run, plan)
+        participants = materialize_plan(service, run, orchestrator, plan)
+        service.spawn_participant_runtime_session(
+            runtime_store,
+            workspace_id="default",
+            run_id=run.run_id,
+            participant_id=orchestrator.participant_id,
+            now=now,
+        )
+        worker, child, _created = service.spawn_participant_runtime_session(
+            runtime_store,
+            workspace_id="default",
+            run_id=run.run_id,
+            participant_id=participants["implement"].participant_id,
+            now=now,
+        )
+        store.save_participant(
+            worker.__class__(**{**worker.__dict__, "status": "running", "current_task_id": "implement"})
+        )
+        runtime_store.save_turn(
+            RuntimeTurnRecord(
+                turn_id="active-implement-turn",
+                session_id=child.session_id,
+                workspace_id="default",
+                status="active",
+                input_text="Implement the task.",
+                created_at=now,
+                updated_at=now,
+                started_at=now,
+                completed_at=None,
+                failure_reason=None,
+            )
+        )
+
+        interrupted = service.interrupt_run(
+            type("State", (), {"runtime_store": runtime_store})(),
+            workspace_id="default",
+            run_id=run.run_id,
+            reason="user_pause",
+            now=now + timedelta(seconds=1),
+        )
+        resumed = service.resume_run(
+            workspace_id="default",
+            run_id=run.run_id,
+            reason="user_resume",
+            now=now + timedelta(seconds=2),
+        )
+        control = load_control_state(service, resumed)
+
+        resumed_orchestrator = store.get_participant("orchestrator", workspace_id="default", run_id=run.run_id)
+        cancelled_worker = store.get_participant("implement", workspace_id="default", run_id=run.run_id)
+        self.assertEqual(interrupted["run"].status, "paused")
+        self.assertEqual(runtime_store.get_turn("active-implement-turn").status, "cancelled")
+        self.assertEqual(resumed.status, "running")
+        self.assertEqual(resumed.recovery_generation, 1)
+        self.assertEqual(resumed_orchestrator.status, "idle")
+        self.assertIsNone(resumed_orchestrator.runtime_session_id)
+        self.assertEqual(cancelled_worker.status, "cancelled")
+        self.assertIsNone(cancelled_worker.current_task_id)
+        self.assertEqual(control.results["implement"].status, "cancelled")
+
     def test_startup_recovery_resets_orchestrated_workers_for_scheduler_replay(self) -> None:
         repo_root = make_temp_repo_root(self)
         store = build_inter_agent_document_store(start_path=repo_root)
@@ -170,6 +246,28 @@ def _runtime_state(session_id: str) -> RuntimeStateRecord:
         forced_stop_reason=None,
         last_error_detail=None,
         updated_at=now,
+    )
+
+
+def _interruptible_plan() -> OrchestrationPlan:
+    return OrchestrationPlan(
+        summary="Implement and review.",
+        tasks=(
+            OrchestrationTaskSpec(
+                task_id="implement",
+                label="Implement",
+                role="implementer",
+                objective="Implement the requested change.",
+            ),
+            OrchestrationTaskSpec(
+                task_id="review",
+                label="Review",
+                role="reviewer",
+                objective="Review the implementation.",
+                depends_on=("implement",),
+                review_of="implement",
+            ),
+        ),
     )
 
 

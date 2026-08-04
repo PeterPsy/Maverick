@@ -75,7 +75,7 @@ def prepare_generalist_handoff(
     deadline = time.monotonic() + max(0.0, timeout_seconds)
     while True:
         latest_run = service.store.get_run(run.run_id, workspace_id=run.workspace_id)
-        if latest_run.status in {"cancelled", "failed"}:
+        if latest_run.status in {"paused", "cancelled", "failed"}:
             raise InterAgentOperationError("Orchestration stopped before the generalist handoff was ready.")
         turn = runtime_store.get_turn(run.source_runtime_turn_id)
         events = [
@@ -138,7 +138,7 @@ def sync_generalist_directives(
         deadline = time.monotonic() + max(0.0, timeout_seconds)
         while True:
             latest_run = service.store.get_run(run.run_id, workspace_id=run.workspace_id)
-            if latest_run.status in {"cancelled", "failed"}:
+            if latest_run.status in {"paused", "cancelled", "failed"}:
                 raise InterAgentOperationError("Orchestration stopped while waiting for generalist steering.")
             turn = runtime_store.get_turn(turn_id)
             if turn.status in TERMINAL_RUNTIME_TURN_STATUSES:

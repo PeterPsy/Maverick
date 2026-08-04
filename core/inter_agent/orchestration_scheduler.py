@@ -54,16 +54,19 @@ def execute_orchestrated_run(
     run = service.store.get_run(run_id, workspace_id=workspace_id)
     if run.mode != "orchestrated":
         raise InterAgentOperationError("Dynamic scheduler requires an orchestrated run.")
-    control = load_control_state(service, run)
-    if run.status in {"failed", "cancelled"} or (run.status == "completed" and not control.pending_control_decisions):
-        return OrchestrationExecutionResult(run=run, task_results=())
-    orchestrator = service.store.get_participant(
-        run.orchestrator_participant_id,
-        workspace_id=workspace_id,
-        run_id=run.run_id,
-    )
-    execute_turn = turn_executor or runtime_turn_executor(service, state, run)
+    control: OrchestrationControlState | None = None
     try:
+        control = load_control_state(service, run)
+        if run.status in {"failed", "cancelled"} or (
+            run.status == "completed" and not control.pending_control_decisions
+        ):
+            return OrchestrationExecutionResult(run=run, task_results=())
+        orchestrator = service.store.get_participant(
+            run.orchestrator_participant_id,
+            workspace_id=workspace_id,
+            run_id=run.run_id,
+        )
+        execute_turn = turn_executor or runtime_turn_executor(service, state, run)
         handoff = prepare_generalist_handoff(service, state, run)
         budget = service.store.get_budget_policy(run.budget_policy_id, workspace_id=workspace_id)
         pending_completion = apply_pending_control_decisions(
@@ -112,7 +115,7 @@ def execute_orchestrated_run(
         max_control_steps = max(2, budget.max_total_turns)
         while control.control_step < max_control_steps:
             latest_run = service.store.get_run(run.run_id, workspace_id=workspace_id)
-            if latest_run.status in {"cancelled", "failed"}:
+            if latest_run.status in {"paused", "cancelled", "failed"}:
                 raise InterAgentOperationError("Orchestration stopped while scheduling work.")
             ready = control.ready_tasks()
             if ready:
@@ -162,6 +165,12 @@ def execute_orchestrated_run(
                 raise InterAgentOperationError(f"{reason} The orchestrator did not repair or complete the run.")
         raise InterAgentOperationError("Orchestration exceeded its adaptive control-step budget.")
     except Exception as error:
+        latest = service.store.get_run(run.run_id, workspace_id=run.workspace_id)
+        if latest.status == "paused":
+            return OrchestrationExecutionResult(
+                run=latest,
+                task_results=tuple(control.results.values()) if control is not None else (),
+            )
         _record_failed_run(service, run, error)
         if isinstance(error, (InterAgentOperationError, InterAgentValidationError)):
             raise
@@ -203,6 +212,9 @@ def _execute_ready_wave(
             task = futures[future]
             control.results[task.task_id] = future.result()
             running_ids.discard(task.task_id)
+            latest_run = service.store.get_run(run.run_id, workspace_id=run.workspace_id)
+            if latest_run.status in {"paused", "cancelled", "failed"}:
+                raise InterAgentOperationError("Orchestration stopped while task workers were unwinding.")
             if control.control_step >= max_control_steps:
                 raise InterAgentOperationError("Orchestration exceeded its adaptive control-step budget.")
             recorded = next_control_decision(

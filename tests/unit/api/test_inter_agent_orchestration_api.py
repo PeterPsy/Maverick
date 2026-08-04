@@ -5,11 +5,117 @@ import tempfile
 from unittest.mock import patch
 
 from core.api.platform_host import PlatformHost
+from core.inter_agent.orchestration_plan import OrchestrationPlan, OrchestrationTaskSpec
+from core.inter_agent.orchestration_state import load_control_state
+from core.inter_agent.orchestration_tasks import materialize_plan, record_plan
+from core.inter_agent.service import InterAgentService
 from core.runtime.runtime_turns import RuntimeTurnRecord
 from tests.unit.api.test_inter_agent_api import InterAgentApiSupport
+from tests.unit.inter_agent.test_dynamic_orchestration_service import orchestrated_spec
 
 
 class InterAgentOrchestrationApiTest(InterAgentApiSupport):
+    def test_active_task_interrupt_then_immediate_resume_reconciles_before_worker_start(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            repo_root = self._repo_root(temp_dir)
+            state = self._bootstrap_state(repo_root)
+            self._create_root_session(state, repo_root)
+            service = InterAgentService(state.inter_agent_store)
+            now = datetime(2026, 7, 19, 12, 0, tzinfo=UTC)
+            run = service.create_run(orchestrated_spec(), now=now)
+            orchestrator = state.inter_agent_store.get_participant(
+                "orchestrator", workspace_id="default", run_id=run.run_id
+            )
+            plan = OrchestrationPlan(
+                summary="Implement and review.",
+                tasks=(
+                    OrchestrationTaskSpec(
+                        task_id="implement",
+                        label="Implement",
+                        role="implementer",
+                        objective="Implement the requested change.",
+                    ),
+                    OrchestrationTaskSpec(
+                        task_id="review",
+                        label="Review",
+                        role="reviewer",
+                        objective="Review the implementation.",
+                        depends_on=("implement",),
+                        review_of="implement",
+                    ),
+                ),
+            )
+            record_plan(service, run, plan)
+            participants = materialize_plan(service, run, orchestrator, plan)
+            service.spawn_participant_runtime_session(
+                state.runtime_store,
+                workspace_id="default",
+                run_id=run.run_id,
+                participant_id=orchestrator.participant_id,
+                now=now,
+            )
+            worker, child, _created = service.spawn_participant_runtime_session(
+                state.runtime_store,
+                workspace_id="default",
+                run_id=run.run_id,
+                participant_id=participants["implement"].participant_id,
+                now=now,
+            )
+            state.inter_agent_store.save_participant(
+                worker.__class__(**{**worker.__dict__, "status": "running", "current_task_id": "implement"})
+            )
+            state.runtime_store.save_turn(
+                RuntimeTurnRecord(
+                    turn_id="active-api-implement-turn",
+                    session_id=child.session_id,
+                    workspace_id="default",
+                    status="active",
+                    input_text="Implement the task.",
+                    created_at=now,
+                    updated_at=now,
+                    started_at=now,
+                    completed_at=None,
+                    failure_reason=None,
+                )
+            )
+            app = PlatformHost(state, start_path=repo_root)
+            cookie = self._login(app)
+            lifecycle: list[str] = []
+
+            interrupt_status, _interrupt_payload, _headers = self._invoke(
+                app,
+                path=f"/api/inter-agent/runs/{run.run_id}/interrupt",
+                method="POST",
+                body={"reason": "user_pause"},
+                cookie=cookie,
+            )
+            with (
+                patch(
+                    "core.api.inter_agent_api.wait_for_orchestrated_execution_worker",
+                    side_effect=lambda *args, **kwargs: lifecycle.append("wait") or True,
+                ),
+                patch(
+                    "core.api.inter_agent_api._start_orchestrated_execution_worker",
+                    side_effect=lambda *args, **kwargs: lifecycle.append("start") or True,
+                ),
+            ):
+                resume_status, resume_payload, _headers = self._invoke(
+                    app,
+                    path=f"/api/inter-agent/runs/{run.run_id}/resume",
+                    method="POST",
+                    body={"reason": "user_resume"},
+                    cookie=cookie,
+                )
+
+            resumed = state.inter_agent_store.get_run(run.run_id, workspace_id="default")
+            control = load_control_state(service, resumed)
+            self.assertEqual(interrupt_status, 200)
+            self.assertEqual(resume_status, 200)
+            self.assertEqual(resume_payload["run"]["status"], "running")
+            self.assertEqual(lifecycle, ["wait", "start"])
+            self.assertEqual(control.results["implement"].status, "cancelled")
+            self.assertEqual(resumed.recovery_generation, 1)
+
     def test_chat_intent_creates_only_hidden_orchestrator_and_accepts_steering(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             repo_root = self._repo_root(temp_dir)

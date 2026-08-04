@@ -7,7 +7,10 @@ from urllib.parse import parse_qs
 from core.api.app_registry import enabled_app_items
 from core.api.http import StartResponse, json_response, read_json_body
 from core.api.platform_state import PlatformState
-from core.api.orchestration_workers import start_orchestrated_execution_worker as _start_orchestrated_execution_worker
+from core.api.orchestration_workers import (
+    start_orchestrated_execution_worker as _start_orchestrated_execution_worker,
+    wait_for_orchestrated_execution_worker,
+)
 from core.api.runtime_cleanup import cleanup_runtime_session
 from core.api.session_api import RequestSession, require_session
 from core.apps.dependencies import resolve_app_dependencies
@@ -359,6 +362,11 @@ def _handle_inter_agent_route(
         )
         return json_response(start_response, inter_agent_payload(result))
     if action == "resume" and method == "POST":
+        if run.mode == "orchestrated" and not wait_for_orchestrated_execution_worker(
+            workspace_id=context.workspace_id,
+            run_id=run.run_id,
+        ):
+            raise InterAgentOperationError("The previous orchestration scheduler is still stopping.")
         resumed = service.resume_run(
             workspace_id=context.workspace_id,
             run_id=run.run_id,

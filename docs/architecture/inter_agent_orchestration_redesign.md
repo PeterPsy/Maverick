@@ -169,7 +169,12 @@ transcript projection behavior.
   internal replay pages to the beginning instead of reading only the newest
   event window. A terminal persisted task participant without a matching result
   record is treated as an incomplete legacy/corrupt ledger and fails recovery
-  rather than being rescheduled. Hosted backend
+  rather than being rescheduled. A user pause therefore persists a protected
+  `cancelled` result for every interrupted active task; the cancelled worker is
+  not silently made ready again. Immediate resume first waits for the previous
+  in-process scheduler to unwind, resets an interrupted orchestrator onto a new
+  recovery-generation child session, and then enqueues the replacement
+  scheduler. Hosted backend
   startup reconciles interrupted participant turns without queuing the generic
   runtime `resume` prompt, resets non-terminal participants onto a new
   recovery-generation child session, and enqueues one scheduler worker for

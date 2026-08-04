@@ -122,6 +122,35 @@ class OrchestrationDecisionRecoveryTest(unittest.TestCase):
         with self.assertRaisesRegex(InterAgentValidationError, "missing terminal task results"):
             load_control_state(service, replace(run, status="recovering"))
 
+    def test_scheduler_marks_run_failed_when_recovery_validation_fails(self) -> None:
+        store = build_inter_agent_document_store(start_path=make_temp_repo_root(self))
+        service = InterAgentService(store)
+        run = service.create_run(orchestrated_spec())
+        plan = parse_orchestration_plan(
+            '{"summary":"Implement once.","tasks":['
+            '{"id":"implement","label":"Implement","role":"implementer",'
+            '"objective":"Implement once.","depends_on":[]}]}',
+            max_tasks=1,
+            require_review_gate=False,
+        )
+        orchestrator = store.get_participant("orchestrator", workspace_id="default", run_id=run.run_id)
+        record_plan(service, run, plan)
+        participants = materialize_plan(service, run, orchestrator, plan)
+        store.save_participant(replace(participants["implement"], status="completed"))
+        store.save_run(replace(run, status="running"))
+
+        with self.assertRaisesRegex(InterAgentValidationError, "missing terminal task results"):
+            execute_orchestrated_run(
+                service,
+                SimpleNamespace(),
+                workspace_id="default",
+                run_id=run.run_id,
+            )
+
+        failed = store.get_run(run.run_id, workspace_id="default")
+        self.assertEqual(failed.status, "failed")
+        self.assertIsNotNone(failed.ended_at)
+
     def test_recovery_rejects_persisted_reviewer_without_review_of(self) -> None:
         store = build_inter_agent_document_store(start_path=make_temp_repo_root(self))
         service = InterAgentService(store)

@@ -71,6 +71,11 @@ It started with names, visibility, legacy compatibility, and initial policy defa
     agent type, snapshot digest, skills, and provider material still match;
     reserved participant ids, including the real orchestrator id, are never
     valid task ids.
+    User pause follows the same fail-closed state discipline: interrupting an
+    active task synchronously records a protected terminal `cancelled` result
+    before resume is accepted. Resume waits for the previous hosted scheduler
+    owner to unwind, detaches an interrupted orchestrator session, advances the
+    recovery generation, and only then starts the replacement scheduler.
 20. Dynamic agent type selection is constrained to Chat's selected agent
     catalog provider. Agent definitions, prompts, skill ids, and skill catalog
     authority are materialized server-side; orchestrator JSON cannot supply

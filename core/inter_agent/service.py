@@ -986,23 +986,74 @@ class InterAgentService:
                     reason=reason,
                 )
             )
+            if run.mode == "orchestrated":
+                try:
+                    session = state.runtime_store.get_session(participant.runtime_session_id)
+                    if session.status in {"created", "running", "stopping"}:
+                        transition_runtime_session(
+                            state.runtime_store,
+                            session_id=session.session_id,
+                            target_status="stopped",
+                            forced_stop_reason=reason,
+                            now=timestamp,
+                        )
+                except (RuntimeSessionNotFoundError, ValueError):
+                    pass
             self.release_budget(
                 run,
                 reservation_id=_participant_spawn_reservation_id(participant.participant_id),
                 now=timestamp,
             )
-            if participant.status not in TERMINAL_PARTICIPANT_STATUSES:
-                updated = replace(participant, status="cancelled", updated_at=timestamp)
+            latest_participant = self.store.get_participant(
+                participant.participant_id,
+                workspace_id=workspace_id,
+                run_id=run.run_id,
+            )
+            if latest_participant.status not in TERMINAL_PARTICIPANT_STATUSES:
+                current_task_id = latest_participant.current_task_id
+                updated = replace(latest_participant, status="cancelled", current_task_id=None, updated_at=timestamp)
                 self.store.save_participant(updated)
+                if (
+                    run.mode == "orchestrated"
+                    and latest_participant.kind == "agent"
+                    and latest_participant.participant_id != run.orchestrator_participant_id
+                    and current_task_id
+                ):
+                    self.record_event(
+                        run,
+                        event_type="inter_agent.task.completed",
+                        participant_id=latest_participant.participant_id,
+                        runtime_session_id=latest_participant.runtime_session_id,
+                        visibility_plane="detail",
+                        idempotency_key=f"{run.run_id}:task.interrupted:{current_task_id}",
+                        correlation_id=current_task_id,
+                        payload={
+                            "task_id": current_task_id,
+                            "participant_id": latest_participant.participant_id,
+                            "status": "cancelled",
+                            "summary": "Cancelled by run interruption.",
+                            "output_text": "",
+                            "error": None,
+                            "reason": reason,
+                        },
+                        now=timestamp,
+                    )
                 self.record_event(
                     run,
                     event_type="inter_agent.participant.status_changed",
-                    participant_id=participant.participant_id,
-                    runtime_session_id=participant.runtime_session_id,
+                    participant_id=latest_participant.participant_id,
+                    runtime_session_id=latest_participant.runtime_session_id,
                     visibility_plane="detail",
-                    idempotency_key=f"{run.run_id}:participant.cancelled:{participant.participant_id}:{timestamp.isoformat()}",
-                    correlation_id=participant.participant_id,
-                    payload={"participant_id": participant.participant_id, "status": "cancelled", "reason": reason},
+                    idempotency_key=(
+                        f"{run.run_id}:participant.cancelled:"
+                        f"{latest_participant.participant_id}:{timestamp.isoformat()}"
+                    ),
+                    correlation_id=latest_participant.participant_id,
+                    payload={
+                        "participant_id": latest_participant.participant_id,
+                        "status": "cancelled",
+                        "reason": reason,
+                    },
                     now=timestamp,
                 )
         if run.status not in TERMINAL_RUN_STATUSES:
@@ -1033,7 +1084,50 @@ class InterAgentService:
         run = self.store.get_run(run_id, workspace_id=workspace_id)
         if run.status in TERMINAL_RUN_STATUSES:
             raise InterAgentOperationError("Terminal inter-agent runs cannot be resumed.")
-        updated = replace(run, status="running", updated_at=timestamp)
+        recovery_generation = run.recovery_generation
+        if run.mode == "orchestrated" and run.status == "paused":
+            orchestrator = self.store.get_participant(
+                run.orchestrator_participant_id,
+                workspace_id=workspace_id,
+                run_id=run.run_id,
+            )
+            if orchestrator.status == "cancelled":
+                self.store.save_participant(
+                    replace(
+                        orchestrator,
+                        runtime_session_id=None,
+                        status="idle",
+                        current_task_id=None,
+                        updated_at=timestamp,
+                    )
+                )
+                self.record_event(
+                    run,
+                    event_type="inter_agent.participant.status_changed",
+                    participant_id=orchestrator.participant_id,
+                    runtime_session_id=orchestrator.runtime_session_id,
+                    visibility_plane="detail",
+                    idempotency_key=(
+                        f"{run.run_id}:participant.resumed:{orchestrator.participant_id}:"
+                        f"{recovery_generation + 1}"
+                    ),
+                    correlation_id=orchestrator.participant_id,
+                    payload={
+                        "participant_id": orchestrator.participant_id,
+                        "status": "idle",
+                        "reason": reason,
+                        "runtime_session_detached": True,
+                    },
+                    now=timestamp,
+                )
+            recovery_generation += 1
+        updated = replace(
+            run,
+            status="running",
+            updated_at=timestamp,
+            ended_at=None,
+            recovery_generation=recovery_generation,
+        )
         self.store.save_run(updated)
         self.record_event(
             updated,
@@ -1042,7 +1136,7 @@ class InterAgentService:
             visibility_plane="summary",
             idempotency_key=f"{updated.run_id}:run.resumed:{timestamp.isoformat()}",
             correlation_id=updated.run_id,
-            payload={"reason": reason},
+            payload={"reason": reason, "recovery_generation": updated.recovery_generation},
             now=timestamp,
         )
         return updated

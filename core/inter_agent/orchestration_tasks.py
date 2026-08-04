@@ -168,6 +168,12 @@ def execute_task(
         workspace_id=run.workspace_id,
         run_id=run.run_id,
     )
+    if latest.status == "cancelled" and latest.current_task_id is None:
+        return OrchestrationTaskResult(
+            task_id=task.task_id,
+            participant_id=participant.participant_id,
+            status="cancelled",
+        )
     service.store.save_participant(replace(latest, status=status, current_task_id=None, updated_at=finished_at))
     service.release_budget(run, reservation_id=f"spawn:{participant.participant_id}")
     service.record_event(

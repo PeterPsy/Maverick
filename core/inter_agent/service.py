@@ -194,8 +194,8 @@ class InterAgentService:
         run = self.store.get_run(run_id, workspace_id=workspace_id)
         if run.mode != "orchestrated":
             raise InterAgentOperationError("Dynamic participants are available only for orchestrated runs.")
-        if run.status in TERMINAL_RUN_STATUSES:
-            raise InterAgentOperationError("Terminal orchestrated runs cannot add participants.")
+        if run.status == "paused" or run.status in TERMINAL_RUN_STATUSES:
+            raise InterAgentOperationError(f"Orchestrated runs cannot add participants while {run.status}.")
         validated = validate_participant_spec(spec)
         participant_id = _clean_optional(validated.participant_id)
         if not participant_id:
@@ -255,8 +255,8 @@ class InterAgentService:
         run = self.store.get_run(run_id, workspace_id=workspace_id)
         if run.mode != "orchestrated":
             raise InterAgentOperationError("Dynamic edges are available only for orchestrated runs.")
-        if run.status in TERMINAL_RUN_STATUSES:
-            raise InterAgentOperationError("Terminal orchestrated runs cannot add edges.")
+        if run.status == "paused" or run.status in TERMINAL_RUN_STATUSES:
+            raise InterAgentOperationError(f"Orchestrated runs cannot add edges while {run.status}.")
         source_id = str(spec.source_id or "").strip()
         target_id = str(spec.target_id or "").strip()
         label = str(spec.label or "").strip()
@@ -315,6 +315,7 @@ class InterAgentService:
         source_runtime_turn_id: str | None = None,
         idempotency_key: str | None = None,
         now: datetime | None = None,
+        expected_recovery_generation: int | None = None,
     ) -> InterAgentEventRecord:
         """Append bounded live steering for later orchestrator delivery."""
         timestamp = now or datetime.now(tz=UTC)
@@ -354,6 +355,7 @@ class InterAgentService:
                 "text": directive_text,
             },
             now=timestamp,
+            expected_recovery_generation=expected_recovery_generation,
         )
 
     def link_generalist_directive(
@@ -415,6 +417,7 @@ class InterAgentService:
         status: str,
         directive_id: str | None = None,
         now: datetime | None = None,
+        expected_recovery_generation: int | None = None,
     ) -> InterAgentEventRecord:
         link_id = str(link.payload.get("link_id") or "").strip()
         if status not in {"delivered", "ignored"} or not link_id:
@@ -429,6 +432,7 @@ class InterAgentService:
             idempotency_key=f"{run.run_id}:generalist.link.resolved:{link_id}",
             payload={"link_id": link_id, "status": status, "directive_id": directive_id},
             now=now,
+            expected_recovery_generation=expected_recovery_generation,
         )
 
     def pending_directives(self, run: InterAgentRunRecord) -> list[InterAgentEventRecord]:
@@ -456,6 +460,7 @@ class InterAgentService:
         directives: list[InterAgentEventRecord],
         *,
         now: datetime | None = None,
+        expected_recovery_generation: int | None = None,
     ) -> None:
         """Record directive delivery after it is included in an orchestrator turn."""
         timestamp = now or datetime.now(tz=UTC)
@@ -472,6 +477,7 @@ class InterAgentService:
                 idempotency_key=f"{run.run_id}:directive.delivered:{directive_id}",
                 payload={"directive_id": directive_id},
                 now=timestamp,
+                expected_recovery_generation=expected_recovery_generation,
             )
 
     def decide_completion(
@@ -485,6 +491,7 @@ class InterAgentService:
         summary: str,
         final_answer: str = "",
         now: datetime | None = None,
+        expected_recovery_generation: int | None = None,
     ) -> InterAgentRunRecord:
         """Apply the only valid completion gate for a dynamic orchestration."""
         timestamp = now or datetime.now(tz=UTC)
@@ -493,6 +500,10 @@ class InterAgentService:
             raise InterAgentOperationError("Completion decisions apply only to orchestrated runs.")
         if participant_id != run.orchestrator_participant_id:
             raise InterAgentOperationError("Only the orchestrator may decide run completion.")
+        if run.status == "completed" and complete:
+            return run
+        if run.status == "paused" or run.status in TERMINAL_RUN_STATUSES:
+            raise InterAgentOperationError(f"Inter-agent run is {run.status}; completion is not allowed.")
         if complete and not quality_passed:
             raise InterAgentValidationError("Completion requires a passing quality decision.")
         answer = str(final_answer or "").strip()
@@ -501,6 +512,11 @@ class InterAgentService:
         decision_summary = str(summary or "").strip() or ("Quality accepted." if quality_passed else "Revision required.")
         summary_digest = hashlib.sha256(decision_summary.encode()).hexdigest()[:16]
         answer_digest = hashlib.sha256(answer.encode()).hexdigest()[:16]
+        scheduler_generation = (
+            run.recovery_generation
+            if expected_recovery_generation is None
+            else expected_recovery_generation
+        )
         self.record_event(
             run,
             event_type="inter_agent.quality.assessed",
@@ -510,6 +526,7 @@ class InterAgentService:
             idempotency_key=f"{run.run_id}:quality:{int(complete)}:{summary_digest}",
             payload={"passed": quality_passed, "summary": decision_summary},
             now=timestamp,
+            expected_recovery_generation=scheduler_generation,
         )
         self.record_event(
             run,
@@ -525,19 +542,32 @@ class InterAgentService:
                 "final_answer": answer if complete else "",
             },
             now=timestamp,
+            expected_recovery_generation=scheduler_generation,
         )
         if not complete:
-            updated = replace(run, status="running", updated_at=timestamp)
-            self.store.save_run(updated)
-            return updated
-        orchestrator = self.store.get_participant(
-            participant_id,
+            with self.store.scheduler_mutation(
+                workspace_id=workspace_id,
+                run_id=run.run_id,
+                expected_recovery_generation=scheduler_generation,
+            ) as current_run:
+                updated = replace(current_run, status="running", updated_at=timestamp)
+                self.store.save_run(updated)
+                return updated
+        with self.store.scheduler_mutation(
             workspace_id=workspace_id,
             run_id=run.run_id,
-        )
-        self.store.save_participant(replace(orchestrator, status="completed", updated_at=timestamp))
-        completed = replace(run, status="completed", updated_at=timestamp, ended_at=timestamp)
-        self.store.save_run(completed)
+            expected_recovery_generation=scheduler_generation,
+        ) as current_run:
+            orchestrator = self.store.get_participant(
+                participant_id,
+                workspace_id=workspace_id,
+                run_id=current_run.run_id,
+            )
+            if orchestrator.status == "cancelled":
+                raise InterAgentOperationError("Cancelled orchestrators cannot complete an inter-agent run.")
+            self.store.save_participant(replace(orchestrator, status="completed", updated_at=timestamp))
+            completed = replace(current_run, status="completed", updated_at=timestamp, ended_at=timestamp)
+            self.store.save_run(completed)
         self.record_event(
             completed,
             event_type="inter_agent.run.completed",
@@ -564,24 +594,44 @@ class InterAgentService:
         correlation_id: str | None = None,
         idempotency_key: str | None = None,
         now: datetime | None = None,
+        expected_recovery_generation: int | None = None,
+        scheduler_statuses: set[str] | None = None,
     ) -> InterAgentEventRecord:
         """Append one normalized event with per-run sequence assignment."""
-        created_at = now or datetime.now(tz=UTC)
-        retention_policy = self.store.get_retention_policy(run.retention_policy_id, workspace_id=run.workspace_id)
-        event = _event_record(
-            run,
-            event_type=event_type,
-            visibility_plane=visibility_plane,
-            participant_id=participant_id,
-            runtime_session_id=runtime_session_id,
-            runtime_turn_id=runtime_turn_id,
-            runtime_event_id=runtime_event_id,
-            correlation_id=_clean_optional(correlation_id) or _clean_optional(idempotency_key) or run.run_id,
-            idempotency_key=_clean_optional(idempotency_key),
-            payload=payload,
-            created_at=created_at,
-        )
-        return self.store.append_event(event, retention_policy=retention_policy)
+        def append(current_run: InterAgentRunRecord) -> InterAgentEventRecord:
+            created_at = now or datetime.now(tz=UTC)
+            retention_policy = self.store.get_retention_policy(
+                current_run.retention_policy_id,
+                workspace_id=current_run.workspace_id,
+            )
+            event = _event_record(
+                current_run,
+                event_type=event_type,
+                visibility_plane=visibility_plane,
+                participant_id=participant_id,
+                runtime_session_id=runtime_session_id,
+                runtime_turn_id=runtime_turn_id,
+                runtime_event_id=runtime_event_id,
+                correlation_id=(
+                    _clean_optional(correlation_id)
+                    or _clean_optional(idempotency_key)
+                    or current_run.run_id
+                ),
+                idempotency_key=_clean_optional(idempotency_key),
+                payload=payload,
+                created_at=created_at,
+            )
+            return self.store.append_event(event, retention_policy=retention_policy)
+
+        if expected_recovery_generation is None:
+            return append(run)
+        with self.store.scheduler_mutation(
+            workspace_id=run.workspace_id,
+            run_id=run.run_id,
+            expected_recovery_generation=expected_recovery_generation,
+            allowed_statuses=scheduler_statuses,
+        ) as current_run:
+            return append(current_run)
 
     def mark_run_planning(
         self,
@@ -595,9 +645,22 @@ class InterAgentService:
         run = self.store.get_run(run_id, workspace_id=workspace_id)
         if run.status != "created":
             return run
-        updated = replace(run, status="planning", updated_at=timestamp)
-        self.store.save_run(updated)
-        return updated
+        if run.mode != "orchestrated":
+            updated = replace(run, status="planning", updated_at=timestamp)
+            self.store.save_run(updated)
+            return updated
+        try:
+            with self.store.scheduler_mutation(
+                workspace_id=workspace_id,
+                run_id=run_id,
+                expected_recovery_generation=run.recovery_generation,
+                allowed_statuses={"created"},
+            ) as current_run:
+                updated = replace(current_run, status="planning", updated_at=timestamp)
+                self.store.save_run(updated)
+                return updated
+        except InterAgentOperationError:
+            return self.store.get_run(run_id, workspace_id=workspace_id)
 
     def reserve_budget(
         self,
@@ -775,6 +838,7 @@ class InterAgentService:
         owner_user_id: str | None = None,
         created_by_user_id: str | None = None,
         now: datetime | None = None,
+        expected_recovery_generation: int | None = None,
     ) -> tuple[InterAgentParticipantRecord, RuntimeSessionRecord, bool]:
         """Spawn one hidden runtime session for an existing child participant.
 
@@ -783,6 +847,11 @@ class InterAgentService:
         """
         timestamp = now or datetime.now(tz=UTC)
         run = self.store.get_run(run_id, workspace_id=workspace_id)
+        scheduler_generation = (
+            run.recovery_generation
+            if expected_recovery_generation is None
+            else expected_recovery_generation
+        )
         if run.status == "paused" or run.status in TERMINAL_RUN_STATUSES:
             raise InterAgentOperationError(f"Inter-agent run is {run.status}; participant spawn is not allowed.")
         participant = self.store.get_participant(participant_id, workspace_id=workspace_id, run_id=run.run_id)
@@ -821,14 +890,40 @@ class InterAgentService:
         )
         agent_id = _clean_optional(child_agent_id) or participant.agent_type_id or participant.participant_id
         reservation_id = _participant_spawn_reservation_id(participant.participant_id)
-        self.reserve_budget(
-            run,
-            reservation_id=reservation_id,
-            participant_id=participant.participant_id,
-            participant_slots=1,
-            running_participants=1,
-            now=timestamp,
-        )
+        if run.mode == "orchestrated":
+            with self.store.scheduler_mutation(
+                workspace_id=workspace_id,
+                run_id=run.run_id,
+                expected_recovery_generation=scheduler_generation,
+            ) as current_run:
+                current_participant = self.store.get_participant(
+                    participant.participant_id,
+                    workspace_id=workspace_id,
+                    run_id=run.run_id,
+                )
+                if current_participant.status in TERMINAL_PARTICIPANT_STATUSES:
+                    raise InterAgentOperationError(
+                        f"Participant `{current_participant.participant_id}` is {current_participant.status}."
+                    )
+                run = current_run
+                participant = current_participant
+                self.reserve_budget(
+                    run,
+                    reservation_id=reservation_id,
+                    participant_id=participant.participant_id,
+                    participant_slots=1,
+                    running_participants=1,
+                    now=timestamp,
+                )
+        else:
+            self.reserve_budget(
+                run,
+                reservation_id=reservation_id,
+                participant_id=participant.participant_id,
+                participant_slots=1,
+                running_participants=1,
+                now=timestamp,
+            )
         try:
             child = create_child_runtime_session(
                 runtime_store,
@@ -857,8 +952,11 @@ class InterAgentService:
             workspace_id=workspace_id,
             run_id=run.run_id,
         )
-        if latest_run.status == "paused" or latest_run.status in TERMINAL_RUN_STATUSES or (
-            latest_participant.status in TERMINAL_PARTICIPANT_STATUSES
+        if (
+            latest_run.recovery_generation != scheduler_generation
+            or latest_run.status == "paused"
+            or latest_run.status in TERMINAL_RUN_STATUSES
+            or latest_participant.status in TERMINAL_PARTICIPANT_STATUSES
         ):
             _discard_unclaimed_child_session(
                 runtime_store,
@@ -866,6 +964,10 @@ class InterAgentService:
                 parent=root_session,
             )
             self.release_budget(run, reservation_id=reservation_id, now=timestamp)
+            if latest_run.recovery_generation != scheduler_generation:
+                raise InterAgentOperationError(
+                    "Inter-agent scheduler generation changed; the late participant session was discarded."
+                )
             raise InterAgentOperationError(
                 f"Inter-agent run is {latest_run.status}; the late participant session was discarded."
             )
@@ -874,6 +976,7 @@ class InterAgentService:
             run_id=run.run_id,
             participant_id=latest_participant.participant_id,
             runtime_session_id=child.session_id,
+            expected_recovery_generation=scheduler_generation,
             now=timestamp,
         )
         if not claimed:
@@ -888,12 +991,17 @@ class InterAgentService:
                 workspace_id=workspace_id,
                 run_id=run.run_id,
             )
-            self._cancel_interrupted_participant(
-                committed_run,
-                committed_participant,
-                reason="participant_spawn_after_pause",
-                now=datetime.now(tz=UTC),
-            )
+            if committed_run.recovery_generation == scheduler_generation:
+                self._cancel_interrupted_participant(
+                    committed_run,
+                    committed_participant,
+                    reason="participant_spawn_after_pause",
+                    now=datetime.now(tz=UTC),
+                )
+            if committed_run.recovery_generation != scheduler_generation:
+                raise InterAgentOperationError(
+                    "Inter-agent scheduler generation changed; the late participant session was discarded."
+                )
             raise InterAgentOperationError(
                 f"Inter-agent run is {committed_run.status}; the late participant session was discarded."
             )
@@ -925,10 +1033,16 @@ class InterAgentService:
         client_message_id: str | None = None,
         async_requested: bool = False,
         now: datetime | None = None,
+        expected_recovery_generation: int | None = None,
     ) -> tuple[InterAgentParticipantRecord, Any, list[Any]]:
         """Send one runtime turn to a spawned child participant session."""
         timestamp = now or datetime.now(tz=UTC)
         run = self.store.get_run(run_id, workspace_id=workspace_id)
+        scheduler_generation = (
+            run.recovery_generation
+            if expected_recovery_generation is None
+            else expected_recovery_generation
+        )
         if run.status != "running":
             raise InterAgentOperationError("Inter-agent run is not accepting new messages.")
         participant = self.store.get_participant(participant_id, workspace_id=workspace_id, run_id=run.run_id)
@@ -951,7 +1065,40 @@ class InterAgentService:
             participant_id=participant.participant_id,
             client_message_id=client_message_id,
         )
-        self.reserve_budget(run, reservation_id=reservation_id, participant_id=participant.participant_id, turns=1, now=timestamp)
+        if run.mode == "orchestrated":
+            with self.store.scheduler_mutation(
+                workspace_id=workspace_id,
+                run_id=run.run_id,
+                expected_recovery_generation=scheduler_generation,
+                allowed_statuses={"running"},
+            ) as current_run:
+                current_participant = self.store.get_participant(
+                    participant.participant_id,
+                    workspace_id=workspace_id,
+                    run_id=run.run_id,
+                )
+                if (
+                    current_participant.status != "running"
+                    or current_participant.runtime_session_id != runtime_session_id
+                ):
+                    raise InterAgentOperationError("Participant lost its runtime-session claim before message send.")
+                run = current_run
+                participant = current_participant
+                self.reserve_budget(
+                    run,
+                    reservation_id=reservation_id,
+                    participant_id=participant.participant_id,
+                    turns=1,
+                    now=timestamp,
+                )
+        else:
+            self.reserve_budget(
+                run,
+                reservation_id=reservation_id,
+                participant_id=participant.participant_id,
+                turns=1,
+                now=timestamp,
+            )
         submit = submit_runtime_turn_async if async_requested else submit_runtime_turn
         try:
             turn, events = submit(
@@ -978,6 +1125,9 @@ class InterAgentService:
                 "runtime_turn_id": turn.turn_id,
             },
             now=timestamp,
+            expected_recovery_generation=(
+                scheduler_generation if run.mode == "orchestrated" else None
+            ),
         )
         return participant, turn, events
 
@@ -1016,21 +1166,24 @@ class InterAgentService:
             participant_id=participant_id,
         )
         if run.status not in TERMINAL_RUN_STATUSES:
-            run = self.store.pause_run_if_active(
+            run, pause_applied = self.store.pause_run_if_active(
                 run.run_id,
                 workspace_id=workspace_id,
                 now=timestamp,
             )
-            self.record_event(
-                run,
-                event_type="inter_agent.run.paused",
-                participant_id=participant_id,
-                visibility_plane="summary",
-                idempotency_key=f"{run.run_id}:run.paused:{timestamp.isoformat()}",
-                correlation_id=run.run_id,
-                payload={"reason": reason, "participant_id": participant_id},
-                now=timestamp,
-            )
+            if pause_applied:
+                self.record_event(
+                    run,
+                    event_type="inter_agent.run.paused",
+                    participant_id=participant_id,
+                    visibility_plane="summary",
+                    idempotency_key=f"{run.run_id}:run.paused:{timestamp.isoformat()}",
+                    correlation_id=run.run_id,
+                    payload={"reason": reason, "participant_id": participant_id},
+                    now=timestamp,
+                )
+        if run.status in TERMINAL_RUN_STATUSES:
+            return {"run": run, "interrupted_sessions": []}
         interrupted_sessions: list[dict[str, Any]] = []
         for participant in participants:
             latest_participant = self.store.get_participant(

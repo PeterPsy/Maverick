@@ -76,6 +76,13 @@ It started with names, visibility, legacy compatibility, and initial policy defa
     even when its child session has not been created yet. The run is marked
     paused before participant reconciliation; child spawn checks that fence
     both before and after creation and deletes any unclaimed late session.
+    Pause is also a scheduler-wide fence. Every scheduler persistence mutation
+    presents the generation captured when that scheduler started and validates
+    the current run status under the workspace transition lock. Task claim and
+    finalization validate both run and participant in that critical section,
+    so queued futures cannot start after pause and a terminal cancellation
+    cannot be overwritten by a late completion or failure. Completion commit
+    uses the same fence and cannot transition `paused` to `completed`.
     Resume from HTTP, CLI, or MCP waits for the previous hosted scheduler owner
     to unwind, detaches an interrupted orchestrator session, advances the
     recovery generation, and only then starts the replacement scheduler.

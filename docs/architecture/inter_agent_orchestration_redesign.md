@@ -172,8 +172,14 @@ transcript projection behavior.
   rather than being rescheduled. A user pause therefore persists a protected
   `cancelled` result for every interrupted active task; the cancelled worker is
   not silently made ready again, including when task execution is between its
-  participant claim and child-session creation. The paused status is the spawn
-  fence: a child created concurrently is rechecked, deleted, and never linked.
+  participant claim and child-session creation. The paused status is a global
+  scheduler fence, not only a spawn fence. Scheduler transitions, recovery
+  records, task materialization, task claim/finalization, directive delivery,
+  and completion commit validate both current status and the scheduler's
+  captured recovery generation under the workspace transition lock. A queued
+  future cannot start after pause, a late worker cannot overwrite a persisted
+  cancellation, and the control loop cannot complete a paused run. A child
+  created concurrently is rechecked, deleted, and never linked.
   Immediate resume through HTTP, CLI, or MCP first waits for the previous
   hosted scheduler to unwind, resets an interrupted orchestrator onto a new
   recovery-generation child session, and then enqueues the replacement.

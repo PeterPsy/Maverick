@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from contextlib import contextmanager
 from copy import deepcopy
 from dataclasses import asdict, dataclass, replace
 from datetime import UTC, datetime
@@ -13,7 +14,7 @@ import os
 from pathlib import Path
 from threading import RLock
 import tempfile
-from typing import Any, Callable, Protocol
+from typing import Any, Callable, ContextManager, Iterator, Protocol
 
 from core.inter_agent.errors import (
     InterAgentApprovalNotFoundError,
@@ -23,6 +24,7 @@ from core.inter_agent.errors import (
     InterAgentEdgeNotFoundError,
     InterAgentEventNotFoundError,
     InterAgentIdempotencyConflictError,
+    InterAgentOperationError,
     InterAgentParticipantNotFoundError,
     InterAgentRunNotFoundError,
     InterAgentValidationError,
@@ -138,7 +140,17 @@ class InterAgentStore(Protocol):
         *,
         workspace_id: str,
         now: datetime,
-    ) -> InterAgentRunRecord:
+    ) -> tuple[InterAgentRunRecord, bool]:
+        ...
+
+    def scheduler_mutation(
+        self,
+        *,
+        workspace_id: str,
+        run_id: str,
+        expected_recovery_generation: int,
+        allowed_statuses: set[str] | None = None,
+    ) -> ContextManager[InterAgentRunRecord]:
         ...
 
     def get_run(self, run_id: str, *, workspace_id: str) -> InterAgentRunRecord:
@@ -163,6 +175,7 @@ class InterAgentStore(Protocol):
         run_id: str,
         participant_id: str,
         runtime_session_id: str,
+        expected_recovery_generation: int,
         now: datetime,
     ) -> tuple[InterAgentRunRecord, InterAgentParticipantRecord, bool]:
         ...
@@ -379,15 +392,42 @@ class InterAgentDocumentStore:
         *,
         workspace_id: str,
         now: datetime,
-    ) -> InterAgentRunRecord:
+    ) -> tuple[InterAgentRunRecord, bool]:
         """Persist the pause under the workspace transition lock."""
         with self._workspace_lock(workspace_id):
             run = self.get_run(run_id, workspace_id=workspace_id)
             if run.status in {"completed", "failed", "cancelled"}:
-                return run
+                return run, False
+            if run.status == "paused":
+                return run, False
             paused = replace(run, status="paused", updated_at=now)
             self.save_run(paused)
-            return paused
+            return paused, True
+
+    @contextmanager
+    def scheduler_mutation(
+        self,
+        *,
+        workspace_id: str,
+        run_id: str,
+        expected_recovery_generation: int,
+        allowed_statuses: set[str] | None = None,
+    ) -> Iterator[InterAgentRunRecord]:
+        """Fence one scheduler mutation by run status and recovery generation."""
+        active_statuses = allowed_statuses or {"created", "planning", "running", "recovering"}
+        with self._workspace_lock(workspace_id):
+            run = self.get_run(run_id, workspace_id=workspace_id)
+            if run.mode != "orchestrated":
+                raise InterAgentOperationError("Scheduler mutations require an orchestrated run.")
+            if run.recovery_generation != expected_recovery_generation:
+                raise InterAgentOperationError(
+                    "Orchestration scheduler generation is stale; the mutation was rejected."
+                )
+            if run.status not in active_statuses:
+                raise InterAgentOperationError(
+                    f"Orchestration scheduler cannot mutate run `{run.run_id}` while it is {run.status}."
+                )
+            yield run
 
     def get_run(self, run_id: str, *, workspace_id: str) -> InterAgentRunRecord:
         document = self.collections.runs.find_one({"workspace_id": workspace_id, "run_id": run_id})
@@ -494,6 +534,7 @@ class InterAgentDocumentStore:
         run_id: str,
         participant_id: str,
         runtime_session_id: str,
+        expected_recovery_generation: int,
         now: datetime,
     ) -> tuple[InterAgentRunRecord, InterAgentParticipantRecord, bool]:
         """Link a child session only while its run and participant remain runnable."""
@@ -504,11 +545,15 @@ class InterAgentDocumentStore:
                 workspace_id=workspace_id,
                 run_id=run_id,
             )
-            if run.status in {"paused", "completed", "failed", "cancelled"} or participant.status in {
-                "completed",
-                "failed",
-                "cancelled",
-            }:
+            if (
+                run.recovery_generation != expected_recovery_generation
+                or run.status in {"paused", "completed", "failed", "cancelled"}
+                or participant.status in {
+                    "completed",
+                    "failed",
+                    "cancelled",
+                }
+            ):
                 return run, participant, False
             updated_participant = replace(
                 participant,

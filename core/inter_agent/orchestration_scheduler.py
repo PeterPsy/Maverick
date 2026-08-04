@@ -54,9 +54,12 @@ def execute_orchestrated_run(
     run = service.store.get_run(run_id, workspace_id=workspace_id)
     if run.mode != "orchestrated":
         raise InterAgentOperationError("Dynamic scheduler requires an orchestrated run.")
+    scheduler_generation = run.recovery_generation
     control: OrchestrationControlState | None = None
     try:
         control = load_control_state(service, run)
+        if run.status == "paused":
+            return OrchestrationExecutionResult(run=run, task_results=tuple(control.results.values()))
         if run.status in {"failed", "cancelled"} or (
             run.status == "completed" and not control.pending_control_decisions
         ):
@@ -66,8 +69,18 @@ def execute_orchestrated_run(
             workspace_id=workspace_id,
             run_id=run.run_id,
         )
-        execute_turn = turn_executor or runtime_turn_executor(service, state, run)
-        handoff = prepare_generalist_handoff(service, state, run)
+        execute_turn = turn_executor or runtime_turn_executor(
+            service,
+            state,
+            run,
+            expected_recovery_generation=scheduler_generation,
+        )
+        handoff = prepare_generalist_handoff(
+            service,
+            state,
+            run,
+            expected_recovery_generation=scheduler_generation,
+        )
         budget = service.store.get_budget_policy(run.budget_policy_id, workspace_id=workspace_id)
         pending_completion = apply_pending_control_decisions(
             service,
@@ -75,12 +88,18 @@ def execute_orchestrated_run(
             orchestrator,
             control,
             agent_snapshot_resolver=agent_snapshot_resolver,
+            expected_recovery_generation=scheduler_generation,
         )
         if pending_completion is not None:
             return _execution_result(pending_completion)
         if not control.tasks:
-            run = replace(run, status="planning", updated_at=now or datetime.now(tz=UTC))
-            service.store.save_run(run)
+            run = _transition_scheduler_run(
+                service,
+                run,
+                expected_recovery_generation=scheduler_generation,
+                status="planning",
+                now=now or datetime.now(tz=UTC),
+            )
             plan = create_initial_plan(
                 service,
                 run,
@@ -92,14 +111,21 @@ def execute_orchestrated_run(
                 state,
                 max_initial_tasks=_initial_task_limit(budget.max_participants),
                 available_agent_type_ids=available_agent_type_ids,
+                expected_recovery_generation=scheduler_generation,
             )
-            record_plan(service, run, plan)
+            record_plan(
+                service,
+                run,
+                plan,
+                expected_recovery_generation=scheduler_generation,
+            )
             materialize_plan(
                 service,
                 run,
                 orchestrator,
                 plan,
                 snapshot_resolver=agent_snapshot_resolver,
+                expected_recovery_generation=scheduler_generation,
             )
             control.tasks.update((task.task_id, task) for task in plan.tasks)
         else:
@@ -109,13 +135,22 @@ def execute_orchestrated_run(
                 orchestrator,
                 tuple(control.tasks.values()),
                 snapshot_resolver=agent_snapshot_resolver,
+                expected_recovery_generation=scheduler_generation,
             )
-        run = replace(run, status="running", updated_at=datetime.now(tz=UTC), ended_at=None)
-        service.store.save_run(run)
+        run = _transition_scheduler_run(
+            service,
+            run,
+            expected_recovery_generation=scheduler_generation,
+            status="running",
+            now=datetime.now(tz=UTC),
+        )
         max_control_steps = max(2, budget.max_total_turns)
         while control.control_step < max_control_steps:
             latest_run = service.store.get_run(run.run_id, workspace_id=workspace_id)
-            if latest_run.status in {"paused", "cancelled", "failed"}:
+            if (
+                latest_run.status in {"paused", "cancelled", "failed"}
+                or latest_run.recovery_generation != scheduler_generation
+            ):
                 raise InterAgentOperationError("Orchestration stopped while scheduling work.")
             ready = control.ready_tasks()
             if ready:
@@ -133,6 +168,7 @@ def execute_orchestrated_run(
                     max_control_steps=max_control_steps,
                     agent_snapshot_resolver=agent_snapshot_resolver,
                     available_agent_type_ids=available_agent_type_ids,
+                    expected_recovery_generation=scheduler_generation,
                 )
                 if completion is not None:
                     return _execution_result(completion)
@@ -149,6 +185,7 @@ def execute_orchestrated_run(
                 runtime_state=state,
                 max_participants=budget.max_participants,
                 available_agent_type_ids=available_agent_type_ids,
+                expected_recovery_generation=scheduler_generation,
             )
             completion = apply_control_decision(
                 service,
@@ -157,6 +194,7 @@ def execute_orchestrated_run(
                 control,
                 recorded,
                 agent_snapshot_resolver=agent_snapshot_resolver,
+                expected_recovery_generation=scheduler_generation,
             )
             if completion is not None:
                 return _execution_result(completion)
@@ -166,12 +204,23 @@ def execute_orchestrated_run(
         raise InterAgentOperationError("Orchestration exceeded its adaptive control-step budget.")
     except Exception as error:
         latest = service.store.get_run(run.run_id, workspace_id=run.workspace_id)
-        if latest.status == "paused":
+        if latest.status == "paused" or latest.recovery_generation != scheduler_generation:
             return OrchestrationExecutionResult(
                 run=latest,
                 task_results=tuple(control.results.values()) if control is not None else (),
             )
-        _record_failed_run(service, run, error)
+        _record_failed_run(
+            service,
+            run,
+            error,
+            expected_recovery_generation=scheduler_generation,
+        )
+        latest = service.store.get_run(run.run_id, workspace_id=run.workspace_id)
+        if latest.status == "paused" or latest.recovery_generation != scheduler_generation:
+            return OrchestrationExecutionResult(
+                run=latest,
+                task_results=tuple(control.results.values()) if control is not None else (),
+            )
         if isinstance(error, (InterAgentOperationError, InterAgentValidationError)):
             raise
         raise InterAgentOperationError(str(error)) from error
@@ -192,6 +241,7 @@ def _execute_ready_wave(
     max_control_steps: int,
     agent_snapshot_resolver: AgentSnapshotResolver | None,
     available_agent_type_ids: tuple[str, ...],
+    expected_recovery_generation: int,
 ) -> ControlCompletion | None:
     running_ids = {task.task_id for task in ready}
     with ThreadPoolExecutor(max_workers=max(1, min(max_concurrency, len(ready)))) as pool:
@@ -205,6 +255,7 @@ def _execute_ready_wave(
                 input_text,
                 {dependency: control.results[dependency].output_text for dependency in task.depends_on},
                 execute_turn,
+                expected_recovery_generation=expected_recovery_generation,
             ): task
             for task in ready
         }
@@ -213,7 +264,10 @@ def _execute_ready_wave(
             control.results[task.task_id] = future.result()
             running_ids.discard(task.task_id)
             latest_run = service.store.get_run(run.run_id, workspace_id=run.workspace_id)
-            if latest_run.status in {"paused", "cancelled", "failed"}:
+            if (
+                latest_run.status in {"paused", "cancelled", "failed"}
+                or latest_run.recovery_generation != expected_recovery_generation
+            ):
                 raise InterAgentOperationError("Orchestration stopped while task workers were unwinding.")
             if control.control_step >= max_control_steps:
                 raise InterAgentOperationError("Orchestration exceeded its adaptive control-step budget.")
@@ -229,6 +283,7 @@ def _execute_ready_wave(
                 max_participants=max_participants,
                 available_agent_type_ids=available_agent_type_ids,
                 non_cancellable_task_ids=running_ids,
+                expected_recovery_generation=expected_recovery_generation,
             )
             completion = apply_control_decision(
                 service,
@@ -237,6 +292,7 @@ def _execute_ready_wave(
                 control,
                 recorded,
                 agent_snapshot_resolver=agent_snapshot_resolver,
+                expected_recovery_generation=expected_recovery_generation,
             )
             if completion is not None:
                 if running_ids:
@@ -258,19 +314,48 @@ def _execution_result(completion: ControlCompletion) -> OrchestrationExecutionRe
     )
 
 
-def _record_failed_run(service: InterAgentService, run: Any, error: Exception) -> None:
-    latest = service.store.get_run(run.run_id, workspace_id=run.workspace_id)
-    if latest.status in {"completed", "cancelled", "failed"}:
+def _record_failed_run(
+    service: InterAgentService,
+    run: Any,
+    error: Exception,
+    *,
+    expected_recovery_generation: int,
+) -> None:
+    try:
+        with service.store.scheduler_mutation(
+            workspace_id=run.workspace_id,
+            run_id=run.run_id,
+            expected_recovery_generation=expected_recovery_generation,
+        ) as current_run:
+            failed_at = datetime.now(tz=UTC)
+            failed = replace(current_run, status="failed", updated_at=failed_at, ended_at=failed_at)
+            service.store.save_run(failed)
+            service.record_event(
+                failed,
+                event_type="inter_agent.run.failed",
+                participant_id=failed.orchestrator_participant_id,
+                visibility_plane="summary",
+                correlation_id=failed.run_id,
+                idempotency_key=f"{failed.run_id}:dynamic.failed",
+                payload={"status": "failed", "error": str(error)},
+            )
+    except InterAgentOperationError:
         return
-    failed_at = datetime.now(tz=UTC)
-    latest = replace(latest, status="failed", updated_at=failed_at, ended_at=failed_at)
-    service.store.save_run(latest)
-    service.record_event(
-        latest,
-        event_type="inter_agent.run.failed",
-        participant_id=latest.orchestrator_participant_id,
-        visibility_plane="summary",
-        correlation_id=latest.run_id,
-        idempotency_key=f"{latest.run_id}:dynamic.failed",
-        payload={"status": "failed", "error": str(error)},
-    )
+
+
+def _transition_scheduler_run(
+    service: InterAgentService,
+    run: Any,
+    *,
+    expected_recovery_generation: int,
+    status: str,
+    now: datetime,
+) -> Any:
+    with service.store.scheduler_mutation(
+        workspace_id=run.workspace_id,
+        run_id=run.run_id,
+        expected_recovery_generation=expected_recovery_generation,
+    ) as current_run:
+        updated = replace(current_run, status=status, updated_at=now, ended_at=None)
+        service.store.save_run(updated)
+        return updated

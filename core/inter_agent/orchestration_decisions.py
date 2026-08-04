@@ -16,6 +16,7 @@ def record_control_decision(
     *,
     control_step: int,
     trigger_task_id: str | None,
+    expected_recovery_generation: int | None = None,
 ) -> InterAgentEventRecord:
     return service.record_event(
         run,
@@ -35,6 +36,11 @@ def record_control_decision(
             "quality_passed": decision.quality_passed,
             "final_answer": decision.final_answer if decision.complete else "",
         },
+        expected_recovery_generation=(
+            run.recovery_generation
+            if expected_recovery_generation is None
+            else expected_recovery_generation
+        ),
     )
 
 
@@ -44,6 +50,7 @@ def record_control_decision_applied(
     *,
     control_step: int,
     decision_event_id: str,
+    expected_recovery_generation: int | None = None,
 ) -> InterAgentEventRecord:
     return service.record_event(
         run,
@@ -57,4 +64,10 @@ def record_control_decision_applied(
             "decision_event_id": decision_event_id,
             "application_status": "applied",
         },
+        expected_recovery_generation=(
+            run.recovery_generation
+            if expected_recovery_generation is None
+            else expected_recovery_generation
+        ),
+        scheduler_statuses={"completed"} if run.status == "completed" else None,
     )

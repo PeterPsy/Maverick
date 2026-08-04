@@ -24,7 +24,19 @@ class GeneralistHandoff:
     runtime_event_id: str
 
 
-def runtime_turn_executor(service: InterAgentService, state: Any, run: Any) -> ParticipantTurnExecutor:
+def runtime_turn_executor(
+    service: InterAgentService,
+    state: Any,
+    run: Any,
+    *,
+    expected_recovery_generation: int | None = None,
+) -> ParticipantTurnExecutor:
+    scheduler_generation = (
+        run.recovery_generation
+        if expected_recovery_generation is None
+        else expected_recovery_generation
+    )
+
     def execute(participant: InterAgentParticipantRecord, prompt: str, client_message_id: str) -> str:
         current = service.store.get_participant(
             participant.participant_id,
@@ -39,6 +51,7 @@ def runtime_turn_executor(service: InterAgentService, state: Any, run: Any) -> P
                 participant_id=current.participant_id,
                 owner_user_id=run.created_by_user_id,
                 created_by_user_id=run.created_by_user_id,
+                expected_recovery_generation=scheduler_generation,
             )
         current, _turn, events = service.send_runtime_message(
             state,
@@ -48,6 +61,7 @@ def runtime_turn_executor(service: InterAgentService, state: Any, run: Any) -> P
             input_text=prompt,
             client_message_id=client_message_id,
             async_requested=False,
+            expected_recovery_generation=scheduler_generation,
         )
         output = _runtime_output_text(events)
         if not output:
@@ -64,6 +78,7 @@ def prepare_generalist_handoff(
     *,
     timeout_seconds: float = GENERALIST_HANDOFF_WAIT_TIMEOUT_SECONDS,
     poll_seconds: float = GENERALIST_HANDOFF_POLL_SECONDS,
+    expected_recovery_generation: int | None = None,
 ) -> GeneralistHandoff:
     """Wait for and persist the source generalist's completed launch analysis."""
     runtime_store = getattr(state, "runtime_store", None)
@@ -72,6 +87,11 @@ def prepare_generalist_handoff(
     persisted = _persisted_handoff(service, run)
     if persisted is not None:
         return persisted
+    scheduler_generation = (
+        run.recovery_generation
+        if expected_recovery_generation is None
+        else expected_recovery_generation
+    )
     deadline = time.monotonic() + max(0.0, timeout_seconds)
     while True:
         latest_run = service.store.get_run(run.run_id, workspace_id=run.workspace_id)
@@ -114,6 +134,7 @@ def prepare_generalist_handoff(
                     "input_text": handoff.input_text,
                     "analysis_text": handoff.analysis_text,
                 },
+                expected_recovery_generation=scheduler_generation,
             )
             return handoff
         if time.monotonic() >= deadline:
@@ -128,11 +149,17 @@ def sync_generalist_directives(
     *,
     timeout_seconds: float = GENERALIST_HANDOFF_WAIT_TIMEOUT_SECONDS,
     poll_seconds: float = GENERALIST_HANDOFF_POLL_SECONDS,
+    expected_recovery_generation: int | None = None,
 ) -> None:
     """Resolve linked later generalist turns before an orchestrator safe point."""
     runtime_store = getattr(state, "runtime_store", None)
     if runtime_store is None:
         return
+    scheduler_generation = (
+        run.recovery_generation
+        if expected_recovery_generation is None
+        else expected_recovery_generation
+    )
     for link in service.pending_generalist_directive_links(run):
         turn_id = str(link.runtime_turn_id or "").strip()
         deadline = time.monotonic() + max(0.0, timeout_seconds)
@@ -159,15 +186,22 @@ def sync_generalist_directives(
                             source_runtime_event_id=str(final_event.event_id),
                             source_runtime_turn_id=turn_id,
                             idempotency_key=f"{run.run_id}:root-directive:{final_event.event_id}",
+                            expected_recovery_generation=scheduler_generation,
                         )
                         service.resolve_generalist_directive_link(
                             latest_run,
                             link,
                             status="delivered",
                             directive_id=str(directive.payload.get("directive_id") or ""),
+                            expected_recovery_generation=scheduler_generation,
                         )
                         break
-                service.resolve_generalist_directive_link(latest_run, link, status="ignored")
+                service.resolve_generalist_directive_link(
+                    latest_run,
+                    link,
+                    status="ignored",
+                    expected_recovery_generation=scheduler_generation,
+                )
                 break
             if time.monotonic() >= deadline:
                 raise InterAgentOperationError("Timed out waiting for linked generalist steering.")

@@ -40,6 +40,7 @@ def materialize_plan(
     plan: OrchestrationPlan,
     *,
     snapshot_resolver: AgentSnapshotResolver | None = None,
+    expected_recovery_generation: int | None = None,
 ) -> dict[str, InterAgentParticipantRecord]:
     return materialize_tasks(
         service,
@@ -47,6 +48,7 @@ def materialize_plan(
         orchestrator,
         plan.tasks,
         snapshot_resolver=snapshot_resolver,
+        expected_recovery_generation=expected_recovery_generation,
     )
 
 
@@ -57,6 +59,34 @@ def materialize_tasks(
     tasks: tuple[OrchestrationTaskSpec, ...],
     *,
     snapshot_resolver: AgentSnapshotResolver | None = None,
+    expected_recovery_generation: int | None = None,
+) -> dict[str, InterAgentParticipantRecord]:
+    scheduler_generation = (
+        run.recovery_generation
+        if expected_recovery_generation is None
+        else expected_recovery_generation
+    )
+    with service.store.scheduler_mutation(
+        workspace_id=run.workspace_id,
+        run_id=run.run_id,
+        expected_recovery_generation=scheduler_generation,
+    ) as current_run:
+        return _materialize_tasks(
+            service,
+            current_run,
+            orchestrator,
+            tasks,
+            snapshot_resolver=snapshot_resolver,
+        )
+
+
+def _materialize_tasks(
+    service: InterAgentService,
+    run: Any,
+    orchestrator: InterAgentParticipantRecord,
+    tasks: tuple[OrchestrationTaskSpec, ...],
+    *,
+    snapshot_resolver: AgentSnapshotResolver | None,
 ) -> dict[str, InterAgentParticipantRecord]:
     participants: dict[str, InterAgentParticipantRecord] = {}
     persisted_participants = {
@@ -136,21 +166,44 @@ def execute_task(
     input_text: str,
     dependency_outputs: Mapping[str, str],
     execute_turn: ParticipantTurnExecutor,
+    *,
+    expected_recovery_generation: int | None = None,
 ) -> OrchestrationTaskResult:
-    now = datetime.now(tz=UTC)
-    service.store.save_participant(replace(participant, status="running", current_task_id=task.task_id, updated_at=now))
-    service.record_event(
-        run,
-        event_type="inter_agent.task.started",
-        participant_id=participant.participant_id,
-        visibility_plane="detail",
-        correlation_id=task.task_id,
-        idempotency_key=f"{run.run_id}:dynamic.task.started:{task.task_id}",
-        payload={"task_id": task.task_id, "participant_id": participant.participant_id},
+    scheduler_generation = (
+        run.recovery_generation
+        if expected_recovery_generation is None
+        else expected_recovery_generation
     )
+    now = datetime.now(tz=UTC)
+    with service.store.scheduler_mutation(
+        workspace_id=run.workspace_id,
+        run_id=run.run_id,
+        expected_recovery_generation=scheduler_generation,
+        allowed_statuses={"running"},
+    ) as current_run:
+        latest = service.store.get_participant(
+            participant.participant_id,
+            workspace_id=run.workspace_id,
+            run_id=run.run_id,
+        )
+        if latest.status != "idle" or latest.current_task_id is not None:
+            raise InterAgentOperationError(
+                f"Task `{task.task_id}` cannot start because participant `{latest.participant_id}` is {latest.status}."
+            )
+        started = replace(latest, status="running", current_task_id=task.task_id, updated_at=now)
+        service.store.save_participant(started)
+        service.record_event(
+            current_run,
+            event_type="inter_agent.task.started",
+            participant_id=participant.participant_id,
+            visibility_plane="detail",
+            correlation_id=task.task_id,
+            idempotency_key=f"{run.run_id}:dynamic.task.started:{task.task_id}",
+            payload={"task_id": task.task_id, "participant_id": participant.participant_id},
+        )
     try:
         output = execute_turn(
-            participant,
+            started,
             task_prompt(task, input_text, dependency_outputs),
             f"{run.run_id}:task:{task.task_id}",
         ).strip()
@@ -163,35 +216,54 @@ def execute_task(
         status = "failed"
         error = str(exc)
     finished_at = datetime.now(tz=UTC)
-    latest = service.store.get_participant(
-        participant.participant_id,
-        workspace_id=run.workspace_id,
-        run_id=run.run_id,
-    )
-    if latest.status == "cancelled" and latest.current_task_id is None:
+    try:
+        with service.store.scheduler_mutation(
+            workspace_id=run.workspace_id,
+            run_id=run.run_id,
+            expected_recovery_generation=scheduler_generation,
+            allowed_statuses={"running"},
+        ) as current_run:
+            latest = service.store.get_participant(
+                participant.participant_id,
+                workspace_id=run.workspace_id,
+                run_id=run.run_id,
+            )
+            if latest.status == "cancelled" and latest.current_task_id is None:
+                return OrchestrationTaskResult(
+                    task_id=task.task_id,
+                    participant_id=participant.participant_id,
+                    status="cancelled",
+                )
+            if latest.status != "running" or latest.current_task_id != task.task_id:
+                raise InterAgentOperationError(
+                    f"Task `{task.task_id}` lost its participant claim before finalization."
+                )
+            service.store.save_participant(
+                replace(latest, status=status, current_task_id=None, updated_at=finished_at)
+            )
+            service.release_budget(current_run, reservation_id=f"spawn:{participant.participant_id}")
+            service.record_event(
+                current_run,
+                event_type="inter_agent.task.completed",
+                participant_id=participant.participant_id,
+                visibility_plane="detail",
+                correlation_id=task.task_id,
+                idempotency_key=f"{run.run_id}:dynamic.task.completed:{task.task_id}",
+                payload={
+                    "task_id": task.task_id,
+                    "participant_id": participant.participant_id,
+                    "status": status,
+                    "summary": output[:1000],
+                    "output_text": output,
+                    "error": error,
+                },
+            )
+    except InterAgentOperationError:
         return OrchestrationTaskResult(
             task_id=task.task_id,
             participant_id=participant.participant_id,
             status="cancelled",
         )
-    service.store.save_participant(replace(latest, status=status, current_task_id=None, updated_at=finished_at))
-    service.release_budget(run, reservation_id=f"spawn:{participant.participant_id}")
-    service.record_event(
-        run,
-        event_type="inter_agent.task.completed",
-        participant_id=participant.participant_id,
-        visibility_plane="detail",
-        correlation_id=task.task_id,
-        idempotency_key=f"{run.run_id}:dynamic.task.completed:{task.task_id}",
-        payload={
-            "task_id": task.task_id,
-            "participant_id": participant.participant_id,
-            "status": status,
-            "summary": output[:1000],
-            "output_text": output,
-            "error": error,
-        },
-    )
     return OrchestrationTaskResult(
         task_id=task.task_id,
         participant_id=participant.participant_id,
@@ -201,7 +273,13 @@ def execute_task(
     )
 
 
-def record_plan(service: InterAgentService, run: Any, plan: OrchestrationPlan) -> None:
+def record_plan(
+    service: InterAgentService,
+    run: Any,
+    plan: OrchestrationPlan,
+    *,
+    expected_recovery_generation: int | None = None,
+) -> None:
     service.record_event(
         run,
         event_type="inter_agent.plan.summary_created",
@@ -215,6 +293,11 @@ def record_plan(service: InterAgentService, run: Any, plan: OrchestrationPlan) -
             "task_ids": [task.task_id for task in plan.tasks],
             "tasks": [task_payload(task) for task in plan.tasks],
         },
+        expected_recovery_generation=(
+            run.recovery_generation
+            if expected_recovery_generation is None
+            else expected_recovery_generation
+        ),
     )
 
 
@@ -223,32 +306,44 @@ def cancel_task(
     run: Any,
     task: OrchestrationTaskSpec,
     participant: InterAgentParticipantRecord,
+    *,
+    expected_recovery_generation: int | None = None,
 ) -> OrchestrationTaskResult:
+    scheduler_generation = (
+        run.recovery_generation
+        if expected_recovery_generation is None
+        else expected_recovery_generation
+    )
     now = datetime.now(tz=UTC)
-    latest = service.store.get_participant(
-        participant.participant_id,
+    with service.store.scheduler_mutation(
         workspace_id=run.workspace_id,
         run_id=run.run_id,
-    )
-    if latest.status not in {"completed", "failed", "cancelled"}:
-        service.store.save_participant(replace(latest, status="cancelled", current_task_id=None, updated_at=now))
-        service.release_budget(run, reservation_id=f"spawn:{participant.participant_id}")
-    service.record_event(
-        run,
-        event_type="inter_agent.task.completed",
-        participant_id=participant.participant_id,
-        visibility_plane="detail",
-        correlation_id=task.task_id,
-        idempotency_key=f"{run.run_id}:dynamic.task.cancelled:{task.task_id}",
-        payload={
-            "task_id": task.task_id,
-            "participant_id": participant.participant_id,
-            "status": "cancelled",
-            "summary": "Cancelled by orchestrator decision.",
-            "output_text": "",
-            "error": None,
-        },
-    )
+        expected_recovery_generation=scheduler_generation,
+    ) as current_run:
+        latest = service.store.get_participant(
+            participant.participant_id,
+            workspace_id=run.workspace_id,
+            run_id=run.run_id,
+        )
+        if latest.status not in {"completed", "failed", "cancelled"}:
+            service.store.save_participant(replace(latest, status="cancelled", current_task_id=None, updated_at=now))
+            service.release_budget(current_run, reservation_id=f"spawn:{participant.participant_id}")
+        service.record_event(
+            current_run,
+            event_type="inter_agent.task.completed",
+            participant_id=participant.participant_id,
+            visibility_plane="detail",
+            correlation_id=task.task_id,
+            idempotency_key=f"{run.run_id}:dynamic.task.cancelled:{task.task_id}",
+            payload={
+                "task_id": task.task_id,
+                "participant_id": participant.participant_id,
+                "status": "cancelled",
+                "summary": "Cancelled by orchestrator decision.",
+                "output_text": "",
+                "error": None,
+            },
+        )
     return OrchestrationTaskResult(
         task_id=task.task_id,
         participant_id=participant.participant_id,

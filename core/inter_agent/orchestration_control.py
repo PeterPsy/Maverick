@@ -45,8 +45,19 @@ def create_initial_plan(
     *,
     max_initial_tasks: int,
     available_agent_type_ids: tuple[str, ...],
+    expected_recovery_generation: int | None = None,
 ) -> OrchestrationPlan:
-    sync_generalist_directives(service, runtime_state, run)
+    scheduler_generation = (
+        run.recovery_generation
+        if expected_recovery_generation is None
+        else expected_recovery_generation
+    )
+    sync_generalist_directives(
+        service,
+        runtime_state,
+        run,
+        expected_recovery_generation=scheduler_generation,
+    )
     directives = service.pending_directives(run)
     output = execute_turn(
         orchestrator,
@@ -65,7 +76,11 @@ def create_initial_plan(
         require_review_gate=False,
         reserved_task_ids=reserved_task_ids_for_run(run.orchestrator_participant_id),
     )
-    service.mark_directives_delivered(run, directives)
+    service.mark_directives_delivered(
+        run,
+        directives,
+        expected_recovery_generation=scheduler_generation,
+    )
     control.plan_summary = plan.summary
     return plan
 
@@ -83,8 +98,19 @@ def next_control_decision(
     max_participants: int,
     available_agent_type_ids: tuple[str, ...],
     non_cancellable_task_ids: set[str] | None = None,
+    expected_recovery_generation: int | None = None,
 ) -> RecordedControlDecision:
-    sync_generalist_directives(service, runtime_state, run)
+    scheduler_generation = (
+        run.recovery_generation
+        if expected_recovery_generation is None
+        else expected_recovery_generation
+    )
+    sync_generalist_directives(
+        service,
+        runtime_state,
+        run,
+        expected_recovery_generation=scheduler_generation,
+    )
     directives = service.pending_directives(run)
     step = control.control_step + 1
     output = execute_turn(
@@ -111,8 +137,19 @@ def next_control_decision(
         decision,
         non_cancellable_task_ids=non_cancellable_task_ids or set(),
     )
-    event = record_control_decision(service, run, decision, control_step=step, trigger_task_id=trigger_task_id)
-    service.mark_directives_delivered(run, directives)
+    event = record_control_decision(
+        service,
+        run,
+        decision,
+        control_step=step,
+        trigger_task_id=trigger_task_id,
+        expected_recovery_generation=scheduler_generation,
+    )
+    service.mark_directives_delivered(
+        run,
+        directives,
+        expected_recovery_generation=scheduler_generation,
+    )
     control.control_step = step
     recorded = RecordedControlDecision(event_id=event.event_id, control_step=step, decision=decision)
     control.recorded_control_decisions[step] = recorded
@@ -127,7 +164,13 @@ def apply_control_decision(
     recorded: RecordedControlDecision,
     *,
     agent_snapshot_resolver: AgentSnapshotResolver | None,
+    expected_recovery_generation: int | None = None,
 ) -> ControlCompletion | None:
+    scheduler_generation = (
+        run.recovery_generation
+        if expected_recovery_generation is None
+        else expected_recovery_generation
+    )
     decision = recorded.decision
     _validate_control_decision(control, decision)
     for task_id in decision.cancel_task_ids:
@@ -136,7 +179,13 @@ def apply_control_decision(
             continue
         task = control.tasks[task_id]
         participant = service.store.get_participant(task_id, workspace_id=run.workspace_id, run_id=run.run_id)
-        control.results[task_id] = cancel_task(service, run, task, participant)
+        control.results[task_id] = cancel_task(
+            service,
+            run,
+            task,
+            participant,
+            expected_recovery_generation=scheduler_generation,
+        )
     if decision.tasks:
         materialize_tasks(
             service,
@@ -144,10 +193,17 @@ def apply_control_decision(
             orchestrator,
             decision.tasks,
             snapshot_resolver=agent_snapshot_resolver,
+            expected_recovery_generation=scheduler_generation,
         )
         control.tasks.update((task.task_id, task) for task in decision.tasks)
     if not decision.complete:
-        _record_decision_applied(service, run, control, recorded)
+        _record_decision_applied(
+            service,
+            run,
+            control,
+            recorded,
+            expected_recovery_generation=scheduler_generation,
+        )
         return None
     completed = service.decide_completion(
         workspace_id=run.workspace_id,
@@ -157,9 +213,16 @@ def apply_control_decision(
         quality_passed=decision.quality_passed,
         summary=decision.summary,
         final_answer=decision.final_answer,
+        expected_recovery_generation=scheduler_generation,
     )
     service.release_budget(completed, reservation_id=f"spawn:{orchestrator.participant_id}")
-    _record_decision_applied(service, completed, control, recorded)
+    _record_decision_applied(
+        service,
+        completed,
+        control,
+        recorded,
+        expected_recovery_generation=scheduler_generation,
+    )
     return ControlCompletion(
         run=completed,
         task_results=tuple(control.results.values()),
@@ -174,6 +237,7 @@ def apply_pending_control_decisions(
     control: OrchestrationControlState,
     *,
     agent_snapshot_resolver: AgentSnapshotResolver | None,
+    expected_recovery_generation: int | None = None,
 ) -> ControlCompletion | None:
     """Apply every recorded decision missing its durable application marker."""
     for recorded in control.pending_control_decisions:
@@ -184,6 +248,7 @@ def apply_pending_control_decisions(
             control,
             recorded,
             agent_snapshot_resolver=agent_snapshot_resolver,
+            expected_recovery_generation=expected_recovery_generation,
         )
         if completion is not None:
             return completion
@@ -224,11 +289,14 @@ def _record_decision_applied(
     run: Any,
     control: OrchestrationControlState,
     recorded: RecordedControlDecision,
+    *,
+    expected_recovery_generation: int,
 ) -> None:
     record_control_decision_applied(
         service,
         run,
         control_step=recorded.control_step,
         decision_event_id=recorded.event_id,
+        expected_recovery_generation=expected_recovery_generation,
     )
     control.applied_control_steps.add(recorded.control_step)

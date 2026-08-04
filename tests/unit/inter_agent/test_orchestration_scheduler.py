@@ -3,8 +3,9 @@ from __future__ import annotations
 from dataclasses import replace
 from types import SimpleNamespace
 import unittest
+from unittest.mock import patch
 
-from core.inter_agent.errors import InterAgentValidationError
+from core.inter_agent.errors import InterAgentOperationError, InterAgentValidationError
 from core.inter_agent.orchestration_control import next_control_decision
 from core.inter_agent.orchestration_plan import (
     OrchestrationPlan,
@@ -27,6 +28,151 @@ from tests.unit.inter_agent.test_dynamic_orchestration_service import orchestrat
 
 
 class OrchestrationSchedulerTest(unittest.TestCase):
+    def test_paused_run_rejects_a_queued_task_before_it_starts(self) -> None:
+        store = build_inter_agent_document_store(start_path=make_temp_repo_root(self))
+        service = InterAgentService(store)
+        run = service.create_run(orchestrated_spec())
+        plan = OrchestrationPlan(
+            summary="One queued task.",
+            tasks=(
+                OrchestrationTaskSpec(
+                    task_id="implement",
+                    label="Implementer",
+                    role="implementer",
+                    objective="Implement only if the scheduler generation is still active.",
+                ),
+            ),
+        )
+        orchestrator = store.get_participant("orchestrator", workspace_id="default", run_id=run.run_id)
+        record_plan(service, run, plan)
+        participant = materialize_plan(service, run, orchestrator, plan)["implement"]
+        running = replace(run, status="running")
+        store.save_run(running)
+        store.pause_run_if_active(run.run_id, workspace_id="default", now=run.updated_at)
+        turn_started = False
+
+        def execute_turn(*_args) -> str:
+            nonlocal turn_started
+            turn_started = True
+            return "This stale task must not run."
+
+        with self.assertRaisesRegex(InterAgentOperationError, "scheduler"):
+            execute_task(service, running, plan.tasks[0], participant, "Implement.", {}, execute_turn)
+
+        persisted = store.get_participant("implement", workspace_id="default", run_id=run.run_id)
+        events = store.list_event_page(
+            run.run_id,
+            workspace_id="default",
+            visibility_plane="detail",
+            limit=200,
+        ).events
+        self.assertFalse(turn_started)
+        self.assertEqual(persisted.status, "idle")
+        self.assertIsNone(persisted.current_task_id)
+        self.assertNotIn("inter_agent.task.started", [event.event_type for event in events])
+        self.assertNotIn("inter_agent.task.completed", [event.event_type for event in events])
+
+    def test_old_scheduler_generation_cannot_start_work_after_resume(self) -> None:
+        store = build_inter_agent_document_store(start_path=make_temp_repo_root(self))
+        service = InterAgentService(store)
+        run = service.create_run(orchestrated_spec())
+        plan = OrchestrationPlan(
+            summary="One stale task.",
+            tasks=(
+                OrchestrationTaskSpec(
+                    task_id="implement",
+                    label="Implementer",
+                    role="implementer",
+                    objective="Reject work owned by the previous scheduler generation.",
+                ),
+            ),
+        )
+        orchestrator = store.get_participant("orchestrator", workspace_id="default", run_id=run.run_id)
+        record_plan(service, run, plan)
+        participant = materialize_plan(service, run, orchestrator, plan)["implement"]
+        stale_run = replace(run, status="running")
+        store.save_run(replace(stale_run, recovery_generation=1))
+
+        with self.assertRaisesRegex(InterAgentOperationError, "generation"):
+            execute_task(
+                service,
+                stale_run,
+                plan.tasks[0],
+                participant,
+                "Implement.",
+                {},
+                lambda *_args: "This stale task must not run.",
+            )
+
+        persisted = store.get_participant("implement", workspace_id="default", run_id=run.run_id)
+        self.assertEqual(persisted.status, "idle")
+        self.assertIsNone(persisted.current_task_id)
+
+    def test_task_finalization_cannot_overwrite_a_persisted_interrupt(self) -> None:
+        store = build_inter_agent_document_store(start_path=make_temp_repo_root(self))
+        service = InterAgentService(store)
+        run = service.create_run(orchestrated_spec())
+        plan = OrchestrationPlan(
+            summary="Interrupt one active task.",
+            tasks=(
+                OrchestrationTaskSpec(
+                    task_id="implement",
+                    label="Implementer",
+                    role="implementer",
+                    objective="Return output only if cancellation did not win.",
+                ),
+            ),
+        )
+        orchestrator = store.get_participant("orchestrator", workspace_id="default", run_id=run.run_id)
+        record_plan(service, run, plan)
+        participant = materialize_plan(service, run, orchestrator, plan)["implement"]
+        running = replace(run, status="running")
+        store.save_run(running)
+        original_scheduler_mutation = store.scheduler_mutation
+        mutation_count = 0
+
+        def pause_before_finalize(**kwargs):
+            nonlocal mutation_count
+            mutation_count += 1
+            if mutation_count == 2:
+                service.interrupt_run(
+                    SimpleNamespace(runtime_store=SimpleNamespace()),
+                    workspace_id="default",
+                    run_id=run.run_id,
+                    reason="pause_before_task_finalize",
+                )
+            return original_scheduler_mutation(**kwargs)
+
+        with patch.object(store, "scheduler_mutation", side_effect=pause_before_finalize):
+            result = execute_task(
+                service,
+                running,
+                plan.tasks[0],
+                participant,
+                "Implement.",
+                {},
+                lambda *_args: "Output produced immediately before cancellation.",
+            )
+
+        persisted_run = store.get_run(run.run_id, workspace_id="default")
+        persisted = store.get_participant("implement", workspace_id="default", run_id=run.run_id)
+        events = store.list_event_page(
+            run.run_id,
+            workspace_id="default",
+            visibility_plane="detail",
+            limit=200,
+        ).events
+        terminal_statuses = [
+            event.payload["status"]
+            for event in events
+            if event.event_type == "inter_agent.task.completed" and event.payload.get("task_id") == "implement"
+        ]
+        self.assertEqual(result.status, "cancelled")
+        self.assertEqual(persisted_run.status, "paused")
+        self.assertEqual(persisted.status, "cancelled")
+        self.assertIsNone(persisted.current_task_id)
+        self.assertEqual(terminal_statuses, ["cancelled"])
+
     def test_completion_rejects_failed_security_review_despite_earlier_approval(self) -> None:
         store = build_inter_agent_document_store(start_path=make_temp_repo_root(self))
         service = InterAgentService(store)

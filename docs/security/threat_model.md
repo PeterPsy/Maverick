@@ -179,6 +179,12 @@ session exists. A paused-run fence before and after child creation removes late
 session records and files before they can receive work. HTTP, CLI, and MCP
 resume share the hosted handoff that waits for the previous scheduler owner;
 sidecars without that owner reject the mutation.
+The same fence covers the complete scheduler mutation path. Each scheduler
+captures one recovery generation, and every run transition, recovery-ledger
+write, task claim/finalization, and completion commit validates that generation
+and an active run status under the workspace transition lock. Queued futures
+cannot start after pause, late results cannot overwrite persisted cancellation,
+and a stale control decision cannot move a paused run to completed.
 
 ### Workspace escape
 

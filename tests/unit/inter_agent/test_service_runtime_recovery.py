@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 import unittest
@@ -138,6 +139,57 @@ class InterAgentRuntimeRecoveryTest(unittest.TestCase):
         self.assertFalse(late_runtime_root.exists())
         with self.assertRaises(RuntimeSessionNotFoundError):
             runtime_store.get_session("late-child-session")
+
+    def test_old_generation_cannot_claim_a_late_child_session(self) -> None:
+        repo_root = make_temp_repo_root(self)
+        store = build_inter_agent_document_store(start_path=repo_root)
+        runtime_store = _runtime_store()
+        service = InterAgentService(store)
+        now = datetime(2026, 6, 16, 12, 0, tzinfo=UTC)
+        runtime_store.save_session(_runtime_session("root-session", repo_root=repo_root))
+        runtime_store.save_state(_runtime_state("root-session"))
+        run = service.create_run(orchestrated_spec(), now=now)
+        orchestrator = store.get_participant("orchestrator", workspace_id="default", run_id=run.run_id)
+        plan = _interruptible_plan()
+        record_plan(service, run, plan)
+        worker = materialize_plan(service, run, orchestrator, plan)["implement"]
+        store.save_run(replace(run, status="running"))
+
+        def create_then_advance_generation(*args, **kwargs):
+            child = create_child_runtime_session(*args, **kwargs)
+            current = store.get_run(run.run_id, workspace_id="default")
+            store.save_run(replace(current, recovery_generation=1))
+            return child
+
+        with (
+            patch(
+                "core.inter_agent.service.create_child_runtime_session",
+                side_effect=create_then_advance_generation,
+            ),
+            self.assertRaisesRegex(InterAgentOperationError, "generation changed"),
+        ):
+            service.spawn_participant_runtime_session(
+                runtime_store,
+                workspace_id="default",
+                run_id=run.run_id,
+                participant_id=worker.participant_id,
+                child_session_id="stale-generation-session",
+                expected_recovery_generation=0,
+                now=now,
+            )
+
+        persisted_run = store.get_run(run.run_id, workspace_id="default")
+        persisted_worker = store.get_participant("implement", workspace_id="default", run_id=run.run_id)
+        stale_runtime_root = (
+            Path(runtime_store.get_session("root-session").runtime_root).parent
+            / "stale-generation-session"
+        )
+        self.assertEqual(persisted_run.recovery_generation, 1)
+        self.assertEqual(persisted_worker.status, "idle")
+        self.assertIsNone(persisted_worker.runtime_session_id)
+        self.assertFalse(stale_runtime_root.exists())
+        with self.assertRaises(RuntimeSessionNotFoundError):
+            runtime_store.get_session("stale-generation-session")
 
     def test_interrupt_and_immediate_resume_preserve_cancelled_task_recovery(self) -> None:
         repo_root = make_temp_repo_root(self)

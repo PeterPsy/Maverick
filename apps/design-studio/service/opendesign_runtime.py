@@ -7,12 +7,11 @@ from pathlib import Path
 from typing import Any
 
 from opendesign_artifact import ArtifactError, selected_asset, validate_bundle_manifest
-from opendesign_generation_control import (
+from opendesign_generation_control import load_generation_control, resolve_generation_data_dir
+from opendesign_generation_model import (
     GenerationControl,
     GenerationControlError,
     GenerationTriple,
-    load_generation_control,
-    resolve_generation_data_dir,
 )
 from opendesign_materialization import MaterializedBundle, discover_verified_bundles
 

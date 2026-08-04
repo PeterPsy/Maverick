@@ -12,19 +12,25 @@ from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[3]
 MODULE_PATH = ROOT / "apps/design-studio/service/opendesign_generation_control.py"
+MODEL_PATH = ROOT / "apps/design-studio/service/opendesign_generation_model.py"
 ADR_PATH = ROOT / "docs/architecture/design_studio_data_generations.md"
 OLD_DIGEST = "a" * 64
 NEW_DIGEST = "b" * 64
 VERIFIED = {OLD_DIGEST: "0.10.1", NEW_DIGEST: "0.16.1"}
 
 
-def _generation_module():
+def _generation_modules():
+    model_spec = importlib.util.spec_from_file_location("opendesign_generation_model", MODEL_PATH)
+    assert model_spec is not None and model_spec.loader is not None
+    model = importlib.util.module_from_spec(model_spec)
+    sys.modules[model_spec.name] = model
+    model_spec.loader.exec_module(model)
     spec = importlib.util.spec_from_file_location("opendesign_generation_control", MODULE_PATH)
     assert spec is not None and spec.loader is not None
     module = importlib.util.module_from_spec(spec)
     sys.modules[spec.name] = module
     spec.loader.exec_module(module)
-    return module
+    return model, module
 
 
 class DesignStudioDataGenerationProofTests(unittest.TestCase):
@@ -35,9 +41,9 @@ class DesignStudioDataGenerationProofTests(unittest.TestCase):
         self.root.mkdir()
         (self.root / "migrations").mkdir()
         (self.root / "backups").mkdir()
-        self.module = _generation_module()
-        self.old = self.module.GenerationTriple(OLD_DIGEST, "0.10.1", "gen_old")
-        self.new = self.module.GenerationTriple(NEW_DIGEST, "0.16.1", "gen_new")
+        self.model, self.module = _generation_modules()
+        self.old = self.model.GenerationTriple(OLD_DIGEST, "0.10.1", "gen_old")
+        self.new = self.model.GenerationTriple(NEW_DIGEST, "0.16.1", "gen_new")
         self._make_generation(self.old, "old bytes")
         self._make_generation(self.new, "forward migrated bytes")
 
@@ -56,7 +62,7 @@ class DesignStudioDataGenerationProofTests(unittest.TestCase):
         self.assertEqual(loaded.previous, self.old)
         self.assertEqual(self._marker(self.old).read_bytes(), old_marker)
 
-        rollback = self.module.GenerationControl(
+        rollback = self.model.GenerationControl(
             active=self.old,
             previous=self.new,
             migration_id="migration_rollback_001",
@@ -100,7 +106,7 @@ class DesignStudioDataGenerationProofTests(unittest.TestCase):
                     verified_artifacts=VERIFIED,
                 )
 
-        newest = self.module.GenerationTriple(NEW_DIGEST, "0.16.1", "gen_newest_but_inactive")
+        newest = self.model.GenerationTriple(NEW_DIGEST, "0.16.1", "gen_newest_but_inactive")
         self._make_generation(newest, "must not be selected")
         recovered = self.module.recover_generation_control(self.root, verified_artifacts=VERIFIED)
         self.assertEqual(recovered.control.active, self.new)
@@ -133,17 +139,17 @@ class DesignStudioDataGenerationProofTests(unittest.TestCase):
         payload = json.loads(control_path.read_text(encoding="utf-8"))
         payload["unexpected"] = True
         control_path.write_text(json.dumps(payload), encoding="utf-8")
-        with self.assertRaisesRegex(self.module.GenerationControlError, "unknown or missing"):
+        with self.assertRaisesRegex(self.model.GenerationControlError, "unknown or missing"):
             self.module.load_generation_control(self.root, verified_artifacts=VERIFIED)
 
         self.module.write_generation_control(self.root, self._initial_control(), verified_artifacts=VERIFIED)
-        with self.assertRaisesRegex(self.module.GenerationControlError, "not verified"):
+        with self.assertRaisesRegex(self.model.GenerationControlError, "not verified"):
             self.module.load_generation_control(
                 self.root,
                 verified_artifacts={NEW_DIGEST: "0.16.1"},
             )
 
-        with self.assertRaisesRegex(self.module.GenerationControlError, "version does not match"):
+        with self.assertRaisesRegex(self.model.GenerationControlError, "version does not match"):
             self.module.load_generation_control(
                 self.root,
                 verified_artifacts={OLD_DIGEST: "0.16.1", NEW_DIGEST: "0.16.1"},
@@ -154,20 +160,20 @@ class DesignStudioDataGenerationProofTests(unittest.TestCase):
             raw.replace('"schema_version":"1"', '"schema_version":"1","schema_version":"1"', 1),
             encoding="utf-8",
         )
-        with self.assertRaisesRegex(self.module.GenerationControlError, "duplicate JSON field"):
+        with self.assertRaisesRegex(self.model.GenerationControlError, "duplicate JSON field"):
             self.module.load_generation_control(self.root, verified_artifacts=VERIFIED)
 
         self.module.write_generation_control(self.root, self._initial_control(), verified_artifacts=VERIFIED)
         self._marker(self.old).unlink()
         self._marker(self.old).parent.rmdir()
-        with self.assertRaisesRegex(self.module.GenerationControlError, "generation data directory is missing"):
+        with self.assertRaisesRegex(self.model.GenerationControlError, "generation data directory is missing"):
             self.module.load_generation_control(self.root, verified_artifacts=VERIFIED)
 
     def test_control_and_generation_symlinks_fail_closed(self) -> None:
         outside = Path(self.temp.name) / "outside.json"
         outside.write_text("{}", encoding="utf-8")
         (self.root / "control.json").symlink_to(outside)
-        with self.assertRaisesRegex(self.module.GenerationControlError, "regular file"):
+        with self.assertRaisesRegex(self.model.GenerationControlError, "regular file"):
             self.module.load_generation_control(self.root, verified_artifacts=VERIFIED)
 
         (self.root / "control.json").unlink()
@@ -176,7 +182,7 @@ class DesignStudioDataGenerationProofTests(unittest.TestCase):
         self._marker(self.old).parent.rmdir()
         generation_root.rmdir()
         generation_root.symlink_to(Path(self.temp.name))
-        with self.assertRaisesRegex(self.module.GenerationControlError, "real directory"):
+        with self.assertRaisesRegex(self.model.GenerationControlError, "real directory"):
             self.module.write_generation_control(
                 self.root,
                 self._initial_control(),
@@ -185,11 +191,11 @@ class DesignStudioDataGenerationProofTests(unittest.TestCase):
 
     def test_journal_and_control_must_describe_the_same_atomic_transition(self) -> None:
         self.module.write_generation_control(self.root, self._initial_control(), verified_artifacts=VERIFIED)
-        unrelated = self.module.GenerationTriple(NEW_DIGEST, "0.16.1", "gen_unrelated")
+        unrelated = self.model.GenerationTriple(NEW_DIGEST, "0.16.1", "gen_unrelated")
         self._make_generation(unrelated, "unrelated")
         self._write_journal("migration_001", self.old, unrelated, "prepared")
 
-        with self.assertRaisesRegex(self.module.GenerationControlError, "inconsistent"):
+        with self.assertRaisesRegex(self.model.GenerationControlError, "inconsistent"):
             self.module.write_generation_control(
                 self.root,
                 self._cutover_control(),
@@ -203,7 +209,7 @@ class DesignStudioDataGenerationProofTests(unittest.TestCase):
         self._write_journal("migration_001", self.old, self.new, "prepared")
         self._write_journal("migration_rollback_001", self.new, self.old, "prepared")
         cutover = self._cutover_control()
-        rollback = self.module.GenerationControl(
+        rollback = self.model.GenerationControl(
             active=self.old,
             previous=self.new,
             migration_id="migration_rollback_001",
@@ -262,7 +268,7 @@ class DesignStudioDataGenerationProofTests(unittest.TestCase):
         return self.root / "instances" / triple.data_generation / "data" / "marker.txt"
 
     def _initial_control(self):
-        return self.module.GenerationControl(
+        return self.model.GenerationControl(
             active=self.old,
             previous=None,
             migration_id=None,
@@ -270,7 +276,7 @@ class DesignStudioDataGenerationProofTests(unittest.TestCase):
         )
 
     def _cutover_control(self):
-        return self.module.GenerationControl(
+        return self.model.GenerationControl(
             active=self.new,
             previous=self.old,
             migration_id="migration_001",
@@ -280,7 +286,7 @@ class DesignStudioDataGenerationProofTests(unittest.TestCase):
     def _write_journal(self, migration_id, source, target, state: str):
         snapshot = self.root / "backups" / migration_id
         snapshot.mkdir(exist_ok=True)
-        journal = self.module.MigrationJournal(
+        journal = self.model.MigrationJournal(
             migration_id=migration_id,
             state=state,
             source=source,

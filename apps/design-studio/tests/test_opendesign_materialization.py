@@ -32,14 +32,20 @@ class OpenDesignMaterializationTests(unittest.TestCase):
     def setUpClass(cls) -> None:
         cls.artifact = _load_module("opendesign_artifact", SERVICE_ROOT / "opendesign_artifact.py")
         cls.archive = _load_module("opendesign_archive", SERVICE_ROOT / "opendesign_archive.py")
-        _load_module("opendesign_generation_control", SERVICE_ROOT / "opendesign_generation_control.py")
+        cls.generation = _load_module(
+            "opendesign_generation_model",
+            SERVICE_ROOT / "opendesign_generation_model.py",
+        )
+        cls.generation_control = _load_module(
+            "opendesign_generation_control",
+            SERVICE_ROOT / "opendesign_generation_control.py",
+        )
         cls.materialization = _load_module(
             "opendesign_materialization",
             SERVICE_ROOT / "opendesign_materialization.py",
         )
         cls.runtime = _load_module("opendesign_runtime", SERVICE_ROOT / "opendesign_runtime.py")
         cls.launcher = _load_module("opendesign_launcher", SERVICE_ROOT / "opendesign_launcher.py")
-        cls.generation = sys.modules["opendesign_generation_control"]
 
     def setUp(self) -> None:
         self.temp = tempfile.TemporaryDirectory(prefix="maverick-od-materialize-")
@@ -114,7 +120,7 @@ class OpenDesignMaterializationTests(unittest.TestCase):
             migration_id=None,
             updated_at="2026-08-04T00:00:00Z",
         )
-        self.generation.write_generation_control(
+        self.generation_control.write_generation_control(
             generation_root,
             control,
             verified_artifacts={self.archive_sha256: "0.16.1"},

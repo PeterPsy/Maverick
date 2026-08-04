@@ -159,20 +159,27 @@ load proof, deterministic build metadata, and signed provenance.
 
 ## Versioned data generations
 
-`opendesign_generation_control.py` defines the strict app-owned `control.json`
-used for coordinated bundle and data activation. It validates verified artifact
-digests and real `instances/<generation>/data/` directories, rejects unknown
-fields and symlinks, and writes with same-directory temp, file `fsync`, atomic
-replace, and directory `fsync`. The same module strictly validates and writes
-migration journals and reconciles them against the active triple. The launcher
-uses only the exact active triple: its digest selects one verified immutable
-bundle directory and its generation selects the only directory exported as
-`OD_DATA_DIR`. It never selects a bundle or data directory by name, timestamp,
-symlink, or fallback. Migration and rollback orchestration are added in WP6.
+`opendesign_generation_model.py` owns the strict value objects, while
+`opendesign_generation_control.py` owns atomic `control.json` and journal I/O.
+Together they validate verified artifact digests and real
+`instances/<generation>/data/` directories, reject unknown fields and symlinks,
+and write with same-directory temp, file `fsync`, atomic replace, and directory
+`fsync`. The launcher uses only the exact active triple: its digest selects one
+verified immutable bundle directory and its generation selects the only
+directory exported as `OD_DATA_DIR`. It never selects a bundle or data directory
+by name, timestamp, symlink, or fallback.
+
+Controlled migration is split by responsibility: `opendesign_migration.py`
+coordinates freeze, drain, staging, cutover, rollback and recovery;
+`opendesign_migration_files.py` owns bounded copies, locks and cleanup;
+`opendesign_migration_legacy.py` moves legacy projects and imports only through
+the governed runtime API. It refuses any root without the explicit
+fixture/controlled-copy marker and does not authorize real workspace migration.
 
 Run the G4 filesystem and crash proof with:
 
 ```bash
 .venv/bin/python -W error::ResourceWarning -m unittest \
-  tests.architecture.test_design_studio_data_generation_proof -v
+  apps/design-studio/tests/test_data_generation_proof.py \
+  apps/design-studio/tests/test_opendesign_migration.py -v
 ```

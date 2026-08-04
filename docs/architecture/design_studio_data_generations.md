@@ -11,8 +11,8 @@ retention, and rollback for Design Studio. OpenDesign migrations are
 forward-only: an older bundle must never open a directory already migrated by a
 newer bundle.
 
-The decision applies to controlled fixtures and copied generations until WP6 is
-implemented and verified. It does not authorize migration of a real workspace.
+The implementation applies only to marked fixtures and controlled copies. It
+does not authorize migration of a real workspace.
 
 ## Decision
 
@@ -82,8 +82,9 @@ must differ. Unknown, duplicate, missing, malformed, oversized, non-UTF-8, or
 non-JSON input is rejected. The parser verifies every referenced generation and
 artifact before returning a usable control record.
 
-The app-owned implementation is
-`apps/design-studio/service/opendesign_generation_control.py`. It performs
+The app-owned implementation separates strict value objects in
+`apps/design-studio/service/opendesign_generation_model.py` from filesystem I/O
+in `apps/design-studio/service/opendesign_generation_control.py`. It performs
 strict schema parsing, reference validation, no-follow regular-file reads,
 same-directory temporary writes, file flush and `fsync`, atomic `replace`, and
 directory `fsync`.
@@ -127,8 +128,8 @@ bootstrap secret, prompt, or arbitrary host path.
 
 ## Cutover protocol
 
-For 0.10.1 to 0.16.1, WP6 must execute this order on fixture or controlled
-copies before any real-data authorization exists:
+For 0.10.1 to 0.16.1, the controlled migration executes this order on a marked
+fixture or copy; no real-data authorization exists:
 
 1. Acquire the Design Studio migration lock; reject new mutating operations.
 2. Wait for active runs or cancel them under the declared policy.
@@ -235,8 +236,9 @@ and canonical new references use the OpenDesign id.
 ## Executable proof
 
 ```bash
-.venv/bin/python -W error::ResourceWarning -m unittest \
-  tests.architecture.test_design_studio_data_generation_proof -v
+python3 -W error::ResourceWarning -m unittest \
+  apps/design-studio/tests/test_data_generation_proof.py \
+  apps/design-studio/tests/test_opendesign_migration.py -v
 ```
 
 The proof uses temporary fixture generations and injects failures immediately
@@ -254,9 +256,9 @@ Expected result: nine passing tests, no resource warning.
 - WP5 materializes and verifies immutable artifacts in digest-named registry
   directories. The launcher now resolves the bundle and data directory only
   from the validated active triple.
-- WP6 uses the strict journal/control primitives to implement staging, API
-  migration, legacy mapping, crash reconciliation, rollback, and retention
-  cleanup on fixture copies.
+- The controlled-copy implementation uses the strict journal/control primitives
+  for staging, API migration, legacy mapping, crash reconciliation, rollback,
+  and retention cleanup.
 - WP10 repeats migration, crash, and rollback scenarios through the final
   sidecar and UI topology.
 

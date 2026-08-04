@@ -46,6 +46,7 @@ node_modules/
 dist/
 build/
 apps/design-studio/service/vendor/open-design/
+apps/design-studio/service/artifacts/
 !apps/*/frontend/dist/
 !apps/*/frontend/dist/**
 

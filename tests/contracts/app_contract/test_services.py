@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from dataclasses import asdict
 import json
 from pathlib import Path
 from tempfile import TemporaryDirectory
@@ -26,6 +27,7 @@ from core.apps.contracts import (
 )
 from core.apps.errors import AppContractValidationError
 from core.apps.models import HttpSidecarBindSpec, HttpSidecarHealthSpec
+from core.apps.store import AppCollections, AppDocumentStore
 
 
 class AppContractServiceTests(unittest.TestCase):
@@ -54,6 +56,25 @@ class AppContractServiceTests(unittest.TestCase):
             self.assertEqual(loaded.contract.permissions.providers.credential_source, "none")
             self.assertFalse(loaded.contract.permissions.providers.deliver_secrets_to_app)
             self.assertEqual(json.loads((app_root / "app_contract.json").read_text(encoding="utf-8")), payload)
+
+            persisted = asdict(loaded.contract)
+            restored = AppDocumentStore(
+                AppCollections(
+                    app_sources=None,  # type: ignore[arg-type]
+                    workspace_local_app_projects=None,  # type: ignore[arg-type]
+                    workspace_app_bindings=None,  # type: ignore[arg-type]
+                    workspace_app_dependency_selections=None,  # type: ignore[arg-type]
+                )
+            )._app_contract(persisted)
+            restored_sidecar = restored.services.http_sidecars[0]
+            self.assertEqual(
+                restored_sidecar.proxy.route_policy.pass_through[3].path_template,
+                "/api/projects/{id}",
+            )
+            self.assertEqual(
+                restored_sidecar.entrypoint_access.surfaces[2].routes[0].path_template,
+                "/api/projects/{id}",
+            )
 
     def test_parse_contract_accepts_provider_model_proxy_permission(self) -> None:
         with TemporaryDirectory() as temp_dir:

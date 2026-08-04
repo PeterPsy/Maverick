@@ -225,11 +225,12 @@ class DesignStudioAppTests(unittest.TestCase):
 
         manifest = json.loads((APP_ROOT / "service" / "opendesign_bundle.json").read_text(encoding="utf-8"))
 
-        self.assertEqual(manifest["upstream"]["commit"], "eb245799adf07e7727ad5f970485d809bad5780e")
-        self.assertEqual(manifest["bundle"]["daemon_package"], "@open-design/daemon")
-        self.assertIn("apps/daemon", manifest["include_paths"])
-        self.assertIn("apps/web", manifest["include_paths"])
-        self.assertIn("apps/desktop", manifest["exclude_paths"])
+        self.assertEqual(manifest["upstream"]["commit"], "276b4d8e970bc143d7ad060181a89a834e3d9caf")
+        self.assertEqual(manifest["upstream"]["release_identity"]["package_version"], "0.16.1")
+        self.assertEqual(manifest["stage"]["daemon_package"], "@open-design/daemon")
+        self.assertEqual(manifest["stage"]["built_entrypoint"], "apps/daemon/dist/cli.js")
+        self.assertEqual(manifest["stage"]["web_static_dir"], "apps/web/out")
+        self.assertEqual(manifest["toolchain"]["package_manager"], "pnpm@10.33.2")
         self.assertEqual(set(manifest["sandbox"]), {"env"})
 
     def test_opendesign_launcher_fails_closed_without_bundle_even_if_fallback_is_requested(self) -> None:

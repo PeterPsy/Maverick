@@ -1,0 +1,120 @@
+diff --git a/apps/daemon/src/server.ts b/apps/daemon/src/server.ts
+index 496efdc039a10ce5eee7e8400f8d474192388d22..e6820115b690dc4aa2abc8097ac6ee7329f5d802 100644
+--- a/apps/daemon/src/server.ts
++++ b/apps/daemon/src/server.ts
+@@ -683,7 +683,12 @@ import {
+   seedLibraryExtensionOrigins,
+ } from './library-tokens.js';
+ import { listLibraryTokenOrigins } from './library-store.js';
+-import { apiTokenFromEnv, isApiAuthDisabled, isApiTokenMiddlewareEnabled } from './api-token-auth.js';
++import {
++  apiTokenFromEnv,
++  isApiAuthDisabled,
++  isApiTokenMiddlewareEnabled,
++  isTruthyEnvFlag,
++} from './api-token-auth.js';
+ import { createOpenDesignPublicMetadataService } from './services/open-design-public-metadata.js';
+ import { createWhatsNewService } from './services/whats-new.js';
+ import { execCommandViaLoginShell } from './services/login-shell.js';
+@@ -2042,6 +2047,7 @@ export async function startServer({
+   // are exempted so the desktop UI keeps working).
+   const apiToken = apiTokenFromEnv();
+   const apiAuthDisabled = isApiAuthDisabled();
++  const requireApiTokenOnLoopback = isTruthyEnvFlag(process.env.OD_REQUIRE_API_TOKEN_ON_LOOPBACK);
+   if (!isLoopbackHostname(host) && apiToken.length === 0 && !apiAuthDisabled) {
+     throw new Error(
+       `OD_BIND_HOST=${host} requires OD_API_TOKEN to be set. ` +
+@@ -2101,11 +2107,11 @@ export async function startServer({
+           return next();
+         }
+       }
+-      // Loopback short-circuit. We ignore the proxied X-Forwarded-For
+-      // header here because a reverse proxy MUST always forward the
+-      // bearer; the loopback bypass exists for the localhost desktop
+-      // UI which has no proxy in the path.
+-      if (isLoopbackPeerAddress(req.socket?.remoteAddress)) return next();
++      // Loopback short-circuit. Hosted embeddings can disable this bypass
++      // with OD_REQUIRE_API_TOKEN_ON_LOOPBACK=1 so a network-isolated relay
++      // remains the only authenticated caller. We ignore X-Forwarded-For:
++      // reverse proxies must always forward the bearer.
++      if (!requireApiTokenOnLoopback && isLoopbackPeerAddress(req.socket?.remoteAddress)) return next();
+       const auth = req.get('authorization') ?? '';
+       const match = /^Bearer\s+(\S+)\s*$/i.exec(auth);
+       if (!match || match[1] !== apiToken) {
+diff --git a/apps/daemon/tests/api-token-guard.test.ts b/apps/daemon/tests/api-token-guard.test.ts
+index 23eb90cacd3abfacf791292dfac4aacae74500ea..95d10ed4ec8b8159bd93fdc2bca9dac5f9edb158 100644
+--- a/apps/daemon/tests/api-token-guard.test.ts
++++ b/apps/daemon/tests/api-token-guard.test.ts
+@@ -20,6 +20,7 @@ import { startServer } from '../src/server.js';
+ const PREVIOUS_TOKEN = process.env.OD_API_TOKEN;
+ const PREVIOUS_HOST  = process.env.OD_BIND_HOST;
+ const PREVIOUS_DISABLE_API_AUTH = process.env.OD_DISABLE_API_AUTH;
++const PREVIOUS_REQUIRE_TOKEN_ON_LOOPBACK = process.env.OD_REQUIRE_API_TOKEN_ON_LOOPBACK;
+ 
+ let server: http.Server | undefined;
+ let baseUrl = '';
+@@ -36,6 +37,8 @@ afterEach(async () => {
+   else process.env.OD_BIND_HOST = PREVIOUS_HOST;
+   if (PREVIOUS_DISABLE_API_AUTH === undefined) delete process.env.OD_DISABLE_API_AUTH;
+   else process.env.OD_DISABLE_API_AUTH = PREVIOUS_DISABLE_API_AUTH;
++  if (PREVIOUS_REQUIRE_TOKEN_ON_LOOPBACK === undefined) delete process.env.OD_REQUIRE_API_TOKEN_ON_LOOPBACK;
++  else process.env.OD_REQUIRE_API_TOKEN_ON_LOOPBACK = PREVIOUS_REQUIRE_TOKEN_ON_LOOPBACK;
+ });
+ 
+ describe('bound-API-token guard', () => {
+@@ -92,6 +95,30 @@ describe('bearer middleware', () => {
+     expect(resp.status).toBe(200);
+   });
+ 
++  it('requires the bearer from loopback when the hosted boundary flag is enabled', async () => {
++    if (shutdown) await Promise.resolve(shutdown());
++    if (server?.listening) await new Promise<void>((resolve) => server!.close(() => resolve()));
++    server = undefined;
++    shutdown = undefined;
++    process.env.OD_REQUIRE_API_TOKEN_ON_LOOPBACK = '1';
++    const started = (await startServer({ port: 0, host: '127.0.0.1', returnServer: true })) as {
++      url: string;
++      server: http.Server;
++      shutdown?: () => Promise<void> | void;
++    };
++    baseUrl = started.url;
++    server = started.server;
++    shutdown = started.shutdown;
++
++    const unauthenticated = await fetch(`${baseUrl}/api/plugins`);
++    const authenticated = await fetch(`${baseUrl}/api/plugins`, {
++      headers: { authorization: 'Bearer secret-test-token' },
++    });
++
++    expect(unauthenticated.status).toBe(401);
++    expect(authenticated.status).toBe(200);
++  });
++
+   it('keeps health / readiness / version probes open without a bearer', async () => {
+     for (const path of ['/api/health', '/api/ready', '/api/version']) {
+       const resp = await fetch(`${baseUrl}${path}`);
+diff --git a/apps/web/next.config.ts b/apps/web/next.config.ts
+index 062b86a662dbf7c5491909972ead83fa3b5a17ee..e24946df69f996f4d63e346b591438c952c50a65 100644
+--- a/apps/web/next.config.ts
++++ b/apps/web/next.config.ts
+@@ -156,6 +156,8 @@ function configuredAllowedDevHosts(): string[] {
+ }
+ 
+ const nextConfig: NextConfig = {
++  generateBuildId: async () => process.env.OD_REPRODUCIBLE_BUILD_ID || 'open-design-v0.16.1',
++  ...(process.env.OD_REPRODUCIBLE_BUILD_CPUS === '1' ? { experimental: { cpus: 1 } } : {}),
+   allowedDevOrigins: configuredAllowedDevHosts(),
+   outputFileTracingRoot: WORKSPACE_ROOT,
+   reactStrictMode: true,
+diff --git a/package.json b/package.json
+index 412abc12af1234cc401ca2d651187e8567951afe..1cfa55a2f5351223c543a37971f8e057f50559df 100644
+--- a/package.json
++++ b/package.json
+@@ -62,6 +62,7 @@
+       "electron",
+       "electron-winstaller",
+       "esbuild",
++      "node-pty",
+       "protobufjs",
+       "sharp"
+     ]

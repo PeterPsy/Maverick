@@ -1,66 +1,171 @@
 {
-  "schema_version": "1",
+  "schema_version": "3",
   "upstream": {
     "repository": "https://github.com/nexu-io/open-design.git",
-    "tag": "open-design-v0.10.1",
-    "commit": "eb245799adf07e7727ad5f970485d809bad5780e",
-    "version": "0.10.1"
+    "tag": "open-design-v0.16.1",
+    "commit": "276b4d8e970bc143d7ad060181a89a834e3d9caf",
+    "release_version": "0.16.1",
+    "release_identity": {
+      "package_path": "apps/packaged/package.json",
+      "package_name": "@open-design/packaged",
+      "package_version": "0.16.1"
+    },
+    "root_package_version": "0.15.1",
+    "tag_metadata": {
+      "object_type": "commit",
+      "signature": "unavailable",
+      "reason": "The upstream release tag is a lightweight tag and the pinned commit is unsigned."
+    }
   },
-  "bundle": {
-    "default_relative_path": "vendor/open-design",
+  "toolchain": {
     "node": "~24",
     "package_manager": "pnpm@10.33.2",
+    "via_corepack": true,
+    "corepack_enable": [
+      "corepack",
+      "enable",
+      "--install-directory"
+    ]
+  },
+  "patch_series": "patches/series.json",
+  "certification": {
+    "record": "opendesign_upstream_baseline_0_16_1.json",
+    "record_sha256": "489915adeb91c96a1a20d57d76132bfbd08c6a992e0187b6485aa0604cd0156b",
+    "separate_from_packaging": true
+  },
+  "build": {
+    "install": [
+      "corepack",
+      "pnpm",
+      "install",
+      "--frozen-lockfile"
+    ],
+    "focused_verification": [
+      [
+        "corepack",
+        "pnpm",
+        "--filter",
+        "@open-design/daemon",
+        "exec",
+        "vitest",
+        "run",
+        "-c",
+        "vitest.config.ts",
+        "tests/api-token-guard.test.ts"
+      ]
+    ],
+    "compile": [
+      [
+        "corepack",
+        "pnpm",
+        "--filter",
+        "@open-design/daemon...",
+        "--workspace-concurrency=4",
+        "--if-present",
+        "run",
+        "build"
+      ],
+      [
+        "corepack",
+        "pnpm",
+        "--filter",
+        "@open-design/web",
+        "run",
+        "build"
+      ]
+    ],
+    "environment": {
+      "CI": "true",
+      "LANG": "C.UTF-8",
+      "LC_ALL": "C.UTF-8",
+      "MALLOC_ARENA_MAX": "2",
+      "NODE_OPTIONS": "--max-old-space-size=896",
+      "NO_COLOR": "1",
+      "OD_REPRODUCIBLE_BUILD_ID": "open-design-v0.16.1",
+      "OD_REPRODUCIBLE_BUILD_CPUS": "1",
+      "SOURCE_DATE_EPOCH": "0",
+      "TZ": "UTC"
+    },
+    "install_environment": {
+      "MALLOC_ARENA_MAX": "1",
+      "NODE_OPTIONS": "--max-old-space-size=640",
+      "OPEN_DESIGN_POSTINSTALL_CONCURRENCY": "1"
+    },
+    "focused_verification_environment": {
+      "MALLOC_ARENA_MAX": "1",
+      "NODE_OPTIONS": "--max-old-space-size=1024"
+    },
+    "compile_environment": {
+      "DO_NOT_TRACK": "1",
+      "NEXT_TELEMETRY_DISABLED": "1"
+    }
+  },
+  "stage": {
     "daemon_package": "@open-design/daemon",
-    "built_entrypoint": "apps/daemon/dist/cli.js",
-    "source_start_command": [
+    "daemon_deploy": [
+      "corepack",
       "pnpm",
       "--filter",
       "@open-design/daemon",
-      "run",
-      "daemon"
+      "--prod",
+      "deploy",
+      "--legacy"
     ],
-    "web_static_dir": "apps/web/out"
+    "built_entrypoint": "apps/daemon/dist/cli.js",
+    "web_static_source": "apps/web/out",
+    "web_static_dir": "apps/web/out",
+    "resource_paths": [
+      "assets",
+      "craft",
+      "design-systems",
+      "design-templates",
+      "plugins/_official",
+      "plugins/registry",
+      "prompt-templates",
+      "skills"
+    ],
+    "remove_globs": [
+      "**/*.map"
+    ]
   },
-  "include_paths": [
-    "package.json",
-    "pnpm-lock.yaml",
-    "pnpm-workspace.yaml",
-    "apps/daemon",
-    "apps/web",
-    "packages/agui-adapter",
-    "packages/components",
-    "packages/contracts",
-    "packages/diagnostics",
-    "packages/host",
-    "packages/platform",
-    "packages/plugin-runtime",
-    "packages/registry-protocol",
-    "packages/sidecar",
-    "packages/sidecar-proto",
-    "assets",
-    "craft",
-    "design-systems",
-    "design-templates",
-    "plugins/registry",
-    "prompt-templates",
-    "skills"
-  ],
-  "exclude_paths": [
-    "apps/desktop",
-    "apps/landing-page",
-    "apps/packaged",
-    "apps/telemetry-worker",
-    "charts",
-    "deploy",
-    "e2e",
-    "node_modules",
-    "plugins/marketplaces",
-    "tools"
+  "artifact": {
+    "format": "tar.gz",
+    "default_relative_path": "vendor/open-design",
+    "asset_directory": "artifacts",
+    "assets": {
+      "linux-x86_64": {
+        "file": "open-design-v0.16.1-linux-x86_64.tar.gz",
+        "sha256": null,
+        "size_bytes": null,
+        "file_manifest": "open-design-v0.16.1-linux-x86_64.manifest.json",
+        "file_manifest_sha256": null,
+        "sbom": "open-design-v0.16.1-linux-x86_64.sbom.cdx.json",
+        "sbom_sha256": null,
+        "license_inventory": "open-design-v0.16.1-linux-x86_64.licenses.json",
+        "license_inventory_sha256": null,
+        "notice": "open-design-v0.16.1-linux-x86_64.NOTICE",
+        "notice_sha256": null,
+        "provenance": "open-design-v0.16.1-linux-x86_64.provenance.json",
+        "provenance_sha256": null,
+        "signature": "open-design-v0.16.1-linux-x86_64.provenance.sig",
+        "signature_sha256": null,
+        "public_key": "open-design-v0.16.1-linux-x86_64.provenance.pub.pem",
+        "public_key_sha256": null
+      }
+    }
+  },
+  "native_runtime_dependencies": [
+    "better-sqlite3",
+    "node-pty",
+    "blake3-wasm"
   ],
   "sandbox": {
     "env": {
       "OD_SANDBOX_MODE": "1",
       "OD_BIND_HOST": "127.0.0.1",
+      "OD_REQUIRE_API_TOKEN_ON_LOOPBACK": "1",
+      "DO_NOT_TRACK": "1",
+      "NEXT_TELEMETRY_DISABLED": "1",
       "OD_DATA_DIR": "${app.data_dir}/opendesign",
       "OD_MEDIA_CONFIG_DIR": "${app.data_dir}/opendesign/media-config"
     }

@@ -1,230 +1,232 @@
-"""Create the curated OpenDesign bundle consumed by ``opendesign_launcher.py``."""
+#!/usr/bin/env python3
+"""Build and attest two independent byte-identical OpenDesign runtime artifacts."""
 
 from __future__ import annotations
 
 import argparse
-from datetime import UTC, datetime
+import copy
 import json
+import os
 from pathlib import Path
 import shutil
-import subprocess
-from typing import Callable
+import sys
+import tempfile
+from typing import Any, Callable
+from uuid import uuid4
+
+from opendesign_artifact import (
+    ARTIFACT_DIGEST_FIELDS,
+    ArtifactError,
+    platform_key,
+    read_bundle_manifest,
+    selected_asset,
+    sha256_file,
+    validate_bundle_manifest,
+    write_canonical_json,
+)
+from opendesign_attestation import provenance_payload, sign_provenance, verify_artifact_set
+from opendesign_build import BuildResult, build_once
+from opendesign_process import BuildProcessError, activate_runtime_attachment, signal_guard
+from opendesign_source import SourceError, validate_repository
+from opendesign_supply_chain import (
+    SupplyChainError,
+    validate_certification_record,
+    validate_manifest,
+    validate_patch_series,
+)
 
 
 SERVICE_ROOT = Path(__file__).resolve().parent
-APP_ROOT = SERVICE_ROOT.parent
+REPOSITORY_ROOT = SERVICE_ROOT.parents[2]
 MANIFEST_PATH = SERVICE_ROOT / "opendesign_bundle.json"
-GENERATED_COPY_NAMES = {"node_modules", ".next", "dist", "__pycache__", ".turbo"}
+BuildFunction = Callable[..., BuildResult]
 
 
-def main() -> None:
-    parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--source", required=True, help="OpenDesign checkout at the pinned tag.")
-    parser.add_argument(
-        "--output",
-        default=str(SERVICE_ROOT / "vendor" / "open-design"),
-        help="Bundle destination inside the Design Studio app source.",
-    )
-    parser.add_argument("--force", action="store_true", help="Replace an existing output directory.")
-    parser.add_argument("--skip-build", action="store_true", help="Copy sources without running pnpm install/build.")
-    args = parser.parse_args()
-
-    manifest = _read_manifest()
-    source = Path(args.source).resolve()
-    output = Path(args.output).resolve()
-    _assert_inside_app(output)
-    _validate_source(source, manifest)
-    if output.exists():
-        if not args.force:
-            raise SystemExit(f"Output already exists: {output}. Use --force to replace it.")
-        shutil.rmtree(output)
-    output.mkdir(parents=True, exist_ok=True)
-    _copy_curated_paths(source, output, manifest)
-    _adapt_curated_workspace(output)
-    _write_bundle_metadata(output, manifest)
-    if not args.skip_build:
-        _run_build(output)
-    _validate_output(output, manifest, built=not args.skip_build)
-    print(json.dumps({"ok": True, "output": str(output), "built": not args.skip_build}, indent=2))
+class PackagingError(RuntimeError):
+    """Raised when deterministic packaging or publication fails."""
 
 
-def _read_manifest() -> dict:
-    return json.loads(MANIFEST_PATH.read_text(encoding="utf-8"))
-
-
-def _assert_inside_app(path: Path) -> None:
-    root = APP_ROOT.resolve()
-    if root != path and root not in path.parents:
-        raise SystemExit("Bundle output must stay inside apps/design-studio.")
-
-
-def _validate_source(source: Path, manifest: dict) -> None:
-    if not (source / "package.json").is_file():
-        raise SystemExit(f"OpenDesign source does not look valid: {source}")
-    package_json = json.loads((source / "package.json").read_text(encoding="utf-8"))
-    expected_version = manifest["upstream"]["version"]
-    if str(package_json.get("version") or "") != expected_version:
-        raise SystemExit(f"OpenDesign package version is {package_json.get('version')!r}, expected {expected_version!r}.")
-    expected_package_manager = manifest["bundle"]["package_manager"]
-    if str(package_json.get("packageManager") or "") != expected_package_manager:
-        raise SystemExit(
-            f"OpenDesign package manager is {package_json.get('packageManager')!r}, expected {expected_package_manager!r}."
+def build_reproducible_artifact(
+    repository: Path,
+    output_directory: Path,
+    *,
+    signing_key: Path,
+    manifest: dict[str, Any],
+    work_parent: Path,
+    pnpm_store: Path,
+    runtime_session_id: str | None,
+    service_root: Path = SERVICE_ROOT,
+    build_function: BuildFunction = build_once,
+) -> dict[str, Any]:
+    validate_manifest(manifest)
+    validate_bundle_manifest(manifest, require_artifact_digest=False)
+    validate_certification_record(service_root, manifest)
+    validate_patch_series(service_root, manifest)
+    validate_repository(repository, manifest)
+    signing_key = _real_signing_key(signing_key)
+    work_parent = _real_directory(work_parent, create=True)
+    pnpm_store = _real_directory(pnpm_store, create=True)
+    output_directory = _real_directory(output_directory, create=True)
+    asset = selected_asset(manifest, require_artifact_digest=False)
+    results: list[BuildResult] = []
+    with tempfile.TemporaryDirectory(prefix="maverick-opendesign-builds-", dir=work_parent) as temporary:
+        temporary_root = Path(temporary)
+        for index in (1, 2):
+            result_root = temporary_root / f"build-{index}"
+            result_root.mkdir()
+            results.append(
+                build_function(
+                    repository,
+                    result_root,
+                    manifest=manifest,
+                    service_root=service_root,
+                    artifact_name=asset["file"],
+                    pnpm_store=pnpm_store,
+                    runtime_session_id=runtime_session_id,
+                )
+            )
+        assert_reproducible(results)
+        first = results[0]
+        _publish_file(first.artifact, output_directory / asset["file"])
+        _publish_file(first.file_manifest_path, output_directory / asset["file_manifest"])
+        _publish_file(first.sbom_path, output_directory / asset["sbom"])
+        _publish_file(first.licenses_path, output_directory / asset["license_inventory"])
+        _publish_file(first.notice_path, output_directory / asset["notice"])
+        provenance = provenance_payload(
+            artifact_name=asset["file"],
+            artifact_sha256=first.artifact_sha256,
+            lockfile_sha256=first.lockfile_sha256,
+            patch_evidence=first.patch_evidence,
+            manifest=manifest,
         )
-    expected = manifest["upstream"]["commit"]
-    actual = _git_commit(source)
-    if actual and actual != expected:
-        raise SystemExit(f"OpenDesign checkout is {actual}, expected {expected}.")
-
-
-def _git_commit(source: Path) -> str:
-    try:
-        result = subprocess.run(
-            ["git", "-C", str(source), "rev-parse", "HEAD"],
-            check=True,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            text=True,
+        provenance_path = output_directory / asset["provenance"]
+        write_canonical_json(provenance_path, provenance)
+        sign_provenance(
+            provenance_path,
+            signing_key,
+            output_directory / asset["signature"],
+            output_directory / asset["public_key"],
         )
-    except (OSError, subprocess.CalledProcessError):
-        return ""
-    return result.stdout.strip()
-
-
-def _copy_curated_paths(source: Path, output: Path, manifest: dict) -> None:
-    excluded = {Path(item) for item in manifest.get("exclude_paths", [])}
-    for relative_text in manifest["include_paths"]:
-        relative = Path(relative_text)
-        if _is_excluded(relative, excluded):
-            continue
-        src = source / relative
-        dst = output / relative
-        if not src.exists():
-            raise SystemExit(f"Manifest include path is missing from upstream checkout: {relative_text}")
-        if src.is_dir():
-            dst.parent.mkdir(parents=True, exist_ok=True)
-            shutil.copytree(src, dst, ignore=_ignore_for_copy(source, excluded))
-        else:
-            dst.parent.mkdir(parents=True, exist_ok=True)
-            shutil.copy2(src, dst)
-
-
-def _is_excluded(relative: Path, excluded: set[Path]) -> bool:
-    return any(relative == item or item in relative.parents for item in excluded)
-
-
-def _ignore_for_copy(source_root: Path, excluded: set[Path]) -> Callable[[str, list[str]], set[str]]:
-    def ignore(directory: str, names: list[str]) -> set[str]:
-        ignored: set[str] = set()
-        try:
-            directory_relative = Path(directory).resolve().relative_to(source_root)
-        except ValueError:
-            directory_relative = Path()
-        for name in names:
-            candidate = directory_relative / name
-            if name in GENERATED_COPY_NAMES or _is_excluded(candidate, excluded):
-                ignored.add(name)
-        return ignored
-
-    return ignore
-
-
-def _write_bundle_metadata(output: Path, manifest: dict) -> None:
-    payload = {
-        "schema_version": "1",
-        "created_at": datetime.now(tz=UTC).isoformat(),
-        "source": manifest["upstream"],
-        "bundle": manifest["bundle"],
-        "sandbox": manifest["sandbox"],
+    pins = artifact_pins(output_directory, asset)
+    pinned_manifest = with_artifact_pins(manifest, pins)
+    verify_artifact_set(pinned_manifest, output_directory)
+    return {
+        "artifact": str(output_directory / asset["file"]),
+        "artifact_sha256": pins["sha256"],
+        "artifact_size_bytes": pins["size_bytes"],
+        "build_artifact_sha256s": [result.artifact_sha256 for result in results],
+        "artifact_pins": pins,
+        "reproducible_builds": 2,
+        "upstream_certification_status": validate_certification_record(service_root, manifest)[
+            "latest_acceptance"
+        ]["status"],
     }
-    (output / "maverick-bundle.json").write_text(
-        json.dumps(payload, indent=2, ensure_ascii=True) + "\n",
-        encoding="utf-8",
-    )
 
 
-def _adapt_curated_workspace(output: Path) -> None:
-    package_json_path = output / "package.json"
-    package_json = json.loads(package_json_path.read_text(encoding="utf-8"))
-    scripts = package_json.get("scripts")
-    if isinstance(scripts, dict):
-        scripts.pop("postinstall", None)
-    dev_dependencies = package_json.get("devDependencies")
-    if isinstance(dev_dependencies, dict):
-        for name in list(dev_dependencies):
-            if name.startswith("@open-design/tools-"):
-                dev_dependencies.pop(name, None)
-    package_json_path.write_text(json.dumps(package_json, indent=2, ensure_ascii=True) + "\n", encoding="utf-8")
-    (output / "pnpm-workspace.yaml").write_text(
-        "\n".join(
-            [
-                "packages:",
-                "  - apps/daemon",
-                "  - apps/web",
-                "  - packages/*",
-                "",
-                "overrides:",
-                "  brace-expansion: 5.0.6",
-                "  devalue: 5.8.1",
-                "  fast-uri: 3.1.2",
-                "  hono: 4.12.19",
-                "  ip-address: 10.2.0",
-                "  postcss: 8.5.15",
-                "  protobufjs: 8.4.0",
-                "  qs: 6.15.2",
-                "  tmp: 0.2.7",
-                "  yaml: 2.9.0",
-                "",
-                "onlyBuiltDependencies:",
-                "  - better-sqlite3",
-                "  - core-js",
-                "  - esbuild",
-                "  - protobufjs",
-                "  - sharp",
-                "",
-            ]
-        ),
-        encoding="utf-8",
-    )
-
-
-def _run_build(output: Path) -> None:
-    corepack = shutil.which("corepack")
-    if corepack is None:
-        raise SystemExit("corepack is required to install pnpm and build the OpenDesign bundle.")
-    subprocess.run([corepack, "pnpm", "install", "--no-frozen-lockfile"], cwd=output, check=True)
-    subprocess.run(
-        [corepack, "pnpm", "-r", "--workspace-concurrency=4", "--if-present", "run", "build"],
-        cwd=output,
-        check=True,
-    )
-
-
-def _validate_output(output: Path, manifest: dict, *, built: bool) -> None:
-    for relative_text in manifest["exclude_paths"]:
-        if Path(relative_text).name in GENERATED_COPY_NAMES:
-            continue
-        if (output / relative_text).exists():
-            raise SystemExit(f"Excluded OpenDesign path was copied into the bundle: {relative_text}")
-    required_paths = ["package.json", "pnpm-lock.yaml", "apps/daemon/package.json", "apps/web/package.json"]
-    if built:
-        required_paths.extend(
-            [
-                manifest["bundle"]["built_entrypoint"],
-                manifest["bundle"]["web_static_dir"],
-            ]
+def assert_reproducible(results: list[BuildResult]) -> None:
+    if len(results) != 2:
+        raise PackagingError("OpenDesign reproducibility requires exactly two clean builds")
+    first, second = results
+    if first.artifact_sha256 != second.artifact_sha256 or first.artifact_size_bytes != second.artifact_size_bytes:
+        first_files = {item["path"]: item for item in first.file_manifest["files"]}
+        second_files = {item["path"]: item for item in second.file_manifest["files"]}
+        differing = sorted(
+            path
+            for path in set(first_files) | set(second_files)
+            if first_files.get(path) != second_files.get(path)
         )
-        required_paths.extend(
-            f"{relative}/dist"
-            for relative in manifest["include_paths"]
-            if str(relative).startswith("packages/")
+        raise PackagingError(
+            "OpenDesign clean builds are not byte-identical; differing paths: "
+            + ", ".join(differing[:50])
         )
-    missing = [relative for relative in required_paths if not (output / relative).exists()]
-    if missing:
-        raise SystemExit(f"OpenDesign bundle is missing required paths: {', '.join(missing)}")
+    if first.file_manifest != second.file_manifest:
+        raise PackagingError("OpenDesign clean builds produced different file manifests")
+
+
+def artifact_pins(output_directory: Path, asset: dict[str, Any]) -> dict[str, Any]:
+    pins: dict[str, Any] = {"size_bytes": (output_directory / asset["file"]).stat().st_size}
+    for path_field, digest_field in ARTIFACT_DIGEST_FIELDS.items():
+        pins[digest_field] = sha256_file(output_directory / asset[path_field])
+    return pins
+
+
+def with_artifact_pins(manifest: dict[str, Any], pins: dict[str, Any]) -> dict[str, Any]:
+    pinned = copy.deepcopy(manifest)
+    asset = pinned["artifact"]["assets"][platform_key()]
+    expected = {"size_bytes", *ARTIFACT_DIGEST_FIELDS.values()}
+    if set(pins) != expected:
+        raise PackagingError("OpenDesign artifact pin result is incomplete")
+    asset.update(pins)
+    validate_bundle_manifest(pinned, require_artifact_digest=True)
+    return pinned
+
+
+def _publish_file(source: Path, destination: Path) -> None:
+    if source.is_symlink() or not source.is_file():
+        raise PackagingError(f"OpenDesign publish source is unsafe: {source.name}")
+    if destination.is_symlink():
+        raise PackagingError(f"OpenDesign publish destination is a symlink: {destination.name}")
+    temporary = destination.with_name(f".{destination.name}.{uuid4().hex}.tmp")
+    try:
+        shutil.copy2(source, temporary)
+        os.replace(temporary, destination)
+    finally:
+        temporary.unlink(missing_ok=True)
+
+
+def _real_directory(path: Path, *, create: bool) -> Path:
+    path = Path(path)
+    if create:
+        path.mkdir(parents=True, exist_ok=True)
+    if path.is_symlink() or not path.is_dir():
+        raise PackagingError(f"OpenDesign directory is unsafe: {path}")
+    return path.resolve(strict=True)
+
+
+def _real_signing_key(path: Path) -> Path:
+    path = Path(path)
+    if path.is_symlink() or not path.is_file():
+        raise PackagingError("OpenDesign provenance signing key must be a real file")
+    return path.resolve(strict=True)
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--source-repository", type=Path, required=True)
+    parser.add_argument("--signing-key", type=Path, required=True)
+    parser.add_argument("--output-directory", type=Path, default=SERVICE_ROOT / "artifacts")
+    parser.add_argument("--work-parent", type=Path, default=Path("/var/tmp"))
+    parser.add_argument("--pnpm-store", type=Path, default=REPOSITORY_ROOT / "tmp/opendesign-pnpm-store")
+    parser.add_argument("--allow-operator-detached", action="store_true")
+    args = parser.parse_args()
+    try:
+        with signal_guard():
+            runtime_session_id = activate_runtime_attachment(
+                allow_operator_detached=args.allow_operator_detached
+            )
+            manifest = read_bundle_manifest(MANIFEST_PATH)
+            result = build_reproducible_artifact(
+                args.source_repository,
+                args.output_directory,
+                signing_key=args.signing_key,
+                manifest=manifest,
+                work_parent=args.work_parent,
+                pnpm_store=args.pnpm_store,
+                runtime_session_id=runtime_session_id,
+            )
+    except (
+        ArtifactError,
+        BuildProcessError,
+        OSError,
+        PackagingError,
+        SourceError,
+        SupplyChainError,
+    ) as exc:
+        print(f"OpenDesign packaging failed: {exc}", file=sys.stderr)
+        return 1
+    print(json.dumps(result, indent=2, sort_keys=True))
+    return 0
 
 
 if __name__ == "__main__":
-    try:
-        main()
-    except subprocess.CalledProcessError as error:
-        raise SystemExit(error.returncode) from error
+    raise SystemExit(main())

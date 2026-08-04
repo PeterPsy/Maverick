@@ -97,7 +97,8 @@
     },
     "compile_environment": {
       "DO_NOT_TRACK": "1",
-      "NEXT_TELEMETRY_DISABLED": "1"
+      "NEXT_TELEMETRY_DISABLED": "1",
+      "NODE_OPTIONS": "--max-old-space-size=1152"
     }
   },
   "stage": {

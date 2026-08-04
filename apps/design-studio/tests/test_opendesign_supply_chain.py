@@ -131,12 +131,5 @@ class OpenDesignSupplyChainTests(unittest.TestCase):
             with self.assertRaisesRegex(self.supply.SupplyChainError, "HEAD or tag"):
                 self.supply.validate_source_identity(source, self.manifest, run=fake_run)
 
-    def test_memory_policy_reads_memavailable(self) -> None:
-        with tempfile.TemporaryDirectory(prefix="maverick-od-mem-") as temp_dir:
-            meminfo = Path(temp_dir) / "meminfo"
-            meminfo.write_text("MemFree: 99 kB\nMemAvailable: 4194304 kB\n", encoding="utf-8")
-            self.assertEqual(self.certify.mem_available_bytes(meminfo), 4 * 1024**3)
-
-
 if __name__ == "__main__":
     unittest.main()

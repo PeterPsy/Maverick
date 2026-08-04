@@ -8,38 +8,72 @@ service/vendor/open-design/
 ```
 
 The bundle must come from upstream `nexu-io/open-design` tag
-`open-design-v0.10.1`, commit
-`eb245799adf07e7727ad5f970485d809bad5780e`.
+`open-design-v0.16.1`, commit
+`276b4d8e970bc143d7ad060181a89a834e3d9caf`.
 
-To materialize it from a verified checkout:
+Build the immutable release assets from the reviewed bare repository, then
+materialize them:
 
 ```bash
 python3 apps/design-studio/service/package_opendesign.py \
-  --source /path/to/open-design \
-  --force
+  --source-repository /path/to/open-design-v0.16.1.git \
+  --signing-key /secure/path/opendesign-provenance-key.pem
+python3 apps/design-studio/service/materialize_opendesign.py
 ```
 
-The packaging manifest is `opendesign_bundle.json`. It copies only the daemon,
-web static app source, required workspace packages, and bundled design assets,
-then narrows the generated pnpm workspace and runs install/build so the daemon
-and its workspace package dependencies have runtime `dist/` outputs. Runtime
-sidecar startup does not build OpenDesign on demand. Desktop, packaged Electron,
-deploy, e2e, broad plugin marketplace, and tool trees are excluded from the
-Maverick sandbox bundle.
+Packaging is fail-closed for agent runs. It requires a live
+`MAVERICK_RUNTIME_SESSION_ID` in its process ancestry. Each command runs in a
+new process group; loss of the runtime attachment, termination, or
+`MemAvailable` below 2.5 GiB terminates that whole group. Heavy commands start
+only with at least 4 GiB available, after a bounded wait of at most 60 seconds.
+There is one heavy command at a time. The short build root lives in an owned
+`TemporaryDirectory` below `/var/tmp` so `tsx` Unix sockets stay within the OS
+path limit and cleanup cannot target source or cache data. The shared pnpm store
+is reused but never deleted. `--allow-operator-detached` is reserved for an
+explicitly authorized human build and does not disable memory controls.
 
-The bundle is a generated artifact. Keep `service/vendor/open-design/` out of
-source control, including `node_modules`; commit only the manifest, packager,
-docs, and smoke script. A Phase 3 verification must run:
+`opendesign_bundle.json` is the build contract. Each of two independent source
+directories is exported directly from the pinned bare Git object—without a
+worktree or checkout—then receives only the hash-verified patch inventory. Each
+build performs one frozen install, the focused loopback-bearer test required by
+the Maverick boundary, daemon/static-web compilation, production `pnpm deploy`,
+native dependency probes, metadata generation, and deterministic archive
+creation. The compile heap is bounded at 1152 MiB and Next build concurrency is
+one. The two archives and file manifests must match byte-for-byte before any
+asset is published.
+
+The complete upstream baseline is not part of packaging and does not gate a
+focused commit. It is a separate acceptance on adequate capacity:
+
+```bash
+python3 apps/design-studio/service/certify_opendesign_upstream.py \
+  --source /path/to/exact-unpatched-open-design-v0.16.1 \
+  --output-dir /owned/output/opendesign-upstream-acceptance
+```
+
+That command performs one frozen install and exactly two complete suite
+processes—web, then daemon—with one worker, no shard, exclusion, or retry. Its
+record is `opendesign_upstream_baseline_0_16_1.json`. A capacity stop is an
+infrastructure blocker to move to a suitable builder, not a reason to resume a
+per-file prefix or construct a retry framework.
+
+The generated artifact and its external file manifest, CycloneDX SBOM, license
+inventory, NOTICE, signed provenance, signature, and public key stay under
+ignored `service/artifacts/`. The committed manifest pins every digest and the
+artifact size. `materialize_opendesign.py` verifies the complete signed set and
+atomically extracts it to ignored `service/vendor/open-design/`; the launcher
+then verifies the materialization marker and every staged file before start.
+A release verification must run:
 
 ```bash
 python3 apps/design-studio/service/smoke_opendesign_sidecar.py
 ```
 
-That smoke fails when the bundle is absent, when required build outputs are
-missing, when host-only OpenDesign trees were included, or when the Maverick
-proxy cannot reach the real sidecar. If the bundle is absent or not
-installed/built, the declared Maverick runtime fails closed. There is no runtime
-compatibility fallback.
+That smoke fails when the bundle is absent, its digest/file manifest differs,
+required outputs are missing, host-only OpenDesign trees are present, or the
+Maverick proxy cannot reach the real sidecar. The declared runtime always fails
+closed; there is no source-tree, build-on-startup, or loopback compatibility
+fallback.
 
 ## Confined process boundary
 
@@ -115,9 +149,9 @@ python3 apps/design-studio/service/sync_route_policy.py
 The check accounts for every inventoried method/template, omits `USE /api` and
 multi-segment splats so deny-by-default applies, and adds only the approved
 safe static trees plus Maverick Storage import/export handlers. The artifact
-manifest no longer duplicates this route catalog. WP5 replaces source-tree measurements with the staged runtime
-closure, SBOM, NOTICE, license inventory, native load proof, and artifact
-provenance.
+manifest does not duplicate this route catalog. The staged runtime closure is
+instead bound to its file manifest, SBOM, NOTICE, license inventory, native
+load proof, deterministic build metadata, and signed provenance.
 
 ## Versioned data generations
 

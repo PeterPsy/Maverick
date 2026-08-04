@@ -6,6 +6,7 @@ import logging
 from threading import Lock, Thread, current_thread
 from typing import Any, Callable
 
+from core.inter_agent.errors import InterAgentOperationError
 from core.inter_agent.orchestration_scheduler import execute_orchestrated_run
 from core.inter_agent.service import InterAgentService
 from core.api.orchestration_agent_catalog import build_orchestration_agent_catalog
@@ -91,6 +92,35 @@ def wait_for_orchestrated_execution_worker(
         return False
     thread.join(timeout=max(0.0, timeout_seconds))
     return not thread.is_alive()
+
+
+def resume_orchestrated_execution_worker(
+    state: Any,
+    service: InterAgentService,
+    *,
+    workspace_id: str,
+    run_id: str,
+    reason: str,
+    wait_worker: Callable[..., bool] | None = None,
+    start_worker: Callable[..., bool] | None = None,
+) -> Any:
+    """Hand one paused run from its old scheduler owner to a replacement worker."""
+    wait_for_worker = wait_worker or wait_for_orchestrated_execution_worker
+    start_new_worker = start_worker or start_orchestrated_execution_worker
+    if not wait_for_worker(workspace_id=workspace_id, run_id=run_id):
+        raise InterAgentOperationError("The previous orchestration scheduler is still stopping.")
+    resumed = service.resume_run(
+        workspace_id=workspace_id,
+        run_id=run_id,
+        reason=reason,
+    )
+    start_new_worker(
+        state,
+        service,
+        workspace_id=workspace_id,
+        run_id=run_id,
+    )
+    return resumed
 
 
 def resume_recovering_orchestrations(

@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import Any
 
 from core.cli.models import CliInvocationContext
+from core.inter_agent.orchestration_resume import OrchestrationResume
 from core.cli.service import run_core_cli_command
 from core.mcp.service import call_mcp_tool
 from core.app_sdk.cli_contexts import _cli_commands, _cli_context, _mcp_context, _mcp_tools
@@ -29,6 +30,7 @@ def _run_core_cli(
     workspace_id: str,
     state,
     trusted_context: CliInvocationContext | None = None,
+    orchestration_resume: OrchestrationResume | None = None,
 ) -> dict[str, Any]:
     commands = [
         command
@@ -69,6 +71,7 @@ def _run_core_cli(
             runtime_event_bus=getattr(state, "runtime_event_bus", None),
             runtime_thread_event_bus=getattr(state, "runtime_thread_event_bus", None),
             app_event_bus=state.app_event_bus,
+            orchestration_resume=orchestration_resume,
             workspace_id=workspace_id,
             start_path=state.repository_root,
             arguments=arguments,
@@ -150,6 +153,7 @@ def _run_core_mcp(
     workspace_id: str,
     state,
     trusted_context: CliInvocationContext | None = None,
+    orchestration_resume: OrchestrationResume | None = None,
 ) -> dict[str, Any]:
     tools = [tool for tool in _mcp_tools(state, workspace_id, options=options, trusted_context=trusted_context) if tool.owner_kind == "core"]
     if operation == "list":
@@ -177,6 +181,7 @@ def _run_core_mcp(
             runtime_event_bus=getattr(state, "runtime_event_bus", None),
             runtime_thread_event_bus=getattr(state, "runtime_thread_event_bus", None),
             app_event_bus=state.app_event_bus,
+            orchestration_resume=orchestration_resume,
             workspace_id=workspace_id,
             start_path=state.repository_root,
             arguments=arguments,

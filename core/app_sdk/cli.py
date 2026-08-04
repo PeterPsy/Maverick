@@ -28,6 +28,7 @@ from core.apps.surfaces import enabled_workspace_app_bindings, resolve_workspace
 from core.apps.presentation import app_frontend_is_launchable
 from core.authorization.service import can_mount_app_visibility
 from core.cli.models import CliInvocationContext
+from core.inter_agent.orchestration_resume import OrchestrationResume
 from core.cli.service import run_core_cli_command
 
 
@@ -145,6 +146,7 @@ def run_cli_json(
     state,
     repository_root: Path | None = None,
     trusted_context: CliInvocationContext | None = None,
+    orchestration_resume: OrchestrationResume | None = None,
 ) -> dict[str, Any]:
     """Run one Maverick CLI command and return the JSON payload without printing."""
     repository_root_arg, args = _extract_repository_root(list(argv))
@@ -160,7 +162,12 @@ def run_cli_json(
     if domain == "apps":
         result = _run_apps(args[1:], state=state, trusted_context=trusted_context)
     elif domain == "core":
-        result = _run_core(args[1:], state=state, trusted_context=trusted_context)
+        result = _run_core(
+            args[1:],
+            state=state,
+            trusted_context=trusted_context,
+            orchestration_resume=orchestration_resume,
+        )
     elif domain == "app":
         result = _run_app(args[1:], state=state, trusted_context=trusted_context)
     elif domain == "sdk":
@@ -228,16 +235,38 @@ def _run_sdk_domain(tokens: list[str], *, state, trusted_context: CliInvocationC
     return {"workspace_id": workspace_id, "format": "markdown", "content": sdk_docs_markdown()}
 
 
-def _run_core(tokens: list[str], *, state, trusted_context: CliInvocationContext | None = None) -> dict[str, Any]:
+def _run_core(
+    tokens: list[str],
+    *,
+    state,
+    trusted_context: CliInvocationContext | None = None,
+    orchestration_resume: OrchestrationResume | None = None,
+) -> dict[str, Any]:
     if len(tokens) < 2:
         _die("usage: maverick core {cli|mcp} {list|inspect|run|call} ...")
     surface, operation = tokens[0], tokens[1]
     options, remaining = _split_wrapper_options(tokens[2:])
     workspace_id = _workspace_id(options, state.repository_root, trusted_context=trusted_context)
     if surface == "cli":
-        return _run_core_cli(operation, remaining, options=options, workspace_id=workspace_id, state=state, trusted_context=trusted_context)
+        return _run_core_cli(
+            operation,
+            remaining,
+            options=options,
+            workspace_id=workspace_id,
+            state=state,
+            trusted_context=trusted_context,
+            orchestration_resume=orchestration_resume,
+        )
     if surface == "mcp":
-        return _run_core_mcp(operation, remaining, options=options, workspace_id=workspace_id, state=state, trusted_context=trusted_context)
+        return _run_core_mcp(
+            operation,
+            remaining,
+            options=options,
+            workspace_id=workspace_id,
+            state=state,
+            trusted_context=trusted_context,
+            orchestration_resume=orchestration_resume,
+        )
     _die("core surface must be `cli` or `mcp`")
 
 

@@ -16,6 +16,7 @@ from core.mcp.runtime_provider_tools import runtime_provider_tool_specs
 from core.mcp.secret_tools import secret_tool_specs
 from core.mcp.workspace_tools import workspace_tool_specs
 from core.inter_agent.store import InterAgentStore
+from core.inter_agent.orchestration_resume import OrchestrationResume
 from core.providers.provider_registry import ProviderRegistry
 from core.providers.store import ProviderStore
 from core.recovery.store import RecoveryStore
@@ -39,6 +40,7 @@ def _core_tool_specs(
     runtime_event_bus=None,
     runtime_thread_event_bus=None,
     app_event_bus=None,
+    orchestration_resume: OrchestrationResume | None = None,
     start_path: Path | None = None,
 ) -> list[tuple[McpToolDefinition, Any]]:
     """Build all core-owned MCP tool specs without mixing tool domains."""
@@ -68,6 +70,7 @@ def _core_tool_specs(
             runtime_event_bus=runtime_event_bus,
             runtime_thread_event_bus=runtime_thread_event_bus,
             app_event_bus=app_event_bus,
+            orchestration_resume=orchestration_resume,
             start_path=start_path,
         )
     )

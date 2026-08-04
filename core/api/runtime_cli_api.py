@@ -6,6 +6,7 @@ from pathlib import Path
 
 from core.api.http import StartResponse, json_response, read_json_body, status_line
 from core.api.platform_state import PlatformState
+from core.api.orchestration_workers import resume_orchestrated_execution_worker
 from core.app_sdk.cli import run_cli_json
 from core.authorization.errors import AuthorizationError
 from core.cli.models import CliInvocationContext
@@ -78,6 +79,7 @@ def handle_runtime_cli_api(
             state=state,
             repository_root=start_path,
             trusted_context=trusted_context,
+            orchestration_resume=resume_orchestrated_execution_worker,
         )
         if output_profile == RUNTIME_CLI_OUTPUT_PROFILE_PROVIDER_COMPACT:
             result = compact_runtime_cli_result(

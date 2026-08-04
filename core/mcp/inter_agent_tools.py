@@ -15,6 +15,7 @@ from core.inter_agent.authorization import (
 )
 from core.inter_agent.executor import execute_inter_agent_run
 from core.inter_agent.feature_flags import validate_product_inter_agent_run_mode
+from core.inter_agent.orchestration_resume import OrchestrationResume, resume_run_from_surface
 from core.inter_agent.service import InterAgentService
 from core.inter_agent.store import InterAgentStore
 from core.inter_agent.surfaces import execution_result_payload, inter_agent_payload, run_detail_payload, run_spec_from_payload
@@ -41,6 +42,7 @@ def inter_agent_tool_specs(
     runtime_event_bus=None,
     runtime_thread_event_bus=None,
     app_event_bus=None,
+    orchestration_resume: OrchestrationResume | None = None,
     start_path=None,
 ) -> list[tuple[McpToolDefinition, Any]]:
     """Build core inter-agent MCP tool specs."""
@@ -239,10 +241,12 @@ def inter_agent_tool_specs(
 
     def _resume(arguments: dict[str, Any], context: McpInvocationContext) -> dict[str, Any]:
         run = _authorized_run(arguments, context)
-        run = _service().resume_run(
-            workspace_id=run.workspace_id,
-            run_id=run.run_id,
+        run = resume_run_from_surface(
+            _service(),
+            _state(),
+            run,
             reason=_text(arguments.get("reason")) or "inter_agent_resume",
+            orchestration_resume=orchestration_resume,
         )
         return run_detail_payload(inter_agent_store, run)  # type: ignore[arg-type]
 
@@ -322,7 +326,7 @@ def inter_agent_tool_specs(
         (
             core_mcp_tool(
                 tool_name="inter_agent_resume",
-                description="Resume a paused or recovering inter-agent run without queuing new work.",
+                description="Resume a paused run through the hosted scheduler handoff.",
                 owner_id="inter_agent",
                 invocation_policy=WORKSPACE_SAFE,
             ),

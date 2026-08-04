@@ -1273,6 +1273,13 @@ are `inter_agent_run_create`, `inter_agent_participant_spawn`,
 `inter_agent_message_send`, `inter_agent_execute`, `inter_agent_wait`,
 `inter_agent_interrupt`, `inter_agent_resume`, and `inter_agent_close`.
 
+For orchestrated runs, all three resume surfaces dispatch through the hosted
+scheduler handoff: wait for the previous in-process owner, reconcile persisted
+state, then start the replacement worker. Runtime-authenticated CLI and MCP
+calls receive that hosted coordinator from the backend. A standalone sidecar
+without a hosted scheduler owner must reject orchestrated resume rather than
+leave the run `running` without execution.
+
 Inter-agent mutation surfaces share the same run authority rule: the local
 operator, the run creator, a platform admin, or a workspace admin may mutate a
 run. Sandbox CLI and MCP callers do not gain mutation authority from

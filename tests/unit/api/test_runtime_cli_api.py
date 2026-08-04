@@ -10,10 +10,30 @@ from types import SimpleNamespace
 import unittest
 from unittest.mock import patch
 
+from core.api.orchestration_workers import resume_orchestrated_execution_worker
 from core.api.runtime_cli_api import handle_runtime_cli_api
 
 
 class RuntimeCliApiTest(unittest.TestCase):
+    def test_runtime_cli_injects_hosted_orchestration_resume(self) -> None:
+        state = self._state()
+
+        with self._trusted_runtime():
+            with patch(
+                "core.api.runtime_cli_api.run_cli_json",
+                return_value={"status_code": 200},
+            ) as run_cli:
+                status, _payload = self._invoke_runtime_cli(
+                    state,
+                    {"argv": ["core", "cli", "run", "inter-agent.runs.resume"]},
+                )
+
+        self.assertEqual(status, "200 OK")
+        self.assertIs(
+            run_cli.call_args.kwargs["orchestration_resume"],
+            resume_orchestrated_execution_worker,
+        )
+
     def test_runtime_cli_defaults_to_full_output(self) -> None:
         state = self._state()
         huge_output = "line\n" * 20_000

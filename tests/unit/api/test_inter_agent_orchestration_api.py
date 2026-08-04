@@ -89,15 +89,17 @@ class InterAgentOrchestrationApiTest(InterAgentApiSupport):
                 body={"reason": "user_pause"},
                 cookie=cookie,
             )
-            with (
-                patch(
-                    "core.api.inter_agent_api.wait_for_orchestrated_execution_worker",
-                    side_effect=lambda *args, **kwargs: lifecycle.append("wait") or True,
-                ),
-                patch(
-                    "core.api.inter_agent_api._start_orchestrated_execution_worker",
-                    side_effect=lambda *args, **kwargs: lifecycle.append("start") or True,
-                ),
+            def hosted_handoff(_state, run_service, *, workspace_id, run_id, reason):
+                lifecycle.append("handoff")
+                return run_service.resume_run(
+                    workspace_id=workspace_id,
+                    run_id=run_id,
+                    reason=reason,
+                )
+
+            with patch(
+                "core.api.inter_agent_api.resume_orchestrated_execution_worker",
+                side_effect=hosted_handoff,
             ):
                 resume_status, resume_payload, _headers = self._invoke(
                     app,
@@ -112,7 +114,7 @@ class InterAgentOrchestrationApiTest(InterAgentApiSupport):
             self.assertEqual(interrupt_status, 200)
             self.assertEqual(resume_status, 200)
             self.assertEqual(resume_payload["run"]["status"], "running")
-            self.assertEqual(lifecycle, ["wait", "start"])
+            self.assertEqual(lifecycle, ["handoff"])
             self.assertEqual(control.results["implement"].status, "cancelled")
             self.assertEqual(resumed.recovery_generation, 1)
 

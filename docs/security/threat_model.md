@@ -174,9 +174,11 @@ visibility-history retention and internal replay reads every page in causal
 order before scheduling resumes. If an older or corrupted run already lacks a
 terminal task result, recovery fails closed rather than risking duplicate task
 side effects. User interruption does not create that gap: an active task is
-synchronously closed with a protected `cancelled` result, and resume waits for
-the previous scheduler owner to stop before rotating the orchestrator child
-session and starting another scheduler.
+synchronously closed with a protected `cancelled` result even before its child
+session exists. A paused-run fence before and after child creation removes late
+session records and files before they can receive work. HTTP, CLI, and MCP
+resume share the hosted handoff that waits for the previous scheduler owner;
+sidecars without that owner reject the mutation.
 
 ### Workspace escape
 

@@ -3,13 +3,17 @@ from __future__ import annotations
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 import unittest
+from unittest.mock import patch
 
+from core.inter_agent.errors import InterAgentOperationError
 from core.inter_agent.service import InterAgentService
 from core.inter_agent.models import ParticipantSpec
 from core.inter_agent.orchestration_plan import OrchestrationPlan, OrchestrationTaskSpec
 from core.inter_agent.orchestration_state import load_control_state
 from core.inter_agent.orchestration_tasks import materialize_plan, record_plan
 from core.inter_agent.store import build_inter_agent_document_store
+from core.runtime.errors import RuntimeSessionNotFoundError
+from core.runtime.lifecycle_service_sessions import create_child_runtime_session
 from core.runtime.runtime_turns import RuntimeTurnRecord
 from core.runtime.runtime_session import RuntimeSessionRecord
 from core.runtime.runtime_state import RuntimeStateRecord
@@ -23,6 +27,118 @@ from tests.unit.inter_agent.test_dynamic_orchestration_service import orchestrat
 
 
 class InterAgentRuntimeRecoveryTest(unittest.TestCase):
+    def test_interrupt_before_child_link_commit_cancels_stale_participant_write(self) -> None:
+        repo_root = make_temp_repo_root(self)
+        store = build_inter_agent_document_store(start_path=repo_root)
+        runtime_store = _runtime_store()
+        service = InterAgentService(store)
+        state = type("State", (), {"runtime_store": runtime_store})()
+        now = datetime(2026, 6, 16, 12, 0, tzinfo=UTC)
+        runtime_store.save_session(_runtime_session("root-session", repo_root=repo_root))
+        runtime_store.save_state(_runtime_state("root-session"))
+        run = service.create_run(orchestrated_spec(), now=now)
+        orchestrator = store.get_participant("orchestrator", workspace_id="default", run_id=run.run_id)
+        plan = _interruptible_plan()
+        record_plan(service, run, plan)
+        worker = materialize_plan(service, run, orchestrator, plan)["implement"]
+        store.save_participant(
+            worker.__class__(**{**worker.__dict__, "status": "running", "current_task_id": "implement"})
+        )
+        original_claim_session = store.claim_participant_runtime_session
+        pause_triggered = False
+
+        def pause_before_link_commit(**kwargs):
+            nonlocal pause_triggered
+            if kwargs["runtime_session_id"] == "late-link-session" and not pause_triggered:
+                pause_triggered = True
+                service.interrupt_run(
+                    state,
+                    workspace_id="default",
+                    run_id=run.run_id,
+                    reason="pause_before_link_commit",
+                    now=now + timedelta(seconds=1),
+                )
+            return original_claim_session(**kwargs)
+
+        with (
+            patch.object(store, "claim_participant_runtime_session", side_effect=pause_before_link_commit),
+            self.assertRaisesRegex(InterAgentOperationError, "paused"),
+        ):
+            service.spawn_participant_runtime_session(
+                runtime_store,
+                workspace_id="default",
+                run_id=run.run_id,
+                participant_id=worker.participant_id,
+                child_session_id="late-link-session",
+                now=now,
+            )
+
+        paused = store.get_run(run.run_id, workspace_id="default")
+        cancelled_worker = store.get_participant("implement", workspace_id="default", run_id=run.run_id)
+        self.assertTrue(pause_triggered)
+        self.assertEqual(paused.status, "paused")
+        self.assertEqual(cancelled_worker.status, "cancelled")
+        self.assertIsNone(cancelled_worker.current_task_id)
+        self.assertEqual(load_control_state(service, paused).results["implement"].status, "cancelled")
+        with self.assertRaises(RuntimeSessionNotFoundError):
+            runtime_store.get_session("late-link-session")
+
+    def test_interrupt_during_child_creation_cancels_task_and_deletes_late_session(self) -> None:
+        repo_root = make_temp_repo_root(self)
+        store = build_inter_agent_document_store(start_path=repo_root)
+        runtime_store = _runtime_store()
+        service = InterAgentService(store)
+        state = type("State", (), {"runtime_store": runtime_store})()
+        now = datetime(2026, 6, 16, 12, 0, tzinfo=UTC)
+        runtime_store.save_session(_runtime_session("root-session", repo_root=repo_root))
+        runtime_store.save_state(_runtime_state("root-session"))
+        run = service.create_run(orchestrated_spec(), now=now)
+        orchestrator = store.get_participant("orchestrator", workspace_id="default", run_id=run.run_id)
+        plan = _interruptible_plan()
+        record_plan(service, run, plan)
+        participants = materialize_plan(service, run, orchestrator, plan)
+        worker = participants["implement"]
+        store.save_participant(
+            worker.__class__(**{**worker.__dict__, "status": "running", "current_task_id": "implement"})
+        )
+
+        def create_then_interrupt(*args, **kwargs):
+            child = create_child_runtime_session(*args, **kwargs)
+            service.interrupt_run(
+                state,
+                workspace_id="default",
+                run_id=run.run_id,
+                reason="pause_during_spawn",
+                now=now + timedelta(seconds=1),
+            )
+            return child
+
+        with (
+            patch("core.inter_agent.service.create_child_runtime_session", side_effect=create_then_interrupt),
+            self.assertRaisesRegex(InterAgentOperationError, "paused"),
+        ):
+            service.spawn_participant_runtime_session(
+                runtime_store,
+                workspace_id="default",
+                run_id=run.run_id,
+                participant_id=worker.participant_id,
+                child_session_id="late-child-session",
+                now=now,
+            )
+
+        paused = store.get_run(run.run_id, workspace_id="default")
+        cancelled_worker = store.get_participant("implement", workspace_id="default", run_id=run.run_id)
+        control = load_control_state(service, paused)
+        self.assertEqual(paused.status, "paused")
+        self.assertEqual(cancelled_worker.status, "cancelled")
+        self.assertIsNone(cancelled_worker.current_task_id)
+        self.assertIsNone(cancelled_worker.runtime_session_id)
+        self.assertEqual(control.results["implement"].status, "cancelled")
+        late_runtime_root = Path(runtime_store.get_session("root-session").runtime_root).parent / "late-child-session"
+        self.assertFalse(late_runtime_root.exists())
+        with self.assertRaises(RuntimeSessionNotFoundError):
+            runtime_store.get_session("late-child-session")
+
     def test_interrupt_and_immediate_resume_preserve_cancelled_task_recovery(self) -> None:
         repo_root = make_temp_repo_root(self)
         store = build_inter_agent_document_store(start_path=repo_root)

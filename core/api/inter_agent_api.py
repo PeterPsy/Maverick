@@ -8,8 +8,8 @@ from core.api.app_registry import enabled_app_items
 from core.api.http import StartResponse, json_response, read_json_body
 from core.api.platform_state import PlatformState
 from core.api.orchestration_workers import (
+    resume_orchestrated_execution_worker,
     start_orchestrated_execution_worker as _start_orchestrated_execution_worker,
-    wait_for_orchestrated_execution_worker,
 )
 from core.api.runtime_cleanup import cleanup_runtime_session
 from core.api.session_api import RequestSession, require_session
@@ -40,6 +40,7 @@ from core.inter_agent.executor import execute_inter_agent_run
 from core.inter_agent.feature_flags import validate_product_inter_agent_run_mode
 from core.inter_agent.generalist_context import generalist_orchestration_context
 from core.inter_agent.models import AgentParticipantSnapshot, BudgetPolicySpec, InterAgentRunSpec, ParticipantSpec
+from core.inter_agent.orchestration_resume import resume_run_from_surface
 from core.inter_agent.service import InterAgentService
 from core.inter_agent.store import DEFAULT_INTER_AGENT_EVENT_LIMIT, MAX_INTER_AGENT_EVENT_LIMIT
 from core.inter_agent.surfaces import (
@@ -362,23 +363,13 @@ def _handle_inter_agent_route(
         )
         return json_response(start_response, inter_agent_payload(result))
     if action == "resume" and method == "POST":
-        if run.mode == "orchestrated" and not wait_for_orchestrated_execution_worker(
-            workspace_id=context.workspace_id,
-            run_id=run.run_id,
-        ):
-            raise InterAgentOperationError("The previous orchestration scheduler is still stopping.")
-        resumed = service.resume_run(
-            workspace_id=context.workspace_id,
-            run_id=run.run_id,
+        resumed = resume_run_from_surface(
+            service,
+            state,
+            run,
             reason=_text(body.get("reason")) or "inter_agent_resume",
+            orchestration_resume=resume_orchestrated_execution_worker,
         )
-        if resumed.mode == "orchestrated":
-            _start_orchestrated_execution_worker(
-                state,
-                service,
-                workspace_id=context.workspace_id,
-                run_id=resumed.run_id,
-            )
         return json_response(start_response, run_detail_payload(state.inter_agent_store, resumed))
     if action == "close" and method == "POST":
         result = service.close_run(

@@ -73,9 +73,14 @@ It started with names, visibility, legacy compatibility, and initial policy defa
     valid task ids.
     User pause follows the same fail-closed state discipline: interrupting an
     active task synchronously records a protected terminal `cancelled` result
-    before resume is accepted. Resume waits for the previous hosted scheduler
-    owner to unwind, detaches an interrupted orchestrator session, advances the
+    even when its child session has not been created yet. The run is marked
+    paused before participant reconciliation; child spawn checks that fence
+    both before and after creation and deletes any unclaimed late session.
+    Resume from HTTP, CLI, or MCP waits for the previous hosted scheduler owner
+    to unwind, detaches an interrupted orchestrator session, advances the
     recovery generation, and only then starts the replacement scheduler.
+    Non-hosted CLI/MCP sidecars reject orchestrated resume instead of mutating
+    the run without a durable scheduler owner.
 20. Dynamic agent type selection is constrained to Chat's selected agent
     catalog provider. Agent definitions, prompts, skill ids, and skill catalog
     authority are materialized server-side; orchestrator JSON cannot supply

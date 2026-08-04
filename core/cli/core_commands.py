@@ -18,6 +18,7 @@ from core.cli.secret_commands import secret_command_specs
 from core.cli.workspace_commands import workspace_command_specs
 from core.identity.store import IdentityStore
 from core.inter_agent.store import InterAgentStore
+from core.inter_agent.orchestration_resume import OrchestrationResume
 from core.providers.provider_registry import ProviderRegistry
 from core.providers.store import ProviderStore
 from core.recovery.store import RecoveryStore
@@ -41,6 +42,7 @@ def _core_command_specs(
     runtime_event_bus=None,
     runtime_thread_event_bus=None,
     app_event_bus=None,
+    orchestration_resume: OrchestrationResume | None = None,
     start_path: Path | None = None,
 ) -> list[tuple[CliCommandDefinition, Any]]:
     """Build all core-owned CLI command specs without mixing command domains."""
@@ -84,6 +86,7 @@ def _core_command_specs(
             runtime_event_bus=runtime_event_bus,
             runtime_thread_event_bus=runtime_thread_event_bus,
             app_event_bus=app_event_bus,
+            orchestration_resume=orchestration_resume,
             start_path=start_path,
         )
     )

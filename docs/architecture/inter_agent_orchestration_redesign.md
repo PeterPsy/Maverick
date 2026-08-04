@@ -171,12 +171,15 @@ transcript projection behavior.
   record is treated as an incomplete legacy/corrupt ledger and fails recovery
   rather than being rescheduled. A user pause therefore persists a protected
   `cancelled` result for every interrupted active task; the cancelled worker is
-  not silently made ready again. Immediate resume first waits for the previous
-  in-process scheduler to unwind, resets an interrupted orchestrator onto a new
-  recovery-generation child session, and then enqueues the replacement
-  scheduler. Hosted backend
-  startup reconciles interrupted participant turns without queuing the generic
-  runtime `resume` prompt, resets non-terminal participants onto a new
+  not silently made ready again, including when task execution is between its
+  participant claim and child-session creation. The paused status is the spawn
+  fence: a child created concurrently is rechecked, deleted, and never linked.
+  Immediate resume through HTTP, CLI, or MCP first waits for the previous
+  hosted scheduler to unwind, resets an interrupted orchestrator onto a new
+  recovery-generation child session, and then enqueues the replacement.
+  Sidecar-only CLI/MCP execution fails closed when it has no hosted coordinator.
+  Hosted backend startup reconciles interrupted participant turns without
+  queuing the generic runtime `resume` prompt, resets non-terminal participants onto a new
   recovery-generation child session, and enqueues one scheduler worker for
   each orchestrated run marked `recovering`. Completed tasks are not rerun;
   only persisted pending/dependency-ready work resumes. Each control decision

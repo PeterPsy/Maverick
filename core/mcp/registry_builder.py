@@ -15,6 +15,7 @@ from core.mcp.runner import McpRunner
 from core.mcp.server import McpHostSurface, build_mcp_host_surface
 from core.mcp.tool_registry import McpToolRegistry
 from core.inter_agent.store import InterAgentStore
+from core.inter_agent.orchestration_resume import OrchestrationResume
 from core.providers.provider_registry import ProviderRegistry
 from core.providers.store import ProviderStore
 from core.recovery.store import RecoveryStore
@@ -37,6 +38,7 @@ def build_core_mcp_registry(
     runtime_event_bus=None,
     runtime_thread_event_bus=None,
     app_event_bus=None,
+    orchestration_resume: OrchestrationResume | None = None,
     workspace_id: str | None = None,
     context: McpInvocationContext | None = None,
     start_path: Path | None = None,
@@ -57,6 +59,7 @@ def build_core_mcp_registry(
         runtime_event_bus=runtime_event_bus,
         runtime_thread_event_bus=runtime_thread_event_bus,
         app_event_bus=app_event_bus,
+        orchestration_resume=orchestration_resume,
         start_path=start_path,
     ):
         registry.register_tool(definition, handler)
@@ -174,6 +177,7 @@ def call_mcp_tool(
     runtime_event_bus=None,
     runtime_thread_event_bus=None,
     app_event_bus=None,
+    orchestration_resume: OrchestrationResume | None = None,
     workspace_id: str | None = None,
     start_path: Path | None = None,
 ) -> dict[str, Any]:
@@ -192,6 +196,7 @@ def call_mcp_tool(
         runtime_event_bus=runtime_event_bus,
         runtime_thread_event_bus=runtime_thread_event_bus,
         app_event_bus=app_event_bus,
+        orchestration_resume=orchestration_resume,
         workspace_id=workspace_id,
         context=context,
         start_path=start_path,

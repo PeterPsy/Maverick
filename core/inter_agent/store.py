@@ -132,6 +132,15 @@ class InterAgentStore(Protocol):
     def save_run(self, record: InterAgentRunRecord) -> InterAgentRunRecord:
         ...
 
+    def pause_run_if_active(
+        self,
+        run_id: str,
+        *,
+        workspace_id: str,
+        now: datetime,
+    ) -> InterAgentRunRecord:
+        ...
+
     def get_run(self, run_id: str, *, workspace_id: str) -> InterAgentRunRecord:
         ...
 
@@ -145,6 +154,27 @@ class InterAgentStore(Protocol):
         ...
 
     def save_participant(self, record: InterAgentParticipantRecord) -> InterAgentParticipantRecord:
+        ...
+
+    def claim_participant_runtime_session(
+        self,
+        *,
+        workspace_id: str,
+        run_id: str,
+        participant_id: str,
+        runtime_session_id: str,
+        now: datetime,
+    ) -> tuple[InterAgentRunRecord, InterAgentParticipantRecord, bool]:
+        ...
+
+    def cancel_participant_if_active(
+        self,
+        *,
+        workspace_id: str,
+        run_id: str,
+        participant_id: str,
+        now: datetime,
+    ) -> tuple[InterAgentParticipantRecord, InterAgentParticipantRecord, bool]:
         ...
 
     def get_participant(
@@ -343,6 +373,22 @@ class InterAgentDocumentStore:
         )
         return record
 
+    def pause_run_if_active(
+        self,
+        run_id: str,
+        *,
+        workspace_id: str,
+        now: datetime,
+    ) -> InterAgentRunRecord:
+        """Persist the pause under the workspace transition lock."""
+        with self._workspace_lock(workspace_id):
+            run = self.get_run(run_id, workspace_id=workspace_id)
+            if run.status in {"completed", "failed", "cancelled"}:
+                return run
+            paused = replace(run, status="paused", updated_at=now)
+            self.save_run(paused)
+            return paused
+
     def get_run(self, run_id: str, *, workspace_id: str) -> InterAgentRunRecord:
         document = self.collections.runs.find_one({"workspace_id": workspace_id, "run_id": run_id})
         if document is None:
@@ -440,6 +486,62 @@ class InterAgentDocumentStore:
             upsert=True,
         )
         return record
+
+    def claim_participant_runtime_session(
+        self,
+        *,
+        workspace_id: str,
+        run_id: str,
+        participant_id: str,
+        runtime_session_id: str,
+        now: datetime,
+    ) -> tuple[InterAgentRunRecord, InterAgentParticipantRecord, bool]:
+        """Link a child session only while its run and participant remain runnable."""
+        with self._workspace_lock(workspace_id):
+            run = self.get_run(run_id, workspace_id=workspace_id)
+            participant = self.get_participant(
+                participant_id,
+                workspace_id=workspace_id,
+                run_id=run_id,
+            )
+            if run.status in {"paused", "completed", "failed", "cancelled"} or participant.status in {
+                "completed",
+                "failed",
+                "cancelled",
+            }:
+                return run, participant, False
+            updated_participant = replace(
+                participant,
+                runtime_session_id=runtime_session_id,
+                status="running",
+                updated_at=now,
+            )
+            self.save_participant(updated_participant)
+            if run.status in {"created", "planning", "recovering"}:
+                run = replace(run, status="running", updated_at=now)
+                self.save_run(run)
+            return run, updated_participant, True
+
+    def cancel_participant_if_active(
+        self,
+        *,
+        workspace_id: str,
+        run_id: str,
+        participant_id: str,
+        now: datetime,
+    ) -> tuple[InterAgentParticipantRecord, InterAgentParticipantRecord, bool]:
+        """Cancel a participant once under the workspace transition lock."""
+        with self._workspace_lock(workspace_id):
+            participant = self.get_participant(
+                participant_id,
+                workspace_id=workspace_id,
+                run_id=run_id,
+            )
+            if participant.status in {"completed", "failed", "cancelled"}:
+                return participant, participant, False
+            updated = replace(participant, status="cancelled", current_task_id=None, updated_at=now)
+            self.save_participant(updated)
+            return participant, updated, True
 
     def get_participant(
         self,

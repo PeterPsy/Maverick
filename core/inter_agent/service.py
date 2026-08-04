@@ -8,6 +8,8 @@ from datetime import UTC, datetime
 from decimal import Decimal
 import hashlib
 import json
+from pathlib import Path
+import shutil
 import time
 from typing import Any
 import uuid
@@ -781,6 +783,8 @@ class InterAgentService:
         """
         timestamp = now or datetime.now(tz=UTC)
         run = self.store.get_run(run_id, workspace_id=workspace_id)
+        if run.status == "paused" or run.status in TERMINAL_RUN_STATUSES:
+            raise InterAgentOperationError(f"Inter-agent run is {run.status}; participant spawn is not allowed.")
         participant = self.store.get_participant(participant_id, workspace_id=workspace_id, run_id=run.run_id)
         if participant.execution_mode != RUNTIME_CHILD_EXECUTION_MODE:
             raise InterAgentOperationError("Only child_runtime_session participants can spawn hidden runtime sessions.")
@@ -847,18 +851,54 @@ class InterAgentService:
         except Exception:
             self.release_budget(run, reservation_id=reservation_id, now=timestamp)
             raise
-        updated = replace(
-            participant,
-            runtime_session_id=child.session_id,
-            status="running",
-            updated_at=timestamp,
+        latest_run = self.store.get_run(run.run_id, workspace_id=workspace_id)
+        latest_participant = self.store.get_participant(
+            participant.participant_id,
+            workspace_id=workspace_id,
+            run_id=run.run_id,
         )
-        self.store.save_participant(updated)
-        if run.status in {"created", "planning", "recovering"}:
-            run = replace(run, status="running", updated_at=timestamp)
-            self.store.save_run(run)
+        if latest_run.status == "paused" or latest_run.status in TERMINAL_RUN_STATUSES or (
+            latest_participant.status in TERMINAL_PARTICIPANT_STATUSES
+        ):
+            _discard_unclaimed_child_session(
+                runtime_store,
+                child=child,
+                parent=root_session,
+            )
+            self.release_budget(run, reservation_id=reservation_id, now=timestamp)
+            raise InterAgentOperationError(
+                f"Inter-agent run is {latest_run.status}; the late participant session was discarded."
+            )
+        committed_run, updated, claimed = self.store.claim_participant_runtime_session(
+            workspace_id=workspace_id,
+            run_id=run.run_id,
+            participant_id=latest_participant.participant_id,
+            runtime_session_id=child.session_id,
+            now=timestamp,
+        )
+        if not claimed:
+            _discard_unclaimed_child_session(
+                runtime_store,
+                child=child,
+                parent=root_session,
+            )
+            self.release_budget(run, reservation_id=reservation_id, now=timestamp)
+            committed_participant = self.store.get_participant(
+                updated.participant_id,
+                workspace_id=workspace_id,
+                run_id=run.run_id,
+            )
+            self._cancel_interrupted_participant(
+                committed_run,
+                committed_participant,
+                reason="participant_spawn_after_pause",
+                now=datetime.now(tz=UTC),
+            )
+            raise InterAgentOperationError(
+                f"Inter-agent run is {committed_run.status}; the late participant session was discarded."
+            )
         self.record_event(
-            run,
+            committed_run,
             event_type="inter_agent.participant.started",
             participant_id=updated.participant_id,
             runtime_session_id=child.session_id,
@@ -975,90 +1015,12 @@ class InterAgentService:
             self.store.list_participants(run.run_id, workspace_id=workspace_id),
             participant_id=participant_id,
         )
-        interrupted_sessions: list[dict[str, Any]] = []
-        for participant in participants:
-            if not participant.runtime_session_id:
-                continue
-            interrupted_sessions.append(
-                _interrupt_runtime_session(
-                    state,
-                    session_id=participant.runtime_session_id,
-                    reason=reason,
-                )
-            )
-            if run.mode == "orchestrated":
-                try:
-                    session = state.runtime_store.get_session(participant.runtime_session_id)
-                    if session.status in {"created", "running", "stopping"}:
-                        transition_runtime_session(
-                            state.runtime_store,
-                            session_id=session.session_id,
-                            target_status="stopped",
-                            forced_stop_reason=reason,
-                            now=timestamp,
-                        )
-                except (RuntimeSessionNotFoundError, ValueError):
-                    pass
-            self.release_budget(
-                run,
-                reservation_id=_participant_spawn_reservation_id(participant.participant_id),
+        if run.status not in TERMINAL_RUN_STATUSES:
+            run = self.store.pause_run_if_active(
+                run.run_id,
+                workspace_id=workspace_id,
                 now=timestamp,
             )
-            latest_participant = self.store.get_participant(
-                participant.participant_id,
-                workspace_id=workspace_id,
-                run_id=run.run_id,
-            )
-            if latest_participant.status not in TERMINAL_PARTICIPANT_STATUSES:
-                current_task_id = latest_participant.current_task_id
-                updated = replace(latest_participant, status="cancelled", current_task_id=None, updated_at=timestamp)
-                self.store.save_participant(updated)
-                if (
-                    run.mode == "orchestrated"
-                    and latest_participant.kind == "agent"
-                    and latest_participant.participant_id != run.orchestrator_participant_id
-                    and current_task_id
-                ):
-                    self.record_event(
-                        run,
-                        event_type="inter_agent.task.completed",
-                        participant_id=latest_participant.participant_id,
-                        runtime_session_id=latest_participant.runtime_session_id,
-                        visibility_plane="detail",
-                        idempotency_key=f"{run.run_id}:task.interrupted:{current_task_id}",
-                        correlation_id=current_task_id,
-                        payload={
-                            "task_id": current_task_id,
-                            "participant_id": latest_participant.participant_id,
-                            "status": "cancelled",
-                            "summary": "Cancelled by run interruption.",
-                            "output_text": "",
-                            "error": None,
-                            "reason": reason,
-                        },
-                        now=timestamp,
-                    )
-                self.record_event(
-                    run,
-                    event_type="inter_agent.participant.status_changed",
-                    participant_id=latest_participant.participant_id,
-                    runtime_session_id=latest_participant.runtime_session_id,
-                    visibility_plane="detail",
-                    idempotency_key=(
-                        f"{run.run_id}:participant.cancelled:"
-                        f"{latest_participant.participant_id}:{timestamp.isoformat()}"
-                    ),
-                    correlation_id=latest_participant.participant_id,
-                    payload={
-                        "participant_id": latest_participant.participant_id,
-                        "status": "cancelled",
-                        "reason": reason,
-                    },
-                    now=timestamp,
-                )
-        if run.status not in TERMINAL_RUN_STATUSES:
-            run = replace(run, status="paused", updated_at=timestamp)
-            self.store.save_run(run)
             self.record_event(
                 run,
                 event_type="inter_agent.run.paused",
@@ -1069,7 +1031,114 @@ class InterAgentService:
                 payload={"reason": reason, "participant_id": participant_id},
                 now=timestamp,
             )
+        interrupted_sessions: list[dict[str, Any]] = []
+        for participant in participants:
+            latest_participant = self.store.get_participant(
+                participant.participant_id,
+                workspace_id=workspace_id,
+                run_id=run.run_id,
+            )
+            runtime_session_id = latest_participant.runtime_session_id
+            if runtime_session_id:
+                interrupted_sessions.append(
+                    _interrupt_runtime_session(
+                        state,
+                        session_id=runtime_session_id,
+                        reason=reason,
+                    )
+                )
+            if run.mode == "orchestrated" and runtime_session_id:
+                try:
+                    session = state.runtime_store.get_session(runtime_session_id)
+                    if session.status in {"created", "running", "stopping"}:
+                        transition_runtime_session(
+                            state.runtime_store,
+                            session_id=session.session_id,
+                            target_status="stopped",
+                            forced_stop_reason=reason,
+                            now=timestamp,
+                        )
+                except (RuntimeSessionNotFoundError, ValueError):
+                    pass
+            should_cancel = bool(runtime_session_id) or (
+                run.mode == "orchestrated" and bool(latest_participant.current_task_id)
+            )
+            if not should_cancel:
+                continue
+            self.release_budget(
+                run,
+                reservation_id=_participant_spawn_reservation_id(latest_participant.participant_id),
+                now=timestamp,
+            )
+            self._cancel_interrupted_participant(
+                run,
+                latest_participant,
+                reason=reason,
+                now=timestamp,
+            )
         return {"run": run, "interrupted_sessions": interrupted_sessions}
+
+    def _cancel_interrupted_participant(
+        self,
+        run: InterAgentRunRecord,
+        participant: InterAgentParticipantRecord,
+        *,
+        reason: str,
+        now: datetime,
+    ) -> InterAgentParticipantRecord:
+        previous, updated, cancelled = self.store.cancel_participant_if_active(
+            workspace_id=run.workspace_id,
+            run_id=run.run_id,
+            participant_id=participant.participant_id,
+            now=now,
+        )
+        if not cancelled:
+            return updated
+        current_task_id = previous.current_task_id
+        if (
+            run.mode == "orchestrated"
+            and previous.kind == "agent"
+            and previous.participant_id != run.orchestrator_participant_id
+            and current_task_id
+            and not _task_result_recorded(self.store, run, current_task_id)
+        ):
+            self.record_event(
+                run,
+                event_type="inter_agent.task.completed",
+                participant_id=previous.participant_id,
+                runtime_session_id=previous.runtime_session_id,
+                visibility_plane="detail",
+                idempotency_key=f"{run.run_id}:task.interrupted:{current_task_id}",
+                correlation_id=current_task_id,
+                payload={
+                    "task_id": current_task_id,
+                    "participant_id": previous.participant_id,
+                    "status": "cancelled",
+                    "summary": "Cancelled by run interruption.",
+                    "output_text": "",
+                    "error": None,
+                    "reason": reason,
+                },
+                now=now,
+            )
+        self.record_event(
+            run,
+            event_type="inter_agent.participant.status_changed",
+            participant_id=previous.participant_id,
+            runtime_session_id=previous.runtime_session_id,
+            visibility_plane="detail",
+            idempotency_key=(
+                f"{run.run_id}:participant.cancelled:{previous.participant_id}:{now.isoformat()}"
+            ),
+            correlation_id=previous.participant_id,
+            payload={
+                "participant_id": previous.participant_id,
+                "status": "cancelled",
+                "reason": reason,
+            },
+            now=now,
+        )
+        return updated
 
     def resume_run(
         self,
@@ -1782,6 +1851,38 @@ def _interrupt_runtime_session(state: Any, *, session_id: str, reason: str) -> d
 
 def _clean_string_list(values: list[str] | None) -> list[str]:
     return [str(value).strip() for value in (values or []) if str(value).strip()]
+
+
+def _discard_unclaimed_child_session(
+    runtime_store: RuntimeStore,
+    *,
+    child: RuntimeSessionRecord,
+    parent: RuntimeSessionRecord,
+) -> None:
+    child_root = Path(child.runtime_root)
+    expected_parent = Path(parent.runtime_root).parent.resolve()
+    if child_root.parent.resolve() != expected_parent or child_root.name != child.session_id:
+        raise InterAgentValidationError("Late child runtime root is outside the parent session boundary.")
+    if child_root.is_symlink():
+        child_root.unlink()
+    elif child_root.exists():
+        shutil.rmtree(child_root)
+    runtime_store.delete_session_records(child.session_id)
+
+
+def _task_result_recorded(
+    store: InterAgentStore,
+    run: InterAgentRunRecord,
+    task_id: str,
+) -> bool:
+    return any(
+        str(event.payload.get("task_id") or event.correlation_id or "").strip() == task_id
+        for event in store.list_recovery_events(
+            run.run_id,
+            workspace_id=run.workspace_id,
+            event_types={"inter_agent.task.completed"},
+        )
+    )
 
 
 def _new_id(prefix: str) -> str:

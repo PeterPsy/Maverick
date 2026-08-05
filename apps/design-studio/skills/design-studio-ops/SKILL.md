@@ -21,6 +21,13 @@ Common operations:
   declared Design Studio reference tools. Reference capability routes are
   GET-only and cannot be used to mutate OpenDesign.
 - Use `POST /api/provider/models` only through the mounted Design Studio sidecar route when checking OpenDesign model discovery; it is handled by Maverick core/app code and must report `sidecar_reached: false`.
+- OpenDesign run creation, status, SSE, cancel, and result packages use the
+  app-owned bridge on the isolated origin. Do not call a provider route or
+  construct a Maverick runtime session directly as a substitute.
+- Treat the returned OpenDesign `runId` as canonical. Design Studio keeps the
+  workspace-scoped mapping to Maverick `runtime_session_id`, `turn_id`, and
+  `stream_id`; those runtime identifiers are correlation metadata, not a
+  second project or run domain.
 - Treat `service/opendesign_launcher.py` as the sidecar entrypoint. It resolves
   only the bundle digest and data generation named together by the validated
   `control.json`; it never builds, migrates, or selects a "latest" directory.

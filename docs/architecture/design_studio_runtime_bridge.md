@@ -1,6 +1,6 @@
 # Design Studio Runtime Bridge
 
-Status: Accepted (G3)
+Status: Implemented (G3 + WP7)
 
 Date: 2026-08-03
 
@@ -321,6 +321,45 @@ are mutually exclusive.
 
 ## Executable proofs
 
+The selected boundary is implemented by the generic core modules
+`core/runtime/app_streams.py`, `core/apps/runtime_requests.py`,
+`core/apps/runtime_root_capabilities.py`, and the ASGI stream host in
+`core/api/sidecar_core_routes.py`. Design Studio owns the correlation store,
+OpenDesign event translation, SSE payloads, and terminal packages in
+`apps/design-studio/backend/runtime_bridge.py`. Core source contains no
+OpenDesign route, identifier, event, or persistence names.
+
+The stream record and its normalized events are durable JSON collections.
+Delivery is ordered by monotonic sequence and acknowledged only after the app
+translator returns the exact final sequence. SSE sends are awaited one at a
+time, use no `Content-Length`, emit a bounded keepalive while idle, and resume
+from `Last-Event-ID`. Replaying an already translated batch is safe and does
+not create a second runtime turn or terminal package.
+
+The project root is accepted only as an app-data-relative directory. Core
+mints and immediately consumes a five-second, one-shot capability bound to the
+workspace, source app, and authenticated actor; only its digest is retained.
+The resolved directory must remain inside the runtime session workspace and
+cannot contain a symlink. Interrupt, cleanup, stream reads, restart recovery,
+and session reuse all require exact workspace and source-app ownership.
+
+Implementation proof:
+
+```bash
+python3 -m unittest \
+  tests.unit.runtime_streams.test_app_streams \
+  tests.unit.api.test_app_runtime_cleanup_requests \
+  tests.integration.app_hosting.test_sidecar_core_routes \
+  tests.integration.recovery.test_backend_restart \
+  apps.design-studio.tests.test_runtime_bridge -v
+```
+
+These tests cover durable replay after store restart, provider-neutral event
+projection, real project-file change detection, one-shot capability isolation,
+idempotent submission, source-app-scoped cancel and cleanup, no duplicate turn
+after backend restart, unbuffered ASGI delivery, app-owned replay translation,
+and success/failed/canceled result packages.
+
 Focused repository proof:
 
 ```bash
@@ -360,15 +399,16 @@ removes the process group and temporary data in `finally`.
 
 - WP4 creates the generic authenticated app-to-core entrypoint/capability needed
   to invoke the bridge without exposing ports or tokens.
-- WP7 implements the generic durable runtime stream in core and the Design
-  Studio translator, mapping, cancel, recovery, and terminal packages.
+- WP7 implemented the generic durable runtime stream in core and the Design
+  Studio translator, mapping, cancel, cleanup, recovery, and terminal packages.
 - WP8 routes Design Studio CLI, MCP, reference, import, and export through the
   OpenDesign domain and removes the legacy writable project catalog.
 - WP10 repeats the real UI proof under the final sandbox/origin topology and
   covers core/sidecar restart, timeout, retry, hostile workspace access, and
   full result-package behavior.
 
-Residual risk until those work packages land: G3 proves feasibility and freezes
-the contract, but does not itself grant runtime permissions or expose a product
-route. Maverick remains experimental and local-only under the limitations in
-`SECURITY.md` and production-readiness documentation.
+Residual risk now lies in WP8–WP10: the runtime permission and product run
+routes are active, while removal of the legacy writable project catalog,
+Storage result export, final full-bleed browser flow, and the complete hostile
+E2E matrix remain gated there. Maverick remains experimental and local-only
+under the limitations in `SECURITY.md` and production-readiness documentation.

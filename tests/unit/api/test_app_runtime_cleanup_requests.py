@@ -47,6 +47,27 @@ class AppRuntimeCleanupRequestsTest(unittest.TestCase):
                 item={"runtime_session_id": "hidden-child"},
             )
 
+    def test_cleanup_request_rejects_session_owned_by_another_source_app(self) -> None:
+        runtime_store = self._runtime_store()
+        repo_root = make_temp_repo_root(self)
+        create_runtime_session(
+            runtime_store,
+            session_id="foreign-session",
+            workspace_id="default",
+            agent_id="chat",
+            source_app_id="other-app",
+            start_path=repo_root,
+        )
+        state = SimpleNamespace(runtime_store=runtime_store)
+
+        with self.assertRaisesRegex(AppHostingError, "owned by another source app"):
+            app_runtime_cleanup_requests._runtime_cleanup_session_ids_for_request(
+                state,
+                workspace_id="default",
+                app_id="video-studio",
+                item={"runtime_session_id": "foreign-session"},
+            )
+
 
 if __name__ == "__main__":
     unittest.main()

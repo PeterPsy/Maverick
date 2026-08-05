@@ -217,3 +217,33 @@ untouched. Distinct 0.10.1/0.16.1 bundle+data atomicity and crash points remain
 covered by the fixture injection suite. The redaction-safe result is pinned in
 `opendesign_migration_acceptance_0_16_1.json`; no real workspace migration is
 authorized.
+
+## Maverick runtime bridge
+
+The OpenDesign run collection, status, cancel, event stream, and result-package
+routes are classified `handled_by_core`. The generic host invokes the Design
+Studio backend; it never teaches core an OpenDesign route or event type. The
+backend validates the OpenDesign project and conversation through the governed
+entrypoint broker, persists only run-to-session correlation metadata in the
+active generation, and returns a generic `runtime_session_request` with a
+stable idempotency key.
+
+Core creates the user-visible source-app session, resolves the active project
+directory through a short one-shot app-data capability, and appends a durable,
+provider-neutral stream. Its ASGI response applies backpressure by awaiting
+each translated SSE event, sends keepalives while idle, and resumes from
+`Last-Event-ID`. Cancel, cleanup, and stream reads fail closed unless workspace
+and source-app ownership match. Backend restart closes an interrupted app turn
+without creating an automatic duplicate; the same OpenDesign request remains
+idempotent.
+
+Run the WP7 proof with:
+
+```bash
+python3 -m unittest \
+  tests.unit.runtime_streams.test_app_streams \
+  tests.unit.api.test_app_runtime_cleanup_requests \
+  tests.integration.app_hosting.test_sidecar_core_routes \
+  tests.integration.recovery.test_backend_restart \
+  apps.design-studio.tests.test_runtime_bridge -v
+```

@@ -161,6 +161,8 @@ def _runtime_cleanup_thread_ids_for_request(
             return []
         if thread.workspace_id != workspace_id:
             raise AppHostingError(f"App `{app_id}` cannot clean runtime thread outside workspace `{workspace_id}`.")
+        if thread.source_app_id != app_id:
+            raise AppHostingError(f"App `{app_id}` cannot clean a runtime thread owned by another source app.")
         return [thread.thread_id]
 
     project_id = str(item.get("project_id") or "").strip()
@@ -168,7 +170,7 @@ def _runtime_cleanup_thread_ids_for_request(
         return [
             thread.thread_id
             for thread in state.runtime_store.list_threads(workspace_id)
-            if thread.project_id == project_id
+            if thread.project_id == project_id and thread.source_app_id == app_id
         ]
 
     return []
@@ -191,6 +193,8 @@ def _runtime_cleanup_session_ids_for_request(
             raise AppHostingError(f"App `{app_id}` cannot clean runtime session outside workspace `{workspace_id}`.")
         if not runtime_session_allows_user_thread(session):
             raise AppHostingError(f"App `{app_id}` cannot clean hidden inter-agent runtime session `{session_id}`.")
+        if session.source_app_id != app_id:
+            raise AppHostingError(f"App `{app_id}` cannot clean a runtime session owned by another source app.")
         return [session_id]
 
     return []
@@ -210,6 +214,8 @@ def _authorize_runtime_thread_cleanup(
         return
     if thread.workspace_id != workspace_id:
         raise AppHostingError(f"App `{app_id}` cannot clean runtime thread outside workspace `{workspace_id}`.")
+    if thread.source_app_id != app_id:
+        raise AppHostingError(f"App `{app_id}` cannot clean a runtime thread owned by another source app.")
     if not thread.runtime_session_id:
         return
     _authorize_runtime_session_cleanup(
@@ -237,6 +243,8 @@ def _authorize_runtime_session_cleanup(
         raise AppHostingError(f"App `{app_id}` cannot clean runtime session outside workspace `{workspace_id}`.")
     if not runtime_session_allows_user_thread(session):
         raise AppHostingError(f"App `{app_id}` cannot clean hidden inter-agent runtime session `{session_id}`.")
+    if session.source_app_id != app_id:
+        raise AppHostingError(f"App `{app_id}` cannot clean a runtime session owned by another source app.")
     if user is None:
         raise AuthorizationError("runtime_session_cleanup_forbidden")
     require_runtime_session_operation(

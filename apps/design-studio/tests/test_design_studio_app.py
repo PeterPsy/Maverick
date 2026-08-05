@@ -55,15 +55,15 @@ class DesignStudioAppTests(unittest.TestCase):
         }
         self.assertEqual(
             route_policy[("POST", "/api/runs", "apps/daemon/src/routes/runs.ts")],
-            "pass_through",
+            "handled_by_core",
         )
         self.assertEqual(
             route_policy[("GET", "/api/runs/{id}/events", "apps/daemon/src/routes/runs.ts")],
-            "pass_through",
+            "handled_by_core",
         )
         self.assertEqual(
             route_policy[("GET", "/api/runs/{id}/result-package", "apps/daemon/src/routes/runs.ts")],
-            "pass_through",
+            "handled_by_core",
         )
         self.assertEqual(
             route_policy[("POST", "/api/projects/{id}/terminals", "apps/daemon/src/routes/terminal.ts")],
@@ -161,6 +161,9 @@ class DesignStudioAppTests(unittest.TestCase):
         self.assertTrue(parsed.contract.permissions.providers.model_proxy)
         self.assertEqual(parsed.contract.permissions.providers.credential_source, "core-vault")
         self.assertFalse(parsed.contract.permissions.providers.deliver_secrets_to_app)
+        self.assertTrue(parsed.contract.permissions.runtime.create_sessions)
+        self.assertTrue(parsed.contract.permissions.runtime.cleanup_sessions)
+        self.assertEqual(parsed.contract.entrypoints.hooks["runtime_event"], "backend/app_backend.py")
         sidecar = parsed.contract.services.http_sidecars[0]
         self.assertEqual(sidecar.service_id, "opendesign")
         self.assertIsNone(sidecar.package_manager)
@@ -200,6 +203,8 @@ class DesignStudioAppTests(unittest.TestCase):
         self.assertIn("/api/dialog/open-folder", blocked)
         self.assertIn("/api/media/config", handled_by_core)
         self.assertIn("/api/provider/models", handled_by_core)
+        self.assertIn("/api/runs", handled_by_core)
+        self.assertIn("/api/runs/{id}/events", handled_by_core)
         self.assertTrue(all(rule.method for rule in sidecar.proxy.route_policy.pass_through))
         self.assertTrue(all(rule.method for rule in sidecar.proxy.route_policy.handled_by_core))
         policy = sidecar.proxy.route_policy

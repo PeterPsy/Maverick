@@ -19,6 +19,15 @@ from core.runtime.client_message_claims import (
     RuntimeClientMessageClaim,
     RuntimeClientMessageClaimConflictError,
 )
+from core.runtime.app_streams import (
+    RuntimeAppStreamError,
+    RuntimeAppStreamEventRecord,
+    RuntimeAppStreamRecord,
+    changed_project_files,
+    normalized_stream_event,
+    snapshot_project_files,
+    stream_status_for_event,
+)
 from core.runtime.models import RuntimeLocation
 from core.runtime.paths import workspace_runtime_root
 from core.runtime.runtime_events import RuntimeEventRecord
@@ -85,6 +94,8 @@ class RuntimeCollections:
     threads: DocumentCollection
     api_tokens: DocumentCollection | None = None
     client_messages: DocumentCollection | None = None
+    app_streams: DocumentCollection | None = None
+    app_stream_events: DocumentCollection | None = None
 
 
 class RuntimeStore(Protocol):
@@ -257,6 +268,62 @@ class RuntimeStore(Protocol):
     ) -> RuntimeClientMessageClaim | None:
         ...
 
+    def reserve_app_stream(self, record: RuntimeAppStreamRecord) -> tuple[RuntimeAppStreamRecord, bool]:
+        ...
+
+    def bind_app_stream(
+        self,
+        *,
+        stream_id: str,
+        workspace_id: str,
+        source_app_id: str,
+        session_id: str,
+        turn_id: str,
+        now: datetime | None = None,
+    ) -> RuntimeAppStreamRecord:
+        ...
+
+    def get_app_stream(
+        self,
+        stream_id: str,
+        *,
+        workspace_id: str,
+        source_app_id: str,
+    ) -> RuntimeAppStreamRecord:
+        ...
+
+    def read_app_stream_events(
+        self,
+        stream_id: str,
+        *,
+        workspace_id: str,
+        source_app_id: str,
+        after_sequence: int = 0,
+        limit: int = 64,
+    ) -> list[RuntimeAppStreamEventRecord]:
+        ...
+
+    def fail_app_stream(
+        self,
+        *,
+        stream_id: str,
+        workspace_id: str,
+        source_app_id: str,
+        now: datetime | None = None,
+    ) -> RuntimeAppStreamRecord:
+        ...
+
+    def list_app_streams_for_session(
+        self,
+        *,
+        workspace_id: str,
+        session_id: str,
+    ) -> list[RuntimeAppStreamRecord]:
+        ...
+
+    def has_nonterminal_app_stream_for_session(self, *, workspace_id: str, session_id: str) -> bool:
+        ...
+
 
 class RuntimeDocumentStore:
     """Persist runtime-domain records in document-style collections."""
@@ -383,6 +450,8 @@ class RuntimeDocumentStore:
             "states": 0,
             "api_tokens": 0,
             "client_messages": 0,
+            "app_streams": 0,
+            "app_stream_events": 0,
         }
         deleted["turns"] = _delete_session_records(
             self.collections.turns,
@@ -422,6 +491,26 @@ class RuntimeDocumentStore:
                 workspace_id=workspace_id,
                 identity_field="client_message_id",
             )
+        if self.collections.app_stream_events is not None:
+            deleted["app_stream_events"] = _delete_session_records(
+                self.collections.app_stream_events,
+                session_id=session_id,
+                workspace_id=workspace_id,
+                identity_field="event_id",
+            )
+        if self.collections.app_streams is not None:
+            stream_query = {"session_id": session_id}
+            if workspace_id:
+                stream_query["workspace_id"] = workspace_id
+            for document in self.collections.app_streams.find(stream_query):
+                stream_id = document.get("stream_id")
+                if not isinstance(stream_id, str):
+                    continue
+                delete_query = {"stream_id": stream_id}
+                if workspace_id:
+                    delete_query["workspace_id"] = workspace_id
+                self.collections.app_streams.delete_one(delete_query)
+                deleted["app_streams"] += 1
         session_delete_query = {"session_id": session_id}
         if workspace_id:
             session_delete_query["workspace_id"] = workspace_id
@@ -655,6 +744,172 @@ class RuntimeDocumentStore:
         document = collection.find_one(query)
         return _client_message_claim_from_document(document) if document is not None else None
 
+    def reserve_app_stream(self, record: RuntimeAppStreamRecord) -> tuple[RuntimeAppStreamRecord, bool]:
+        """Atomically reserve one workspace/app idempotency key."""
+        collection = self.collections.app_streams
+        if collection is None:
+            raise RuntimeAppStreamError("runtime_app_streams_unavailable")
+        query = {
+            "workspace_id": record.workspace_id,
+            "source_app_id": record.source_app_id,
+            "idempotency_key": record.idempotency_key,
+        }
+        document, inserted = self._insert_one_if_absent(collection, query, asdict(record))
+        existing = _app_stream_from_document(document)
+        if existing.request_fingerprint != record.request_fingerprint:
+            raise RuntimeAppStreamError("runtime_app_stream_idempotency_conflict")
+        return existing, inserted
+
+    def get_app_stream(
+        self,
+        stream_id: str,
+        *,
+        workspace_id: str,
+        source_app_id: str,
+    ) -> RuntimeAppStreamRecord:
+        """Read one stream only through its stamped workspace/app ownership."""
+        collection = self.collections.app_streams
+        if collection is None:
+            raise RuntimeAppStreamError("runtime_app_streams_unavailable")
+        document = collection.find_one(
+            {
+                "stream_id": stream_id,
+                "workspace_id": workspace_id,
+                "source_app_id": source_app_id,
+            }
+        )
+        if document is None:
+            raise RuntimeAppStreamError("runtime_app_stream_not_found")
+        return _app_stream_from_document(document)
+
+    def list_app_streams_for_session(
+        self,
+        *,
+        workspace_id: str,
+        session_id: str,
+    ) -> list[RuntimeAppStreamRecord]:
+        """List generic streams bound to one runtime session."""
+        collection = self.collections.app_streams
+        if collection is None:
+            return []
+        return [
+            _app_stream_from_document(document)
+            for document in collection.find({"workspace_id": workspace_id, "session_id": session_id})
+        ]
+
+    def has_nonterminal_app_stream_for_session(self, *, workspace_id: str, session_id: str) -> bool:
+        """Return whether automatic restart must not create a second app turn."""
+        terminal = {"completed", "failed", "cancelled", "timed-out"}
+        return any(
+            stream.status not in terminal
+            for stream in self.list_app_streams_for_session(workspace_id=workspace_id, session_id=session_id)
+        )
+
+    def bind_app_stream(
+        self,
+        *,
+        stream_id: str,
+        workspace_id: str,
+        source_app_id: str,
+        session_id: str,
+        turn_id: str,
+        now: datetime | None = None,
+    ) -> RuntimeAppStreamRecord:
+        """Bind a reserved stream and backfill already-persisted turn events."""
+        collection = self.collections.app_streams
+        if collection is None:
+            raise RuntimeAppStreamError("runtime_app_streams_unavailable")
+        timestamp = now or datetime.now(tz=UTC)
+        with self.session_lifecycle_handoff(workspace_id=workspace_id, session_id=session_id):
+            stream = self.get_app_stream(stream_id, workspace_id=workspace_id, source_app_id=source_app_id)
+            if stream.session_id and (stream.session_id != session_id or stream.turn_id != turn_id):
+                raise RuntimeAppStreamError("runtime_app_stream_already_bound")
+            session = self.get_session(session_id)
+            turn = self.get_turn(turn_id)
+            if (
+                session.workspace_id != workspace_id
+                or turn.workspace_id != workspace_id
+                or turn.session_id != session_id
+                or (session.source_app_id or "") != source_app_id
+            ):
+                raise RuntimeAppStreamError("runtime_app_stream_ownership_mismatch")
+            bound = replace(
+                stream,
+                session_id=session_id,
+                turn_id=turn_id,
+                status="submitted",
+                initial_file_state=snapshot_project_files(session.workdir),
+                updated_at=timestamp,
+            )
+            collection.update_one(
+                {"stream_id": stream_id, "workspace_id": workspace_id, "source_app_id": source_app_id},
+                {"$set": asdict(bound)},
+                upsert=False,
+            )
+            for event in self.list_events(session_id):
+                if event.turn_id == turn_id:
+                    self._append_event_to_one_app_stream(bound, event)
+                    bound = self.get_app_stream(
+                        stream_id,
+                        workspace_id=workspace_id,
+                        source_app_id=source_app_id,
+                    )
+            return bound
+
+    def fail_app_stream(
+        self,
+        *,
+        stream_id: str,
+        workspace_id: str,
+        source_app_id: str,
+        now: datetime | None = None,
+    ) -> RuntimeAppStreamRecord:
+        """Mark a reservation failed without fabricating a runtime turn."""
+        collection = self.collections.app_streams
+        if collection is None:
+            raise RuntimeAppStreamError("runtime_app_streams_unavailable")
+        stream = self.get_app_stream(stream_id, workspace_id=workspace_id, source_app_id=source_app_id)
+        if stream.status in {"completed", "failed", "cancelled", "timed-out"}:
+            return stream
+        failed = replace(stream, status="failed", updated_at=now or datetime.now(tz=UTC))
+        collection.update_one(
+            {"stream_id": stream_id, "workspace_id": workspace_id, "source_app_id": source_app_id},
+            {"$set": asdict(failed)},
+            upsert=False,
+        )
+        return failed
+
+    def read_app_stream_events(
+        self,
+        stream_id: str,
+        *,
+        workspace_id: str,
+        source_app_id: str,
+        after_sequence: int = 0,
+        limit: int = 64,
+    ) -> list[RuntimeAppStreamEventRecord]:
+        """Read one bounded ordered page after an acknowledged sequence."""
+        stream = self.get_app_stream(stream_id, workspace_id=workspace_id, source_app_id=source_app_id)
+        collection = self.collections.app_stream_events
+        if collection is None:
+            raise RuntimeAppStreamError("runtime_app_stream_events_unavailable")
+        bounded_after = max(0, int(after_sequence))
+        bounded_limit = max(1, min(int(limit), 256))
+        documents = collection.find(
+            {
+                "workspace_id": workspace_id,
+                "session_id": stream.session_id,
+                "stream_id": stream_id,
+                "source_app_id": source_app_id,
+            }
+        )
+        documents.sort(key=lambda item: int(item.get("sequence") or 0))
+        return [
+            _app_stream_event_from_document(document)
+            for document in documents
+            if int(document.get("sequence") or 0) > bounded_after
+        ][:bounded_limit]
+
     def _claim_has_persisted_turn(self, claim: RuntimeClientMessageClaim) -> bool:
         return (
             self.collections.turns.find_one(
@@ -683,10 +938,121 @@ class RuntimeDocumentStore:
                 {"$set": asdict(record)},
                 max_documents=MAX_RUNTIME_EVENTS_PER_SESSION,
             )
+            self._append_event_to_app_streams(record)
             return record
         self.collections.events.update_one({"event_id": record.event_id}, {"$set": asdict(record)}, upsert=True)
         self._prune_session_events(record.session_id)
+        self._append_event_to_app_streams(record)
         return record
+
+    def _append_event_to_app_streams(self, record: RuntimeEventRecord) -> None:
+        streams = self.collections.app_streams
+        if streams is None or self.collections.app_stream_events is None or not record.turn_id:
+            return
+        matches = streams.find({"workspace_id": record.workspace_id, "turn_id": record.turn_id})
+        if not matches:
+            return
+        with self.session_lifecycle_handoff(workspace_id=record.workspace_id, session_id=record.session_id):
+            for document in matches:
+                stream = _app_stream_from_document(document)
+                if stream.session_id != record.session_id:
+                    continue
+                if record.event_type in {
+                    "runtime.turn.completed",
+                    "runtime.turn.failed",
+                    "runtime.turn.cancelled",
+                    "runtime.turn.timed-out",
+                }:
+                    self._append_project_file_events(stream, record)
+                    stream = self.get_app_stream(
+                        stream.stream_id,
+                        workspace_id=stream.workspace_id,
+                        source_app_id=stream.source_app_id,
+                    )
+                self._append_event_to_one_app_stream(stream, record)
+
+    def _append_project_file_events(self, stream: RuntimeAppStreamRecord, terminal_event: RuntimeEventRecord) -> None:
+        try:
+            session = self.get_session(stream.session_id)
+        except RuntimeSessionNotFoundError:
+            return
+        current = snapshot_project_files(session.workdir)
+        for index, (path, change) in enumerate(changed_project_files(stream.initial_file_state, current), start=1):
+            synthetic = RuntimeEventRecord(
+                event_id=f"{terminal_event.event_id}:file:{index}",
+                workspace_id=terminal_event.workspace_id,
+                session_id=terminal_event.session_id,
+                plane="turn",
+                event_type="runtime.file.changed",
+                turn_id=terminal_event.turn_id,
+                process_id=None,
+                payload={"path": path, "change": change},
+                created_at=terminal_event.created_at,
+            )
+            self._append_event_to_one_app_stream(stream, synthetic)
+            stream = self.get_app_stream(
+                stream.stream_id,
+                workspace_id=stream.workspace_id,
+                source_app_id=stream.source_app_id,
+            )
+
+    def _append_event_to_one_app_stream(
+        self,
+        stream: RuntimeAppStreamRecord,
+        record: RuntimeEventRecord,
+    ) -> RuntimeAppStreamEventRecord | None:
+        normalized = normalized_stream_event(record)
+        collection = self.collections.app_stream_events
+        streams = self.collections.app_streams
+        if normalized is None or collection is None or streams is None:
+            return None
+        event_type, payload, terminal = normalized
+        identity = {
+            "workspace_id": stream.workspace_id,
+            "session_id": stream.session_id,
+            "stream_id": stream.stream_id,
+            "event_id": record.event_id,
+        }
+        existing = collection.find_one(identity)
+        if existing is not None:
+            return _app_stream_event_from_document(existing)
+        current = self.get_app_stream(
+            stream.stream_id,
+            workspace_id=stream.workspace_id,
+            source_app_id=stream.source_app_id,
+        )
+        projected = RuntimeAppStreamEventRecord(
+            stream_id=current.stream_id,
+            workspace_id=current.workspace_id,
+            source_app_id=current.source_app_id,
+            session_id=current.session_id,
+            turn_id=current.turn_id,
+            sequence=current.last_sequence + 1,
+            event_id=record.event_id,
+            event_type=event_type,
+            payload=payload,
+            terminal=terminal,
+            created_at=record.created_at,
+        )
+        document, inserted = self._insert_one_if_absent(collection, identity, asdict(projected))
+        if not inserted:
+            return _app_stream_event_from_document(document)
+        updated = replace(
+            current,
+            status=stream_status_for_event(event_type, current.status),
+            last_sequence=projected.sequence,
+            updated_at=record.created_at,
+        )
+        streams.update_one(
+            {
+                "stream_id": current.stream_id,
+                "workspace_id": current.workspace_id,
+                "source_app_id": current.source_app_id,
+            },
+            {"$set": asdict(updated)},
+            upsert=False,
+        )
+        return projected
 
     def list_events(self, session_id: str) -> list[RuntimeEventRecord]:
         return [RuntimeEventRecord(**document) for document in self.collections.events.find(self._session_query(session_id))]
@@ -921,6 +1287,18 @@ def runtime_location(workspace_id: str, start_path=None) -> RuntimeLocation:
         workspace_id=workspace_id,
         path=workspace_runtime_root(workspace_id=workspace_id, start_path=start_path),
     )
+
+
+def _app_stream_from_document(document: dict[str, Any]) -> RuntimeAppStreamRecord:
+    payload = dict(document)
+    payload.setdefault("initial_file_state", {})
+    payload.setdefault("created_at", None)
+    payload.setdefault("updated_at", None)
+    return RuntimeAppStreamRecord(**payload)
+
+
+def _app_stream_event_from_document(document: dict[str, Any]) -> RuntimeAppStreamEventRecord:
+    return RuntimeAppStreamEventRecord(**document)
 
 
 def _delete_session_records(

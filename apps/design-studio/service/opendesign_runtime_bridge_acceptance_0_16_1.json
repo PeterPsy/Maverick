@@ -1,0 +1,58 @@
+{
+  "artifact": {
+    "artifact_sha256": "b91ce140e6fc8302dc4d4b83dac197d4735533c0f141a44100ff1eeff8904e70",
+    "file_manifest_sha256": "3b99a4c85884d50e22f29561973f8db1f9a6ad3f00b67c22bee1fd54b25bbc2b",
+    "oci_index_digest": "sha256:eb1c9d55532ffd2088a4a71951cffd273dff65e96e077bcef8c8bac3a6e1f1a1",
+    "release": "0.16.1",
+    "upstream_commit": "276b4d8e970bc143d7ad060181a89a834e3d9caf"
+  },
+  "date": "2026-08-05",
+  "proofs": {
+    "architecture": {
+      "command": "python3 -m unittest tests.architecture.test_design_studio_runtime_bridge_proof -v",
+      "passed": 3
+    },
+    "focused": {
+      "command": "python3 -m unittest apps.design-studio.tests.test_design_studio_app apps.design-studio.tests.test_runtime_bridge tests.unit.runtime_streams.test_app_streams tests.unit.apps.test_runtime_requests tests.unit.api.test_app_runtime_cleanup_requests tests.integration.app_hosting.test_sidecar_core_routes tests.integration.recovery.test_backend_restart -v",
+      "passed": 38
+    },
+    "official_oci_sidecar": {
+      "command": "python3 apps/design-studio/service/smoke_opendesign_sidecar.py",
+      "launcher_mode": "oci-musl-runtime",
+      "passed": true,
+      "real_daemon": true,
+      "route_checks": 6
+    },
+    "owned_python_compile": {
+      "excluded": "ignored verified OCI vendor closure containing upstream node-pty winpty Python 2 utilities",
+      "passed": true,
+      "scope": "core, Design Studio backend/CLI/MCP/hooks/service, and WP7 tests"
+    },
+    "platform_app_hosting": {
+      "command": "python3 scripts/test_suite.py --area app-hosting",
+      "contract_tests_passed": 59,
+      "integration_tests_passed": 55,
+      "integration_tests_skipped_for_host_capability": 10
+    }
+  },
+  "schema_version": "1",
+  "selection": "B",
+  "security": {
+    "app_owned_translation": true,
+    "cleanup_source_app_scoped": true,
+    "core_contains_opendesign_product_names": false,
+    "durable_ordered_stream": true,
+    "external_provider_credentials_delivered_to_sidecar": false,
+    "interrupt_source_app_scoped": true,
+    "normalized_provider_neutral_events": true,
+    "project_root_capability_one_shot": true,
+    "restart_creates_duplicate_turn": false,
+    "sse_backpressure_and_keepalive": true,
+    "terminal_packages": [
+      "succeeded",
+      "failed",
+      "canceled"
+    ]
+  },
+  "work_package": "WP7"
+}

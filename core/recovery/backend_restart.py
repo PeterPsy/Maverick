@@ -94,13 +94,20 @@ def recover_interrupted_runtime_turns_after_backend_restart(
         recovered += 1
         should_queue_resume = False
         resume_attempts = _backend_restart_resume_attempt_count(session_events)
+        has_app_stream = state.runtime_store.has_nonterminal_app_stream_for_session(
+            workspace_id=session.workspace_id,
+            session_id=session.session_id,
+        )
         for turn in interrupted_turns:
             is_recovery_resume_turn = _is_backend_restart_resume_turn(turn, session_events)
             is_inter_agent_root_turn = _is_inter_agent_root_turn(turn, session_events)
             failure_reason = f"Interrupted by {reason}; automatic resume turn queued."
             recovery_action = "automatic_resume_turn"
             target_status = "failed" if turn.status == "active" else "cancelled"
-            if is_inter_agent_root_turn:
+            if has_app_stream:
+                failure_reason = f"Interrupted by {reason}; source app retry remains idempotent."
+                recovery_action = "close_app_stream_turn"
+            elif is_inter_agent_root_turn:
                 failure_reason = f"Interrupted by {reason}; inter-agent run recovery will close the run."
                 recovery_action = "close_inter_agent_root_turn"
             elif session.session_kind == "inter_agent_participant":

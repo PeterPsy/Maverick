@@ -73,8 +73,8 @@
       "outbound": []
     },
     "runtime": {
-      "create_sessions": false,
-      "cleanup_sessions": false
+      "create_sessions": true,
+      "cleanup_sessions": true
     },
     "host": {
       "telemetry": false
@@ -177,7 +177,8 @@
     "hooks": {
       "install": "hooks/install.py",
       "migrate": "hooks/migrate.py",
-      "health_check": "hooks/health_check.py"
+      "health_check": "hooks/health_check.py",
+      "runtime_event": "backend/app_backend.py"
     },
     "backend": "backend/app_backend.py",
     "frontend": "frontend/dist",
@@ -303,6 +304,14 @@
                 {
                   "method": "GET",
                   "path_template": "/api/projects/{id}"
+                },
+                {
+                  "method": "GET",
+                  "path_template": "/api/projects/{id}/conversations"
+                },
+                {
+                  "method": "GET",
+                  "path_template": "/api/projects/{id}/files"
                 }
               ]
             },
@@ -653,35 +662,11 @@
               },
               {
                 "method": "GET",
-                "path_template": "/api/runs"
-              },
-              {
-                "method": "POST",
-                "path_template": "/api/runs"
-              },
-              {
-                "method": "GET",
-                "path_template": "/api/runs/{id}"
-              },
-              {
-                "method": "GET",
                 "path_template": "/api/runs/{id}/agui"
               },
               {
                 "method": "POST",
-                "path_template": "/api/runs/{id}/cancel"
-              },
-              {
-                "method": "GET",
-                "path_template": "/api/runs/{id}/events"
-              },
-              {
-                "method": "POST",
                 "path_template": "/api/runs/{id}/feedback"
-              },
-              {
-                "method": "GET",
-                "path_template": "/api/runs/{id}/result-package"
               },
               {
                 "method": "GET",
@@ -799,6 +784,30 @@
               {
                 "method": "POST",
                 "path_template": "/api/provider/models"
+              },
+              {
+                "method": "GET",
+                "path_template": "/api/runs"
+              },
+              {
+                "method": "POST",
+                "path_template": "/api/runs"
+              },
+              {
+                "method": "GET",
+                "path_template": "/api/runs/{id}"
+              },
+              {
+                "method": "POST",
+                "path_template": "/api/runs/{id}/cancel"
+              },
+              {
+                "method": "GET",
+                "path_template": "/api/runs/{id}/events"
+              },
+              {
+                "method": "GET",
+                "path_template": "/api/runs/{id}/result-package"
               }
             ],
             "blocked": [

@@ -9,12 +9,19 @@ from pathlib import Path
 import tempfile
 from types import SimpleNamespace
 import unittest
+from unittest.mock import patch
 
+from core.api.platform_state import bootstrap_platform_state
+from core.recovery import backend_restart
 from core.recovery.backend_restart import _close_orphan_non_terminal_turn_events, _is_inter_agent_root_turn
+from core.runtime.app_streams import RuntimeAppStreamRecord
 from core.runtime.event_collection import RuntimeEventJsonCollection
 from core.runtime.errors import RuntimeTurnNotFoundError
 from core.runtime.runtime_events import RuntimeEventRecord
 from core.runtime.runtime_session import RuntimeSessionRecord
+from core.runtime.runtime_turns import RuntimeTurnRecord
+from core.runtime.service import create_runtime_session, transition_runtime_session
+from tests.support.repo import make_temp_repo_root
 
 
 NOW = datetime(2026, 4, 21, 12, 0, tzinfo=UTC)
@@ -141,6 +148,82 @@ class BackendRestartRecoveryTestCase(unittest.TestCase):
             self.assertEqual(events, [])
             self.assertFalse(event_path.exists())
             self.assertEqual(len(list(event_path.parent.glob("events.json.quarantined-malformed-*"))), 1)
+
+    def test_app_stream_restart_closes_turn_without_queueing_duplicate(self) -> None:
+        repo_root = make_temp_repo_root(self)
+        state = bootstrap_platform_state(start_path=repo_root)
+        session = create_runtime_session(
+            state.runtime_store,
+            session_id="session-app-stream",
+            workspace_id="default",
+            agent_id="chat",
+            source_app_id="source-app",
+            start_path=repo_root,
+        )
+        session = transition_runtime_session(
+            state.runtime_store,
+            session_id=session.session_id,
+            target_status="running",
+        )
+        state.runtime_store.save_turn(
+            RuntimeTurnRecord(
+                turn_id="turn-app-stream",
+                session_id=session.session_id,
+                workspace_id="default",
+                status="active",
+                input_text="work",
+                created_at=NOW,
+                updated_at=NOW,
+                started_at=NOW,
+                completed_at=None,
+                failure_reason=None,
+            )
+        )
+        state.runtime_store.reserve_app_stream(
+            RuntimeAppStreamRecord(
+                stream_id="stream-restart",
+                workspace_id="default",
+                source_app_id="source-app",
+                actor_id="user:admin",
+                request_id="request-restart",
+                idempotency_key="request-restart:attempt-1",
+                request_fingerprint="f" * 64,
+                session_id="",
+                turn_id="",
+                status="reserving",
+                last_sequence=0,
+                created_at=NOW,
+                updated_at=NOW,
+            )
+        )
+        state.runtime_store.bind_app_stream(
+            stream_id="stream-restart",
+            workspace_id="default",
+            source_app_id="source-app",
+            session_id=session.session_id,
+            turn_id="turn-app-stream",
+            now=NOW,
+        )
+
+        with (
+            patch.object(backend_restart, "submit_runtime_turn_async") as submit,
+            patch.object(backend_restart, "set_thread_availability"),
+            patch.object(backend_restart, "dispatch_source_app_runtime_event"),
+            patch.object(backend_restart, "dispatch_workspace_app_background_hooks", return_value=[]),
+            patch.object(backend_restart.InterAgentService, "recover_non_terminal_runs", return_value=[]),
+        ):
+            result = backend_restart.recover_interrupted_runtime_turns_after_backend_restart(state)
+
+        submit.assert_not_called()
+        self.assertEqual(result.queued_resume_turns, 0)
+        self.assertEqual(len(state.runtime_store.list_turns(session.session_id)), 1)
+        self.assertEqual(state.runtime_store.get_turn("turn-app-stream").status, "failed")
+        stream = state.runtime_store.get_app_stream(
+            "stream-restart",
+            workspace_id="default",
+            source_app_id="source-app",
+        )
+        self.assertEqual(stream.status, "failed")
 
 
 if __name__ == "__main__":

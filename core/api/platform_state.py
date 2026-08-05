@@ -13,6 +13,7 @@ from core.api.application import create_application
 from core.api.control_store import ControlPlaneCollections, ControlStoreSettings, build_control_plane_collections
 from core.api.persistence_cleanup_worker import run_pending_cleanup_plans
 from core.apps.store import AppDocumentStore
+from core.apps.runtime_root_capabilities import RuntimeRootCapabilityStore
 from core.apps.sidecar_browser_sessions import SidecarBrowserSessionStore
 from core.identity.service import bootstrap_default_admin
 from core.identity.store import IdentityDocumentStore
@@ -55,6 +56,7 @@ class PlatformState:
     recovery_store: RecoveryDocumentStore
     observability_store: ObservabilityDocumentStore
     sidecar_browser_sessions: SidecarBrowserSessionStore
+    runtime_root_capabilities: RuntimeRootCapabilityStore
     root_shell_app_id: str
 
 
@@ -85,6 +87,11 @@ def bootstrap_platform_state(
     runtime_states = RuntimeSessionJsonCollection(start_path=repository_root, filename="state.json")
     runtime_threads = WorkspaceRuntimeJsonCollection(start_path=repository_root, filename="threads.json")
     runtime_client_messages = WorkspaceRuntimeJsonCollection(start_path=repository_root, filename="client_messages.json")
+    runtime_app_streams = WorkspaceRuntimeJsonCollection(start_path=repository_root, filename="app_streams.json")
+    runtime_app_stream_events = RuntimeSessionJsonCollection(
+        start_path=repository_root,
+        filename="app_stream_events.json",
+    )
     runtime_store = RuntimeDocumentStore(
         RuntimeCollections(
             sessions=runtime_sessions,
@@ -94,6 +101,8 @@ def bootstrap_platform_state(
             states=runtime_states,
             threads=runtime_threads,
             client_messages=runtime_client_messages,
+            app_streams=runtime_app_streams,
+            app_stream_events=runtime_app_stream_events,
             api_tokens=control_collections.runtime_api_tokens,
         )
     )
@@ -151,6 +160,7 @@ def bootstrap_platform_state(
         recovery_store=recovery_store,
         observability_store=observability_store,
         sidecar_browser_sessions=SidecarBrowserSessionStore(),
+        runtime_root_capabilities=RuntimeRootCapabilityStore(),
         root_shell_app_id=os.environ.get("MAVERICK_ROOT_SHELL_APP_ID", "base-shell").strip() or "base-shell",
     )
     if recover_backend_restart:

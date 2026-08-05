@@ -9,10 +9,17 @@ from pathlib import Path
 import tempfile
 import textwrap
 import unittest
+from datetime import UTC, datetime
+from unittest.mock import patch
 
+import core.api.sidecar_core_routes as sidecar_core_routes
 from core.api.platform_host import PlatformHost
 from core.api.platform_state import bootstrap_platform_state
-from core.api.sidecar_core_routes import _send_core_sidecar_asgi_response
+from core.api.sidecar_core_routes import (
+    SidecarCoreRouteContext,
+    _send_core_sidecar_asgi_response,
+    _send_runtime_stream_asgi,
+)
 from core.apps.contracts import (
     build_app_contract,
     build_app_entrypoints,
@@ -27,6 +34,9 @@ from core.apps.contracts import (
 )
 from core.apps.models import HttpSidecarBindSpec, HttpSidecarHealthSpec
 from core.apps.service import install_store_app, register_app_source_from_contract
+from core.runtime.app_streams import RuntimeAppStreamRecord
+from core.runtime.runtime_turns import RuntimeTurnRecord
+from core.runtime.service import create_runtime_session, record_runtime_event
 from core.shared.entrypoints import EntrypointShutdownController
 
 
@@ -83,6 +93,220 @@ class SidecarCoreRouteIntegrationTests(unittest.TestCase):
         self.assertNotIn("cookie", payload["headers"])
         self.assertFalse(sidecar_log.exists())
 
+    def test_generic_runtime_stream_is_unbuffered_ordered_and_provider_neutral(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            repo_root = self._repo_root(temp)
+            state = bootstrap_platform_state(start_path=repo_root)
+            app_root, parsed = self._install_app(repo_root, state)
+            session = create_runtime_session(
+                state.runtime_store,
+                session_id="session-stream",
+                workspace_id="default",
+                agent_id="chat",
+                source_app_id="sidecar-core-demo",
+                start_path=repo_root,
+            )
+            now = datetime(2026, 8, 5, 12, 0, tzinfo=UTC)
+            state.runtime_store.save_turn(
+                RuntimeTurnRecord(
+                    turn_id="turn-stream",
+                    session_id=session.session_id,
+                    workspace_id="default",
+                    status="active",
+                    input_text="private prompt",
+                    created_at=now,
+                    updated_at=now,
+                    started_at=now,
+                    completed_at=None,
+                    failure_reason=None,
+                )
+            )
+            state.runtime_store.reserve_app_stream(
+                RuntimeAppStreamRecord(
+                    stream_id="stream-one",
+                    workspace_id="default",
+                    source_app_id="sidecar-core-demo",
+                    actor_id="user:admin",
+                    request_id="request-one",
+                    idempotency_key="request-one:attempt-1",
+                    request_fingerprint="f" * 64,
+                    session_id="",
+                    turn_id="",
+                    status="reserving",
+                    last_sequence=0,
+                    created_at=now,
+                    updated_at=now,
+                )
+            )
+            state.runtime_store.bind_app_stream(
+                stream_id="stream-one",
+                workspace_id="default",
+                source_app_id="sidecar-core-demo",
+                session_id=session.session_id,
+                turn_id="turn-stream",
+                now=now,
+            )
+            for event_id, event_type, payload in (
+                ("event-started", "runtime.turn.started", {"provider_id": "secret-provider"}),
+                (
+                    "event-delta",
+                    "runtime.output.delta",
+                    {"text": "Incremental output.", "raw": {"secret": True}},
+                ),
+                ("event-completed", "runtime.turn.completed", {"provider_payload": "secret"}),
+            ):
+                record_runtime_event(
+                    state.runtime_store,
+                    event_id=event_id,
+                    session_id=session.session_id,
+                    turn_id="turn-stream",
+                    plane="turn",
+                    event_type=event_type,
+                    payload=payload,
+                    now=now,
+                )
+            context = SidecarCoreRouteContext(
+                source_root=app_root,
+                data_root=str(repo_root / "workspaces/default/data/sidecar-core-demo"),
+                parsed=parsed,
+                sidecar=parsed.contract.services.http_sidecars[0],
+                proxy_path="/api/runs/run-one/events",
+            )
+            messages: list[dict] = []
+
+            async def receive() -> dict:
+                return {"type": "http.disconnect"}
+
+            async def send(message: dict) -> None:
+                messages.append(message)
+
+            asyncio.run(
+                _send_runtime_stream_asgi(
+                    state,
+                    receive=receive,
+                    send=send,
+                    descriptor={
+                        "stream_id": "stream-one",
+                        "after_sequence": 0,
+                        "callback": {"action": "translate", "payload": {"run_id": "run-one"}},
+                    },
+                    workspace_id="default",
+                    app_id="sidecar-core-demo",
+                    user=None,
+                    context=context,
+                    start_path=repo_root,
+                    shutdown_controller=None,
+                    response_headers=None,
+                )
+            )
+
+        start = messages[0]
+        bodies = [message for message in messages if message["type"] == "http.response.body"]
+        headers = dict(start["headers"])
+        delivered = b"".join(message["body"] for message in bodies)
+        self.assertEqual(headers[b"content-type"], b"text/event-stream; charset=utf-8")
+        self.assertNotIn(b"content-length", headers)
+        self.assertGreaterEqual(len(bodies), 4)
+        self.assertTrue(all(message["more_body"] for message in bodies[:-1]))
+        self.assertFalse(bodies[-1]["more_body"])
+        self.assertLess(delivered.index(b"id: 1"), delivered.index(b"id: 2"))
+        self.assertLess(delivered.index(b"id: 2"), delivered.index(b"id: 3"))
+        self.assertIn(b"Incremental output.", delivered)
+        self.assertNotIn(b"secret-provider", delivered)
+        self.assertNotIn(b"provider_payload", delivered)
+        self.assertNotIn(b"private prompt", delivered)
+
+    def test_generic_runtime_stream_sends_keepalive_and_stops_on_disconnect(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            repo_root = self._repo_root(temp)
+            state = bootstrap_platform_state(start_path=repo_root)
+            app_root, parsed = self._install_app(repo_root, state)
+            session = create_runtime_session(
+                state.runtime_store,
+                session_id="session-idle-stream",
+                workspace_id="default",
+                agent_id="chat",
+                source_app_id="sidecar-core-demo",
+                start_path=repo_root,
+            )
+            now = datetime(2026, 8, 5, 12, 1, tzinfo=UTC)
+            state.runtime_store.save_turn(
+                RuntimeTurnRecord(
+                    turn_id="turn-idle-stream",
+                    session_id=session.session_id,
+                    workspace_id="default",
+                    status="active",
+                    input_text="private prompt",
+                    created_at=now,
+                    updated_at=now,
+                    started_at=now,
+                    completed_at=None,
+                    failure_reason=None,
+                )
+            )
+            state.runtime_store.reserve_app_stream(
+                RuntimeAppStreamRecord(
+                    stream_id="stream-idle",
+                    workspace_id="default",
+                    source_app_id="sidecar-core-demo",
+                    actor_id="user:admin",
+                    request_id="request-idle",
+                    idempotency_key="request-idle:attempt-1",
+                    request_fingerprint="a" * 64,
+                    session_id="",
+                    turn_id="",
+                    status="reserving",
+                    last_sequence=0,
+                    created_at=now,
+                    updated_at=now,
+                )
+            )
+            state.runtime_store.bind_app_stream(
+                stream_id="stream-idle",
+                workspace_id="default",
+                source_app_id="sidecar-core-demo",
+                session_id=session.session_id,
+                turn_id="turn-idle-stream",
+                now=now,
+            )
+            context = SidecarCoreRouteContext(
+                source_root=app_root,
+                data_root=str(repo_root / "workspaces/default/data/sidecar-core-demo"),
+                parsed=parsed,
+                sidecar=parsed.contract.services.http_sidecars[0],
+                proxy_path="/api/runs/run-idle/events",
+            )
+            messages: list[dict] = []
+
+            async def receive() -> dict:
+                return {"type": "http.disconnect"}
+
+            async def send(message: dict) -> None:
+                messages.append(message)
+
+            with patch.object(sidecar_core_routes, "_RUNTIME_STREAM_KEEPALIVE_SECONDS", 0.0):
+                asyncio.run(
+                    _send_runtime_stream_asgi(
+                        state,
+                        receive=receive,
+                        send=send,
+                        descriptor={
+                            "stream_id": "stream-idle",
+                            "callback": {"action": "translate", "payload": {"run_id": "run-idle"}},
+                        },
+                        workspace_id="default",
+                        app_id="sidecar-core-demo",
+                        user=None,
+                        context=context,
+                        start_path=repo_root,
+                        shutdown_controller=None,
+                        response_headers=None,
+                    )
+                )
+
+        bodies = [message["body"] for message in messages if message["type"] == "http.response.body"]
+        self.assertEqual(bodies, [b": keepalive\n\n"])
+
     def _repo_root(self, temp_dir: str) -> Path:
         repo_root = Path(temp_dir) / "maverick"
         for name in ("core", "apps", "workspaces", "scripts"):
@@ -91,7 +315,7 @@ class SidecarCoreRouteIntegrationTests(unittest.TestCase):
         (repo_root / "AGENTS.md").write_text("", encoding="utf-8")
         return repo_root
 
-    def _install_app(self, repo_root: Path, state) -> None:
+    def _install_app(self, repo_root: Path, state):
         app_root = repo_root / "apps" / "sidecar-core-demo"
         (app_root / "service").mkdir(parents=True)
         (app_root / "backend").mkdir(parents=True)
@@ -152,6 +376,7 @@ class SidecarCoreRouteIntegrationTests(unittest.TestCase):
             start_path=repo_root,
             observability_store=state.observability_store,
         )
+        return app_root, parsed
 
     def _login(self, app: PlatformHost) -> str:
         status, _body, headers = self._invoke(
@@ -243,6 +468,23 @@ _BACKEND = textwrap.dedent(
     payload = json.loads(sys.stdin.read() or "{}")
     body = payload.get("body") if isinstance(payload.get("body"), dict) else {}
     headers = payload.get("headers") if isinstance(payload.get("headers"), dict) else {}
+    if payload.get("surface") == "runtime_stream_translation":
+        events = body.get("events") if isinstance(body.get("events"), list) else []
+        print(json.dumps({
+            "status_code": 200,
+            "json": {
+                "ack_sequence": events[-1]["sequence"] if events else 0,
+                "sse_events": [
+                    {
+                        "id": str(event["sequence"]),
+                        "event": "runtime",
+                        "data": {"type": event["event_type"], **event["payload"]},
+                    }
+                    for event in events
+                ],
+            },
+        }))
+        raise SystemExit(0)
     print(json.dumps({
         "status_code": 200,
         "json": {

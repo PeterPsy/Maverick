@@ -16,6 +16,19 @@ from core.app_sdk.app_sidecar import AppSidecarError, app_sidecar
 from core.app_sdk.storage import safe_app_data_path
 
 from store import OPENDESIGN_COMMIT, OPENDESIGN_MODE, OPENDESIGN_VERSION, ensure_state, update_state, utc_now
+from runtime_bridge import (
+    RuntimeBridgeError,
+    build_result_package,
+    mark_cancel_requested,
+    project_root_relative_to_app_data,
+    public_run,
+    record_submission,
+    record_terminal,
+    reserve_run,
+    store_for_payload,
+    translate_stream_events,
+    validated_identifier,
+)
 
 
 PROJECT_ID_PATTERN = re.compile(r"^design_[a-f0-9]{12}$")
@@ -505,11 +518,196 @@ def handle_sidecar_core_route(payload: dict[str, Any], arguments: dict[str, Any]
         return _handle_storage_export_route(payload, arguments, method=method)
     if _route_matches(route_path, "/api/provider"):
         return _handle_provider_proxy_route(payload, arguments, method=method, route_path=route_path)
+    if _route_matches(route_path, "/api/runs"):
+        return _handle_runtime_bridge_route(payload, arguments, method=method, route_path=route_path)
     raise DesignStudioError(
         "sidecar_core_route_not_found",
         f"Design Studio does not implement handled sidecar route `{route_path}`.",
         status_code=404,
     )
+
+
+def _handle_runtime_bridge_route(
+    payload: dict[str, Any],
+    arguments: dict[str, Any],
+    *,
+    method: str,
+    route_path: str,
+) -> dict[str, Any]:
+    try:
+        parts = [part for part in route_path.split("/") if part]
+        if parts == ["api", "runs"]:
+            if method == "GET":
+                return {
+                    "status_code": 200,
+                    "json": {"runs": [public_run(record) for record in store_for_payload(payload).list()]},
+                }
+            if method == "POST":
+                return _create_runtime_bridge_run(payload, _sidecar_core_body(arguments))
+            raise DesignStudioError("method_not_allowed", "Run collection routes require GET or POST.", status_code=405)
+        if len(parts) not in {3, 4} or parts[:2] != ["api", "runs"]:
+            raise DesignStudioError("run_route_not_found", "OpenDesign run route was not found.", status_code=404)
+        run_id = validated_identifier(parts[2], label="OpenDesign run id")
+        record = store_for_payload(payload).get(run_id)
+        if len(parts) == 3:
+            if method != "GET":
+                raise DesignStudioError("method_not_allowed", "Run status routes require GET.", status_code=405)
+            return {"status_code": 200, "json": public_run(record)}
+        operation = parts[3]
+        if operation == "events" and method == "GET":
+            last_event_id = str(payload.get("headers", {}).get("last-event-id") or "0")
+            try:
+                after_sequence = max(0, int(last_event_id))
+            except ValueError as exc:
+                raise DesignStudioError("last_event_id_invalid", "Last-Event-ID must be an integer.") from exc
+            if not record.get("stream_id"):
+                raise DesignStudioError("run_stream_pending", "Runtime stream is not bound yet.", status_code=409)
+            return {
+                "runtime_stream_response": {
+                    "status_code": 200,
+                    "stream_id": record["stream_id"],
+                    "after_sequence": after_sequence,
+                    "callback": {
+                        "action": "runtime_bridge.translate_events",
+                        "payload": {"od_run_id": run_id},
+                    },
+                }
+            }
+        if operation == "cancel" and method == "POST":
+            if record["status"] in {"succeeded", "failed", "canceled"}:
+                return {"status_code": 200, "json": public_run(record)}
+            if not record.get("turn_id"):
+                raise DesignStudioError("run_cancel_pending", "Runtime turn is not bound yet.", status_code=409)
+            updated = mark_cancel_requested(payload, run_id)
+            return {
+                "status_code": 200,
+                "json": public_run(updated),
+                "runtime_turn_interrupt_requests": [
+                    {
+                        "turn_id": record["turn_id"],
+                        "reason": "Canceled from the owning app run.",
+                        "result_visibility": "internal",
+                    }
+                ],
+            }
+        if operation == "result-package" and method == "GET":
+            result_package = record.get("result_package")
+            if not isinstance(result_package, dict):
+                if record["status"] not in {"succeeded", "failed", "canceled"}:
+                    raise DesignStudioError("run_not_terminal", "Run result package is not ready.", status_code=409)
+                result_package = build_result_package(record, files=[])
+            return {"status_code": 200, "json": result_package}
+        raise DesignStudioError("run_route_not_found", "OpenDesign run route was not found.", status_code=404)
+    except RuntimeBridgeError as error:
+        raise DesignStudioError("runtime_bridge_failed", str(error), status_code=409) from error
+
+
+def _create_runtime_bridge_run(payload: dict[str, Any], body: dict[str, Any]) -> dict[str, Any]:
+    project_id = validated_identifier(body.get("projectId"), label="OpenDesign project id")
+    conversation_id = validated_identifier(body.get("conversationId"), label="OpenDesign conversation id")
+    assistant_message_id = validated_identifier(
+        body.get("assistantMessageId"),
+        label="OpenDesign assistant message id",
+    )
+    client_request_id = str(body.get("clientRequestId") or "").strip()
+    message = str(body.get("message") or body.get("currentPrompt") or "").strip()
+    if not message:
+        raise DesignStudioError("run_message_required", "OpenDesign run requires a message.")
+    if len(message.encode("utf-8")) > 1_000_000:
+        raise DesignStudioError("run_message_too_large", "OpenDesign run message is too large.", status_code=413)
+    project_response = _opendesign_request(payload, f"/api/projects/{project_id}")
+    project = project_response.get("project")
+    if not isinstance(project, dict) or str(project.get("id") or "") != project_id:
+        raise DesignStudioError("project_not_found", "The OpenDesign project was not found.", status_code=404)
+    conversations_response = _opendesign_request(payload, f"/api/projects/{project_id}/conversations")
+    conversations = conversations_response.get("conversations")
+    if not isinstance(conversations, list) or not any(
+        isinstance(item, dict) and str(item.get("id") or "") == conversation_id
+        for item in conversations
+    ):
+        raise DesignStudioError("conversation_not_found", "The OpenDesign conversation was not found.", status_code=404)
+    record, inserted = reserve_run(
+        payload,
+        project_id=project_id,
+        conversation_id=conversation_id,
+        assistant_message_id=assistant_message_id,
+        client_request_id=client_request_id,
+        agent_id="maverick",
+    )
+    response = {
+        "runId": record["od_run_id"],
+        "conversationId": record["od_conversation_id"],
+        "assistantMessageId": record["assistant_message_id"],
+    }
+    if not inserted:
+        return {"status_code": 202, "json": response}
+    project_root = project_root_relative_to_app_data(payload, project_id)
+    return {
+        "status_code": 202,
+        "json": response,
+        "runtime_session_requests": [
+            {
+                "request_id": record["request_id"],
+                "idempotency_key": record["idempotency_key"],
+                "create_stream": True,
+                "result_visibility": "internal",
+                "agent_id": "chat",
+                "agent_type_id": "chat",
+                "agent_label": "Maverick Design Runtime",
+                "title": f"Design run {record['od_run_id']}",
+                "project_id": project_id,
+                "requested_mode": "sandbox",
+                "system_prompt": (
+                    "Work only inside the current OpenDesign project directory. "
+                    "Create or update project files needed to satisfy the user request. "
+                    "Do not inspect credentials, runtime homes, or paths outside this directory."
+                ),
+                "input_text": message,
+                "project_root": {"scope": "app_data", "relative_path": project_root},
+                "callback": {
+                    "action": "runtime_bridge.record_submission",
+                    "payload": {"od_run_id": record["od_run_id"]},
+                },
+            }
+        ],
+    }
+
+
+def runtime_bridge_callback(payload: dict[str, Any], arguments: dict[str, Any]) -> dict[str, Any]:
+    try:
+        return record_submission(payload, arguments)
+    except RuntimeBridgeError as error:
+        raise DesignStudioError("runtime_bridge_callback_failed", str(error), status_code=409) from error
+
+
+def runtime_bridge_translate(payload: dict[str, Any], arguments: dict[str, Any]) -> dict[str, Any]:
+    try:
+        return translate_stream_events(payload, arguments)
+    except RuntimeBridgeError as error:
+        raise DesignStudioError("runtime_bridge_translation_failed", str(error), status_code=409) from error
+
+
+def runtime_bridge_terminal(payload: dict[str, Any], arguments: dict[str, Any], *, event_type: str) -> dict[str, Any]:
+    runtime_session_id = str(arguments.get("runtime_session_id") or payload.get("runtime_session_id") or "")
+    turn_id = str(arguments.get("turn_id") or payload.get("turn_id") or "")
+    files: list[dict[str, Any]] = []
+    try:
+        correlation = store_for_payload(payload).find_by_runtime(runtime_session_id, turn_id)
+        if correlation is not None:
+            response = _opendesign_json_request(payload, f"/api/projects/{correlation['od_project_id']}/files")
+            raw_files = response.get("files") if isinstance(response, dict) and isinstance(response.get("files"), list) else response
+            if isinstance(raw_files, list):
+                files = [item for item in raw_files if isinstance(item, dict)]
+        updated = record_terminal(
+            payload,
+            runtime_session_id=runtime_session_id,
+            turn_id=turn_id,
+            event_type=event_type,
+            files=files,
+        )
+    except (RuntimeBridgeError, DesignStudioError) as error:
+        raise DesignStudioError("runtime_bridge_terminal_failed", str(error), status_code=409) from error
+    return {"correlation": updated or {}, "terminal_package_written": bool(updated)}
 
 
 def _handle_media_config_route(payload: dict[str, Any], arguments: dict[str, Any], *, method: str) -> dict[str, Any]:
@@ -739,6 +937,17 @@ def dispatch(action: str, payload: dict[str, Any], arguments: dict[str, Any]) ->
         return set_custom_view(payload, arguments)
     if action == "clear_custom_view":
         return clear_custom_view(payload)
+    if action == "runtime_bridge.record_submission":
+        return runtime_bridge_callback(payload, arguments)
+    if action == "runtime_bridge.translate_events":
+        return runtime_bridge_translate(payload, arguments)
+    if action in {
+        "runtime.turn.completed",
+        "runtime.turn.failed",
+        "runtime.turn.cancelled",
+        "runtime.turn.timed-out",
+    }:
+        return runtime_bridge_terminal(payload, arguments, event_type=action)
     if action in {"references.manifest", "reference_manifest"}:
         return reference_manifest(payload)
     if action in {"references.search", "reference_search"}:
@@ -878,6 +1087,13 @@ def _opendesign_project_id(value: object) -> str:
 
 
 def _opendesign_request(payload: dict[str, Any], path: str) -> dict[str, Any]:
+    decoded = _opendesign_json_request(payload, path)
+    if not isinstance(decoded, dict):
+        raise DesignStudioError("opendesign_response_invalid", "OpenDesign returned an invalid response.", status_code=502)
+    return decoded
+
+
+def _opendesign_json_request(payload: dict[str, Any], path: str) -> Any:
     try:
         response = app_sidecar(payload, "opendesign").get(path, headers={"accept": "application/json"})
     except AppSidecarError as error:
@@ -902,8 +1118,6 @@ def _opendesign_request(payload: dict[str, Any], path: str) -> dict[str, Any]:
             "OpenDesign returned invalid JSON.",
             status_code=502,
         ) from error
-    if not isinstance(decoded, dict):
-        raise DesignStudioError("opendesign_response_invalid", "OpenDesign returned an invalid response.", status_code=502)
     return decoded
 
 

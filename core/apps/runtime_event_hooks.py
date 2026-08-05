@@ -106,7 +106,21 @@ def dispatch_source_app_runtime_event(
         },
     }
     try:
-        result = run_json_entrypoint(source_root / hook_path, payload=payload, cwd=source_root, timeout_seconds=30)
+        from core.api.sidecar_entrypoint_invocation import run_json_entrypoint_with_sidecars
+
+        result = run_json_entrypoint_with_sidecars(
+            source_root / hook_path,
+            payload=payload,
+            cwd=source_root,
+            binding=binding,
+            parsed=parsed,
+            surface="backend",
+            start_path=start_path or state.repository_root,
+            actor_user_id=session.owner_user_id,
+            runtime_session_id=session.session_id,
+            observability_store=state.observability_store,
+            timeout_seconds=30,
+        )
     except Exception as error:
         _record_source_app_hook_failure(state, session=session, turn=turn, detail=str(error))
         return None

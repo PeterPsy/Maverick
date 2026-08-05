@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+from datetime import UTC, datetime
+from hashlib import sha256
+import json
 from pathlib import Path, PurePosixPath
 from typing import Any
 from uuid import uuid4
@@ -15,6 +18,7 @@ from core.apps.surfaces import resolve_workspace_app_surface
 from core.providers.errors import ProviderError
 from core.providers.service import resolve_provider_for_runtime_session
 from core.runtime.errors import RuntimeSessionNotFoundError
+from core.runtime.app_streams import RuntimeAppStreamError, RuntimeAppStreamRecord
 from core.runtime.runtime_session import runtime_session_allows_user_thread
 from core.runtime.runtime_threads import create_runtime_thread
 from core.runtime.service import create_runtime_session, record_runtime_event, transition_runtime_session, transition_runtime_turn
@@ -45,6 +49,7 @@ def apply_app_runtime_requests(
     data_root: str,
     parsed: ParsedAppContract,
     start_path: Path,
+    actor_user_id: str | None = None,
 ) -> list[dict[str, Any]]:
     """Apply platform-owned requests returned by an app through a generic result envelope."""
     requests = _pop_runtime_requests(result)
@@ -54,6 +59,8 @@ def apply_app_runtime_requests(
         return []
     if requests and not parsed.contract.permissions.runtime.create_sessions:
         raise AppHostingError(f"App `{app_id}` requested runtime session creation without declaring runtime.create_sessions.")
+    if interrupt_requests and not parsed.contract.permissions.runtime.create_sessions:
+        raise AppHostingError(f"App `{app_id}` requested runtime interrupt without declaring runtime.create_sessions.")
     if not isinstance(requests, list):
         raise AppHostingError("App runtime launch requests must be a list.")
     if not isinstance(dependency_backend_requests, list):
@@ -90,6 +97,7 @@ def apply_app_runtime_requests(
                 data_root=data_root,
                 parsed=parsed,
                 start_path=start_path,
+                actor_user_id=actor_user_id,
             )
         )
     if not isinstance(interrupt_requests, list):
@@ -97,7 +105,12 @@ def apply_app_runtime_requests(
     for request in interrupt_requests:
         if isinstance(request, dict):
             results.append(_apply_one_runtime_interrupt_request(state, request=request, workspace_id=workspace_id, app_id=app_id))
-    _attach_runtime_request_results(result, results)
+    visible_results: list[dict[str, Any]] = []
+    for request_result in results:
+        visible = bool(request_result.pop("_visible", True))
+        if visible:
+            visible_results.append(request_result)
+    _attach_runtime_request_results(result, visible_results)
     return results
 
 
@@ -264,6 +277,7 @@ def _apply_one_runtime_request(
     data_root: str,
     parsed: ParsedAppContract,
     start_path: Path,
+    actor_user_id: str | None = None,
 ) -> dict[str, Any]:
     request_id = _text(request.get("request_id")) or str(uuid4())
     callback = request.get("callback") if isinstance(request.get("callback"), dict) else {}
@@ -272,7 +286,46 @@ def _apply_one_runtime_request(
     callback_result: dict[str, Any] = {}
     status = "submitted"
     error = ""
+    stream = None
+    stream_requested = bool(request.get("create_stream"))
+    actor_id = _text(actor_user_id) or "system"
     try:
+        if stream_requested:
+            idempotency_key = _text(request.get("idempotency_key"))
+            if not idempotency_key:
+                raise AppHostingError("Streamed runtime launch request requires idempotency_key.")
+            if len(idempotency_key) > 256:
+                raise AppHostingError("Runtime launch request idempotency_key is too long.")
+            timestamp = datetime.now(tz=UTC)
+            stream, inserted = state.runtime_store.reserve_app_stream(
+                RuntimeAppStreamRecord(
+                    stream_id=str(uuid4()),
+                    workspace_id=workspace_id,
+                    source_app_id=app_id,
+                    actor_id=actor_id,
+                    request_id=request_id,
+                    idempotency_key=idempotency_key,
+                    request_fingerprint=_runtime_request_fingerprint(request),
+                    session_id="",
+                    turn_id="",
+                    status="reserving",
+                    last_sequence=0,
+                    created_at=timestamp,
+                    updated_at=timestamp,
+                )
+            )
+            if not inserted:
+                return {
+                    "request_id": request_id,
+                    "status": stream.status,
+                    "stream_id": stream.stream_id,
+                    "runtime_session_id": stream.session_id,
+                    "turn_id": stream.turn_id,
+                    "error": "",
+                    "callback_status_code": 0,
+                    "idempotent_replay": True,
+                    "_visible": request.get("result_visibility") != "internal",
+                }
         attachments = _validated_runtime_request_attachments(
             request.get("attachments"),
             workspace_id=workspace_id,
@@ -285,18 +338,32 @@ def _apply_one_runtime_request(
             app_id=app_id,
             parsed=parsed,
             start_path=start_path,
+            actor_user_id=actor_user_id,
+        )
+        session = _apply_project_root_capability(
+            state,
+            session=session,
+            request=request,
+            workspace_id=workspace_id,
+            app_id=app_id,
+            actor_id=actor_id,
+            data_root=data_root,
+            start_path=start_path,
         )
         input_text = _long_text(request.get("input_text"))
         if not input_text:
             raise AppHostingError("Runtime launch request requires input_text.")
-        turn, _events = submit_runtime_turn_async(
-            state,
-            session=session,
-            input_text=input_text,
-            client_message_id=_text(request.get("client_message_id")) or f"{app_id}:{request_id}",
-            attachments=attachments,
-            app_references=_list_of_dicts(request.get("app_references")),
-            on_queued=lambda queued_turn, _events: callback_result.update(
+        def on_queued(queued_turn, _events) -> None:
+            nonlocal stream
+            if stream is not None:
+                stream = state.runtime_store.bind_app_stream(
+                    stream_id=stream.stream_id,
+                    workspace_id=workspace_id,
+                    source_app_id=app_id,
+                    session_id=session.session_id,
+                    turn_id=queued_turn.turn_id,
+                )
+            callback_result.update(
                 _invoke_runtime_request_callback(
                     state,
                     callback=callback,
@@ -310,15 +377,35 @@ def _apply_one_runtime_request(
                     request=request,
                     request_id=request_id,
                     status="submitted",
-                    session_id=session.session_id if session is not None else "",
+                    session_id=session.session_id,
                     turn_id=queued_turn.turn_id,
+                    stream_id=stream.stream_id if stream is not None else "",
+                    actor_id=actor_id,
                     error="",
                 )
-            ),
+            )
+
+        turn, _events = submit_runtime_turn_async(
+            state,
+            session=session,
+            input_text=input_text,
+            client_message_id=_text(request.get("client_message_id")) or f"{app_id}:{request_id}",
+            attachments=attachments,
+            app_references=_list_of_dicts(request.get("app_references")),
+            on_queued=on_queued,
         )
     except Exception as exc:
         status = "failed"
         error = str(exc)
+        if stream is not None:
+            try:
+                stream = state.runtime_store.fail_app_stream(
+                    stream_id=stream.stream_id,
+                    workspace_id=workspace_id,
+                    source_app_id=app_id,
+                )
+            except RuntimeAppStreamError:
+                pass
         _record_runtime_request_failed(
             state,
             workspace_id=workspace_id,
@@ -342,6 +429,8 @@ def _apply_one_runtime_request(
             status=status,
             session_id=session.session_id if session is not None else "",
             turn_id=turn.turn_id if turn is not None else "",
+            stream_id=stream.stream_id if stream is not None else "",
+            actor_id=actor_id,
             error=error,
         )
     return {
@@ -349,8 +438,10 @@ def _apply_one_runtime_request(
         "status": status,
         "runtime_session_id": session.session_id if session is not None else "",
         "turn_id": turn.turn_id if turn is not None else "",
+        "stream_id": stream.stream_id if stream is not None else "",
         "error": error,
         "callback_status_code": int(callback_result.get("status_code", 0)) if isinstance(callback_result, dict) else 0,
+        "_visible": request.get("result_visibility") != "internal",
     }
 
 
@@ -362,6 +453,7 @@ def _runtime_session_for_request(
     app_id: str,
     parsed: ParsedAppContract,
     start_path: Path,
+    actor_user_id: str | None = None,
 ):
     existing_session_id = _text(request.get("runtime_session_id"))
     if existing_session_id:
@@ -373,7 +465,7 @@ def _runtime_session_for_request(
             raise AppHostingError(f"Runtime session `{existing_session_id}` is outside workspace `{workspace_id}`.")
         if not runtime_session_allows_user_thread(session):
             raise AppHostingError(f"Runtime session `{existing_session_id}` is hidden and must be operated through inter-agent APIs.")
-        if session.source_app_id and session.source_app_id != app_id:
+        if session.source_app_id != app_id:
             raise AppHostingError(f"Runtime session `{existing_session_id}` is owned by another source app.")
         return session
     agent_id = _text(request.get("agent_id") or request.get("agent_type_id"))
@@ -402,8 +494,8 @@ def _runtime_session_for_request(
             start_path=start_path,
         ),
         source_app_id=app_id,
-        owner_user_id=None,
-        created_by_user_id=None,
+        owner_user_id=_text(actor_user_id) or None,
+        created_by_user_id=_text(actor_user_id) or None,
         grants=[],
         governance=state.workspace_store.get_governance(workspace_id),
         platform_allows_full_access=workspace_id == "default",
@@ -458,6 +550,64 @@ def _validated_runtime_request_attachments(
             raise AppHostingError(f"Runtime launch request attachment `{relative_path}` was not found in workspace storage.")
         attachments.append(_runtime_attachment_payload(item, relative_path=relative_path))
     return attachments
+
+
+def _apply_project_root_capability(
+    state,
+    *,
+    session,
+    request: dict[str, Any],
+    workspace_id: str,
+    app_id: str,
+    actor_id: str,
+    data_root: str,
+    start_path: Path,
+):
+    capability_request = request.get("project_root")
+    if capability_request is None:
+        return session
+    if not isinstance(capability_request, dict) or capability_request.get("scope") != "app_data":
+        raise AppHostingError("Runtime project root requires the app_data capability scope.")
+    relative_path = capability_request.get("relative_path")
+    app_data_root = Path(data_root)
+    if not app_data_root.is_absolute():
+        app_data_root = start_path / app_data_root
+    store = getattr(state, "runtime_root_capabilities", None)
+    if store is None:
+        raise AppHostingError("Runtime root capability service is unavailable.")
+    capability = store.issue(
+        workspace_id=workspace_id,
+        source_app_id=app_id,
+        actor_id=actor_id,
+        app_data_root=app_data_root,
+        relative_path=relative_path,
+        ttl_seconds=5,
+    )
+    resolved = store.consume(
+        capability,
+        workspace_id=workspace_id,
+        source_app_id=app_id,
+        actor_id=actor_id,
+    )
+    try:
+        resolved.relative_to(Path(session.workspace_root).resolve(strict=True))
+    except (OSError, ValueError) as exc:
+        raise AppHostingError("Runtime project root is outside the workspace boundary.") from exc
+    return state.runtime_store.patch_session_metadata(
+        session_id=session.session_id,
+        workspace_id=workspace_id,
+        updates={"workdir": str(resolved)},
+    )
+
+
+def _runtime_request_fingerprint(request: dict[str, Any]) -> str:
+    payload = {
+        key: value
+        for key, value in request.items()
+        if key not in {"callback", "result_visibility"}
+    }
+    encoded = json.dumps(payload, sort_keys=True, separators=(",", ":"), ensure_ascii=True, default=str).encode("utf-8")
+    return sha256(encoded).hexdigest()
 
 
 def _validated_attachment_storage_path(item: dict[str, object]) -> str:
@@ -540,10 +690,15 @@ def _apply_one_runtime_interrupt_request(
         raise AppHostingError(f"Runtime turn `{turn_id}` is outside workspace `{workspace_id}`.")
     if not runtime_session_allows_user_thread(session):
         raise AppHostingError(f"Runtime turn `{turn_id}` belongs to a hidden inter-agent session.")
-    if session.source_app_id and session.source_app_id != app_id:
+    if session.source_app_id != app_id:
         raise AppHostingError(f"Runtime turn `{turn_id}` is owned by another source app.")
     if turn.status not in {"queued", "active"}:
-        return {"turn_id": turn_id, "status": turn.status, "interrupted": False}
+        return {
+            "turn_id": turn_id,
+            "status": turn.status,
+            "interrupted": False,
+            "_visible": request.get("result_visibility") != "internal",
+        }
     provider_id = _resolved_provider_id(state, session)
     provider_interrupted = interrupt_runtime_provider_turn(state, session)
     reason = _long_text(request.get("reason")) or "Interrupted by app request."
@@ -570,7 +725,7 @@ def _apply_one_runtime_interrupt_request(
         state,
         session=session,
         turn=updated,
-        event_type="runtime.turn.failed",
+        event_type="runtime.turn.cancelled",
         failure_reason=reason,
     )
     return {
@@ -579,6 +734,7 @@ def _apply_one_runtime_interrupt_request(
         "interrupted": True,
         "provider_interrupted": provider_interrupted,
         "event_id": event.event_id,
+        "_visible": request.get("result_visibility") != "internal",
     }
 
 
@@ -1013,6 +1169,8 @@ def _invoke_runtime_request_callback(
     status: str,
     session_id: str,
     turn_id: str,
+    stream_id: str,
+    actor_id: str,
     error: str,
 ) -> dict[str, Any]:
     action = _text(callback.get("action"))
@@ -1033,6 +1191,8 @@ def _invoke_runtime_request_callback(
                 "runtime_request_status": status,
                 "runtime_session_id": session_id,
                 "turn_id": turn_id,
+                "stream_id": stream_id,
+                "actor_id": actor_id,
                 "error": error,
                 "request": request,
             },

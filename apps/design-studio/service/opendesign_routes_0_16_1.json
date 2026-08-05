@@ -1,8 +1,8 @@
 {
   "counts": {
     "blocked": 269,
-    "handled_by_core": 6,
-    "pass_through": 95,
+    "handled_by_core": 12,
+    "pass_through": 89,
     "total": 370
   },
   "policy": {
@@ -2888,31 +2888,31 @@
       "rationale": "owner module is outside the approved product surface"
     },
     {
-      "classification": "pass_through",
+      "classification": "handled_by_core",
       "line": 1428,
       "method": "GET",
       "owner": "apps/daemon/src/routes/runs.ts",
       "path_source": "string",
       "path_template": "/api/runs",
-      "rationale": "OpenDesign-owned run, event, result, or preview surface"
+      "rationale": "Design Studio translates the app-owned run protocol to the generic Maverick runtime stream"
     },
     {
-      "classification": "pass_through",
+      "classification": "handled_by_core",
       "line": 553,
       "method": "POST",
       "owner": "apps/daemon/src/routes/runs.ts",
       "path_source": "string",
       "path_template": "/api/runs",
-      "rationale": "OpenDesign-owned run, event, result, or preview surface"
+      "rationale": "Design Studio translates the app-owned run protocol to the generic Maverick runtime stream"
     },
     {
-      "classification": "pass_through",
+      "classification": "handled_by_core",
       "line": 1521,
       "method": "GET",
       "owner": "apps/daemon/src/routes/runs.ts",
       "path_source": "string",
       "path_template": "/api/runs/{id}",
-      "rationale": "OpenDesign-owned run, event, result, or preview surface"
+      "rationale": "Design Studio translates the app-owned run protocol to the generic Maverick runtime stream"
     },
     {
       "classification": "pass_through",
@@ -2924,22 +2924,22 @@
       "rationale": "OpenDesign-owned run, event, result, or preview surface"
     },
     {
-      "classification": "pass_through",
+      "classification": "handled_by_core",
       "line": 1586,
       "method": "POST",
       "owner": "apps/daemon/src/routes/runs.ts",
       "path_source": "string",
       "path_template": "/api/runs/{id}/cancel",
-      "rationale": "OpenDesign-owned run, event, result, or preview surface"
+      "rationale": "Design Studio verifies ownership before requesting generic Maverick runtime interrupt"
     },
     {
-      "classification": "pass_through",
+      "classification": "handled_by_core",
       "line": 1529,
       "method": "GET",
       "owner": "apps/daemon/src/routes/runs.ts",
       "path_source": "string",
       "path_template": "/api/runs/{id}/events",
-      "rationale": "OpenDesign-owned run, event, result, or preview surface"
+      "rationale": "Design Studio owns SSE translation over the durable generic Maverick runtime stream"
     },
     {
       "classification": "pass_through",
@@ -2951,13 +2951,13 @@
       "rationale": "run feedback is stored in the isolated OpenDesign domain"
     },
     {
-      "classification": "pass_through",
+      "classification": "handled_by_core",
       "line": 1435,
       "method": "GET",
       "owner": "apps/daemon/src/routes/runs.ts",
       "path_source": "string",
       "path_template": "/api/runs/{id}/result-package",
-      "rationale": "OpenDesign-owned run, event, result, or preview surface"
+      "rationale": "Design Studio owns the OpenDesign terminal result package"
     },
     {
       "classification": "pass_through",

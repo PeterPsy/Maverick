@@ -197,6 +197,19 @@ Routes declared as `handled_by_core` are routed to the Design Studio backend wit
 - `POST /api/import/storage`, importing through the selected `storage-read` dependency backend
 - `POST /api/export/storage`, exporting through the selected `storage-write` dependency backend
 - `POST /api/provider/models`, mapping OpenDesign provider model discovery to the active Maverick workspace provider without forwarding provider routes to the sidecar
+- `GET/POST /api/runs`, run status, SSE events, cancel, and result-package
+  routes through the generic Maverick runtime stream
+
+For run creation, Design Studio first validates the real project and
+conversation through its short-lived `app_sidecar` capability. It then reserves
+an app-owned OpenDesign run correlation and asks core for a source-app-stamped
+runtime session, a durable stream, and a one-shot capability to the active
+project directory. Only correlation metadata is stored under the active data
+generation in `maverick-runtime/correlations.json`; prompts, provider payloads,
+tokens, and host paths are excluded. Core owns provider selection, budgets,
+interrupt, recovery, and normalized events. Design Studio alone owns the
+OpenDesign SSE schema and writes terminal result packages for success, failure,
+timeout, and cancellation.
 
 The contract declares `permissions.providers.model_proxy: true` with `credential_source: core-vault` and `deliver_secrets_to_app: false`. It does not declare app-scoped provider secret reads. Provider keys stay in Maverick/Vault-owned flows, are not delivered to the browser, Design Studio backend, or OpenDesign sidecar, and are not written into `OD_MEDIA_CONFIG_DIR`. Provider errors are returned in OpenDesign's provider-model response shape (`ok`, `kind`, `latencyMs`, `status`, `detail`) so the bundled UI can handle unavailable provider state without learning raw credentials.
 
@@ -206,6 +219,7 @@ Useful checks:
 
 ```bash
 python3 -m unittest apps/design-studio/tests/test_design_studio_app.py
+python3 -m unittest apps.design-studio.tests.test_runtime_bridge
 python3 -m unittest apps/design-studio/tests/test_opendesign_oci_import.py
 python3 -m unittest apps/design-studio/tests/test_opendesign_materialization.py
 python3 -m unittest apps/design-studio/tests/test_opendesign_migration.py

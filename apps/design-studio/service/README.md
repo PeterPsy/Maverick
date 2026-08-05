@@ -120,6 +120,15 @@ sidecar requests. Core strips platform cookies, sidecar cookies, unsafe
 redirects, and technical authorization headers, applies no-store/no-referrer
 headers plus the contract CSP, and refuses to fall through to platform routes.
 
+`frontend/src/App.tsx` consumes that production browser-origin contract as a
+minimal full-bleed host. It uses a transient form POST to the exact bootstrap
+URL returned by core, then clears the ticket input. It never uses the legacy
+path-mounted `proxy_url`, constructs an OpenDesign API URL, stores a token, or
+renders a second project list. A scalar `od_project_id` selects the real
+`/projects/<id>` router path at bootstrap; `od_run_id` is forwarded only in the
+versioned, origin/source-bound navigation message. Reload obtains a new
+one-shot ticket instead of replaying an old session bootstrap.
+
 The OpenDesign contract uses a 16 GiB virtual-address ceiling. This is a bound
 on address space, not a claim of physical allocation: Node/V8 and WebAssembly
 reserve multi-gigabyte virtual regions at startup, and the real curated daemon

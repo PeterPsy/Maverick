@@ -127,12 +127,33 @@ legacy archive; `design_*` is accepted only as an input alias resolved through
 `opendesign/legacy-project-map.json`, and canonical responses always return
 `od_project_id` with an optional `legacy_project_id`.
 
+## Frontend Boundary
+
+The Maverick frontend is a full-bleed host for the native OpenDesign UI. It
+does not render a project catalog, editor, import form, or export history of its
+own. It requests a one-shot launch from
+`POST /api/app-sidecars/browser-launch`, validates that the response names a
+different HTTP origin and the exact clean bootstrap endpoint, and submits the
+ticket through a transient form POST targeted at the iframe. The ticket is
+cleared from the form immediately and is never put in a URL, fragment,
+localStorage, log, or persisted React state.
+
+After the `303`, the OpenDesign UI and all of its API requests stay same-origin
+on the opaque sidecar host. The wrapper exposes only accessible
+loading/degraded/error recovery and reload/fullscreen controls. Maverick shell
+navigation accepts bounded scalar `od_project_id`/`od_run_id` values. Project
+deep links bootstrap the real OpenDesign `/projects/<id>` route; the minimal
+versioned navigation message forwards the same scalar identity and is sent only
+to the exact sidecar origin. Incoming shell and sidecar messages require both
+the expected `event.origin` and `event.source`.
+
 ## SDK Flow
 
 Design Studio is a first-party source-available platform app under `apps/design-studio`, not a workspace-local SDK-generated app. It still follows the same contract validation and hosted lifecycle expectations:
 
 ```bash
 python3 -m unittest apps/design-studio/tests/test_design_studio_app.py
+npm test --if-present --prefix apps/design-studio
 maverick app design-studio frontend build --json
 maverick app design-studio cli list --json
 maverick app design-studio mcp list --json

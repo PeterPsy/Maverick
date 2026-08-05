@@ -1,286 +1,241 @@
-import { useEffect, useMemo, useState } from "react";
-import { Download, FileInput, Loader2, Plus, RefreshCw, Search, ShieldCheck } from "lucide-react";
-import { currentDesignStudioAppId, designStudioAction, loadDesignStudioStatus } from "./api";
-import type { DesignProject, DesignStudioStatus } from "./types";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { Expand, LoaderCircle, RefreshCw, TriangleAlert } from "lucide-react";
+import {
+  currentDesignStudioAppId,
+  initialNavigation,
+  isTrustedSidecarMessage,
+  navigationFromParams,
+  navigationMessage,
+  requestOpenDesignLaunch,
+  SidecarLaunchError,
+} from "./api";
+import type { OpenDesignNavigation, SidecarDiagnostic, SidecarHostPhase, SidecarLaunch } from "./types";
 import "./styles/main.css";
 
-type Notice = {
-  kind: "ok" | "error";
-  message: string;
-};
+const LOAD_DEGRADED_AFTER_MS = 20_000;
 
 export function App() {
   const appId = currentDesignStudioAppId();
-  const [status, setStatus] = useState<DesignStudioStatus | null>(null);
-  const [selectedId, setSelectedId] = useState("");
-  const [query, setQuery] = useState("");
-  const [name, setName] = useState("New interface direction");
-  const [prompt, setPrompt] = useState("");
-  const [storagePath, setStoragePath] = useState("storage/uploaded/");
-  const [notice, setNotice] = useState<Notice | null>(null);
-  const [busy, setBusy] = useState(false);
+  const frameRef = useRef<HTMLIFrameElement>(null);
+  const submittedFrameRef = useRef<HTMLIFrameElement | null>(null);
+  const sidecarOriginRef = useRef("");
+  const navigationRef = useRef<OpenDesignNavigation>(initialNavigation());
+  const [navigation, setNavigation] = useState(navigationRef.current);
+  const [phase, setPhase] = useState<SidecarHostPhase>("launching");
+  const [diagnostic, setDiagnostic] = useState<SidecarDiagnostic | null>(null);
+  const [launchRevision, setLaunchRevision] = useState(0);
 
-  const selectedProject = useMemo(
-    () => status?.state.projects.find((project) => project.id === selectedId) || status?.state.projects[0] || null,
-    [selectedId, status],
-  );
-  const filteredProjects = useMemo(() => {
-    const text = query.trim().toLowerCase();
-    const projects = status?.state.projects || [];
-    if (!text) {
-      return projects;
+  const postNavigation = useCallback(() => {
+    const frameWindow = frameRef.current?.contentWindow;
+    const origin = sidecarOriginRef.current;
+    if (!frameWindow || !origin) {
+      return;
     }
-    return projects.filter((project) =>
-      `${project.name} ${project.prompt} ${project.source_files.join(" ")}`.toLowerCase().includes(text),
-    );
-  }, [query, status]);
-
-  useEffect(() => {
-    void refresh();
+    frameWindow.postMessage(navigationMessage(navigationRef.current), origin);
   }, []);
 
-  async function refresh() {
-    setBusy(true);
-    try {
-      const next = await loadDesignStudioStatus(appId);
-      setStatus(next);
-      setSelectedId(next.state.view_state.selected_project_id || next.state.projects[0]?.id || "");
-      setNotice(null);
-    } catch (error) {
-      setNotice({ kind: "error", message: error instanceof Error ? error.message : "Unable to load Design Studio." });
-    } finally {
-      setBusy(false);
+  useEffect(() => {
+    window.parent?.postMessage({ type: "maverick.app.ready", app_id: appId }, window.location.origin);
+  }, [appId]);
+
+  useEffect(() => {
+    function handleMessage(event: MessageEvent) {
+      if (event.origin === window.location.origin && event.source === window.parent && isRecord(event.data)) {
+        if (event.data.type !== "maverick.app.navigate") {
+          return;
+        }
+        if (event.data.app_id && event.data.app_id !== appId) {
+          return;
+        }
+        const params = isRecord(event.data.params)
+          ? event.data.params as Record<string, string | boolean | null>
+          : {};
+        const next = navigationFromParams(params);
+        if (next.od_project_id === navigationRef.current.od_project_id && next.od_run_id === navigationRef.current.od_run_id) {
+          return;
+        }
+        navigationRef.current = next;
+        setNavigation(next);
+        setLaunchRevision((value) => value + 1);
+        return;
+      }
+      const frameWindow = frameRef.current?.contentWindow || null;
+      if (!isTrustedSidecarMessage(event, sidecarOriginRef.current, frameWindow) || !isRecord(event.data)) {
+        return;
+      }
+      if (event.data.type === "maverick.opendesign.ready" && event.data.version === 1) {
+        setDiagnostic(null);
+        setPhase("ready");
+      }
     }
-  }
 
-  async function createProject() {
-    await runAction("create_project", { name, prompt }, "Project created.");
-  }
+    window.addEventListener("message", handleMessage);
+    return () => window.removeEventListener("message", handleMessage);
+  }, [appId]);
 
-  async function importSource() {
-    if (!selectedProject) {
-      setNotice({ kind: "error", message: "Create or select a project before importing." });
+  useEffect(() => {
+    let canceled = false;
+    let degradedTimer = 0;
+    const frame = frameRef.current;
+    submittedFrameRef.current = null;
+    sidecarOriginRef.current = "";
+    setDiagnostic(null);
+    setPhase("launching");
+
+    void requestOpenDesignLaunch(appId, navigation)
+      .then((launch) => {
+        if (canceled || !frame) {
+          return;
+        }
+        sidecarOriginRef.current = launch.origin;
+        setPhase("bootstrapping");
+        submittedFrameRef.current = frame;
+        submitBootstrapForm(frame, launch);
+        degradedTimer = window.setTimeout(() => {
+          setPhase((current) => {
+            if (current !== "bootstrapping") {
+              return current;
+            }
+            setDiagnostic({ code: "sidecar_load_delayed", status: 0 });
+            return "degraded";
+          });
+        }, LOAD_DEGRADED_AFTER_MS);
+      })
+      .catch((error: unknown) => {
+        if (canceled) {
+          return;
+        }
+        const launchError = error instanceof SidecarLaunchError
+          ? error
+          : new SidecarLaunchError("sidecar_launch_failed", 0);
+        setDiagnostic({ code: launchError.code, status: launchError.status });
+        setPhase("error");
+      });
+
+    return () => {
+      canceled = true;
+      window.clearTimeout(degradedTimer);
+    };
+  }, [appId, launchRevision, navigation]);
+
+  function handleFrameLoad() {
+    if (submittedFrameRef.current !== frameRef.current) {
       return;
     }
-    await runAction(
-      "import_from_storage",
-      { project_id: selectedProject.id, workspace_relative_path: storagePath },
-      "Storage source imported.",
-    );
+    setDiagnostic(null);
+    setPhase("ready");
+    postNavigation();
   }
 
-  async function exportProject() {
-    if (!selectedProject) {
-      setNotice({ kind: "error", message: "Create or select a project before exporting." });
+  function handleFrameError() {
+    if (submittedFrameRef.current !== frameRef.current) {
       return;
     }
-    await runAction("export_to_storage", { project_id: selectedProject.id }, "Project exported to Storage.");
+    setDiagnostic({ code: "sidecar_frame_load_failed", status: 0 });
+    setPhase("error");
   }
 
-  async function runAction(action: string, args: Record<string, unknown>, success: string) {
-    setBusy(true);
+  function retry() {
+    setLaunchRevision((value) => value + 1);
+  }
+
+  async function enterFullscreen() {
+    const target = frameRef.current?.parentElement;
+    if (!target?.requestFullscreen) {
+      setDiagnostic({ code: "fullscreen_unavailable", status: 0 });
+      setPhase("degraded");
+      return;
+    }
     try {
-      const result = await designStudioAction<{ state?: DesignStudioStatus["state"]; project?: DesignProject }>(appId, action, args);
-      const next = await loadDesignStudioStatus(appId);
-      setStatus(next);
-      setSelectedId(result.project?.id || next.state.view_state.selected_project_id || next.state.projects[0]?.id || "");
-      setNotice({ kind: "ok", message: success });
-    } catch (error) {
-      setNotice({ kind: "error", message: error instanceof Error ? error.message : "Design Studio action failed." });
-    } finally {
-      setBusy(false);
+      await target.requestFullscreen();
+    } catch {
+      setDiagnostic({ code: "fullscreen_denied", status: 0 });
+      setPhase("degraded");
     }
   }
+
+  const loading = phase === "launching" || phase === "bootstrapping";
+  const showRecovery = phase === "degraded" || phase === "error";
 
   return (
-    <main className="design-studio-root">
-      <section className="design-studio-shell">
-        <header className="design-studio-topbar">
-          <div className="design-studio-title">
-            <span className="design-studio-glyph">stylus_note</span>
-            <div>
-              <h1>Design Studio</h1>
-              <p>OpenDesign {status?.opendesign.version || "unavailable"} in Maverick sandbox</p>
-            </div>
-          </div>
-          <label className="design-studio-search">
-            <Search size={18} />
-            <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search projects and Storage refs" />
-          </label>
-          <div className="design-studio-actions">
-            <button className="secondary" type="button" onClick={refresh} disabled={busy}>
-              {busy ? <Loader2 className="spin" size={17} /> : <RefreshCw size={17} />}
-              <span>Refresh</span>
-            </button>
-            <button className="primary" type="button" onClick={createProject} disabled={busy}>
-              <Plus size={17} />
-              <span>Project</span>
-            </button>
-          </div>
-        </header>
+    <main className="design-studio-host" data-phase={phase}>
+      <iframe
+        key={launchRevision}
+        ref={frameRef}
+        className="design-studio-frame"
+        title="OpenDesign"
+        referrerPolicy="no-referrer"
+        allow="fullscreen"
+        allowFullScreen
+        onLoad={handleFrameLoad}
+        onError={handleFrameError}
+      />
 
-        <div className="design-studio-status">
-          <StatusPill
-            label="Sidecar"
-            value={status?.opendesign.runtime.bundle_configured ? status.opendesign.runtime.mode : "unavailable"}
-          />
-          <StatusPill label="Provider" value="Maverick proxy" />
-          <StatusPill label="Blocked" value={(status?.state.route_policy.blocked.length || 3).toString()} />
-          <StatusPill label="Exports" value="Storage" />
+      {loading ? (
+        <div className="design-studio-state" role="status" aria-live="polite">
+          <LoaderCircle className="spin" aria-hidden="true" />
+          <strong>{phase === "launching" ? "Opening OpenDesign" : "Starting isolated session"}</strong>
+          <span>The verified local runtime is preparing its workspace.</span>
         </div>
+      ) : null}
 
-        {notice ? <div className={`design-studio-notice ${notice.kind}`}>{notice.message}</div> : null}
-
-        <div className="design-studio-workspace">
-          <aside className="design-studio-projects">
-            <div className="design-studio-panel-head">
-              <span>Projects</span>
-              <small>{filteredProjects.length}</small>
-            </div>
-            <div className="design-studio-new">
-              <input value={name} onChange={(event) => setName(event.target.value)} aria-label="Project name" />
-              <textarea value={prompt} onChange={(event) => setPrompt(event.target.value)} placeholder="Design brief or generation prompt" />
-            </div>
-            <div className="design-studio-list">
-              {filteredProjects.map((project) => (
-                <button
-                  className={`design-studio-row ${project.id === selectedProject?.id ? "active" : ""}`}
-                  key={project.id}
-                  type="button"
-                  onClick={() => setSelectedId(project.id)}
-                >
-                  <span>{project.name}</span>
-                  <small>{project.status}</small>
-                </button>
-              ))}
-              {!filteredProjects.length ? <div className="design-studio-empty">No design projects</div> : null}
-            </div>
-          </aside>
-
-          <section className="design-studio-detail">
-            <div className="design-studio-detail-head">
-              <div>
-                <h2>{selectedProject?.name || "No project selected"}</h2>
-                <p>{selectedProject?.id || "Create a project to start importing design sources."}</p>
-              </div>
-              <div className="design-studio-detail-actions">
-                <button className="secondary" type="button" onClick={importSource} disabled={busy || !selectedProject}>
-                  <FileInput size={17} />
-                  <span>Import</span>
-                </button>
-                <button className="secondary" type="button" onClick={exportProject} disabled={busy || !selectedProject}>
-                  <Download size={17} />
-                  <span>Export</span>
-                </button>
-              </div>
-            </div>
-
-            <label className="design-studio-field">
-              <span>Storage source</span>
-              <input value={storagePath} onChange={(event) => setStoragePath(event.target.value)} />
-            </label>
-
-            <div className="design-studio-grid">
-              <Metric label="Sources" value={selectedProject?.source_files.length || 0} />
-              <Metric label="Imports" value={selectedProject?.imports.length || 0} />
-              <Metric label="Exports" value={selectedProject?.exports.length || 0} />
-              <Metric label="Status" value={selectedProject?.status || "idle"} />
-            </div>
-
-            <div className="design-studio-section">
-              <h3>Storage References</h3>
-              <div className="design-studio-reference-list">
-                {(selectedProject?.source_files || []).map((item) => (
-                  <code key={item}>{item}</code>
-                ))}
-                {!selectedProject?.source_files.length ? <span>No source files imported</span> : null}
-              </div>
-            </div>
-
-            <div className="design-studio-history">
-              <HistoryPanel
-                title="Imports"
-                empty="No imports"
-                items={(selectedProject?.imports || []).map((item) => ({
-                  id: item.import_id,
-                  label: item.name || item.workspace_relative_path,
-                  status: item.status,
-                  detail: item.error || item.workspace_relative_path,
-                }))}
-              />
-              <HistoryPanel
-                title="Exports"
-                empty="No exports"
-                items={(selectedProject?.exports || []).map((item) => ({
-                  id: item.export_id,
-                  label: item.export_id,
-                  status: item.status,
-                  detail: item.error || item.completed_workspace_relative_paths[0] || item.workspace_relative_paths[0] || "",
-                }))}
-              />
-            </div>
-
-            <div className="design-studio-section sidecar">
-              <div className="design-studio-sidecar-head">
-                <h3>OpenDesign Surface</h3>
-                <span>
-                  <ShieldCheck size={15} />
-                  sandbox policy
-                </span>
-              </div>
-              {status?.opendesign.runtime.bundle_configured ? (
-                <iframe title="OpenDesign governed sidecar" src={status.sidecar.proxy_url} />
-              ) : (
-                <div className="design-studio-empty">Verified OpenDesign runtime unavailable</div>
-              )}
-            </div>
-          </section>
+      {showRecovery ? (
+        <div className={`design-studio-state ${phase === "error" ? "is-error" : "is-degraded"}`} role="alert">
+          <TriangleAlert aria-hidden="true" />
+          <strong>{phase === "error" ? "OpenDesign is unavailable" : "OpenDesign is taking longer than expected"}</strong>
+          <span>{diagnosticLabel(diagnostic)}</span>
+          <button type="button" onClick={retry}>
+            <RefreshCw size={17} aria-hidden="true" />
+            Retry securely
+          </button>
         </div>
-      </section>
+      ) : null}
+
+      {phase === "ready" ? (
+        <div className="design-studio-toolbar" aria-label="OpenDesign host controls">
+          <button type="button" onClick={retry} aria-label="Reload OpenDesign in a new isolated session" title="Reload isolated session">
+            <RefreshCw size={17} aria-hidden="true" />
+          </button>
+          <button type="button" onClick={enterFullscreen} aria-label="Enter OpenDesign fullscreen" title="Fullscreen">
+            <Expand size={18} aria-hidden="true" />
+          </button>
+        </div>
+      ) : null}
     </main>
   );
 }
 
-function StatusPill({ label, value }: { label: string; value: string }) {
-  return (
-    <span className="design-studio-pill">
-      <small>{label}</small>
-      <strong>{value}</strong>
-    </span>
-  );
+function submitBootstrapForm(frame: HTMLIFrameElement, launch: SidecarLaunch) {
+  const targetName = `opendesign-${crypto.randomUUID()}`;
+  frame.name = targetName;
+  const form = document.createElement("form");
+  const ticket = document.createElement("input");
+  form.method = "POST";
+  form.action = launch.bootstrap_url;
+  form.target = targetName;
+  form.enctype = "application/x-www-form-urlencoded";
+  form.hidden = true;
+  ticket.type = "hidden";
+  ticket.name = launch.ticket_field;
+  ticket.value = launch.ticket;
+  form.append(ticket);
+  document.body.append(form);
+  try {
+    form.submit();
+  } finally {
+    ticket.value = "";
+    form.remove();
+  }
 }
 
-function Metric({ label, value }: { label: string; value: string | number }) {
-  return (
-    <div className="design-studio-metric">
-      <small>{label}</small>
-      <strong>{value}</strong>
-    </div>
-  );
+function diagnosticLabel(diagnostic: SidecarDiagnostic | null): string {
+  if (!diagnostic) {
+    return "The isolated session did not become ready.";
+  }
+  const status = diagnostic.status ? ` · HTTP ${diagnostic.status}` : "";
+  return `Diagnostic: ${diagnostic.code}${status}`;
 }
 
-function HistoryPanel({
-  title,
-  empty,
-  items,
-}: {
-  title: string;
-  empty: string;
-  items: Array<{ id: string; label: string; status: string; detail: string }>;
-}) {
-  return (
-    <div className="design-studio-section">
-      <h3>{title}</h3>
-      <div className="design-studio-history-list">
-        {items.map((item) => (
-          <div className="design-studio-history-row" key={item.id}>
-            <span>{item.label}</span>
-            <small>{item.status}</small>
-            <code>{item.detail}</code>
-          </div>
-        ))}
-        {!items.length ? <span className="design-studio-history-empty">{empty}</span> : null}
-      </div>
-    </div>
-  );
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value && typeof value === "object" && !Array.isArray(value));
 }

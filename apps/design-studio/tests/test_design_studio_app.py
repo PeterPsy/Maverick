@@ -227,6 +227,29 @@ class DesignStudioAppTests(unittest.TestCase):
             "blocked",
         )
 
+    def test_frontend_is_a_full_bleed_isolated_origin_host(self) -> None:
+        app_source = (APP_ROOT / "frontend" / "src" / "App.tsx").read_text(encoding="utf-8")
+        api_source = (APP_ROOT / "frontend" / "src" / "api.ts").read_text(encoding="utf-8")
+        css_source = (APP_ROOT / "frontend" / "src" / "styles" / "main.css").read_text(encoding="utf-8")
+        built_source = "\n".join(
+            path.read_text(encoding="utf-8")
+            for path in sorted((APP_ROOT / "frontend" / "dist" / "assets").glob("app-*.js"))
+        )
+
+        self.assertIn("/api/app-sidecars/browser-launch", api_source)
+        self.assertIn("/.well-known/maverick-sidecar-bootstrap", api_source)
+        self.assertIn('form.method = "POST"', app_source)
+        self.assertIn('ticket.value = ""', app_source)
+        self.assertIn("event.source === window.parent", app_source)
+        self.assertIn("isTrustedSidecarMessage", app_source)
+        self.assertIn('allow="fullscreen"', app_source)
+        self.assertIn("height: 100dvh", css_source)
+        self.assertNotIn("proxy_url", app_source + api_source + built_source)
+        self.assertNotIn("localStorage", app_source + api_source + built_source)
+        self.assertNotIn("location.hash", app_source + api_source + built_source)
+        self.assertNotIn("state.projects", app_source)
+        self.assertIn("/api/app-sidecars/browser-launch", built_source)
+
     def test_opendesign_inventory_matches_exact_contract_policy(self) -> None:
         policy_check = subprocess.run(
             [sys.executable, str(APP_ROOT / "service" / "sync_route_policy.py")],

@@ -44,6 +44,13 @@ Common operations:
   distribution. `service/import_opendesign_oci.py` performs two verified
   derivations without Docker or a local Next build; the launcher uses only the
   materialized image loader and Node runtime.
+- Treat the workspace frontend as a full-bleed host for the isolated
+  OpenDesign origin, not as a second project UI. Browser launch must use core's
+  one-shot form POST contract. Never use the legacy path-mounted `proxy_url`,
+  put a ticket/token in a URL or browser storage, access the iframe DOM, or
+  mirror project state in React. Deep links use bounded scalar
+  `od_project_id`/`od_run_id` values and versioned messages with exact
+  origin/source checks.
 
 Sandbox policy:
 

@@ -95,8 +95,12 @@ It started with names, visibility, legacy compatibility, and initial policy defa
     must not reuse an earlier lifecycle snapshot. Before calling either a
     plain-hosted or agentic provider, sync and async execution take the same
     handoff again, repeat the authoritative `active`/executable check, and hold
-    it only until provider acceptance. Prewarm applies the session-only form of
-    that handshake. Session metadata callbacks and worker returns use partial,
+    it only until provider acceptance. Plain-hosted execution registers a
+    cancellable request before releasing acceptance. Interrupt persists the
+    terminal turn after that handoff, retries provider cancellation, and waits
+    for the hosted HTTP request to unwind before session cleanup can report
+    `stopped`. Prewarm applies the session-only form of that handshake. Session
+    metadata callbacks and worker returns use partial,
     allowlisted mutations under the handoff and cannot write lifecycle fields.
     Interrupt and resume share a cross-process run-control handoff that remains
     owned until participant and session cleanup is complete. Cleanup targets

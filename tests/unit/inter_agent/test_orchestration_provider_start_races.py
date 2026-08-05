@@ -10,6 +10,7 @@ import unittest
 
 from core.inter_agent.service import InterAgentService
 from core.inter_agent.store import build_inter_agent_document_store
+from core.runtime.plain_hosted_cancellation import plain_hosted_request_cancellation
 from core.runtime.turn_submission import submit_runtime_turn, submit_runtime_turn_async
 from tests.support.repo import make_temp_repo_root
 from tests.unit.inter_agent import test_service_runtime as runtime_test_support
@@ -17,6 +18,75 @@ from tests.unit.inter_agent.test_dynamic_orchestration_service import orchestrat
 
 
 class OrchestrationProviderStartRaceTest(unittest.TestCase):
+    def test_interrupt_waits_for_plain_hosted_provider_to_stop_after_late_acceptance(self) -> None:
+        service, state, run, child = self._scenario()
+        provider_called = Event()
+        allow_provider_acceptance = Event()
+        provider_accepted = Event()
+        provider_stopped = Event()
+        interrupt_returned = Event()
+        provider_was_stopped_at_return: list[bool] = []
+        errors: list[BaseException] = []
+
+        def execute_provider(*_args, **kwargs):
+            provider_called.set()
+            if not allow_provider_acceptance.wait(timeout=2):
+                raise AssertionError("Timed out waiting to accept the provider turn.")
+            with plain_hosted_request_cancellation(
+                session_id=kwargs["session"].session_id,
+                turn_id=kwargs["turn_id"],
+            ) as cancellation:
+                accepted = kwargs.get("on_provider_accepted")
+                if callable(accepted):
+                    accepted({"provider_id": "hosted-test", "status_code": 200})
+                provider_accepted.set()
+                if not cancellation.wait_cancelled(timeout=2):
+                    raise AssertionError("Provider request was not cancelled after acceptance.")
+                provider_stopped.set()
+                return SimpleNamespace(output_text="cancelled output", exit_code=0), SimpleNamespace(
+                    selected_provider_id="hosted-test"
+                )
+
+        def interrupt() -> None:
+            try:
+                service.interrupt_run(
+                    state,
+                    workspace_id="default",
+                    run_id=run.run_id,
+                    reason="pause_before_provider_ack",
+                )
+                provider_was_stopped_at_return.append(provider_stopped.is_set())
+            except BaseException as error:  # pragma: no cover - asserted below
+                errors.append(error)
+            finally:
+                interrupt_returned.set()
+
+        with (
+            patch(
+                "core.runtime.turn_submission_service_runtime.execute_plain_hosted_text_turn",
+                side_effect=execute_provider,
+            ),
+            patch("core.inter_agent.service.release_idle_runtime_processes", return_value=0),
+            patch("core.runtime.turn_submission_service_runtime.dispatch_source_app_runtime_event"),
+        ):
+            turn, _events = submit_runtime_turn_async(state, session=child, input_text="race provider stop")
+            self.assertTrue(provider_called.wait(timeout=1))
+            interrupt_thread = Thread(target=interrupt)
+            interrupt_thread.start()
+            try:
+                self.assertFalse(interrupt_returned.wait(timeout=0.1))
+            finally:
+                allow_provider_acceptance.set()
+            interrupt_thread.join(timeout=2)
+
+        self.assertFalse(interrupt_thread.is_alive())
+        self.assertEqual(errors, [])
+        self.assertTrue(provider_accepted.is_set())
+        self.assertTrue(provider_stopped.is_set())
+        self.assertEqual(provider_was_stopped_at_return, [True])
+        self.assertEqual(state.runtime_store.get_turn(turn.turn_id).status, "cancelled")
+        self.assertEqual(state.runtime_store.get_session(child.session_id).status, "stopped")
+
     def test_interrupt_cannot_complete_between_final_check_and_provider_acceptance(self) -> None:
         service, state, run, child = self._scenario()
         provider_called = Event()

@@ -1939,8 +1939,16 @@ def _handle_turn_interrupt(
     if turn.status not in {"queued", "active"}:
         return json_response(start_response, {"turn": _turn_payload(turn), "interrupted": False})
     provider_id = _resolved_provider_id(state, session)
-    provider_interrupted = interrupt_runtime_provider_turn(state, session)
+    provider_interrupted = False
+    if not runtime_session_is_plain_hosted_chat(session):
+        provider_interrupted = interrupt_runtime_provider_turn(state, session)
     updated = transition_runtime_turn(state.runtime_store, turn_id=turn_id, target_status="cancelled", failure_reason="Interrupted by user.")
+    provider_interrupted_after_handoff = interrupt_runtime_provider_turn(
+        state,
+        state.runtime_store.get_session(updated.session_id),
+        wait_for_termination=True,
+    )
+    provider_interrupted = provider_interrupted_after_handoff or provider_interrupted
     event = record_runtime_event(
         state.runtime_store,
         event_id=str(uuid4()),

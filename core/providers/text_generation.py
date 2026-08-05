@@ -2,10 +2,12 @@
 
 from __future__ import annotations
 
+from contextlib import contextmanager, nullcontext, suppress
 from dataclasses import dataclass, field
 import json
 import socket
-from typing import Callable, Iterable, Literal, Protocol
+from threading import Event, Lock
+from typing import Callable, Iterable, Iterator, Literal, Protocol
 from urllib import error as urllib_error
 from urllib import parse as urllib_parse
 from urllib import request as urllib_request
@@ -43,6 +45,64 @@ class HostedTextGenerationError(ProviderError):
         super().__init__(message or reason_code)
         self.reason_code = reason_code
         self.reason_codes = list(reason_codes or [reason_code])
+
+
+class HostedTextCancellation:
+    """Thread-safe cancellation and completion handle for one hosted request."""
+
+    def __init__(self) -> None:
+        self._cancelled = Event()
+        self._finished = Event()
+        self._abort_lock = Lock()
+        self._abort: Callable[[], object] | None = None
+
+    @property
+    def cancelled(self) -> bool:
+        return self._cancelled.is_set()
+
+    def cancel(self) -> None:
+        """Signal cancellation and abort the currently bound transport response."""
+        self._cancelled.set()
+        with self._abort_lock:
+            abort = self._abort
+        if abort is not None:
+            with suppress(Exception):
+                abort()
+
+    def raise_if_cancelled(self) -> None:
+        if self.cancelled:
+            raise HostedTextGenerationError("provider_cancelled")
+
+    def wait_cancelled(self, timeout: float | None = None) -> bool:
+        return self._cancelled.wait(timeout=timeout)
+
+    def mark_finished(self) -> None:
+        self._finished.set()
+
+    def wait_finished(self, timeout: float | None = None) -> bool:
+        return self._finished.wait(timeout=timeout)
+
+    @contextmanager
+    def interruptible(self, abort: Callable[[], object]) -> Iterator[None]:
+        """Bind an abort callback without losing a concurrent cancellation."""
+        with self._abort_lock:
+            self._abort = abort
+            cancelled = self.cancelled
+        if cancelled:
+            try:
+                with suppress(Exception):
+                    abort()
+            finally:
+                with self._abort_lock:
+                    if self._abort is abort:
+                        self._abort = None
+            self.raise_if_cancelled()
+        try:
+            yield
+        finally:
+            with self._abort_lock:
+                if self._abort is abort:
+                    self._abort = None
 
 
 @dataclass(frozen=True)
@@ -116,6 +176,7 @@ class HostedTextTransport(Protocol):
         chunk_sink: Callable[[str], None] | None = None,
         sent_sink: Callable[[dict[str, object]], None] | None = None,
         accepted_sink: Callable[[dict[str, object]], None] | None = None,
+        cancellation: HostedTextCancellation | None = None,
     ) -> HostedTextTransportResult:
         ...
 
@@ -130,6 +191,7 @@ class TextGenerationClient(Protocol):
         delta_sink: Callable[[str], None] | None = None,
         sent_sink: Callable[[dict[str, object]], None] | None = None,
         accepted_sink: Callable[[dict[str, object]], None] | None = None,
+        cancellation: HostedTextCancellation | None = None,
     ) -> TextGenerationResult:
         ...
 
@@ -166,7 +228,10 @@ class FakeHostedTextTransport:
         chunk_sink: Callable[[str], None] | None = None,
         sent_sink: Callable[[dict[str, object]], None] | None = None,
         accepted_sink: Callable[[dict[str, object]], None] | None = None,
+        cancellation: HostedTextCancellation | None = None,
     ) -> HostedTextTransportResult:
+        if cancellation is not None:
+            cancellation.raise_if_cancelled()
         safe_headers = {
             key: ("<redacted>" if key.lower() in {"authorization", "x-goog-api-key"} else value)
             for key, value in headers.items()
@@ -182,15 +247,21 @@ class FakeHostedTextTransport:
         )
         if sent_sink is not None:
             sent_sink({"source": "fake"})
+        if cancellation is not None:
+            cancellation.raise_if_cancelled()
         if self.timed_out:
             return HostedTextTransportResult(status_code=0, timed_out=True, error=self.error)
         if self.status_code >= 400:
             return HostedTextTransportResult(status_code=self.status_code, payload=self.payload, error=self.error)
         if accepted_sink is not None:
             accepted_sink({"status_code": self.status_code})
+        if cancellation is not None:
+            cancellation.raise_if_cancelled()
         if stream and self.chunks:
             if chunk_sink is not None:
                 for chunk in self.chunks:
+                    if cancellation is not None:
+                        cancellation.raise_if_cancelled()
                     chunk_sink(chunk)
             return HostedTextTransportResult(status_code=self.status_code, chunks=list(self.chunks), payload=self.payload)
         payload = self.payload or {
@@ -219,36 +290,60 @@ class OpenAICompatibleHttpTransport:
         chunk_sink: Callable[[str], None] | None = None,
         sent_sink: Callable[[dict[str, object]], None] | None = None,
         accepted_sink: Callable[[dict[str, object]], None] | None = None,
+        cancellation: HostedTextCancellation | None = None,
     ) -> HostedTextTransportResult:
         body = json.dumps(payload).encode("utf-8")
         req = urllib_request.Request(endpoint_url, data=body, headers=headers, method="POST")
         try:
+            if cancellation is not None:
+                cancellation.raise_if_cancelled()
             if sent_sink is not None:
                 sent_sink({})
+            if cancellation is not None:
+                cancellation.raise_if_cancelled()
             with urllib_request.urlopen(req, timeout=timeout_seconds) as response:
-                if accepted_sink is not None:
-                    accepted_sink({"status_code": response.status})
-                if stream:
-                    chunks: list[str] = []
-                    for chunk in _iter_openai_sse_chunks(response):
-                        chunks.append(chunk)
-                        if chunk_sink is not None:
-                            chunk_sink(chunk)
-                    return HostedTextTransportResult(
-                        status_code=response.status,
-                        chunks=chunks,
-                    )
-                try:
-                    decoded = json.loads(response.read().decode("utf-8"))
-                except (json.JSONDecodeError, UnicodeDecodeError):
-                    return HostedTextTransportResult(status_code=response.status, error="provider_response_invalid")
-                return HostedTextTransportResult(status_code=response.status, payload=decoded)
+                cancellation_scope = (
+                    cancellation.interruptible(response.close) if cancellation is not None else nullcontext()
+                )
+                with cancellation_scope:
+                    if accepted_sink is not None:
+                        accepted_sink({"status_code": response.status})
+                    if cancellation is not None:
+                        cancellation.raise_if_cancelled()
+                    if stream:
+                        chunks: list[str] = []
+                        for chunk in _iter_openai_sse_chunks(response):
+                            if cancellation is not None:
+                                cancellation.raise_if_cancelled()
+                            chunks.append(chunk)
+                            if chunk_sink is not None:
+                                chunk_sink(chunk)
+                        if cancellation is not None:
+                            cancellation.raise_if_cancelled()
+                        return HostedTextTransportResult(
+                            status_code=response.status,
+                            chunks=chunks,
+                        )
+                    try:
+                        response_payload = response.read()
+                        if cancellation is not None:
+                            cancellation.raise_if_cancelled()
+                        decoded = json.loads(response_payload.decode("utf-8"))
+                    except (json.JSONDecodeError, UnicodeDecodeError):
+                        return HostedTextTransportResult(status_code=response.status, error="provider_response_invalid")
+                    return HostedTextTransportResult(status_code=response.status, payload=decoded)
+        except HostedTextGenerationError:
+            raise
         except urllib_error.HTTPError as error:
             return HostedTextTransportResult(status_code=error.code, error=str(error))
         except (TimeoutError, socket.timeout, urllib_error.URLError) as error:
             if isinstance(error, urllib_error.URLError) and not isinstance(error.reason, TimeoutError | socket.timeout):
                 return HostedTextTransportResult(status_code=0, error=str(error))
             return HostedTextTransportResult(status_code=0, timed_out=True, error=str(error))
+        except Exception as error:
+            if cancellation is not None and cancellation.cancelled:
+                raise HostedTextGenerationError("provider_cancelled") from error
+            raise
 
 
 class GoogleAIStudioHttpTransport(OpenAICompatibleHttpTransport):
@@ -265,6 +360,7 @@ class GoogleAIStudioHttpTransport(OpenAICompatibleHttpTransport):
         chunk_sink: Callable[[str], None] | None = None,
         sent_sink: Callable[[dict[str, object]], None] | None = None,
         accepted_sink: Callable[[dict[str, object]], None] | None = None,
+        cancellation: HostedTextCancellation | None = None,
     ) -> HostedTextTransportResult:
         if not stream:
             return super().send(
@@ -276,30 +372,51 @@ class GoogleAIStudioHttpTransport(OpenAICompatibleHttpTransport):
                 chunk_sink=chunk_sink,
                 sent_sink=sent_sink,
                 accepted_sink=accepted_sink,
+                cancellation=cancellation,
             )
         body = json.dumps(payload).encode("utf-8")
         req = urllib_request.Request(endpoint_url, data=body, headers=headers, method="POST")
         try:
+            if cancellation is not None:
+                cancellation.raise_if_cancelled()
             if sent_sink is not None:
                 sent_sink({})
+            if cancellation is not None:
+                cancellation.raise_if_cancelled()
             with urllib_request.urlopen(req, timeout=timeout_seconds) as response:
-                if accepted_sink is not None:
-                    accepted_sink({"status_code": response.status})
-                chunks: list[str] = []
-                for chunk in _iter_gemini_sse_chunks(response):
-                    chunks.append(chunk)
-                    if chunk_sink is not None:
-                        chunk_sink(chunk)
-                return HostedTextTransportResult(
-                    status_code=response.status,
-                    chunks=chunks,
+                cancellation_scope = (
+                    cancellation.interruptible(response.close) if cancellation is not None else nullcontext()
                 )
+                with cancellation_scope:
+                    if accepted_sink is not None:
+                        accepted_sink({"status_code": response.status})
+                    if cancellation is not None:
+                        cancellation.raise_if_cancelled()
+                    chunks: list[str] = []
+                    for chunk in _iter_gemini_sse_chunks(response):
+                        if cancellation is not None:
+                            cancellation.raise_if_cancelled()
+                        chunks.append(chunk)
+                        if chunk_sink is not None:
+                            chunk_sink(chunk)
+                    if cancellation is not None:
+                        cancellation.raise_if_cancelled()
+                    return HostedTextTransportResult(
+                        status_code=response.status,
+                        chunks=chunks,
+                    )
+        except HostedTextGenerationError:
+            raise
         except urllib_error.HTTPError as error:
             return HostedTextTransportResult(status_code=error.code, error=str(error))
         except (TimeoutError, socket.timeout, urllib_error.URLError) as error:
             if isinstance(error, urllib_error.URLError) and not isinstance(error.reason, TimeoutError | socket.timeout):
                 return HostedTextTransportResult(status_code=0, error=str(error))
             return HostedTextTransportResult(status_code=0, timed_out=True, error=str(error))
+        except Exception as error:
+            if cancellation is not None and cancellation.cancelled:
+                raise HostedTextGenerationError("provider_cancelled") from error
+            raise
 
 
 class OpenAICompatibleTextGenerationClient:
@@ -327,6 +444,7 @@ class OpenAICompatibleTextGenerationClient:
         delta_sink: Callable[[str], None] | None = None,
         sent_sink: Callable[[dict[str, object]], None] | None = None,
         accepted_sink: Callable[[dict[str, object]], None] | None = None,
+        cancellation: HostedTextCancellation | None = None,
     ) -> TextGenerationResult:
         """Generate text and normalize streaming/non-streaming provider output."""
         _validate_hosted_text_request(request)
@@ -344,7 +462,10 @@ class OpenAICompatibleTextGenerationClient:
             chunk_sink=delta_sink,
             sent_sink=sent_sink,
             accepted_sink=accepted_sink,
+            cancellation=cancellation,
         )
+        if cancellation is not None:
+            cancellation.raise_if_cancelled()
         if result.timed_out:
             raise HostedTextGenerationError("provider_timeout")
         if result.status_code in {401, 403}:
@@ -390,6 +511,7 @@ class GoogleAIStudioTextGenerationClient:
         delta_sink: Callable[[str], None] | None = None,
         sent_sink: Callable[[dict[str, object]], None] | None = None,
         accepted_sink: Callable[[dict[str, object]], None] | None = None,
+        cancellation: HostedTextCancellation | None = None,
     ) -> TextGenerationResult:
         """Generate text through Google AI Studio and normalize Gemini responses."""
         _validate_hosted_text_request(request)
@@ -407,7 +529,10 @@ class GoogleAIStudioTextGenerationClient:
             chunk_sink=delta_sink,
             sent_sink=sent_sink,
             accepted_sink=accepted_sink,
+            cancellation=cancellation,
         )
+        if cancellation is not None:
+            cancellation.raise_if_cancelled()
         if result.timed_out:
             raise HostedTextGenerationError("provider_timeout")
         if result.status_code in {401, 403}:
@@ -443,6 +568,7 @@ def execute_hosted_text_generation(
     delta_sink: Callable[[str], None] | None = None,
     sent_sink: Callable[[dict[str, object]], None] | None = None,
     accepted_sink: Callable[[dict[str, object]], None] | None = None,
+    cancellation: HostedTextCancellation | None = None,
 ) -> TextGenerationResult:
     """Resolve the authorized API key and execute hosted text generation."""
     if decision.selected_provider_id is None:
@@ -459,7 +585,13 @@ def execute_hosted_text_generation(
         api_key=api_key,
         transport=transport,
     )
-    return client.generate(request, delta_sink=delta_sink, sent_sink=sent_sink, accepted_sink=accepted_sink)
+    return client.generate(
+        request,
+        delta_sink=delta_sink,
+        sent_sink=sent_sink,
+        accepted_sink=accepted_sink,
+        cancellation=cancellation,
+    )
 
 
 def _hosted_text_generation_client(

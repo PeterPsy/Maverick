@@ -25,6 +25,7 @@ from core.providers.text_generation import (
 )
 from core.runtime.execution import RuntimeExecutionResult
 from core.runtime.execution_events import RuntimeExecutionEvent
+from core.runtime.plain_hosted_cancellation import plain_hosted_request_cancellation
 from core.runtime.plain_hosted_history import build_plain_hosted_message_history
 from core.runtime.runtime_session import RuntimeSessionRecord
 
@@ -142,17 +143,22 @@ def execute_plain_hosted_text_turn(
         provider_routing=_openrouter_provider_routing_for_decision(state, session=session, decision=decision),
     )
     try:
-        result = execute_hosted_text_generation(
-            state.provider_store,
-            state.secret_store,
-            decision=decision,
-            request=request,
-            runtime_session_id=session.session_id,
-            transport=_fake_transport_from_environment(),
-            delta_sink=_hosted_delta_sink(event_sink, decision=decision),
-            sent_sink=_hosted_provider_sent_sink(on_provider_turn_start_sent, decision=decision),
-            accepted_sink=_hosted_provider_accepted_sink(on_provider_accepted, decision=decision),
-        )
+        with plain_hosted_request_cancellation(
+            session_id=session.session_id,
+            turn_id=turn_id,
+        ) as cancellation:
+            result = execute_hosted_text_generation(
+                state.provider_store,
+                state.secret_store,
+                decision=decision,
+                request=request,
+                runtime_session_id=session.session_id,
+                transport=_fake_transport_from_environment(),
+                delta_sink=_hosted_delta_sink(event_sink, decision=decision),
+                sent_sink=_hosted_provider_sent_sink(on_provider_turn_start_sent, decision=decision),
+                accepted_sink=_hosted_provider_accepted_sink(on_provider_accepted, decision=decision),
+                cancellation=cancellation,
+            )
     except HostedTextGenerationError as error:
         raise HostedTextGenerationError(
             error.reason_code,

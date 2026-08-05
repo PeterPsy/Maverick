@@ -387,10 +387,15 @@ Synchronous and asynchronous plain-hosted and agentic dispatch reacquire that
 session handoff for a final authoritative `active`/executable check and retain it
 only through the provider's acceptance callback. An interrupt that wins first
 therefore prevents provider start; one ordered after acceptance can observe and
-interrupt the accepted provider turn. Prewarm uses the same session-only start
-handoff. Provider, provider-thread, visibility, and routing metadata use an
-allowlisted partial store mutation under that handoff, so a callback or worker
-return can never write stale status, timestamps, or other lifecycle fields.
+interrupt the accepted provider turn. Plain-hosted dispatch registers a
+process-local cancellation handle before releasing that callback. Its interrupt
+path first persists the terminal turn after the acceptance handoff, then
+reissues provider cancellation and waits for the HTTP request to unwind, so a
+stopped session cannot retain a live hosted request. Prewarm uses the same
+session-only start handoff. Provider, provider-thread, visibility, and routing
+metadata use an allowlisted partial store mutation under that handoff, so a
+callback or worker return can never write stale status, timestamps, or other
+lifecycle fields.
 Interrupt and resume also share one cross-process run-control
 handoff for the complete participant/session cleanup. Interrupt cancellation is
 conditional on the recovery generation, runtime session, and task captured by

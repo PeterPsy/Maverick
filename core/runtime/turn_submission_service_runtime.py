@@ -43,6 +43,7 @@ from core.runtime.plain_hosted_text import (
     queue_provider_id_for_session,
     runtime_session_is_plain_hosted_chat,
 )
+from core.runtime.plain_hosted_cancellation import interrupt_plain_hosted_requests
 from core.runtime.execution import execute_runtime_turn
 from core.runtime.provider_input_context import generalist_orchestration_input_text, runtime_provider_input_text
 from core.runtime.provider_start_handoff import (
@@ -1113,8 +1114,14 @@ def interrupt_runtime_provider_turn(
     session: RuntimeSessionRecord,
     *,
     registry: "ProviderRegistry | None" = None,
+    wait_for_termination: bool = False,
 ) -> bool:
     """Ask the selected runtime provider adapter to interrupt the active turn."""
+    if runtime_session_is_plain_hosted_chat(session):
+        return interrupt_plain_hosted_requests(
+            session.session_id,
+            wait_for_termination=wait_for_termination,
+        )
     with suppress(Exception):
         _definition, _selection, runtime_adapter = resolve_runtime_backend_for_session(
             state.provider_store,

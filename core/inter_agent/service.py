@@ -39,6 +39,7 @@ from core.inter_agent.models import (
 from core.inter_agent.store import InterAgentRunCreateBundle, InterAgentStore
 from core.runtime.errors import RuntimeSessionNotFoundError
 from core.runtime.lifecycle_service_sessions import create_child_runtime_session
+from core.runtime.plain_hosted_text import runtime_session_is_plain_hosted_chat
 from core.runtime.runtime_session import RuntimeSessionRecord, runtime_session_allows_user_thread
 from core.runtime.runtime_threads import runtime_thread_availability_for_session, update_runtime_thread_availability
 from core.runtime.store import RuntimeStore
@@ -2030,7 +2031,9 @@ def _interrupt_runtime_session(state: Any, *, session_id: str, reason: str) -> d
         session = state.runtime_store.get_session(session_id)
     except (RuntimeSessionNotFoundError, ValueError):
         return {"session_id": session_id, "found": False, "cancelled_turns": 0, "provider_interrupted": False}
-    provider_interrupted = interrupt_runtime_provider_turn(state, session)
+    provider_interrupted = False
+    if not runtime_session_is_plain_hosted_chat(session):
+        provider_interrupted = interrupt_runtime_provider_turn(state, session)
     cancelled_turns = 0
     for turn in state.runtime_store.list_turns(session.session_id):
         if turn.status not in {"queued", "active"}:
@@ -2052,6 +2055,13 @@ def _interrupt_runtime_session(state: Any, *, session_id: str, reason: str) -> d
             event_bus=getattr(state, "runtime_event_bus", None),
         )
         cancelled_turns += 1
+    refreshed_session = state.runtime_store.get_session(session.session_id)
+    provider_interrupted_after_handoff = interrupt_runtime_provider_turn(
+        state,
+        refreshed_session,
+        wait_for_termination=True,
+    )
+    provider_interrupted = provider_interrupted_after_handoff or provider_interrupted
     release_idle_runtime_processes(
         state,
         session_id=session.session_id,

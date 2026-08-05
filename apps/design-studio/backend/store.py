@@ -1,4 +1,10 @@
-"""JSON state store for Design Studio."""
+"""Adapter-only JSON state for Design Studio.
+
+OpenDesign owns projects, conversations, runs, and project files.  This store is
+deliberately limited to Maverick view state plus import/export lifecycle
+metadata.  The pre-OpenDesign ``state.json`` is a sealed migration input and is
+never opened for writing here.
+"""
 
 from __future__ import annotations
 
@@ -10,8 +16,9 @@ from typing import Any, Callable
 from core.app_sdk.storage import ensure_json_state, read_json_state, update_json_state, write_json_state
 
 
-STATE_FILE = "state.json"
-SCHEMA_VERSION = "1"
+STATE_FILE = "adapter-state.json"
+SCHEMA_VERSION = "2"
+MAX_JOB_RECORDS = 1000
 _OPENDESIGN_MANIFEST_PATH = Path(__file__).resolve().parents[1] / "service" / "opendesign_bundle.json"
 
 
@@ -40,10 +47,16 @@ def default_state() -> dict[str, Any]:
             "mode": OPENDESIGN_MODE,
             "provider_mode": "maverick-proxy",
         },
-        "projects": [],
         "view_state": {
             "query": "",
             "selected_project_id": "",
+        },
+        "import_jobs": [],
+        "export_jobs": [],
+        "lifecycle": {
+            "legacy_project_map": "opendesign/legacy-project-map.json",
+            "legacy_state": "state.json",
+            "legacy_state_writable": False,
         },
         "route_policy": {
             "pass_through": [
@@ -74,7 +87,6 @@ def default_state() -> dict[str, Any]:
             "handled_by_core": [
                 "/api/provider",
                 "/api/media/config",
-                "/api/projects",
                 "/api/import/storage",
                 "/api/export/storage",
                 "/api/runs",
@@ -90,8 +102,6 @@ def _ensure_layout(data_root: str | Path) -> None:
         "opendesign/instances",
         "opendesign/backups",
         "opendesign/migrations",
-        "imports",
-        "exports",
     ):
         (root / relative).mkdir(parents=True, exist_ok=True)
 
@@ -133,8 +143,12 @@ def migrate_state_payload(payload: dict[str, Any]) -> dict[str, Any]:
     state["schema_version"] = SCHEMA_VERSION
     state["opendesign"] = defaults["opendesign"]
     state["route_policy"] = defaults["route_policy"]
-    if not isinstance(state.get("projects"), list):
-        state["projects"] = []
     if not isinstance(state.get("view_state"), dict):
         state["view_state"] = default_state()["view_state"]
+    for key in ("import_jobs", "export_jobs"):
+        if not isinstance(state.get(key), list):
+            state[key] = []
+        else:
+            state[key] = [item for item in state[key] if isinstance(item, dict)][-MAX_JOB_RECORDS:]
+    state["lifecycle"] = defaults["lifecycle"]
     return state

@@ -79,6 +79,7 @@ def apply_app_runtime_requests(
                     data_root=data_root,
                     parsed=parsed,
                     start_path=start_path,
+                    actor_user_id=actor_user_id,
                 )
             )
     _attach_dependency_backend_request_results(result, dependency_results)
@@ -199,6 +200,7 @@ def _apply_one_dependency_backend_request(
     data_root: str,
     parsed: ParsedAppContract,
     start_path: Path,
+    actor_user_id: str | None,
 ) -> dict[str, Any]:
     request_id = _text(request.get("request_id")) or str(uuid4())
     dependency_alias = _text(request.get("dependency_alias") or request.get("alias"))
@@ -229,6 +231,7 @@ def _apply_one_dependency_backend_request(
             provider_result=result,
             error="",
             start_path=start_path,
+            actor_user_id=actor_user_id,
         )
     except Exception as exc:
         callback_result = _safe_dependency_backend_request_callback(
@@ -247,6 +250,7 @@ def _apply_one_dependency_backend_request(
             provider_result={},
             error=str(exc),
             start_path=start_path,
+            actor_user_id=actor_user_id,
         )
         return {
             "request_id": request_id,
@@ -1107,13 +1111,17 @@ def _invoke_dependency_backend_request_callback(
     provider_result: dict[str, Any],
     error: str,
     start_path: Path,
+    actor_user_id: str | None,
 ) -> dict[str, Any]:
     action = _text(callback.get("action"))
     if not action or backend_entrypoint is None:
         return {}
     payload = callback.get("payload") if isinstance(callback.get("payload"), dict) else {}
     paths = workspace_paths(workspace_id, start_path=start_path)
-    result = run_json_entrypoint(
+    from core.api.sidecar_entrypoint_invocation import run_json_entrypoint_with_sidecars
+
+    binding = state.app_store.get_workspace_app_binding(workspace_id=workspace_id, app_id=app_id)
+    result = run_json_entrypoint_with_sidecars(
         source_root / backend_entrypoint,
         payload={
             "surface": "dependency_backend_request_callback",
@@ -1137,6 +1145,13 @@ def _invoke_dependency_backend_request_callback(
             "turn_id": "",
         },
         cwd=source_root,
+        binding=binding,
+        parsed=parsed,
+        surface="backend",
+        start_path=start_path,
+        actor_user_id=actor_user_id,
+        runtime_session_id=None,
+        observability_store=state.observability_store,
         timeout_seconds=30,
     )
     publish_declared_app_events(

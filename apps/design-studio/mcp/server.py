@@ -13,6 +13,7 @@ from service import DesignStudioError, dispatch
 
 TOOL_ACTIONS = {
     "design_studio_state": "state",
+    "design_studio_create_project": "create_project",
     "design_studio_get_project": "get_project",
     "design_studio_import_from_storage": "import_from_storage",
     "design_studio_export_to_storage": "export_to_storage",

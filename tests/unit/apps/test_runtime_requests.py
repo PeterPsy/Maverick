@@ -368,6 +368,7 @@ class RuntimeRequestsTestCase(unittest.TestCase):
 
     def test_dependency_backend_request_result_is_only_exposed_to_callback(self) -> None:
         callback_payloads: list[dict[str, object]] = []
+        callback_invocations: list[dict[str, object]] = []
         result = {
             "json": {"ok": True},
             "dependency_backend_requests": [
@@ -393,16 +394,27 @@ class RuntimeRequestsTestCase(unittest.TestCase):
                 "json": {"local_path": "/tmp/storage/file.bin"},
             }
 
-        def fake_run_entrypoint(_entrypoint, *, payload, **_kwargs):
+        def fake_run_entrypoint(_entrypoint, *, payload, **kwargs):
             callback_payloads.append(payload)
+            callback_invocations.append(kwargs)
             return {"status_code": 200, "json": {"stored": True}}
 
+        callback_state = SimpleNamespace(
+            app_event_bus=None,
+            observability_store=None,
+            app_store=SimpleNamespace(
+                get_workspace_app_binding=lambda **_kwargs: SimpleNamespace(workspace_id="default", app_id="video-studio")
+            ),
+        )
         with (
             patch.object(runtime_requests, "_invoke_dependency_backend", fake_invoke_dependency_backend),
-            patch.object(runtime_requests, "run_json_entrypoint", fake_run_entrypoint),
+            patch(
+                "core.api.sidecar_entrypoint_invocation.run_json_entrypoint_with_sidecars",
+                fake_run_entrypoint,
+            ),
         ):
             runtime_requests.apply_app_runtime_requests(
-                SimpleNamespace(app_event_bus=None),
+                callback_state,
                 result=result,
                 workspace_id="default",
                 app_id="video-studio",
@@ -420,6 +432,8 @@ class RuntimeRequestsTestCase(unittest.TestCase):
         self.assertEqual(callback_body["action"], "store_resolved_local_path")
         self.assertEqual(callback_body["job_id"], "render-1")
         self.assertEqual(callback_body["dependency_backend_result"]["json"], {"local_path": "/tmp/storage/file.bin"})
+        self.assertEqual(callback_invocations[0]["surface"], "backend")
+        self.assertIsNone(callback_invocations[0]["runtime_session_id"])
 
 
 if __name__ == "__main__":

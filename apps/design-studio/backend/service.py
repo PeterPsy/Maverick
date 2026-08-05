@@ -2,15 +2,21 @@
 
 from __future__ import annotations
 
-from base64 import b64decode
+from base64 import b64decode, b64encode
 import binascii
+from hashlib import sha256
+from io import BytesIO
 import json
+import mimetypes
+import os
 from pathlib import Path
+from pathlib import PurePosixPath
 import re
-import shutil
+import stat
 from time import monotonic
 from typing import Any
 from uuid import uuid4
+from zipfile import BadZipFile, ZipFile
 
 from core.app_sdk.app_sidecar import AppSidecarError, app_sidecar
 from core.app_sdk.storage import safe_app_data_path
@@ -37,6 +43,9 @@ IMPORT_ID_PATTERN = re.compile(r"^import_[a-f0-9]{12}$")
 EXPORT_ID_PATTERN = re.compile(r"^export_[a-f0-9]{12}$")
 STORAGE_PATH_PATTERN = re.compile(r"^storage/(uploaded|generated)/(.+)$")
 MAX_IMPORT_BYTES = 10 * 1024 * 1024
+MAX_EXPORT_UNCOMPRESSED_BYTES = 128 * 1024 * 1024
+MAX_LEGACY_MAP_BYTES = 2 * 1024 * 1024
+MAX_JOB_RECORDS = 1000
 PROVIDER_MODEL_PROTOCOLS = {"anthropic", "openai", "azure", "google", "ollama", "senseaudio", "aihubmix"}
 
 
@@ -73,8 +82,8 @@ def status_payload(payload: dict[str, Any]) -> dict[str, Any]:
 
 
 def list_projects(payload: dict[str, Any]) -> dict[str, Any]:
-    """Return all design projects."""
-    return {"projects": _public_state(ensure_state(payload["data_root"]))["projects"]}
+    """Return the canonical OpenDesign project catalog."""
+    return list_opendesign_projects(payload)
 
 
 def list_opendesign_projects(payload: dict[str, Any]) -> dict[str, Any]:
@@ -87,20 +96,17 @@ def list_opendesign_projects(payload: dict[str, Any]) -> dict[str, Any]:
 
 
 def get_project(payload: dict[str, Any], arguments: dict[str, Any]) -> dict[str, Any]:
-    """Return one design project."""
-    raw_project_id = str(arguments.get("project_id") or arguments.get("id") or "").strip()
-    if not PROJECT_ID_PATTERN.fullmatch(raw_project_id):
-        project_id = _opendesign_project_id(raw_project_id)
-        response = _opendesign_request(payload, f"/api/projects/{project_id}")
-        project = response.get("project") if isinstance(response.get("project"), dict) else response
-        if not isinstance(project, dict) or str(project.get("id") or "") != project_id:
-            raise DesignStudioError("opendesign_response_invalid", "OpenDesign returned an invalid project.", status_code=502)
-        return {"project": project, "od_project_id": project_id}
-    project_id = _project_id(raw_project_id)
-    project = _find_project(ensure_state(payload["data_root"]), project_id)
-    if project is None:
-        raise DesignStudioError("project_not_found", f"Design project `{project_id}` was not found.")
-    return {"project": project}
+    """Return one canonical OpenDesign project, resolving a legacy alias once."""
+    identity = _resolve_project_identity(
+        payload["data_root"],
+        arguments.get("project_id") or arguments.get("id"),
+    )
+    project_id = identity["od_project_id"]
+    response = _opendesign_request(payload, f"/api/projects/{project_id}")
+    project = response.get("project") if isinstance(response.get("project"), dict) else response
+    if not isinstance(project, dict) or str(project.get("id") or "") != project_id:
+        raise DesignStudioError("opendesign_response_invalid", "OpenDesign returned an invalid project.", status_code=502)
+    return {"project": project, **identity}
 
 
 def reference_manifest(payload: dict[str, Any]) -> dict[str, Any]:
@@ -132,14 +138,18 @@ def reference_search(payload: dict[str, Any], arguments: dict[str, Any]) -> dict
 
 def reference_resolve(payload: dict[str, Any], arguments: dict[str, Any]) -> dict[str, Any]:
     """Resolve one OpenDesign project reference through its governed API."""
-    project_id = _opendesign_project_id(arguments.get("entity_id") or arguments.get("project_id"))
+    identity = _resolve_project_identity(
+        payload["data_root"],
+        arguments.get("entity_id") or arguments.get("project_id"),
+    )
+    project_id = identity["od_project_id"]
     try:
         project = get_project(payload, {"project_id": project_id})["project"]
     except DesignStudioError as error:
         if error.error == "project_not_found":
             return {"entity_type": "design_project", "entity_id": project_id, "exists": False}
         raise
-    return {"exists": True, **_opendesign_reference_item(payload, project)}
+    return {"exists": True, **_opendesign_reference_item(payload, project), **identity}
 
 
 def reference_summarize(payload: dict[str, Any], arguments: dict[str, Any]) -> dict[str, Any]:
@@ -151,77 +161,98 @@ def reference_summarize(payload: dict[str, Any], arguments: dict[str, Any]) -> d
 
 
 def create_project(payload: dict[str, Any], arguments: dict[str, Any]) -> dict[str, Any]:
-    """Create one design project in app-owned state."""
+    """Create one canonical project through the governed OpenDesign API."""
     name = _clean_text(arguments.get("name"), fallback="Untitled design")
     prompt = _clean_text(arguments.get("prompt"), fallback="")
-    now = utc_now()
-    project = {
-        "id": f"design_{uuid4().hex[:12]}",
-        "name": name,
-        "prompt": prompt,
-        "status": "draft",
-        "source_files": [],
-        "imports": [],
-        "exports": [],
-        "created_at": now,
-        "updated_at": now,
-    }
+    project_id = f"od_maverick_{uuid4().hex[:24]}"
+    response = _opendesign_post(
+        payload,
+        "/api/projects",
+        {
+            "id": project_id,
+            "name": name,
+            "metadata": {
+                "kind": "prototype",
+                "maverickIntegration": "design-studio",
+                **({"initialPrompt": prompt} if prompt else {}),
+            },
+            "skipDiscoveryBrief": True,
+        },
+    )
+    project = response.get("project") if isinstance(response.get("project"), dict) else response
+    if not isinstance(project, dict) or str(project.get("id") or "") != project_id:
+        raise DesignStudioError("opendesign_response_invalid", "OpenDesign returned an invalid project.", status_code=502)
 
-    def add(state: dict[str, Any]) -> dict[str, Any]:
-        state["projects"].insert(0, project)
-        state["view_state"]["selected_project_id"] = project["id"]
+    def select(state: dict[str, Any]) -> dict[str, Any]:
+        state["view_state"]["selected_project_id"] = project_id
         return state
 
-    state = update_state(payload["data_root"], add)
-    return {"project": project, "state": _public_state(state)}
+    state = update_state(payload["data_root"], select)
+    return {
+        "project": project,
+        "od_project_id": project_id,
+        "state": _public_state(state),
+    }
 
 
 def import_from_storage(payload: dict[str, Any], arguments: dict[str, Any]) -> dict[str, Any]:
-    """Import one bounded Storage file into a design project data directory."""
+    """Request a bounded Storage read for one canonical OpenDesign project."""
     data_root = payload["data_root"]
-    project_id = _project_id(arguments.get("project_id"))
+    identity = _resolve_project_identity(data_root, arguments.get("project_id"))
+    project_id = identity["od_project_id"]
+    project = get_project(payload, {"project_id": project_id})["project"]
     workspace_relative_path = _storage_path(arguments.get("workspace_relative_path"))
     if _should_request_storage_read(payload):
         return _request_storage_import(
             data_root=data_root,
             project_id=project_id,
+            legacy_project_id=identity.get("legacy_project_id", ""),
             workspace_relative_path=workspace_relative_path,
+            project=project,
         )
-    return _import_from_local_storage(
-        payload,
-        data_root=data_root,
-        project_id=project_id,
-        workspace_relative_path=workspace_relative_path,
+    raise DesignStudioError(
+        "storage_dependency_unavailable",
+        "Storage imports require the governed storage-read dependency.",
+        status_code=503,
     )
 
 
-def _request_storage_import(*, data_root: str, project_id: str, workspace_relative_path: str) -> dict[str, Any]:
+def _request_storage_import(
+    *,
+    data_root: str,
+    project_id: str,
+    legacy_project_id: str,
+    workspace_relative_path: str,
+    project: dict[str, Any],
+) -> dict[str, Any]:
     import_id = f"import_{uuid4().hex[:12]}"
     requested_at = utc_now()
     import_record = {
         "import_id": import_id,
+        "od_project_id": project_id,
+        **({"legacy_project_id": legacy_project_id} if legacy_project_id else {}),
         "status": "pending",
         "workspace_relative_path": workspace_relative_path,
         "name": Path(workspace_relative_path).name,
         "size_bytes": 0,
-        "app_data_path": "",
+        "sha256": "",
+        "media_type": "",
         "requested_at": requested_at,
         "imported_at": "",
         "error": "",
     }
 
     def apply_pending_import(state: dict[str, Any]) -> dict[str, Any]:
-        project = _require_project(state, project_id)
-        project["imports"].append(import_record)
-        project["status"] = "importing"
-        project["updated_at"] = requested_at
+        _append_job(state["import_jobs"], import_record)
         state["view_state"]["selected_project_id"] = project_id
         return state
 
     state = update_state(data_root, apply_pending_import)
     return {
         "import": import_record,
-        "project": _require_project(state, project_id),
+        "project": project,
+        "od_project_id": project_id,
+        **({"legacy_project_id": legacy_project_id} if legacy_project_id else {}),
         "state": _public_state(state),
         "dependency_backend_requests": [
             _storage_read_request(
@@ -233,50 +264,9 @@ def _request_storage_import(*, data_root: str, project_id: str, workspace_relati
     }
 
 
-def _import_from_local_storage(
-    payload: dict[str, Any],
-    *,
-    data_root: str,
-    project_id: str,
-    workspace_relative_path: str,
-) -> dict[str, Any]:
-    """Import via mounted local Storage roots for direct CLI/MCP/test entrypoints."""
-    source_path = _resolve_storage_file(payload, workspace_relative_path)
-    if source_path.stat().st_size > MAX_IMPORT_BYTES:
-        raise DesignStudioError("storage_file_too_large", "Design Studio imports are limited to 10 MiB in the sandbox MVP.")
-    import_id = f"import_{uuid4().hex[:12]}"
-    project_import_dir = safe_app_data_path(data_root, Path("imports") / project_id / import_id)
-    project_import_dir.mkdir(parents=True, exist_ok=True)
-    target_path = (project_import_dir / source_path.name).resolve()
-    shutil.copyfile(source_path, target_path)
-    imported = {
-        "import_id": import_id,
-        "status": "imported",
-        "workspace_relative_path": workspace_relative_path,
-        "name": source_path.name,
-        "size_bytes": source_path.stat().st_size,
-        "app_data_path": str(target_path.relative_to(Path(data_root).resolve())),
-        "requested_at": utc_now(),
-        "imported_at": utc_now(),
-        "error": "",
-    }
-
-    def apply_import(state: dict[str, Any]) -> dict[str, Any]:
-        project = _require_project(state, project_id)
-        project["imports"].append(imported)
-        _append_source_file(project, workspace_relative_path)
-        project["status"] = "imported"
-        project["updated_at"] = utc_now()
-        state["view_state"]["selected_project_id"] = project_id
-        return state
-
-    state = update_state(data_root, apply_import)
-    return {"import": imported, "project": _require_project(state, project_id), "state": _public_state(state)}
-
-
 def record_storage_import_result(payload: dict[str, Any], arguments: dict[str, Any]) -> dict[str, Any]:
-    """Record and materialize the result of one Storage dependency-backend import read."""
-    project_id = _project_id(arguments.get("project_id"))
+    """Upload a completed Storage read into OpenDesign and verify its bytes."""
+    project_id = _opendesign_project_id(arguments.get("project_id"))
     import_id = _import_id(arguments.get("import_id"))
     workspace_relative_path = _storage_path(arguments.get("workspace_relative_path"))
     dependency_status = str(arguments.get("dependency_backend_status") or "").strip()
@@ -320,70 +310,189 @@ def record_storage_import_result(payload: dict[str, Any], arguments: dict[str, A
             import_id=import_id,
             error=error.detail,
         )
-    project_import_dir = safe_app_data_path(payload["data_root"], Path("imports") / project_id / import_id)
-    project_import_dir.mkdir(parents=True, exist_ok=True)
-    target_path = (project_import_dir / file_name).resolve()
-    if project_import_dir.resolve() != target_path.parent.resolve():
-        raise DesignStudioError("storage_import_invalid_name", "Storage returned an invalid file name.")
-    target_path.write_bytes(decoded)
+    digest = sha256(decoded).hexdigest()
+    media_type = str(file_payload.get("media_type") or file_payload.get("mime_type") or "").strip()
+    if not media_type:
+        media_type = mimetypes.guess_type(file_name)[0] or "application/octet-stream"
+    try:
+        response = _opendesign_post(
+            payload,
+            f"/api/projects/{project_id}/files",
+            {
+                "name": file_name,
+                "content": b64encode(decoded).decode("ascii"),
+                "encoding": "base64",
+                "overwrite": True,
+            },
+        )
+    except DesignStudioError as error:
+        return _mark_storage_import_failed(
+            data_root=payload["data_root"],
+            project_id=project_id,
+            import_id=import_id,
+            error=error.detail,
+        )
+    returned_file = response.get("file") if isinstance(response.get("file"), dict) else {}
+    if str(returned_file.get("name") or "") != file_name or int(returned_file.get("size") or -1) != len(decoded):
+        return _mark_storage_import_failed(
+            data_root=payload["data_root"],
+            project_id=project_id,
+            import_id=import_id,
+            error="OpenDesign returned mismatched file metadata after upload.",
+        )
+    try:
+        verified = _opendesign_bytes_request(payload, f"/api/projects/{project_id}/raw/{file_name}")
+    except DesignStudioError as error:
+        return _mark_storage_import_failed(
+            data_root=payload["data_root"],
+            project_id=project_id,
+            import_id=import_id,
+            error=error.detail,
+        )
+    if sha256(verified).hexdigest() != digest:
+        return _mark_storage_import_failed(
+            data_root=payload["data_root"],
+            project_id=project_id,
+            import_id=import_id,
+            error="OpenDesign read-back digest did not match the Storage source.",
+        )
     imported_at = utc_now()
     imported = {
         "import_id": import_id,
+        "od_project_id": project_id,
         "status": "imported",
         "workspace_relative_path": workspace_relative_path,
         "name": file_name,
         "size_bytes": len(decoded),
-        "app_data_path": str(target_path.relative_to(Path(payload["data_root"]).resolve())),
+        "sha256": digest,
+        "media_type": media_type,
         "requested_at": "",
         "imported_at": imported_at,
         "error": "",
     }
 
     def apply_result(state: dict[str, Any]) -> dict[str, Any]:
-        project = _require_project(state, project_id)
-        existing = _find_import(project, import_id)
+        existing = _find_job(state["import_jobs"], "import_id", import_id)
         if existing is None:
-            project["imports"].append(imported)
+            _append_job(state["import_jobs"], imported)
         else:
             imported["requested_at"] = str(existing.get("requested_at") or "")
+            if existing.get("legacy_project_id"):
+                imported["legacy_project_id"] = existing["legacy_project_id"]
             existing.update(imported)
-        _append_source_file(project, workspace_relative_path)
-        project["status"] = "imported"
-        project["updated_at"] = imported_at
         state["view_state"]["selected_project_id"] = project_id
         return state
 
     state = update_state(payload["data_root"], apply_result)
-    project = _require_project(state, project_id)
-    return {"import": _require_import(project, import_id), "project": project, "state": _public_state(state)}
+    item = _require_job(state["import_jobs"], "import_id", import_id, label="import")
+    project = get_project(payload, {"project_id": project_id})["project"]
+    return {
+        "import": item,
+        "project": project,
+        "od_project_id": project_id,
+        **({"legacy_project_id": item["legacy_project_id"]} if item.get("legacy_project_id") else {}),
+        "state": _public_state(state),
+    }
 
 
 def export_to_storage(payload: dict[str, Any], arguments: dict[str, Any]) -> dict[str, Any]:
-    """Request governed Storage writes for project metadata and notes."""
-    project_id = _project_id(arguments.get("project_id"))
+    """Export one terminal run package and its OpenDesign project files."""
     data_root = payload["data_root"]
-    state = ensure_state(data_root)
-    project = _require_project(state, project_id)
+    identity = _resolve_project_identity(data_root, arguments.get("project_id"))
+    project_id = identity["od_project_id"]
+    run_id = validated_identifier(arguments.get("run_id"), label="OpenDesign run id")
+    project = get_project(payload, {"project_id": project_id})["project"]
+    try:
+        correlation = store_for_payload(payload).get(run_id)
+    except RuntimeBridgeError as error:
+        raise DesignStudioError("run_not_found", str(error), status_code=404) from error
+    if correlation.get("od_project_id") != project_id:
+        raise DesignStudioError("run_project_mismatch", "The OpenDesign run does not belong to this project.")
+    if correlation.get("status") not in {"succeeded", "failed", "canceled"}:
+        raise DesignStudioError("run_not_terminal", "A terminal OpenDesign run is required for export.", status_code=409)
+    result_package = correlation.get("result_package")
+    if not isinstance(result_package, dict):
+        raise DesignStudioError("run_result_missing", "The terminal OpenDesign result package is missing.", status_code=409)
+
+    files_response = _opendesign_request(payload, f"/api/projects/{project_id}/files")
+    raw_files = files_response.get("files")
+    if not isinstance(raw_files, list) or any(not isinstance(item, dict) for item in raw_files):
+        raise DesignStudioError("opendesign_response_invalid", "OpenDesign returned an invalid file list.", status_code=502)
+    public_files = [_public_opendesign_file(item) for item in raw_files]
+    file_names = sorted(item["path"] for item in public_files)
+    if len(file_names) != len(set(file_names)):
+        raise DesignStudioError("opendesign_response_invalid", "OpenDesign returned duplicate project files.", status_code=502)
+    project_archive = b""
+    verified_files: list[dict[str, Any]] = []
+    if file_names:
+        project_archive = _opendesign_bytes_post(
+            payload,
+            f"/api/projects/{project_id}/archive/batch",
+            {"files": file_names},
+        )
+        verified_files = _verified_archive_files(project_archive, public_files)
+
     export_id = f"export_{uuid4().hex[:12]}"
     exported_at = utc_now()
+    export_root = f"storage/generated/design-studio/{project_id}/{run_id}"
+    artifacts: list[tuple[str, bytes, str, str]] = []
+    if project_archive:
+        artifacts.append(("project-files.zip", project_archive, "application/zip", "opendesign-project-files"))
+    result_bytes = _json_bytes(result_package)
+    artifacts.append(("result-package.json", result_bytes, "application/json", "opendesign-result-package"))
+    artifact_manifest = [
+        {
+            "workspace_relative_path": f"{export_root}/{name}",
+            "sha256": sha256(content).hexdigest(),
+            "size_bytes": len(content),
+            "media_type": media_type,
+            "role": role,
+        }
+        for name, content, media_type, role in artifacts
+    ]
+    bundle = _opendesign_bundle_summary()
     manifest = {
+        "schema_version": "1",
         "app_id": "design-studio",
         "opendesign_version": OPENDESIGN_VERSION,
         "opendesign_commit": OPENDESIGN_COMMIT,
         "export_id": export_id,
-        "project_id": project_id,
-        "project_name": project["name"],
-        "source_files": project.get("source_files", []),
-        "provider": "maverick-proxy",
-        "model": "",
-        "created_at": exported_at,
+        "od_project_id": project_id,
+        **({"legacy_project_id": identity["legacy_project_id"]} if identity.get("legacy_project_id") else {}),
+        "od_run_id": run_id,
+        "project": {"id": project_id, "name": str(project.get("name") or project_id)},
+        "opendesign_files": verified_files,
+        "artifacts": artifact_manifest,
+        "provenance": {
+            "provider_mode": "maverick-proxy",
+            "runtime_session_id": str(correlation.get("runtime_session_id") or ""),
+            "turn_id": str(correlation.get("turn_id") or ""),
+            "stream_id": str(correlation.get("stream_id") or ""),
+            "request_id": str(correlation.get("request_id") or ""),
+            "correlation_id": str(correlation.get("correlation_id") or ""),
+            "run_status": str(correlation.get("status") or ""),
+            "run_updated_at": str(correlation.get("updated_at") or ""),
+            "oci_reference": str(bundle.get("oci_reference") or ""),
+            "oci_index_digest": str(bundle.get("oci_index_digest") or ""),
+            "materialized_artifact_sha256": str(bundle.get("artifact_sha256") or ""),
+            "storage_imports": [
+                {
+                    key: item.get(key)
+                    for key in ("import_id", "workspace_relative_path", "name", "sha256", "size_bytes", "media_type")
+                }
+                for item in ensure_state(data_root).get("import_jobs", [])
+                if item.get("od_project_id") == project_id and item.get("status") == "imported"
+            ],
+        },
     }
-    notes = _export_notes(project, manifest)
-    manifest_workspace_path = f"storage/generated/design-studio/{project_id}/{export_id}/manifest.json"
-    notes_workspace_path = f"storage/generated/design-studio/{project_id}/{export_id}/notes.md"
-    expected_paths = [manifest_workspace_path, notes_workspace_path]
+    manifest_bytes = _json_bytes(manifest)
+    artifacts.append(("manifest.json", manifest_bytes, "application/json", "export-manifest"))
+    expected_paths = [f"{export_root}/{name}" for name, _content, _media_type, _role in artifacts]
     export_record = {
         "export_id": export_id,
+        "od_project_id": project_id,
+        **({"legacy_project_id": identity["legacy_project_id"]} if identity.get("legacy_project_id") else {}),
+        "od_run_id": run_id,
         "status": "pending",
         "workspace_relative_paths": expected_paths,
         "completed_workspace_relative_paths": [],
@@ -393,40 +502,34 @@ def export_to_storage(payload: dict[str, Any], arguments: dict[str, Any]) -> dic
     }
 
     def apply_export(next_state: dict[str, Any]) -> dict[str, Any]:
-        next_project = _require_project(next_state, project_id)
-        next_project["exports"].append(export_record)
-        next_project["status"] = "exporting"
-        next_project["updated_at"] = exported_at
+        _append_job(next_state["export_jobs"], export_record)
         next_state["view_state"]["selected_project_id"] = project_id
         return next_state
 
     next_state = update_state(data_root, apply_export)
     return {
         "export": export_record,
-        "project": _require_project(next_state, project_id),
+        "project": project,
+        **identity,
+        "manifest": manifest,
         "state": _public_state(next_state),
         "dependency_backend_requests": [
             _storage_write_request(
                 project_id=project_id,
                 export_id=export_id,
-                workspace_relative_path=manifest_workspace_path,
-                content=_json_text(manifest),
-                artifact="manifest",
-            ),
-            _storage_write_request(
-                project_id=project_id,
-                export_id=export_id,
-                workspace_relative_path=notes_workspace_path,
-                content=notes,
-                artifact="notes",
-            ),
+                run_id=run_id,
+                workspace_relative_path=f"{export_root}/{name}",
+                content=content,
+                artifact=role,
+            )
+            for name, content, _media_type, role in artifacts
         ],
     }
 
 
 def record_storage_export_result(payload: dict[str, Any], arguments: dict[str, Any]) -> dict[str, Any]:
     """Record the result of one Storage dependency-backend export write."""
-    project_id = _project_id(arguments.get("project_id"))
+    project_id = _opendesign_project_id(arguments.get("project_id"))
     export_id = _export_id(arguments.get("export_id"))
     workspace_relative_path = _storage_path(arguments.get("workspace_relative_path"))
     dependency_status = str(arguments.get("dependency_backend_status") or "").strip()
@@ -437,13 +540,12 @@ def record_storage_export_result(payload: dict[str, Any], arguments: dict[str, A
         raise DesignStudioError("storage_export_mismatch", "Storage wrote a different path than the export requested.")
 
     def apply_result(state: dict[str, Any]) -> dict[str, Any]:
-        project = _require_project(state, project_id)
-        export = _require_export(project, export_id)
+        export = _require_job(state["export_jobs"], "export_id", export_id, label="export")
+        if export.get("od_project_id") != project_id:
+            raise DesignStudioError("storage_export_mismatch", "Storage export project identity changed.")
         if dependency_status != "completed":
             export["status"] = "failed"
             export["error"] = error or "Storage export write failed."
-            project["status"] = "export_failed"
-            project["updated_at"] = utc_now()
             return state
         completed = export.setdefault("completed_workspace_relative_paths", [])
         if workspace_relative_path not in completed:
@@ -453,14 +555,12 @@ def record_storage_export_result(payload: dict[str, Any], arguments: dict[str, A
             export["status"] = "exported"
             export["completed_at"] = utc_now()
             export["error"] = ""
-            project["status"] = "exported"
-        project["updated_at"] = utc_now()
         state["view_state"]["selected_project_id"] = project_id
         return state
 
     state = update_state(payload["data_root"], apply_result)
-    project = _require_project(state, project_id)
-    return {"export": _require_export(project, export_id), "project": project, "state": _public_state(state)}
+    export = _require_job(state["export_jobs"], "export_id", export_id, label="export")
+    return {"export": export, "od_project_id": project_id, "state": _public_state(state)}
 
 
 def set_view_filter(payload: dict[str, Any], arguments: dict[str, Any]) -> dict[str, Any]:
@@ -482,16 +582,19 @@ def view_filter(payload: dict[str, Any]) -> dict[str, Any]:
 
 def set_custom_view(payload: dict[str, Any], arguments: dict[str, Any]) -> dict[str, Any]:
     """Select one curated project when provided by id."""
-    project_id = str(arguments.get("project_id") or "").strip()
+    raw_project_id = str(arguments.get("project_id") or "").strip()
+    identity: dict[str, str] = {}
+    if raw_project_id:
+        identity = _resolve_project_identity(payload["data_root"], raw_project_id)
+        get_project(payload, {"project_id": identity["od_project_id"]})
 
     def update_view(state: dict[str, Any]) -> dict[str, Any]:
-        if project_id:
-            _require_project(state, _project_id(project_id))
-            state["view_state"]["selected_project_id"] = project_id
+        if identity:
+            state["view_state"]["selected_project_id"] = identity["od_project_id"]
         return state
 
     state = update_state(payload["data_root"], update_view)
-    return {"view_state": state.get("view_state", {}), "state": _public_state(state)}
+    return {"view_state": state.get("view_state", {}), "state": _public_state(state), **identity}
 
 
 def clear_custom_view(payload: dict[str, Any]) -> dict[str, Any]:
@@ -510,8 +613,6 @@ def handle_sidecar_core_route(payload: dict[str, Any], arguments: dict[str, Any]
     method = str(payload.get("method") or "GET").upper()
     if _route_matches(route_path, "/api/media/config"):
         return _handle_media_config_route(payload, arguments, method=method)
-    if _route_matches(route_path, "/api/projects"):
-        return _handle_projects_route(payload, arguments, method=method, route_path=route_path)
     if _route_matches(route_path, "/api/import/storage"):
         return _handle_storage_import_route(payload, arguments, method=method)
     if _route_matches(route_path, "/api/export/storage"):
@@ -735,26 +836,6 @@ def _handle_media_config_route(payload: dict[str, Any], arguments: dict[str, Any
     }
 
 
-def _handle_projects_route(
-    payload: dict[str, Any],
-    arguments: dict[str, Any],
-    *,
-    method: str,
-    route_path: str,
-) -> dict[str, Any]:
-    if route_path not in {"/api/projects", "/api/projects/"}:
-        raise DesignStudioError(
-            "opendesign_project_route_not_available",
-            "This OpenDesign project subroute is not exposed in Maverick sandbox mode.",
-            status_code=404,
-        )
-    if method == "GET":
-        return {"status_code": 200, "json": list_projects(payload)}
-    if method == "POST":
-        return {"status_code": 201, "json": create_project(payload, _sidecar_core_body(arguments))}
-    raise DesignStudioError("method_not_allowed", "Project routes require GET or POST.", status_code=405)
-
-
 def _handle_storage_import_route(payload: dict[str, Any], arguments: dict[str, Any], *, method: str) -> dict[str, Any]:
     if method != "POST":
         raise DesignStudioError("method_not_allowed", "Storage import routes require POST.", status_code=405)
@@ -964,8 +1045,10 @@ def dispatch(action: str, payload: dict[str, Any], arguments: dict[str, Any]) ->
 def _public_state(state: dict[str, Any]) -> dict[str, Any]:
     return {
         "schema_version": state.get("schema_version"),
-        "projects": state.get("projects", []),
         "view_state": state.get("view_state", {}),
+        "import_jobs": state.get("import_jobs", []),
+        "export_jobs": state.get("export_jobs", []),
+        "lifecycle": state.get("lifecycle", {}),
         "route_policy": state.get("route_policy", {}),
         "updated_at": state.get("updated_at", ""),
     }
@@ -1037,46 +1120,83 @@ def _opendesign_runtime_status(data_root: str) -> dict[str, Any]:
     }
 
 
-def _find_project(state: dict[str, Any], project_id: str) -> dict[str, Any] | None:
-    for project in state.get("projects", []):
-        if project.get("id") == project_id:
-            return project
-    return None
+def _find_job(jobs: list[dict[str, Any]], key: str, value: str) -> dict[str, Any] | None:
+    return next((item for item in jobs if item.get(key) == value), None)
 
 
-def _require_project(state: dict[str, Any], project_id: str) -> dict[str, Any]:
-    project = _find_project(state, project_id)
-    if project is None:
-        raise DesignStudioError("project_not_found", f"Design project `{project_id}` was not found.")
-    return project
+def _append_job(jobs: list[dict[str, Any]], item: dict[str, Any]) -> None:
+    jobs.append(item)
+    if len(jobs) > MAX_JOB_RECORDS:
+        del jobs[:-MAX_JOB_RECORDS]
 
 
-def _find_import(project: dict[str, Any], import_id: str) -> dict[str, Any] | None:
-    for item in project.get("imports", []):
-        if item.get("import_id") == import_id:
-            return item
-    return None
-
-
-def _require_import(project: dict[str, Any], import_id: str) -> dict[str, Any]:
-    item = _find_import(project, import_id)
+def _require_job(
+    jobs: list[dict[str, Any]],
+    key: str,
+    value: str,
+    *,
+    label: str,
+) -> dict[str, Any]:
+    item = _find_job(jobs, key, value)
     if item is None:
-        raise DesignStudioError("import_not_found", f"Design import `{import_id}` was not found.")
+        raise DesignStudioError(f"{label}_not_found", f"Design {label} `{value}` was not found.")
     return item
 
 
-def _require_export(project: dict[str, Any], export_id: str) -> dict[str, Any]:
-    for item in project.get("exports", []):
-        if item.get("export_id") == export_id:
-            return item
-    raise DesignStudioError("export_not_found", f"Design export `{export_id}` was not found.")
+def _resolve_project_identity(data_root: str, value: object) -> dict[str, str]:
+    raw_project_id = str(value or "").strip()
+    if not PROJECT_ID_PATTERN.fullmatch(raw_project_id):
+        return {"od_project_id": _opendesign_project_id(raw_project_id)}
+    mapping = _read_legacy_project_map(data_root)
+    matches = [item for item in mapping if item.get("legacy_project_id") == raw_project_id]
+    if len(matches) != 1:
+        raise DesignStudioError(
+            "legacy_project_not_mapped",
+            f"Legacy project `{raw_project_id}` has no unique OpenDesign mapping.",
+            status_code=404,
+        )
+    od_project_id = _opendesign_project_id(matches[0].get("od_project_id"))
+    return {"od_project_id": od_project_id, "legacy_project_id": raw_project_id}
 
 
-def _project_id(value: object) -> str:
-    project_id = str(value or "").strip()
-    if not PROJECT_ID_PATTERN.fullmatch(project_id):
-        raise DesignStudioError("project_id_invalid", "A valid design project id is required.")
-    return project_id
+def _read_legacy_project_map(data_root: str) -> list[dict[str, Any]]:
+    root = Path(data_root).resolve()
+    mapping_root = root / "opendesign"
+    if mapping_root.is_symlink():
+        raise DesignStudioError("legacy_project_map_invalid", "Legacy project mapping directory cannot be a symlink.")
+    try:
+        resolved_mapping_root = mapping_root.resolve(strict=True)
+    except FileNotFoundError:
+        return []
+    if resolved_mapping_root != mapping_root:
+        raise DesignStudioError("legacy_project_map_invalid", "Legacy project mapping directory escapes app data.")
+    path = mapping_root / "legacy-project-map.json"
+    if not path.exists():
+        return []
+    try:
+        descriptor = os.open(path, os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0))
+    except OSError as error:
+        raise DesignStudioError("legacy_project_map_invalid", "Legacy project mapping cannot be opened.") from error
+    try:
+        file_stat = os.fstat(descriptor)
+        if not stat.S_ISREG(file_stat.st_mode) or file_stat.st_size > MAX_LEGACY_MAP_BYTES:
+            raise DesignStudioError("legacy_project_map_invalid", "Legacy project mapping is not a bounded regular file.")
+        with os.fdopen(descriptor, "rb", closefd=True) as handle:
+            descriptor = -1
+            raw = handle.read(MAX_LEGACY_MAP_BYTES + 1)
+    finally:
+        if descriptor >= 0:
+            os.close(descriptor)
+    if len(raw) > MAX_LEGACY_MAP_BYTES:
+        raise DesignStudioError("legacy_project_map_invalid", "Legacy project mapping exceeds its size limit.")
+    try:
+        payload = json.loads(raw.decode("utf-8"))
+    except (UnicodeDecodeError, json.JSONDecodeError) as error:
+        raise DesignStudioError("legacy_project_map_invalid", "Legacy project mapping is not valid JSON.") from error
+    mappings = payload.get("mappings") if isinstance(payload, dict) else None
+    if not isinstance(mappings, list) or any(not isinstance(item, dict) for item in mappings):
+        raise DesignStudioError("legacy_project_map_invalid", "Legacy project mapping has an invalid schema.")
+    return mappings
 
 
 def _opendesign_project_id(value: object) -> str:
@@ -1094,8 +1214,40 @@ def _opendesign_request(payload: dict[str, Any], path: str) -> dict[str, Any]:
 
 
 def _opendesign_json_request(payload: dict[str, Any], path: str) -> Any:
+    response = _opendesign_response(payload, "GET", path)
+    return _decode_opendesign_json(response)
+
+
+def _opendesign_post(payload: dict[str, Any], path: str, body: dict[str, Any]) -> dict[str, Any]:
+    response = _opendesign_response(payload, "POST", path, json_body=body)
+    decoded = _decode_opendesign_json(response)
+    if not isinstance(decoded, dict):
+        raise DesignStudioError("opendesign_response_invalid", "OpenDesign returned an invalid response.", status_code=502)
+    return decoded
+
+
+def _opendesign_bytes_request(payload: dict[str, Any], path: str) -> bytes:
+    return _opendesign_response(payload, "GET", path).body
+
+
+def _opendesign_bytes_post(payload: dict[str, Any], path: str, body: dict[str, Any]) -> bytes:
+    return _opendesign_response(payload, "POST", path, json_body=body).body
+
+
+def _opendesign_response(
+    payload: dict[str, Any],
+    method: str,
+    path: str,
+    *,
+    json_body: dict[str, Any] | None = None,
+):
     try:
-        response = app_sidecar(payload, "opendesign").get(path, headers={"accept": "application/json"})
+        response = app_sidecar(payload, "opendesign").request(
+            method,
+            path,
+            headers={"accept": "application/json" if json_body is not None or method == "GET" else "*/*"},
+            json_body=json_body,
+        )
     except AppSidecarError as error:
         raise DesignStudioError(
             "opendesign_unavailable",
@@ -1110,6 +1262,10 @@ def _opendesign_json_request(payload: dict[str, Any], path: str) -> Any:
             f"OpenDesign returned HTTP {response.status_code}.",
             status_code=502,
         )
+    return response
+
+
+def _decode_opendesign_json(response) -> Any:
     try:
         decoded = response.json()
     except (UnicodeDecodeError, json.JSONDecodeError) as error:
@@ -1210,13 +1366,9 @@ def _contains_secret_like_value(value: Any) -> bool:
 
 
 def _should_request_storage_read(payload: dict[str, Any]) -> bool:
-    return payload.get("surface") in {"backend", "sidecar_core_handler"} and isinstance(payload.get("app_dependencies"), dict)
-
-
-def _append_source_file(project: dict[str, Any], workspace_relative_path: str) -> None:
-    source_files = project.setdefault("source_files", [])
-    if workspace_relative_path not in source_files:
-        source_files.append(workspace_relative_path)
+    return payload.get("surface") in {"backend", "sidecar_core_handler", "cli", "mcp"} and isinstance(
+        payload.get("app_dependencies"), dict
+    )
 
 
 def _mark_storage_import_failed(
@@ -1226,39 +1378,18 @@ def _mark_storage_import_failed(
     import_id: str,
     error: str,
 ) -> dict[str, Any]:
-    failed_at = utc_now()
-
     def apply_failure(state: dict[str, Any]) -> dict[str, Any]:
-        project = _require_project(state, project_id)
-        item = _find_import(project, import_id)
+        item = _find_job(state["import_jobs"], "import_id", import_id)
         if item is not None:
             item["status"] = "failed"
             item["error"] = error
             item["imported_at"] = ""
-        project["status"] = "import_failed"
-        project["updated_at"] = failed_at
         state["view_state"]["selected_project_id"] = project_id
         return state
 
     state = update_state(data_root, apply_failure)
-    project = _require_project(state, project_id)
-    item = _find_import(project, import_id)
-    return {"import": item or {}, "project": project, "state": _public_state(state)}
-
-
-def _resolve_storage_file(payload: dict[str, Any], workspace_relative_path: str) -> Path:
-    match = STORAGE_PATH_PATTERN.fullmatch(workspace_relative_path)
-    if match is None:
-        raise DesignStudioError("storage_path_invalid", "Invalid Storage path.")
-    role, relative = match.groups()
-    root_key = "uploaded_storage_root" if role == "uploaded" else "generated_storage_root"
-    root = Path(str(payload.get(root_key) or "")).resolve()
-    path = (root / relative).resolve()
-    if root != path and root not in path.parents:
-        raise DesignStudioError("storage_path_invalid", "Storage path escapes its role root.")
-    if not path.is_file():
-        raise DesignStudioError("storage_file_not_found", f"Storage file `{workspace_relative_path}` was not found.")
-    return path
+    item = _find_job(state["import_jobs"], "import_id", import_id)
+    return {"import": item or {}, "od_project_id": project_id, "state": _public_state(state)}
 
 
 def _storage_read_result_file(result: dict[str, Any]) -> dict[str, Any]:
@@ -1288,32 +1419,73 @@ def _storage_file_name(workspace_relative_path: str, file_payload: dict[str, Any
     return name
 
 
+def _public_opendesign_file(item: dict[str, Any]) -> dict[str, Any]:
+    name = str(item.get("name") or item.get("path") or "").strip()
+    if not name or "\\" in name or "\x00" in name:
+        raise DesignStudioError("opendesign_response_invalid", "OpenDesign returned an invalid file path.", status_code=502)
+    path = PurePosixPath(name)
+    if path.is_absolute() or path.as_posix() != name or any(part in {"", ".", ".."} for part in path.parts):
+        raise DesignStudioError("opendesign_response_invalid", "OpenDesign returned an unsafe file path.", status_code=502)
+    try:
+        size = int(item.get("size"))
+    except (TypeError, ValueError) as error:
+        raise DesignStudioError("opendesign_response_invalid", "OpenDesign returned an invalid file size.", status_code=502) from error
+    if size < 0:
+        raise DesignStudioError("opendesign_response_invalid", "OpenDesign returned an invalid file size.", status_code=502)
+    return {
+        "name": name,
+        "path": name,
+        "size_bytes": size,
+        "media_type": str(item.get("mime") or "application/octet-stream"),
+        "kind": str(item.get("kind") or "file"),
+    }
+
+
+def _verified_archive_files(archive_bytes: bytes, files: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    expected = {item["path"]: item for item in files}
+    try:
+        with ZipFile(BytesIO(archive_bytes), "r") as archive:
+            infos = [info for info in archive.infolist() if not info.is_dir()]
+            names = [info.filename for info in infos]
+            if len(names) != len(set(names)) or set(names) != set(expected):
+                raise DesignStudioError(
+                    "opendesign_archive_invalid",
+                    "OpenDesign project archive does not match its file catalog.",
+                    status_code=502,
+                )
+            if any(info.flag_bits & 0x1 for info in infos):
+                raise DesignStudioError("opendesign_archive_invalid", "OpenDesign returned an encrypted archive.", status_code=502)
+            total = sum(info.file_size for info in infos)
+            if total > MAX_EXPORT_UNCOMPRESSED_BYTES:
+                raise DesignStudioError("opendesign_archive_too_large", "OpenDesign project export exceeds 128 MiB.", status_code=413)
+            verified: list[dict[str, Any]] = []
+            for info in sorted(infos, key=lambda value: value.filename):
+                metadata = expected[info.filename]
+                if info.file_size != metadata["size_bytes"]:
+                    raise DesignStudioError(
+                        "opendesign_archive_invalid",
+                        "OpenDesign archive file size does not match its catalog.",
+                        status_code=502,
+                    )
+                content = archive.read(info)
+                verified.append({**metadata, "sha256": sha256(content).hexdigest()})
+            return verified
+    except BadZipFile as error:
+        raise DesignStudioError("opendesign_archive_invalid", "OpenDesign returned an invalid project archive.", status_code=502) from error
+
+
 def _clean_text(value: object, *, fallback: str) -> str:
     text = str(value or "").strip()
     return text[:500] if text else fallback
-
-
-def _export_notes(project: dict[str, Any], manifest: dict[str, Any]) -> str:
-    source_files = project.get("source_files", [])
-    source_lines = "\n".join(f"- `{item}`" for item in source_files) if source_files else "- None"
-    return (
-        f"# {project['name']}\n\n"
-        f"Project id: `{project['id']}`\n\n"
-        f"Export id: `{manifest['export_id']}`\n\n"
-        f"Status: `{project.get('status', 'draft')}`\n\n"
-        f"OpenDesign: `{manifest['opendesign_version']}` "
-        f"({manifest['opendesign_commit']})\n\n"
-        f"## Prompt\n\n{project.get('prompt') or 'No prompt recorded.'}\n\n"
-        f"## Source Files\n\n{source_lines}\n"
-    )
 
 
 def _storage_write_request(
     *,
     project_id: str,
     export_id: str,
+    run_id: str,
     workspace_relative_path: str,
-    content: str,
+    content: bytes,
     artifact: str,
 ) -> dict[str, Any]:
     return {
@@ -1323,13 +1495,14 @@ def _storage_write_request(
             "action": "file.content.write",
             "workspace_relative_path": workspace_relative_path,
             "mode": "create",
-            "content": content,
+            "content_base64": b64encode(content).decode("ascii"),
         },
         "callback": {
             "action": "record_storage_export_result",
             "payload": {
                 "project_id": project_id,
                 "export_id": export_id,
+                "run_id": run_id,
                 "workspace_relative_path": workspace_relative_path,
                 "artifact": artifact,
             },
@@ -1368,7 +1541,5 @@ def _storage_write_result_path(result: dict[str, Any]) -> str:
     return str(file_payload.get("workspace_relative_path") or "").strip()
 
 
-def _json_text(payload: dict[str, Any]) -> str:
-    import json
-
-    return json.dumps(payload, indent=2, ensure_ascii=True) + "\n"
+def _json_bytes(payload: dict[str, Any]) -> bytes:
+    return (json.dumps(payload, sort_keys=True, separators=(",", ":"), ensure_ascii=True) + "\n").encode("utf-8")

@@ -28,6 +28,9 @@
           "project_id": {
             "type": "string"
           },
+          "run_id": {
+            "type": "string"
+          },
           "name": {
             "type": "string"
           },

@@ -10,9 +10,13 @@ Use Design Studio through its official Maverick app surfaces.
 Common operations:
 
 - Inspect app state with MCP tool `design_studio_state` or CLI command `design-studio --action state`.
-- Create a design project through the mounted frontend or backend action `create_project`.
+- Create a canonical OpenDesign project through the mounted frontend, backend
+  action/CLI `create_project`, or MCP `design_studio_create_project`.
 - Import only workspace Storage files using `workspace_relative_path` values under `storage/uploaded/` or `storage/generated/`; hosted imports are read through the `storage-read` dependency backend.
-- Export project metadata and notes to `storage/generated/design-studio/<project-id>/` through the `storage-write` dependency backend.
+- Export a terminal run with both `project_id` and canonical `run_id`. The
+  Storage package is written to
+  `storage/generated/design-studio/<od-project-id>/<od-run-id>/` and contains
+  `project-files.zip`, `result-package.json`, and a SHA-256 provenance manifest.
 - Verify the OpenDesign sidecar through the app state `sidecar.ready_url` or `sidecar.version_url`.
 - Resolve an OpenDesign project id with MCP tool `design_studio_get_project` or
   CLI action `get_project`; these entrypoints use the short-lived core
@@ -28,6 +32,11 @@ Common operations:
   workspace-scoped mapping to Maverick `runtime_session_id`, `turn_id`, and
   `stream_id`; those runtime identifiers are correlation metadata, not a
   second project or run domain.
+- Treat `data/design-studio/adapter-state.json` only as view and job metadata.
+  Never use it as a project catalog. OpenDesign owns projects and files.
+- Accept `design_*` only as a migrated input alias. Resolve it through the
+  governed app surface; canonical output is `od_project_id`, optionally with
+  `legacy_project_id` for traceability. Never edit the sealed `state.json`.
 - Treat `service/opendesign_launcher.py` as the sidecar entrypoint. It resolves
   only the bundle digest and data generation named together by the validated
   `control.json`; it never builds, migrates, or selects a "latest" directory.
@@ -39,6 +48,8 @@ Common operations:
 Sandbox policy:
 
 - Do not use host absolute paths as design sources.
+- Do not copy Storage imports into app data or write Storage exports directly;
+  use the declared `storage-read`/`storage-write` dependency backends.
 - Do not request `/api/import/folder`, terminal, or pty routes in sandbox mode.
 - Provider credentials must remain in Maverick/Vault-owned flows. Do not put provider keys in browser payloads, sidecar requests, backend app secrets, or OpenDesign media config.
 - Design Studio declares provider model proxy access only; it must not receive raw provider keys and must not expose provider generation/chat routes directly to OpenDesign.

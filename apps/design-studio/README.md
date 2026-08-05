@@ -102,19 +102,30 @@ storage/generated/<file>
 Exports are written under:
 
 ```text
-storage/generated/design-studio/<project-id>/<export-id>/
+storage/generated/design-studio/<od-project-id>/<od-run-id>/
 ```
 
 The app never accepts host absolute paths in sandbox mode. Hosted imports are
-issued through the `storage-read` dependency backend request, then materialized
-under `data/design-studio/imports/` only after Storage returns bounded file
-content. Export writes are issued through Design Studio's `storage-write`
-dependency backend request so the Storage app owns the generated file write path
-and inventory update. Design Studio records imports and exports as pending first,
-then marks them imported/exported or failed from the Storage callback result.
-Direct local CLI/MCP test entrypoints may use the mounted workspace Storage roots
-as a development fallback, but hosted backend calls use the declared Storage
-dependencies.
+issued through the `storage-read` dependency backend request. Core gives the
+result callback a fresh backend-scoped sidecar capability; the callback uploads
+the bounded bytes through `POST /api/projects/{id}/files` and verifies a raw
+read-back SHA-256 before marking the import complete. Design Studio never keeps
+a second copy under app data.
+
+Exports require a terminal canonical `od_run_id`. Design Studio reads the real
+OpenDesign file catalog, obtains the project file archive from the governed
+batch archive API, and writes `project-files.zip`, `result-package.json`, and
+`manifest.json` through `storage-write`. The manifest records SHA-256, size,
+media type, the OpenDesign run id, Maverick runtime correlation ids, OCI pin,
+materialized artifact digest, and Storage-import provenance. Storage owns every
+generated file and inventory update.
+
+`data/design-studio/adapter-state.json` contains only view state and bounded
+import/export job metadata. OpenDesign remains the sole owner of projects,
+conversations, runs, and project files. The migrated `state.json` is a sealed
+legacy archive; `design_*` is accepted only as an input alias resolved through
+`opendesign/legacy-project-map.json`, and canonical responses always return
+`od_project_id` with an optional `legacy_project_id`.
 
 ## SDK Flow
 
@@ -165,9 +176,10 @@ are blocked explicitly; all other routes are denied by default.
 
 Backend, CLI, MCP, and reference access uses the separate generic
 `entrypoint_access` contract. Each invocation receives an opaque, per-process
-SDK capability for `GET /api/projects` and `GET /api/projects/{id}` only, with a
-30-second TTL, request budget, explicit request/response limits, and no
-streaming. `core.app_sdk.app_sidecar` calls the core-owned Unix broker; Design
+SDK capability for the minimum project catalog, project file upload/read-back,
+and batch archive routes needed by that surface, with a 30-second TTL, request
+budget, explicit request/response limits, and no streaming. Reference access
+remains GET-only. `core.app_sdk.app_sidecar` calls the core-owned Unix broker; Design
 Studio never learns the OpenDesign port, `OD_API_TOKEN`, relay capability, or
 database path. The capability is bound to workspace, local app, service,
 surface, actor, and invocation and is revoked when the entrypoint finishes.
@@ -177,9 +189,10 @@ authority. Broker failure has no loopback or filesystem fallback.
 An explicit OpenDesign project id is resolved through this SDK path by the
 backend (and therefore the mounted frontend), CLI `get_project`, MCP
 `design_studio_get_project`, and the standard Design Studio reference
-resolve/summarize tools. Legacy `design_*` records remain a read-only legacy
-catalog until a separately authorized controlled migration maps them to real
-OpenDesign ids; no OpenDesign data is read directly from `app.sqlite`.
+resolve/summarize tools. CLI `create_project` and MCP
+`design_studio_create_project` also create canonical OpenDesign projects.
+Legacy `design_*` ids never become output identities; no OpenDesign data is
+read directly from `app.sqlite` or duplicated in adapter state.
 
 The production confinement suite uses real bubblewrap and validates filesystem,
 environment, network, authenticated relay, concurrency and descendant cleanup:
@@ -219,6 +232,8 @@ Useful checks:
 
 ```bash
 python3 -m unittest apps/design-studio/tests/test_design_studio_app.py
+python3 -m unittest apps/design-studio/tests/test_opendesign_adapter.py
+python3 -m unittest tests/unit/apps/test_runtime_requests.py
 python3 -m unittest apps.design-studio.tests.test_runtime_bridge
 python3 -m unittest apps/design-studio/tests/test_opendesign_oci_import.py
 python3 -m unittest apps/design-studio/tests/test_opendesign_materialization.py

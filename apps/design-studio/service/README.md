@@ -168,7 +168,9 @@ python3 apps/design-studio/service/sync_route_policy.py
 
 The check accounts for every inventoried method/template, omits `USE /api` and
 multi-segment splats so deny-by-default applies, and adds only the approved
-safe static trees plus Maverick Storage import/export handlers. The artifact
+safe static trees, the exact one-segment raw read used for Storage import
+verification, plus Maverick Storage import/export handlers. Nested raw reads
+remain denied; project export uses OpenDesign's exact batch archive route. The artifact
 manifest does not duplicate this route catalog. The staged runtime closure is
 instead bound to its file manifest, SBOM, NOTICE, license inventory, native
 load proof, deterministic build metadata, and signed provenance.
@@ -246,4 +248,23 @@ python3 -m unittest \
   tests.integration.app_hosting.test_sidecar_core_routes \
   tests.integration.recovery.test_backend_restart \
   apps.design-studio.tests.test_runtime_bridge -v
+```
+
+## Canonical project and Storage adapter
+
+`adapter-state.json` stores only view state plus import/export lifecycle jobs.
+The sealed pre-migration `state.json` is never created, migrated, or opened for
+writing by the adapter. Canonical create/list/get operations use the governed
+OpenDesign API. A `design_*` value is accepted only as an alias found in
+`opendesign/legacy-project-map.json`; output identity remains
+`od_project_id`.
+
+Storage imports are read through the selected dependency, uploaded to the real
+OpenDesign project, and verified by SHA-256 read-back. Terminal run exports use
+the real OpenDesign batch archive and write a run-scoped package through
+Storage. The official OCI smoke performs this flow in a temporary workspace:
+
+```bash
+PYTHONDONTWRITEBYTECODE=1 python3 -B \
+  apps/design-studio/service/smoke_opendesign_sidecar.py
 ```

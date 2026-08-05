@@ -12,8 +12,25 @@
       "required_secrets": [],
       "secret_selectors": []
     },
+    "design_studio_create_project": {
+      "description": "Create a canonical OpenDesign project through the governed sidecar capability.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "name": {"type": "string"},
+          "prompt": {"type": "string"}
+        },
+        "required": ["name"],
+        "additionalProperties": false
+      },
+      "output_schema": {
+        "type": "object"
+      },
+      "required_secrets": [],
+      "secret_selectors": []
+    },
     "design_studio_get_project": {
-      "description": "Return one Design Studio project by id.",
+      "description": "Return one canonical OpenDesign project by id or migrated legacy alias.",
       "input_schema": {
         "type": "object",
         "properties": {
@@ -33,7 +50,7 @@
       "secret_selectors": []
     },
     "design_studio_import_from_storage": {
-      "description": "Import one bounded Storage file into a Design Studio project.",
+      "description": "Import one bounded Storage file into a canonical OpenDesign project.",
       "input_schema": {
         "type": "object",
         "properties": {
@@ -58,16 +75,20 @@
       "secret_selectors": []
     },
     "design_studio_export_to_storage": {
-      "description": "Export Design Studio project metadata and notes under storage/generated/design-studio.",
+      "description": "Export a terminal OpenDesign run package and project files under storage/generated/design-studio/<project-id>/<run-id>/.",
       "input_schema": {
         "type": "object",
         "properties": {
           "project_id": {
             "type": "string"
+          },
+          "run_id": {
+            "type": "string"
           }
         },
         "required": [
-          "project_id"
+          "project_id",
+          "run_id"
         ],
         "additionalProperties": false
       },

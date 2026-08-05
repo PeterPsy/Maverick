@@ -88,6 +88,7 @@
   "capabilities": {
     "mcp_tools": [
       "design_studio_state",
+      "design_studio_create_project",
       "design_studio_get_project",
       "design_studio_import_from_storage",
       "design_studio_export_to_storage",
@@ -112,7 +113,7 @@
     "data_events": [
       {
         "resource": "state",
-        "description": "Design Studio projects, imports, exports, or view state changed."
+        "description": "Design Studio adapter import/export jobs or view state changed."
       },
       {
         "resource": "view-state",
@@ -155,7 +156,7 @@
           {
             "action": "export_to_storage",
             "standard": false,
-            "description": "Export project metadata and notes to Storage."
+            "description": "Export a terminal OpenDesign run package and project files to Storage."
           }
         ],
         "supports_custom_view": false,
@@ -188,12 +189,10 @@
   },
   "storage": {
     "storage_kind": "json+files",
-    "data_schema_version": "1",
+    "data_schema_version": "2",
     "primary_paths": [
-      "data/design-studio/state.json",
-      "data/design-studio/opendesign",
-      "data/design-studio/imports",
-      "data/design-studio/exports"
+      "data/design-studio/adapter-state.json",
+      "data/design-studio/opendesign"
     ],
     "indices": null,
     "supports_export": true,
@@ -290,8 +289,8 @@
         "entrypoint_access": {
           "ttl_seconds": 30,
           "request_budget": 16,
-          "max_request_body_bytes": 65536,
-          "max_response_body_bytes": 8388608,
+          "max_request_body_bytes": 14680064,
+          "max_response_body_bytes": 67108864,
           "streaming": false,
           "surfaces": [
             {
@@ -299,6 +298,10 @@
               "routes": [
                 {
                   "method": "GET",
+                  "path_template": "/api/projects"
+                },
+                {
+                  "method": "POST",
                   "path_template": "/api/projects"
                 },
                 {
@@ -312,6 +315,18 @@
                 {
                   "method": "GET",
                   "path_template": "/api/projects/{id}/files"
+                },
+                {
+                  "method": "POST",
+                  "path_template": "/api/projects/{id}/files"
+                },
+                {
+                  "method": "GET",
+                  "path_template": "/api/projects/{id}/raw/{name}"
+                },
+                {
+                  "method": "POST",
+                  "path_template": "/api/projects/{id}/archive/batch"
                 }
               ]
             },
@@ -323,8 +338,20 @@
                   "path_template": "/api/projects"
                 },
                 {
+                  "method": "POST",
+                  "path_template": "/api/projects"
+                },
+                {
                   "method": "GET",
                   "path_template": "/api/projects/{id}"
+                },
+                {
+                  "method": "GET",
+                  "path_template": "/api/projects/{id}/files"
+                },
+                {
+                  "method": "POST",
+                  "path_template": "/api/projects/{id}/archive/batch"
                 }
               ]
             },
@@ -336,8 +363,20 @@
                   "path_template": "/api/projects"
                 },
                 {
+                  "method": "POST",
+                  "path_template": "/api/projects"
+                },
+                {
                   "method": "GET",
                   "path_template": "/api/projects/{id}"
+                },
+                {
+                  "method": "GET",
+                  "path_template": "/api/projects/{id}/files"
+                },
+                {
+                  "method": "POST",
+                  "path_template": "/api/projects/{id}/archive/batch"
                 }
               ]
             },
@@ -619,6 +658,10 @@
               {
                 "method": "GET",
                 "path_template": "/api/projects/{id}/preview-url"
+              },
+              {
+                "method": "GET",
+                "path_template": "/api/projects/{id}/raw/{name}"
               },
               {
                 "method": "GET",

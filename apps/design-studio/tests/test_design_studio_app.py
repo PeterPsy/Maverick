@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from contextlib import contextmanager
-from base64 import b64decode, b64encode
+from base64 import b64encode
 from io import BytesIO
 import json
 import os
@@ -285,118 +285,15 @@ class DesignStudioAppTests(unittest.TestCase):
             self.assertIn("Curated OpenDesign daemon unavailable", process.stderr)
             self.assertFalse((data_dir / "launcher-status.json").exists())
 
-    def test_backend_creates_imports_and_requests_storage_export_writes(self) -> None:
+    def test_adapter_state_preserves_sealed_legacy_catalog_and_uses_od_ids(self) -> None:
         with TemporaryDirectory() as temp_dir:
             root = Path(temp_dir)
             data_root = root / "data" / "design-studio"
-            uploaded = root / "storage" / "uploaded"
-            generated = root / "storage" / "generated"
-            source = uploaded / "brief.md"
-            source.parent.mkdir(parents=True)
-            generated.mkdir(parents=True)
-            source.write_text("# Brief\n\nCreate a dashboard.\n", encoding="utf-8")
-
-            created = self._run_entrypoint(
-                APP_ROOT / "backend" / "app_backend.py",
-                {
-                    "surface": "backend",
-                    "app_id": "design-studio",
-                    "workspace_id": "default",
-                    "data_root": str(data_root),
-                    "uploaded_storage_root": str(uploaded),
-                    "generated_storage_root": str(generated),
-                    "body": {
-                        "action": "create_project",
-                        "arguments": {"name": "Dashboard", "prompt": "Operational metrics"},
-                    },
-                },
-            )
-            project_id = created["json"]["project"]["id"]
-            self.assertTrue((data_root / "opendesign/instances").is_dir())
-            self.assertTrue((data_root / "opendesign/backups").is_dir())
-            self.assertTrue((data_root / "opendesign/migrations").is_dir())
-            self.assertFalse((data_root / "opendesign/db").exists())
-
-            imported = self._run_entrypoint(
-                APP_ROOT / "backend" / "app_backend.py",
-                {
-                    "surface": "backend",
-                    "app_id": "design-studio",
-                    "workspace_id": "default",
-                    "data_root": str(data_root),
-                    "uploaded_storage_root": str(uploaded),
-                    "generated_storage_root": str(generated),
-                    "body": {
-                        "action": "import_from_storage",
-                        "arguments": {
-                            "project_id": project_id,
-                            "workspace_relative_path": "storage/uploaded/brief.md",
-                        },
-                    },
-                },
-            )
-            exported = self._run_entrypoint(
-                APP_ROOT / "backend" / "app_backend.py",
-                {
-                    "surface": "backend",
-                    "app_id": "design-studio",
-                    "workspace_id": "default",
-                    "data_root": str(data_root),
-                    "uploaded_storage_root": str(uploaded),
-                    "generated_storage_root": str(generated),
-                    "body": {
-                        "action": "export_to_storage",
-                        "arguments": {"project_id": project_id},
-                    },
-                },
-            )
-
-            self.assertEqual(imported["status_code"], 200)
-            import_record = imported["json"]["import"]
-            self.assertEqual(import_record["status"], "imported")
-            self.assertTrue((data_root / import_record["app_data_path"]).is_file())
-            self.assertEqual(exported["status_code"], 200)
-            export_record = exported["json"]["export"]
-            export_id = export_record["export_id"]
-            requests = exported["json"]["dependency_backend_requests"]
-            self.assertEqual(export_record["status"], "pending")
-            self.assertEqual([request["dependency_alias"] for request in requests], ["storage-write", "storage-write"])
-            self.assertEqual(
-                [request["body"]["workspace_relative_path"] for request in requests],
-                [
-                    f"storage/generated/design-studio/{project_id}/{export_id}/manifest.json",
-                    f"storage/generated/design-studio/{project_id}/{export_id}/notes.md",
-                ],
-            )
-            self.assertFalse((generated / "design-studio" / project_id / export_id / "manifest.json").exists())
-
-            for request in requests:
-                callback_payload = request["callback"]["payload"]
-                self._run_entrypoint(
-                    APP_ROOT / "backend" / "app_backend.py",
-                    {
-                        "surface": "dependency_backend_request_callback",
-                        "app_id": "design-studio",
-                        "workspace_id": "default",
-                        "data_root": str(data_root),
-                        "uploaded_storage_root": str(uploaded),
-                        "generated_storage_root": str(generated),
-                        "body": {
-                            **callback_payload,
-                            "action": "record_storage_export_result",
-                            "dependency_backend_status": "completed",
-                            "dependency_backend_result": {
-                                "status_code": 200,
-                                "json": {
-                                    "file": {
-                                        "workspace_relative_path": callback_payload["workspace_relative_path"],
-                                    }
-                                },
-                            },
-                        },
-                    },
-                )
-
+            data_root.mkdir(parents=True)
+            legacy_bytes = b'{"schema_version":"1","projects":[{"id":"design_0123456789ab"}]}\n'
+            legacy_state = data_root / "state.json"
+            legacy_state.write_bytes(legacy_bytes)
+            legacy_state.chmod(0o400)
             state = self._run_entrypoint(
                 APP_ROOT / "backend" / "app_backend.py",
                 {
@@ -404,18 +301,42 @@ class DesignStudioAppTests(unittest.TestCase):
                     "app_id": "design-studio",
                     "workspace_id": "default",
                     "data_root": str(data_root),
-                    "uploaded_storage_root": str(uploaded),
-                    "generated_storage_root": str(generated),
                     "body": {"action": "state"},
                 },
             )
-            final_export = state["json"]["state"]["projects"][0]["exports"][0]
-            self.assertEqual(final_export["status"], "exported")
-            self.assertEqual(
-                final_export["completed_workspace_relative_paths"],
-                export_record["workspace_relative_paths"],
-            )
-            self.assertFalse(state["json"]["opendesign"]["runtime"]["bundle_configured"])
+            adapter = json.loads((data_root / "adapter-state.json").read_text(encoding="utf-8"))
+            self.assertEqual(state["json"]["state"]["schema_version"], "2")
+            self.assertNotIn("projects", state["json"]["state"])
+            self.assertNotIn("projects", adapter)
+            self.assertEqual(legacy_state.read_bytes(), legacy_bytes)
+            self.assertEqual(legacy_state.stat().st_mode & 0o777, 0o400)
+
+            project = {"project": {"id": "od_project_adapter", "name": "Dashboard"}}
+            with self._fake_app_sidecar_broker(project) as (descriptor, captured):
+                imported = self._run_entrypoint(
+                    APP_ROOT / "backend" / "app_backend.py",
+                    {
+                        "surface": "backend",
+                        "app_id": "design-studio",
+                        "workspace_id": "default",
+                        "data_root": str(data_root),
+                        "app_dependencies": {"storage-read": {"provider_app_ids": ["storage"]}},
+                        "app_sidecar": descriptor,
+                        "body": {
+                            "action": "import_from_storage",
+                            "arguments": {
+                                "project_id": "od_project_adapter",
+                                "workspace_relative_path": "storage/uploaded/brief.md",
+                            },
+                        },
+                    },
+                )
+            self.assertEqual(captured["path"], "/api/projects/od_project_adapter")
+            self.assertEqual(imported["json"]["od_project_id"], "od_project_adapter")
+            self.assertEqual(imported["json"]["import"]["status"], "pending")
+            request = imported["json"]["dependency_backend_requests"][0]
+            self.assertEqual(request["dependency_alias"], "storage-read")
+            self.assertNotIn("app_data_path", imported["json"]["import"])
 
     def test_cli_and_mcp_state_entrypoints_return_ok(self) -> None:
         with TemporaryDirectory() as temp_dir:
@@ -445,8 +366,8 @@ class DesignStudioAppTests(unittest.TestCase):
 
             self.assertTrue(cli["ok"])
             self.assertTrue(mcp["ok"])
-            self.assertEqual(cli["state"]["schema_version"], "1")
-            self.assertEqual(mcp["state"]["schema_version"], "1")
+            self.assertEqual(cli["state"]["schema_version"], "2")
+            self.assertEqual(mcp["state"]["schema_version"], "2")
             self.assertEqual(cli["opendesign"]["version"], "0.16.1")
             self.assertEqual(mcp["opendesign"]["version"], "0.16.1")
 
@@ -518,7 +439,7 @@ class DesignStudioAppTests(unittest.TestCase):
         self.assertTrue(all(request["capability"] == "fixture-capability" for request in requests))
         self.assertNotIn("OD_API_TOKEN", json.dumps(requests))
 
-    def test_hosted_backend_imports_and_exports_through_storage_dependencies(self) -> None:
+    def test_hosted_backend_imports_through_storage_dependency_and_sidecar_callback(self) -> None:
         with TemporaryDirectory() as temp_dir:
             with self._test_platform_env():
                 repo_root = self._temporary_repo_root(Path(temp_dir))
@@ -575,30 +496,10 @@ class DesignStudioAppTests(unittest.TestCase):
                     },
                 )
                 import_payload = json.loads(import_body.decode("utf-8"))
-                self.assertEqual(import_status, 200)
+                self.assertEqual(import_status, 200, import_body.decode("utf-8"))
                 self.assertEqual(
                     [item["status"] for item in import_payload["dependency_backend_request_results"]],
                     ["completed"],
-                )
-
-                export_status, export_body, _export_headers = self._invoke_backend(
-                    app,
-                    cookie=cookie,
-                    body={"action": "export_to_storage", "arguments": {"project_id": project_id}},
-                )
-
-                export_payload = json.loads(export_body.decode("utf-8"))
-                export_record = export_payload["export"]
-                export_id = export_record["export_id"]
-                generated_root = repo_root / "workspaces" / "default" / "storage" / "generated"
-                export_root = generated_root / "design-studio" / project_id / export_id
-
-                self.assertEqual(export_status, 200)
-                self.assertTrue((export_root / "manifest.json").is_file())
-                self.assertTrue((export_root / "notes.md").is_file())
-                self.assertEqual(
-                    [item["status"] for item in export_payload["dependency_backend_request_results"]],
-                    ["completed", "completed"],
                 )
 
                 state_status, state_body, _state_headers = self._invoke_backend(
@@ -607,22 +508,14 @@ class DesignStudioAppTests(unittest.TestCase):
                     body={"action": "state"},
                 )
             state_payload = json.loads(state_body.decode("utf-8"))
-            final_import = state_payload["state"]["projects"][0]["imports"][0]
-            final_export = state_payload["state"]["projects"][0]["exports"][0]
+            self.assertEqual(import_status, 200, import_body.decode("utf-8"))
+            final_import = state_payload["state"]["import_jobs"][0]
             self.assertEqual(state_status, 200)
             self.assertEqual(final_import["status"], "imported")
             self.assertEqual(final_import["workspace_relative_path"], "storage/uploaded/brief.md")
-            imported_app_path = (
-                repo_root
-                / "workspaces"
-                / "default"
-                / "data"
-                / "design-studio"
-                / final_import["app_data_path"]
-            )
-            self.assertTrue(imported_app_path.is_file())
-            self.assertEqual(final_export["status"], "exported")
-            self.assertEqual(final_export["completed_workspace_relative_paths"], export_record["workspace_relative_paths"])
+            self.assertEqual(len(final_import["sha256"]), 64)
+            self.assertNotIn("app_data_path", final_import)
+            self.assertNotIn("projects", state_payload["state"])
 
     def test_sidecar_core_routes_handle_provider_and_storage_without_passing_to_sidecar(self) -> None:
         with TemporaryDirectory() as temp_dir:
@@ -709,13 +602,6 @@ class DesignStudioAppTests(unittest.TestCase):
                     },
                     cookie=cookie,
                 )
-                export_status, export_body, _export_headers = self._invoke(
-                    app,
-                    path="/api/apps/design-studio/sidecars/opendesign/api/export/storage",
-                    method="POST",
-                    body={"project_id": project_id},
-                    cookie=cookie,
-                )
                 terminal_status, terminal_body, _terminal_headers = self._invoke(
                     app,
                     path=f"/api/apps/design-studio/sidecars/opendesign/api/projects/{project_id}/terminals",
@@ -731,17 +617,11 @@ class DesignStudioAppTests(unittest.TestCase):
             provider_payload = json.loads(provider_body.decode("utf-8"))
             direct_provider_payload = json.loads(direct_provider_body.decode("utf-8"))
             import_payload = json.loads(import_body.decode("utf-8"))
-            export_payload = json.loads(export_body.decode("utf-8"))
             terminal_payload = json.loads(terminal_body.decode("utf-8"))
             state_payload = json.loads(state_body.decode("utf-8"))
             media_config_root = repo_root / "workspaces" / "default" / "data" / "design-studio" / "opendesign" / "media-config"
             media_config_text = "\n".join(path.read_text(encoding="utf-8") for path in media_config_root.glob("*") if path.is_file())
-            export_record = export_payload["export"]
-            export_id = export_record["export_id"]
-            export_root = repo_root / "workspaces" / "default" / "storage" / "generated" / "design-studio" / project_id / export_id
-            final_project = state_payload["state"]["projects"][0]
-            final_import = final_project["imports"][0]
-            final_export = final_project["exports"][0]
+            final_import = state_payload["state"]["import_jobs"][0]
 
             self.assertEqual(media_status, 200)
             self.assertFalse(media_payload["sidecar_reached"])
@@ -765,18 +645,11 @@ class DesignStudioAppTests(unittest.TestCase):
                 [item["status"] for item in import_payload["dependency_backend_request_results"]],
                 ["completed"],
             )
-            self.assertEqual(export_status, 200)
-            self.assertTrue((export_root / "manifest.json").is_file())
-            self.assertTrue((export_root / "notes.md").is_file())
-            self.assertEqual(
-                [item["status"] for item in export_payload["dependency_backend_request_results"]],
-                ["completed", "completed"],
-            )
             self.assertEqual(terminal_status, 403)
             self.assertEqual(terminal_payload["error"], "sidecar_route_blocked")
             self.assertEqual(state_status, 200)
             self.assertEqual(final_import["status"], "imported")
-            self.assertEqual(final_export["status"], "exported")
+            self.assertNotIn("projects", state_payload["state"])
 
     def test_provider_proxy_maps_missing_provider_to_opendesign_payload(self) -> None:
         with TemporaryDirectory() as temp_dir:
@@ -849,7 +722,6 @@ class DesignStudioAppTests(unittest.TestCase):
                         while not wire.endswith(b"\n"):
                             wire += connection.recv(65536)
                         captured.update(json.loads(wire.decode("utf-8")))
-                        self.assertEqual(b64decode(captured["body_base64"]), b"")
                         response = {
                             "ok": True,
                             "status_code": 200,
@@ -931,6 +803,13 @@ class DesignStudioAppTests(unittest.TestCase):
             target,
             ignore=shutil.ignore_patterns("node_modules", "__pycache__", "*.pyc", ".pytest_cache"),
         )
+        if app_id == "design-studio":
+            contract_path = target / "app_contract.json"
+            contract = json.loads(contract_path.read_text(encoding="utf-8"))
+            sidecar = contract["services"]["http_sidecars"][0]
+            sidecar["working_directory"] = "."
+            sidecar["command"] = ["python3", "tests/fixtures/opendesign_test_server.py"]
+            contract_path.write_text(json.dumps(contract, indent=2) + "\n", encoding="utf-8")
 
     @contextmanager
     def _repo_pythonpath(self):

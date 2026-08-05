@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from contextlib import contextmanager
+from hashlib import sha256
 from io import BytesIO
 import json
 import os
@@ -21,6 +22,7 @@ APP_ID = "design-studio"
 
 sys.path.insert(0, str(REPO_ROOT))
 sys.path.insert(0, str(SERVICE_ROOT))
+sys.path.insert(0, str(APP_ROOT / "backend"))
 
 from core.api.platform_host import PlatformHost  # noqa: E402
 from core.api.platform_state import bootstrap_platform_state  # noqa: E402
@@ -35,6 +37,7 @@ from opendesign_artifact import (  # noqa: E402
 )
 from opendesign_bootstrap import bootstrap_empty_generation  # noqa: E402
 from opendesign_materialization import discover_verified_bundles  # noqa: E402
+from runtime_bridge import build_result_package, reserve_run, store_for_payload  # noqa: E402
 
 
 def main() -> None:
@@ -62,6 +65,7 @@ def main() -> None:
                     expected_version=bundle_summary["runtime_reported_version"],
                     bundle_dir=bundle_dir,
                 )
+                adapter_result = _smoke_adapter(app, cookie=cookie, repo_root=repo_root)
                 launcher_status = _launcher_status(
                     repo_root,
                     expected_artifact_sha256=bundle_summary["artifact_sha256"],
@@ -79,6 +83,7 @@ def main() -> None:
                     "detail": launcher_status.get("detail"),
                 },
                 "routes": route_results,
+                "adapter": adapter_result,
             },
             indent=2,
             ensure_ascii=True,
@@ -271,6 +276,155 @@ def _smoke_proxy_routes(
             raise SystemExit(f"{path} was not handled by core: {decoded}")
         results.append({"method": method, "path": path, "status": status})
     return results
+
+
+def _smoke_adapter(app: PlatformHost, *, cookie: str, repo_root: Path) -> dict[str, Any]:
+    """Exercise canonical create/import/export against the official daemon."""
+    data_root = repo_root / "workspaces" / WORKSPACE_ID / "data" / APP_ID
+    legacy_state = data_root / "state.json"
+    legacy_bytes = b'{"schema_version":"1","projects":[]}\n'
+    legacy_state.write_bytes(legacy_bytes)
+    legacy_state.chmod(0o400)
+    uploaded = repo_root / "workspaces" / WORKSPACE_ID / "storage" / "uploaded"
+    uploaded.mkdir(parents=True, exist_ok=True)
+    source_bytes = b"# Governed import\n\nOfficial OpenDesign adapter smoke.\n"
+    (uploaded / "wp8-brief.md").write_bytes(source_bytes)
+
+    create_status, create_body, _headers = _invoke(
+        app,
+        "/api/apps/design-studio/backend",
+        method="POST",
+        body={"action": "create_project", "arguments": {"name": "WP8 official adapter smoke"}},
+        cookie=cookie,
+        origin=True,
+    )
+    created = _decode_json_object(create_body)
+    if create_status != 200 or not str(created.get("od_project_id") or "").startswith("od_maverick_"):
+        raise SystemExit(f"Canonical OpenDesign project create failed: HTTP {create_status}: {created}")
+    project_id = str(created["od_project_id"])
+
+    import_status, import_body, _headers = _invoke(
+        app,
+        "/api/apps/design-studio/backend",
+        method="POST",
+        body={
+            "action": "import_from_storage",
+            "arguments": {
+                "project_id": project_id,
+                "workspace_relative_path": "storage/uploaded/wp8-brief.md",
+            },
+        },
+        cookie=cookie,
+        origin=True,
+    )
+    imported = _decode_json_object(import_body)
+    dependency_results = imported.get("dependency_backend_request_results")
+    adapter_after_import = _backend_state(app, cookie=cookie)
+    import_jobs = adapter_after_import.get("import_jobs") if isinstance(adapter_after_import.get("import_jobs"), list) else []
+    import_record = import_jobs[-1] if import_jobs and isinstance(import_jobs[-1], dict) else {}
+    if (
+        import_status != 200
+        or import_record.get("status") != "imported"
+        or import_record.get("sha256") != sha256(source_bytes).hexdigest()
+        or not isinstance(dependency_results, list)
+        or [item.get("status") for item in dependency_results] != ["completed"]
+    ):
+        raise SystemExit(f"Governed Storage import failed: HTTP {import_status}: {imported}")
+
+    bridge_payload = {
+        "app_id": APP_ID,
+        "workspace_id": WORKSPACE_ID,
+        "data_root": str(data_root),
+        "sidecar_id": "opendesign",
+    }
+    correlation, inserted = reserve_run(
+        bridge_payload,
+        project_id=project_id,
+        conversation_id="od_conversation_wp8_smoke",
+        assistant_message_id="od_message_wp8_smoke",
+        client_request_id="wp8-official-adapter-smoke",
+        agent_id="maverick",
+    )
+    if not inserted:
+        raise SystemExit("WP8 smoke correlation unexpectedly existed.")
+
+    def terminal(record: dict[str, Any]) -> dict[str, Any]:
+        record["runtime_session_id"] = "runtime_wp8_smoke"
+        record["turn_id"] = "turn_wp8_smoke"
+        record["stream_id"] = "stream_wp8_smoke"
+        record["status"] = "succeeded"
+        record["result_package"] = build_result_package(record, files=[])
+        record["terminal_package_written"] = True
+        return record
+
+    correlation = store_for_payload(bridge_payload).update(correlation["od_run_id"], terminal)
+    run_id = str(correlation["od_run_id"])
+    export_status, export_body, _headers = _invoke(
+        app,
+        "/api/apps/design-studio/backend",
+        method="POST",
+        body={
+            "action": "export_to_storage",
+            "arguments": {"project_id": project_id, "run_id": run_id},
+        },
+        cookie=cookie,
+        origin=True,
+    )
+    exported = _decode_json_object(export_body)
+    export_results = exported.get("dependency_backend_request_results")
+    adapter_after_export = _backend_state(app, cookie=cookie)
+    export_jobs = adapter_after_export.get("export_jobs") if isinstance(adapter_after_export.get("export_jobs"), list) else []
+    export_record = export_jobs[-1] if export_jobs and isinstance(export_jobs[-1], dict) else {}
+    generated_root = repo_root / "workspaces" / WORKSPACE_ID / "storage" / "generated"
+    export_root = generated_root / "design-studio" / project_id / run_id
+    expected_files = [export_root / "project-files.zip", export_root / "result-package.json", export_root / "manifest.json"]
+    if (
+        export_status != 200
+        or export_record.get("status") != "exported"
+        or not isinstance(export_results, list)
+        or [item.get("status") for item in export_results] != ["completed", "completed", "completed"]
+        or any(not path.is_file() for path in expected_files)
+    ):
+        raise SystemExit(f"Governed Storage export failed: HTTP {export_status}: {exported}")
+    manifest = json.loads((export_root / "manifest.json").read_text(encoding="utf-8"))
+    artifacts = manifest.get("artifacts") if isinstance(manifest.get("artifacts"), list) else []
+    by_path = {item.get("workspace_relative_path"): item for item in artifacts if isinstance(item, dict)}
+    for path in expected_files[:-1]:
+        relative = f"storage/generated/{path.relative_to(generated_root).as_posix()}"
+        entry = by_path.get(relative)
+        if not isinstance(entry, dict) or entry.get("sha256") != sha256(path.read_bytes()).hexdigest():
+            raise SystemExit(f"Export manifest digest mismatch for {relative}.")
+    if manifest.get("od_project_id") != project_id or manifest.get("od_run_id") != run_id:
+        raise SystemExit("Export manifest canonical identity mismatch.")
+    if legacy_state.read_bytes() != legacy_bytes or legacy_state.stat().st_mode & 0o777 != 0o400:
+        raise SystemExit("Adapter modified the sealed legacy state.")
+    adapter_state = json.loads((data_root / "adapter-state.json").read_text(encoding="utf-8"))
+    if "projects" in adapter_state or (data_root / "imports").exists() or (data_root / "exports").exists():
+        raise SystemExit("Adapter duplicated OpenDesign project or file storage.")
+    return {
+        "od_project_id": project_id,
+        "od_run_id": run_id,
+        "import_sha256": import_record["sha256"],
+        "export_paths": [f"storage/generated/{path.relative_to(generated_root).as_posix()}" for path in expected_files],
+        "manifest_artifact_count": len(artifacts),
+        "legacy_state_preserved": True,
+    }
+
+
+def _backend_state(app: PlatformHost, *, cookie: str) -> dict[str, Any]:
+    status, body, _headers = _invoke(
+        app,
+        "/api/apps/design-studio/backend",
+        method="POST",
+        body={"action": "state"},
+        cookie=cookie,
+        origin=True,
+    )
+    payload = _decode_json_object(body)
+    state = payload.get("state") if isinstance(payload.get("state"), dict) else {}
+    if status != 200:
+        raise SystemExit(f"Design Studio state failed: HTTP {status}: {payload}")
+    return state
 
 
 def _next_asset_path(bundle_dir: Path) -> str:

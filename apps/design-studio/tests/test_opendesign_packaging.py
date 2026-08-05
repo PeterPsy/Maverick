@@ -66,7 +66,7 @@ class OpenDesignPackagingTests(unittest.TestCase):
 
     def test_compile_heap_is_bounded_without_changing_host_thresholds(self) -> None:
         self.assertEqual(
-            self.manifest["build"]["compile_environment"]["NODE_OPTIONS"],
+            self.manifest["fallback_build"]["build"]["compile_environment"]["NODE_OPTIONS"],
             "--max-old-space-size=1152",
         )
         self.assertEqual(self.process.START_AVAILABLE_BYTES, 4 * 1024**3)

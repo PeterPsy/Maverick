@@ -135,7 +135,7 @@ def provenance_payload(
                 },
                 "internalParameters": {
                     "patches": patch_evidence,
-                    "commands": manifest["build"],
+                    "commands": manifest["fallback_build"]["build"],
                 },
                 "resolvedDependencies": [
                     {
@@ -151,6 +151,82 @@ def provenance_payload(
                     "invocationId": invocation,
                     "reproducible": True,
                     "sourceSignature": manifest["upstream"]["tag_metadata"],
+                },
+            },
+        },
+    }
+
+
+def oci_provenance_payload(
+    *,
+    artifact_name: str,
+    artifact_sha256: str,
+    patch_evidence: dict[str, str],
+    rootfs_inventory_sha256: str,
+    manifest: dict[str, Any],
+) -> dict[str, Any]:
+    distribution = manifest["distribution"]
+    invocation = hashlib.sha256(
+        f"{artifact_sha256}:{distribution['index']['digest']}:{patch_evidence['post_sha256']}".encode("utf-8")
+    ).hexdigest()
+    dependencies = [
+        {
+            "uri": f"oci://{distribution['registry']}/{distribution['repository']}@{distribution['index']['digest']}",
+            "digest": {"sha256": distribution["index"]["digest"][7:]},
+        },
+        {
+            "uri": f"oci-manifest://{distribution['registry']}/{distribution['repository']}@{distribution['manifest']['digest']}",
+            "digest": {"sha256": distribution["manifest"]["digest"][7:]},
+        },
+        {
+            "uri": "oci-config://opendesign/linux-amd64",
+            "digest": {"sha256": distribution["config"]["digest"][7:]},
+        },
+    ]
+    dependencies.extend(
+        {
+            "uri": f"oci-layer://opendesign/{index:02d}",
+            "digest": {"sha256": descriptor["digest"][7:]},
+        }
+        for index, descriptor in enumerate(distribution["layers"], start=1)
+    )
+    dependencies.extend(
+        [
+            {
+                "uri": "in-toto://opendesign/upstream-slsa",
+                "digest": {"sha256": distribution["attestation"]["statement"]["digest"][7:]},
+            },
+            {
+                "uri": f"git+{manifest['upstream']['repository']}@{manifest['upstream']['commit']}#LICENSE",
+                "digest": {"sha256": manifest["upstream_license"]["sha256"]},
+            },
+        ]
+    )
+    return {
+        "_type": "https://in-toto.io/Statement/v1",
+        "subject": [{"name": artifact_name, "digest": {"sha256": artifact_sha256}}],
+        "predicateType": "https://slsa.dev/provenance/v1",
+        "predicate": {
+            "buildDefinition": {
+                "buildType": "https://maverick.local/build-types/opendesign-oci-derivation/v1",
+                "externalParameters": {
+                    "distribution": distribution,
+                    "platform": platform_key(),
+                },
+                "internalParameters": {
+                    "boundaryPatch": patch_evidence,
+                    "rootfsInventorySha256": rootfs_inventory_sha256,
+                    "runtimeClosure": manifest["runtime_closure"],
+                },
+                "resolvedDependencies": dependencies,
+            },
+            "runDetails": {
+                "builder": {"id": "maverick/design-studio/import_opendesign_oci.py"},
+                "metadata": {
+                    "invocationId": invocation,
+                    "reproducible": True,
+                    "upstreamAttestationVerified": True,
+                    "upstreamAttestationTrustIdentityVerified": False,
                 },
             },
         },

@@ -101,7 +101,7 @@ def apply_patch_series(
     manifest: dict[str, Any],
 ) -> list[dict[str, Any]]:
     series = validate_patch_series(service_root, manifest, source_root=source)
-    series_path = _safe_file(service_root, manifest["patch_series"])
+    series_path = _safe_file(service_root, manifest["fallback_build"]["patch_series"])
     evidence: list[dict[str, Any]] = []
     for entry_value in series["patches"]:
         if not isinstance(entry_value, dict):

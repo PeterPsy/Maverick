@@ -246,7 +246,6 @@
       {
         "id": "opendesign",
         "runtime": "python",
-        "package_manager": "corepack/pnpm",
         "working_directory": "service",
         "command": [
           "python3",

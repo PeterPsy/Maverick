@@ -65,7 +65,7 @@ class OpenDesignSupplyChainTests(unittest.TestCase):
     def test_normal_packaging_rejects_pathological_suite_orchestration(self) -> None:
         for fragment in ("--shard=1/433", "--retry=2", "checkpoint", "deferred_shards"):
             tampered = copy.deepcopy(self.manifest)
-            tampered["build"]["host_workaround"] = fragment
+            tampered["fallback_build"]["build"]["host_workaround"] = fragment
             with self.subTest(fragment=fragment):
                 with self.assertRaisesRegex(self.supply.SupplyChainError, "certification orchestration"):
                     self.supply.validate_manifest(tampered)

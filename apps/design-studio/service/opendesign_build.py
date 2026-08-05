@@ -55,6 +55,7 @@ def build_once(
     artifact = result_root / artifact_name
     source_evidence = export_source(repository, source, manifest)
     patch_evidence = apply_patch_series(source, service_root, manifest)
+    build = manifest["fallback_build"]["build"]
     lockfile = source / "pnpm-lock.yaml"
     lockfile_sha256 = sha256_file(lockfile)
     tool_bin = result_root / "tool-bin"
@@ -68,9 +69,9 @@ def build_once(
     )
     verify_toolchain(source, manifest, env=environment)
     run_command(
-        manifest["build"]["install"],
+        build["install"],
         cwd=source,
-        env=_phase_environment(environment, manifest["build"]["install_environment"]),
+        env=_phase_environment(environment, build["install_environment"]),
         log_path=logs / "install.log",
         heavy=True,
         runtime_session_id=runtime_session_id,
@@ -78,9 +79,9 @@ def build_once(
     _assert_lockfile_unchanged(lockfile, lockfile_sha256, phase="install")
     focused_environment = _phase_environment(
         environment,
-        manifest["build"]["focused_verification_environment"],
+        build["focused_verification_environment"],
     )
-    for index, command in enumerate(manifest["build"]["focused_verification"], start=1):
+    for index, command in enumerate(build["focused_verification"], start=1):
         run_command(
             command,
             cwd=source,
@@ -91,9 +92,9 @@ def build_once(
         )
     compile_environment = _phase_environment(
         environment,
-        manifest["build"]["compile_environment"],
+        build["compile_environment"],
     )
-    for index, command in enumerate(manifest["build"]["compile"], start=1):
+    for index, command in enumerate(build["compile"], start=1):
         run_command(
             command,
             cwd=source,
@@ -136,10 +137,10 @@ def build_once(
         "patches": patch_evidence,
         "pnpm_lock_sha256": lockfile_sha256,
         "commands": {
-            "install": manifest["build"]["install"],
-            "focused_verification": manifest["build"]["focused_verification"],
-            "compile": manifest["build"]["compile"],
-            "stage": manifest["stage"]["daemon_deploy"],
+            "install": build["install"],
+            "focused_verification": build["focused_verification"],
+            "compile": build["compile"],
+            "stage": manifest["fallback_build"]["stage"]["daemon_deploy"],
         },
         "normalized_bin_shims": normalized_shims,
     }
@@ -188,7 +189,7 @@ def build_environment(
     if len(os.fsencode(temp_root)) > 72:
         raise BuildError("OpenDesign build TMPDIR is too long for tsx Unix sockets")
     return {
-        **manifest["build"]["environment"],
+        **manifest["fallback_build"]["build"]["environment"],
         "COREPACK_ENABLE_DOWNLOAD_PROMPT": "0",
         "COREPACK_HOME": str(cache_root / "corepack"),
         "HOME": str(build_home),

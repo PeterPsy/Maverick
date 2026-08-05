@@ -24,6 +24,10 @@ Common operations:
 - Treat `service/opendesign_launcher.py` as the sidecar entrypoint. It resolves
   only the bundle digest and data generation named together by the validated
   `control.json`; it never builds, migrates, or selects a "latest" directory.
+- Treat the pinned `ghcr.io/nexu-io/od:0.16.1` OCI image as the primary
+  distribution. `service/import_opendesign_oci.py` performs two verified
+  derivations without Docker or a local Next build; the launcher uses only the
+  materialized image loader and Node runtime.
 
 Sandbox policy:
 
@@ -37,7 +41,7 @@ Sandbox policy:
 - Use `bootstrap_opendesign_generation.py` only for a new empty data root. It
   refuses legacy or unknown content. Existing data migration requires an
   explicitly marked fixture/controlled copy and is never implied by startup.
-- Keep full upstream certification separate from packaging. Do not resume a
+- Keep full source-build certification separate from OCI import. Do not resume a
   per-file checkpoint or create shards/retries when the host lacks capacity.
 
 The exact upstream release, commit, patch set, artifact digest, and file
@@ -45,3 +49,8 @@ manifest come only from `service/opendesign_bundle.json`. Materialized bundles
 live in immutable `service/vendor/open-design/<artifact-sha256>/` directories.
 The declared runtime fails closed without a verified bundle and matching active
 data generation; there is no compatibility fallback.
+
+Release verification uses `service/smoke_opendesign_runtime.py` for the real
+imported daemon and `service/smoke_opendesign_sidecar.py` for launcher/core
+proxy behavior. The redaction-safe evidence record is
+`service/opendesign_oci_acceptance_0_16_1.json`.

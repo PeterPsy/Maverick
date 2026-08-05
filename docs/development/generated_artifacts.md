@@ -10,6 +10,10 @@ This is intentional for built-in apps that must mount in a fresh checkout before
 - Rebuild the app after changing source.
 - Commit generated `frontend/dist/` only for built-in apps whose contract serves that directory.
 - Do not commit local runtime output, logs, caches, workspace data, screenshots, or temporary exports.
+- Keep Design Studio's signed OpenDesign release assets under ignored
+  `apps/design-studio/service/artifacts/` and materialized bundles under ignored
+  `apps/design-studio/service/vendor/open-design/`. Commit only their canonical
+  digest contract and redaction-safe acceptance record.
 - Do not commit source maps that expose local paths unless explicitly reviewed.
 - CI should verify that source-built apps can rebuild successfully.
 

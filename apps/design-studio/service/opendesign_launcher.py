@@ -15,6 +15,7 @@ from opendesign_artifact import (
     write_canonical_json,
 )
 from opendesign_runtime import RuntimeBinding, resolve_runtime_binding
+from opendesign_oci_stage import OciStageError, runtime_command
 
 LOOPBACK_HOSTS = {"127.0.0.1", "localhost", "::1"}
 SERVICE_ROOT = Path(__file__).resolve().parent
@@ -48,7 +49,7 @@ def main() -> None:
     media_config_dir = data_dir / "media-config"
     _ensure_runtime_dirs(data_dir, media_config_dir)
 
-    plan = _resolve_launch_plan(binding)
+    plan = _resolve_launch_plan(binding, manifest)
     _write_launcher_status(
         generation_root,
         plan,
@@ -71,19 +72,42 @@ def _registry_root() -> Path:
     return resolved
 
 
-def _resolve_launch_plan(binding: RuntimeBinding) -> LaunchPlan:
+def _resolve_launch_plan(binding: RuntimeBinding, manifest: dict[str, Any]) -> LaunchPlan:
     bundle_dir = binding.bundle.path
-    daemon_package = bundle_dir / "apps" / "daemon" / "package.json"
+    daemon_package = bundle_dir / "app" / "apps" / "daemon" / "package.json"
     if not daemon_package.is_file():
         raise SystemExit("Curated OpenDesign daemon unavailable: bundle is missing the daemon package manifest.")
-    cli = bundle_dir / "apps" / "daemon" / "dist" / "cli.js"
-    if cli.is_file() and (bundle_dir / "apps" / "daemon" / "node_modules").is_dir():
-        return LaunchPlan("curated-dist", ["node", str(cli), "--no-open"], bundle_dir, "using built daemon dist")
-    raise SystemExit("Curated OpenDesign daemon unavailable: curated bundle exists but is not installed and built.")
+    if not (bundle_dir / "app" / "apps" / "daemon" / "node_modules").is_dir():
+        raise SystemExit("Curated OpenDesign daemon unavailable: imported runtime dependencies are missing.")
+    try:
+        command = runtime_command(bundle_dir, manifest)
+    except OciStageError as error:
+        raise SystemExit(f"Curated OpenDesign daemon unavailable: {error}") from error
+    return LaunchPlan(
+        "oci-musl-runtime",
+        command,
+        bundle_dir / "app",
+        "using pinned imported musl loader, Node, and compiled daemon",
+    )
 
 
 def _daemon_env(*, data_dir: Path, media_config_dir: Path) -> dict[str, str]:
-    env = dict(os.environ)
+    allowed = {
+        "CI",
+        "DO_NOT_TRACK",
+        "LANG",
+        "LC_ALL",
+        "NEXT_TELEMETRY_DISABLED",
+        "NO_COLOR",
+        "OD_API_TOKEN",
+        "OD_BIND_HOST",
+        "OD_PORT",
+        "OD_REQUIRE_API_TOKEN_ON_LOOPBACK",
+        "OD_SANDBOX_MODE",
+        "PATH",
+        "TMPDIR",
+    }
+    env = {key: value for key, value in os.environ.items() if key in allowed}
     env["OD_DATA_DIR"] = str(data_dir)
     env["OD_MEDIA_CONFIG_DIR"] = str(media_config_dir)
     env["OD_SANDBOX_MODE"] = "1"
@@ -184,7 +208,8 @@ def _runtime_binding(
 def _manifest_summary(payload: dict[str, Any]) -> dict[str, object]:
     return {
         "upstream": payload["upstream"],
-        "toolchain": payload["toolchain"],
+        "distribution": payload["distribution"],
+        "runtime_closure": payload["runtime_closure"],
         "artifact": payload["artifact"],
     }
 

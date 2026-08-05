@@ -8,43 +8,49 @@ registry:
 service/vendor/open-design/<artifact-sha256>/
 ```
 
-The bundle must come from upstream `nexu-io/open-design` tag
-`open-design-v0.16.1`, commit
-`276b4d8e970bc143d7ad060181a89a834e3d9caf`.
+The primary distribution is the upstream image
+`ghcr.io/nexu-io/od:0.16.1`, pinned to OCI index
+`sha256:eb1c9d55532ffd2088a4a71951cffd273dff65e96e077bcef8c8bac3a6e1f1a1`
+and linux/amd64 manifest
+`sha256:170f56cdeb3a213423af150d4095b7729814eaf0ad26a99be7fab2344f0f5cd1`.
+The image labels and SLSA attestation bind it to upstream commit
+`276b4d8e970bc143d7ad060181a89a834e3d9caf` and release `0.16.1`.
 
-Build the immutable release assets from the reviewed bare repository, then
-materialize them:
+Import the immutable release without Docker or a local Next build, then
+materialize it:
 
 ```bash
-python3 apps/design-studio/service/package_opendesign.py \
-  --source-repository /path/to/open-design-v0.16.1.git \
+python3 apps/design-studio/service/import_opendesign_oci.py \
   --signing-key /secure/path/opendesign-provenance-key.pem
 python3 apps/design-studio/service/materialize_opendesign.py
 ```
 
-Packaging is fail-closed for agent runs. It requires a live
+Import is fail-closed for agent runs. It requires a live
 `MAVERICK_RUNTIME_SESSION_ID` in its process ancestry. Each command runs in a
-new process group; loss of the runtime attachment, termination, or
-`MemAvailable` below 2.5 GiB terminates that whole group. Heavy commands start
-only with at least 4 GiB available, after a bounded wait of at most 60 seconds.
-There is one heavy command at a time. The short build root lives in an owned
-`TemporaryDirectory` below `/var/tmp` so `tsx` Unix sockets stay within the OS
-path limit and cleanup cannot target source or cache data. The shared pnpm store
-is reused but never deleted. `--allow-operator-detached` is reserved for an
-explicitly authorized human build and does not disable memory controls.
+new process group; loss of the runtime attachment or termination stops the whole
+group. It also refuses to begin below 3 GiB available memory. The registry
+client accepts only the two pinned HTTPS hosts, validates every descriptor,
+layer size and digest, requires the exact OCI config labels and SLSA subject,
+and streams layers through owned temporary files. Layer extraction rejects path
+escape, unsafe links and special files and implements OCI whiteouts without
+following filesystem links.
 
-`opendesign_bundle.json` is the build contract. Each of two independent source
-directories is exported directly from the pinned bare Git object—without a
-worktree or checkout—then receives only the hash-verified patch inventory. Each
-build performs one frozen install, the focused loopback-bearer test required by
-the Maverick boundary, daemon/static-web compilation, production `pnpm deploy`,
-native dependency probes, metadata generation, and deterministic archive
-creation. The compile heap is bounded at 1152 MiB and Next build concurrency is
-one. The two archives and file manifests must match byte-for-byte before any
-asset is published.
+`opendesign_bundle.json` is the single distribution contract. Two independent
+pulls reconstruct and inventory the root filesystem, apply the one exact
+preimage-bound compiled boundary patch, stage the image's own musl loader, Node
+runtime, daemon, static web and native dependency closure, and generate the
+archive, file manifest, SBOM, licenses, NOTICE and signed provenance. Every
+output must match byte-for-byte before publication. The launcher invokes only
+that imported loader and Node binary; the app contract deliberately declares no
+package manager and core therefore does not mount a host Node runtime.
 
-The complete upstream baseline is not part of packaging and does not gate a
-focused commit. It is a separate acceptance on adequate capacity:
+The source-build recipe remains under `fallback_build` only as a separately
+reviewed fallback. It is not part of the primary import or runtime path and must
+not be used to replace a failed OCI verification.
+
+The complete source-suite baseline is not part of OCI import and does not gate
+the pinned image verification. It remains a separate fallback-build acceptance
+on adequate capacity:
 
 ```bash
 python3 apps/design-studio/service/certify_opendesign_upstream.py \
@@ -70,8 +76,18 @@ active bundle/data triple before start.
 A release verification must run:
 
 ```bash
+python3 apps/design-studio/service/smoke_opendesign_runtime.py
 python3 apps/design-studio/service/smoke_opendesign_sidecar.py
 ```
+
+The committed `opendesign_oci_acceptance_0_16_1.json` records the real double
+import, rootfs inventory, materialization, native loads, bearer boundary,
+SQLite integrity and daemon/static smoke. Upstream's root package still reports
+`0.15.1`; release identity is therefore taken from the pinned image labels,
+attestation and `apps/packaged/package.json` version `0.16.1`. The official
+image contains `node-pty` without a loadable linux binary. Terminal and PTY
+routes remain denied, while required `better-sqlite3` and `blake3-wasm` load
+from the imported closure.
 
 That smoke fails when the bundle is absent, its digest/file manifest differs,
 required outputs are missing, host-only OpenDesign trees are present, or the

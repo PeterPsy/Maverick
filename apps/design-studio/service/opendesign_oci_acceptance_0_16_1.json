@@ -1,0 +1,55 @@
+{
+  "artifact": {
+    "file_manifest_sha256": "3b99a4c85884d50e22f29561973f8db1f9a6ad3f00b67c22bee1fd54b25bbc2b",
+    "license_inventory_sha256": "1b717abf64b5bf6b7faac15b941acf5e95ceebc66dcdf14bc107279cb7b36750",
+    "notice_sha256": "b5619a7efe5f6c40f12a04c9392fdc0b7a0d057a275c3d3ade2ea1b6bfd0d2bb",
+    "provenance_sha256": "5009ea7a6d1adbd670dbc1d3a5305994cffc2975d8fe8c398bc16b1c6c970a4b",
+    "public_key_sha256": "9c52c6d33e40ba6101efd8a8051415d57b9ad39412b43ace75db0c1c6483b4d8",
+    "sbom_sha256": "a1a28df1527e9208153fd036d0005364ec062c10078af6f5708b3bc9c1c1ded5",
+    "sha256": "b91ce140e6fc8302dc4d4b83dac197d4735533c0f141a44100ff1eeff8904e70",
+    "signature_sha256": "0b66182b1952f8feaf817e072ec89ee224d028495d65ad48a9098fe68cd8f50a",
+    "size_bytes": 185823243
+  },
+  "boundary_patch": {
+    "path": "app/apps/daemon/dist/server.js",
+    "post_sha256": "ca107003e03b55d8fa3291e39a51810ce361e09e61e68d2122e05795e1431e1d",
+    "pre_sha256": "61c966b4a3a99e7098e37a943436e8b5d52563d1bace24a0e398b200ac0135e8"
+  },
+  "executed_at": "2026-08-05",
+  "import": {
+    "independent_derivations": 2,
+    "reproducible": true,
+    "rootfs_inventory_sha256": "7045dda649c4928343acaf1be4b90fb2e223b817ff5cfbb4ab6f12218d4c73b0"
+  },
+  "oci": {
+    "config_digest": "sha256:d7dbdd6a660cbc0fccad6e8aed6ce568021a8edc52618c801537b766f8a1a790",
+    "index_digest": "sha256:eb1c9d55532ffd2088a4a71951cffd273dff65e96e077bcef8c8bac3a6e1f1a1",
+    "manifest_digest": "sha256:170f56cdeb3a213423af150d4095b7729814eaf0ad26a99be7fab2344f0f5cd1",
+    "platform": "linux/amd64",
+    "reference": "ghcr.io/nexu-io/od:0.16.1",
+    "slsa_statement_digest": "sha256:46c51752abc19db8f0cbf523ab59c8ba80fb2d731a0e7660043435e42ed31cfc",
+    "upstream_revision": "276b4d8e970bc143d7ad060181a89a834e3d9caf"
+  },
+  "runtime_smoke": {
+    "bearer": {
+      "correct": 200,
+      "missing": 401,
+      "wrong": 401
+    },
+    "launcher_mode": "oci-musl-runtime",
+    "materialized": true,
+    "native_modules": {
+      "better-sqlite3": "loaded",
+      "blake3-wasm": "loaded",
+      "node-pty": "unavailable_upstream_and_route_blocked"
+    },
+    "node": "v24.18.0",
+    "plugin_count": 460,
+    "ready": true,
+    "reported_root_package_version": "0.15.1",
+    "sqlite_integrity": "ok",
+    "static_web": 200
+  },
+  "schema_version": "1",
+  "workspace_data_migrated": false
+}

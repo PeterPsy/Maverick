@@ -59,7 +59,7 @@ def main() -> None:
                 route_results = _smoke_proxy_routes(
                     app,
                     cookie=cookie,
-                    expected_version=bundle_summary["release_version"],
+                    expected_version=bundle_summary["runtime_reported_version"],
                     bundle_dir=bundle_dir,
                 )
                 launcher_status = _launcher_status(
@@ -106,21 +106,24 @@ def _assert_bundle_materialized() -> tuple[dict[str, Any], Path]:
     required = [
         "maverick/materialized.json",
         "maverick/manifest.json",
-        "maverick/build.json",
+        "maverick/oci.json",
+        "maverick/boundary-patch.json",
         "maverick/sbom.cdx.json",
         "maverick/licenses.json",
         "maverick/NOTICE",
-        "apps/daemon/package.json",
-        "apps/daemon/node_modules",
-        "apps/daemon/dist/cli.js",
-        "apps/web/out/index.html",
+        "runtime/lib/ld-musl-x86_64.so.1",
+        "runtime/bin/node",
+        "app/apps/daemon/package.json",
+        "app/apps/daemon/node_modules",
+        "app/apps/daemon/dist/cli.js",
+        "app/apps/web/out/index.html",
     ]
     missing = [relative for relative in required if not (bundle.path / relative).exists()]
     forbidden = [
-        "apps/desktop",
-        "apps/landing-page",
-        "apps/packaged",
-        "apps/telemetry-worker",
+        "app/apps/desktop",
+        "app/apps/landing-page",
+        "app/apps/packaged",
+        "app/apps/telemetry-worker",
         "charts",
         "deploy",
         "e2e",
@@ -143,6 +146,7 @@ def _assert_bundle_materialized() -> tuple[dict[str, Any], Path]:
         "path": str(bundle.path.relative_to(REPO_ROOT)),
         "mode": "verified-materialized-artifact",
         "release_version": manifest["upstream"]["release_version"],
+        "runtime_reported_version": manifest["upstream"]["root_package_version"],
         "upstream_commit": manifest["upstream"]["commit"],
         "artifact_sha256": bundle.artifact_sha256,
         "file_manifest_sha256": bundle.file_manifest_sha256,
@@ -270,18 +274,18 @@ def _smoke_proxy_routes(
 
 
 def _next_asset_path(bundle_dir: Path) -> str:
-    static_root = bundle_dir / "apps" / "web" / "out" / "_next"
+    static_root = bundle_dir / "app" / "apps" / "web" / "out" / "_next"
     for path in sorted(static_root.rglob("*")):
         if path.is_file() and path.suffix in {".js", ".css"}:
-            return path.relative_to(bundle_dir / "apps" / "web" / "out").as_posix()
+            return path.relative_to(bundle_dir / "app" / "apps" / "web" / "out").as_posix()
     raise SystemExit("OpenDesign web bundle has no _next JavaScript or CSS asset to smoke.")
 
 
 def _launcher_status(repo_root: Path, *, expected_artifact_sha256: str) -> dict[str, Any]:
     status_path = repo_root / "workspaces" / WORKSPACE_ID / "data" / APP_ID / "opendesign" / "launcher-status.json"
     payload = json.loads(status_path.read_text(encoding="utf-8"))
-    if payload.get("mode") != "curated-dist":
-        raise SystemExit(f"Launcher did not use curated-dist mode: {payload}")
+    if payload.get("mode") != "oci-musl-runtime":
+        raise SystemExit(f"Launcher did not use oci-musl-runtime mode: {payload}")
     if not payload.get("bundle_configured"):
         raise SystemExit(f"Launcher did not report bundle_configured=true: {payload}")
     active = payload.get("active")

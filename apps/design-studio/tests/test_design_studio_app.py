@@ -163,7 +163,7 @@ class DesignStudioAppTests(unittest.TestCase):
         self.assertFalse(parsed.contract.permissions.providers.deliver_secrets_to_app)
         sidecar = parsed.contract.services.http_sidecars[0]
         self.assertEqual(sidecar.service_id, "opendesign")
-        self.assertEqual(sidecar.package_manager, "corepack/pnpm")
+        self.assertIsNone(sidecar.package_manager)
         self.assertEqual(sidecar.command, ["python3", "opendesign_launcher.py"])
         self.assertNotIn("MAVERICK_OPENDESIGN_ALLOW_FALLBACK", sidecar.env)
         self.assertNotIn("OD_DATA_DIR", sidecar.env)
@@ -237,9 +237,15 @@ class DesignStudioAppTests(unittest.TestCase):
 
         self.assertEqual(manifest["upstream"]["commit"], "276b4d8e970bc143d7ad060181a89a834e3d9caf")
         self.assertEqual(manifest["upstream"]["release_identity"]["package_version"], "0.16.1")
-        self.assertEqual(manifest["stage"]["daemon_package"], "@open-design/daemon")
-        self.assertEqual(manifest["stage"]["built_entrypoint"], "apps/daemon/dist/cli.js")
-        self.assertEqual(manifest["stage"]["web_static_dir"], "apps/web/out")
+        self.assertEqual(manifest["distribution"]["primary"], "oci_import")
+        self.assertEqual(
+            manifest["distribution"]["index"]["digest"],
+            "sha256:eb1c9d55532ffd2088a4a71951cffd273dff65e96e077bcef8c8bac3a6e1f1a1",
+        )
+        fallback_stage = manifest["fallback_build"]["stage"]
+        self.assertEqual(fallback_stage["daemon_package"], "@open-design/daemon")
+        self.assertEqual(fallback_stage["built_entrypoint"], "apps/daemon/dist/cli.js")
+        self.assertEqual(fallback_stage["web_static_dir"], "apps/web/out")
         self.assertEqual(manifest["toolchain"]["package_manager"], "pnpm@10.33.2")
         self.assertEqual(set(manifest["sandbox"]), {"env"})
 

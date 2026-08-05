@@ -42,22 +42,30 @@ def validate_bundle_manifest(manifest: dict[str, Any], *, require_artifact_diges
     expected_top_level = {
         "schema_version",
         "upstream",
+        "upstream_license",
+        "distribution",
         "toolchain",
-        "patch_series",
         "certification",
-        "build",
-        "stage",
+        "fallback_build",
+        "runtime_closure",
+        "boundary_patch",
         "artifact",
         "native_runtime_dependencies",
         "sandbox",
     }
-    if set(manifest) != expected_top_level or manifest.get("schema_version") != "3":
+    if set(manifest) != expected_top_level or manifest.get("schema_version") != "4":
         raise ArtifactError("OpenDesign bundle manifest schema or fields are unsupported")
     upstream = mapping(manifest, "upstream")
     commit = required_hex(upstream, "commit", length=40)
     if commit != "276b4d8e970bc143d7ad060181a89a834e3d9caf":
         raise ArtifactError("OpenDesign upstream commit is not the reviewed pin")
     release_version = required_string(upstream, "release_version")
+    upstream_license = mapping(manifest, "upstream_license")
+    if set(upstream_license) != {"path", "sha256"}:
+        raise ArtifactError("OpenDesign upstream license fields are unsupported")
+    safe_relative_path(required_string(upstream_license, "path"))
+    if required_string(upstream_license, "sha256") != "9d95806a26532623360eb84bb17d298f394b55ef73fb4c0796d99b4319b2b0da":
+        raise ArtifactError("OpenDesign upstream license digest changed")
     release_identity = mapping(upstream, "release_identity")
     if required_string(release_identity, "package_version") != release_version:
         raise ArtifactError("OpenDesign release identity version does not match release_version")
@@ -70,7 +78,13 @@ def validate_bundle_manifest(manifest: dict[str, Any], *, require_artifact_diges
         raise ArtifactError("OpenDesign pnpm must be selected through Corepack")
     if toolchain.get("corepack_enable") != ["corepack", "enable", "--install-directory"]:
         raise ArtifactError("OpenDesign Corepack shim command is not pinned")
-    safe_relative_path(required_string(manifest, "patch_series"))
+    validate_oci_distribution(manifest)
+    fallback = mapping(manifest, "fallback_build")
+    if set(fallback) != {"patch_series", "build", "stage"}:
+        raise ArtifactError("OpenDesign fallback build fields are unsupported")
+    safe_relative_path(required_string(fallback, "patch_series"))
+    mapping(fallback, "build")
+    mapping(fallback, "stage")
     certification = mapping(manifest, "certification")
     safe_relative_path(required_string(certification, "record"))
     required_hex(certification, "record_sha256", length=64)
@@ -78,7 +92,162 @@ def validate_bundle_manifest(manifest: dict[str, Any], *, require_artifact_diges
         raise ArtifactError("OpenDesign upstream certification must remain separate")
     if manifest.get("native_runtime_dependencies") != ["better-sqlite3", "node-pty", "blake3-wasm"]:
         raise ArtifactError("OpenDesign native runtime dependency proof set is incomplete")
+    closure = mapping(manifest, "runtime_closure")
+    if set(closure) != {
+        "app_root",
+        "node",
+        "musl_loader",
+        "library_paths",
+        "daemon_entrypoint",
+        "required_native_modules",
+        "blocked_optional_native_modules",
+    }:
+        raise ArtifactError("OpenDesign runtime closure fields are unsupported")
+    for key in ("app_root", "node", "musl_loader", "daemon_entrypoint"):
+        safe_relative_path(required_string(closure, key))
+    libraries = closure.get("library_paths")
+    if not isinstance(libraries, list) or not libraries:
+        raise ArtifactError("OpenDesign runtime library paths must be a non-empty list")
+    for value in libraries:
+        if not isinstance(value, str):
+            raise ArtifactError("OpenDesign runtime library path must be a string")
+        safe_relative_path(value)
+    if closure.get("required_native_modules") != ["better-sqlite3", "blake3-wasm"]:
+        raise ArtifactError("OpenDesign required OCI native dependency set changed")
+    if closure.get("blocked_optional_native_modules") != ["node-pty"]:
+        raise ArtifactError("OpenDesign blocked OCI native dependency set changed")
+    boundary = mapping(manifest, "boundary_patch")
+    if set(boundary) != {"path", "pre_sha256", "post_sha256", "required_environment"}:
+        raise ArtifactError("OpenDesign boundary patch fields are unsupported")
+    if required_string(boundary, "path") != "app/apps/daemon/dist/server.js":
+        raise ArtifactError("OpenDesign boundary patch path is not authorized")
+    if required_string(boundary, "pre_sha256") != "61c966b4a3a99e7098e37a943436e8b5d52563d1bace24a0e398b200ac0135e8":
+        raise ArtifactError("OpenDesign boundary patch preimage is not authorized")
+    if boundary.get("required_environment") != "OD_REQUIRE_API_TOKEN_ON_LOOPBACK":
+        raise ArtifactError("OpenDesign boundary patch environment is not authorized")
+    post_sha256 = boundary.get("post_sha256")
+    if require_artifact_digest and not is_sha256(post_sha256):
+        raise ArtifactError("OpenDesign boundary patch postimage is not pinned")
+    if post_sha256 is not None and not is_sha256(post_sha256):
+        raise ArtifactError("OpenDesign boundary patch postimage must be null or lowercase SHA-256")
     selected_asset(manifest, require_artifact_digest=require_artifact_digest)
+
+
+def validate_oci_distribution(manifest: dict[str, Any]) -> dict[str, Any]:
+    distribution = mapping(manifest, "distribution")
+    expected_fields = {
+        "primary",
+        "registry",
+        "repository",
+        "reference",
+        "platform",
+        "index",
+        "manifest",
+        "config",
+        "layers",
+        "attestation",
+        "expected_revision",
+        "expected_version",
+        "allowed_redirect_hosts",
+        "max_blob_size_bytes",
+        "minimum_mem_available_bytes",
+    }
+    if set(distribution) != expected_fields or distribution.get("primary") != "oci_import":
+        raise ArtifactError("OpenDesign OCI distribution fields are unsupported")
+    if distribution.get("registry") != "ghcr.io" or distribution.get("repository") != "nexu-io/od":
+        raise ArtifactError("OpenDesign OCI registry identity changed")
+    if distribution.get("reference") != "0.16.1":
+        raise ArtifactError("OpenDesign OCI reference changed")
+    if distribution.get("platform") != {"os": "linux", "architecture": "amd64"}:
+        raise ArtifactError("OpenDesign OCI platform is not authorized")
+    if distribution.get("expected_revision") != manifest["upstream"]["commit"]:
+        raise ArtifactError("OpenDesign OCI revision does not match upstream")
+    if distribution.get("expected_version") != manifest["upstream"]["release_version"]:
+        raise ArtifactError("OpenDesign OCI version does not match upstream")
+    if distribution.get("allowed_redirect_hosts") != ["ghcr.io", "pkg-containers.githubusercontent.com"]:
+        raise ArtifactError("OpenDesign OCI redirect policy changed")
+    max_blob_size = distribution.get("max_blob_size_bytes")
+    minimum_memory = distribution.get("minimum_mem_available_bytes")
+    if not _positive_integer(max_blob_size) or max_blob_size > 128 * 1024 * 1024:
+        raise ArtifactError("OpenDesign OCI blob limit is invalid")
+    if not _positive_integer(minimum_memory) or minimum_memory < 3 * 1024 * 1024 * 1024:
+        raise ArtifactError("OpenDesign OCI memory floor is invalid")
+    _validate_oci_descriptor(
+        mapping(distribution, "index"),
+        media_type="application/vnd.oci.image.index.v1+json",
+        label="index",
+    )
+    manifest_descriptor = _validate_oci_descriptor(
+        mapping(distribution, "manifest"),
+        media_type="application/vnd.oci.image.manifest.v1+json",
+        label="manifest",
+    )
+    _validate_oci_descriptor(
+        mapping(distribution, "config"),
+        media_type="application/vnd.oci.image.config.v1+json",
+        label="config",
+    )
+    layers = distribution.get("layers")
+    if not isinstance(layers, list) or not layers:
+        raise ArtifactError("OpenDesign OCI layers must be a non-empty list")
+    layer_digests: set[str] = set()
+    for layer in layers:
+        if not isinstance(layer, dict):
+            raise ArtifactError("OpenDesign OCI layer descriptor must be an object")
+        descriptor = _validate_oci_descriptor(
+            layer,
+            media_type="application/vnd.oci.image.layer.v1.tar+gzip",
+            label="layer",
+        )
+        if descriptor["size_bytes"] > max_blob_size:
+            raise ArtifactError("OpenDesign OCI layer exceeds its pinned size limit")
+        if descriptor["digest"] in layer_digests:
+            raise ArtifactError("OpenDesign OCI layer digest is duplicated")
+        layer_digests.add(descriptor["digest"])
+    attestation = mapping(distribution, "attestation")
+    if set(attestation) != {"manifest", "config", "statement", "subject_manifest_digest"}:
+        raise ArtifactError("OpenDesign OCI attestation fields are unsupported")
+    _validate_oci_descriptor(
+        mapping(attestation, "manifest"),
+        media_type="application/vnd.oci.image.manifest.v1+json",
+        label="attestation manifest",
+    )
+    _validate_oci_descriptor(
+        mapping(attestation, "config"),
+        media_type="application/vnd.oci.image.config.v1+json",
+        label="attestation config",
+    )
+    statement = mapping(attestation, "statement")
+    if set(statement) != {"media_type", "predicate_type", "digest", "size_bytes"}:
+        raise ArtifactError("OpenDesign OCI attestation statement descriptor is invalid")
+    _validate_oci_descriptor(
+        {key: statement[key] for key in ("media_type", "digest", "size_bytes")},
+        media_type="application/vnd.in-toto+json",
+        label="attestation statement",
+    )
+    if statement.get("predicate_type") != "https://slsa.dev/provenance/v1":
+        raise ArtifactError("OpenDesign OCI attestation predicate type changed")
+    if attestation.get("subject_manifest_digest") != manifest_descriptor["digest"]:
+        raise ArtifactError("OpenDesign OCI attestation subject pin changed")
+    return distribution
+
+
+def _validate_oci_descriptor(
+    descriptor: dict[str, Any],
+    *,
+    media_type: str,
+    label: str,
+) -> dict[str, Any]:
+    if set(descriptor) != {"media_type", "digest", "size_bytes"}:
+        raise ArtifactError(f"OpenDesign OCI {label} descriptor fields are invalid")
+    if descriptor.get("media_type") != media_type:
+        raise ArtifactError(f"OpenDesign OCI {label} media type changed")
+    digest = descriptor.get("digest")
+    if not isinstance(digest, str) or not digest.startswith("sha256:") or not is_sha256(digest[7:]):
+        raise ArtifactError(f"OpenDesign OCI {label} digest is invalid")
+    if not _positive_integer(descriptor.get("size_bytes")):
+        raise ArtifactError(f"OpenDesign OCI {label} size is invalid")
+    return descriptor
 
 
 def selected_asset(manifest: dict[str, Any], *, require_artifact_digest: bool) -> dict[str, Any]:

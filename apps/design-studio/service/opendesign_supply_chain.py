@@ -10,7 +10,7 @@ import subprocess
 from typing import Callable
 
 
-MANIFEST_SCHEMA_VERSION = "3"
+MANIFEST_SCHEMA_VERSION = "4"
 PATCH_SCHEMA_VERSION = "1"
 CERTIFICATION_SCHEMA_VERSION = "4"
 SHA256_RE = re.compile(r"^[0-9a-f]{64}$")
@@ -57,12 +57,13 @@ def validate_manifest(manifest: dict[str, object]) -> None:
     toolchain = _mapping(manifest.get("toolchain"), "toolchain")
     _exact_text(toolchain, "node", "~24")
     _exact_text(toolchain, "package_manager", "pnpm@10.33.2")
-    if manifest.get("patch_series") != "patches/series.json":
+    fallback = _mapping(manifest.get("fallback_build"), "fallback_build")
+    if fallback.get("patch_series") != "patches/series.json":
         raise SupplyChainError("patch series path is not pinned")
     certification = _mapping(manifest.get("certification"), "certification")
     if certification.get("separate_from_packaging") is not True:
         raise SupplyChainError("upstream certification must remain separate from packaging")
-    build = _mapping(manifest.get("build"), "build")
+    build = _mapping(fallback.get("build"), "fallback_build.build")
     encoded_build = json.dumps(build, sort_keys=True)
     forbidden = ("--shard=", "--retry", "--testNamePattern", "checkpoint", "deferred_shards")
     if any(token in encoded_build for token in forbidden):
@@ -78,7 +79,8 @@ def validate_patch_series(
     *,
     source_root: Path | None = None,
 ) -> dict[str, object]:
-    series_path = _safe_child(service_root, str(manifest["patch_series"]))
+    fallback = _mapping(manifest.get("fallback_build"), "fallback_build")
+    series_path = _safe_child(service_root, str(fallback["patch_series"]))
     series = read_json(series_path)
     if series.get("schema_version") != PATCH_SCHEMA_VERSION:
         raise SupplyChainError("unsupported patch inventory schema")

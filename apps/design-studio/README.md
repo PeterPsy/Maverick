@@ -24,19 +24,19 @@ triple. The artifact digest resolves an immutable bundle below
 the only directory exported to OpenDesign as `OD_DATA_DIR`. A successful launch
 writes redaction-safe status under
 `data/design-studio/opendesign/launcher-status.json` and records
-`mode: curated-dist`.
+`mode: oci-musl-runtime`.
 
-The packaging recipe is declared in `service/opendesign_bundle.json` and
-implemented by `service/package_opendesign.py`. Two independent source trees
-are exported directly from the exact object in a reviewed bare Git repository,
-without checkouts or worktrees. Each receives only the digest-bound Maverick
-host-boundary patch, uses Node 24 and Corepack-pinned pnpm 10.33.2, performs one
-frozen install, runs the focused loopback-bearer guard, and builds the daemon
-and static web export. It then stages a production `pnpm deploy` closure plus
-the reviewed runtime resources. Desktop, Electron packaging, charts,
-deployment tools, E2E sources, broad marketplace trees, source maps, and build
-tooling remain out of the runtime artifact. The two deterministic archives must
-be byte-identical. Runtime startup never installs dependencies or builds.
+The primary distribution recipe is declared in
+`service/opendesign_bundle.json` and implemented by
+`service/import_opendesign_oci.py`. It imports the official pinned
+`ghcr.io/nexu-io/od:0.16.1` linux/amd64 image directly over bounded HTTPS,
+verifies the complete OCI descriptor chain and SLSA subject, and reconstructs
+the layers without Docker. Two independent imports receive only the
+digest-bound compiled loopback-bearer patch and stage the image's own musl
+loader, Node 24 runtime, daemon, static web export and required native modules.
+The two deterministic archives and all metadata must be byte-identical.
+Runtime startup never installs dependencies, invokes a package manager, mounts
+host Node, or builds Next.
 
 The complete upstream web and daemon suites are a separate acceptance run via
 `service/certify_opendesign_upstream.py`. They run once each with one worker on
@@ -52,11 +52,11 @@ the closure in its digest-named registry directory. An existing digest
 directory is immutable and is never overwritten after a verification failure.
 The launcher revalidates every materialized file before each start.
 
-Fresh checkouts will not include the materialized Node bundle. Run packaging before declaring Phase 3 complete:
+Fresh checkouts will not include the materialized OCI bundle. Import the pinned
+release assets before declaring the release complete:
 
 ```bash
-python3 apps/design-studio/service/package_opendesign.py \
-  --source-repository /path/to/reviewed-open-design-v0.16.1.git \
+python3 apps/design-studio/service/import_opendesign_oci.py \
   --signing-key /secure/path/opendesign-provenance-key.pem
 python3 apps/design-studio/service/materialize_opendesign.py
 python3 apps/design-studio/service/bootstrap_opendesign_generation.py \
@@ -70,10 +70,13 @@ is never migrated at launcher startup. The launcher fails closed when the
 bundle, control record, or generation is absent or inconsistent. There is no
 runtime compatibility fallback.
 
-The upstream tag was inventoried before implementation. It includes web,
+The upstream tag and official OCI image were inventoried before implementation.
+The source tree includes web,
 daemon, desktop, deploy, Helm/chart, design-system, skill, and plugin trees; the
 daemon also has native dependencies including `node-pty`, `better-sqlite3`, and
-`blake3-wasm`. Packaging probes all three from the staged closure. Vendoring
+`blake3-wasm`. The OCI closure loads the two modules needed on allowed routes;
+the official image lacks a loadable linux `node-pty` binary and all terminal/
+PTY routes stay denied. Vendoring
 the full repository directly would mix sandbox-safe surfaces with full-access
 surfaces the Maverick contract must keep blocked.
 
@@ -203,9 +206,11 @@ Useful checks:
 
 ```bash
 python3 -m unittest apps/design-studio/tests/test_design_studio_app.py
+python3 -m unittest apps/design-studio/tests/test_opendesign_oci_import.py
 python3 -m unittest apps/design-studio/tests/test_opendesign_materialization.py
 python3 -m unittest apps/design-studio/tests/test_opendesign_migration.py
 python3 apps/design-studio/service/sync_route_policy.py
+python3 apps/design-studio/service/smoke_opendesign_runtime.py
 python3 apps/design-studio/service/smoke_opendesign_sidecar.py
 maverick app design-studio frontend build --json
 maverick app design-studio mcp list --json
@@ -216,6 +221,6 @@ Current intentional omissions:
 
 - generated OpenDesign assets and dependency closures stay out of source control
 - real workspace migration remains unauthorized; migration tests operate only on marked fixtures and controlled copies
-- upstream acceptance certification and production artifact hashes remain pending when the current host lacks adequate build capacity
+- the source-build baseline remains a separate fallback certification; the primary OCI artifact is pinned and its real acceptance evidence is committed
 - provider proxying is limited to OpenDesign model discovery through Maverick's active workspace provider; generation/chat provider routes remain unavailable in sandbox mode
 - full-access terminal, Local CLI, and host-folder import are not part of the sandbox MVP

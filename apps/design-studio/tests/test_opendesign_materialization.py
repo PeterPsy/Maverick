@@ -71,7 +71,7 @@ class OpenDesignMaterializationTests(unittest.TestCase):
     def test_existing_digest_directory_is_never_replaced_after_tampering(self) -> None:
         registry = self.root / "registry"
         installed = self._materialize(registry)
-        cli = installed.path / "apps/daemon/dist/cli.js"
+        cli = installed.path / "app/apps/daemon/dist/cli.js"
         cli.write_text("tampered\n", encoding="utf-8")
 
         with self.assertRaisesRegex(self.artifact.ArtifactError, "invalid and was not replaced"):
@@ -122,7 +122,7 @@ class OpenDesignMaterializationTests(unittest.TestCase):
             generation_root=generation_root,
             manifest=self._pinned_manifest(),
         )
-        plan = self.launcher._resolve_launch_plan(binding)
+        plan = self.launcher._resolve_launch_plan(binding, self._pinned_manifest())
         daemon_env = self.launcher._daemon_env(
             data_dir=binding.data_dir,
             media_config_dir=binding.data_dir / "media-config",
@@ -131,8 +131,10 @@ class OpenDesignMaterializationTests(unittest.TestCase):
         self.assertEqual(binding.bundle, installed)
         self.assertEqual(binding.data_dir, data_dir)
         self.assertEqual(binding.active, control.active)
-        self.assertEqual(plan.mode, "curated-dist")
-        self.assertEqual(plan.cwd, installed.path)
+        self.assertEqual(plan.mode, "oci-musl-runtime")
+        self.assertEqual(plan.cwd, installed.path / "app")
+        self.assertEqual(plan.command[0], str(installed.path / "runtime/lib/ld-musl-x86_64.so.1"))
+        self.assertEqual(plan.command[3], str(installed.path / "runtime/bin/node"))
         self.assertEqual(daemon_env["OD_DATA_DIR"], str(data_dir))
         self.assertEqual(daemon_env["OD_REQUIRE_API_TOKEN_ON_LOOPBACK"], "1")
         self.assertEqual(daemon_env["DO_NOT_TRACK"], "1")
@@ -168,7 +170,7 @@ class OpenDesignMaterializationTests(unittest.TestCase):
                 manifest=self._pinned_manifest(),
             )
 
-        (installed.path / "apps/web/out/index.html").write_text("tampered", encoding="utf-8")
+        (installed.path / "app/apps/web/out/index.html").write_text("tampered", encoding="utf-8")
         with self.assertRaisesRegex(self.artifact.ArtifactError, "manifest mismatch"):
             self.materialization.discover_verified_bundles(registry)
 
@@ -237,11 +239,15 @@ class OpenDesignMaterializationTests(unittest.TestCase):
     def _fixture_archive(self) -> tuple[Path, str, str]:
         stage = self.root / "stage"
         files = {
-            "apps/daemon/package.json": '{"name":"@open-design/daemon","version":"0.16.1"}\n',
-            "apps/daemon/dist/cli.js": "process.exit(0);\n",
-            "apps/daemon/node_modules/.modules.yaml": "layoutVersion: 5\n",
-            "apps/web/out/index.html": "<!doctype html><title>OpenDesign</title>\n",
-            "maverick/build.json": '{"schema_version":"1"}\n',
+            "app/apps/daemon/package.json": '{"name":"@open-design/daemon","version":"0.16.1"}\n',
+            "app/apps/daemon/dist/cli.js": "process.exit(0);\n",
+            "app/apps/daemon/node_modules/.modules.yaml": "layoutVersion: 5\n",
+            "app/apps/web/out/index.html": "<!doctype html><title>OpenDesign</title>\n",
+            "runtime/bin/node": "fixture-node\n",
+            "runtime/lib/ld-musl-x86_64.so.1": "fixture-loader\n",
+            "runtime/lib/libc.musl-x86_64.so.1": "fixture-libc\n",
+            "runtime/usr-lib/libstdc++.so.6": "fixture-libstdc++\n",
+            "maverick/oci.json": '{"schema_version":"1"}\n',
         }
         for relative, content in files.items():
             path = stage / relative

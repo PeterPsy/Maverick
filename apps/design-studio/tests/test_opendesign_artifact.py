@@ -39,10 +39,14 @@ class OpenDesignArtifactTests(unittest.TestCase):
     def setUp(self) -> None:
         self.manifest = self.artifact.read_bundle_manifest(MANIFEST_PATH)
 
-    def test_manifest_accepts_declared_assets_but_requires_real_release_pins(self) -> None:
+    def test_manifest_contains_real_release_pins_and_rejects_missing_assets(self) -> None:
         self.artifact.validate_bundle_manifest(self.manifest, require_artifact_digest=False)
+        self.artifact.validate_bundle_manifest(self.manifest, require_artifact_digest=True)
+
+        missing_asset = copy.deepcopy(self.manifest)
+        missing_asset["artifact"]["assets"][self.artifact.platform_key()]["sha256"] = None
         with self.assertRaisesRegex(self.artifact.ArtifactError, "is not pinned"):
-            self.artifact.validate_bundle_manifest(self.manifest, require_artifact_digest=True)
+            self.artifact.validate_bundle_manifest(missing_asset, require_artifact_digest=True)
 
         tampered = copy.deepcopy(self.manifest)
         tampered["upstream"]["commit"] = "0" * 40

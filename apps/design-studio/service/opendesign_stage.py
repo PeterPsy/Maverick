@@ -28,7 +28,7 @@ def stage_runtime_closure(
 ) -> list[str]:
     if staging.exists() or staging.is_symlink():
         raise StageError("OpenDesign staging destination must not exist")
-    stage = manifest["stage"]
+    stage = manifest["fallback_build"]["stage"]
     daemon_root = staging / "apps/daemon"
     daemon_root.parent.mkdir(parents=True)
     run_command(

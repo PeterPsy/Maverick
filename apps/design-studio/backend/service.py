@@ -769,15 +769,26 @@ def _opendesign_bundle_summary() -> dict[str, Any]:
     except (OSError, json.JSONDecodeError):
         return {}
     upstream = payload.get("upstream") if isinstance(payload.get("upstream"), dict) else {}
-    toolchain = payload.get("toolchain") if isinstance(payload.get("toolchain"), dict) else {}
+    distribution = payload.get("distribution") if isinstance(payload.get("distribution"), dict) else {}
     artifact = payload.get("artifact") if isinstance(payload.get("artifact"), dict) else {}
+    assets = artifact.get("assets") if isinstance(artifact.get("assets"), dict) else {}
+    platform_asset = assets.get("linux-x86_64") if isinstance(assets.get("linux-x86_64"), dict) else {}
     return {
         "repository": upstream.get("repository", ""),
         "tag": upstream.get("tag", ""),
         "commit": upstream.get("commit", ""),
+        "distribution": distribution.get("primary", ""),
+        "oci_reference": (
+            f"{distribution.get('registry', '')}/{distribution.get('repository', '')}:"
+            f"{distribution.get('reference', '')}"
+        ),
+        "oci_index_digest": (
+            distribution.get("index", {}).get("digest", "")
+            if isinstance(distribution.get("index"), dict)
+            else ""
+        ),
+        "artifact_sha256": platform_asset.get("sha256", ""),
         "default_relative_path": artifact.get("default_relative_path", ""),
-        "node": toolchain.get("node", ""),
-        "package_manager": toolchain.get("package_manager", ""),
     }
 
 

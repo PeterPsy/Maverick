@@ -92,7 +92,12 @@ It started with names, visibility, legacy compatibility, and initial policy defa
     provider dispatch. A queued worker may activate only through a persisted
     compare-and-set under the runtime session lifecycle handoff; it must reread
     both turn and session, reject terminal turn state or a stopped session, and
-    must not reuse an earlier lifecycle snapshot.
+    must not reuse an earlier lifecycle snapshot. Before calling either a
+    plain-hosted or agentic provider, sync and async execution take the same
+    handoff again, repeat the authoritative `active`/executable check, and hold
+    it only until provider acceptance. Prewarm applies the session-only form of
+    that handshake. Session metadata callbacks and worker returns use partial,
+    allowlisted mutations under the handoff and cannot write lifecycle fields.
     Interrupt and resume share a cross-process run-control handoff that remains
     owned until participant and session cleanup is complete. Cleanup targets
     only the recovery generation, runtime session, and task captured by the

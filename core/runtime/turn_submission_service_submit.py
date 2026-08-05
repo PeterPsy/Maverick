@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from dataclasses import replace
 from threading import Lock
 import time
 from typing import TYPE_CHECKING, Callable
@@ -12,12 +11,15 @@ from core.providers.service import resolve_runtime_backend_for_session
 from core.runtime.plain_hosted_text import (
     HOSTED_TEXT_RUNTIME_PROVIDER_ID,
     assert_plain_hosted_chat_input_allowed,
-    execute_plain_hosted_text_turn,
     runtime_session_is_plain_hosted_chat,
 )
 from core.runtime.client_message_claims import RuntimeClientMessageClaim
 from core.runtime.execution import execute_runtime_turn
-from core.runtime.provider_input_context import generalist_orchestration_input_text, runtime_provider_input_text
+from core.runtime.provider_input_context import runtime_provider_input_text
+from core.runtime.provider_start_handoff import (
+    provider_thread_recorder,
+    runtime_provider_start_handoff,
+)
 from core.runtime.runtime_events import RuntimeEventRecord
 from core.runtime.runtime_session import RuntimeSessionRecord
 from core.runtime.runtime_turns import RuntimeTurnRecord
@@ -32,7 +34,6 @@ from core.runtime.turn_submission_service_output import (
     _build_launch_spec_for_execution,
     _record_provider_accepted,
     _record_provider_dispatching,
-    _record_provider_thread_id,
     _record_provider_turn_start_sent,
     _record_turn_activation_completed,
     _record_turn_started,
@@ -41,6 +42,11 @@ from core.runtime.turn_submission_service_output import (
     _record_turn_worker_started,
 )
 from core.runtime.turn_submission_service_output_text import _RuntimeTurnOutputRecorder
+from core.runtime.turn_submission_service_references import (
+    _materialize_app_references_for_execution,
+    _runtime_app_reference_counts,
+)
+from core.runtime.turn_submission_service_sync_hosted import execute_sync_plain_hosted_turn
 from core.runtime.turn_submission_service_runtime import _wait_for_session_prewarm
 
 if TYPE_CHECKING:
@@ -159,56 +165,16 @@ def submit_runtime_turn(
             )
             output_recorder = _RuntimeTurnOutputRecorder(state, session_id=session.session_id, turn_id=turn.turn_id)
             if plain_hosted:
-                dispatch_started_at = time.perf_counter()
-                turn_start_sent_at: float | None = None
-                events.append(
-                    _record_provider_dispatching(
-                        state,
-                        session_id=session.session_id,
-                        turn_id=turn.turn_id,
-                        provider_id=provider_id,
-                        runtime_mode=session.runtime_mode,
-                    )
-                )
-
-                def record_plain_provider_turn_start_sent(metadata: dict[str, object]) -> None:
-                    nonlocal turn_start_sent_at
-                    turn_start_sent_at = time.perf_counter()
-                    sent = _record_provider_turn_start_sent(
-                        state,
-                        session_id=session.session_id,
-                        turn_id=turn.turn_id,
-                        provider_id=str(metadata.get("provider_id") or provider_id),
-                        runtime_mode=session.runtime_mode,
-                        metadata=metadata,
-                    )
-                    events.append(sent)
-
-                def record_plain_provider_accepted(metadata: dict[str, object]) -> None:
-                    started_at = turn_start_sent_at if turn_start_sent_at is not None else dispatch_started_at
-                    accepted = _record_provider_accepted(
-                        state,
-                        session_id=session.session_id,
-                        turn_id=turn.turn_id,
-                        provider_id=str(metadata.get("provider_id") or provider_id),
-                        runtime_mode=session.runtime_mode,
-                        elapsed_ms=(time.perf_counter() - started_at) * 1000,
-                        metadata=metadata,
-                    )
-                    events.append(accepted)
-
-                result, routing_decision = execute_plain_hosted_text_turn(
+                result, provider_id, session = execute_sync_plain_hosted_turn(
                     state,
                     session=session,
-                    turn_id=turn.turn_id,
-                    input_text=generalist_orchestration_input_text(state, session=session, input_text=input_text),
+                    turn=turn,
+                    input_text=input_text,
                     attachments=attachments,
-                    event_sink=output_recorder.record,
-                    on_provider_turn_start_sent=record_plain_provider_turn_start_sent,
-                    on_provider_accepted=record_plain_provider_accepted,
+                    output_recorder=output_recorder,
+                    provider_id=provider_id,
+                    events=events,
                 )
-                provider_id = routing_decision.selected_provider_id or provider_id
-                session = state.runtime_store.save_session(replace(session, provider_id=provider_id))
             else:
                 assert provider is not None
                 launch_result = _build_launch_spec_for_execution(
@@ -310,18 +276,28 @@ def submit_runtime_turn(
                     )
                     events.append(accepted)
 
-                result = execute_runtime_turn(
-                    session=session,
-                    provider=provider,
-                    input_text=provider_input_text,
-                    launch_spec=launch_spec,
-                    runtime_adapter=runtime_adapter,
-                    on_provider_thread_id=lambda provider_thread_id: _record_provider_thread_id(state, session=session, provider_id=provider_id, provider_thread_id=provider_thread_id),
-                    on_provider_startup_event=record_provider_startup_event,
-                    on_provider_turn_start_sent=record_provider_turn_start_sent,
+                with runtime_provider_start_handoff(
+                    state.runtime_store,
+                    session_id=session.session_id,
+                    turn_id=turn.turn_id,
                     on_provider_accepted=record_provider_accepted,
-                    event_sink=output_recorder.record,
-                )
+                ) as (provider_session, provider_accepted):
+                    result = execute_runtime_turn(
+                        session=provider_session,
+                        provider=provider,
+                        input_text=provider_input_text,
+                        launch_spec=launch_spec,
+                        runtime_adapter=runtime_adapter,
+                        on_provider_thread_id=provider_thread_recorder(
+                            state,
+                            session_id=provider_session.session_id,
+                            provider_id=provider_id,
+                        ),
+                        on_provider_startup_event=record_provider_startup_event,
+                        on_provider_turn_start_sent=record_provider_turn_start_sent,
+                        on_provider_accepted=provider_accepted,
+                        event_sink=output_recorder.record,
+                    )
         except Exception as error:
             failure_reason = str(getattr(error, "reason_code", None) or error)
             reason_codes = getattr(error, "reason_codes", None)
@@ -333,6 +309,9 @@ def submit_runtime_turn(
                 message="Runtime turn debug: sync execution raised",
                 payload={"phase": "sync_execution_raised", "error_type": type(error).__name__, "error": failure_reason},
             )
+            current = state.runtime_store.get_turn(turn.turn_id)
+            if current.status in {"completed", "failed", "cancelled", "timed-out"}:
+                return current, events
             turn = transition_runtime_turn(state.runtime_store, turn_id=turn.turn_id, target_status="failed", failure_reason=failure_reason)
             events.append(
                 _record_turn_failed(
@@ -354,6 +333,9 @@ def submit_runtime_turn(
             if not plain_hosted:
                 release_idle_runtime_processes(state, session_id=session.session_id, provider_id=provider_id, reason="sync_turn_failed", idle_ttl_seconds=0)
             return turn, events
+        current = state.runtime_store.get_turn(turn.turn_id)
+        if current.status in {"completed", "failed", "cancelled", "timed-out"}:
+            return current, events
         _debug_log_runtime_turn(
             state,
             session=session,

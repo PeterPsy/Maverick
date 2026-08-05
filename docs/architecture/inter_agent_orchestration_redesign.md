@@ -185,7 +185,12 @@ transcript projection behavior.
   pause and is visible to interrupt cleanup, or is rejected before any provider
   dispatch. Worker activation then uses a persisted compare-and-set under the
   runtime-session lifecycle handoff, rereading the current turn and session and
-  rejecting cancelled turns or non-executable sessions. A child created
+  rejecting cancelled turns or non-executable sessions. Provider dispatch then
+  repeats that persisted check under the same handoff and retains it through
+  the provider acceptance callback, closing the post-activation start window
+  without holding a lock for the duration of the turn. Provider and thread
+  metadata are partial allowlisted patches under that handoff and cannot restore
+  stale lifecycle state after interrupt. A child created
   concurrently is rechecked, deleted, and never linked. Interrupt and resume
   hold the same cross-process run-control handoff across the full cleanup;
   cancellation matches the pause snapshot's generation, runtime session, and

@@ -382,7 +382,16 @@ interrupt or is never persisted and never dispatched. Worker activation is a
 separate persisted compare-and-set under a cross-process runtime-session
 lifecycle handoff: it rereads the authoritative turn and session, accepts only
 `queued` turns on executable sessions, and never writes caller snapshots back
-as lifecycle state. Interrupt and resume also share one cross-process run-control
+as lifecycle state. Activation alone does not authorize a later provider call.
+Synchronous and asynchronous plain-hosted and agentic dispatch reacquire that
+session handoff for a final authoritative `active`/executable check and retain it
+only through the provider's acceptance callback. An interrupt that wins first
+therefore prevents provider start; one ordered after acceptance can observe and
+interrupt the accepted provider turn. Prewarm uses the same session-only start
+handoff. Provider, provider-thread, visibility, and routing metadata use an
+allowlisted partial store mutation under that handoff, so a callback or worker
+return can never write stale status, timestamps, or other lifecycle fields.
+Interrupt and resume also share one cross-process run-control
 handoff for the complete participant/session cleanup. Interrupt cancellation is
 conditional on the recovery generation, runtime session, and task captured by
 the pause snapshot, and resume advances the generation only after that cleanup

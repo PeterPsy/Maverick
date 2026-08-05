@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from collections import OrderedDict
 from contextlib import suppress
-from dataclasses import dataclass, replace
+from dataclasses import dataclass
 from threading import Event, Lock, Thread, Timer
 import time
 from typing import TYPE_CHECKING, Callable
@@ -21,9 +21,6 @@ from core.runtime.turn_submission_service_events import (
 )
 from core.runtime.turn_submission_service_output import (
     _build_launch_spec_for_execution,
-    _record_app_references_materialize_completed,
-    _record_app_references_materialize_failed,
-    _record_app_references_materialize_started,
     _record_provider_accepted,
     _record_provider_dispatching,
     _record_provider_thread_id,
@@ -35,6 +32,10 @@ from core.runtime.turn_submission_service_output import (
     _record_turn_worker_started,
 )
 from core.runtime.turn_submission_service_output_text import _RuntimeTurnOutputRecorder
+from core.runtime.turn_submission_service_references import (
+    _materialize_app_references_for_execution,
+    _runtime_app_reference_counts,
+)
 from core.runtime.plain_hosted_text import (
     HOSTED_TEXT_RUNTIME_PROVIDER_ID,
     assert_plain_hosted_chat_input_allowed,
@@ -44,6 +45,11 @@ from core.runtime.plain_hosted_text import (
 )
 from core.runtime.execution import execute_runtime_turn
 from core.runtime.provider_input_context import generalist_orchestration_input_text, runtime_provider_input_text
+from core.runtime.provider_start_handoff import (
+    patch_runtime_session_metadata,
+    provider_thread_recorder,
+    runtime_provider_start_handoff,
+)
 from core.runtime.process_control import terminate_codex_app_server_processes_for_session, terminate_runtime_processes
 from core.runtime.client_message_claims import RuntimeClientMessageClaim
 from core.runtime.runtime_events import RuntimeEventRecord
@@ -148,7 +154,9 @@ def prewarm_runtime_session_async(state: PlatformState, *, session: RuntimeSessi
                     status = "skipped_non_codex"
                     return
                 if current_session.provider_id != provider.provider_id:
-                    current_session = state.runtime_store.save_session(replace(current_session, provider_id=provider.provider_id))
+                    current_session = patch_runtime_session_metadata(
+                        state.runtime_store, current_session, provider_id=provider.provider_id
+                    )
                 launch_spec, _metadata = _build_launch_spec_for_execution(
                     state,
                     session=current_session,
@@ -162,20 +170,24 @@ def prewarm_runtime_session_async(state: PlatformState, *, session: RuntimeSessi
                     return
                 from core.providers.codex_app_server import prewarm_codex_app_server_runtime
 
-                provider_thread_id = prewarm_codex_app_server_runtime(
-                    session=current_session,
-                    launch_spec=launch_spec,
-                )
-                if not provider_thread_id:
-                    status = "missing_provider_thread"
-                    return
-                if provider_thread_id and provider_thread_id != (current_session.provider_thread_id or ""):
-                    _record_provider_thread_id(
-                        state,
-                        session=current_session,
-                        provider_id=provider.provider_id,
-                        provider_thread_id=provider_thread_id,
+                with runtime_provider_start_handoff(
+                    state.runtime_store,
+                    session_id=current_session.session_id,
+                ) as (provider_session, _provider_accepted):
+                    provider_thread_id = prewarm_codex_app_server_runtime(
+                        session=provider_session,
+                        launch_spec=launch_spec,
                     )
+                    if not provider_thread_id:
+                        status = "missing_provider_thread"
+                        return
+                    if provider_thread_id != (provider_session.provider_thread_id or ""):
+                        _record_provider_thread_id(
+                            state,
+                            session_id=provider_session.session_id,
+                            provider_id=provider.provider_id,
+                            provider_thread_id=provider_thread_id,
+                        )
             finally:
                 lock.release()
         except Exception as error:
@@ -752,23 +764,37 @@ def submit_runtime_turn_async(
                             metadata=metadata,
                         )
 
-                    result, routing_decision = execute_plain_hosted_text_turn(
-                        state,
-                        session=current_session,
+                    with runtime_provider_start_handoff(
+                        state.runtime_store,
+                        session_id=current_session.session_id,
                         turn_id=turn.turn_id,
-                        input_text=generalist_orchestration_input_text(state, session=current_session, input_text=input_text),
-                        attachments=attachments,
-                        event_sink=output_recorder.record,
-                        on_provider_turn_start_sent=record_plain_provider_turn_start_sent,
                         on_provider_accepted=record_plain_provider_accepted,
-                    )
+                    ) as (provider_session, provider_accepted):
+                        result, routing_decision = execute_plain_hosted_text_turn(
+                            state,
+                            session=provider_session,
+                            turn_id=turn.turn_id,
+                            input_text=generalist_orchestration_input_text(
+                                state,
+                                session=provider_session,
+                                input_text=input_text,
+                            ),
+                            attachments=attachments,
+                            event_sink=output_recorder.record,
+                            on_provider_turn_start_sent=record_plain_provider_turn_start_sent,
+                            on_provider_accepted=provider_accepted,
+                        )
                     worker_provider_id = routing_decision.selected_provider_id or worker_provider_id
-                    current_session = state.runtime_store.save_session(replace(current_session, provider_id=worker_provider_id))
+                    current_session = patch_runtime_session_metadata(
+                        state.runtime_store, current_session, provider_id=worker_provider_id
+                    )
                 else:
                     provider, selection, runtime_adapter = resolve_runtime_backend_for_session(state.provider_store, session=current_session)
                     worker_provider_id = provider.provider_id
                     if current_session.provider_id != worker_provider_id:
-                        current_session = state.runtime_store.save_session(replace(current_session, provider_id=worker_provider_id))
+                        current_session = patch_runtime_session_metadata(
+                            state.runtime_store, current_session, provider_id=worker_provider_id
+                        )
                     launch_result = _build_launch_spec_for_execution(
                         state,
                         session=current_session,
@@ -870,23 +896,28 @@ def submit_runtime_turn_async(
                             metadata=enriched_metadata,
                         )
 
-                    result = execute_runtime_turn(
-                        session=current_session,
-                        provider=provider,
-                        input_text=provider_input_text,
-                        launch_spec=launch_spec,
-                        runtime_adapter=runtime_adapter,
-                        on_provider_thread_id=lambda provider_thread_id: _record_provider_thread_id(
-                            state,
-                            session=current_session,
-                            provider_id=worker_provider_id,
-                            provider_thread_id=provider_thread_id,
-                        ),
-                        on_provider_startup_event=record_provider_startup_event,
-                        on_provider_turn_start_sent=record_provider_turn_start_sent,
+                    with runtime_provider_start_handoff(
+                        state.runtime_store,
+                        session_id=current_session.session_id,
+                        turn_id=turn.turn_id,
                         on_provider_accepted=record_provider_accepted,
-                        event_sink=output_recorder.record,
-                    )
+                    ) as (provider_session, provider_accepted):
+                        result = execute_runtime_turn(
+                            session=provider_session,
+                            provider=provider,
+                            input_text=provider_input_text,
+                            launch_spec=launch_spec,
+                            runtime_adapter=runtime_adapter,
+                            on_provider_thread_id=provider_thread_recorder(
+                                state,
+                                session_id=provider_session.session_id,
+                                provider_id=worker_provider_id,
+                            ),
+                            on_provider_startup_event=record_provider_startup_event,
+                            on_provider_turn_start_sent=record_provider_turn_start_sent,
+                            on_provider_accepted=provider_accepted,
+                            event_sink=output_recorder.record,
+                        )
                 _debug_log_runtime_turn(
                     state,
                     session=current_session,
@@ -986,88 +1017,6 @@ def submit_runtime_turn_async(
 
     Thread(target=worker, name=f"maverick-runtime-turn-{turn.turn_id}", daemon=True).start()
     return turn, events
-
-
-def _materialize_app_references_for_execution(
-    *,
-    app_references: list[dict[str, object]] | None,
-    app_reference_materializer: Callable[[list[dict[str, object]]], object] | None,
-    state: PlatformState | None = None,
-    session_id: str | None = None,
-    turn_id: str | None = None,
-    provider_id: str | None = None,
-) -> list[dict[str, object]] | None:
-    references = [item for item in app_references or [] if isinstance(item, dict)]
-    if not references or app_reference_materializer is None:
-        return references
-    app_reference_count, storage_reference_count = _runtime_app_reference_counts(references)
-    can_record = state is not None and session_id is not None and turn_id is not None and provider_id is not None
-    if can_record:
-        _record_app_references_materialize_started(
-            state,
-            session_id=session_id,
-            turn_id=turn_id,
-            provider_id=provider_id,
-            app_reference_count=app_reference_count,
-            storage_reference_count=storage_reference_count,
-        )
-    started_at = time.perf_counter()
-    try:
-        raw_materialized = app_reference_materializer(references)
-        materialized, reference_action_timings, reference_cache_hit = _coerce_materialized_reference_result(raw_materialized)
-    except Exception as error:
-        reference_action_timings = _materializer_reference_action_timings(locals().get("raw_materialized"))
-        if can_record:
-            _record_app_references_materialize_failed(
-                state,
-                session_id=session_id,
-                turn_id=turn_id,
-                provider_id=provider_id,
-                elapsed_ms=(time.perf_counter() - started_at) * 1000,
-                app_reference_count=app_reference_count,
-                storage_reference_count=storage_reference_count,
-                error=error,
-                reference_action_timings=reference_action_timings,
-            )
-        raise
-    materialized_references = [item for item in materialized or [] if isinstance(item, dict)]
-    if can_record:
-        _record_app_references_materialize_completed(
-            state,
-            session_id=session_id,
-            turn_id=turn_id,
-            provider_id=provider_id,
-            elapsed_ms=(time.perf_counter() - started_at) * 1000,
-            app_reference_count=app_reference_count,
-            storage_reference_count=storage_reference_count,
-            materialized_reference_count=len(materialized_references),
-            reference_cache_hit=reference_cache_hit,
-            reference_action_timings=reference_action_timings,
-        )
-    return materialized_references
-
-
-def _coerce_materialized_reference_result(raw_result: object) -> tuple[list[dict[str, object]], list[dict[str, object]], bool]:
-    references = getattr(raw_result, "references", raw_result)
-    timings = _materializer_reference_action_timings(raw_result)
-    cache_hit = bool(getattr(raw_result, "reference_cache_hit", False))
-    if not isinstance(references, list):
-        return [], timings, cache_hit
-    return [item for item in references if isinstance(item, dict)], timings, cache_hit
-
-
-def _materializer_reference_action_timings(raw_result: object) -> list[dict[str, object]]:
-    timings = getattr(raw_result, "reference_action_timings", None)
-    if not isinstance(timings, list):
-        return []
-    return [item for item in timings if isinstance(item, dict)]
-
-
-def _runtime_app_reference_counts(references: list[dict[str, object]] | None) -> tuple[int, int]:
-    items = [item for item in references or [] if isinstance(item, dict)]
-    storage_count = sum(1 for item in items if str(item.get("app_id") or "").strip().lower() == "storage")
-    return len(items), storage_count
-
 
 
 def release_idle_runtime_processes(

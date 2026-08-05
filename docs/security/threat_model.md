@@ -183,7 +183,12 @@ mutation. Cleanup can cancel only the recovery generation, runtime session, and
 task captured when the pause won. Runtime worker activation is independently
 compare-and-set under a cross-process session lifecycle handoff and rereads the
 persisted turn and session, so a cancelled turn or stopped session cannot be
-resurrected by an older worker snapshot.
+resurrected by an older worker snapshot. Provider start has a second bounded
+handoff from the final persisted `active`/executable check through provider
+acceptance for both plain-hosted and agentic sync/async paths; prewarm uses the
+session-only equivalent. Late provider and provider-thread metadata writes are
+partial allowlisted mutations under the same handoff, so they cannot restore a
+stopped session from an older full record.
 The same fence covers the complete scheduler mutation path. Each scheduler
 captures one recovery generation, and every run transition, recovery-ledger
 write, task claim/finalization, and completion commit validates that generation

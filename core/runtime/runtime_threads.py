@@ -107,7 +107,11 @@ def promote_hidden_chat_root_session_with_turns(
         return None
     if not store.list_turns(normalized_session_id):
         return None
-    return store.save_session(replace(session, thread_visibility="user", updated_at=utcnow()))
+    return store.patch_session_metadata(
+        session_id=session.session_id,
+        workspace_id=session.workspace_id,
+        updates={"thread_visibility": "user"},
+    )
 
 
 def promote_hidden_chat_root_sessions_with_turns(
@@ -130,7 +134,13 @@ def promote_hidden_chat_root_sessions_with_turns(
                 or not store.list_turns(session.session_id)
             ):
                 continue
-            promoted.append(store.save_session(replace(session, thread_visibility="user", updated_at=utcnow())))
+            promoted.append(
+                store.patch_session_metadata(
+                    session_id=session.session_id,
+                    workspace_id=session.workspace_id,
+                    updates={"thread_visibility": "user"},
+                )
+            )
         return promoted
     for session in store.list_sessions(workspace_id):
         if session.session_kind != "chat_root" or session.thread_visibility != "hidden":

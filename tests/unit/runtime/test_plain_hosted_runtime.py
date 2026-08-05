@@ -213,11 +213,11 @@ class PlainHostedRuntimeTest(unittest.TestCase):
             patch.dict("os.environ", {"MAVERICK_HOSTED_TEXT_FAKE_RESPONSE": "status response"}, clear=False),
             patch("core.runtime.turn_submission_service_output.schedule_runtime_thread_title_generation"),
             patch(
-                "core.runtime.turn_submission_service_submit.generalist_orchestration_input_text",
+                "core.runtime.turn_submission_service_sync_hosted.generalist_orchestration_input_text",
                 return_value=governed_input,
             ) as attach_context,
             patch(
-                "core.runtime.turn_submission_service_submit.execute_plain_hosted_text_turn",
+                "core.runtime.turn_submission_service_sync_hosted.execute_plain_hosted_text_turn",
                 wraps=execute_plain_hosted_text_turn,
             ) as execute_hosted,
         ):

@@ -132,15 +132,17 @@ def reconcile_runtime_session_policy(
         and session.runtime_root == routing.runtime_root
     ):
         return session
-    reconciled = replace(
-        session,
-        effective_mode=routing.effective_mode,
-        workspace_root=routing.workspace_root,
-        workdir=routing.workdir,
-        runtime_root=routing.runtime_root,
-        updated_at=timestamp,
+    return store.patch_session_metadata(
+        session_id=session.session_id,
+        workspace_id=session.workspace_id,
+        updates={
+            "effective_mode": routing.effective_mode,
+            "workspace_root": routing.workspace_root,
+            "workdir": routing.workdir,
+            "runtime_root": routing.runtime_root,
+        },
+        now=timestamp,
     )
-    return store.save_session(reconciled)
 def queue_runtime_turn(
     store: RuntimeStore,
     *,

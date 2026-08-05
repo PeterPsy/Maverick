@@ -74,6 +74,57 @@ class RuntimeTurnActivationFenceTest(unittest.TestCase):
         self.assertEqual(second_store.get_turn(turn.turn_id).status, "cancelled")
         self.assertEqual(second_store.get_session(session.session_id).status, "stopped")
 
+    def test_metadata_patch_after_stop_preserves_authoritative_lifecycle(self) -> None:
+        repo_root = make_temp_repo_root(self)
+        first_store = _runtime_store(repo_root)
+        second_store = _runtime_store(repo_root)
+        session = create_runtime_session(
+            first_store,
+            session_id="session-metadata-cas",
+            workspace_id="default",
+            agent_id="chat",
+            start_path=repo_root,
+        )
+        transition_runtime_session(
+            first_store,
+            session_id=session.session_id,
+            target_status="running",
+        )
+        stopped = transition_runtime_session(
+            first_store,
+            session_id=session.session_id,
+            target_status="stopped",
+        )
+
+        updated = second_store.patch_session_metadata(
+            session_id=session.session_id,
+            workspace_id=session.workspace_id,
+            updates={"provider_id": "hosted-test", "provider_thread_id": "provider-thread"},
+        )
+
+        self.assertEqual(updated.provider_id, "hosted-test")
+        self.assertEqual(updated.provider_thread_id, "provider-thread")
+        self.assertEqual(updated.status, "stopped")
+        self.assertEqual(updated.ended_at, stopped.ended_at)
+
+    def test_metadata_patch_rejects_lifecycle_fields(self) -> None:
+        repo_root = make_temp_repo_root(self)
+        store = _runtime_store(repo_root)
+        session = create_runtime_session(
+            store,
+            session_id="session-metadata-allowlist",
+            workspace_id="default",
+            agent_id="chat",
+            start_path=repo_root,
+        )
+
+        with self.assertRaises(ValueError):
+            store.patch_session_metadata(
+                session_id=session.session_id,
+                workspace_id=session.workspace_id,
+                updates={"status": "running"},
+            )
+
 
 def _runtime_store(repo_root: Path) -> RuntimeDocumentStore:
     return RuntimeDocumentStore(

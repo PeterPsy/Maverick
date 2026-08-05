@@ -10,7 +10,7 @@ import json
 import os
 from pathlib import Path
 import tempfile
-from threading import RLock
+from threading import local, RLock
 from typing import Any
 
 from core.runtime.paths import runtime_session_root
@@ -25,6 +25,7 @@ from core.shared.json_file_collection import (
 )
 
 MAX_RECOVERY_EVENT_SCAN_BYTES = 2 * 1024 * 1024
+_LIFECYCLE_HANDOFF_LOCAL = local()
 
 
 class RuntimeSessionJsonCollection:
@@ -234,7 +235,7 @@ class RuntimeSessionJsonCollection:
             session_id=session_id,
             start_path=self.start_path,
         ) / "lifecycle.json"
-        return _locked_collection_path(path)
+        return _reentrant_lifecycle_handoff(path)
 
     def _read_documents(self, path: Path) -> list[dict[str, Any]]:
         if not path.is_file():
@@ -316,3 +317,27 @@ def _locked_collection_path(path: Path):
             yield
         finally:
             fcntl.flock(lock_file.fileno(), fcntl.LOCK_UN)
+
+
+@contextmanager
+def _reentrant_lifecycle_handoff(path: Path):
+    """Make the cross-process lifecycle lock reentrant in its owning thread."""
+    key = str(path.resolve(strict=False))
+    depths = getattr(_LIFECYCLE_HANDOFF_LOCAL, "depths", None)
+    if depths is None:
+        depths = {}
+        _LIFECYCLE_HANDOFF_LOCAL.depths = depths
+    depth = int(depths.get(key, 0))
+    depths[key] = depth + 1
+    try:
+        if depth:
+            yield
+            return
+        with _locked_collection_path(path):
+            yield
+    finally:
+        remaining = int(depths.get(key, 1)) - 1
+        if remaining > 0:
+            depths[key] = remaining
+        else:
+            depths.pop(key, None)

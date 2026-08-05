@@ -30,6 +30,17 @@ from core.runtime.runtime_turns import RuntimeTurnRecord
 
 
 MAX_RUNTIME_EVENTS_PER_SESSION = 500
+RUNTIME_SESSION_METADATA_FIELDS = frozenset(
+    {
+        "effective_mode",
+        "provider_id",
+        "provider_thread_id",
+        "runtime_root",
+        "thread_visibility",
+        "workdir",
+        "workspace_root",
+    }
+)
 
 
 @dataclass(frozen=True)
@@ -88,6 +99,16 @@ class RuntimeStore(Protocol):
         ...
 
     def save_session(self, record: RuntimeSessionRecord) -> RuntimeSessionRecord:
+        ...
+
+    def patch_session_metadata(
+        self,
+        *,
+        session_id: str,
+        workspace_id: str,
+        updates: dict[str, object],
+        now: datetime | None = None,
+    ) -> RuntimeSessionRecord:
         ...
 
     def get_session(self, session_id: str) -> RuntimeSessionRecord:
@@ -267,6 +288,37 @@ class RuntimeDocumentStore:
         )
         self._remember_session_partition(record.session_id, record.workspace_id)
         return record
+
+    def patch_session_metadata(
+        self,
+        *,
+        session_id: str,
+        workspace_id: str,
+        updates: dict[str, object],
+        now: datetime | None = None,
+    ) -> RuntimeSessionRecord:
+        """Patch allowlisted session metadata without writing lifecycle fields."""
+        invalid_fields = sorted(set(updates) - RUNTIME_SESSION_METADATA_FIELDS)
+        if invalid_fields:
+            raise ValueError(
+                "Runtime session metadata patch contains forbidden fields: "
+                + ", ".join(invalid_fields)
+            )
+        with self.session_lifecycle_handoff(workspace_id=workspace_id, session_id=session_id):
+            current = self.get_session(session_id)
+            if current.workspace_id != workspace_id:
+                raise RuntimeSessionNotFoundError(
+                    f"Runtime session `{session_id}` was not found in workspace `{workspace_id}`."
+                )
+            if not updates:
+                return current
+            payload = {**updates, "updated_at": now or datetime.now(tz=UTC)}
+            self.collections.sessions.update_one(
+                {"session_id": session_id, "workspace_id": workspace_id},
+                {"$set": payload},
+                upsert=False,
+            )
+            return replace(current, **payload)
 
     def save_api_token(self, record: RuntimeApiTokenRecord) -> RuntimeApiTokenRecord:
         if self.collections.api_tokens is None:

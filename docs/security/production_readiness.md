@@ -33,6 +33,18 @@ Unacceptable current uses:
 - shared untrusted multi-user deployments
 - third-party app execution without review
 
+## Design Studio OpenDesign Gate
+
+Design Studio has completed its app-scoped OpenDesign 0.16.1 production-path
+acceptance using the official pinned OCI artifact, OS-confined sidecars, real
+Chromium, Storage, core/runtime streaming, restart, two-workspace isolation,
+and migration/rollback on marked fixture copies. Its redaction-safe product
+record and 24-criterion evidence map live under `apps/design-studio/service/`.
+
+This is an integration gate, not a statement that Maverick is production-ready.
+The launch blockers above still prohibit internet exposure, real secrets,
+customer data, untrusted multi-user hosting, and real workspace migration.
+
 ## Secrets Status
 
 Core Secrets and Vault provide the platform-owned management flow for sensitive values: apps store references and grants, Vault calls admin-gated Core Secrets APIs, app entrypoints receive grant-authorized values only as ephemeral input, and HTTP responses expose metadata or redacted leases rather than raw values. Secret value envelopes use AES-GCM with operator-supplied key material, a stored key id, and AAD over the value format, secret id, and key id. `MAVERICK_SECRET_STORE_PREVIOUS_KEYS` supports decrypt-only previous keys during rotation, and legacy `mvr3secret1` values are readable for migration. This is still not a production secret-management guarantee. A hosted deployment still needs externalized key management, explicit rotation operations, audited operational access to key files and bootstrap secret files, CSRF protection for unsafe cookie-authenticated calls, and broader sandboxing before real credentials are acceptable.

@@ -174,7 +174,8 @@ namespace is a failed gate, not a skip.
 - WP7 mounts a distinct runtime broker socket only if the selected bridge needs
   it.
 - WP10 repeats filesystem/network/workspace A/B, timeout, restart, and orphan
-  cleanup tests against the production launcher.
+  cleanup tests against the production launcher. Design Studio's official OCI
+  browser proof and stable evidence map now close this item.
 
 The OpenDesign-specific launcher remains app-owned. Core contains no
 OpenDesign-specific command, route, environment key, mount path, or fallback.

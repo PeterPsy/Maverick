@@ -26,13 +26,13 @@ class SidecarBrowserWorkspaceIsolationTests(SidecarBrowserOriginTestSupport, uni
             shutdown = EntrypointShutdownController()
             self.addCleanup(shutdown.begin_shutdown)
             app = PlatformAsgiHost(state, shutdown_controller=shutdown)
-            platform_origin = "http://localhost:8000"
-            platform_cookie = await self._login(app, host="localhost:8000")
+            platform_origin = "http://maverick.localhost:8000"
+            platform_cookie = await self._login(app, host="maverick.localhost:8000")
 
             status, launch_a, _headers = await self._launch(
                 app,
                 platform_cookie=platform_cookie,
-                host="localhost:8000",
+                host="maverick.localhost:8000",
                 origin=platform_origin,
             )
             self.assertEqual(status, 200)
@@ -50,7 +50,7 @@ class SidecarBrowserWorkspaceIsolationTests(SidecarBrowserOriginTestSupport, uni
 
             create_status, create_body, _headers = await self._invoke(
                 app,
-                host="localhost:8000",
+                host="maverick.localhost:8000",
                 path="/api/workspaces",
                 method="POST",
                 body=json.dumps({"name": "Workspace B"}).encode("utf-8"),
@@ -76,7 +76,7 @@ class SidecarBrowserWorkspaceIsolationTests(SidecarBrowserOriginTestSupport, uni
             )
             switch_status, _body, _headers = await self._invoke(
                 app,
-                host="localhost:8000",
+                host="maverick.localhost:8000",
                 path="/api/workspaces/active",
                 method="POST",
                 body=json.dumps({"workspace_id": workspace_b}).encode("utf-8"),
@@ -98,7 +98,7 @@ class SidecarBrowserWorkspaceIsolationTests(SidecarBrowserOriginTestSupport, uni
             status, launch_b, _headers = await self._launch(
                 app,
                 platform_cookie=platform_cookie,
-                host="localhost:8000",
+                host="maverick.localhost:8000",
                 origin=platform_origin,
             )
             self.assertEqual(status, 200)

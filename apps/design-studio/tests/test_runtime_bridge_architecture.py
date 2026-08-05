@@ -7,8 +7,8 @@ from pathlib import Path
 import unittest
 
 
-REPO_ROOT = Path(__file__).resolve().parents[2]
-APP_ROOT = REPO_ROOT / "apps" / "design-studio"
+REPO_ROOT = Path(__file__).resolve().parents[3]
+APP_ROOT = Path(__file__).resolve().parents[1]
 CORE_BRIDGE_FILES = (
     "core/runtime/app_streams.py",
     "core/runtime/store.py",

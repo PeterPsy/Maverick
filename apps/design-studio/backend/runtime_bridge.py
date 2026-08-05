@@ -405,6 +405,8 @@ def build_result_package(record: dict[str, Any], *, files: list[dict[str, Any]])
             "workspace_id": record["workspace_id"],
             "local_app_id": record["local_app_id"],
             "sidecar_id": record["sidecar_id"],
+            "od_project_id": record["od_project_id"],
+            "od_run_id": record["od_run_id"],
             "request_id": record["request_id"],
             "correlation_id": record["correlation_id"],
             "runtime_session_id": record["runtime_session_id"],

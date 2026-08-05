@@ -62,7 +62,7 @@ def utcnow() -> datetime:
     return datetime.now(tz=UTC)
 
 
-def builtin_provider_registry(*, codex_command: str = "codex", refresh_model_catalog: bool = False) -> ProviderRegistry:
+def builtin_provider_registry(*, codex_command: str | None = None, refresh_model_catalog: bool = False) -> ProviderRegistry:
     """Build the builtin provider registry shipped by the core."""
     registry = ProviderRegistry()
     adapter = CodexProviderAdapter(codex_command=codex_command)
@@ -84,7 +84,7 @@ def register_builtin_providers(
     store: ProviderStore,
     *,
     registry: ProviderRegistry | None = None,
-    codex_command: str = "codex",
+    codex_command: str | None = None,
     refresh_model_catalog: bool = False,
 ) -> list[ProviderDefinition]:
     """Persist builtin provider definitions into the provider store."""
@@ -151,7 +151,7 @@ def effective_provider_registry(
     store: ProviderStore,
     *,
     registry: ProviderRegistry | None = None,
-    codex_command: str = "codex",
+    codex_command: str | None = None,
     refresh_model_catalog: bool = False,
 ) -> ProviderRegistry:
     """Return builtin provider metadata overlaid with persisted store definitions."""
@@ -186,7 +186,7 @@ def activate_hosted_model_provider(
     secret_ref: str,
     label: str | None = None,
     registry: ProviderRegistry | None = None,
-    codex_command: str = "codex",
+    codex_command: str | None = None,
     observability_store=None,
     now: datetime | None = None,
 ) -> HostedModelProviderActivation:
@@ -279,7 +279,7 @@ def activate_speech_provider(
     secret_ref: str,
     label: str | None = None,
     registry: ProviderRegistry | None = None,
-    codex_command: str = "codex",
+    codex_command: str | None = None,
     observability_store=None,
     now: datetime | None = None,
 ) -> SpeechProviderActivation:
@@ -356,7 +356,7 @@ def configure_speech_provider(
     profile: str = "speech_stt",
     selection_reason: str = "configured by speech provider settings",
     registry: ProviderRegistry | None = None,
-    codex_command: str = "codex",
+    codex_command: str | None = None,
     observability_store=None,
     now: datetime | None = None,
 ) -> ProviderSpeechSelection:
@@ -438,7 +438,7 @@ def configure_hosted_model_provider(
     profile: str = "fast_model",
     selection_reason: str = "configured by hosted model settings",
     registry: ProviderRegistry | None = None,
-    codex_command: str = "codex",
+    codex_command: str | None = None,
     observability_store=None,
     now: datetime | None = None,
 ) -> ProviderHostedSelection:
@@ -652,7 +652,7 @@ def list_available_providers(
     store: ProviderStore,
     *,
     registry: ProviderRegistry | None = None,
-    codex_command: str = "codex",
+    codex_command: str | None = None,
     refresh_model_catalog: bool = False,
 ) -> list[ProviderDefinition]:
     """List provider definitions from the authoritative registry."""
@@ -675,7 +675,7 @@ def configure_workspace_provider(
     model_reasoning_effort: str | None = None,
     selection_reason: str = "configured by control-plane policy",
     registry: ProviderRegistry | None = None,
-    codex_command: str = "codex",
+    codex_command: str | None = None,
     observability_store=None,
     now: datetime | None = None,
 ) -> ProviderSelection:
@@ -749,7 +749,7 @@ def resolve_provider_for_runtime_session(
     *,
     session: RuntimeSessionRecord,
     registry: ProviderRegistry | None = None,
-    codex_command: str = "codex",
+    codex_command: str | None = None,
 ) -> tuple[ProviderDefinition, ProviderSelection | None]:
     """Resolve the effective provider selection for one runtime session."""
     active_registry = registry or builtin_provider_registry(codex_command=codex_command)
@@ -763,7 +763,7 @@ def resolve_runtime_backend_for_session(
     *,
     session: RuntimeSessionRecord,
     registry: ProviderRegistry | None = None,
-    codex_command: str = "codex",
+    codex_command: str | None = None,
 ) -> tuple[ProviderDefinition, ProviderSelection | None, RuntimeBackendAdapter]:
     """Resolve provider definition, selection, and executable runtime adapter for one session."""
     active_registry = registry or builtin_provider_registry(codex_command=codex_command)
@@ -778,7 +778,7 @@ def resolve_provider_for_workspace(
     *,
     workspace_id: str,
     registry: ProviderRegistry | None = None,
-    codex_command: str = "codex",
+    codex_command: str | None = None,
 ) -> tuple[ProviderDefinition, ProviderSelection | None]:
     """Resolve the effective provider selection for one workspace."""
     active_registry = registry or builtin_provider_registry(codex_command=codex_command)
@@ -792,7 +792,7 @@ def resolve_workspace_provider_status(
     *,
     workspace_id: str,
     registry: ProviderRegistry | None = None,
-    codex_command: str = "codex",
+    codex_command: str | None = None,
     refresh_model_catalog: bool = False,
 ) -> WorkspaceProviderStatus:
     """Return provider selection state without falling back to an implicit backend."""
@@ -939,7 +939,7 @@ def build_runtime_backend_launch_spec(
     *,
     session: RuntimeSessionRecord,
     registry: ProviderRegistry | None = None,
-    codex_command: str = "codex",
+    codex_command: str | None = None,
     secret_store: SecretStore | None = None,
     observability_store=None,
 ) -> RuntimeBackendLaunchSpec:
@@ -970,7 +970,7 @@ def prepare_runtime_skills(
     skills: list[SkillDefinition],
     runtime_adapter: RuntimeBackendAdapter | None = None,
     registry: ProviderRegistry | None = None,
-    codex_command: str = "codex",
+    codex_command: str | None = None,
 ) -> list[SkillMaterialization]:
     """Prepare provider-specific runtime skill installation for one runtime session."""
     if runtime_adapter is not None:

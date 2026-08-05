@@ -868,6 +868,9 @@ async def _proxy_asgi_to_running_sidecar(
         request_headers["Host"] = f"{running.host}:{running.port}"
         request_headers["Authorization"] = f"Bearer {running.token}"
         request_headers["Connection"] = "close"
+        if method in _REQUEST_BODY_METHODS:
+            request_headers["Origin"] = f"http://{running.host}:{running.port}"
+            request_headers["Sec-Fetch-Site"] = "same-origin"
         if stream_request_as_chunked:
             request_headers["Transfer-Encoding"] = "chunked"
         header_lines = [f"{method} {upstream_path} HTTP/1.1"]

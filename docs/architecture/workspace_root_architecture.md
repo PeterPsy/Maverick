@@ -148,6 +148,14 @@ previous artifact and its matching previous data generation as one pair. At
 least one complete previous pair is retained after cutover unless a stronger
 app policy applies.
 
+Design Studio implements this rule with an immutable OpenDesign artifact digest
+and one app-owned `control.json` selecting the matching versioned data
+generation. Its WP10 proof boots two temporary workspace roots simultaneously,
+verifies distinct processes/origins and disjoint OpenDesign project catalogs,
+then performs a bundle+generation rollback only on explicitly marked fixture
+copies. It does not migrate or inspect an existing workspace's Design Studio
+data.
+
 For example:
 
 - the app `agents` defines which agent records exist in the workspace

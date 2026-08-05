@@ -82,3 +82,19 @@ Release verification uses `service/smoke_opendesign_runtime.py` for the real
 imported daemon and `service/smoke_opendesign_sidecar.py` for launcher/core
 proxy behavior. The redaction-safe evidence record is
 `service/opendesign_oci_acceptance_0_16_1.json`.
+
+Final product acceptance uses the official OCI daemon, Chromium, Maverick core,
+the isolated sidecar broker, Storage, and two temporary workspaces:
+
+```bash
+npm run test:e2e --prefix apps/design-studio -- \
+  --evidence-output apps/design-studio/service/opendesign_product_acceptance_0_16_1.json
+python3 -m unittest apps.design-studio.tests.test_production_acceptance
+```
+
+Do not replace this gate with an in-process runtime mock. The suite's external
+compiled app-server fixture must still cross the normal runtime sandbox and
+process protocol. The product evidence contains all fourteen WP10 scenarios;
+`service/opendesign_production_acceptance_0_16_1.json` maps the 24 global
+criteria to stable evidence. Both records must remain free of prompts, cookies,
+bearers, provider payloads, environment values, host paths, and secrets.

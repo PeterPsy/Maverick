@@ -379,12 +379,13 @@ def _resolve_origin_configuration(
     if mode == "local":
         platform_origin = _request_platform_origin(environ)
         parsed = urlsplit(platform_origin)
-        if parsed.hostname not in {"localhost", "127.0.0.1", "::1"} and not str(parsed.hostname or "").endswith(
-            ".localhost"
-        ):
-            raise AppHostingError("Local sidecar origins require the platform to be accessed through localhost.")
+        platform_hostname = str(parsed.hostname or "").lower()
+        if not platform_hostname.endswith(".localhost"):
+            raise AppHostingError(
+                "Local sidecar origins require a named .localhost platform host so SameSite=Strict remains effective."
+            )
         suffix = f":{parsed.port}" if parsed.port is not None else ""
-        host = f"{_opaque_label(target)}.sidecars.localhost{suffix}"
+        host = f"{_opaque_label(target)}.sidecars.{platform_hostname}{suffix}"
         return f"{parsed.scheme}://{host}", host, platform_origin, parsed.scheme == "https"
     if mode == "hosted":
         domain = os.environ.get("MAVERICK_SIDECAR_INSTALLATION_DOMAIN", "").strip().lower().rstrip(".")

@@ -25,8 +25,12 @@ origin of the form:
 ```
 
 The opaque label identifies one installed app/sidecar/workspace generation. It
-is not a credential. In local mode the label is placed beneath
-`sidecars.localhost` and uses the core listener's port. Hosted installations
+is not a credential. In local mode Maverick itself must use a named loopback
+host such as `maverick.localhost`; the label is placed beneath
+`sidecars.maverick.localhost` and uses the core listener's port. Keeping the
+platform and sidecar hosts under the same named `.localhost` site preserves the
+required `SameSite=Strict` bootstrap cookie across the `303`. Bare `localhost`
+and IP-literal platform hosts fail closed. Hosted installations
 must provision wildcard DNS and TLS for `*.sidecars.<installation-domain>`.
 Core fails closed when the declared isolated origin cannot be constructed or
 served securely.
@@ -145,8 +149,8 @@ rejected. A separate `static_tree` form is restricted to GET/HEAD roots outside
 handled-by-core, then pass-through, with unknown routes denied.
 
 Local mode is the default and is available only when Maverick itself is
-accessed through a loopback/`.localhost` origin. Hosted mode is explicitly
-enabled with:
+accessed through a named `.localhost` origin. Hosted mode is explicitly enabled
+with:
 
 ```text
 MAVERICK_SIDECAR_ORIGIN_MODE=hosted
@@ -161,9 +165,13 @@ ticket is issued.
 
 ## Residual Risk And Closure
 
-- WP9 uses only the form bootstrap and verifies `postMessage` origin/source.
-- WP10 runs Playwright, leakage searches, full workspace A/B isolation, and the
-  global browser/runtime failure matrix.
+WP9 and WP10 are complete for Design Studio. The mounted frontend uses only the
+form bootstrap, keeps a stable iframe target from its first browsing context,
+and validates `postMessage` origin/source. The WP10 Chromium proof covers clean
+redirects, credential leakage, restart session renewal, forbidden/core routes,
+and distinct workspace A/B origins. The evidence is
+`apps/design-studio/service/opendesign_product_acceptance_0_16_1.json`.
 
-WP2 and WP3 are complete. WP9 remains responsible for the mounted frontend's
-safe iframe and `postMessage` adoption before the capability is product-ready.
+This closes the declared Design Studio browser-origin gate; it does not make
+Maverick generally production-ready or remove the blockers in
+`docs/security/production_readiness.md`.

@@ -268,6 +268,29 @@ maverick app design-studio mcp list --json
 maverick app design-studio cli list --json
 ```
 
+WP10 production-path acceptance runs the official materialized OCI daemon, the
+real Maverick ASGI host and sidecar broker, the real Storage app, and headless
+Chromium against two temporary workspaces. The only provider substitute is an
+external statically compiled process that implements the Codex app-server
+protocol; it crosses the normal sandbox/process boundary and writes the test
+artifact into the granted project root. It is not an in-process runtime mock.
+
+```bash
+npm run test:e2e --prefix apps/design-studio -- \
+  --evidence-output apps/design-studio/service/opendesign_product_acceptance_0_16_1.json
+python3 -m unittest apps.design-studio.tests.test_production_acceptance
+```
+
+The browser suite covers all fourteen required scenarios: login/open, project
+creation in the native OpenDesign UI, Storage import, runtime start,
+incremental SSE, generated-file preview, idempotent cancel, Storage export and
+manifest read-back, core/sidecar restart, deep link, workspace A/B isolation,
+exact route denial, browser credential non-disclosure, and real-daemon
+upgrade/rollback on marked fixture copies. Its committed output is
+redaction-safe and each scenario carries the full app/runtime correlation join.
+The 24 global criteria and stable evidence references are tracked in
+`service/opendesign_production_acceptance_0_16_1.json`.
+
 Current intentional omissions:
 
 - generated OpenDesign assets and dependency closures stay out of source control

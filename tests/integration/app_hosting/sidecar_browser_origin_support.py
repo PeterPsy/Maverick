@@ -263,7 +263,12 @@ BROWSER_SIDECAR_SERVER = textwrap.dedent(
             if self.path == "/api/projects":
                 length = int(self.headers.get("Content-Length", "0"))
                 self.rfile.read(length)
-                self._json({"created": True, "cookie_seen": bool(self.headers.get("Cookie"))})
+                self._json({
+                    "created": True,
+                    "cookie_seen": bool(self.headers.get("Cookie")),
+                    "technical_origin_seen": self.headers.get("Origin") == "http://" + self.headers.get("Host", ""),
+                    "same_origin_fetch_seen": self.headers.get("Sec-Fetch-Site") == "same-origin",
+                })
                 return
             self._json({"error": "not_found"}, status=404)
 

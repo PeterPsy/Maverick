@@ -328,7 +328,7 @@ class DesignStudioAppTests(unittest.TestCase):
                 },
             )
             adapter = json.loads((data_root / "adapter-state.json").read_text(encoding="utf-8"))
-            self.assertEqual(state["json"]["state"]["schema_version"], "2")
+            self.assertEqual(state["json"]["state"]["schema_version"], "3")
             self.assertNotIn("projects", state["json"]["state"])
             self.assertNotIn("projects", adapter)
             self.assertEqual(legacy_state.read_bytes(), legacy_bytes)
@@ -389,8 +389,8 @@ class DesignStudioAppTests(unittest.TestCase):
 
             self.assertTrue(cli["ok"])
             self.assertTrue(mcp["ok"])
-            self.assertEqual(cli["state"]["schema_version"], "2")
-            self.assertEqual(mcp["state"]["schema_version"], "2")
+            self.assertEqual(cli["state"]["schema_version"], "3")
+            self.assertEqual(mcp["state"]["schema_version"], "3")
             self.assertEqual(cli["opendesign"]["version"], "0.16.1")
             self.assertEqual(mcp["opendesign"]["version"], "0.16.1")
 
@@ -597,6 +597,38 @@ class DesignStudioAppTests(unittest.TestCase):
                     path="/api/apps/design-studio/sidecars/opendesign/api/media/config",
                     cookie=cookie,
                 )
+                config_status, config_body, _config_headers = self._invoke(
+                    app,
+                    path="/api/apps/design-studio/sidecars/opendesign/api/app-config",
+                    cookie=cookie,
+                )
+                config_update_status, config_update_body, _config_update_headers = self._invoke(
+                    app,
+                    path="/api/apps/design-studio/sidecars/opendesign/api/app-config",
+                    method="PUT",
+                    body={
+                        "onboardingCompleted": True,
+                        "agentId": "maverick",
+                        "skillId": "design-review",
+                        "telemetry": {"metrics": False, "content": False, "artifactManifest": False},
+                        "allowSilentUpdates": False,
+                    },
+                    cookie=cookie,
+                )
+                config_secret_status, config_secret_body, _config_secret_headers = self._invoke(
+                    app,
+                    path="/api/apps/design-studio/sidecars/opendesign/api/app-config",
+                    method="PUT",
+                    body={"agentCliEnv": {"codex": {"OPENAI_API_KEY": "must-not-persist"}}},
+                    cookie=cookie,
+                )
+                attribution_status, attribution_body, _attribution_headers = self._invoke(
+                    app,
+                    path="/api/apps/design-studio/sidecars/opendesign/api/attribution/claim",
+                    method="POST",
+                    body={"token": "must-not-persist"},
+                    cookie=cookie,
+                )
                 provider_status, provider_body, _provider_headers = self._invoke(
                     app,
                     path="/api/apps/design-studio/sidecars/opendesign/api/provider/models",
@@ -637,6 +669,10 @@ class DesignStudioAppTests(unittest.TestCase):
                 )
 
             media_payload = json.loads(media_body.decode("utf-8"))
+            config_payload = json.loads(config_body.decode("utf-8"))
+            config_update_payload = json.loads(config_update_body.decode("utf-8"))
+            config_secret_payload = json.loads(config_secret_body.decode("utf-8"))
+            attribution_payload = json.loads(attribution_body.decode("utf-8"))
             provider_payload = json.loads(provider_body.decode("utf-8"))
             direct_provider_payload = json.loads(direct_provider_body.decode("utf-8"))
             import_payload = json.loads(import_body.decode("utf-8"))
@@ -649,6 +685,19 @@ class DesignStudioAppTests(unittest.TestCase):
             self.assertEqual(media_status, 200)
             self.assertFalse(media_payload["sidecar_reached"])
             self.assertFalse(media_payload["secrets_persisted"])
+            self.assertEqual(config_status, 200)
+            self.assertTrue(config_payload["config"]["onboardingCompleted"])
+            self.assertEqual(config_payload["config"]["agentId"], "maverick")
+            self.assertFalse(config_payload["config"]["telemetry"]["content"])
+            self.assertEqual(config_update_status, 200)
+            self.assertEqual(config_update_payload["config"]["skillId"], "design-review")
+            self.assertEqual(config_secret_status, 400)
+            self.assertEqual(config_secret_payload["error"], "app_config_field_not_allowed")
+            self.assertNotIn("must-not-persist", config_secret_body.decode("utf-8"))
+            self.assertEqual(attribution_status, 200)
+            self.assertEqual(attribution_payload["status"], "invalid")
+            self.assertFalse(attribution_payload["sidecar_reached"])
+            self.assertNotIn("must-not-persist", attribution_body.decode("utf-8"))
             self.assertEqual(provider_status, 200)
             self.assertTrue(provider_payload["ok"])
             self.assertEqual(provider_payload["kind"], "success")
@@ -662,6 +711,7 @@ class DesignStudioAppTests(unittest.TestCase):
             self.assertNotIn("provider-fixture-token", direct_provider_body.decode("utf-8"))
             self.assertNotIn("provider-fixture-token", media_body.decode("utf-8"))
             self.assertNotIn("provider-fixture-token", state_body.decode("utf-8"))
+            self.assertNotIn("must-not-persist", state_body.decode("utf-8"))
             self.assertNotIn("provider-fixture-token", media_config_text)
             self.assertEqual(import_status, 200)
             self.assertEqual(

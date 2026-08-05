@@ -17,6 +17,7 @@ const LOAD_DEGRADED_AFTER_MS = 20_000;
 export function App() {
   const appId = currentDesignStudioAppId();
   const frameRef = useRef<HTMLIFrameElement>(null);
+  const frameNameRef = useRef(`opendesign-${crypto.randomUUID()}`);
   const submittedFrameRef = useRef<HTMLIFrameElement | null>(null);
   const sidecarOriginRef = useRef("");
   const navigationRef = useRef<OpenDesignNavigation>(initialNavigation());
@@ -162,6 +163,7 @@ export function App() {
       <iframe
         key={launchRevision}
         ref={frameRef}
+        name={frameNameRef.current}
         className="design-studio-frame"
         title="OpenDesign"
         referrerPolicy="no-referrer"
@@ -206,8 +208,10 @@ export function App() {
 }
 
 function submitBootstrapForm(frame: HTMLIFrameElement, launch: SidecarLaunch) {
-  const targetName = `opendesign-${crypto.randomUUID()}`;
-  frame.name = targetName;
+  const targetName = frame.name;
+  if (!targetName) {
+    throw new SidecarLaunchError("sidecar_frame_target_missing", 0);
+  }
   const form = document.createElement("form");
   const ticket = document.createElement("input");
   form.method = "POST";

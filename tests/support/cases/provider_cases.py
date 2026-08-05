@@ -400,6 +400,28 @@ class ProvidersTestCase(unittest.TestCase):
         self.assertEqual(selection.provider_id if selection is not None else None, "codex")
         self.assertEqual(runtime_adapter.provider_definition().provider_id, "codex")
 
+    def test_runtime_resolution_honors_codex_command_environment_override(self) -> None:
+        provider_store = self.make_provider_store()
+        runtime_store = self.make_runtime_store()
+        repo_root = self.make_repo_root()
+        session = create_runtime_session(
+            runtime_store,
+            session_id="sess-codex-command-override",
+            workspace_id="default",
+            agent_id="agent-1",
+            start_path=repo_root,
+        )
+
+        with patch.dict(os.environ, {"MAVERICK_CODEX_COMMAND": "/opt/maverick/codex-fixture"}, clear=False):
+            register_builtin_providers(provider_store)
+            configure_workspace_provider(provider_store, workspace_id="default", provider_id="codex")
+            _provider, _selection, runtime_adapter = resolve_runtime_backend_for_session(
+                provider_store,
+                session=session,
+            )
+
+        self.assertEqual(runtime_adapter.codex_command, "/opt/maverick/codex-fixture")
+
     def test_configure_workspace_provider_rejects_hosted_api_without_runtime_adapter(self) -> None:
         provider_store = self.make_provider_store()
         registry = builtin_provider_registry()

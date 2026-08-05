@@ -264,7 +264,8 @@ a real 0.16.1 daemon migration and rollback smoke with
   and retention cleanup.
 - WP6 supplies the real materialized-daemon adapter and acceptance record for
   marked copies. WP10 repeats migration, crash, and rollback scenarios through
-  the final sidecar and UI topology.
+  the final sidecar and UI topology; the browser product evidence records that
+  final real-daemon smoke as passed.
 
 Real workspace migration remains intentionally unauthorized. A fresh
 installation has no active generation until controlled bootstrap writes a fully

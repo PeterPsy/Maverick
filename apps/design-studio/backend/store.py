@@ -17,7 +17,7 @@ from core.app_sdk.storage import ensure_json_state, read_json_state, update_json
 
 
 STATE_FILE = "adapter-state.json"
-SCHEMA_VERSION = "2"
+SCHEMA_VERSION = "3"
 MAX_JOB_RECORDS = 1000
 _OPENDESIGN_MANIFEST_PATH = Path(__file__).resolve().parents[1] / "service" / "opendesign_bundle.json"
 
@@ -51,6 +51,20 @@ def default_state() -> dict[str, Any]:
             "query": "",
             "selected_project_id": "",
         },
+        "opendesign_app_config": {
+            "onboardingCompleted": True,
+            "agentId": "maverick",
+            "skillId": None,
+            "designSystemId": None,
+            "disabledSkills": [],
+            "disabledDesignSystems": [],
+            "telemetry": {
+                "metrics": False,
+                "content": False,
+                "artifactManifest": False,
+            },
+            "allowSilentUpdates": False,
+        },
         "import_jobs": [],
         "export_jobs": [],
         "lifecycle": {
@@ -77,7 +91,6 @@ def default_state() -> dict[str, Any]:
                 "/api/agents",
                 "/api/mcp",
                 "/api/plugins/upload-folder",
-                "/api/app-config",
                 "/api/orbit",
                 "/api/research",
                 "/api/deploy",
@@ -87,6 +100,8 @@ def default_state() -> dict[str, Any]:
             "handled_by_core": [
                 "/api/provider",
                 "/api/media/config",
+                "/api/app-config",
+                "/api/attribution/claim",
                 "/api/import/storage",
                 "/api/export/storage",
                 "/api/runs",
@@ -145,6 +160,17 @@ def migrate_state_payload(payload: dict[str, Any]) -> dict[str, Any]:
     state["route_policy"] = defaults["route_policy"]
     if not isinstance(state.get("view_state"), dict):
         state["view_state"] = default_state()["view_state"]
+    if not isinstance(state.get("opendesign_app_config"), dict):
+        state["opendesign_app_config"] = defaults["opendesign_app_config"]
+    else:
+        state["opendesign_app_config"] = {
+            **defaults["opendesign_app_config"],
+            **{
+                key: value
+                for key, value in state["opendesign_app_config"].items()
+                if key in defaults["opendesign_app_config"]
+            },
+        }
     for key in ("import_jobs", "export_jobs"):
         if not isinstance(state.get(key), list):
             state[key] = []

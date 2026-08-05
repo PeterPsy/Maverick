@@ -405,10 +405,11 @@ removes the process group and temporary data in `finally`.
   OpenDesign domain and removes the legacy writable project catalog.
 - WP10 repeats the real UI proof under the final sandbox/origin topology and
   covers core/sidecar restart, timeout, retry, hostile workspace access, and
-  full result-package behavior.
+  full result-package behavior. The real Chromium/OCI proof is committed as
+  `apps/design-studio/service/opendesign_product_acceptance_0_16_1.json`.
 
-Residual risk now lies in WP8–WP10: the runtime permission and product run
-routes are active, while removal of the legacy writable project catalog,
-Storage result export, final full-bleed browser flow, and the complete hostile
-E2E matrix remain gated there. Maverick remains experimental and local-only
-under the limitations in `SECURITY.md` and production-readiness documentation.
+WP8-WP10 are complete for this bridge: there is no writable legacy project
+catalog, Storage export is run-scoped, the full-bleed browser uses the isolated
+origin, and every scenario records the workspace/app/sidecar/OpenDesign/runtime
+correlation join without prompts or credentials. Maverick remains experimental
+and local-only under `SECURITY.md` and the production-readiness documentation.

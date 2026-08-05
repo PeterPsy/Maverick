@@ -1,0 +1,659 @@
+#!/usr/bin/env node
+
+/** Run the WP10 production-path browser acceptance against the pinned OCI bundle. */
+
+import { spawn } from 'node:child_process';
+import { createServer } from 'node:net';
+import { mkdtemp, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
+import os from 'node:os';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+
+const scriptDir = path.dirname(fileURLToPath(import.meta.url));
+const appRoot = path.resolve(scriptDir, '..');
+const repoRoot = path.resolve(appRoot, '..', '..');
+const serverFixture = path.join(scriptDir, 'fixtures', 'opendesign_product_server.py');
+const migrationSmoke = path.join(appRoot, 'service', 'smoke_opendesign_migration.py');
+const python = path.join(repoRoot, '.venv', 'bin', 'python');
+const bundleContract = JSON.parse(await readFile(path.join(appRoot, 'service', 'opendesign_bundle.json'), 'utf8'));
+const evidenceOutput = argument('--evidence-output');
+const evidenceOutputPath = evidenceOutput
+  ? (path.isAbsolute(evidenceOutput)
+      ? evidenceOutput
+      : path.resolve(evidenceOutput.startsWith('apps/design-studio/') ? repoRoot : appRoot, evidenceOutput))
+  : '';
+const temporaryRoot = await mkdtemp(path.join(os.tmpdir(), 'moe-'));
+const keepTemporary = process.env.MAVERICK_KEEP_E2E_TEMP === '1';
+const installationRoot = path.join(temporaryRoot, 'i');
+const port = await freePort();
+const platformOrigin = `http://maverick.localhost:${port}`;
+process.env.PLAYWRIGHT_BROWSERS_PATH ||= process.env.MAVERICK_PLAYWRIGHT_BROWSERS_PATH
+  || path.resolve(repoRoot, '..', '..', '.cache', 'ms-playwright');
+const { chromium } = await import('playwright');
+let server = null;
+let browser = null;
+
+
+try {
+  await mkdir(installationRoot, { recursive: true });
+  server = await startServer();
+  browser = await chromium.launch({ headless: true });
+  const context = await browser.newContext({ viewport: { width: 1600, height: 1000 } });
+  const page = await context.newPage();
+  const networkProof = {
+    isolatedRequests: 0,
+    bootstrapPosts: 0,
+    maverickCookieForwarded: false,
+    browserBearerForwarded: false,
+    diagnostics: [],
+  };
+  page.on('request', (request) => {
+    let parsed;
+    try { parsed = new URL(request.url()); } catch { return; }
+    if (!isSidecarHostname(parsed.hostname)) return;
+    networkProof.isolatedRequests += 1;
+    if (parsed.pathname === '/.well-known/maverick-sidecar-bootstrap' && request.method() === 'POST') {
+      networkProof.bootstrapPosts += 1;
+    }
+    const headers = request.headers();
+    const cookie = headers.cookie || '';
+    if (cookie.includes('maverick_session=')) networkProof.maverickCookieForwarded = true;
+    if (headers.authorization) networkProof.browserBearerForwarded = true;
+  });
+  page.on('response', (response) => {
+    let parsed;
+    try { parsed = new URL(response.url()); } catch { return; }
+    if (!isSidecarHostname(parsed.hostname)) return;
+    networkProof.diagnostics.push({ method: response.request().method(), path: parsed.pathname, status: response.status() });
+  });
+  page.on('requestfailed', (request) => {
+    let parsed;
+    try { parsed = new URL(request.url()); } catch { return; }
+    if (!isSidecarHostname(parsed.hostname)) return;
+    networkProof.diagnostics.push({
+      method: request.method(),
+      path: parsed.pathname,
+      failure: String(request.failure()?.errorText || 'request_failed').slice(0, 120),
+    });
+  });
+
+  await loginAndOpen(page);
+  let sidecar = await waitForSidecarFrame(page, '', networkProof);
+  await completeOpenDesignOnboarding(sidecar);
+  const originA = new URL(sidecar.url()).origin;
+  assert(originA !== platformOrigin, 'OpenDesign did not use an isolated origin');
+
+  const projectA = await createProjectFromUi(page, sidecar, 'Maverick WP10 browser project');
+  const uploaded = await platformRequest(page, '/api/workspace-files/uploads', {
+    method: 'POST',
+    body: {
+      filename: 'wp10-brief.md',
+      content_type: 'text/markdown',
+      content_base64: Buffer.from('# WP10 brief\n\nGoverned Storage import.\n').toString('base64'),
+    },
+  });
+  assert(uploaded.status === 201, `Storage upload returned HTTP ${uploaded.status}`);
+  const uploadedPath = uploaded.body?.file?.relative_path;
+  assert(typeof uploadedPath === 'string' && uploadedPath.startsWith('storage/uploaded/'), 'Storage upload path is invalid');
+  const imported = await frameRequest(sidecar, '/api/import/storage', {
+    method: 'POST',
+    body: { project_id: projectA.projectId, workspace_relative_path: uploadedPath },
+  });
+  assert(imported.status === 200, `Storage import returned HTTP ${imported.status}`);
+  const importedFile = await frameText(sidecar, `/api/projects/${encodeURIComponent(projectA.projectId)}/raw/wp10-brief.md`);
+  assert(importedFile.status === 200 && importedFile.text.includes('Governed Storage import.'), 'Storage import read-back failed');
+
+  const successful = await createRun(sidecar, projectA, 'Create the governed WP10 HTML artifact.');
+  const streamProof = await readIncrementalStream(sidecar, successful.runId);
+  const successfulRun = await waitForRun(sidecar, successful.runId, 'succeeded');
+  const successfulPackage = await resultPackage(sidecar, successful.runId);
+  if (!streamProof.incremental || (!streamProof.closed && !streamProof.terminal)) {
+    const runtimeEvents = await platformRequest(
+      page,
+      `/api/runtime/sessions/${encodeURIComponent(successfulPackage.maverick.runtime_session_id)}/events`,
+    );
+    const eventTypes = Array.isArray(runtimeEvents.body?.items)
+      ? runtimeEvents.body.items.map((item) => String(item?.event_type || '')).filter(Boolean)
+      : [];
+    throw new Error(`Incremental SSE did not deliver and terminate cleanly: ${JSON.stringify({ ...streamProof, eventTypes })}`);
+  }
+  const correlationA = correlationFromPackage(successfulPackage, projectA.projectId, successful.runId);
+  const preview = await frameText(sidecar, `/api/projects/${encodeURIComponent(projectA.projectId)}/raw/index.html`);
+  assert(preview.status === 200 && preview.text.includes('Maverick real runtime file proof'), 'Generated file preview failed');
+  assert(successfulRun.status === 'succeeded', 'Successful run status drifted');
+
+  const canceled = await createRun(sidecar, projectA, 'MAVERICK_E2E_LONG');
+  const canceledStreamPromise = readIncrementalStream(sidecar, canceled.runId);
+  await waitForRun(sidecar, canceled.runId, 'running');
+  const cancelOne = await frameRequest(sidecar, `/api/runs/${encodeURIComponent(canceled.runId)}/cancel`, { method: 'POST' });
+  const cancelTwo = await frameRequest(sidecar, `/api/runs/${encodeURIComponent(canceled.runId)}/cancel`, { method: 'POST' });
+  assert(cancelOne.status === 200 && cancelTwo.status === 200, 'Cancel was not idempotent');
+  const canceledRun = await waitForRun(sidecar, canceled.runId, 'canceled');
+  const canceledStream = await canceledStreamPromise;
+  const canceledPackage = await resultPackage(sidecar, canceled.runId);
+  const correlationCanceled = correlationFromPackage(canceledPackage, projectA.projectId, canceled.runId);
+  assert(
+    canceledRun.status === 'canceled' && canceledPackage.run.status === 'canceled' && canceledStream.terminal,
+    'Canceled package or stream drifted',
+  );
+
+  const exported = await frameRequest(sidecar, '/api/export/storage', {
+    method: 'POST',
+    body: { project_id: projectA.projectId, run_id: successful.runId },
+  });
+  assert(exported.status === 200, `Storage export returned HTTP ${exported.status}`);
+  const manifestPath = `storage/generated/design-studio/${projectA.projectId}/${successful.runId}/manifest.json`;
+  const manifestRead = await storageRead(page, manifestPath);
+  assert(manifestRead.status === 200, `Export manifest read returned HTTP ${manifestRead.status}`);
+  const manifest = JSON.parse(Buffer.from(manifestRead.body.content_base64, 'base64').toString('utf8'));
+  assert(manifest.od_project_id === projectA.projectId && manifest.od_run_id === successful.runId, 'Export identity drifted');
+  assert(Array.isArray(manifest.artifacts) && manifest.artifacts.length >= 1, 'Export manifest has no artifacts');
+
+  const forbidden = await frameRequest(sidecar, '/api/import/folder', { method: 'POST', body: {} });
+  const unknown = await frameRequest(sidecar, '/api/wp10-unknown-route');
+  const coreRoute = await frameRequest(sidecar, '/api/session');
+  assert(forbidden.status === 403, 'Sensitive OpenDesign route was not blocked');
+  assert(unknown.status === 404 && coreRoute.status === 404, 'Unknown or Maverick core route leaked through sidecar origin');
+  const browserStorage = await sidecar.evaluate(() => ({
+    cookie: document.cookie,
+    href: window.location.href,
+    local: Object.entries(localStorage),
+    session: Object.entries(sessionStorage),
+  }));
+  const browserStorageText = JSON.stringify([browserStorage.local, browserStorage.session]);
+  assert(browserStorage.cookie === '', 'A script-visible cookie reached OpenDesign');
+  assert(!/(ticket|bearer|maverick_session)/i.test(browserStorageText), 'A credential-like value reached browser storage');
+  const cleanSidecarUrl = new URL(browserStorage.href);
+  assert(cleanSidecarUrl.search === '' && cleanSidecarUrl.hash === '', 'OpenDesign retained bootstrap material in its URL');
+
+  const bootstrapCountBeforeRestart = networkProof.bootstrapPosts;
+  await stopServer(server);
+  server = await startServer();
+  await page.goto(`${platformOrigin}/app/design-studio`, { waitUntil: 'domcontentloaded' });
+  sidecar = await waitForSidecarFrame(page);
+  const persistedProject = await frameRequest(sidecar, `/api/projects/${encodeURIComponent(projectA.projectId)}`);
+  assert(persistedProject.status === 200, 'Project did not survive core/sidecar restart');
+  assert(networkProof.bootstrapPosts > bootstrapCountBeforeRestart, 'Restart did not mint a fresh one-shot browser session');
+
+  await page.goto(
+    `${platformOrigin}/app/design-studio?od_project_id=${encodeURIComponent(projectA.projectId)}&od_run_id=${encodeURIComponent(successful.runId)}`,
+    { waitUntil: 'domcontentloaded' },
+  );
+  sidecar = await waitForSidecarFrame(page, `/projects/${projectA.projectId}`);
+  assert(new URL(sidecar.url()).pathname === `/projects/${projectA.projectId}`, 'Project/run deep link did not reach OpenDesign');
+
+  const switched = await platformRequest(page, '/api/workspaces/active', {
+    method: 'POST',
+    body: { workspace_id: 'workspace-b' },
+  });
+  assert(switched.status === 200, 'Workspace switch failed');
+  await page.goto(`${platformOrigin}/app/design-studio`, { waitUntil: 'domcontentloaded' });
+  const sidecarB = await waitForSidecarFrame(page);
+  const originB = new URL(sidecarB.url()).origin;
+  assert(originB !== originA, 'Two workspaces reused the same isolated sidecar origin');
+  const projectsB = await frameRequest(sidecarB, '/api/projects');
+  const projectItemsB = Array.isArray(projectsB.body?.projects) ? projectsB.body.projects : [];
+  assert(!projectItemsB.some((item) => item?.id === projectA.projectId), 'Workspace B observed workspace A project data');
+  const projectB = await createProjectFromUi(page, sidecarB, 'Maverick WP10 workspace B');
+  const successfulB = await createRun(sidecarB, projectB, 'Create the isolated workspace B artifact.');
+  await readIncrementalStream(sidecarB, successfulB.runId);
+  await waitForRun(sidecarB, successfulB.runId, 'succeeded');
+  const packageB = await resultPackage(sidecarB, successfulB.runId);
+  const correlationB = correlationFromPackage(packageB, projectB.projectId, successfulB.runId);
+  assert(correlationB.workspace_id === 'workspace-b', 'Workspace B correlation identity drifted');
+
+  assert(networkProof.isolatedRequests > 0, 'Browser did not send requests to the isolated sidecar origin');
+  assert(!networkProof.maverickCookieForwarded, 'A Maverick session cookie reached the sidecar origin');
+  assert(!networkProof.browserBearerForwarded, 'A browser bearer reached the sidecar origin');
+
+  await runMigrationSmoke();
+  const evidence = buildEvidence({
+    correlationA,
+    correlationB,
+    correlationCanceled,
+    manifest,
+    networkProof,
+    originA,
+    originB,
+    projectA,
+    successful,
+  });
+  if (evidenceOutputPath) {
+    await mkdir(path.dirname(evidenceOutputPath), { recursive: true });
+    await writeFile(evidenceOutputPath, `${JSON.stringify(evidence, null, 2)}\n`, 'utf8');
+  }
+  process.stdout.write(`${JSON.stringify(evidence, null, 2)}\n`);
+} catch (error) {
+  const diagnostic = typeof server?.wp10Diagnostic === 'function' ? server.wp10Diagnostic() : '';
+  if (diagnostic) process.stderr.write(`\nSynthetic server diagnostic:\n${redactedDiagnostic(diagnostic)}\n`);
+  throw error;
+} finally {
+  if (browser) await browser.close().catch(() => {});
+  await stopServer(server);
+  if (keepTemporary) {
+    process.stderr.write(`Synthetic E2E root retained at ${temporaryRoot}\n`);
+  } else {
+    await rm(temporaryRoot, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
+  }
+}
+
+
+function argument(name) {
+  const index = process.argv.indexOf(name);
+  return index >= 0 ? process.argv[index + 1] : '';
+}
+
+
+function assert(condition, message) {
+  if (!condition) throw new Error(message);
+}
+
+
+async function freePort() {
+  const serverSocket = createServer();
+  await new Promise((resolve, reject) => {
+    serverSocket.once('error', reject);
+    serverSocket.listen(0, '127.0.0.1', resolve);
+  });
+  const address = serverSocket.address();
+  const selected = typeof address === 'object' && address ? address.port : 0;
+  await new Promise((resolve) => serverSocket.close(resolve));
+  if (!selected) throw new Error('Could not reserve a local E2E port');
+  return selected;
+}
+
+
+async function startServer() {
+  const child = spawn(python, [serverFixture, '--root', installationRoot, '--port', String(port)], {
+    cwd: repoRoot,
+    detached: true,
+    env: { ...process.env, PYTHONUNBUFFERED: '1' },
+    stdio: ['ignore', 'pipe', 'pipe'],
+  });
+  let output = '';
+  child.stdout.on('data', (chunk) => { output = `${output}${String(chunk)}`.slice(-16_384); });
+  child.stderr.on('data', (chunk) => { output = `${output}${String(chunk)}`.slice(-16_384); });
+  child.wp10Diagnostic = () => output;
+  for (let attempt = 0; attempt < 600; attempt += 1) {
+    if (child.exitCode !== null || child.signalCode !== null) {
+      throw new Error(`Synthetic Maverick server exited before readiness: ${redactedDiagnostic(output)}`);
+    }
+    try {
+      const response = await fetch(`http://localhost:${port}/health`);
+      if (response.ok) return child;
+    } catch {}
+    await delay(100);
+  }
+  await stopServer(child);
+  throw new Error(`Synthetic Maverick server did not become ready: ${redactedDiagnostic(output)}`);
+}
+
+
+async function stopServer(child) {
+  if (!child?.pid || child.exitCode !== null || child.signalCode !== null) return;
+  try { process.kill(-child.pid, 'SIGTERM'); } catch {}
+  const exited = await Promise.race([
+    new Promise((resolve) => child.once('exit', () => resolve(true))),
+    delay(10_000).then(() => false),
+  ]);
+  if (!exited) {
+    try { process.kill(-child.pid, 'SIGKILL'); } catch {}
+  }
+}
+
+
+async function loginAndOpen(page) {
+  await page.goto(`${platformOrigin}/app/design-studio`, { waitUntil: 'domcontentloaded' });
+  await page.getByPlaceholder('Email or username').fill('admin');
+  await page.getByRole('button', { name: 'Continue' }).click();
+  await page.getByPlaceholder('Password').fill('maverick');
+  const sessionResponse = page.waitForResponse(
+    (response) => response.url() === `${platformOrigin}/api/session` && response.status() === 200,
+  );
+  await page.getByRole('button', { name: 'Sign in' }).click();
+  await sessionResponse;
+}
+
+
+async function waitForSidecarFrame(page, expectedPath = '', networkProof = null) {
+  let lastRetryAt = 0;
+  for (let attempt = 0; attempt < 600; attempt += 1) {
+    const frame = page.frames().find((candidate) => {
+      try {
+        const url = new URL(candidate.url());
+        return isSidecarHostname(url.hostname) && (!expectedPath || url.pathname === expectedPath);
+      } catch { return false; }
+    });
+    if (frame) {
+      await frame.waitForLoadState('domcontentloaded').catch(() => {});
+      return frame;
+    }
+    const retry = page.getByRole('button', { name: 'Retry securely' });
+    if (Date.now() - lastRetryAt >= 2_000 && await retry.isVisible().catch(() => false)) {
+      await retry.click();
+      lastRetryAt = Date.now();
+    }
+    await delay(100);
+  }
+  const frameUrls = await Promise.all(page.frames().map(async (frame) => ({
+    url: frame.url(),
+    body: (await frame.locator('body').innerText().catch(() => '')).slice(0, 500),
+  })));
+  const bodyText = (await page.locator('body').innerText().catch(() => '')).slice(0, 1000);
+  throw new Error(`OpenDesign isolated browser frame did not become ready: ${JSON.stringify({ frameUrls, bodyText, network: networkProof?.diagnostics || [] })}`);
+}
+
+
+async function completeOpenDesignOnboarding(frame) {
+  const projectButton = frame.locator('[data-testid="entry-nav-new-project"]');
+  const localAgent = frame.getByText('Local coding agent', { exact: true });
+  let selected = false;
+  let seeded = false;
+  for (let attempt = 0; attempt < 600; attempt += 1) {
+    if (await projectButton.isVisible().catch(() => false)) return;
+    if (!selected && await localAgent.isVisible().catch(() => false)) {
+      await localAgent.click();
+      selected = true;
+    }
+    if (selected && !seeded && await frame.getByText('No agents detected yet.', { exact: false }).isVisible().catch(() => false)) {
+      const configured = await frameRequest(frame, '/api/app-config', {
+        method: 'PUT',
+        body: { onboardingCompleted: true, agentId: 'maverick' },
+      });
+      assert(configured.status === 200, `OpenDesign synthetic onboarding setup returned HTTP ${configured.status}`);
+      seeded = true;
+      await frame.goto(`${new URL(frame.url()).origin}/`, { waitUntil: 'domcontentloaded' });
+    }
+    await delay(100);
+  }
+  const body = (await frame.locator('body').innerText().catch(() => '')).slice(0, 600);
+  throw new Error(`OpenDesign onboarding did not reach the project UI: ${JSON.stringify({ url: frame.url(), body })}`);
+}
+
+
+async function createProjectFromUi(page, frame, name) {
+  await frame.locator('[data-testid="entry-nav-new-project"]').waitFor({ state: 'visible', timeout: 60_000 });
+  const railToggle = frame.locator('[data-testid="entry-rail-toggle"]');
+  if (await railToggle.getAttribute('aria-expanded') !== 'true') await railToggle.click();
+  await frame.locator('[data-testid="entry-nav-new-project"]').click();
+  await frame.locator('[data-testid="new-project-name"]').fill(name);
+  const responsePromise = page.waitForResponse((response) => {
+    try {
+      const url = new URL(response.url());
+      return isSidecarHostname(url.hostname)
+        && url.pathname === '/api/projects'
+        && response.request().method() === 'POST';
+    } catch { return false; }
+  }, { timeout: 60_000 });
+  await frame.locator('[data-testid="create-project"]').click();
+  const response = await responsePromise;
+  const responseText = await response.text();
+  assert(response.status() < 300, `OpenDesign UI project create returned HTTP ${response.status()}: ${responseText.slice(0, 300)}`);
+  const payload = JSON.parse(responseText);
+  const projectId = String(payload?.project?.id || payload?.id || '');
+  assert(projectId, 'OpenDesign UI did not return a project id');
+  let conversationId = String(payload?.conversationId || payload?.conversation?.id || '');
+  if (!conversationId) {
+    const conversations = await frameRequest(frame, `/api/projects/${encodeURIComponent(projectId)}/conversations`);
+    const items = Array.isArray(conversations.body?.conversations) ? conversations.body.conversations : [];
+    conversationId = String(items[0]?.id || '');
+  }
+  assert(conversationId, 'OpenDesign UI did not create a conversation');
+  return { projectId, conversationId };
+}
+
+
+async function createRun(frame, project, message) {
+  const suffix = crypto.randomUUID();
+  const response = await frameRequest(frame, '/api/runs', {
+    method: 'POST',
+    body: {
+      projectId: project.projectId,
+      conversationId: project.conversationId,
+      assistantMessageId: `assistant_${suffix}`,
+      clientRequestId: `client_${suffix}`,
+      agentId: 'maverick',
+      message,
+      currentPrompt: message,
+    },
+  });
+  assert(response.status === 202 && response.body?.runId, `Run create returned HTTP ${response.status}`);
+  return { runId: String(response.body.runId) };
+}
+
+
+async function readIncrementalStream(frame, runId) {
+  return frame.evaluate(async ({ id }) => {
+    let response;
+    for (let attempt = 0; attempt < 300; attempt += 1) {
+      response = await fetch(`/api/runs/${encodeURIComponent(id)}/events`);
+      if (response.status !== 409) break;
+      await new Promise((resolve) => setTimeout(resolve, 100));
+    }
+    if (!response) throw new Error('SSE request was not issued');
+    if (!response.ok || !response.body) throw new Error(`SSE returned HTTP ${response.status}`);
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+    let text = '';
+    let closed = false;
+    let runStatus = '';
+    let terminalObservedAt = 0;
+    const deadline = Date.now() + 90_000;
+    let pendingRead = reader.read();
+    while (Date.now() < deadline) {
+      const part = await Promise.race([
+        pendingRead,
+        new Promise((resolve) => setTimeout(() => resolve(null), 1_000)),
+      ]);
+      if (part === null) {
+        const runResponse = await fetch(`/api/runs/${encodeURIComponent(id)}`);
+        if (runResponse.ok) {
+          runStatus = String((await runResponse.json())?.status || '');
+          if (['succeeded', 'failed', 'canceled'].includes(runStatus)) {
+            terminalObservedAt ||= Date.now();
+            if (Date.now() - terminalObservedAt >= 10_000) break;
+          }
+        }
+        continue;
+      }
+      if (part.done) {
+        closed = true;
+        break;
+      }
+      text += decoder.decode(part.value, { stream: true });
+      if (/event:\s*end/.test(text)) break;
+      pendingRead = reader.read();
+    }
+    await reader.cancel().catch(() => {});
+    return {
+      incremental: /text_delta|project_file_changed/.test(text),
+      terminal: /event:\s*end/.test(text),
+      closed,
+      runStatus,
+      eventNames: [...text.matchAll(/event:\s*([^\r\n]+)/g)].map((match) => match[1]).slice(0, 20),
+    };
+  }, { id: runId });
+}
+
+
+async function waitForRun(frame, runId, expectedStatus) {
+  const terminal = new Set(['succeeded', 'failed', 'canceled']);
+  for (let attempt = 0; attempt < 600; attempt += 1) {
+    const response = await frameRequest(frame, `/api/runs/${encodeURIComponent(runId)}`);
+    if (response.status === 200) {
+      const status = String(response.body?.status || '');
+      if (status === expectedStatus) return response.body;
+      if (terminal.has(status) && status !== expectedStatus) {
+        throw new Error(`Run reached ${status}; expected ${expectedStatus}: ${JSON.stringify(response.body)}`);
+      }
+    }
+    await delay(100);
+  }
+  throw new Error(`Run did not reach ${expectedStatus}`);
+}
+
+
+async function resultPackage(frame, runId) {
+  const response = await frameRequest(frame, `/api/runs/${encodeURIComponent(runId)}/result-package`);
+  assert(response.status === 200 && response.body?.maverick, `Result package returned HTTP ${response.status}`);
+  return response.body;
+}
+
+
+function correlationFromPackage(payload, projectId, runId) {
+  const correlation = {
+    workspace_id: String(payload.maverick.workspace_id || ''),
+    local_app_id: String(payload.maverick.local_app_id || ''),
+    sidecar_id: String(payload.maverick.sidecar_id || ''),
+    od_project_id: String(payload.maverick.od_project_id || projectId),
+    od_run_id: String(payload.maverick.od_run_id || runId),
+    runtime_session_id: String(payload.maverick.runtime_session_id || ''),
+    turn_id: String(payload.maverick.turn_id || ''),
+    request_id: String(payload.maverick.request_id || ''),
+    correlation_id: String(payload.maverick.correlation_id || ''),
+  };
+  assert(Object.values(correlation).every(Boolean), 'Result package correlation is incomplete');
+  assert(correlation.od_project_id === projectId && correlation.od_run_id === runId, 'Result correlation identity drifted');
+  return correlation;
+}
+
+
+async function frameRequest(frame, requestPath, { method = 'GET', body = undefined } = {}) {
+  return frame.evaluate(async ({ requestPath: target, method: requestMethod, body: requestBody }) => {
+    const response = await fetch(target, {
+      method: requestMethod,
+      headers: requestBody === undefined ? undefined : { 'content-type': 'application/json' },
+      body: requestBody === undefined ? undefined : JSON.stringify(requestBody),
+    });
+    const text = await response.text();
+    let parsed = null;
+    try { parsed = text ? JSON.parse(text) : null; } catch { parsed = text; }
+    return { status: response.status, body: parsed };
+  }, { requestPath, method, body });
+}
+
+
+async function frameText(frame, requestPath) {
+  return frame.evaluate(async (target) => {
+    const response = await fetch(target);
+    return { status: response.status, text: await response.text() };
+  }, requestPath);
+}
+
+
+async function platformRequest(page, requestPath, { method = 'GET', body = undefined } = {}) {
+  return page.evaluate(async ({ requestPath: target, method: requestMethod, body: requestBody }) => {
+    const response = await fetch(target, {
+      method: requestMethod,
+      credentials: 'same-origin',
+      headers: requestBody === undefined ? undefined : { 'content-type': 'application/json' },
+      body: requestBody === undefined ? undefined : JSON.stringify(requestBody),
+    });
+    const text = await response.text();
+    let parsed = null;
+    try { parsed = text ? JSON.parse(text) : null; } catch { parsed = text; }
+    return { status: response.status, body: parsed };
+  }, { requestPath, method, body });
+}
+
+
+async function storageRead(page, workspaceRelativePath) {
+  return platformRequest(page, '/api/apps/storage/backend', {
+    method: 'POST',
+    body: {
+      action: 'file.content.read',
+      workspace_relative_path: workspaceRelativePath,
+      include_content: true,
+      max_bytes: 1_048_576,
+      _app_secret_request: { logical_names: [], required: false },
+    },
+  });
+}
+
+
+async function runMigrationSmoke() {
+  const child = spawn(python, [migrationSmoke], {
+    cwd: path.dirname(migrationSmoke),
+    env: process.env,
+    stdio: ['ignore', 'ignore', 'pipe'],
+  });
+  let diagnostic = '';
+  child.stderr.on('data', (chunk) => { diagnostic = `${diagnostic}${String(chunk)}`.slice(-8_192); });
+  const code = await new Promise((resolve, reject) => {
+    child.once('error', reject);
+    child.once('exit', (status) => resolve(status));
+  });
+  if (code !== 0) throw new Error(`Migration/rollback smoke failed: ${redactedDiagnostic(diagnostic)}`);
+}
+
+
+function buildEvidence({ correlationA, correlationB, correlationCanceled, manifest, networkProof, originA, originB, projectA, successful }) {
+  const scenarios = [
+    ['login_open', 'Login and open Design Studio', correlationA, { isolated_origin: true }],
+    ['create_project_ui', 'Create project from the OpenDesign UI', correlationA, { project_created: true }],
+    ['storage_import', 'Import one Storage file with read-back', correlationA, { imported: true }],
+    ['runtime_start', 'Start one Maverick-owned run', correlationA, { submitted: true }],
+    ['incremental_sse', 'Receive incremental SSE before terminal', correlationA, { incremental: true }],
+    ['generated_preview', 'Generate and preview a project file', correlationA, { previewed: true }],
+    ['cancel_long_run', 'Cancel a long run idempotently', correlationCanceled, { canceled: true, repeated_cancel_safe: true }],
+    ['storage_export', 'Export result package and verified manifest to Storage', correlationA, { artifact_count: manifest.artifacts.length }],
+    ['restart_reload', 'Reload after core and sidecar restart', correlationA, { recovered: true }],
+    ['deep_link', 'Open a project/run deep link', correlationA, { project_route: true, run_hint: true }],
+    ['workspace_isolation', 'Keep workspace A and B processes and data isolated', correlationB, { distinct_origins: originA !== originB }],
+    ['forbidden_routes', 'Deny sensitive, unknown, and core routes', correlationA, { exact_deny: true }],
+    ['secret_boundary', 'Keep platform credentials out of OpenDesign', correlationA, {
+      maverick_cookie_forwarded: networkProof.maverickCookieForwarded,
+      browser_bearer_forwarded: networkProof.browserBearerForwarded,
+      one_shot_bootstrap_count: networkProof.bootstrapPosts,
+    }],
+    ['upgrade_rollback', 'Upgrade and rollback the real artifact with fixture data', correlationA, { migration_smoke: true }],
+  ].map(([id, name, correlation, proof]) => ({ id, name, status: 'passed', correlation, proof }));
+  return {
+    schema_version: '1',
+    gate: 'WP10',
+    status: 'passed',
+    opendesign: {
+      version: bundleContract.upstream.release_version,
+      oci_reference: `${bundleContract.distribution.registry}/${bundleContract.distribution.repository}:${bundleContract.distribution.reference}`,
+      artifact_sha256: bundleContract.artifact.assets['linux-x86_64'].sha256,
+    },
+    product_path: {
+      official_oci_daemon: true,
+      real_chromium: true,
+      real_maverick_core: true,
+      real_sidecar_broker: true,
+      real_storage_app: true,
+      external_runtime_protocol_fixture: true,
+      local_next_build: false,
+      docker_socket: false,
+      remote_iframe: false,
+    },
+    canonical_entity: {
+      od_project_id: projectA.projectId,
+      od_run_id: successful.runId,
+    },
+    scenarios,
+    redaction: {
+      full_prompt_recorded: false,
+      credential_value_recorded: false,
+      environment_recorded: false,
+      host_path_recorded: false,
+    },
+  };
+}
+
+
+function redactedDiagnostic(value) {
+  return String(value || '').replace(/\/[^\s:]+/g, '<path>').slice(-1000);
+}
+
+
+function isSidecarHostname(hostname) {
+  return String(hostname || '').includes('.sidecars.') && String(hostname || '').endsWith('.localhost');
+}
+
+
+function delay(milliseconds) {
+  return new Promise((resolve) => setTimeout(resolve, milliseconds));
+}

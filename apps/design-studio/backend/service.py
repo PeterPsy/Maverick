@@ -47,6 +47,9 @@ MAX_EXPORT_UNCOMPRESSED_BYTES = 128 * 1024 * 1024
 MAX_LEGACY_MAP_BYTES = 2 * 1024 * 1024
 MAX_JOB_RECORDS = 1000
 PROVIDER_MODEL_PROTOCOLS = {"anthropic", "openai", "azure", "google", "ollama", "senseaudio", "aihubmix"}
+APP_CONFIG_SCALAR_KEYS = {"skillId", "designSystemId"}
+APP_CONFIG_LIST_KEYS = {"disabledSkills", "disabledDesignSystems"}
+APP_CONFIG_ID_PATTERN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:@-]{0,127}$")
 
 
 class DesignStudioError(ValueError):
@@ -613,6 +616,10 @@ def handle_sidecar_core_route(payload: dict[str, Any], arguments: dict[str, Any]
     method = str(payload.get("method") or "GET").upper()
     if _route_matches(route_path, "/api/media/config"):
         return _handle_media_config_route(payload, arguments, method=method)
+    if _route_matches(route_path, "/api/app-config"):
+        return _handle_app_config_route(payload, arguments, method=method)
+    if _route_matches(route_path, "/api/attribution/claim"):
+        return _handle_attribution_claim_route(method=method)
     if _route_matches(route_path, "/api/import/storage"):
         return _handle_storage_import_route(payload, arguments, method=method)
     if _route_matches(route_path, "/api/export/storage"):
@@ -626,6 +633,112 @@ def handle_sidecar_core_route(payload: dict[str, Any], arguments: dict[str, Any]
         f"Design Studio does not implement handled sidecar route `{route_path}`.",
         status_code=404,
     )
+
+
+def _handle_app_config_route(
+    payload: dict[str, Any],
+    arguments: dict[str, Any],
+    *,
+    method: str,
+) -> dict[str, Any]:
+    """Expose only non-secret OpenDesign preferences owned by Maverick."""
+    if method == "GET":
+        state = ensure_state(payload["data_root"])
+        return {"status_code": 200, "json": {"config": state["opendesign_app_config"]}}
+    if method != "PUT":
+        raise DesignStudioError("method_not_allowed", "App config routes require GET or PUT.", status_code=405)
+    body = _sidecar_core_body(arguments)
+    allowed = {
+        "onboardingCompleted",
+        "agentId",
+        "skillId",
+        "designSystemId",
+        "disabledSkills",
+        "disabledDesignSystems",
+        "telemetry",
+        "allowSilentUpdates",
+    }
+    unexpected = sorted(set(body) - allowed)
+    if unexpected:
+        raise DesignStudioError(
+            "app_config_field_not_allowed",
+            f"OpenDesign app config field `{unexpected[0]}` is not governed by Maverick.",
+            status_code=400,
+        )
+    updates: dict[str, Any] = {}
+    if "onboardingCompleted" in body:
+        if body["onboardingCompleted"] is not True:
+            raise DesignStudioError(
+                "app_config_value_not_allowed",
+                "Maverick-owned runtime configuration keeps OpenDesign onboarding complete.",
+                status_code=400,
+            )
+        updates["onboardingCompleted"] = True
+    if "agentId" in body:
+        if body["agentId"] not in {None, "maverick"}:
+            raise DesignStudioError(
+                "app_config_value_not_allowed",
+                "OpenDesign execution is owned by the Maverick runtime bridge.",
+                status_code=400,
+            )
+        updates["agentId"] = "maverick"
+    for key in APP_CONFIG_SCALAR_KEYS:
+        if key in body:
+            value = body[key]
+            if value is not None and (not isinstance(value, str) or not APP_CONFIG_ID_PATTERN.fullmatch(value)):
+                raise DesignStudioError("app_config_invalid", f"OpenDesign app config field `{key}` is invalid.")
+            updates[key] = value
+    for key in APP_CONFIG_LIST_KEYS:
+        if key in body:
+            value = body[key]
+            if (
+                not isinstance(value, list)
+                or len(value) > 256
+                or any(not isinstance(item, str) or not APP_CONFIG_ID_PATTERN.fullmatch(item) for item in value)
+            ):
+                raise DesignStudioError("app_config_invalid", f"OpenDesign app config field `{key}` is invalid.")
+            updates[key] = list(dict.fromkeys(value))
+    if "telemetry" in body:
+        telemetry = body["telemetry"]
+        if not isinstance(telemetry, dict) or any(value is not False for value in telemetry.values()):
+            raise DesignStudioError(
+                "app_config_value_not_allowed",
+                "OpenDesign telemetry remains disabled in the governed runtime.",
+                status_code=400,
+            )
+        updates["telemetry"] = {"metrics": False, "content": False, "artifactManifest": False}
+    if "allowSilentUpdates" in body:
+        if body["allowSilentUpdates"] is not False:
+            raise DesignStudioError(
+                "app_config_value_not_allowed",
+                "OpenDesign updates require a verified Maverick artifact.",
+                status_code=400,
+            )
+        updates["allowSilentUpdates"] = False
+
+    def apply(state: dict[str, Any]) -> dict[str, Any]:
+        state["opendesign_app_config"].update(updates)
+        return state
+
+    state = update_state(payload["data_root"], apply)
+    return {"status_code": 200, "json": {"config": state["opendesign_app_config"]}}
+
+
+def _handle_attribution_claim_route(*, method: str) -> dict[str, Any]:
+    if method != "POST":
+        raise DesignStudioError("method_not_allowed", "Attribution claim routes require POST.", status_code=405)
+    return {
+        "status_code": 200,
+        "json": {
+            "ok": True,
+            "status": "invalid",
+            "found": False,
+            "pending": False,
+            "merged": False,
+            "sidecar_reached": False,
+            "telemetry_enabled": False,
+        },
+    }
 
 
 def _handle_runtime_bridge_route(
@@ -1046,6 +1159,7 @@ def _public_state(state: dict[str, Any]) -> dict[str, Any]:
     return {
         "schema_version": state.get("schema_version"),
         "view_state": state.get("view_state", {}),
+        "opendesign_app_config": state.get("opendesign_app_config", {}),
         "import_jobs": state.get("import_jobs", []),
         "export_jobs": state.get("export_jobs", []),
         "lifecycle": state.get("lifecycle", {}),

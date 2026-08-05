@@ -424,11 +424,9 @@ class SidecarCoreRouteIntegrationTests(unittest.TestCase):
 _SIDECAR_SERVER = textwrap.dedent(
     """
     from __future__ import annotations
-
     from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
     import json
     import os
-
 
     class Handler(BaseHTTPRequestHandler):
         def do_GET(self):
@@ -451,7 +449,6 @@ _SIDECAR_SERVER = textwrap.dedent(
             self.end_headers()
             self.wfile.write(body)
 
-
     ThreadingHTTPServer((os.environ["OD_BIND_HOST"], int(os.environ["OD_PORT"])), Handler).serve_forever()
     """
 )
@@ -460,10 +457,8 @@ _SIDECAR_SERVER = textwrap.dedent(
 _BACKEND = textwrap.dedent(
     """
     from __future__ import annotations
-
     import json
     import sys
-
 
     payload = json.loads(sys.stdin.read() or "{}")
     body = payload.get("body") if isinstance(payload.get("body"), dict) else {}

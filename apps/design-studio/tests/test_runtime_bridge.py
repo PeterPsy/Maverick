@@ -142,6 +142,22 @@ class DesignStudioRuntimeBridgeTests(unittest.TestCase):
                 self.assertEqual(package["run"]["status"], status)
                 self.assertEqual(package["artifacts"][0]["file"], "index.html")
                 self.assertEqual(package["maverick"]["workspace_id"], "default")
+                self.assertEqual(package["maverick"]["od_project_id"], f"od_project_{'success' if status == 'succeeded' else 'failure' if status == 'failed' else 'cancel'}")
+                self.assertEqual(package["maverick"]["od_run_id"], package["run"]["runId"])
+                self.assertEqual(
+                    set(package["maverick"]),
+                    {
+                        "workspace_id",
+                        "local_app_id",
+                        "sidecar_id",
+                        "od_project_id",
+                        "od_run_id",
+                        "request_id",
+                        "correlation_id",
+                        "runtime_session_id",
+                        "turn_id",
+                    },
+                )
 
     def test_translator_rejects_foreign_stream_and_unknown_event(self) -> None:
         with TemporaryDirectory() as temp_dir:

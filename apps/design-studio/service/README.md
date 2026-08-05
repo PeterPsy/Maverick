@@ -277,3 +277,29 @@ Storage. The official OCI smoke performs this flow in a temporary workspace:
 PYTHONDONTWRITEBYTECODE=1 python3 -B \
   apps/design-studio/service/smoke_opendesign_sidecar.py
 ```
+
+## Production-path acceptance
+
+WP10 is exercised by `tests/opendesign_product.e2e.mjs`. It creates a new
+temporary Maverick installation with two synthetic workspaces, boots the
+materialized official `ghcr.io/nexu-io/od:0.16.1` closure through the declared
+launcher, and drives the isolated UI with real Chromium. Core, the Unix sidecar
+relay, Storage import/export, restart recovery, route policy, browser sessions,
+and migration smoke all use their production code paths. A statically compiled
+external Codex app-server protocol fixture supplies deterministic model output
+without entering the OpenDesign or core process and without logging prompts.
+
+Run and validate the committed redaction-safe records with:
+
+```bash
+npm run test:e2e --prefix apps/design-studio -- \
+  --evidence-output apps/design-studio/service/opendesign_product_acceptance_0_16_1.json
+python3 -m unittest apps.design-studio.tests.test_production_acceptance
+```
+
+`opendesign_product_acceptance_0_16_1.json` contains the fourteen browser
+scenario results and nine-key correlation join. It contains no prompt, cookie,
+bearer, provider payload, environment, host path, or secret value.
+`opendesign_production_acceptance_0_16_1.json` maps every global acceptance
+criterion to a stable test, proof, or canonical document. Neither record
+authorizes migration of an existing workspace data root.

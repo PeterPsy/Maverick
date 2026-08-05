@@ -30,8 +30,17 @@ class SidecarBrowserOriginIntegrationTests(SidecarBrowserOriginTestSupport, unit
             shutdown = EntrypointShutdownController()
             self.addCleanup(shutdown.begin_shutdown)
             app = PlatformAsgiHost(state, shutdown_controller=shutdown)
-            platform_origin = "http://localhost:8000"
-            platform_cookie = await self._login(app, host="localhost:8000")
+            platform_origin = "http://maverick.localhost:8000"
+            platform_cookie = await self._login(app, host="maverick.localhost:8000")
+
+            bare_local_status, bare_local_payload, _headers = await self._launch(
+                app,
+                platform_cookie=platform_cookie,
+                host="localhost:8000",
+                origin="http://localhost:8000",
+            )
+            self.assertEqual(bare_local_status, 503)
+            self.assertIn("SameSite=Strict", bare_local_payload["detail"])
 
             unavailable_status, unavailable_payload, _headers = await self._launch(
                 app,
@@ -54,7 +63,7 @@ class SidecarBrowserOriginIntegrationTests(SidecarBrowserOriginTestSupport, unit
                 hosted_status, hosted_payload, _headers = await self._launch(
                     app,
                     platform_cookie=platform_cookie,
-                    host="localhost:8000",
+                    host="maverick.localhost:8000",
                     origin=platform_origin,
                 )
             self.assertEqual(hosted_status, 503)
@@ -63,19 +72,19 @@ class SidecarBrowserOriginIntegrationTests(SidecarBrowserOriginTestSupport, unit
             launch_status, launch, launch_headers = await self._launch(
                 app,
                 platform_cookie=platform_cookie,
-                host="localhost:8000",
+                host="maverick.localhost:8000",
                 origin=platform_origin,
             )
             self.assertEqual(launch_status, 200)
             self.assertEqual(launch_headers["cache-control"], "no-store")
             self.assertEqual(launch_headers["referrer-policy"], "no-referrer")
             self.assertTrue(launch["origin"].startswith("http://sc-"))
-            self.assertTrue(launch["origin"].endswith(".sidecars.localhost:8000"))
+            self.assertTrue(launch["origin"].endswith(".sidecars.maverick.localhost:8000"))
             self.assertEqual(launch["bootstrap_url"], launch["origin"] + BROWSER_BOOTSTRAP_PATH)
             self.assertNotIn(launch["ticket"], launch["bootstrap_url"])
 
             sidecar_host = launch["origin"].removeprefix("http://")
-            wrong_host = "sc-workspace-b.sidecars.localhost:8000"
+            wrong_host = "sc-workspace-b.sidecars.maverick.localhost:8000"
             wrong_status, _wrong_body, _wrong_headers = await self._invoke(
                 app,
                 host=wrong_host,
@@ -89,7 +98,7 @@ class SidecarBrowserOriginIntegrationTests(SidecarBrowserOriginTestSupport, unit
             launch_status, launch, _headers = await self._launch(
                 app,
                 platform_cookie=platform_cookie,
-                host="localhost:8000",
+                host="maverick.localhost:8000",
                 origin=platform_origin,
             )
             self.assertEqual(launch_status, 200)
@@ -232,7 +241,10 @@ class SidecarBrowserOriginIntegrationTests(SidecarBrowserOriginTestSupport, unit
             self.assertEqual(missing_origin_status, 403)
             self.assertEqual(cross_origin_status, 403)
             self.assertEqual(same_origin_status, 200)
-            self.assertEqual(json.loads(same_origin_body.decode("utf-8"))["created"], True)
+            same_origin_payload = json.loads(same_origin_body.decode("utf-8"))
+            self.assertEqual(same_origin_payload["created"], True)
+            self.assertTrue(same_origin_payload["technical_origin_seen"])
+            self.assertTrue(same_origin_payload["same_origin_fetch_seen"])
 
             messages: list[dict] = []
             queue: asyncio.Queue[dict] = asyncio.Queue()
@@ -268,7 +280,7 @@ class SidecarBrowserOriginIntegrationTests(SidecarBrowserOriginTestSupport, unit
 
             logout_status, _logout_body, _logout_headers = await self._invoke(
                 app,
-                host="localhost:8000",
+                host="maverick.localhost:8000",
                 path="/api/auth/logout",
                 method="POST",
                 body=b"{}",
@@ -297,12 +309,12 @@ class SidecarBrowserOriginIntegrationTests(SidecarBrowserOriginTestSupport, unit
             shutdown = EntrypointShutdownController()
             self.addCleanup(shutdown.begin_shutdown)
             app = PlatformAsgiHost(state, shutdown_controller=shutdown)
-            platform_cookie = await self._login(app, host="localhost:8000")
+            platform_cookie = await self._login(app, host="maverick.localhost:8000")
             status, launch, _headers = await self._launch(
                 app,
                 platform_cookie=platform_cookie,
-                host="localhost:8000",
-                origin="http://localhost:8000",
+                host="maverick.localhost:8000",
+                origin="http://maverick.localhost:8000",
             )
             self.assertEqual(status, 200)
             sidecar_host = launch["origin"].removeprefix("http://")
@@ -322,8 +334,8 @@ class SidecarBrowserOriginIntegrationTests(SidecarBrowserOriginTestSupport, unit
             status, launch, _headers = await self._launch(
                 app,
                 platform_cookie=platform_cookie,
-                host="localhost:8000",
-                origin="http://localhost:8000",
+                host="maverick.localhost:8000",
+                origin="http://maverick.localhost:8000",
             )
             self.assertEqual(status, 200)
             sidecar_host = launch["origin"].removeprefix("http://")
@@ -362,8 +374,8 @@ class SidecarBrowserOriginIntegrationTests(SidecarBrowserOriginTestSupport, unit
             status, launch, _headers = await self._launch(
                 app,
                 platform_cookie=platform_cookie,
-                host="localhost:8000",
-                origin="http://localhost:8000",
+                host="maverick.localhost:8000",
+                origin="http://maverick.localhost:8000",
             )
             self.assertEqual(status, 200)
             bootstrap_status, _body, bootstrap_headers = await self._invoke(

@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import asdict, dataclass, replace
 from datetime import UTC, datetime, timedelta
 from threading import RLock
-from typing import Any, Protocol
+from typing import Any, ContextManager, Protocol
 
 from core.runtime.errors import (
     RuntimeProcessNotFoundError,
@@ -78,6 +78,14 @@ class RuntimeCollections:
 
 class RuntimeStore(Protocol):
     """Persistence contract for runtime-domain records."""
+
+    def session_lifecycle_handoff(
+        self,
+        *,
+        workspace_id: str,
+        session_id: str,
+    ) -> ContextManager[object]:
+        ...
 
     def save_session(self, record: RuntimeSessionRecord) -> RuntimeSessionRecord:
         ...
@@ -238,6 +246,18 @@ class RuntimeDocumentStore:
         self._partition_index_lock = RLock()
         self._session_workspace_index: dict[str, str] = {}
         self._turn_partition_index: dict[str, tuple[str, str]] = {}
+
+    def session_lifecycle_handoff(
+        self,
+        *,
+        workspace_id: str,
+        session_id: str,
+    ) -> ContextManager[object]:
+        """Return the shared lock for persisted session and turn transitions."""
+        lifecycle_handoff = getattr(self.collections.sessions, "lifecycle_handoff", None)
+        if callable(lifecycle_handoff):
+            return lifecycle_handoff(workspace_id=workspace_id, session_id=session_id)
+        return self._fallback_lock
 
     def save_session(self, record: RuntimeSessionRecord) -> RuntimeSessionRecord:
         self.collections.sessions.update_one(

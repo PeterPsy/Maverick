@@ -177,8 +177,13 @@ side effects. User interruption does not create that gap: an active task is
 synchronously closed with a protected `cancelled` result even before its child
 session exists. A paused-run fence before and after child creation removes late
 session records and files before they can receive work. HTTP, CLI, and MCP
-resume share the hosted handoff that waits for the previous scheduler owner;
-sidecars without that owner reject the mutation.
+resume share a cross-process run-control handoff with interrupt cleanup, then
+wait for the previous scheduler owner; sidecars without that owner reject the
+mutation. Cleanup can cancel only the recovery generation, runtime session, and
+task captured when the pause won. Runtime worker activation is independently
+compare-and-set under a cross-process session lifecycle handoff and rereads the
+persisted turn and session, so a cancelled turn or stopped session cannot be
+resurrected by an older worker snapshot.
 The same fence covers the complete scheduler mutation path. Each scheduler
 captures one recovery generation, and every run transition, recovery-ledger
 write, task claim/finalization, and completion commit validates that generation

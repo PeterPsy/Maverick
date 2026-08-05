@@ -637,8 +637,6 @@ def submit_runtime_turn_async(
                             turn_id=turn.turn_id,
                             target_status="failed",
                             failure_reason=str(error),
-                            current_turn=current,
-                            current_session=session,
                         )
                         _record_turn_failed(
                             state,
@@ -657,8 +655,6 @@ def submit_runtime_turn_async(
                     target_status="active",
                     timing_payload=transition_timings,
                     update_thread=False,
-                    current_turn=current,
-                    current_session=session,
                 )
                 transition_active_ms = (time.perf_counter() - transition_started_at) * 1000
                 started_event = _record_turn_started(state, session_id=session.session_id, turn_id=active.turn_id, provider_id=worker_provider_id)
@@ -958,8 +954,6 @@ def submit_runtime_turn_async(
                         turn_id=turn.turn_id,
                         target_status="failed",
                         failure_reason=failure_reason,
-                        current_turn=current,
-                        current_session=session,
                     )
                     _record_turn_failed(
                         state,

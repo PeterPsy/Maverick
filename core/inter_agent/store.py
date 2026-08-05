@@ -134,6 +134,14 @@ class InterAgentStore(Protocol):
     def save_run(self, record: InterAgentRunRecord) -> InterAgentRunRecord:
         ...
 
+    def run_control_handoff(
+        self,
+        *,
+        workspace_id: str,
+        run_id: str,
+    ) -> ContextManager[object]:
+        ...
+
     def pause_run_if_active(
         self,
         run_id: str,
@@ -189,12 +197,15 @@ class InterAgentStore(Protocol):
     ) -> tuple[InterAgentRunRecord, InterAgentParticipantRecord, bool]:
         ...
 
-    def cancel_participant_if_active(
+    def cancel_participant_for_interrupt(
         self,
         *,
         workspace_id: str,
         run_id: str,
         participant_id: str,
+        expected_recovery_generation: int,
+        expected_runtime_session_id: str | None,
+        expected_current_task_id: str | None,
         now: datetime,
     ) -> tuple[InterAgentParticipantRecord, InterAgentParticipantRecord, bool]:
         ...
@@ -395,6 +406,18 @@ class InterAgentDocumentStore:
         )
         return record
 
+    def run_control_handoff(
+        self,
+        *,
+        workspace_id: str,
+        run_id: str,
+    ) -> ContextManager[object]:
+        """Serialize interrupt and resume ownership for one run."""
+        run_control_handoff = getattr(self.collections.runs, "run_control_handoff", None)
+        if callable(run_control_handoff):
+            return run_control_handoff(workspace_id=workspace_id, run_id=run_id)
+        return self._lock
+
     def pause_run_if_active(
         self,
         run_id: str,
@@ -590,22 +613,31 @@ class InterAgentDocumentStore:
                 self.save_run(run)
             return run, updated_participant, True
 
-    def cancel_participant_if_active(
+    def cancel_participant_for_interrupt(
         self,
         *,
         workspace_id: str,
         run_id: str,
         participant_id: str,
+        expected_recovery_generation: int,
+        expected_runtime_session_id: str | None,
+        expected_current_task_id: str | None,
         now: datetime,
     ) -> tuple[InterAgentParticipantRecord, InterAgentParticipantRecord, bool]:
-        """Cancel a participant once under the workspace transition lock."""
+        """Cancel only the participant ownership captured by one interrupt."""
         with self._workspace_lock(workspace_id):
+            run = self.get_run(run_id, workspace_id=workspace_id)
             participant = self.get_participant(
                 participant_id,
                 workspace_id=workspace_id,
                 run_id=run_id,
             )
-            if participant.status in {"completed", "failed", "cancelled"}:
+            if (
+                run.recovery_generation != expected_recovery_generation
+                or participant.runtime_session_id != expected_runtime_session_id
+                or participant.current_task_id != expected_current_task_id
+                or participant.status in {"completed", "failed", "cancelled"}
+            ):
                 return participant, participant, False
             updated = replace(participant, status="cancelled", current_task_id=None, updated_at=now)
             self.save_participant(updated)
@@ -1014,6 +1046,17 @@ class WorkspaceInterAgentJsonCollection:
             / "inter_agent"
             / "workspace_lock.json"
         )
+
+    def run_control_handoff(self, *, workspace_id: str, run_id: str):
+        """Return a cross-process handoff lock without exposing run ids as paths."""
+        lock_id = hashlib.sha256(f"{workspace_id}\0{run_id}".encode("utf-8")).hexdigest()
+        path = (
+            workspace_runtime_root(workspace_id=workspace_id, start_path=self.start_path)
+            / "inter_agent"
+            / "control_handoffs"
+            / f"{lock_id}.json"
+        )
+        return _locked_json_path(path)
 
 
 class InterAgentEventJsonCollection(WorkspaceInterAgentJsonCollection):

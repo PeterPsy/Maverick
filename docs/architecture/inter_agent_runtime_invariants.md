@@ -89,10 +89,17 @@ It started with names, visibility, legacy compatibility, and initial policy defa
     is also enclosed by the status-and-generation fence. The interrupt either
     sees the persisted queued/active turn and cancels it with its hidden session,
     or wins before queueing and makes submission fail without a runtime turn or
-    provider dispatch.
-    Resume from HTTP, CLI, or MCP waits for the previous hosted scheduler owner
-    to unwind, detaches an interrupted orchestrator session, advances the
-    recovery generation, and only then starts the replacement scheduler.
+    provider dispatch. A queued worker may activate only through a persisted
+    compare-and-set under the runtime session lifecycle handoff; it must reread
+    both turn and session, reject terminal turn state or a stopped session, and
+    must not reuse an earlier lifecycle snapshot.
+    Interrupt and resume share a cross-process run-control handoff that remains
+    owned until participant and session cleanup is complete. Cleanup targets
+    only the recovery generation, runtime session, and task captured by the
+    pause snapshot. Resume from HTTP, CLI, or MCP then waits for the previous
+    hosted scheduler owner to unwind, detaches the interrupted orchestrator
+    session, advances the recovery generation, and only then starts the
+    replacement scheduler.
     Non-hosted CLI/MCP sidecars reject orchestrated resume instead of mutating
     the run without a durable scheduler owner.
 20. Dynamic agent type selection is constrained to Chat's selected agent

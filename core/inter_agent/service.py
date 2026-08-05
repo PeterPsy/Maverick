@@ -1177,6 +1177,27 @@ class InterAgentService:
     ) -> dict[str, Any]:
         """Interrupt active child participant turns without deleting sessions."""
         timestamp = now or datetime.now(tz=UTC)
+        with self.store.run_control_handoff(workspace_id=workspace_id, run_id=run_id):
+            return self._interrupt_run_with_handoff(
+                state,
+                workspace_id=workspace_id,
+                run_id=run_id,
+                participant_id=participant_id,
+                reason=reason,
+                timestamp=timestamp,
+            )
+
+    def _interrupt_run_with_handoff(
+        self,
+        state: Any,
+        *,
+        workspace_id: str,
+        run_id: str,
+        participant_id: str | None,
+        reason: str,
+        timestamp: datetime,
+    ) -> dict[str, Any]:
+        """Complete one interrupt while its run-control handoff is held."""
         self.store.get_run(run_id, workspace_id=workspace_id)
         target_participant_id = _clean_optional(participant_id)
         if target_participant_id is not None:
@@ -1215,12 +1236,7 @@ class InterAgentService:
             return {"run": run, "interrupted_sessions": []}
         interrupted_sessions: list[dict[str, Any]] = []
         for participant in participants:
-            latest_participant = self.store.get_participant(
-                participant.participant_id,
-                workspace_id=workspace_id,
-                run_id=run.run_id,
-            )
-            runtime_session_id = latest_participant.runtime_session_id
+            runtime_session_id = participant.runtime_session_id
             if runtime_session_id:
                 interrupted_sessions.append(
                     _interrupt_runtime_session(
@@ -1243,18 +1259,18 @@ class InterAgentService:
                 except (RuntimeSessionNotFoundError, ValueError):
                     pass
             should_cancel = bool(runtime_session_id) or (
-                run.mode == "orchestrated" and bool(latest_participant.current_task_id)
+                run.mode == "orchestrated" and bool(participant.current_task_id)
             )
             if not should_cancel:
                 continue
             self.release_budget(
                 run,
-                reservation_id=_participant_spawn_reservation_id(latest_participant.participant_id),
+                reservation_id=_participant_spawn_reservation_id(participant.participant_id),
                 now=timestamp,
             )
             self._cancel_interrupted_participant(
                 run,
-                latest_participant,
+                participant,
                 reason=reason,
                 now=timestamp,
             )
@@ -1268,10 +1284,13 @@ class InterAgentService:
         reason: str,
         now: datetime,
     ) -> InterAgentParticipantRecord:
-        previous, updated, cancelled = self.store.cancel_participant_if_active(
+        previous, updated, cancelled = self.store.cancel_participant_for_interrupt(
             workspace_id=run.workspace_id,
             run_id=run.run_id,
             participant_id=participant.participant_id,
+            expected_recovery_generation=run.recovery_generation,
+            expected_runtime_session_id=participant.runtime_session_id,
+            expected_current_task_id=participant.current_task_id,
             now=now,
         )
         if not cancelled:
@@ -1332,6 +1351,23 @@ class InterAgentService:
     ) -> InterAgentRunRecord:
         """Mark a paused or recovering run runnable; hosted surfaces enqueue execution."""
         timestamp = now or datetime.now(tz=UTC)
+        with self.store.run_control_handoff(workspace_id=workspace_id, run_id=run_id):
+            return self._resume_run_with_handoff(
+                workspace_id=workspace_id,
+                run_id=run_id,
+                reason=reason,
+                timestamp=timestamp,
+            )
+
+    def _resume_run_with_handoff(
+        self,
+        *,
+        workspace_id: str,
+        run_id: str,
+        reason: str,
+        timestamp: datetime,
+    ) -> InterAgentRunRecord:
+        """Resume one run only after any in-flight interrupt releases ownership."""
         run = self.store.get_run(run_id, workspace_id=workspace_id)
         if run.status in TERMINAL_RUN_STATUSES:
             raise InterAgentOperationError("Terminal inter-agent runs cannot be resumed.")

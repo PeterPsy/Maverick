@@ -5,18 +5,13 @@ from __future__ import annotations
 from dataclasses import replace
 from datetime import datetime
 from pathlib import Path
-import time
 
 from core.observability.service import append_platform_log, record_platform_audit, record_platform_event
 from core.runtime.client_message_claims import RuntimeClientMessageClaim
 from core.runtime.routing import build_runtime_routing
 from core.runtime.runtime_session import RuntimeSessionRecord, RuntimeSessionStatus
-from core.runtime.runtime_turns import RuntimeTurnRecord, RuntimeTurnStatus
-from core.runtime.runtime_threads import (
-    mark_runtime_thread_response_completed,
-    mark_runtime_thread_user_message,
-    update_runtime_thread_availability,
-)
+from core.runtime.runtime_turns import RuntimeTurnRecord
+from core.runtime.runtime_threads import mark_runtime_thread_user_message
 from core.runtime.store import RuntimeStore
 from core.workspaces.models import WorkspaceGovernanceRecord
 
@@ -34,37 +29,42 @@ def transition_runtime_session(
 ) -> RuntimeSessionRecord:
     """Transition one runtime session between canonical lifecycle statuses."""
     timestamp = now or utcnow()
-    session = store.get_session(session_id)
-    allowed: dict[RuntimeSessionStatus, set[RuntimeSessionStatus]] = {
-        "created": {"running", "stopped", "failed"},
-        "running": {"stopping", "stopped", "failed"},
-        "stopping": {"stopped", "failed", "running"},
-        "stopped": {"running"},
-        "failed": {"running"},
-    }
-    _transition_allowed(session.status, target_status, allowed=allowed, kind="runtime session")
-    started_at = session.started_at or (timestamp if target_status == "running" else None)
-    ended_at = timestamp if target_status in {"stopped", "failed"} else None
-    updated = replace(
-        session,
-        status=target_status,
-        started_at=started_at,
-        updated_at=timestamp,
-        ended_at=ended_at,
-        last_progress_at=timestamp if target_status == "running" else session.last_progress_at,
-    )
-    state = store.get_state(session_id)
-    store.save_state(
-        replace(
-            state,
-            session_status=target_status,
-            last_progress_at=timestamp if target_status == "running" else state.last_progress_at,
-            forced_stop_reason=forced_stop_reason or state.forced_stop_reason,
-            last_error_detail=error_detail or state.last_error_detail,
+    location = store.get_session(session_id)
+    with store.session_lifecycle_handoff(
+        workspace_id=location.workspace_id,
+        session_id=location.session_id,
+    ):
+        session = store.get_session(session_id)
+        allowed: dict[RuntimeSessionStatus, set[RuntimeSessionStatus]] = {
+            "created": {"running", "stopped", "failed"},
+            "running": {"stopping", "stopped", "failed"},
+            "stopping": {"stopped", "failed", "running"},
+            "stopped": {"running"},
+            "failed": {"running"},
+        }
+        _transition_allowed(session.status, target_status, allowed=allowed, kind="runtime session")
+        started_at = session.started_at or (timestamp if target_status == "running" else None)
+        ended_at = timestamp if target_status in {"stopped", "failed"} else None
+        updated = replace(
+            session,
+            status=target_status,
+            started_at=started_at,
             updated_at=timestamp,
+            ended_at=ended_at,
+            last_progress_at=timestamp if target_status == "running" else session.last_progress_at,
         )
-    )
-    saved = store.save_session(updated)
+        state = store.get_state(session_id)
+        store.save_state(
+            replace(
+                state,
+                session_status=target_status,
+                last_progress_at=timestamp if target_status == "running" else state.last_progress_at,
+                forced_stop_reason=forced_stop_reason or state.forced_stop_reason,
+                last_error_detail=error_detail or state.last_error_detail,
+                updated_at=timestamp,
+            )
+        )
+        saved = store.save_session(updated)
     if observability_store is not None:
         payload = {
             "session_id": session_id,
@@ -215,74 +215,6 @@ def queue_runtime_turn_if_client_message_absent(
     store.save_turn(record)
     _update_thread_for_queued_turn(store, record)
     return record, True
-def transition_runtime_turn(
-    store: RuntimeStore,
-    *,
-    turn_id: str,
-    target_status: RuntimeTurnStatus,
-    failure_reason: str | None = None,
-    now: datetime | None = None,
-    timing_payload: dict[str, float] | None = None,
-    update_thread: bool = True,
-    current_turn: RuntimeTurnRecord | None = None,
-    current_session: RuntimeSessionRecord | None = None,
-) -> RuntimeTurnRecord:
-    """Transition one runtime turn between canonical lifecycle statuses."""
-    timestamp = now or utcnow()
-    turn = current_turn if current_turn is not None and current_turn.turn_id == turn_id else store.get_turn(turn_id)
-    allowed: dict[RuntimeTurnStatus, set[RuntimeTurnStatus]] = {
-        "queued": {"active", "failed", "cancelled", "timed-out"},
-        "active": {"completed", "failed", "cancelled", "timed-out"},
-        "completed": set(),
-        "failed": set(),
-        "cancelled": set(),
-        "timed-out": set(),
-    }
-    _transition_allowed(turn.status, target_status, allowed=allowed, kind="runtime turn")
-    updated = replace(
-        turn,
-        status=target_status,
-        updated_at=timestamp,
-        started_at=turn.started_at or (timestamp if target_status == "active" else None),
-        completed_at=timestamp if target_status in {"completed", "failed", "cancelled", "timed-out"} else None,
-        failure_reason=failure_reason,
-    )
-    state = store.get_state(turn.session_id)
-    save_state_started_at = time.perf_counter()
-    store.save_state(
-        replace(
-            state,
-            current_turn_id=turn.turn_id if target_status == "active" else None,
-            turn_status=target_status if target_status == "active" else None,
-            last_progress_at=timestamp,
-            last_error_detail=failure_reason if target_status in {"failed", "timed-out"} else state.last_error_detail,
-            updated_at=timestamp,
-        )
-    )
-    _record_transition_timing(timing_payload, "save_state_ms", save_state_started_at)
-    session = (
-        current_session
-        if current_session is not None and current_session.session_id == turn.session_id
-        else store.get_session(turn.session_id)
-    )
-    save_session_started_at = time.perf_counter()
-    store.save_session(replace(session, last_progress_at=timestamp, updated_at=timestamp))
-    _record_transition_timing(timing_payload, "save_session_ms", save_session_started_at)
-    save_turn_started_at = time.perf_counter()
-    saved = store.save_turn(updated)
-    _record_transition_timing(timing_payload, "save_turn_ms", save_turn_started_at)
-    if update_thread:
-        thread_update_started_at = time.perf_counter()
-        _update_thread_for_turn_transition(store, saved)
-        _record_transition_timing(timing_payload, "thread_update_ms", thread_update_started_at)
-    elif timing_payload is not None:
-        timing_payload["thread_update_ms"] = 0.0
-    return saved
-
-
-def _record_transition_timing(timing_payload: dict[str, float] | None, key: str, started_at: float) -> None:
-    if timing_payload is not None:
-        timing_payload[key] = round((time.perf_counter() - started_at) * 1000, 3)
 
 
 def _update_thread_for_queued_turn(store: RuntimeStore, turn: RuntimeTurnRecord) -> None:
@@ -293,25 +225,4 @@ def _update_thread_for_queued_turn(store: RuntimeStore, turn: RuntimeTurnRecord)
         input_text=turn.input_text or "",
         availability="queued",
         now=turn.created_at,
-    )
-
-
-def _update_thread_for_turn_transition(store: RuntimeStore, turn: RuntimeTurnRecord) -> None:
-    if turn.status == "completed":
-        mark_runtime_thread_response_completed(
-            store,
-            workspace_id=turn.workspace_id,
-            runtime_session_id=turn.session_id,
-            turn_id=turn.turn_id,
-            availability="free",
-            now=turn.completed_at or turn.updated_at,
-        )
-        return
-    availability = "active" if turn.status == "active" else "queued" if turn.status == "queued" else "free"
-    update_runtime_thread_availability(
-        store,
-        workspace_id=turn.workspace_id,
-        runtime_session_id=turn.session_id,
-        availability=availability,
-        now=turn.updated_at,
     )

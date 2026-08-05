@@ -378,8 +378,15 @@ persisted cancellation, or move the run from `paused` to `completed`. The pause
 transition snapshots participants before releasing that lock, so a task claim
 cannot fall between pause persistence and interrupt reconciliation. Runtime turn
 queueing is enclosed by the same fence: a queued turn is either visible to the
-interrupt or is never persisted and never dispatched. Resume advances the
-generation before a replacement scheduler may mutate the run.
+interrupt or is never persisted and never dispatched. Worker activation is a
+separate persisted compare-and-set under a cross-process runtime-session
+lifecycle handoff: it rereads the authoritative turn and session, accepts only
+`queued` turns on executable sessions, and never writes caller snapshots back
+as lifecycle state. Interrupt and resume also share one cross-process run-control
+handoff for the complete participant/session cleanup. Interrupt cancellation is
+conditional on the recovery generation, runtime session, and task captured by
+the pause snapshot, and resume advances the generation only after that cleanup
+releases ownership and before a replacement scheduler may mutate the run.
 
 Participant, tool, task, summary, and final-answer events are never written to
 the root runtime store. The normal Chat transcript belongs exclusively to the

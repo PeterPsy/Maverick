@@ -183,8 +183,13 @@ transcript projection behavior.
   before the pause is reconciled and every claim ordered after it is rejected.
   Runtime turn persistence uses the same locked fence: queueing either precedes
   pause and is visible to interrupt cleanup, or is rejected before any provider
-  dispatch. A child created concurrently is rechecked, deleted, and never linked.
-  Immediate resume through HTTP, CLI, or MCP first waits for the previous
+  dispatch. Worker activation then uses a persisted compare-and-set under the
+  runtime-session lifecycle handoff, rereading the current turn and session and
+  rejecting cancelled turns or non-executable sessions. A child created
+  concurrently is rechecked, deleted, and never linked. Interrupt and resume
+  hold the same cross-process run-control handoff across the full cleanup;
+  cancellation matches the pause snapshot's generation, runtime session, and
+  task. Immediate resume through HTTP, CLI, or MCP next waits for the previous
   hosted scheduler to unwind, resets an interrupted orchestrator onto a new
   recovery-generation child session, and then enqueues the replacement.
   Sidecar-only CLI/MCP execution fails closed when it has no hosted coordinator.

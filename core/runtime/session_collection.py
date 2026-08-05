@@ -227,6 +227,15 @@ class RuntimeSessionJsonCollection:
     def _record_path(self, *, workspace_id: str, session_id: str) -> Path:
         return runtime_session_root(workspace_id=workspace_id, session_id=session_id, start_path=self.start_path) / self.filename
 
+    def lifecycle_handoff(self, *, workspace_id: str, session_id: str):
+        """Serialize authoritative lifecycle transitions for one runtime session."""
+        path = runtime_session_root(
+            workspace_id=workspace_id,
+            session_id=session_id,
+            start_path=self.start_path,
+        ) / "lifecycle.json"
+        return _locked_collection_path(path)
+
     def _read_documents(self, path: Path) -> list[dict[str, Any]]:
         if not path.is_file():
             return []

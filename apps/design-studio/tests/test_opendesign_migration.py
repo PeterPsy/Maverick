@@ -13,8 +13,12 @@ from unittest.mock import patch
 ROOT = Path(__file__).resolve().parents[3]
 SERVICE_ROOT = ROOT / "apps/design-studio/service"
 MODULE_PATH = SERVICE_ROOT / "opendesign_migration.py"
+ACCEPTANCE_PATH = SERVICE_ROOT / "opendesign_migration_acceptance_0_16_1.json"
 OLD_DIGEST = "a" * 64
-NEW_DIGEST = "b" * 64
+_BUNDLE_MANIFEST = json.loads(
+    (SERVICE_ROOT / "opendesign_bundle.json").read_text(encoding="utf-8")
+)
+NEW_DIGEST = _BUNDLE_MANIFEST["artifact"]["assets"]["linux-x86_64"]["sha256"]
 VERIFIED = {OLD_DIGEST: "0.10.1", NEW_DIGEST: "0.16.1"}
 LEGACY_ID = "design_0123456789ab"
 
@@ -115,6 +119,10 @@ class OpenDesignMigrationTests(unittest.TestCase):
             SERVICE_ROOT / "opendesign_migration_legacy.py",
         )
         self.module = _load_module("opendesign_migration", MODULE_PATH)
+        self.oci_runtime = _load_module(
+            "opendesign_migration_oci_runtime",
+            SERVICE_ROOT / "opendesign_migration_oci_runtime.py",
+        )
         self.temp = tempfile.TemporaryDirectory(prefix="maverick-wp6-")
         self.addCleanup(self.temp.cleanup)
         self.app_data = Path(self.temp.name) / "design-studio"
@@ -214,6 +222,10 @@ class OpenDesignMigrationTests(unittest.TestCase):
             verified_artifacts=VERIFIED,
         )
         self.assertEqual(journal.state, "cutover_committed")
+        self.assertEqual(journal.checks["pre_migration_health"], "pass")
+        self.assertEqual(journal.checks["pre_migration_staging_project_count"], 1)
+        self.assertEqual(journal.checks["post_migration_health"], "pass")
+        self.assertEqual(journal.checks["post_migration_staging_project_count"], 1)
         self.assertEqual(self.state_path.stat().st_mode & 0o777, stat.S_IRUSR)
         self.assertIn(("start", "gen_new", "data", True), self.runtime.events)
         self.assertIn(("start", "gen_new", "data", False), self.runtime.events)
@@ -293,6 +305,25 @@ class OpenDesignMigrationTests(unittest.TestCase):
         self.assertEqual(rollback.previous, self.new)
         self.assertEqual(forward.read_bytes(), b"forward-only bytes")
         self.assertIn(("start", "gen_old", "data", False), rollback_runtime.events)
+        self.assertIn("health", rollback_runtime.events)
+        self.assertIn("db-verify", rollback_runtime.events)
+        self.assertIn(("smoke", "od_existing"), rollback_runtime.events)
+
+    def test_real_migration_acceptance_binds_the_pinned_artifact_without_workspace_data(self) -> None:
+        acceptance = json.loads(ACCEPTANCE_PATH.read_text(encoding="utf-8"))
+        forward = acceptance["forward_fixture_migration"]
+        self.assertEqual(acceptance["schema_version"], "1")
+        self.assertEqual(forward["source"]["od_version"], "0.10.1")
+        self.assertEqual(forward["target"]["artifact_sha256"], NEW_DIGEST)
+        self.assertTrue(forward["target"]["real_materialized_daemon"])
+        self.assertEqual(forward["source"]["tree_sha256_before"], forward["source"]["tree_sha256_after"])
+        self.assertEqual(forward["api_import_read_back"], "byte_identical")
+        self.assertTrue(acceptance["rollback"]["forward_generation_preserved"])
+        self.assertEqual(
+            acceptance["rollback"]["real_round_trip_artifact_sha256"],
+            NEW_DIGEST,
+        )
+        self.assertFalse(acceptance["workspace_data_migrated"])
 
     def test_retention_cleanup_rejects_references_and_deletes_only_explicit_orphan(self) -> None:
         orphan = self.root / "instances" / "gen_orphan" / "data"
@@ -357,6 +388,21 @@ class OpenDesignMigrationTests(unittest.TestCase):
 
         self.assertFalse((self.root / "backups" / "migration_fixture_001").exists())
         self.assertFalse((self.root / "instances" / "gen_new").exists())
+
+    def test_real_runtime_log_rejects_symlinks_and_uses_a_regular_file(self) -> None:
+        log_root = Path(self.temp.name) / "log-proof"
+        log_root.mkdir()
+        outside = Path(self.temp.name) / "outside.log"
+        outside.write_bytes(b"outside")
+        log_path = log_root / "runtime.log"
+        log_path.symlink_to(outside)
+        with self.assertRaisesRegex(self.runtime_module.MigrationError, "unsafe"):
+            self.oci_runtime._open_append_log(log_path)
+        self.assertEqual(outside.read_bytes(), b"outside")
+        log_path.unlink()
+        with self.oci_runtime._open_append_log(log_path) as handle:
+            handle.write(b"bounded runtime evidence\n")
+        self.assertEqual(log_path.read_bytes(), b"bounded runtime evidence\n")
 
 
 if __name__ == "__main__":

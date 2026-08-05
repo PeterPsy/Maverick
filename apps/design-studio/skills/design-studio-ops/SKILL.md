@@ -41,6 +41,9 @@ Sandbox policy:
 - Use `bootstrap_opendesign_generation.py` only for a new empty data root. It
   refuses legacy or unknown content. Existing data migration requires an
   explicitly marked fixture/controlled copy and is never implied by startup.
+- `smoke_opendesign_migration.py` is the authorized real-daemon migration and
+  rollback proof because it creates temporary marked copies. It is not an
+  authorization to migrate the current workspace data root.
 - Keep full source-build certification separate from OCI import. Do not resume a
   per-file checkpoint or create shards/retries when the host lacks capacity.
 

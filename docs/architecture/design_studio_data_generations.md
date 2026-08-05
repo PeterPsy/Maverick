@@ -239,6 +239,7 @@ and canonical new references use the OpenDesign id.
 python3 -W error::ResourceWarning -m unittest \
   apps/design-studio/tests/test_data_generation_proof.py \
   apps/design-studio/tests/test_opendesign_migration.py -v
+python3 apps/design-studio/service/smoke_opendesign_migration.py
 ```
 
 The proof uses temporary fixture generations and injects failures immediately
@@ -247,7 +248,9 @@ rollback, immutable old/forward bytes, strict stale-temp recovery, selection
 only from control in the presence of a newer inactive generation, artifact and
 generation validation, and symlink rejection.
 
-Expected result: nine passing tests, no resource warning.
+Expected result: eighteen passing tests with no resource warning, followed by
+a real 0.16.1 daemon migration and rollback smoke with
+`workspace_data_migrated: false`.
 
 ## Consequences and follow-up
 
@@ -259,10 +262,10 @@ Expected result: nine passing tests, no resource warning.
 - The controlled-copy implementation uses the strict journal/control primitives
   for staging, API migration, legacy mapping, crash reconciliation, rollback,
   and retention cleanup.
-- WP10 repeats migration, crash, and rollback scenarios through the final
-  sidecar and UI topology.
+- WP6 supplies the real materialized-daemon adapter and acceptance record for
+  marked copies. WP10 repeats migration, crash, and rollback scenarios through
+  the final sidecar and UI topology.
 
-Residual risk until WP6: no real workspace is authorized for migration, and a
-fresh installation has no active generation until the controlled migration or
-bootstrap operation writes a fully verified `control.json`. The launcher fails
-closed in either state.
+Real workspace migration remains intentionally unauthorized. A fresh
+installation has no active generation until controlled bootstrap writes a fully
+verified `control.json`; the launcher fails closed in that state.

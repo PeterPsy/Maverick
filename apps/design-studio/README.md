@@ -211,6 +211,7 @@ python3 -m unittest apps/design-studio/tests/test_opendesign_materialization.py
 python3 -m unittest apps/design-studio/tests/test_opendesign_migration.py
 python3 apps/design-studio/service/sync_route_policy.py
 python3 apps/design-studio/service/smoke_opendesign_runtime.py
+python3 apps/design-studio/service/smoke_opendesign_migration.py
 python3 apps/design-studio/service/smoke_opendesign_sidecar.py
 maverick app design-studio frontend build --json
 maverick app design-studio mcp list --json

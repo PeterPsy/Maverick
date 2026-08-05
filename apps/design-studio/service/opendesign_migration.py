@@ -99,13 +99,14 @@ def migrate_controlled_copy(
             target_data = clone_generation(root, source_data, target.data_generation)
             created_generation = target_data.parent
             runtime.start_sidecar(target, target_data, staging=True)
-            checks = _validate_staging(runtime)
+            checks = _prefixed_checks("pre_migration", _validate_staging(runtime))
             mapping, project_count, import_count = migrate_legacy_catalog(
                 legacy_state,
                 migration_root=root,
                 runtime=runtime,
                 migration_id=migration_id,
             )
+            checks.update(_prefixed_checks("post_migration", _validate_staging(runtime)))
             mapping_destination = root / LEGACY_PROJECT_MAP
             if mapping_destination.exists() or mapping_destination.is_symlink():
                 raise MigrationError("legacy project map already exists")
@@ -241,6 +242,7 @@ def rollback_controlled_copy(
                 verified_artifacts=verified_artifacts,
             )
             runtime.start_sidecar(rollback.active, target_data, staging=False)
+            _validate_staging(runtime)
             return rollback
         except (MigrationError, GenerationControlError, OSError, ValueError) as exc:
             _stop_after_failure(runtime)
@@ -353,6 +355,10 @@ def _validate_staging(runtime: MigrationRuntime) -> dict[str, object]:
         "staging_project_count": len(project_ids),
         "project_smoke": "pass" if project_ids else "not_applicable",
     }
+
+
+def _prefixed_checks(prefix: str, checks: Mapping[str, object]) -> dict[str, object]:
+    return {f"{prefix}_{key}": value for key, value in checks.items()}
 
 
 def _journal_with_state(

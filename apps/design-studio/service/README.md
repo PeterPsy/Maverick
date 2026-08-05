@@ -199,3 +199,21 @@ Run the G4 filesystem and crash proof with:
   apps/design-studio/tests/test_data_generation_proof.py \
   apps/design-studio/tests/test_opendesign_migration.py -v
 ```
+
+WP6 also has a real-daemon proof:
+
+```bash
+python3 apps/design-studio/service/smoke_opendesign_migration.py
+```
+
+It creates only temporary, explicitly marked controlled copies. The first
+scenario migrates a 0.10.1 fixture into a staging generation served by the
+materialized 0.16.1 OCI daemon, creates the canonical project and file through
+OpenDesign APIs, reads the uploaded bytes back, verifies both SQLite databases,
+and proves the retained source tree is unchanged. A second scenario performs a
+real daemon cutover and rollback, reactivates the previous generation, runs
+health/database/project checks and proves the forward generation remains
+untouched. Distinct 0.10.1/0.16.1 bundle+data atomicity and crash points remain
+covered by the fixture injection suite. The redaction-safe result is pinned in
+`opendesign_migration_acceptance_0_16_1.json`; no real workspace migration is
+authorized.

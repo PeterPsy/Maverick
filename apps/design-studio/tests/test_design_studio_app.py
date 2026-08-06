@@ -23,6 +23,8 @@ from core.apps.service import install_store_app, register_app_source_from_contra
 from core.apps.contracts import parse_app_contract_file
 from core.apps.sidecar_route_policy import route_policy_mode
 from core.providers.service import configure_workspace_provider
+from core.runtime.service import create_runtime_session
+from core.runtime.runtime_threads import create_runtime_thread
 from core.shared.entrypoints import EntrypointShutdownController
 
 
@@ -461,6 +463,59 @@ class DesignStudioAppTests(unittest.TestCase):
         self.assertEqual([request["path"] for request in requests], [f"/api/projects/{project_id}"] * 4)
         self.assertTrue(all(request["capability"] == "fixture-capability" for request in requests))
         self.assertNotIn("OD_API_TOKEN", json.dumps(requests))
+
+    def test_runtime_thread_delete_completes_with_design_studio_enabled(self) -> None:
+        with TemporaryDirectory() as temp_dir:
+            with self._test_platform_env():
+                repo_root = self._temporary_repo_root(Path(temp_dir))
+                state = bootstrap_platform_state(start_path=repo_root)
+                with self._repo_pythonpath():
+                    self._install_platform_app(state, repo_root, "design-studio")
+                session = create_runtime_session(
+                    state.runtime_store,
+                    session_id="chat-delete-test",
+                    workspace_id="default",
+                    agent_id="chat",
+                    source_app_id="chat",
+                    start_path=repo_root,
+                )
+                create_runtime_thread(
+                    state.runtime_store,
+                    workspace_id="default",
+                    thread_id=session.session_id,
+                    runtime_session_id=session.session_id,
+                    title="Delete me",
+                    source_app_id="chat",
+                    now=session.updated_at,
+                )
+                shutdown = EntrypointShutdownController()
+                self.addCleanup(shutdown.begin_shutdown)
+                app = PlatformHost(state, start_path=repo_root, shutdown_controller=shutdown)
+                cookie = self._login(app)
+
+            with self._repo_pythonpath():
+                status, body, _headers = self._invoke(
+                    app,
+                    path="/api/runtime/threads/chat-delete-test",
+                    method="DELETE",
+                    body={"reason": "chat_thread_deleted"},
+                    cookie=cookie,
+                )
+
+            payload = json.loads(body.decode("utf-8"))
+            self.assertEqual(status, 200, body.decode("utf-8"))
+            self.assertEqual(payload["deleted_thread_id"], "chat-delete-test")
+            self.assertEqual(
+                payload["runtime_cleanup"]["app_cleanup"],
+                [
+                    {
+                        "app_id": "design-studio",
+                        "cleaned_runtime_session_ids": ["chat-delete-test"],
+                        "deleted_runtime_correlations": 0,
+                    }
+                ],
+            )
+            self.assertEqual(state.runtime_store.list_threads("default"), [])
 
     def test_hosted_backend_imports_through_storage_dependency_and_sidecar_callback(self) -> None:
         with TemporaryDirectory() as temp_dir:

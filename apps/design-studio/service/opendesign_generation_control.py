@@ -41,9 +41,7 @@ def load_generation_control(
     verified_artifacts: Mapping[str, str],
 ) -> GenerationControl:
     root = _validated_root(root)
-    control_path = root / CONTROL_FILE_NAME
-    payload = _read_strict_json_file(control_path)
-    control = GenerationControl.from_dict(payload)
+    control = load_generation_control_metadata(root)
     _validate_references(root, control, verified_artifacts=verified_artifacts)
     if control.migration_id is not None:
         journal = load_migration_journal(
@@ -53,6 +51,12 @@ def load_generation_control(
         )
         reconcile_migration_control(control, journal)
     return control
+
+
+def load_generation_control_metadata(root: Path) -> GenerationControl:
+    """Read strict data-control metadata; executable runtime must use load_generation_control."""
+    root = _validated_root(root)
+    return GenerationControl.from_dict(_read_strict_json_file(root / CONTROL_FILE_NAME))
 
 
 def write_generation_control(

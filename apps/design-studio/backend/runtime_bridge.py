@@ -22,6 +22,11 @@ if str(SERVICE_ROOT) not in sys.path:
     sys.path.insert(0, str(SERVICE_ROOT))
 
 from opendesign_artifact import read_bundle_manifest  # noqa: E402
+from opendesign_generation_control import (  # noqa: E402
+    load_generation_control_metadata,
+    resolve_generation_data_dir,
+)
+from opendesign_generation_model import GenerationControlError  # noqa: E402
 from opendesign_runtime import resolve_runtime_binding  # noqa: E402
 
 
@@ -60,6 +65,24 @@ def active_data_directory(payload: dict[str, Any]) -> Path:
         manifest=manifest,
     )
     return _real_directory(binding.data_dir, label="active OpenDesign data generation")
+
+
+def cleanup_data_directory(payload: dict[str, Any]) -> Path | None:
+    """Resolve the control-selected data generation for bounded metadata cleanup."""
+    app_data_root = _real_directory(Path(str(payload.get("data_root") or "")), label="Design Studio data root")
+    generation_root = _real_directory(app_data_root / "opendesign", label="OpenDesign generation root")
+    control_path = generation_root / "control.json"
+    if not control_path.exists() and not control_path.is_symlink():
+        instances_root = _real_directory(generation_root / "instances", label="OpenDesign instances root")
+        if any(instances_root.iterdir()):
+            raise RuntimeBridgeError("OpenDesign cleanup generation control is missing for existing instances.")
+        return None
+    try:
+        control = load_generation_control_metadata(generation_root)
+        data_root = resolve_generation_data_dir(generation_root, control.active)
+    except GenerationControlError as error:
+        raise RuntimeBridgeError(f"OpenDesign cleanup generation control is invalid: {error}") from error
+    return _real_directory(data_root, label="active OpenDesign cleanup data generation")
 
 
 def project_root_relative_to_app_data(payload: dict[str, Any], project_id: str) -> str:
@@ -143,6 +166,17 @@ class RuntimeCorrelationStore:
 
         return self._update(mutate)
 
+    def delete_for_runtime_sessions(self, runtime_session_ids: set[str]) -> int:
+        """Delete correlations owned by the runtime sessions being cleaned."""
+        if not runtime_session_ids:
+            return 0
+
+        def mutate(records: list[dict[str, Any]]) -> tuple[list[dict[str, Any]], int]:
+            retained = [record for record in records if record.get("runtime_session_id") not in runtime_session_ids]
+            return retained, len(records) - len(retained)
+
+        return self._update(mutate)
+
     def _update(self, updater):
         with self._locked():
             records = self._read()
@@ -217,6 +251,11 @@ class RuntimeCorrelationStore:
 
 def store_for_payload(payload: dict[str, Any]) -> RuntimeCorrelationStore:
     return RuntimeCorrelationStore(active_data_directory(payload))
+
+
+def cleanup_store_for_payload(payload: dict[str, Any]) -> RuntimeCorrelationStore | None:
+    data_root = cleanup_data_directory(payload)
+    return None if data_root is None else RuntimeCorrelationStore(data_root)
 
 
 def reserve_run(

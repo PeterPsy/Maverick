@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 import sys
 from tempfile import TemporaryDirectory
@@ -15,6 +16,7 @@ if str(BACKEND_ROOT) not in sys.path:
     sys.path.insert(0, str(BACKEND_ROOT))
 
 import runtime_bridge  # noqa: E402
+import service  # noqa: E402
 
 
 class DesignStudioRuntimeBridgeTests(unittest.TestCase):
@@ -95,6 +97,40 @@ class DesignStudioRuntimeBridgeTests(unittest.TestCase):
             self.assertNotIn("Creating the design", persisted)
             self.assertNotIn("client-request-one", persisted)
 
+    def test_cleanup_data_directory_uses_strict_generation_control_without_bundle_verification(self) -> None:
+        with TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            generation_root = root / "opendesign"
+            (generation_root / "instances").mkdir(parents=True)
+            (generation_root / "backups").mkdir()
+            (generation_root / "migrations").mkdir()
+            payload = self._payload(root)
+
+            self.assertIsNone(runtime_bridge.cleanup_data_directory(payload))
+
+            data_root = generation_root / "instances" / "gen_cleanup_fixture" / "data"
+            data_root.mkdir(parents=True)
+
+            (generation_root / "control.json").write_text(
+                json.dumps(
+                    {
+                        "active": {
+                            "bundle_artifact_sha256": "a" * 64,
+                            "data_generation": "gen_cleanup_fixture",
+                            "od_version": "0.16.1",
+                        },
+                        "migration_id": None,
+                        "previous": None,
+                        "schema_version": "1",
+                        "updated_at": "2026-08-06T15:00:00Z",
+                    }
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+
+            self.assertEqual(runtime_bridge.cleanup_data_directory(payload), data_root.resolve())
+
     def test_terminal_packages_cover_success_failure_and_cancel(self) -> None:
         with TemporaryDirectory() as temp_dir:
             root = Path(temp_dir)
@@ -157,6 +193,66 @@ class DesignStudioRuntimeBridgeTests(unittest.TestCase):
                         "runtime_session_id",
                         "turn_id",
                     },
+                )
+
+    def test_platform_runtime_cleanup_deletes_only_matching_correlations(self) -> None:
+        with TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            active = root / "active"
+            active.mkdir()
+            payload = {
+                **self._payload(root),
+                "effective_mode": "full-access",
+                "user_id": None,
+            }
+            with patch.object(runtime_bridge, "active_data_directory", return_value=active), patch.object(
+                runtime_bridge,
+                "cleanup_data_directory",
+                return_value=active,
+            ):
+                records = {}
+                for suffix in ("deleted", "retained"):
+                    record, _ = runtime_bridge.reserve_run(
+                        payload,
+                        project_id=f"od_project_{suffix}",
+                        conversation_id=f"od_conversation_{suffix}",
+                        assistant_message_id=f"od_message_{suffix}",
+                        client_request_id=f"client-{suffix}",
+                        agent_id="maverick",
+                    )
+                    runtime_bridge.record_submission(
+                        payload,
+                        {
+                            "od_run_id": record["od_run_id"],
+                            "runtime_request_status": "submitted",
+                            "runtime_session_id": f"session-{suffix}",
+                            "turn_id": f"turn-{suffix}",
+                            "stream_id": f"stream-{suffix}",
+                        },
+                    )
+                    records[suffix] = record
+
+                result = service.dispatch(
+                    "runtime.cleanup_sessions",
+                    payload,
+                    {"runtime_session_ids": ["session-deleted", "session-missing", "session-deleted"]},
+                )
+                remaining = runtime_bridge.store_for_payload(payload).list()
+
+            self.assertEqual(
+                result,
+                {
+                    "cleaned_runtime_session_ids": ["session-deleted", "session-missing"],
+                    "deleted_runtime_correlations": 1,
+                },
+            )
+            self.assertEqual([record["od_run_id"] for record in remaining], [records["retained"]["od_run_id"]])
+
+            with self.assertRaisesRegex(service.DesignStudioError, "trusted platform cleanup flow"):
+                service.dispatch(
+                    "runtime.cleanup_sessions",
+                    self._payload(root),
+                    {"runtime_session_ids": ["session-retained"]},
                 )
 
     def test_translator_rejects_foreign_stream_and_unknown_event(self) -> None:

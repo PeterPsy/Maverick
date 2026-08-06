@@ -25,6 +25,7 @@ from store import OPENDESIGN_COMMIT, OPENDESIGN_MODE, OPENDESIGN_VERSION, ensure
 from runtime_bridge import (
     RuntimeBridgeError,
     build_result_package,
+    cleanup_store_for_payload,
     mark_cancel_requested,
     project_root_relative_to_app_data,
     public_run,
@@ -901,6 +902,42 @@ def runtime_bridge_translate(payload: dict[str, Any], arguments: dict[str, Any])
         raise DesignStudioError("runtime_bridge_translation_failed", str(error), status_code=409) from error
 
 
+def cleanup_runtime_sessions(payload: dict[str, Any], arguments: dict[str, Any]) -> dict[str, Any]:
+    """Remove app-owned correlation metadata during trusted core cleanup."""
+    if payload.get("effective_mode") != "full-access" or payload.get("user_id") is not None:
+        raise DesignStudioError(
+            "runtime_cleanup_forbidden",
+            "Runtime cleanup is available only to the trusted platform cleanup flow.",
+            status_code=403,
+        )
+    raw_session_ids = arguments.get("runtime_session_ids")
+    if not isinstance(raw_session_ids, list):
+        raise DesignStudioError(
+            "runtime_session_ids_invalid",
+            "runtime_session_ids must be a list of runtime session identifiers.",
+        )
+    session_ids: list[str] = []
+    seen_session_ids: set[str] = set()
+    for item in raw_session_ids:
+        try:
+            session_id = validated_identifier(item, label="runtime session id")
+        except RuntimeBridgeError as error:
+            raise DesignStudioError("runtime_session_ids_invalid", str(error)) from error
+        if session_id in seen_session_ids:
+            continue
+        seen_session_ids.add(session_id)
+        session_ids.append(session_id)
+    try:
+        store = cleanup_store_for_payload(payload)
+        deleted = 0 if store is None else store.delete_for_runtime_sessions(set(session_ids))
+    except RuntimeBridgeError as error:
+        raise DesignStudioError("runtime_cleanup_failed", str(error), status_code=409) from error
+    return {
+        "cleaned_runtime_session_ids": session_ids,
+        "deleted_runtime_correlations": deleted,
+    }
+
+
 def runtime_bridge_terminal(payload: dict[str, Any], arguments: dict[str, Any], *, event_type: str) -> dict[str, Any]:
     runtime_session_id = str(arguments.get("runtime_session_id") or payload.get("runtime_session_id") or "")
     turn_id = str(arguments.get("turn_id") or payload.get("turn_id") or "")
@@ -1135,6 +1172,8 @@ def dispatch(action: str, payload: dict[str, Any], arguments: dict[str, Any]) ->
         return runtime_bridge_callback(payload, arguments)
     if action == "runtime_bridge.translate_events":
         return runtime_bridge_translate(payload, arguments)
+    if action == "runtime.cleanup_sessions":
+        return cleanup_runtime_sessions(payload, arguments)
     if action in {
         "runtime.turn.completed",
         "runtime.turn.failed",

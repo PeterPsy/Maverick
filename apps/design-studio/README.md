@@ -165,6 +165,12 @@ The app is installed into workspaces through the generic built-in app source reg
 
 The contract declares frontend, backend, CLI, MCP, lifecycle hooks, a bundled skill, referenceable `design_project` entities, standard view-state actions, Storage dependencies, and one app-owned HTTP sidecar.
 
+Because Design Studio can create runtime sessions, it also implements the
+trusted platform `runtime.cleanup_sessions` hook declared by
+`permissions.runtime.cleanup_sessions`. Full runtime cleanup removes only the
+matching app-owned OpenDesign correlation records; ordinary user backend calls
+cannot invoke that destructive hook.
+
 The sidecar is sandbox-compatible because its mandatory generic
 `process_policy` starts it under bubblewrap with an allowlisted environment,
 read-only app bundle, writable validated app data root, isolated network

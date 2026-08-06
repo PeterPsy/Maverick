@@ -32,3 +32,5 @@ class RuntimeTurnRecord:
     cancellation_reason: str | None = None
     provider_request_started_at: datetime | None = None
     provider_request_finished_at: datetime | None = None
+    provider_request_owner_id: str | None = None
+    provider_request_generation: str | None = None

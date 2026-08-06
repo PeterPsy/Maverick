@@ -1939,14 +1939,22 @@ def _handle_turn_interrupt(
         return json_response(start_response, {"error": error.reason}, status="403 Forbidden")
     if turn.status not in {"queued", "active"}:
         return json_response(start_response, {"turn": _turn_payload(turn), "interrupted": False})
-    request_runtime_turn_cancellation(
+    cancellation_request = request_runtime_turn_cancellation(
         state.runtime_store,
         turn_id=turn_id,
         reason="Interrupted by user.",
     )
-    provider_id = _resolved_provider_id(state, session)
-    provider_interrupted = interrupt_runtime_provider_turn(state, session)
+    provider_id = None
+    provider_interrupted = False
+    if cancellation_request.cancellation_requested_at is not None:
+        provider_id = _resolved_provider_id(state, session)
+        provider_interrupted = interrupt_runtime_provider_turn(state, session)
     updated = transition_runtime_turn(state.runtime_store, turn_id=turn_id, target_status="cancelled", failure_reason="Interrupted by user.")
+    if updated.status != "cancelled":
+        return json_response(
+            start_response,
+            {"turn": _turn_payload(updated), "interrupted": False},
+        )
     provider_interrupted_after_handoff = interrupt_runtime_provider_turn(
         state,
         state.runtime_store.get_session(updated.session_id),

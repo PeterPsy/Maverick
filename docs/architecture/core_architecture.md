@@ -1591,6 +1591,17 @@ Backend process restart is a runtime recovery event.
 
 On real backend host startup, the platform must inspect persisted running runtime sessions. Generic platform-state bootstrap used by CLI wrappers, MCP wrappers, tests, app tooling, or other sidecar processes must not run backend-restart recovery, because those processes can coexist with live runtime workers owned by the backend host. The hosted backend must start this recovery from the backend host lifecycle without blocking the HTTP socket from opening; large runtime histories must not make the service unavailable while deterministic recovery work is still running. Recovery must scope bounded event reads to the running sessions being inspected instead of scanning every persisted runtime event partition or loading full legacy histories. Oversized valid event partitions may be skipped by the startup recovery scan, but they must remain in place for normal runtime history reads and WebSocket snapshot replay; malformed event partitions may be quarantined out of the startup path rather than parsed unboundedly. If a running session has a queued or active turn during true backend startup, the in-memory worker that owned that turn died with the previous backend process. The startup recovery pass must first reconcile the turn store with persisted terminal events: if the event log already contains a terminal event such as `runtime.output.final`, `runtime.turn.completed`, `runtime.turn.failed`, or `runtime.turn.cancelled`, the non-terminal turn record must be closed to match that evidence, source-app runtime event hooks must be dispatched for the terminal state, and no resume turn should be queued for it. Remaining stale non-terminal user turns must be closed with explicit backend-restart evidence and source-app hooks must be dispatched for those terminal transitions. The platform may then enqueue one new asynchronous turn with the fixed input `resume` on the same runtime session and dispatch a source-app `runtime.turn.queued` hook for that resume turn so app-owned projections can track the active turn id. If a recovery-created `resume` turn is itself interrupted by a later backend restart, recovery may retry it only up to a bounded attempt limit; it must never create an unbounded restart/resume loop.
 
+Recovery events, source-app callbacks, and resume eligibility must be derived
+from the terminal status actually returned by the turn lifecycle transition,
+not from its requested target. A persisted cancellation intent therefore
+produces only `runtime.turn.cancelled` evidence and can never enqueue an
+automatic resume. Before turn recovery, the new backend process also closes
+unfinished plain-hosted request leases owned by earlier backend process
+incarnations. Each lease persists both a process owner id and a per-request
+generation; request-finished acknowledgement is compare-and-set against both,
+so a late `finally` from an older incarnation cannot finish a replacement
+request on the same turn.
+
 Hidden `inter_agent_participant` sessions are excluded from that generic
 runtime `resume` behavior. Their interrupted turns are closed with explicit
 restart evidence, after which `InterAgentService` marks the owning orchestrated

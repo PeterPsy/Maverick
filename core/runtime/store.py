@@ -56,6 +56,8 @@ RUNTIME_TURN_CONTROL_FIELDS = frozenset(
         "cancellation_reason",
         "provider_request_started_at",
         "provider_request_finished_at",
+        "provider_request_owner_id",
+        "provider_request_generation",
     }
 )
 
@@ -174,6 +176,8 @@ class RuntimeStore(Protocol):
         self,
         *,
         turn_id: str,
+        owner_id: str,
+        generation: str,
         now: datetime | None = None,
     ) -> RuntimeTurnRecord:
         ...
@@ -182,8 +186,18 @@ class RuntimeStore(Protocol):
         self,
         *,
         turn_id: str,
+        owner_id: str,
+        generation: str,
         now: datetime | None = None,
     ) -> RuntimeTurnRecord:
+        ...
+
+    def reconcile_stale_turn_provider_requests(
+        self,
+        *,
+        active_owner_id: str,
+        now: datetime | None = None,
+    ) -> int:
         ...
 
     def save_turn_if_client_message_absent(self, record: RuntimeTurnRecord) -> tuple[RuntimeTurnRecord, bool]:
@@ -637,39 +651,72 @@ class RuntimeDocumentStore:
         self,
         *,
         turn_id: str,
+        owner_id: str,
+        generation: str,
         now: datetime | None = None,
     ) -> RuntimeTurnRecord:
-        """Persist ownership evidence before one hosted provider request blocks."""
+        """Acquire a generation-fenced lease before one hosted request blocks."""
+        normalized_owner_id = owner_id.strip()
+        normalized_generation = generation.strip()
+        if not normalized_owner_id or not normalized_generation:
+            raise ValueError("Hosted provider request leases require owner_id and generation.")
         current = self.get_turn(turn_id)
-        if current.provider_request_started_at is not None:
-            return current
+        if current.provider_request_started_at is not None and current.provider_request_finished_at is None:
+            if (
+                current.provider_request_owner_id == normalized_owner_id
+                and current.provider_request_generation == normalized_generation
+            ):
+                return current
+            raise RuntimeError(f"Runtime turn `{turn_id}` already has an active hosted provider request lease.")
         timestamp = now or datetime.now(tz=UTC)
         self.collections.turns.update_one(
             {
                 "turn_id": current.turn_id,
                 "workspace_id": current.workspace_id,
                 "session_id": current.session_id,
-                "provider_request_started_at": None,
+                "provider_request_started_at": current.provider_request_started_at,
+                "provider_request_finished_at": current.provider_request_finished_at,
+                "provider_request_owner_id": current.provider_request_owner_id,
+                "provider_request_generation": current.provider_request_generation,
             },
             {
                 "$set": {
                     "provider_request_started_at": timestamp,
                     "provider_request_finished_at": None,
+                    "provider_request_owner_id": normalized_owner_id,
+                    "provider_request_generation": normalized_generation,
                 }
             },
             upsert=False,
         )
-        return self.get_turn(turn_id)
+        persisted = self.get_turn(turn_id)
+        if (
+            persisted.provider_request_owner_id != normalized_owner_id
+            or persisted.provider_request_generation != normalized_generation
+        ):
+            raise RuntimeError(f"Runtime turn `{turn_id}` hosted provider request lease was acquired concurrently.")
+        return persisted
 
     def mark_turn_provider_request_finished(
         self,
         *,
         turn_id: str,
+        owner_id: str,
+        generation: str,
         now: datetime | None = None,
     ) -> RuntimeTurnRecord:
-        """Acknowledge that the process owning a hosted request has unwound it."""
+        """Acknowledge one hosted request only when its exact lease still owns the turn."""
+        normalized_owner_id = owner_id.strip()
+        normalized_generation = generation.strip()
+        if not normalized_owner_id or not normalized_generation:
+            raise ValueError("Hosted provider request acknowledgement requires owner_id and generation.")
         current = self.get_turn(turn_id)
-        if current.provider_request_started_at is None or current.provider_request_finished_at is not None:
+        if (
+            current.provider_request_started_at is None
+            or current.provider_request_finished_at is not None
+            or current.provider_request_owner_id != normalized_owner_id
+            or current.provider_request_generation != normalized_generation
+        ):
             return current
         timestamp = now or datetime.now(tz=UTC)
         self.collections.turns.update_one(
@@ -678,11 +725,57 @@ class RuntimeDocumentStore:
                 "workspace_id": current.workspace_id,
                 "session_id": current.session_id,
                 "provider_request_finished_at": None,
+                "provider_request_owner_id": normalized_owner_id,
+                "provider_request_generation": normalized_generation,
             },
             {"$set": {"provider_request_finished_at": timestamp}},
             upsert=False,
         )
         return self.get_turn(turn_id)
+
+    def reconcile_stale_turn_provider_requests(
+        self,
+        *,
+        active_owner_id: str,
+        now: datetime | None = None,
+    ) -> int:
+        """Close unfinished leases from backend owners that predate this process."""
+        normalized_owner_id = active_owner_id.strip()
+        if not normalized_owner_id:
+            raise ValueError("Hosted provider request reconciliation requires active_owner_id.")
+        timestamp = now or datetime.now(tz=UTC)
+        reconciled = 0
+        for document in self.collections.turns.find({}):
+            started_at = document.get("provider_request_started_at")
+            finished_at = document.get("provider_request_finished_at")
+            previous_owner_id = document.get("provider_request_owner_id")
+            previous_generation = document.get("provider_request_generation")
+            if started_at is None or finished_at is not None or previous_owner_id == normalized_owner_id:
+                continue
+            turn_id = str(document.get("turn_id") or "").strip()
+            workspace_id = str(document.get("workspace_id") or "").strip()
+            session_id = str(document.get("session_id") or "").strip()
+            if not turn_id or not workspace_id or not session_id:
+                continue
+            self.collections.turns.update_one(
+                {
+                    "turn_id": turn_id,
+                    "workspace_id": workspace_id,
+                    "session_id": session_id,
+                    "provider_request_started_at": started_at,
+                    "provider_request_finished_at": None,
+                    "provider_request_owner_id": previous_owner_id,
+                    "provider_request_generation": previous_generation,
+                },
+                {"$set": {"provider_request_finished_at": timestamp}},
+                upsert=False,
+            )
+            refreshed = self.collections.turns.find_one(
+                {"turn_id": turn_id, "workspace_id": workspace_id, "session_id": session_id}
+            )
+            if refreshed is not None and refreshed.get("provider_request_finished_at") is not None:
+                reconciled += 1
+        return reconciled
 
     def save_turn_if_client_message_absent(self, record: RuntimeTurnRecord) -> tuple[RuntimeTurnRecord, bool]:
         normalized_client_message_id = record.client_message_id.strip() if isinstance(record.client_message_id, str) else ""

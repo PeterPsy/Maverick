@@ -20,7 +20,12 @@ from core.runtime.errors import RuntimeTurnNotFoundError
 from core.runtime.runtime_events import RuntimeEventRecord
 from core.runtime.runtime_session import RuntimeSessionRecord
 from core.runtime.runtime_turns import RuntimeTurnRecord
-from core.runtime.service import create_runtime_session, transition_runtime_session
+from core.runtime.plain_hosted_cancellation import plain_hosted_request_cancellation
+from core.runtime.service import (
+    create_runtime_session,
+    request_runtime_turn_cancellation,
+    transition_runtime_session,
+)
 from tests.support.repo import make_temp_repo_root
 
 
@@ -224,6 +229,151 @@ class BackendRestartRecoveryTestCase(unittest.TestCase):
             source_app_id="source-app",
         )
         self.assertEqual(stream.status, "failed")
+
+    def test_cancel_intent_prevents_failed_event_callback_and_automatic_resume(self) -> None:
+        repo_root = make_temp_repo_root(self)
+        state = bootstrap_platform_state(start_path=repo_root)
+        session = create_runtime_session(
+            state.runtime_store,
+            session_id="session-cancelled-before-recovery",
+            workspace_id="default",
+            agent_id="chat",
+            source_app_id="source-app",
+            start_path=repo_root,
+        )
+        transition_runtime_session(
+            state.runtime_store,
+            session_id=session.session_id,
+            target_status="running",
+        )
+        state.runtime_store.save_turn(
+            RuntimeTurnRecord(
+                turn_id="turn-cancelled-before-recovery",
+                session_id=session.session_id,
+                workspace_id="default",
+                status="active",
+                input_text="stop before restart",
+                created_at=NOW,
+                updated_at=NOW,
+                started_at=NOW,
+                completed_at=None,
+                failure_reason=None,
+            )
+        )
+        request_runtime_turn_cancellation(
+            state.runtime_store,
+            turn_id="turn-cancelled-before-recovery",
+            reason="cancel won before restart recovery",
+            now=NOW,
+        )
+
+        with (
+            patch.object(backend_restart, "submit_runtime_turn_async") as submit,
+            patch.object(backend_restart, "set_thread_availability"),
+            patch.object(backend_restart, "dispatch_source_app_runtime_event") as dispatch,
+            patch.object(backend_restart, "dispatch_workspace_app_background_hooks", return_value=[]),
+            patch.object(backend_restart.InterAgentService, "recover_non_terminal_runs", return_value=[]),
+        ):
+            result = backend_restart.recover_interrupted_runtime_turns_after_backend_restart(state)
+
+        updated = state.runtime_store.get_turn("turn-cancelled-before-recovery")
+        terminal_events = [
+            event
+            for event in state.runtime_store.list_events(session.session_id)
+            if event.turn_id == updated.turn_id and event.event_type.startswith("runtime.turn.")
+        ]
+        submit.assert_not_called()
+        self.assertEqual(result.queued_resume_turns, 0)
+        self.assertEqual(updated.status, "cancelled")
+        self.assertEqual(terminal_events[-1].event_type, "runtime.turn.cancelled")
+        self.assertEqual(terminal_events[-1].payload["recovery_action"], "preserve_cancelled_turn")
+        self.assertEqual(dispatch.call_args.kwargs["event_type"], "runtime.turn.cancelled")
+
+    def test_backend_restart_reconciles_crashed_hosted_owner_and_allows_new_generation(self) -> None:
+        repo_root = make_temp_repo_root(self)
+        state = bootstrap_platform_state(start_path=repo_root)
+        session = create_runtime_session(
+            state.runtime_store,
+            session_id="session-crashed-hosted-owner",
+            workspace_id="default",
+            agent_id="chat",
+            runtime_mode="plain_hosted_chat",
+            start_path=repo_root,
+        )
+        state.runtime_store.save_turn(
+            RuntimeTurnRecord(
+                turn_id="turn-crashed-hosted-owner",
+                session_id=session.session_id,
+                workspace_id="default",
+                status="queued",
+                input_text="retry provider request",
+                created_at=NOW,
+                updated_at=NOW,
+                started_at=None,
+                completed_at=None,
+                failure_reason=None,
+            )
+        )
+        state.runtime_store.mark_turn_provider_request_started(
+            turn_id="turn-crashed-hosted-owner",
+            owner_id="dead-backend-owner",
+            generation="dead-request-generation",
+            now=NOW,
+        )
+        state.runtime_store.save_turn(
+            RuntimeTurnRecord(
+                turn_id="turn-legacy-hosted-owner",
+                session_id=session.session_id,
+                workspace_id="default",
+                status="queued",
+                input_text="legacy provider request",
+                created_at=NOW,
+                updated_at=NOW,
+                started_at=None,
+                completed_at=None,
+                failure_reason=None,
+            )
+        )
+        state.runtime_store.collections.turns.update_one(
+            {
+                "turn_id": "turn-legacy-hosted-owner",
+                "workspace_id": "default",
+                "session_id": session.session_id,
+            },
+            {"$set": {"provider_request_started_at": NOW, "provider_request_finished_at": None}},
+            upsert=False,
+        )
+
+        with (
+            patch.object(backend_restart, "dispatch_workspace_app_background_hooks", return_value=[]),
+            patch.object(backend_restart.InterAgentService, "recover_non_terminal_runs", return_value=[]),
+        ):
+            backend_restart.recover_interrupted_runtime_turns_after_backend_restart(state)
+
+        reconciled = state.runtime_store.get_turn("turn-crashed-hosted-owner")
+        self.assertIsNotNone(reconciled.provider_request_finished_at)
+        self.assertIsNotNone(
+            state.runtime_store.get_turn("turn-legacy-hosted-owner").provider_request_finished_at
+        )
+
+        with plain_hosted_request_cancellation(
+            session_id=session.session_id,
+            turn_id=reconciled.turn_id,
+            store=state.runtime_store,
+        ):
+            restarted = state.runtime_store.get_turn(reconciled.turn_id)
+            self.assertNotEqual(restarted.provider_request_owner_id, "dead-backend-owner")
+            self.assertNotEqual(restarted.provider_request_generation, "dead-request-generation")
+            self.assertIsNone(restarted.provider_request_finished_at)
+            state.runtime_store.mark_turn_provider_request_finished(
+                turn_id=restarted.turn_id,
+                owner_id="dead-backend-owner",
+                generation="dead-request-generation",
+                now=NOW,
+            )
+            self.assertIsNone(state.runtime_store.get_turn(restarted.turn_id).provider_request_finished_at)
+
+        self.assertIsNotNone(state.runtime_store.get_turn(reconciled.turn_id).provider_request_finished_at)
 
 
 if __name__ == "__main__":

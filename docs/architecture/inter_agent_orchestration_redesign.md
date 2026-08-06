@@ -195,9 +195,13 @@ transcript projection behavior.
   saves cannot clear. Activation, provider start, and terminal reconciliation
   treat that intent as authoritative, including idempotent correction of a
   stale terminal write. Plain-hosted owners poll the intent, abort their HTTP
-  response, and persist request-finished acknowledgement, so sidecar CLI/MCP
-  processes can wait for real provider unwind. Every interrupt source retries
-  provider cancellation after lifecycle reconciliation. A child created
+  response, and persist an owner-and-generation-fenced request-finished
+  acknowledgement, so sidecar CLI/MCP processes can wait for real provider
+  unwind. Backend restart closes unfinished leases from older process owners;
+  a late old-owner acknowledgement cannot finish a replacement incarnation on
+  the same turn. Every interrupt source retries provider cancellation after
+  lifecycle reconciliation and reports the terminal status actually returned
+  by that transition. A child created
   concurrently is rechecked, deleted, and never linked. Interrupt and resume
   hold the same cross-process run-control handoff across the full cleanup;
   cancellation matches the pause snapshot's generation, runtime session, and

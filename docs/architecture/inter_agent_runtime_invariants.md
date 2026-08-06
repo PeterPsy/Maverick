@@ -101,11 +101,15 @@ It started with names, visibility, legacy compatibility, and initial policy defa
     handoff. Activation, provider start, and terminal reconciliation reread the
     intent, so a completion or failure cannot win after pause acknowledgement;
     repeated reconciliation is idempotent. Plain-hosted request ownership and
-    unwind acknowledgement are persisted with the turn, allowing a backend
-    watcher to abort the HTTP response and a CLI or MCP sidecar to wait across
-    process boundaries. HTTP, app, and inter-agent interrupt paths retry
+    unwind acknowledgement are persisted with an owner id and per-request
+    generation, allowing a backend watcher to abort the HTTP response and a CLI
+    or MCP sidecar to wait across process boundaries. Restart recovery closes
+    unfinished leases from older backend owners, and exact-generation finish
+    fencing permits a new request incarnation on the same turn without a stale
+    `finally` closing it. HTTP, app, and inter-agent interrupt paths retry
     provider cancellation after the terminal transition before session cleanup
-    can report `stopped`. Prewarm applies the session-only form of that handshake. Session
+    can report `stopped`; their events and callbacks use the status returned by
+    that transition and never report cancellation when completion won. Prewarm applies the session-only form of that handshake. Session
     metadata callbacks and worker returns use partial,
     allowlisted mutations under the handoff and cannot write lifecycle fields.
     Interrupt and resume share a cross-process run-control handoff that remains

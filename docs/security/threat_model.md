@@ -195,8 +195,12 @@ authoritative, ordinary lifecycle saves cannot erase it, and stale terminal
 writes are corrected idempotently. Plain-hosted request owners watch that
 intent and persist request-finished acknowledgement after aborting the HTTP
 response, so an interrupt issued by CLI or MCP in another process does not
-leave provider work alive. App, HTTP, and inter-agent callers retry provider
-interruption after the lifecycle handoff.
+leave provider work alive. The acknowledgement is fenced by a durable backend
+owner id and request generation. Backend restart recovery closes leases from
+previous owners before reconciling turns, while a stale owner cannot acknowledge
+a newer request incarnation. App, HTTP, and inter-agent callers retry provider
+interruption after the lifecycle handoff, and publish cancellation events or
+callbacks only when the authoritative transition actually returns `cancelled`.
 The same fence covers the complete scheduler mutation path. Each scheduler
 captures one recovery generation, and every run transition, recovery-ledger
 write, task claim/finalization, and completion commit validates that generation

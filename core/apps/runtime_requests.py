@@ -710,14 +710,24 @@ def _apply_one_runtime_interrupt_request(
             "_visible": request.get("result_visibility") != "internal",
         }
     reason = _long_text(request.get("reason")) or "Interrupted by app request."
-    request_runtime_turn_cancellation(
+    cancellation_request = request_runtime_turn_cancellation(
         state.runtime_store,
         turn_id=turn_id,
         reason=reason,
     )
-    provider_id = _resolved_provider_id(state, session)
-    provider_interrupted = interrupt_runtime_provider_turn(state, session)
+    provider_id = None
+    provider_interrupted = False
+    if cancellation_request.cancellation_requested_at is not None:
+        provider_id = _resolved_provider_id(state, session)
+        provider_interrupted = interrupt_runtime_provider_turn(state, session)
     updated = transition_runtime_turn(state.runtime_store, turn_id=turn_id, target_status="cancelled", failure_reason=reason)
+    if updated.status != "cancelled":
+        return {
+            "turn_id": updated.turn_id,
+            "status": updated.status,
+            "interrupted": False,
+            "_visible": request.get("result_visibility") != "internal",
+        }
     provider_interrupted_after_handoff = interrupt_runtime_provider_turn(
         state,
         state.runtime_store.get_session(updated.session_id),

@@ -10,6 +10,7 @@ from core.apps.runtime_event_hooks import dispatch_source_app_runtime_event, dis
 from core.inter_agent.service import InterAgentService
 from core.providers.errors import ProviderError
 from core.runtime.errors import RuntimeTurnNotFoundError
+from core.runtime.plain_hosted_cancellation import reconcile_stale_plain_hosted_request_owners
 from core.runtime.service import record_runtime_event, transition_runtime_turn
 from core.runtime.store import MAX_RUNTIME_EVENTS_PER_SESSION
 from core.runtime.thread_catalog_events import set_thread_availability
@@ -61,6 +62,7 @@ def recover_interrupted_runtime_turns_after_backend_restart(
     reason: str = "backend restart",
 ) -> BackendRestartRecoveryResult:
     """Resume runtime sessions whose in-memory turn workers died during backend restart."""
+    reconcile_stale_plain_hosted_request_owners(state.runtime_store)
     inspected = 0
     recovered = 0
     closed_turns = 0
@@ -120,12 +122,20 @@ def recover_interrupted_runtime_turns_after_backend_restart(
                 else:
                     failure_reason = f"Interrupted by {reason}; recovery resume retry queued."
                     recovery_action = "retry_resume_turn"
+            if recovery_action in {"automatic_resume_turn", "retry_resume_turn"}:
+                target_status = "failed"
             updated = transition_runtime_turn(
                 state.runtime_store,
                 turn_id=turn.turn_id,
                 target_status=target_status,
                 failure_reason=failure_reason,
             )
+            recovery_action = _recovery_action_for_updated_status(
+                updated_status=updated.status,
+                planned_action=recovery_action,
+            )
+            terminal_event_type = f"runtime.turn.{updated.status}"
+            terminal_detail = updated.failure_reason or failure_reason
             closed_turns += 1
             event = record_runtime_event(
                 state.runtime_store,
@@ -133,10 +143,10 @@ def recover_interrupted_runtime_turns_after_backend_restart(
                 session_id=session.session_id,
                 turn_id=updated.turn_id,
                 plane="turn",
-                event_type=f"runtime.turn.{target_status}",
+                event_type=terminal_event_type,
                 payload={
                     "reason": "backend_restart",
-                    "detail": failure_reason,
+                    "detail": terminal_detail,
                     "recovery_action": recovery_action,
                     "resume_attempts": resume_attempts if is_recovery_resume_turn else None,
                     "max_resume_attempts": MAX_BACKEND_RESTART_RESUME_ATTEMPTS_PER_SESSION if is_recovery_resume_turn else None,
@@ -154,10 +164,13 @@ def recover_interrupted_runtime_turns_after_backend_restart(
                 state,
                 session=state.runtime_store.get_session(session.session_id),
                 turn=updated,
-                event_type=f"runtime.turn.{target_status}",
-                failure_reason=updated.failure_reason or failure_reason,
+                event_type=terminal_event_type,
+                failure_reason=terminal_detail,
             )
-            should_queue_resume = should_queue_resume or recovery_action in {"automatic_resume_turn", "retry_resume_turn"}
+            should_queue_resume = should_queue_resume or (
+                updated.status == "failed"
+                and recovery_action in {"automatic_resume_turn", "retry_resume_turn"}
+            )
         if not should_queue_resume:
             continue
         try:
@@ -416,3 +429,9 @@ def _backend_restart_resume_attempt_count(events: list) -> int:
         if isinstance(client_message_id, str) and client_message_id.startswith(RESUME_CLIENT_MESSAGE_ID_PREFIX):
             count += 1
     return count
+
+
+def _recovery_action_for_updated_status(*, updated_status: str, planned_action: str) -> str:
+    if updated_status == "failed":
+        return planned_action
+    return f"preserve_{updated_status.replace('-', '_')}_turn"

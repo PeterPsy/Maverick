@@ -1169,7 +1169,7 @@ def _invoke_dependency_backend_request_callback(
         actor_user_id=actor_user_id,
         runtime_session_id=None,
         observability_store=state.observability_store,
-        timeout_seconds=30,
+        timeout_seconds=int(parsed.contract.hook_timeouts.backend_seconds),
     )
     publish_declared_app_events(
         state.app_event_bus,

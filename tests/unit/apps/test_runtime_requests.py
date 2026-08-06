@@ -437,6 +437,7 @@ class RuntimeRequestsTestCase(unittest.TestCase):
             contract=SimpleNamespace(
                 permissions=SimpleNamespace(runtime=SimpleNamespace(create_sessions=False)),
                 capabilities=SimpleNamespace(data_events=[]),
+                hook_timeouts=SimpleNamespace(backend_seconds=73),
             )
         )
 
@@ -487,6 +488,7 @@ class RuntimeRequestsTestCase(unittest.TestCase):
         self.assertEqual(callback_body["dependency_backend_result"]["json"], {"local_path": "/tmp/storage/file.bin"})
         self.assertEqual(callback_invocations[0]["surface"], "backend")
         self.assertIsNone(callback_invocations[0]["runtime_session_id"])
+        self.assertEqual(callback_invocations[0]["timeout_seconds"], 73)
 
 
 if __name__ == "__main__":

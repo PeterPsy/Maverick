@@ -15,23 +15,23 @@ from core.runtime import process_control
 
 
 class CodexAppServerRuntimeProcessTestCase(unittest.TestCase):
-    def test_runtime_process_is_made_preferred_for_oom_termination(self) -> None:
+    def test_runtime_process_is_reset_to_neutral_oom_priority(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             proc_root = Path(temp_dir)
             score_path = proc_root / "4321" / "oom_score_adj"
             score_path.parent.mkdir()
             score_path.write_text("0\n", encoding="ascii")
 
-            configured = process_control.make_runtime_process_oom_kill_preferred(
+            configured = process_control.configure_runtime_process_oom_score(
                 SimpleNamespace(pid=4321),
                 proc_root=proc_root,
             )
             score = score_path.read_text(encoding="ascii")
 
         self.assertTrue(configured)
-        self.assertEqual(score, "500\n")
+        self.assertEqual(score, "0\n")
 
-    def test_codex_runtime_launch_applies_oom_preference_before_registration(self) -> None:
+    def test_codex_runtime_launch_configures_oom_score_before_registration(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             session = SimpleNamespace(
                 session_id="session-oom",
@@ -61,7 +61,7 @@ class CodexAppServerRuntimeProcessTestCase(unittest.TestCase):
             thread = SimpleNamespace(start=lambda: None)
             runtime_thread._RUNTIMES.pop(session.session_id, None)
 
-            with patch.object(runtime_thread, "make_runtime_process_oom_kill_preferred") as prefer_oom, patch.object(
+            with patch.object(runtime_thread, "configure_runtime_process_oom_score") as configure_oom, patch.object(
                 runtime_thread.threading,
                 "Thread",
                 return_value=thread,
@@ -76,7 +76,7 @@ class CodexAppServerRuntimeProcessTestCase(unittest.TestCase):
             runtime_thread.unregister_runtime_process(session.session_id, process)
 
         self.assertIs(runtime.process, process)
-        prefer_oom.assert_called_once_with(process)
+        configure_oom.assert_called_once_with(process)
 
     def test_warm_turn_skips_repeated_generated_skill_cleanup_and_reports_startup_spans(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:

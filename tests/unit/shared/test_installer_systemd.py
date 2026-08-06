@@ -30,6 +30,15 @@ class InstallerSystemdTestCase(unittest.TestCase):
             with self.subTest(service_name=service_name):
                 self.assertIn(expected_path, rendered[config.systemd_dir / service_name])
 
+    def test_core_is_protected_without_preferentially_targeting_runtime_providers(self) -> None:
+        repo_root = Path(__file__).resolve().parents[3]
+        config = _make_config(repo_root)
+
+        rendered = render_install_plan(config)
+
+        core_service = rendered[config.systemd_dir / "maverick-core.service"]
+        self.assertIn("OOMScoreAdjust=-500", core_service)
+
 
 def _make_config(repo_root: Path) -> InstallerConfig:
     output_root = default_output_root(repo_root)

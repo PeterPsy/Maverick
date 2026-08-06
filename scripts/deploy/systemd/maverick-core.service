@@ -11,6 +11,7 @@ Environment=PATH=/usr/local/bin:/usr/bin:/bin
 Environment=PYTHONUNBUFFERED=1
 EnvironmentFile={{ENV_FILE}}
 ExecStart={{INSTALL_ROOT}}/.venv/bin/python -m uvicorn core.api.asgi_application:app --host {{BIND_HOST}} --port {{CORE_PORT}}
+OOMScoreAdjust=-500
 Restart=always
 RestartSec=3
 

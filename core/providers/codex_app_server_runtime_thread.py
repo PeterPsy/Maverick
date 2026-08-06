@@ -13,7 +13,7 @@ from core.providers.models import RuntimeBackendLaunchSpec
 from core.providers.codex_app_server_runtime_state import _CodexAppServerRuntime, _RUNTIMES, _RUNTIMES_LOCK
 from core.providers.provider_codex import remove_codex_system_skills
 from core.runtime.process_control import (
-    make_runtime_process_oom_kill_preferred,
+    configure_runtime_process_oom_score,
     register_runtime_process,
     unregister_runtime_process,
 )
@@ -45,7 +45,7 @@ def _ensure_runtime(
             bufsize=1,
             start_new_session=True,
         )
-        make_runtime_process_oom_kill_preferred(process)
+        configure_runtime_process_oom_score(process)
         runtime = _CodexAppServerRuntime(
             session_id=session.session_id,
             workspace_id=session.workspace_id,

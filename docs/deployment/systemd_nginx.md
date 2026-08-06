@@ -44,6 +44,13 @@ Generated systemd services put `/usr/local/bin` before `/usr/bin` in `PATH`,
 so host-level Node 24 installs under `/usr/local` are visible to
 backend-triggered frontend builds and runtime agent processes.
 
+The core service uses `OOMScoreAdjust=-500` to keep the control plane available
+during host memory pressure. Runtime provider children are reset to neutral OOM
+priority by the core. This protects the backend without marking all live agent
+sessions as preferred victims for `earlyoom` or the kernel OOM killer. Operators
+must still bound or stop unrelated restart loops and memory-heavy development
+services; OOM scoring is not a substitute for host resource management.
+
 The backend watchdog also loads `.env.maverick`, but rescue authority comes from the configured provider selection persisted in the control-plane store. A `MAVERICK_BACKEND_RESCUE_COMMAND` value is only a provider command override for the selected provider; it must not start rescue by itself when no provider is configured.
 
 For a first-time HTTPS install, the installer initially writes an HTTP nginx config that can pass `nginx -t` without existing certificates and serve the ACME challenge.

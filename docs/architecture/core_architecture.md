@@ -540,6 +540,13 @@ The Codex adapter should own the provider-specific protocol:
 - keep the provider thread id as provider-runtime state, not as chat-app state
 - keep the local provider process warm for a short idle TTL after a terminal turn, then terminate it if the runtime session still has no queued or active turns, while keeping the provider thread id so a later turn can restart the backend and resume the same conversation
 
+On Linux systemd deployments, the core host should carry a negative OOM score
+adjustment so the platform control plane is less likely to be terminated during
+host memory pressure. Runtime provider processes must be reset to neutral OOM
+priority when launched. They must not receive a positive adjustment: doing so
+causes early-OOM daemons to terminate every active session before selecting the
+process that is actually consuming the most memory.
+
 The core runtime session remains the Maverick-owned lifecycle container.
 
 The provider thread is the selected backend's conversation container.

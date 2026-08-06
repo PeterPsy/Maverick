@@ -13,19 +13,22 @@ import time
 
 _LOCK = Lock()
 _PROCESSES_BY_SESSION: dict[str, set[subprocess.Popen]] = defaultdict(set)
-RUNTIME_PROVIDER_OOM_SCORE_ADJ = 500
+RUNTIME_PROVIDER_OOM_SCORE_ADJ = 0
 
 
-def make_runtime_process_oom_kill_preferred(
+def configure_runtime_process_oom_score(
     process: subprocess.Popen,
     *,
     proc_root: str | Path = "/proc",
 ) -> bool:
-    """Prefer a provider over the platform host when Linux must reclaim memory.
+    """Keep a provider at neutral Linux OOM priority.
 
-    Provider descendants inherit this value. The operation is best-effort so
-    unsupported hosts or restricted procfs mounts do not prevent a turn from
-    starting.
+    The systemd-hosted core uses a negative ``OOMScoreAdjust`` so the platform
+    control plane survives memory pressure. Provider processes are reset to a
+    neutral score instead of receiving a positive adjustment that would make
+    every active session an early-OOM victim. Provider descendants inherit the
+    neutral value. The operation is best-effort so unsupported hosts or
+    restricted procfs mounts do not prevent a turn from starting.
     """
     try:
         pid = int(process.pid)

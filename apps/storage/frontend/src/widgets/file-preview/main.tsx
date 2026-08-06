@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type RefObject } from 'react';
+import { useCallback, useEffect, useRef, useState, type RefObject } from 'react';
 import { createRoot } from 'react-dom/client';
 import * as pdfjs from 'pdfjs-dist';
 import pdfWorkerUrl from 'pdfjs-dist/build/pdf.worker.min.mjs?url';
@@ -9,6 +9,7 @@ import { MarkdownPreview } from '../../markdownPreview';
 import { canRequestFullscreen, elementIsFullscreen, exitDocumentFullscreen, requestElementFullscreen } from '../../lib/browserFullscreen';
 import { VideoPreview } from '../../videoPreview';
 import type { StorageFile } from '../../types';
+import { DocxPreview, isDocxFile } from './docxPreview';
 import './styles.css';
 
 pdfjs.GlobalWorkerOptions.workerSrc = pdfWorkerUrl;
@@ -182,7 +183,31 @@ function FileFallback({ file, downloadUrl, reason }: { file: StorageFile; downlo
   );
 }
 
-function Preview({ file, previewUrl, previewText, downloadUrl }: { file: StorageFile; previewUrl: string; previewText: string; downloadUrl: string }) {
+function Preview({
+  file,
+  previewUrl,
+  previewText,
+  downloadUrl,
+  docxBlob,
+  onDocxRendered,
+}: {
+  file: StorageFile;
+  previewUrl: string;
+  previewText: string;
+  downloadUrl: string;
+  docxBlob: Blob | null;
+  onDocxRendered: () => void;
+}) {
+  if (isDocxFile(file) && docxBlob) {
+    return (
+      <DocxPreview
+        blob={docxBlob}
+        fileName={file.name}
+        fallback={(reason) => <FileFallback file={file} downloadUrl={downloadUrl} reason={reason} />}
+        onRendered={onDocxRendered}
+      />
+    );
+  }
   if (file.preview_kind === 'image' && previewUrl) return <img src={previewUrl} alt={file.name} />;
   if (file.preview_kind === 'video' && previewUrl) return <VideoPreview file={file} src={previewUrl} />;
   if (file.preview_kind === 'audio' && previewUrl) return <audio src={previewUrl} controls />;
@@ -219,12 +244,16 @@ function StorageFilePreviewWidget() {
   const [file, setFile] = useState<StorageFile | null>(null);
   const [previewUrl, setPreviewUrl] = useState('');
   const [previewText, setPreviewText] = useState('');
+  const [docxBlob, setDocxBlob] = useState<Blob | null>(null);
   const [previewLoading, setPreviewLoading] = useState(false);
   const [isScrolling, setIsScrolling] = useState(false);
   const [fullscreenMode, setFullscreenMode] = useState<PreviewFullscreenMode>('none');
   const [error, setError] = useState('');
   const fullscreenActive = fullscreenMode !== 'none';
   const downloadUrl = file ? storageMediaStreamUrl(file, { download: true }) : '';
+  const handleDocxRendered = useCallback(() => {
+    if (rootRef.current) postWidgetResize(rootRef.current, documentRef.current);
+  }, []);
 
   useEffect(() => {
     loadWidgetContext()
@@ -235,6 +264,7 @@ function StorageFilePreviewWidget() {
       .then((result) => {
         setPreviewText('');
         setPreviewUrl('');
+        setDocxBlob(null);
         setPreviewLoading(canInlinePreview(result.file));
         setFile(result.file);
       })
@@ -244,6 +274,7 @@ function StorageFilePreviewWidget() {
   useEffect(() => {
     setPreviewText('');
     setPreviewUrl('');
+    setDocxBlob(null);
     setPreviewLoading(Boolean(file && canInlinePreview(file)));
     if (!file || !canInlinePreview(file)) return;
     let active = true;
@@ -255,7 +286,9 @@ function StorageFilePreviewWidget() {
       : isDriveFile(file)
         ? previewDriveFile(file, PREVIEW_BYTES)
       : canRenderDocumentPreview(file)
-        ? renderPreview(file).catch(() => readPreviewText(file))
+        ? isDocxFile(file)
+          ? renderPreview(file).catch(() => readFile(file, PREVIEW_BYTES))
+          : renderPreview(file).catch(() => readPreviewText(file))
         : readFile(file, PREVIEW_BYTES);
     previewRequest
       .then(async (payload) => {
@@ -270,6 +303,10 @@ function StorageFilePreviewWidget() {
         }
         if (!payload.content_base64) return;
         const blob = decodeBase64(payload.content_base64, payload.content_type || payload.file.content_type);
+        if (isDocxFile(payload.file)) {
+          setDocxBlob(blob);
+          return;
+        }
         if (['text', 'markdown'].includes(payload.file.preview_kind)) {
           const text = await blob.text();
           if (active) setPreviewText(text);
@@ -423,7 +460,14 @@ function StorageFilePreviewWidget() {
         ref={documentRef}
         onScroll={handleDocumentScroll}
       >
-        <Preview file={file} previewUrl={previewUrl} previewText={previewText} downloadUrl={downloadUrl} />
+        <Preview
+          file={file}
+          previewUrl={previewUrl}
+          previewText={previewText}
+          downloadUrl={downloadUrl}
+          docxBlob={docxBlob}
+          onDocxRendered={handleDocxRendered}
+        />
       </section>
     </main>
   );

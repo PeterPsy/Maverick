@@ -53,9 +53,31 @@ describe('storage file preview widget styles', () => {
 
     expect(source).toContain('readPreviewText, renderPreview');
     expect(source).toContain('function canRenderDocumentPreview');
-    expect(source).toContain('? renderPreview(file).catch(() => readPreviewText(file))');
+    expect(source).toContain('? renderPreview(file).catch(() => readFile(file, PREVIEW_BYTES))');
+    expect(source).toContain(': renderPreview(file).catch(() => readPreviewText(file))');
     expect(source).toContain("['pdf', 'document', 'presentation', 'spreadsheet'].includes(file.preview_kind) && previewUrl");
     expect(source).toContain('<PdfCanvasPreview file={file} previewUrl={previewUrl} downloadUrl={downloadUrl} />');
+  });
+
+  it('renders DOCX blobs as styled document pages instead of monospaced fallback text', () => {
+    const source = readStyle('main.tsx');
+    const docxSource = readStyle('docxPreview.tsx');
+    const styles = readStyle('styles.css');
+
+    expect(source).toContain("import { DocxPreview, isDocxFile } from './docxPreview';");
+    expect(source).toContain("const [docxBlob, setDocxBlob] = useState<Blob | null>(null);");
+    expect(source).toContain('if (isDocxFile(payload.file))');
+    expect(source).toContain('<DocxPreview');
+    expect(source).toContain('blob={docxBlob}');
+    expect(source).toContain('fileName={file.name}');
+    expect(docxSource).toContain("import('docx-preview')");
+    expect(docxSource).toContain('renderAsync(blob, renderedBody, renderedStyles');
+    expect(docxSource).toContain('breakPages: true');
+    expect(docxSource).toContain('ignoreWidth: false');
+    expect(docxSource).toContain('renderAltChunks: false');
+    expect(styles).toContain('.file-widget__docx-preview .docx-wrapper');
+    expect(styles).toContain('.file-widget__docx-preview section.docx');
+    expect(styles).toContain('background: #fff;');
   });
 
   it('keeps open-in-storage on the title and groups header action buttons', () => {

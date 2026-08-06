@@ -509,3 +509,90 @@ button {
     border-radius: 0;
   }
 }
+
+.file-widget__docx-preview {
+  position: relative;
+  width: max-content;
+  min-width: 100%;
+  min-height: 100%;
+}
+
+.file-widget__docx-styles {
+  display: contents;
+}
+
+.file-widget__docx-body {
+  width: max-content;
+  min-width: 100%;
+}
+
+.file-widget__docx-preview .docx-wrapper {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1.5rem;
+  min-width: 100%;
+  min-height: 100%;
+  background: transparent;
+  padding: 0.72rem !important;
+}
+
+.file-widget__docx-preview section.docx {
+  background: #fff;
+  color: #000;
+  flex: none;
+  overflow: hidden;
+  box-shadow: 0 14px 42px rgba(0, 0, 0, 0.34);
+  margin: 0;
+  border-radius: 6px;
+}
+
+.file-widget__docx-preview section.docx img {
+  display: inline;
+  width: auto;
+  max-width: 100%;
+  object-fit: initial;
+}
+
+.file-widget__docx-loading {
+  box-sizing: border-box;
+  width: min(42rem, calc(100vw - 2rem));
+  min-height: 34rem;
+  margin: 0.72rem auto;
+  padding: 4.5rem 4rem;
+  border-radius: 6px;
+  background: #fff;
+  box-shadow: 0 14px 42px rgba(0, 0, 0, 0.28);
+}
+
+.file-widget__docx-loading span {
+  display: block;
+  height: 0.72rem;
+  margin-bottom: 0.9rem;
+  border-radius: 999px;
+  background: #e5e7eb;
+}
+
+.file-widget__docx-loading span:nth-child(2) {
+  width: 88%;
+}
+
+.file-widget__docx-loading span:nth-child(3) {
+  width: 72%;
+}
+
+.file-widget__docx-loading span:nth-child(4) {
+  width: 80%;
+  margin-top: 2.4rem;
+}
+
+@media (max-width: 640px) {
+  .file-widget__docx-preview .docx-wrapper {
+    align-items: flex-start;
+  }
+
+  .file-widget__docx-loading {
+    min-height: 28rem;
+    padding: 3.5rem 2.4rem;
+  }
+}

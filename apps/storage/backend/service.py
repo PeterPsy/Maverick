@@ -1004,6 +1004,8 @@ def handle_action(
             role=role,
             relative_path=relative_path,
             content=body.get("content"),
+            replacements=body.get("replacements"),
+            expected_sha256=body.get("expected_sha256"),
             data_root=data_root,
             uploaded_root=uploaded_root,
             generated_root=generated_root,

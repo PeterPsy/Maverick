@@ -114,6 +114,22 @@
           "max_columns": {"type": "integer", "minimum": 1},
           "content": {"type": "string"},
           "content_base64": {"type": "string"},
+          "expected_sha256": {"type": "string", "pattern": "^[0-9A-Fa-f]{64}$"},
+          "replacements": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 100,
+            "items": {
+              "type": "object",
+              "properties": {
+                "old_text": {"type": "string", "minLength": 1},
+                "new_text": {"type": "string"},
+                "expected_occurrences": {"type": "integer", "minimum": 1, "default": 1}
+              },
+              "required": ["old_text", "new_text"],
+              "additionalProperties": false
+            }
+          },
           "content_type": {"type": "string"},
           "images": {
             "type": "array",
@@ -355,10 +371,14 @@
               "action": {"enum": ["update_markdown_file"]},
               "role": {"enum": ["uploaded", "generated"]}
             },
-            "required": ["action", "content"],
+            "required": ["action"],
             "anyOf": [
               {"required": ["workspace_relative_path"]},
               {"required": ["role", "relative_path"]}
+            ],
+            "oneOf": [
+              {"required": ["content"]},
+              {"required": ["replacements", "expected_sha256"]}
             ]
           },
           {

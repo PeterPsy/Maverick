@@ -27,13 +27,13 @@ Common actions:
 - `move_folder`: move a non-root folder into another folder or back to the storage root while keeping it inside its current storage role; Storage rejects path escapes, collisions, and moves into the same folder subtree.
 - `view_filter`: read the shared Storage UI filter without scanning workspace storage.
 - `read_file`: read a specific file by `role` and `relative_path` for bounded inline binary/download workflows. Use Storage media URLs for browser downloads of large local files.
-- `read_text` / `file.text.read`: extract document text from text, Markdown, DOCX, PPTX, and XLSX files without the preview character cap; use `offset` and `max_chars` only when you intentionally want a window.
+- `read_text` / `file.text.read`: extract document text from text, Markdown, DOCX, PPTX, XLSX, and ODT files in transport-safe pages. Always follow `next_offset` while `has_more=true`; never infer completeness from the requested `max_chars` or from inline output length.
 - `write_file` / `file.content.write`: create or overwrite a file by `role` and `relative_path` or `workspace_relative_path`, with UTF-8 `content` or `content_base64`.
 - `image.inspect`: inspect one or more local Storage images for dimensions, display orientation, size, and sha256.
 - `image.compose_pair` / `storage_image_compose_pair`: auto-rotate two local Storage images, compose them side by side, save the result under `storage/generated`, and return generated file metadata. `background_color` is limited to supported color names or `#RRGGBB`; check `health.check.image_operations` when diagnosing missing `ffmpeg` or `ffprobe`. Use this for front/back document image composition instead of ad hoc image scripts.
 - `preview_text`: extract a bounded text preview for UI-style preview workflows, not for complete document reading.
 - `preview_table`: extract structured sheet rows for CSV and spreadsheet files so Storage can render a table preview.
-- `update_markdown_file`: replace the UTF-8 contents of a validated `.md` file in workspace storage.
+- `storage_update_markdown_file` / `update_markdown_file`: prefer the dedicated MCP tool for agent edits. Pass the file's current `sha256` as `expected_sha256` and one or more exact `{old_text, new_text, expected_occurrences}` replacements. Storage validates every match and writes atomically; a stale hash or ambiguous match returns `409 conflict` without changing the file. Full-content replacement remains available to the Storage editor through the generic action.
 - `set_view_filter`: update the shared Storage UI filter with `query`, `role`, and `kind` so the frontend can show the filtered view.
 - `set_custom_view`: update the shared Storage UI with a curated file set using `title`, `file_ids`, and/or `workspace_relative_paths`.
 - `clear_custom_view`: return Storage to normal search mode.
@@ -57,6 +57,31 @@ maverick app storage cli run storage --arguments-json '{
 ```
 
 Do not expose `source_path` through MCP, frontend, or browser-facing flows. In sandboxed agent workflows, move or create the source file inside the workspace before using this wrapper.
+
+For a large text document, page until Storage says the read is finished:
+
+```bash
+maverick app storage mcp call storage_read_text --json \
+  --workspace-relative-path storage/generated/report.md --offset 0
+```
+
+Use the returned `next_offset` in the next call whenever `has_more` is true. Each page reports `page_serialized_bytes`, `transport_max_serialized_bytes`, and `transport_limited`; `complete=true` only when a single response contains the whole document.
+
+For a safe Markdown edit, first obtain current metadata with `storage_file_info` or a text page, then submit only the intended change:
+
+```json
+{
+  "workspace_relative_path": "storage/generated/report.md",
+  "expected_sha256": "<current file sha256>",
+  "replacements": [
+    {
+      "old_text": "Status: draft",
+      "new_text": "Status: final",
+      "expected_occurrences": 1
+    }
+  ]
+}
+```
 
 ## Google Drive Agent Workflow
 

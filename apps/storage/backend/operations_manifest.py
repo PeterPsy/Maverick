@@ -112,6 +112,7 @@ def operations_manifest_payload() -> dict[str, Any]:
             {"surface": "mcp", "name": "storage_preview_text", "operation": "file.preview.text"},
             {"surface": "mcp", "name": "storage_preview_table", "operation": "file.preview.table"},
             {"surface": "mcp", "name": "storage_write_file", "operation": "file.content.write"},
+            {"surface": "mcp", "name": "storage_update_markdown_file", "operation": "update_markdown_file"},
             {"surface": "mcp", "name": "storage_image_inspect", "operation": "image.inspect"},
             {"surface": "mcp", "name": "storage_image_compose_pair", "operation": "image.compose_pair"},
             {"surface": "mcp", "name": "storage_drive_list_roots", "operation": "drive_list_roots"},
@@ -177,6 +178,17 @@ def operations_manifest_payload() -> dict[str, Any]:
                 },
             },
             {
+                "task": "update_markdown_without_full_rewrite",
+                "operation": "update_markdown_file",
+                "calls_required": 1,
+                "example": {
+                    "action": "update_markdown_file",
+                    "workspace_relative_path": "storage/generated/report.md",
+                    "expected_sha256": "<sha256 from file_info or read_text>",
+                    "replacements": [{"old_text": "Status: draft", "new_text": "Status: final"}],
+                },
+            },
+            {
                 "task": "combine_front_back_images",
                 "operation": "image.compose_pair",
                 "calls_required": 1,
@@ -226,10 +238,17 @@ def operations_manifest_payload() -> dict[str, Any]:
             {
                 "action": "file.text.read",
                 "aliases": ["read_text"],
-                "description": "Extract complete text for a supported Storage document, optionally windowed with offset and max_chars.",
+                "description": "Extract one transport-safe text page for a supported Storage document; continue with next_offset while has_more is true.",
                 "required_any": ["workspace_relative_path", "role + relative_path"],
                 "optional": ["offset", "max_chars"],
                 "payload_profile": "explicit_text_content",
+            },
+            {
+                "action": "update_markdown_file",
+                "description": "Atomically replace Markdown content or apply exact replacements guarded by expected_sha256.",
+                "required_any": ["workspace_relative_path", "role + relative_path"],
+                "required_one_of": ["content", "replacements + expected_sha256"],
+                "payload_profile": "guarded_markdown_write_result",
             },
             {
                 "action": "file.content.write",

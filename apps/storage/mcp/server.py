@@ -8,7 +8,7 @@ import sys
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "backend"))
 
-from errors import StorageValidationError, validation_error_payload
+from errors import StorageConflictError, StorageValidationError, conflict_error_payload, validation_error_payload
 from operations_manifest import STORAGE_ACTION_ALIASES
 from service import app_events_for_action, handle_action, secret_lookup_for_drive_action
 
@@ -31,6 +31,7 @@ tool_actions = {
     "storage_set_custom_view": "set_custom_view",
     "storage_clear_custom_view": "clear_custom_view",
     "storage_write_file": "file.content.write",
+    "storage_update_markdown_file": "update_markdown_file",
     "storage_image_inspect": "image.inspect",
     "storage_image_compose_pair": "image.compose_pair",
     "storage_drive_connections_list": "drive_connections.list",
@@ -85,6 +86,8 @@ try:
         Path(payload["generated_storage_root"]),
         body,
     )
+except StorageConflictError as error:
+    status_code, result = 409, conflict_error_payload(error)
 except StorageValidationError as error:
     status_code, result = 400, validation_error_payload(error)
 

@@ -99,6 +99,22 @@
           "max_chars": {"type": "integer", "minimum": 1},
           "content": {"type": "string"},
           "content_base64": {"type": "string"},
+          "expected_sha256": {"type": "string", "pattern": "^[0-9A-Fa-f]{64}$"},
+          "replacements": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 100,
+            "items": {
+              "type": "object",
+              "properties": {
+                "old_text": {"type": "string", "minLength": 1},
+                "new_text": {"type": "string"},
+                "expected_occurrences": {"type": "integer", "minimum": 1, "default": 1}
+              },
+              "required": ["old_text", "new_text"],
+              "additionalProperties": false
+            }
+          },
           "file_name": {"type": "string"},
           "images": {
             "type": "array",
@@ -331,7 +347,7 @@
       "output_schema": {"type": "object", "properties": {"file": {"type": "object"}, "content_base64": {"type": "string"}, "file_handle": {"type": "object"}}}
     },
     "storage_read_text": {
-      "description": "Extract complete text for a supported Storage text, Markdown, DOCX, PPTX, XLSX, or ODT file. Use offset and max_chars to page very large documents.",
+      "description": "Extract one transport-safe text page for a supported Storage text, Markdown, DOCX, PPTX, XLSX, or ODT file. Continue with next_offset while has_more is true.",
       "input_schema": {
         "type": "object",
         "properties": {
@@ -355,6 +371,11 @@
           "offset": {"type": "integer"},
           "max_chars": {"type": ["integer", "null"]},
           "range_end": {"type": "integer"},
+          "page_char_count": {"type": "integer"},
+          "page_serialized_bytes": {"type": "integer"},
+          "transport_max_chars": {"type": "integer"},
+          "transport_max_serialized_bytes": {"type": "integer"},
+          "transport_limited": {"type": "boolean"},
           "has_more": {"type": "boolean"},
           "next_offset": {"type": ["integer", "null"]},
           "complete": {"type": "boolean"},
@@ -423,6 +444,51 @@
         "additionalProperties": false
       },
       "output_schema": {"type": "object", "properties": {"file": {"type": "object"}}}
+    },
+    "storage_update_markdown_file": {
+      "description": "Atomically apply exact replacements to one Markdown file. The write succeeds only when expected_sha256 and every expected occurrence count match current content.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "workspace_relative_path": {"type": "string", "pattern": "^storage/(uploaded|generated)/.+\\.md$"},
+          "role": {"type": "string", "enum": ["uploaded", "generated"]},
+          "relative_path": {"type": "string", "pattern": ".+\\.md$"},
+          "expected_sha256": {"type": "string", "pattern": "^[0-9A-Fa-f]{64}$"},
+          "replacements": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 100,
+            "items": {
+              "type": "object",
+              "properties": {
+                "old_text": {"type": "string", "minLength": 1},
+                "new_text": {"type": "string"},
+                "expected_occurrences": {"type": "integer", "minimum": 1, "default": 1}
+              },
+              "required": ["old_text", "new_text"],
+              "additionalProperties": false
+            }
+          }
+        },
+        "required": ["expected_sha256", "replacements"],
+        "anyOf": [
+          {"required": ["workspace_relative_path"]},
+          {"required": ["role", "relative_path"]}
+        ],
+        "additionalProperties": false
+      },
+      "output_schema": {
+        "type": "object",
+        "properties": {
+          "file": {"type": "object"},
+          "write_strategy": {"type": "string", "enum": ["exact_replacements"]},
+          "previous_sha256": {"type": "string"},
+          "sha256": {"type": "string"},
+          "bytes_written": {"type": "integer"},
+          "replacements_applied": {"type": "integer"},
+          "matched_occurrences": {"type": "integer"}
+        }
+      }
     },
     "storage_image_inspect": {
       "description": "Read dimensions, display orientation, size, and SHA-256 for one or more local Storage images.",

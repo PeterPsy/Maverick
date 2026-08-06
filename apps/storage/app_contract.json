@@ -153,6 +153,7 @@
       "storage_set_custom_view",
       "storage_clear_custom_view",
       "storage_write_file",
+      "storage_update_markdown_file",
       "storage_image_inspect",
       "storage_image_compose_pair",
       "storage_drive_connections_list",

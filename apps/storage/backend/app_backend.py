@@ -6,7 +6,7 @@ import json
 from pathlib import Path
 import sys
 
-from errors import StorageValidationError, validation_error_payload
+from errors import StorageConflictError, StorageValidationError, conflict_error_payload, validation_error_payload
 from operations_manifest import STORAGE_ACTION_ALIASES
 from service import app_events_for_result, handle_action, prepare_media_response_body, secret_lookup_for_drive_action, stream_prepared_media_response_body
 
@@ -55,6 +55,9 @@ def main() -> None:
             media_request_method=str(payload.get("method") or "GET").upper(),
             streaming_response_supported=media_route and str(payload.get("stream_response_protocol") or "") == "maverick.backend.stream.v1",
         )
+    except StorageConflictError as error:
+        _response(409, conflict_error_payload(error))
+        return
     except StorageValidationError as error:
         _response(400, validation_error_payload(error))
         return

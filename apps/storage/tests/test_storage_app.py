@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from base64 import b64decode, b64encode
+import hashlib
 from io import BytesIO
 import json
 import os
@@ -178,6 +179,7 @@ class StorageAppTestCase(unittest.TestCase):
         self.assertIn("storage_list_files", parsed.contract.capabilities.mcp_tools)
         self.assertIn("storage_read_file", parsed.contract.capabilities.mcp_tools)
         self.assertIn("storage_read_text", parsed.contract.capabilities.mcp_tools)
+        self.assertIn("storage_update_markdown_file", parsed.contract.capabilities.mcp_tools)
         self.assertIn("storage_preview_text", parsed.contract.capabilities.mcp_tools)
         self.assertIn("storage_set_view_filter", parsed.contract.capabilities.mcp_tools)
         self.assertIn("storage_reference_manifest", parsed.contract.capabilities.mcp_tools)
@@ -1052,6 +1054,80 @@ class StorageAppTestCase(unittest.TestCase):
             self.assertEqual(target.read_text(encoding="utf-8"), "# updated\n\n| Name | Value |\n| --- | ---: |\n| Speed | 10 |\n")
             self.assertEqual(rejected["status_code"], 400)
             self.assertEqual((generated_root / "notes.txt").read_text(encoding="utf-8"), "plain text")
+
+    def test_backend_updates_markdown_with_atomic_exact_replacements(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            generated_root = root / "storage" / "generated"
+            generated_root.mkdir(parents=True)
+            target = generated_root / "report.md"
+            original = "# Report\n\nStatus: draft\n\nOwner: Marco\n"
+            target.write_text(original, encoding="utf-8")
+            original_sha256 = hashlib.sha256(original.encode("utf-8")).hexdigest()
+
+            updated = self.run_backend(
+                data_root=root / "data" / "storage",
+                uploaded_root=root / "storage" / "uploaded",
+                generated_root=generated_root,
+                body={
+                    "action": "update_markdown_file",
+                    "workspace_relative_path": "storage/generated/report.md",
+                    "expected_sha256": original_sha256,
+                    "replacements": [
+                        {"old_text": "Status: draft", "new_text": "Status: final"},
+                        {"old_text": "Owner: Marco", "new_text": "Owner: Maverick"},
+                    ],
+                },
+            )
+
+            self.assertEqual(updated["status_code"], 200, updated)
+            self.assertEqual(updated["json"]["previous_sha256"], original_sha256)
+            self.assertEqual(updated["json"]["replacements_applied"], 2)
+            self.assertEqual(updated["json"]["matched_occurrences"], 2)
+            self.assertNotEqual(updated["json"]["sha256"], original_sha256)
+            self.assertEqual(target.read_text(encoding="utf-8"), "# Report\n\nStatus: final\n\nOwner: Maverick\n")
+
+            stale = self.run_backend(
+                data_root=root / "data" / "storage",
+                uploaded_root=root / "storage" / "uploaded",
+                generated_root=generated_root,
+                body={
+                    "action": "update_markdown_file",
+                    "workspace_relative_path": "storage/generated/report.md",
+                    "expected_sha256": original_sha256,
+                    "replacements": [{"old_text": "Status: final", "new_text": "Status: archived"}],
+                },
+            )
+
+            self.assertEqual(stale["status_code"], 409, stale)
+            self.assertEqual(stale["json"]["error"], "conflict")
+            self.assertEqual(stale["json"]["conflict"], "expected_sha256_mismatch")
+            self.assertEqual(target.read_text(encoding="utf-8"), "# Report\n\nStatus: final\n\nOwner: Maverick\n")
+
+    def test_backend_rejects_ambiguous_markdown_replacement_without_writing(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            generated_root = root / "storage" / "generated"
+            generated_root.mkdir(parents=True)
+            target = generated_root / "report.md"
+            original = "draft\ndraft\n"
+            target.write_text(original, encoding="utf-8")
+
+            rejected = self.run_backend(
+                data_root=root / "data" / "storage",
+                uploaded_root=root / "storage" / "uploaded",
+                generated_root=generated_root,
+                body={
+                    "action": "update_markdown_file",
+                    "workspace_relative_path": "storage/generated/report.md",
+                    "expected_sha256": hashlib.sha256(original.encode("utf-8")).hexdigest(),
+                    "replacements": [{"old_text": "draft", "new_text": "final"}],
+                },
+            )
+
+            self.assertEqual(rejected["status_code"], 409, rejected)
+            self.assertEqual(rejected["json"]["conflict"], "replacement_occurrence_mismatch")
+            self.assertEqual(target.read_text(encoding="utf-8"), original)
 
     def test_backend_writes_file_content_through_generic_interface(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
@@ -2202,10 +2278,11 @@ class StorageAppTestCase(unittest.TestCase):
             self.assertNotIn("FINAL-MARKER", full_preview["json"]["preview_text"])
             self.assertTrue(full_preview["json"]["preview_text"].endswith("…"))
             self.assertEqual(text_read["status_code"], 200)
-            self.assertIn("FINAL-MARKER", text_read["json"]["text"])
             self.assertEqual(text_read["json"]["text_char_count"], len(markdown_content))
-            self.assertTrue(text_read["json"]["complete"])
-            self.assertFalse(text_read["json"]["has_more"])
+            self.assertEqual(text_read["json"]["text"], markdown_content[: text_read["json"]["range_end"]])
+            self.assertTrue(text_read["json"]["has_more"])
+            self.assertFalse(text_read["json"]["complete"])
+            self.assertTrue(text_read["json"]["transport_limited"])
             self.assertEqual(text_window["status_code"], 200)
             self.assertEqual(text_window["json"]["text"], markdown_content[2:10])
             self.assertEqual(text_window["json"]["next_offset"], 10)
@@ -2213,6 +2290,44 @@ class StorageAppTestCase(unittest.TestCase):
             self.assertEqual(limited_preview["status_code"], 200)
             self.assertNotIn("FINAL-MARKER", limited_preview["json"]["preview_text"])
             self.assertTrue(limited_preview["json"]["preview_text"].endswith("…"))
+
+    def test_backend_text_read_pages_within_transport_budget_and_reassembles_exactly(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            generated_root = root / "storage" / "generated"
+            generated_root.mkdir(parents=True)
+            content = ("😀\\\"\n\tsection " * 4000) + "FINAL-MARKER"
+            (generated_root / "large.md").write_text(content, encoding="utf-8")
+            data_root = root / "data" / "storage"
+            offset = 0
+            pages: list[str] = []
+
+            while True:
+                page = self.run_backend(
+                    data_root=data_root,
+                    uploaded_root=root / "storage" / "uploaded",
+                    generated_root=generated_root,
+                    body={
+                        "action": "file.text.read",
+                        "workspace_relative_path": "storage/generated/large.md",
+                        "offset": offset,
+                        "max_chars": len(content),
+                    },
+                )
+                self.assertEqual(page["status_code"], 200, page)
+                payload = page["json"]
+                serialized_page_bytes = len(json.dumps(payload["text"], ensure_ascii=True).encode("utf-8"))
+                self.assertLessEqual(serialized_page_bytes, payload["transport_max_serialized_bytes"])
+                self.assertEqual(serialized_page_bytes, payload["page_serialized_bytes"])
+                pages.append(payload["text"])
+                if not payload["has_more"]:
+                    break
+                self.assertTrue(payload["transport_limited"])
+                self.assertEqual(payload["next_offset"], payload["range_end"])
+                offset = payload["next_offset"]
+
+            self.assertEqual("".join(pages), content)
+            self.assertGreater(len(pages), 1)
 
     def test_backend_table_preview_is_bounded_by_default(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
@@ -2513,6 +2628,7 @@ class StorageAppTestCase(unittest.TestCase):
         self.assertIn("app.storage.storage_read_file", [tool.tool_name for tool in tools])
         self.assertIn("app.storage.storage_read_text", [tool.tool_name for tool in tools])
         self.assertIn("app.storage.storage_write_file", [tool.tool_name for tool in tools])
+        self.assertIn("app.storage.storage_update_markdown_file", [tool.tool_name for tool in tools])
         self.assertIn("app.storage.storage_image_inspect", [tool.tool_name for tool in tools])
         self.assertIn("app.storage.storage_image_compose_pair", [tool.tool_name for tool in tools])
         self.assertIn("app.storage.storage_file_localize", [tool.tool_name for tool in tools])
@@ -2534,6 +2650,10 @@ class StorageAppTestCase(unittest.TestCase):
         self.assertNotIn("file.media_stream", flattened_actions)
         write_tool = next(tool for tool in tools if tool.tool_name == "app.storage.storage_write_file")
         self.assertIn("workspace_relative_path", write_tool.input_schema["properties"])
+        markdown_tool = next(tool for tool in tools if tool.tool_name == "app.storage.storage_update_markdown_file")
+        self.assertIn("expected_sha256", markdown_tool.input_schema["required"])
+        self.assertIn("replacements", markdown_tool.input_schema["required"])
+        self.assertFalse(markdown_tool.input_schema["additionalProperties"])
         read_tool = next(tool for tool in tools if tool.tool_name == "app.storage.storage_read_file")
         self.assertNotIn("include_local_path", read_tool.input_schema["properties"])
         generic_tool = next(tool for tool in tools if tool.tool_name == "app.storage.maverick_storage")
@@ -2744,9 +2864,22 @@ class StorageAppTestCase(unittest.TestCase):
             workspace_id="default",
             start_path=repo_root,
         )
+        markdown_update = call_mcp_tool(
+            tool_name="app.storage.storage_update_markdown_file",
+            context=context,
+            arguments={
+                "workspace_relative_path": "storage/generated/report.md",
+                "expected_sha256": info_payload["file"]["sha256"],
+                "replacements": [{"old_text": "hello from storage", "new_text": "updated by agent"}],
+            },
+            app_store=state.app_store,
+            workspace_id="default",
+            start_path=repo_root,
+        )
 
         self.assertEqual(info_payload["status_code"], 200)
         self.assertEqual(info_payload["file"]["workspace_relative_path"], "storage/generated/report.md")
+        self.assertEqual(len(info_payload["file"]["sha256"]), 64)
         self.assertEqual(read_payload["status_code"], 200)
         self.assertIn("# Report", b64decode(read_payload["content_base64"]).decode("utf-8"))
         self.assertEqual(text_read["status_code"], 200)
@@ -2758,6 +2891,9 @@ class StorageAppTestCase(unittest.TestCase):
         self.assertEqual(table_preview["file"]["workspace_relative_path"], "storage/generated/leads.csv")
         self.assertEqual(table_preview["sheets"][0]["rows"][0], ["name", "value"])
         self.assertEqual(table_preview["sheets"][0]["rows"][1], ["Acme", "42"])
+        self.assertEqual(markdown_update["status_code"], 200, markdown_update)
+        self.assertEqual(markdown_update["write_strategy"], "exact_replacements")
+        self.assertIn("updated by agent", (generated / "report.md").read_text(encoding="utf-8"))
 
     @integration_test("storage platform integration suite; run with scripts/test_suite.py --level integration")
     def test_mcp_and_cli_can_write_storage_file_content(self) -> None:

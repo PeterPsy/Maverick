@@ -15,7 +15,7 @@ import zipfile
 from xml.etree import ElementTree
 
 from core.app_sdk.storage import read_json_state, write_json_state
-from errors import StorageValidationError
+from errors import StorageConflictError, StorageValidationError
 from inventory import content_hash, remove_folder_records, rename_file_record, upsert_directory_record, upsert_file_record
 from limits import MAX_INLINE_READ_BYTES, MAX_INLINE_WRITE_BYTES, MAX_STORAGE_FILE_TRANSFER_BYTES, MAX_STORAGE_TRANSIENT_TRANSFER_BYTES
 from store_files_paths import (
@@ -46,6 +46,7 @@ from text_preview import (
     extract_text_preview,
     text_content_supported,
 )
+from text_windows import bounded_text_window
 
 
 SCHEMA_VERSION = "1"
@@ -59,6 +60,7 @@ MAX_CUSTOM_VIEW_TITLE_CHARS = 140
 MAX_CUSTOM_VIEW_FILES = 500
 MAX_TEXT_PREVIEW_CACHE_ENTRIES = 200
 MAX_MARKDOWN_EDIT_BYTES = 2 * 1024 * 1024
+MAX_MARKDOWN_REPLACEMENTS = 100
 MAX_WRITE_BYTES = MAX_INLINE_WRITE_BYTES
 MAX_FOLDER_DOWNLOAD_BYTES = MAX_STORAGE_FILE_TRANSFER_BYTES
 MAX_INLINE_FOLDER_DOWNLOAD_BYTES = MAX_INLINE_READ_BYTES
@@ -126,7 +128,7 @@ def preview_text_payload(*, role: str, relative_path: str, uploaded_root: Path, 
         generated_root=generated_root,
     )
     root = storage_root_for_role(role=role, uploaded_root=uploaded_root, generated_root=generated_root).resolve()
-    record = upsert_file_record(data_root=data_root, role=role, root=root, path=path.resolve())
+    record = _upsert_record_with_markdown_edit_hash(data_root=data_root, role=role, root=root, path=path)
     effective_max_chars = MAX_TEXT_PREVIEW_CHARS if max_chars is None else max_chars
     cache_key = _text_preview_cache_key(record, effective_max_chars)
     cache = _load_text_preview_cache(data_root)
@@ -161,27 +163,14 @@ def read_text_payload(
         generated_root=generated_root,
     )
     root = storage_root_for_role(role=role, uploaded_root=uploaded_root, generated_root=generated_root).resolve()
-    record = upsert_file_record(data_root=data_root, role=role, root=root, path=path.resolve())
+    record = _upsert_record_with_markdown_edit_hash(data_root=data_root, role=role, root=root, path=path)
     if not text_content_supported(path, record["preview_kind"]):
         raise StorageValidationError("Text read is only available for text, Markdown, DOCX, PPTX, XLSX, and ODT files.")
     try:
         text = extract_text_content(path, record["preview_kind"])
     except (ValueError, KeyError, ElementTree.ParseError, zipfile.BadZipFile, OSError, UnicodeDecodeError) as error:
         raise StorageValidationError(f"Text could not be extracted: {error}") from error
-    text_char_count = len(text)
-    start = min(offset, text_char_count)
-    range_end = text_char_count if max_chars is None else min(text_char_count, start + max_chars)
-    return {
-        "file": record,
-        "text": text[start:range_end],
-        "text_char_count": text_char_count,
-        "offset": start,
-        "max_chars": max_chars,
-        "range_end": range_end,
-        "has_more": range_end < text_char_count,
-        "next_offset": range_end if range_end < text_char_count else None,
-        "complete": start == 0 and range_end == text_char_count,
-    }
+    return {"file": record, **bounded_text_window(text, offset=offset, max_chars=max_chars)}
 
 
 def preview_table_payload(*, role: str, relative_path: str, data_root: Path, uploaded_root: Path, generated_root: Path, max_rows: int | None, max_columns: int | None) -> dict:
@@ -214,7 +203,7 @@ def file_info_payload(*, role: str, relative_path: str, data_root: Path, uploade
         generated_root=generated_root,
     )
     root = storage_root_for_role(role=role, uploaded_root=uploaded_root, generated_root=generated_root).resolve()
-    return {"file": upsert_file_record(data_root=data_root, role=role, root=root, path=path.resolve())}
+    return {"file": _upsert_record_with_markdown_edit_hash(data_root=data_root, role=role, root=root, path=path)}
 
 
 def file_info_by_id_payload(*, file_id: str, data_root: Path, uploaded_root: Path, generated_root: Path) -> dict:
@@ -222,13 +211,36 @@ def file_info_by_id_payload(*, file_id: str, data_root: Path, uploaded_root: Pat
     return {"file": resolver.require_file(file_id)}
 
 
+def _upsert_record_with_markdown_edit_hash(*, data_root: Path, role: str, root: Path, path: Path) -> dict:
+    record = upsert_file_record(data_root=data_root, role=role, root=root, path=path.resolve())
+    if record["preview_kind"] == "markdown" and int(record["size_bytes"]) <= MAX_MARKDOWN_EDIT_BYTES:
+        record = upsert_file_record(
+            data_root=data_root,
+            role=role,
+            root=root,
+            path=path.resolve(),
+            sha256=hash_file(path),
+        )
+    return record
 
-def update_markdown_file_payload(*, role: str, relative_path: str, content: object, data_root: Path, uploaded_root: Path, generated_root: Path) -> dict:
-    if not isinstance(content, str):
-        raise StorageValidationError("content must be a string.")
-    encoded = content.encode("utf-8")
-    if len(encoded) > MAX_MARKDOWN_EDIT_BYTES:
-        raise StorageValidationError(f"Markdown content must be at most {MAX_MARKDOWN_EDIT_BYTES} bytes.")
+
+
+def update_markdown_file_payload(
+    *,
+    role: str,
+    relative_path: str,
+    content: object,
+    replacements: object,
+    expected_sha256: object,
+    data_root: Path,
+    uploaded_root: Path,
+    generated_root: Path,
+) -> dict:
+    has_content = content is not None
+    has_replacements = replacements is not None
+    if has_content == has_replacements:
+        raise StorageValidationError("Provide exactly one of content or replacements.")
+    normalized_expected_sha256 = _normalize_expected_sha256(expected_sha256, required=has_replacements)
     root = storage_root_for_role(role=role, uploaded_root=uploaded_root, generated_root=generated_root).resolve()
     with storage_write_lock(data_root):
         path = resolve_storage_file(
@@ -240,17 +252,102 @@ def update_markdown_file_payload(*, role: str, relative_path: str, content: obje
         record = upsert_file_record(data_root=data_root, role=role, root=root, path=path.resolve())
         if record["preview_kind"] != "markdown":
             raise StorageValidationError("Only Markdown files can be edited in the Storage Markdown editor.")
+        if path.stat().st_size > MAX_MARKDOWN_EDIT_BYTES:
+            raise StorageValidationError(f"Markdown content must be at most {MAX_MARKDOWN_EDIT_BYTES} bytes.")
+        current_bytes = path.read_bytes()
+        if len(current_bytes) > MAX_MARKDOWN_EDIT_BYTES:
+            raise StorageValidationError(f"Markdown content must be at most {MAX_MARKDOWN_EDIT_BYTES} bytes.")
+        current_sha256 = content_hash(current_bytes)
+        if normalized_expected_sha256 and normalized_expected_sha256 != current_sha256:
+            raise StorageConflictError(
+                "The Markdown file changed after it was read; fetch current metadata before retrying.",
+                conflict="expected_sha256_mismatch",
+                expected_sha256=normalized_expected_sha256,
+                current_sha256=current_sha256,
+            )
+        if has_replacements:
+            try:
+                updated_content, replacements_applied, matched_occurrences = _apply_exact_replacements(
+                    current_bytes.decode("utf-8"), replacements
+                )
+            except UnicodeDecodeError as error:
+                raise StorageValidationError("Markdown file content must be valid UTF-8.") from error
+            write_strategy = "exact_replacements"
+        else:
+            if not isinstance(content, str):
+                raise StorageValidationError("content must be a string.")
+            updated_content = content
+            replacements_applied = 0
+            matched_occurrences = 0
+            write_strategy = "replace_content"
+        encoded = updated_content.encode("utf-8")
+        if len(encoded) > MAX_MARKDOWN_EDIT_BYTES:
+            raise StorageValidationError(f"Markdown content must be at most {MAX_MARKDOWN_EDIT_BYTES} bytes.")
         enforce_storage_budget(uploaded_root=uploaded_root, generated_root=generated_root, target=path, payload_size=len(encoded))
         atomic_write_bytes(path, encoded)
+        sha256 = content_hash(encoded)
         return {
             "file": upsert_file_record(
                 data_root=data_root,
                 role=role,
                 root=root,
                 path=path.resolve(),
-                sha256=content_hash(encoded),
-            )
+                sha256=sha256,
+            ),
+            "write_strategy": write_strategy,
+            "previous_sha256": current_sha256,
+            "sha256": sha256,
+            "bytes_written": len(encoded),
+            "replacements_applied": replacements_applied,
+            "matched_occurrences": matched_occurrences,
         }
+
+
+def _normalize_expected_sha256(value: object, *, required: bool) -> str:
+    normalized = str(value or "").strip().lower()
+    if not normalized:
+        if required:
+            raise StorageValidationError("expected_sha256 is required when replacements are used.")
+        return ""
+    if re.fullmatch(r"[0-9a-f]{64}", normalized) is None:
+        raise StorageValidationError("expected_sha256 must be a 64-character hexadecimal SHA-256 digest.")
+    return normalized
+
+
+def _apply_exact_replacements(content: str, raw_replacements: object) -> tuple[str, int, int]:
+    if not isinstance(raw_replacements, list) or not raw_replacements:
+        raise StorageValidationError("replacements must be a non-empty array.")
+    if len(raw_replacements) > MAX_MARKDOWN_REPLACEMENTS:
+        raise StorageValidationError(f"replacements must contain at most {MAX_MARKDOWN_REPLACEMENTS} items.")
+    updated = content
+    matched_occurrences = 0
+    allowed_fields = {"old_text", "new_text", "expected_occurrences"}
+    for index, replacement in enumerate(raw_replacements):
+        if not isinstance(replacement, dict):
+            raise StorageValidationError(f"replacements[{index}] must be an object.")
+        if set(replacement) - allowed_fields:
+            raise StorageValidationError(f"replacements[{index}] contains unsupported fields.")
+        old_text = replacement.get("old_text")
+        new_text = replacement.get("new_text")
+        expected_occurrences = replacement.get("expected_occurrences", 1)
+        if not isinstance(old_text, str) or not old_text:
+            raise StorageValidationError(f"replacements[{index}].old_text must be a non-empty string.")
+        if not isinstance(new_text, str):
+            raise StorageValidationError(f"replacements[{index}].new_text must be a string.")
+        if isinstance(expected_occurrences, bool) or not isinstance(expected_occurrences, int) or expected_occurrences <= 0:
+            raise StorageValidationError(f"replacements[{index}].expected_occurrences must be a positive integer.")
+        actual_occurrences = updated.count(old_text)
+        if actual_occurrences != expected_occurrences:
+            raise StorageConflictError(
+                f"Replacement {index} matched {actual_occurrences} occurrences instead of {expected_occurrences}; no changes were written.",
+                conflict="replacement_occurrence_mismatch",
+                replacement_index=index,
+                expected_occurrences=expected_occurrences,
+                actual_occurrences=actual_occurrences,
+            )
+        updated = updated.replace(old_text, new_text, expected_occurrences)
+        matched_occurrences += actual_occurrences
+    return updated, len(raw_replacements), matched_occurrences
 
 
 

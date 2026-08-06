@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { fitPreviewMediaToBox, type PreviewMediaSize } from './previewSizing';
 import type { StorageFile } from './types';
+import './styles/video-preview.css';
 
 type VideoOverlayMode = 'idle' | 'play' | 'pause';
 
@@ -28,12 +29,9 @@ export function VideoPreview({ file, src }: { file: StorageFile; src: string }) 
   const frameRef = useRef<HTMLDivElement | null>(null);
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const overlayTimerRef = useRef<number | null>(null);
-  const autoPlayAttemptedRef = useRef(false);
-  const userToggledRef = useRef(false);
-  const suppressNextPlayOverlayRef = useRef(false);
   const [frameSize, setFrameSize] = useState<PreviewMediaSize | null>(null);
   const [videoSize, setVideoSize] = useState<PreviewMediaSize | null>(null);
-  const [overlayMode, setOverlayMode] = useState<VideoOverlayMode>('idle');
+  const [overlayMode, setOverlayMode] = useState<VideoOverlayMode>('play');
   const fittedSize = videoSize && frameSize ? fitPreviewMediaToBox(videoSize, frameSize) : null;
   const videoStyle = fittedSize
     ? { width: `${fittedSize.width}px`, height: `${fittedSize.height}px` }
@@ -56,7 +54,7 @@ export function VideoPreview({ file, src }: { file: StorageFile; src: string }) 
     }
   }, [clearOverlayTimer]);
 
-  const playVideo = useCallback((showPauseOverlay: boolean) => {
+  const playVideo = useCallback(() => {
     const video = videoRef.current;
     if (!video) return;
     if (video.ended) {
@@ -66,46 +64,30 @@ export function VideoPreview({ file, src }: { file: StorageFile; src: string }) 
         // Some browsers reject currentTime updates before metadata is ready.
       }
     }
-    if (showPauseOverlay) {
-      setVideoOverlayMode('pause');
-    }
+    setVideoOverlayMode('pause');
     const playPromise = video.play();
     if (playPromise && typeof playPromise.catch === 'function') {
       playPromise.catch(() => {
-        suppressNextPlayOverlayRef.current = false;
         setVideoOverlayMode('play');
       });
     }
   }, [setVideoOverlayMode]);
 
-  const attemptAutoPlay = useCallback(() => {
-    const video = videoRef.current;
-    if (!video || autoPlayAttemptedRef.current || userToggledRef.current || video.readyState < 2) return;
-    autoPlayAttemptedRef.current = true;
-    suppressNextPlayOverlayRef.current = true;
-    playVideo(false);
-  }, [playVideo]);
-
   useEffect(() => {
     setVideoSize(null);
     clearOverlayTimer();
-    autoPlayAttemptedRef.current = false;
-    userToggledRef.current = false;
-    suppressNextPlayOverlayRef.current = false;
-    setOverlayMode('idle');
+    setOverlayMode('play');
     const video = videoRef.current;
     if (video) {
+      video.pause();
       try {
         video.currentTime = 0;
       } catch (_error) {
         // Some browsers reject currentTime updates before metadata is ready.
       }
-      if (video.readyState >= 2) {
-        attemptAutoPlay();
-      }
     }
     return clearOverlayTimer;
-  }, [attemptAutoPlay, clearOverlayTimer, file.id, src]);
+  }, [clearOverlayTimer, file.id, src]);
 
   useEffect(() => {
     const frame = frameRef.current;
@@ -143,10 +125,8 @@ export function VideoPreview({ file, src }: { file: StorageFile; src: string }) 
   const handleTogglePlayback = () => {
     const video = videoRef.current;
     if (!video) return;
-    userToggledRef.current = true;
     if (video.paused || video.ended) {
-      suppressNextPlayOverlayRef.current = false;
-      playVideo(true);
+      playVideo();
       return;
     }
     video.pause();
@@ -154,11 +134,6 @@ export function VideoPreview({ file, src }: { file: StorageFile; src: string }) 
   };
 
   const handlePlay = () => {
-    if (suppressNextPlayOverlayRef.current) {
-      suppressNextPlayOverlayRef.current = false;
-      setVideoOverlayMode('idle');
-      return;
-    }
     setVideoOverlayMode('pause');
   };
 
@@ -179,8 +154,6 @@ export function VideoPreview({ file, src }: { file: StorageFile; src: string }) 
         preload="auto"
         style={videoStyle}
         onLoadedMetadata={(event) => updateVideoSize(event.currentTarget)}
-        onLoadedData={attemptAutoPlay}
-        onCanPlay={attemptAutoPlay}
         onPlay={handlePlay}
         onPause={handlePause}
       />
@@ -190,7 +163,6 @@ export function VideoPreview({ file, src }: { file: StorageFile; src: string }) 
         onClick={handleTogglePlayback}
         aria-label={overlayLabel}
         title={overlayLabel}
-        tabIndex={overlayMode === 'idle' ? -1 : 0}
       >
         <VideoPlaybackIcon mode="play" />
         <VideoPlaybackIcon mode="pause" />

@@ -48,6 +48,16 @@ describe('storage file preview widget styles', () => {
     expect(styles).not.toContain('.file-widget__document iframe');
   });
 
+  it('renders local Office files as PDF and falls back to extracted text', () => {
+    const source = readStyle('main.tsx');
+
+    expect(source).toContain('readPreviewText, renderPreview');
+    expect(source).toContain('function canRenderDocumentPreview');
+    expect(source).toContain('? renderPreview(file).catch(() => readPreviewText(file))');
+    expect(source).toContain("['pdf', 'document', 'presentation', 'spreadsheet'].includes(file.preview_kind) && previewUrl");
+    expect(source).toContain('<PdfCanvasPreview file={file} previewUrl={previewUrl} downloadUrl={downloadUrl} />');
+  });
+
   it('keeps open-in-storage on the title and groups header action buttons', () => {
     const source = readStyle('main.tsx');
     const styles = readStyle('styles.css');

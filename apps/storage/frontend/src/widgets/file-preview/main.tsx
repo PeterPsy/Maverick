@@ -2,7 +2,7 @@ import { useEffect, useRef, useState, type RefObject } from 'react';
 import { createRoot } from 'react-dom/client';
 import * as pdfjs from 'pdfjs-dist';
 import pdfWorkerUrl from 'pdfjs-dist/build/pdf.worker.min.mjs?url';
-import { callBackend, decodeBase64, driveMediaStreamUrl, previewDriveFile, readFile, storageMediaStreamUrl } from '../../storageApi';
+import { callBackend, decodeBase64, driveMediaStreamUrl, previewDriveFile, readFile, readPreviewText, renderPreview, storageMediaStreamUrl } from '../../storageApi';
 import { iconForKind, kindLabels } from '../../storageMeta';
 import { Icon } from '../../Icon';
 import { MarkdownPreview } from '../../markdownPreview';
@@ -73,6 +73,10 @@ function isBrowserStreamableMedia(file: StorageFile) {
   return !isDriveFile(file) && ['image', 'video', 'audio', 'pdf'].includes(file.preview_kind);
 }
 
+function canRenderDocumentPreview(file: StorageFile) {
+  return !isDriveFile(file) && ['document', 'presentation', 'spreadsheet'].includes(file.preview_kind);
+}
+
 function openStorage(file?: StorageFile) {
   window.parent?.postMessage(
     {
@@ -107,7 +111,7 @@ function postWidgetResize(element: HTMLElement, scrollElement?: HTMLElement | nu
   );
 }
 
-function PdfCanvasPreview({ file, previewUrl }: { file: StorageFile; previewUrl: string }) {
+function PdfCanvasPreview({ file, previewUrl, downloadUrl }: { file: StorageFile; previewUrl: string; downloadUrl: string }) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const [error, setError] = useState('');
 
@@ -148,7 +152,7 @@ function PdfCanvasPreview({ file, previewUrl }: { file: StorageFile; previewUrl:
     };
   }, [previewUrl]);
 
-  if (error) return <FileFallback file={file} previewUrl={previewUrl} reason={error} />;
+  if (error) return <FileFallback file={file} downloadUrl={downloadUrl} reason={error} />;
   return (
     <div className="file-widget__pdf-page" aria-label={`PDF preview for ${file.name}`}>
       <canvas ref={canvasRef} />
@@ -156,7 +160,7 @@ function PdfCanvasPreview({ file, previewUrl }: { file: StorageFile; previewUrl:
   );
 }
 
-function FileFallback({ file, previewUrl, reason }: { file: StorageFile; previewUrl: string; reason?: string }) {
+function FileFallback({ file, downloadUrl, reason }: { file: StorageFile; downloadUrl: string; reason?: string }) {
   return (
     <div className="file-widget__fallback">
       <Icon name={iconForKind(file.preview_kind)} />
@@ -167,8 +171,8 @@ function FileFallback({ file, previewUrl, reason }: { file: StorageFile; preview
           <Icon name="open_in_new" />
           <span>Open in Storage</span>
         </button>
-        {previewUrl ? (
-          <a href={previewUrl} download={file.name}>
+        {downloadUrl ? (
+          <a href={downloadUrl} download={file.name}>
             <Icon name="download" />
             <span>Download</span>
           </a>
@@ -178,15 +182,17 @@ function FileFallback({ file, previewUrl, reason }: { file: StorageFile; preview
   );
 }
 
-function Preview({ file, previewUrl, previewText }: { file: StorageFile; previewUrl: string; previewText: string }) {
+function Preview({ file, previewUrl, previewText, downloadUrl }: { file: StorageFile; previewUrl: string; previewText: string; downloadUrl: string }) {
   if (file.preview_kind === 'image' && previewUrl) return <img src={previewUrl} alt={file.name} />;
   if (file.preview_kind === 'video' && previewUrl) return <VideoPreview file={file} src={previewUrl} />;
   if (file.preview_kind === 'audio' && previewUrl) return <audio src={previewUrl} controls />;
-  if (file.preview_kind === 'pdf' && previewUrl) return <PdfCanvasPreview file={file} previewUrl={previewUrl} />;
+  if (['pdf', 'document', 'presentation', 'spreadsheet'].includes(file.preview_kind) && previewUrl) {
+    return <PdfCanvasPreview file={file} previewUrl={previewUrl} downloadUrl={downloadUrl} />;
+  }
   if (file.preview_kind === 'markdown') return <MarkdownPreview text={previewText} compact />;
   if (file.preview_kind === 'text') return <pre>{previewText}</pre>;
   if (['document', 'presentation', 'spreadsheet'].includes(file.preview_kind) && previewText) return <pre>{previewText}</pre>;
-  return <FileFallback file={file} previewUrl={previewUrl} />;
+  return <FileFallback file={file} downloadUrl={downloadUrl} />;
 }
 
 function FileWidgetSkeleton({ rootRef }: { rootRef: RefObject<HTMLElement | null> }) {
@@ -218,6 +224,7 @@ function StorageFilePreviewWidget() {
   const [fullscreenMode, setFullscreenMode] = useState<PreviewFullscreenMode>('none');
   const [error, setError] = useState('');
   const fullscreenActive = fullscreenMode !== 'none';
+  const downloadUrl = file ? storageMediaStreamUrl(file, { download: true }) : '';
 
   useEffect(() => {
     loadWidgetContext()
@@ -247,6 +254,8 @@ function StorageFilePreviewWidget() {
         ? Promise.resolve({ stream_url: driveMediaStreamUrl(file) })
       : isDriveFile(file)
         ? previewDriveFile(file, PREVIEW_BYTES)
+      : canRenderDocumentPreview(file)
+        ? renderPreview(file).catch(() => readPreviewText(file))
         : readFile(file, PREVIEW_BYTES);
     previewRequest
       .then(async (payload) => {
@@ -396,10 +405,10 @@ function StorageFilePreviewWidget() {
           >
             <Icon name="open_in_new" />
           </button>
-          {previewUrl ? (
+          {downloadUrl ? (
             <a
               className="file-widget__action"
-              href={previewUrl}
+              href={downloadUrl}
               download={file.name}
               aria-label={`Download ${file.name}`}
               title="Download"
@@ -414,7 +423,7 @@ function StorageFilePreviewWidget() {
         ref={documentRef}
         onScroll={handleDocumentScroll}
       >
-        <Preview file={file} previewUrl={previewUrl} previewText={previewText} />
+        <Preview file={file} previewUrl={previewUrl} previewText={previewText} downloadUrl={downloadUrl} />
       </section>
     </main>
   );

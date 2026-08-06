@@ -1581,6 +1581,8 @@ The local JSON adapter must treat malformed collection files as storage errors, 
 
 Runtime session, turn, event, process, and state records must survive auth logout/login cycles and local host restarts.
 
+Runtime turn cancellation is a persisted control-plane intent, not only an in-process provider callback. An interrupt publishes the first cancellation request before it waits for the session lifecycle handoff or invokes provider cleanup. Ordinary turn saves cannot clear that intent. Activation, provider start, and terminal transition reread it, cancellation wins over a later completion or failure, and repeated terminal reconciliation is idempotent. Plain-hosted requests also persist request-started and request-finished evidence. The backend process that owns the HTTP response watches the durable intent and aborts the response, while HTTP, app, CLI, and MCP interrupt callers may wait for the persisted finished acknowledgement even when they run in another process. Provider interruption is retried after the lifecycle transition so a handle registered during the acceptance handoff cannot escape cleanup.
+
 For the local hosted bootstrap, workspace-scoped runtime-domain collections are persisted under the owning workspace root. Installation-local `.maverick/local-state/runtime/` is not the storage home for runtime sessions, runtime threads, turns, events, processes, or state.
 
 This is a bootstrap adapter detail, not the domain model. Production deployments may replace it with MongoDB or another store adapter without changing runtime service interfaces.

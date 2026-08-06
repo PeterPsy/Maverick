@@ -190,7 +190,14 @@ transcript projection behavior.
   the provider acceptance callback, closing the post-activation start window
   without holding a lock for the duration of the turn. Provider and thread
   metadata are partial allowlisted patches under that handoff and cannot restore
-  stale lifecycle state after interrupt. A child created
+  stale lifecycle state after interrupt. Before waiting for the handoff,
+  interrupt persists a first-writer cancellation intent that ordinary turn
+  saves cannot clear. Activation, provider start, and terminal reconciliation
+  treat that intent as authoritative, including idempotent correction of a
+  stale terminal write. Plain-hosted owners poll the intent, abort their HTTP
+  response, and persist request-finished acknowledgement, so sidecar CLI/MCP
+  processes can wait for real provider unwind. Every interrupt source retries
+  provider cancellation after lifecycle reconciliation. A child created
   concurrently is rechecked, deleted, and never linked. Interrupt and resume
   hold the same cross-process run-control handoff across the full cleanup;
   cancellation matches the pause snapshot's generation, runtime session, and

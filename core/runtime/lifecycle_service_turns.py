@@ -16,6 +16,10 @@ from core.runtime.runtime_process import RuntimeProcessRecord, RuntimeProcessSta
 from core.runtime.runtime_threads import mark_runtime_thread_response_completed, update_runtime_thread_availability
 from core.runtime.runtime_turns import RuntimeTurnRecord, RuntimeTurnStatus
 from core.runtime.store import RuntimeStore
+from core.runtime.turn_cancellation import (
+    materialize_runtime_turn_transition,
+    request_runtime_turn_cancellation,
+)
 
 if TYPE_CHECKING:
     from core.runtime.event_bus import RuntimeEventBus
@@ -91,6 +95,13 @@ def transition_runtime_turn(
     """Compare and transition one persisted turn under its session handoff."""
     timestamp = now or utcnow()
     location = store.get_turn(turn_id)
+    if target_status == "cancelled" and location.status in {"queued", "active"}:
+        location = request_runtime_turn_cancellation(
+            store,
+            turn_id=turn_id,
+            reason=failure_reason or "Runtime turn cancelled.",
+            now=timestamp,
+        )
     with store.session_lifecycle_handoff(
         workspace_id=location.workspace_id,
         session_id=location.session_id,
@@ -104,32 +115,65 @@ def transition_runtime_turn(
             "cancelled": set(),
             "timed-out": set(),
         }
-        _transition_allowed(turn.status, target_status, allowed=allowed, kind="runtime turn")
+        effective_target = target_status
+        effective_failure_reason = failure_reason
+        if turn.cancellation_requested_at is not None:
+            effective_target = "cancelled"
+            effective_failure_reason = turn.cancellation_reason or failure_reason or "Runtime turn cancelled."
+        if turn.status == effective_target:
+            return turn
+        if turn.status in {"completed", "failed", "cancelled", "timed-out"}:
+            if effective_target != "cancelled" or turn.cancellation_requested_at is None:
+                if target_status == "cancelled":
+                    return turn
+                _transition_allowed(turn.status, effective_target, allowed=allowed, kind="runtime turn")
+        else:
+            _transition_allowed(turn.status, effective_target, allowed=allowed, kind="runtime turn")
         session = store.get_session(turn.session_id)
-        if target_status == "active" and session.status not in {"created", "running"}:
+        if effective_target == "active" and session.status not in {"created", "running"}:
             raise RuntimeTransitionError(
                 f"Cannot activate runtime turn while session `{session.session_id}` is {session.status}."
             )
-        updated = replace(
+        updated = materialize_runtime_turn_transition(
             turn,
-            status=target_status,
-            updated_at=timestamp,
-            started_at=turn.started_at or (timestamp if target_status == "active" else None),
-            completed_at=(
-                timestamp if target_status in {"completed", "failed", "cancelled", "timed-out"} else None
-            ),
-            failure_reason=failure_reason,
+            target_status=effective_target,
+            failure_reason=effective_failure_reason,
+            timestamp=timestamp,
         )
+        save_turn_started_at = time.perf_counter()
+        if effective_target == "cancelled":
+            saved = store.save_turn(updated)
+        else:
+            saved, applied = store.save_turn_if_cancellation_absent(
+                updated,
+                expected_status=turn.status,
+            )
+            if not applied:
+                if saved.cancellation_requested_at is None:
+                    raise RuntimeTransitionError(
+                        f"Runtime turn `{turn.turn_id}` changed concurrently during transition."
+                    )
+                saved = store.save_turn(
+                    materialize_runtime_turn_transition(
+                        saved,
+                        target_status="cancelled",
+                        failure_reason=saved.cancellation_reason or "Runtime turn cancelled.",
+                        timestamp=timestamp,
+                    )
+                )
+        _record_transition_timing(timing_payload, "save_turn_ms", save_turn_started_at)
         state = store.get_state(turn.session_id)
         save_state_started_at = time.perf_counter()
         store.save_state(
             replace(
                 state,
-                current_turn_id=turn.turn_id if target_status == "active" else None,
-                turn_status=target_status if target_status == "active" else None,
+                current_turn_id=turn.turn_id if saved.status == "active" else None,
+                turn_status=saved.status if saved.status == "active" else None,
                 last_progress_at=timestamp,
                 last_error_detail=(
-                    failure_reason if target_status in {"failed", "timed-out"} else state.last_error_detail
+                    saved.failure_reason
+                    if saved.status in {"failed", "timed-out"}
+                    else state.last_error_detail
                 ),
                 updated_at=timestamp,
             )
@@ -138,9 +182,6 @@ def transition_runtime_turn(
         save_session_started_at = time.perf_counter()
         store.save_session(replace(session, last_progress_at=timestamp, updated_at=timestamp))
         _record_transition_timing(timing_payload, "save_session_ms", save_session_started_at)
-        save_turn_started_at = time.perf_counter()
-        saved = store.save_turn(updated)
-        _record_transition_timing(timing_payload, "save_turn_ms", save_turn_started_at)
         if update_thread:
             thread_update_started_at = time.perf_counter()
             _update_thread_for_turn_transition(store, saved)

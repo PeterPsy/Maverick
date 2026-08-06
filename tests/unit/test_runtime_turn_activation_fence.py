@@ -10,6 +10,7 @@ from core.runtime.event_collection import RuntimeEventJsonCollection
 from core.runtime.service import (
     create_runtime_session,
     queue_runtime_turn,
+    request_runtime_turn_cancellation,
     transition_runtime_session,
     transition_runtime_turn,
 )
@@ -20,6 +21,106 @@ from tests.support.repo import make_temp_repo_root
 
 
 class RuntimeTurnActivationFenceTest(unittest.TestCase):
+    def test_cancellation_intent_is_visible_before_lifecycle_handoff_release(self) -> None:
+        repo_root = make_temp_repo_root(self)
+        owner_store = _runtime_store(repo_root)
+        interrupter_store = _runtime_store(repo_root)
+        session = create_runtime_session(
+            owner_store,
+            session_id="session-cancel-intent",
+            workspace_id="default",
+            agent_id="chat",
+            start_path=repo_root,
+        )
+        transition_runtime_session(owner_store, session_id=session.session_id, target_status="running")
+        turn = queue_runtime_turn(
+            owner_store,
+            turn_id="turn-cancel-intent",
+            session_id=session.session_id,
+            input_text="must be fenced",
+        )
+        transition_runtime_turn(owner_store, turn_id=turn.turn_id, target_status="active")
+        intent_persisted = Event()
+
+        def request_cancel() -> None:
+            request_runtime_turn_cancellation(
+                interrupter_store,
+                turn_id=turn.turn_id,
+                reason="interrupt won",
+            )
+            intent_persisted.set()
+
+        with owner_store.session_lifecycle_handoff(
+            workspace_id=session.workspace_id,
+            session_id=session.session_id,
+        ):
+            requester = Thread(target=request_cancel)
+            requester.start()
+            self.assertTrue(intent_persisted.wait(timeout=1))
+            persisted = owner_store.get_turn(turn.turn_id)
+            self.assertIsNotNone(persisted.cancellation_requested_at)
+            self.assertEqual(persisted.cancellation_reason, "interrupt won")
+
+        requester.join(timeout=1)
+        self.assertFalse(requester.is_alive())
+        reconciled = transition_runtime_turn(
+            owner_store,
+            turn_id=turn.turn_id,
+            target_status="completed",
+        )
+        self.assertEqual(reconciled.status, "cancelled")
+
+    def test_terminal_cancellation_reconciliation_is_idempotent(self) -> None:
+        repo_root = make_temp_repo_root(self)
+        store = _runtime_store(repo_root)
+        session = create_runtime_session(
+            store,
+            session_id="session-cancel-reconcile",
+            workspace_id="default",
+            agent_id="chat",
+            start_path=repo_root,
+        )
+        transition_runtime_session(store, session_id=session.session_id, target_status="running")
+        turn = queue_runtime_turn(
+            store,
+            turn_id="turn-cancel-reconcile",
+            session_id=session.session_id,
+            input_text="must remain cancelled",
+        )
+        active = transition_runtime_turn(store, turn_id=turn.turn_id, target_status="active")
+        requested = request_runtime_turn_cancellation(
+            store,
+            turn_id=turn.turn_id,
+            reason="interrupt won",
+        )
+        store.save_turn(
+            replace(
+                active,
+                status="completed",
+                updated_at=requested.cancellation_requested_at,
+                completed_at=requested.cancellation_requested_at,
+            )
+        )
+        stale_completion = store.get_turn(turn.turn_id)
+        self.assertEqual(stale_completion.status, "completed")
+        self.assertIsNotNone(stale_completion.cancellation_requested_at)
+
+        cancelled = transition_runtime_turn(
+            store,
+            turn_id=turn.turn_id,
+            target_status="cancelled",
+            failure_reason="interrupt won",
+        )
+        again = transition_runtime_turn(
+            store,
+            turn_id=turn.turn_id,
+            target_status="cancelled",
+            failure_reason="interrupt won",
+        )
+
+        self.assertEqual(cancelled.status, "cancelled")
+        self.assertEqual(again, cancelled)
+
     def test_persisted_cancel_wins_while_stale_activation_waits_on_session_handoff(self) -> None:
         repo_root = make_temp_repo_root(self)
         first_store = _runtime_store(repo_root)

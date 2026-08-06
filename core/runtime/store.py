@@ -50,6 +50,22 @@ RUNTIME_SESSION_METADATA_FIELDS = frozenset(
         "workspace_root",
     }
 )
+RUNTIME_TURN_CONTROL_FIELDS = frozenset(
+    {
+        "cancellation_requested_at",
+        "cancellation_reason",
+        "provider_request_started_at",
+        "provider_request_finished_at",
+    }
+)
+
+
+def _runtime_turn_lifecycle_payload(record: RuntimeTurnRecord) -> dict[str, object]:
+    return {
+        key: value
+        for key, value in asdict(record).items()
+        if key not in RUNTIME_TURN_CONTROL_FIELDS
+    }
 
 
 @dataclass(frozen=True)
@@ -135,6 +151,39 @@ class RuntimeStore(Protocol):
         ...
 
     def save_turn(self, record: RuntimeTurnRecord) -> RuntimeTurnRecord:
+        ...
+
+    def save_turn_if_cancellation_absent(
+        self,
+        record: RuntimeTurnRecord,
+        *,
+        expected_status: str,
+    ) -> tuple[RuntimeTurnRecord, bool]:
+        ...
+
+    def request_turn_cancellation(
+        self,
+        *,
+        turn_id: str,
+        reason: str,
+        now: datetime | None = None,
+    ) -> RuntimeTurnRecord:
+        ...
+
+    def mark_turn_provider_request_started(
+        self,
+        *,
+        turn_id: str,
+        now: datetime | None = None,
+    ) -> RuntimeTurnRecord:
+        ...
+
+    def mark_turn_provider_request_finished(
+        self,
+        *,
+        turn_id: str,
+        now: datetime | None = None,
+    ) -> RuntimeTurnRecord:
         ...
 
     def save_turn_if_client_message_absent(self, record: RuntimeTurnRecord) -> tuple[RuntimeTurnRecord, bool]:
@@ -520,13 +569,120 @@ class RuntimeDocumentStore:
         return deleted
 
     def save_turn(self, record: RuntimeTurnRecord) -> RuntimeTurnRecord:
+        payload = _runtime_turn_lifecycle_payload(record)
         self.collections.turns.update_one(
             {"turn_id": record.turn_id, "workspace_id": record.workspace_id, "session_id": record.session_id},
-            {"$set": asdict(record)},
+            {"$set": payload},
             upsert=True,
         )
         self._remember_turn_partition(record)
         return record
+
+    def save_turn_if_cancellation_absent(
+        self,
+        record: RuntimeTurnRecord,
+        *,
+        expected_status: str,
+    ) -> tuple[RuntimeTurnRecord, bool]:
+        """Atomically save one lifecycle transition only while no cancel intent exists."""
+        self.collections.turns.update_one(
+            {
+                "turn_id": record.turn_id,
+                "workspace_id": record.workspace_id,
+                "session_id": record.session_id,
+                "status": expected_status,
+                "cancellation_requested_at": None,
+            },
+            {"$set": _runtime_turn_lifecycle_payload(record)},
+            upsert=False,
+        )
+        persisted = self.get_turn(record.turn_id)
+        applied = persisted.status == record.status
+        return persisted, applied
+
+    def request_turn_cancellation(
+        self,
+        *,
+        turn_id: str,
+        reason: str,
+        now: datetime | None = None,
+    ) -> RuntimeTurnRecord:
+        """Persist a first-writer-wins cancellation intent outside the lifecycle handoff."""
+        timestamp = now or datetime.now(tz=UTC)
+        while True:
+            current = self.get_turn(turn_id)
+            if current.status not in {"queued", "active"} or current.cancellation_requested_at is not None:
+                return current
+            self.collections.turns.update_one(
+                {
+                    "turn_id": current.turn_id,
+                    "workspace_id": current.workspace_id,
+                    "session_id": current.session_id,
+                    "status": current.status,
+                    "cancellation_requested_at": None,
+                },
+                {
+                    "$set": {
+                        "cancellation_requested_at": timestamp,
+                        "cancellation_reason": reason,
+                    }
+                },
+                upsert=False,
+            )
+            refreshed = self.get_turn(turn_id)
+            if refreshed.cancellation_requested_at is not None or refreshed.status not in {"queued", "active"}:
+                return refreshed
+
+    def mark_turn_provider_request_started(
+        self,
+        *,
+        turn_id: str,
+        now: datetime | None = None,
+    ) -> RuntimeTurnRecord:
+        """Persist ownership evidence before one hosted provider request blocks."""
+        current = self.get_turn(turn_id)
+        if current.provider_request_started_at is not None:
+            return current
+        timestamp = now or datetime.now(tz=UTC)
+        self.collections.turns.update_one(
+            {
+                "turn_id": current.turn_id,
+                "workspace_id": current.workspace_id,
+                "session_id": current.session_id,
+                "provider_request_started_at": None,
+            },
+            {
+                "$set": {
+                    "provider_request_started_at": timestamp,
+                    "provider_request_finished_at": None,
+                }
+            },
+            upsert=False,
+        )
+        return self.get_turn(turn_id)
+
+    def mark_turn_provider_request_finished(
+        self,
+        *,
+        turn_id: str,
+        now: datetime | None = None,
+    ) -> RuntimeTurnRecord:
+        """Acknowledge that the process owning a hosted request has unwound it."""
+        current = self.get_turn(turn_id)
+        if current.provider_request_started_at is None or current.provider_request_finished_at is not None:
+            return current
+        timestamp = now or datetime.now(tz=UTC)
+        self.collections.turns.update_one(
+            {
+                "turn_id": current.turn_id,
+                "workspace_id": current.workspace_id,
+                "session_id": current.session_id,
+                "provider_request_finished_at": None,
+            },
+            {"$set": {"provider_request_finished_at": timestamp}},
+            upsert=False,
+        )
+        return self.get_turn(turn_id)
 
     def save_turn_if_client_message_absent(self, record: RuntimeTurnRecord) -> tuple[RuntimeTurnRecord, bool]:
         normalized_client_message_id = record.client_message_id.strip() if isinstance(record.client_message_id, str) else ""

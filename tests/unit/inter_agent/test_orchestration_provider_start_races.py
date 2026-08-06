@@ -75,6 +75,7 @@ class OrchestrationProviderStartRaceTest(unittest.TestCase):
             interrupt_thread.start()
             try:
                 self.assertFalse(interrupt_returned.wait(timeout=0.1))
+                self._wait_for_cancellation_intent(state, turn.turn_id)
             finally:
                 allow_provider_acceptance.set()
             interrupt_thread.join(timeout=2)
@@ -138,6 +139,7 @@ class OrchestrationProviderStartRaceTest(unittest.TestCase):
             interrupt_thread.start()
             try:
                 self.assertFalse(interrupt_returned.wait(timeout=0.1))
+                self._wait_for_cancellation_intent(state, turn.turn_id)
             finally:
                 allow_provider_acceptance.set()
             interrupt_thread.join(timeout=2)
@@ -358,6 +360,14 @@ class OrchestrationProviderStartRaceTest(unittest.TestCase):
             repository_root=repo_root,
         )
         return service, state, run, child
+
+    def _wait_for_cancellation_intent(self, state, turn_id: str) -> None:
+        deadline = time.monotonic() + 1
+        while time.monotonic() < deadline:
+            if state.runtime_store.get_turn(turn_id).cancellation_requested_at is not None:
+                return
+            time.sleep(0.01)
+        self.fail("Interrupt did not publish its cancellation intent before provider acceptance.")
 
 
 if __name__ == "__main__":

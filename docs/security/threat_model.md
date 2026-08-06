@@ -188,7 +188,15 @@ handoff from the final persisted `active`/executable check through provider
 acceptance for both plain-hosted and agentic sync/async paths; prewarm uses the
 session-only equivalent. Late provider and provider-thread metadata writes are
 partial allowlisted mutations under the same handoff, so they cannot restore a
-stopped session from an older full record.
+stopped session from an older full record. Interrupt also publishes a durable
+first-writer cancellation intent before waiting for provider acceptance.
+Activation, provider start, and terminal reconciliation treat it as
+authoritative, ordinary lifecycle saves cannot erase it, and stale terminal
+writes are corrected idempotently. Plain-hosted request owners watch that
+intent and persist request-finished acknowledgement after aborting the HTTP
+response, so an interrupt issued by CLI or MCP in another process does not
+leave provider work alive. App, HTTP, and inter-agent callers retry provider
+interruption after the lifecycle handoff.
 The same fence covers the complete scheduler mutation path. Each scheduler
 captures one recovery generation, and every run transition, recovery-ledger
 write, task claim/finalization, and completion commit validates that generation

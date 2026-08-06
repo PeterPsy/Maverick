@@ -651,6 +651,8 @@ def submit_runtime_turn_async(
                             target_status="failed",
                             failure_reason=str(error),
                         )
+                        if failed.status == "cancelled":
+                            return
                         _record_turn_failed(
                             state,
                             session_id=session.session_id,
@@ -669,6 +671,8 @@ def submit_runtime_turn_async(
                     timing_payload=transition_timings,
                     update_thread=False,
                 )
+                if active.status != "active":
+                    return
                 transition_active_ms = (time.perf_counter() - transition_started_at) * 1000
                 started_event = _record_turn_started(state, session_id=session.session_id, turn_id=active.turn_id, provider_id=worker_provider_id)
                 _record_turn_worker_started(
@@ -928,7 +932,14 @@ def submit_runtime_turn_async(
                     payload={"phase": "async_execution_returned", "exit_code": result.exit_code, "output_text_length": len(result.output_text)},
                 )
                 current = state.runtime_store.get_turn(turn.turn_id)
-                if current.status == "cancelled":
+                if current.status == "cancelled" or current.cancellation_requested_at is not None:
+                    if current.status != "cancelled":
+                        current = transition_runtime_turn(
+                            state.runtime_store,
+                            turn_id=turn.turn_id,
+                            target_status="cancelled",
+                            failure_reason=current.cancellation_reason,
+                        )
                     _debug_log_runtime_turn(
                         state,
                         session=current_session,
@@ -987,6 +998,8 @@ def submit_runtime_turn_async(
                         target_status="failed",
                         failure_reason=failure_reason,
                     )
+                    if failed.status == "cancelled":
+                        return
                     _record_turn_failed(
                         state,
                         session_id=session.session_id,
@@ -1120,6 +1133,7 @@ def interrupt_runtime_provider_turn(
     if runtime_session_is_plain_hosted_chat(session):
         return interrupt_plain_hosted_requests(
             session.session_id,
+            store=state.runtime_store,
             wait_for_termination=wait_for_termination,
         )
     with suppress(Exception):

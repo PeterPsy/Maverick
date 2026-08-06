@@ -146,6 +146,7 @@ def execute_plain_hosted_text_turn(
         with plain_hosted_request_cancellation(
             session_id=session.session_id,
             turn_id=turn_id,
+            store=state.runtime_store,
         ) as cancellation:
             result = execute_hosted_text_generation(
                 state.provider_store,

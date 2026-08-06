@@ -366,6 +366,59 @@ class RuntimeRequestsTestCase(unittest.TestCase):
                 app_id="video-studio",
             )
 
+    def test_app_runtime_interrupt_retries_provider_after_cancellation_handoff(self) -> None:
+        runtime_store = self._runtime_store()
+        now = datetime(2026, 6, 16, 12, 0, tzinfo=UTC)
+        repo_root = make_temp_repo_root(self)
+        session = create_runtime_session(
+            runtime_store,
+            session_id="app-owned-session",
+            workspace_id="default",
+            agent_id="video-agent",
+            source_app_id="video-studio",
+            start_path=repo_root,
+        )
+        runtime_store.save_turn(
+            RuntimeTurnRecord(
+                turn_id="app-owned-turn",
+                session_id=session.session_id,
+                workspace_id="default",
+                status="active",
+                input_text="render",
+                created_at=now,
+                updated_at=now,
+                started_at=now,
+                completed_at=None,
+                failure_reason=None,
+            )
+        )
+        state = SimpleNamespace(
+            runtime_store=runtime_store,
+            provider_store=object(),
+            runtime_event_bus=None,
+        )
+
+        with (
+            patch.object(runtime_requests, "_resolved_provider_id", return_value="codex"),
+            patch.object(runtime_requests, "interrupt_runtime_provider_turn", side_effect=[False, True]) as interrupt,
+            patch.object(runtime_requests, "set_thread_availability"),
+            patch.object(runtime_requests, "release_idle_runtime_processes", return_value=0),
+            patch.object(runtime_requests, "dispatch_source_app_runtime_event"),
+        ):
+            result = runtime_requests._apply_one_runtime_interrupt_request(
+                state,
+                request={"turn_id": "app-owned-turn"},
+                workspace_id="default",
+                app_id="video-studio",
+            )
+
+        self.assertEqual(interrupt.call_count, 2)
+        self.assertNotIn("wait_for_termination", interrupt.call_args_list[0].kwargs)
+        self.assertTrue(interrupt.call_args_list[1].kwargs["wait_for_termination"])
+        self.assertTrue(result["provider_interrupted"])
+        self.assertEqual(result["status"], "cancelled")
+        self.assertIsNotNone(runtime_store.get_turn("app-owned-turn").cancellation_requested_at)
+
     def test_dependency_backend_request_result_is_only_exposed_to_callback(self) -> None:
         callback_payloads: list[dict[str, object]] = []
         callback_invocations: list[dict[str, object]] = []

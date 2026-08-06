@@ -96,10 +96,16 @@ It started with names, visibility, legacy compatibility, and initial policy defa
     plain-hosted or agentic provider, sync and async execution take the same
     handoff again, repeat the authoritative `active`/executable check, and hold
     it only until provider acceptance. Plain-hosted execution registers a
-    cancellable request before releasing acceptance. Interrupt persists the
-    terminal turn after that handoff, retries provider cancellation, and waits
-    for the hosted HTTP request to unwind before session cleanup can report
-    `stopped`. Prewarm applies the session-only form of that handshake. Session
+    cancellable request before releasing acceptance. Interrupt first publishes
+    a durable, first-writer cancellation intent without waiting for that
+    handoff. Activation, provider start, and terminal reconciliation reread the
+    intent, so a completion or failure cannot win after pause acknowledgement;
+    repeated reconciliation is idempotent. Plain-hosted request ownership and
+    unwind acknowledgement are persisted with the turn, allowing a backend
+    watcher to abort the HTTP response and a CLI or MCP sidecar to wait across
+    process boundaries. HTTP, app, and inter-agent interrupt paths retry
+    provider cancellation after the terminal transition before session cleanup
+    can report `stopped`. Prewarm applies the session-only form of that handshake. Session
     metadata callbacks and worker returns use partial,
     allowlisted mutations under the handoff and cannot write lifecycle fields.
     Interrupt and resume share a cross-process run-control handoff that remains

@@ -28,3 +28,7 @@ class RuntimeTurnRecord:
     failure_reason: str | None
     runtime_mode: RuntimeMode = "agentic"
     client_message_id: str | None = None
+    cancellation_requested_at: datetime | None = None
+    cancellation_reason: str | None = None
+    provider_request_started_at: datetime | None = None
+    provider_request_finished_at: datetime | None = None

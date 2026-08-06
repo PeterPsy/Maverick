@@ -21,7 +21,13 @@ from core.runtime.errors import RuntimeSessionNotFoundError
 from core.runtime.app_streams import RuntimeAppStreamError, RuntimeAppStreamRecord
 from core.runtime.runtime_session import runtime_session_allows_user_thread
 from core.runtime.runtime_threads import create_runtime_thread
-from core.runtime.service import create_runtime_session, record_runtime_event, transition_runtime_session, transition_runtime_turn
+from core.runtime.service import (
+    create_runtime_session,
+    record_runtime_event,
+    request_runtime_turn_cancellation,
+    transition_runtime_session,
+    transition_runtime_turn,
+)
 from core.runtime.thread_catalog_events import set_thread_availability
 from core.runtime.turn_submission import interrupt_runtime_provider_turn, release_idle_runtime_processes, submit_runtime_turn_async
 from core.secrets.app_delivery import AppSecretRequest, resolve_app_secret_payload_requests
@@ -703,10 +709,21 @@ def _apply_one_runtime_interrupt_request(
             "interrupted": False,
             "_visible": request.get("result_visibility") != "internal",
         }
+    reason = _long_text(request.get("reason")) or "Interrupted by app request."
+    request_runtime_turn_cancellation(
+        state.runtime_store,
+        turn_id=turn_id,
+        reason=reason,
+    )
     provider_id = _resolved_provider_id(state, session)
     provider_interrupted = interrupt_runtime_provider_turn(state, session)
-    reason = _long_text(request.get("reason")) or "Interrupted by app request."
     updated = transition_runtime_turn(state.runtime_store, turn_id=turn_id, target_status="cancelled", failure_reason=reason)
+    provider_interrupted_after_handoff = interrupt_runtime_provider_turn(
+        state,
+        state.runtime_store.get_session(updated.session_id),
+        wait_for_termination=True,
+    )
+    provider_interrupted = provider_interrupted_after_handoff or provider_interrupted
     event = record_runtime_event(
         state.runtime_store,
         event_id=str(uuid4()),

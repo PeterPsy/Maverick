@@ -109,6 +109,8 @@ def submit_runtime_turn(
             on_queued(turn, events)
         except Exception as error:
             failed = transition_runtime_turn(state.runtime_store, turn_id=turn.turn_id, target_status="failed", failure_reason=str(error))
+            if failed.status == "cancelled":
+                return failed, events
             _record_turn_failed(state, session_id=session.session_id, turn_id=failed.turn_id, provider_id=provider_id, error=str(error))
             raise
         worker_metrics["source_app_queued_dispatch_ms"] = (time.perf_counter() - source_app_dispatch_started_at) * 1000
@@ -126,6 +128,8 @@ def submit_runtime_turn(
         worker_metrics["session_lock_wait_ms"] = (time.perf_counter() - lock_wait_started_at) * 1000
         try:
             turn = transition_runtime_turn(state.runtime_store, turn_id=turn.turn_id, target_status="active")
+            if turn.status != "active":
+                return turn, events
             started_event = _record_turn_started(state, session_id=session.session_id, turn_id=turn.turn_id, provider_id=provider_id)
             events.append(started_event)
             events.append(
@@ -313,6 +317,8 @@ def submit_runtime_turn(
             if current.status in {"completed", "failed", "cancelled", "timed-out"}:
                 return current, events
             turn = transition_runtime_turn(state.runtime_store, turn_id=turn.turn_id, target_status="failed", failure_reason=failure_reason)
+            if turn.status == "cancelled":
+                return turn, events
             events.append(
                 _record_turn_failed(
                     state,
@@ -335,6 +341,14 @@ def submit_runtime_turn(
             return turn, events
         current = state.runtime_store.get_turn(turn.turn_id)
         if current.status in {"completed", "failed", "cancelled", "timed-out"}:
+            return current, events
+        if current.cancellation_requested_at is not None:
+            current = transition_runtime_turn(
+                state.runtime_store,
+                turn_id=current.turn_id,
+                target_status="cancelled",
+                failure_reason=current.cancellation_reason,
+            )
             return current, events
         _debug_log_runtime_turn(
             state,

@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from multiprocessing import get_context
+from pathlib import Path
 from threading import Event, Thread
 import unittest
 from unittest.mock import patch
@@ -14,9 +16,77 @@ from core.providers.text_generation import (
     TextGenerationMessage,
     TextGenerationRequest,
 )
+from core.runtime.event_collection import RuntimeEventJsonCollection
+from core.runtime.plain_hosted_cancellation import (
+    interrupt_plain_hosted_requests,
+    plain_hosted_request_cancellation,
+)
+from core.runtime.service import (
+    create_runtime_session,
+    queue_runtime_turn,
+    request_runtime_turn_cancellation,
+    transition_runtime_session,
+    transition_runtime_turn,
+)
+from core.runtime.session_collection import RuntimeSessionJsonCollection
+from core.runtime.store import RuntimeCollections, RuntimeDocumentStore
+from core.runtime.workspace_collection import WorkspaceRuntimeJsonCollection
+from tests.support.repo import make_temp_repo_root
 
 
 class HostedTextCancellationTest(unittest.TestCase):
+    def test_durable_intent_stops_request_owned_by_another_process(self) -> None:
+        repo_root = make_temp_repo_root(self)
+        store = _runtime_store(repo_root)
+        session = create_runtime_session(
+            store,
+            session_id="cross-process-hosted-session",
+            workspace_id="default",
+            agent_id="chat",
+            runtime_mode="plain_hosted_chat",
+            start_path=repo_root,
+        )
+        transition_runtime_session(store, session_id=session.session_id, target_status="running")
+        turn = queue_runtime_turn(
+            store,
+            turn_id="cross-process-hosted-turn",
+            session_id=session.session_id,
+            input_text="wait for cancellation",
+        )
+        transition_runtime_turn(store, turn_id=turn.turn_id, target_status="active")
+        context = get_context("spawn")
+        request_started = context.Event()
+        provider_stopped = context.Event()
+        owner = context.Process(
+            target=_run_remote_hosted_request,
+            args=(repo_root, session.session_id, turn.turn_id, request_started, provider_stopped),
+        )
+        owner.start()
+        try:
+            self.assertTrue(request_started.wait(timeout=2))
+            request_runtime_turn_cancellation(
+                store,
+                turn_id=turn.turn_id,
+                reason="cross-process interrupt",
+            )
+
+            interrupted = interrupt_plain_hosted_requests(
+                session.session_id,
+                store=store,
+                wait_for_termination=True,
+            )
+
+            self.assertTrue(interrupted)
+            self.assertTrue(provider_stopped.is_set())
+            persisted = store.get_turn(turn.turn_id)
+            self.assertIsNotNone(persisted.provider_request_finished_at)
+        finally:
+            owner.join(timeout=2)
+            if owner.is_alive():
+                owner.terminate()
+                owner.join(timeout=2)
+        self.assertEqual(owner.exitcode, 0)
+
     def test_streaming_cancellation_closes_and_stops_response(self) -> None:
         class BlockingResponse:
             status = 200
@@ -76,6 +146,38 @@ class HostedTextCancellationTest(unittest.TestCase):
         self.assertEqual(len(errors), 1)
         self.assertIsInstance(errors[0], HostedTextGenerationError)
         self.assertEqual(errors[0].reason_code, "provider_cancelled")
+
+
+def _run_remote_hosted_request(
+    repo_root: Path,
+    session_id: str,
+    turn_id: str,
+    request_started,
+    provider_stopped,
+) -> None:
+    store = _runtime_store(repo_root)
+    with plain_hosted_request_cancellation(
+        session_id=session_id,
+        turn_id=turn_id,
+        store=store,
+    ) as cancellation:
+        request_started.set()
+        if not cancellation.wait_cancelled(timeout=3):
+            raise AssertionError("Durable cancellation intent was not observed by the provider owner.")
+        provider_stopped.set()
+
+
+def _runtime_store(repo_root: Path) -> RuntimeDocumentStore:
+    return RuntimeDocumentStore(
+        RuntimeCollections(
+            sessions=RuntimeSessionJsonCollection(start_path=repo_root, filename="session.json"),
+            turns=RuntimeSessionJsonCollection(start_path=repo_root, filename="turns.json"),
+            events=RuntimeEventJsonCollection(start_path=repo_root),
+            processes=RuntimeSessionJsonCollection(start_path=repo_root, filename="processes.json"),
+            states=RuntimeSessionJsonCollection(start_path=repo_root, filename="state.json"),
+            threads=WorkspaceRuntimeJsonCollection(start_path=repo_root, filename="threads.json"),
+        )
+    )
 
 
 if __name__ == "__main__":

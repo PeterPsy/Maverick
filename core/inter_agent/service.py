@@ -39,11 +39,15 @@ from core.inter_agent.models import (
 from core.inter_agent.store import InterAgentRunCreateBundle, InterAgentStore
 from core.runtime.errors import RuntimeSessionNotFoundError
 from core.runtime.lifecycle_service_sessions import create_child_runtime_session
-from core.runtime.plain_hosted_text import runtime_session_is_plain_hosted_chat
 from core.runtime.runtime_session import RuntimeSessionRecord, runtime_session_allows_user_thread
 from core.runtime.runtime_threads import runtime_thread_availability_for_session, update_runtime_thread_availability
 from core.runtime.store import RuntimeStore
-from core.runtime.service import record_runtime_event, transition_runtime_session, transition_runtime_turn
+from core.runtime.service import (
+    record_runtime_event,
+    request_runtime_turn_cancellation,
+    transition_runtime_session,
+    transition_runtime_turn,
+)
 from core.runtime.turn_submission import (
     interrupt_runtime_provider_turn,
     release_idle_runtime_processes,
@@ -2031,30 +2035,38 @@ def _interrupt_runtime_session(state: Any, *, session_id: str, reason: str) -> d
         session = state.runtime_store.get_session(session_id)
     except (RuntimeSessionNotFoundError, ValueError):
         return {"session_id": session_id, "found": False, "cancelled_turns": 0, "provider_interrupted": False}
-    provider_interrupted = False
-    if not runtime_session_is_plain_hosted_chat(session):
-        provider_interrupted = interrupt_runtime_provider_turn(state, session)
+    cancellable_turns = [
+        turn
+        for turn in state.runtime_store.list_turns(session.session_id)
+        if turn.status in {"queued", "active"}
+    ]
+    for turn in cancellable_turns:
+        request_runtime_turn_cancellation(
+            state.runtime_store,
+            turn_id=turn.turn_id,
+            reason=reason,
+        )
+    provider_interrupted = interrupt_runtime_provider_turn(state, session)
     cancelled_turns = 0
-    for turn in state.runtime_store.list_turns(session.session_id):
-        if turn.status not in {"queued", "active"}:
-            continue
+    for turn in cancellable_turns:
         cancelled = transition_runtime_turn(
             state.runtime_store,
             turn_id=turn.turn_id,
             target_status="cancelled",
             failure_reason=reason,
         )
-        record_runtime_event(
-            state.runtime_store,
-            event_id=str(uuid.uuid4()),
-            session_id=session.session_id,
-            turn_id=cancelled.turn_id,
-            plane="turn",
-            event_type="runtime.turn.cancelled",
-            payload={"reason": reason},
-            event_bus=getattr(state, "runtime_event_bus", None),
-        )
-        cancelled_turns += 1
+        if cancelled.status == "cancelled":
+            record_runtime_event(
+                state.runtime_store,
+                event_id=str(uuid.uuid4()),
+                session_id=session.session_id,
+                turn_id=cancelled.turn_id,
+                plane="turn",
+                event_type="runtime.turn.cancelled",
+                payload={"reason": reason},
+                event_bus=getattr(state, "runtime_event_bus", None),
+            )
+            cancelled_turns += 1
     refreshed_session = state.runtime_store.get_session(session.session_id)
     provider_interrupted_after_handoff = interrupt_runtime_provider_turn(
         state,

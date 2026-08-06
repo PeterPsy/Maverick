@@ -63,7 +63,6 @@ def _complete_turn_from_exit_code(
 ) -> tuple[RuntimeTurnRecord, RuntimeEventRecord]:
     if exit_code == 0:
         turn = transition_runtime_turn(state.runtime_store, turn_id=turn_id, target_status="completed")
-        event_type = "runtime.turn.completed"
     else:
         turn = transition_runtime_turn(
             state.runtime_store,
@@ -71,7 +70,7 @@ def _complete_turn_from_exit_code(
             target_status="failed",
             failure_reason=f"Provider exited with code {exit_code}.",
         )
-        event_type = "runtime.turn.failed"
+    event_type = f"runtime.turn.{turn.status}"
     event = record_runtime_event(
         state.runtime_store,
         event_id=str(uuid4()),
@@ -79,10 +78,14 @@ def _complete_turn_from_exit_code(
         turn_id=turn.turn_id,
         plane="turn",
         event_type=event_type,
-        payload={"provider_id": provider_id, "exit_code": exit_code},
+        payload={
+            "provider_id": provider_id,
+            "exit_code": exit_code,
+            **({"reason": turn.failure_reason or "Runtime turn cancelled."} if turn.status == "cancelled" else {}),
+        },
         event_bus=state.runtime_event_bus,
     )
-    if exit_code == 0:
+    if turn.status == "completed":
         mark_thread_response_completed(
             state,
             workspace_id=turn.workspace_id,

@@ -40,6 +40,10 @@ class RuntimeProviderStartHandoff:
                     raise RuntimeTransitionError(
                         f"Cannot start a provider while runtime turn `{self.turn_id}` is {turn.status}."
                     )
+                if turn.cancellation_requested_at is not None:
+                    raise RuntimeTransitionError(
+                        f"Cannot start a provider while runtime turn `{self.turn_id}` has a pending cancellation."
+                    )
             self.session = session
             return self
         except BaseException:

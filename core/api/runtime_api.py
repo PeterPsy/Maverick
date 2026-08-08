@@ -48,6 +48,7 @@ from core.runtime.service import (
     create_runtime_session,
     reconcile_runtime_session_policy,
     record_runtime_event,
+    record_runtime_turn_event_once,
     request_runtime_turn_cancellation,
     transition_runtime_session,
     transition_runtime_turn,
@@ -1961,16 +1962,25 @@ def _handle_turn_interrupt(
         wait_for_termination=True,
     )
     provider_interrupted = provider_interrupted_after_handoff or provider_interrupted
-    event = record_runtime_event(
+    event, event_inserted = record_runtime_turn_event_once(
         state.runtime_store,
         event_id=str(uuid4()),
         session_id=updated.session_id,
         turn_id=updated.turn_id,
-        plane="turn",
         event_type="runtime.turn.cancelled",
         payload={"reason": "interrupted_by_user"},
         event_bus=state.runtime_event_bus,
     )
+    if not event_inserted:
+        return json_response(
+            start_response,
+            {
+                "turn": _turn_payload(updated),
+                "event": _event_payload(event),
+                "interrupted": False,
+                "provider_interrupted": provider_interrupted,
+            },
+        )
     set_thread_availability(
         state,
         workspace_id=updated.workspace_id,

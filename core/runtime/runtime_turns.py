@@ -34,3 +34,8 @@ class RuntimeTurnRecord:
     provider_request_finished_at: datetime | None = None
     provider_request_owner_id: str | None = None
     provider_request_generation: str | None = None
+    provider_request_owner_kind: str | None = None
+    provider_request_owner_host_id: str | None = None
+    provider_request_owner_pid: int | None = None
+    provider_request_owner_process_start: str | None = None
+    provider_request_cancellation_acknowledged_at: datetime | None = None

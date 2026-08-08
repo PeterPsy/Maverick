@@ -1581,7 +1581,7 @@ The local JSON adapter must treat malformed collection files as storage errors, 
 
 Runtime session, turn, event, process, and state records must survive auth logout/login cycles and local host restarts.
 
-Runtime turn cancellation is a persisted control-plane intent, not only an in-process provider callback. An interrupt publishes the first cancellation request before it waits for the session lifecycle handoff or invokes provider cleanup. Ordinary turn saves cannot clear that intent. Activation, provider start, and terminal transition reread it, cancellation wins over a later completion or failure, and repeated terminal reconciliation is idempotent. Plain-hosted requests also persist request-started and request-finished evidence. The backend process that owns the HTTP response watches the durable intent and aborts the response, while HTTP, app, CLI, and MCP interrupt callers may wait for the persisted finished acknowledgement even when they run in another process. Provider interruption is retried after the lifecycle transition so a handle registered during the acceptance handoff cannot escape cleanup.
+Runtime turn cancellation is a persisted control-plane intent, not only an in-process provider callback. An interrupt publishes the first cancellation request before it waits for the session lifecycle handoff or invokes provider cleanup. Ordinary turn saves cannot clear that intent. Activation, provider start, and terminal transition reread it, cancellation wins over a later completion or failure, and repeated terminal reconciliation is idempotent. Plain-hosted requests also persist request-started and request-finished evidence with the owner kind, host, process id, process-start token, and per-request generation. The process that owns the HTTP response watches the durable intent and aborts the response, while HTTP, app, CLI, and MCP interrupt callers may wait for the persisted finished acknowledgement even when they run in another process. Startup and interrupt-time reconciliation may close only an exact lease whose local process incarnation is proven dead; a different owner id alone is not evidence of death, and an unknown or foreign-host owner fails closed. Provider interruption is retried after the lifecycle transition so a handle registered during the acceptance handoff cannot escape cleanup. A lease that acknowledged the cancellation before the retry snapshot still counts as an accepted provider interruption. Concurrent HTTP or app interrupts insert the turn cancellation event atomically by turn and event type; only the writer that inserted it publishes the source-app callback and reports `interrupted=true`.
 
 For the local hosted bootstrap, workspace-scoped runtime-domain collections are persisted under the owning workspace root. Installation-local `.maverick/local-state/runtime/` is not the storage home for runtime sessions, runtime threads, turns, events, processes, or state.
 
@@ -1596,11 +1596,13 @@ from the terminal status actually returned by the turn lifecycle transition,
 not from its requested target. A persisted cancellation intent therefore
 produces only `runtime.turn.cancelled` evidence and can never enqueue an
 automatic resume. Before turn recovery, the new backend process also closes
-unfinished plain-hosted request leases owned by earlier backend process
-incarnations. Each lease persists both a process owner id and a per-request
-generation; request-finished acknowledgement is compare-and-set against both,
-so a late `finally` from an older incarnation cannot finish a replacement
-request on the same turn.
+unfinished plain-hosted request leases whose same-host process incarnation is
+proven dead. Interrupt polling performs the same reconciliation so a CLI or MCP
+owner that crashes after backend startup cannot leave a permanent phantom
+acknowledgement. Each lease persists verifiable process identity and a
+per-request generation; both dead-owner reconciliation and request-finished
+acknowledgement compare-and-set the exact incarnation, so a late `finally` from
+an older request cannot finish a replacement request on the same turn.
 
 Hidden `inter_agent_participant` sessions are excluded from that generic
 runtime `resume` behavior. Their interrupted turns are closed with explicit

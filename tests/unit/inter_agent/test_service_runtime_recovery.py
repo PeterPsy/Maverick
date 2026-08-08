@@ -19,7 +19,12 @@ from core.runtime.runtime_turns import RuntimeTurnRecord
 from core.runtime.runtime_session import RuntimeSessionRecord
 from core.runtime.runtime_state import RuntimeStateRecord
 from core.runtime.runtime_threads import create_runtime_thread
-from core.runtime.service import queue_runtime_turn, record_runtime_event
+from core.runtime.service import (
+    queue_runtime_turn,
+    record_runtime_event,
+    request_runtime_turn_cancellation,
+    transition_runtime_turn,
+)
 from core.runtime.store import RuntimeCollections, RuntimeDocumentStore
 from tests.support.collections import FakeCollection
 from tests.support.repo import make_temp_repo_root
@@ -364,6 +369,58 @@ class InterAgentRuntimeRecoveryTest(unittest.TestCase):
         self.assertEqual(recovered_turn.status, "cancelled")
         self.assertEqual(root_thread.availability, "free")
         self.assertIn("runtime.turn.cancelled", root_event_types)
+
+    def test_startup_recovery_publishes_cancelled_for_active_root_turn_with_cancel_intent(self) -> None:
+        repo_root = make_temp_repo_root(self)
+        store = build_inter_agent_document_store(start_path=repo_root)
+        runtime_store = _runtime_store()
+        service = InterAgentService(store)
+        now = datetime(2026, 6, 16, 12, 0, tzinfo=UTC)
+        runtime_store.save_session(_runtime_session("root-session", repo_root=repo_root))
+        runtime_store.save_state(_runtime_state("root-session"))
+        run = service.create_run(_run_spec(idempotency_key="recover-cancelled-active-root"), now=now)
+        service.mark_run_planning(workspace_id="default", run_id=run.run_id, now=now)
+        turn = queue_runtime_turn(
+            runtime_store,
+            turn_id="root-turn-cancelled-active",
+            session_id="root-session",
+            input_text="Cancel active root work.",
+            now=now,
+        )
+        record_runtime_event(
+            runtime_store,
+            event_id="event-root-turn-cancelled-active",
+            session_id="root-session",
+            turn_id=turn.turn_id,
+            plane="turn",
+            event_type="runtime.turn.queued",
+            payload={"inter_agent_run_id": run.run_id},
+            now=now,
+        )
+        transition_runtime_turn(runtime_store, turn_id=turn.turn_id, target_status="active", now=now)
+        request_runtime_turn_cancellation(
+            runtime_store,
+            turn_id=turn.turn_id,
+            reason="cancel before inter-agent recovery",
+            now=now,
+        )
+
+        result = service.recover_non_terminal_runs(
+            runtime_store,
+            workspace_id="default",
+            now=now + timedelta(seconds=1),
+        )
+
+        recovered_turn = runtime_store.get_turn(turn.turn_id)
+        terminal_events = [
+            event.event_type
+            for event in runtime_store.list_events("root-session")
+            if event.turn_id == turn.turn_id and event.event_type.startswith("runtime.turn.")
+        ]
+        self.assertEqual(result["closed_root_turns"], 1)
+        self.assertEqual(recovered_turn.status, "cancelled")
+        self.assertEqual(terminal_events[-1], "runtime.turn.cancelled")
+        self.assertNotIn("runtime.turn.failed", terminal_events)
 
 
 def _runtime_store() -> RuntimeDocumentStore:

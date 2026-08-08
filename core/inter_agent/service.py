@@ -1961,7 +1961,7 @@ def _close_non_terminal_root_turns_for_run(
             session_id=updated.session_id,
             turn_id=updated.turn_id,
             plane="turn",
-            event_type=f"runtime.turn.{target_status}",
+            event_type=f"runtime.turn.{updated.status}",
             payload={
                 "inter_agent_run_id": run.run_id,
                 "reason": "inter_agent_recovery_failed",

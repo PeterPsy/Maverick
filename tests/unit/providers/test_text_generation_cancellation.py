@@ -20,6 +20,7 @@ from core.runtime.event_collection import RuntimeEventJsonCollection
 from core.runtime.plain_hosted_cancellation import (
     interrupt_plain_hosted_requests,
     plain_hosted_request_cancellation,
+    reconcile_stale_plain_hosted_request_owners,
 )
 from core.runtime.service import (
     create_runtime_session,
@@ -69,6 +70,9 @@ class HostedTextCancellationTest(unittest.TestCase):
                 turn_id=turn.turn_id,
                 reason="cross-process interrupt",
             )
+            self.assertTrue(provider_stopped.wait(timeout=2))
+            owner.join(timeout=2)
+            self.assertFalse(owner.is_alive())
 
             interrupted = interrupt_plain_hosted_requests(
                 session.session_id,
@@ -80,12 +84,70 @@ class HostedTextCancellationTest(unittest.TestCase):
             self.assertTrue(provider_stopped.is_set())
             persisted = store.get_turn(turn.turn_id)
             self.assertIsNotNone(persisted.provider_request_finished_at)
+            self.assertIsNotNone(persisted.provider_request_cancellation_acknowledged_at)
         finally:
             owner.join(timeout=2)
             if owner.is_alive():
                 owner.terminate()
                 owner.join(timeout=2)
         self.assertEqual(owner.exitcode, 0)
+
+    def test_reconciliation_preserves_live_remote_owner_and_closes_it_after_crash(self) -> None:
+        repo_root = make_temp_repo_root(self)
+        store = _runtime_store(repo_root)
+        session = create_runtime_session(
+            store,
+            session_id="live-remote-owner-session",
+            workspace_id="default",
+            agent_id="chat",
+            runtime_mode="plain_hosted_chat",
+            start_path=repo_root,
+        )
+        turn = queue_runtime_turn(
+            store,
+            turn_id="live-remote-owner-turn",
+            session_id=session.session_id,
+            input_text="stay alive",
+        )
+        context = get_context("spawn")
+        request_started = context.Event()
+        release_request = context.Event()
+        owner = context.Process(
+            target=_hold_remote_hosted_request,
+            args=(repo_root, session.session_id, turn.turn_id, request_started, release_request),
+        )
+        owner.start()
+        try:
+            self.assertTrue(request_started.wait(timeout=2))
+
+            reconciled_while_alive = reconcile_stale_plain_hosted_request_owners(
+                store,
+                session_id=session.session_id,
+            )
+
+            self.assertEqual(reconciled_while_alive, 0)
+            self.assertTrue(owner.is_alive())
+            self.assertIsNone(store.get_turn(turn.turn_id).provider_request_finished_at)
+            owner.terminate()
+            owner.join(timeout=2)
+            self.assertFalse(owner.is_alive())
+
+            reconciled_after_crash = reconcile_stale_plain_hosted_request_owners(
+                store,
+                session_id=session.session_id,
+            )
+
+            self.assertEqual(reconciled_after_crash, 1)
+            crashed = store.get_turn(turn.turn_id)
+            self.assertIsNotNone(crashed.provider_request_finished_at)
+            self.assertIsNone(crashed.provider_request_cancellation_acknowledged_at)
+        finally:
+            if owner.is_alive():
+                release_request.set()
+                owner.join(timeout=2)
+            if owner.is_alive():
+                owner.terminate()
+                owner.join(timeout=2)
 
     def test_streaming_cancellation_closes_and_stops_response(self) -> None:
         class BlockingResponse:
@@ -165,6 +227,24 @@ def _run_remote_hosted_request(
         if not cancellation.wait_cancelled(timeout=3):
             raise AssertionError("Durable cancellation intent was not observed by the provider owner.")
         provider_stopped.set()
+
+
+def _hold_remote_hosted_request(
+    repo_root: Path,
+    session_id: str,
+    turn_id: str,
+    request_started,
+    release_request,
+) -> None:
+    store = _runtime_store(repo_root)
+    with plain_hosted_request_cancellation(
+        session_id=session_id,
+        turn_id=turn_id,
+        store=store,
+    ):
+        request_started.set()
+        if not release_request.wait(timeout=5):
+            raise AssertionError("Timed out waiting to release remote hosted request.")
 
 
 def _runtime_store(repo_root: Path) -> RuntimeDocumentStore:

@@ -24,6 +24,7 @@ from core.runtime.runtime_threads import create_runtime_thread
 from core.runtime.service import (
     create_runtime_session,
     record_runtime_event,
+    record_runtime_turn_event_once,
     request_runtime_turn_cancellation,
     transition_runtime_session,
     transition_runtime_turn,
@@ -734,16 +735,24 @@ def _apply_one_runtime_interrupt_request(
         wait_for_termination=True,
     )
     provider_interrupted = provider_interrupted_after_handoff or provider_interrupted
-    event = record_runtime_event(
+    event, event_inserted = record_runtime_turn_event_once(
         state.runtime_store,
         event_id=str(uuid4()),
         session_id=updated.session_id,
         turn_id=updated.turn_id,
-        plane="turn",
         event_type="runtime.turn.cancelled",
         payload={"reason": reason, "requested_by_app_id": app_id},
         event_bus=state.runtime_event_bus,
     )
+    if not event_inserted:
+        return {
+            "turn_id": updated.turn_id,
+            "status": updated.status,
+            "interrupted": False,
+            "provider_interrupted": provider_interrupted,
+            "event_id": event.event_id,
+            "_visible": request.get("result_visibility") != "internal",
+        }
     set_thread_availability(
         state,
         workspace_id=updated.workspace_id,

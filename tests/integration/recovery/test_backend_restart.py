@@ -6,6 +6,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 import json
 from pathlib import Path
+import socket
 import tempfile
 from types import SimpleNamespace
 import unittest
@@ -316,32 +317,13 @@ class BackendRestartRecoveryTestCase(unittest.TestCase):
         )
         state.runtime_store.mark_turn_provider_request_started(
             turn_id="turn-crashed-hosted-owner",
-            owner_id="dead-backend-owner",
+            owner_id="backend:2147483647:dead",
             generation="dead-request-generation",
+            owner_kind="process",
+            owner_host_id=socket.gethostname(),
+            owner_pid=2147483647,
+            owner_process_start="dead-process-start",
             now=NOW,
-        )
-        state.runtime_store.save_turn(
-            RuntimeTurnRecord(
-                turn_id="turn-legacy-hosted-owner",
-                session_id=session.session_id,
-                workspace_id="default",
-                status="queued",
-                input_text="legacy provider request",
-                created_at=NOW,
-                updated_at=NOW,
-                started_at=None,
-                completed_at=None,
-                failure_reason=None,
-            )
-        )
-        state.runtime_store.collections.turns.update_one(
-            {
-                "turn_id": "turn-legacy-hosted-owner",
-                "workspace_id": "default",
-                "session_id": session.session_id,
-            },
-            {"$set": {"provider_request_started_at": NOW, "provider_request_finished_at": None}},
-            upsert=False,
         )
 
         with (
@@ -352,9 +334,6 @@ class BackendRestartRecoveryTestCase(unittest.TestCase):
 
         reconciled = state.runtime_store.get_turn("turn-crashed-hosted-owner")
         self.assertIsNotNone(reconciled.provider_request_finished_at)
-        self.assertIsNotNone(
-            state.runtime_store.get_turn("turn-legacy-hosted-owner").provider_request_finished_at
-        )
 
         with plain_hosted_request_cancellation(
             session_id=session.session_id,
@@ -362,12 +341,12 @@ class BackendRestartRecoveryTestCase(unittest.TestCase):
             store=state.runtime_store,
         ):
             restarted = state.runtime_store.get_turn(reconciled.turn_id)
-            self.assertNotEqual(restarted.provider_request_owner_id, "dead-backend-owner")
+            self.assertNotEqual(restarted.provider_request_owner_id, "backend:2147483647:dead")
             self.assertNotEqual(restarted.provider_request_generation, "dead-request-generation")
             self.assertIsNone(restarted.provider_request_finished_at)
             state.runtime_store.mark_turn_provider_request_finished(
                 turn_id=restarted.turn_id,
-                owner_id="dead-backend-owner",
+                owner_id="backend:2147483647:dead",
                 generation="dead-request-generation",
                 now=NOW,
             )

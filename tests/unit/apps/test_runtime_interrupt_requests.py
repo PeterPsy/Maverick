@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime
+from threading import Barrier, Thread
 from types import SimpleNamespace
 import unittest
 from unittest.mock import patch
@@ -137,6 +138,63 @@ class RuntimeInterruptRequestsTestCase(unittest.TestCase):
         )
         interrupt_provider.assert_not_called()
         dispatch.assert_not_called()
+
+    def test_concurrent_app_interrupts_publish_one_terminal_event_and_callback(self) -> None:
+        runtime_store, session = self._active_turn(
+            session_id="app-concurrent-interrupt",
+            turn_id="app-concurrent-interrupt-turn",
+        )
+        state = SimpleNamespace(
+            runtime_store=runtime_store,
+            provider_store=object(),
+            runtime_event_bus=None,
+        )
+        barrier = Barrier(2)
+        original_request = request_runtime_turn_cancellation
+        results: list[dict[str, object]] = []
+        errors: list[BaseException] = []
+
+        def synchronized_request(*args, **kwargs):
+            barrier.wait(timeout=2)
+            return original_request(*args, **kwargs)
+
+        def invoke() -> None:
+            try:
+                results.append(
+                    runtime_requests._apply_one_runtime_interrupt_request(
+                        state,
+                        request={"turn_id": "app-concurrent-interrupt-turn"},
+                        workspace_id="default",
+                        app_id="video-studio",
+                    )
+                )
+            except BaseException as error:  # pragma: no cover - asserted below
+                errors.append(error)
+
+        with (
+            patch.object(runtime_requests, "request_runtime_turn_cancellation", side_effect=synchronized_request),
+            patch.object(runtime_requests, "_resolved_provider_id", return_value="codex"),
+            patch.object(runtime_requests, "interrupt_runtime_provider_turn", return_value=False),
+            patch.object(runtime_requests, "set_thread_availability"),
+            patch.object(runtime_requests, "release_idle_runtime_processes"),
+            patch.object(runtime_requests, "dispatch_source_app_runtime_event") as dispatch,
+        ):
+            threads = [Thread(target=invoke) for _index in range(2)]
+            for thread in threads:
+                thread.start()
+            for thread in threads:
+                thread.join(timeout=3)
+
+        self.assertEqual(errors, [])
+        self.assertTrue(all(not thread.is_alive() for thread in threads))
+        self.assertEqual(sorted(bool(result["interrupted"]) for result in results), [False, True])
+        cancelled_events = [
+            event
+            for event in runtime_store.list_events(session.session_id)
+            if event.event_type == "runtime.turn.cancelled"
+        ]
+        self.assertEqual(len(cancelled_events), 1)
+        dispatch.assert_called_once()
 
 
 if __name__ == "__main__":

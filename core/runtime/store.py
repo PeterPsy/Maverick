@@ -58,6 +58,11 @@ RUNTIME_TURN_CONTROL_FIELDS = frozenset(
         "provider_request_finished_at",
         "provider_request_owner_id",
         "provider_request_generation",
+        "provider_request_owner_kind",
+        "provider_request_owner_host_id",
+        "provider_request_owner_pid",
+        "provider_request_owner_process_start",
+        "provider_request_cancellation_acknowledged_at",
     }
 )
 
@@ -178,6 +183,10 @@ class RuntimeStore(Protocol):
         turn_id: str,
         owner_id: str,
         generation: str,
+        owner_kind: str,
+        owner_host_id: str,
+        owner_pid: int,
+        owner_process_start: str,
         now: datetime | None = None,
     ) -> RuntimeTurnRecord:
         ...
@@ -188,16 +197,20 @@ class RuntimeStore(Protocol):
         turn_id: str,
         owner_id: str,
         generation: str,
+        cancellation_observed: bool = False,
         now: datetime | None = None,
     ) -> RuntimeTurnRecord:
         ...
 
-    def reconcile_stale_turn_provider_requests(
+    def reconcile_turn_provider_request_if_current(
         self,
         *,
-        active_owner_id: str,
+        turn_id: str,
+        expected_owner_id: str | None,
+        expected_generation: str | None,
+        expected_started_at: datetime,
         now: datetime | None = None,
-    ) -> int:
+    ) -> tuple[RuntimeTurnRecord, bool]:
         ...
 
     def save_turn_if_client_message_absent(self, record: RuntimeTurnRecord) -> tuple[RuntimeTurnRecord, bool]:
@@ -234,6 +247,9 @@ class RuntimeStore(Protocol):
         ...
 
     def save_event(self, record: RuntimeEventRecord) -> RuntimeEventRecord:
+        ...
+
+    def save_turn_event_if_absent(self, record: RuntimeEventRecord) -> tuple[RuntimeEventRecord, bool]:
         ...
 
     def list_events(self, session_id: str) -> list[RuntimeEventRecord]:
@@ -653,13 +669,27 @@ class RuntimeDocumentStore:
         turn_id: str,
         owner_id: str,
         generation: str,
+        owner_kind: str,
+        owner_host_id: str,
+        owner_pid: int,
+        owner_process_start: str,
         now: datetime | None = None,
     ) -> RuntimeTurnRecord:
         """Acquire a generation-fenced lease before one hosted request blocks."""
         normalized_owner_id = owner_id.strip()
         normalized_generation = generation.strip()
-        if not normalized_owner_id or not normalized_generation:
-            raise ValueError("Hosted provider request leases require owner_id and generation.")
+        normalized_owner_kind = owner_kind.strip()
+        normalized_owner_host_id = owner_host_id.strip()
+        normalized_owner_process_start = owner_process_start.strip()
+        if (
+            not normalized_owner_id
+            or not normalized_generation
+            or not normalized_owner_kind
+            or not normalized_owner_host_id
+            or owner_pid < 1
+            or not normalized_owner_process_start
+        ):
+            raise ValueError("Hosted provider request leases require verifiable process ownership.")
         current = self.get_turn(turn_id)
         if current.provider_request_started_at is not None and current.provider_request_finished_at is None:
             if (
@@ -685,6 +715,11 @@ class RuntimeDocumentStore:
                     "provider_request_finished_at": None,
                     "provider_request_owner_id": normalized_owner_id,
                     "provider_request_generation": normalized_generation,
+                    "provider_request_owner_kind": normalized_owner_kind,
+                    "provider_request_owner_host_id": normalized_owner_host_id,
+                    "provider_request_owner_pid": owner_pid,
+                    "provider_request_owner_process_start": normalized_owner_process_start,
+                    "provider_request_cancellation_acknowledged_at": None,
                 }
             },
             upsert=False,
@@ -703,6 +738,7 @@ class RuntimeDocumentStore:
         turn_id: str,
         owner_id: str,
         generation: str,
+        cancellation_observed: bool = False,
         now: datetime | None = None,
     ) -> RuntimeTurnRecord:
         """Acknowledge one hosted request only when its exact lease still owns the turn."""
@@ -719,6 +755,9 @@ class RuntimeDocumentStore:
         ):
             return current
         timestamp = now or datetime.now(tz=UTC)
+        finished_payload = {"provider_request_finished_at": timestamp}
+        if cancellation_observed:
+            finished_payload["provider_request_cancellation_acknowledged_at"] = timestamp
         self.collections.turns.update_one(
             {
                 "turn_id": current.turn_id,
@@ -728,54 +767,51 @@ class RuntimeDocumentStore:
                 "provider_request_owner_id": normalized_owner_id,
                 "provider_request_generation": normalized_generation,
             },
-            {"$set": {"provider_request_finished_at": timestamp}},
+            {"$set": finished_payload},
             upsert=False,
         )
         return self.get_turn(turn_id)
 
-    def reconcile_stale_turn_provider_requests(
+    def reconcile_turn_provider_request_if_current(
         self,
         *,
-        active_owner_id: str,
+        turn_id: str,
+        expected_owner_id: str | None,
+        expected_generation: str | None,
+        expected_started_at: datetime,
         now: datetime | None = None,
-    ) -> int:
-        """Close unfinished leases from backend owners that predate this process."""
-        normalized_owner_id = active_owner_id.strip()
-        if not normalized_owner_id:
-            raise ValueError("Hosted provider request reconciliation requires active_owner_id.")
+    ) -> tuple[RuntimeTurnRecord, bool]:
+        """Close one exact lease after its process owner was proven dead."""
+        current = self.get_turn(turn_id)
+        if (
+            current.provider_request_started_at != expected_started_at
+            or current.provider_request_finished_at is not None
+            or current.provider_request_owner_id != expected_owner_id
+            or current.provider_request_generation != expected_generation
+        ):
+            return current, False
         timestamp = now or datetime.now(tz=UTC)
-        reconciled = 0
-        for document in self.collections.turns.find({}):
-            started_at = document.get("provider_request_started_at")
-            finished_at = document.get("provider_request_finished_at")
-            previous_owner_id = document.get("provider_request_owner_id")
-            previous_generation = document.get("provider_request_generation")
-            if started_at is None or finished_at is not None or previous_owner_id == normalized_owner_id:
-                continue
-            turn_id = str(document.get("turn_id") or "").strip()
-            workspace_id = str(document.get("workspace_id") or "").strip()
-            session_id = str(document.get("session_id") or "").strip()
-            if not turn_id or not workspace_id or not session_id:
-                continue
-            self.collections.turns.update_one(
-                {
-                    "turn_id": turn_id,
-                    "workspace_id": workspace_id,
-                    "session_id": session_id,
-                    "provider_request_started_at": started_at,
-                    "provider_request_finished_at": None,
-                    "provider_request_owner_id": previous_owner_id,
-                    "provider_request_generation": previous_generation,
-                },
-                {"$set": {"provider_request_finished_at": timestamp}},
-                upsert=False,
-            )
-            refreshed = self.collections.turns.find_one(
-                {"turn_id": turn_id, "workspace_id": workspace_id, "session_id": session_id}
-            )
-            if refreshed is not None and refreshed.get("provider_request_finished_at") is not None:
-                reconciled += 1
-        return reconciled
+        self.collections.turns.update_one(
+            {
+                "turn_id": current.turn_id,
+                "workspace_id": current.workspace_id,
+                "session_id": current.session_id,
+                "provider_request_started_at": expected_started_at,
+                "provider_request_finished_at": None,
+                "provider_request_owner_id": expected_owner_id,
+                "provider_request_generation": expected_generation,
+            },
+            {"$set": {"provider_request_finished_at": timestamp}},
+            upsert=False,
+        )
+        persisted = self.get_turn(turn_id)
+        applied = (
+            persisted.provider_request_started_at == expected_started_at
+            and persisted.provider_request_owner_id == expected_owner_id
+            and persisted.provider_request_generation == expected_generation
+            and persisted.provider_request_finished_at is not None
+        )
+        return persisted, applied
 
     def save_turn_if_client_message_absent(self, record: RuntimeTurnRecord) -> tuple[RuntimeTurnRecord, bool]:
         normalized_client_message_id = record.client_message_id.strip() if isinstance(record.client_message_id, str) else ""
@@ -1193,6 +1229,34 @@ class RuntimeDocumentStore:
         self._prune_session_events(record.session_id)
         self._append_event_to_app_streams(record)
         return record
+
+    def save_turn_event_if_absent(self, record: RuntimeEventRecord) -> tuple[RuntimeEventRecord, bool]:
+        """Atomically insert the single event for one turn and event type."""
+        if not record.turn_id:
+            raise ValueError("Idempotent turn events require turn_id.")
+        query = {
+            "workspace_id": record.workspace_id,
+            "session_id": record.session_id,
+            "turn_id": record.turn_id,
+            "event_type": record.event_type,
+        }
+        document, inserted = self._insert_one_if_absent(
+            self.collections.events,
+            query,
+            asdict(record),
+        )
+        saved = RuntimeEventRecord(**document)
+        self._remember_session_partition(saved.session_id, saved.workspace_id)
+        if inserted:
+            append_history_upsert = getattr(self.collections.events, "append_history_upsert", None)
+            if callable(append_history_upsert):
+                append_history_upsert(
+                    {"event_id": saved.event_id},
+                    {"$set": asdict(saved)},
+                )
+            self._prune_session_events(saved.session_id)
+            self._append_event_to_app_streams(saved)
+        return saved, inserted
 
     def _append_event_to_app_streams(self, record: RuntimeEventRecord) -> None:
         streams = self.collections.app_streams

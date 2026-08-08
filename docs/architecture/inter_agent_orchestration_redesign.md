@@ -197,11 +197,16 @@ transcript projection behavior.
   stale terminal write. Plain-hosted owners poll the intent, abort their HTTP
   response, and persist an owner-and-generation-fenced request-finished
   acknowledgement, so sidecar CLI/MCP processes can wait for real provider
-  unwind. Backend restart closes unfinished leases from older process owners;
-  a late old-owner acknowledgement cannot finish a replacement incarnation on
-  the same turn. Every interrupt source retries provider cancellation after
-  lifecycle reconciliation and reports the terminal status actually returned
-  by that transition. A child created
+  unwind. The lease records host, process id, process-start token, and request
+  generation. Startup and interrupt-time reconciliation close it only when the
+  exact same-host process incarnation is proven dead; a mere owner mismatch is
+  never sufficient, and a late old-owner acknowledgement cannot finish a
+  replacement incarnation on the same turn. Every interrupt source retries
+  provider cancellation after lifecycle reconciliation and reports the
+  terminal status actually returned by that transition. Concurrent HTTP and app
+  interrupts atomically insert one turn/status event so only its writer reports
+  success and invokes the source-app callback. Root-turn recovery also derives
+  terminal event type from the persisted transition result. A child created
   concurrently is rechecked, deleted, and never linked. Interrupt and resume
   hold the same cross-process run-control handoff across the full cleanup;
   cancellation matches the pause snapshot's generation, runtime session, and

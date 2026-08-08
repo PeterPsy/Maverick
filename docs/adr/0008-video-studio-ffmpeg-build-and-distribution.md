@@ -2,8 +2,8 @@
 
 ## Status
 
-Accepted on 2026-08-06 for the current local server in Video Studio phases 1
-through 3.
+Accepted on 2026-08-06 and amended on 2026-08-08 for the current local server
+in Video Studio phases 1 through 3.
 
 ## Context
 
@@ -20,6 +20,11 @@ The current server provides the Ubuntu package `ffmpeg
 This hash records the audited local baseline; it is not permission to accept an
 unreviewed replacement at the same path.
 
+The corresponding `/usr/bin/ffprobe` SHA-256 is
+`96b609cc3ad9f2f6a4e505bd3e8bc3785822dc609a1e4947ddff0db7b313e69e`.
+Both identities and the complete build configuration are committed in the
+machine-readable Video Studio host manifest.
+
 ## Decision
 
 For phases 1 through 3, Video Studio uses the current GPL-enabled Ubuntu FFmpeg
@@ -34,6 +39,14 @@ that codec only for the governed local server profile described here. It does
 not authorize Maverick or Video Studio to sell, sublicense, or redistribute the
 FFmpeg binary, an FFmpeg-containing image, or another compiled FFmpeg artifact
 as part of the app.
+
+This accepted host capability does not cover the FFmpeg/ffprobe executables and
+libraries embedded in Remotion's optional compositor packages. Those binaries
+have distinct digests and build configurations; the inspected Linux x64 GNU
+variant additionally enables `libfdk-aac`. They are inventoried as an unresolved
+local-development dependency under ADR-0007 and are forbidden in release,
+bundle, installer, image, and container artifacts. Runtime reports must never
+attribute compositor media work to this host manifest.
 
 Each accepted FFmpeg installation has a content-addressed build manifest. At
 minimum it records:
@@ -55,6 +68,13 @@ observed codec/container, effective encoder, relevant encoding parameters, and
 quality-gate result. A worker whose actual binary or build configuration does
 not match an accepted manifest is incompatible and must fail closed before it
 processes media.
+
+The verifier invokes only the manifest's absolute `ffmpeg` and `ffprobe` paths
+using argument arrays with `shell: false` and an allowlisted environment. It
+checks the real path, executable SHA-256, exact first version line, complete
+ordered build configuration, GPL classification, required legal flags, sandbox
+contract, and non-empty codec/container/pixel-format allowlists. A missing or
+malformed manifest is a capability denial rather than a PATH fallback.
 
 FFmpeg and ffprobe run inside the job sandbox with granted inputs mounted
 read-only, a dedicated writable staging directory, an allowlisted environment,
@@ -112,6 +132,9 @@ an operating-system update.
 - A binary/image distribution gate must fail whenever an FFmpeg artifact is
   found in an app or release bundle without the later distribution ADR and its
   required compliance artifacts.
+- The distribution gate must also reject Remotion compositor directories and
+  nested archive/container layers containing `ffmpeg` or `ffprobe`; inspection
+  errors and unsafe archive entries fail closed.
 - A package upgrade, checksum change, build-configuration change, codec change,
   or new target architecture requires compatibility, vulnerability, and
   license review before acceptance.
@@ -135,3 +158,4 @@ an operating-system update.
 - [FFmpeg legal and compliance checklist](https://ffmpeg.org/legal.html)
 - [Ubuntu source package `ffmpeg 7:7.1.1-1ubuntu1.3`](https://launchpad.net/ubuntu/+source/ffmpeg/7%3A7.1.1-1ubuntu1.3)
 - [x264 license](https://code.videolan.org/videolan/x264/-/blob/master/COPYING)
+- [Remotion renderer optional compositor declarations at v4.0.506](https://github.com/remotion-dev/remotion/blob/v4.0.506/packages/renderer/package.json)

@@ -9,6 +9,7 @@ from core.apps.store import AppStore
 from core.identity.store import IdentityStore
 from core.mcp.developer_context_tools import developer_context_tool_specs
 from core.mcp.inter_agent_tools import inter_agent_tool_specs
+from core.mcp.job_tools import job_tool_specs
 from core.mcp.persistence_tools import persistence_tool_specs
 from core.mcp.models import McpToolDefinition
 from core.mcp.recovery_tools import recovery_tool_specs
@@ -35,6 +36,7 @@ def _core_tool_specs(
     inter_agent_store: InterAgentStore | None = None,
     secret_store: SecretStore | None = None,
     recovery_store: RecoveryStore | None = None,
+    job_service=None,
     provider_registry: ProviderRegistry | None = None,
     observability_store=None,
     runtime_event_bus=None,
@@ -46,6 +48,7 @@ def _core_tool_specs(
     """Build all core-owned MCP tool specs without mixing tool domains."""
     specs: list[tuple[McpToolDefinition, Any]] = []
     specs.extend(workspace_tool_specs(workspace_store=workspace_store))
+    specs.extend(job_tool_specs(job_service=job_service))
     specs.extend(persistence_tool_specs(start_path=start_path))
     specs.extend(developer_context_tool_specs(start_path=start_path))
     specs.extend(

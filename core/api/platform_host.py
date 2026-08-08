@@ -23,6 +23,7 @@ from core.api.app_sdk_api import handle_app_sdk_api
 from core.api.app_store_api import handle_app_store_api
 from core.api.http import HttpRequestError, StartResponse, enforce_same_origin_for_unsafe_request, json_response, text_response
 from core.api.inter_agent_api import handle_inter_agent_api
+from core.api.job_api import handle_job_api
 from core.api.platform_state import PlatformState
 from core.api.provider_api import handle_provider_api
 from core.api.runtime_api import handle_runtime_api
@@ -117,6 +118,9 @@ class PlatformHost:
             if routed is not None:
                 return routed
             routed = handle_runtime_api(self.state, environ, start_response, start_path=self.start_path)
+            if routed is not None:
+                return routed
+            routed = handle_job_api(self.state, environ, start_response)
             if routed is not None:
                 return routed
             routed = handle_settings_api(self.state, environ, start_response)

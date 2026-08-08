@@ -297,6 +297,28 @@ An app such as `agents` may compose prompt text and pass it to the runtime sessi
 
 The core does not define workspace-specific agent personas as built-in runtime types.
 
+### 4A. Durable job execution
+
+The core owns the app-agnostic `compute.job.execution` version `1` capability
+for typed work that must outlive an HTTP request, app entrypoint, or runtime
+turn. Its canonical envelope is `app-job.v1`.
+
+The capability owns durable submission and idempotency, grants and budgets,
+workspace quotas and fair scheduling, lease/heartbeat fencing, typed progress,
+cooperative and operator-forced cancellation, retry/backoff, restart recovery,
+executor advertisement and selection, bounded redacted logs, state events, and
+assignment audit. It does not own app handlers or app business data.
+
+The default JSON and optional Mongo control-plane adapters persist the same job
+records through a storage-agnostic domain store. The server executor invokes
+only explicitly registered, process-safe handler callables in bounded child
+processes; the generic domain does not construct shell strings or interpret app
+parameters as code. Input validation and output publication are delegated only
+through explicit trusted provider-interface registries and fail closed when the
+matching provider is absent. The complete contract and trust boundary are
+documented in
+`docs/architecture/durable_job_execution.md`.
+
 ### 5. Inter-agent communication
 
 The core owns the infrastructure that allows multiple agents to coordinate.

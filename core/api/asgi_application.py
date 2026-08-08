@@ -16,6 +16,7 @@ from core.api.backend_recovery import start_backend_restart_recovery
 from core.api.background_hooks import start_background_hook_scheduler
 from core.api.http import max_json_body_bytes
 from core.api.inter_agent_websocket import INTER_AGENT_RUN_WS_PREFIX, stream_inter_agent_run_events
+from core.api.job_websocket import JOB_EVENTS_WS_PATH, stream_job_events
 from core.api.platform_host import PlatformHost
 from core.api.platform_state import PlatformState, bootstrap_platform_state
 from core.api.runtime_thread_websocket import RUNTIME_THREADS_WS_PATH, stream_runtime_thread_events
@@ -70,6 +71,21 @@ class PlatformAsgiHost:
 
     async def _handle_websocket(self, scope: dict[str, Any], receive: AsgiReceive, send: AsgiSend) -> None:
         path = str(scope.get("path") or "")
+        if path == JOB_EVENTS_WS_PATH:
+            context = resolve_request_session(self.state, _websocket_environ(scope))
+            if context is None:
+                await send({"type": "websocket.close", "code": 4401})
+                return
+            await stream_job_events(
+                service=self.state.job_service,
+                bus=self.state.job_event_bus,
+                scope=scope,
+                receive=receive,
+                send=send,
+                workspace_id=context.workspace_id,
+                shutdown_controller=self.shutdown_controller,
+            )
+            return
         if path == APP_EVENTS_WS_PATH:
             context = resolve_request_session(self.state, _websocket_environ(scope))
             if context is None:

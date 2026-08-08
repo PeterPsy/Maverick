@@ -1,0 +1,106 @@
+{
+  "schema_version": 1,
+  "snapshot_date": "2026-08-08",
+  "node": {
+    "range": ">=24.11.0 <25",
+    "package_manager": "npm@11.6.1",
+    "lockfile_version": 3
+  },
+  "remotion": {
+    "approved_version": "4.0.506",
+    "direct_packages": [
+      "remotion",
+      "@remotion/player",
+      "@remotion/renderer",
+      "@remotion/bundler",
+      "@remotion/captions"
+    ],
+    "forbidden_packages": [
+      "@remotion/transitions"
+    ],
+    "approved_locked_packages": [
+      "@remotion/bundler",
+      "@remotion/captions",
+      "@remotion/compositor-darwin-arm64",
+      "@remotion/compositor-darwin-x64",
+      "@remotion/compositor-linux-arm64-gnu",
+      "@remotion/compositor-linux-arm64-musl",
+      "@remotion/compositor-linux-x64-gnu",
+      "@remotion/compositor-linux-x64-musl",
+      "@remotion/compositor-win32-x64-msvc",
+      "@remotion/licensing",
+      "@remotion/media-parser",
+      "@remotion/media-utils",
+      "@remotion/player",
+      "@remotion/renderer",
+      "@remotion/streaming",
+      "@remotion/studio",
+      "@remotion/studio-protocol",
+      "@remotion/studio-shared",
+      "@remotion/timeline-utils",
+      "@remotion/web-renderer",
+      "@remotion/zod-types",
+      "remotion"
+    ],
+    "license_file_sha256": "bd65083b940f61904f6ef298aade918a7cad72a3e35bc406e36fab365844b673",
+    "governing_decision": "docs/adr/0007-video-studio-remotion-4-license-and-version.md",
+    "compositor_packages": [
+      "@remotion/compositor-darwin-arm64",
+      "@remotion/compositor-darwin-x64",
+      "@remotion/compositor-linux-arm64-gnu",
+      "@remotion/compositor-linux-arm64-musl",
+      "@remotion/compositor-linux-x64-gnu",
+      "@remotion/compositor-linux-x64-musl",
+      "@remotion/compositor-win32-x64-msvc"
+    ]
+  },
+  "licenses": {
+    "allowed_spdx_expressions": [
+      "0BSD",
+      "Apache-2.0",
+      "BSD-2-Clause",
+      "BSD-3-Clause",
+      "CC-BY-4.0",
+      "ISC",
+      "MIT",
+      "MPL-2.0",
+      "Unlicense"
+    ],
+    "blocked_tokens": [
+      "UNKNOWN",
+      "UNLICENSED",
+      "AGPL",
+      "GPL",
+      "LGPL"
+    ],
+    "remotion_license_labels": [
+      "Remotion License",
+      "Remotion License https://remotion.dev/license",
+      "SEE LICENSE IN LICENSE.md"
+    ],
+    "development_only_exceptions": [
+      {
+        "package_prefix": "@remotion/compositor-",
+        "version": "4.0.506",
+        "observed_license": "NOASSERTION",
+        "reason": "Published compositor metadata and tarballs contain no adequate license declaration while embedding FFmpeg and native libraries.",
+        "governed_by": "docs/adr/0007-video-studio-remotion-4-license-and-version.md",
+        "redistribution_allowed": false
+      }
+    ]
+  },
+  "models": {
+    "unreviewed_models_allowed": false,
+    "required_digest": "sha256",
+    "forbidden_revisions": [
+      "latest",
+      "main",
+      "master"
+    ]
+  },
+  "release": {
+    "embedded_compositor_redistribution": "blocked",
+    "embedded_ffmpeg_redistribution": "blocked",
+    "governing_decision": "docs/adr/0008-video-studio-ffmpeg-build-and-distribution.md"
+  }
+}

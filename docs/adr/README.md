@@ -12,3 +12,5 @@ Current ADR set:
 - `0004-committed-dist-policy.md`
 - `0005-secret-storage-model.md`
 - `0006-mit-licensing-choice.md`
+- `0007-video-studio-remotion-4-license-and-version.md`
+- `0008-video-studio-ffmpeg-build-and-distribution.md`

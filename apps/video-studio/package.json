@@ -3,18 +3,31 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
+  "packageManager": "npm@11.6.1",
   "engines": {
     "node": ">=24.11.0 <25"
   },
   "scripts": {
     "prebuild": "node scripts/check-node-runtime.mjs",
     "build": "tsc --noEmit && vite build",
+    "check:supply-chain": "node scripts/compliance/verify-supply-chain.mjs",
+    "check:ffmpeg": "node scripts/toolchain/verify-ffmpeg.mjs",
+    "check:release-artifact": "node scripts/compliance/verify-release-artifact.mjs",
+    "check:vulnerabilities": "npm audit --audit-level=high",
+    "compliance:generate": "node scripts/compliance/generate-baseline.mjs",
+    "compliance:inventory-compositors": "node scripts/compliance/inventory-remotion-compositors.mjs",
     "predev": "node scripts/check-node-runtime.mjs",
-    "dev": "vite --host 0.0.0.0"
+    "dev": "vite --host 0.0.0.0",
+    "test": "node --test tests/supply-chain/*.test.mjs"
   },
   "dependencies": {
+    "@remotion/bundler": "4.0.506",
+    "@remotion/captions": "4.0.506",
+    "@remotion/player": "4.0.506",
+    "@remotion/renderer": "4.0.506",
     "react": "^19.0.0",
-    "react-dom": "^19.0.0"
+    "react-dom": "^19.0.0",
+    "remotion": "4.0.506"
   },
   "devDependencies": {
     "@types/react": "^19.0.0",

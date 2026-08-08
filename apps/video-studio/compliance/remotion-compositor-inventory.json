@@ -1,0 +1,688 @@
+{
+  "schema_version": 1,
+  "snapshot_date": "2026-08-08",
+  "source": "npm registry tarballs resolved and integrity-pinned by package-lock.json",
+  "status": "development inventory only; not a release redistribution approval",
+  "risk": "All compositor tarballs omit adequate license metadata while embedding FFmpeg/ffprobe and native libraries. The executable build inspected for linux-x64-gnu is GPL-enabled and includes libfdk-aac, libx264, and libx265.",
+  "packages": [
+    {
+      "name": "@remotion/compositor-darwin-arm64",
+      "version": "4.0.506",
+      "npm_resolved": "https://registry.npmjs.org/@remotion/compositor-darwin-arm64/-/compositor-darwin-arm64-4.0.506.tgz",
+      "npm_integrity": "sha512-1hJRX8cyeX5PKTswmUeiaBw//Zc0ujLrE89v3ITWuDoyDTdtaezk1YCVN9k9F12Ev9ovkKZOebfmRFzlHpqMrQ==",
+      "archive_bytes": 8442609,
+      "archive_sha256": "db3881d0aa01108b17d2546c3b42a3d1e8342833012052e9dd9880acd8f86597",
+      "platform": {
+        "os": [
+          "darwin"
+        ],
+        "cpu": [
+          "arm64"
+        ],
+        "libc": []
+      },
+      "license_metadata": "NOASSERTION",
+      "license_files_in_tarball": [],
+      "embedded_files": [
+        {
+          "path": "ffmpeg",
+          "bytes": 304696,
+          "sha256": "899fceb537d0e7609433aa644830cfc8ddcef4b97077c5e2150b43505928c5e9"
+        },
+        {
+          "path": "ffprobe",
+          "bytes": 168520,
+          "sha256": "3ad991fd4ca0556195e88686b57af91e0518a9ac8abfb3d0d10b85a6fa168527"
+        },
+        {
+          "path": "libavcodec.dylib",
+          "bytes": 13454816,
+          "sha256": "6175fee33ee11d610b00ce2e4841489b21245a21de009e7a9b9b7dd2b31aa113"
+        },
+        {
+          "path": "libavdevice.dylib",
+          "bytes": 81872,
+          "sha256": "e6ca27cd57e8a3e19018ee82aa6ffe74c860032118ea1d85f1cba5b82cf25627"
+        },
+        {
+          "path": "libavfilter.dylib",
+          "bytes": 510304,
+          "sha256": "d40071fa15228cddab3defa3e1063af57f0b358a53b61dca90db3b4938f91dfd"
+        },
+        {
+          "path": "libavformat.dylib",
+          "bytes": 967328,
+          "sha256": "3b8c8a9441c789b13d3b1af4cd401bb40ad1cde8c6f874da99ed5688846261ca"
+        },
+        {
+          "path": "libavutil.dylib",
+          "bytes": 542896,
+          "sha256": "84989619c29d4a92703da2ee8fc51418a91e7e64cb70993bd6cab006ea36478e"
+        },
+        {
+          "path": "libswresample.dylib",
+          "bytes": 86992,
+          "sha256": "6d6e19ca4f8fa95392e68f59a120ae19bbe7dc3e3ee895900bab7ede5ec25206"
+        },
+        {
+          "path": "libswscale.dylib",
+          "bytes": 369536,
+          "sha256": "51d63f757c117b430a20213a0c4bf397b06ee34be1c58dd213de8b0b646418d5"
+        },
+        {
+          "path": "remotion",
+          "bytes": 1211424,
+          "sha256": "f52c202a7129b4b72939178601eb12e12a96285ee68f3c49fab6356103b65801"
+        }
+      ],
+      "embedded_ffmpeg_observation": null,
+      "redistribution_allowed": false
+    },
+    {
+      "name": "@remotion/compositor-darwin-x64",
+      "version": "4.0.506",
+      "npm_resolved": "https://registry.npmjs.org/@remotion/compositor-darwin-x64/-/compositor-darwin-x64-4.0.506.tgz",
+      "npm_integrity": "sha512-EX4e/VnTY7NEMXbNghp6+Rsbtl2dKp42SdRZsUtByUOC57H6hQdbP3+d9ggfEETQuArv4o1dNgUDMm+9SoOqjQ==",
+      "archive_bytes": 9655080,
+      "archive_sha256": "5082bc076902019d271b3450bf8f271ebeb78b674c5c4c5452f76d9ae2b3f10c",
+      "platform": {
+        "os": [
+          "darwin"
+        ],
+        "cpu": [
+          "x64"
+        ],
+        "libc": []
+      },
+      "license_metadata": "NOASSERTION",
+      "license_files_in_tarball": [],
+      "embedded_files": [
+        {
+          "path": "ffmpeg",
+          "bytes": 301864,
+          "sha256": "4a14d5ceddb1d601f15fca2f52f2f41dd253b57b9e3572aeb770fb0c06529ee5"
+        },
+        {
+          "path": "ffprobe",
+          "bytes": 150528,
+          "sha256": "1aafe77f2c5b0d34e263ff8c940b4ccfbcb26716ad99bed8bb190f18073df041"
+        },
+        {
+          "path": "libavcodec.dylib",
+          "bytes": 20296008,
+          "sha256": "c5632ffe2601ae43df86e1c9b4d362d02ca5eeece2fbd8b3f34f2fa280d2c062"
+        },
+        {
+          "path": "libavdevice.dylib",
+          "bytes": 60600,
+          "sha256": "ab2101916b5de4ec7db31e3818e06b4b8b5e37fdcd716a886ae7a2c67899a3ad"
+        },
+        {
+          "path": "libavfilter.dylib",
+          "bytes": 965776,
+          "sha256": "593e5b1623c80d28ab367d36a1096ddd6a1ac30bbe270b19e6bbe8f8bb32f7ed"
+        },
+        {
+          "path": "libavformat.dylib",
+          "bytes": 1015432,
+          "sha256": "094311e17a170edec1fb45e5231bb7289bede0cac1d6d932ff7c623d29d066bf"
+        },
+        {
+          "path": "libavutil.dylib",
+          "bytes": 661344,
+          "sha256": "9f9d4b89506e9fc6344c6d2b17f09e2509a70a8627bcec3ecb7479ca5db9bd87"
+        },
+        {
+          "path": "libswresample.dylib",
+          "bytes": 99024,
+          "sha256": "f0cf5934bbf638129b64753f0abd1e62b1ed5137f6740b1c8d0391f6e454fab9"
+        },
+        {
+          "path": "libswscale.dylib",
+          "bytes": 548008,
+          "sha256": "aec83026916fb3fb88d74c5180f5e8b95a6c6afe6e64ccff546edf40ea8b6d0a"
+        },
+        {
+          "path": "remotion",
+          "bytes": 1269472,
+          "sha256": "6faf0c0a8377f6a412a9e14f621a711570eacaed672620cb2eaf23866875ba48"
+        }
+      ],
+      "embedded_ffmpeg_observation": null,
+      "redistribution_allowed": false
+    },
+    {
+      "name": "@remotion/compositor-linux-arm64-gnu",
+      "version": "4.0.506",
+      "npm_resolved": "https://registry.npmjs.org/@remotion/compositor-linux-arm64-gnu/-/compositor-linux-arm64-gnu-4.0.506.tgz",
+      "npm_integrity": "sha512-PyzEYtUh2OkQ0rcHkya8vk9YvEbYFOEWTDrqhSU2a1Tl/PLzT5RhibnFFbeYIJXOYo72D2bEnjLrR2T1pdf5ig==",
+      "archive_bytes": 6975553,
+      "archive_sha256": "dd5d8408cc851d33dda79a27dd4a43680991ffb4baf8f60a8857a0fe1b78c423",
+      "platform": {
+        "os": [
+          "linux"
+        ],
+        "cpu": [
+          "arm64"
+        ],
+        "libc": [
+          "glibc"
+        ]
+      },
+      "license_metadata": "NOASSERTION",
+      "license_files_in_tarball": [],
+      "embedded_files": [
+        {
+          "path": "ffmpeg",
+          "bytes": 398840,
+          "sha256": "88ae0babaa372aeaf370188f3be36fa9783658fc3c77d6c47ed5e0e61ebd6b14"
+        },
+        {
+          "path": "ffprobe",
+          "bytes": 208280,
+          "sha256": "334bbe55a5a3b19c9fe33aba9e4369839657e04417c8f4eb122ecae9fda5a86a"
+        },
+        {
+          "path": "libavcodec.so",
+          "bytes": 10172056,
+          "sha256": "47b7430c7790e1a33e8ec81e8a5cfaf433244e1b65379395d7b176c501fc8289"
+        },
+        {
+          "path": "libavdevice.so",
+          "bytes": 68328,
+          "sha256": "ddefb8078bfd2feb008a85c8dbc598eb41cae0a28a28c05a07862b263ca9fb88"
+        },
+        {
+          "path": "libavfilter.so",
+          "bytes": 659968,
+          "sha256": "879005f6f988fae0aab674eaf7adc9312277ed78514d334378350fdc6fdf0056"
+        },
+        {
+          "path": "libavformat.so",
+          "bytes": 1054296,
+          "sha256": "76261baca494313fd288108ec285921094132034b304c151a41b7e75cbc76987"
+        },
+        {
+          "path": "libavutil.so",
+          "bytes": 592576,
+          "sha256": "ec0b362843d64b885a9b865ef906a66f4f7214029c73c6b027dc929a6967fe6f"
+        },
+        {
+          "path": "libswresample.so",
+          "bytes": 133352,
+          "sha256": "311a648a273ae54b6d1193cdacf206ee3a1d5863966cad05d56f3f2da8c40217"
+        },
+        {
+          "path": "libswscale.so",
+          "bytes": 395520,
+          "sha256": "aa410c9f51023fe7077fdedb1336ebc65939868d7c5f0ff96952959de049621f"
+        },
+        {
+          "path": "remotion",
+          "bytes": 1372504,
+          "sha256": "6db5e2c8b009759391fab9c454d344960b91a9971441318c04bf1a6990a342e3"
+        }
+      ],
+      "embedded_ffmpeg_observation": null,
+      "redistribution_allowed": false
+    },
+    {
+      "name": "@remotion/compositor-linux-arm64-musl",
+      "version": "4.0.506",
+      "npm_resolved": "https://registry.npmjs.org/@remotion/compositor-linux-arm64-musl/-/compositor-linux-arm64-musl-4.0.506.tgz",
+      "npm_integrity": "sha512-D/gWZUmhbvFdt+LQqEHZS2MBvf5NVBvd3LpiXwmSQqS8Uqx10NRa+v+F7Isbv8qTdujrZ38wKt6f8u7vZjxGyg==",
+      "archive_bytes": 8765349,
+      "archive_sha256": "377fca58ab41d3fccc514cc5b001700bd408e686f21298360cdba7a216cacdea",
+      "platform": {
+        "os": [
+          "linux"
+        ],
+        "cpu": [
+          "arm64"
+        ],
+        "libc": [
+          "musl"
+        ]
+      },
+      "license_metadata": "NOASSERTION",
+      "license_files_in_tarball": [],
+      "embedded_files": [
+        {
+          "path": "ffmpeg",
+          "bytes": 338048,
+          "sha256": "73408e07d3dc5cf465c044cfc2d922ef1032cc79d882153b60a569d7564ed617"
+        },
+        {
+          "path": "ffprobe",
+          "bytes": 203656,
+          "sha256": "be27b39c12a1f0e39dbe88a6cd7fd4fd913a6ebd8d23d028eb1fb3205b5ffa0b"
+        },
+        {
+          "path": "libavcodec.so",
+          "bytes": 13271536,
+          "sha256": "d8a0fe1581400e317d7a9c40a5fab3a93b1f11e94966684c4766c2b3c0771487"
+        },
+        {
+          "path": "libavdevice.so",
+          "bytes": 22352,
+          "sha256": "c6e329d53d7eaf831d004855ce6fc72f97983cfbf0a7a3cd85077a1e8e50749b"
+        },
+        {
+          "path": "libavfilter.so",
+          "bytes": 624848,
+          "sha256": "76cda73d33aa0bf66e1756aebe0dd23041ba02c03a09c233bcf502f571bec0a7"
+        },
+        {
+          "path": "libavformat.so",
+          "bytes": 1034456,
+          "sha256": "325c42482d5a47050b0f2793142156aa356d6eaf6b20f237f07b35b51f44f376"
+        },
+        {
+          "path": "libavutil.so",
+          "bytes": 571176,
+          "sha256": "677d5e84bcd306f0a8386d8477576c65cbbc5dc6a43e3d9fb2faf80df9140dc1"
+        },
+        {
+          "path": "libswresample.so",
+          "bytes": 79696,
+          "sha256": "d374033a5166123aac6cef7a9903ab74cfef954bc233a1dd85169d7eb1c0f859"
+        },
+        {
+          "path": "libswscale.so",
+          "bytes": 374608,
+          "sha256": "8a6683e7f8f36ffb947dfa8f27ff04b13988bf62b25bcd3115e068bed80fa82b"
+        },
+        {
+          "path": "remotion",
+          "bytes": 1481768,
+          "sha256": "4bfc8612f565c8920b7262cfe85210e2443318f60df2abdf6483935a71d73123"
+        }
+      ],
+      "embedded_ffmpeg_observation": null,
+      "redistribution_allowed": false
+    },
+    {
+      "name": "@remotion/compositor-linux-x64-gnu",
+      "version": "4.0.506",
+      "npm_resolved": "https://registry.npmjs.org/@remotion/compositor-linux-x64-gnu/-/compositor-linux-x64-gnu-4.0.506.tgz",
+      "npm_integrity": "sha512-aDLlLG04QzszjlcbfSE+oevuE6QKlZs2d7BrM5D+Z/7f61XQjVnQoQleH7dXB9Ax1FIDuZ5fq6HY28w3wGnRUw==",
+      "archive_bytes": 10304757,
+      "archive_sha256": "4a96b78ea4518b302f204f64e9aa2251da47136a6d0061443f4a4c09c609d05e",
+      "platform": {
+        "os": [
+          "linux"
+        ],
+        "cpu": [
+          "x64"
+        ],
+        "libc": [
+          "glibc"
+        ]
+      },
+      "license_metadata": "NOASSERTION",
+      "license_files_in_tarball": [],
+      "embedded_files": [
+        {
+          "path": "ffmpeg",
+          "bytes": 322224,
+          "sha256": "e4f4b8c4eca1df026e232150099ee9bcdd062da719bf554607a866be49216d81"
+        },
+        {
+          "path": "ffprobe",
+          "bytes": 171344,
+          "sha256": "b09efb0caa8553a38c54943dc0a727ea5e70789bd3b90634b8f8fd41ab67834b"
+        },
+        {
+          "path": "libavcodec.so",
+          "bytes": 21710088,
+          "sha256": "a7d2fe1d5954e3f10f11e1499826ea0336d55290b18743480b58a1ce926baceb"
+        },
+        {
+          "path": "libavdevice.so",
+          "bytes": 60384,
+          "sha256": "ef0ce12bd86ac61546d42da0229541b3595a8204f97a5cb86fa98ab5158d3160"
+        },
+        {
+          "path": "libavfilter.so",
+          "bytes": 1200392,
+          "sha256": "ef570758c583bc7e4d322f40503a0e8352573461b2f39fc745b36233291e8ef2"
+        },
+        {
+          "path": "libavformat.so",
+          "bytes": 1038160,
+          "sha256": "027aee4f4b476e56399f35b40e68ed61353ac27c0d04d08e02bd7d3d9c8c3c30"
+        },
+        {
+          "path": "libavutil.so",
+          "bytes": 731936,
+          "sha256": "0cee40d49379e39e64e892df8025288122399494a584d28a9e937212eb08d6cc"
+        },
+        {
+          "path": "libswresample.so",
+          "bytes": 108912,
+          "sha256": "9b632ac439a2844e415388a1f8d321767c118498de35d2b9ad643f266015b83d"
+        },
+        {
+          "path": "libswscale.so",
+          "bytes": 539032,
+          "sha256": "a2418dee25932c5250baeb72b95c7ccc6ce39706478db1135967f8c780b79960"
+        },
+        {
+          "path": "remotion",
+          "bytes": 1395856,
+          "sha256": "3c51b8c5c9e7f7c8d1513b1937020a6c9b240c91f8ec8c4d501ef8c9f54c3a49"
+        }
+      ],
+      "embedded_ffmpeg_observation": {
+        "version_first_line": "ffmpeg version n7.1 Copyright (c) 2000-2024 the FFmpeg developers",
+        "build_flags": [
+          "--prefix=remotion",
+          "--extra-cflags='-Iremotion/include -Iremotion/include/opus -Iremotion/include/lame -Iremotion/include/vpx'",
+          "--extra-ldflags=-Lremotion/lib",
+          "--enable-small",
+          "--enable-shared",
+          "--enable-libdav1d",
+          "--enable-libaom",
+          "--enable-libzimg",
+          "--enable-libfdk-aac",
+          "--disable-static",
+          "--disable-ffplay",
+          "--disable-postproc",
+          "--disable-filters",
+          "--disable-libxcb",
+          "--enable-filter=aformat",
+          "--enable-filter=atrim",
+          "--enable-filter=acopy",
+          "--enable-filter=adelay",
+          "--enable-filter=anullsrc",
+          "--enable-filter=atempo",
+          "--enable-filter=apad",
+          "--enable-filter=amerge",
+          "--enable-filter=amix",
+          "--enable-filter=asetrate",
+          "--enable-filter=asetpts",
+          "--enable-filter=aresample",
+          "--enable-filter=concat",
+          "--enable-filter=loudnorm",
+          "--enable-filter=colorspace",
+          "--enable-filter=tinterlace",
+          "--enable-filter=fieldorder",
+          "--enable-filter=pan",
+          "--enable-filter=volume",
+          "--enable-filter=scale",
+          "--enable-filter=sine",
+          "--enable-filter=split",
+          "--enable-filter=nullsrc",
+          "--enable-filter=silencedetect",
+          "--enable-filter=palettegen",
+          "--enable-filter=paletteuse",
+          "--enable-filter=zscale",
+          "--enable-filter=tonemap",
+          "--enable-filter=copy",
+          "--disable-doc",
+          "--disable-debug",
+          "--enable-gpl",
+          "--disable-encoders",
+          "--enable-encoder=opus",
+          "--enable-encoder=aac",
+          "--enable-encoder=libfdk_aac",
+          "--enable-encoder=png",
+          "--enable-encoder=mjpeg",
+          "--enable-encoder=pcm_s16le",
+          "--enable-encoder=pcm_s24le",
+          "--enable-encoder=libx264",
+          "--enable-encoder=libx265",
+          "--enable-encoder=libaom_av1",
+          "--enable-libvpx",
+          "--enable-encoder=libvpx_vp8",
+          "--enable-encoder=libvpx_vp9",
+          "--enable-encoder=gif",
+          "--enable-encoder=libmp3lame",
+          "--enable-encoder=libopus",
+          "--enable-encoder=prores_ks",
+          "--enable-encoder=rawvideo",
+          "--enable-encoder=h264_nvenc",
+          "--enable-encoder=hevc_nvenc",
+          "--disable-muxers",
+          "--enable-muxer='webm,opus,mp4,wav,mp3,mov,matroska,hevc,h264,gif,image2,image2pipe,adts,m4a,mpegts,null,avi'",
+          "--enable-libx264",
+          "--enable-libx265",
+          "--enable-libmp3lame",
+          "--enable-zlib",
+          "--enable-libopus",
+          "--disable-demuxers",
+          "--disable-sdl2",
+          "--disable-xlib",
+          "--enable-demuxer='aac,av1,avi,caf,concat,flac,flv,h264,hevc,image2,image2pipe,matroska,mov,mp3,ogg,pcm_f32le,pcm_f32be,pcm_f64le,pcm_f64be,pcm_s16be,pcm_s16le,pcm_s24be,pcm_s24le,pcm_s32be,pcm_s32le,pcm_u16be,pcm_u16le,pcm_u24le,pcm_u24be,pcm_u32be,pcm_u32le,wav,gif,hls,m4a,mpeg2_videotoolbox,mpeg4_videotoolbox'",
+          "--disable-decoders",
+          "--enable-decoder='aac,ac3,flac,h264,hevc,libvpx_vp8,libvpx_vp9,vp8,vp9,mp3,mpeg4,opus,pcm_u8,pcm_f16le,pcm_f24le,pcm_f32le,pcm_f32be,pcm_f64le,pcm_f64be,pcm_s16be,pcm_s16le,pcm_s24be,pcm_s24le,pcm_s32be,pcm_s32le,pcm_s64be,pcm_s64le,pcm_u16be,pcm_u16le,pcm_u24le,pcm_u24be,pcm_u32be,pcm_u32le,prores,theora,vorbis,vp9,mjpeg,gif,png,libdav1d,hls,m4a,rawvideo'"
+        ],
+        "legal_risk_flags": [
+          "--enable-libfdk-aac",
+          "--enable-gpl",
+          "--enable-libx264",
+          "--enable-libx265"
+        ]
+      },
+      "redistribution_allowed": false
+    },
+    {
+      "name": "@remotion/compositor-linux-x64-musl",
+      "version": "4.0.506",
+      "npm_resolved": "https://registry.npmjs.org/@remotion/compositor-linux-x64-musl/-/compositor-linux-x64-musl-4.0.506.tgz",
+      "npm_integrity": "sha512-0pllQaU2ztzxb22Hp2ht2Cw4aVKkenVuRry13paw4p6tctmyHSezmvgeYQwMzvSyWnliE4mdRaRIO+wFZGf75g==",
+      "archive_bytes": 10724982,
+      "archive_sha256": "bcc85f927d40ca5a03aebd6143edb95c0717e046a154d7a460fc875d8a551214",
+      "platform": {
+        "os": [
+          "linux"
+        ],
+        "cpu": [
+          "x64"
+        ],
+        "libc": [
+          "musl"
+        ]
+      },
+      "license_metadata": "NOASSERTION",
+      "license_files_in_tarball": [],
+      "embedded_files": [
+        {
+          "path": "ffmpeg",
+          "bytes": 613272,
+          "sha256": "dd88aed586a9c304c0068e833480dd73f00563d48bd59f8d8c9bfbdf2e592149"
+        },
+        {
+          "path": "ffprobe",
+          "bytes": 466648,
+          "sha256": "572f6a62537ecf65fb9f8d3429252d7f9c0064a9f9aab9f98917a8e3bb8f251b"
+        },
+        {
+          "path": "libavcodec.so",
+          "bytes": 21993672,
+          "sha256": "1d8e74f45d140802117a15d6443e8b34d75bdd7b8c7b6c8836b2e5f7c7a9f310"
+        },
+        {
+          "path": "libavdevice.so",
+          "bytes": 256264,
+          "sha256": "75eb99c93b1298b279159d37b4cfa5fbf62b46574300b7e373242ca933a8581d"
+        },
+        {
+          "path": "libavfilter.so",
+          "bytes": 1251696,
+          "sha256": "c8d6374f8ce96e7da77189f484c977785d5b6ae1ce95f03254808529e76056e5"
+        },
+        {
+          "path": "libavformat.so",
+          "bytes": 1030624,
+          "sha256": "3a9e2a1e4520e547a4422bd1b885a77c50e691be39e907135661ddd0e5004588"
+        },
+        {
+          "path": "libavutil.so",
+          "bytes": 722888,
+          "sha256": "9664baa1914ae97681fd6b93c6531ba03b122553ce0cedcd85b2d5081317f556"
+        },
+        {
+          "path": "libswresample.so",
+          "bytes": 108464,
+          "sha256": "c3d9c08c15b20591c86b3b7d3a8cb5d6940936fd4f640674c41c6acf2f474199"
+        },
+        {
+          "path": "libswscale.so",
+          "bytes": 538544,
+          "sha256": "d0eb4452dc7d3df54f126bdf09109961900febbe019edaf8014dba8c1dd34cd4"
+        },
+        {
+          "path": "remotion",
+          "bytes": 1533584,
+          "sha256": "3860c5d0d5974cd033c6555b95a22e9b1879eef2602f0e74fe79b979d20ca717"
+        }
+      ],
+      "embedded_ffmpeg_observation": null,
+      "redistribution_allowed": false
+    },
+    {
+      "name": "@remotion/compositor-win32-x64-msvc",
+      "version": "4.0.506",
+      "npm_resolved": "https://registry.npmjs.org/@remotion/compositor-win32-x64-msvc/-/compositor-win32-x64-msvc-4.0.506.tgz",
+      "npm_integrity": "sha512-u6Y100rmEiQpGj+vnyXihk2/0rYmPJuB4RuE/RaDh0S5hLrOwEHNSaDyeXaakDs/a+VIRnTLmIqy+xR5A2Cs7g==",
+      "archive_bytes": 18087084,
+      "archive_sha256": "711d7fd604c4a3a9155c1d4d0afa76942801f6f282448adb98f5eead3e408295",
+      "platform": {
+        "os": [
+          "win32"
+        ],
+        "cpu": [
+          "x64"
+        ],
+        "libc": []
+      },
+      "license_metadata": "NOASSERTION",
+      "license_files_in_tarball": [],
+      "embedded_files": [
+        {
+          "path": "avcodec-60.dll",
+          "bytes": 16481792,
+          "sha256": "b65d252925037d170803a16cdab1391acb3a9179cd5f93e47f31eefbce535f5d"
+        },
+        {
+          "path": "avcodec-61.dll",
+          "bytes": 18414080,
+          "sha256": "f20de600c7a762768705821be4d7c7ec27524bd8f338659937785d7df0650914"
+        },
+        {
+          "path": "avdevice-60.dll",
+          "bytes": 128512,
+          "sha256": "bb17bd3d39856f6c8940e86bc7336ab09151f17cac4a52eb0c5679ea3c171d46"
+        },
+        {
+          "path": "avdevice-61.dll",
+          "bytes": 128512,
+          "sha256": "b83c1035e74bd590bbb60387421a8f9428b69cee531199d6e5d38000979a0b75"
+        },
+        {
+          "path": "avfilter-10.dll",
+          "bytes": 1181696,
+          "sha256": "856f2dc37b14f42e526be3ec378d420d4c6714ec1c191bc60c51de48040bc30b"
+        },
+        {
+          "path": "avfilter-9.dll",
+          "bytes": 1159680,
+          "sha256": "ddeb084f55d2f5c9d3d33d0b5b238d3d66ab83744a853daada3bd6b1d0f765ba"
+        },
+        {
+          "path": "avformat-60.dll",
+          "bytes": 908800,
+          "sha256": "0694f8549b8d56125150dfacc70d0f27ab199a1179055b43b7c386a381106a52"
+        },
+        {
+          "path": "avformat-61.dll",
+          "bytes": 981504,
+          "sha256": "d143e11641ec99b82787306aa9921348b10cacbe55ffbf4d9439f1b15fbe76a7"
+        },
+        {
+          "path": "avutil-58.dll",
+          "bytes": 683520,
+          "sha256": "71d5c71fab96ab66f0826a310418e010f796dc1c88d5c48d233cad080c5f0c40"
+        },
+        {
+          "path": "avutil-59.dll",
+          "bytes": 743424,
+          "sha256": "3cbe1a3eaf12996de9915e3c9ad7f7f349912b3557208a470d926ecd34b39597"
+        },
+        {
+          "path": "ffmpeg.exe",
+          "bytes": 325120,
+          "sha256": "cec8044dabd562f06fc4a6ed1cd59b8289680f542ef4ccf07d1924c5b340bc68"
+        },
+        {
+          "path": "ffprobe.exe",
+          "bytes": 170496,
+          "sha256": "3c7c023ed30f7034daa099f617ddf70dec87492dfb2bfb5000ece5a8768b0769"
+        },
+        {
+          "path": "libgcc_s_seh-1.dll",
+          "bytes": 83150,
+          "sha256": "22f5d5bafd409871d8041686e55e3af1939d60f37cb1a48e7a4785136d0e9870"
+        },
+        {
+          "path": "libssp-0.dll",
+          "bytes": 43431,
+          "sha256": "647dbde6fe577e2d8710f96510556c2405a42a4f10fc30e4e10521ce036584b4"
+        },
+        {
+          "path": "libstdc++-6.dll",
+          "bytes": 1444997,
+          "sha256": "65b141802009fd5e12c9ff1cc7c561f1be0607b5ec641971b313d8269e353606"
+        },
+        {
+          "path": "libvpx-1.dll",
+          "bytes": 3419339,
+          "sha256": "e7da5d371cd3607cfe8d9819da040e2761074ad1c58ddcd7f8f47a9ebc088f0f"
+        },
+        {
+          "path": "libwinpthread-1.dll",
+          "bytes": 58621,
+          "sha256": "e814c9ce497ccb9a79ab4180e0cffaafa987e33a1b7474f12f70cecb1e868705"
+        },
+        {
+          "path": "msvcr100.dll",
+          "bytes": 823808,
+          "sha256": "e8684453d54a1bf9b9ed4b9d32c0e01da034debcd91fc35b2fd66d11b760845b"
+        },
+        {
+          "path": "remotion.exe",
+          "bytes": 1316557,
+          "sha256": "c8f3372681d623ee87d609f586152610b9863433860ec234ab474a678839abdd"
+        },
+        {
+          "path": "swresample-4.dll",
+          "bytes": 112640,
+          "sha256": "31f08bd1b0996ec52a96b9dac6786289559f6b29902cc2ec455fdb7bd35f4ec0"
+        },
+        {
+          "path": "swresample-5.dll",
+          "bytes": 110080,
+          "sha256": "e6f1c1196d0cb9ecac3801056a9d43533a56a7c9e7977eda9817aec6be011c21"
+        },
+        {
+          "path": "swscale-7.dll",
+          "bytes": 525824,
+          "sha256": "1f96a24e81da9fe32d35d3db9780fcdd4048d5c62b0cb2795cf7c95975f40326"
+        },
+        {
+          "path": "swscale-8.dll",
+          "bytes": 564736,
+          "sha256": "4b97a9efb593bd217d105dfc6e62c5c7fd61b3db57fb072751cd6030aecef860"
+        },
+        {
+          "path": "zlib1.dll",
+          "bytes": 75776,
+          "sha256": "fb23ab0f7f3def5a6af4653b2c70b5e3a42b5ae329d1c71ad986ba85ea439cf1"
+        }
+      ],
+      "embedded_ffmpeg_observation": null,
+      "redistribution_allowed": false
+    }
+  ]
+}

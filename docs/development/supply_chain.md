@@ -26,6 +26,15 @@ For the first release, the goal is:
 
 Full SBOM generation, signed releases, and stronger provenance are follow-up work.
 
+Video Studio has a narrower app-local development baseline under
+`apps/video-studio/compliance/`. It generates a transitive CycloneDX SBOM,
+Third-Party Notices, provenance inputs/outputs, a Remotion compositor inventory,
+and a content-addressed FFmpeg host manifest. These artifacts intentionally do
+not claim final release compliance: native Remotion compositor packages embed
+FFmpeg and other libraries without adequate package license metadata, so Video
+Studio release, bundle, installer, image, and container artifacts containing
+them are blocked by a separate fail-closed gate. See ADR-0007 and ADR-0008.
+
 ## Dependency Inventory
 
 Generate the current direct dependency inventory with:

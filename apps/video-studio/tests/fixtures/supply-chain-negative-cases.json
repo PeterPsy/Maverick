@@ -1,0 +1,14 @@
+{
+  "remotion_range": "^4.0.506",
+  "misaligned_version": "4.0.505",
+  "forbidden_package": "@remotion/transitions",
+  "unknown_license_package": "fixture-unknown-license",
+  "gpl_license": "GPL-3.0-only",
+  "bad_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "missing_build_flag": "--enable-gpl",
+  "unsafe_invocation_mode": "shell-string",
+  "release_payload_paths": [
+    "node_modules/@remotion/compositor-linux-x64-gnu/ffmpeg",
+    "usr/local/bin/ffprobe"
+  ]
+}

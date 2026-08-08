@@ -1,0 +1,164 @@
+{
+  "schema_version": 1,
+  "profile_id": "ubuntu-ffmpeg-7.1.1-gpl-amd64",
+  "reviewed_at": "2026-08-06",
+  "status": "accepted-local-server-external-process",
+  "governing_decision": "docs/adr/0008-video-studio-ffmpeg-build-and-distribution.md",
+  "distribution": {
+    "embedded_or_redistributed": false,
+    "binary_source": "operator-installed Ubuntu package",
+    "redistribution_allowed": false
+  },
+  "package": {
+    "name": "ffmpeg",
+    "version": "7:7.1.1-1ubuntu1.3",
+    "architecture": "amd64",
+    "source_url": "https://launchpad.net/ubuntu/+source/ffmpeg/7%3A7.1.1-1ubuntu1.3"
+  },
+  "binaries": {
+    "ffmpeg": {
+      "absolute_path": "/usr/bin/ffmpeg",
+      "sha256": "8ad7731105142fb4e70dbccf4fd25e4df71e448001dee6f5167ce0d3e961aeac",
+      "version_first_line": "ffmpeg version 7.1.1-1ubuntu1.3 Copyright (c) 2000-2025 the FFmpeg developers"
+    },
+    "ffprobe": {
+      "absolute_path": "/usr/bin/ffprobe",
+      "sha256": "96b609cc3ad9f2f6a4e505bd3e8bc3785822dc609a1e4947ddff0db7b313e69e",
+      "version_first_line": "ffprobe version 7.1.1-1ubuntu1.3 Copyright (c) 2007-2025 the FFmpeg developers"
+    }
+  },
+  "build": {
+    "compiler": "gcc 14 (Ubuntu 14.2.0-19ubuntu2)",
+    "configuration": [
+      "--prefix=/usr",
+      "--extra-version=1ubuntu1.3",
+      "--toolchain=hardened",
+      "--libdir=/usr/lib/x86_64-linux-gnu",
+      "--incdir=/usr/include/x86_64-linux-gnu",
+      "--arch=amd64",
+      "--enable-gpl",
+      "--disable-stripping",
+      "--disable-libmfx",
+      "--disable-omx",
+      "--enable-gnutls",
+      "--enable-libaom",
+      "--enable-libass",
+      "--enable-libbs2b",
+      "--enable-libcdio",
+      "--enable-libcodec2",
+      "--enable-libdav1d",
+      "--enable-libflite",
+      "--enable-libfontconfig",
+      "--enable-libfreetype",
+      "--enable-libfribidi",
+      "--enable-libglslang",
+      "--enable-libgme",
+      "--enable-libgsm",
+      "--enable-libharfbuzz",
+      "--enable-libmp3lame",
+      "--enable-libmysofa",
+      "--enable-libopenjpeg",
+      "--enable-libopenmpt",
+      "--enable-libopus",
+      "--enable-librubberband",
+      "--enable-libshine",
+      "--enable-libsnappy",
+      "--enable-libsoxr",
+      "--enable-libspeex",
+      "--enable-libtheora",
+      "--enable-libtwolame",
+      "--enable-libvidstab",
+      "--enable-libvorbis",
+      "--enable-libvpx",
+      "--enable-libwebp",
+      "--enable-libx265",
+      "--enable-libxml2",
+      "--enable-libxvid",
+      "--enable-libzimg",
+      "--enable-openal",
+      "--enable-opencl",
+      "--enable-opengl",
+      "--disable-sndio",
+      "--enable-libvpl",
+      "--enable-libdc1394",
+      "--enable-libdrm",
+      "--enable-libiec61883",
+      "--enable-chromaprint",
+      "--enable-frei0r",
+      "--enable-ladspa",
+      "--enable-libbluray",
+      "--enable-libcaca",
+      "--enable-libdvdnav",
+      "--enable-libdvdread",
+      "--enable-libjack",
+      "--enable-libpulse",
+      "--enable-librabbitmq",
+      "--enable-librist",
+      "--enable-libsrt",
+      "--enable-libssh",
+      "--enable-libsvtav1",
+      "--enable-libx264",
+      "--enable-libzmq",
+      "--enable-libzvbi",
+      "--enable-lv2",
+      "--enable-sdl2",
+      "--enable-libplacebo",
+      "--enable-librav1e",
+      "--enable-pocketsphinx",
+      "--enable-librsvg",
+      "--enable-libjxl",
+      "--enable-shared"
+    ],
+    "required_legal_flags": [
+      "--enable-gpl",
+      "--enable-libx264",
+      "--enable-libx265"
+    ]
+  },
+  "license": {
+    "classification": "GPL-2.0-or-later",
+    "reason": "The audited Ubuntu build enables GPL, libx264, and libx265.",
+    "notices_url": "https://ffmpeg.org/legal.html"
+  },
+  "capability": {
+    "invocation": {
+      "mode": "argv-array",
+      "shell": false,
+      "trusted_executable_resolution": "manifest-absolute-path-only",
+      "environment_allowlist": [
+        "LANG",
+        "LC_ALL"
+      ]
+    },
+    "sandbox": {
+      "input_mounts": "granted-read-only",
+      "output_mount": "dedicated-staging-only",
+      "egress": "deny-by-default",
+      "process_tree_kill": true
+    },
+    "allowlists": {
+      "containers": [
+        "mp4",
+        "mov",
+        "webm",
+        "wav"
+      ],
+      "video_encoders": [
+        "libx264"
+      ],
+      "audio_encoders": [
+        "aac",
+        "libopus",
+        "pcm_s16le"
+      ],
+      "pixel_formats": [
+        "yuv420p",
+        "yuv422p10le",
+        "rgba"
+      ],
+      "hardware_acceleration": [
+        "none"
+      ]
+    }
+  }
+}

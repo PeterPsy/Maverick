@@ -1,0 +1,47 @@
+{
+  "schema_version": 1,
+  "snapshot_date": "2026-08-08",
+  "status": "development baseline; not signed release provenance or legal approval",
+  "generator": "scripts/compliance/generate-baseline.mjs",
+  "runtime": {
+    "range": ">=24.11.0 <25",
+    "package_manager": "npm@11.6.1",
+    "lockfile_version": 3
+  },
+  "sources": [
+    "package-lock.json integrity-pinned npm registry artifacts",
+    "compliance/remotion-compositor-inventory.json",
+    "compliance/ffmpeg-host-manifest.json",
+    "https://github.com/remotion-dev/remotion/blob/v4.0.506/LICENSE.md",
+    "https://ffmpeg.org/legal.html"
+  ],
+  "input_sha256": {
+    "package.json": "b020560dad0cf4ebc7fe19f7c332219f37063f937eb69d3946b3ce892a33178d",
+    "package-lock.json": "2a4525b58c45d673e8d8a5b3760ab3f77810cc12c9e92dbb538b226762dc6cf3",
+    "compliance/supply-chain-policy.json": "232c77528d042149cf797b726cfad69319c59b8e141141eabde46ae64dfd229e",
+    "compliance/remotion-compositor-inventory.json": "d8ca38c1e878aff9f7b8b9b33409f21e1df21bc5d94e295ac4ab6c90fcaa769d",
+    "compliance/ffmpeg-host-manifest.json": "766784952bd0edd8a0c8d55ad81b3bed44ba4089ce993cc4b68c0f1643845877",
+    "compliance/model-inventory.json": "e8a57b7433ecc8c0517d2b2dd9c20a4992a42c8fe9efdac0cccf6c1a27994382",
+    "scripts/compliance/generate-baseline.mjs": "44d3a22aa2960d57bcdd69ccffc85405ad3b04beee0ab3a71c90002e5f07243e",
+    "scripts/compliance/inventory-remotion-compositors.mjs": "f106cdf3c84cf5c748d13e1fc4d9afae1fc845356f55595f30bde0ada24247e7",
+    "scripts/compliance/model-policy.mjs": "a907f50ad84715c09c09b44a275f0f4b27a54dade499afd3cf8c0daef4c13062",
+    "scripts/compliance/supply-chain-lib.mjs": "1c3d8e6506602f2b47c4a4aaf236f37dc8d3659a6fc00b00a98048101633ef0f",
+    "scripts/compliance/verify-release-artifact.mjs": "0c7611b9726c1bbe2be273bcb8ad4c8682a3f64f0d1534117a85265129bce203",
+    "scripts/compliance/verify-supply-chain.mjs": "8cdae96110957502ad508f07dc9e6edc17d363df4b70ea2c853c896596713040",
+    "scripts/toolchain/verify-ffmpeg.mjs": "29cbfd015a7f47ed5155b97b88d0a97b28d3ed5fe8f85f3c414fbb7cc72afe15",
+    "../../docs/adr/0007-video-studio-remotion-4-license-and-version.md": "3445bbda0f68b81b55faad6cb25201c6c646969d202332dce0d24c74add6e7cf",
+    "../../docs/adr/0008-video-studio-ffmpeg-build-and-distribution.md": "cae6fece43c86f4880fad9f03e05063c2c4165be12fe0a830182894c2f491f30"
+  },
+  "output_sha256": {
+    "compliance/sbom.cdx.json": "26203f9c1c1c7672c986c7082504472d95a8dc568c028773fd712da460d0fe66",
+    "compliance/THIRD-PARTY-NOTICES.md": "d5b45648f9f57fad6dcf62a78695f8807b091576e5016b5bf70421e8b8953edf"
+  },
+  "package_count": 278,
+  "embedded_compositor_package_count": 7,
+  "approved_model_count": 0,
+  "release_blockers": [
+    "Remotion compositor packages have NOASSERTION license metadata and embed FFmpeg/native libraries.",
+    "No ADR currently authorizes redistribution of the compositor or an FFmpeg-containing release artifact.",
+    "This baseline is unsigned and is not a vulnerability attestation or final legal review."
+  ]
+}

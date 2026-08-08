@@ -1,0 +1,109 @@
+{
+  "app_id": "video-studio",
+  "contract_version": "1.0",
+  "name": "Video Studio",
+  "version": "0.1.0",
+  "description": "Server-first, revisioned video editing foundation for Maverick workspaces.",
+  "publisher": "maverick",
+  "minimum_core_version": "0.1.0",
+  "provides": [],
+  "requires": [],
+  "distribution": {
+    "mode": "source_available",
+    "source_access": "forkable"
+  },
+  "visibility": {
+    "platform_roles": null
+  },
+  "presentation": {
+    "frontend_role": "workspace"
+  },
+  "capabilities": {
+    "mcp_tools": [
+      "video_studio_reference_manifest"
+    ],
+    "cli_commands": [
+      "video-studio"
+    ],
+    "skills": [
+      "video-studio-ops"
+    ],
+    "views": [
+      "main"
+    ],
+    "data_events": [
+      {
+        "resource": "state",
+        "description": "Primary app state changed."
+      }
+    ],
+    "view_surfaces": [],
+    "reference_entities": []
+  },
+  "entrypoints": {
+    "hooks": {
+      "install": "hooks/install.py",
+      "migrate": "hooks/migrate.py",
+      "health_check": "hooks/health_check.py"
+    },
+    "backend": "backend/app_backend.py",
+    "frontend": "frontend/dist",
+    "mcp": "mcp/server.py",
+    "cli": "cli/app_cli.py",
+    "skills_root": "skills"
+  },
+  "storage": {
+    "storage_kind": "json",
+    "data_schema_version": "1",
+    "primary_paths": [
+      "data/video-studio/state.json"
+    ],
+    "indices": null,
+    "supports_export": true,
+    "supports_import": true,
+    "supports_migrations": true
+  },
+  "compatibility": {
+    "workspace_modes": [
+      "sandbox",
+      "full-access"
+    ]
+  },
+  "hook_timeouts": {
+    "backend_seconds": 30,
+    "install_seconds": 60,
+    "upgrade_seconds": 120,
+    "migrate_seconds": 300,
+    "export_seconds": 120,
+    "import_seconds": 120,
+    "validate_after_import_seconds": 60,
+    "repair_after_import_seconds": 180,
+    "health_check_seconds": 30
+  },
+  "lifecycle": {
+    "install": true,
+    "upgrade": true,
+    "uninstall": true,
+    "migrate": true,
+    "export": false,
+    "import": false,
+    "validate_after_import": false,
+    "repair_after_import": false,
+    "health_check": true
+  },
+  "health_contract": {
+    "mode": "hook",
+    "degraded_on_failure": true
+  },
+  "failure_semantics": {
+    "install_failure": "block_activation",
+    "migrate_failure": "preserve_data_mark_unhealthy",
+    "import_failure": "preserve_payload_mark_failed"
+  },
+  "rollback_support": {
+    "bundle": false,
+    "data": false,
+    "repair_only": false
+  },
+  "widgets": []
+}

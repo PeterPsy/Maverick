@@ -1,0 +1,45 @@
+{
+  "tools": {
+    "video_studio_foundation": {
+      "description": "Inspect the installed Video Studio foundation without exposing workspace or host paths.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "action": {
+            "type": "string",
+            "enum": [
+              "status",
+              "schema",
+              "health",
+              "capabilities"
+            ],
+            "default": "status"
+          }
+        },
+        "additionalProperties": false
+      },
+      "output_schema": {
+        "type": "object"
+      }
+    },
+    "video_studio_reference_manifest": {
+      "description": "Describe Video Studio reference entities implemented by the current checkpoint.",
+      "input_schema": {
+        "type": "object",
+        "properties": {},
+        "additionalProperties": false
+      },
+      "output_schema": {
+        "type": "object",
+        "properties": {
+          "entity_types": {
+            "type": "array"
+          }
+        },
+        "required": [
+          "entity_types"
+        ]
+      }
+    }
+  }
+}

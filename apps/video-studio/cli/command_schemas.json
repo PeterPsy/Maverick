@@ -1,0 +1,23 @@
+{
+  "commands": {
+    "video-studio": {
+      "description": "Inspect the installed Video Studio foundation, SQLite schema, health, and implemented checkpoint capabilities.",
+      "argument_schema": {
+        "type": "object",
+        "properties": {
+          "action": {
+            "type": "string",
+            "enum": [
+              "status",
+              "schema",
+              "health",
+              "capabilities"
+            ],
+            "default": "status"
+          }
+        },
+        "additionalProperties": false
+      }
+    }
+  }
+}

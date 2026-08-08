@@ -15,11 +15,56 @@ from unittest.mock import patch
 from core.api.asgi_application import PlatformAsgiHost
 from core.api.sidecar_browser import BROWSER_BOOTSTRAP_PATH
 from core.api.sidecar_proxy import stop_app_sidecars
+from core.apps.sidecar_browser_sessions import SESSION_IDLE_TTL_SECONDS
 from core.shared.entrypoints import EntrypointShutdownController
 from tests.integration.app_hosting.sidecar_browser_origin_support import SidecarBrowserOriginTestSupport
 
 
 class SidecarBrowserOriginIntegrationTests(SidecarBrowserOriginTestSupport, unittest.TestCase):
+    def test_cold_launch_after_host_restart_waits_for_declared_health_budget(self) -> None:
+        asyncio.run(self._assert_cold_launch_after_host_restart())
+
+    async def _assert_cold_launch_after_host_restart(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            repo_root = self._repo_root(Path(temp_dir))
+            state = self._state_with_sidecar(
+                repo_root,
+                startup_delay_seconds=0.4,
+                health_timeout_ms=3000,
+            )
+            first_shutdown = EntrypointShutdownController()
+            first_app = PlatformAsgiHost(state, shutdown_controller=first_shutdown)
+            first_cookie = await self._login(first_app, host="maverick.localhost:8000")
+            first_status, _launch, _headers = await self._launch(
+                first_app,
+                platform_cookie=first_cookie,
+                host="maverick.localhost:8000",
+                origin="http://maverick.localhost:8000",
+            )
+            self.assertEqual(first_status, 200)
+            first_shutdown.begin_shutdown()
+
+            from core.api.platform_state import bootstrap_platform_state
+
+            restarted_state = bootstrap_platform_state(start_path=repo_root)
+            restarted_shutdown = EntrypointShutdownController()
+            self.addCleanup(restarted_shutdown.begin_shutdown)
+            restarted_app = PlatformAsgiHost(
+                restarted_state,
+                shutdown_controller=restarted_shutdown,
+            )
+            restarted_cookie = await self._login(
+                restarted_app,
+                host="maverick.localhost:8000",
+            )
+            restarted_status, _launch, _headers = await self._launch(
+                restarted_app,
+                platform_cookie=restarted_cookie,
+                host="maverick.localhost:8000",
+                origin="http://maverick.localhost:8000",
+            )
+            self.assertEqual(restarted_status, 200)
+
     def test_post_bootstrap_cookie_csrf_headers_isolation_and_unbuffered_sse(self) -> None:
         asyncio.run(self._assert_browser_origin_contract())
 
@@ -357,6 +402,41 @@ class SidecarBrowserOriginIntegrationTests(SidecarBrowserOriginTestSupport, unit
             )
             self.assertEqual(before_restart_status, 200)
 
+            idle_clock = time.monotonic()
+            state.sidecar_browser_sessions._clock = lambda: idle_clock + SESSION_IDLE_TTL_SECONDS + 1
+            after_idle_status, _body, _headers = await self._invoke(
+                app,
+                host=sidecar_host,
+                path="/api/projects",
+                headers={"cookie": sidecar_cookie},
+            )
+            self.assertEqual(after_idle_status, 401)
+            state.sidecar_browser_sessions._clock = time.monotonic
+            status, launch, _headers = await self._launch(
+                app,
+                platform_cookie=platform_cookie,
+                host="maverick.localhost:8000",
+                origin="http://maverick.localhost:8000",
+            )
+            self.assertEqual(status, 200)
+            bootstrap_status, _body, bootstrap_headers = await self._invoke(
+                app,
+                host=sidecar_host,
+                path=BROWSER_BOOTSTRAP_PATH,
+                method="POST",
+                body=f"ticket={launch['ticket']}".encode("utf-8"),
+                headers={"content-type": "application/x-www-form-urlencoded"},
+            )
+            self.assertEqual(bootstrap_status, 303)
+            sidecar_cookie = bootstrap_headers["set-cookie"].split(";", 1)[0]
+            after_idle_relaunch_status, _body, _headers = await self._invoke(
+                app,
+                host=sidecar_host,
+                path="/api/projects",
+                headers={"cookie": sidecar_cookie},
+            )
+            self.assertEqual(after_idle_relaunch_status, 200)
+
             binding = state.app_store.get_workspace_app_binding(
                 workspace_id="default",
                 app_id="sidecar-browser-demo",
@@ -397,6 +477,31 @@ class SidecarBrowserOriginIntegrationTests(SidecarBrowserOriginTestSupport, unit
                 headers={"cookie": sidecar_cookie},
             )
             self.assertEqual(after_restart_status, 401)
+            status, launch, _headers = await self._launch(
+                app,
+                platform_cookie=platform_cookie,
+                host="maverick.localhost:8000",
+                origin="http://maverick.localhost:8000",
+            )
+            self.assertEqual(status, 200)
+            restarted_host = launch["origin"].removeprefix("http://")
+            bootstrap_status, _body, bootstrap_headers = await self._invoke(
+                app,
+                host=restarted_host,
+                path=BROWSER_BOOTSTRAP_PATH,
+                method="POST",
+                body=f"ticket={launch['ticket']}".encode("utf-8"),
+                headers={"content-type": "application/x-www-form-urlencoded"},
+            )
+            self.assertEqual(bootstrap_status, 303)
+            restarted_cookie = bootstrap_headers["set-cookie"].split(";", 1)[0]
+            restarted_status, _body, _headers = await self._invoke(
+                app,
+                host=restarted_host,
+                path="/api/projects",
+                headers={"cookie": restarted_cookie},
+            )
+            self.assertEqual(restarted_status, 200)
 
 
 if __name__ == "__main__":

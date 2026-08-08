@@ -129,7 +129,10 @@ It covers the absolute-path routing boundary, fail-closed local and hosted
 configuration, one-shot/expired tickets, host-only cookie issuance, cookie
 rotation bounds, CSRF and Fetch Metadata, response-header filtering, exact CSP
 frame/connect policy, unbuffered SSE, logout and process-restart revocation,
-and redaction-safe success/failure audit records.
+fresh launch after browser-session idle expiry, cold launch after host restart,
+sidecar relaunch after process restart, and redaction-safe success/failure audit
+records. The cold-start case waits for the app-declared health budget; it does
+not replace readiness with a fixed core timeout.
 
 Exact route and canonicalization proof:
 

@@ -156,7 +156,12 @@ class SidecarBrowserOriginTestSupport:
         return repo_root
 
     @staticmethod
-    def _state_with_sidecar(repo_root: Path):
+    def _state_with_sidecar(
+        repo_root: Path,
+        *,
+        startup_delay_seconds: float = 0,
+        health_timeout_ms: int = 5000,
+    ):
         from core.api.platform_state import bootstrap_platform_state
 
         state = bootstrap_platform_state(start_path=repo_root)
@@ -181,10 +186,14 @@ class SidecarBrowserOriginTestSupport:
                             env={
                                 "SIDECAR_PORT": "${service.port}",
                                 "SIDECAR_TOKEN": "${service.token}",
+                                "SIDECAR_STARTUP_DELAY": str(startup_delay_seconds),
                             },
                             browser_origin=build_http_sidecar_browser_origin(),
                             bind=HttpSidecarBindSpec(host="127.0.0.1", port="auto"),
-                            health=HttpSidecarHealthSpec(path="/api/ready", timeout_ms=5000),
+                            health=HttpSidecarHealthSpec(
+                                path="/api/ready",
+                                timeout_ms=health_timeout_ms,
+                            ),
                             proxy=build_http_sidecar_proxy(
                                 mount="/web",
                                 streaming=True,
@@ -231,6 +240,8 @@ BROWSER_SIDECAR_SERVER = textwrap.dedent(
     import json
     import os
     import time
+
+    time.sleep(float(os.environ.get("SIDECAR_STARTUP_DELAY", "0")))
 
     class Handler(BaseHTTPRequestHandler):
         def do_GET(self):

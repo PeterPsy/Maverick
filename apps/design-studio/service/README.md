@@ -44,6 +44,15 @@ output must match byte-for-byte before publication. The launcher invokes only
 that imported loader and Node binary; the app contract deliberately declares no
 package manager and core therefore does not mount a host Node runtime.
 
+The launcher revalidates the materialized files on every new process. This is
+part of the artifact trust boundary and can dominate a cold start when the OS
+page cache is cold. Design Studio therefore declares a 120-second startup
+health budget for `/api/ready`. Core keeps serving its own `/health` endpoint
+during that wait, retries the authenticated Unix-relay probe, and tears down the
+whole confined process group if readiness still fails. A later browser launch
+must start a new process cleanly; no half-started relay or browser session is
+reused.
+
 The source-build recipe remains under `fallback_build` only as a separately
 reviewed fallback. It is not part of the primary import or runtime path and must
 not be used to replace a failed OCI verification.
@@ -73,6 +82,14 @@ atomically installs it into its digest-named directory below ignored
 accepted only when every file still verifies and is never overwritten after a
 mismatch. The launcher verifies the registry, the current manifest pin, and the
 active bundle/data triple before start.
+
+Repository-wide Python bytecode checks must exclude `service/vendor/**`. Running
+`compileall` across the imported closure creates `__pycache__` files inside the
+otherwise immutable digest directory, which correctly makes subsequent launcher
+verification fail closed. Compile only repository-owned Python sources, for
+example with `rg --files ... -g '!apps/design-studio/service/vendor/**'` piped to
+`python3 -m py_compile`.
+
 A release verification must run:
 
 ```bash

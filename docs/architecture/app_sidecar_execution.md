@@ -130,6 +130,12 @@ disk/process-count controls require a supported host quota/cgroup primitive and
 must fail closed when declared; WP1 does not pretend `RLIMIT_NPROC` is a
 per-sidecar bound on hosts where it is actually per-user.
 
+The declared health timeout must include deterministic launcher work that
+precedes the listener, such as verified artifact revalidation. Core probes the
+declared health route through the authenticated relay until that budget expires;
+it must neither apply a shorter hidden cold-start timeout nor keep a
+half-started process after expiry.
+
 ## Ownership
 
 Core parses and serializes the generic process policy, resolves verified paths,

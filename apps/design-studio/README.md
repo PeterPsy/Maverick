@@ -181,6 +181,15 @@ cookies, Storage, operator paths, and other workspaces are absent. The generated
 technical token uses the generic `${service.token}` substitution and is not the
 relay capability.
 
+OpenDesign verifies the complete materialized closure before every process
+start. A cold launch after a core or sidecar restart can therefore take longer
+than a warm relaunch even though the control record and bundle are healthy.
+The sidecar health declaration gives `/api/ready` up to 120 seconds; failed
+readiness still terminates the complete process group and returns a fail-closed
+`sidecar_origin_unavailable` response. Browser-session idle expiry does not
+replay an old ticket: the wrapper requests a fresh launch while reusing the
+healthy process when it is still live.
+
 The core sidecar proxy uses the ASGI streaming path for Design Studio routes. Request bodies are forwarded to the sidecar as chunks instead of through the JSON app-backend body limit, responses are streamed back to the browser, and SSE responses are preserved without exposing the generated `OD_API_TOKEN` to the client.
 
 The sidecar also declares the generic isolated `browser_origin` capability.

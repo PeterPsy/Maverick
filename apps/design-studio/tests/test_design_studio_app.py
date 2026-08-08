@@ -182,6 +182,8 @@ class DesignStudioAppTests(unittest.TestCase):
             "${app.source_dir}/service/vendor/open-design",
         )
         self.assertEqual(sidecar.bind.host, "127.0.0.1")
+        self.assertEqual(sidecar.health.path, "/api/ready")
+        self.assertEqual(sidecar.health.timeout_ms, 120_000)
         self.assertTrue(sidecar.proxy.streaming)
         self.assertTrue(sidecar.proxy.sse)
         self.assertFalse(sidecar.proxy.websocket)

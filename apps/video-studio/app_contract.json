@@ -1,5 +1,6 @@
 {
   "app_id": "video-studio",
+  "public_app_id": "video-studio",
   "contract_version": "1.0",
   "name": "Video Studio",
   "version": "0.1.0",
@@ -7,7 +8,64 @@
   "publisher": "maverick",
   "minimum_core_version": "0.1.0",
   "provides": [],
-  "requires": [],
+  "requires": [
+    {
+      "alias": "storage-catalog",
+      "interface": "file.catalog",
+      "version": "^1",
+      "required": true,
+      "cardinality": "one",
+      "description": "Browse workspace media through the selected Storage-compatible provider."
+    },
+    {
+      "alias": "storage-preview",
+      "interface": "file.preview",
+      "version": "^1",
+      "required": true,
+      "cardinality": "one",
+      "description": "Resolve governed previews for workspace media."
+    },
+    {
+      "alias": "storage-read",
+      "interface": "file.content.read",
+      "version": "^1",
+      "required": true,
+      "cardinality": "one",
+      "description": "Read selected workspace media through official provider surfaces."
+    },
+    {
+      "alias": "storage-text-read",
+      "interface": "file.text.read",
+      "version": "^1",
+      "required": true,
+      "cardinality": "one",
+      "description": "Read bounded extracted text for supported workspace files."
+    },
+    {
+      "alias": "storage-write",
+      "interface": "file.content.write",
+      "version": "^1",
+      "required": true,
+      "cardinality": "one",
+      "description": "Publish validated outputs through official provider surfaces."
+    },
+    {
+      "alias": "storage-media-stream",
+      "interface": "file.media.stream",
+      "version": "^1",
+      "required": true,
+      "cardinality": "one",
+      "description": "Stream governed media to the mounted editor."
+    },
+    {
+      "alias": "storage-local-path",
+      "interface": "file.local.path",
+      "version": "^1",
+      "required": true,
+      "cardinality": "one",
+      "description": "Resolve a bounded local media path only for trusted backend-to-backend processing."
+    }
+  ],
   "distribution": {
     "mode": "source_available",
     "source_access": "forkable"
@@ -18,8 +76,25 @@
   "presentation": {
     "frontend_role": "workspace"
   },
+  "permissions": {
+    "secrets": {
+      "read": [],
+      "write": []
+    },
+    "network": {
+      "outbound": []
+    },
+    "runtime": {
+      "create_sessions": false,
+      "cleanup_sessions": false
+    },
+    "host": {
+      "telemetry": false
+    }
+  },
   "capabilities": {
     "mcp_tools": [
+      "video_studio_foundation",
       "video_studio_reference_manifest"
     ],
     "cli_commands": [
@@ -31,12 +106,7 @@
     "views": [
       "main"
     ],
-    "data_events": [
-      {
-        "resource": "state",
-        "description": "Primary app state changed."
-      }
-    ],
+    "data_events": [],
     "view_surfaces": [],
     "reference_entities": []
   },
@@ -53,14 +123,16 @@
     "skills_root": "skills"
   },
   "storage": {
-    "storage_kind": "json",
+    "storage_kind": "sqlite",
     "data_schema_version": "1",
     "primary_paths": [
-      "data/video-studio/state.json"
+      "data/video-studio/app.db"
     ],
-    "indices": null,
-    "supports_export": true,
-    "supports_import": true,
+    "indices": {
+      "kind": "embedded"
+    },
+    "supports_export": false,
+    "supports_import": false,
     "supports_migrations": true
   },
   "compatibility": {
@@ -82,8 +154,8 @@
   },
   "lifecycle": {
     "install": true,
-    "upgrade": true,
-    "uninstall": true,
+    "upgrade": false,
+    "uninstall": false,
     "migrate": true,
     "export": false,
     "import": false,
@@ -105,5 +177,75 @@
     "data": false,
     "repair_only": false
   },
-  "widgets": []
+  "widgets": [],
+  "services": {
+    "http_sidecars": [
+      {
+        "id": "foundation",
+        "runtime": "python",
+        "working_directory": "backend",
+        "command": [
+          "python3",
+          "sidecar_server.py"
+        ],
+        "env": {
+          "VIDEO_STUDIO_DATA_ROOT": "${app.data_dir}",
+          "VIDEO_STUDIO_SIDECAR_HOST": "127.0.0.1",
+          "VIDEO_STUDIO_SIDECAR_PORT": "${service.port}",
+          "VIDEO_STUDIO_SIDECAR_TOKEN": "${service.token}",
+          "PYTHONUNBUFFERED": "1"
+        },
+        "process_policy": {
+          "inherit_host_env": false,
+          "sandbox": "required",
+          "bundle_read_only": true,
+          "workspace_data_write": true,
+          "network": "isolated",
+          "transport": "unix_relay",
+          "outbound": [],
+          "limits": {
+            "memory_bytes": 536870912,
+            "open_files": 256,
+            "request_concurrency": 8
+          }
+        },
+        "bind": {
+          "host": "127.0.0.1",
+          "port": "auto"
+        },
+        "health": {
+          "path": "/health",
+          "timeout_ms": 30000
+        },
+        "proxy": {
+          "mount": "/foundation",
+          "streaming": false,
+          "sse": false,
+          "websocket": false,
+          "route_policy": {
+            "pass_through": [
+              {
+                "method": "GET",
+                "path_template": "/health"
+              },
+              {
+                "method": "GET",
+                "path_template": "/status"
+              },
+              {
+                "method": "GET",
+                "path_template": "/schema"
+              }
+            ],
+            "handled_by_core": [],
+            "blocked": []
+          }
+        },
+        "logs": {
+          "stdout": "logs/apps/video-studio/foundation.log",
+          "stderr": "logs/apps/video-studio/foundation.log"
+        }
+      }
+    ]
+  }
 }

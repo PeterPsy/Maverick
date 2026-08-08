@@ -9,6 +9,7 @@ from core.apps.store import AppStore
 from core.cli.app_sdk_commands import app_sdk_command_specs
 from core.cli.developer_context_commands import developer_context_command_specs
 from core.cli.identity_commands import identity_command_specs
+from core.cli.job_commands import job_command_specs
 from core.cli.inter_agent_commands import inter_agent_command_specs
 from core.cli.persistence_commands import persistence_command_specs
 from core.cli.models import CliCommandDefinition
@@ -37,6 +38,7 @@ def _core_command_specs(
     inter_agent_store: InterAgentStore | None = None,
     secret_store: SecretStore | None = None,
     recovery_store: RecoveryStore | None = None,
+    job_service=None,
     provider_registry: ProviderRegistry | None = None,
     observability_store=None,
     runtime_event_bus=None,
@@ -55,6 +57,7 @@ def _core_command_specs(
         )
     )
     specs.extend(workspace_command_specs(workspace_store=workspace_store))
+    specs.extend(job_command_specs(job_service=job_service))
     specs.extend(persistence_command_specs(start_path=start_path))
     specs.extend(developer_context_command_specs(start_path=start_path))
     specs.extend(

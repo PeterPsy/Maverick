@@ -25,6 +25,8 @@ class ControlStoreSettingsTestCase(unittest.TestCase):
             self.assertIsInstance(collections.workspace.workspaces, JsonFileCollection)
             self.assertIsInstance(collections.provider.definitions, JsonFileCollection)
             self.assertIsInstance(collections.provider.bindings, JsonFileCollection)
+            self.assertIsInstance(collections.jobs.jobs, JsonFileCollection)
+            self.assertEqual(collections.jobs.jobs.path, settings.json_root / "jobs" / "jobs.json")
 
     def test_mongo_uri_selects_mongo_when_kind_is_omitted(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:

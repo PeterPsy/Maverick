@@ -42,6 +42,28 @@ class MongoDocumentCollection:
             return
         self.collection.update_one(deepcopy(query), mongo_update, upsert=upsert)
 
+    def insert_one_if_absent(self, query: dict[str, Any], document: dict[str, Any]) -> tuple[dict[str, Any], bool]:
+        """Atomically insert one document when no record matches the identity query."""
+        payload = {**deepcopy(query), **deepcopy(document)}
+        try:
+            update_result = self.collection.update_one(
+                deepcopy(query),
+                {"$setOnInsert": payload},
+                upsert=True,
+            )
+        except Exception as error:
+            if not _is_duplicate_key_error(error):
+                raise
+            document_result = self.collection.find_one(deepcopy(query))
+            if document_result is None:
+                raise
+            return _without_mongo_id(document_result), False
+        document_result = self.collection.find_one(deepcopy(query))
+        if document_result is None:
+            raise RuntimeError("Mongo insert-if-absent did not return a document.")
+        inserted = getattr(update_result, "upserted_id", None) is not None
+        return _without_mongo_id(document_result), inserted
+
     def delete_one(self, query: dict[str, Any]) -> None:
         self.collection.delete_one(deepcopy(query))
 
@@ -58,6 +80,15 @@ def _without_mongo_id(document: dict[str, Any]) -> dict[str, Any]:
     sanitized = deepcopy(document)
     sanitized.pop("_id", None)
     return _normalize_document_values(sanitized)
+
+
+def _is_duplicate_key_error(error: Exception) -> bool:
+    """Recognize the optional driver's duplicate-key error without importing it eagerly."""
+    try:
+        from pymongo.errors import DuplicateKeyError
+    except ImportError:
+        return type(error).__name__ == "DuplicateKeyError"
+    return isinstance(error, DuplicateKeyError)
 
 
 def _normalize_document_values(value: Any) -> Any:

@@ -30,6 +30,9 @@ Primary control-plane routes include:
 - `/api/inter-agent/runs/<run_id>/resume`
 - `/api/inter-agent/runs/<run_id>/close`
 - `/api/providers/active`
+- `/api/jobs`
+- `/api/jobs/<job_id>`
+- `/api/jobs/<job_id>/cancel`
 - `/api/recovery/status`
 - `/api/recovery/health`
 
@@ -40,6 +43,7 @@ Primary core WebSocket routes include:
 - `/ws/runtime/threads`
 - `/ws/runtime/sessions/<session_id>`
 - `/ws/inter-agent/runs/<run_id>`
+- `/api/jobs/events/ws`
 
 Runtime turn submission is idempotent when callers provide `client_message_id`.
 Retries with the same client message id return the already persisted turn instead
@@ -89,6 +93,11 @@ older frames that still include `threads`.
 The inter-agent WebSocket serves graph snapshots, bounded replay, history pages,
 live event frames, and heartbeats with server-side visibility filtering.
 
+The durable-job WebSocket is authenticated and workspace-filtered. It sends a
+bounded persisted `compute.job.snapshot`, live `compute.job.event` frames, and
+transport `compute.job.heartbeat` frames. Clients can reconnect with a persisted
+event cursor; replay is capped at 200 records.
+
 ## Core CLI
 
 Discover core commands with:
@@ -106,6 +115,10 @@ Important current core commands include:
 - `core.providers.hosted.activate`
 - `developer-context.list`
 - `developer-context.read`
+- `core.jobs.submit`
+- `core.jobs.list`
+- `core.jobs.get`
+- `core.jobs.cancel`
 
 ## Core MCP
 
@@ -124,6 +137,10 @@ Important current tools include:
 - `core.providers.hosted.activate`
 - `developer-context.list`
 - `developer-context.read`
+- `core.jobs.submit`
+- `core.jobs.list`
+- `core.jobs.get`
+- `core.jobs.cancel`
 
 ## App-Owned CLI And MCP
 

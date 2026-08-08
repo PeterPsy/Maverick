@@ -333,6 +333,7 @@ def _run_app_frontend(
         provider_store=state.provider_store,
         secret_store=state.secret_store,
         recovery_store=state.recovery_store,
+        job_service=getattr(state, "job_service", None),
         observability_store=state.observability_store,
         app_event_bus=state.app_event_bus,
         workspace_id=workspace_id,

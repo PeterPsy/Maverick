@@ -11,6 +11,7 @@ from urllib.parse import urlparse
 
 from core.apps.store import AppCollections
 from core.identity.store import IdentityCollections
+from core.jobs.store import JobCollections
 from core.providers.store import ProviderCollections
 from core.secrets.bootstrap import resolve_bootstrap_secret
 from core.secrets.store import SecretCollections
@@ -41,6 +42,12 @@ MONGO_COLLECTION_UNIQUE_INDEXES: dict[str, tuple[tuple[str, ...], ...]] = {
     "provider_hosted_selections": (("workspace_id", "profile"),),
     "provider_speech_selections": (("workspace_id", "profile"),),
     "runtime_api_tokens": (("token_id",),),
+    "compute_jobs": (("workspace_id", "job_id"), ("workspace_id", "idempotency_key")),
+    "compute_job_events": (("event_id",),),
+    "compute_job_audits": (("audit_id",),),
+    "compute_job_logs": (("log_id",),),
+    "compute_executors": (("executor_id",),),
+    "compute_job_quotas": (("workspace_id",),),
     "secrets": (("secret_id",), ("alias",)),
     "secret_values": (("secret_id",),),
     "secret_bindings": (("binding_id",),),
@@ -99,6 +106,7 @@ class ControlPlaneCollections:
     apps: AppCollections
     provider: ProviderCollections
     runtime_api_tokens: Any | None
+    jobs: JobCollections
     secrets: SecretCollections
 
 
@@ -140,6 +148,12 @@ def control_plane_collection_specs(collections: ControlPlaneCollections) -> list
         ControlPlaneCollectionSpec("provider_selections", collections.provider.selections),
         ControlPlaneCollectionSpec("provider_hosted_selections", collections.provider.hosted_selections),
         ControlPlaneCollectionSpec("runtime_api_tokens", collections.runtime_api_tokens),
+        ControlPlaneCollectionSpec("compute_jobs", collections.jobs.jobs),
+        ControlPlaneCollectionSpec("compute_job_events", collections.jobs.events),
+        ControlPlaneCollectionSpec("compute_job_audits", collections.jobs.audits),
+        ControlPlaneCollectionSpec("compute_job_logs", collections.jobs.logs),
+        ControlPlaneCollectionSpec("compute_executors", collections.jobs.executors),
+        ControlPlaneCollectionSpec("compute_job_quotas", collections.jobs.quotas),
         ControlPlaneCollectionSpec("secrets", collections.secrets.secrets),
         ControlPlaneCollectionSpec("secret_values", collections.secrets.values),
         ControlPlaneCollectionSpec("secret_bindings", collections.secrets.bindings),
@@ -154,6 +168,7 @@ def _build_json_collections(json_root: Path) -> ControlPlaneCollections:
     identity_state_root = json_root / "identity"
     secret_state_root = json_root / "secrets"
     provider_state_root = json_root / "providers"
+    job_state_root = json_root / "jobs"
     return ControlPlaneCollections(
         workspace=WorkspaceCollections(
             workspaces=JsonFileCollection(workspace_state_root / "workspaces.json"),
@@ -185,6 +200,14 @@ def _build_json_collections(json_root: Path) -> ControlPlaneCollections:
             speech_selections=JsonFileCollection(provider_state_root / "speech_selections.json"),
         ),
         runtime_api_tokens=JsonFileCollection(json_root / "runtime" / "api_tokens.json"),
+        jobs=JobCollections(
+            jobs=JsonFileCollection(job_state_root / "jobs.json"),
+            events=JsonFileCollection(job_state_root / "events.json"),
+            audits=JsonFileCollection(job_state_root / "audits.json"),
+            logs=JsonFileCollection(job_state_root / "logs.json"),
+            executors=JsonFileCollection(job_state_root / "executors.json"),
+            quotas=JsonFileCollection(job_state_root / "quotas.json"),
+        ),
         secrets=SecretCollections(
             secrets=JsonFileCollection(secret_state_root / "secrets.json"),
             values=JsonFileCollection(secret_state_root / "values.json"),
@@ -226,6 +249,14 @@ def _build_mongo_collections(settings: ControlStoreSettings) -> ControlPlaneColl
             speech_selections=collection("provider_speech_selections"),
         ),
         runtime_api_tokens=collection("runtime_api_tokens"),
+        jobs=JobCollections(
+            jobs=collection("compute_jobs"),
+            events=collection("compute_job_events"),
+            audits=collection("compute_job_audits"),
+            logs=collection("compute_job_logs"),
+            executors=collection("compute_executors"),
+            quotas=collection("compute_job_quotas"),
+        ),
         secrets=SecretCollections(
             secrets=collection("secrets"),
             values=collection("secret_values"),

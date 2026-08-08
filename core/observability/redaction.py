@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from core.runtime.output_compaction.redaction import redact_text
+
 
 SENSITIVE_KEYS = {
     "secret",
@@ -33,4 +35,6 @@ def redact_payload(payload):
         return redacted
     if isinstance(payload, list):
         return [redact_payload(item) for item in payload]
+    if isinstance(payload, str):
+        return redact_text(payload)
     return payload

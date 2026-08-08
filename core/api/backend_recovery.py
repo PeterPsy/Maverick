@@ -26,12 +26,14 @@ def start_backend_restart_recovery(state) -> Thread:
 def _recover_backend_restart(state) -> None:
     try:
         result = recover_interrupted_runtime_turns_after_backend_restart(state)
+        recovered_jobs = state.job_service.recover_expired_jobs()
         resumed_orchestrations = resume_recovering_orchestrations(state)
     except Exception:
         logger.exception("Backend restart recovery failed.")
         return
     logger.info(
-        "Backend restart recovery completed: %s; resumed orchestrations=%s",
+        "Backend restart recovery completed: %s; recovered jobs=%s; resumed orchestrations=%s",
         result,
+        len(recovered_jobs),
         len(resumed_orchestrations),
     )

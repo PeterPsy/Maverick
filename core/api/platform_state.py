@@ -18,6 +18,9 @@ from core.apps.sidecar_browser_sessions import SidecarBrowserSessionStore
 from core.identity.service import bootstrap_default_admin
 from core.identity.store import IdentityDocumentStore
 from core.inter_agent.store import InterAgentDocumentStore, build_inter_agent_document_store
+from core.jobs.events import JobEventBus
+from core.jobs.service import JobService
+from core.jobs.store import JobDocumentStore
 from core.observability.store import ObservabilityDocumentStore, ObservabilityCollections
 from core.providers.provider_codex import refresh_workspace_maverick_wrappers
 from core.recovery.backend_restart import recover_interrupted_runtime_turns_after_backend_restart
@@ -49,6 +52,8 @@ class PlatformState:
     provider_store: ProviderDocumentStore
     runtime_store: RuntimeDocumentStore
     inter_agent_store: InterAgentDocumentStore
+    job_service: JobService
+    job_event_bus: JobEventBus
     runtime_event_bus: RuntimeEventBus
     runtime_thread_event_bus: RuntimeThreadEventBus
     app_event_bus: AppEventBus
@@ -110,6 +115,7 @@ def bootstrap_platform_state(
     runtime_event_bus = RuntimeEventBus()
     runtime_thread_event_bus = RuntimeThreadEventBus()
     app_event_bus = AppEventBus()
+    job_event_bus = JobEventBus()
     secret_store = SecretDocumentStore(control_collections.secrets)
     recovery_store = RecoveryDocumentStore(
         RecoveryCollections(
@@ -124,6 +130,11 @@ def bootstrap_platform_state(
             audit=InMemoryCollection(),
             metrics=InMemoryCollection(),
         )
+    )
+    job_service = JobService(
+        JobDocumentStore(control_collections.jobs),
+        event_bus=job_event_bus,
+        observability_store=observability_store,
     )
     create_application(
         start_path=repository_root,
@@ -153,6 +164,8 @@ def bootstrap_platform_state(
         provider_store=provider_store,
         runtime_store=runtime_store,
         inter_agent_store=inter_agent_store,
+        job_service=job_service,
+        job_event_bus=job_event_bus,
         runtime_event_bus=runtime_event_bus,
         runtime_thread_event_bus=runtime_thread_event_bus,
         app_event_bus=app_event_bus,
@@ -165,6 +178,7 @@ def bootstrap_platform_state(
     )
     if recover_backend_restart:
         recover_interrupted_runtime_turns_after_backend_restart(state)
+        job_service.recover_expired_jobs()
     return state
 
 

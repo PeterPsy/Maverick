@@ -5,6 +5,7 @@ from __future__ import annotations
 from copy import deepcopy
 from datetime import UTC, datetime
 import unittest
+from unittest.mock import patch
 from typing import Any
 
 from core.shared.mongo_document_collection import MongoDocumentCollection
@@ -24,9 +25,10 @@ class FakeMongoCollection:
     def find(self, query: dict[str, Any]) -> list[dict[str, Any]]:
         return [deepcopy(document) for document in self.documents if _matches(document, query)]
 
-    def update_one(self, query: dict[str, Any], update: dict[str, Any], *, upsert: bool = False) -> None:
+    def update_one(self, query: dict[str, Any], update: dict[str, Any], *, upsert: bool = False):
         self.updates.append({"query": deepcopy(query), "update": deepcopy(update), "upsert": upsert})
         payload = deepcopy(update.get("$set", {}))
+        insert_payload = deepcopy(update.get("$setOnInsert", {}))
         unset_payload = deepcopy(update.get("$unset", {}))
         for index, document in enumerate(self.documents):
             if _matches(document, query):
@@ -34,9 +36,12 @@ class FakeMongoCollection:
                 for field in unset_payload:
                     updated.pop(field, None)
                 self.documents[index] = updated
-                return
+                return FakeUpdateResult(None)
         if upsert:
-            self.documents.append({"_id": f"fake-{len(self.documents)}", **payload})
+            inserted_id = f"fake-{len(self.documents)}"
+            self.documents.append({"_id": inserted_id, **deepcopy(query), **insert_payload, **payload})
+            return FakeUpdateResult(inserted_id)
+        return FakeUpdateResult(None)
 
     def delete_one(self, query: dict[str, Any]) -> None:
         for index, document in enumerate(self.documents):
@@ -52,6 +57,31 @@ class FakeMongoCollection:
 
 
 class MongoDocumentCollectionTestCase(unittest.TestCase):
+    def test_insert_one_if_absent_is_idempotent(self) -> None:
+        collection = MongoDocumentCollection(FakeMongoCollection())
+
+        first, inserted = collection.insert_one_if_absent({"identity": "one"}, {"value": 1})
+        replay, replay_inserted = collection.insert_one_if_absent({"identity": "one"}, {"value": 2})
+
+        self.assertTrue(inserted)
+        self.assertFalse(replay_inserted)
+        self.assertEqual(first, {"identity": "one", "value": 1})
+        self.assertEqual(replay, first)
+
+    def test_insert_one_if_absent_reraises_an_unrelated_unique_collision(self) -> None:
+        collision = RuntimeError("other unique index collided")
+
+        class CollidingCollection(FakeMongoCollection):
+            def update_one(self, query, update, *, upsert=False):
+                raise collision
+
+        collection = MongoDocumentCollection(CollidingCollection())
+        with patch("core.shared.mongo_document_collection._is_duplicate_key_error", return_value=True):
+            with self.assertRaises(RuntimeError) as raised:
+                collection.insert_one_if_absent({"identity": "one"}, {"value": 1})
+
+        self.assertIs(raised.exception, collision)
+
     def test_upsert_merges_query_fields_into_insert_payload(self) -> None:
         fake = FakeMongoCollection()
         collection = MongoDocumentCollection(fake)
@@ -113,6 +143,11 @@ class MongoDocumentCollectionTestCase(unittest.TestCase):
 
 def _matches(document: dict[str, Any], query: dict[str, Any]) -> bool:
     return all(document.get(key) == value for key, value in query.items())
+
+
+class FakeUpdateResult:
+    def __init__(self, upserted_id: str | None) -> None:
+        self.upserted_id = upserted_id
 
 
 if __name__ == "__main__":

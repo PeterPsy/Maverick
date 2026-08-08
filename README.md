@@ -88,7 +88,7 @@ For local service installs, hosted evaluation, MongoDB, nginx, certbot, systemd,
 
 ## What Maverick Provides
 
-- **Core:** identity, sessions, workspaces, app mounting, runtime orchestration, provider selection, persistence adapters, secrets, recovery, and platform HTTP/CLI/MCP APIs.
+- **Core:** identity, sessions, workspaces, app mounting, runtime orchestration, durable jobs, provider selection, persistence adapters, secrets, recovery, and platform HTTP/CLI/MCP APIs.
 - **Workspaces:** tenant boundaries for app data, runtime material, logs, uploads, generated files, and workspace-local apps.
 - **Apps:** product behavior packaged under `apps/<app_id>/` with an `app_contract.json`.
 - **Widgets:** small app-owned surfaces that can render inside other apps without source imports.

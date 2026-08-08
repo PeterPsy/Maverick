@@ -1,7 +1,17 @@
 # Video Studio App Plan
 
-Status: planning
+Status: superseded historical plan
 Date: 2026-05-20
+
+> [!WARNING]
+> This plan is retained for historical context only. It is superseded by
+> `storage/generated/video-studio/video-studio-documento-base-sviluppo.md`
+> (version 1.1, 2026-08-06; Storage file id
+> `file_425b4cd555314db4a3068b330ff0d666`). The approved implementation is an
+> installation-level, server-first app under `apps/video-studio/`, not a
+> workspace-local MVP. The current source of truth requires all three product
+> phases and their acceptance gates; do not execute the workspace-local SDK,
+> `register-local`, `install-local`, or MVP scope described below.
 
 Review update: tightened after implementation review on 2026-05-20. The key
 constraints are now explicit: first development is workspace-local, Remotion packages

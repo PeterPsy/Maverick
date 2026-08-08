@@ -265,6 +265,13 @@ and source-app ownership match. Backend restart closes an interrupted app turn
 without creating an automatic duplicate; the same OpenDesign request remains
 idempotent.
 
+The bridge writes cancel intent before requesting the generic core interrupt.
+Terminal callbacks and SSE translation share one monotonic projection: terminal
+states do not regress, and a failure observed after cancel intent is recorded is
+projected as `canceled`. This keeps the OpenDesign status, terminal SSE event,
+and result package consistent when provider termination and callback delivery
+race.
+
 Run the WP7 proof with:
 
 ```bash
@@ -305,6 +312,8 @@ relay, Storage import/export, restart recovery, route policy, browser sessions,
 and migration smoke all use their production code paths. A statically compiled
 external Codex app-server protocol fixture supplies deterministic model output
 without entering the OpenDesign or core process and without logging prompts.
+The browser asserts the isolated `/api/ready` response before onboarding and
+again after the core/sidecar restart, then verifies the persisted project.
 
 Run and validate the committed redaction-safe records with:
 

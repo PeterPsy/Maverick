@@ -195,6 +195,95 @@ class DesignStudioRuntimeBridgeTests(unittest.TestCase):
                     },
                 )
 
+    def test_cancel_intent_dominates_late_failure_and_terminal_state_does_not_regress(self) -> None:
+        with TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            active = root / "active"
+            active.mkdir()
+            payload = self._payload(root)
+            with patch.object(runtime_bridge, "active_data_directory", return_value=active):
+                canceled, _ = runtime_bridge.reserve_run(
+                    payload,
+                    project_id="od_project_cancel_race",
+                    conversation_id="od_conversation_cancel_race",
+                    assistant_message_id="od_message_cancel_race",
+                    client_request_id="client-cancel-race",
+                    agent_id="maverick",
+                )
+                runtime_bridge.record_submission(
+                    payload,
+                    {
+                        "od_run_id": canceled["od_run_id"],
+                        "runtime_request_status": "submitted",
+                        "runtime_session_id": "session-cancel-race",
+                        "turn_id": "turn-cancel-race",
+                        "stream_id": "stream-cancel-race",
+                    },
+                )
+                runtime_bridge.mark_cancel_requested(payload, canceled["od_run_id"])
+                terminal = runtime_bridge.record_terminal(
+                    payload,
+                    runtime_session_id="session-cancel-race",
+                    turn_id="turn-cancel-race",
+                    event_type="runtime.turn.failed",
+                    files=[],
+                )
+                translated = runtime_bridge.translate_stream_events(
+                    payload,
+                    {
+                        "od_run_id": canceled["od_run_id"],
+                        "events": [
+                            {
+                                "stream_id": "stream-cancel-race",
+                                "sequence": 1,
+                                "event_type": "runtime.turn.failed",
+                                "payload": {},
+                            }
+                        ],
+                    },
+                )
+
+                succeeded, _ = runtime_bridge.reserve_run(
+                    payload,
+                    project_id="od_project_terminal_race",
+                    conversation_id="od_conversation_terminal_race",
+                    assistant_message_id="od_message_terminal_race",
+                    client_request_id="client-terminal-race",
+                    agent_id="maverick",
+                )
+                runtime_bridge.record_submission(
+                    payload,
+                    {
+                        "od_run_id": succeeded["od_run_id"],
+                        "runtime_request_status": "submitted",
+                        "runtime_session_id": "session-terminal-race",
+                        "turn_id": "turn-terminal-race",
+                        "stream_id": "stream-terminal-race",
+                    },
+                )
+                runtime_bridge.record_terminal(
+                    payload,
+                    runtime_session_id="session-terminal-race",
+                    turn_id="turn-terminal-race",
+                    event_type="runtime.turn.completed",
+                    files=[],
+                )
+                preserved = runtime_bridge.record_terminal(
+                    payload,
+                    runtime_session_id="session-terminal-race",
+                    turn_id="turn-terminal-race",
+                    event_type="runtime.turn.failed",
+                    files=[],
+                )
+
+            self.assertIsNotNone(terminal)
+            self.assertEqual(terminal["status"], "canceled")
+            self.assertEqual(terminal["error"], "")
+            self.assertEqual(translated["sse_events"][0]["data"]["status"], "canceled")
+            self.assertIsNotNone(preserved)
+            self.assertEqual(preserved["status"], "succeeded")
+            self.assertEqual(preserved["result_package"]["run"]["status"], "succeeded")
+
     def test_platform_runtime_cleanup_deletes_only_matching_correlations(self) -> None:
         with TemporaryDirectory() as temp_dir:
             root = Path(temp_dir)

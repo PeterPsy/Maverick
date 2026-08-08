@@ -80,6 +80,11 @@ try {
 
   await loginAndOpen(page);
   let sidecar = await waitForSidecarFrame(page, '', networkProof);
+  const initialReady = await frameRequest(sidecar, '/api/ready');
+  assert(
+    initialReady.status === 200 && initialReady.body?.ok === true && initialReady.body?.ready === true,
+    `Initial OpenDesign readiness returned HTTP ${initialReady.status}`,
+  );
   await completeOpenDesignOnboarding(sidecar);
   const originA = new URL(sidecar.url()).origin;
   assert(originA !== platformOrigin, 'OpenDesign did not use an isolated origin');
@@ -124,13 +129,18 @@ try {
   assert(successfulRun.status === 'succeeded', 'Successful run status drifted');
 
   const canceled = await createRun(sidecar, projectA, 'MAVERICK_E2E_LONG');
-  const canceledStreamPromise = readIncrementalStream(sidecar, canceled.runId);
+  let canceledStreamFailure = null;
+  const canceledStreamPromise = readIncrementalStream(sidecar, canceled.runId).catch((error) => {
+    canceledStreamFailure = error;
+    return null;
+  });
   await waitForRun(sidecar, canceled.runId, 'running');
   const cancelOne = await frameRequest(sidecar, `/api/runs/${encodeURIComponent(canceled.runId)}/cancel`, { method: 'POST' });
   const cancelTwo = await frameRequest(sidecar, `/api/runs/${encodeURIComponent(canceled.runId)}/cancel`, { method: 'POST' });
   assert(cancelOne.status === 200 && cancelTwo.status === 200, 'Cancel was not idempotent');
   const canceledRun = await waitForRun(sidecar, canceled.runId, 'canceled');
   const canceledStream = await canceledStreamPromise;
+  if (!canceledStream) throw canceledStreamFailure || new Error('Canceled run SSE failed');
   const canceledPackage = await resultPackage(sidecar, canceled.runId);
   const correlationCanceled = correlationFromPackage(canceledPackage, projectA.projectId, canceled.runId);
   assert(
@@ -172,6 +182,11 @@ try {
   server = await startServer();
   await page.goto(`${platformOrigin}/app/design-studio`, { waitUntil: 'domcontentloaded' });
   sidecar = await waitForSidecarFrame(page);
+  const restartedReady = await frameRequest(sidecar, '/api/ready');
+  assert(
+    restartedReady.status === 200 && restartedReady.body?.ok === true && restartedReady.body?.ready === true,
+    `Restarted OpenDesign readiness returned HTTP ${restartedReady.status}`,
+  );
   const persistedProject = await frameRequest(sidecar, `/api/projects/${encodeURIComponent(projectA.projectId)}`);
   assert(persistedProject.status === 200, 'Project did not survive core/sidecar restart');
   assert(networkProof.bootstrapPosts > bootstrapCountBeforeRestart, 'Restart did not mint a fresh one-shot browser session');
@@ -590,7 +605,7 @@ async function runMigrationSmoke() {
 
 function buildEvidence({ correlationA, correlationB, correlationCanceled, manifest, networkProof, originA, originB, projectA, successful }) {
   const scenarios = [
-    ['login_open', 'Login and open Design Studio', correlationA, { isolated_origin: true }],
+    ['login_open', 'Login and open Design Studio', correlationA, { isolated_origin: true, ready_endpoint: true }],
     ['create_project_ui', 'Create project from the OpenDesign UI', correlationA, { project_created: true }],
     ['storage_import', 'Import one Storage file with read-back', correlationA, { imported: true }],
     ['runtime_start', 'Start one Maverick-owned run', correlationA, { submitted: true }],
@@ -598,7 +613,7 @@ function buildEvidence({ correlationA, correlationB, correlationCanceled, manife
     ['generated_preview', 'Generate and preview a project file', correlationA, { previewed: true }],
     ['cancel_long_run', 'Cancel a long run idempotently', correlationCanceled, { canceled: true, repeated_cancel_safe: true }],
     ['storage_export', 'Export result package and verified manifest to Storage', correlationA, { artifact_count: manifest.artifacts.length }],
-    ['restart_reload', 'Reload after core and sidecar restart', correlationA, { recovered: true }],
+    ['restart_reload', 'Reload after core and sidecar restart', correlationA, { recovered: true, ready_endpoint: true }],
     ['deep_link', 'Open a project/run deep link', correlationA, { project_route: true, run_hint: true }],
     ['workspace_isolation', 'Keep workspace A and B processes and data isolated', correlationB, { distinct_origins: originA !== originB }],
     ['forbidden_routes', 'Deny sensitive, unknown, and core routes', correlationA, { exact_deny: true }],

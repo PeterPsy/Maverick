@@ -260,6 +260,12 @@ interrupt, recovery, and normalized events. Design Studio alone owns the
 OpenDesign SSE schema and writes terminal result packages for success, failure,
 timeout, and cancellation.
 
+Cancellation intent is persisted before core receives the interrupt request.
+Terminal projection is monotonic: a later callback cannot replace an already
+terminal run, and a failure delivered after a recorded cancel request is exposed
+as `canceled` rather than regressing the OpenDesign run to `failed`. This rule is
+applied identically to the direct runtime hook and the translated SSE stream.
+
 The contract declares `permissions.providers.model_proxy: true` with `credential_source: core-vault` and `deliver_secrets_to_app: false`. It does not declare app-scoped provider secret reads. Provider keys stay in Maverick/Vault-owned flows, are not delivered to the browser, Design Studio backend, or OpenDesign sidecar, and are not written into `OD_MEDIA_CONFIG_DIR`. Provider errors are returned in OpenDesign's provider-model response shape (`ok`, `kind`, `latencyMs`, `status`, `detail`) so the bundled UI can handle unavailable provider state without learning raw credentials.
 
 ## Verification
@@ -299,7 +305,8 @@ python3 -m unittest apps.design-studio.tests.test_production_acceptance
 The browser suite covers all fourteen required scenarios: login/open, project
 creation in the native OpenDesign UI, Storage import, runtime start,
 incremental SSE, generated-file preview, idempotent cancel, Storage export and
-manifest read-back, core/sidecar restart, deep link, workspace A/B isolation,
+manifest read-back, core/sidecar restart with explicit `/api/ready` checks,
+deep link, workspace A/B isolation,
 exact route denial, browser credential non-disclosure, and real-daemon
 upgrade/rollback on marked fixture copies. Its committed output is
 redaction-safe and each scenario carries the full app/runtime correlation join.

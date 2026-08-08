@@ -19,8 +19,8 @@
     "remote_iframe": false
   },
   "canonical_entity": {
-    "od_project_id": "77f3fd60-6c49-4e73-beb7-b7408d1028ee",
-    "od_run_id": "od_run_6ea4a44069ef488196d0fd90107bedc7"
+    "od_project_id": "28f60936-4cde-4374-9ca4-3fcfcdd15b99",
+    "od_run_id": "od_run_af4b7aedf4b04200a42a030362e8b020"
   },
   "scenarios": [
     {
@@ -31,15 +31,16 @@
         "workspace_id": "default",
         "local_app_id": "design-studio",
         "sidecar_id": "opendesign",
-        "od_project_id": "77f3fd60-6c49-4e73-beb7-b7408d1028ee",
-        "od_run_id": "od_run_6ea4a44069ef488196d0fd90107bedc7",
-        "runtime_session_id": "43091420-17fb-4ae2-b9f7-de13c4e641e1",
-        "turn_id": "6b3050c2-1932-4c48-9577-f5b709e69bb4",
-        "request_id": "request_8e18194d8d2dc7f17ecd8df2",
-        "correlation_id": "request_8e18194d8d2dc7f17ecd8df2"
+        "od_project_id": "28f60936-4cde-4374-9ca4-3fcfcdd15b99",
+        "od_run_id": "od_run_af4b7aedf4b04200a42a030362e8b020",
+        "runtime_session_id": "4a09f101-1e61-4556-943c-3612548c1320",
+        "turn_id": "57595e3a-45d4-43f7-bdb8-f2d1c86f7108",
+        "request_id": "request_507aeb471f8372499bdf70b1",
+        "correlation_id": "request_507aeb471f8372499bdf70b1"
       },
       "proof": {
-        "isolated_origin": true
+        "isolated_origin": true,
+        "ready_endpoint": true
       }
     },
     {
@@ -50,12 +51,12 @@
         "workspace_id": "default",
         "local_app_id": "design-studio",
         "sidecar_id": "opendesign",
-        "od_project_id": "77f3fd60-6c49-4e73-beb7-b7408d1028ee",
-        "od_run_id": "od_run_6ea4a44069ef488196d0fd90107bedc7",
-        "runtime_session_id": "43091420-17fb-4ae2-b9f7-de13c4e641e1",
-        "turn_id": "6b3050c2-1932-4c48-9577-f5b709e69bb4",
-        "request_id": "request_8e18194d8d2dc7f17ecd8df2",
-        "correlation_id": "request_8e18194d8d2dc7f17ecd8df2"
+        "od_project_id": "28f60936-4cde-4374-9ca4-3fcfcdd15b99",
+        "od_run_id": "od_run_af4b7aedf4b04200a42a030362e8b020",
+        "runtime_session_id": "4a09f101-1e61-4556-943c-3612548c1320",
+        "turn_id": "57595e3a-45d4-43f7-bdb8-f2d1c86f7108",
+        "request_id": "request_507aeb471f8372499bdf70b1",
+        "correlation_id": "request_507aeb471f8372499bdf70b1"
       },
       "proof": {
         "project_created": true
@@ -69,12 +70,12 @@
         "workspace_id": "default",
         "local_app_id": "design-studio",
         "sidecar_id": "opendesign",
-        "od_project_id": "77f3fd60-6c49-4e73-beb7-b7408d1028ee",
-        "od_run_id": "od_run_6ea4a44069ef488196d0fd90107bedc7",
-        "runtime_session_id": "43091420-17fb-4ae2-b9f7-de13c4e641e1",
-        "turn_id": "6b3050c2-1932-4c48-9577-f5b709e69bb4",
-        "request_id": "request_8e18194d8d2dc7f17ecd8df2",
-        "correlation_id": "request_8e18194d8d2dc7f17ecd8df2"
+        "od_project_id": "28f60936-4cde-4374-9ca4-3fcfcdd15b99",
+        "od_run_id": "od_run_af4b7aedf4b04200a42a030362e8b020",
+        "runtime_session_id": "4a09f101-1e61-4556-943c-3612548c1320",
+        "turn_id": "57595e3a-45d4-43f7-bdb8-f2d1c86f7108",
+        "request_id": "request_507aeb471f8372499bdf70b1",
+        "correlation_id": "request_507aeb471f8372499bdf70b1"
       },
       "proof": {
         "imported": true
@@ -88,12 +89,12 @@
         "workspace_id": "default",
         "local_app_id": "design-studio",
         "sidecar_id": "opendesign",
-        "od_project_id": "77f3fd60-6c49-4e73-beb7-b7408d1028ee",
-        "od_run_id": "od_run_6ea4a44069ef488196d0fd90107bedc7",
-        "runtime_session_id": "43091420-17fb-4ae2-b9f7-de13c4e641e1",
-        "turn_id": "6b3050c2-1932-4c48-9577-f5b709e69bb4",
-        "request_id": "request_8e18194d8d2dc7f17ecd8df2",
-        "correlation_id": "request_8e18194d8d2dc7f17ecd8df2"
+        "od_project_id": "28f60936-4cde-4374-9ca4-3fcfcdd15b99",
+        "od_run_id": "od_run_af4b7aedf4b04200a42a030362e8b020",
+        "runtime_session_id": "4a09f101-1e61-4556-943c-3612548c1320",
+        "turn_id": "57595e3a-45d4-43f7-bdb8-f2d1c86f7108",
+        "request_id": "request_507aeb471f8372499bdf70b1",
+        "correlation_id": "request_507aeb471f8372499bdf70b1"
       },
       "proof": {
         "submitted": true
@@ -107,12 +108,12 @@
         "workspace_id": "default",
         "local_app_id": "design-studio",
         "sidecar_id": "opendesign",
-        "od_project_id": "77f3fd60-6c49-4e73-beb7-b7408d1028ee",
-        "od_run_id": "od_run_6ea4a44069ef488196d0fd90107bedc7",
-        "runtime_session_id": "43091420-17fb-4ae2-b9f7-de13c4e641e1",
-        "turn_id": "6b3050c2-1932-4c48-9577-f5b709e69bb4",
-        "request_id": "request_8e18194d8d2dc7f17ecd8df2",
-        "correlation_id": "request_8e18194d8d2dc7f17ecd8df2"
+        "od_project_id": "28f60936-4cde-4374-9ca4-3fcfcdd15b99",
+        "od_run_id": "od_run_af4b7aedf4b04200a42a030362e8b020",
+        "runtime_session_id": "4a09f101-1e61-4556-943c-3612548c1320",
+        "turn_id": "57595e3a-45d4-43f7-bdb8-f2d1c86f7108",
+        "request_id": "request_507aeb471f8372499bdf70b1",
+        "correlation_id": "request_507aeb471f8372499bdf70b1"
       },
       "proof": {
         "incremental": true
@@ -126,12 +127,12 @@
         "workspace_id": "default",
         "local_app_id": "design-studio",
         "sidecar_id": "opendesign",
-        "od_project_id": "77f3fd60-6c49-4e73-beb7-b7408d1028ee",
-        "od_run_id": "od_run_6ea4a44069ef488196d0fd90107bedc7",
-        "runtime_session_id": "43091420-17fb-4ae2-b9f7-de13c4e641e1",
-        "turn_id": "6b3050c2-1932-4c48-9577-f5b709e69bb4",
-        "request_id": "request_8e18194d8d2dc7f17ecd8df2",
-        "correlation_id": "request_8e18194d8d2dc7f17ecd8df2"
+        "od_project_id": "28f60936-4cde-4374-9ca4-3fcfcdd15b99",
+        "od_run_id": "od_run_af4b7aedf4b04200a42a030362e8b020",
+        "runtime_session_id": "4a09f101-1e61-4556-943c-3612548c1320",
+        "turn_id": "57595e3a-45d4-43f7-bdb8-f2d1c86f7108",
+        "request_id": "request_507aeb471f8372499bdf70b1",
+        "correlation_id": "request_507aeb471f8372499bdf70b1"
       },
       "proof": {
         "previewed": true
@@ -145,12 +146,12 @@
         "workspace_id": "default",
         "local_app_id": "design-studio",
         "sidecar_id": "opendesign",
-        "od_project_id": "77f3fd60-6c49-4e73-beb7-b7408d1028ee",
-        "od_run_id": "od_run_3f99466ce6644542a3c4c889ba1ae668",
-        "runtime_session_id": "554370a1-e420-47a0-979d-90b8c390bd1b",
-        "turn_id": "f57760ff-8e2f-4c64-9b8f-d757f1719d56",
-        "request_id": "request_e4d5cc7600003d152e8b45a5",
-        "correlation_id": "request_e4d5cc7600003d152e8b45a5"
+        "od_project_id": "28f60936-4cde-4374-9ca4-3fcfcdd15b99",
+        "od_run_id": "od_run_fc2db80d35884e47a6e5c759825094b1",
+        "runtime_session_id": "d628b96a-d536-4d60-a01c-87ea8b63841a",
+        "turn_id": "df930fdb-8211-43bb-b5f4-8932511ab94f",
+        "request_id": "request_eed57a3e5138b7d3b56bef5b",
+        "correlation_id": "request_eed57a3e5138b7d3b56bef5b"
       },
       "proof": {
         "canceled": true,
@@ -165,12 +166,12 @@
         "workspace_id": "default",
         "local_app_id": "design-studio",
         "sidecar_id": "opendesign",
-        "od_project_id": "77f3fd60-6c49-4e73-beb7-b7408d1028ee",
-        "od_run_id": "od_run_6ea4a44069ef488196d0fd90107bedc7",
-        "runtime_session_id": "43091420-17fb-4ae2-b9f7-de13c4e641e1",
-        "turn_id": "6b3050c2-1932-4c48-9577-f5b709e69bb4",
-        "request_id": "request_8e18194d8d2dc7f17ecd8df2",
-        "correlation_id": "request_8e18194d8d2dc7f17ecd8df2"
+        "od_project_id": "28f60936-4cde-4374-9ca4-3fcfcdd15b99",
+        "od_run_id": "od_run_af4b7aedf4b04200a42a030362e8b020",
+        "runtime_session_id": "4a09f101-1e61-4556-943c-3612548c1320",
+        "turn_id": "57595e3a-45d4-43f7-bdb8-f2d1c86f7108",
+        "request_id": "request_507aeb471f8372499bdf70b1",
+        "correlation_id": "request_507aeb471f8372499bdf70b1"
       },
       "proof": {
         "artifact_count": 2
@@ -184,15 +185,16 @@
         "workspace_id": "default",
         "local_app_id": "design-studio",
         "sidecar_id": "opendesign",
-        "od_project_id": "77f3fd60-6c49-4e73-beb7-b7408d1028ee",
-        "od_run_id": "od_run_6ea4a44069ef488196d0fd90107bedc7",
-        "runtime_session_id": "43091420-17fb-4ae2-b9f7-de13c4e641e1",
-        "turn_id": "6b3050c2-1932-4c48-9577-f5b709e69bb4",
-        "request_id": "request_8e18194d8d2dc7f17ecd8df2",
-        "correlation_id": "request_8e18194d8d2dc7f17ecd8df2"
+        "od_project_id": "28f60936-4cde-4374-9ca4-3fcfcdd15b99",
+        "od_run_id": "od_run_af4b7aedf4b04200a42a030362e8b020",
+        "runtime_session_id": "4a09f101-1e61-4556-943c-3612548c1320",
+        "turn_id": "57595e3a-45d4-43f7-bdb8-f2d1c86f7108",
+        "request_id": "request_507aeb471f8372499bdf70b1",
+        "correlation_id": "request_507aeb471f8372499bdf70b1"
       },
       "proof": {
-        "recovered": true
+        "recovered": true,
+        "ready_endpoint": true
       }
     },
     {
@@ -203,12 +205,12 @@
         "workspace_id": "default",
         "local_app_id": "design-studio",
         "sidecar_id": "opendesign",
-        "od_project_id": "77f3fd60-6c49-4e73-beb7-b7408d1028ee",
-        "od_run_id": "od_run_6ea4a44069ef488196d0fd90107bedc7",
-        "runtime_session_id": "43091420-17fb-4ae2-b9f7-de13c4e641e1",
-        "turn_id": "6b3050c2-1932-4c48-9577-f5b709e69bb4",
-        "request_id": "request_8e18194d8d2dc7f17ecd8df2",
-        "correlation_id": "request_8e18194d8d2dc7f17ecd8df2"
+        "od_project_id": "28f60936-4cde-4374-9ca4-3fcfcdd15b99",
+        "od_run_id": "od_run_af4b7aedf4b04200a42a030362e8b020",
+        "runtime_session_id": "4a09f101-1e61-4556-943c-3612548c1320",
+        "turn_id": "57595e3a-45d4-43f7-bdb8-f2d1c86f7108",
+        "request_id": "request_507aeb471f8372499bdf70b1",
+        "correlation_id": "request_507aeb471f8372499bdf70b1"
       },
       "proof": {
         "project_route": true,
@@ -223,12 +225,12 @@
         "workspace_id": "workspace-b",
         "local_app_id": "design-studio",
         "sidecar_id": "opendesign",
-        "od_project_id": "931f25f9-7da6-40c5-897c-4e6c724c0b25",
-        "od_run_id": "od_run_b7a19a2709d14ad7bb48a0b438b1abdc",
-        "runtime_session_id": "3182fc26-527d-4883-b465-3659683b8c98",
-        "turn_id": "cf5b42f5-6cdf-4dc5-af20-9134f29d8ea8",
-        "request_id": "request_c0ea783230eced7cb98ab5ee",
-        "correlation_id": "request_c0ea783230eced7cb98ab5ee"
+        "od_project_id": "4fbb9883-1ade-4d78-bf71-bae8fab5b582",
+        "od_run_id": "od_run_46728df102124e9dbb28c3ddc9fb04c7",
+        "runtime_session_id": "0d82c5e3-3e7a-40ce-b495-378c4e3a736a",
+        "turn_id": "7fd7796a-a03d-410f-9c29-f32b8876fb93",
+        "request_id": "request_836bd29c6b013b33845a893c",
+        "correlation_id": "request_836bd29c6b013b33845a893c"
       },
       "proof": {
         "distinct_origins": true
@@ -242,12 +244,12 @@
         "workspace_id": "default",
         "local_app_id": "design-studio",
         "sidecar_id": "opendesign",
-        "od_project_id": "77f3fd60-6c49-4e73-beb7-b7408d1028ee",
-        "od_run_id": "od_run_6ea4a44069ef488196d0fd90107bedc7",
-        "runtime_session_id": "43091420-17fb-4ae2-b9f7-de13c4e641e1",
-        "turn_id": "6b3050c2-1932-4c48-9577-f5b709e69bb4",
-        "request_id": "request_8e18194d8d2dc7f17ecd8df2",
-        "correlation_id": "request_8e18194d8d2dc7f17ecd8df2"
+        "od_project_id": "28f60936-4cde-4374-9ca4-3fcfcdd15b99",
+        "od_run_id": "od_run_af4b7aedf4b04200a42a030362e8b020",
+        "runtime_session_id": "4a09f101-1e61-4556-943c-3612548c1320",
+        "turn_id": "57595e3a-45d4-43f7-bdb8-f2d1c86f7108",
+        "request_id": "request_507aeb471f8372499bdf70b1",
+        "correlation_id": "request_507aeb471f8372499bdf70b1"
       },
       "proof": {
         "exact_deny": true
@@ -261,12 +263,12 @@
         "workspace_id": "default",
         "local_app_id": "design-studio",
         "sidecar_id": "opendesign",
-        "od_project_id": "77f3fd60-6c49-4e73-beb7-b7408d1028ee",
-        "od_run_id": "od_run_6ea4a44069ef488196d0fd90107bedc7",
-        "runtime_session_id": "43091420-17fb-4ae2-b9f7-de13c4e641e1",
-        "turn_id": "6b3050c2-1932-4c48-9577-f5b709e69bb4",
-        "request_id": "request_8e18194d8d2dc7f17ecd8df2",
-        "correlation_id": "request_8e18194d8d2dc7f17ecd8df2"
+        "od_project_id": "28f60936-4cde-4374-9ca4-3fcfcdd15b99",
+        "od_run_id": "od_run_af4b7aedf4b04200a42a030362e8b020",
+        "runtime_session_id": "4a09f101-1e61-4556-943c-3612548c1320",
+        "turn_id": "57595e3a-45d4-43f7-bdb8-f2d1c86f7108",
+        "request_id": "request_507aeb471f8372499bdf70b1",
+        "correlation_id": "request_507aeb471f8372499bdf70b1"
       },
       "proof": {
         "maverick_cookie_forwarded": false,
@@ -282,12 +284,12 @@
         "workspace_id": "default",
         "local_app_id": "design-studio",
         "sidecar_id": "opendesign",
-        "od_project_id": "77f3fd60-6c49-4e73-beb7-b7408d1028ee",
-        "od_run_id": "od_run_6ea4a44069ef488196d0fd90107bedc7",
-        "runtime_session_id": "43091420-17fb-4ae2-b9f7-de13c4e641e1",
-        "turn_id": "6b3050c2-1932-4c48-9577-f5b709e69bb4",
-        "request_id": "request_8e18194d8d2dc7f17ecd8df2",
-        "correlation_id": "request_8e18194d8d2dc7f17ecd8df2"
+        "od_project_id": "28f60936-4cde-4374-9ca4-3fcfcdd15b99",
+        "od_run_id": "od_run_af4b7aedf4b04200a42a030362e8b020",
+        "runtime_session_id": "4a09f101-1e61-4556-943c-3612548c1320",
+        "turn_id": "57595e3a-45d4-43f7-bdb8-f2d1c86f7108",
+        "request_id": "request_507aeb471f8372499bdf70b1",
+        "correlation_id": "request_507aeb471f8372499bdf70b1"
       },
       "proof": {
         "migration_smoke": true

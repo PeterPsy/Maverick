@@ -395,11 +395,10 @@ def record_terminal(
     correlation = store.find_by_runtime(runtime_session_id, turn_id)
     if correlation is None:
         return None
-    status = _terminal_status(event_type)
-
     def update(record: dict[str, Any]) -> dict[str, Any]:
-        record["status"] = status
-        record["error"] = "Runtime request failed." if status == "failed" else ""
+        projected_status = _projected_terminal_status(record, event_type)
+        record["status"] = projected_status
+        record["error"] = "Runtime request failed." if projected_status == "failed" else ""
         record["result_package"] = build_result_package(record, files=files)
         record["terminal_package_written"] = True
         record["updated_at"] = utc_now()
@@ -493,7 +492,7 @@ def _translate_one_event(record: dict[str, Any], event: dict[str, Any]) -> dict[
         "runtime.turn.cancelled",
         "runtime.turn.timed-out",
     }:
-        record["status"] = _terminal_status(event_type)
+        record["status"] = _projected_terminal_status(record, event_type)
         record["error"] = "Runtime request failed." if record["status"] == "failed" else ""
         name, data = "end", {
             "code": 0 if record["status"] == "succeeded" else 1 if record["status"] == "failed" else None,
@@ -516,6 +515,16 @@ def _terminal_status(event_type: str) -> str:
     if event_type == "runtime.turn.cancelled":
         return "canceled"
     return "failed"
+
+
+def _projected_terminal_status(record: dict[str, Any], event_type: str) -> str:
+    incoming = _terminal_status(event_type)
+    current = str(record.get("status") or "")
+    if incoming == "failed" and bool(record.get("cancel_requested")):
+        return "canceled"
+    if current in _TERMINAL_STATUS:
+        return current
+    return incoming
 
 
 def _validated_generic_event(value: object) -> dict[str, Any]:

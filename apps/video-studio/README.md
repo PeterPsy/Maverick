@@ -23,6 +23,16 @@ Video Studio never reads another app database or writes business data into
 Core/control-plane storage. Media bytes remain Storage-owned and Project IR
 uses only governed Storage identity and provider provenance.
 
+## Contract Notes
+
+`app_contract.json` declares schema version 2, the single `video-studio` CLI
+command, 16 implemented MCP tools, and data-change resources for `projects`,
+`project-metadata`, and `revisions`. Native project interchange is a domain
+surface; it is not the generic whole-app lifecycle export/import protocol, so
+the lifecycle export/import flags remain disabled. The app remains
+sandbox-compatible, has no outbound network or secret permissions, and adds no
+Core route.
+
 ## Project IR v1
 
 The authoritative schema is
@@ -172,11 +182,13 @@ Remotion preview, media search, agent proposals, editor UI, Core Jobs changes,
 app installation, or app enablement. The existing frontend source/artifact is
 unchanged by the Project IR and revision engine.
 
-## Verification
+## SDK Flow
 
-From the repository root:
+Validate the source through the canonical SDK, then run engineering checks from
+the repository root:
 
 ```bash
+maverick core cli run core.app-sdk.validate --app-root apps/video-studio --json
 python3 -m unittest discover -s apps/video-studio/tests -p 'test_*.py'
 python3 -m unittest discover -s tests/unit/jobs -p 'test_*.py'
 python3 -m compileall core apps/video-studio tests

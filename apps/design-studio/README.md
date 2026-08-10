@@ -304,6 +304,23 @@ npm run test:e2e --prefix apps/design-studio -- \
 python3 -m unittest apps.design-studio.tests.test_production_acceptance
 ```
 
+For a deployed installation, run the separate hosted-origin smoke from the
+repository host. It uses an existing active operator session without logging
+its value, keeps Chromium TLS verification enabled, and verifies the isolated
+HTTPS iframe, secure bootstrap cookie, reload, persisted-project lookup, and
+deep link. Supplying `--storage-input-path` additionally creates a temporary
+OpenDesign project, exercises Storage import, a real runtime run and SSE,
+result packaging, Storage export/read-back, and deletes only that temporary
+project.
+
+```bash
+npm run test:e2e:hosted --prefix apps/design-studio -- \
+  --platform-origin https://maverick.example \
+  --auth-sessions-file data/control-plane/json/identity/auth_sessions.json \
+  --project-id <canonical-opendesign-project-id> \
+  --storage-input-path storage/generated/design-studio/hosted-acceptance-input.md
+```
+
 The browser suite covers all fourteen required scenarios: login/open, project
 creation in the native OpenDesign UI, Storage import, runtime start,
 incremental SSE, generated-file preview, idempotent cancel, Storage export and

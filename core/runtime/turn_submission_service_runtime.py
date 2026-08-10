@@ -18,6 +18,7 @@ from core.runtime.turn_submission_service_events import (
     _debug_log_runtime_turn,
     _record_final_output,
     _record_turn_failed,
+    _terminalize_worker_observed_cancellation,
 )
 from core.runtime.turn_submission_service_output import (
     _build_launch_spec_for_execution,
@@ -639,6 +640,11 @@ def submit_runtime_turn_async(
                         message="Runtime turn debug: async worker saw pre-cancelled turn",
                         payload={"phase": "async_worker_pre_cancelled"},
                     )
+                    _terminalize_worker_observed_cancellation(
+                        state,
+                        turn=current,
+                        provider_id=worker_provider_id,
+                    )
                     return
                 if on_queued is not None:
                     source_app_dispatch_started_at = time.perf_counter()
@@ -652,6 +658,11 @@ def submit_runtime_turn_async(
                             failure_reason=str(error),
                         )
                         if failed.status == "cancelled":
+                            _terminalize_worker_observed_cancellation(
+                                state,
+                                turn=failed,
+                                provider_id=worker_provider_id,
+                            )
                             return
                         _record_turn_failed(
                             state,
@@ -672,6 +683,12 @@ def submit_runtime_turn_async(
                     update_thread=False,
                 )
                 if active.status != "active":
+                    if active.status == "cancelled":
+                        _terminalize_worker_observed_cancellation(
+                            state,
+                            turn=active,
+                            provider_id=worker_provider_id,
+                        )
                     return
                 transition_active_ms = (time.perf_counter() - transition_started_at) * 1000
                 started_event = _record_turn_started(state, session_id=session.session_id, turn_id=active.turn_id, provider_id=worker_provider_id)
@@ -933,13 +950,12 @@ def submit_runtime_turn_async(
                 )
                 current = state.runtime_store.get_turn(turn.turn_id)
                 if current.status == "cancelled" or current.cancellation_requested_at is not None:
-                    if current.status != "cancelled":
-                        current = transition_runtime_turn(
-                            state.runtime_store,
-                            turn_id=turn.turn_id,
-                            target_status="cancelled",
-                            failure_reason=current.cancellation_reason,
-                        )
+                    terminalization = _terminalize_worker_observed_cancellation(
+                        state,
+                        turn=current,
+                        provider_id=worker_provider_id,
+                    )
+                    current = terminalization.turn
                     _debug_log_runtime_turn(
                         state,
                         session=current_session,
@@ -960,15 +976,24 @@ def submit_runtime_turn_async(
                     complete_text=app_output_text,
                     exit_code=result.exit_code,
                 )
-                completed_turn, terminal_event = _complete_turn_from_exit_code(state, session_id=session.session_id, turn_id=turn.turn_id, provider_id=worker_provider_id, exit_code=result.exit_code)
-                dispatch_source_app_runtime_event(
+                completed_turn, terminal_event = _complete_turn_from_exit_code(
                     state,
-                    session=current_session,
-                    turn=completed_turn,
-                    event_type=terminal_event.event_type,
+                    session_id=session.session_id,
+                    turn_id=turn.turn_id,
+                    provider_id=worker_provider_id,
+                    exit_code=result.exit_code,
                     output_text=app_output_text,
-                    failure_reason=completed_turn.failure_reason or "",
                 )
+                if completed_turn.status != "cancelled":
+                    dispatch_source_app_runtime_event(
+                        state,
+                        session=current_session,
+                        turn=completed_turn,
+                        event_type=terminal_event.event_type,
+                        output_text=app_output_text,
+                        failure_reason=completed_turn.failure_reason or "",
+                        runtime_event_id=terminal_event.event_id,
+                    )
                 _debug_log_runtime_turn(
                     state,
                     session=current_session,
@@ -999,8 +1024,13 @@ def submit_runtime_turn_async(
                         failure_reason=failure_reason,
                     )
                     if failed.status == "cancelled":
+                        _terminalize_worker_observed_cancellation(
+                            state,
+                            turn=failed,
+                            provider_id=worker_provider_id,
+                        )
                         return
-                    _record_turn_failed(
+                    failed_event = _record_turn_failed(
                         state,
                         session_id=session.session_id,
                         turn_id=failed.turn_id,
@@ -1014,6 +1044,7 @@ def submit_runtime_turn_async(
                         turn=failed,
                         event_type="runtime.turn.failed",
                         failure_reason=failure_reason,
+                        runtime_event_id=failed_event.event_id,
                     )
             finally:
                 if not plain_hosted:

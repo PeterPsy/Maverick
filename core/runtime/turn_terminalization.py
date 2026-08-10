@@ -194,3 +194,32 @@ def drain_runtime_turn_terminalization(
             claimed=claimed,
             callback_pending=callback_pending,
         )
+
+
+def migrate_legacy_cancelled_turn_terminalization(
+    store: RuntimeStore,
+    *,
+    turn: RuntimeTurnRecord,
+    event: RuntimeEventRecord,
+) -> RuntimeTurnTerminalizationResult:
+    """Adopt a pre-outbox cancellation whose event and callback were already delivered."""
+    if turn.status != "cancelled" or event.turn_id != turn.turn_id or event.event_type != "runtime.turn.cancelled":
+        return RuntimeTurnTerminalizationResult(
+            turn=turn,
+            event=event,
+            claimed=False,
+            callback_pending=False,
+        )
+    migrated, applied = store.migrate_legacy_turn_terminalization(
+        turn_id=turn.turn_id,
+        event_id=event.event_id,
+        event_type=event.event_type,
+        payload=dict(event.payload),
+        delivered_at=event.created_at,
+    )
+    return RuntimeTurnTerminalizationResult(
+        turn=migrated,
+        event=event,
+        claimed=applied,
+        callback_pending=False,
+    )

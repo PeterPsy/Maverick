@@ -8,12 +8,17 @@ from threading import Lock
 from typing import TYPE_CHECKING
 from uuid import uuid4
 
+from core.apps.runtime_event_hooks import dispatch_source_app_runtime_event
 from core.observability.service import append_platform_log
 from core.runtime.runtime_events import RuntimeEventRecord
 from core.runtime.runtime_session import RuntimeSessionRecord
 from core.runtime.runtime_turns import RuntimeTurnRecord
 from core.runtime.service import record_runtime_event, transition_runtime_turn
 from core.runtime.thread_catalog_events import mark_thread_response_completed, set_thread_availability
+from core.runtime.turn_terminalization import (
+    RuntimeTurnTerminalizationResult,
+    terminalize_runtime_turn_cancellation,
+)
 
 if TYPE_CHECKING:
     from core.api.platform_state import PlatformState
@@ -60,6 +65,7 @@ def _complete_turn_from_exit_code(
     turn_id: str,
     provider_id: str,
     exit_code: int,
+    output_text: str = "",
 ) -> tuple[RuntimeTurnRecord, RuntimeEventRecord]:
     if exit_code == 0:
         turn = transition_runtime_turn(state.runtime_store, turn_id=turn_id, target_status="completed")
@@ -70,6 +76,17 @@ def _complete_turn_from_exit_code(
             target_status="failed",
             failure_reason=f"Provider exited with code {exit_code}.",
         )
+    if turn.status == "cancelled":
+        terminalization = _terminalize_worker_observed_cancellation(
+            state,
+            turn=turn,
+            provider_id=provider_id,
+            exit_code=exit_code,
+            output_text=output_text,
+        )
+        if terminalization.event is None:
+            raise RuntimeError(f"Cancelled runtime turn `{turn.turn_id}` has no terminal event.")
+        return terminalization.turn, terminalization.event
     event_type = f"runtime.turn.{turn.status}"
     event = record_runtime_event(
         state.runtime_store,
@@ -103,6 +120,42 @@ def _complete_turn_from_exit_code(
         )
     return turn, event
 
+
+def _terminalize_worker_observed_cancellation(
+    state: PlatformState,
+    *,
+    turn: RuntimeTurnRecord,
+    provider_id: str,
+    exit_code: int | None = None,
+    output_text: str = "",
+) -> RuntimeTurnTerminalizationResult:
+    """Drain the authoritative cancellation outbox when a turn worker loses the race."""
+    reason = turn.cancellation_reason or turn.failure_reason or "Runtime turn cancelled."
+    event_payload: dict[str, object] = {
+        "provider_id": provider_id,
+        "reason": reason,
+    }
+    if exit_code is not None:
+        event_payload["exit_code"] = exit_code
+    return terminalize_runtime_turn_cancellation(
+        state.runtime_store,
+        turn_id=turn.turn_id,
+        reason=reason,
+        event_payload=event_payload,
+        event_bus=state.runtime_event_bus,
+        callback=lambda session, cancelled_turn, event: dispatch_source_app_runtime_event(
+            state,
+            session=session,
+            turn=cancelled_turn,
+            event_type=event.event_type,
+            output_text=output_text,
+            failure_reason=reason,
+            runtime_event_id=event.event_id,
+            raise_on_failure=True,
+            start_path=getattr(state, "repository_root", None),
+        ),
+        request_intent=False,
+    )
 
 
 def _record_turn_failed(

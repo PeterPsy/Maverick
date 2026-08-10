@@ -231,6 +231,17 @@ class RuntimeStore(Protocol):
     ) -> tuple[RuntimeTurnRecord, bool]:
         ...
 
+    def migrate_legacy_turn_terminalization(
+        self,
+        *,
+        turn_id: str,
+        event_id: str,
+        event_type: str,
+        payload: dict[str, object],
+        delivered_at: datetime,
+    ) -> tuple[RuntimeTurnRecord, bool]:
+        ...
+
     def mark_turn_terminalization_phase(
         self,
         *,
@@ -889,6 +900,56 @@ class RuntimeDocumentStore:
             persisted = self.get_turn(turn_id)
             if persisted.terminalization_event_id is not None:
                 return persisted, persisted.terminalization_event_id == normalized_event_id
+
+    def migrate_legacy_turn_terminalization(
+        self,
+        *,
+        turn_id: str,
+        event_id: str,
+        event_type: str,
+        payload: dict[str, object],
+        delivered_at: datetime,
+    ) -> tuple[RuntimeTurnRecord, bool]:
+        """Atomically mark a pre-outbox terminal event as already delivered."""
+        normalized_event_id = event_id.strip()
+        normalized_event_type = event_type.strip()
+        if not normalized_event_id or not normalized_event_type:
+            raise ValueError("Legacy runtime turn terminalization requires event_id and event_type.")
+        current = self.get_turn(turn_id)
+        if normalized_event_type != f"runtime.turn.{current.status}":
+            return current, False
+        if current.terminalization_event_id is not None:
+            return current, False
+        self.collections.turns.update_one(
+            {
+                "turn_id": current.turn_id,
+                "workspace_id": current.workspace_id,
+                "session_id": current.session_id,
+                "status": current.status,
+                "terminalization_event_id": None,
+            },
+            {
+                "$set": {
+                    "terminalization_event_id": normalized_event_id,
+                    "terminalization_event_type": normalized_event_type,
+                    "terminalization_event_payload": dict(payload),
+                    "terminalization_claimed_at": delivered_at,
+                    "terminalization_event_persisted_at": delivered_at,
+                    "terminalization_thread_released_at": delivered_at,
+                    "terminalization_callback_delivered_at": delivered_at,
+                }
+            },
+            upsert=False,
+        )
+        persisted = self.get_turn(turn_id)
+        applied = (
+            persisted.terminalization_event_id == normalized_event_id
+            and persisted.terminalization_event_type == normalized_event_type
+            and persisted.terminalization_event_persisted_at is not None
+            and persisted.terminalization_thread_released_at is not None
+            and persisted.terminalization_callback_delivered_at is not None
+        )
+        return persisted, applied
 
     def mark_turn_terminalization_phase(
         self,

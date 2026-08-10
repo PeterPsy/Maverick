@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime
+from types import SimpleNamespace
 import unittest
 from unittest.mock import patch
 
@@ -12,6 +13,7 @@ from core.runtime.runtime_turns import RuntimeTurnRecord
 from core.runtime.service import create_runtime_session, request_runtime_turn_cancellation, transition_runtime_turn
 from core.runtime.session_collection import RuntimeSessionJsonCollection
 from core.runtime.store import RuntimeCollections, RuntimeDocumentStore
+from core.runtime.turn_submission_service_events import _complete_turn_from_exit_code
 from core.runtime.turn_terminalization import terminalize_runtime_turn_cancellation
 from core.runtime.workspace_collection import WorkspaceRuntimeJsonCollection
 from tests.support.collections import FakeCollection
@@ -19,6 +21,77 @@ from tests.support.repo import make_temp_repo_root
 
 
 class RuntimeSessionTerminationRaceTest(unittest.TestCase):
+    def test_worker_completion_drains_cancellation_outbox_claimed_after_status_check(self) -> None:
+        repo_root = make_temp_repo_root(self)
+        store = _runtime_json_store(repo_root)
+        session = create_runtime_session(
+            store,
+            session_id="worker-cancel-outbox-race",
+            workspace_id="default",
+            agent_id="chat",
+            start_path=repo_root,
+        )
+        now = datetime(2026, 8, 10, 9, 0, tzinfo=UTC)
+        store.save_turn(
+            RuntimeTurnRecord(
+                turn_id="worker-cancel-outbox-race-turn",
+                session_id=session.session_id,
+                workspace_id="default",
+                status="active",
+                input_text="finish while interrupt claims the outbox",
+                created_at=now,
+                updated_at=now,
+                started_at=now,
+                completed_at=None,
+                failure_reason=None,
+            )
+        )
+        request_runtime_turn_cancellation(
+            store,
+            turn_id="worker-cancel-outbox-race-turn",
+            reason="interrupt won",
+            now=now,
+        )
+        cancelled = transition_runtime_turn(
+            store,
+            turn_id="worker-cancel-outbox-race-turn",
+            target_status="cancelled",
+            failure_reason="interrupt won",
+            now=now,
+        )
+        claimed, applied = store.claim_turn_terminalization(
+            turn_id=cancelled.turn_id,
+            event_id="outbox-event",
+            event_type="runtime.turn.cancelled",
+            payload={"reason": "interrupt won"},
+            now=now,
+        )
+        self.assertTrue(applied)
+
+        completed, event = _complete_turn_from_exit_code(
+            SimpleNamespace(runtime_store=store, runtime_event_bus=None, repository_root=repo_root),
+            session_id=session.session_id,
+            turn_id=claimed.turn_id,
+            provider_id="codex",
+            exit_code=0,
+            output_text="provider output",
+        )
+        retried = terminalize_runtime_turn_cancellation(
+            store,
+            turn_id=claimed.turn_id,
+            reason="interrupt won",
+            event_payload={"reason": "interrupt won"},
+            now=now,
+        )
+
+        self.assertEqual(completed.status, "cancelled")
+        self.assertEqual(event.event_id, "outbox-event")
+        self.assertEqual(retried.event.event_id, "outbox-event")
+        self.assertEqual(
+            [item.event_id for item in store.list_events(session.session_id) if item.event_type == "runtime.turn.cancelled"],
+            ["outbox-event"],
+        )
+
     def test_terminalization_retry_delivers_callback_with_stable_event_id(self) -> None:
         repo_root = make_temp_repo_root(self)
         store = _runtime_json_store(repo_root)

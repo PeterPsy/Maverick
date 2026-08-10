@@ -254,8 +254,10 @@ conversation through its short-lived `app_sidecar` capability. It then reserves
 an app-owned OpenDesign run correlation and asks core for a source-app-stamped
 runtime session, a durable stream, and a one-shot capability to the active
 project directory. Only correlation metadata is stored under the active data
-generation in `maverick-runtime/correlations.json`; prompts, provider payloads,
-tokens, and host paths are excluded. Core owns provider selection, budgets,
+generation in `maverick-runtime/correlations.json`; terminal callback event IDs
+are persisted there before acknowledgement so at-least-once callback replays
+return without another OpenDesign request or state mutation. Prompts, provider
+payloads, tokens, and host paths are excluded. Core owns provider selection, budgets,
 interrupt, recovery, and normalized events. Design Studio alone owns the
 OpenDesign SSE schema and writes terminal result packages for success, failure,
 timeout, and cancellation.

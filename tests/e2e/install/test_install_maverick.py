@@ -22,6 +22,7 @@ from core.shared.installer import (
     default_nginx_conf_path,
     default_output_root,
     default_systemd_dir,
+    preflight_check,
     request_tls_certificate,
     render_install_plan,
     render_nginx_config,
@@ -134,6 +135,46 @@ class InstallerRenderingTestCase(unittest.TestCase):
 
         self.assertIn("listen 443 ssl", nginx_conf)
         self.assertIn("ssl_certificate /etc/letsencrypt/live/maverick.example.test/fullchain.pem;", nginx_conf)
+
+    def test_hosted_sidecars_render_wildcard_vhost_and_core_environment(self) -> None:
+        repo_root = Path(__file__).resolve().parents[3]
+        config = replace(
+            self.make_config(repo_root, hostname="maverick.example.test", local_only=False),
+            hosted_sidecars=True,
+            sidecar_tls_cert_path="/run/tls/sidecars-fullchain.pem",
+            sidecar_tls_key_path="/run/tls/sidecars-privkey.pem",
+        )
+
+        rendered = render_install_plan(config, force_https_nginx=True)
+        nginx_conf = rendered[config.nginx_conf_path]
+        env_file = rendered[config.install_env_path]
+        manifest = json.loads(rendered[config.output_root / "install-manifest.json"])
+
+        self.assertIn("server_name *.sidecars.maverick.example.test;", nginx_conf)
+        self.assertIn("ssl_certificate /run/tls/sidecars-fullchain.pem;", nginx_conf)
+        self.assertIn("proxy_buffering off;", nginx_conf)
+        sidecar_server = nginx_conf.split("server_name *.sidecars.maverick.example.test;", 1)[1]
+        self.assertNotIn("add_header X-Frame-Options", sidecar_server)
+        self.assertIn("MAVERICK_SIDECAR_ORIGIN_MODE=hosted", env_file)
+        self.assertIn("MAVERICK_SIDECAR_INSTALLATION_DOMAIN=maverick.example.test", env_file)
+        self.assertIn("MAVERICK_SIDECAR_PLATFORM_ORIGIN=https://maverick.example.test", env_file)
+        self.assertTrue(manifest["hosted_sidecars"])
+        self.assertEqual(manifest["sidecar_origin_pattern"], "*.sidecars.maverick.example.test")
+
+    def test_hosted_sidecars_fail_live_preflight_without_wildcard_tls_files(self) -> None:
+        repo_root = Path(__file__).resolve().parents[3]
+        config = replace(
+            self.make_config(repo_root, hostname="maverick.example.test", local_only=False),
+            hosted_sidecars=True,
+            sidecar_tls_cert_path="/missing/sidecars-fullchain.pem",
+            sidecar_tls_key_path="/missing/sidecars-privkey.pem",
+        )
+
+        with patch("core.shared.installer.shutil.which", return_value="/usr/bin/tool"):
+            report = preflight_check(config, live_apply=True, request_tls=False)
+
+        self.assertIn("hosted sidecar TLS certificate not found: /missing/sidecars-fullchain.pem", report.errors)
+        self.assertIn("hosted sidecar TLS private key not found: /missing/sidecars-privkey.pem", report.errors)
 
     def test_render_install_plan_skips_nginx_for_local_only_mode(self) -> None:
         repo_root = Path(__file__).resolve().parents[3]

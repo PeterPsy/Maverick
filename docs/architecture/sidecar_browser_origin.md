@@ -166,6 +166,13 @@ The hosted listener must terminate wildcard TLS and route
 invalid, non-HTTPS, or request-mismatched configuration fails closed before a
 ticket is issued.
 
+The self-hosted installer exposes this boundary explicitly through
+`--hosted-sidecars`. Live preflight requires an externally provisioned DNS-01
+wildcard certificate, renders the three core environment values above, and
+adds a dedicated Nginx wildcard server without `X-Frame-Options`. The platform
+server may retain `X-Frame-Options: SAMEORIGIN`; that header must never be
+inherited by the distinct sidecar server.
+
 ## Residual Risk And Closure
 
 WP9 and WP10 are complete for Design Studio. The mounted frontend uses only the

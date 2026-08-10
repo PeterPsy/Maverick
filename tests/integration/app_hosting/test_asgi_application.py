@@ -71,6 +71,16 @@ class AsgiApplicationTests(unittest.TestCase):
         )
         self.assertTrue(controller.is_shutting_down())
 
+    def test_request_disconnect_controller_is_distinct_from_host_shutdown(self) -> None:
+        host = EntrypointShutdownController()
+        request = EntrypointShutdownController(parent=host, interruption_reason="client disconnect")
+
+        request.begin_shutdown()
+
+        self.assertTrue(request.is_shutting_down())
+        self.assertEqual(request.interruption_reason(), "client disconnect")
+        self.assertFalse(host.is_shutting_down())
+
     def test_http_request_body_uses_configured_size_limit_before_wsgi_dispatch(self) -> None:
         host = PlatformAsgiHost(state=SimpleNamespace(repository_root=REPO_ROOT))
         sent: list[dict[str, object]] = []

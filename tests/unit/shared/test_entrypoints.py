@@ -9,6 +9,7 @@ import unittest
 from unittest.mock import patch
 
 from core.shared.entrypoints import (
+    EntrypointInterruptedError,
     EntrypointShutdownController,
     StreamingJsonEntrypointResult,
     redact_entrypoint_stderr,
@@ -30,6 +31,19 @@ class SharedEntrypointTests(unittest.TestCase):
         controller.begin_shutdown()
 
         self.assertEqual(calls, ["cleanup"])
+
+    def test_nested_shutdown_controller_reports_the_initiating_reason(self) -> None:
+        host = EntrypointShutdownController()
+        request = EntrypointShutdownController(parent=host, interruption_reason="client disconnect")
+
+        request.begin_shutdown()
+
+        self.assertEqual(request.interruption_reason(), "client disconnect")
+        self.assertIsNone(host.interruption_reason())
+
+        inherited = EntrypointShutdownController(parent=host, interruption_reason="client disconnect")
+        host.begin_shutdown()
+        self.assertEqual(inherited.interruption_reason(), "host shutdown")
 
     def test_entrypoint_stderr_redaction_hides_secret_material(self) -> None:
         self.assertEqual(
@@ -123,7 +137,8 @@ class SharedEntrypointTests(unittest.TestCase):
 
             self.assertFalse(worker.is_alive())
             error = failures.get_nowait()
-            self.assertIsInstance(error, RuntimeError)
+            self.assertIsInstance(error, EntrypointInterruptedError)
+            self.assertEqual(error.reason, "host shutdown")
             self.assertIn("host shutdown", str(error))
 
     def test_json_entrypoint_delivers_stdin_when_child_reads_after_initial_wait(self) -> None:

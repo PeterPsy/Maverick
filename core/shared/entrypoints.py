@@ -28,15 +28,31 @@ SENSITIVE_ERROR_MARKERS = (
 )
 STREAMING_ENTRYPOINT_HEADER_MAX_BYTES = 1024 * 1024
 
+
+class EntrypointInterruptedError(RuntimeError):
+    """Report an entrypoint terminated by its owning lifecycle controller."""
+
+    def __init__(self, entrypoint_path: str | Path, *, reason: str) -> None:
+        self.entrypoint_path = str(entrypoint_path)
+        self.reason = reason
+        super().__init__(f"Entrypoint `{self.entrypoint_path}` interrupted by {reason}.")
+
+
 class EntrypointShutdownController:
     """Track live entrypoint subprocesses so a host can terminate them during shutdown."""
 
-    def __init__(self, *, parent: EntrypointShutdownController | None = None) -> None:
+    def __init__(
+        self,
+        *,
+        parent: EntrypointShutdownController | None = None,
+        interruption_reason: str = "host shutdown",
+    ) -> None:
         self._shutting_down = Event()
         self._lock = Lock()
         self._processes: set[subprocess.Popen[str]] = set()
         self._cleanup_callbacks: set[Callable[[], None]] = set()
         self._parent = parent
+        self._interruption_reason = interruption_reason
 
     def begin_shutdown(self) -> None:
         """Mark shutdown started and terminate registered subprocesses."""
@@ -53,6 +69,14 @@ class EntrypointShutdownController:
     def is_shutting_down(self) -> bool:
         """Return whether the host has started shutdown."""
         return self._shutting_down.is_set() or bool(self._parent and self._parent.is_shutting_down())
+
+    def interruption_reason(self) -> str | None:
+        """Return the reason supplied by the controller that initiated shutdown."""
+        if self._shutting_down.is_set():
+            return self._interruption_reason
+        if self._parent is not None:
+            return self._parent.interruption_reason()
+        return None
 
     def active_process_count(self) -> int:
         """Return how many entrypoint subprocesses are still registered."""
@@ -156,7 +180,10 @@ class StreamingJsonEntrypointResult:
         if returncode != 0:
             stderr = _read_stderr_file(self.stderr_file)
             if self.shutdown_controller is not None and self.shutdown_controller.is_shutting_down():
-                raise RuntimeError(f"Entrypoint `{self.entrypoint_path}` interrupted by host shutdown.")
+                raise EntrypointInterruptedError(
+                    self.entrypoint_path,
+                    reason=self.shutdown_controller.interruption_reason() or "host shutdown",
+                )
             raise RuntimeError(
                 f"Entrypoint `{self.entrypoint_path}` failed with exit code {returncode}: "
                 f"{redact_entrypoint_stderr(stderr) or 'no stderr'}"
@@ -248,7 +275,10 @@ def run_json_entrypoint(
             shutdown_controller.unregister(process)
     if process.returncode != 0:
         if shutdown_controller is not None and shutdown_controller.is_shutting_down():
-            raise RuntimeError(f"Entrypoint `{entrypoint_path}` interrupted by host shutdown.")
+            raise EntrypointInterruptedError(
+                entrypoint_path,
+                reason=shutdown_controller.interruption_reason() or "host shutdown",
+            )
         stderr_text = redact_entrypoint_stderr(stderr or "")
         raise RuntimeError(
             f"Entrypoint `{entrypoint_path}` failed with exit code {process.returncode}: {stderr_text or 'no stderr'}"
@@ -328,7 +358,10 @@ def run_streaming_json_entrypoint(
         stderr_file.close()
         if returncode != 0:
             if shutdown_controller is not None and shutdown_controller.is_shutting_down():
-                raise RuntimeError(f"Entrypoint `{entrypoint_path}` interrupted by host shutdown.")
+                raise EntrypointInterruptedError(
+                    entrypoint_path,
+                    reason=shutdown_controller.interruption_reason() or "host shutdown",
+                )
             raise RuntimeError(
                 f"Entrypoint `{entrypoint_path}` failed with exit code {returncode}: "
                 f"{redact_entrypoint_stderr(stderr) or 'no stderr'}"
@@ -385,7 +418,10 @@ def _read_streaming_json_header(
                 raise RuntimeError(f"Entrypoint `{entrypoint_path}` stream header exceeded the size limit.")
             if shutdown_controller is not None and shutdown_controller.is_shutting_down():
                 _terminate_process_tree_and_wait(process)  # type: ignore[arg-type]
-                raise RuntimeError(f"Entrypoint `{entrypoint_path}` interrupted by host shutdown.")
+                raise EntrypointInterruptedError(
+                    entrypoint_path,
+                    reason=shutdown_controller.interruption_reason() or "host shutdown",
+                )
             if process.poll() is not None:
                 try:
                     while True:
@@ -448,7 +484,10 @@ def _communicate_with_limits(
     except subprocess.TimeoutExpired as error:
         _terminate_process_tree_and_wait(process)
         if shutdown_controller is not None and shutdown_controller.is_shutting_down():
-            raise RuntimeError(f"Entrypoint `{entrypoint_path}` interrupted by host shutdown.") from error
+            raise EntrypointInterruptedError(
+                entrypoint_path,
+                reason=shutdown_controller.interruption_reason() or "host shutdown",
+            ) from error
         raise
 
 

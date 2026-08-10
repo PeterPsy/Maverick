@@ -173,7 +173,10 @@ class PlatformAsgiHost:
         request_shutdown_controller: EntrypointShutdownController | None = None
         disconnect_task: asyncio.Task[bool] | None = None
         if use_app_backend_executor:
-            request_shutdown_controller = EntrypointShutdownController(parent=self.shutdown_controller)
+            request_shutdown_controller = EntrypointShutdownController(
+                parent=self.shutdown_controller,
+                interruption_reason="client disconnect",
+            )
             environ["maverick.entrypoint_shutdown_controller"] = request_shutdown_controller
             disconnect_task = asyncio.create_task(_wait_for_http_disconnect(receive))
             response_future = loop.run_in_executor(

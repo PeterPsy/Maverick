@@ -13,6 +13,7 @@ APP_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(APP_ROOT / "backend"))
 
 from projects.batches import OperationBatch  # noqa: E402
+from projects.errors import ProjectError  # noqa: E402
 from projects.operations import apply_operation_batch  # noqa: E402
 
 
@@ -95,6 +96,53 @@ class TimelineOperationsTest(unittest.TestCase):
         clips = result["timeline"]["tracks"][0]["clips"]
         right = next(item for item in clips if item["start_frame"] == 180)
         self.assertEqual(right["source"], {"in_pts": 337500, "out_pts": 450000})
+
+    def test_rich_clip_residuals_reidentify_children_and_preserve_valid_references(self) -> None:
+        result, _ = apply_operation_batch(
+            golden(),
+            batch(
+                [{"type": "timeline.split", "clip_id": "clip-video-a", "frame": 60, "right_clip_id": "clip-split"}],
+                batch_id="batch-rich-split",
+            ),
+        )
+        video_clips = result["timeline"]["tracks"][0]["clips"]
+        left = next(item for item in video_clips if item["clip_id"] == "clip-video-a")
+        right = next(item for item in video_clips if item["clip_id"] == "clip-split")
+        self.assertEqual([item["frame"] for item in left["keyframes"]], [0])
+        self.assertEqual([item["frame"] for item in right["keyframes"]], [60])
+        self.assertNotEqual(left["effects"][0]["effect_id"], right["effects"][0]["effect_id"])
+        self.assertNotEqual(left["layers"][0]["layer_id"], right["layers"][0]["layer_id"])
+        self.assertIn("clip-split", result["timeline"]["groups"][0]["member_ids"])
+        self.assertEqual(result["timeline"]["transitions"][0]["from_clip_id"], "clip-split")
+
+        overwritten, _ = apply_operation_batch(
+            golden(),
+            batch(
+                [{"type": "timeline.overwrite", "track_id": "track-video", "clip": clip("clip-new", 60, 120, 1000, 2000)}],
+                batch_id="batch-rich-overwrite",
+            ),
+        )
+        child_ids = []
+        for item in overwritten["timeline"]["tracks"][0]["clips"]:
+            child_ids.extend(effect["effect_id"] for effect in item["effects"])
+            child_ids.extend(layer["layer_id"] for layer in item["layers"])
+            child_ids.extend(keyframe["keyframe_id"] for keyframe in item["keyframes"])
+        self.assertEqual(len(child_ids), len(set(child_ids)))
+        self.assertEqual(overwritten["timeline"]["transitions"], [])
+
+    def test_frame_zero_and_timeline_end_boundaries_are_explicit(self) -> None:
+        for frame in (0, 120):
+            with self.subTest(frame=frame), self.assertRaisesRegex(ProjectError, "strictly inside"):
+                apply_operation_batch(
+                    timeline_document(),
+                    batch([{"type": "timeline.split", "clip_id": "clip-video-a", "frame": frame, "right_clip_id": "clip-split"}]),
+                )
+
+        inserted, _ = apply_operation_batch(
+            timeline_document(),
+            batch([{"type": "timeline.insert", "track_id": "track-video", "clip": clip("clip-at-zero", 0, 1, 0, 1)}]),
+        )
+        self.assertEqual(inserted["timeline"]["tracks"][0]["clips"][0]["start_frame"], 0)
 
 
 class ContentOperationsTest(unittest.TestCase):

@@ -5,6 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from enum import Enum
 from fractions import Fraction
+from bisect import bisect_right
 from math import gcd
 
 
@@ -16,6 +17,7 @@ class Rounding(str, Enum):
 
     FLOOR = "floor"
     CEIL = "ceil"
+    TOWARD_ZERO = "toward_zero"
     NEAREST_TIES_TO_EVEN = "nearest_ties_to_even"
 
 
@@ -140,12 +142,35 @@ def rescale_timestamp(
     return round_fraction(exact, rounding)
 
 
+def vfr_frame_to_pts(frame: int, pts_map: list[int] | tuple[int, ...]) -> int:
+    """Resolve a zero-based decoded-frame index against an authoritative VFR PTS map."""
+
+    _require_integer(frame, "frame")
+    _validate_pts_map(pts_map)
+    if frame < 0 or frame >= len(pts_map):
+        raise ValueError("Frame lies outside the VFR PTS map.")
+    return pts_map[frame]
+
+
+def pts_to_vfr_frame(pts: int, pts_map: list[int] | tuple[int, ...]) -> int:
+    """Resolve a source timestamp to the frame active at or immediately before it."""
+
+    _require_integer(pts, "PTS")
+    _validate_pts_map(pts_map)
+    position = bisect_right(pts_map, pts) - 1
+    if position < 0:
+        raise ValueError("PTS precedes the VFR PTS map.")
+    return position
+
+
 def round_fraction(value: Fraction, rounding: Rounding) -> int:
     floor_value = value.numerator // value.denominator
     if rounding is Rounding.FLOOR:
         return floor_value
     if rounding is Rounding.CEIL:
         return -((-value.numerator) // value.denominator)
+    if rounding is Rounding.TOWARD_ZERO:
+        return floor_value if value >= 0 else -((-value.numerator) // value.denominator)
     remainder = value - floor_value
     if remainder < Fraction(1, 2):
         return floor_value
@@ -162,3 +187,12 @@ def _require_positive_rate(value: Rational, name: str) -> None:
 def _require_integer(value: object, name: str) -> None:
     if isinstance(value, bool) or not isinstance(value, int):
         raise ValueError(f"{name.capitalize()} must be an integer.")
+
+
+def _validate_pts_map(value: object) -> None:
+    if not isinstance(value, (list, tuple)) or not value:
+        raise ValueError("VFR PTS map must be a non-empty integer sequence.")
+    if any(isinstance(item, bool) or not isinstance(item, int) or item < 0 for item in value):
+        raise ValueError("VFR PTS map must contain non-negative integers.")
+    if any(left >= right for left, right in zip(value, value[1:])):
+        raise ValueError("VFR PTS map must be strictly increasing.")

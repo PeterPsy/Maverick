@@ -12,13 +12,16 @@
     "canvas": {"$ref": "#/$defs/canvas"},
     "frame_rate": {"$ref": "#/$defs/positiveRational"},
     "audio": {"$ref": "#/$defs/audioConfiguration"},
-    "duration_frames": {"type": "integer", "minimum": 0},
+    "duration_frames": {"$ref": "#/$defs/nonNegativeInteger"},
     "assets": {"type": "array", "items": {"$ref": "#/$defs/asset"}},
     "timeline": {"$ref": "#/$defs/timeline"}
   },
   "$defs": {
     "identifier": {"type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"},
     "sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+    "signedInteger": {"type": "integer", "minimum": -9007199254740991, "maximum": 9007199254740991},
+    "nonNegativeInteger": {"type": "integer", "minimum": 0, "maximum": 9007199254740991},
+    "positiveInteger": {"type": "integer", "minimum": 1, "maximum": 9007199254740991},
     "registryReference": {
       "type": "object",
       "additionalProperties": false,
@@ -29,7 +32,19 @@
       "type": "object",
       "additionalProperties": false,
       "required": ["numerator", "denominator"],
-      "properties": {"numerator": {"type": "integer", "minimum": 1}, "denominator": {"type": "integer", "minimum": 1}}
+      "properties": {"numerator": {"$ref": "#/$defs/positiveInteger"}, "denominator": {"$ref": "#/$defs/positiveInteger"}}
+    },
+    "provenanceEntry": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "id", "version"],
+      "properties": {
+        "kind": {"enum": ["import", "user", "agent", "system"]},
+        "id": {"$ref": "#/$defs/identifier"},
+        "version": {"type": "string", "minLength": 1, "maxLength": 64},
+        "digest": {"$ref": "#/$defs/sha256"},
+        "note": {"type": "string", "maxLength": 1024}
+      }
     },
     "metadata": {
       "type": "object",
@@ -40,7 +55,7 @@
         "workspace_id": {"$ref": "#/$defs/identifier"},
         "name": {"type": "string", "minLength": 1, "maxLength": 256},
         "tags": {"type": "array", "maxItems": 128, "items": {"type": "string", "minLength": 1, "maxLength": 128}},
-        "provenance": {"type": "array", "maxItems": 128, "items": {"type": "object"}}
+        "provenance": {"type": "array", "maxItems": 128, "items": {"$ref": "#/$defs/provenanceEntry"}}
       }
     },
     "canvas": {
@@ -91,11 +106,11 @@
           "type": "object", "additionalProperties": false,
           "required": ["duration_pts", "time_base", "duration_us", "frame_rate_mode", "pts_map"],
           "properties": {
-            "duration_pts": {"type": "integer", "minimum": 0},
+            "duration_pts": {"$ref": "#/$defs/nonNegativeInteger"},
             "time_base": {"$ref": "#/$defs/positiveRational"},
-            "duration_us": {"type": "integer", "minimum": 0},
+            "duration_us": {"$ref": "#/$defs/nonNegativeInteger"},
             "frame_rate_mode": {"enum": ["cfr", "vfr", "still", "audio"]},
-            "pts_map": {"type": "array", "items": {"type": "integer", "minimum": 0}}
+            "pts_map": {"type": "array", "items": {"$ref": "#/$defs/nonNegativeInteger"}}
           }
         }
       }
@@ -131,11 +146,11 @@
         "clip_id": {"$ref": "#/$defs/identifier"},
         "kind": {"enum": ["video", "audio", "image", "text", "caption", "shape", "template", "compound"]},
         "asset_id": {"$ref": "#/$defs/identifier"},
-        "start_frame": {"type": "integer", "minimum": 0},
-        "duration_frames": {"type": "integer", "minimum": 1},
+        "start_frame": {"$ref": "#/$defs/nonNegativeInteger"},
+        "duration_frames": {"$ref": "#/$defs/positiveInteger"},
         "source": {
           "type": "object", "additionalProperties": false, "required": ["in_pts", "out_pts"],
-          "properties": {"in_pts": {"type": "integer", "minimum": 0}, "out_pts": {"type": "integer", "minimum": 1}}
+          "properties": {"in_pts": {"$ref": "#/$defs/nonNegativeInteger"}, "out_pts": {"$ref": "#/$defs/positiveInteger"}}
         },
         "transform": {"$ref": "#/$defs/transform"},
         "crop": {"$ref": "#/$defs/crop"},
@@ -155,17 +170,17 @@
     "transform": {
       "type": "object", "additionalProperties": false,
       "properties": {
-        "x_millipixels": {"type": "integer"}, "y_millipixels": {"type": "integer"},
-        "scale_x_permille": {"type": "integer"}, "scale_y_permille": {"type": "integer"},
-        "rotation_millidegrees": {"type": "integer"},
-        "anchor_x_permille": {"type": "integer"}, "anchor_y_permille": {"type": "integer"}
+        "x_millipixels": {"$ref": "#/$defs/signedInteger"}, "y_millipixels": {"$ref": "#/$defs/signedInteger"},
+        "scale_x_permille": {"$ref": "#/$defs/signedInteger"}, "scale_y_permille": {"$ref": "#/$defs/signedInteger"},
+        "rotation_millidegrees": {"$ref": "#/$defs/signedInteger"},
+        "anchor_x_permille": {"$ref": "#/$defs/signedInteger"}, "anchor_y_permille": {"$ref": "#/$defs/signedInteger"}
       }
     },
     "crop": {
       "type": "object", "additionalProperties": false,
       "properties": {
-        "left_pixels": {"type": "integer", "minimum": 0}, "top_pixels": {"type": "integer", "minimum": 0},
-        "right_pixels": {"type": "integer", "minimum": 0}, "bottom_pixels": {"type": "integer", "minimum": 0}
+        "left_pixels": {"$ref": "#/$defs/nonNegativeInteger"}, "top_pixels": {"$ref": "#/$defs/nonNegativeInteger"},
+        "right_pixels": {"$ref": "#/$defs/nonNegativeInteger"}, "bottom_pixels": {"$ref": "#/$defs/nonNegativeInteger"}
       }
     },
     "audioClip": {
@@ -175,15 +190,15 @@
         "gain_millibels": {"type": "integer", "minimum": -9600, "maximum": 2400},
         "pan_milli": {"type": "integer", "minimum": -1000, "maximum": 1000},
         "mute": {"type": "boolean"},
-        "channel_mapping": {"type": "array", "items": {"type": "integer", "minimum": 0, "maximum": 63}},
-        "fade_in_frames": {"type": "integer", "minimum": 0}, "fade_out_frames": {"type": "integer", "minimum": 0},
+        "channel_mapping": {"type": "array", "maxItems": 64, "items": {"type": "integer", "minimum": 0, "maximum": 63}},
+        "fade_in_frames": {"$ref": "#/$defs/nonNegativeInteger"}, "fade_out_frames": {"$ref": "#/$defs/nonNegativeInteger"},
         "envelope": {"type": "array", "items": {"$ref": "#/$defs/envelopePoint"}}
       }
     },
     "envelopePoint": {
       "type": "object", "additionalProperties": false, "required": ["frame", "gain_millibels", "easing"],
       "properties": {
-        "frame": {"type": "integer", "minimum": 0}, "gain_millibels": {"type": "integer", "minimum": -9600, "maximum": 2400},
+        "frame": {"$ref": "#/$defs/nonNegativeInteger"}, "gain_millibels": {"type": "integer", "minimum": -9600, "maximum": 2400},
         "easing": {"enum": ["linear", "ease-in", "ease-out", "ease-in-out", "step-start", "step-end"]}
       }
     },
@@ -191,9 +206,15 @@
       "type": "object", "additionalProperties": false,
       "required": ["keyframe_id", "property", "frame", "value", "easing"],
       "properties": {
-        "keyframe_id": {"$ref": "#/$defs/identifier"}, "property": {"$ref": "#/$defs/identifier"},
-        "frame": {"type": "integer", "minimum": 0},
-        "value": {"type": ["integer", "string", "boolean", "object", "array", "null"]},
+        "keyframe_id": {"$ref": "#/$defs/identifier"},
+        "property": {"enum": [
+          "audio.gain_millibels", "audio.pan_milli", "crop.bottom_pixels", "crop.left_pixels",
+          "crop.right_pixels", "crop.top_pixels", "opacity_permille", "transform.anchor_x_permille",
+          "transform.anchor_y_permille", "transform.rotation_millidegrees", "transform.scale_x_permille",
+          "transform.scale_y_permille", "transform.x_millipixels", "transform.y_millipixels"
+        ]},
+        "frame": {"$ref": "#/$defs/nonNegativeInteger"},
+        "value": {"$ref": "#/$defs/signedInteger"},
         "easing": {"enum": ["linear", "ease-in", "ease-out", "ease-in-out", "step-start", "step-end"]}
       }
     },
@@ -202,7 +223,17 @@
       "required": ["effect_id", "registry", "enabled", "parameters"],
       "properties": {
         "effect_id": {"$ref": "#/$defs/identifier"}, "registry": {"$ref": "#/$defs/registryReference"},
-        "enabled": {"type": "boolean"}, "parameters": {"type": "object"}
+        "enabled": {"type": "boolean"},
+        "parameters": {
+          "type": "object", "additionalProperties": false,
+          "properties": {
+            "amount_permille": {"type": "integer", "minimum": -1000, "maximum": 3000},
+            "radius_millipixels": {"type": "integer", "minimum": 0, "maximum": 100000},
+            "low_gain_millibels": {"type": "integer", "minimum": -2400, "maximum": 2400},
+            "mid_gain_millibels": {"type": "integer", "minimum": -2400, "maximum": 2400},
+            "high_gain_millibels": {"type": "integer", "minimum": -2400, "maximum": 2400}
+          }
+        }
       }
     },
     "layer": {
@@ -222,7 +253,18 @@
         "plain_text": {"type": "string", "maxLength": 100000}, "font": {"$ref": "#/$defs/registryReference"},
         "size_millipixels": {"type": "integer", "minimum": 1}, "color": {"type": "string", "pattern": "^#[0-9A-Fa-f]{8}$"},
         "align": {"enum": ["start", "center", "end", "justify"]},
-        "runs": {"type": "array", "items": {"type": "object"}}
+        "runs": {"type": "array", "maxItems": 10000, "items": {"$ref": "#/$defs/textRun"}}
+      }
+    },
+    "textRun": {
+      "type": "object", "additionalProperties": false, "required": ["start", "end"],
+      "properties": {
+        "start": {"$ref": "#/$defs/nonNegativeInteger"},
+        "end": {"$ref": "#/$defs/positiveInteger"},
+        "weight": {"enum": ["normal", "medium", "semibold", "bold"]},
+        "italic": {"type": "boolean"},
+        "underline": {"type": "boolean"},
+        "color": {"type": "string", "pattern": "^#[0-9A-Fa-f]{8}$"}
       }
     },
     "transition": {
@@ -231,7 +273,8 @@
       "properties": {
         "transition_id": {"$ref": "#/$defs/identifier"}, "registry": {"$ref": "#/$defs/registryReference"},
         "from_clip_id": {"$ref": "#/$defs/identifier"}, "to_clip_id": {"$ref": "#/$defs/identifier"},
-        "duration_frames": {"type": "integer", "minimum": 1}, "parameters": {"type": "object"}
+        "duration_frames": {"$ref": "#/$defs/positiveInteger"},
+        "parameters": {"type": "object", "additionalProperties": false, "properties": {}}
       }
     },
     "caption": {
@@ -239,15 +282,21 @@
       "required": ["caption_id", "track_id", "start_frame", "duration_frames", "text", "speaker", "style"],
       "properties": {
         "caption_id": {"$ref": "#/$defs/identifier"}, "track_id": {"$ref": "#/$defs/identifier"},
-        "start_frame": {"type": "integer", "minimum": 0}, "duration_frames": {"type": "integer", "minimum": 1},
+        "start_frame": {"$ref": "#/$defs/nonNegativeInteger"}, "duration_frames": {"$ref": "#/$defs/positiveInteger"},
         "text": {"type": "string", "minLength": 1}, "speaker": {"type": "string", "maxLength": 256},
-        "style": {"type": "object", "required": ["font"], "properties": {"font": {"$ref": "#/$defs/registryReference"}}}
+        "style": {
+          "type": "object", "additionalProperties": false, "required": ["font"],
+          "properties": {
+            "font": {"$ref": "#/$defs/registryReference"},
+            "position": {"enum": ["safe-top", "safe-center", "safe-bottom"]}
+          }
+        }
       }
     },
     "marker": {
       "type": "object", "additionalProperties": false, "required": ["marker_id", "frame", "kind", "label", "note"],
       "properties": {
-        "marker_id": {"$ref": "#/$defs/identifier"}, "frame": {"type": "integer", "minimum": 0},
+        "marker_id": {"$ref": "#/$defs/identifier"}, "frame": {"$ref": "#/$defs/nonNegativeInteger"},
         "kind": {"enum": ["marker", "chapter", "range-start", "range-end"]},
         "label": {"type": "string", "maxLength": 256}, "note": {"type": "string", "maxLength": 4096}
       }
@@ -257,14 +306,21 @@
       "required": ["template_instance_id", "registry", "start_frame", "duration_frames", "parameters"],
       "properties": {
         "template_instance_id": {"$ref": "#/$defs/identifier"}, "registry": {"$ref": "#/$defs/registryReference"},
-        "start_frame": {"type": "integer", "minimum": 0}, "duration_frames": {"type": "integer", "minimum": 1},
-        "parameters": {"type": "object"}
+        "start_frame": {"$ref": "#/$defs/nonNegativeInteger"}, "duration_frames": {"$ref": "#/$defs/positiveInteger"},
+        "parameters": {
+          "type": "object", "additionalProperties": false,
+          "properties": {
+            "title": {"type": "string", "maxLength": 4096},
+            "subtitle": {"type": "string", "maxLength": 4096},
+            "name": {"type": "string", "maxLength": 4096}
+          }
+        }
       }
     },
     "group": {
       "type": "object", "additionalProperties": false, "required": ["group_id", "name", "member_ids"],
       "properties": {
-        "group_id": {"$ref": "#/$defs/identifier"}, "name": {"type": "string", "minLength": 1},
+        "group_id": {"$ref": "#/$defs/identifier"}, "name": {"type": "string", "minLength": 1, "maxLength": 256},
         "member_ids": {"type": "array", "minItems": 1, "items": {"$ref": "#/$defs/identifier"}}
       }
     },

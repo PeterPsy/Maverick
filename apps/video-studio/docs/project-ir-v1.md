@@ -17,8 +17,9 @@ The root has exactly `ir_version`, `metadata`, `canvas`, `frame_rate`, `audio`,
 - Audio declares an allowlisted integer sample rate and channel layout.
 - Assets identify Storage records by `storage_file_id`, `source_version`, and
   SHA-256. Provenance names a governed provider interface and the same trusted
-  workspace. Source timing declares duration PTS, reduced time base, duration
-  microseconds, frame-rate mode, and an ordered VFR PTS map when applicable.
+workspace. Source timing declares duration PTS, reduced time base, duration
+  microseconds equal to the explicit PTS/time-base conversion, frame-rate mode,
+  and a strictly ordered, source-bounded VFR PTS map when applicable.
 - Timeline arrays preserve declared order. Track and clip kinds must be
   compatible. Same-track clip intervals are half-open `[start, start+duration)`
   and may touch but not overlap.
@@ -57,13 +58,16 @@ Negative rounding follows the mathematical policy, not language truncation.
 Conversions do not feed a previously rounded result back as authority. Frame,
 PTS, and sample boundaries are independently derived from their original exact
 rational values. This prevents cumulative drift on long timelines and repeated
-conversions. VFR media uses its monotonic PTS map rather than pretending the
+conversions. VFR media resolves frame index to PTS, and PTS to the active frame,
+directly against its source-bounded monotonic map rather than pretending the
 source has a constant frame rate. Timeline placement remains integer-frame
 authority at the project rate.
 
 ## Invariants
 
-Validation returns all deterministic issues sorted by path/code. It checks:
+After canonical byte and complexity limits pass, validation returns deterministic
+issues sorted by path/code. Resource-limit failures stop before schema traversal,
+security scanning, indexing, or semantic work. Validation checks:
 
 - globally unique bounded identifiers and all referenced endpoints;
 - non-negative project/source intervals and positive clip durations;
@@ -73,7 +77,8 @@ Validation returns all deterministic issues sorted by path/code. It checks:
 - unique, ordered, in-clip keyframes and audio envelope points;
 - track/clip kind, asset/clip kind, channel, font, template, transition,
   effect, easing, fit, compositing, and color-space compatibility;
-- acyclic groups and valid group/relationship members;
+- acyclic groups, bidirectional unique membership, and valid group/relationship
+  members;
 - workspace-local asset provenance and governed provider identity;
 - configured document and collection complexity limits.
 
@@ -89,7 +94,9 @@ fields, and the recursive security scan rejects keys or values that introduce:
 - absolute host paths, home paths, Windows drive paths, or traversal segments;
 - direct references to another workspace or another app's private files.
 
-Text is plain Unicode text with control-character restrictions. Renderer
+Text is plain Unicode text with control-character and surrogate restrictions.
+Canonical integer authority is limited to the portable JSON safe-integer range,
+and nesting is bounded at 64 levels. Renderer
 implementations must consume validated registry IDs and typed parameters; they
 must not reinterpret text or metadata as executable content.
 

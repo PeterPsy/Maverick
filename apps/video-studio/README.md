@@ -55,8 +55,9 @@ executable code and does not depend on Remotion or FFmpeg. It models:
 - safe plain text, captions, markers, groups, and declared relationships.
 
 Canonical serialization sorts object keys, emits UTF-8 JSON without
-insignificant whitespace, rejects floats/NaN/non-JSON values, and feeds SHA-256
-content addressing. Arrays preserve semantic order.
+insignificant whitespace, rejects floats/NaN/non-JSON values, Unicode
+surrogates, excessive nesting, and integers outside the portable safe range,
+and feeds SHA-256 content addressing. Arrays preserve semantic order.
 
 ## Exact time model
 
@@ -72,7 +73,9 @@ long timelines, repeated conversions, frame boundaries, and audio sample drift.
 
 ## Validation and security
 
-Validation is fail-closed and deterministic. Errors shared by the service,
+Validation is fail-closed and deterministic. Canonical-byte and collection
+complexity limits fail before structural, recursive security, indexing, or
+semantic work. Errors shared by the service,
 backend, CLI, and MCP contain stable `code`, JSON-pointer `path`, `message`, and
 sorted `details`. Validators enforce global ID uniqueness, existing references,
 non-negative bounded intervals, source ranges, project containment, same-track
@@ -106,7 +109,10 @@ operation types are:
 
 Every intermediate operation is pure over a detached document; the completed
 batch must change the document and pass full Project IR validation before any
-revision is committed. Derived clip IDs and source boundaries are deterministic.
+revision is committed. Residual and split clips receive deterministic globally
+unique child IDs, relative keyframes are trimmed/rebased, and stale transition,
+group, and relationship references are normalized before validation. Derived
+clip IDs and source boundaries are deterministic.
 
 ## Revision semantics and concurrency
 

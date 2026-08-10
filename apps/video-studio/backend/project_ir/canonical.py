@@ -7,6 +7,10 @@ import json
 from typing import Any
 
 
+MAX_SAFE_INTEGER = 9_007_199_254_740_991
+MAX_NESTING_DEPTH = 64
+
+
 class CanonicalizationError(ValueError):
     """Raised when a value cannot be represented by the IR canonical profile."""
 
@@ -23,7 +27,7 @@ def canonical_dumps(value: Any) -> str:
             separators=(",", ":"),
             sort_keys=True,
         )
-    except (TypeError, ValueError) as error:
+    except (RecursionError, TypeError, ValueError) as error:
         raise CanonicalizationError("Value is not canonical Project IR JSON.") from error
 
 
@@ -42,25 +46,50 @@ def canonical_copy(value: Any) -> Any:
 
 
 def _validate_json_value(value: Any, *, path: str) -> None:
-    if value is None or isinstance(value, (str, bool, int)):
-        return
-    if isinstance(value, float):
+    pending: list[tuple[Any, str, int]] = [(value, path, 0)]
+    while pending:
+        current, current_path, depth = pending.pop()
+        display_path = current_path or "/"
+        if depth > MAX_NESTING_DEPTH:
+            raise CanonicalizationError(
+                f"Project IR nesting exceeds {MAX_NESTING_DEPTH} levels at `{display_path}`."
+            )
+        if current is None or isinstance(current, bool):
+            continue
+        if isinstance(current, int):
+            if not -MAX_SAFE_INTEGER <= current <= MAX_SAFE_INTEGER:
+                raise CanonicalizationError(
+                    f"Integer authority exceeds the cross-platform safe range at `{display_path}`."
+                )
+            continue
+        if isinstance(current, str):
+            if any(0xD800 <= ord(character) <= 0xDFFF for character in current):
+                raise CanonicalizationError(
+                    f"Unicode surrogate code points are not allowed at `{display_path}`."
+                )
+            continue
+        if isinstance(current, float):
+            raise CanonicalizationError(
+                f"Floating-point numbers are not allowed in Project IR at `{display_path}`."
+            )
+        if isinstance(current, list):
+            pending.extend(
+                (item, f"{current_path}/{index}", depth + 1)
+                for index, item in reversed(tuple(enumerate(current)))
+            )
+            continue
+        if isinstance(current, dict):
+            for key in current:
+                if not isinstance(key, str):
+                    raise CanonicalizationError("Project IR object keys must be strings.")
+            pending.extend(
+                (item, f"{current_path}/{_escape(key)}", depth + 1)
+                for key, item in reversed(tuple(current.items()))
+            )
+            continue
         raise CanonicalizationError(
-            f"Floating-point numbers are not allowed in Project IR at `{path or '/'}`."
+            f"Unsupported Project IR value `{type(current).__name__}` at `{display_path}`."
         )
-    if isinstance(value, list):
-        for index, item in enumerate(value):
-            _validate_json_value(item, path=f"{path}/{index}")
-        return
-    if isinstance(value, dict):
-        for key, item in value.items():
-            if not isinstance(key, str):
-                raise CanonicalizationError("Project IR object keys must be strings.")
-            _validate_json_value(item, path=f"{path}/{_escape(key)}")
-        return
-    raise CanonicalizationError(
-        f"Unsupported Project IR value `{type(value).__name__}` at `{path or '/'}`."
-    )
 
 
 def _escape(value: str) -> str:

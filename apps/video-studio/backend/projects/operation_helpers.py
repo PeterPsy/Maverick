@@ -109,6 +109,39 @@ def clone_clip(clip: dict[str, Any]) -> dict[str, Any]:
     return canonical_copy(clip)
 
 
+def reidentify_clip_children(
+    clip: dict[str, Any],
+    *,
+    batch_id: str,
+    operation_index: int,
+    suffix: str,
+) -> None:
+    """Give a derived clip globally unique descendant identities."""
+
+    for keyframe in clip.get("keyframes", []):
+        if isinstance(keyframe, dict) and isinstance(keyframe.get("keyframe_id"), str):
+            keyframe["keyframe_id"] = derived_id(
+                keyframe["keyframe_id"], batch_id, operation_index, f"{suffix}.keyframe"
+            )
+    for effect in clip.get("effects", []):
+        if isinstance(effect, dict) and isinstance(effect.get("effect_id"), str):
+            effect["effect_id"] = derived_id(
+                effect["effect_id"], batch_id, operation_index, f"{suffix}.effect"
+            )
+    for layer in clip.get("layers", []):
+        if not isinstance(layer, dict):
+            continue
+        if isinstance(layer.get("layer_id"), str):
+            layer["layer_id"] = derived_id(
+                layer["layer_id"], batch_id, operation_index, f"{suffix}.layer"
+            )
+        for effect in layer.get("effects", []):
+            if isinstance(effect, dict) and isinstance(effect.get("effect_id"), str):
+                effect["effect_id"] = derived_id(
+                    effect["effect_id"], batch_id, operation_index, f"{suffix}.layer-effect"
+                )
+
+
 def source_boundary(clip: dict[str, Any], relative_frame: int) -> int | None:
     source = clip.get("source")
     duration = clip.get("duration_frames")

@@ -7,6 +7,7 @@ import json
 from pathlib import Path
 import sys
 import unittest
+from unittest.mock import patch
 
 
 APP_ROOT = Path(__file__).resolve().parents[1]
@@ -14,6 +15,7 @@ sys.path.insert(0, str(APP_ROOT / "backend"))
 
 from project_ir import IRValidationError, ProjectIR, ValidationLimits  # noqa: E402
 from project_ir.canonical import CanonicalizationError, canonical_dumps, content_digest  # noqa: E402
+from project_ir.schema_validation import schema_issues  # noqa: E402
 
 
 FIXTURE_PATH = APP_ROOT / "tests" / "fixtures" / "project-ir-v1-golden.json"
@@ -75,6 +77,42 @@ class ProjectIRSchemaTest(unittest.TestCase):
         with self.assertRaises(CanonicalizationError):
             canonical_dumps({"value": object()})
 
+    def test_digest_is_stable_for_nested_key_order_and_cross_platform_authority(self) -> None:
+        first = golden()
+        second = json.loads(json.dumps(first), object_pairs_hook=lambda pairs: dict(reversed(pairs)))
+
+        self.assertEqual(content_digest(first), content_digest(second))
+        with self.assertRaisesRegex(CanonicalizationError, "safe range"):
+            canonical_dumps({"value": 9_007_199_254_740_992})
+        with self.assertRaisesRegex(CanonicalizationError, "surrogate"):
+            canonical_dumps({"value": "\ud800"})
+
+    def test_schema_and_runtime_structural_validation_have_parity(self) -> None:
+        mutations = []
+        width = golden()
+        width["canvas"]["width"] = 32769
+        mutations.append(width)
+        background = golden()
+        background["canvas"]["background"]["value"] = "red"
+        mutations.append(background)
+        source = golden()
+        del source["assets"][0]["source"]["duration_us"]
+        mutations.append(source)
+        provenance = golden()
+        provenance["metadata"]["provenance"] = [{"kind": "network", "id": "x", "version": "1"}]
+        mutations.append(provenance)
+        parameter = golden()
+        parameter["timeline"]["transitions"][0]["parameters"]["script"] = "safe-looking"
+        mutations.append(parameter)
+        run = golden()
+        run["timeline"]["tracks"][2]["clips"][0]["text"]["runs"] = [{"start": 0, "end": 1, "extra": True}]
+        mutations.append(run)
+
+        for document in mutations:
+            with self.subTest(issues=schema_issues(document)):
+                self.assertTrue(schema_issues(document))
+                self.assertTrue(any(code.startswith("schema_") for code in error_codes(document)))
+
 
 class ProjectIRNegativeValidationTest(unittest.TestCase):
     def test_security_profile_rejects_active_content_remote_and_host_references(self) -> None:
@@ -90,6 +128,18 @@ class ProjectIRNegativeValidationTest(unittest.TestCase):
             with self.subTest(key=key):
                 document = golden()
                 document["metadata"][key] = value
+                self.assertIn(expected, error_codes(document))
+
+        embedded = (
+            ("A reference is https://example.invalid/x", "remote_reference_forbidden"),
+            ("payload data:text/plain,hello", "remote_reference_forbidden"),
+            ("read from /etc/passwd", "host_path_forbidden"),
+            ("harmless <b>markup</b>", "active_markup_forbidden"),
+        )
+        for value, expected in embedded:
+            with self.subTest(value=value):
+                document = golden()
+                document["metadata"]["name"] = value
                 self.assertIn(expected, error_codes(document))
 
     def test_ids_references_ranges_and_track_types_are_checked(self) -> None:
@@ -182,6 +232,25 @@ class ProjectIRNegativeValidationTest(unittest.TestCase):
 
         tiny_document = ValidationLimits(max_document_bytes=100)
         self.assertIn("document_limit_exceeded", error_codes(golden(), limits=tiny_document))
+
+        with patch("project_ir.validator.structural_issues") as structural:
+            self.assertIn("complexity_limit_exceeded", error_codes(golden(), limits=limits))
+            structural.assert_not_called()
+
+    def test_source_time_metadata_is_consistent_and_vfr_is_bounded(self) -> None:
+        mismatch = golden()
+        mismatch["assets"][0]["source"]["duration_us"] += 1
+        self.assertIn("source_duration_mismatch", error_codes(mismatch))
+
+        outside = golden()
+        outside["assets"][0]["source"]["pts_map"][-1] = 450000
+        self.assertIn("vfr_pts_outside_source", error_codes(outside))
+
+    def test_deeply_nested_hostile_input_fails_closed(self) -> None:
+        value: object = "leaf"
+        for _ in range(66):
+            value = [value]
+        self.assertIn("canonical_json_invalid", error_codes(value))
 
     def test_errors_have_stable_code_path_message_and_deterministic_details(self) -> None:
         document = golden()

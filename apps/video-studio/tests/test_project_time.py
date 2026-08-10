@@ -22,6 +22,8 @@ from project_ir.temporal import (  # noqa: E402
     rescale_timestamp,
     round_fraction,
     samples_to_frames,
+    pts_to_vfr_frame,
+    vfr_frame_to_pts,
 )
 
 
@@ -45,6 +47,8 @@ class RationalTimeTest(unittest.TestCase):
         self.assertEqual(round_fraction(Fraction(-7, 2), Rounding.NEAREST_TIES_TO_EVEN), -4)
         self.assertEqual(round_fraction(Fraction(-3, 2), Rounding.FLOOR), -2)
         self.assertEqual(round_fraction(Fraction(-3, 2), Rounding.CEIL), -1)
+        self.assertEqual(round_fraction(Fraction(3, 2), Rounding.TOWARD_ZERO), 1)
+        self.assertEqual(round_fraction(Fraction(-3, 2), Rounding.TOWARD_ZERO), -1)
 
     def test_frame_boundaries_have_deterministic_floor_and_ceil(self) -> None:
         rate = Rational(24000, 1001)
@@ -75,6 +79,10 @@ class RationalTimeTest(unittest.TestCase):
         for source, microseconds in zip(pts, converted, strict=True):
             self.assertLessEqual(abs(microseconds_to_pts(microseconds, time_base) - source), 1)
         self.assertEqual(rescale_timestamp(90000, time_base, Rational(1, 48000)), 48000)
+        self.assertEqual(vfr_frame_to_pts(2, pts), 6100)
+        self.assertEqual(pts_to_vfr_frame(6199, pts), 2)
+        with self.assertRaises(ValueError):
+            vfr_frame_to_pts(len(pts), pts)
 
     def test_audio_sample_conversion_avoids_cumulative_drift(self) -> None:
         for rate in (Rational(24000, 1001), Rational(30000, 1001), Rational(60000, 1001)):

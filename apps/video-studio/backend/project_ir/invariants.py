@@ -9,6 +9,7 @@ from typing import Any
 
 from .errors import ValidationIssue, issue
 from .registry import ProjectRegistry
+from .temporal import Rational, pts_to_microseconds
 
 
 IDENTIFIER = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$")
@@ -25,6 +26,8 @@ class IRIndex:
     clip_tracks: dict[str, tuple[str, str]] = field(default_factory=dict)
     tracks: dict[str, str] = field(default_factory=dict)
     groups: dict[str, dict[str, Any]] = field(default_factory=dict)
+    captions: dict[str, dict[str, Any]] = field(default_factory=dict)
+    template_instances: dict[str, dict[str, Any]] = field(default_factory=dict)
 
 
 def build_index(document: dict[str, Any], problems: list[ValidationIssue]) -> IRIndex:
@@ -88,8 +91,13 @@ def build_index(document: dict[str, Any], problems: list[ValidationIssue]) -> IR
             if not isinstance(item, dict):
                 continue
             identifier = register(item.get(id_field), f"/timeline/{collection}/{position}/{id_field}")
-            if identifier and collection == "groups":
-                index.groups[identifier] = item
+            if identifier:
+                if collection == "groups":
+                    index.groups[identifier] = item
+                elif collection == "captions":
+                    index.captions[identifier] = item
+                elif collection == "template_instances":
+                    index.template_instances[identifier] = item
     return index
 
 
@@ -154,6 +162,25 @@ def _asset_issues(asset: dict[str, Any], position: int, workspace_id: str | None
     duration_pts = source.get("duration_pts")
     if not _non_negative_integer(duration_pts):
         problems.append(issue("source_duration_invalid", f"{path}/source/duration_pts", "Source duration PTS must be non-negative."))
+    duration_us = source.get("duration_us")
+    if not _non_negative_integer(duration_us):
+        problems.append(issue("source_duration_invalid", f"{path}/source/duration_us", "Source duration microseconds must be non-negative."))
+    time_base = source.get("time_base")
+    if _non_negative_integer(duration_pts) and _non_negative_integer(duration_us) and isinstance(time_base, dict):
+        try:
+            expected_duration_us = pts_to_microseconds(duration_pts, Rational.from_dict(time_base))
+        except ValueError:
+            pass
+        else:
+            if duration_us != expected_duration_us:
+                problems.append(
+                    issue(
+                        "source_duration_mismatch",
+                        f"{path}/source/duration_us",
+                        "Source microsecond duration must equal its PTS/time-base conversion.",
+                        expected=expected_duration_us,
+                    )
+                )
     if source.get("frame_rate_mode") not in {"cfr", "vfr", "still", "audio"}:
         problems.append(issue("frame_rate_mode_invalid", f"{path}/source/frame_rate_mode", "Source frame-rate mode is invalid."))
     pts_map = source.get("pts_map", [])
@@ -161,6 +188,8 @@ def _asset_issues(asset: dict[str, Any], position: int, workspace_id: str | None
         problems.append(issue("vfr_pts_invalid", f"{path}/source/pts_map", "VFR PTS map must contain non-negative integers."))
     elif pts_map != sorted(set(pts_map)):
         problems.append(issue("vfr_pts_not_monotonic", f"{path}/source/pts_map", "VFR PTS values must be strictly increasing."))
+    elif _non_negative_integer(duration_pts) and any(value >= duration_pts for value in pts_map):
+        problems.append(issue("vfr_pts_outside_source", f"{path}/source/pts_map", "VFR PTS values must precede source duration."))
     if source.get("frame_rate_mode") == "vfr" and not pts_map:
         problems.append(issue("vfr_pts_required", f"{path}/source/pts_map", "VFR sources require a PTS map."))
     return problems

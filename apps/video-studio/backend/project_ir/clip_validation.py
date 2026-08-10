@@ -109,6 +109,18 @@ def _clip_issues(
         problems.extend(_source_range_issues(clip, asset, path))
     elif asset_id is not None:
         problems.append(issue("asset_reference_unexpected", f"{path}/asset_id", "This clip kind must not reference a source asset."))
+    caption_id = clip.get("caption_id")
+    if clip_kind == "caption":
+        if not isinstance(caption_id, str) or caption_id not in index.captions:
+            problems.append(issue("caption_reference_missing", f"{path}/caption_id", "Caption clip references a missing caption."))
+    elif caption_id is not None:
+        problems.append(issue("caption_reference_unexpected", f"{path}/caption_id", "Only caption clips may reference captions."))
+    template_id = clip.get("template_instance_id")
+    if clip_kind == "template":
+        if not isinstance(template_id, str) or template_id not in index.template_instances:
+            problems.append(issue("template_reference_missing", f"{path}/template_instance_id", "Template clip references a missing template instance."))
+    elif template_id is not None:
+        problems.append(issue("template_reference_unexpected", f"{path}/template_instance_id", "Only template clips may reference template instances."))
     problems.extend(_visual_issues(clip, path, registry))
     problems.extend(_keyframe_issues(clip, path, duration, registry))
     problems.extend(_effect_issues(clip, path, registry))
@@ -173,7 +185,7 @@ def _keyframe_issues(clip: dict[str, Any], path: str, duration: int, registry: P
         prop = keyframe.get("property")
         if not _integer(frame) or frame < 0 or frame > duration:
             problems.append(issue("keyframe_outside_clip", f"{key_path}/frame", "Keyframe must lie inside the clip."))
-        if not isinstance(prop, str) or not prop:
+        if not isinstance(prop, str) or prop not in KEYFRAME_VALUE_RANGES:
             problems.append(issue("keyframe_property_invalid", f"{key_path}/property", "Keyframe property is required."))
         elif _integer(frame):
             previous = previous_by_property.get(prop, -1)
@@ -182,8 +194,11 @@ def _keyframe_issues(clip: dict[str, Any], path: str, duration: int, registry: P
             previous_by_property[prop] = frame
         if keyframe.get("easing") not in registry.easings:
             problems.append(issue("easing_not_allowed", f"{key_path}/easing", "Keyframe easing is not allowlisted."))
-        if isinstance(keyframe.get("value"), float):
-            problems.append(issue("keyframe_value_float", f"{key_path}/value", "Keyframe authority must not use floating point."))
+        value = keyframe.get("value")
+        if prop in KEYFRAME_VALUE_RANGES:
+            minimum, maximum = KEYFRAME_VALUE_RANGES[prop]
+            if not _integer(value) or value < minimum or value > maximum:
+                problems.append(issue("keyframe_value_invalid", f"{key_path}/value", "Keyframe value is outside the fixed-point property range."))
     return problems
 
 
@@ -263,3 +278,22 @@ def _list(value: object) -> list[Any]:
 
 def _dict(value: object) -> dict[str, Any]:
     return value if isinstance(value, dict) else {}
+
+
+_SAFE_INTEGER = 9_007_199_254_740_991
+KEYFRAME_VALUE_RANGES = {
+    "audio.gain_millibels": (-9600, 2400),
+    "audio.pan_milli": (-1000, 1000),
+    "crop.bottom_pixels": (0, _SAFE_INTEGER),
+    "crop.left_pixels": (0, _SAFE_INTEGER),
+    "crop.right_pixels": (0, _SAFE_INTEGER),
+    "crop.top_pixels": (0, _SAFE_INTEGER),
+    "opacity_permille": (0, 1000),
+    "transform.anchor_x_permille": (-_SAFE_INTEGER, _SAFE_INTEGER),
+    "transform.anchor_y_permille": (-_SAFE_INTEGER, _SAFE_INTEGER),
+    "transform.rotation_millidegrees": (-_SAFE_INTEGER, _SAFE_INTEGER),
+    "transform.scale_x_permille": (-_SAFE_INTEGER, _SAFE_INTEGER),
+    "transform.scale_y_permille": (-_SAFE_INTEGER, _SAFE_INTEGER),
+    "transform.x_millipixels": (-_SAFE_INTEGER, _SAFE_INTEGER),
+    "transform.y_millipixels": (-_SAFE_INTEGER, _SAFE_INTEGER),
+}

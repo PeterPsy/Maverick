@@ -22,26 +22,31 @@ def validate_project_ir(
     registry: ProjectRegistry | None = None,
     limits: ValidationLimits | None = None,
 ) -> None:
-    """Validate all known failures, then raise them in stable path/code order."""
+    """Validate Project IR, rejecting bounded-resource failures before deep work."""
 
     active_registry = registry or default_registry()
     active_limits = limits or ValidationLimits()
-    problems: list[ValidationIssue] = []
     try:
         size = len(canonical_bytes(document))
     except CanonicalizationError as error:
-        problems.append(issue("canonical_json_invalid", "", str(error)))
-        size = 0
+        raise IRValidationError([issue("canonical_json_invalid", "", str(error))]) from error
     if size > active_limits.max_document_bytes:
-        problems.append(
-            issue(
-                "document_limit_exceeded",
-                "",
-                "Project IR exceeds the configured canonical byte limit.",
-                actual=size,
-                maximum=active_limits.max_document_bytes,
-            )
+        raise IRValidationError(
+            [
+                issue(
+                    "document_limit_exceeded",
+                    "",
+                    "Project IR exceeds the configured canonical byte limit.",
+                    actual=size,
+                    maximum=active_limits.max_document_bytes,
+                )
+            ]
         )
+    if isinstance(document, dict):
+        bounded_resource_problems = _complexity_issues(document, active_limits)
+        if bounded_resource_problems:
+            raise IRValidationError(bounded_resource_problems)
+    problems: list[ValidationIssue] = []
     problems.extend(structural_issues(document))
     problems.extend(security_issues(document))
     if isinstance(document, dict):
@@ -56,7 +61,6 @@ def validate_project_ir(
         )
         problems.extend(clip_invariant_issues(document, index, active_registry))
         problems.extend(timeline_invariant_issues(document, index, active_registry))
-        problems.extend(_complexity_issues(document, active_limits))
     if problems:
         raise IRValidationError(problems)
 

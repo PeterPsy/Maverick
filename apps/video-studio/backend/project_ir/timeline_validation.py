@@ -153,10 +153,14 @@ def _group_issues(timeline: dict[str, Any], index: IRIndex) -> list[ValidationIs
         if not isinstance(members, list) or not members:
             problems.append(issue("group_members_invalid", f"{path}/member_ids", "Group must contain at least one member."))
             continue
+        if all(isinstance(member, str) for member in members) and len(members) != len(set(members)):
+            problems.append(issue("group_members_duplicate", f"{path}/member_ids", "Group members must be unique."))
         group_edges: list[str] = []
         for member_pos, member_id in enumerate(members):
             if member_id not in index.clips and member_id not in index.groups:
                 problems.append(issue("group_member_missing", f"{path}/member_ids/{member_pos}", "Group member reference is missing."))
+            if member_id in index.clips and group_id not in _list(index.clips[member_id].get("group_ids")):
+                problems.append(issue("group_membership_mismatch", f"{path}/member_ids/{member_pos}", "Clip and group membership must be bidirectional."))
             if member_id in index.groups:
                 group_edges.append(member_id)
         if isinstance(group_id, str):
@@ -178,6 +182,17 @@ def _group_issues(timeline: dict[str, Any], index: IRIndex) -> list[ValidationIs
 
     for group_id in sorted(graph):
         visit(group_id)
+    for clip_id, clip in sorted(index.clips.items()):
+        for group_position, group_id in enumerate(_list(clip.get("group_ids"))):
+            group = index.groups.get(group_id) if isinstance(group_id, str) else None
+            if group is not None and clip_id not in _list(group.get("member_ids")):
+                problems.append(
+                    issue(
+                        "group_membership_mismatch",
+                        f"{index.id_paths.get(clip_id, '')}/../group_ids/{group_position}",
+                        "Clip and group membership must be bidirectional.",
+                    )
+                )
     return problems
 
 

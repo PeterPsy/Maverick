@@ -25,9 +25,9 @@ FORBIDDEN_KEY_PARTS = (
     "token",
     "url",
 )
-REMOTE_SCHEME = re.compile(r"(?i)^(?:https?|ftp|data|file|ssh)://")
-HOST_PATH = re.compile(r"^(?:/|~(?:/|$)|[A-Za-z]:[\\/])")
-ACTIVE_MARKUP = re.compile(r"(?is)<\s*/?\s*(?:script|iframe|object|embed|svg|math|style|link|meta)\b")
+REMOTE_SCHEME = re.compile(r"(?i)(?:https?|ftp|file|ssh)://|data:")
+HOST_PATH = re.compile(r"(?:^|[\s\"'(`])(?:/|~(?:/|$)|[A-Za-z]:[\\/])")
+MARKUP = re.compile(r"(?s)<\s*/?\s*[A-Za-z][^>]*>")
 
 
 def security_issues(value: object) -> list[ValidationIssue]:
@@ -64,8 +64,8 @@ def _scan(value: Any, path: str, problems: list[ValidationIssue]) -> None:
         problems.append(issue("remote_reference_forbidden", path, "Remote URLs are forbidden in Project IR."))
     if HOST_PATH.search(value.strip()) or "../" in value or "..\\" in value:
         problems.append(issue("host_path_forbidden", path, "Host and traversing paths are forbidden in Project IR."))
-    if ACTIVE_MARKUP.search(value):
-        problems.append(issue("active_markup_forbidden", path, "Active markup is forbidden in Project IR text."))
+    if MARKUP.search(value):
+        problems.append(issue("active_markup_forbidden", path, "Markup is forbidden in Project IR text."))
     if any(ord(character) < 32 and character not in "\n\r\t" for character in value):
         problems.append(issue("control_character_forbidden", path, "Control characters are forbidden in Project IR text."))
 

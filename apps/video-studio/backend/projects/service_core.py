@@ -8,6 +8,7 @@ from typing import Any
 
 from foundation.database import FoundationDatabase
 
+from .errors import ProjectError
 from .repository import ProjectRepository
 from .repository_records import pending_events
 from .revision_diff import compare_values
@@ -28,7 +29,32 @@ class ProjectServiceCore:
         self.id_factory = id_factory
         self.database = FoundationDatabase(data_root)
         self.database.migrate()
+        self._bind_workspace()
         self.repository = ProjectRepository(self.database)
+
+    def _bind_workspace(self) -> None:
+        """Atomically bind one app-owned database to one trusted workspace."""
+
+        with closing(self.database.connect()) as connection:
+            connection.execute("BEGIN IMMEDIATE")
+            row = connection.execute(
+                "SELECT value FROM app_metadata WHERE key = 'workspace_id'"
+            ).fetchone()
+            if row is None:
+                connection.execute(
+                    "INSERT INTO app_metadata(key, value) VALUES ('workspace_id', ?)",
+                    (self.workspace_id,),
+                )
+                connection.commit()
+                return
+            if str(row[0]) != self.workspace_id:
+                connection.rollback()
+                raise ProjectError(
+                    "workspace_store_mismatch",
+                    "Video Studio project storage belongs to another workspace.",
+                    status_code=403,
+                )
+            connection.commit()
 
     def list_projects(self, *, include_archived: bool = False) -> list[dict[str, Any]]:
         return self.repository.list_projects(include_archived=include_archived)

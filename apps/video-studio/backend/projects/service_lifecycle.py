@@ -84,6 +84,16 @@ class ProjectLifecycleMixin:
                 timestamp=timestamp,
                 dedupe_key=revision_id,
             )
+            enqueue_event(
+                connection,
+                project_id=target_id,
+                revision_id=revision_id,
+                event_type="project.revision.created",
+                resource="revisions",
+                payload=event_payload(target_id, revision_id, "revision"),
+                timestamp=timestamp,
+                dedupe_key=revision_id,
+            )
         return self.get_project(target_id)
 
     def duplicate_project(

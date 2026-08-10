@@ -25,7 +25,7 @@ uses only governed Storage identity and provider provenance.
 
 ## Contract Notes
 
-`app_contract.json` declares schema version 2, the single `video-studio` CLI
+`app_contract.json` declares schema version 3, the single `video-studio` CLI
 command, 16 implemented MCP tools, and data-change resources for `projects`,
 `project-metadata`, and `revisions`. Native project interchange is a domain
 surface; it is not the generic whole-app lifecycle export/import protocol, so
@@ -135,9 +135,13 @@ contract. In summary:
   project;
 - revision comparison emits a stable path-sorted structural diff.
 
+The database is atomically bound to its trusted workspace on first project
+service use. Transport entrypoints replace any batch actor supplied in request
+content with the host-owned user/agent identity (or the app system identity).
+
 ## SQLite schema and recovery
 
-`data/video-studio/app.db` is at schema version 2. Migration
+`data/video-studio/app.db` is at schema version 3. Migration
 `0001_foundation.sql` is immutable. `0002_project_revision_engine.sql` adds:
 
 - `project_projections`;
@@ -145,6 +149,11 @@ contract. In summary:
 - `project_operation_batches`;
 - `project_autosaves`;
 - `project_outbox`.
+
+Migration `0003_revision_integrity.sql` makes revision rows immutable at the
+database boundary and rejects cross-project revision references in heads,
+projections, navigation, idempotency records, autosaves, and outbox records.
+Migrations 0001 and 0002 remain byte-identical.
 
 Migrations are ordered, contiguous, checksummed, idempotent, and transactional.
 Connections enforce foreign keys and prefer WAL with a verified delete-journal
@@ -176,7 +185,8 @@ reference manifest. Inspect `cli/command_schemas.json` and
 
 Successful mutations emit declared `maverick.app.data-changed` events for
 `projects`, `project-metadata`, and/or `revisions`. A durable app-owned outbox is
-written in the same transaction as the corresponding state change.
+written in the same transaction with matching resources; pending records remain
+recoverable until a later delivery component marks them dispatched.
 
 The governed HTTP sidecar remains foundation-only and read-only. No
 app-specific FastAPI route was added to Core.

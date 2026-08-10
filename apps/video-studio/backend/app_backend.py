@@ -8,13 +8,18 @@ import sys
 from core.app_sdk.runtime import backend_response, emit_json, read_entrypoint_payload
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from project_actions import app_events_for_result, handle_action
+from project_actions import actor_from_entrypoint, app_events_for_result, handle_action
 
 
 def main() -> None:
     payload = read_entrypoint_payload()
     action = str(payload.body.get("action") or "status").strip().lower()
-    status_code, result = handle_action(payload.data_root, payload.workspace_id, payload.body)
+    status_code, result = handle_action(
+        payload.data_root,
+        payload.workspace_id,
+        payload.body,
+        trusted_actor=actor_from_entrypoint(payload.raw),
+    )
     result.update({"workspace_id": payload.workspace_id, "surface": "backend"})
     response = backend_response(status_code, result)
     if status_code < 400:

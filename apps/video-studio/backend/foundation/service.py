@@ -53,7 +53,7 @@ def foundation_manifest() -> dict[str, Any]:
     """Describe concrete checkpoint surfaces, not future editing capabilities."""
     return {
         "app_id": APP_ID,
-        "foundation_version": "2",
+        "foundation_version": "3",
         "storage": {"kind": "sqlite", "schema_version": LATEST_SCHEMA_VERSION},
         "actions": [
             *FOUNDATION_ACTIONS,
@@ -63,7 +63,12 @@ def foundation_manifest() -> dict[str, Any]:
             "operations.apply", "history.undo", "history.redo",
         ],
         "surfaces": {
-            "backend": list(FOUNDATION_ACTIONS),
+            "backend": [*FOUNDATION_ACTIONS, *(
+                "project.create", "project.list", "project.get", "project.rename",
+                "project.duplicate", "project.archive", "project.restore",
+                "revision.get", "revision.compare", "native.export", "native.import",
+                "operations.apply", "history.undo", "history.redo",
+            )],
             "cli": ["video-studio"],
             "mcp": [
                 "video_studio_foundation", "video_studio_reference_manifest",

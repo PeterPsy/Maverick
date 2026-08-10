@@ -12,7 +12,7 @@ from .paths import DataRootError, safe_data_path
 
 
 APP_DATABASE_NAME = "app.db"
-LATEST_SCHEMA_VERSION = 2
+LATEST_SCHEMA_VERSION = 3
 DOMAIN_TABLES = (
     "projects",
     "project_revisions",

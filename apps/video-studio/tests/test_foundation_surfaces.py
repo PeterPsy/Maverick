@@ -60,7 +60,7 @@ class FoundationSurfacesTest(unittest.TestCase):
             migrated = _invoke("hooks/migrate.py", payload)
             health = _invoke("hooks/health_check.py", payload)
 
-            self.assertEqual(first["applied_migrations"], [1, 2])
+            self.assertEqual(first["applied_migrations"], [1, 2, 3])
             self.assertEqual(second["applied_migrations"], [])
             self.assertEqual(migrated["applied_migrations"], [])
             self.assertTrue(health["ok"])

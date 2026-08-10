@@ -37,10 +37,11 @@ def edit_batch(
     batch_id: str,
     name: str = "Renamed",
     workspace_id: str = "workspace-test",
+    project_id: str = "project-golden",
 ) -> dict:
     return {
         "workspace_id": workspace_id,
-        "project_id": "project-golden",
+        "project_id": project_id,
         "base_revision_id": revision_id,
         "operation_batch_id": batch_id,
         "preconditions": [{"type": "head_is", "revision_id": revision_id}],
@@ -72,6 +73,12 @@ class RevisionEngineTest(unittest.TestCase):
                 edit_batch(created["head_revision_id"], batch_id="batch-rename")
             )
 
+            create_events = [
+                event
+                for event in application.pending_outbox()
+                if event["event_type"] in {"project.created", "project.revision.created"}
+            ]
+            self.assertEqual({event["resource"] for event in create_events}, {"projects", "revisions"})
             self.assertEqual(application.list_projects()[0]["head_revision_id"], renamed["revision_id"])
             self.assertEqual(application.get_revision("project-golden", renamed["revision_id"])["digest"], renamed["digest"])
             comparison = application.compare_revisions(
@@ -98,6 +105,19 @@ class RevisionEngineTest(unittest.TestCase):
             self.assertEqual(stale.exception.code, "stale_revision_conflict")
             self.assertEqual(stale.exception.details["actual_revision_id"], first["revision_id"])
 
+            second_project = application.create_project(
+                name="Second", project_id="project-second", project_ir=golden()
+            )
+            scoped = application.apply_operations(
+                edit_batch(
+                    second_project["head_revision_id"],
+                    batch_id="batch-one",
+                    name="Second renamed",
+                    project_id="project-second",
+                )
+            )
+            self.assertEqual(scoped["project_id"], "project-second")
+
     def test_concurrent_batches_allow_exactly_one_head_update(self) -> None:
         with TemporaryDirectory() as temp_dir:
             application = service(temp_dir)
@@ -108,7 +128,10 @@ class RevisionEngineTest(unittest.TestCase):
             def writer(batch_id: str, name: str) -> None:
                 barrier.wait()
                 try:
-                    application.apply_operations(edit_batch(base["head_revision_id"], batch_id=batch_id, name=name))
+                    independent_process = service(temp_dir)
+                    independent_process.apply_operations(
+                        edit_batch(base["head_revision_id"], batch_id=batch_id, name=name)
+                    )
                     results.append("success")
                 except ProjectError as error:
                     results.append(error.code)
@@ -167,6 +190,52 @@ class RevisionEngineTest(unittest.TestCase):
                 self.assertEqual(connection.execute("SELECT COUNT(*) FROM project_autosaves").fetchone()[0], 1)
             self.assertGreaterEqual(len(final_process.pending_outbox()), 5)
 
+    def test_idempotency_and_redo_invalidation_survive_service_restart(self) -> None:
+        with TemporaryDirectory() as temp_dir:
+            first_process = service(temp_dir)
+            created = first_process.create_project(
+                name="Golden timeline", project_id="project-golden", project_ir=golden()
+            )
+            request = edit_batch(created["head_revision_id"], batch_id="batch-replay")
+            edited = first_process.apply_operations(request)
+
+            recovered = service(temp_dir)
+            self.assertEqual(recovered.apply_operations(request), edited)
+            undone = recovered.undo(history_batch(edited["revision_id"], "batch-undo", "undo"))
+            replacement = recovered.apply_operations(
+                edit_batch(
+                    undone["revision_id"],
+                    batch_id="batch-replacement",
+                    name="Replacement",
+                )
+            )
+
+            restarted = service(temp_dir)
+            with self.assertRaises(ProjectError) as unavailable:
+                restarted.redo(history_batch(replacement["revision_id"], "batch-redo", "redo"))
+            self.assertEqual(unavailable.exception.code, "redo_unavailable")
+
+    def test_workspace_binding_prevents_reusing_one_store_across_workspaces(self) -> None:
+        with TemporaryDirectory() as shared_root, TemporaryDirectory() as other_root:
+            workspace_one = service(shared_root, workspace_id="workspace-test")
+            workspace_one.create_project(
+                name="Golden timeline", project_id="project-golden", project_ir=golden()
+            )
+            with self.assertRaises(ProjectError) as mismatch:
+                service(shared_root, workspace_id="workspace-other")
+            self.assertEqual(mismatch.exception.code, "workspace_store_mismatch")
+
+            other_document = golden()
+            other_document["metadata"]["workspace_id"] = "workspace-other"
+            for asset in other_document["assets"]:
+                asset["provenance"]["workspace_id"] = "workspace-other"
+            isolated = service(other_root, workspace_id="workspace-other")
+            isolated.create_project(
+                name="Other", project_id="project-golden", project_ir=other_document
+            )
+            self.assertEqual(len(workspace_one.list_projects()), 1)
+            self.assertEqual(len(isolated.list_projects()), 1)
+
     def test_duplicate_archive_restore_and_native_round_trip(self) -> None:
         with TemporaryDirectory() as source_root, TemporaryDirectory() as import_root:
             application = service(source_root)
@@ -192,6 +261,12 @@ class RevisionEngineTest(unittest.TestCase):
             exported = source.export_native("project-golden")
             target = service(target_root)
 
+            arbitrary_path = deepcopy(exported)
+            arbitrary_path["path"] = "/tmp/host-project.json"
+            with self.assertRaises(ProjectError) as path_field_error:
+                target.import_native(arbitrary_path)
+            self.assertEqual(path_field_error.exception.code, "native_import_invalid")
+
             tampered = deepcopy(exported)
             tampered["revision"]["project_ir"]["metadata"]["name"] = "Tampered"
             with self.assertRaises(ProjectError) as digest_error:
@@ -205,7 +280,7 @@ class RevisionEngineTest(unittest.TestCase):
                 target.import_native(traversal)
             self.assertEqual(path_error.exception.code, "project_ir_invalid")
 
-            other = service(target_root, workspace_id="workspace-other")
+            other = service(Path(target_root) / "other", workspace_id="workspace-other")
             with self.assertRaises(ProjectError) as workspace_error:
                 other.import_native(exported)
             self.assertEqual(workspace_error.exception.code, "project_ir_invalid")

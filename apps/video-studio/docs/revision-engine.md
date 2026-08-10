@@ -11,6 +11,9 @@ UTF-8, no insignificant whitespace, and no floats. Its SHA-256 digest is the
 content address and produces `revision-<digest>`. Revision rows are immutable.
 Revisiting identical historical content selects the existing content-addressed
 revision rather than creating a mutable copy.
+Schema v3 enforces immutability with SQLite `BEFORE UPDATE` and `BEFORE DELETE`
+triggers; it also rejects branch, projection, navigation, batch, autosave, and
+outbox revision references whose revision belongs to another project.
 
 The `main` branch stores one current head. `project_projections` is a derived,
 transactionally updated read projection containing name, duration, asset count,
@@ -31,7 +34,11 @@ Patch. A batch ID is unique within a project. An identical retry returns the
 stored deterministic result; reuse with different canonical content returns
 `operation_batch_id_conflict`.
 
-The trusted workspace must match the envelope and Project IR provenance. The
+The trusted workspace must match the envelope and Project IR provenance. Each
+database is atomically bound to its first trusted workspace context and refuses
+reuse under another workspace. On backend, CLI, and MCP, the batch actor field
+is overwritten from the host-owned `user_id`/`agent_id` context (or the app
+system identity), so request content cannot forge revision authorship. The
 base must equal the current main head or the service returns
 `stale_revision_conflict` with expected and actual revision IDs.
 
@@ -65,7 +72,7 @@ head to an immutable revision while moving the previous head between persistent
 JSON navigation stacks. The navigation command itself has a batch ID and is
 idempotent. A new edit clears redo history.
 
-All recovery state is in schema v2 SQLite tables. Reopening the service after a
+All recovery state is in schema v3 SQLite tables. Reopening the service after a
 process restart restores the head, stacks, autosaves, idempotency results, and
 pending outbox without in-memory reconstruction.
 
@@ -82,9 +89,11 @@ Revision comparison recursively walks sorted object keys and ordered array
 positions. Each change has a stable JSON-pointer path and `added`, `removed`, or
 `replaced` payload.
 
-## Schema v2 tables
+## Schema v3 integrity
 
 Migration `0002_project_revision_engine.sql` adds projection, navigation,
 operation-batch/idempotency, autosave, and outbox tables plus bounded lookup
 indexes. It updates both SQLite `user_version` (through the migration runner)
-and app metadata to 2. Migration 0001 and its checksum remain byte-identical.
+and app metadata to 2. Migration `0003_revision_integrity.sql` adds immutable
+revision and same-project reference triggers and advances both versions to 3.
+Migrations 0001 and 0002 and their checksums remain byte-identical.

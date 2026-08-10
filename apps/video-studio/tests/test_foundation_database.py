@@ -32,6 +32,7 @@ from foundation.paths import DataRootError, safe_data_path  # noqa: E402
 
 MIGRATIONS_ROOT = APP_ROOT / "migrations"
 FOUNDATION_CHECKSUM = "6aa8d20f562311380f9137f5c21430ae431a71d17bafead92b6fab1087af8552"
+REVISION_ENGINE_CHECKSUM = "ce6b31746ea39f21f3e14b7acfe5546f7d1f6715d50c50bb78cf1fd6f2d5bbfc"
 
 
 class FoundationDatabaseTest(unittest.TestCase):
@@ -47,8 +48,12 @@ class FoundationDatabaseTest(unittest.TestCase):
                 self.assertEqual(first[0].checksum, FOUNDATION_CHECKSUM)
                 self.assertEqual(apply_migrations(connection, first), [1])
                 shutil.copy2(MIGRATIONS_ROOT / "0002_project_revision_engine.sql", migration_root)
-                self.assertEqual(apply_migrations(connection, discover_migrations(migration_root)), [2])
-                self.assertEqual(connection.execute("PRAGMA user_version").fetchone()[0], 2)
+                second = discover_migrations(migration_root)
+                self.assertEqual(second[1].checksum, REVISION_ENGINE_CHECKSUM)
+                self.assertEqual(apply_migrations(connection, second), [2])
+                shutil.copy2(MIGRATIONS_ROOT / "0003_revision_integrity.sql", migration_root)
+                self.assertEqual(apply_migrations(connection, discover_migrations(migration_root)), [3])
+                self.assertEqual(connection.execute("PRAGMA user_version").fetchone()[0], 3)
                 self.assertIsNotNone(
                     connection.execute(
                         "SELECT name FROM sqlite_schema WHERE name = 'project_outbox'"
@@ -66,7 +71,7 @@ class FoundationDatabaseTest(unittest.TestCase):
             second = database.migrate()
             health = database.health()
 
-            self.assertEqual(first["applied_migrations"], [1, 2])
+            self.assertEqual(first["applied_migrations"], [1, 2, 3])
             self.assertEqual(second["applied_migrations"], [])
             self.assertEqual(first["domain_aggregate_count"], 23)
             self.assertEqual(set(first["tables"]), set(FOUNDATION_TABLES))
@@ -78,11 +83,11 @@ class FoundationDatabaseTest(unittest.TestCase):
 
             with closing(database.connect()) as connection:
                 self.assertEqual(connection.execute("PRAGMA foreign_keys").fetchone()[0], 1)
-                self.assertEqual(connection.execute("PRAGMA user_version").fetchone()[0], 2)
+                self.assertEqual(connection.execute("PRAGMA user_version").fetchone()[0], 3)
                 migration_count = connection.execute(
                     "SELECT COUNT(*) FROM schema_migrations"
                 ).fetchone()[0]
-                self.assertEqual(migration_count, 2)
+                self.assertEqual(migration_count, 3)
                 with self.assertRaises(sqlite3.IntegrityError):
                     connection.execute(
                         """
@@ -150,11 +155,56 @@ class FoundationDatabaseTest(unittest.TestCase):
             database.migrate()
             with closing(database.connect()) as connection:
                 connection.execute(
-                    "UPDATE app_metadata SET value = '3' WHERE key = 'schema_version'"
+                    "UPDATE app_metadata SET value = '4' WHERE key = 'schema_version'"
                 )
                 connection.commit()
             with self.assertRaisesRegex(FoundationDatabaseError, "inconsistent"):
                 database.health()
+
+    def test_revision_rows_and_cross_project_revision_references_are_database_enforced(self) -> None:
+        with TemporaryDirectory() as temp_dir:
+            database = FoundationDatabase(Path(temp_dir) / "data")
+            database.migrate()
+            with closing(database.connect()) as connection:
+                for project_id in ("project-one", "project-two"):
+                    connection.execute(
+                        "INSERT INTO projects(project_id, name, created_at, updated_at) VALUES (?, ?, 'now', 'now')",
+                        (project_id, project_id),
+                    )
+                for revision_id, project_id in (("revision-one", "project-one"), ("revision-two", "project-two")):
+                    connection.execute(
+                        """
+                        INSERT INTO project_revisions(
+                          revision_id, project_id, schema_version, project_ir_json,
+                          operation_batch_json, author_kind, digest, created_at
+                        ) VALUES (?, ?, 1, '{}', '{}', 'system', ?, 'now')
+                        """,
+                        (revision_id, project_id, revision_id),
+                    )
+                with self.assertRaisesRegex(sqlite3.IntegrityError, "immutable"):
+                    connection.execute(
+                        "UPDATE project_revisions SET message = 'changed' WHERE revision_id = 'revision-one'"
+                    )
+                with self.assertRaisesRegex(sqlite3.IntegrityError, "immutable"):
+                    connection.execute(
+                        "DELETE FROM project_revisions WHERE revision_id = 'revision-one'"
+                    )
+                with self.assertRaisesRegex(sqlite3.IntegrityError, "another project"):
+                    connection.execute(
+                        """
+                        INSERT INTO project_branches(
+                          branch_id, project_id, name, head_revision_id, created_at, updated_at
+                        ) VALUES ('branch-cross', 'project-one', 'main', 'revision-two', 'now', 'now')
+                        """
+                    )
+                with self.assertRaisesRegex(sqlite3.IntegrityError, "another project"):
+                    connection.execute(
+                        """
+                        INSERT INTO project_revision_navigation(
+                          project_id, undo_stack_json, redo_stack_json, updated_at
+                        ) VALUES ('project-one', '[\"revision-two\"]', '[]', 'now')
+                        """
+                    )
 
     def test_paths_reject_absolute_traversal_and_symlinks(self) -> None:
         with TemporaryDirectory() as temp_dir:

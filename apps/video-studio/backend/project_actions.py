@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+from copy import deepcopy
 from pathlib import Path
+import re
 import sqlite3
 from typing import Any
 
@@ -41,12 +43,31 @@ MUTATING_ACTIONS = {
     "history.undo",
     "history.redo",
 }
+_IDENTIFIER = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$")
+_ACTION_FIELDS = {
+    "project.create": {"action", "name", "project_id", "description", "project_ir"},
+    "project.list": {"action", "include_archived"},
+    "project.get": {"action", "project_id"},
+    "project.rename": {"action", "project_id", "name", "base_revision_id", "operation_batch_id"},
+    "project.duplicate": {"action", "project_id", "new_project_id", "name"},
+    "project.archive": {"action", "project_id"},
+    "project.restore": {"action", "project_id"},
+    "revision.get": {"action", "project_id", "revision_id"},
+    "revision.compare": {"action", "project_id", "before_revision_id", "after_revision_id"},
+    "native.export": {"action", "project_id", "revision_id"},
+    "native.import": {"action", "native_project", "project_id", "name"},
+    "operations.apply": {"action", "batch"},
+    "history.undo": {"action", "batch"},
+    "history.redo": {"action", "batch"},
+}
 
 
 def handle_action(
     data_root: str | Path,
     workspace_id: object,
     request: object,
+    *,
+    trusted_actor: dict[str, str] | None = None,
 ) -> tuple[int, dict[str, Any]]:
     if not isinstance(request, dict):
         return _error(ProjectError("request_invalid", "Action request must be an object."))
@@ -56,8 +77,20 @@ def handle_action(
     if action not in PROJECT_ACTIONS:
         return _error(ProjectError("unsupported_action", "Unsupported Video Studio action."))
     try:
+        unknown = sorted(set(request) - _ACTION_FIELDS[action])
+        if unknown:
+            raise ProjectError(
+                "request_shape_invalid",
+                "Action request contains undeclared fields.",
+                details={"unknown": unknown},
+            )
         application = ProjectService(data_root, workspace_id=workspace_id)  # type: ignore[arg-type]
-        result = _dispatch(application, action, request)
+        result = _dispatch(
+            application,
+            action,
+            request,
+            trusted_actor or {"kind": "system", "id": "video-studio"},
+        )
     except ProjectError as error:
         return _error(error)
     except FoundationDatabaseError:
@@ -83,13 +116,18 @@ def handle_action(
     return 200, {"ok": True, "action": action, **result}
 
 
-def _dispatch(application: ProjectService, action: str, request: dict[str, Any]) -> dict[str, Any]:
+def _dispatch(
+    application: ProjectService,
+    action: str,
+    request: dict[str, Any],
+    actor: dict[str, str],
+) -> dict[str, Any]:
     if action == "project.create":
         return {"project": application.create_project(
             name=request.get("name"),
             project_id=request.get("project_id"),
             description=request.get("description", ""),
-            actor=request.get("actor"),
+            actor=actor,
             project_ir=request.get("project_ir"),
         )}
     if action == "project.list":
@@ -102,14 +140,14 @@ def _dispatch(application: ProjectService, action: str, request: dict[str, Any])
             name=request.get("name"),
             base_revision_id=request.get("base_revision_id"),
             operation_batch_id=request.get("operation_batch_id"),
-            actor=request.get("actor"),
+            actor=actor,
         )}
     if action == "project.duplicate":
         return {"project": application.duplicate_project(
             request.get("project_id"),
             name=request.get("name"),
             project_id=request.get("new_project_id"),
-            actor=request.get("actor"),
+            actor=actor,
         )}
     if action in {"project.archive", "project.restore"}:
         method = application.archive_project if action.endswith("archive") else application.restore_project
@@ -129,14 +167,14 @@ def _dispatch(application: ProjectService, action: str, request: dict[str, Any])
             request.get("native_project"),
             project_id=request.get("project_id"),
             name=request.get("name"),
-            actor=request.get("actor"),
+            actor=actor,
         )}
     if action == "operations.apply":
-        return {"revision": application.apply_operations(request.get("batch"))}
+        return {"revision": application.apply_operations(_authoritative_batch(request.get("batch"), actor))}
     if action == "history.undo":
-        return {"revision": application.undo(request.get("batch"))}
+        return {"revision": application.undo(_authoritative_batch(request.get("batch"), actor))}
     if action == "history.redo":
-        return {"revision": application.redo(request.get("batch"))}
+        return {"revision": application.redo(_authoritative_batch(request.get("batch"), actor))}
     raise ProjectError("unsupported_action", "Unsupported Video Studio action.")
 
 
@@ -170,6 +208,26 @@ def _boolean(request: dict[str, Any], field: str, default: bool) -> bool:
     if not isinstance(value, bool):
         raise ProjectError("boolean_invalid", "Action value must be boolean.", path=f"/{field}")
     return value
+
+
+def actor_from_entrypoint(raw: dict[str, Any]) -> dict[str, str]:
+    """Build audit identity only from the host-owned entrypoint envelope."""
+
+    agent_id = raw.get("agent_id")
+    if isinstance(agent_id, str) and _IDENTIFIER.fullmatch(agent_id):
+        return {"kind": "agent", "id": agent_id}
+    user_id = raw.get("user_id")
+    if isinstance(user_id, str) and _IDENTIFIER.fullmatch(user_id):
+        return {"kind": "user", "id": user_id}
+    return {"kind": "system", "id": "video-studio"}
+
+
+def _authoritative_batch(value: object, actor: dict[str, str]) -> object:
+    if not isinstance(value, dict):
+        return value
+    batch = deepcopy(value)
+    batch["actor"] = dict(actor)
+    return batch
 
 
 def _error(error: ProjectError) -> tuple[int, dict[str, Any]]:

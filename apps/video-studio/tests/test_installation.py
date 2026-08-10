@@ -80,11 +80,11 @@ class InstallationLevelRegistrationTest(unittest.TestCase):
             )
             marker = json.loads((data_root / ".maverick-app.json").read_text(encoding="utf-8"))
             self.assertEqual(marker["app_id"], "video-studio")
-            self.assertEqual(marker["data_schema_version"], "2")
+            self.assertEqual(marker["data_schema_version"], "3")
             with closing(sqlite3.connect(data_root / "app.db")) as connection:
                 self.assertEqual(
                     connection.execute("SELECT COUNT(*) FROM schema_migrations").fetchone()[0],
-                    2,
+                    3,
                 )
 
     def _temporary_repository(self, root: Path) -> Path:

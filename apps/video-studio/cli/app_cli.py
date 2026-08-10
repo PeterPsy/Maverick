@@ -8,7 +8,7 @@ import sys
 from core.app_sdk.runtime import emit_json, read_entrypoint_payload
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "backend"))
-from project_actions import app_events_for_result, handle_action
+from project_actions import actor_from_entrypoint, app_events_for_result, handle_action
 
 
 def main() -> None:
@@ -21,7 +21,12 @@ def main() -> None:
             "error": {"code": "unsupported_command", "message": "Unsupported Video Studio command."},
         }
     else:
-        status_code, result = handle_action(payload.data_root, payload.workspace_id, payload.arguments)
+        status_code, result = handle_action(
+            payload.data_root,
+            payload.workspace_id,
+            payload.arguments,
+            trusted_actor=actor_from_entrypoint(payload.raw),
+        )
     result.update({
         "app_id": "video-studio",
         "workspace_id": payload.workspace_id,

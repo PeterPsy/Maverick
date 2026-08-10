@@ -41,7 +41,7 @@ def batch(revision_id: str, batch_id: str, operation: dict) -> dict:
         "base_revision_id": revision_id,
         "operation_batch_id": batch_id,
         "preconditions": [{"type": "head_is", "revision_id": revision_id}],
-        "actor": {"kind": "user", "id": "surface-editor"},
+        "actor": {"kind": "system", "id": "payload-spoof"},
         "operations": [operation],
         "autosave": {"enabled": False, "reason": "surface-test"},
         "metadata": {"message": "Surface parity"},
@@ -71,6 +71,18 @@ class ProjectSurfaceParityTest(unittest.TestCase):
                 {event["resource"] for event in backend["app_events"]},
                 {"project-metadata", "revisions"},
             )
+            audit = invoke(
+                "mcp/server.py",
+                {
+                    **base,
+                    "tool_name": "video_studio_revision_get",
+                    "arguments": {
+                        "project_id": "project-golden",
+                        "revision_id": backend["json"]["revision"]["revision_id"],
+                    },
+                },
+            )
+            self.assertEqual(audit["revision"]["actor"], {"kind": "user", "id": "trusted-editor"})
 
             project_id = created["project"]["project_id"]
             arguments = {"action": "project.get", "project_id": project_id}
@@ -92,7 +104,7 @@ class ProjectSurfaceParityTest(unittest.TestCase):
                     "tool_name": "video_studio_project_rename",
                     "arguments": {
                         "project_id": "project-golden", "name": "Renamed", "base_revision_id": initial,
-                        "operation_batch_id": "batch-rename", "actor": {"kind": "user", "id": "surface-editor"},
+                        "operation_batch_id": "batch-rename",
                     },
                 },
             )["revision"]
@@ -133,9 +145,39 @@ class ProjectSurfaceParityTest(unittest.TestCase):
             self.assertEqual(cli, mcp)
             self.assertEqual(set(backend), {"code", "path", "message", "details"})
 
+    def test_transport_actor_fields_are_not_part_of_the_public_request_contract(self) -> None:
+        with TemporaryDirectory() as temp_dir:
+            base = self._base(temp_dir)
+            request = {
+                "action": "project.create",
+                "name": "Spoofed",
+                "actor": {"kind": "system", "id": "attacker"},
+            }
+            backend = invoke("backend/app_backend.py", {**base, "body": request})["json"]["error"]
+            cli = invoke(
+                "cli/app_cli.py",
+                {**base, "command_id": "video-studio.video-studio", "arguments": request},
+            )["error"]
+            mcp = invoke(
+                "mcp/server.py",
+                {
+                    **base,
+                    "tool_name": "video_studio_project_create",
+                    "arguments": {"name": "Spoofed", "actor": request["actor"]},
+                },
+            )["error"]
+            self.assertEqual(backend, cli)
+            self.assertEqual(cli, mcp)
+            self.assertEqual(backend["code"], "request_shape_invalid")
+
     @staticmethod
     def _base(temp_dir: str) -> dict:
-        return {"app_id": "video-studio", "workspace_id": "workspace-test", "data_root": str(Path(temp_dir) / "video-studio")}
+        return {
+            "app_id": "video-studio",
+            "workspace_id": "workspace-test",
+            "user_id": "trusted-editor",
+            "data_root": str(Path(temp_dir) / "video-studio"),
+        }
 
     @staticmethod
     def _create(base: dict) -> dict:
@@ -146,7 +188,7 @@ class ProjectSurfaceParityTest(unittest.TestCase):
                 **base,
                 "body": {
                     "action": "project.create", "project_id": "project-golden", "name": "Golden timeline",
-                    "actor": {"kind": "user", "id": "surface-editor"}, "project_ir": document,
+                    "project_ir": document,
                 },
             },
         )

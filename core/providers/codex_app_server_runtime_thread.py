@@ -78,7 +78,6 @@ def _ensure_runtime(
     return runtime
 
 
-
 def _ensure_provider_thread(
     *,
     runtime: _CodexAppServerRuntime,
@@ -108,7 +107,6 @@ def _ensure_provider_thread(
         return provider_thread_id
 
 
-
 def _thread_params(*, session: RuntimeSessionRecord, launch_spec: RuntimeBackendLaunchSpec) -> dict[str, Any]:
     return {
         "approvalPolicy": "never",
@@ -117,7 +115,6 @@ def _thread_params(*, session: RuntimeSessionRecord, launch_spec: RuntimeBackend
         "developerInstructions": session.system_prompt or "",
         "config": {"mcp_servers": {}},
     }
-
 
 
 def _remove_generated_system_skills_if_needed(
@@ -139,7 +136,6 @@ def _remove_generated_system_skills_if_needed(
         return True
 
 
-
 def _turn_sandbox_policy(launch_spec: RuntimeBackendLaunchSpec) -> dict[str, Any]:
     if launch_spec.execution_mode == "full-access":
         return {"type": "dangerFullAccess"}
@@ -153,7 +149,6 @@ def _turn_sandbox_policy(launch_spec: RuntimeBackendLaunchSpec) -> dict[str, Any
     if writable_roots:
         policy["writableRoots"] = writable_roots
     return policy
-
 
 
 def _send_request(
@@ -194,7 +189,6 @@ def _send_request(
         raise RuntimeError(f"`{method}` failed against Codex app-server: {message}")
     result = response.get("result") if isinstance(response, dict) else None
     return result if isinstance(result, dict) else {}
-
 
 
 def _reader_loop(runtime: _CodexAppServerRuntime) -> None:
@@ -264,14 +258,12 @@ def _handle_reader_loop_exit(runtime: _CodexAppServerRuntime, *, reason: str, er
             continue
 
 
-
 def _decode_json_line(line: str) -> dict[str, Any] | None:
     try:
         payload = json.loads(str(line or "").strip())
     except json.JSONDecodeError:
         return None
     return payload if isinstance(payload, dict) else None
-
 
 
 def _resolve_response(runtime: _CodexAppServerRuntime, payload: dict[str, Any]) -> None:
@@ -282,7 +274,6 @@ def _resolve_response(runtime: _CodexAppServerRuntime, payload: dict[str, Any]) 
         waiter = runtime.response_waiters.pop(request_id, None)
     if waiter is not None:
         waiter.put(payload)
-
 
 
 def _respond_to_server_request(runtime: _CodexAppServerRuntime, payload: dict[str, Any]) -> None:

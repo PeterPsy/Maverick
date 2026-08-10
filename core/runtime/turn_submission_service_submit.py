@@ -33,9 +33,7 @@ from core.runtime.turn_submission_service_events import (
 )
 from core.runtime.turn_submission_service_output import (
     _build_launch_spec_for_execution,
-    _record_provider_accepted,
     _record_provider_dispatching,
-    _record_provider_turn_start_sent,
     _record_turn_activation_completed,
     _record_turn_started,
     _record_turn_thread_availability_active,
@@ -43,6 +41,7 @@ from core.runtime.turn_submission_service_output import (
     _record_turn_worker_started,
 )
 from core.runtime.turn_submission_service_output_text import _RuntimeTurnOutputRecorder
+from core.runtime.turn_submission_service_provider_callbacks import ProviderStartupCallbacks
 from core.runtime.turn_submission_service_references import (
     _materialize_app_references_for_execution,
     _runtime_app_reference_counts,
@@ -228,10 +227,13 @@ def submit_runtime_turn(
                     "storage_reference_count": storage_reference_count,
                     "materialized_reference_count": materialized_reference_count,
                 }
-                dispatch_started_at = time.perf_counter()
-                turn_start_sent_at: float | None = None
-                provider_startup_metrics: dict[str, object] = {}
-                provider_startup_started_at: dict[str, float] = {}
+                provider_callbacks = ProviderStartupCallbacks(
+                    state=state,
+                    session=session,
+                    turn=turn,
+                    provider_id=provider_id,
+                    events=events,
+                )
                 events.append(
                     _record_provider_dispatching(
                         state,
@@ -243,65 +245,11 @@ def submit_runtime_turn(
                     )
                 )
 
-                def record_provider_startup_event(phase: str, metadata: dict[str, object]) -> None:
-                    if phase.endswith("_started"):
-                        provider_startup_started_at[phase.removesuffix("_started")] = time.perf_counter()
-                    if phase.endswith("_completed"):
-                        base_phase = phase.removesuffix("_completed")
-                        started_at = provider_startup_started_at.get(base_phase)
-                        metric_name = {
-                            "ensure_runtime": "ensure_runtime_ms",
-                            "remove_generated_skills": "remove_generated_skills_ms",
-                            "ensure_thread": "ensure_provider_thread_ms",
-                            "event_sink_reset": "event_sink_reset_ms",
-                        }.get(base_phase)
-                        if metric_name and metric_name not in metadata and started_at is not None:
-                            provider_startup_metrics[metric_name] = (time.perf_counter() - started_at) * 1000
-                    if phase == "turn_start_write_started":
-                        provider_startup_started_at["turn_start_write"] = time.perf_counter()
-                    if phase == "turn_start_write_sent":
-                        started_at = provider_startup_started_at.get("turn_start_write")
-                        if "turn_start_write_ms" not in metadata and started_at is not None:
-                            provider_startup_metrics["turn_start_write_ms"] = (time.perf_counter() - started_at) * 1000
-                    for key, value in metadata.items():
-                        if key.endswith("_ms") and isinstance(value, int | float):
-                            provider_startup_metrics[key] = float(value)
-                        elif key in {"provider_thread_id", "source"} and value is not None and value != "":
-                            provider_startup_metrics[key] = value
-
-                def record_provider_turn_start_sent(metadata: dict[str, object]) -> None:
-                    nonlocal turn_start_sent_at
-                    turn_start_sent_at = time.perf_counter()
-                    enriched_metadata = {**provider_startup_metrics, **metadata}
-                    sent = _record_provider_turn_start_sent(
-                        state,
-                        session_id=session.session_id,
-                        turn_id=turn.turn_id,
-                        provider_id=provider_id,
-                        runtime_mode=session.runtime_mode,
-                        metadata=enriched_metadata,
-                    )
-                    events.append(sent)
-
-                def record_provider_accepted(metadata: dict[str, object]) -> None:
-                    started_at = turn_start_sent_at if turn_start_sent_at is not None else dispatch_started_at
-                    enriched_metadata = {**provider_startup_metrics, **metadata}
-                    accepted = _record_provider_accepted(
-                        state,
-                        session_id=session.session_id,
-                        turn_id=turn.turn_id,
-                        provider_id=provider_id,
-                        runtime_mode=session.runtime_mode,
-                        elapsed_ms=(time.perf_counter() - started_at) * 1000,
-                        metadata=enriched_metadata,
-                    )
-                    events.append(accepted)
-
                 with runtime_provider_start_handoff(
                     state.runtime_store,
                     session_id=session.session_id,
                     turn_id=turn.turn_id,
-                    on_provider_accepted=record_provider_accepted,
+                    on_provider_accepted=provider_callbacks.record_accepted,
                 ) as (provider_session, provider_accepted):
                     result = execute_runtime_turn(
                         session=provider_session,
@@ -314,8 +262,8 @@ def submit_runtime_turn(
                             session_id=provider_session.session_id,
                             provider_id=provider_id,
                         ),
-                        on_provider_startup_event=record_provider_startup_event,
-                        on_provider_turn_start_sent=record_provider_turn_start_sent,
+                        on_provider_startup_event=provider_callbacks.record_startup_event,
+                        on_provider_turn_start_sent=provider_callbacks.record_turn_start_sent,
                         on_provider_accepted=provider_accepted,
                         event_sink=output_recorder.record,
                     )

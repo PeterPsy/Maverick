@@ -79,6 +79,16 @@ origin. Nginx renders a separate wildcard virtual host that proxies to the same
 ASGI core, disables response buffering for SSE, and deliberately omits
 `X-Frame-Options`; core supplies the exact CSP `frame-ancestors` policy.
 
+For a controlled recovery of one already-known sidecar origin, an operator may
+temporarily use an HTTP-01 certificate whose SAN is that exact opaque hostname.
+The wildcard Nginx virtual host may serve that certificate, but TLS will be
+valid only for the named origin. This is sufficient to recover the current
+workspace and generation; it is not equivalent to wildcard provisioning.
+Before adding a workspace, rotating to a generation that changes the derived
+origin, or relying on unattended scale-out, replace it with the DNS-01 wildcard
+certificate. Keep the exact-host certificate under normal ACME renewal and
+repeat the hosted Chromium smoke after every renewal or origin change.
+
 Use `--render-only` to stop after rendering.
 
 Use `--systemd-dir`, `--nginx-conf`, and `--install-env` to customize rendered output paths, and `--live-systemd-dir`, `--live-nginx-conf`, and `--live-nginx-enabled` to customize the live target paths used by apply.

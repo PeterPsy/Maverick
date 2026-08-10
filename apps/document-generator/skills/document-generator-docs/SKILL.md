@@ -58,7 +58,7 @@ Markdown conversion supports:
 - `pptx`
 - `xlsx`
 
-Markdown conversion uses Docling. If `convert_to_markdown` reports that Docling is unavailable, the platform environment needs the `document-generator` Python extra installed.
+Markdown conversion uses Docling. If `convert_to_markdown` reports that Docling is unavailable, the platform environment needs the `document-generator` Python extra installed. On Linux CPU-only hosts, install it with `python3 -m pip install -e '.[document-generator]' --extra-index-url https://download.pytorch.org/whl/cpu` to avoid pulling an unused CUDA runtime.
 
 PDF text patching uses the PyMuPDF runtime dependency. Do not create a temporary virtualenv or hand-roll PDF coordinates for ordinary text replacement; use the official `patch_pdf_text` or `modify_uploaded_document` action first.
 

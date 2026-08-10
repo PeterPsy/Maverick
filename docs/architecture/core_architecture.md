@@ -1081,6 +1081,8 @@ Mounted app backend routes under `/api/apps/<mount_app_id>/backend` must run thr
 
 The ASGI host must implement `lifespan` shutdown so active mounted app backend subprocess trees are terminated cooperatively during service restarts instead of relying on `systemd` timeout kills.
 
+The authorized non-root backend restart fallback may signal the systemd-managed main process when `systemctl restart` requires interactive authentication. Its deferred self-restart helper must bound the graceful-shutdown wait and escalate only after verifying that the target PID still belongs to the same process incarnation. This prevents a stalled ASGI request from leaving systemd reporting an active service whose listening socket has already closed, without risking a signal against a reused PID.
+
 The WSGI host may remain useful for isolated local smoke checks, but it is not the production runtime host once WebSocket is part of the agent communication surface.
 
 `nginx` must forward `/ws/` and WebSocket-capable API routes such as `/api/apps/events/ws` with `Upgrade` and `Connection: upgrade` headers to the main core host.

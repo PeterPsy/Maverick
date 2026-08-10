@@ -12,7 +12,7 @@ from .paths import DataRootError, safe_data_path
 
 
 APP_DATABASE_NAME = "app.db"
-LATEST_SCHEMA_VERSION = 1
+LATEST_SCHEMA_VERSION = 2
 DOMAIN_TABLES = (
     "projects",
     "project_revisions",
@@ -38,7 +38,19 @@ DOMAIN_TABLES = (
     "style_recipes",
     "audit_events",
 )
-FOUNDATION_TABLES = ("app_metadata", "schema_migrations", *DOMAIN_TABLES)
+REVISION_ENGINE_TABLES = (
+    "project_projections",
+    "project_revision_navigation",
+    "project_operation_batches",
+    "project_autosaves",
+    "project_outbox",
+)
+FOUNDATION_TABLES = (
+    "app_metadata",
+    "schema_migrations",
+    *DOMAIN_TABLES,
+    *REVISION_ENGINE_TABLES,
+)
 LAYOUT_DIRECTORIES = (
     "migrations",
     "project-snapshots",

@@ -115,6 +115,10 @@ class ProjectIRNegativeValidationTest(unittest.TestCase):
         wrong_track["timeline"]["tracks"][1]["clips"][0]["kind"] = "video"
         mutations.append((wrong_track, "track_clip_incompatible"))
 
+        overlap = golden()
+        overlap["timeline"]["tracks"][0]["clips"][1]["start_frame"] = 119
+        mutations.append((overlap, "clip_overlap"))
+
         external = golden()
         external["assets"][0]["provenance"]["workspace_id"] = "other-workspace"
         mutations.append((external, "external_asset_reference"))

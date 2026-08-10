@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from contextlib import closing
 from pathlib import Path
 import shutil
 import sqlite3
@@ -30,9 +31,32 @@ from foundation.paths import DataRootError, safe_data_path  # noqa: E402
 
 
 MIGRATIONS_ROOT = APP_ROOT / "migrations"
+FOUNDATION_CHECKSUM = "6aa8d20f562311380f9137f5c21430ae431a71d17bafead92b6fab1087af8552"
 
 
 class FoundationDatabaseTest(unittest.TestCase):
+    def test_version_one_database_upgrades_without_mutating_foundation_checksum(self) -> None:
+        with TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            migration_root = root / "migrations"
+            migration_root.mkdir()
+            shutil.copy2(MIGRATIONS_ROOT / "0001_foundation.sql", migration_root)
+            connection = sqlite3.connect(root / "app.db")
+            try:
+                first = discover_migrations(migration_root)
+                self.assertEqual(first[0].checksum, FOUNDATION_CHECKSUM)
+                self.assertEqual(apply_migrations(connection, first), [1])
+                shutil.copy2(MIGRATIONS_ROOT / "0002_project_revision_engine.sql", migration_root)
+                self.assertEqual(apply_migrations(connection, discover_migrations(migration_root)), [2])
+                self.assertEqual(connection.execute("PRAGMA user_version").fetchone()[0], 2)
+                self.assertIsNotNone(
+                    connection.execute(
+                        "SELECT name FROM sqlite_schema WHERE name = 'project_outbox'"
+                    ).fetchone()
+                )
+            finally:
+                connection.close()
+
     def test_migration_is_complete_transactional_and_idempotent(self) -> None:
         with TemporaryDirectory() as temp_dir:
             data_root = Path(temp_dir) / "data" / "video-studio"
@@ -42,7 +66,7 @@ class FoundationDatabaseTest(unittest.TestCase):
             second = database.migrate()
             health = database.health()
 
-            self.assertEqual(first["applied_migrations"], [1])
+            self.assertEqual(first["applied_migrations"], [1, 2])
             self.assertEqual(second["applied_migrations"], [])
             self.assertEqual(first["domain_aggregate_count"], 23)
             self.assertEqual(set(first["tables"]), set(FOUNDATION_TABLES))
@@ -52,13 +76,13 @@ class FoundationDatabaseTest(unittest.TestCase):
             for relative_path in LAYOUT_DIRECTORIES:
                 self.assertTrue((data_root / relative_path).is_dir(), relative_path)
 
-            with database.connect() as connection:
+            with closing(database.connect()) as connection:
                 self.assertEqual(connection.execute("PRAGMA foreign_keys").fetchone()[0], 1)
-                self.assertEqual(connection.execute("PRAGMA user_version").fetchone()[0], 1)
+                self.assertEqual(connection.execute("PRAGMA user_version").fetchone()[0], 2)
                 migration_count = connection.execute(
                     "SELECT COUNT(*) FROM schema_migrations"
                 ).fetchone()[0]
-                self.assertEqual(migration_count, 1)
+                self.assertEqual(migration_count, 2)
                 with self.assertRaises(sqlite3.IntegrityError):
                     connection.execute(
                         """
@@ -124,9 +148,9 @@ class FoundationDatabaseTest(unittest.TestCase):
         with TemporaryDirectory() as temp_dir:
             database = FoundationDatabase(Path(temp_dir) / "data")
             database.migrate()
-            with database.connect() as connection:
+            with closing(database.connect()) as connection:
                 connection.execute(
-                    "UPDATE app_metadata SET value = '2' WHERE key = 'schema_version'"
+                    "UPDATE app_metadata SET value = '3' WHERE key = 'schema_version'"
                 )
                 connection.commit()
             with self.assertRaisesRegex(FoundationDatabaseError, "inconsistent"):

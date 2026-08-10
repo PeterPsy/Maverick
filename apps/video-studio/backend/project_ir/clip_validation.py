@@ -35,7 +35,9 @@ def clip_invariant_issues(
         track_path = f"/timeline/tracks/{track_pos}"
         if track_type not in TRACK_CLIP_COMPATIBILITY:
             problems.append(issue("track_type_invalid", f"{track_path}/type", "Track type is unsupported."))
-        for clip_pos, clip in enumerate(_list(track.get("clips"))):
+        clips = _list(track.get("clips"))
+        problems.extend(_overlap_issues(clips, track_path))
+        for clip_pos, clip in enumerate(clips):
             if isinstance(clip, dict):
                 problems.extend(
                     _clip_issues(
@@ -47,6 +49,30 @@ def clip_invariant_issues(
                         registry,
                     )
                 )
+    return problems
+
+
+def _overlap_issues(clips: list[Any], track_path: str) -> list[ValidationIssue]:
+    intervals: list[tuple[int, int, int]] = []
+    for position, clip in enumerate(clips):
+        if not isinstance(clip, dict):
+            continue
+        start, duration = clip.get("start_frame"), clip.get("duration_frames")
+        if _integer(start) and _integer(duration) and duration > 0:
+            intervals.append((start, start + duration, position))
+    intervals.sort()
+    problems: list[ValidationIssue] = []
+    previous_end = -1
+    for start, end, position in intervals:
+        if start < previous_end:
+            problems.append(
+                issue(
+                    "clip_overlap",
+                    f"{track_path}/clips/{position}",
+                    "Clips on the same track must not overlap.",
+                )
+            )
+        previous_end = max(previous_end, end)
     return problems
 
 

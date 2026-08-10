@@ -9,6 +9,7 @@ import {
   openChatThreadRouteInShell,
   openStoragePathInShell,
   runtimeSessionThreadMetadataFromParams,
+  shellAppHrefTarget,
   shellMessageMatchesNavigationScope,
 } from "./shellNavigation";
 
@@ -127,6 +128,23 @@ describe("chat shell navigation", () => {
       app_id: "storage",
       params: { workspace_relative_path: "storage/generated/report.md" },
     });
+  });
+
+  it("parses canonical shell app deep links into app navigation params", () => {
+    expect(shellAppHrefTarget("/app/mail?thread=email_thread_123")).toEqual({
+      appId: "mail",
+      params: { thread: "email_thread_123" },
+    });
+    expect(shellAppHrefTarget("/app/checklist/checklists/check%20123?focus=details")).toEqual({
+      appId: "checklist",
+      params: { app_page: "checklists/check 123", focus: "details" },
+    });
+  });
+
+  it("rejects links that do not belong to the canonical shell app route", () => {
+    expect(shellAppHrefTarget("/apps/mail/")).toBeNull();
+    expect(shellAppHrefTarget("/docs/getting-started")).toBeNull();
+    expect(shellAppHrefTarget("https://example.com/app/mail?thread=thread_123")).toBeNull();
   });
 
   it("normalizes app_page routes into chat navigation params", () => {

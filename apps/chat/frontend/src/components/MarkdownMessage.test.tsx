@@ -127,4 +127,41 @@ describe("MarkdownMessage", () => {
       Object.defineProperty(window, "parent", { configurable: true, value: originalParent });
     }
   });
+
+  it("routes Mail deep links through the shell instead of navigating the Chat frame", async () => {
+    const messages: Array<{ message: unknown; targetOrigin: string }> = [];
+    const originalParent = window.parent;
+    Object.defineProperty(window, "parent", {
+      configurable: true,
+      value: {
+        postMessage(message: unknown, targetOrigin: string) {
+          messages.push({ message, targetOrigin });
+        },
+      },
+    });
+    try {
+      container = document.createElement("div");
+      document.body.appendChild(container);
+      root = createRoot(container);
+
+      await act(async () => {
+        root?.render(<MarkdownMessage content={"[Open in Mail](/app/mail?thread=email_thread_123)"} />);
+      });
+
+      const link = container.querySelector("a");
+      expect(link?.getAttribute("href")).toBe("/app/mail?thread=email_thread_123");
+
+      const click = new MouseEvent("click", { bubbles: true, cancelable: true });
+      link?.dispatchEvent(click);
+
+      expect(click.defaultPrevented).toBe(true);
+      expect(messages[0]?.message).toEqual({
+        type: "maverick.app.open-app",
+        app_id: "mail",
+        params: { thread: "email_thread_123" },
+      });
+    } finally {
+      Object.defineProperty(window, "parent", { configurable: true, value: originalParent });
+    }
+  });
 });

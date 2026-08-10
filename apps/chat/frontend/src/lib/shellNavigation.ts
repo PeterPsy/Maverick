@@ -10,6 +10,11 @@ type ShellRouteOptions = {
 };
 export type ShellRouteParams = Record<string, string | boolean | null>;
 
+export type ShellAppHrefTarget = {
+  appId: string;
+  params: ShellRouteParams;
+};
+
 export type RuntimeSessionThreadMetadata = {
   agent_label?: string;
   agent_type_id?: string;
@@ -52,6 +57,32 @@ export function openStoragePathInShell(workspaceRelativePath: string, options: S
     return false;
   }
   return postAppRouteToShell("storage", { workspace_relative_path: normalizedPath }, options);
+}
+
+export function shellAppHrefTarget(value: unknown): ShellAppHrefTarget | null {
+  if (typeof value !== "string" || !value.startsWith("/app/")) {
+    return null;
+  }
+  let url: URL;
+  try {
+    url = new URL(value, "https://maverick.invalid");
+  } catch {
+    return null;
+  }
+  const segments = url.pathname
+    .slice("/app/".length)
+    .split("/")
+    .filter(Boolean)
+    .map(decodePathSegment);
+  const [appId = "", ...pageSegments] = segments;
+  if (!appId.trim()) {
+    return null;
+  }
+  const params: ShellRouteParams = Object.fromEntries(url.searchParams.entries());
+  if (pageSegments.length) {
+    params.app_page = pageSegments.join("/");
+  }
+  return { appId, params };
 }
 
 function postChatRouteToShell(params: ShellRouteParams, options: ShellRouteOptions): boolean {
@@ -153,4 +184,12 @@ export function chatNavigationRequestKey({
 
 export function scalarString(value: string | boolean | null | undefined): string {
   return typeof value === "string" ? value.trim() : "";
+}
+
+function decodePathSegment(value: string): string {
+  try {
+    return decodeURIComponent(value);
+  } catch {
+    return value;
+  }
 }

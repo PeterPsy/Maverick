@@ -5,7 +5,7 @@ import signal
 import unittest
 from unittest.mock import Mock
 
-from core.recovery.backend_service import restart_backend_service
+from core.recovery.backend_service import _terminate_process_with_escalation, restart_backend_service
 
 
 RUNNING_STATUS = "MainPID=100\nRestart=always\nActiveState=active\nSubState=running\n"
@@ -117,4 +117,39 @@ class RecoveryBackendServiceTest(unittest.TestCase):
         self.assertTrue(result.restarted)
         self.assertEqual(result.method, "deferred-signal")
         killer.assert_not_called()
-        schedule_restart.assert_called_once_with(os.getpid())
+        schedule_restart.assert_called_once_with(os.getpid(), force_after_seconds=15.0)
+
+    def test_deferred_restart_escalates_when_graceful_shutdown_stalls(self) -> None:
+        now = [0.0]
+        killer = Mock()
+
+        _terminate_process_with_escalation(
+            100,
+            "start-token",
+            delay_seconds=0.75,
+            force_after_seconds=1.0,
+            process_killer=killer,
+            sleep=lambda seconds: now.__setitem__(0, now[0] + seconds),
+            monotonic=lambda: now[0],
+            process_start_token=lambda _pid: "start-token",
+        )
+
+        self.assertEqual(
+            killer.call_args_list,
+            [unittest.mock.call(100, signal.SIGTERM), unittest.mock.call(100, signal.SIGKILL)],
+        )
+
+    def test_deferred_restart_does_not_signal_a_reused_pid(self) -> None:
+        killer = Mock()
+
+        _terminate_process_with_escalation(
+            100,
+            "original-start-token",
+            delay_seconds=0.75,
+            force_after_seconds=1.0,
+            process_killer=killer,
+            sleep=lambda _seconds: None,
+            process_start_token=lambda _pid: "replacement-start-token",
+        )
+
+        killer.assert_not_called()

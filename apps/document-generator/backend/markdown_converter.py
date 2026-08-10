@@ -111,11 +111,15 @@ def _load_docling_converter_class() -> type:
     except ModuleNotFoundError as error:
         if error.name == "docling":
             raise DocumentValidationError(
-                "Docling is not installed. Install the document-generator extra with `python3 -m pip install -e '.[document-generator]'`."
+                "Docling is not installed. Install the document-generator extra with "
+                "`python3 -m pip install -e '.[document-generator]'`. On Linux CPU-only hosts, add "
+                "`--extra-index-url https://download.pytorch.org/whl/cpu` to avoid installing CUDA packages."
             ) from None
         missing_name = error.name or "a required package"
         raise DocumentValidationError(
-            f"Docling is installed without `{missing_name}`. Reinstall the document-generator extra with `python3 -m pip install -e '.[document-generator]'`."
+            f"Docling is installed without `{missing_name}`. Reinstall the document-generator extra with "
+            "`python3 -m pip install -e '.[document-generator]'`. On Linux CPU-only hosts, add "
+            "`--extra-index-url https://download.pytorch.org/whl/cpu` to avoid installing CUDA packages."
         ) from None
     return DocumentConverter
 

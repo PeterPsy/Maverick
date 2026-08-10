@@ -15,9 +15,13 @@ from core.providers.provider_codex import remove_codex_system_skills
 from core.runtime.process_control import (
     configure_runtime_process_oom_score,
     register_runtime_process,
+    terminate_runtime_process,
     unregister_runtime_process,
 )
 from core.runtime.runtime_session import RuntimeSessionRecord
+
+
+APP_SERVER_INITIALIZE_TIMEOUT_SECONDS = 30.0
 
 
 def _ensure_runtime(
@@ -57,7 +61,20 @@ def _ensure_runtime(
         register_runtime_process(session.session_id, process)
         runtime.reader_thread.start()
 
-    _send_request(runtime, "initialize", {"clientInfo": {"name": "maverick", "version": "3.0.0"}}, timeout=10.0)
+    try:
+        _send_request(
+            runtime,
+            "initialize",
+            {"clientInfo": {"name": "maverick", "version": "3.0.0"}},
+            timeout=APP_SERVER_INITIALIZE_TIMEOUT_SECONDS,
+        )
+    except Exception:
+        with _RUNTIMES_LOCK:
+            if _RUNTIMES.get(session.session_id) is runtime:
+                _RUNTIMES.pop(session.session_id, None)
+        terminate_runtime_process(runtime.process)
+        unregister_runtime_process(session.session_id, runtime.process)
+        raise
     return runtime
 
 
@@ -212,6 +229,7 @@ def _reader_loop(runtime: _CodexAppServerRuntime) -> None:
 
 def _handle_reader_loop_exit(runtime: _CodexAppServerRuntime, *, reason: str, error: str | None) -> None:
     message = "Codex app-server stream ended before turn completion."
+    request_message = "Codex app-server stream ended before request completion."
     with runtime.event_lock:
         had_active_turn = runtime.current_event_sink is not None
         completion_received = runtime.current_completion_received
@@ -236,6 +254,14 @@ def _handle_reader_loop_exit(runtime: _CodexAppServerRuntime, *, reason: str, er
     )
     if failed_before_completion:
         _put_completion(runtime, {"status": "failed"})
+    with runtime.request_lock:
+        pending_waiters = list(runtime.response_waiters.values())
+        runtime.response_waiters.clear()
+    for waiter in pending_waiters:
+        try:
+            waiter.put_nowait({"error": {"message": request_message}})
+        except queue.Full:
+            continue
 
 
 

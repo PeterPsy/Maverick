@@ -26,6 +26,7 @@ function defaultIcon(app: AppRegistryItem): string {
     checklist: "checklist",
     crm: "contacts",
     "developer-kit": "developer_board",
+    "design-studio": "design_services",
     "docs-studio": "description",
     "document-generator": "description",
     "dynamic-views": "dashboard_customize",

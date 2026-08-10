@@ -22,10 +22,13 @@ from core.runtime.runtime_events import RuntimeEventRecord
 from core.runtime.runtime_session import RuntimeSessionRecord
 from core.runtime.runtime_turns import RuntimeTurnRecord
 from core.runtime.plain_hosted_cancellation import plain_hosted_request_cancellation
+from core.runtime.turn_terminalization import terminalize_runtime_turn_cancellation
 from core.runtime.service import (
     create_runtime_session,
+    record_runtime_event,
     request_runtime_turn_cancellation,
     transition_runtime_session,
+    transition_runtime_turn,
 )
 from tests.support.repo import make_temp_repo_root
 
@@ -86,6 +89,133 @@ class _FakeState:
 
 
 class BackendRestartRecoveryTestCase(unittest.TestCase):
+    def test_cancel_terminalization_failure_is_isolated_to_one_turn(self) -> None:
+        repo_root = make_temp_repo_root(self)
+        state = bootstrap_platform_state(start_path=repo_root)
+        session = create_runtime_session(
+            state.runtime_store,
+            session_id="session-isolated-cancel-recovery",
+            workspace_id="default",
+            agent_id="chat",
+            source_app_id="source-app",
+            start_path=repo_root,
+        )
+        for turn_id in ("turn-corrupt-cancel", "turn-recoverable-cancel"):
+            state.runtime_store.save_turn(
+                RuntimeTurnRecord(
+                    turn_id=turn_id,
+                    session_id=session.session_id,
+                    workspace_id="default",
+                    status="active",
+                    input_text=turn_id,
+                    created_at=NOW,
+                    updated_at=NOW,
+                    started_at=NOW,
+                    completed_at=None,
+                    failure_reason=None,
+                )
+            )
+
+        request_runtime_turn_cancellation(
+            state.runtime_store,
+            turn_id="turn-corrupt-cancel",
+            reason="corrupt cancellation",
+            now=NOW,
+        )
+        corrupt = transition_runtime_turn(
+            state.runtime_store,
+            turn_id="turn-corrupt-cancel",
+            target_status="cancelled",
+            failure_reason="corrupt cancellation",
+            now=NOW,
+        )
+        state.runtime_store.claim_turn_terminalization(
+            turn_id=corrupt.turn_id,
+            event_id="outbox-event",
+            event_type="runtime.turn.cancelled",
+            payload={"reason": "corrupt cancellation"},
+            now=NOW,
+        )
+        record_runtime_event(
+            state.runtime_store,
+            event_id="worker-event",
+            session_id=session.session_id,
+            turn_id=corrupt.turn_id,
+            plane="turn",
+            event_type="runtime.turn.cancelled",
+            payload={"reason": "corrupt cancellation"},
+            now=NOW,
+        )
+        recoverable = terminalize_runtime_turn_cancellation(
+            state.runtime_store,
+            turn_id="turn-recoverable-cancel",
+            reason="recoverable cancellation",
+            event_payload={"reason": "recoverable cancellation"},
+            callback=lambda _session, _turn, _event: (_ for _ in ()).throw(RuntimeError("callback crash")),
+            now=NOW,
+        )
+
+        with (
+            patch.object(backend_restart, "dispatch_source_app_runtime_event") as dispatch,
+            self.assertLogs(backend_restart.logger, level="ERROR"),
+        ):
+            recovered = backend_restart._recover_pending_cancelled_turn_terminalizations(state)
+
+        self.assertEqual(recovered, 1)
+        dispatch.assert_called_once()
+        self.assertEqual(dispatch.call_args.kwargs["runtime_event_id"], recoverable.event.event_id)
+        self.assertIsNone(state.runtime_store.get_turn(corrupt.turn_id).terminalization_event_persisted_at)
+        self.assertIsNotNone(
+            state.runtime_store.get_turn(recoverable.turn.turn_id).terminalization_callback_delivered_at
+        )
+
+    def test_backend_restart_drains_pending_cancel_callback_with_same_event_id(self) -> None:
+        repo_root = make_temp_repo_root(self)
+        state = bootstrap_platform_state(start_path=repo_root)
+        session = create_runtime_session(
+            state.runtime_store,
+            session_id="session-pending-cancel-callback",
+            workspace_id="default",
+            agent_id="chat",
+            source_app_id="source-app",
+            start_path=repo_root,
+        )
+        state.runtime_store.save_turn(
+            RuntimeTurnRecord(
+                turn_id="turn-pending-cancel-callback",
+                session_id=session.session_id,
+                workspace_id="default",
+                status="active",
+                input_text="cancel before restart",
+                created_at=NOW,
+                updated_at=NOW,
+                started_at=NOW,
+                completed_at=None,
+                failure_reason=None,
+            )
+        )
+        seeded = terminalize_runtime_turn_cancellation(
+            state.runtime_store,
+            turn_id="turn-pending-cancel-callback",
+            reason="cancel before restart",
+            event_payload={"reason": "cancel before restart"},
+            callback=lambda _session, _turn, _event: (_ for _ in ()).throw(RuntimeError("crash")),
+            now=NOW,
+        )
+        self.assertTrue(seeded.callback_pending)
+
+        with (
+            patch.object(backend_restart, "dispatch_source_app_runtime_event") as dispatch,
+            patch.object(backend_restart, "dispatch_workspace_app_background_hooks", return_value=[]),
+            patch.object(backend_restart.InterAgentService, "recover_non_terminal_runs", return_value=[]),
+        ):
+            backend_restart.recover_interrupted_runtime_turns_after_backend_restart(state)
+
+        persisted = state.runtime_store.get_turn(seeded.turn.turn_id)
+        dispatch.assert_called_once()
+        self.assertEqual(dispatch.call_args.kwargs["runtime_event_id"], seeded.event.event_id)
+        self.assertIsNotNone(persisted.terminalization_callback_delivered_at)
+
     def test_orphan_event_recovery_reads_session_events_once(self) -> None:
         store = _FakeRuntimeStore(
             events=[

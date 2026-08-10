@@ -203,9 +203,13 @@ transcript projection behavior.
   never sufficient, and a late old-owner acknowledgement cannot finish a
   replacement incarnation on the same turn. Every interrupt source retries
   provider cancellation after lifecycle reconciliation and reports the
-  terminal status actually returned by that transition. Concurrent HTTP and app
-  interrupts atomically insert one turn/status event so only its writer reports
-  success and invokes the source-app callback. Root-turn recovery also derives
+  terminal status actually returned by that transition. Hosted waits correlate
+  the exact turn and request generation and reread its acknowledgement after
+  unwind, excluding stale acknowledgements from other turns or incarnations.
+  Concurrent HTTP and app interrupts atomically claim one durable terminalization
+  outbox whose stable event, thread-release, and at-least-once callback phases
+  can be drained after a crash; only the first claimant reports success.
+  Root-turn recovery also derives
   terminal event type from the persisted transition result. A child created
   concurrently is rechecked, deleted, and never linked. Interrupt and resume
   hold the same cross-process run-control handoff across the full cleanup;

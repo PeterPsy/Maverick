@@ -1103,6 +1103,8 @@ Mounted app backend routes under `/api/apps/<mount_app_id>/backend` must run thr
 
 The ASGI host must implement `lifespan` shutdown so active mounted app backend subprocess trees are terminated cooperatively during service restarts instead of relying on `systemd` timeout kills.
 
+The authorized non-root backend restart fallback may signal the systemd-managed main process when `systemctl restart` requires interactive authentication. Its deferred self-restart helper must bound the graceful-shutdown wait and escalate only after verifying that the target PID still belongs to the same process incarnation. This prevents a stalled ASGI request from leaving systemd reporting an active service whose listening socket has already closed, without risking a signal against a reused PID.
+
 The WSGI host may remain useful for isolated local smoke checks, but it is not the production runtime host once WebSocket is part of the agent communication surface.
 
 `nginx` must forward `/ws/` and WebSocket-capable API routes such as `/api/apps/events/ws` with `Upgrade` and `Connection: upgrade` headers to the main core host.
@@ -1603,7 +1605,9 @@ The local JSON adapter must treat malformed collection files as storage errors, 
 
 Runtime session, turn, event, process, and state records must survive auth logout/login cycles and local host restarts.
 
-Runtime turn cancellation is a persisted control-plane intent, not only an in-process provider callback. An interrupt publishes the first cancellation request before it waits for the session lifecycle handoff or invokes provider cleanup. Ordinary turn saves cannot clear that intent. Activation, provider start, and terminal transition reread it, cancellation wins over a later completion or failure, and repeated terminal reconciliation is idempotent. Plain-hosted requests also persist request-started and request-finished evidence with the owner kind, host, process id, process-start token, and per-request generation. The process that owns the HTTP response watches the durable intent and aborts the response, while HTTP, app, CLI, and MCP interrupt callers may wait for the persisted finished acknowledgement even when they run in another process. Startup and interrupt-time reconciliation may close only an exact lease whose local process incarnation is proven dead; a different owner id alone is not evidence of death, and an unknown or foreign-host owner fails closed. Provider interruption is retried after the lifecycle transition so a handle registered during the acceptance handoff cannot escape cleanup. A lease that acknowledged the cancellation before the retry snapshot still counts as an accepted provider interruption. Concurrent HTTP or app interrupts insert the turn cancellation event atomically by turn and event type; only the writer that inserted it publishes the source-app callback and reports `interrupted=true`.
+Runtime turn cancellation is a persisted control-plane intent, not only an in-process provider callback. An interrupt publishes the first cancellation request before it waits for the session lifecycle handoff or invokes provider cleanup. Ordinary turn saves cannot clear that intent. Activation, provider start, and terminal transition reread it, cancellation wins over a later completion or failure, and repeated terminal reconciliation is idempotent. Plain-hosted requests also persist request-started and request-finished evidence with the owner kind, host, process id, process-start token, and per-request generation. The process that owns the HTTP response watches the durable intent and aborts the response, while HTTP, app, CLI, and MCP interrupt callers may wait for the persisted finished acknowledgement even when they run in another process. The waiter captures the exact turn and request generation, rereads that incarnation after waiting, and never treats an acknowledgement from another turn as success. Startup and interrupt-time reconciliation may close only an exact lease whose local process incarnation is proven dead; a different owner id alone is not evidence of death, and an unknown or foreign-host owner fails closed. Provider interruption is retried after the lifecycle transition so a handle registered during the acceptance handoff cannot escape cleanup.
+
+Cancellation terminalization is a durable per-turn outbox. Its stable event id, event payload, event persistence, thread release, and source-app callback delivery are recorded as separate idempotent phases. Cancellation-intent ownership and terminal-outbox ownership are independent compare-and-set results: an external interrupt reports `interrupted=true` when it created the durable intent or claimed the outbox, so a worker that wins the technical outbox race cannot steal the successful result from the caller that published the intent. Concurrent or later callers may still drain unfinished phases. Event persistence repairs history, bounded tail, and app-stream projections independently, so a crash between those writes does not turn a partial event into a permanent claim. Source-app callbacks receive the stable runtime event id and are delivered at least once: a crash or error before the delivered phase is persisted leaves the callback recoverable by a request retry or backend restart. A turn worker that observes cancellation before or during its own final transition drains this same outbox and never publishes a parallel terminal event or callback. Session cleanup and backend recovery use the authoritative turn status and the same cancellation terminalizer, so a concurrent completion never produces cancelled evidence.
 
 For the local hosted bootstrap, workspace-scoped runtime-domain collections are persisted under the owning workspace root. Installation-local `.maverick/local-state/runtime/` is not the storage home for runtime sessions, runtime threads, turns, events, processes, or state.
 
@@ -1625,6 +1629,16 @@ acknowledgement. Each lease persists verifiable process identity and a
 per-request generation; both dead-owner reconciliation and request-finished
 acknowledgement compare-and-set the exact incarnation, so a late `finally` from
 an older request cannot finish a replacement request on the same turn.
+Before ordinary restart reconciliation, the backend also drains incomplete
+cancellation outboxes for terminal turns, including sessions that no longer
+have queued or active work. This repairs missing event, thread, and callback
+phases without resuming cancelled work. A pre-outbox cancellation that already
+has its legacy terminal event has event and callback delivery adopted without a
+callback replay. Recovery then reconciles actual thread availability under the
+session lifecycle handoff before marking the thread-release phase complete, so
+the first deployment of the outbox format cannot leave a thread visibly active.
+Recovery isolates terminalization failures per turn, and orchestration resume
+still runs if the broader runtime recovery phase fails.
 
 Hidden `inter_agent_participant` sessions are excluded from that generic
 runtime `resume` behavior. Their interrupted turns are closed with explicit

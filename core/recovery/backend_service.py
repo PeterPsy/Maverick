@@ -8,6 +8,7 @@ import signal
 import subprocess
 import sys
 import time
+from pathlib import Path
 from typing import Callable
 from urllib.error import URLError
 from urllib.request import urlopen
@@ -86,7 +87,10 @@ def restart_backend_service(
                 healthy=_health_ok(health_url),
             )
         if previous_pid == os.getpid():
-            _schedule_delayed_sigterm(previous_pid)
+            _schedule_delayed_sigterm(
+                previous_pid,
+                force_after_seconds=timeout_seconds,
+            )
             return BackendServiceRestartResult(
                 service_name=service_name,
                 health_url=health_url,
@@ -184,24 +188,84 @@ def _parse_pid(raw_value: str | None) -> int | None:
     return pid if pid > 0 else None
 
 
-def _schedule_delayed_sigterm(pid: int, *, delay_seconds: float = 0.75) -> None:
+def _schedule_delayed_sigterm(
+    pid: int,
+    *,
+    delay_seconds: float = 0.75,
+    force_after_seconds: float = 15.0,
+) -> None:
+    process_start_token = _process_start_token(pid)
+    if process_start_token is None:
+        raise RuntimeError(f"Could not identify backend process `{pid}` before restart.")
     subprocess.Popen(  # noqa: S603
         [
             sys.executable,
             "-c",
             (
-                "import os, signal, sys, time; "
-                "time.sleep(float(sys.argv[2])); "
-                "os.kill(int(sys.argv[1]), signal.SIGTERM)"
+                "import sys; "
+                "from core.recovery.backend_service import _terminate_process_with_escalation; "
+                "_terminate_process_with_escalation("
+                "int(sys.argv[1]), sys.argv[2], "
+                "delay_seconds=float(sys.argv[3]), force_after_seconds=float(sys.argv[4]))"
             ),
             str(pid),
+            process_start_token,
             str(delay_seconds),
+            str(force_after_seconds),
         ],
         stdin=subprocess.DEVNULL,
         stdout=subprocess.DEVNULL,
         stderr=subprocess.DEVNULL,
         start_new_session=True,
     )
+
+
+def _terminate_process_with_escalation(
+    pid: int,
+    expected_start_token: str,
+    *,
+    delay_seconds: float,
+    force_after_seconds: float,
+    process_killer: Callable[[int, int], None] = os.kill,
+    sleep: Callable[[float], None] = time.sleep,
+    monotonic: Callable[[], float] = time.monotonic,
+    process_start_token: Callable[[int], str | None] | None = None,
+) -> None:
+    """Terminate one process, escalating only while its PID still has the same owner."""
+    read_start_token = process_start_token or _process_start_token
+    sleep(max(0.0, delay_seconds))
+    if read_start_token(pid) != expected_start_token:
+        return
+    try:
+        process_killer(pid, signal.SIGTERM)
+    except ProcessLookupError:
+        return
+
+    deadline = monotonic() + max(0.0, force_after_seconds)
+    while read_start_token(pid) == expected_start_token:
+        remaining = deadline - monotonic()
+        if remaining <= 0:
+            break
+        sleep(min(0.25, remaining))
+    if read_start_token(pid) != expected_start_token:
+        return
+    try:
+        process_killer(pid, signal.SIGKILL)
+    except ProcessLookupError:
+        return
+
+
+def _process_start_token(pid: int) -> str | None:
+    """Return the Linux process start token used to detect PID reuse."""
+    try:
+        raw_stat = Path(f"/proc/{pid}/stat").read_text(encoding="utf-8")
+    except OSError:
+        return None
+    command_end = raw_stat.rfind(")")
+    if command_end < 0:
+        return None
+    fields_after_command = raw_stat[command_end + 1 :].split()
+    return fields_after_command[19] if len(fields_after_command) > 19 else None
 
 
 def _health_ok(health_url: str) -> bool:

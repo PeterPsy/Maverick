@@ -83,7 +83,7 @@ class RuntimeSessionJsonCollection:
             matches.sort(key=lambda item: str(item.get("created_at") or ""))
             return matches[-limit:]
 
-    def update_one(self, query: dict[str, Any], update: dict[str, Any], *, upsert: bool = False) -> None:
+    def update_one(self, query: dict[str, Any], update: dict[str, Any], *, upsert: bool = False) -> bool:
         payload = deepcopy(update.get("$set", {}))
         workspace_id = str(payload.get("workspace_id") or query.get("workspace_id") or "").strip()
         session_id = str(payload.get("session_id") or query.get("session_id") or "").strip()
@@ -98,18 +98,20 @@ class RuntimeSessionJsonCollection:
                         count = self._count_documents(path)
                     self._append_document(path, {**deepcopy(query), **payload})
                     self._partition_counts[path] = count + 1
-                    return
+                    return True
                 documents = self._read_documents(path)
                 for index, document in enumerate(documents):
                     if _matches(document, query):
                         documents[index] = {**document, **payload}
                         self._write_documents(path, documents)
                         self._partition_counts[path] = len(documents)
-                        return
+                        return True
                 if upsert:
                     documents.append({**deepcopy(query), **payload})
                     self._write_documents(path, documents)
                     self._partition_counts[path] = len(documents)
+                    return True
+        return False
 
     def insert_one_if_absent(self, query: dict[str, Any], document: dict[str, Any]) -> tuple[dict[str, Any], bool]:
         """Insert one session-partitioned record atomically when the query has no match."""

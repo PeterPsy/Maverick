@@ -112,6 +112,21 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--skip-verify", action="store_true")
     parser.add_argument("--build-frontends", action="store_true", help="Build app frontends during bootstrap.")
     parser.add_argument("--skip-tls", action="store_true", help="Skip the TLS certbot step.")
+    parser.add_argument(
+        "--hosted-sidecars",
+        action="store_true",
+        help="Enable isolated hosted sidecar origins; requires externally provisioned wildcard TLS.",
+    )
+    parser.add_argument(
+        "--sidecar-tls-cert",
+        default="",
+        help="Wildcard sidecar certificate path (defaults to the Certbot <hostname>-sidecars lineage).",
+    )
+    parser.add_argument(
+        "--sidecar-tls-key",
+        default="",
+        help="Wildcard sidecar private-key path (defaults to the Certbot <hostname>-sidecars lineage).",
+    )
     parser.add_argument("--skip-health-check", action="store_true", help="Skip final post-apply health checks.")
     parser.add_argument("--render-only", action="store_true", help="Only render files, do not offer live apply.")
     parser.add_argument("--force", action="store_true", help="Continue despite blocking preflight errors.")
@@ -520,6 +535,9 @@ def build_config(args: argparse.Namespace, *, interactive: bool) -> InstallerCon
         admin_password=admin_password,
         secret_key_file=args.secret_key_file,
         bootstrap_secret_store_root=args.bootstrap_secret_store_root,
+        hosted_sidecars=bool(args.hosted_sidecars),
+        sidecar_tls_cert_path=str(args.sidecar_tls_cert or "").strip(),
+        sidecar_tls_key_path=str(args.sidecar_tls_key or "").strip(),
     )
 
 

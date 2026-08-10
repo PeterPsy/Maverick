@@ -71,6 +71,7 @@
       "requirement": "No host/provider secret or Maverick cookie reaches OpenDesign.",
       "status": "passed",
       "evidence": [
+        {"kind": "hosted-browser-proof", "ref": "apps/design-studio/service/opendesign_hosted_acceptance_0_16_1.json"},
         {"kind": "browser-proof", "ref": "apps/design-studio/service/opendesign_product_acceptance_0_16_1.json"},
         {"kind": "test", "ref": "apps/design-studio/tests/test_design_studio_app.py"}
       ]
@@ -80,6 +81,7 @@
       "requirement": "OpenDesign UI and API remain same-origin on an isolated browser origin.",
       "status": "passed",
       "evidence": [
+        {"kind": "hosted-browser-proof", "ref": "apps/design-studio/service/opendesign_hosted_acceptance_0_16_1.json"},
         {"kind": "browser-proof", "ref": "apps/design-studio/service/opendesign_product_acceptance_0_16_1.json"},
         {"kind": "test", "ref": "tests/integration/app_hosting/test_sidecar_browser_origin.py"}
       ]
@@ -89,6 +91,7 @@
       "requirement": "Bootstrap is a one-shot POST followed by a clean redirect with no ticket/session leakage.",
       "status": "passed",
       "evidence": [
+        {"kind": "hosted-browser-proof", "ref": "apps/design-studio/service/opendesign_hosted_acceptance_0_16_1.json"},
         {"kind": "browser-proof", "ref": "apps/design-studio/service/opendesign_product_acceptance_0_16_1.json"},
         {"kind": "test", "ref": "tests/integration/app_hosting/test_sidecar_browser_origin.py"}
       ]
@@ -125,6 +128,7 @@
       "requirement": "The real browser completes create, run, SSE, file, preview, result package, and Storage export.",
       "status": "passed",
       "evidence": [
+        {"kind": "hosted-browser-proof", "ref": "apps/design-studio/service/opendesign_hosted_acceptance_0_16_1.json"},
         {"kind": "browser-proof", "ref": "apps/design-studio/service/opendesign_product_acceptance_0_16_1.json"},
         {"kind": "test", "ref": "apps/design-studio/tests/opendesign_product.e2e.mjs"}
       ]
@@ -152,6 +156,7 @@
       "requirement": "Cancel, timeout, restart, and retry behavior is idempotent.",
       "status": "passed",
       "evidence": [
+        {"kind": "hosted-browser-proof", "ref": "apps/design-studio/service/opendesign_hosted_acceptance_0_16_1.json"},
         {"kind": "browser-proof", "ref": "apps/design-studio/service/opendesign_product_acceptance_0_16_1.json"},
         {"kind": "test", "ref": "tests/unit/runtime_streams/test_app_streams.py"}
       ]

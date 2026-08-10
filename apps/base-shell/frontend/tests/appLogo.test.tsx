@@ -50,6 +50,10 @@ describe("AppLogo", () => {
     expect(renderedLogo("fitness-coach")).toContain(">fitness_center<");
   });
 
+  it("uses the design services glyph for Design Studio", () => {
+    expect(renderedLogo("design-studio")).toContain(">design_services<");
+  });
+
   it("uses the sensors glyph for Senses", () => {
     expect(renderedLogo("senses")).toContain(">sensors<");
   });

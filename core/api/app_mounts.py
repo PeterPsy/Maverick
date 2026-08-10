@@ -52,7 +52,7 @@ from core.api.sidecar_entrypoint_invocation import (
     run_json_entrypoint_with_sidecars,
     run_streaming_json_entrypoint_with_sidecars,
 )
-from core.shared.entrypoints import EntrypointShutdownController, run_json_entrypoint
+from core.shared.entrypoints import EntrypointInterruptedError, EntrypointShutdownController, run_json_entrypoint
 from core.workspaces.paths import workspace_paths
 from core.identity.models import UserRecord
 
@@ -691,7 +691,15 @@ def handle_app_backend(
                 observability_store=state.observability_store,
                 entrypoint_runner=run_json_entrypoint,
             )
-    except Exception as error:
+    except EntrypointInterruptedError as error:
+        logger.info(
+            "App `%s` backend entrypoint interrupted by %s in workspace `%s`.",
+            app_id,
+            error.reason,
+            workspace_id,
+        )
+        return json_response(start_response, {"error": "app_backend_interrupted"}, status=status_line(503))
+    except Exception:
         logger.exception("App `%s` backend entrypoint failed in workspace `%s`.", app_id, workspace_id)
         return json_response(start_response, {"error": "app_backend_failed"}, status=status_line(500))
     finally:

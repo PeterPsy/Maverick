@@ -18,14 +18,16 @@ class FakeCollection:
     def find(self, query: dict) -> list[dict]:
         return [dict(document) for document in self.documents if _matches(document, query)]
 
-    def update_one(self, query: dict, update: dict, *, upsert: bool = False) -> None:
+    def update_one(self, query: dict, update: dict, *, upsert: bool = False) -> bool:
         payload = dict(update.get("$set", {}))
         for index, document in enumerate(self.documents):
             if _matches(document, query):
                 self.documents[index] = {**document, **payload}
-                return
+                return True
         if upsert:
             self.documents.append({**query, **payload})
+            return True
+        return False
 
     def insert_one_if_absent(self, query: dict, document: dict) -> tuple[dict, bool]:
         payload = {**query, **document}

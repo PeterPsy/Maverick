@@ -58,6 +58,37 @@ After certbot obtains the certificate, the installer rewrites nginx with the fin
 The installer runs the local core health check before requesting TLS, so bind/port failures are reported even when Certbot is blocked by DNS, port `80`, or another active Certbot process.
 When an operator passes `--skip-tls` for a public HTTPS install, the installer assumes TLS is externally managed or already provisioned and renders the final HTTPS nginx config immediately.
 
+Browser-visible HTTP sidecars need a second, isolated hosted origin. For a
+public hostname such as `maverick.example.com`, provision wildcard DNS and a
+certificate for `*.sidecars.maverick.example.com` before live apply, then run:
+
+```bash
+python3.12 scripts/install_maverick.py \
+  --hostname maverick.example.com \
+  --hosted-sidecars \
+  --sidecar-tls-cert /etc/letsencrypt/live/maverick.example.com-sidecars/fullchain.pem \
+  --sidecar-tls-key /etc/letsencrypt/live/maverick.example.com-sidecars/privkey.pem \
+  --skip-tls
+```
+
+Wildcard certificates require a DNS-01 ACME flow and are intentionally not
+requested by the installer's single-host webroot flow. With
+`--hosted-sidecars`, live preflight fails until both wildcard TLS files exist.
+The rendered environment enables hosted mode and binds it to the exact platform
+origin. Nginx renders a separate wildcard virtual host that proxies to the same
+ASGI core, disables response buffering for SSE, and deliberately omits
+`X-Frame-Options`; core supplies the exact CSP `frame-ancestors` policy.
+
+For a controlled recovery of one already-known sidecar origin, an operator may
+temporarily use an HTTP-01 certificate whose SAN is that exact opaque hostname.
+The wildcard Nginx virtual host may serve that certificate, but TLS will be
+valid only for the named origin. This is sufficient to recover the current
+workspace and generation; it is not equivalent to wildcard provisioning.
+Before adding a workspace, rotating to a generation that changes the derived
+origin, or relying on unattended scale-out, replace it with the DNS-01 wildcard
+certificate. Keep the exact-host certificate under normal ACME renewal and
+repeat the hosted Chromium smoke after every renewal or origin change.
+
 Use `--render-only` to stop after rendering.
 
 Use `--systemd-dir`, `--nginx-conf`, and `--install-env` to customize rendered output paths, and `--live-systemd-dir`, `--live-nginx-conf`, and `--live-nginx-enabled` to customize the live target paths used by apply.

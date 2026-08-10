@@ -11,6 +11,7 @@ APP_ROOT = Path(__file__).resolve().parents[1]
 REPOSITORY_ROOT = APP_ROOT.parents[1]
 SERVICE_ROOT = APP_ROOT / "service"
 PRODUCT_EVIDENCE = SERVICE_ROOT / "opendesign_product_acceptance_0_16_1.json"
+HOSTED_EVIDENCE = SERVICE_ROOT / "opendesign_hosted_acceptance_0_16_1.json"
 GLOBAL_ACCEPTANCE = SERVICE_ROOT / "opendesign_production_acceptance_0_16_1.json"
 CORRELATION_KEYS = {
     "workspace_id",
@@ -102,6 +103,30 @@ class OpenDesignProductionAcceptanceTest(unittest.TestCase):
         self.assertIs(secret_proof["maverick_cookie_forwarded"], False)
         self.assertIs(secret_proof["browser_bearer_forwarded"], False)
         self.assertGreaterEqual(secret_proof["one_shot_bootstrap_count"], 2)
+
+    def test_hosted_evidence_covers_the_public_browser_path(self) -> None:
+        evidence = _read_json(HOSTED_EVIDENCE)
+
+        self.assertEqual(evidence["gate"], "hosted-origin")
+        self.assertEqual(evidence["status"], "passed")
+        self.assertTrue(evidence["platform_origin"].startswith("https://"))
+        self.assertTrue(evidence["sidecar_origin"].startswith("https://sc-"))
+        for key in (
+            "ok",
+            "ready",
+            "persisted_project",
+            "reload",
+            "deep_link",
+            "tls_verified_by_chromium",
+            "bootstrap_cookie_secure",
+            "x_frame_options_absent",
+        ):
+            self.assertIs(evidence[key], True, key)
+        self.assertGreaterEqual(evidence["project_count"], 1)
+        self.assertTrue(all(evidence["write_flow"].values()))
+        serialized = json.dumps(evidence, sort_keys=True)
+        for forbidden in ("maverick_session", "Authorization", "session_id", "/home/", "/tmp/"):
+            self.assertNotIn(forbidden, serialized)
 
     def test_all_global_acceptance_criteria_have_stable_evidence(self) -> None:
         acceptance = _read_json(GLOBAL_ACCEPTANCE)

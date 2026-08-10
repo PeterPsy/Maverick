@@ -11,7 +11,8 @@
     "dev": "vite --host 0.0.0.0",
     "pretest": "node ../../scripts/check-node-runtime.mjs",
     "test": "vitest run",
-    "test:e2e": "node tests/opendesign_product.e2e.mjs"
+    "test:e2e": "node tests/opendesign_product.e2e.mjs",
+    "test:e2e:hosted": "node tests/opendesign_hosted_smoke.e2e.mjs"
   },
   "dependencies": {
     "lucide-react": "^1.14.0",

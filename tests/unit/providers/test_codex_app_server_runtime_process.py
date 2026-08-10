@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import importlib
 from pathlib import Path
+import queue
 from types import SimpleNamespace
 import tempfile
 import unittest
@@ -15,6 +16,77 @@ from core.runtime import process_control
 
 
 class CodexAppServerRuntimeProcessTestCase(unittest.TestCase):
+    def test_reader_exit_fails_pending_protocol_requests_immediately(self) -> None:
+        process = SimpleNamespace(pid=4321, poll=lambda: 1)
+        runtime = runtime_process._CodexAppServerRuntime(
+            session_id="session-reader-exit",
+            workspace_id="default",
+            runtime_root="/tmp/runtime-reader-exit",
+            process=process,
+        )
+        waiter = queue.Queue(maxsize=1)
+        runtime.response_waiters[1] = waiter
+
+        with patch.object(runtime_thread, "_debug_log"):
+            runtime_thread._handle_reader_loop_exit(runtime, reason="stdout_closed", error=None)
+
+        response = waiter.get_nowait()
+        self.assertEqual(response["error"]["message"], "Codex app-server stream ended before request completion.")
+        self.assertEqual(runtime.response_waiters, {})
+
+    def test_initialize_failure_terminates_and_forgets_the_runtime(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            session = SimpleNamespace(
+                session_id="session-init-failure",
+                workspace_id="default",
+                runtime_root=str(Path(temp_dir) / "runtime"),
+            )
+            launch_spec = RuntimeBackendLaunchSpec(
+                provider_id="codex",
+                command=["codex", "app-server"],
+                env_overrides={},
+                credential_binding_id=None,
+                resolved_secret_refs=[],
+                working_directory=temp_dir,
+                execution_mode="sandbox",
+                readable_roots=[],
+                writable_roots=[],
+            )
+            class FakeProcess:
+                pid = 4321
+                stdout: list[str] = []
+
+                @staticmethod
+                def poll():
+                    return None
+
+            process = FakeProcess()
+            thread = SimpleNamespace(start=lambda: None)
+            runtime_thread._RUNTIMES.pop(session.session_id, None)
+
+            with patch.object(runtime_thread, "configure_runtime_process_oom_score"), patch.object(
+                runtime_thread.threading,
+                "Thread",
+                return_value=thread,
+            ), patch.object(
+                runtime_thread,
+                "_send_request",
+                side_effect=RuntimeError("initialize failed"),
+            ) as send_request, patch.object(
+                runtime_thread,
+                "terminate_runtime_process",
+            ) as terminate:
+                with self.assertRaisesRegex(RuntimeError, "initialize failed"):
+                    runtime_thread._ensure_runtime(
+                        session=session,
+                        launch_spec=launch_spec,
+                        command_runner=lambda *_args, **_kwargs: process,
+                    )
+
+            self.assertNotIn(session.session_id, runtime_thread._RUNTIMES)
+            terminate.assert_called_once_with(process)
+            self.assertEqual(send_request.call_args.kwargs["timeout"], runtime_thread.APP_SERVER_INITIALIZE_TIMEOUT_SECONDS)
+
     def test_runtime_process_is_reset_to_neutral_oom_priority(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             proc_root = Path(temp_dir)

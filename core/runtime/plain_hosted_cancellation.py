@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from contextlib import contextmanager, suppress
 from dataclasses import dataclass
+from datetime import datetime
 import os
 from pathlib import Path
 import socket
@@ -33,6 +34,13 @@ class _PlainHostedProcessOwner:
     host_id: str
     pid: int
     process_start: str
+
+
+@dataclass(frozen=True)
+class _PlainHostedRequestLease:
+    turn_id: str
+    generation: str
+    started_at: datetime
 
 
 def plain_hosted_request_owner_id() -> str:
@@ -144,24 +152,24 @@ def plain_hosted_request_cancellation(
 def interrupt_plain_hosted_requests(
     session_id: str,
     *,
+    turn_id: str | None = None,
     store: "RuntimeStore | None" = None,
     wait_for_termination: bool = False,
 ) -> bool:
-    """Cancel local handles and optionally await a remote owner's durable ack."""
+    """Cancel and await only the hosted request incarnation observed for one turn."""
     with _ACTIVE_REQUESTS_LOCK:
         cancellations = [
             cancellation
-            for (active_session_id, _turn_id), cancellation in _ACTIVE_REQUESTS.items()
+            for (active_session_id, active_turn_id), cancellation in _ACTIVE_REQUESTS.items()
             if active_session_id == session_id
+            and (turn_id is None or active_turn_id == turn_id)
         ]
     for cancellation in cancellations:
         cancellation.cancel()
     if store is not None:
         reconcile_stale_plain_hosted_request_owners(store, session_id=session_id)
-    remote_active = _durable_provider_requests_inflight(store, session_id=session_id)
-    remote_request_observed = bool(
-        _durable_provider_requests_accepted(store, session_id=session_id)
-    )
+    lease = _durable_provider_request_lease(store, session_id=session_id, turn_id=turn_id)
+    remote_active = _durable_provider_request_inflight(store, lease=lease)
     if wait_for_termination:
         deadline = time.monotonic() + _TERMINATION_WAIT_SECONDS
         unfinished_local = False
@@ -172,12 +180,13 @@ def interrupt_plain_hosted_requests(
             time.sleep(_CANCELLATION_POLL_SECONDS)
             if store is not None:
                 reconcile_stale_plain_hosted_request_owners(store, session_id=session_id)
-            remote_active = _durable_provider_requests_inflight(store, session_id=session_id)
+            remote_active = _durable_provider_request_inflight(store, lease=lease)
         if unfinished_local or remote_active:
             raise TimeoutError(
                 f"Plain-hosted provider request for runtime session `{session_id}` did not stop after cancellation."
             )
-    return bool(cancellations or remote_request_observed)
+    remote_request_acknowledged = _durable_provider_request_acknowledged(store, lease=lease)
+    return bool(cancellations or remote_request_acknowledged)
 
 
 def _watch_durable_cancellation(
@@ -203,40 +212,67 @@ def _watch_durable_cancellation(
         stop.wait(_CANCELLATION_POLL_SECONDS)
 
 
-def _durable_provider_requests_inflight(
+def _durable_provider_request_lease(
     store: "RuntimeStore | None",
     *,
     session_id: str,
-) -> list[str]:
-    if store is None:
-        return []
-    turns = store.list_turns(session_id)
-    return [
-        turn.turn_id
-        for turn in turns
-        if turn.cancellation_requested_at is not None
-        and turn.provider_request_started_at is not None
+    turn_id: str | None,
+) -> _PlainHostedRequestLease | None:
+    if store is None or turn_id is None:
+        return None
+    try:
+        turn = store.get_turn(turn_id)
+    except RuntimeTurnNotFoundError:
+        return None
+    generation = (turn.provider_request_generation or "").strip()
+    if turn.session_id != session_id or turn.provider_request_started_at is None or not generation:
+        return None
+    return _PlainHostedRequestLease(
+        turn_id=turn.turn_id,
+        generation=generation,
+        started_at=turn.provider_request_started_at,
+    )
+
+
+def _durable_provider_request_inflight(
+    store: "RuntimeStore | None",
+    *,
+    lease: _PlainHostedRequestLease | None,
+) -> bool:
+    turn = _turn_for_exact_lease(store, lease=lease)
+    return bool(
+        turn is not None
+        and turn.cancellation_requested_at is not None
         and turn.provider_request_finished_at is None
-    ]
+    )
 
 
-def _durable_provider_requests_accepted(
+def _durable_provider_request_acknowledged(
     store: "RuntimeStore | None",
     *,
-    session_id: str,
-) -> list[str]:
-    if store is None:
-        return []
-    accepted: list[str] = []
-    for turn in store.list_turns(session_id):
-        requested_at = turn.cancellation_requested_at
-        started_at = turn.provider_request_started_at
-        acknowledged_at = turn.provider_request_cancellation_acknowledged_at
-        if requested_at is None or started_at is None or acknowledged_at is None:
-            continue
-        if acknowledged_at >= requested_at:
-            accepted.append(turn.turn_id)
-    return accepted
+    lease: _PlainHostedRequestLease | None,
+) -> bool:
+    turn = _turn_for_exact_lease(store, lease=lease)
+    if turn is None:
+        return False
+    requested_at = turn.cancellation_requested_at
+    acknowledged_at = turn.provider_request_cancellation_acknowledged_at
+    return bool(requested_at is not None and acknowledged_at is not None and acknowledged_at >= requested_at)
+
+
+def _turn_for_exact_lease(store: "RuntimeStore | None", *, lease: _PlainHostedRequestLease | None):
+    if store is None or lease is None:
+        return None
+    try:
+        turn = store.get_turn(lease.turn_id)
+    except RuntimeTurnNotFoundError:
+        return None
+    if (
+        turn.provider_request_generation != lease.generation
+        or turn.provider_request_started_at != lease.started_at
+    ):
+        return None
+    return turn
 
 
 def _current_process_owner() -> _PlainHostedProcessOwner:

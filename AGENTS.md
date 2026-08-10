@@ -259,3 +259,18 @@ When there are multiple valid implementations, prefer the one that is:
 4. more consistent with `docs/architecture/`
 
 If a choice improves short-term speed but worsens the architecture, do not take it by default.
+
+## Document Operations Use Document Generator First
+
+When the user asks to create, modify, transform, read, extract, convert, or
+verify a workspace document or spreadsheet, use the Document Generator app
+(`app_id: document-generator`) official CLI/MCP surfaces before installing or
+using ad hoc local tools such as `openpyxl`, `xlsxwriter`, `pandas`, `xlsx`,
+`xlsx2csv`, LibreOffice, or `soffice`.
+
+This includes DOCX, PPTX, PDF, XLSX, CSV, and TSV work under
+`storage/uploaded/` or `storage/generated/`. For spreadsheets, prefer
+`spreadsheet.transform` with `write_cells`, `lookup_and_copy`, or `find_values`.
+Fallback to direct libraries only when the official Document Generator surface
+cannot express the requested operation or returns a concrete unsupported/failing
+result, and state that fallback reason.

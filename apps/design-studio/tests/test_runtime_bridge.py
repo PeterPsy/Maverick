@@ -97,6 +97,37 @@ class DesignStudioRuntimeBridgeTests(unittest.TestCase):
             self.assertNotIn("Creating the design", persisted)
             self.assertNotIn("client-request-one", persisted)
 
+    def test_legacy_correlation_schema_upgrades_with_empty_terminal_event_id(self) -> None:
+        with TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            active = root / "active"
+            active.mkdir()
+            payload = self._payload(root)
+            with patch.object(runtime_bridge, "active_data_directory", return_value=active):
+                record, _ = runtime_bridge.reserve_run(
+                    payload,
+                    project_id="od_project_legacy_schema",
+                    conversation_id="od_conversation_legacy_schema",
+                    assistant_message_id="od_message_legacy_schema",
+                    client_request_id="client-legacy-schema",
+                    agent_id="maverick",
+                )
+                path = active / runtime_bridge.BRIDGE_DIRECTORY / runtime_bridge.CORRELATIONS_FILE
+                records = json.loads(path.read_text(encoding="utf-8"))
+                records[0]["schema_version"] = runtime_bridge.LEGACY_BRIDGE_SCHEMA_VERSION
+                records[0].pop("terminal_runtime_event_id")
+                path.write_text(json.dumps(records), encoding="utf-8")
+
+                store = runtime_bridge.store_for_payload(payload)
+                migrated = store.get(record["od_run_id"])
+                store.update(record["od_run_id"], lambda current: current)
+                persisted = json.loads(path.read_text(encoding="utf-8"))[0]
+
+            self.assertEqual(migrated["schema_version"], runtime_bridge.BRIDGE_SCHEMA_VERSION)
+            self.assertEqual(migrated["terminal_runtime_event_id"], "")
+            self.assertEqual(persisted["schema_version"], runtime_bridge.BRIDGE_SCHEMA_VERSION)
+            self.assertEqual(persisted["terminal_runtime_event_id"], "")
+
     def test_cleanup_data_directory_uses_strict_generation_control_without_bundle_verification(self) -> None:
         with TemporaryDirectory() as temp_dir:
             root = Path(temp_dir)
@@ -167,6 +198,7 @@ class DesignStudioRuntimeBridgeTests(unittest.TestCase):
                         runtime_session_id=f"session-{suffix}",
                         turn_id=f"turn-{suffix}",
                         event_type=event_type,
+                        runtime_event_id=f"runtime-event-{suffix}",
                         files=[{"name": "index.html"}],
                     )
                     self.assertIsNotNone(terminal)
@@ -226,6 +258,7 @@ class DesignStudioRuntimeBridgeTests(unittest.TestCase):
                     runtime_session_id="session-cancel-race",
                     turn_id="turn-cancel-race",
                     event_type="runtime.turn.failed",
+                    runtime_event_id="runtime-event-cancel-race",
                     files=[],
                 )
                 translated = runtime_bridge.translate_stream_events(
@@ -266,6 +299,7 @@ class DesignStudioRuntimeBridgeTests(unittest.TestCase):
                     runtime_session_id="session-terminal-race",
                     turn_id="turn-terminal-race",
                     event_type="runtime.turn.completed",
+                    runtime_event_id="runtime-event-terminal-success",
                     files=[],
                 )
                 preserved = runtime_bridge.record_terminal(
@@ -273,6 +307,7 @@ class DesignStudioRuntimeBridgeTests(unittest.TestCase):
                     runtime_session_id="session-terminal-race",
                     turn_id="turn-terminal-race",
                     event_type="runtime.turn.failed",
+                    runtime_event_id="runtime-event-terminal-failure",
                     files=[],
                 )
 
@@ -283,6 +318,58 @@ class DesignStudioRuntimeBridgeTests(unittest.TestCase):
             self.assertIsNotNone(preserved)
             self.assertEqual(preserved["status"], "succeeded")
             self.assertEqual(preserved["result_package"]["run"]["status"], "succeeded")
+
+    def test_terminal_runtime_event_replay_skips_opendesign_and_persistence_mutations(self) -> None:
+        with TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            active = root / "active"
+            active.mkdir()
+            payload = self._payload(root)
+            with patch.object(runtime_bridge, "active_data_directory", return_value=active):
+                record, _ = runtime_bridge.reserve_run(
+                    payload,
+                    project_id="od_project_event_replay",
+                    conversation_id="od_conversation_event_replay",
+                    assistant_message_id="od_message_event_replay",
+                    client_request_id="client-event-replay",
+                    agent_id="maverick",
+                )
+                runtime_bridge.record_submission(
+                    payload,
+                    {
+                        "od_run_id": record["od_run_id"],
+                        "runtime_request_status": "submitted",
+                        "runtime_session_id": "session-event-replay",
+                        "turn_id": "turn-event-replay",
+                        "stream_id": "stream-event-replay",
+                    },
+                )
+                arguments = {
+                    "runtime_session_id": "session-event-replay",
+                    "turn_id": "turn-event-replay",
+                    "runtime_event_id": "runtime-event-replay",
+                }
+                with patch.object(
+                    service,
+                    "_opendesign_json_request",
+                    return_value={"files": [{"name": "index.html"}]},
+                ) as opendesign_request:
+                    first = service.runtime_bridge_terminal(
+                        payload,
+                        arguments,
+                        event_type="runtime.turn.completed",
+                    )
+                    replayed = service.runtime_bridge_terminal(
+                        payload,
+                        arguments,
+                        event_type="runtime.turn.completed",
+                    )
+
+                persisted = runtime_bridge.store_for_payload(payload).get(record["od_run_id"])
+
+            opendesign_request.assert_called_once()
+            self.assertEqual(replayed, first)
+            self.assertEqual(persisted["terminal_runtime_event_id"], "runtime-event-replay")
 
     def test_platform_runtime_cleanup_deletes_only_matching_correlations(self) -> None:
         with TemporaryDirectory() as temp_dir:

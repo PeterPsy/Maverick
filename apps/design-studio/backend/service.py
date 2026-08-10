@@ -941,10 +941,16 @@ def cleanup_runtime_sessions(payload: dict[str, Any], arguments: dict[str, Any])
 def runtime_bridge_terminal(payload: dict[str, Any], arguments: dict[str, Any], *, event_type: str) -> dict[str, Any]:
     runtime_session_id = str(arguments.get("runtime_session_id") or payload.get("runtime_session_id") or "")
     turn_id = str(arguments.get("turn_id") or payload.get("turn_id") or "")
+    runtime_event_id = str(arguments.get("runtime_event_id") or "")
     files: list[dict[str, Any]] = []
     try:
-        correlation = store_for_payload(payload).find_by_runtime(runtime_session_id, turn_id)
+        runtime_event_id = validated_identifier(runtime_event_id, label="runtime event id")
+        store = store_for_payload(payload)
+        correlation = store.find_by_runtime(runtime_session_id, turn_id)
         if correlation is not None:
+            processed_event_id = str(correlation.get("terminal_runtime_event_id") or "")
+            if processed_event_id:
+                return {"correlation": correlation, "terminal_package_written": True}
             response = _opendesign_json_request(payload, f"/api/projects/{correlation['od_project_id']}/files")
             raw_files = response.get("files") if isinstance(response, dict) and isinstance(response.get("files"), list) else response
             if isinstance(raw_files, list):
@@ -954,6 +960,7 @@ def runtime_bridge_terminal(payload: dict[str, Any], arguments: dict[str, Any], 
             runtime_session_id=runtime_session_id,
             turn_id=turn_id,
             event_type=event_type,
+            runtime_event_id=runtime_event_id,
             files=files,
         )
     except (RuntimeBridgeError, DesignStudioError) as error:

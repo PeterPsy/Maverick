@@ -61,6 +61,8 @@ def dispatch_source_app_runtime_event(
     event_type: str,
     output_text: str = "",
     failure_reason: str = "",
+    runtime_event_id: str | None = None,
+    raise_on_failure: bool = False,
     start_path: Path | None = None,
 ) -> dict[str, Any] | None:
     """Notify the source app for a terminal runtime turn when it declares a runtime hook."""
@@ -103,6 +105,7 @@ def dispatch_source_app_runtime_event(
             "failure_reason": failure_reason or turn.failure_reason or "",
             "agent_id": session.agent_id,
             "source_app_id": app_id,
+            "runtime_event_id": runtime_event_id or "",
         },
     }
     try:
@@ -123,6 +126,8 @@ def dispatch_source_app_runtime_event(
         )
     except Exception as error:
         _record_source_app_hook_failure(state, session=session, turn=turn, detail=str(error))
+        if raise_on_failure:
+            raise
         return None
     publish_declared_app_events(
         state.app_event_bus,

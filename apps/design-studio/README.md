@@ -254,8 +254,10 @@ conversation through its short-lived `app_sidecar` capability. It then reserves
 an app-owned OpenDesign run correlation and asks core for a source-app-stamped
 runtime session, a durable stream, and a one-shot capability to the active
 project directory. Only correlation metadata is stored under the active data
-generation in `maverick-runtime/correlations.json`; prompts, provider payloads,
-tokens, and host paths are excluded. Core owns provider selection, budgets,
+generation in `maverick-runtime/correlations.json`; terminal callback event IDs
+are persisted there before acknowledgement so at-least-once callback replays
+return without another OpenDesign request or state mutation. Prompts, provider
+payloads, tokens, and host paths are excluded. Core owns provider selection, budgets,
 interrupt, recovery, and normalized events. Design Studio alone owns the
 OpenDesign SSE schema and writes terminal result packages for success, failure,
 timeout, and cancellation.
@@ -301,6 +303,28 @@ npm run test:e2e --prefix apps/design-studio -- \
   --evidence-output apps/design-studio/service/opendesign_product_acceptance_0_16_1.json
 python3 -m unittest apps.design-studio.tests.test_production_acceptance
 ```
+
+For a deployed installation, run the separate hosted-origin smoke from the
+repository host. It uses an existing active operator session without logging
+its value, keeps Chromium TLS verification enabled, and verifies the isolated
+HTTPS iframe, secure bootstrap cookie, reload, persisted-project lookup, and
+deep link. Supplying `--storage-input-path` additionally creates a temporary
+OpenDesign project, exercises Storage import, a real runtime run and SSE,
+result packaging, Storage export/read-back, and deletes only that temporary
+project.
+
+```bash
+npm run test:e2e:hosted --prefix apps/design-studio -- \
+  --platform-origin https://maverick.example \
+  --auth-sessions-file data/control-plane/json/identity/auth_sessions.json \
+  --project-id <canonical-opendesign-project-id> \
+  --storage-input-path storage/generated/design-studio/hosted-acceptance-input.md \
+  --evidence-output apps/design-studio/service/opendesign_hosted_acceptance_0_16_1.json
+```
+
+The optional evidence file contains only public origins and bounded acceptance
+booleans. It never records the selected platform session, bootstrap cookie,
+browser headers, prompts, provider payloads, or environment values.
 
 The browser suite covers all fourteen required scenarios: login/open, project
 creation in the native OpenDesign UI, Storage import, runtime start,

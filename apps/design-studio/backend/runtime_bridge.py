@@ -30,7 +30,8 @@ from opendesign_generation_model import GenerationControlError  # noqa: E402
 from opendesign_runtime import resolve_runtime_binding  # noqa: E402
 
 
-BRIDGE_SCHEMA_VERSION = "1"
+BRIDGE_SCHEMA_VERSION = "2"
+LEGACY_BRIDGE_SCHEMA_VERSION = "1"
 BRIDGE_DIRECTORY = "maverick-runtime"
 CORRELATIONS_FILE = "correlations.json"
 MAX_CORRELATIONS_BYTES = 8 * 1024 * 1024
@@ -307,6 +308,7 @@ def reserve_run(
         "status": "queued",
         "cancel_requested": False,
         "terminal_package_written": False,
+        "terminal_runtime_event_id": "",
         "result_package": None,
         "error": "",
         "created_at": timestamp,
@@ -389,18 +391,25 @@ def record_terminal(
     runtime_session_id: str,
     turn_id: str,
     event_type: str,
+    runtime_event_id: str,
     files: list[dict[str, Any]],
 ) -> dict[str, Any] | None:
+    runtime_event_id = validated_identifier(runtime_event_id, label="runtime event id")
     store = store_for_payload(payload)
     correlation = store.find_by_runtime(runtime_session_id, turn_id)
     if correlation is None:
         return None
+
     def update(record: dict[str, Any]) -> dict[str, Any]:
+        processed_event_id = str(record.get("terminal_runtime_event_id") or "")
+        if processed_event_id:
+            return record
         projected_status = _projected_terminal_status(record, event_type)
         record["status"] = projected_status
         record["error"] = "Runtime request failed." if projected_status == "failed" else ""
         record["result_package"] = build_result_package(record, files=files)
         record["terminal_package_written"] = True
+        record["terminal_runtime_event_id"] = runtime_event_id
         record["updated_at"] = utc_now()
         return record
 
@@ -552,6 +561,9 @@ def _validated_record(value: object) -> dict[str, Any]:
     if not isinstance(value, dict):
         raise RuntimeBridgeError("Runtime correlation record must be an object.")
     record = dict(value)
+    if record.get("schema_version") == LEGACY_BRIDGE_SCHEMA_VERSION and "terminal_runtime_event_id" not in record:
+        record["schema_version"] = BRIDGE_SCHEMA_VERSION
+        record["terminal_runtime_event_id"] = ""
     required = {
         "schema_version",
         "workspace_id",
@@ -575,6 +587,7 @@ def _validated_record(value: object) -> dict[str, Any]:
         "status",
         "cancel_requested",
         "terminal_package_written",
+        "terminal_runtime_event_id",
         "result_package",
         "error",
         "created_at",
@@ -592,6 +605,8 @@ def _validated_record(value: object) -> dict[str, Any]:
         raise RuntimeBridgeError("Runtime correlation client digest is invalid.")
     if int(record["attempt"]) < 1 or int(record["last_sequence"]) < 0:
         raise RuntimeBridgeError("Runtime correlation sequence metadata is invalid.")
+    if record["terminal_runtime_event_id"]:
+        validated_identifier(record["terminal_runtime_event_id"], label="runtime event id")
     for key in ("created_at", "updated_at"):
         try:
             timestamp = datetime.fromisoformat(str(record[key]))

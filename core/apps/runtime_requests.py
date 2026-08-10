@@ -22,15 +22,16 @@ from core.runtime.app_streams import RuntimeAppStreamError, RuntimeAppStreamReco
 from core.runtime.runtime_session import runtime_session_allows_user_thread
 from core.runtime.runtime_threads import create_runtime_thread
 from core.runtime.service import (
+    claim_runtime_turn_cancellation,
     create_runtime_session,
     record_runtime_event,
-    record_runtime_turn_event_once,
-    request_runtime_turn_cancellation,
     transition_runtime_session,
-    transition_runtime_turn,
 )
-from core.runtime.thread_catalog_events import set_thread_availability
 from core.runtime.turn_submission import interrupt_runtime_provider_turn, release_idle_runtime_processes, submit_runtime_turn_async
+from core.runtime.turn_terminalization import (
+    drain_runtime_turn_terminalization,
+    terminalize_runtime_turn_cancellation,
+)
 from core.secrets.app_delivery import AppSecretRequest, resolve_app_secret_payload_requests
 from core.secrets.errors import SecretError
 from core.skills.runtime_catalog import runtime_skill_catalog_app_id_for_request
@@ -703,7 +704,7 @@ def _apply_one_runtime_interrupt_request(
         raise AppHostingError(f"Runtime turn `{turn_id}` belongs to a hidden inter-agent session.")
     if session.source_app_id != app_id:
         raise AppHostingError(f"Runtime turn `{turn_id}` is owned by another source app.")
-    if turn.status not in {"queued", "active"}:
+    if turn.status not in {"queued", "active", "cancelled"}:
         return {
             "turn_id": turn_id,
             "status": turn.status,
@@ -711,17 +712,32 @@ def _apply_one_runtime_interrupt_request(
             "_visible": request.get("result_visibility") != "internal",
         }
     reason = _long_text(request.get("reason")) or "Interrupted by app request."
-    cancellation_request = request_runtime_turn_cancellation(
-        state.runtime_store,
-        turn_id=turn_id,
-        reason=reason,
+    cancellation_intent = (
+        claim_runtime_turn_cancellation(
+            state.runtime_store,
+            turn_id=turn_id,
+            reason=reason,
+        )
+        if turn.status in {"queued", "active"}
+        else None
     )
+    cancellation_request = cancellation_intent.turn if cancellation_intent is not None else turn
+    intent_claimed = cancellation_intent.claimed if cancellation_intent is not None else False
     provider_id = None
     provider_interrupted = False
     if cancellation_request.cancellation_requested_at is not None:
         provider_id = _resolved_provider_id(state, session)
-        provider_interrupted = interrupt_runtime_provider_turn(state, session)
-    updated = transition_runtime_turn(state.runtime_store, turn_id=turn_id, target_status="cancelled", failure_reason=reason)
+        provider_interrupted = interrupt_runtime_provider_turn(state, session, turn_id=turn_id)
+    terminalization = terminalize_runtime_turn_cancellation(
+        state.runtime_store,
+        turn_id=turn_id,
+        reason=reason,
+        event_payload={"reason": reason, "requested_by_app_id": app_id},
+        event_bus=state.runtime_event_bus,
+        request_intent=False,
+    )
+    interrupted = intent_claimed or terminalization.claimed
+    updated = terminalization.turn
     if updated.status != "cancelled":
         return {
             "turn_id": updated.turn_id,
@@ -732,50 +748,38 @@ def _apply_one_runtime_interrupt_request(
     provider_interrupted_after_handoff = interrupt_runtime_provider_turn(
         state,
         state.runtime_store.get_session(updated.session_id),
+        turn_id=updated.turn_id,
         wait_for_termination=True,
     )
     provider_interrupted = provider_interrupted_after_handoff or provider_interrupted
-    event, event_inserted = record_runtime_turn_event_once(
+    terminalization = drain_runtime_turn_terminalization(
         state.runtime_store,
-        event_id=str(uuid4()),
-        session_id=updated.session_id,
-        turn_id=updated.turn_id,
-        event_type="runtime.turn.cancelled",
-        payload={"reason": reason, "requested_by_app_id": app_id},
-        event_bus=state.runtime_event_bus,
-    )
-    if not event_inserted:
-        return {
-            "turn_id": updated.turn_id,
-            "status": updated.status,
-            "interrupted": False,
-            "provider_interrupted": provider_interrupted,
-            "event_id": event.event_id,
-            "_visible": request.get("result_visibility") != "internal",
-        }
-    set_thread_availability(
-        state,
-        workspace_id=updated.workspace_id,
-        runtime_session_id=updated.session_id,
-        availability="free",
-        now=event.created_at,
-    )
-    release_idle_runtime_processes(state, session_id=updated.session_id, provider_id=provider_id or "unconfigured", reason="app_turn_interrupted", idle_ttl_seconds=0)
-    dispatch_source_app_runtime_event(
-        state,
-        session=session,
         turn=updated,
-        event_type="runtime.turn.cancelled",
-        failure_reason=reason,
+        event_payload={"reason": reason, "requested_by_app_id": app_id},
+        event_bus=state.runtime_event_bus,
+        callback=lambda callback_session, callback_turn, callback_event: dispatch_source_app_runtime_event(
+            state,
+            session=callback_session,
+            turn=callback_turn,
+            event_type="runtime.turn.cancelled",
+            failure_reason=reason,
+            runtime_event_id=callback_event.event_id,
+            raise_on_failure=True,
+        ),
     )
-    return {
+    updated = terminalization.turn
+    event = terminalization.event
+    release_idle_runtime_processes(state, session_id=updated.session_id, provider_id=provider_id or "unconfigured", reason="app_turn_interrupted", idle_ttl_seconds=0)
+    result = {
         "turn_id": updated.turn_id,
         "status": updated.status,
-        "interrupted": True,
+        "interrupted": interrupted,
         "provider_interrupted": provider_interrupted,
-        "event_id": event.event_id,
         "_visible": request.get("result_visibility") != "internal",
     }
+    if event is not None:
+        result["event_id"] = event.event_id
+    return result
 
 
 def _resolved_provider_id(state, session) -> str | None:

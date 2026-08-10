@@ -691,6 +691,44 @@ class ProvidersTestCase(unittest.TestCase):
         separator_index = sandbox_command.index("--")
         self.assertEqual(sandbox_command[separator_index + 1], str(home / "workspace" / "runtime" / "bin" / "codex"))
 
+    def test_codex_current_vendor_layout_uses_native_binary_and_codex_path_rg(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            home = Path(temp)
+            package_root = home / "lib" / "node_modules" / "@openai" / "codex"
+            codex_bin = home / "bin" / "codex"
+            codex_js = package_root / "bin" / "codex.js"
+            vendor_target = (
+                package_root
+                / "node_modules"
+                / "@openai"
+                / "codex-linux-x64"
+                / "vendor"
+                / "x86_64-unknown-linux-musl"
+            )
+            standalone = vendor_target / "bin" / "codex"
+            rg = vendor_target / "codex-path" / "rg"
+            codex_js.parent.mkdir(parents=True)
+            standalone.parent.mkdir(parents=True)
+            rg.parent.mkdir(parents=True)
+            codex_bin.parent.mkdir(parents=True)
+            codex_js.write_text("#!/usr/bin/env node\n", encoding="utf-8")
+            standalone.write_text("binary\n", encoding="utf-8")
+            rg.write_text("rg-binary\n", encoding="utf-8")
+            codex_bin.symlink_to(codex_js)
+            adapter = CodexProviderAdapter(codex_command="codex")
+
+            with patch("core.providers.provider_codex.shutil.which", return_value=str(codex_bin)):
+                runtime_command = adapter._runtime_command("codex")
+                sandbox_command = adapter._build_command(
+                    workspace_root=home / "workspace",
+                    runtime_root=home / "workspace" / "runtime",
+                    execution_mode="sandbox",
+                )
+
+        self.assertEqual(runtime_command, str(standalone))
+        self.assertIn(f"{standalone}={home / 'workspace' / 'runtime' / 'bin' / 'codex'}", sandbox_command)
+        self.assertIn(f"{rg}={home / 'workspace' / 'runtime' / 'bin' / 'rg'}", sandbox_command)
+
     def test_codex_nvm_dependency_root_fails_closed_without_standalone_binary(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
             home = Path(temp)

@@ -412,7 +412,7 @@ class AppStoreAppTestCase(unittest.TestCase):
         self.assertNotIn(b'todayLabel', payload)
         self.assertIn(b"/apps/app-store/assets/main.css?v=20260514-stale-pin-cleanup", payload)
         self.assertIn(b"/apps/app-store/assets/frontend-presentation.js?v=20260514-stale-pin-cleanup", payload)
-        self.assertIn(b"/apps/app-store/assets/app-icons.js?v=20260514-stale-pin-cleanup", payload)
+        self.assertIn(b"/apps/app-store/assets/app-icons.js?v=20260810-design-studio-icon", payload)
         self.assertIn(b"/apps/app-store/assets/app-folder-data.js?v=20260514-stale-pin-cleanup", payload)
         self.assertIn(b"/apps/app-store/assets/app-folder-lightbox.js?v=20260514-stale-pin-cleanup", payload)
         self.assertIn(b"/apps/app-store/assets/app-folders.js?v=20260514-stale-pin-cleanup", payload)
@@ -448,6 +448,7 @@ class AppStoreAppTestCase(unittest.TestCase):
         self.assertIn('"storage": "cloud"', icon_js)
         self.assertIn('"app-store": "storefront"', icon_js)
         self.assertIn('"browser": "language"', icon_js)
+        self.assertIn('"design-studio": "design_services"', icon_js)
         self.assertIn('"mail": "mail"', icon_js)
         self.assertIn('"speech": "record_voice_over"', icon_js)
         self.assertIn("mergeCatalogAndServerApps", frontend_js)
@@ -576,6 +577,7 @@ const installed = presentation.frontendPresentation(
 assert(installed.launchable === false, "installed binding launchability overrides catalog latest");
 assert(installed.role === "supporting", "installed binding role overrides catalog latest");
 assert(icons.glyphName({{ app_id: "browser", frontend_role: "workspace", surfaces: ["frontend"] }}) === "language", "browser app uses material language icon");
+assert(icons.glyphName({{ app_id: "design-studio", frontend_role: "workspace", surfaces: ["frontend"] }}) === "design_services", "Design Studio uses material design services icon");
 assert(icons.glyphName({{ app_id: "mail", frontend_role: "workspace", surfaces: ["frontend"] }}) === "mail", "mail app uses material mail icon");
 const icon = icons.renderIcon(
   {{ app_id: "reporter", frontend_role: "workspace", frontend_launchable: true, surfaces: ["frontend"] }},
@@ -709,7 +711,7 @@ assert(icon.classList.classes.includes("is-non-launchable"), "icons use installe
         self.assertIn(b"App shortcuts", widget_body)
         self.assertIn(b"styles.css?v=20260514-all-apps-sidebar", widget_body)
         self.assertIn(b"frontend-presentation.js?v=20260514-all-apps-sidebar", widget_body)
-        self.assertIn(b"app-icons.js?v=20260514-all-apps-sidebar", widget_body)
+        self.assertIn(b"app-icons.js?v=20260810-design-studio-icon", widget_body)
         self.assertIn(b"main.js?v=20260514-all-apps-sidebar", widget_body)
         shortcut_script = (
             Path(__file__).resolve().parents[1] / "frontend" / "dist" / "widgets" / "app-shortcuts" / "main.js"

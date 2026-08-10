@@ -2,14 +2,12 @@
 
 from __future__ import annotations
 
-from uuid import uuid4
-
 from core.runtime.errors import RuntimeSessionNotFoundError, RuntimeTransitionError
 from core.runtime.event_bus import RuntimeEventBus
 from core.runtime.process_control import terminate_runtime_processes
-from core.runtime.runtime_threads import runtime_thread_availability_for_session, update_runtime_thread_availability
-from core.runtime.service import record_runtime_event, transition_runtime_session, transition_runtime_turn
+from core.runtime.service import transition_runtime_session
 from core.runtime.store import RuntimeStore
+from core.runtime.turn_terminalization import terminalize_runtime_turn_cancellation
 from core.runtime.turn_submission_launch_cache import clear_cached_runtime_launch_context
 
 
@@ -33,25 +31,15 @@ def terminate_runtime_session(
     cancelled_turns = 0
     for turn in store.list_turns(session_id):
         if turn.status in {"queued", "active"}:
-            transition_runtime_turn(store, turn_id=turn.turn_id, target_status="cancelled", failure_reason=reason)
-            record_runtime_event(
+            terminalization = terminalize_runtime_turn_cancellation(
                 store,
-                event_id=str(uuid4()),
-                session_id=session_id,
                 turn_id=turn.turn_id,
-                plane="turn",
-                event_type="runtime.turn.cancelled",
-                payload={"reason": reason},
+                reason=reason,
+                event_payload={"reason": reason},
                 event_bus=event_bus,
             )
-            cancelled_turns += 1
-    if cancelled_turns:
-        update_runtime_thread_availability(
-            store,
-            workspace_id=session.workspace_id,
-            runtime_session_id=session_id,
-            availability=runtime_thread_availability_for_session(store, runtime_session_id=session_id),
-        )
+            if terminalization.turn.status == "cancelled" and terminalization.claimed:
+                cancelled_turns += 1
 
     if session.status in {"created", "running", "stopping"}:
         target_status = "stopped" if session.status in {"created", "stopping"} else "stopping"

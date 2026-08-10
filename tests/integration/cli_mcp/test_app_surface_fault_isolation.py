@@ -34,12 +34,12 @@ class AppSurfaceFaultIsolationTest(SurfaceTestBase):
             now=now,
         )
 
-        missing_root = repo_root / "apps" / "video-studio"
+        missing_root = repo_root / "apps" / "unavailable-app"
         write_app_contract_file(
             missing_root,
             build_parsed_app_contract(
-                app_id="video-studio",
-                name="Video Studio",
+                app_id="unavailable-app",
+                name="Unavailable App",
                 version="1.0.0",
                 description="App source removed after installation.",
                 publisher="maverick",

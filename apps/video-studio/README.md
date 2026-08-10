@@ -24,6 +24,15 @@ The normal built-in bootstrap or the generic
 registration and binding. Video Studio has no app-specific installer and does
 not use workspace-local app registration.
 
+## Contract Notes
+
+The contract declares only the foundation surfaces implemented in this
+checkpoint. Project IR, media editing, analysis, render execution, reference
+entities, widgets, export/import, runtime-session creation, and host telemetry
+remain intentionally absent. The app is sandbox-compatible and does not require
+full-access execution; full-access workspaces may still host sandbox-compatible
+apps through the generic compatibility rules.
+
 ## Implemented surfaces
 
 - mounted frontend artifact and source build;
@@ -72,7 +81,7 @@ Media bytes and final outputs remain Storage-owned. The contract requires
 typed `file.*` provider interfaces by alias; app code must not read another
 app's database or hardcode a provider app id.
 
-## Validation
+## SDK Flow
 
 From the Maverick repository root, validate the installation-level source with
 the canonical SDK validator by supplying its source path:

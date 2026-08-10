@@ -1,6 +1,5 @@
 {
   "app_id": "video-studio",
-  "public_app_id": "video-studio",
   "contract_version": "1.0",
   "name": "Video Studio",
   "version": "0.1.0",
@@ -137,12 +136,10 @@
   },
   "compatibility": {
     "workspace_modes": [
-      "sandbox",
-      "full-access"
+      "sandbox"
     ]
   },
   "hook_timeouts": {
-    "backend_seconds": 30,
     "install_seconds": 60,
     "upgrade_seconds": 120,
     "migrate_seconds": 300,

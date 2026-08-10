@@ -9,6 +9,7 @@
     "chat": "chat",
     "crm": "contacts",
     "developer-kit": "sdk",
+    "design-studio": "design_services",
     "document-generator": "description",
     "docs-studio": "article",
     "dynamic-views": "dashboard_customize",

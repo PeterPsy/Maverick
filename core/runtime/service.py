@@ -16,7 +16,7 @@ from core.runtime.lifecycle import (
     transition_runtime_turn,
     utcnow,
 )
-from core.runtime.turn_cancellation import request_runtime_turn_cancellation
+from core.runtime.turn_cancellation import claim_runtime_turn_cancellation, request_runtime_turn_cancellation
 from core.runtime.routing import build_runtime_routing, resolve_runtime
 
 __all__ = [
@@ -29,6 +29,7 @@ __all__ = [
     "record_runtime_event",
     "record_runtime_turn_event_once",
     "reconcile_runtime_session_policy",
+    "claim_runtime_turn_cancellation",
     "request_runtime_turn_cancellation",
     "resolve_runtime",
     "transition_runtime_process",

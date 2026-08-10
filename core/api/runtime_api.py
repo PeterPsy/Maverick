@@ -44,10 +44,10 @@ from core.runtime.runtime_threads import (
 )
 from core.runtime.thread_titles import DEFAULT_THREAD_TITLE
 from core.runtime.service import (
+    claim_runtime_turn_cancellation,
     create_runtime_session,
     reconcile_runtime_session_policy,
     record_runtime_event,
-    request_runtime_turn_cancellation,
     transition_runtime_session,
 )
 from core.runtime.runtime_events import RuntimeEventRecord
@@ -1941,15 +1941,17 @@ def _handle_turn_interrupt(
         return json_response(start_response, {"error": error.reason}, status="403 Forbidden")
     if turn.status not in {"queued", "active", "cancelled"}:
         return json_response(start_response, {"turn": _turn_payload(turn), "interrupted": False})
-    cancellation_request = (
-        request_runtime_turn_cancellation(
+    cancellation_intent = (
+        claim_runtime_turn_cancellation(
             state.runtime_store,
             turn_id=turn_id,
             reason="Interrupted by user.",
         )
         if turn.status in {"queued", "active"}
-        else turn
+        else None
     )
+    cancellation_request = cancellation_intent.turn if cancellation_intent is not None else turn
+    intent_claimed = cancellation_intent.claimed if cancellation_intent is not None else False
     provider_id = None
     provider_interrupted = False
     if cancellation_request.cancellation_requested_at is not None:
@@ -1963,7 +1965,7 @@ def _handle_turn_interrupt(
         event_bus=state.runtime_event_bus,
         request_intent=False,
     )
-    interrupted = terminalization.claimed
+    interrupted = intent_claimed or terminalization.claimed
     updated = terminalization.turn
     if updated.status != "cancelled":
         return json_response(

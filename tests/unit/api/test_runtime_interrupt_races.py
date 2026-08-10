@@ -14,6 +14,7 @@ from core.runtime.event_collection import RuntimeEventJsonCollection
 from core.runtime.runtime_turns import RuntimeTurnRecord
 from core.runtime.session_collection import RuntimeSessionJsonCollection
 from core.runtime.service import (
+    claim_runtime_turn_cancellation,
     create_runtime_session,
     request_runtime_turn_cancellation,
     transition_runtime_turn,
@@ -25,6 +26,77 @@ from tests.support.repo import make_temp_repo_root
 
 
 class RuntimeInterruptRaceTestCase(unittest.TestCase):
+    def test_api_interrupt_stays_successful_when_worker_claims_terminal_outbox(self) -> None:
+        repo_root = make_temp_repo_root(self)
+        runtime_store = _runtime_json_store(repo_root)
+        session = create_runtime_session(
+            runtime_store,
+            session_id="api-worker-claims-outbox",
+            workspace_id="default",
+            agent_id="chat",
+            source_app_id="chat",
+            start_path=repo_root,
+        )
+        now = datetime(2026, 8, 10, 9, 0, tzinfo=UTC)
+        runtime_store.save_turn(
+            RuntimeTurnRecord(
+                turn_id="api-worker-claims-outbox-turn",
+                session_id=session.session_id,
+                workspace_id="default",
+                status="active",
+                input_text="worker races the interrupt endpoint",
+                created_at=now,
+                updated_at=now,
+                started_at=now,
+                completed_at=None,
+                failure_reason=None,
+            )
+        )
+        state = SimpleNamespace(
+            runtime_store=runtime_store,
+            runtime_event_bus=None,
+            workspace_store=object(),
+        )
+        worker_claimed = False
+
+        def worker_claims_outbox(*_args, **_kwargs) -> bool:
+            nonlocal worker_claimed
+            if not worker_claimed:
+                worker_claimed = True
+                runtime_api.terminalize_runtime_turn_cancellation(
+                    runtime_store,
+                    turn_id="api-worker-claims-outbox-turn",
+                    reason="Interrupted by user.",
+                    event_payload={"reason": "worker_observed_cancellation"},
+                    request_intent=False,
+                )
+            return False
+
+        with (
+            patch.object(runtime_api, "require_runtime_session_operation"),
+            patch.object(runtime_api, "_resolved_provider_id", return_value="codex"),
+            patch.object(runtime_api, "interrupt_runtime_provider_turn", side_effect=worker_claims_outbox),
+            patch.object(runtime_api, "release_idle_runtime_processes"),
+            patch.object(runtime_api, "dispatch_source_app_runtime_event"),
+        ):
+            response = runtime_api._handle_turn_interrupt(
+                state,
+                SimpleNamespace(workspace_id="default", user=SimpleNamespace()),
+                "api-worker-claims-outbox-turn",
+                lambda _status, _headers: None,
+                start_path=repo_root,
+            )
+
+        payload = json.loads(b"".join(response).decode("utf-8"))
+        cancelled_events = [
+            event
+            for event in runtime_store.list_events(session.session_id)
+            if event.event_type == "runtime.turn.cancelled"
+        ]
+        self.assertTrue(payload["interrupted"])
+        self.assertEqual(payload["turn"]["status"], "cancelled")
+        self.assertEqual(len(cancelled_events), 1)
+
     def test_api_retry_repairs_cancelled_turn_without_terminal_event_or_callback(self) -> None:
         repo_root = make_temp_repo_root(self)
         runtime_store = _runtime_json_store(repo_root)
@@ -140,14 +212,14 @@ class RuntimeInterruptRaceTestCase(unittest.TestCase):
 
         def completion_wins(store, *, turn_id: str, reason: str, now=None):
             transition_runtime_turn(store, turn_id=turn_id, target_status="completed")
-            return request_runtime_turn_cancellation(store, turn_id=turn_id, reason=reason, now=now)
+            return claim_runtime_turn_cancellation(store, turn_id=turn_id, reason=reason, now=now)
 
         def start_response(status: str, _headers: list[tuple[str, str]]) -> None:
             response_status.append(status)
 
         with (
             patch.object(runtime_api, "require_runtime_session_operation"),
-            patch.object(runtime_api, "request_runtime_turn_cancellation", side_effect=completion_wins),
+            patch.object(runtime_api, "claim_runtime_turn_cancellation", side_effect=completion_wins),
             patch.object(runtime_api, "_resolved_provider_id", return_value="codex"),
             patch.object(runtime_api, "interrupt_runtime_provider_turn") as interrupt_provider,
             patch.object(runtime_api, "release_idle_runtime_processes"),
@@ -205,13 +277,16 @@ class RuntimeInterruptRaceTestCase(unittest.TestCase):
             workspace_store=object(),
         )
         barrier = Barrier(2)
-        original_request = request_runtime_turn_cancellation
+        original_request = claim_runtime_turn_cancellation
         payloads: list[dict[str, object]] = []
+        intent_claims: list[bool] = []
         errors: list[BaseException] = []
 
         def synchronized_request(*args, **kwargs):
             barrier.wait(timeout=2)
-            return original_request(*args, **kwargs)
+            result = original_request(*args, **kwargs)
+            intent_claims.append(result.claimed)
+            return result
 
         def invoke() -> None:
             try:
@@ -228,7 +303,7 @@ class RuntimeInterruptRaceTestCase(unittest.TestCase):
 
         with (
             patch.object(runtime_api, "require_runtime_session_operation"),
-            patch.object(runtime_api, "request_runtime_turn_cancellation", side_effect=synchronized_request),
+            patch.object(runtime_api, "claim_runtime_turn_cancellation", side_effect=synchronized_request),
             patch.object(runtime_api, "_resolved_provider_id", return_value="codex"),
             patch.object(runtime_api, "interrupt_runtime_provider_turn", return_value=False),
             patch.object(runtime_api, "release_idle_runtime_processes"),
@@ -242,7 +317,8 @@ class RuntimeInterruptRaceTestCase(unittest.TestCase):
 
         self.assertEqual(errors, [])
         self.assertTrue(all(not thread.is_alive() for thread in threads))
-        self.assertEqual(sorted(bool(payload["interrupted"]) for payload in payloads), [False, True])
+        self.assertEqual(sorted(intent_claims), [False, True])
+        self.assertTrue(any(bool(payload["interrupted"]) for payload in payloads))
         cancelled_events = [
             event
             for event in runtime_store.list_events(session.session_id)

@@ -210,16 +210,41 @@ def migrate_legacy_cancelled_turn_terminalization(
             claimed=False,
             callback_pending=False,
         )
-    migrated, applied = store.migrate_legacy_turn_terminalization(
-        turn_id=turn.turn_id,
-        event_id=event.event_id,
-        event_type=event.event_type,
-        payload=dict(event.payload),
-        delivered_at=event.created_at,
-    )
+    with store.session_lifecycle_handoff(
+        workspace_id=turn.workspace_id,
+        session_id=turn.session_id,
+    ):
+        thread_applied = False
+        migrated, applied = store.migrate_legacy_turn_terminalization(
+            turn_id=turn.turn_id,
+            event_id=event.event_id,
+            event_type=event.event_type,
+            payload=dict(event.payload),
+            delivered_at=event.created_at,
+        )
+        if (
+            migrated.terminalization_event_id == event.event_id
+            and migrated.terminalization_thread_released_at is None
+        ):
+            update_runtime_thread_availability(
+                store,
+                workspace_id=migrated.workspace_id,
+                runtime_session_id=migrated.session_id,
+                availability=runtime_thread_availability_for_session(
+                    store,
+                    runtime_session_id=migrated.session_id,
+                ),
+                now=event.created_at,
+            )
+            migrated, thread_applied = store.mark_turn_terminalization_phase(
+                turn_id=migrated.turn_id,
+                event_id=event.event_id,
+                phase="thread",
+                now=event.created_at,
+            )
     return RuntimeTurnTerminalizationResult(
         turn=migrated,
         event=event,
-        claimed=applied,
+        claimed=applied or thread_applied,
         callback_pending=False,
     )

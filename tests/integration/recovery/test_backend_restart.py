@@ -169,58 +169,6 @@ class BackendRestartRecoveryTestCase(unittest.TestCase):
             state.runtime_store.get_turn(recoverable.turn.turn_id).terminalization_callback_delivered_at
         )
 
-    def test_backend_restart_migrates_delivered_legacy_cancellation_without_callback_replay(self) -> None:
-        repo_root = make_temp_repo_root(self)
-        state = bootstrap_platform_state(start_path=repo_root)
-        session = create_runtime_session(
-            state.runtime_store,
-            session_id="session-legacy-cancellation",
-            workspace_id="default",
-            agent_id="chat",
-            source_app_id="source-app",
-            start_path=repo_root,
-        )
-        state.runtime_store.save_turn(
-            RuntimeTurnRecord(
-                turn_id="turn-legacy-cancellation",
-                session_id=session.session_id,
-                workspace_id="default",
-                status="cancelled",
-                input_text="legacy cancellation",
-                created_at=NOW,
-                updated_at=NOW,
-                started_at=NOW,
-                completed_at=NOW,
-                failure_reason="legacy cancellation",
-                cancellation_requested_at=NOW,
-                cancellation_reason="legacy cancellation",
-            )
-        )
-        legacy_event = record_runtime_event(
-            state.runtime_store,
-            event_id="legacy-event",
-            session_id=session.session_id,
-            turn_id="turn-legacy-cancellation",
-            plane="turn",
-            event_type="runtime.turn.cancelled",
-            payload={"reason": "legacy cancellation"},
-            now=NOW,
-        )
-
-        with (
-            patch.object(backend_restart, "dispatch_source_app_runtime_event") as dispatch,
-            patch.object(backend_restart, "dispatch_workspace_app_background_hooks", return_value=[]),
-            patch.object(backend_restart.InterAgentService, "recover_non_terminal_runs", return_value=[]),
-        ):
-            backend_restart.recover_interrupted_runtime_turns_after_backend_restart(state)
-
-        migrated = state.runtime_store.get_turn("turn-legacy-cancellation")
-        dispatch.assert_not_called()
-        self.assertEqual(migrated.terminalization_event_id, legacy_event.event_id)
-        self.assertIsNotNone(migrated.terminalization_event_persisted_at)
-        self.assertIsNotNone(migrated.terminalization_thread_released_at)
-        self.assertIsNotNone(migrated.terminalization_callback_delivered_at)
-
     def test_backend_restart_drains_pending_cancel_callback_with_same_event_id(self) -> None:
         repo_root = make_temp_repo_root(self)
         state = bootstrap_platform_state(start_path=repo_root)

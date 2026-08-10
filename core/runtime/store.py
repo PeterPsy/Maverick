@@ -181,7 +181,7 @@ class RuntimeStore(Protocol):
         turn_id: str,
         reason: str,
         now: datetime | None = None,
-    ) -> RuntimeTurnRecord:
+    ) -> tuple[RuntimeTurnRecord, bool]:
         ...
 
     def mark_turn_provider_request_started(
@@ -678,14 +678,14 @@ class RuntimeDocumentStore:
         turn_id: str,
         reason: str,
         now: datetime | None = None,
-    ) -> RuntimeTurnRecord:
-        """Persist a first-writer-wins cancellation intent outside the lifecycle handoff."""
+    ) -> tuple[RuntimeTurnRecord, bool]:
+        """Persist a cancellation intent and report whether this caller won its CAS."""
         timestamp = now or datetime.now(tz=UTC)
         while True:
             current = self.get_turn(turn_id)
             if current.status not in {"queued", "active"} or current.cancellation_requested_at is not None:
-                return current
-            self.collections.turns.update_one(
+                return current, False
+            update_result = self.collections.turns.update_one(
                 {
                     "turn_id": current.turn_id,
                     "workspace_id": current.workspace_id,
@@ -702,8 +702,11 @@ class RuntimeDocumentStore:
                 upsert=False,
             )
             refreshed = self.get_turn(turn_id)
+            applied = update_result is True or bool(getattr(update_result, "modified_count", 0))
+            if applied:
+                return refreshed, True
             if refreshed.cancellation_requested_at is not None or refreshed.status not in {"queued", "active"}:
-                return refreshed
+                return refreshed, False
 
     def mark_turn_provider_request_started(
         self,
@@ -910,7 +913,7 @@ class RuntimeDocumentStore:
         payload: dict[str, object],
         delivered_at: datetime,
     ) -> tuple[RuntimeTurnRecord, bool]:
-        """Atomically mark a pre-outbox terminal event as already delivered."""
+        """Adopt pre-outbox event/callback delivery while leaving thread reconciliation pending."""
         normalized_event_id = event_id.strip()
         normalized_event_type = event_type.strip()
         if not normalized_event_id or not normalized_event_type:
@@ -935,7 +938,6 @@ class RuntimeDocumentStore:
                     "terminalization_event_payload": dict(payload),
                     "terminalization_claimed_at": delivered_at,
                     "terminalization_event_persisted_at": delivered_at,
-                    "terminalization_thread_released_at": delivered_at,
                     "terminalization_callback_delivered_at": delivered_at,
                 }
             },
@@ -946,7 +948,6 @@ class RuntimeDocumentStore:
             persisted.terminalization_event_id == normalized_event_id
             and persisted.terminalization_event_type == normalized_event_type
             and persisted.terminalization_event_persisted_at is not None
-            and persisted.terminalization_thread_released_at is not None
             and persisted.terminalization_callback_delivered_at is not None
         )
         return persisted, applied

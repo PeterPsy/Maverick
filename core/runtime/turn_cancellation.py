@@ -2,12 +2,36 @@
 
 from __future__ import annotations
 
-from dataclasses import replace
+from dataclasses import dataclass, replace
 from datetime import datetime
 
 from core.runtime.lifecycle_service_sessions import utcnow
 from core.runtime.runtime_turns import RuntimeTurnRecord, RuntimeTurnStatus
 from core.runtime.store import RuntimeStore
+
+
+@dataclass(frozen=True)
+class RuntimeTurnCancellationIntentResult:
+    """Authoritative turn plus ownership of the first cancellation intent."""
+
+    turn: RuntimeTurnRecord
+    claimed: bool
+
+
+def claim_runtime_turn_cancellation(
+    store: RuntimeStore,
+    *,
+    turn_id: str,
+    reason: str,
+    now: datetime | None = None,
+) -> RuntimeTurnCancellationIntentResult:
+    """Publish a durable cancellation fence and expose which caller created it."""
+    turn, claimed = store.request_turn_cancellation(
+        turn_id=turn_id,
+        reason=reason,
+        now=now or utcnow(),
+    )
+    return RuntimeTurnCancellationIntentResult(turn=turn, claimed=claimed)
 
 
 def request_runtime_turn_cancellation(
@@ -18,11 +42,12 @@ def request_runtime_turn_cancellation(
     now: datetime | None = None,
 ) -> RuntimeTurnRecord:
     """Publish a durable cancellation fence without waiting for provider acceptance."""
-    return store.request_turn_cancellation(
+    return claim_runtime_turn_cancellation(
+        store,
         turn_id=turn_id,
         reason=reason,
-        now=now or utcnow(),
-    )
+        now=now,
+    ).turn
 
 
 def materialize_runtime_turn_transition(

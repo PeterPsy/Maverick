@@ -22,9 +22,9 @@ from core.runtime.app_streams import RuntimeAppStreamError, RuntimeAppStreamReco
 from core.runtime.runtime_session import runtime_session_allows_user_thread
 from core.runtime.runtime_threads import create_runtime_thread
 from core.runtime.service import (
+    claim_runtime_turn_cancellation,
     create_runtime_session,
     record_runtime_event,
-    request_runtime_turn_cancellation,
     transition_runtime_session,
 )
 from core.runtime.turn_submission import interrupt_runtime_provider_turn, release_idle_runtime_processes, submit_runtime_turn_async
@@ -712,15 +712,17 @@ def _apply_one_runtime_interrupt_request(
             "_visible": request.get("result_visibility") != "internal",
         }
     reason = _long_text(request.get("reason")) or "Interrupted by app request."
-    cancellation_request = (
-        request_runtime_turn_cancellation(
+    cancellation_intent = (
+        claim_runtime_turn_cancellation(
             state.runtime_store,
             turn_id=turn_id,
             reason=reason,
         )
         if turn.status in {"queued", "active"}
-        else turn
+        else None
     )
+    cancellation_request = cancellation_intent.turn if cancellation_intent is not None else turn
+    intent_claimed = cancellation_intent.claimed if cancellation_intent is not None else False
     provider_id = None
     provider_interrupted = False
     if cancellation_request.cancellation_requested_at is not None:
@@ -734,7 +736,7 @@ def _apply_one_runtime_interrupt_request(
         event_bus=state.runtime_event_bus,
         request_intent=False,
     )
-    interrupted = terminalization.claimed
+    interrupted = intent_claimed or terminalization.claimed
     updated = terminalization.turn
     if updated.status != "cancelled":
         return {

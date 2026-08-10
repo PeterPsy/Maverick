@@ -137,6 +137,15 @@ def submit_runtime_turn(
         try:
             turn = transition_runtime_turn(state.runtime_store, turn_id=turn.turn_id, target_status="active")
             if turn.status != "active":
+                if turn.status == "cancelled":
+                    terminalization = _terminalize_worker_observed_cancellation(
+                        state,
+                        turn=turn,
+                        provider_id=provider_id,
+                    )
+                    if terminalization.event is not None:
+                        events.append(terminalization.event)
+                    return terminalization.turn, events
                 return turn, events
             started_event = _record_turn_started(state, session_id=session.session_id, turn_id=turn.turn_id, provider_id=provider_id)
             events.append(started_event)

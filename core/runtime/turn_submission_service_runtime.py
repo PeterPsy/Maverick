@@ -1016,6 +1016,9 @@ def submit_runtime_turn_async(
                 )
                 force_idle_reap = not plain_hosted
                 current = state.runtime_store.get_turn(turn.turn_id)
+                if current.status == "cancelled":
+                    _terminalize_worker_observed_cancellation(state, turn=current, provider_id=worker_provider_id)
+                    return
                 if current.status not in {"completed", "failed", "cancelled", "timed-out"}:
                     failed = transition_runtime_turn(
                         state.runtime_store,

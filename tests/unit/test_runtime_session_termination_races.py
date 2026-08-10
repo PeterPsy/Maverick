@@ -2,12 +2,15 @@
 
 from __future__ import annotations
 
+from contextlib import nullcontext
 from datetime import UTC, datetime
 from types import SimpleNamespace
 import unittest
 from unittest.mock import patch
 
 import core.runtime.session_termination as session_termination
+import core.runtime.turn_submission_service_runtime as turn_submission_runtime
+import core.runtime.turn_submission_service_submit as turn_submission_submit
 from core.runtime.event_collection import RuntimeEventJsonCollection
 from core.runtime.runtime_turns import RuntimeTurnRecord
 from core.runtime.service import create_runtime_session, request_runtime_turn_cancellation, transition_runtime_turn
@@ -21,6 +24,177 @@ from tests.support.repo import make_temp_repo_root
 
 
 class RuntimeSessionTerminationRaceTest(unittest.TestCase):
+    def test_sync_activation_terminalizes_cancellation_observed_after_queue(self) -> None:
+        repo_root = make_temp_repo_root(self)
+        store = _runtime_json_store(repo_root)
+        session = create_runtime_session(
+            store,
+            session_id="sync-activation-cancelled",
+            workspace_id="default",
+            agent_id="chat",
+            start_path=repo_root,
+        )
+        now = datetime(2026, 8, 10, 9, 0, tzinfo=UTC)
+        queued = store.save_turn(
+            RuntimeTurnRecord(
+                turn_id="sync-activation-cancelled-turn",
+                session_id=session.session_id,
+                workspace_id="default",
+                status="queued",
+                input_text="cancel during queued callback",
+                created_at=now,
+                updated_at=now,
+                started_at=None,
+                completed_at=None,
+                failure_reason=None,
+            )
+        )
+        state = SimpleNamespace(
+            runtime_store=store,
+            runtime_event_bus=None,
+            repository_root=repo_root,
+        )
+
+        def cancel_after_queue(_turn, _events) -> None:
+            request_runtime_turn_cancellation(
+                store,
+                turn_id=queued.turn_id,
+                reason="cancel during activation",
+                now=now,
+            )
+
+        with (
+            patch.object(turn_submission_submit, "runtime_session_is_plain_hosted_chat", return_value=True),
+            patch.object(
+                turn_submission_submit,
+                "_queue_turn_with_event_result",
+                return_value=(queued, [], True),
+            ),
+            patch.object(
+                turn_submission_submit,
+                "_record_turn_worker_entered",
+                return_value=SimpleNamespace(event_type="runtime.turn.worker_entered"),
+            ),
+        ):
+            cancelled, events = turn_submission_submit.submit_runtime_turn(
+                state,
+                session=session,
+                input_text=queued.input_text,
+                on_queued=cancel_after_queue,
+            )
+
+        persisted = store.get_turn(queued.turn_id)
+        cancelled_events = [
+            event
+            for event in store.list_events(session.session_id)
+            if event.event_type == "runtime.turn.cancelled"
+        ]
+        self.assertEqual(cancelled.status, "cancelled")
+        self.assertEqual(persisted.status, "cancelled")
+        self.assertIsNotNone(persisted.terminalization_event_id)
+        self.assertEqual(len(cancelled_events), 1)
+        self.assertEqual(events[-1].event_id, cancelled_events[0].event_id)
+
+    def test_async_exception_terminalizes_turn_already_cancelled_by_provider_path(self) -> None:
+        repo_root = make_temp_repo_root(self)
+        store = _runtime_json_store(repo_root)
+        session = create_runtime_session(
+            store,
+            session_id="async-exception-cancelled",
+            workspace_id="default",
+            agent_id="chat",
+            start_path=repo_root,
+        )
+        now = datetime(2026, 8, 10, 9, 0, tzinfo=UTC)
+        queued = store.save_turn(
+            RuntimeTurnRecord(
+                turn_id="async-exception-cancelled-turn",
+                session_id=session.session_id,
+                workspace_id="default",
+                status="queued",
+                input_text="provider observes cancellation then raises",
+                created_at=now,
+                updated_at=now,
+                started_at=None,
+                completed_at=None,
+                failure_reason=None,
+            )
+        )
+        state = SimpleNamespace(
+            runtime_store=store,
+            runtime_event_bus=None,
+            repository_root=repo_root,
+        )
+
+        class InlineThread:
+            def __init__(self, *, target, **_kwargs) -> None:
+                self.target = target
+
+            def start(self) -> None:
+                self.target()
+
+        def cancel_then_raise(*_args, **_kwargs):
+            request_runtime_turn_cancellation(
+                store,
+                turn_id=queued.turn_id,
+                reason="provider observed cancellation",
+                now=now,
+            )
+            transition_runtime_turn(
+                store,
+                turn_id=queued.turn_id,
+                target_status="cancelled",
+                failure_reason="provider observed cancellation",
+                now=now,
+            )
+            raise RuntimeError("provider stopped after cancellation")
+
+        with (
+            patch.object(turn_submission_runtime, "runtime_session_is_plain_hosted_chat", return_value=True),
+            patch.object(
+                turn_submission_runtime,
+                "_queue_turn_with_event_result",
+                return_value=(queued, [], True),
+            ),
+            patch.object(turn_submission_runtime, "Thread", InlineThread),
+            patch.object(turn_submission_runtime, "_record_turn_worker_entered"),
+            patch.object(turn_submission_runtime, "_debug_log_runtime_turn"),
+            patch.object(turn_submission_runtime, "_debug_log_runtime_turn_with_timing"),
+            patch.object(
+                turn_submission_runtime,
+                "_record_turn_started",
+                return_value=SimpleNamespace(created_at=now),
+            ),
+            patch.object(turn_submission_runtime, "_record_turn_worker_started"),
+            patch.object(turn_submission_runtime, "_record_turn_activation_completed"),
+            patch.object(turn_submission_runtime, "_record_provider_dispatching"),
+            patch.object(
+                turn_submission_runtime,
+                "runtime_provider_start_handoff",
+                return_value=nullcontext((session, lambda _metadata: None)),
+            ),
+            patch.object(
+                turn_submission_runtime,
+                "execute_plain_hosted_text_turn",
+                side_effect=cancel_then_raise,
+            ),
+        ):
+            turn_submission_runtime.submit_runtime_turn_async(
+                state,
+                session=session,
+                input_text=queued.input_text,
+            )
+
+        persisted = store.get_turn(queued.turn_id)
+        cancelled_events = [
+            event
+            for event in store.list_events(session.session_id)
+            if event.event_type == "runtime.turn.cancelled"
+        ]
+        self.assertEqual(persisted.status, "cancelled")
+        self.assertIsNotNone(persisted.terminalization_event_id)
+        self.assertEqual(len(cancelled_events), 1)
+
     def test_worker_completion_drains_cancellation_outbox_claimed_after_status_check(self) -> None:
         repo_root = make_temp_repo_root(self)
         store = _runtime_json_store(repo_root)

@@ -1,0 +1,275 @@
+{
+  "ir_version": "video-project-ir.v1",
+  "metadata": {
+    "project_id": "project-golden",
+    "workspace_id": "workspace-test",
+    "name": "Golden timeline",
+    "tags": ["golden", "long-form"],
+    "provenance": []
+  },
+  "canvas": {
+    "width": 1920,
+    "height": 1080,
+    "pixel_aspect": {"numerator": 1, "denominator": 1},
+    "background": {"kind": "color", "value": "#101010FF"},
+    "color_space": "rec709"
+  },
+  "frame_rate": {"numerator": 24000, "denominator": 1001},
+  "audio": {"sample_rate": 48000, "channel_layout": "stereo"},
+  "duration_frames": 240,
+  "assets": [
+    {
+      "asset_id": "asset-video",
+      "kind": "video",
+      "identity": {
+        "storage_file_id": "file-video",
+        "source_version": "sha256-v1",
+        "sha256": "1111111111111111111111111111111111111111111111111111111111111111"
+      },
+      "provenance": {
+        "provider_interface": "file.content.read",
+        "workspace_id": "workspace-test",
+        "acquisition": "uploaded"
+      },
+      "source": {
+        "duration_pts": 450000,
+        "time_base": {"numerator": 1, "denominator": 90000},
+        "duration_us": 5000000,
+        "frame_rate_mode": "vfr",
+        "pts_map": [0, 3754, 7508, 11263, 15016]
+      }
+    },
+    {
+      "asset_id": "asset-audio",
+      "kind": "audio",
+      "identity": {
+        "storage_file_id": "file-audio",
+        "source_version": "sha256-v1",
+        "sha256": "2222222222222222222222222222222222222222222222222222222222222222"
+      },
+      "provenance": {
+        "provider_interface": "file.media.stream",
+        "workspace_id": "workspace-test",
+        "acquisition": "generated"
+      },
+      "source": {
+        "duration_pts": 240000,
+        "time_base": {"numerator": 1, "denominator": 48000},
+        "duration_us": 5000000,
+        "frame_rate_mode": "audio",
+        "pts_map": []
+      }
+    }
+  ],
+  "timeline": {
+    "tracks": [
+      {
+        "track_id": "track-video",
+        "type": "video",
+        "name": "Primary video",
+        "enabled": true,
+        "locked": false,
+        "muted": false,
+        "clips": [
+          {
+            "clip_id": "clip-video-a",
+            "kind": "video",
+            "asset_id": "asset-video",
+            "start_frame": 0,
+            "duration_frames": 120,
+            "source": {"in_pts": 0, "out_pts": 225000},
+            "transform": {
+              "x_millipixels": 0,
+              "y_millipixels": 0,
+              "scale_x_permille": 1000,
+              "scale_y_permille": 1000,
+              "rotation_millidegrees": 0,
+              "anchor_x_permille": 500,
+              "anchor_y_permille": 500
+            },
+            "crop": {"left_pixels": 0, "top_pixels": 0, "right_pixels": 0, "bottom_pixels": 0},
+            "fit": "cover",
+            "opacity_permille": 1000,
+            "compositing": "source-over",
+            "keyframes": [
+              {"keyframe_id": "keyframe-scale-a", "property": "transform.scale_x_permille", "frame": 0, "value": 1000, "easing": "linear"},
+              {"keyframe_id": "keyframe-scale-b", "property": "transform.scale_x_permille", "frame": 120, "value": 1100, "easing": "ease-in-out"}
+            ],
+            "effects": [
+              {
+                "effect_id": "effect-brightness",
+                "registry": {"id": "video.brightness", "version": "1"},
+                "enabled": true,
+                "parameters": {"amount_permille": 50}
+              }
+            ],
+            "layers": [
+              {
+                "layer_id": "layer-callout",
+                "kind": "shape",
+                "opacity_permille": 800,
+                "compositing": "source-over",
+                "fit": "contain",
+                "transform": {"x_millipixels": 1000, "y_millipixels": 1000},
+                "crop": {},
+                "effects": []
+              }
+            ],
+            "group_ids": ["group-av"]
+          },
+          {
+            "clip_id": "clip-video-b",
+            "kind": "video",
+            "asset_id": "asset-video",
+            "start_frame": 120,
+            "duration_frames": 120,
+            "source": {"in_pts": 225000, "out_pts": 450000},
+            "keyframes": [],
+            "effects": [],
+            "layers": [],
+            "group_ids": []
+          }
+        ]
+      },
+      {
+        "track_id": "track-audio",
+        "type": "audio",
+        "name": "Dialogue",
+        "enabled": true,
+        "locked": false,
+        "muted": false,
+        "clips": [
+          {
+            "clip_id": "clip-audio",
+            "kind": "audio",
+            "asset_id": "asset-audio",
+            "start_frame": 0,
+            "duration_frames": 240,
+            "source": {"in_pts": 0, "out_pts": 240000},
+            "audio": {
+              "gain_millibels": 0,
+              "pan_milli": 0,
+              "mute": false,
+              "channel_mapping": [0, 1],
+              "fade_in_frames": 12,
+              "fade_out_frames": 12,
+              "envelope": [
+                {"frame": 0, "gain_millibels": -1200, "easing": "linear"},
+                {"frame": 12, "gain_millibels": 0, "easing": "ease-out"}
+              ]
+            },
+            "keyframes": [],
+            "effects": [
+              {
+                "effect_id": "effect-equalizer",
+                "registry": {"id": "audio.equalizer", "version": "1"},
+                "enabled": true,
+                "parameters": {"low_gain_millibels": 100, "mid_gain_millibels": 0, "high_gain_millibels": -100}
+              }
+            ],
+            "layers": [],
+            "group_ids": ["group-av"]
+          }
+        ]
+      },
+      {
+        "track_id": "track-text",
+        "type": "text",
+        "name": "Titles",
+        "enabled": true,
+        "locked": false,
+        "muted": false,
+        "clips": [
+          {
+            "clip_id": "clip-title",
+            "kind": "text",
+            "start_frame": 24,
+            "duration_frames": 72,
+            "text": {
+              "plain_text": "Safe plain title",
+              "font": {"id": "inter", "version": "1"},
+              "size_millipixels": 64000,
+              "color": "#FFFFFFFF",
+              "align": "center",
+              "runs": []
+            },
+            "keyframes": [],
+            "effects": [],
+            "layers": [],
+            "group_ids": []
+          }
+        ]
+      },
+      {
+        "track_id": "track-captions",
+        "type": "captions",
+        "name": "Captions",
+        "enabled": true,
+        "locked": false,
+        "muted": false,
+        "clips": []
+      },
+      {
+        "track_id": "track-graphics",
+        "type": "graphics",
+        "name": "Templates",
+        "enabled": true,
+        "locked": false,
+        "muted": false,
+        "clips": [
+          {
+            "clip_id": "clip-template",
+            "kind": "template",
+            "start_frame": 48,
+            "duration_frames": 96,
+            "template_instance_id": "template-lower-third",
+            "keyframes": [],
+            "effects": [],
+            "layers": [],
+            "group_ids": []
+          }
+        ]
+      }
+    ],
+    "transitions": [
+      {
+        "transition_id": "transition-main",
+        "registry": {"id": "transition.dissolve", "version": "1"},
+        "from_clip_id": "clip-video-a",
+        "to_clip_id": "clip-video-b",
+        "duration_frames": 12,
+        "parameters": {}
+      }
+    ],
+    "captions": [
+      {
+        "caption_id": "caption-one",
+        "track_id": "track-captions",
+        "start_frame": 24,
+        "duration_frames": 48,
+        "text": "A safe caption",
+        "speaker": "Speaker 1",
+        "style": {"font": {"id": "noto-sans", "version": "1"}, "position": "safe-bottom"}
+      }
+    ],
+    "markers": [
+      {"marker_id": "marker-chapter", "frame": 120, "kind": "chapter", "label": "Second part", "note": "Editorial boundary"}
+    ],
+    "template_instances": [
+      {
+        "template_instance_id": "template-lower-third",
+        "registry": {"id": "lower-third.basic", "version": "1"},
+        "start_frame": 48,
+        "duration_frames": 96,
+        "parameters": {"title": "Maverick", "subtitle": "Video Studio"}
+      }
+    ],
+    "groups": [
+      {"group_id": "group-av", "name": "Linked primary audio/video", "member_ids": ["clip-video-a", "clip-audio"]}
+    ],
+    "relationships": [
+      {"relationship_id": "relationship-av", "type": "linked-audio-video", "source_id": "clip-video-a", "target_id": "clip-audio"},
+      {"relationship_id": "relationship-template", "type": "template-binding", "source_id": "clip-template", "target_id": "template-lower-third"}
+    ]
+  }
+}

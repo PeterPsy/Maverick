@@ -63,6 +63,13 @@ RUNTIME_TURN_CONTROL_FIELDS = frozenset(
         "provider_request_owner_pid",
         "provider_request_owner_process_start",
         "provider_request_cancellation_acknowledged_at",
+        "terminalization_event_id",
+        "terminalization_event_type",
+        "terminalization_event_payload",
+        "terminalization_claimed_at",
+        "terminalization_event_persisted_at",
+        "terminalization_thread_released_at",
+        "terminalization_callback_delivered_at",
     }
 )
 
@@ -213,6 +220,27 @@ class RuntimeStore(Protocol):
     ) -> tuple[RuntimeTurnRecord, bool]:
         ...
 
+    def claim_turn_terminalization(
+        self,
+        *,
+        turn_id: str,
+        event_id: str,
+        event_type: str,
+        payload: dict[str, object],
+        now: datetime | None = None,
+    ) -> tuple[RuntimeTurnRecord, bool]:
+        ...
+
+    def mark_turn_terminalization_phase(
+        self,
+        *,
+        turn_id: str,
+        event_id: str,
+        phase: str,
+        now: datetime | None = None,
+    ) -> tuple[RuntimeTurnRecord, bool]:
+        ...
+
     def save_turn_if_client_message_absent(self, record: RuntimeTurnRecord) -> tuple[RuntimeTurnRecord, bool]:
         ...
 
@@ -250,6 +278,9 @@ class RuntimeStore(Protocol):
         ...
 
     def save_turn_event_if_absent(self, record: RuntimeEventRecord) -> tuple[RuntimeEventRecord, bool]:
+        ...
+
+    def find_turn_event(self, *, turn_id: str, event_type: str) -> RuntimeEventRecord | None:
         ...
 
     def list_events(self, session_id: str) -> list[RuntimeEventRecord]:
@@ -813,6 +844,87 @@ class RuntimeDocumentStore:
         )
         return persisted, applied
 
+    def claim_turn_terminalization(
+        self,
+        *,
+        turn_id: str,
+        event_id: str,
+        event_type: str,
+        payload: dict[str, object],
+        now: datetime | None = None,
+    ) -> tuple[RuntimeTurnRecord, bool]:
+        """Atomically assign the durable terminalization outbox to one writer."""
+        normalized_event_id = event_id.strip()
+        normalized_event_type = event_type.strip()
+        if not normalized_event_id or not normalized_event_type:
+            raise ValueError("Runtime turn terminalization requires event_id and event_type.")
+        timestamp = now or datetime.now(tz=UTC)
+        while True:
+            current = self.get_turn(turn_id)
+            expected_event_type = f"runtime.turn.{current.status}"
+            if current.status not in {"completed", "failed", "cancelled", "timed-out"}:
+                return current, False
+            if normalized_event_type != expected_event_type:
+                return current, False
+            if current.terminalization_event_id is not None:
+                return current, False
+            self.collections.turns.update_one(
+                {
+                    "turn_id": current.turn_id,
+                    "workspace_id": current.workspace_id,
+                    "session_id": current.session_id,
+                    "status": current.status,
+                    "terminalization_event_id": None,
+                },
+                {
+                    "$set": {
+                        "terminalization_event_id": normalized_event_id,
+                        "terminalization_event_type": normalized_event_type,
+                        "terminalization_event_payload": dict(payload),
+                        "terminalization_claimed_at": timestamp,
+                    }
+                },
+                upsert=False,
+            )
+            persisted = self.get_turn(turn_id)
+            if persisted.terminalization_event_id is not None:
+                return persisted, persisted.terminalization_event_id == normalized_event_id
+
+    def mark_turn_terminalization_phase(
+        self,
+        *,
+        turn_id: str,
+        event_id: str,
+        phase: str,
+        now: datetime | None = None,
+    ) -> tuple[RuntimeTurnRecord, bool]:
+        """Mark one exact outbox phase complete without accepting a stale worker."""
+        phase_fields = {
+            "event": "terminalization_event_persisted_at",
+            "thread": "terminalization_thread_released_at",
+            "callback": "terminalization_callback_delivered_at",
+        }
+        field = phase_fields.get(phase)
+        if field is None:
+            raise ValueError(f"Unknown runtime turn terminalization phase `{phase}`.")
+        current = self.get_turn(turn_id)
+        if current.terminalization_event_id != event_id or getattr(current, field) is not None:
+            return current, False
+        timestamp = now or datetime.now(tz=UTC)
+        self.collections.turns.update_one(
+            {
+                "turn_id": current.turn_id,
+                "workspace_id": current.workspace_id,
+                "session_id": current.session_id,
+                "terminalization_event_id": event_id,
+                field: None,
+            },
+            {"$set": {field: timestamp}},
+            upsert=False,
+        )
+        persisted = self.get_turn(turn_id)
+        return persisted, persisted.terminalization_event_id == event_id and getattr(persisted, field) is not None
+
     def save_turn_if_client_message_absent(self, record: RuntimeTurnRecord) -> tuple[RuntimeTurnRecord, bool]:
         normalized_client_message_id = record.client_message_id.strip() if isinstance(record.client_message_id, str) else ""
         if not normalized_client_message_id:
@@ -1231,7 +1343,7 @@ class RuntimeDocumentStore:
         return record
 
     def save_turn_event_if_absent(self, record: RuntimeEventRecord) -> tuple[RuntimeEventRecord, bool]:
-        """Atomically insert the single event for one turn and event type."""
+        """Idempotently materialize one turn event in history, tail, and app streams."""
         if not record.turn_id:
             raise ValueError("Idempotent turn events require turn_id.")
         query = {
@@ -1240,23 +1352,49 @@ class RuntimeDocumentStore:
             "turn_id": record.turn_id,
             "event_type": record.event_type,
         }
-        document, inserted = self._insert_one_if_absent(
+        self._remember_session_partition(record.session_id, record.workspace_id)
+        history_inserted = False
+        append_history_if_absent = getattr(self.collections.events, "append_history_upsert_if_absent", None)
+        if callable(append_history_if_absent):
+            _history_document, history_inserted = append_history_if_absent(
+                {"workspace_id": record.workspace_id, "session_id": record.session_id, "event_id": record.event_id},
+                {"$set": asdict(record)},
+            )
+        document, tail_inserted = self._insert_one_if_absent(
             self.collections.events,
             query,
             asdict(record),
         )
         saved = RuntimeEventRecord(**document)
-        self._remember_session_partition(saved.session_id, saved.workspace_id)
-        if inserted:
+        if saved.event_id != record.event_id:
+            raise RuntimeError(
+                f"Runtime turn `{record.turn_id}` terminal event identity conflicts with `{saved.event_id}`."
+            )
+        if not callable(append_history_if_absent):
             append_history_upsert = getattr(self.collections.events, "append_history_upsert", None)
-            if callable(append_history_upsert):
-                append_history_upsert(
-                    {"event_id": saved.event_id},
-                    {"$set": asdict(saved)},
-                )
+            if callable(append_history_upsert) and tail_inserted:
+                append_history_upsert({"event_id": saved.event_id}, {"$set": asdict(saved)})
+                history_inserted = True
+        if tail_inserted:
             self._prune_session_events(saved.session_id)
-            self._append_event_to_app_streams(saved)
-        return saved, inserted
+        self._append_event_to_app_streams(saved)
+        return saved, bool(history_inserted or tail_inserted)
+
+    def find_turn_event(self, *, turn_id: str, event_type: str) -> RuntimeEventRecord | None:
+        """Find the persisted terminal event in either bounded tail or full history."""
+        turn = self.get_turn(turn_id)
+        query = {
+            "workspace_id": turn.workspace_id,
+            "session_id": turn.session_id,
+            "turn_id": turn_id,
+            "event_type": event_type,
+        }
+        document = self.collections.events.find_one(query)
+        if document is None:
+            find_history_one = getattr(self.collections.events, "find_history_one", None)
+            if callable(find_history_one):
+                document = find_history_one(query)
+        return RuntimeEventRecord(**document) if document is not None else None
 
     def _append_event_to_app_streams(self, record: RuntimeEventRecord) -> None:
         streams = self.collections.app_streams
@@ -1328,7 +1466,29 @@ class RuntimeDocumentStore:
         }
         existing = collection.find_one(identity)
         if existing is not None:
-            return _app_stream_event_from_document(existing)
+            persisted = _app_stream_event_from_document(existing)
+            current = self.get_app_stream(
+                stream.stream_id,
+                workspace_id=stream.workspace_id,
+                source_app_id=stream.source_app_id,
+            )
+            repaired = replace(
+                current,
+                status=stream_status_for_event(persisted.event_type, current.status),
+                last_sequence=max(current.last_sequence, persisted.sequence),
+                updated_at=max(current.updated_at, persisted.created_at),
+            )
+            if repaired != current:
+                streams.update_one(
+                    {
+                        "stream_id": current.stream_id,
+                        "workspace_id": current.workspace_id,
+                        "source_app_id": current.source_app_id,
+                    },
+                    {"$set": asdict(repaired)},
+                    upsert=False,
+                )
+            return persisted
         current = self.get_app_stream(
             stream.stream_id,
             workspace_id=stream.workspace_id,

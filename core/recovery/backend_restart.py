@@ -15,6 +15,7 @@ from core.runtime.service import record_runtime_event, transition_runtime_turn
 from core.runtime.store import MAX_RUNTIME_EVENTS_PER_SESSION
 from core.runtime.thread_catalog_events import set_thread_availability
 from core.runtime.turn_submission import _complete_output_text, submit_runtime_turn_async
+from core.runtime.turn_terminalization import drain_runtime_turn_terminalization
 
 if TYPE_CHECKING:
     from core.api.platform_state import PlatformState
@@ -63,6 +64,7 @@ def recover_interrupted_runtime_turns_after_backend_restart(
 ) -> BackendRestartRecoveryResult:
     """Resume runtime sessions whose in-memory turn workers died during backend restart."""
     reconcile_stale_plain_hosted_request_owners(state.runtime_store)
+    _recover_pending_cancelled_turn_terminalizations(state)
     inspected = 0
     recovered = 0
     closed_turns = 0
@@ -137,36 +139,49 @@ def recover_interrupted_runtime_turns_after_backend_restart(
             terminal_event_type = f"runtime.turn.{updated.status}"
             terminal_detail = updated.failure_reason or failure_reason
             closed_turns += 1
-            event = record_runtime_event(
-                state.runtime_store,
-                event_id=str(uuid4()),
-                session_id=session.session_id,
-                turn_id=updated.turn_id,
-                plane="turn",
-                event_type=terminal_event_type,
-                payload={
-                    "reason": "backend_restart",
-                    "detail": terminal_detail,
-                    "recovery_action": recovery_action,
-                    "resume_attempts": resume_attempts if is_recovery_resume_turn else None,
-                    "max_resume_attempts": MAX_BACKEND_RESTART_RESUME_ATTEMPTS_PER_SESSION if is_recovery_resume_turn else None,
-                },
-                event_bus=state.runtime_event_bus,
-            )
-            set_thread_availability(
-                state,
-                workspace_id=updated.workspace_id,
-                runtime_session_id=session.session_id,
-                availability="free",
-                now=event.created_at,
-            )
-            dispatch_source_app_runtime_event(
-                state,
-                session=state.runtime_store.get_session(session.session_id),
-                turn=updated,
-                event_type=terminal_event_type,
-                failure_reason=terminal_detail,
-            )
+            terminal_payload = {
+                "reason": "backend_restart",
+                "detail": terminal_detail,
+                "recovery_action": recovery_action,
+                "resume_attempts": resume_attempts if is_recovery_resume_turn else None,
+                "max_resume_attempts": MAX_BACKEND_RESTART_RESUME_ATTEMPTS_PER_SESSION if is_recovery_resume_turn else None,
+            }
+            if updated.status == "cancelled":
+                drain_runtime_turn_terminalization(
+                    state.runtime_store,
+                    turn=updated,
+                    event_payload=terminal_payload,
+                    event_bus=state.runtime_event_bus,
+                    callback=_source_app_terminal_callback(
+                        state,
+                        failure_reason=terminal_detail,
+                    ),
+                )
+            else:
+                event = record_runtime_event(
+                    state.runtime_store,
+                    event_id=str(uuid4()),
+                    session_id=session.session_id,
+                    turn_id=updated.turn_id,
+                    plane="turn",
+                    event_type=terminal_event_type,
+                    payload=terminal_payload,
+                    event_bus=state.runtime_event_bus,
+                )
+                set_thread_availability(
+                    state,
+                    workspace_id=updated.workspace_id,
+                    runtime_session_id=session.session_id,
+                    availability="free",
+                    now=event.created_at,
+                )
+                dispatch_source_app_runtime_event(
+                    state,
+                    session=state.runtime_store.get_session(session.session_id),
+                    turn=updated,
+                    event_type=terminal_event_type,
+                    failure_reason=terminal_detail,
+                )
             should_queue_resume = should_queue_resume or (
                 updated.status == "failed"
                 and recovery_action in {"automatic_resume_turn", "retry_resume_turn"}
@@ -230,6 +245,55 @@ def recover_interrupted_runtime_turns_after_backend_restart(
         closed_turns=closed_turns,
         queued_resume_turns=queued_resumes,
     )
+
+
+def _recover_pending_cancelled_turn_terminalizations(state: "PlatformState") -> int:
+    """Drain cancellation outboxes left between phases by a terminated process."""
+    recovered = 0
+    for session in state.runtime_store.list_all_sessions():
+        for turn in state.runtime_store.list_turns(session.session_id):
+            if turn.status != "cancelled":
+                continue
+            if turn.cancellation_requested_at is None and turn.terminalization_event_id is None:
+                continue
+            if (
+                turn.terminalization_event_persisted_at is not None
+                and turn.terminalization_thread_released_at is not None
+                and turn.terminalization_callback_delivered_at is not None
+            ):
+                continue
+            reason = turn.cancellation_reason or turn.failure_reason or "Runtime turn cancelled."
+            result = drain_runtime_turn_terminalization(
+                state.runtime_store,
+                turn=turn,
+                event_payload={"reason": reason, "recovery_action": "drain_terminalization_outbox"},
+                event_bus=state.runtime_event_bus,
+                callback=_source_app_terminal_callback(state, failure_reason=reason),
+            )
+            recovered += int(
+                result.event is not None
+                and not result.callback_pending
+                and result.turn.terminalization_event_persisted_at is not None
+                and result.turn.terminalization_thread_released_at is not None
+                and result.turn.terminalization_callback_delivered_at is not None
+            )
+    return recovered
+
+
+def _source_app_terminal_callback(state: "PlatformState", *, failure_reason: str):
+    def callback(session, turn, event) -> None:
+        dispatch_source_app_runtime_event(
+            state,
+            session=session,
+            turn=turn,
+            event_type=event.event_type,
+            failure_reason=failure_reason,
+            runtime_event_id=event.event_id,
+            raise_on_failure=True,
+            start_path=state.repository_root,
+        )
+
+    return callback
 
 
 def _events_by_session_id(state: "PlatformState", *, session_ids: set[str]) -> dict[str, list]:

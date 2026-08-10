@@ -22,6 +22,7 @@ from core.runtime.runtime_events import RuntimeEventRecord
 from core.runtime.runtime_session import RuntimeSessionRecord
 from core.runtime.runtime_turns import RuntimeTurnRecord
 from core.runtime.plain_hosted_cancellation import plain_hosted_request_cancellation
+from core.runtime.turn_terminalization import terminalize_runtime_turn_cancellation
 from core.runtime.service import (
     create_runtime_session,
     request_runtime_turn_cancellation,
@@ -86,6 +87,53 @@ class _FakeState:
 
 
 class BackendRestartRecoveryTestCase(unittest.TestCase):
+    def test_backend_restart_drains_pending_cancel_callback_with_same_event_id(self) -> None:
+        repo_root = make_temp_repo_root(self)
+        state = bootstrap_platform_state(start_path=repo_root)
+        session = create_runtime_session(
+            state.runtime_store,
+            session_id="session-pending-cancel-callback",
+            workspace_id="default",
+            agent_id="chat",
+            source_app_id="source-app",
+            start_path=repo_root,
+        )
+        state.runtime_store.save_turn(
+            RuntimeTurnRecord(
+                turn_id="turn-pending-cancel-callback",
+                session_id=session.session_id,
+                workspace_id="default",
+                status="active",
+                input_text="cancel before restart",
+                created_at=NOW,
+                updated_at=NOW,
+                started_at=NOW,
+                completed_at=None,
+                failure_reason=None,
+            )
+        )
+        seeded = terminalize_runtime_turn_cancellation(
+            state.runtime_store,
+            turn_id="turn-pending-cancel-callback",
+            reason="cancel before restart",
+            event_payload={"reason": "cancel before restart"},
+            callback=lambda _session, _turn, _event: (_ for _ in ()).throw(RuntimeError("crash")),
+            now=NOW,
+        )
+        self.assertTrue(seeded.callback_pending)
+
+        with (
+            patch.object(backend_restart, "dispatch_source_app_runtime_event") as dispatch,
+            patch.object(backend_restart, "dispatch_workspace_app_background_hooks", return_value=[]),
+            patch.object(backend_restart.InterAgentService, "recover_non_terminal_runs", return_value=[]),
+        ):
+            backend_restart.recover_interrupted_runtime_turns_after_backend_restart(state)
+
+        persisted = state.runtime_store.get_turn(seeded.turn.turn_id)
+        dispatch.assert_called_once()
+        self.assertEqual(dispatch.call_args.kwargs["runtime_event_id"], seeded.event.event_id)
+        self.assertIsNotNone(persisted.terminalization_callback_delivered_at)
+
     def test_orphan_event_recovery_reads_session_events_once(self) -> None:
         store = _FakeRuntimeStore(
             events=[

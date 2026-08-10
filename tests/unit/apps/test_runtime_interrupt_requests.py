@@ -13,6 +13,7 @@ from core.runtime.runtime_session import RuntimeSessionRecord
 from core.runtime.runtime_turns import RuntimeTurnRecord
 from core.runtime.service import (
     create_runtime_session,
+    record_runtime_event,
     request_runtime_turn_cancellation,
     transition_runtime_turn,
 )
@@ -81,7 +82,6 @@ class RuntimeInterruptRequestsTestCase(unittest.TestCase):
         with (
             patch.object(runtime_requests, "_resolved_provider_id", return_value="codex"),
             patch.object(runtime_requests, "interrupt_runtime_provider_turn", side_effect=[False, True]) as interrupt,
-            patch.object(runtime_requests, "set_thread_availability"),
             patch.object(runtime_requests, "release_idle_runtime_processes", return_value=0),
             patch.object(runtime_requests, "dispatch_source_app_runtime_event"),
         ):
@@ -98,6 +98,61 @@ class RuntimeInterruptRequestsTestCase(unittest.TestCase):
         self.assertTrue(result["provider_interrupted"])
         self.assertEqual(result["status"], "cancelled")
         self.assertIsNotNone(runtime_store.get_turn("app-owned-turn").cancellation_requested_at)
+
+    def test_app_retry_repairs_callback_after_terminal_event_was_already_persisted(self) -> None:
+        runtime_store, session = self._active_turn(
+            session_id="app-crashed-callback",
+            turn_id="app-crashed-callback-turn",
+        )
+        cancelled = request_runtime_turn_cancellation(
+            runtime_store,
+            turn_id="app-crashed-callback-turn",
+            reason="Interrupted by app request.",
+        )
+        cancelled = transition_runtime_turn(
+            runtime_store,
+            turn_id=cancelled.turn_id,
+            target_status="cancelled",
+            failure_reason="Interrupted by app request.",
+        )
+        existing_event = record_runtime_event(
+            runtime_store,
+            event_id="event-before-callback-crash",
+            session_id=session.session_id,
+            turn_id=cancelled.turn_id,
+            plane="turn",
+            event_type="runtime.turn.cancelled",
+            payload={"reason": "Interrupted by app request."},
+        )
+        state = SimpleNamespace(
+            runtime_store=runtime_store,
+            provider_store=object(),
+            runtime_event_bus=None,
+        )
+
+        with (
+            patch.object(runtime_requests, "_resolved_provider_id", return_value="codex"),
+            patch.object(runtime_requests, "interrupt_runtime_provider_turn", return_value=False),
+            patch.object(runtime_requests, "release_idle_runtime_processes"),
+            patch.object(runtime_requests, "dispatch_source_app_runtime_event") as dispatch,
+        ):
+            result = runtime_requests._apply_one_runtime_interrupt_request(
+                state,
+                request={"turn_id": cancelled.turn_id},
+                workspace_id="default",
+                app_id="video-studio",
+            )
+
+        cancelled_events = [
+            event
+            for event in runtime_store.list_events(session.session_id)
+            if event.event_type == "runtime.turn.cancelled"
+        ]
+        self.assertEqual(len(cancelled_events), 1)
+        self.assertEqual(cancelled_events[0].event_id, existing_event.event_id)
+        self.assertTrue(result["interrupted"])
+        dispatch.assert_called_once()
+        self.assertEqual(dispatch.call_args.kwargs["runtime_event_id"], existing_event.event_id)
 
     def test_app_runtime_interrupt_reports_completion_when_it_wins_before_cancel_intent(self) -> None:
         runtime_store, session = self._active_turn(
@@ -118,7 +173,6 @@ class RuntimeInterruptRequestsTestCase(unittest.TestCase):
             patch.object(runtime_requests, "request_runtime_turn_cancellation", side_effect=completion_wins),
             patch.object(runtime_requests, "_resolved_provider_id", return_value="codex"),
             patch.object(runtime_requests, "interrupt_runtime_provider_turn") as interrupt_provider,
-            patch.object(runtime_requests, "set_thread_availability"),
             patch.object(runtime_requests, "release_idle_runtime_processes"),
             patch.object(runtime_requests, "dispatch_source_app_runtime_event") as dispatch,
         ):
@@ -175,7 +229,6 @@ class RuntimeInterruptRequestsTestCase(unittest.TestCase):
             patch.object(runtime_requests, "request_runtime_turn_cancellation", side_effect=synchronized_request),
             patch.object(runtime_requests, "_resolved_provider_id", return_value="codex"),
             patch.object(runtime_requests, "interrupt_runtime_provider_turn", return_value=False),
-            patch.object(runtime_requests, "set_thread_availability"),
             patch.object(runtime_requests, "release_idle_runtime_processes"),
             patch.object(runtime_requests, "dispatch_source_app_runtime_event") as dispatch,
         ):
@@ -195,6 +248,7 @@ class RuntimeInterruptRequestsTestCase(unittest.TestCase):
         ]
         self.assertEqual(len(cancelled_events), 1)
         dispatch.assert_called_once()
+        self.assertEqual(dispatch.call_args.kwargs["runtime_event_id"], cancelled_events[0].event_id)
 
 
 if __name__ == "__main__":

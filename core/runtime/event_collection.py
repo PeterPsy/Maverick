@@ -38,6 +38,58 @@ class RuntimeEventJsonCollection(RuntimeSessionJsonCollection):
                 count = self._partition_counts.get(path)
                 self._partition_counts[path] = self._count_documents(path) if count is None else count + 1
 
+    def append_history_upsert_if_absent(
+        self,
+        query: dict[str, Any],
+        update: dict[str, Any],
+    ) -> tuple[dict[str, Any], bool]:
+        """Append once to full history while holding its cross-process partition lock."""
+        payload = dict(update.get("$set", {}))
+        workspace_id = str(payload.get("workspace_id") or query.get("workspace_id") or "").strip()
+        session_id = str(payload.get("session_id") or query.get("session_id") or "").strip()
+        if not workspace_id or not session_id:
+            raise ValueError("Runtime event history updates require both workspace_id and session_id.")
+        history_root = self._history_root(workspace_id=workspace_id, session_id=session_id)
+        document = {**dict(query), **payload}
+        with self._lock:
+            with _locked_collection_path(history_root):
+                for path in self._history_chunk_paths(history_root):
+                    for existing in self._read_documents(path):
+                        if _matches(existing, query):
+                            return existing, False
+                for path in self._candidate_legacy_history_paths(query):
+                    if not path.is_file():
+                        continue
+                    for existing in self._read_documents(path):
+                        if _matches(existing, query):
+                            return existing, False
+                path = self._history_chunk_for_append(history_root)
+                self._append_document(path, document)
+                count = self._partition_counts.get(path)
+                self._partition_counts[path] = self._count_documents(path) if count is None else count + 1
+                return document, True
+
+    def find_history_one(self, query: dict[str, Any]) -> dict[str, Any] | None:
+        """Find one event in the complete history archive."""
+        for history_root in self._candidate_history_roots(query):
+            if not history_root.is_dir():
+                continue
+            with self._lock:
+                with _locked_collection_path(history_root):
+                    for path in reversed(self._history_chunk_paths(history_root)):
+                        for document in reversed(self._read_documents(path)):
+                            if _matches(document, query):
+                                return document
+        for path in self._candidate_legacy_history_paths(query):
+            if not path.is_file():
+                continue
+            with self._lock:
+                with _locked_collection_path(path):
+                    for document in reversed(self._read_documents(path)):
+                        if _matches(document, query):
+                            return document
+        return None
+
     def find_event_page(self, query: dict[str, Any], *, before_event_id: str | None, limit: int) -> dict[str, Any]:
         """Return a bounded page from history without scanning the whole archive."""
         if limit < 1:

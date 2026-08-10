@@ -1126,6 +1126,7 @@ def interrupt_runtime_provider_turn(
     state: PlatformState,
     session: RuntimeSessionRecord,
     *,
+    turn_id: str | None = None,
     registry: "ProviderRegistry | None" = None,
     wait_for_termination: bool = False,
 ) -> bool:
@@ -1133,6 +1134,7 @@ def interrupt_runtime_provider_turn(
     if runtime_session_is_plain_hosted_chat(session):
         return interrupt_plain_hosted_requests(
             session.session_id,
+            turn_id=turn_id,
             store=state.runtime_store,
             wait_for_termination=wait_for_termination,
         )

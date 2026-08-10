@@ -104,7 +104,9 @@ It started with names, visibility, legacy compatibility, and initial policy defa
     unwind acknowledgement are persisted with an owner id and per-request
     generation plus verifiable host, process, and process-start identity,
     allowing the owner to abort the HTTP response and a CLI or MCP sidecar to
-    wait across process boundaries. Restart and interrupt-time reconciliation
+    wait across process boundaries. Waiters correlate the exact turn and lease
+    generation and reread its acknowledgement after the provider unwind, so an
+    older turn's acknowledgement cannot satisfy a new interrupt. Restart and interrupt-time reconciliation
     close only exact leases whose same-host process incarnation is proven dead;
     a different owner id never proves death. Exact-incarnation fencing permits
     a new request on the same turn without a stale `finally` closing it. HTTP,
@@ -112,8 +114,11 @@ It started with names, visibility, legacy compatibility, and initial policy defa
     provider cancellation after the terminal transition before session cleanup
     can report `stopped`; their events and callbacks use the status returned by
     that transition and never report cancellation when completion won.
-    Concurrent HTTP and app interrupts atomically insert one cancellation event,
-    and only its writer invokes the source-app callback or reports success.
+    Concurrent HTTP and app interrupts atomically claim one durable cancellation
+    terminalization outbox. Its stable event id, event/history projection,
+    thread release, and at-least-once source-app callback are independently
+    retryable; only the first claimant reports success, while later callers and
+    backend recovery drain incomplete phases.
     Inter-agent root-turn recovery likewise publishes the status actually
     persisted by the transition. Prewarm applies the session-only form of that handshake. Session
     metadata callbacks and worker returns use partial,

@@ -25,6 +25,77 @@ from tests.support.repo import make_temp_repo_root
 
 
 class RuntimeInterruptRaceTestCase(unittest.TestCase):
+    def test_api_retry_repairs_cancelled_turn_without_terminal_event_or_callback(self) -> None:
+        repo_root = make_temp_repo_root(self)
+        runtime_store = _runtime_json_store(repo_root)
+        session = create_runtime_session(
+            runtime_store,
+            session_id="api-crashed-terminalization",
+            workspace_id="default",
+            agent_id="chat",
+            source_app_id="chat",
+            start_path=repo_root,
+        )
+        now = datetime(2026, 8, 10, 9, 0, tzinfo=UTC)
+        runtime_store.save_turn(
+            RuntimeTurnRecord(
+                turn_id="api-crashed-terminalization-turn",
+                session_id=session.session_id,
+                workspace_id="default",
+                status="active",
+                input_text="cancel before crash",
+                created_at=now,
+                updated_at=now,
+                started_at=now,
+                completed_at=None,
+                failure_reason=None,
+            )
+        )
+        request_runtime_turn_cancellation(
+            runtime_store,
+            turn_id="api-crashed-terminalization-turn",
+            reason="Interrupted by user.",
+            now=now,
+        )
+        transition_runtime_turn(
+            runtime_store,
+            turn_id="api-crashed-terminalization-turn",
+            target_status="cancelled",
+            failure_reason="Interrupted by user.",
+            now=now,
+        )
+        state = SimpleNamespace(
+            runtime_store=runtime_store,
+            runtime_event_bus=None,
+            workspace_store=object(),
+        )
+
+        with (
+            patch.object(runtime_api, "require_runtime_session_operation"),
+            patch.object(runtime_api, "_resolved_provider_id", return_value="codex"),
+            patch.object(runtime_api, "interrupt_runtime_provider_turn", return_value=False),
+            patch.object(runtime_api, "release_idle_runtime_processes"),
+            patch.object(runtime_api, "dispatch_source_app_runtime_event") as dispatch,
+        ):
+            response = runtime_api._handle_turn_interrupt(
+                state,
+                SimpleNamespace(workspace_id="default", user=SimpleNamespace()),
+                "api-crashed-terminalization-turn",
+                lambda _status, _headers: None,
+                start_path=repo_root,
+            )
+
+        payload = json.loads(b"".join(response).decode("utf-8"))
+        cancelled_events = [
+            event
+            for event in runtime_store.list_events(session.session_id)
+            if event.event_type == "runtime.turn.cancelled"
+        ]
+        self.assertTrue(payload["interrupted"])
+        self.assertEqual(len(cancelled_events), 1)
+        dispatch.assert_called_once()
+        self.assertEqual(dispatch.call_args.kwargs["runtime_event_id"], cancelled_events[0].event_id)
+
     def test_api_reports_not_interrupted_when_completion_wins_before_cancel_intent(self) -> None:
         runtime_store = RuntimeDocumentStore(
             RuntimeCollections(
@@ -79,7 +150,6 @@ class RuntimeInterruptRaceTestCase(unittest.TestCase):
             patch.object(runtime_api, "request_runtime_turn_cancellation", side_effect=completion_wins),
             patch.object(runtime_api, "_resolved_provider_id", return_value="codex"),
             patch.object(runtime_api, "interrupt_runtime_provider_turn") as interrupt_provider,
-            patch.object(runtime_api, "set_thread_availability"),
             patch.object(runtime_api, "release_idle_runtime_processes"),
             patch.object(runtime_api, "dispatch_source_app_runtime_event") as dispatch,
         ):
@@ -161,7 +231,6 @@ class RuntimeInterruptRaceTestCase(unittest.TestCase):
             patch.object(runtime_api, "request_runtime_turn_cancellation", side_effect=synchronized_request),
             patch.object(runtime_api, "_resolved_provider_id", return_value="codex"),
             patch.object(runtime_api, "interrupt_runtime_provider_turn", return_value=False),
-            patch.object(runtime_api, "set_thread_availability"),
             patch.object(runtime_api, "release_idle_runtime_processes"),
             patch.object(runtime_api, "dispatch_source_app_runtime_event") as dispatch,
         ):
@@ -185,6 +254,7 @@ class RuntimeInterruptRaceTestCase(unittest.TestCase):
             [cancelled_events[0].event_id],
         )
         dispatch.assert_called_once()
+        self.assertEqual(dispatch.call_args.kwargs["runtime_event_id"], cancelled_events[0].event_id)
 
 
 def _runtime_json_store(repo_root) -> RuntimeDocumentStore:

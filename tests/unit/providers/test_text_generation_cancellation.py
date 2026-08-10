@@ -70,18 +70,18 @@ class HostedTextCancellationTest(unittest.TestCase):
                 turn_id=turn.turn_id,
                 reason="cross-process interrupt",
             )
-            self.assertTrue(provider_stopped.wait(timeout=2))
-            owner.join(timeout=2)
-            self.assertFalse(owner.is_alive())
 
             interrupted = interrupt_plain_hosted_requests(
                 session.session_id,
+                turn_id=turn.turn_id,
                 store=store,
                 wait_for_termination=True,
             )
 
             self.assertTrue(interrupted)
             self.assertTrue(provider_stopped.is_set())
+            owner.join(timeout=2)
+            self.assertFalse(owner.is_alive())
             persisted = store.get_turn(turn.turn_id)
             self.assertIsNotNone(persisted.provider_request_finished_at)
             self.assertIsNotNone(persisted.provider_request_cancellation_acknowledged_at)
@@ -91,6 +91,50 @@ class HostedTextCancellationTest(unittest.TestCase):
                 owner.terminate()
                 owner.join(timeout=2)
         self.assertEqual(owner.exitcode, 0)
+
+    def test_old_ack_from_another_turn_does_not_report_new_turn_interrupted(self) -> None:
+        repo_root = make_temp_repo_root(self)
+        store = _runtime_store(repo_root)
+        session = create_runtime_session(
+            store,
+            session_id="hosted-ack-correlation-session",
+            workspace_id="default",
+            agent_id="chat",
+            runtime_mode="plain_hosted_chat",
+            start_path=repo_root,
+        )
+        first = queue_runtime_turn(
+            store,
+            turn_id="hosted-ack-old-turn",
+            session_id=session.session_id,
+            input_text="old provider request",
+        )
+        transition_runtime_turn(store, turn_id=first.turn_id, target_status="active")
+        with plain_hosted_request_cancellation(
+            session_id=session.session_id,
+            turn_id=first.turn_id,
+            store=store,
+        ) as cancellation:
+            request_runtime_turn_cancellation(store, turn_id=first.turn_id, reason="cancel old turn")
+            self.assertTrue(cancellation.wait_cancelled(timeout=1))
+        transition_runtime_turn(store, turn_id=first.turn_id, target_status="cancelled")
+        second = queue_runtime_turn(
+            store,
+            turn_id="hosted-ack-new-turn",
+            session_id=session.session_id,
+            input_text="no provider request",
+        )
+        transition_runtime_turn(store, turn_id=second.turn_id, target_status="active")
+        request_runtime_turn_cancellation(store, turn_id=second.turn_id, reason="cancel new turn")
+
+        interrupted = interrupt_plain_hosted_requests(
+            session.session_id,
+            turn_id=second.turn_id,
+            store=store,
+            wait_for_termination=True,
+        )
+
+        self.assertFalse(interrupted)
 
     def test_reconciliation_preserves_live_remote_owner_and_closes_it_after_crash(self) -> None:
         repo_root = make_temp_repo_root(self)

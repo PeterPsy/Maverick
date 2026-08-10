@@ -54,6 +54,7 @@ from core.runtime.turn_submission import (
     submit_runtime_turn,
     submit_runtime_turn_async,
 )
+from core.runtime.turn_terminalization import terminalize_runtime_turn_cancellation
 
 
 DEFAULT_SUMMARY_EVENT_LIMIT = 1000
@@ -2046,34 +2047,35 @@ def _interrupt_runtime_session(state: Any, *, session_id: str, reason: str) -> d
             turn_id=turn.turn_id,
             reason=reason,
         )
-    provider_interrupted = interrupt_runtime_provider_turn(state, session)
+    provider_interrupted = False
+    for turn in cancellable_turns:
+        provider_interrupted = (
+            interrupt_runtime_provider_turn(state, session, turn_id=turn.turn_id)
+            or provider_interrupted
+        )
     cancelled_turns = 0
     for turn in cancellable_turns:
-        cancelled = transition_runtime_turn(
+        terminalization = terminalize_runtime_turn_cancellation(
             state.runtime_store,
             turn_id=turn.turn_id,
-            target_status="cancelled",
-            failure_reason=reason,
+            reason=reason,
+            event_payload={"reason": reason},
+            event_bus=getattr(state, "runtime_event_bus", None),
+            request_intent=False,
         )
-        if cancelled.status == "cancelled":
-            record_runtime_event(
-                state.runtime_store,
-                event_id=str(uuid.uuid4()),
-                session_id=session.session_id,
-                turn_id=cancelled.turn_id,
-                plane="turn",
-                event_type="runtime.turn.cancelled",
-                payload={"reason": reason},
-                event_bus=getattr(state, "runtime_event_bus", None),
-            )
+        if terminalization.turn.status == "cancelled" and terminalization.claimed:
             cancelled_turns += 1
     refreshed_session = state.runtime_store.get_session(session.session_id)
-    provider_interrupted_after_handoff = interrupt_runtime_provider_turn(
-        state,
-        refreshed_session,
-        wait_for_termination=True,
-    )
-    provider_interrupted = provider_interrupted_after_handoff or provider_interrupted
+    for turn in cancellable_turns:
+        provider_interrupted = (
+            interrupt_runtime_provider_turn(
+                state,
+                refreshed_session,
+                turn_id=turn.turn_id,
+                wait_for_termination=True,
+            )
+            or provider_interrupted
+        )
     release_idle_runtime_processes(
         state,
         session_id=session.session_id,

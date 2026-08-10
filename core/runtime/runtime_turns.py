@@ -39,3 +39,10 @@ class RuntimeTurnRecord:
     provider_request_owner_pid: int | None = None
     provider_request_owner_process_start: str | None = None
     provider_request_cancellation_acknowledged_at: datetime | None = None
+    terminalization_event_id: str | None = None
+    terminalization_event_type: str | None = None
+    terminalization_event_payload: dict[str, object] | None = None
+    terminalization_claimed_at: datetime | None = None
+    terminalization_event_persisted_at: datetime | None = None
+    terminalization_thread_released_at: datetime | None = None
+    terminalization_callback_delivered_at: datetime | None = None

@@ -124,6 +124,7 @@ class ChatProjectDeleteTests(unittest.TestCase):
             runtime_session_id="missing-session",
             title="Orphaned chat",
             project_id=deleted_project_id,
+            source_app_id="chat",
         )
 
         status, body, _headers = self.invoke(

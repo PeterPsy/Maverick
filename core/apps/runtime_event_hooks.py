@@ -9,7 +9,7 @@ from uuid import uuid4
 
 from core.api.app_event_publication import declared_data_event_resources, publish_declared_app_events
 from core.apps.dependencies import resolve_app_dependencies
-from core.apps.errors import AppSourceNotFoundError, WorkspaceAppBindingNotFoundError, WorkspaceLocalAppProjectNotFoundError
+from core.apps.errors import AppHostingError
 from core.apps.surfaces import enabled_workspace_app_bindings, resolve_workspace_app_surface
 from core.runtime.service import record_runtime_event
 from core.shared.entrypoints import run_json_entrypoint
@@ -72,7 +72,7 @@ def dispatch_source_app_runtime_event(
         if binding.status != "enabled":
             return None
         source_root, parsed = resolve_workspace_app_surface(state.app_store, binding=binding, start_path=start_path)
-    except (AppSourceNotFoundError, WorkspaceAppBindingNotFoundError, WorkspaceLocalAppProjectNotFoundError):
+    except AppHostingError:
         return None
     hook_path = parsed.contract.entrypoints.hooks.get("runtime_event")
     if not hook_path:
@@ -183,57 +183,92 @@ def dispatch_workspace_app_background_hooks(
         if binding.status != "enabled":
             continue
         try:
-            source_root, parsed = resolve_workspace_app_surface(state.app_store, binding=binding, start_path=start_path)
-        except (AppSourceNotFoundError, WorkspaceAppBindingNotFoundError, WorkspaceLocalAppProjectNotFoundError):
-            continue
-        hook_path = parsed.contract.entrypoints.hooks.get(hook_name)
-        if not hook_path:
-            continue
-        paths = workspace_paths(workspace_id, start_path=start_path)
-        payload = {
-            "surface": hook_name,
-            "workspace_id": workspace_id,
-            "app_id": binding.app_id,
-            "workspace_root": str(paths.root),
-            "data_root": binding.data_root,
-            "uploaded_storage_root": str(paths.uploaded_storage),
-            "generated_storage_root": str(paths.generated_storage),
-            "runtime_session_id": "",
-            "turn_id": "",
-            "app_dependencies": _app_dependencies_payload(
-                state,
-                workspace_id=workspace_id,
-                app_id=binding.app_id,
+            source_root, parsed = resolve_workspace_app_surface(
+                state.app_store,
+                binding=binding,
                 start_path=start_path,
-            ),
-            "body": {"action": action, **(body or {})},
-        }
-        try:
-            result = run_json_entrypoint(source_root / hook_path, payload=payload, cwd=source_root, timeout_seconds=30)
+            )
+        except AppHostingError:
+            continue
         except Exception as error:
             results.append({"app_id": binding.app_id, "status": "failed", "detail": str(error)})
             continue
-        publish_declared_app_events(
-            state.app_event_bus,
-            result,
-            workspace_id=workspace_id,
-            app_id=binding.app_id,
-            declared_resources=declared_data_event_resources(parsed.contract.capabilities.data_events),
-            remove_from_result=True,
-        )
-        _apply_runtime_requests(
-            state,
-            result=result,
-            workspace_id=workspace_id,
-            app_id=binding.app_id,
-            source_root=source_root,
-            backend_entrypoint=parsed.contract.entrypoints.backend,
-            data_root=binding.data_root,
-            parsed=parsed,
-            start_path=start_path,
-        )
+        try:
+            result = _dispatch_workspace_app_background_hook(
+                state,
+                binding=binding,
+                source_root=source_root,
+                parsed=parsed,
+                workspace_id=workspace_id,
+                hook_name=hook_name,
+                action=action,
+                body=body,
+                start_path=start_path,
+            )
+        except Exception as error:
+            results.append({"app_id": binding.app_id, "status": "failed", "detail": str(error)})
+            continue
+        if result is None:
+            continue
         results.append({"app_id": binding.app_id, "status": "completed", "result": result})
     return results
+
+
+def _dispatch_workspace_app_background_hook(
+    state: "PlatformState",
+    *,
+    binding,
+    source_root: Path,
+    parsed,
+    workspace_id: str,
+    hook_name: str,
+    action: str,
+    body: dict[str, Any] | None,
+    start_path: Path | None,
+) -> dict[str, Any] | None:
+    hook_path = parsed.contract.entrypoints.hooks.get(hook_name)
+    if not hook_path:
+        return None
+    paths = workspace_paths(workspace_id, start_path=start_path)
+    payload = {
+        "surface": hook_name,
+        "workspace_id": workspace_id,
+        "app_id": binding.app_id,
+        "workspace_root": str(paths.root),
+        "data_root": binding.data_root,
+        "uploaded_storage_root": str(paths.uploaded_storage),
+        "generated_storage_root": str(paths.generated_storage),
+        "runtime_session_id": "",
+        "turn_id": "",
+        "app_dependencies": _app_dependencies_payload(
+            state,
+            workspace_id=workspace_id,
+            app_id=binding.app_id,
+            start_path=start_path,
+        ),
+        "body": {"action": action, **(body or {})},
+    }
+    result = run_json_entrypoint(source_root / hook_path, payload=payload, cwd=source_root, timeout_seconds=30)
+    publish_declared_app_events(
+        state.app_event_bus,
+        result,
+        workspace_id=workspace_id,
+        app_id=binding.app_id,
+        declared_resources=declared_data_event_resources(parsed.contract.capabilities.data_events),
+        remove_from_result=True,
+    )
+    _apply_runtime_requests(
+        state,
+        result=result,
+        workspace_id=workspace_id,
+        app_id=binding.app_id,
+        source_root=source_root,
+        backend_entrypoint=parsed.contract.entrypoints.backend,
+        data_root=binding.data_root,
+        parsed=parsed,
+        start_path=start_path,
+    )
+    return result
 
 
 def _app_dependencies_payload(

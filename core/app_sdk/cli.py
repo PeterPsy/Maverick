@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import logging
 import os
 from pathlib import Path
 import sys
@@ -24,6 +25,7 @@ from core.app_sdk.cli_surfaces import (
     _workspace_id,
     _wants_help,
 )
+from core.apps.errors import AppHostingError
 from core.apps.surfaces import enabled_workspace_app_bindings, resolve_workspace_app_surface
 from core.apps.presentation import app_frontend_is_launchable
 from core.authorization.service import can_mount_app_visibility
@@ -33,6 +35,7 @@ from core.cli.service import run_core_cli_command
 
 
 SDK_DOMAIN_ACTIONS = {"templates", "docs"}
+logger = logging.getLogger(__name__)
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -185,11 +188,21 @@ def _run_apps(tokens: list[str], *, state, trusted_context: CliInvocationContext
     context = _cli_context(options, workspace_id, trusted_context=trusted_context)
     apps = []
     for binding in enabled_workspace_app_bindings(state.app_store, workspace_id=workspace_id):
-        _source_root, parsed = resolve_workspace_app_surface(
-            state.app_store,
-            binding=binding,
-            start_path=state.repository_root,
-        )
+        try:
+            _source_root, parsed = resolve_workspace_app_surface(
+                state.app_store,
+                binding=binding,
+                start_path=state.repository_root,
+            )
+        except AppHostingError:
+            continue
+        except Exception:
+            logger.exception(
+                "Skipping app `%s` while listing workspace `%s` apps.",
+                binding.app_id,
+                workspace_id,
+            )
+            continue
         if not can_mount_app_visibility(
             state.workspace_store,
             user=None,

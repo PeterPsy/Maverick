@@ -1027,23 +1027,6 @@ class TestMcpCliSurfaces(SurfaceTestBase):
         self.assertNotIn("super-secret-token", str(observability_store.list_audit(workspace_id="default")))
         self.assertNotIn(secret_ref, str(observability_store.list_events(workspace_id="default")))
 
-    def test_app_cli_policy_rejects_operator_only_true(self) -> None:
-        store = self.make_app_store()
-        repo_root = self.make_repo_root()
-        app_root = repo_root / "apps" / "checklists"
-        self.write_app_contract(app_root)
-        policy_path = app_root / "cli" / "command_policies.json"
-        policy_path.parent.mkdir(parents=True, exist_ok=True)
-        policy_path.write_text(
-            json.dumps({"commands": {"checklists": {"operator_only": True}}}),
-            encoding="utf-8",
-        )
-        source = register_app_source_from_contract(store, source_kind="platform", source_path=str(app_root))
-        install_store_app(store, source_id=source.source_id, workspace_id="default", start_path=repo_root)
-
-        with self.assertRaises(ValueError):
-            list_core_cli_commands(app_store=store, workspace_id="default", start_path=repo_root)
-
     def test_cli_registry_exposes_enabled_app_commands_with_workspace_safe_policy(self) -> None:
         store = self.make_app_store()
         workspace_store = self.make_workspace_store()

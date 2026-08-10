@@ -7,7 +7,7 @@ import json
 import subprocess
 from typing import Any
 
-from core.apps.errors import AppLifecycleError
+from core.apps.errors import AppHostingError, AppLifecycleError
 from core.apps.models import WorkspaceAppBindingRecord
 from core.apps.store import AppStore
 from core.apps.surfaces import resolve_workspace_app_surface
@@ -60,7 +60,7 @@ def app_supports_frontend_build(store: AppStore, *, binding: WorkspaceAppBinding
     """Return whether a workspace app binding exposes the official frontend build operation."""
     try:
         source_root, parsed = resolve_workspace_app_surface(store, binding=binding, start_path=start_path)
-    except AppLifecycleError:
+    except AppHostingError:
         return False
     if parsed.contract.entrypoints.frontend is None:
         return False

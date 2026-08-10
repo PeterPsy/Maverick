@@ -2,9 +2,12 @@
 
 from __future__ import annotations
 
+import logging
 from pathlib import Path
 from typing import Any
 
+from core.apps.errors import AppHostingError
+from core.apps.surfaces import enabled_workspace_app_bindings
 from core.apps.store import AppStore
 from core.cli.errors import CliCommandNotFoundError, CliInvocationNotAllowedError
 from core.cli.app_commands import _workspace_app_command_specs
@@ -22,6 +25,10 @@ from core.recovery.store import RecoveryStore
 from core.runtime.store import RuntimeStore
 from core.secrets.store import SecretStore
 from core.workspaces.store import WorkspaceStore
+
+
+logger = logging.getLogger(__name__)
+
 
 def build_core_cli_registry(
     *,
@@ -64,19 +71,32 @@ def build_core_cli_registry(
     ):
         registry.register_command(definition, handler)
     if app_store is not None and workspace_id is not None:
-        for definition, handler in _workspace_app_command_specs(
-            app_store,
-            workspace_id=workspace_id,
-            workspace_store=workspace_store,
-            provider_store=provider_store,
-            runtime_store=runtime_store,
-            context=context,
-            secret_store=secret_store,
-            observability_store=observability_store,
-            app_event_bus=app_event_bus,
-            start_path=start_path,
-        ):
-            registry.register_command(definition, handler)
+        for binding in enabled_workspace_app_bindings(app_store, workspace_id=workspace_id):
+            try:
+                app_specs = _workspace_app_command_specs(
+                    app_store,
+                    workspace_id=workspace_id,
+                    bindings=[binding],
+                    workspace_store=workspace_store,
+                    provider_store=provider_store,
+                    runtime_store=runtime_store,
+                    context=context,
+                    secret_store=secret_store,
+                    observability_store=observability_store,
+                    app_event_bus=app_event_bus,
+                    start_path=start_path,
+                )
+            except AppHostingError:
+                continue
+            except Exception:
+                logger.exception(
+                    "Skipping app `%s` while building the CLI registry for workspace `%s`.",
+                    binding.app_id,
+                    workspace_id,
+                )
+                continue
+            for definition, handler in app_specs:
+                registry.register_command(definition, handler)
         for definition, handler in app_lifecycle_command_specs(
             app_store=app_store,
             identity_store=identity_store,

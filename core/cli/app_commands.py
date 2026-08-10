@@ -10,6 +10,7 @@ from typing import Any
 from core.api.app_event_publication import declared_data_event_resources, publish_declared_app_events
 from core.api.sidecar_entrypoint_invocation import run_json_entrypoint_with_sidecars
 from core.apps.dependencies import resolve_app_dependencies
+from core.apps.models import WorkspaceAppBindingRecord
 from core.apps.runtime_requests import apply_app_runtime_requests
 from core.apps.surfaces import enabled_workspace_app_bindings, resolve_workspace_app_surface
 from core.apps.store import AppStore
@@ -114,6 +115,7 @@ def _workspace_app_command_specs(
     store: AppStore,
     *,
     workspace_id: str,
+    bindings: list[WorkspaceAppBindingRecord] | None = None,
     workspace_store=None,
     provider_store=None,
     runtime_store=None,
@@ -124,7 +126,10 @@ def _workspace_app_command_specs(
     start_path: Path | None = None,
 ) -> list[tuple[CliCommandDefinition, Any]]:
     specs: list[tuple[CliCommandDefinition, Any]] = []
-    for binding in enabled_workspace_app_bindings(store, workspace_id=workspace_id):
+    resolved_bindings = bindings
+    if resolved_bindings is None:
+        resolved_bindings = enabled_workspace_app_bindings(store, workspace_id=workspace_id)
+    for binding in resolved_bindings:
         source_root, parsed = resolve_workspace_app_surface(store, binding=binding, start_path=start_path)
         if workspace_store is not None and context is not None and not can_mount_app_visibility(
             workspace_store,

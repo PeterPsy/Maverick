@@ -8,7 +8,7 @@ import sys
 from core.app_sdk.runtime import emit_json, read_entrypoint_payload
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "backend"))
-from service import handle_foundation_action
+from project_actions import app_events_for_result, handle_action
 
 
 def main() -> None:
@@ -21,10 +21,7 @@ def main() -> None:
             "error": {"code": "unsupported_command", "message": "Unsupported Video Studio command."},
         }
     else:
-        status_code, result = handle_foundation_action(
-            payload.data_root,
-            str(payload.arguments.get("action") or "status"),
-        )
+        status_code, result = handle_action(payload.data_root, payload.workspace_id, payload.arguments)
     result.update({
         "app_id": "video-studio",
         "workspace_id": payload.workspace_id,
@@ -32,6 +29,10 @@ def main() -> None:
         "status_code": status_code,
         "surface": "cli",
     })
+    if status_code < 400:
+        result["app_events"] = app_events_for_result(
+            str(payload.arguments.get("action") or "status").strip().lower(), result
+        )
     emit_json(result)
 
 

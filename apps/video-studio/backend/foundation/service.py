@@ -9,7 +9,7 @@ from .database import FoundationDatabase, FoundationDatabaseError, LATEST_SCHEMA
 
 
 APP_ID = "video-studio"
-APP_VERSION = "0.1.0"
+APP_VERSION = "0.2.0"
 FOUNDATION_ACTIONS = ("status", "schema", "health", "capabilities")
 
 
@@ -53,14 +53,34 @@ def foundation_manifest() -> dict[str, Any]:
     """Describe concrete checkpoint surfaces, not future editing capabilities."""
     return {
         "app_id": APP_ID,
-        "foundation_version": "1",
+        "foundation_version": "2",
         "storage": {"kind": "sqlite", "schema_version": LATEST_SCHEMA_VERSION},
-        "actions": list(FOUNDATION_ACTIONS),
+        "actions": [
+            *FOUNDATION_ACTIONS,
+            "project.create", "project.list", "project.get", "project.rename",
+            "project.duplicate", "project.archive", "project.restore",
+            "revision.get", "revision.compare", "native.export", "native.import",
+            "operations.apply", "history.undo", "history.redo",
+        ],
         "surfaces": {
             "backend": list(FOUNDATION_ACTIONS),
             "cli": ["video-studio"],
-            "mcp": ["video_studio_foundation", "video_studio_reference_manifest"],
+            "mcp": [
+                "video_studio_foundation", "video_studio_reference_manifest",
+                "video_studio_project_create", "video_studio_project_list",
+                "video_studio_project_get", "video_studio_project_rename",
+                "video_studio_project_duplicate", "video_studio_project_archive",
+                "video_studio_project_restore", "video_studio_revision_get",
+                "video_studio_revision_compare", "video_studio_native_export",
+                "video_studio_native_import", "video_studio_operations_apply",
+                "video_studio_undo", "video_studio_redo",
+            ],
             "lifecycle": ["install", "migrate", "health_check"],
         },
-        "domain_capabilities": [],
+        "domain_capabilities": [
+            "project-ir.v1",
+            "revision-engine.v1",
+            "typed-editing.v1",
+            "native-interchange.v1",
+        ],
     }

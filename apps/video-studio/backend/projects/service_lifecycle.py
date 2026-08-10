@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from project_ir import ProjectIR
+from project_ir import IRValidationError, ProjectIR
 from project_ir.canonical import content_digest
 
 from .errors import ProjectError
@@ -27,16 +27,23 @@ class ProjectLifecycleMixin:
         if not isinstance(description, str) or len(description) > 4000:
             raise ProjectError("project_description_invalid", "Project description is invalid.")
         active_actor = _actor(actor)
-        ir = (
-            ProjectIR.empty(project_id=target_id, workspace_id=self.workspace_id, name=clean_name)
-            if project_ir is None
-            else validated_document(
-                project_ir,
-                workspace_id=self.workspace_id,
-                project_id=target_id,
-                name=clean_name,
+        try:
+            ir = (
+                ProjectIR.empty(project_id=target_id, workspace_id=self.workspace_id, name=clean_name)
+                if project_ir is None
+                else validated_document(
+                    project_ir,
+                    workspace_id=self.workspace_id,
+                    project_id=target_id,
+                    name=clean_name,
+                )
             )
-        )
+        except IRValidationError as error:
+            raise ProjectError(
+                "project_ir_invalid",
+                "Project IR validation failed.",
+                details={"issues": [item.to_dict() for item in error.issues]},
+            ) from error
         document = ir.to_dict()
         revision_id, digest = revision_identity(document)
         timestamp = self.clock()

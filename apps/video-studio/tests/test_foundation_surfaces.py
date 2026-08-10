@@ -116,7 +116,7 @@ class FoundationSurfacesTest(unittest.TestCase):
             combined = json.dumps([backend, cli, mcp])
             self.assertNotIn(data_root, combined)
 
-    def test_capability_manifest_does_not_claim_video_domain_features(self) -> None:
+    def test_capability_manifest_declares_project_revision_features(self) -> None:
         with TemporaryDirectory() as temp_dir:
             data_root = str(Path(temp_dir) / "data")
             base = {
@@ -141,10 +141,18 @@ class FoundationSurfacesTest(unittest.TestCase):
                     "arguments": {},
                 },
             )
-            self.assertEqual(cli["domain_capabilities"], [])
+            self.assertEqual(
+                cli["domain_capabilities"],
+                ["project-ir.v1", "revision-engine.v1", "typed-editing.v1", "native-interchange.v1"],
+            )
             self.assertEqual(
                 cli["actions"],
-                ["status", "schema", "health", "capabilities"],
+                [
+                    "status", "schema", "health", "capabilities", "project.create",
+                    "project.list", "project.get", "project.rename", "project.duplicate",
+                    "project.archive", "project.restore", "revision.get", "revision.compare",
+                    "native.export", "native.import", "operations.apply", "history.undo", "history.redo",
+                ],
             )
             self.assertEqual(reference_manifest["entity_types"], [])
 

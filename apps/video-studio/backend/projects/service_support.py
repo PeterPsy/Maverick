@@ -8,7 +8,7 @@ from typing import Any, Callable
 from uuid import uuid4
 
 from project_ir import IRValidationError, ProjectIR
-from project_ir.canonical import canonical_copy, content_digest
+from project_ir.canonical import CanonicalizationError, canonical_copy, content_digest
 
 from .errors import ProjectError
 
@@ -45,14 +45,14 @@ def validated_document(
     project_id: str | None = None,
     name: str | None = None,
 ) -> ProjectIR:
-    document = canonical_copy(value)
-    if project_id is not None:
-        document["metadata"]["project_id"] = project_id
-    if name is not None:
-        document["metadata"]["name"] = name
     try:
+        document = canonical_copy(value)
+        if project_id is not None:
+            document["metadata"]["project_id"] = project_id
+        if name is not None:
+            document["metadata"]["name"] = name
         return ProjectIR.parse(document, workspace_id=workspace_id)
-    except (IRValidationError, KeyError, TypeError) as error:
+    except (CanonicalizationError, IRValidationError, KeyError, TypeError) as error:
         details = {}
         if isinstance(error, IRValidationError):
             details = {"issues": [item.to_dict() for item in error.issues]}

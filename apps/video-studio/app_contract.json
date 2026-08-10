@@ -2,7 +2,7 @@
   "app_id": "video-studio",
   "contract_version": "1.0",
   "name": "Video Studio",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Server-first, revisioned video editing foundation for Maverick workspaces.",
   "publisher": "maverick",
   "minimum_core_version": "0.1.0",
@@ -94,7 +94,21 @@
   "capabilities": {
     "mcp_tools": [
       "video_studio_foundation",
-      "video_studio_reference_manifest"
+      "video_studio_reference_manifest",
+      "video_studio_project_create",
+      "video_studio_project_list",
+      "video_studio_project_get",
+      "video_studio_project_rename",
+      "video_studio_project_duplicate",
+      "video_studio_project_archive",
+      "video_studio_project_restore",
+      "video_studio_revision_get",
+      "video_studio_revision_compare",
+      "video_studio_native_export",
+      "video_studio_native_import",
+      "video_studio_operations_apply",
+      "video_studio_undo",
+      "video_studio_redo"
     ],
     "cli_commands": [
       "video-studio"
@@ -105,7 +119,20 @@
     "views": [
       "main"
     ],
-    "data_events": [],
+    "data_events": [
+      {
+        "resource": "projects",
+        "description": "Emitted when a project is created, duplicated, imported, archived, or restored."
+      },
+      {
+        "resource": "project-metadata",
+        "description": "Emitted when revisioned project metadata changes."
+      },
+      {
+        "resource": "revisions",
+        "description": "Emitted when an immutable revision is created or the persistent main head changes."
+      }
+    ],
     "view_surfaces": [],
     "reference_entities": []
   },

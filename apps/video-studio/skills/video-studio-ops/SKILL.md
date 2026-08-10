@@ -5,16 +5,36 @@ description: Use the `video-studio` Maverick app through its declared CLI and MC
 
 # Video Studio Operations
 
-Use the app's official CLI or MCP surfaces. Do not read or write another app's
-private data and never construct a host path for Video Studio media.
+Use only the app's official CLI or MCP surfaces. Never read another app's
+private data, fabricate a host path, put a remote URL into Project IR, or invoke
+render/ingest behavior that this version does not implement.
 
-This foundation checkpoint exposes the `video_studio_foundation` MCP tool and
-the `video-studio` CLI command. Both accept an optional `action` of `status`,
-`schema`, `health`, or `capabilities`. The MCP surface also exposes the common
-`video_studio_reference_manifest`, which correctly reports no reference entity
-types until those domain records are implemented.
+Start with the CLI `video-studio` action `capabilities` or the
+`video_studio_foundation` MCP tool. The implemented domain capability IDs are
+`project-ir.v1`, `revision-engine.v1`, `typed-editing.v1`, and
+`native-interchange.v1`.
 
-Use `capabilities` before assuming that an editing, media-analysis, proposal,
-or rendering surface exists. An empty `domain_capabilities` list means those
-later product slices are not yet available; do not present scaffold behavior
-as completed video editing.
+The CLI command accepts the declared actions in `cli/command_schemas.json`.
+MCP exposes explicit tools for project create/list/get/rename/duplicate,
+archive/restore, revision get/compare, native export/import, typed operation
+batch apply, undo, and redo. Discover their exact schemas from
+`mcp/tool_schemas.json`; do not invent arguments.
+
+For every edit, first read the project and use its current `head_revision_id`
+as `base_revision_id`. Generate one stable `operation_batch_id`, include the
+trusted workspace, actor, preconditions, ordered typed operations, and autosave
+metadata, then retain the same complete request for retries. A stale head is a
+real concurrency conflict: read the new revision and ask the user how to
+reconcile; never silently rewrite the base.
+
+Treat native export as a validated JSON domain envelope, not a rendered media
+file or app backup. Import is workspace-confined and digest-checked. Use Storage
+surfaces separately if a user explicitly needs a user-facing saved document.
+
+Undo/redo are persistent revision-head moves and also require typed batch
+envelopes. They survive app process restart. Archived projects are read-only
+until restored.
+
+Do not claim ingest, transcoding, media search, rendering, FFmpeg execution,
+Remotion preview, agent proposals, or frontend editing. Those capabilities are
+outside this app version.

@@ -32,12 +32,14 @@ def compare_values(before: Any, after: Any, path: str = "") -> list[dict[str, An
             else:
                 changes.extend(compare_values(before[index], after[index], child_path))
         return changes
-    return {
-        "change": "replaced",
-        "path": path or "",
-        "before": canonical_copy(before),
-        "after": canonical_copy(after),
-    },
+    return [
+        {
+            "change": "replaced",
+            "path": path or "",
+            "before": canonical_copy(before),
+            "after": canonical_copy(after),
+        }
+    ]
 
 
 def _escape(value: str) -> str:

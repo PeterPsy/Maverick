@@ -27,17 +27,19 @@ class VideoStudioContractTest(unittest.TestCase):
         self.assertFalse(parsed.contract.storage.supports_export)
         self.assertFalse(parsed.contract.storage.supports_import)
 
-    def test_contract_declares_only_implemented_foundation_surfaces(self) -> None:
+    def test_contract_declares_implemented_project_revision_surfaces(self) -> None:
         parsed = parse_app_contract_file(APP_ROOT)
         contract = parsed.contract
 
         self.assertEqual(contract.capabilities.cli_commands, ["video-studio"])
-        self.assertEqual(
-            contract.capabilities.mcp_tools,
-            ["video_studio_foundation", "video_studio_reference_manifest"],
-        )
+        self.assertEqual(len(contract.capabilities.mcp_tools), 16)
+        self.assertIn("video_studio_operations_apply", contract.capabilities.mcp_tools)
+        self.assertIn("video_studio_native_import", contract.capabilities.mcp_tools)
         self.assertEqual(contract.capabilities.skills, ["video-studio-ops"])
-        self.assertEqual(contract.capabilities.data_events, [])
+        self.assertEqual(
+            {event.resource for event in contract.capabilities.data_events},
+            {"projects", "project-metadata", "revisions"},
+        )
         self.assertEqual(contract.capabilities.reference_entities, [])
         self.assertEqual(contract.capabilities.view_surfaces, [])
         self.assertEqual(
@@ -98,19 +100,23 @@ class VideoStudioContractTest(unittest.TestCase):
         mcp = json.loads((APP_ROOT / "mcp" / "tool_schemas.json").read_text(encoding="utf-8"))
 
         self.assertEqual(set(cli["commands"]), {"video-studio"})
-        self.assertEqual(
-            set(mcp["tools"]),
-            {"video_studio_foundation", "video_studio_reference_manifest"},
-        )
-        expected_actions = {"status", "schema", "health", "capabilities"}
+        self.assertEqual(set(mcp["tools"]), set(parse_app_contract_file(APP_ROOT).contract.capabilities.mcp_tools))
+        expected_actions = {
+            "status", "schema", "health", "capabilities", "project.create",
+            "project.list", "project.get", "project.rename", "project.duplicate",
+            "project.archive", "project.restore", "revision.get", "revision.compare",
+            "native.export", "native.import", "operations.apply", "history.undo", "history.redo",
+        }
         self.assertEqual(
             set(cli["commands"]["video-studio"]["argument_schema"]["properties"]["action"]["enum"]),
             expected_actions,
         )
         self.assertEqual(
             set(mcp["tools"]["video_studio_foundation"]["input_schema"]["properties"]["action"]["enum"]),
-            expected_actions,
+            {"status", "schema", "health", "capabilities"},
         )
+        for tool in mcp["tools"].values():
+            self.assertEqual(tool["input_schema"].get("additionalProperties"), False)
 
     def test_docs_do_not_prescribe_workspace_local_installation(self) -> None:
         contract_text = (APP_ROOT / "app_contract.json").read_text(encoding="utf-8")

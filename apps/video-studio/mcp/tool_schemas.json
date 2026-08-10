@@ -1,45 +1,84 @@
 {
   "tools": {
     "video_studio_foundation": {
-      "description": "Inspect the installed Video Studio foundation without exposing workspace or host paths.",
-      "input_schema": {
-        "type": "object",
-        "properties": {
-          "action": {
-            "type": "string",
-            "enum": [
-              "status",
-              "schema",
-              "health",
-              "capabilities"
-            ],
-            "default": "status"
-          }
-        },
-        "additionalProperties": false
-      },
-      "output_schema": {
-        "type": "object"
-      }
+      "description": "Inspect the installed Video Studio foundation.",
+      "input_schema": {"type": "object", "properties": {"action": {"type": "string", "enum": ["status", "schema", "health", "capabilities"], "default": "status"}}, "additionalProperties": false},
+      "output_schema": {"type": "object"}
     },
     "video_studio_reference_manifest": {
-      "description": "Describe Video Studio reference entities implemented by the current checkpoint.",
-      "input_schema": {
-        "type": "object",
-        "properties": {},
-        "additionalProperties": false
-      },
-      "output_schema": {
-        "type": "object",
-        "properties": {
-          "entity_types": {
-            "type": "array"
-          }
-        },
-        "required": [
-          "entity_types"
-        ]
-      }
+      "description": "Describe implemented Video Studio reference entities.",
+      "input_schema": {"type": "object", "properties": {}, "additionalProperties": false},
+      "output_schema": {"type": "object", "properties": {"entity_types": {"type": "array"}}, "required": ["entity_types"]}
+    },
+    "video_studio_project_create": {
+      "description": "Create a validated Project IR project and its initial immutable revision.",
+      "input_schema": {"type": "object", "properties": {"name": {"type": "string"}, "project_id": {"type": "string"}, "description": {"type": "string"}, "actor": {"type": "object"}, "project_ir": {"type": "object"}}, "required": ["name"], "additionalProperties": false},
+      "output_schema": {"type": "object"}
+    },
+    "video_studio_project_list": {
+      "description": "List projects, excluding archived projects by default.",
+      "input_schema": {"type": "object", "properties": {"include_archived": {"type": "boolean", "default": false}}, "additionalProperties": false},
+      "output_schema": {"type": "object"}
+    },
+    "video_studio_project_get": {
+      "description": "Get a project and its current validated Project IR.",
+      "input_schema": {"type": "object", "properties": {"project_id": {"type": "string"}}, "required": ["project_id"], "additionalProperties": false},
+      "output_schema": {"type": "object"}
+    },
+    "video_studio_project_rename": {
+      "description": "Rename a project through an optimistic, idempotent revision batch.",
+      "input_schema": {"type": "object", "properties": {"project_id": {"type": "string"}, "name": {"type": "string"}, "base_revision_id": {"type": "string"}, "operation_batch_id": {"type": "string"}, "actor": {"type": "object"}}, "required": ["project_id", "name", "base_revision_id", "operation_batch_id", "actor"], "additionalProperties": false},
+      "output_schema": {"type": "object"}
+    },
+    "video_studio_project_duplicate": {
+      "description": "Duplicate a project into a new content-addressed revision history.",
+      "input_schema": {"type": "object", "properties": {"project_id": {"type": "string"}, "new_project_id": {"type": "string"}, "name": {"type": "string"}, "actor": {"type": "object"}}, "required": ["project_id", "name"], "additionalProperties": false},
+      "output_schema": {"type": "object"}
+    },
+    "video_studio_project_archive": {
+      "description": "Archive a project without deleting its immutable revisions.",
+      "input_schema": {"type": "object", "properties": {"project_id": {"type": "string"}}, "required": ["project_id"], "additionalProperties": false},
+      "output_schema": {"type": "object"}
+    },
+    "video_studio_project_restore": {
+      "description": "Restore an archived project.",
+      "input_schema": {"type": "object", "properties": {"project_id": {"type": "string"}}, "required": ["project_id"], "additionalProperties": false},
+      "output_schema": {"type": "object"}
+    },
+    "video_studio_revision_get": {
+      "description": "Get one immutable project revision by id.",
+      "input_schema": {"type": "object", "properties": {"project_id": {"type": "string"}, "revision_id": {"type": "string"}}, "required": ["project_id", "revision_id"], "additionalProperties": false},
+      "output_schema": {"type": "object"}
+    },
+    "video_studio_revision_compare": {
+      "description": "Return a deterministic structural diff between two revisions.",
+      "input_schema": {"type": "object", "properties": {"project_id": {"type": "string"}, "before_revision_id": {"type": "string"}, "after_revision_id": {"type": "string"}}, "required": ["project_id", "before_revision_id", "after_revision_id"], "additionalProperties": false},
+      "output_schema": {"type": "object"}
+    },
+    "video_studio_native_export": {
+      "description": "Export a validated native Project IR revision envelope.",
+      "input_schema": {"type": "object", "properties": {"project_id": {"type": "string"}, "revision_id": {"type": "string"}}, "required": ["project_id"], "additionalProperties": false},
+      "output_schema": {"type": "object"}
+    },
+    "video_studio_native_import": {
+      "description": "Validate and import a native Project IR revision envelope.",
+      "input_schema": {"type": "object", "properties": {"native_project": {"type": "object"}, "project_id": {"type": "string"}, "name": {"type": "string"}, "actor": {"type": "object"}}, "required": ["native_project"], "additionalProperties": false},
+      "output_schema": {"type": "object"}
+    },
+    "video_studio_operations_apply": {
+      "description": "Atomically apply an ordered typed operation batch to a base revision.",
+      "input_schema": {"type": "object", "properties": {"batch": {"type": "object"}}, "required": ["batch"], "additionalProperties": false},
+      "output_schema": {"type": "object"}
+    },
+    "video_studio_undo": {
+      "description": "Persistently move the main head to the previous immutable revision.",
+      "input_schema": {"type": "object", "properties": {"batch": {"type": "object"}}, "required": ["batch"], "additionalProperties": false},
+      "output_schema": {"type": "object"}
+    },
+    "video_studio_redo": {
+      "description": "Persistently restore the next immutable revision after undo.",
+      "input_schema": {"type": "object", "properties": {"batch": {"type": "object"}}, "required": ["batch"], "additionalProperties": false},
+      "output_schema": {"type": "object"}
     }
   }
 }

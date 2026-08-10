@@ -2,7 +2,7 @@
 
 /** Verify the deployed Design Studio through its real public HTTPS origin. */
 
-import { readFile } from 'node:fs/promises';
+import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -13,6 +13,7 @@ const platformOrigin = requiredOrigin(argument('--platform-origin'));
 const authSessionsFile = requiredArgument('--auth-sessions-file');
 const projectId = argument('--project-id');
 const storageInputPath = argument('--storage-input-path');
+const evidenceOutput = argument('--evidence-output');
 const platformHostname = new URL(platformOrigin).hostname;
 const sidecarSuffix = `.sidecars.${platformHostname}`;
 process.env.PLAYWRIGHT_BROWSERS_PATH ||= process.env.MAVERICK_PLAYWRIGHT_BROWSERS_PATH
@@ -155,7 +156,10 @@ try {
     };
   }
 
-  process.stdout.write(`${JSON.stringify({
+  const result = {
+    schema_version: '1',
+    gate: 'hosted-origin',
+    status: 'passed',
     ok: true,
     platform_origin: platformOrigin,
     sidecar_origin: origin,
@@ -168,7 +172,9 @@ try {
     bootstrap_cookie_secure: true,
     x_frame_options_absent: true,
     write_flow: writeFlow,
-  }, null, 2)}\n`);
+  };
+  if (evidenceOutput) await writeEvidence(evidenceOutput, result);
+  process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
 } finally {
   if (cleanupFrame && cleanupProjectId) {
     await frameRequest(cleanupFrame, `/api/projects/${encodeURIComponent(cleanupProjectId)}`, { method: 'DELETE' }).catch(() => {});
@@ -187,6 +193,13 @@ async function newestActiveSession(filename) {
     .sort((left, right) => storedDate(left.last_seen_at || left.created_at) - storedDate(right.last_seen_at || right.created_at));
   assert(active.length > 0, 'No active hosted auth session is available');
   return active.at(-1).session_id;
+}
+
+
+async function writeEvidence(filename, result) {
+  const target = path.isAbsolute(filename) ? filename : path.resolve(repoRoot, filename);
+  await mkdir(path.dirname(target), { recursive: true });
+  await writeFile(target, `${JSON.stringify(result, null, 2)}\n`, { encoding: 'utf8', mode: 0o644 });
 }
 
 

@@ -318,8 +318,13 @@ npm run test:e2e:hosted --prefix apps/design-studio -- \
   --platform-origin https://maverick.example \
   --auth-sessions-file data/control-plane/json/identity/auth_sessions.json \
   --project-id <canonical-opendesign-project-id> \
-  --storage-input-path storage/generated/design-studio/hosted-acceptance-input.md
+  --storage-input-path storage/generated/design-studio/hosted-acceptance-input.md \
+  --evidence-output apps/design-studio/service/opendesign_hosted_acceptance_0_16_1.json
 ```
+
+The optional evidence file contains only public origins and bounded acceptance
+booleans. It never records the selected platform session, bootstrap cookie,
+browser headers, prompts, provider payloads, or environment values.
 
 The browser suite covers all fourteen required scenarios: login/open, project
 creation in the native OpenDesign UI, Storage import, runtime start,

@@ -329,3 +329,10 @@ bearer, provider payload, environment, host path, or secret value.
 `opendesign_production_acceptance_0_16_1.json` maps every global acceptance
 criterion to a stable test, proof, or canonical document. Neither record
 authorizes migration of an existing workspace data root.
+
+The deployed-origin gate is separate: `opendesign_hosted_acceptance_0_16_1.json`
+is emitted by `tests/opendesign_hosted_smoke.e2e.mjs` against the configured
+public HTTPS platform. It covers live TLS, bootstrap, readiness, reload,
+persisted deep link, Storage import/export, runtime SSE, result packaging, and
+temporary-project deletion without recording either platform or sidecar
+session material.

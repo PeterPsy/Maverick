@@ -250,7 +250,12 @@ class CodexCommandPathMixin:
         vendor_root = package_root / "node_modules" / "@openai"
         if not vendor_root.exists():
             return None
-        candidates = sorted(vendor_root.glob("codex-linux-*/vendor/*/codex/codex"))
+        candidates = sorted(
+            [
+                *vendor_root.glob("codex-linux-*/vendor/*/codex/codex"),
+                *vendor_root.glob("codex-linux-*/vendor/*/bin/codex"),
+            ]
+        )
         for candidate in candidates:
             if candidate.is_file():
                 return candidate.resolve(strict=False)
@@ -261,12 +266,18 @@ class CodexCommandPathMixin:
     def _vendored_codex_tool_binary(self, standalone_codex: Path, tool_name: str) -> Path | None:
         if not self._is_standalone_codex_binary(standalone_codex):
             return None
-        candidate = standalone_codex.parent.parent / "path" / tool_name
-        if candidate.is_file():
-            return candidate.resolve(strict=False)
+        vendor_target_root = standalone_codex.parent.parent
+        for directory in ("path", "codex-path"):
+            candidate = vendor_target_root / directory / tool_name
+            if candidate.is_file():
+                return candidate.resolve(strict=False)
         return None
 
 
 
     def _is_standalone_codex_binary(self, resolved: Path) -> bool:
-        return resolved.name == "codex" and resolved.parent.name == "codex" and "vendor" in resolved.parts
+        return (
+            resolved.name == "codex"
+            and resolved.parent.name in {"codex", "bin"}
+            and "vendor" in resolved.parts
+        )

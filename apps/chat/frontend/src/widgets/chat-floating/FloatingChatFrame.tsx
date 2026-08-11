@@ -132,6 +132,12 @@ export function FloatingChatFrame({
             threads={threads}
             windowItem={windowItem}
           />
+          {activeThread?.source_app_id === "design-studio" ? (
+            <span className="chat-floating-widget-shell__source-badge" title="OpenDesign chat">
+              <span aria-hidden="true" className="material-symbols-rounded">design_services</span>
+              OpenDesign
+            </span>
+          ) : null}
         </div>
         <div className="chat-floating-widget-shell__actions">
           <button

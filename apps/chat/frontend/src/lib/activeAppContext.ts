@@ -5,6 +5,7 @@ export type ActiveAppContext = {
   app_id: string;
   description: string;
   name: string;
+  params?: Record<string, string | boolean | null>;
   views: string[];
 };
 
@@ -48,12 +49,26 @@ export function activeAppContextFromWidgetContext(context: Record<string, unknow
   if (!appId || appId === "chat") {
     return null;
   }
+  const params = scalarParams(record.params);
   return {
     app_id: appId,
     description: typeof record.description === "string" ? record.description : "",
     name: typeof record.name === "string" && record.name.trim() ? record.name.trim() : appId,
+    ...(Object.keys(params).length ? { params } : {}),
     views: Array.isArray(record.views) ? record.views.filter((item): item is string => typeof item === "string") : [],
   };
+}
+
+function scalarParams(value: unknown): Record<string, string | boolean | null> {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return {};
+  }
+  return Object.fromEntries(
+    Object.entries(value).filter((entry): entry is [string, string | boolean | null] => {
+      const item = entry[1];
+      return typeof item === "string" || typeof item === "boolean" || item === null;
+    }),
+  );
 }
 
 export function promptWithActiveAppContext(basePrompt: string, activeApp: ActiveAppContext | null): string {

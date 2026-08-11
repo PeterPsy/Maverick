@@ -513,6 +513,7 @@ class DesignStudioAppTests(unittest.TestCase):
                     {
                         "app_id": "design-studio",
                         "cleaned_runtime_session_ids": ["chat-delete-test"],
+                        "deleted_conversation_bindings": 0,
                         "deleted_runtime_correlations": 0,
                     }
                 ],

@@ -32,8 +32,11 @@ The primary distribution recipe is declared in
 `ghcr.io/nexu-io/od:0.16.1` linux/amd64 image directly over bounded HTTPS,
 verifies the complete OCI descriptor chain and SLSA subject, and reconstructs
 the layers without Docker. Two independent imports receive only the
-digest-bound compiled loopback-bearer patch and stage the image's own musl
-loader, Node 24 runtime, daemon, static web export and required native modules.
+digest-bound compiled loopback-bearer and Maverick-native-shell patches, then
+stage the image's own musl loader, Node 24 runtime, daemon, static web export
+and required native modules. The equivalent source-level shell patch is kept in
+the ordered patch series so an exact upstream checkout remains independently
+auditable.
 The two deterministic archives and all metadata must be byte-identical.
 Runtime startup never installs dependencies, invokes a package manager, mounts
 host Node, or builds Next.
@@ -129,9 +132,14 @@ legacy archive; `design_*` is accepted only as an input alias resolved through
 
 ## Frontend Boundary
 
-The Maverick frontend is a full-bleed host for the native OpenDesign UI. It
-does not render a project catalog, editor, import form, or export history of its
-own. It requests a one-shot launch from
+The Maverick frontend is a full-bleed host for the native OpenDesign editor. A
+`shell.sidebar.primary` widget renders the canonical OpenDesign project catalog
+with search, recent ordering, loading/error/empty states, and selected-project
+state; its fixed footer creates a canonical project. The widgets call the
+Design Studio backend and never persist a duplicate catalog. Their layout uses
+the shell-owned `is_mobile_layout` context rather than iframe media queries.
+
+The editor host requests a one-shot launch from
 `POST /api/app-sidecars/browser-launch`, validates that the response names a
 different HTTP origin and the exact clean bootstrap endpoint, and submits the
 ticket through a transient form POST targeted at the iframe. The ticket is
@@ -139,13 +147,46 @@ cleared from the form immediately and is never put in a URL, fragment,
 localStorage, log, or persisted React state.
 
 After the `303`, the OpenDesign UI and all of its API requests stay same-origin
-on the opaque sidecar host. The wrapper exposes only accessible
-loading/degraded/error recovery and reload/fullscreen controls. Maverick shell
-navigation accepts bounded scalar `od_project_id`/`od_run_id` values. Project
-deep links bootstrap the real OpenDesign `/projects/<id>` route; the minimal
-versioned navigation message forwards the same scalar identity and is sent only
-to the exact sidecar origin. Incoming shell and sidecar messages require both
+on the opaque sidecar host. The wrapper exposes accessible loading/degraded/
+error recovery and reload/fullscreen controls. Maverick shell navigation
+accepts bounded scalar `od_project_id`/`od_run_id` values. Project deep links
+bootstrap the real OpenDesign `/projects/<id>` route; later sidebar selections
+use a minimal versioned navigation message and the sidecar performs a
+same-origin route navigation. Native OpenDesign navigation emits the selected
+project back to the shell so the sidebar and floating Chat remain contextual.
+
+The shell theme is forwarded as a sanitized dark/light message. The patched
+OpenDesign export maps its backgrounds, surfaces, borders, text, focus, dialog,
+popover and scrollbar colors to Maverick tokens. The same patch removes the
+native `ChatPane`, resize rail, side-chat entry points, home composer and recent
+project strip, leaving the file workspace full width and the shell sidebar as
+the only project catalog. Every incoming shell/sidecar message requires both
 the expected `event.origin` and `event.source`.
+
+## Maverick Chat Integration
+
+OpenDesign conversations appear as ordinary user-visible Maverick runtime
+threads with `source_app_id: design-studio`. Chat adds an OpenDesign badge to
+the sidebar row and active floating header, an OpenDesign filter, and delegates
+submit/cancel/retry to Design Studio instead of bypassing the OpenDesign run
+protocol with a direct runtime turn.
+
+Design Studio stores only the durable correlation in
+`maverick-runtime/conversation-bindings.json`: one OpenDesign project and
+conversation resolve to one canonical Maverick runtime session/thread across
+later turns and restarts. OpenDesign remains canonical for the conversation,
+user/assistant messages, run records and result packages. Legacy correlations
+are migrated by choosing the newest valid session for future turns without
+rewriting or deleting historical runtime threads.
+
+The composer exposes one OpenDesign tools button. Chat, Plan and Design modes,
+Storage attachments, app/project references, project files, design-system
+context, Skills, the Maverick agent/model selector, stop and retry are wired to
+governed surfaces. Plugin mutation, persistent MCP, Connectors, Library, Figma
+import, host folder/working-directory access, external search/media generation,
+terminal/deploy, design-system mutation and native visual annotations are shown
+disabled with their sandbox reason; the route allowlist is not widened for
+them.
 
 ## SDK Flow
 
@@ -168,8 +209,8 @@ The contract declares frontend, backend, CLI, MCP, lifecycle hooks, a bundled sk
 Because Design Studio can create runtime sessions, it also implements the
 trusted platform `runtime.cleanup_sessions` hook declared by
 `permissions.runtime.cleanup_sessions`. Full runtime cleanup removes only the
-matching app-owned OpenDesign correlation records; ordinary user backend calls
-cannot invoke that destructive hook.
+matching app-owned OpenDesign correlation records and conversation bindings;
+ordinary user backend calls cannot invoke that destructive hook.
 
 The sidecar is sandbox-compatible because its mandatory generic
 `process_policy` starts it under bubblewrap with an allowlisted environment,
@@ -253,8 +294,10 @@ For run creation, Design Studio first validates the real project and
 conversation through its short-lived `app_sidecar` capability. It then reserves
 an app-owned OpenDesign run correlation and asks core for a source-app-stamped
 runtime session, a durable stream, and a one-shot capability to the active
-project directory. Only correlation metadata is stored under the active data
-generation in `maverick-runtime/correlations.json`; terminal callback event IDs
+project directory. Existing conversation bindings supply the same
+`runtime_session_id` for subsequent turns. Only correlation metadata is stored
+under the active data generation in `maverick-runtime/correlations.json` and
+`maverick-runtime/conversation-bindings.json`; terminal callback event IDs
 are persisted there before acknowledgement so at-least-once callback replays
 return without another OpenDesign request or state mutation. Prompts, provider
 payloads, tokens, and host paths are excluded. Core owns provider selection, budgets,
@@ -326,13 +369,14 @@ The optional evidence file contains only public origins and bounded acceptance
 booleans. It never records the selected platform session, bootstrap cookie,
 browser headers, prompts, provider payloads, or environment values.
 
-The browser suite covers all fourteen required scenarios: login/open, project
-creation in the native OpenDesign UI, Storage import, runtime start,
-incremental SSE, generated-file preview, idempotent cancel, Storage export and
-manifest read-back, core/sidecar restart with explicit `/api/ready` checks,
-deep link, workspace A/B isolation,
-exact route denial, browser credential non-disclosure, and real-daemon
-upgrade/rollback on marked fixture copies. Its committed output is
+The browser suite covers all fourteen required scenarios: login/open with the
+fixed Maverick sidebar, project creation and navigation through that sidebar,
+absence of the native home project strip and Chat pane, Storage import, runtime
+start, incremental SSE, generated-file preview, idempotent cancel, Storage
+export and manifest read-back, core/sidecar restart with explicit `/api/ready`
+checks, deep link, workspace A/B isolation, exact route denial, browser
+credential non-disclosure, and real-daemon upgrade/rollback on marked fixture
+copies. Its committed output is
 redaction-safe and each scenario carries the full app/runtime correlation join.
 The 24 global criteria and stable evidence references are tracked in
 `service/opendesign_production_acceptance_0_16_1.json`.

@@ -1,6 +1,7 @@
 import { FormEvent, KeyboardEvent, useRef, useState } from "react";
 import type { AgentTypeSummary, AppReference, ProviderItem } from "../api/client";
 import type { MultiAgentComposerMode } from "../api/client";
+import type { SourceAppChatMode } from "../api/client";
 import type { ComposerAttachment } from "../lib/attachments";
 import { hasInvalidAttachments } from "../lib/attachments";
 import { isGroupChatComposerModeEnabled } from "../lib/interAgentFeatures";
@@ -15,6 +16,7 @@ import { ComposerDictationButton } from "./ComposerDictationButton";
 import { ComposerRuntimeBadges } from "./ComposerRuntimeBadges";
 import { MentionPanel } from "./MentionPanel";
 import { QueuedMessageNotice } from "./QueuedMessageNotice";
+import { SourceAppChatTools } from "./SourceAppChatTools";
 
 export type ExecutionMode = "sandbox" | "full-access";
 
@@ -41,6 +43,7 @@ export type ChatComposerProps = {
   onReferenceRemove?: (reference: AppReference) => void;
   onSearchReferences?: (query: string, signal: AbortSignal) => Promise<MentionItem[]>;
   onSelectMultiAgentMode?: (mode: MultiAgentComposerMode) => void;
+  onSelectSourceAppChatMode?: (mode: SourceAppChatMode) => void;
   onSelectAgent: (agentTypeId: string) => void;
   onSelectProvider: (providerId: string) => void;
   providerSelectorLocked?: boolean;
@@ -51,6 +54,9 @@ export type ChatComposerProps = {
   queuedCount: number;
   queuedPreview: string | null;
   selectedAgentTypeId: string;
+  sourceAppChatMode?: SourceAppChatMode;
+  sourceAppId?: string;
+  sourceAppProjectId?: string;
   transcriptionProviderAppId?: string;
   transcriptionProviderAvailable?: boolean;
   transcriptionChunkedDictationSupported?: boolean;
@@ -83,6 +89,7 @@ export function ChatComposer({
   onReferenceRemove,
   onSearchReferences,
   onSelectMultiAgentMode,
+  onSelectSourceAppChatMode,
   onSelectAgent,
   onSelectProvider,
   providerSelectorLocked = false,
@@ -93,6 +100,9 @@ export function ChatComposer({
   queuedCount,
   queuedPreview,
   selectedAgentTypeId,
+  sourceAppChatMode = "design",
+  sourceAppId = "",
+  sourceAppProjectId = "",
   transcriptionProviderAppId = "",
   transcriptionProviderAvailable = false,
   transcriptionChunkedDictationSupported = false,
@@ -251,6 +261,15 @@ export function ChatComposer({
             <div className="chatapp-composer__toolbar">
               <div className="chatapp-composer__tools">
                 <AttachmentMenu attachments={attachments} disabled={disabled} onAddAttachments={onAddAttachments} onCapturePageArea={onCapturePageArea} />
+                {sourceAppId === "design-studio" && onSelectSourceAppChatMode ? (
+                  <SourceAppChatTools
+                    disabled={disabled || isSending}
+                    mode={sourceAppChatMode}
+                    onSelectMode={onSelectSourceAppChatMode}
+                    projectId={sourceAppProjectId}
+                    sourceAppId={sourceAppId}
+                  />
+                ) : null}
                 <button
                   aria-expanded={isAppMentionPickerOpen}
                   aria-haspopup="listbox"

@@ -19,7 +19,7 @@
       "tree_sha256_before": "977ae1faaced8b94da2ab22932732a1ea85795f25b1fc5f09bfb197f1575d00a"
     },
     "target": {
-      "artifact_sha256": "b91ce140e6fc8302dc4d4b83dac197d4735533c0f141a44100ff1eeff8904e70",
+      "artifact_sha256": "bfc7705a104e147110bccfadaf284085f739c99c0704bbc5eadb047f31834afc",
       "data_generation": "gen_oci_0161",
       "database_integrity": {
         "app.sqlite": "ok",
@@ -37,7 +37,7 @@
     },
     "previous_generation_reactivated": "gen_real_previous",
     "real_daemon_health_database_and_project_smoke": "passed",
-    "real_round_trip_artifact_sha256": "b91ce140e6fc8302dc4d4b83dac197d4735533c0f141a44100ff1eeff8904e70"
+    "real_round_trip_artifact_sha256": "bfc7705a104e147110bccfadaf284085f739c99c0704bbc5eadb047f31834afc"
   },
   "schema_version": "1",
   "workspace_data_migrated": false

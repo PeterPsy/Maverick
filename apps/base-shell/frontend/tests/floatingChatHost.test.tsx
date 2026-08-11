@@ -58,6 +58,34 @@ describe("FloatingChatHost mount gate", () => {
     expect(widgetSlotMock).toHaveBeenCalledTimes(1);
     expect(container.querySelector("[data-testid='widget-slot']")).not.toBeNull();
   });
+
+  it("passes active app params into the floating Chat widget context", async () => {
+    await renderHost(root, {
+      activeApp: {
+        app_id: "design-studio",
+        name: "Design Studio",
+        version: "0.1.0",
+        description: "OpenDesign",
+        publisher: "Maverick",
+        status: "enabled",
+        distribution_mode: "bundled",
+        source_access: "built-in",
+        views: [],
+        provides: [],
+        requires: [],
+        logo: null,
+        frontend_mount: "/apps/design-studio/",
+        frontend_role: "workspace",
+        frontend_launchable: true,
+        backend_mount: "/api/apps/design-studio/backend",
+      },
+      activeAppParams: { od_project_id: "od_project_1" },
+    });
+
+    expect(widgetSlotMock.mock.calls[0][0]).toMatchObject({
+      content: { active_app: { app_id: "design-studio", params: { od_project_id: "od_project_1" } } },
+    });
+  });
 });
 
 async function renderHost(root: Root, overrides: Partial<ComponentProps<typeof FloatingChatHost>> = {}) {

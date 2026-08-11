@@ -99,6 +99,7 @@ export function useChatSidebarState() {
   const threadFilterCounts = useMemo(
     () => ({
       all: threads.length,
+      opendesign: filterThreads(threads, "opendesign").length,
       senses: filterThreads(threads, "senses").length,
       multi_agent: filterThreads(threads, "multi_agent", multiAgentThreadIds).length,
       unread: filterThreads(threads, "unread").length,

@@ -9,6 +9,7 @@ type FloatingChatPlacement = "overlay" | "fixed-right" | "mobile-fullscreen";
 
 export function FloatingChatHost({
   activeApp,
+  activeAppParams = {},
   activeWorkspaceId,
   floatingChatMode,
   isChatAppActive,
@@ -29,6 +30,7 @@ export function FloatingChatHost({
   widthPx,
 }: {
   activeApp: AppRegistryItem | null;
+  activeAppParams?: Record<string, string | boolean | null>;
   activeWorkspaceId: string;
   floatingChatMode: FloatingChatMode;
   isChatAppActive: boolean;
@@ -79,6 +81,7 @@ export function FloatingChatHost({
             app_id: activeApp.app_id,
             description: activeApp.description,
             name: activeApp.name,
+            params: activeAppParams,
             views: activeApp.views,
           }
         : null,
@@ -88,7 +91,7 @@ export function FloatingChatHost({
       thread_id: isDockMode ? threadId || "" : "",
       user: user?.username || null,
     }),
-    [activeApp, isDockMode, isMobileMode, navigationScope, placement, threadId, user?.username],
+    [activeApp, activeAppParams, isDockMode, isMobileMode, navigationScope, placement, threadId, user?.username],
   );
 
   if (!isVisible) {

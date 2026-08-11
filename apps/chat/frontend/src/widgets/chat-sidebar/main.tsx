@@ -42,6 +42,19 @@ function ChatSidebarWidget() {
           <span className="bs-chat-sidebar-source-filter__count">{sidebar.threadFilterCounts.all}</span>
         </button>
         <button
+          aria-label="OpenDesign chats"
+          aria-pressed={sidebar.threadFilter === "opendesign"}
+          className={`bs-chat-sidebar-source-filter__button is-label-collapsible ${sidebar.threadFilter === "opendesign" ? "is-active" : ""}`}
+          onClick={() => sidebar.setThreadFilter("opendesign")}
+          type="button"
+        >
+          <span aria-hidden="true" className="material-symbols-rounded">
+            design_services
+          </span>
+          <span className="bs-chat-sidebar-source-filter__label">OpenDesign</span>
+          <span className="bs-chat-sidebar-source-filter__count">{sidebar.threadFilterCounts.opendesign}</span>
+        </button>
+        <button
           aria-label="Senses chats"
           aria-pressed={sidebar.threadFilter === "senses"}
           className={`bs-chat-sidebar-source-filter__button is-label-collapsible ${sidebar.threadFilter === "senses" ? "is-active" : ""}`}

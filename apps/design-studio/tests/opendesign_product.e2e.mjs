@@ -328,6 +328,18 @@ async function loginAndOpen(page) {
   );
   await page.getByRole('button', { name: 'Sign in' }).click();
   await sessionResponse;
+  await page.evaluate(() => {
+    const key = 'maverick:base-shell:session';
+    let session = {};
+    try { session = JSON.parse(localStorage.getItem(key) || '{}'); } catch {}
+    localStorage.setItem(key, JSON.stringify({
+      ...session,
+      activeAppId: 'design-studio',
+      isSidebarOpen: true,
+      sidebarMode: 'fixed',
+    }));
+  });
+  await page.reload({ waitUntil: 'domcontentloaded' });
 }
 
 
@@ -388,26 +400,55 @@ async function completeOpenDesignOnboarding(frame) {
 
 
 async function createProjectFromUi(page, frame, name) {
-  await frame.locator('[data-testid="entry-nav-new-project"]').waitFor({ state: 'visible', timeout: 60_000 });
-  const railToggle = frame.locator('[data-testid="entry-rail-toggle"]');
-  if (await railToggle.getAttribute('aria-expanded') !== 'true') await railToggle.click();
-  await frame.locator('[data-testid="entry-nav-new-project"]').click();
-  await frame.locator('[data-testid="new-project-name"]').fill(name);
+  assert(
+    !await frame.locator('.home-view > .recent-projects, .home-view > .home-hero').isVisible().catch(() => false),
+    'OpenDesign home still exposes native project or chat affordances',
+  );
+  const beforeResponse = await frameRequest(frame, '/api/projects');
+  const beforeIds = new Set(
+    (Array.isArray(beforeResponse.body?.projects) ? beforeResponse.body.projects : [])
+      .map((item) => String(item?.id || ''))
+      .filter(Boolean),
+  );
+  const footer = await waitForShellWidgetFrame(page, 'App sidebar footer');
   const responsePromise = page.waitForResponse((response) => {
     try {
       const url = new URL(response.url());
-      return isSidecarHostname(url.hostname)
-        && url.pathname === '/api/projects'
-        && response.request().method() === 'POST';
+      const body = response.request().postDataJSON();
+      return url.origin === platformOrigin
+        && url.pathname === '/api/apps/design-studio/backend'
+        && response.request().method() === 'POST'
+        && body?.action === 'create_project';
     } catch { return false; }
   }, { timeout: 60_000 });
-  await frame.locator('[data-testid="create-project"]').click();
+  await footer.getByRole('button', { name: 'New project', exact: true }).click();
   const response = await responsePromise;
   const responseText = await response.text();
-  assert(response.status() < 300, `OpenDesign UI project create returned HTTP ${response.status()}: ${responseText.slice(0, 300)}`);
-  const payload = JSON.parse(responseText);
-  const projectId = String(payload?.project?.id || payload?.id || '');
-  assert(projectId, 'OpenDesign UI did not return a project id');
+  assert(response.status() < 300, `Maverick sidebar project create returned HTTP ${response.status()}: ${responseText.slice(0, 300)}`);
+  let payload = null;
+  try { payload = JSON.parse(responseText); } catch {}
+  let projectId = String(payload?.project?.id || payload?.od_project_id || payload?.id || '');
+  if (!projectId) {
+    const afterResponse = await frameRequest(frame, '/api/projects');
+    const created = (Array.isArray(afterResponse.body?.projects) ? afterResponse.body.projects : [])
+      .find((item) => item?.id && !beforeIds.has(String(item.id)));
+    projectId = String(created?.id || '');
+  }
+  assert(projectId, 'Maverick sidebar did not return or expose the new OpenDesign project id');
+  const sidebar = await waitForShellWidgetFrame(page, 'App sidebar content');
+  const projectButton = sidebar.getByRole('button').filter({ hasText: 'Untitled design' }).first();
+  await projectButton.waitFor({ state: 'visible', timeout: 60_000 });
+  const shellSidebar = page.locator('aside[aria-label="Workspace navigation"]');
+  if (await shellSidebar.evaluate((element) => element.classList.contains('is-closed'))) {
+    await page.locator('.bs-sidebar__rail-button.is-active').first().click();
+    await page.waitForFunction(() => !document.querySelector('aside[aria-label="Workspace navigation"]')?.classList.contains('is-closed'));
+  }
+  await projectButton.click();
+  await frame.waitForURL((url) => url.pathname === `/projects/${projectId}`, { timeout: 60_000 });
+  assert(
+    !await frame.locator('.split-chat-slot, .split-resize-handle, [data-testid="side-chat-tab"]').isVisible().catch(() => false),
+    'OpenDesign native project chat is still visible',
+  );
   let conversationId = String(payload?.conversationId || payload?.conversation?.id || '');
   if (!conversationId) {
     const conversations = await frameRequest(frame, `/api/projects/${encodeURIComponent(projectId)}/conversations`);
@@ -416,6 +457,17 @@ async function createProjectFromUi(page, frame, name) {
   }
   assert(conversationId, 'OpenDesign UI did not create a conversation');
   return { projectId, conversationId };
+}
+
+
+async function waitForShellWidgetFrame(page, title) {
+  const iframe = page.locator(`iframe[title="${title}"]`);
+  await iframe.waitFor({ state: 'visible', timeout: 60_000 });
+  const handle = await iframe.elementHandle();
+  const frame = await handle?.contentFrame();
+  assert(frame, `${title} iframe did not expose a content frame`);
+  await frame.waitForLoadState('domcontentloaded').catch(() => {});
+  return frame;
 }
 
 
@@ -606,7 +658,12 @@ async function runMigrationSmoke() {
 function buildEvidence({ correlationA, correlationB, correlationCanceled, manifest, networkProof, originA, originB, projectA, successful }) {
   const scenarios = [
     ['login_open', 'Login and open Design Studio', correlationA, { isolated_origin: true, ready_endpoint: true }],
-    ['create_project_ui', 'Create project from the OpenDesign UI', correlationA, { project_created: true }],
+    ['create_project_ui', 'Create and open a project from the Maverick sidebar', correlationA, {
+      project_created: true,
+      sidebar_navigation: true,
+      native_home_projects_hidden: true,
+      native_chat_hidden: true,
+    }],
     ['storage_import', 'Import one Storage file with read-back', correlationA, { imported: true }],
     ['runtime_start', 'Start one Maverick-owned run', correlationA, { submitted: true }],
     ['incremental_sse', 'Receive incremental SSE before terminal', correlationA, { incremental: true }],

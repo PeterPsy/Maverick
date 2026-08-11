@@ -161,13 +161,14 @@ def oci_provenance_payload(
     *,
     artifact_name: str,
     artifact_sha256: str,
-    patch_evidence: dict[str, str],
+    patch_evidence: dict[str, Any],
     rootfs_inventory_sha256: str,
     manifest: dict[str, Any],
 ) -> dict[str, Any]:
     distribution = manifest["distribution"]
+    ui_patch = patch_evidence.get("ui_patch") if isinstance(patch_evidence.get("ui_patch"), dict) else {}
     invocation = hashlib.sha256(
-        f"{artifact_sha256}:{distribution['index']['digest']}:{patch_evidence['post_sha256']}".encode("utf-8")
+        f"{artifact_sha256}:{distribution['index']['digest']}:{patch_evidence['post_sha256']}:{ui_patch.get('post_sha256', '')}".encode("utf-8")
     ).hexdigest()
     dependencies = [
         {

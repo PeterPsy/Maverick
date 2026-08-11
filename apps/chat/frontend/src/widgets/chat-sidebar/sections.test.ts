@@ -72,6 +72,16 @@ describe("chat sidebar runtime status", () => {
     expect(buildSections([], [chatThread, sensesThread], "senses")[0].items.map((item) => item.thread_id)).toEqual(["senses-thread"]);
   });
 
+  it("filters and badges OpenDesign threads", () => {
+    const designThread = thread({ thread_id: "design-thread", source_app_id: "design-studio" });
+    const chatThread = thread({ thread_id: "chat-thread", source_app_id: "chat" });
+
+    expect(filterThreads([chatThread, designThread], "opendesign")).toEqual([designThread]);
+    expect(threadSourceBadges(designThread)).toEqual([
+      { icon: "design_services", kind: "opendesign", label: "OpenDesign" },
+    ]);
+  });
+
   it("filters multi-agent threads for the Multi view", () => {
     const chatThread = thread({ thread_id: "chat-thread", runtime_session_id: "chat-session" });
     const multiThread = thread({ thread_id: "multi-thread", runtime_session_id: "multi-session" });

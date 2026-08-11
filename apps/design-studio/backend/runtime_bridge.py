@@ -34,9 +34,17 @@ BRIDGE_SCHEMA_VERSION = "2"
 LEGACY_BRIDGE_SCHEMA_VERSION = "1"
 BRIDGE_DIRECTORY = "maverick-runtime"
 CORRELATIONS_FILE = "correlations.json"
+BINDINGS_FILE = "conversation-bindings.json"
 MAX_CORRELATIONS_BYTES = 8 * 1024 * 1024
 _SAFE_ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$")
 _TERMINAL_STATUS = {"succeeded", "failed", "canceled"}
+_ACTIVE_DATA_CACHE_KEY = "_maverick_verified_active_data_directory"
+_TRUSTED_RUNTIME_METADATA_KEY = "_maverick_trusted_runtime_metadata"
+_TRUSTED_RUNTIME_METADATA_SURFACES = {
+    "runtime_event",
+    "runtime_request_callback",
+    "runtime_stream_translation",
+}
 _GENERIC_EVENT_TYPES = {
     "runtime.turn.queued",
     "runtime.turn.started",
@@ -56,7 +64,13 @@ class RuntimeBridgeError(RuntimeError):
 
 def active_data_directory(payload: dict[str, Any]) -> Path:
     """Resolve only the verified bundle/data triple selected by G4 control."""
-    app_data_root = _real_directory(Path(str(payload.get("data_root") or "")), label="Design Studio data root")
+    data_root_value = str(payload.get("data_root") or "")
+    cached = payload.get(_ACTIVE_DATA_CACHE_KEY)
+    if isinstance(cached, dict) and cached.get("data_root") == data_root_value:
+        cached_path = cached.get("active_path")
+        if isinstance(cached_path, str) and cached_path:
+            return _real_directory(Path(cached_path), label="cached active OpenDesign data generation")
+    app_data_root = _real_directory(Path(data_root_value), label="Design Studio data root")
     generation_root = _real_directory(app_data_root / "opendesign", label="OpenDesign generation root")
     registry_root = _real_directory(SERVICE_ROOT / "vendor" / "open-design", label="OpenDesign registry root")
     manifest = read_bundle_manifest(SERVICE_ROOT / "opendesign_bundle.json")
@@ -65,7 +79,12 @@ def active_data_directory(payload: dict[str, Any]) -> Path:
         generation_root=generation_root,
         manifest=manifest,
     )
-    return _real_directory(binding.data_dir, label="active OpenDesign data generation")
+    active = _real_directory(binding.data_dir, label="active OpenDesign data generation")
+    payload[_ACTIVE_DATA_CACHE_KEY] = {
+        "data_root": data_root_value,
+        "active_path": str(active),
+    }
+    return active
 
 
 def cleanup_data_directory(payload: dict[str, Any]) -> Path | None:
@@ -251,12 +270,251 @@ class RuntimeCorrelationStore:
 
 
 def store_for_payload(payload: dict[str, Any]) -> RuntimeCorrelationStore:
-    return RuntimeCorrelationStore(active_data_directory(payload))
+    return RuntimeCorrelationStore(_runtime_metadata_data_directory(payload))
 
 
 def cleanup_store_for_payload(payload: dict[str, Any]) -> RuntimeCorrelationStore | None:
     data_root = cleanup_data_directory(payload)
     return None if data_root is None else RuntimeCorrelationStore(data_root)
+
+
+class ConversationBindingStore:
+    """Strict per-generation conversation to Maverick thread bindings."""
+
+    def __init__(self, active_data_root: Path) -> None:
+        self.active_data_root = _real_directory(active_data_root, label="active OpenDesign data generation")
+        self.root = self.active_data_root / BRIDGE_DIRECTORY
+        self._ensure_root()
+        self.path = self.root / BINDINGS_FILE
+        self.lock_path = self.root / f".{BINDINGS_FILE}.lock"
+
+    def list(self) -> list[dict[str, Any]]:
+        self._migrate_from_correlations_if_needed()
+        with self._locked():
+            return self._read()
+
+    def get(self, workspace_id: str, project_id: str, conversation_id: str) -> dict[str, Any] | None:
+        workspace_id = validated_identifier(workspace_id, label="workspace id")
+        project_id = validated_identifier(project_id, label="OpenDesign project id")
+        conversation_id = validated_identifier(conversation_id, label="OpenDesign conversation id")
+        return next(
+            (
+                record
+                for record in self.list()
+                if record["workspace_id"] == workspace_id
+                and record["od_project_id"] == project_id
+                and record["od_conversation_id"] == conversation_id
+            ),
+            None,
+        )
+
+    def find_by_runtime(self, workspace_id: str, runtime_session_id: str) -> dict[str, Any] | None:
+        workspace_id = validated_identifier(workspace_id, label="workspace id")
+        runtime_session_id = validated_identifier(runtime_session_id, label="runtime session id")
+        return next(
+            (
+                record
+                for record in self.list()
+                if record["workspace_id"] == workspace_id and record["runtime_session_id"] == runtime_session_id
+            ),
+            None,
+        )
+
+    def upsert(
+        self,
+        *,
+        workspace_id: str,
+        local_app_id: str,
+        sidecar_id: str,
+        project_id: str,
+        conversation_id: str,
+        runtime_session_id: str,
+        thread_id: str,
+        timestamp: str | None = None,
+    ) -> dict[str, Any]:
+        now = timestamp or utc_now()
+        candidate = _validated_binding(
+            {
+                "schema_version": "1",
+                "workspace_id": workspace_id,
+                "local_app_id": local_app_id,
+                "sidecar_id": sidecar_id,
+                "od_project_id": project_id,
+                "od_conversation_id": conversation_id,
+                "runtime_session_id": runtime_session_id,
+                "thread_id": thread_id,
+                "created_at": now,
+                "updated_at": now,
+            }
+        )
+        self._migrate_from_correlations_if_needed()
+
+        def mutate(records: list[dict[str, Any]]) -> tuple[list[dict[str, Any]], dict[str, Any]]:
+            for index, existing in enumerate(records):
+                if _binding_identity(existing) != _binding_identity(candidate):
+                    continue
+                candidate["created_at"] = existing["created_at"]
+                records[index] = _validated_binding(candidate)
+                return records, records[index]
+            records.append(candidate)
+            records.sort(key=lambda item: (*_binding_identity(item), item["updated_at"]))
+            return records, candidate
+
+        return self._update(mutate)
+
+    def delete_for_runtime_sessions(self, runtime_session_ids: set[str]) -> int:
+        if not runtime_session_ids:
+            return 0
+        self._migrate_from_correlations_if_needed()
+
+        def mutate(records: list[dict[str, Any]]) -> tuple[list[dict[str, Any]], int]:
+            retained = [record for record in records if record["runtime_session_id"] not in runtime_session_ids]
+            return retained, len(records) - len(retained)
+
+        return self._update(mutate)
+
+    def _migrate_from_correlations_if_needed(self) -> None:
+        if self.path.exists() or self.path.is_symlink():
+            return
+        correlations = RuntimeCorrelationStore(self.active_data_root).list()
+        latest: dict[tuple[str, str, str], dict[str, Any]] = {}
+        for correlation in correlations:
+            runtime_session_id = str(correlation.get("runtime_session_id") or "")
+            if not runtime_session_id:
+                continue
+            key = (
+                str(correlation["workspace_id"]),
+                str(correlation["od_project_id"]),
+                str(correlation["od_conversation_id"]),
+            )
+            existing = latest.get(key)
+            if existing is None or str(correlation["updated_at"]) > str(existing["updated_at"]):
+                latest[key] = correlation
+        records = [
+            _validated_binding(
+                {
+                    "schema_version": "1",
+                    "workspace_id": item["workspace_id"],
+                    "local_app_id": item["local_app_id"],
+                    "sidecar_id": item["sidecar_id"],
+                    "od_project_id": item["od_project_id"],
+                    "od_conversation_id": item["od_conversation_id"],
+                    "runtime_session_id": item["runtime_session_id"],
+                    "thread_id": item["runtime_session_id"],
+                    "created_at": item["created_at"],
+                    "updated_at": item["updated_at"],
+                }
+            )
+            for item in latest.values()
+        ]
+        records.sort(key=lambda item: (*_binding_identity(item), item["updated_at"]))
+        with self._locked():
+            if not self.path.exists() and not self.path.is_symlink():
+                self._write(records)
+
+    def _update(self, updater):
+        with self._locked():
+            records = self._read()
+            updated, result = updater(records)
+            self._write(updated)
+            return result
+
+    @contextmanager
+    def _locked(self):
+        descriptor = os.open(self.lock_path, os.O_RDWR | os.O_CREAT | _no_follow_flag(), 0o600)
+        with os.fdopen(descriptor, "a+b", closefd=True) as handle:
+            fcntl.flock(handle.fileno(), fcntl.LOCK_EX)
+            try:
+                yield
+            finally:
+                fcntl.flock(handle.fileno(), fcntl.LOCK_UN)
+
+    def _read(self) -> list[dict[str, Any]]:
+        if not self.path.exists():
+            return []
+        descriptor = os.open(self.path, os.O_RDONLY | _no_follow_flag())
+        try:
+            file_stat = os.fstat(descriptor)
+            if not stat.S_ISREG(file_stat.st_mode) or file_stat.st_size > MAX_CORRELATIONS_BYTES:
+                raise RuntimeBridgeError("Conversation binding store is not a bounded regular file.")
+            with os.fdopen(descriptor, "rb", closefd=True) as handle:
+                descriptor = -1
+                raw = handle.read(MAX_CORRELATIONS_BYTES + 1)
+        finally:
+            if descriptor >= 0:
+                os.close(descriptor)
+        if len(raw) > MAX_CORRELATIONS_BYTES:
+            raise RuntimeBridgeError("Conversation binding store exceeds its size limit.")
+        try:
+            payload = json.loads(raw.decode("utf-8"))
+        except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+            raise RuntimeBridgeError("Conversation binding store is not valid UTF-8 JSON.") from exc
+        if not isinstance(payload, list):
+            raise RuntimeBridgeError("Conversation binding store must contain a JSON array.")
+        return [_validated_binding(item) for item in payload]
+
+    def _write(self, records: list[dict[str, Any]]) -> None:
+        encoded = (json.dumps(records, sort_keys=True, separators=(",", ":"), ensure_ascii=True) + "\n").encode("utf-8")
+        if len(encoded) > MAX_CORRELATIONS_BYTES:
+            raise RuntimeBridgeError("Conversation binding store exceeds its size limit.")
+        temp = self.root / f".{BINDINGS_FILE}.{secrets.token_hex(8)}.tmp"
+        descriptor = os.open(temp, os.O_WRONLY | os.O_CREAT | os.O_EXCL | _no_follow_flag(), 0o600)
+        try:
+            with os.fdopen(descriptor, "wb", closefd=True) as handle:
+                descriptor = -1
+                handle.write(encoded)
+                handle.flush()
+                os.fsync(handle.fileno())
+            os.replace(temp, self.path)
+            directory_fd = os.open(self.root, os.O_RDONLY | getattr(os, "O_DIRECTORY", 0))
+            try:
+                os.fsync(directory_fd)
+            finally:
+                os.close(directory_fd)
+        finally:
+            if descriptor >= 0:
+                os.close(descriptor)
+            temp.unlink(missing_ok=True)
+
+    def _ensure_root(self) -> None:
+        if self.root.exists():
+            _real_directory(self.root, label="conversation binding root")
+            return
+        self.root.mkdir(mode=0o700)
+        _real_directory(self.root, label="conversation binding root")
+
+
+def binding_store_for_payload(payload: dict[str, Any]) -> ConversationBindingStore:
+    return ConversationBindingStore(_runtime_metadata_data_directory(payload))
+
+
+def trusted_sidecar_runtime_metadata_payload(payload: dict[str, Any]) -> dict[str, Any]:
+    """Mark one already-routed sidecar run operation as Core-trusted metadata access."""
+    if str(payload.get("surface") or "") != "sidecar_core_handler":
+        raise RuntimeBridgeError("Trusted sidecar runtime metadata requires the Core sidecar surface.")
+    trusted = dict(payload)
+    trusted[_TRUSTED_RUNTIME_METADATA_KEY] = True
+    return trusted
+
+
+def cleanup_binding_store_for_payload(payload: dict[str, Any]) -> ConversationBindingStore | None:
+    data_root = cleanup_data_directory(payload)
+    return None if data_root is None else ConversationBindingStore(data_root)
+
+
+def _runtime_metadata_data_directory(payload: dict[str, Any]) -> Path:
+    """Use strict control metadata for Core-owned callbacks, full verification otherwise."""
+    trusted_surface = str(payload.get("surface") or "") in _TRUSTED_RUNTIME_METADATA_SURFACES
+    trusted_sidecar = (
+        str(payload.get("surface") or "") == "sidecar_core_handler"
+        and payload.get(_TRUSTED_RUNTIME_METADATA_KEY) is True
+    )
+    if not trusted_surface and not trusted_sidecar:
+        return active_data_directory(payload)
+    data_root = cleanup_data_directory(payload)
+    if data_root is None:
+        raise RuntimeBridgeError("OpenDesign runtime metadata generation is not initialized.")
+    return data_root
 
 
 def reserve_run(
@@ -337,7 +595,20 @@ def record_submission(payload: dict[str, Any], body: dict[str, Any]) -> dict[str
         record["updated_at"] = utc_now()
         return record
 
-    return store_for_payload(payload).update(run_id, update)
+    updated = store_for_payload(payload).update(run_id, update)
+    runtime_session_id = str(updated.get("runtime_session_id") or "")
+    if status == "submitted" and runtime_session_id:
+        binding_store_for_payload(payload).upsert(
+            workspace_id=str(updated["workspace_id"]),
+            local_app_id=str(updated["local_app_id"]),
+            sidecar_id=str(updated["sidecar_id"]),
+            project_id=str(updated["od_project_id"]),
+            conversation_id=str(updated["od_conversation_id"]),
+            runtime_session_id=runtime_session_id,
+            thread_id=runtime_session_id,
+            timestamp=str(updated["updated_at"]),
+        )
+    return updated
 
 
 def mark_cancel_requested(payload: dict[str, Any], run_id: str) -> dict[str, Any]:
@@ -615,6 +886,54 @@ def _validated_record(value: object) -> dict[str, Any]:
         if timestamp.tzinfo is None:
             raise RuntimeBridgeError("Runtime correlation timestamp requires a timezone.")
     return record
+
+
+def _validated_binding(value: object) -> dict[str, Any]:
+    if not isinstance(value, dict):
+        raise RuntimeBridgeError("Conversation binding record must be an object.")
+    record = dict(value)
+    required = {
+        "schema_version",
+        "workspace_id",
+        "local_app_id",
+        "sidecar_id",
+        "od_project_id",
+        "od_conversation_id",
+        "runtime_session_id",
+        "thread_id",
+        "created_at",
+        "updated_at",
+    }
+    if set(record) != required or record.get("schema_version") != "1":
+        raise RuntimeBridgeError("Conversation binding record schema changed.")
+    for key in (
+        "workspace_id",
+        "local_app_id",
+        "sidecar_id",
+        "od_project_id",
+        "od_conversation_id",
+        "runtime_session_id",
+        "thread_id",
+    ):
+        validated_identifier(record[key], label=key)
+    if record["thread_id"] != record["runtime_session_id"]:
+        raise RuntimeBridgeError("Conversation binding thread must match its runtime session.")
+    for key in ("created_at", "updated_at"):
+        try:
+            timestamp = datetime.fromisoformat(str(record[key]))
+        except ValueError as exc:
+            raise RuntimeBridgeError("Conversation binding timestamp is invalid.") from exc
+        if timestamp.tzinfo is None:
+            raise RuntimeBridgeError("Conversation binding timestamp requires a timezone.")
+    return record
+
+
+def _binding_identity(record: dict[str, Any]) -> tuple[str, str, str]:
+    return (
+        str(record["workspace_id"]),
+        str(record["od_project_id"]),
+        str(record["od_conversation_id"]),
+    )
 
 
 def _artifact_for_file(item: dict[str, Any]) -> dict[str, Any] | None:

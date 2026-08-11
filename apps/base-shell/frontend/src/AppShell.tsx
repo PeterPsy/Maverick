@@ -698,6 +698,7 @@ export function AppShell() {
       />
       <FloatingChatHost
         activeApp={activeApp}
+        activeAppParams={activeAppParams}
         activeWorkspaceId={activeWorkspaceId}
         floatingChatMode={floatingChatMode}
         isChatAppActive={isChatAppActive}

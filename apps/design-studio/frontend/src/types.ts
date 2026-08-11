@@ -25,3 +25,9 @@ export type OpenDesignNavigateMessage = {
   od_project_id?: string;
   od_run_id?: string;
 };
+
+export type OpenDesignThemeMessage = {
+  type: "maverick.opendesign.theme";
+  version: 1;
+  theme: "dark" | "light";
+};

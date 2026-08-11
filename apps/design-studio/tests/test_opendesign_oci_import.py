@@ -175,12 +175,22 @@ class OpenDesignOciImportTests(unittest.TestCase):
             target = stage / "app/apps/daemon/dist/server.js"
             target.parent.mkdir(parents=True)
             target.write_bytes(source)
+            ui_target = stage / "app/apps/web/out/index.html"
+            ui_target.parent.mkdir(parents=True)
+            ui_source = b"<!doctype html><html><head></head><body></body></html>"
+            ui_target.write_bytes(ui_source)
             manifest = copy.deepcopy(self.manifest)
             manifest["boundary_patch"]["pre_sha256"] = hashlib.sha256(source).hexdigest()
             manifest["boundary_patch"]["post_sha256"] = None
+            manifest["ui_patch"]["pre_sha256"] = hashlib.sha256(ui_source).hexdigest()
+            manifest["ui_patch"]["post_sha256"] = hashlib.sha256(
+                ui_source.replace(b"</head>", self.boundary._UI_INJECTION + b"</head>")
+            ).hexdigest()
             evidence = self.boundary.apply_boundary_patch(stage, manifest)
             self.assertEqual(evidence["path"], "app/apps/daemon/dist/server.js")
             self.assertIn(b"!requireApiTokenOnLoopback", target.read_bytes())
+            self.assertEqual(evidence["ui_patch"]["path"], "app/apps/web/out/index.html")
+            self.assertIn(b"maverick-opendesign-ui", ui_target.read_bytes())
             with self.assertRaisesRegex(self.boundary.BoundaryPatchError, "preimage"):
                 self.boundary.apply_boundary_patch(stage, manifest)
 
@@ -227,6 +237,7 @@ class OpenDesignOciImportTests(unittest.TestCase):
         self.assertEqual(acceptance["artifact"]["size_bytes"], asset["size_bytes"])
         for field in ("path", "pre_sha256", "post_sha256"):
             self.assertEqual(acceptance["boundary_patch"][field], self.manifest["boundary_patch"][field])
+            self.assertEqual(acceptance["ui_patch"][field], self.manifest["ui_patch"][field])
         self.assertEqual(acceptance["import"]["independent_derivations"], 2)
         self.assertTrue(acceptance["import"]["reproducible"])
         self.assertTrue(acceptance["runtime_smoke"]["ready"])

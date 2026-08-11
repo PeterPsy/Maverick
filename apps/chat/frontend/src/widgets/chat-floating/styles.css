@@ -242,6 +242,25 @@ body {
   pointer-events: auto;
 }
 
+.chat-floating-widget-shell__source-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  min-height: 1.55rem;
+  padding: 0.16rem 0.45rem;
+  border: 1px solid rgba(var(--maverick-contrast-rgb), 0.12);
+  border-radius: 999px;
+  color: var(--maverick-text-soft);
+  font-size: 0.68rem;
+  font-weight: 750;
+  white-space: nowrap;
+}
+
+.chat-floating-widget-shell__source-badge .material-symbols-rounded {
+  color: var(--maverick-accent);
+  font-size: 0.9rem;
+}
+
 .chat-floating-widget-shell__actions {
   display: inline-flex;
   align-items: center;

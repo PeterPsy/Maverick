@@ -240,7 +240,42 @@
     "data": false,
     "repair_only": false
   },
-  "widgets": [],
+  "widgets": [
+    {
+      "widget_id": "design-studio-sidebar",
+      "host": "base-shell",
+      "content_kinds": [
+        "shell.sidebar.primary"
+      ],
+      "frontend": {
+        "kind": "iframe",
+        "mount": "frontend/dist/widgets/design-studio-sidebar",
+        "spa_fallback": true
+      },
+      "actions": {
+        "backend": true,
+        "mcp": false,
+        "cli": false
+      }
+    },
+    {
+      "widget_id": "design-studio-sidebar-footer",
+      "host": "base-shell",
+      "content_kinds": [
+        "shell.sidebar.footer"
+      ],
+      "frontend": {
+        "kind": "iframe",
+        "mount": "frontend/dist/widgets/design-studio-sidebar-footer",
+        "spa_fallback": true
+      },
+      "actions": {
+        "backend": true,
+        "mcp": false,
+        "cli": false
+      }
+    }
+  ],
   "services": {
     "http_sidecars": [
       {
@@ -311,6 +346,14 @@
                 {
                   "method": "GET",
                   "path_template": "/api/projects/{id}/conversations"
+                },
+                {
+                  "method": "POST",
+                  "path_template": "/api/projects/{id}/conversations"
+                },
+                {
+                  "method": "PUT",
+                  "path_template": "/api/projects/{id}/conversations/{cid}/messages/{mid}"
                 },
                 {
                   "method": "GET",

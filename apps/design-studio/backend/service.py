@@ -13,7 +13,7 @@ from pathlib import Path
 from pathlib import PurePosixPath
 import re
 import stat
-from time import monotonic
+from time import monotonic, time
 from typing import Any
 from uuid import uuid4
 from zipfile import BadZipFile, ZipFile
@@ -24,7 +24,9 @@ from core.app_sdk.storage import safe_app_data_path
 from store import OPENDESIGN_COMMIT, OPENDESIGN_MODE, OPENDESIGN_VERSION, ensure_state, update_state, utc_now
 from runtime_bridge import (
     RuntimeBridgeError,
+    binding_store_for_payload,
     build_result_package,
+    cleanup_binding_store_for_payload,
     cleanup_store_for_payload,
     mark_cancel_requested,
     project_root_relative_to_app_data,
@@ -33,6 +35,7 @@ from runtime_bridge import (
     record_terminal,
     reserve_run,
     store_for_payload,
+    trusted_sidecar_runtime_metadata_payload,
     translate_stream_events,
     validated_identifier,
 )
@@ -753,9 +756,10 @@ def _handle_runtime_bridge_route(
         parts = [part for part in route_path.split("/") if part]
         if parts == ["api", "runs"]:
             if method == "GET":
+                runtime_payload = trusted_sidecar_runtime_metadata_payload(payload)
                 return {
                     "status_code": 200,
-                    "json": {"runs": [public_run(record) for record in store_for_payload(payload).list()]},
+                    "json": {"runs": [public_run(record) for record in store_for_payload(runtime_payload).list()]},
                 }
             if method == "POST":
                 return _create_runtime_bridge_run(payload, _sidecar_core_body(arguments))
@@ -763,7 +767,8 @@ def _handle_runtime_bridge_route(
         if len(parts) not in {3, 4} or parts[:2] != ["api", "runs"]:
             raise DesignStudioError("run_route_not_found", "OpenDesign run route was not found.", status_code=404)
         run_id = validated_identifier(parts[2], label="OpenDesign run id")
-        record = store_for_payload(payload).get(run_id)
+        runtime_payload = trusted_sidecar_runtime_metadata_payload(payload)
+        record = store_for_payload(runtime_payload).get(run_id)
         if len(parts) == 3:
             if method != "GET":
                 raise DesignStudioError("method_not_allowed", "Run status routes require GET.", status_code=405)
@@ -793,7 +798,7 @@ def _handle_runtime_bridge_route(
                 return {"status_code": 200, "json": public_run(record)}
             if not record.get("turn_id"):
                 raise DesignStudioError("run_cancel_pending", "Runtime turn is not bound yet.", status_code=409)
-            updated = mark_cancel_requested(payload, run_id)
+            updated = mark_cancel_requested(runtime_payload, run_id)
             return {
                 "status_code": 200,
                 "json": public_run(updated),
@@ -856,36 +861,58 @@ def _create_runtime_bridge_run(payload: dict[str, Any], body: dict[str, Any]) ->
     }
     if not inserted:
         return {"status_code": 202, "json": response}
+    binding = binding_store_for_payload(payload).get(
+        str(payload.get("workspace_id") or ""),
+        project_id,
+        conversation_id,
+    )
     project_root = project_root_relative_to_app_data(payload, project_id)
+    runtime_request = {
+        "request_id": record["request_id"],
+        "idempotency_key": record["idempotency_key"],
+        "create_stream": True,
+        "result_visibility": "public" if body.get("resultVisibility") == "public" else "internal",
+        "agent_id": "chat",
+        "agent_type_id": "chat",
+        "agent_label": "Maverick Design Runtime",
+        "title": str(body.get("threadTitle") or f"Design run {record['od_run_id']}")[:160],
+        "project_id": project_id,
+        "requested_mode": "sandbox",
+        "system_prompt": _runtime_system_prompt(str(body.get("sessionMode") or "design")),
+        "input_text": message,
+        "project_root": {"scope": "app_data", "relative_path": project_root},
+        "callback": {
+            "action": "runtime_bridge.record_submission",
+            "payload": {"od_run_id": record["od_run_id"]},
+        },
+    }
+    if binding is not None:
+        runtime_request["runtime_session_id"] = binding["runtime_session_id"]
+    attachments = body.get("attachments")
+    if isinstance(attachments, list):
+        runtime_request["attachments"] = attachments
+    app_references = body.get("appReferences")
+    if isinstance(app_references, list):
+        runtime_request["app_references"] = app_references
     return {
         "status_code": 202,
         "json": response,
-        "runtime_session_requests": [
-            {
-                "request_id": record["request_id"],
-                "idempotency_key": record["idempotency_key"],
-                "create_stream": True,
-                "result_visibility": "internal",
-                "agent_id": "chat",
-                "agent_type_id": "chat",
-                "agent_label": "Maverick Design Runtime",
-                "title": f"Design run {record['od_run_id']}",
-                "project_id": project_id,
-                "requested_mode": "sandbox",
-                "system_prompt": (
-                    "Work only inside the current OpenDesign project directory. "
-                    "Create or update project files needed to satisfy the user request. "
-                    "Do not inspect credentials, runtime homes, or paths outside this directory."
-                ),
-                "input_text": message,
-                "project_root": {"scope": "app_data", "relative_path": project_root},
-                "callback": {
-                    "action": "runtime_bridge.record_submission",
-                    "payload": {"od_run_id": record["od_run_id"]},
-                },
-            }
-        ],
+        "runtime_session_requests": [runtime_request],
     }
+
+
+def _runtime_system_prompt(session_mode: str) -> str:
+    mode = session_mode if session_mode in {"chat", "plan", "design"} else "design"
+    mode_instruction = {
+        "chat": "Discuss the design and answer questions; edit files only when explicitly requested.",
+        "plan": "Produce a concrete implementation plan before making any project-file changes.",
+        "design": "Create or update project files needed to satisfy the user request.",
+    }[mode]
+    return (
+        "Work only inside the current OpenDesign project directory. "
+        f"OpenDesign session mode is {mode}. {mode_instruction} "
+        "Do not inspect credentials, runtime homes, or paths outside this directory."
+    )
 
 
 def runtime_bridge_callback(payload: dict[str, Any], arguments: dict[str, Any]) -> dict[str, Any]:
@@ -930,11 +957,14 @@ def cleanup_runtime_sessions(payload: dict[str, Any], arguments: dict[str, Any])
     try:
         store = cleanup_store_for_payload(payload)
         deleted = 0 if store is None else store.delete_for_runtime_sessions(set(session_ids))
+        binding_store = cleanup_binding_store_for_payload(payload)
+        deleted_bindings = 0 if binding_store is None else binding_store.delete_for_runtime_sessions(set(session_ids))
     except RuntimeBridgeError as error:
         raise DesignStudioError("runtime_cleanup_failed", str(error), status_code=409) from error
     return {
         "cleaned_runtime_session_ids": session_ids,
         "deleted_runtime_correlations": deleted,
+        "deleted_conversation_bindings": deleted_bindings,
     }
 
 
@@ -955,6 +985,13 @@ def runtime_bridge_terminal(payload: dict[str, Any], arguments: dict[str, Any], 
             raw_files = response.get("files") if isinstance(response, dict) and isinstance(response.get("files"), list) else response
             if isinstance(raw_files, list):
                 files = [item for item in raw_files if isinstance(item, dict)]
+            _upsert_opendesign_assistant_terminal_message(
+                payload,
+                correlation,
+                event_type=event_type,
+                output_text=str(arguments.get("output_text") or ""),
+                failure_reason=str(arguments.get("failure_reason") or ""),
+            )
         updated = record_terminal(
             payload,
             runtime_session_id=runtime_session_id,
@@ -966,6 +1003,268 @@ def runtime_bridge_terminal(payload: dict[str, Any], arguments: dict[str, Any], 
     except (RuntimeBridgeError, DesignStudioError) as error:
         raise DesignStudioError("runtime_bridge_terminal_failed", str(error), status_code=409) from error
     return {"correlation": updated or {}, "terminal_package_written": bool(updated)}
+
+
+def chat_capabilities(payload: dict[str, Any]) -> dict[str, Any]:
+    """Describe only contextual OpenDesign controls the governed bridge can honor."""
+    return {
+        "source_app_id": str(payload.get("app_id") or "design-studio"),
+        "label": "OpenDesign",
+        "modes": ["chat", "plan", "design"],
+        "supported": {
+            "storage_attachments": True,
+            "project_references": True,
+            "project_files": True,
+            "active_design_context": True,
+            "design_system_selection": True,
+            "skills": True,
+            "agent_and_model": "chat",
+            "stop": True,
+            "retry": True,
+        },
+        "unavailable": {
+            "plugins": "Plugins are blocked until Maverick exposes a governed plugin capability.",
+            "mcp": "Direct MCP configuration is blocked; use Maverick-owned app and skill surfaces.",
+            "connectors": "Connectors require a declared Maverick dependency and grant.",
+            "library": "The OpenDesign Library API is not available in sandbox mode.",
+            "figma_import": "Figma import is not yet backed by a governed Maverick importer.",
+            "local_code": "Local folders and working directories cannot escape the project sandbox.",
+            "external_search": "External search is unavailable without an explicit network capability.",
+            "media_generation": "Direct media generation is unavailable; use Maverick media apps.",
+            "terminal_and_deploy": "Terminal and deployment access are intentionally unavailable.",
+            "design_system_mutation": "Design-system mutation is read-only until a governed API is available.",
+            "visual_annotations": "Visual annotations remain in the canvas until typed chat events are available.",
+        },
+    }
+
+
+def chat_list_conversations(payload: dict[str, Any], arguments: dict[str, Any]) -> dict[str, Any]:
+    project_id = validated_identifier(
+        arguments.get("od_project_id") or arguments.get("project_id"),
+        label="OpenDesign project id",
+    )
+    response = _opendesign_request(payload, f"/api/projects/{project_id}/conversations")
+    conversations = response.get("conversations")
+    if not isinstance(conversations, list) or any(not isinstance(item, dict) for item in conversations):
+        raise DesignStudioError("opendesign_response_invalid", "OpenDesign returned invalid conversations.", status_code=502)
+    bindings = binding_store_for_payload(payload)
+    workspace_id = str(payload.get("workspace_id") or "")
+    return {
+        "od_project_id": project_id,
+        "conversations": [
+            {
+                **conversation,
+                "maverick_binding": bindings.get(workspace_id, project_id, str(conversation.get("id") or "")),
+            }
+            for conversation in conversations
+            if str(conversation.get("id") or "")
+        ],
+    }
+
+
+def chat_create_conversation(payload: dict[str, Any], arguments: dict[str, Any]) -> dict[str, Any]:
+    project_id = validated_identifier(
+        arguments.get("od_project_id") or arguments.get("project_id"),
+        label="OpenDesign project id",
+    )
+    mode = _chat_session_mode(arguments.get("session_mode") or arguments.get("mode"))
+    title = str(arguments.get("title") or "New design conversation").strip()[:160] or "New design conversation"
+    response = _opendesign_post(
+        payload,
+        f"/api/projects/{project_id}/conversations",
+        {"title": title, "sessionMode": mode},
+    )
+    conversation = response.get("conversation") if isinstance(response.get("conversation"), dict) else response
+    conversation_id = validated_identifier(conversation.get("id"), label="OpenDesign conversation id")
+    return {"od_project_id": project_id, "od_conversation_id": conversation_id, "conversation": conversation}
+
+
+def chat_submit_turn(payload: dict[str, Any], arguments: dict[str, Any]) -> dict[str, Any]:
+    runtime_session_id = str(arguments.get("runtime_session_id") or "").strip()
+    existing_binding = None
+    if runtime_session_id:
+        existing_binding = binding_store_for_payload(payload).find_by_runtime(
+            str(payload.get("workspace_id") or ""),
+            runtime_session_id,
+        )
+    project_id = validated_identifier(
+        arguments.get("od_project_id")
+        or arguments.get("project_id")
+        or (existing_binding or {}).get("od_project_id"),
+        label="OpenDesign project id",
+    )
+    message = str(arguments.get("message") or arguments.get("input_text") or "").strip()
+    if not message:
+        raise DesignStudioError("chat_message_required", "OpenDesign chat requires a message.")
+    if len(message.encode("utf-8")) > 1_000_000:
+        raise DesignStudioError("chat_message_too_large", "OpenDesign chat message is too large.", status_code=413)
+    project_response = _opendesign_request(payload, f"/api/projects/{project_id}")
+    project = project_response.get("project") if isinstance(project_response.get("project"), dict) else project_response
+    if not isinstance(project, dict) or str(project.get("id") or "") != project_id:
+        raise DesignStudioError("project_not_found", "The OpenDesign project was not found.", status_code=404)
+    mode = _chat_session_mode(arguments.get("session_mode") or arguments.get("mode"))
+    conversation_id = str(
+        arguments.get("od_conversation_id")
+        or arguments.get("conversation_id")
+        or (existing_binding or {}).get("od_conversation_id")
+        or ""
+    ).strip()
+    if conversation_id:
+        conversation_id = validated_identifier(conversation_id, label="OpenDesign conversation id")
+        _require_opendesign_conversation(payload, project_id, conversation_id)
+    else:
+        created = chat_create_conversation(
+            payload,
+            {
+                "od_project_id": project_id,
+                "title": str(arguments.get("thread_title") or message)[:80],
+                "session_mode": mode,
+            },
+        )
+        conversation_id = str(created["od_conversation_id"])
+    now_ms = int(time() * 1000)
+    user_message_id = f"msg_{uuid4().hex}"
+    assistant_message_id = f"msg_{uuid4().hex}"
+    _upsert_opendesign_message(
+        payload,
+        project_id,
+        conversation_id,
+        user_message_id,
+        {
+            "id": user_message_id,
+            "role": "user",
+            "content": message,
+            "sessionMode": mode,
+            "createdAt": now_ms,
+        },
+    )
+    _upsert_opendesign_message(
+        payload,
+        project_id,
+        conversation_id,
+        assistant_message_id,
+        {
+            "id": assistant_message_id,
+            "role": "assistant",
+            "content": "",
+            "agentId": "maverick",
+            "agentName": "Maverick Design Runtime",
+            "runStatus": "queued",
+            "sessionMode": mode,
+            "createdAt": now_ms,
+        },
+    )
+    bridge = _create_runtime_bridge_run(
+        payload,
+        {
+            "projectId": project_id,
+            "conversationId": conversation_id,
+            "assistantMessageId": assistant_message_id,
+            "clientRequestId": str(arguments.get("client_message_id") or uuid4()),
+            "message": message,
+            "sessionMode": mode,
+            "threadTitle": str(arguments.get("thread_title") or project.get("name") or "OpenDesign")[:160],
+            "resultVisibility": "public",
+            "attachments": arguments.get("attachments"),
+            "appReferences": arguments.get("app_references"),
+        },
+    )
+    bridge_json = bridge.get("json") if isinstance(bridge.get("json"), dict) else {}
+    bridge["json"] = {
+        **bridge_json,
+        "source_app_id": "design-studio",
+        "od_project_id": project_id,
+        "od_conversation_id": conversation_id,
+        "user_message_id": user_message_id,
+        "assistant_message_id": assistant_message_id,
+        "session_mode": mode,
+    }
+    return bridge
+
+
+def chat_cancel_turn(payload: dict[str, Any], arguments: dict[str, Any]) -> dict[str, Any]:
+    runtime_session_id = validated_identifier(arguments.get("runtime_session_id"), label="runtime session id")
+    turn_id = validated_identifier(arguments.get("turn_id"), label="runtime turn id")
+    correlation = store_for_payload(payload).find_by_runtime(runtime_session_id, turn_id)
+    if correlation is None:
+        raise DesignStudioError("chat_turn_not_found", "The OpenDesign runtime turn was not found.", status_code=404)
+    updated = mark_cancel_requested(payload, str(correlation["od_run_id"]))
+    return {
+        "status_code": 200,
+        "json": {"run": public_run(updated)},
+        "runtime_turn_interrupt_requests": [
+            {
+                "turn_id": turn_id,
+                "reason": "Canceled from Maverick Chat for OpenDesign.",
+                "result_visibility": "public",
+            }
+        ],
+    }
+
+
+def chat_retry_turn(payload: dict[str, Any], arguments: dict[str, Any]) -> dict[str, Any]:
+    retry_arguments = dict(arguments)
+    retry_arguments["client_message_id"] = str(arguments.get("client_message_id") or f"retry-{uuid4()}")
+    return chat_submit_turn(payload, retry_arguments)
+
+
+def _chat_session_mode(value: object) -> str:
+    mode = str(value or "design").strip().lower()
+    if mode not in {"chat", "plan", "design"}:
+        raise DesignStudioError("chat_mode_invalid", "OpenDesign mode must be chat, plan, or design.")
+    return mode
+
+
+def _require_opendesign_conversation(payload: dict[str, Any], project_id: str, conversation_id: str) -> dict[str, Any]:
+    conversations = chat_list_conversations(payload, {"od_project_id": project_id})["conversations"]
+    for conversation in conversations:
+        if str(conversation.get("id") or "") == conversation_id:
+            return conversation
+    raise DesignStudioError("conversation_not_found", "The OpenDesign conversation was not found.", status_code=404)
+
+
+def _upsert_opendesign_message(
+    payload: dict[str, Any],
+    project_id: str,
+    conversation_id: str,
+    message_id: str,
+    body: dict[str, Any],
+) -> dict[str, Any]:
+    return _opendesign_put(
+        payload,
+        f"/api/projects/{project_id}/conversations/{conversation_id}/messages/{message_id}",
+        body,
+    )
+
+
+def _upsert_opendesign_assistant_terminal_message(
+    payload: dict[str, Any],
+    correlation: dict[str, Any],
+    *,
+    event_type: str,
+    output_text: str,
+    failure_reason: str,
+) -> None:
+    status = "completed" if event_type == "runtime.turn.completed" else "canceled" if event_type == "runtime.turn.cancelled" else "failed"
+    content = output_text.strip()
+    if not content and failure_reason.strip():
+        content = failure_reason.strip()
+    _upsert_opendesign_message(
+        payload,
+        str(correlation["od_project_id"]),
+        str(correlation["od_conversation_id"]),
+        str(correlation["assistant_message_id"]),
+        {
+            "id": str(correlation["assistant_message_id"]),
+            "role": "assistant",
+            "content": content,
+            "agentId": "maverick",
+            "agentName": "Maverick Design Runtime",
+            "runId": str(correlation["od_run_id"]),
+            "runStatus": status,
+            "endedAt": int(time() * 1000),
+        },
+    )
 
 
 def _handle_media_config_route(payload: dict[str, Any], arguments: dict[str, Any], *, method: str) -> dict[str, Any]:
@@ -1175,6 +1474,18 @@ def dispatch(action: str, payload: dict[str, Any], arguments: dict[str, Any]) ->
         return set_custom_view(payload, arguments)
     if action == "clear_custom_view":
         return clear_custom_view(payload)
+    if action == "chat.capabilities":
+        return chat_capabilities(payload)
+    if action == "chat.list_conversations":
+        return chat_list_conversations(payload, arguments)
+    if action == "chat.create_conversation":
+        return chat_create_conversation(payload, arguments)
+    if action == "chat.submit_turn":
+        return chat_submit_turn(payload, arguments)
+    if action == "chat.cancel_turn":
+        return chat_cancel_turn(payload, arguments)
+    if action == "chat.retry_turn":
+        return chat_retry_turn(payload, arguments)
     if action == "runtime_bridge.record_submission":
         return runtime_bridge_callback(payload, arguments)
     if action == "runtime_bridge.translate_events":
@@ -1380,6 +1691,14 @@ def _opendesign_json_request(payload: dict[str, Any], path: str) -> Any:
 
 def _opendesign_post(payload: dict[str, Any], path: str, body: dict[str, Any]) -> dict[str, Any]:
     response = _opendesign_response(payload, "POST", path, json_body=body)
+    decoded = _decode_opendesign_json(response)
+    if not isinstance(decoded, dict):
+        raise DesignStudioError("opendesign_response_invalid", "OpenDesign returned an invalid response.", status_code=502)
+    return decoded
+
+
+def _opendesign_put(payload: dict[str, Any], path: str, body: dict[str, Any]) -> dict[str, Any]:
+    response = _opendesign_response(payload, "PUT", path, json_body=body)
     decoded = _decode_opendesign_json(response)
     if not isinstance(decoded, dict):
         raise DesignStudioError("opendesign_response_invalid", "OpenDesign returned an invalid response.", status_code=502)

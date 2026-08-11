@@ -14,6 +14,7 @@ import {
   type RuntimeEvent,
   type RuntimeSession,
   type RuntimeTurn,
+  type SourceAppChatMode,
 } from "../api/client";
 import type { ExternalFileDrop, ExternalMentionDrop } from "../lib/externalInputs";
 import { type ActiveAppContext, loadWidgetActiveAppContext } from "../lib/activeAppContext";
@@ -215,6 +216,7 @@ export function useChatAppController({
   const [composerError, setComposerError] = useState<string | null>(null);
   const [activeAppContext, setActiveAppContext] = useState<ActiveAppContext | null>(null);
   const [multiAgentMode, setMultiAgentMode] = useState<MultiAgentComposerMode>("off");
+  const [sourceAppChatMode, setSourceAppChatMode] = useState<SourceAppChatMode>("design");
   const [interAgentRuns, setInterAgentRuns] = useState<InterAgentRunDetail[]>([]);
   const [interAgentEventsByRunId, setInterAgentEventsByRunId] = useState<Record<string, InterAgentEventRecord[]>>({});
   const [interAgentApprovalsByRunId, setInterAgentApprovalsByRunId] = useState<Record<string, InterAgentApprovalRecord[]>>({});
@@ -432,6 +434,7 @@ export function useChatAppController({
     notifyActiveThreadChanged,
     onInterAgentRunChanged: upsertInterAgentRunDetail,
     selectedAgentRuntimeConfig: runtimeControls.selectedAgentRuntimeConfig,
+    sourceAppChatMode,
     setActiveSession,
     setActiveThread,
     setActiveTurn,
@@ -614,6 +617,13 @@ export function useChatAppController({
     queuedMessages,
     removeAttachment,
     selectedAgentTypeId,
+    sourceAppChatMode,
+    sourceAppId: activeThread?.source_app_id || activeAppContext?.app_id || "",
+    sourceAppProjectId:
+      activeThread?.project_id
+      || (typeof activeAppContext?.params?.od_project_id === "string" ? activeAppContext.params.od_project_id : "")
+      || (typeof activeAppContext?.params?.project_id === "string" ? activeAppContext.params.project_id : ""),
+    setSourceAppChatMode,
     setMultiAgentMode,
     setComposer,
     speechMaxTextChars,

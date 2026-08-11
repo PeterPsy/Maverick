@@ -1,5 +1,9 @@
-export async function callDesignStudioBackend<T>(action: string, argumentsPayload: Record<string, unknown> = {}): Promise<T> {
-  const response = await fetch("/api/apps/design-studio/backend", {
+export async function callDesignStudioBackend<T>(
+  action: string,
+  argumentsPayload: Record<string, unknown> = {},
+  appId = mountedAppId(),
+): Promise<T> {
+  const response = await fetch(`/api/apps/${encodeURIComponent(appId)}/backend`, {
     method: "POST",
     credentials: "same-origin",
     headers: { "Content-Type": "application/json", Accept: "application/json" },
@@ -10,6 +14,27 @@ export async function callDesignStudioBackend<T>(action: string, argumentsPayloa
     throw new Error(payload.detail || payload.error || "Design Studio request failed.");
   }
   return payload;
+}
+
+export function mountedAppId(pathname = window.location.pathname): string {
+  const match = /^\/apps\/([^/?#]+)/.exec(pathname);
+  return match?.[1] || "design-studio";
+}
+
+export function projectCreatedAt(project: Record<string, unknown>): number {
+  const value = project.createdAt ?? project.created_at ?? 0;
+  if (typeof value === "number" && Number.isFinite(value)) {
+    return Math.abs(value) < 100_000_000_000 ? value * 1000 : value;
+  }
+  if (typeof value !== "string") {
+    return 0;
+  }
+  const numeric = Number(value);
+  if (Number.isFinite(numeric) && value.trim()) {
+    return Math.abs(numeric) < 100_000_000_000 ? numeric * 1000 : numeric;
+  }
+  const parsed = Date.parse(value);
+  return Number.isFinite(parsed) ? parsed : 0;
 }
 
 export function projectIdFromWidgetMessage(value: unknown): string {

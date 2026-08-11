@@ -5,7 +5,7 @@
   "opendesign": {
     "version": "0.16.1",
     "oci_reference": "ghcr.io/nexu-io/od:0.16.1",
-    "artifact_sha256": "bfc7705a104e147110bccfadaf284085f739c99c0704bbc5eadb047f31834afc"
+    "artifact_sha256": "9ab929264888b981e4205f0c596ee1128d04bc1cc7573266c15c1ad14e9a8d68"
   },
   "product_path": {
     "official_oci_daemon": true,
@@ -19,8 +19,8 @@
     "remote_iframe": false
   },
   "canonical_entity": {
-    "od_project_id": "od_maverick_7bbe722a873745069956bcdc",
-    "od_run_id": "od_run_0559ae7e6bac4b6d96216689892d145c"
+    "od_project_id": "od_maverick_b5bb808921804367ab906ebe",
+    "od_run_id": "od_run_fcb1ea206ae8492881dae58a4cc4aac4"
   },
   "scenarios": [
     {
@@ -31,12 +31,12 @@
         "workspace_id": "default",
         "local_app_id": "design-studio",
         "sidecar_id": "opendesign",
-        "od_project_id": "od_maverick_7bbe722a873745069956bcdc",
-        "od_run_id": "od_run_0559ae7e6bac4b6d96216689892d145c",
-        "runtime_session_id": "06a1a5c2-de0f-4c9f-a307-d9f6057636b1",
-        "turn_id": "8862d290-653a-48ba-852e-711205c53ad7",
-        "request_id": "request_905efbe5b28e4b19163785a4",
-        "correlation_id": "request_905efbe5b28e4b19163785a4"
+        "od_project_id": "od_maverick_b5bb808921804367ab906ebe",
+        "od_run_id": "od_run_fcb1ea206ae8492881dae58a4cc4aac4",
+        "runtime_session_id": "689c6ee8-8e23-402a-a27d-c60888efc079",
+        "turn_id": "0a92dd8b-f4e7-4041-bb33-fd33d27cc0d4",
+        "request_id": "request_15321db4e259533fa8aa60d9",
+        "correlation_id": "request_15321db4e259533fa8aa60d9"
       },
       "proof": {
         "isolated_origin": true,
@@ -51,18 +51,19 @@
         "workspace_id": "default",
         "local_app_id": "design-studio",
         "sidecar_id": "opendesign",
-        "od_project_id": "od_maverick_7bbe722a873745069956bcdc",
-        "od_run_id": "od_run_0559ae7e6bac4b6d96216689892d145c",
-        "runtime_session_id": "06a1a5c2-de0f-4c9f-a307-d9f6057636b1",
-        "turn_id": "8862d290-653a-48ba-852e-711205c53ad7",
-        "request_id": "request_905efbe5b28e4b19163785a4",
-        "correlation_id": "request_905efbe5b28e4b19163785a4"
+        "od_project_id": "od_maverick_b5bb808921804367ab906ebe",
+        "od_run_id": "od_run_fcb1ea206ae8492881dae58a4cc4aac4",
+        "runtime_session_id": "689c6ee8-8e23-402a-a27d-c60888efc079",
+        "turn_id": "0a92dd8b-f4e7-4041-bb33-fd33d27cc0d4",
+        "request_id": "request_15321db4e259533fa8aa60d9",
+        "correlation_id": "request_15321db4e259533fa8aa60d9"
       },
       "proof": {
         "project_created": true,
         "sidebar_navigation": true,
         "native_home_projects_hidden": true,
-        "native_chat_hidden": true
+        "native_chat_unmounted": true,
+        "native_chat_background_requests": 0
       }
     },
     {
@@ -73,12 +74,12 @@
         "workspace_id": "default",
         "local_app_id": "design-studio",
         "sidecar_id": "opendesign",
-        "od_project_id": "od_maverick_7bbe722a873745069956bcdc",
-        "od_run_id": "od_run_0559ae7e6bac4b6d96216689892d145c",
-        "runtime_session_id": "06a1a5c2-de0f-4c9f-a307-d9f6057636b1",
-        "turn_id": "8862d290-653a-48ba-852e-711205c53ad7",
-        "request_id": "request_905efbe5b28e4b19163785a4",
-        "correlation_id": "request_905efbe5b28e4b19163785a4"
+        "od_project_id": "od_maverick_b5bb808921804367ab906ebe",
+        "od_run_id": "od_run_fcb1ea206ae8492881dae58a4cc4aac4",
+        "runtime_session_id": "689c6ee8-8e23-402a-a27d-c60888efc079",
+        "turn_id": "0a92dd8b-f4e7-4041-bb33-fd33d27cc0d4",
+        "request_id": "request_15321db4e259533fa8aa60d9",
+        "correlation_id": "request_15321db4e259533fa8aa60d9"
       },
       "proof": {
         "imported": true
@@ -92,12 +93,12 @@
         "workspace_id": "default",
         "local_app_id": "design-studio",
         "sidecar_id": "opendesign",
-        "od_project_id": "od_maverick_7bbe722a873745069956bcdc",
-        "od_run_id": "od_run_0559ae7e6bac4b6d96216689892d145c",
-        "runtime_session_id": "06a1a5c2-de0f-4c9f-a307-d9f6057636b1",
-        "turn_id": "8862d290-653a-48ba-852e-711205c53ad7",
-        "request_id": "request_905efbe5b28e4b19163785a4",
-        "correlation_id": "request_905efbe5b28e4b19163785a4"
+        "od_project_id": "od_maverick_b5bb808921804367ab906ebe",
+        "od_run_id": "od_run_fcb1ea206ae8492881dae58a4cc4aac4",
+        "runtime_session_id": "689c6ee8-8e23-402a-a27d-c60888efc079",
+        "turn_id": "0a92dd8b-f4e7-4041-bb33-fd33d27cc0d4",
+        "request_id": "request_15321db4e259533fa8aa60d9",
+        "correlation_id": "request_15321db4e259533fa8aa60d9"
       },
       "proof": {
         "submitted": true
@@ -111,12 +112,12 @@
         "workspace_id": "default",
         "local_app_id": "design-studio",
         "sidecar_id": "opendesign",
-        "od_project_id": "od_maverick_7bbe722a873745069956bcdc",
-        "od_run_id": "od_run_0559ae7e6bac4b6d96216689892d145c",
-        "runtime_session_id": "06a1a5c2-de0f-4c9f-a307-d9f6057636b1",
-        "turn_id": "8862d290-653a-48ba-852e-711205c53ad7",
-        "request_id": "request_905efbe5b28e4b19163785a4",
-        "correlation_id": "request_905efbe5b28e4b19163785a4"
+        "od_project_id": "od_maverick_b5bb808921804367ab906ebe",
+        "od_run_id": "od_run_fcb1ea206ae8492881dae58a4cc4aac4",
+        "runtime_session_id": "689c6ee8-8e23-402a-a27d-c60888efc079",
+        "turn_id": "0a92dd8b-f4e7-4041-bb33-fd33d27cc0d4",
+        "request_id": "request_15321db4e259533fa8aa60d9",
+        "correlation_id": "request_15321db4e259533fa8aa60d9"
       },
       "proof": {
         "incremental": true
@@ -130,12 +131,12 @@
         "workspace_id": "default",
         "local_app_id": "design-studio",
         "sidecar_id": "opendesign",
-        "od_project_id": "od_maverick_7bbe722a873745069956bcdc",
-        "od_run_id": "od_run_0559ae7e6bac4b6d96216689892d145c",
-        "runtime_session_id": "06a1a5c2-de0f-4c9f-a307-d9f6057636b1",
-        "turn_id": "8862d290-653a-48ba-852e-711205c53ad7",
-        "request_id": "request_905efbe5b28e4b19163785a4",
-        "correlation_id": "request_905efbe5b28e4b19163785a4"
+        "od_project_id": "od_maverick_b5bb808921804367ab906ebe",
+        "od_run_id": "od_run_fcb1ea206ae8492881dae58a4cc4aac4",
+        "runtime_session_id": "689c6ee8-8e23-402a-a27d-c60888efc079",
+        "turn_id": "0a92dd8b-f4e7-4041-bb33-fd33d27cc0d4",
+        "request_id": "request_15321db4e259533fa8aa60d9",
+        "correlation_id": "request_15321db4e259533fa8aa60d9"
       },
       "proof": {
         "previewed": true
@@ -149,12 +150,12 @@
         "workspace_id": "default",
         "local_app_id": "design-studio",
         "sidecar_id": "opendesign",
-        "od_project_id": "od_maverick_7bbe722a873745069956bcdc",
-        "od_run_id": "od_run_e81efb275231416aa9559d85f3ec6c9a",
-        "runtime_session_id": "06a1a5c2-de0f-4c9f-a307-d9f6057636b1",
-        "turn_id": "c4448da6-b5e2-4839-98fc-5729f7df1536",
-        "request_id": "request_2070f05bef6182d2f45f5e8b",
-        "correlation_id": "request_2070f05bef6182d2f45f5e8b"
+        "od_project_id": "od_maverick_b5bb808921804367ab906ebe",
+        "od_run_id": "od_run_b9ac9ee4360840be9f9cc49fae6f193d",
+        "runtime_session_id": "689c6ee8-8e23-402a-a27d-c60888efc079",
+        "turn_id": "c575b9bc-94f2-46ca-9568-ac1ea881c3f0",
+        "request_id": "request_a8168ea86b9444d076def76d",
+        "correlation_id": "request_a8168ea86b9444d076def76d"
       },
       "proof": {
         "canceled": true,
@@ -169,12 +170,12 @@
         "workspace_id": "default",
         "local_app_id": "design-studio",
         "sidecar_id": "opendesign",
-        "od_project_id": "od_maverick_7bbe722a873745069956bcdc",
-        "od_run_id": "od_run_0559ae7e6bac4b6d96216689892d145c",
-        "runtime_session_id": "06a1a5c2-de0f-4c9f-a307-d9f6057636b1",
-        "turn_id": "8862d290-653a-48ba-852e-711205c53ad7",
-        "request_id": "request_905efbe5b28e4b19163785a4",
-        "correlation_id": "request_905efbe5b28e4b19163785a4"
+        "od_project_id": "od_maverick_b5bb808921804367ab906ebe",
+        "od_run_id": "od_run_fcb1ea206ae8492881dae58a4cc4aac4",
+        "runtime_session_id": "689c6ee8-8e23-402a-a27d-c60888efc079",
+        "turn_id": "0a92dd8b-f4e7-4041-bb33-fd33d27cc0d4",
+        "request_id": "request_15321db4e259533fa8aa60d9",
+        "correlation_id": "request_15321db4e259533fa8aa60d9"
       },
       "proof": {
         "artifact_count": 2
@@ -188,12 +189,12 @@
         "workspace_id": "default",
         "local_app_id": "design-studio",
         "sidecar_id": "opendesign",
-        "od_project_id": "od_maverick_7bbe722a873745069956bcdc",
-        "od_run_id": "od_run_0559ae7e6bac4b6d96216689892d145c",
-        "runtime_session_id": "06a1a5c2-de0f-4c9f-a307-d9f6057636b1",
-        "turn_id": "8862d290-653a-48ba-852e-711205c53ad7",
-        "request_id": "request_905efbe5b28e4b19163785a4",
-        "correlation_id": "request_905efbe5b28e4b19163785a4"
+        "od_project_id": "od_maverick_b5bb808921804367ab906ebe",
+        "od_run_id": "od_run_fcb1ea206ae8492881dae58a4cc4aac4",
+        "runtime_session_id": "689c6ee8-8e23-402a-a27d-c60888efc079",
+        "turn_id": "0a92dd8b-f4e7-4041-bb33-fd33d27cc0d4",
+        "request_id": "request_15321db4e259533fa8aa60d9",
+        "correlation_id": "request_15321db4e259533fa8aa60d9"
       },
       "proof": {
         "recovered": true,
@@ -208,12 +209,12 @@
         "workspace_id": "default",
         "local_app_id": "design-studio",
         "sidecar_id": "opendesign",
-        "od_project_id": "od_maverick_7bbe722a873745069956bcdc",
-        "od_run_id": "od_run_0559ae7e6bac4b6d96216689892d145c",
-        "runtime_session_id": "06a1a5c2-de0f-4c9f-a307-d9f6057636b1",
-        "turn_id": "8862d290-653a-48ba-852e-711205c53ad7",
-        "request_id": "request_905efbe5b28e4b19163785a4",
-        "correlation_id": "request_905efbe5b28e4b19163785a4"
+        "od_project_id": "od_maverick_b5bb808921804367ab906ebe",
+        "od_run_id": "od_run_fcb1ea206ae8492881dae58a4cc4aac4",
+        "runtime_session_id": "689c6ee8-8e23-402a-a27d-c60888efc079",
+        "turn_id": "0a92dd8b-f4e7-4041-bb33-fd33d27cc0d4",
+        "request_id": "request_15321db4e259533fa8aa60d9",
+        "correlation_id": "request_15321db4e259533fa8aa60d9"
       },
       "proof": {
         "project_route": true,
@@ -228,12 +229,12 @@
         "workspace_id": "workspace-b",
         "local_app_id": "design-studio",
         "sidecar_id": "opendesign",
-        "od_project_id": "od_maverick_11ad39bcb4c14950a42c0e6c",
-        "od_run_id": "od_run_c03022b592a6492382104687c1a5cd9e",
-        "runtime_session_id": "ea3b4177-1f0e-4de0-9061-398b70f837fa",
-        "turn_id": "e3c6e925-db27-4c16-9239-484ec6c69d69",
-        "request_id": "request_1e84d29493043433ed6e68bd",
-        "correlation_id": "request_1e84d29493043433ed6e68bd"
+        "od_project_id": "od_maverick_cd3dc8afba01474d94f23009",
+        "od_run_id": "od_run_4cc3ff66a74e4b239fa153cc3847b4da",
+        "runtime_session_id": "c42d48e3-513e-4856-bd03-1ad55715de60",
+        "turn_id": "77064dd7-dfe0-4fbd-8c16-55c5bb949bb4",
+        "request_id": "request_793ee02fcb27c596b9a6d875",
+        "correlation_id": "request_793ee02fcb27c596b9a6d875"
       },
       "proof": {
         "distinct_origins": true
@@ -247,12 +248,12 @@
         "workspace_id": "default",
         "local_app_id": "design-studio",
         "sidecar_id": "opendesign",
-        "od_project_id": "od_maverick_7bbe722a873745069956bcdc",
-        "od_run_id": "od_run_0559ae7e6bac4b6d96216689892d145c",
-        "runtime_session_id": "06a1a5c2-de0f-4c9f-a307-d9f6057636b1",
-        "turn_id": "8862d290-653a-48ba-852e-711205c53ad7",
-        "request_id": "request_905efbe5b28e4b19163785a4",
-        "correlation_id": "request_905efbe5b28e4b19163785a4"
+        "od_project_id": "od_maverick_b5bb808921804367ab906ebe",
+        "od_run_id": "od_run_fcb1ea206ae8492881dae58a4cc4aac4",
+        "runtime_session_id": "689c6ee8-8e23-402a-a27d-c60888efc079",
+        "turn_id": "0a92dd8b-f4e7-4041-bb33-fd33d27cc0d4",
+        "request_id": "request_15321db4e259533fa8aa60d9",
+        "correlation_id": "request_15321db4e259533fa8aa60d9"
       },
       "proof": {
         "exact_deny": true
@@ -266,12 +267,12 @@
         "workspace_id": "default",
         "local_app_id": "design-studio",
         "sidecar_id": "opendesign",
-        "od_project_id": "od_maverick_7bbe722a873745069956bcdc",
-        "od_run_id": "od_run_0559ae7e6bac4b6d96216689892d145c",
-        "runtime_session_id": "06a1a5c2-de0f-4c9f-a307-d9f6057636b1",
-        "turn_id": "8862d290-653a-48ba-852e-711205c53ad7",
-        "request_id": "request_905efbe5b28e4b19163785a4",
-        "correlation_id": "request_905efbe5b28e4b19163785a4"
+        "od_project_id": "od_maverick_b5bb808921804367ab906ebe",
+        "od_run_id": "od_run_fcb1ea206ae8492881dae58a4cc4aac4",
+        "runtime_session_id": "689c6ee8-8e23-402a-a27d-c60888efc079",
+        "turn_id": "0a92dd8b-f4e7-4041-bb33-fd33d27cc0d4",
+        "request_id": "request_15321db4e259533fa8aa60d9",
+        "correlation_id": "request_15321db4e259533fa8aa60d9"
       },
       "proof": {
         "maverick_cookie_forwarded": false,
@@ -287,12 +288,12 @@
         "workspace_id": "default",
         "local_app_id": "design-studio",
         "sidecar_id": "opendesign",
-        "od_project_id": "od_maverick_7bbe722a873745069956bcdc",
-        "od_run_id": "od_run_0559ae7e6bac4b6d96216689892d145c",
-        "runtime_session_id": "06a1a5c2-de0f-4c9f-a307-d9f6057636b1",
-        "turn_id": "8862d290-653a-48ba-852e-711205c53ad7",
-        "request_id": "request_905efbe5b28e4b19163785a4",
-        "correlation_id": "request_905efbe5b28e4b19163785a4"
+        "od_project_id": "od_maverick_b5bb808921804367ab906ebe",
+        "od_run_id": "od_run_fcb1ea206ae8492881dae58a4cc4aac4",
+        "runtime_session_id": "689c6ee8-8e23-402a-a27d-c60888efc079",
+        "turn_id": "0a92dd8b-f4e7-4041-bb33-fd33d27cc0d4",
+        "request_id": "request_15321db4e259533fa8aa60d9",
+        "correlation_id": "request_15321db4e259533fa8aa60d9"
       },
       "proof": {
         "migration_smoke": true

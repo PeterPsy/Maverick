@@ -1,12 +1,12 @@
 {
   "artifact": {
-    "artifact_sha256": "bfc7705a104e147110bccfadaf284085f739c99c0704bbc5eadb047f31834afc",
-    "file_manifest_sha256": "ba8fe2df10714e31468d0cf376e7f572bb9d0fe118a504b6579c21a7ba80e610",
+    "artifact_sha256": "9ab929264888b981e4205f0c596ee1128d04bc1cc7573266c15c1ad14e9a8d68",
+    "file_manifest_sha256": "64cca85fc901c484837a3a759a56dab200e4b5c8f383798681cd505333765608",
     "oci_index_digest": "sha256:eb1c9d55532ffd2088a4a71951cffd273dff65e96e077bcef8c8bac3a6e1f1a1",
     "release": "0.16.1",
     "upstream_commit": "276b4d8e970bc143d7ad060181a89a834e3d9caf"
   },
-  "date": "2026-08-05",
+  "date": "2026-08-11",
   "proofs": {
     "architecture": {
       "command": "python3 -m unittest tests.architecture.test_design_studio_runtime_bridge_proof -v",

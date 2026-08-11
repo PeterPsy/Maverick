@@ -836,6 +836,10 @@
               {
                 "method": "GET",
                 "path_template": "/index.html"
+              },
+              {
+                "method": "GET",
+                "path_template": "/projects/{id}"
               }
             ],
             "handled_by_core": [

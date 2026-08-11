@@ -1,16 +1,18 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Expand, LoaderCircle, RefreshCw, TriangleAlert } from "lucide-react";
+import { Expand, LoaderCircle, Plus, RefreshCw, TriangleAlert } from "lucide-react";
 import {
   currentDesignStudioAppId,
   initialNavigation,
   isTrustedSidecarMessage,
   navigationFromParams,
   navigationMessage,
+  openSettingsMessage,
   requestOpenDesignLaunch,
   SidecarLaunchError,
   themeMessage,
 } from "./api";
-import type { OpenDesignNavigation, SidecarDiagnostic, SidecarHostPhase, SidecarLaunch } from "./types";
+import { callDesignStudioBackend } from "./backendApi";
+import type { OpenDesignLaunchTarget, OpenDesignNavigation, SidecarDiagnostic, SidecarHostPhase, SidecarLaunch } from "./types";
 import "./styles/main.css";
 
 const LOAD_DEGRADED_AFTER_MS = 20_000;
@@ -22,11 +24,18 @@ export function App() {
   const submittedFrameRef = useRef<HTMLIFrameElement | null>(null);
   const sidecarOriginRef = useRef("");
   const navigationRef = useRef<OpenDesignNavigation>(initialNavigation());
+  const settingsRequestRef = useRef(initialSettingsRequest());
+  const deliveredSettingsRequestRef = useRef("");
+  const settingsDeliveryAttemptsRef = useRef(0);
   const themeRef = useRef<"dark" | "light">(initialTheme());
   const [, setNavigation] = useState(navigationRef.current);
   const [phase, setPhase] = useState<SidecarHostPhase>("launching");
   const [diagnostic, setDiagnostic] = useState<SidecarDiagnostic | null>(null);
   const [launchRevision, setLaunchRevision] = useState(0);
+  const [empty, setEmpty] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [creating, setCreating] = useState(false);
+  const [createError, setCreateError] = useState("");
 
   const postNavigation = useCallback(() => {
     const frameWindow = frameRef.current?.contentWindow;
@@ -44,6 +53,40 @@ export function App() {
       frameWindow.postMessage(themeMessage(themeRef.current), origin);
     }
   }, []);
+
+  const postSettings = useCallback(() => {
+    const requestId = settingsRequestRef.current;
+    if (!requestId || deliveredSettingsRequestRef.current === requestId) {
+      return;
+    }
+    function send() {
+      const frameWindow = frameRef.current?.contentWindow;
+      const origin = sidecarOriginRef.current;
+      if (
+        !frameWindow
+        || !origin
+        || deliveredSettingsRequestRef.current === requestId
+        || settingsDeliveryAttemptsRef.current >= 40
+      ) {
+        return;
+      }
+      settingsDeliveryAttemptsRef.current += 1;
+      frameWindow.postMessage(openSettingsMessage(), origin);
+      window.setTimeout(send, 250);
+    }
+    send();
+  }, []);
+
+  const openInShell = useCallback((projectId: string, extra: Record<string, string> = {}) => {
+    window.parent?.postMessage(
+      {
+        type: "maverick.app.open-app",
+        app_id: appId,
+        params: { ...(projectId ? { od_project_id: projectId } : {}), ...extra },
+      },
+      window.location.origin,
+    );
+  }, [appId]);
 
   useEffect(() => {
     window.parent?.postMessage({ type: "maverick.app.ready", app_id: appId }, window.location.origin);
@@ -70,10 +113,20 @@ export function App() {
         const params = isRecord(event.data.params)
           ? event.data.params as Record<string, string | boolean | null>
           : {};
-        const next = navigationFromParams(params);
+        const settingsRequest = scalarString(params.open_settings_request_id);
+        if (settingsRequest && settingsRequest !== settingsRequestRef.current) {
+          settingsRequestRef.current = settingsRequest;
+          deliveredSettingsRequestRef.current = "";
+          settingsDeliveryAttemptsRef.current = 0;
+          postSettings();
+        }
+        const next = settingsRequest && !scalarString(params.od_project_id)
+          ? navigationRef.current
+          : navigationFromParams(params);
         if (next.od_project_id === navigationRef.current.od_project_id && next.od_run_id === navigationRef.current.od_run_id) {
           return;
         }
+        setEmpty(!next.od_project_id);
         navigationRef.current = next;
         setNavigation(next);
         postNavigation();
@@ -88,6 +141,7 @@ export function App() {
         setPhase("ready");
         postNavigation();
         postTheme();
+        postSettings();
         return;
       }
       if (event.data.type === "maverick.opendesign.navigation-changed" && event.data.version === 1) {
@@ -97,20 +151,23 @@ export function App() {
         }
         navigationRef.current = next;
         setNavigation(next);
-        window.parent?.postMessage(
-          {
-            type: "maverick.app.selection-changed",
-            owner_app_id: appId,
-            selection: { od_project_id: next.od_project_id },
-          },
-          window.location.origin,
-        );
+        setEmpty(false);
+        openInShell(next.od_project_id);
+        return;
+      }
+      if (event.data.type === "maverick.opendesign.settings-opened" && event.data.version === 1) {
+        deliveredSettingsRequestRef.current = settingsRequestRef.current;
+        setSettingsOpen(true);
+        return;
+      }
+      if (event.data.type === "maverick.opendesign.settings-closed" && event.data.version === 1) {
+        setSettingsOpen(false);
       }
     }
 
     window.addEventListener("message", handleMessage);
     return () => window.removeEventListener("message", handleMessage);
-  }, [appId, postNavigation, postTheme]);
+  }, [appId, openInShell, postNavigation, postSettings, postTheme]);
 
   useEffect(() => {
     let canceled = false;
@@ -118,12 +175,32 @@ export function App() {
     const frame = frameRef.current;
     submittedFrameRef.current = null;
     sidecarOriginRef.current = "";
+    deliveredSettingsRequestRef.current = "";
+    settingsDeliveryAttemptsRef.current = 0;
     setDiagnostic(null);
     setPhase("launching");
 
-    void requestOpenDesignLaunch(appId, navigationRef.current)
+    void callDesignStudioBackend<OpenDesignLaunchTarget>(
+      "resolve_launch_target",
+      navigationRef.current.od_project_id ? { od_project_id: navigationRef.current.od_project_id } : {},
+      appId,
+    )
+      .then((target) => {
+        if (canceled) {
+          return null;
+        }
+        const resolved = navigationFromParams({ od_project_id: target.od_project_id });
+        const shouldSyncShell = resolved.od_project_id && resolved.od_project_id !== navigationRef.current.od_project_id;
+        navigationRef.current = resolved;
+        setNavigation(resolved);
+        setEmpty(target.target === "empty");
+        if (shouldSyncShell) {
+          openInShell(resolved.od_project_id);
+        }
+        return requestOpenDesignLaunch(appId, resolved);
+      })
       .then((launch) => {
-        if (canceled || !frame) {
+        if (canceled || !frame || !launch) {
           return;
         }
         sidecarOriginRef.current = launch.origin;
@@ -155,7 +232,7 @@ export function App() {
       canceled = true;
       window.clearTimeout(degradedTimer);
     };
-  }, [appId, launchRevision]);
+  }, [appId, launchRevision, openInShell]);
 
   function handleFrameLoad() {
     if (submittedFrameRef.current !== frameRef.current) {
@@ -179,6 +256,35 @@ export function App() {
     setLaunchRevision((value) => value + 1);
   }
 
+  async function createProject() {
+    if (creating) {
+      return;
+    }
+    setCreating(true);
+    setCreateError("");
+    try {
+      const payload = await callDesignStudioBackend<{ od_project_id?: string; project?: { id?: string } }>(
+        "create_project",
+        { name: "Untitled design" },
+        appId,
+      );
+      const projectId = payload.od_project_id || payload.project?.id || "";
+      if (!projectId) {
+        throw new Error("OpenDesign did not return the new project.");
+      }
+      const next = navigationFromParams({ od_project_id: projectId });
+      navigationRef.current = next;
+      setNavigation(next);
+      setEmpty(false);
+      postNavigation();
+      openInShell(projectId);
+    } catch (error) {
+      setCreateError(error instanceof Error ? error.message : "Unable to create the project.");
+    } finally {
+      setCreating(false);
+    }
+  }
+
   async function enterFullscreen() {
     const target = frameRef.current?.parentElement;
     if (!target?.requestFullscreen) {
@@ -198,7 +304,7 @@ export function App() {
   const showRecovery = phase === "degraded" || phase === "error";
 
   return (
-    <main className="design-studio-host" data-phase={phase}>
+    <main className={`design-studio-host ${empty ? "is-empty" : ""} ${settingsOpen ? "is-settings-open" : ""}`} data-phase={phase}>
       <iframe
         key={launchRevision}
         ref={frameRef}
@@ -232,7 +338,17 @@ export function App() {
         </div>
       ) : null}
 
-      {phase === "ready" ? (
+      {phase === "ready" && empty && !settingsOpen ? (
+        <div className="design-studio-empty">
+          <button disabled={creating} onClick={() => void createProject()} type="button">
+            {creating ? <LoaderCircle aria-hidden="true" className="spin" /> : <Plus aria-hidden="true" />}
+            <span>Nuovo progetto</span>
+          </button>
+          {createError ? <p role="alert">{createError}</p> : null}
+        </div>
+      ) : null}
+
+      {phase === "ready" && !empty ? (
         <div className="design-studio-toolbar" aria-label="OpenDesign host controls">
           <button type="button" onClick={retry} aria-label="Reload OpenDesign in a new isolated session" title="Reload isolated session">
             <RefreshCw size={17} aria-hidden="true" />
@@ -249,6 +365,14 @@ export function App() {
 function initialTheme(): "dark" | "light" {
   const value = new URLSearchParams(window.location.search).get("maverick_theme");
   return value === "light" ? "light" : "dark";
+}
+
+function initialSettingsRequest(search = window.location.search): string {
+  return scalarString(new URLSearchParams(search).get("open_settings_request_id"));
+}
+
+function scalarString(value: unknown): string {
+  return typeof value === "string" && value.length <= 128 ? value.trim() : "";
 }
 
 function submitBootstrapForm(frame: HTMLIFrameElement, launch: SidecarLaunch) {

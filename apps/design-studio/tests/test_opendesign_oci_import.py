@@ -175,24 +175,40 @@ class OpenDesignOciImportTests(unittest.TestCase):
             target = stage / "app/apps/daemon/dist/server.js"
             target.parent.mkdir(parents=True)
             target.write_bytes(source)
-            ui_target = stage / "app/apps/web/out/index.html"
-            ui_target.parent.mkdir(parents=True)
-            ui_source = b"<!doctype html><html><head></head><body></body></html>"
-            ui_target.write_bytes(ui_source)
             manifest = copy.deepcopy(self.manifest)
             manifest["boundary_patch"]["pre_sha256"] = hashlib.sha256(source).hexdigest()
             manifest["boundary_patch"]["post_sha256"] = None
-            manifest["ui_patch"]["pre_sha256"] = hashlib.sha256(ui_source).hexdigest()
-            manifest["ui_patch"]["post_sha256"] = hashlib.sha256(
-                ui_source.replace(b"</head>", self.boundary._UI_INJECTION + b"</head>")
-            ).hexdigest()
             evidence = self.boundary.apply_boundary_patch(stage, manifest)
             self.assertEqual(evidence["path"], "app/apps/daemon/dist/server.js")
             self.assertIn(b"!requireApiTokenOnLoopback", target.read_bytes())
-            self.assertEqual(evidence["ui_patch"]["path"], "app/apps/web/out/index.html")
-            self.assertIn(b"maverick-opendesign-ui", ui_target.read_bytes())
+            self.assertNotIn("web_patch", evidence)
             with self.assertRaisesRegex(self.boundary.BoundaryPatchError, "preimage"):
                 self.boundary.apply_boundary_patch(stage, manifest)
+
+    def test_web_patch_is_a_rebuilt_react_boundary_without_dom_pruning(self) -> None:
+        compiled_patch = (SERVICE_ROOT / "opendesign_oci_patch.py").read_text(encoding="utf-8")
+        react_patch = (SERVICE_ROOT / "patches/0002-maverick-native-shell.patch").read_text(encoding="utf-8")
+        self.assertNotIn("MutationObserver", compiled_patch)
+        self.assertNotIn("querySelectorAll", compiled_patch)
+        for marker in (
+            "function MaverickProjectView",
+            "maverickHosted ? null",
+            "maverick.opendesign.open-settings",
+            "maverick.opendesign.settings-closed",
+        ):
+            self.assertIn(marker, react_patch)
+        self.assertEqual(
+            self.manifest["web_patch"]["capabilities"],
+            [
+                "react_hosted_project_view",
+                "native_chat_unmounted",
+                "native_home_unmounted",
+                "native_workspace_tabs_unmounted",
+                "native_settings_bridge",
+                "maverick_theme",
+                "project_navigation_bridge",
+            ],
+        )
 
     def test_runtime_command_uses_only_imported_loader_libraries_and_node(self) -> None:
         with tempfile.TemporaryDirectory(prefix="maverick-od-oci-command-") as temporary:
@@ -212,7 +228,7 @@ class OpenDesignOciImportTests(unittest.TestCase):
             self.assertEqual(command[-2:], [str(root / "app/apps/daemon/dist/cli.js"), "--no-open"])
             self.assertNotEqual(command[3], "node")
 
-    def test_primary_import_has_no_docker_socket_or_source_build_path(self) -> None:
+    def test_primary_import_has_no_docker_socket_and_uses_reviewed_web_builder(self) -> None:
         sources = "\n".join(
             (SERVICE_ROOT / name).read_text(encoding="utf-8")
             for name in (
@@ -222,8 +238,9 @@ class OpenDesignOciImportTests(unittest.TestCase):
                 "opendesign_oci_stage.py",
             )
         )
-        for forbidden in ("docker run", "/var/run/docker.sock", "pnpm", "next build"):
+        for forbidden in ("docker run", "/var/run/docker.sock"):
             self.assertNotIn(forbidden, sources.lower())
+        self.assertIn("build_and_overlay_web", sources)
 
     def test_real_acceptance_record_matches_canonical_manifest(self) -> None:
         acceptance = json.loads(ACCEPTANCE_PATH.read_text(encoding="utf-8"))
@@ -237,7 +254,10 @@ class OpenDesignOciImportTests(unittest.TestCase):
         self.assertEqual(acceptance["artifact"]["size_bytes"], asset["size_bytes"])
         for field in ("path", "pre_sha256", "post_sha256"):
             self.assertEqual(acceptance["boundary_patch"][field], self.manifest["boundary_patch"][field])
-            self.assertEqual(acceptance["ui_patch"][field], self.manifest["ui_patch"][field])
+        self.assertEqual(
+            acceptance["web_patch"]["output_manifest_sha256"],
+            self.manifest["web_patch"]["output_manifest_sha256"],
+        )
         self.assertEqual(acceptance["import"]["independent_derivations"], 2)
         self.assertTrue(acceptance["import"]["reproducible"])
         self.assertTrue(acceptance["runtime_smoke"]["ready"])

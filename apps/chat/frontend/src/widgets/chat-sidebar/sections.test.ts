@@ -74,9 +74,10 @@ describe("chat sidebar runtime status", () => {
 
   it("filters and badges OpenDesign threads", () => {
     const designThread = thread({ thread_id: "design-thread", source_app_id: "design-studio" });
+    const mountedDesignThread = thread({ thread_id: "mounted-design-thread", source_app_id: "workspace-design-studio" });
     const chatThread = thread({ thread_id: "chat-thread", source_app_id: "chat" });
 
-    expect(filterThreads([chatThread, designThread], "opendesign")).toEqual([designThread]);
+    expect(filterThreads([chatThread, designThread, mountedDesignThread], "opendesign")).toEqual([designThread, mountedDesignThread]);
     expect(threadSourceBadges(designThread)).toEqual([
       { icon: "design_services", kind: "opendesign", label: "OpenDesign" },
     ]);
@@ -169,6 +170,9 @@ describe("chat sidebar runtime status", () => {
       { icon: "account_tree", kind: "multi_agent", label: "Multi-chat" },
     ]);
     expect(threadSourceBadges(thread({ source_app_id: "chat" }))).toEqual([]);
+    expect(threadSourceBadges(thread({ source_app_id: "whiteboard" }))).toEqual([
+      { icon: "apps", kind: "source_app", label: "Whiteboard" },
+    ]);
   });
 
   it("uses the runtime thread availability supplied over websocket", () => {

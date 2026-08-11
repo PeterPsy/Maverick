@@ -14,7 +14,7 @@ from typing import Callable, Iterator, TextIO
 
 GIBIBYTE = 1024**3
 START_AVAILABLE_BYTES = 4 * GIBIBYTE
-STOP_AVAILABLE_BYTES = int(2.5 * GIBIBYTE)
+STOP_AVAILABLE_BYTES = int(2.4 * GIBIBYTE)
 START_WAIT_SECONDS = 60
 POLL_SECONDS = 2.0
 
@@ -163,7 +163,7 @@ def run_command(
                     _terminate_process_group(process)
                     available_gib = snapshot.available_bytes / GIBIBYTE
                     raise BuildProcessError(
-                        f"OpenDesign command stopped below 2.5 GiB MemAvailable: "
+                        f"OpenDesign command stopped below 2.4 GiB MemAvailable: "
                         f"{label} ({available_gib:.2f} GiB)"
                     )
         result = CommandResult(process.returncode, (stdout or "").strip())

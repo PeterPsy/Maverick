@@ -22,6 +22,7 @@ _STATIC_RULES = (
     {"method": "GET", "path_template": "/favicon.ico"},
     {"method": "GET", "path_template": "/frames", "static_tree": True},
     {"method": "GET", "path_template": "/index.html"},
+    {"method": "GET", "path_template": "/projects/{id}"},
 )
 _MAVERICK_EXTENSION_RULES = (
     # The upstream raw route is multi-segment and therefore remains blocked.

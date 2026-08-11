@@ -4,9 +4,11 @@ from __future__ import annotations
 
 from base64 import b64decode, b64encode
 import binascii
+from datetime import datetime, timezone
 from hashlib import sha256
 from io import BytesIO
 import json
+from math import isfinite
 import mimetypes
 import os
 from pathlib import Path
@@ -100,6 +102,61 @@ def list_opendesign_projects(payload: dict[str, Any]) -> dict[str, Any]:
     if not isinstance(projects, list) or any(not isinstance(project, dict) for project in projects):
         raise DesignStudioError("opendesign_response_invalid", "OpenDesign returned an invalid project list.", status_code=502)
     return {"projects": projects}
+
+
+def resolve_launch_target(payload: dict[str, Any], arguments: dict[str, Any]) -> dict[str, Any]:
+    """Resolve the hosted launch without ever falling back to OpenDesign Home."""
+    projects = list_opendesign_projects(payload)["projects"]
+    requested_id = str(arguments.get("od_project_id") or arguments.get("project_id") or "").strip()
+    if requested_id:
+        try:
+            requested_id = validated_identifier(requested_id, label="OpenDesign project id")
+        except RuntimeBridgeError as error:
+            raise DesignStudioError("project_id_invalid", str(error)) from error
+        selected = next((project for project in projects if str(project.get("id") or "") == requested_id), None)
+        if selected is None:
+            raise DesignStudioError("project_not_found", "The OpenDesign project was not found.", status_code=404)
+        return {"target": "project", "od_project_id": requested_id, "project": selected}
+    if not projects:
+        return {"target": "empty", "od_project_id": "", "project": None}
+    selected = max(
+        projects,
+        key=lambda project: (_project_created_at(project), str(project.get("id") or "")),
+    )
+    try:
+        selected_id = validated_identifier(selected.get("id"), label="OpenDesign project id")
+    except RuntimeBridgeError as error:
+        raise DesignStudioError(
+            "opendesign_response_invalid",
+            "OpenDesign returned a project without a valid identifier.",
+            status_code=502,
+        ) from error
+    return {"target": "project", "od_project_id": selected_id, "project": selected}
+
+
+def _project_created_at(project: dict[str, Any]) -> float:
+    value = project.get("createdAt", project.get("created_at"))
+    if isinstance(value, bool):
+        return 0.0
+    if isinstance(value, (int, float)):
+        numeric = float(value)
+        if not isfinite(numeric):
+            return 0.0
+        return numeric * 1000 if abs(numeric) < 100_000_000_000 else numeric
+    if not isinstance(value, str) or not value.strip():
+        return 0.0
+    text = value.strip()
+    try:
+        return _project_created_at({"createdAt": float(text)})
+    except ValueError:
+        pass
+    try:
+        parsed = datetime.fromisoformat(text.replace("Z", "+00:00"))
+    except ValueError:
+        return 0.0
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=timezone.utc)
+    return parsed.timestamp() * 1000
 
 
 def get_project(payload: dict[str, Any], arguments: dict[str, Any]) -> dict[str, Any]:
@@ -1006,35 +1063,11 @@ def runtime_bridge_terminal(payload: dict[str, Any], arguments: dict[str, Any], 
 
 
 def chat_capabilities(payload: dict[str, Any]) -> dict[str, Any]:
-    """Describe only contextual OpenDesign controls the governed bridge can honor."""
+    """Describe only actions exposed by the source-app chat contract."""
     return {
         "source_app_id": str(payload.get("app_id") or "design-studio"),
         "label": "OpenDesign",
         "modes": ["chat", "plan", "design"],
-        "supported": {
-            "storage_attachments": True,
-            "project_references": True,
-            "project_files": True,
-            "active_design_context": True,
-            "design_system_selection": True,
-            "skills": True,
-            "agent_and_model": "chat",
-            "stop": True,
-            "retry": True,
-        },
-        "unavailable": {
-            "plugins": "Plugins are blocked until Maverick exposes a governed plugin capability.",
-            "mcp": "Direct MCP configuration is blocked; use Maverick-owned app and skill surfaces.",
-            "connectors": "Connectors require a declared Maverick dependency and grant.",
-            "library": "The OpenDesign Library API is not available in sandbox mode.",
-            "figma_import": "Figma import is not yet backed by a governed Maverick importer.",
-            "local_code": "Local folders and working directories cannot escape the project sandbox.",
-            "external_search": "External search is unavailable without an explicit network capability.",
-            "media_generation": "Direct media generation is unavailable; use Maverick media apps.",
-            "terminal_and_deploy": "Terminal and deployment access are intentionally unavailable.",
-            "design_system_mutation": "Design-system mutation is read-only until a governed API is available.",
-            "visual_annotations": "Visual annotations remain in the canvas until typed chat events are available.",
-        },
     }
 
 
@@ -1172,7 +1205,7 @@ def chat_submit_turn(payload: dict[str, Any], arguments: dict[str, Any]) -> dict
     bridge_json = bridge.get("json") if isinstance(bridge.get("json"), dict) else {}
     bridge["json"] = {
         **bridge_json,
-        "source_app_id": "design-studio",
+        "source_app_id": str(payload.get("app_id") or "design-studio"),
         "od_project_id": project_id,
         "od_conversation_id": conversation_id,
         "user_message_id": user_message_id,
@@ -1454,6 +1487,8 @@ def dispatch(action: str, payload: dict[str, Any], arguments: dict[str, Any]) ->
         return list_projects(payload)
     if action == "list_opendesign_projects":
         return list_opendesign_projects(payload)
+    if action == "resolve_launch_target":
+        return resolve_launch_target(payload, arguments)
     if action == "get_project":
         return get_project(payload, arguments)
     if action == "create_project":

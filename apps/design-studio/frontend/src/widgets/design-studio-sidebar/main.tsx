@@ -1,13 +1,15 @@
 import { useEffect, useMemo, useState } from "react";
 import { createRoot } from "react-dom/client";
 import { Search } from "lucide-react";
-import { callDesignStudioBackend, mobileLayoutFromWidgetMessage, projectIdFromWidgetMessage } from "../../backendApi";
+import { callDesignStudioBackend, mobileLayoutFromWidgetMessage, mountedAppId, projectCreatedAt, projectIdFromWidgetMessage } from "../../backendApi";
 import { applyInitialWidgetTheme, listenForWidgetTheme } from "../../widgetTheme";
 import "../../styles/sidebar.css";
 
 type OpenDesignProject = {
   id: string;
   name?: string;
+  createdAt?: number | string;
+  created_at?: number | string;
   updatedAt?: number | string;
   updated_at?: number | string;
 };
@@ -16,6 +18,7 @@ applyInitialWidgetTheme();
 listenForWidgetTheme();
 
 let isMobileLayout = false;
+const APP_ID = mountedAppId();
 
 function DesignStudioSidebar() {
   const [projects, setProjects] = useState<OpenDesignProject[]>([]);
@@ -28,7 +31,7 @@ function DesignStudioSidebar() {
     const needle = query.trim().toLocaleLowerCase();
     return projects
       .filter((project) => !needle || `${project.name || ""} ${project.id}`.toLocaleLowerCase().includes(needle))
-      .sort((left, right) => projectUpdatedAt(right) - projectUpdatedAt(left));
+      .sort((left, right) => projectCreatedAt(right) - projectCreatedAt(left));
   }, [projects, query]);
 
   async function refresh() {
@@ -61,7 +64,7 @@ function DesignStudioSidebar() {
         isMobileLayout = mobileLayout;
       }
       const payload = event.data as { owner_app_id?: string; resource?: string; type?: string };
-      if (payload.type === "maverick.widget.data-changed" && payload.owner_app_id === "design-studio") {
+      if (payload.type === "maverick.widget.data-changed" && payload.owner_app_id === APP_ID) {
         void refresh();
       }
     }
@@ -72,7 +75,7 @@ function DesignStudioSidebar() {
   function openProject(projectId: string) {
     setSelectedProjectId(projectId);
     window.parent?.postMessage(
-      { type: "maverick.widget.open-app", app_id: "design-studio", params: { od_project_id: projectId } },
+      { type: "maverick.widget.open-app", app_id: APP_ID, params: { od_project_id: projectId } },
       window.location.origin,
     );
     if (isMobileLayout) {

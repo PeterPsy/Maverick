@@ -16,11 +16,12 @@ and linux/amd64 manifest
 The image labels and SLSA attestation bind it to upstream commit
 `276b4d8e970bc143d7ad060181a89a834e3d9caf` and release `0.16.1`.
 
-Import the immutable release without Docker or a local Next build, then
-materialize it:
+Import the immutable OCI runtime and rebuild the reviewed React web overlay from
+the exact pinned source, then materialize it:
 
 ```bash
 python3 apps/design-studio/service/import_opendesign_oci.py \
+  --source-repository /path/to/open-design-v0.16.1/.git \
   --signing-key /secure/path/opendesign-provenance-key.pem
 python3 apps/design-studio/service/materialize_opendesign.py
 ```
@@ -28,7 +29,8 @@ python3 apps/design-studio/service/materialize_opendesign.py
 Import is fail-closed for agent runs. It requires a live
 `MAVERICK_RUNTIME_SESSION_ID` in its process ancestry. Each command runs in a
 new process group; loss of the runtime attachment or termination stops the whole
-group. It also refuses to begin below 3 GiB available memory. The registry
+group. Heavy phases refuse to begin below 4 GiB available memory and stop below
+2.4 GiB. The registry
 client accepts only the two pinned HTTPS hosts, validates every descriptor,
 layer size and digest, requires the exact OCI config labels and SLSA subject,
 and streams layers through owned temporary files. Layer extraction rejects path
@@ -37,8 +39,11 @@ following filesystem links.
 
 `opendesign_bundle.json` is the single distribution contract. Two independent
 pulls reconstruct and inventory the root filesystem, apply the one exact
-preimage-bound compiled boundary patch, stage the image's own musl loader, Node
-runtime, daemon, static web and native dependency closure, and generate the
+preimage-bound compiled boundary patch, export the exact upstream Git pin,
+apply the reviewed source patch series, and independently build the React web
+overlay with the frozen lockfile. They then stage the image's own musl loader,
+Node runtime, daemon and native dependency closure with that rebuilt web output,
+and generate the
 archive, file manifest, SBOM, licenses, NOTICE and signed provenance. Every
 output must match byte-for-byte before publication. The launcher invokes only
 that imported loader and Node binary; the app contract deliberately declares no
@@ -55,9 +60,11 @@ probe, and tears down the whole confined process group if readiness still fails.
 A later browser launch must start a new process cleanly; no half-started relay or
 browser session is reused.
 
-The source-build recipe remains under `fallback_build` only as a separately
-reviewed fallback. It is not part of the primary import or runtime path and must
-not be used to replace a failed OCI verification.
+The complete daemon/source runtime build remains under `fallback_build` only as
+a separately reviewed fallback. The primary artifact still requires a verified
+OCI daemon/runtime; only its web output is rebuilt from the same pinned source
+so component removal is performed at the React boundary. Runtime startup never
+contains a source tree, package manager or build step.
 
 The complete source-suite baseline is not part of OCI import and does not gate
 the pinned image verification. It remains a separate fallback-build acceptance

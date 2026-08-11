@@ -63,7 +63,7 @@ describe("source app chat bridge", () => {
     const firstBody = JSON.parse(String(vi.mocked(fetch).mock.calls[0][1]?.body));
     expect(firstBody).toMatchObject({
       action: "chat.submit_turn",
-      arguments: { od_project_id: "od_project_1", session_mode: "design" },
+      arguments: { project_id: "od_project_1", session_mode: "design" },
     });
     expect(vi.mocked(fetch).mock.calls.map((call) => call[0])).toEqual([
       "/api/apps/design-studio/backend",

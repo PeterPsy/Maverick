@@ -52,6 +52,53 @@ button {
   background: var(--maverick-bg);
 }
 
+.design-studio-host.is-empty:not(.is-settings-open) .design-studio-frame {
+  visibility: hidden;
+}
+
+.design-studio-empty {
+  position: absolute;
+  z-index: 3;
+  inset: 0;
+  display: grid;
+  place-content: center;
+  justify-items: center;
+  gap: 12px;
+}
+
+.design-studio-empty button {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 52px;
+  padding: 0 20px;
+  border: 1px solid var(--maverick-border-strong);
+  border-radius: 18px;
+  background: var(--maverick-accent);
+  color: var(--maverick-text-on-accent);
+  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.24);
+  cursor: pointer;
+  font-weight: 650;
+}
+
+.design-studio-empty button:disabled {
+  cursor: wait;
+  opacity: 0.64;
+}
+
+.design-studio-empty button svg {
+  width: 19px;
+  height: 19px;
+}
+
+.design-studio-empty p {
+  max-width: min(420px, calc(100vw - 32px));
+  margin: 0;
+  color: var(--maverick-danger);
+  font-size: 0.78rem;
+  text-align: center;
+}
+
 .design-studio-state {
   position: absolute;
   z-index: 3;
@@ -145,6 +192,7 @@ button {
 }
 
 .design-studio-state button:focus-visible,
+.design-studio-empty button:focus-visible,
 .design-studio-toolbar button:focus-visible {
   outline: 2px solid var(--maverick-accent);
   outline-offset: 3px;

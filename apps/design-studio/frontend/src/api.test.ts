@@ -6,10 +6,11 @@ import {
   navigationFromParams,
   navigationMessage,
   openDesignPath,
+  openSettingsMessage,
   SidecarLaunchError,
   validateSidecarLaunch,
 } from "./api";
-import { mobileLayoutFromWidgetMessage, projectIdFromWidgetMessage } from "./backendApi";
+import { mobileLayoutFromWidgetMessage, mountedAppId, projectCreatedAt, projectIdFromWidgetMessage } from "./backendApi";
 
 const VALID_LAUNCH = {
   origin: "https://sc-proof.sidecars.example",
@@ -25,6 +26,20 @@ describe("currentDesignStudioAppId", () => {
     expect(currentDesignStudioAppId("/apps/design-studio/projects")).toBe("design-studio");
     expect(currentDesignStudioAppId("/apps/workspace-design-studio")).toBe("workspace-design-studio");
     expect(currentDesignStudioAppId("/")).toBe("design-studio");
+    expect(mountedAppId("/apps/workspace-design-studio/widgets/sidebar")).toBe("workspace-design-studio");
+  });
+
+  it("uses the typed native settings command", () => {
+    expect(openSettingsMessage()).toEqual({ type: "maverick.opendesign.open-settings", version: 1 });
+  });
+});
+
+describe("project creation ordering", () => {
+  it("normalizes timestamps and never substitutes updatedAt for createdAt", () => {
+    const older = { createdAt: "2026-08-01T00:00:00Z", updatedAt: "2026-08-11T00:00:00Z" };
+    const newer = { created_at: 1_786_310_400, updatedAt: "2026-08-02T00:00:00Z" };
+    expect(projectCreatedAt(newer)).toBeGreaterThan(projectCreatedAt(older));
+    expect(projectCreatedAt({ updatedAt: "2099-01-01T00:00:00Z" })).toBe(0);
   });
 });
 

@@ -10,7 +10,7 @@ import subprocess
 from typing import Callable
 
 
-MANIFEST_SCHEMA_VERSION = "4"
+MANIFEST_SCHEMA_VERSION = "5"
 PATCH_SCHEMA_VERSION = "1"
 CERTIFICATION_SCHEMA_VERSION = "4"
 SHA256_RE = re.compile(r"^[0-9a-f]{64}$")

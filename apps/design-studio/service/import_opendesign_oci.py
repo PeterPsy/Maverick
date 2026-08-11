@@ -42,6 +42,8 @@ from opendesign_oci_patch import BoundaryPatchError, apply_boundary_patch
 from opendesign_oci_registry import OciRegistryError, RegistryClient
 from opendesign_oci_stage import OciStageError, runtime_node_command, stage_runtime_closure
 from opendesign_process import activate_runtime_attachment, signal_guard
+from opendesign_source import SourceError
+from opendesign_web_patch import WebPatchError, build_and_overlay_web
 
 
 SERVICE_ROOT = Path(__file__).resolve().parent
@@ -65,12 +67,17 @@ class DerivationResult:
 def import_reproducible_artifact(
     output_directory: Path,
     *,
+    source_repository: Path,
     signing_key: Path,
     manifest: dict[str, Any],
     work_parent: Path,
+    pnpm_store: Path,
+    runtime_session_id: str | None,
 ) -> dict[str, Any]:
     validate_bundle_manifest(manifest, require_artifact_digest=False)
     signing_key = _real_file(signing_key, label="OpenDesign OCI provenance signing key")
+    source_repository = _real_directory(source_repository, create=False, label="OpenDesign source repository")
+    pnpm_store = _real_directory(pnpm_store, create=True, label="OpenDesign pnpm store")
     work_parent = _real_directory(work_parent, create=True, label="OpenDesign OCI work root")
     output_directory = _real_directory(output_directory, create=True, label="OpenDesign artifact output")
     asset = selected_asset(manifest, require_artifact_digest=False)
@@ -83,9 +90,12 @@ def import_reproducible_artifact(
             results.append(
                 derive_once(
                     result_root,
+                    source_repository=source_repository,
                     signing_key=signing_key,
                     manifest=manifest,
                     asset=asset,
+                    pnpm_store=pnpm_store,
+                    runtime_session_id=runtime_session_id,
                 )
             )
         _assert_reproducible(results, asset)
@@ -93,7 +103,11 @@ def import_reproducible_artifact(
         for path_field in ARTIFACT_DIGEST_FIELDS:
             _publish_file(first.output_root / asset[path_field], output_directory / asset[path_field])
         pins = _artifact_pins(output_directory, asset)
-        pinned_manifest = _with_artifact_pins(manifest, pins)
+        pinned_manifest = _with_artifact_pins(
+            manifest,
+            pins,
+            web_output_manifest_sha256=str(first.patch_evidence["web_patch"]["output_manifest_sha256"]),
+        )
         verify_artifact_set(pinned_manifest, output_directory)
     return {
         "artifact": str(output_directory / asset["file"]),
@@ -103,6 +117,7 @@ def import_reproducible_artifact(
         "file_manifest_sha256": pins["file_manifest_sha256"],
         "rootfs_inventory_sha256": results[0].rootfs_inventory_sha256,
         "boundary_patch": results[0].patch_evidence,
+        "web_patch": results[0].patch_evidence["web_patch"],
         "oci_index_digest": manifest["distribution"]["index"]["digest"],
         "oci_manifest_digest": manifest["distribution"]["manifest"]["digest"],
         "reproducible_imports": 2,
@@ -113,9 +128,12 @@ def import_reproducible_artifact(
 def derive_once(
     result_root: Path,
     *,
+    source_repository: Path,
     signing_key: Path,
     manifest: dict[str, Any],
     asset: dict[str, Any],
+    pnpm_store: Path,
+    runtime_session_id: str | None,
 ) -> DerivationResult:
     pull_root = result_root / "pull"
     release = RegistryClient(manifest).pull(pull_root)
@@ -124,6 +142,15 @@ def derive_once(
     rootfs_inventory = create_file_manifest(rootfs)
     rootfs_inventory_sha256 = _canonical_payload_sha256(rootfs_inventory)
     patch_evidence = apply_boundary_patch(rootfs, manifest)
+    patch_evidence["web_patch"] = build_and_overlay_web(
+        source_repository,
+        rootfs,
+        result_root / "web-build",
+        manifest=manifest,
+        service_root=SERVICE_ROOT,
+        pnpm_store=pnpm_store,
+        runtime_session_id=runtime_session_id,
+    )
     staging = result_root / "staging"
     stage_runtime_closure(rootfs, staging, manifest=manifest, service_root=SERVICE_ROOT)
     native_probe = _probe_native_runtime(staging, manifest)
@@ -148,7 +175,7 @@ def derive_once(
     notice = notice_text(licenses) + (
         "\nMaverick derived patch notice:\n"
         f"- {patch_evidence['path']} was modified to require the technical bearer on loopback.\n"
-        f"- {patch_evidence['ui_patch']['path']} was modified to remove the native chat/home catalog, apply Maverick themes, and bridge project navigation.\n"
+        f"- {patch_evidence['web_patch']['output_path']} was replaced by the reproducible web build from the reviewed React patch series.\n"
     )
     write_canonical_json(metadata_root / "sbom.cdx.json", sbom)
     write_canonical_json(metadata_root / "licenses.json", licenses)
@@ -285,13 +312,19 @@ def _artifact_pins(output_directory: Path, asset: dict[str, Any]) -> dict[str, A
     return pins
 
 
-def _with_artifact_pins(manifest: dict[str, Any], pins: dict[str, Any]) -> dict[str, Any]:
+def _with_artifact_pins(
+    manifest: dict[str, Any],
+    pins: dict[str, Any],
+    *,
+    web_output_manifest_sha256: str,
+) -> dict[str, Any]:
     pinned = copy.deepcopy(manifest)
     selected = pinned["artifact"]["assets"][platform_key()]
     expected = {"size_bytes", *ARTIFACT_DIGEST_FIELDS.values()}
     if set(pins) != expected:
         raise OciImportError("OpenDesign OCI artifact pin set is incomplete")
     selected.update(pins)
+    pinned["web_patch"]["output_manifest_sha256"] = web_output_manifest_sha256
     validate_bundle_manifest(pinned, require_artifact_digest=True)
     return pinned
 
@@ -325,19 +358,24 @@ def _real_file(path: Path, *, label: str) -> Path:
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--source-repository", type=Path, required=True)
     parser.add_argument("--signing-key", type=Path, required=True)
     parser.add_argument("--output-directory", type=Path, default=SERVICE_ROOT / "artifacts")
     parser.add_argument("--work-parent", type=Path, default=Path("/var/tmp"))
+    parser.add_argument("--pnpm-store", type=Path, default=SERVICE_ROOT.parents[2] / "tmp/opendesign-pnpm-store")
     parser.add_argument("--allow-operator-detached", action="store_true")
     args = parser.parse_args()
     try:
         with signal_guard():
-            activate_runtime_attachment(allow_operator_detached=args.allow_operator_detached)
+            runtime_session_id = activate_runtime_attachment(allow_operator_detached=args.allow_operator_detached)
             result = import_reproducible_artifact(
                 args.output_directory,
+                source_repository=args.source_repository,
                 signing_key=args.signing_key,
                 manifest=read_bundle_manifest(MANIFEST_PATH),
                 work_parent=args.work_parent,
+                pnpm_store=args.pnpm_store,
+                runtime_session_id=runtime_session_id,
             )
     except (
         ArtifactError,
@@ -346,6 +384,8 @@ def main() -> int:
         OciLayoutError,
         OciRegistryError,
         OciStageError,
+        SourceError,
+        WebPatchError,
         OSError,
         subprocess.SubprocessError,
     ) as exc:

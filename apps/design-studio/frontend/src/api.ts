@@ -1,4 +1,4 @@
-import type { OpenDesignNavigateMessage, OpenDesignNavigation, OpenDesignThemeMessage, SidecarLaunch } from "./types";
+import type { OpenDesignNavigateMessage, OpenDesignNavigation, OpenDesignOpenSettingsMessage, OpenDesignThemeMessage, SidecarLaunch } from "./types";
 
 const PROJECT_ID_PATTERN = /^[A-Za-z0-9_][A-Za-z0-9._~-]{0,127}$/;
 const RUN_ID_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/;
@@ -127,6 +127,10 @@ export function navigationMessage(navigation: OpenDesignNavigation): OpenDesignN
 
 export function themeMessage(theme: "dark" | "light"): OpenDesignThemeMessage {
   return { type: "maverick.opendesign.theme", version: 1, theme };
+}
+
+export function openSettingsMessage(): OpenDesignOpenSettingsMessage {
+  return { type: "maverick.opendesign.open-settings", version: 1 };
 }
 
 export function isTrustedSidecarMessage(

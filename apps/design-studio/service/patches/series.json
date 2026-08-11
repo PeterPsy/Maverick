@@ -30,18 +30,23 @@
     },
     {
       "path": "0002-maverick-native-shell.patch",
-      "sha256": "e7e7457129f8c4c5f3ed8812812d971e93948d68922050377ffb28a5078151e9",
-      "reason": "Delegate OpenDesign navigation and chat surfaces to Maverick, synchronize the isolated sidecar with shell navigation and theme messages, remove native chat and home project affordances, and map the web UI to Maverick dark and light palette tokens.",
+      "sha256": "0114433a2793771d733661a36078e9ee1163a3c4a57e2791bfd9d186e6d1f4d2",
+      "reason": "Delegate OpenDesign navigation and chat to Maverick at the React component boundary, expose the native settings dialog through a typed host command, and map the isolated web UI to Maverick dark and light palette tokens.",
       "files": [
         {
           "path": "apps/web/app/layout.tsx",
           "pre_sha256": "41bdd320b85971c770175f6afbcefcd436e50f34bf89e45f825407b2de10fcc4",
-          "post_sha256": "9885e8d4c7476aae83496c998a65a54ddd07aff41670b8640637cf13c26907c1"
+          "post_sha256": "3fe4a225c7579b8fb10c3e32de61db8aaed6e409bba9f9106ba0f6c8244ba30c"
+        },
+        {
+          "path": "apps/web/src/App.tsx",
+          "pre_sha256": "0eea6ad56d20099dc1427e7d17d4700e0e8c42f89b14a466f665ec1e6841e72f",
+          "post_sha256": "fc0f81659a70e9d3ce49b1d88479392f6d3f1539284bfab7baf57abff5d207f5"
         },
         {
           "path": "apps/web/src/index.css",
           "pre_sha256": "eb6d72ef653365c66dccc65ae7b7d66a4b92b9a190472b621a63c73e1058d80c",
-          "post_sha256": "9f918f94d0a7c4073e3f0c542c08c0d02ff43dfdc5527ce4531cd92a9f294b87"
+          "post_sha256": "8355c28d679cfa04702b34d314535b5edf98bf237d143918b5e46a0b2dfcf769"
         }
       ]
     }

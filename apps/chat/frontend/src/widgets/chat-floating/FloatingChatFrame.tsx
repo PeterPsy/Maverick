@@ -4,6 +4,7 @@ import { App } from "../../App";
 import type { ChatThread } from "../../api/client";
 import type { ExternalFileDrop, ExternalMentionDrop } from "../../lib/externalInputs";
 import { filesFromDataTransfer, hasFileDropData } from "../../lib/fileDropAttachments";
+import { sourceAppPresentation } from "../../lib/sourceAppPresentation";
 import { appReferenceMentionItemsFromDataTransfer, hasAppReferenceDragData } from "../../lib/storageDragReferences";
 import { isThreadBusy, isThreadUnread } from "../chat-sidebar/sections";
 import { FloatingLauncher } from "./FloatingLauncher";
@@ -56,6 +57,7 @@ export function FloatingChatFrame({
   const activeThread = threads.find((thread) => thread.thread_id === windowItem.threadId) || null;
   const isActiveThreadBusy = Boolean(activeThread && isThreadBusy(activeThread));
   const isActiveThreadUnread = Boolean(activeThread && isThreadUnread(activeThread));
+  const sourcePresentation = sourceAppPresentation(activeThread?.source_app_id);
 
   function openCollapsedThread() {
     onCollapseChange(windowItem.id, false);
@@ -132,10 +134,10 @@ export function FloatingChatFrame({
             threads={threads}
             windowItem={windowItem}
           />
-          {activeThread?.source_app_id === "design-studio" ? (
-            <span className="chat-floating-widget-shell__source-badge" title="OpenDesign chat">
-              <span aria-hidden="true" className="material-symbols-rounded">design_services</span>
-              OpenDesign
+          {sourcePresentation ? (
+            <span className="chat-floating-widget-shell__source-badge" title={`${sourcePresentation.label} chat`}>
+              <span aria-hidden="true" className="material-symbols-rounded">{sourcePresentation.icon}</span>
+              {sourcePresentation.label}
             </span>
           ) : null}
         </div>

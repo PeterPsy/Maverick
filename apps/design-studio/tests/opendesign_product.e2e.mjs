@@ -44,6 +44,7 @@ try {
   const networkProof = {
     isolatedRequests: 0,
     bootstrapPosts: 0,
+    nativeChatRequests: 0,
     maverickCookieForwarded: false,
     browserBearerForwarded: false,
     diagnostics: [],
@@ -53,6 +54,9 @@ try {
     try { parsed = new URL(request.url()); } catch { return; }
     if (!isSidecarHostname(parsed.hostname)) return;
     networkProof.isolatedRequests += 1;
+    if (/\/api\/projects\/[^/]+\/conversations(?:\/|$)/.test(parsed.pathname)) {
+      networkProof.nativeChatRequests += 1;
+    }
     if (parsed.pathname === '/.well-known/maverick-sidecar-bootstrap' && request.method() === 'POST') {
       networkProof.bootstrapPosts += 1;
     }
@@ -85,11 +89,11 @@ try {
     initialReady.status === 200 && initialReady.body?.ok === true && initialReady.body?.ready === true,
     `Initial OpenDesign readiness returned HTTP ${initialReady.status}`,
   );
-  await completeOpenDesignOnboarding(sidecar);
+  await completeOpenDesignOnboarding(page, sidecar);
   const originA = new URL(sidecar.url()).origin;
   assert(originA !== platformOrigin, 'OpenDesign did not use an isolated origin');
 
-  const projectA = await createProjectFromUi(page, sidecar, 'Maverick WP10 browser project');
+  const projectA = await createProjectFromUi(page, sidecar, 'Maverick WP10 browser project', networkProof);
   const uploaded = await platformRequest(page, '/api/workspace-files/uploads', {
     method: 'POST',
     body: {
@@ -210,7 +214,7 @@ try {
   const projectsB = await frameRequest(sidecarB, '/api/projects');
   const projectItemsB = Array.isArray(projectsB.body?.projects) ? projectsB.body.projects : [];
   assert(!projectItemsB.some((item) => item?.id === projectA.projectId), 'Workspace B observed workspace A project data');
-  const projectB = await createProjectFromUi(page, sidecarB, 'Maverick WP10 workspace B');
+  const projectB = await createProjectFromUi(page, sidecarB, 'Maverick WP10 workspace B', networkProof);
   const successfulB = await createRun(sidecarB, projectB, 'Create the isolated workspace B artifact.');
   await readIncrementalStream(sidecarB, successfulB.runId);
   await waitForRun(sidecarB, successfulB.runId, 'succeeded');
@@ -372,34 +376,39 @@ async function waitForSidecarFrame(page, expectedPath = '', networkProof = null)
 }
 
 
-async function completeOpenDesignOnboarding(frame) {
-  const projectButton = frame.locator('[data-testid="entry-nav-new-project"]');
-  const localAgent = frame.getByText('Local coding agent', { exact: true });
-  let selected = false;
-  let seeded = false;
-  for (let attempt = 0; attempt < 600; attempt += 1) {
-    if (await projectButton.isVisible().catch(() => false)) return;
-    if (!selected && await localAgent.isVisible().catch(() => false)) {
-      await localAgent.click();
-      selected = true;
-    }
-    if (selected && !seeded && await frame.getByText('No agents detected yet.', { exact: false }).isVisible().catch(() => false)) {
-      const configured = await frameRequest(frame, '/api/app-config', {
-        method: 'PUT',
-        body: { onboardingCompleted: true, agentId: 'maverick' },
-      });
-      assert(configured.status === 200, `OpenDesign synthetic onboarding setup returned HTTP ${configured.status}`);
-      seeded = true;
-      await frame.goto(`${new URL(frame.url()).origin}/`, { waitUntil: 'domcontentloaded' });
-    }
-    await delay(100);
+async function completeOpenDesignOnboarding(page, frame) {
+  const appFrame = await waitForShellWidgetFrame(page, 'Design Studio viewport');
+  const centralCreate = appFrame.getByRole('button', { name: 'Nuovo progetto', exact: true });
+  try {
+    await centralCreate.waitFor({ state: 'visible', timeout: 60_000 });
+  } catch (error) {
+    const launchTarget = await platformRequest(page, '/api/apps/design-studio/backend', {
+      method: 'POST',
+      body: { action: 'resolve_launch_target', arguments: {} },
+    });
+    const diagnostic = {
+      launchTarget,
+      pageBody: (await page.locator('body').innerText().catch(() => '')).slice(0, 1_000),
+      frameBody: (await frame.locator('body').innerText().catch(() => '')).slice(0, 1_000),
+      host: await appFrame.locator('.design-studio-host').evaluate((element) => ({
+        className: element.className,
+        phase: element.getAttribute('data-phase'),
+      })).catch(() => null),
+    };
+    throw new Error(`Hosted empty state did not become visible: ${JSON.stringify(diagnostic)}`, { cause: error });
   }
-  const body = (await frame.locator('body').innerText().catch(() => '')).slice(0, 600);
-  throw new Error(`OpenDesign onboarding did not reach the project UI: ${JSON.stringify({ url: frame.url(), body })}`);
+  const footer = await waitForShellWidgetFrame(page, 'App sidebar footer');
+  await footer.getByRole('button', { name: 'Impostazioni', exact: true }).click();
+  await frame.locator('.modal-settings').waitFor({ state: 'visible', timeout: 60_000 });
+  await frame.locator('.settings-close').click();
+  await frame.locator('.modal-settings').waitFor({ state: 'detached', timeout: 60_000 });
+  await centralCreate.waitFor({ state: 'visible', timeout: 60_000 });
 }
 
 
-async function createProjectFromUi(page, frame, name) {
+async function createProjectFromUi(page, frame, name, networkProof) {
+  const nativeChatRequestsBefore = networkProof.nativeChatRequests;
+  const appFrame = await waitForShellWidgetFrame(page, 'Design Studio viewport');
   assert(
     !await frame.locator('.home-view > .recent-projects, .home-view > .home-hero').isVisible().catch(() => false),
     'OpenDesign home still exposes native project or chat affordances',
@@ -410,7 +419,6 @@ async function createProjectFromUi(page, frame, name) {
       .map((item) => String(item?.id || ''))
       .filter(Boolean),
   );
-  const footer = await waitForShellWidgetFrame(page, 'App sidebar footer');
   const responsePromise = page.waitForResponse((response) => {
     try {
       const url = new URL(response.url());
@@ -421,7 +429,7 @@ async function createProjectFromUi(page, frame, name) {
         && body?.action === 'create_project';
     } catch { return false; }
   }, { timeout: 60_000 });
-  await footer.getByRole('button', { name: 'New project', exact: true }).click();
+  await appFrame.getByRole('button', { name: 'Nuovo progetto', exact: true }).click();
   const response = await responsePromise;
   const responseText = await response.text();
   assert(response.status() < 300, `Maverick sidebar project create returned HTTP ${response.status()}: ${responseText.slice(0, 300)}`);
@@ -438,17 +446,32 @@ async function createProjectFromUi(page, frame, name) {
   const sidebar = await waitForShellWidgetFrame(page, 'App sidebar content');
   const projectButton = sidebar.getByRole('button').filter({ hasText: 'Untitled design' }).first();
   await projectButton.waitFor({ state: 'visible', timeout: 60_000 });
-  const shellSidebar = page.locator('aside[aria-label="Workspace navigation"]');
-  if (await shellSidebar.evaluate((element) => element.classList.contains('is-closed'))) {
-    await page.locator('.bs-sidebar__rail-button.is-active').first().click();
-    await page.waitForFunction(() => !document.querySelector('aside[aria-label="Workspace navigation"]')?.classList.contains('is-closed'));
-  }
-  await projectButton.click();
   await frame.waitForURL((url) => url.pathname === `/projects/${projectId}`, { timeout: 60_000 });
+  assert(await projectButton.getAttribute('aria-current') === 'page', 'Created project was not selected in the Maverick sidebar');
+  try {
+    await frame.locator('[data-testid="maverick-project-view"]').waitFor({ state: 'visible', timeout: 60_000 });
+  } catch (error) {
+    const diagnostic = {
+      url: frame.url(),
+      body: (await frame.locator('body').innerText().catch(() => '')).slice(0, 1_500),
+      html: (await frame.locator('body').innerHTML().catch(() => '')).slice(0, 2_000),
+      project: await frameRequest(frame, `/api/projects/${encodeURIComponent(projectId)}`),
+    };
+    throw new Error(`Maverick project view did not render: ${JSON.stringify(diagnostic)}`, { cause: error });
+  }
   assert(
-    !await frame.locator('.split-chat-slot, .split-resize-handle, [data-testid="side-chat-tab"]').isVisible().catch(() => false),
-    'OpenDesign native project chat is still visible',
+    await frame.locator('.split-chat-slot, .split-resize-handle, [data-testid="side-chat-tab"]').count() === 0,
+    'OpenDesign native project chat is still mounted',
   );
+  assert(
+    networkProof.nativeChatRequests === nativeChatRequestsBefore,
+    'Hosted project view issued a native conversation request',
+  );
+  const footer = await waitForShellWidgetFrame(page, 'App sidebar footer');
+  await footer.getByRole('button', { name: 'Impostazioni', exact: true }).click();
+  await frame.locator('.modal-settings').waitFor({ state: 'visible', timeout: 60_000 });
+  await frame.locator('.settings-close').click();
+  await frame.locator('[data-testid="maverick-project-view"]').waitFor({ state: 'visible', timeout: 60_000 });
   let conversationId = String(payload?.conversationId || payload?.conversation?.id || '');
   if (!conversationId) {
     const conversations = await frameRequest(frame, `/api/projects/${encodeURIComponent(projectId)}/conversations`);
@@ -662,7 +685,8 @@ function buildEvidence({ correlationA, correlationB, correlationCanceled, manife
       project_created: true,
       sidebar_navigation: true,
       native_home_projects_hidden: true,
-      native_chat_hidden: true,
+      native_chat_unmounted: true,
+      native_chat_background_requests: 0,
     }],
     ['storage_import', 'Import one Storage file with read-back', correlationA, { imported: true }],
     ['runtime_start', 'Start one Maverick-owned run', correlationA, { submitted: true }],

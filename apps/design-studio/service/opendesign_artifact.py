@@ -49,12 +49,12 @@ def validate_bundle_manifest(manifest: dict[str, Any], *, require_artifact_diges
         "fallback_build",
         "runtime_closure",
         "boundary_patch",
-        "ui_patch",
+        "web_patch",
         "artifact",
         "native_runtime_dependencies",
         "sandbox",
     }
-    if set(manifest) != expected_top_level or manifest.get("schema_version") != "4":
+    if set(manifest) != expected_top_level or manifest.get("schema_version") != "5":
         raise ArtifactError("OpenDesign bundle manifest schema or fields are unsupported")
     upstream = mapping(manifest, "upstream")
     commit = required_hex(upstream, "commit", length=40)
@@ -131,23 +131,28 @@ def validate_bundle_manifest(manifest: dict[str, Any], *, require_artifact_diges
         raise ArtifactError("OpenDesign boundary patch postimage is not pinned")
     if post_sha256 is not None and not is_sha256(post_sha256):
         raise ArtifactError("OpenDesign boundary patch postimage must be null or lowercase SHA-256")
-    ui_patch = mapping(manifest, "ui_patch")
-    if set(ui_patch) != {"path", "pre_sha256", "post_sha256", "capabilities"}:
-        raise ArtifactError("OpenDesign UI patch fields are unsupported")
-    if required_string(ui_patch, "path") != "app/apps/web/out/index.html":
-        raise ArtifactError("OpenDesign UI patch path is not authorized")
-    if required_string(ui_patch, "pre_sha256") != "c17994dfe25730e8dc293cd1dc8221e7e918b63ff6a3756f732c0132d2b2c694":
-        raise ArtifactError("OpenDesign UI patch preimage is not authorized")
-    if required_string(ui_patch, "post_sha256") != "970dc7a4986cc68968b4defba8b2b6a0d28529356b69f6e471b03f2d04c45880":
-        raise ArtifactError("OpenDesign UI patch postimage is not authorized")
-    if ui_patch.get("capabilities") != [
-        "hide_native_chat",
-        "hide_home_composer",
-        "hide_recent_projects",
+    web_patch = mapping(manifest, "web_patch")
+    if set(web_patch) != {"patch_series", "output_path", "output_manifest_sha256", "capabilities"}:
+        raise ArtifactError("OpenDesign web patch fields are unsupported")
+    if required_string(web_patch, "patch_series") != manifest["fallback_build"]["patch_series"]:
+        raise ArtifactError("OpenDesign web patch series is not authorized")
+    if required_string(web_patch, "output_path") != "app/apps/web/out":
+        raise ArtifactError("OpenDesign web patch output path is not authorized")
+    web_output_sha256 = web_patch.get("output_manifest_sha256")
+    if require_artifact_digest and not is_sha256(web_output_sha256):
+        raise ArtifactError("OpenDesign web patch output is not pinned")
+    if web_output_sha256 is not None and not is_sha256(web_output_sha256):
+        raise ArtifactError("OpenDesign web patch output must be null or lowercase SHA-256")
+    if web_patch.get("capabilities") != [
+        "react_hosted_project_view",
+        "native_chat_unmounted",
+        "native_home_unmounted",
+        "native_workspace_tabs_unmounted",
+        "native_settings_bridge",
         "maverick_theme",
         "project_navigation_bridge",
     ]:
-        raise ArtifactError("OpenDesign UI patch capability set changed")
+        raise ArtifactError("OpenDesign web patch capability set changed")
     selected_asset(manifest, require_artifact_digest=require_artifact_digest)
 
 

@@ -76,6 +76,7 @@ try {
   assert(ready.status === 200 && ready.body?.ok === true && ready.body?.ready === true, `Hosted readiness returned HTTP ${ready.status}`);
   const projects = await frameRequest(frame, '/api/projects');
   assert(projects.status === 200, `Hosted project listing returned HTTP ${projects.status}`);
+  await verifyNativeSettings(page, frame, projectCount(projects.body) === 0);
   if (projectId) {
     const persisted = await frameRequest(frame, `/api/projects/${encodeURIComponent(projectId)}`);
     assert(persisted.status === 200, `Persisted project lookup returned HTTP ${persisted.status}`);
@@ -233,26 +234,31 @@ async function waitForSidecarFrame(page, expectedPath = '') {
 
 
 async function createProjectFromUi(page, frame, name) {
-  const button = frame.locator('[data-testid="entry-nav-new-project"]');
-  await button.waitFor({ state: 'visible', timeout: 60_000 });
-  const rail = frame.locator('[data-testid="entry-rail-toggle"]');
-  if (await rail.count() && await rail.getAttribute('aria-expanded') !== 'true') await rail.click();
-  await button.click();
-  await frame.locator('[data-testid="new-project-name"]').fill(name);
+  const footer = await waitForShellWidgetFrame(page, 'App sidebar footer');
   const responsePromise = page.waitForResponse((response) => {
     try {
       const url = new URL(response.url());
-      return isSidecarUrl(url.href) && url.pathname === '/api/projects' && response.request().method() === 'POST';
+      const body = response.request().postDataJSON();
+      return url.origin === platformOrigin
+        && url.pathname === '/api/apps/design-studio/backend'
+        && response.request().method() === 'POST'
+        && body?.action === 'create_project';
     } catch {
       return false;
     }
   }, { timeout: 60_000 });
-  await frame.locator('[data-testid="create-project"]').click();
+  await footer.getByRole('button', { name: 'Nuovo progetto', exact: true }).click();
   const response = await responsePromise;
   const body = JSON.parse(await response.text());
   assert(response.status() < 300, `Hosted project creation returned HTTP ${response.status()}`);
-  const createdProjectId = String(body?.project?.id || body?.id || '');
+  const createdProjectId = String(body?.od_project_id || body?.project?.id || body?.id || '');
   assert(createdProjectId, 'Hosted UI project creation returned no project id');
+  await frame.waitForURL((url) => url.pathname === `/projects/${createdProjectId}`, { timeout: 60_000 });
+  await frame.locator('[data-testid="maverick-project-view"]').waitFor({ state: 'visible', timeout: 60_000 });
+  assert(
+    await frame.locator('.split-chat-slot, .split-resize-handle, [data-testid="side-chat-tab"]').count() === 0,
+    'Hosted OpenDesign native chat remains mounted',
+  );
   let conversationId = String(body?.conversationId || body?.conversation?.id || '');
   if (!conversationId) {
     const conversations = await frameRequest(frame, `/api/projects/${encodeURIComponent(createdProjectId)}/conversations`);
@@ -261,6 +267,33 @@ async function createProjectFromUi(page, frame, name) {
   }
   assert(conversationId, 'Hosted UI project creation returned no conversation id');
   return { projectId: createdProjectId, conversationId };
+}
+
+
+async function verifyNativeSettings(page, frame, expectEmpty) {
+  const appFrame = await waitForShellWidgetFrame(page, 'Design Studio viewport');
+  if (expectEmpty) {
+    await appFrame.getByRole('button', { name: 'Nuovo progetto', exact: true }).waitFor({ state: 'visible', timeout: 60_000 });
+  }
+  const footer = await waitForShellWidgetFrame(page, 'App sidebar footer');
+  await footer.getByRole('button', { name: 'Impostazioni', exact: true }).click();
+  await frame.locator('.modal-settings').waitFor({ state: 'visible', timeout: 60_000 });
+  await frame.locator('.settings-close').click();
+  await frame.locator('.modal-settings').waitFor({ state: 'detached', timeout: 60_000 });
+  if (expectEmpty) {
+    await appFrame.getByRole('button', { name: 'Nuovo progetto', exact: true }).waitFor({ state: 'visible', timeout: 60_000 });
+  }
+}
+
+
+async function waitForShellWidgetFrame(page, title) {
+  const iframe = page.locator(`iframe[title="${title}"]`);
+  await iframe.waitFor({ state: 'visible', timeout: 60_000 });
+  const handle = await iframe.elementHandle();
+  const frame = await handle?.contentFrame();
+  assert(frame, `${title} iframe did not expose a content frame`);
+  await frame.waitForLoadState('domcontentloaded').catch(() => {});
+  return frame;
 }
 
 

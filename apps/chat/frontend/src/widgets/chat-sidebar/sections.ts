@@ -1,4 +1,5 @@
 import { ChatProject, ChatThread } from "../../api/client";
+import { isOpenDesignSourceApp, sourceAppPresentation } from "../../lib/sourceAppPresentation";
 
 export type FolderSection = {
   id: string;
@@ -15,7 +16,7 @@ export type ThreadFilter = "all" | "opendesign" | "senses" | "multi_agent" | "un
 
 export type ThreadSourceBadge = {
   icon: string;
-  kind: "multi_agent" | "opendesign" | "senses";
+  kind: "multi_agent" | "opendesign" | "senses" | "source_app";
   label: string;
 };
 
@@ -118,11 +119,11 @@ export function filterThreadsForSidebar(
 }
 
 export function isSensesThread(thread: ChatThread): boolean {
-  return thread.source_app_id === "senses";
+  return sourceAppPresentation(thread.source_app_id)?.kind === "senses";
 }
 
 export function isOpenDesignThread(thread: ChatThread): boolean {
-  return thread.source_app_id === "design-studio";
+  return isOpenDesignSourceApp(thread.source_app_id);
 }
 
 export function isMultiAgentThread(thread: ChatThread, multiAgentThreadIds: ReadonlySet<string>): boolean {
@@ -131,11 +132,9 @@ export function isMultiAgentThread(thread: ChatThread, multiAgentThreadIds: Read
 
 export function threadSourceBadges(thread: ChatThread, multiAgentThreadIds: ReadonlySet<string> = new Set()): ThreadSourceBadge[] {
   const badges: ThreadSourceBadge[] = [];
-  if (isSensesThread(thread)) {
-    badges.push({ icon: "sensors", kind: "senses", label: "Senses" });
-  }
-  if (isOpenDesignThread(thread)) {
-    badges.push({ icon: "design_services", kind: "opendesign", label: "OpenDesign" });
+  const sourcePresentation = sourceAppPresentation(thread.source_app_id);
+  if (sourcePresentation) {
+    badges.push(sourcePresentation);
   }
   if (isMultiAgentThread(thread, multiAgentThreadIds)) {
     badges.push({ icon: "account_tree", kind: "multi_agent", label: "Multi-chat" });

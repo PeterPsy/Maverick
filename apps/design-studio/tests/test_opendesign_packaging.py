@@ -42,7 +42,7 @@ class OpenDesignPackagingTests(unittest.TestCase):
     def setUp(self) -> None:
         self.manifest = self.artifact.read_bundle_manifest(MANIFEST_PATH)
 
-    def test_memavailable_policy_uses_four_gib_start_and_two_point_five_stop(self) -> None:
+    def test_memavailable_policy_uses_four_gib_start_and_two_point_four_stop(self) -> None:
         with tempfile.TemporaryDirectory(prefix="maverick-od-memory-") as temp_dir:
             meminfo = Path(temp_dir) / "meminfo"
             meminfo.write_text(
@@ -52,7 +52,7 @@ class OpenDesignPackagingTests(unittest.TestCase):
             snapshot = self.process.host_memory_snapshot(meminfo)
             self.assertEqual(snapshot.available_bytes, 4 * 1024**3)
             self.assertEqual(self.process.START_AVAILABLE_BYTES, 4 * 1024**3)
-            self.assertEqual(self.process.STOP_AVAILABLE_BYTES, int(2.5 * 1024**3))
+            self.assertEqual(self.process.STOP_AVAILABLE_BYTES, int(2.4 * 1024**3))
             self.assertLessEqual(self.process.START_WAIT_SECONDS, 60)
 
     def test_memory_wait_is_bounded_and_never_raises_the_threshold(self) -> None:
@@ -67,7 +67,7 @@ class OpenDesignPackagingTests(unittest.TestCase):
     def test_compile_heap_is_bounded_without_changing_host_thresholds(self) -> None:
         self.assertEqual(
             self.manifest["fallback_build"]["build"]["compile_environment"]["NODE_OPTIONS"],
-            "--max-old-space-size=1152",
+            "--max-old-space-size=1536",
         )
         self.assertEqual(self.process.START_AVAILABLE_BYTES, 4 * 1024**3)
 

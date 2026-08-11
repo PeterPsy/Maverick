@@ -166,9 +166,9 @@ def oci_provenance_payload(
     manifest: dict[str, Any],
 ) -> dict[str, Any]:
     distribution = manifest["distribution"]
-    ui_patch = patch_evidence.get("ui_patch") if isinstance(patch_evidence.get("ui_patch"), dict) else {}
+    web_patch = patch_evidence.get("web_patch") if isinstance(patch_evidence.get("web_patch"), dict) else {}
     invocation = hashlib.sha256(
-        f"{artifact_sha256}:{distribution['index']['digest']}:{patch_evidence['post_sha256']}:{ui_patch.get('post_sha256', '')}".encode("utf-8")
+        f"{artifact_sha256}:{distribution['index']['digest']}:{patch_evidence['post_sha256']}:{web_patch.get('output_manifest_sha256', '')}".encode("utf-8")
     ).hexdigest()
     dependencies = [
         {
@@ -200,6 +200,10 @@ def oci_provenance_payload(
             {
                 "uri": f"git+{manifest['upstream']['repository']}@{manifest['upstream']['commit']}#LICENSE",
                 "digest": {"sha256": manifest["upstream_license"]["sha256"]},
+            },
+            {
+                "uri": f"git+{manifest['upstream']['repository']}@{manifest['upstream']['commit']}",
+                "digest": {"gitCommit": manifest["upstream"]["commit"]},
             },
         ]
     )

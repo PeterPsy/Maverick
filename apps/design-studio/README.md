@@ -31,12 +31,11 @@ The primary distribution recipe is declared in
 `service/import_opendesign_oci.py`. It imports the official pinned
 `ghcr.io/nexu-io/od:0.16.1` linux/amd64 image directly over bounded HTTPS,
 verifies the complete OCI descriptor chain and SLSA subject, and reconstructs
-the layers without Docker. Two independent imports receive only the
-digest-bound compiled loopback-bearer and Maverick-native-shell patches, then
-stage the image's own musl loader, Node 24 runtime, daemon, static web export
-and required native modules. The equivalent source-level shell patch is kept in
-the ordered patch series so an exact upstream checkout remains independently
-auditable.
+the layers without Docker. Two independent derivations apply the digest-bound
+compiled loopback-bearer patch to the OCI daemon, export the exact upstream Git
+pin, apply the ordered source patch series, and rebuild the React web output
+with the frozen lockfile. They then stage the image's own musl loader, Node 24
+runtime, daemon, rebuilt static web export and required native modules.
 The two deterministic archives and all metadata must be byte-identical.
 Runtime startup never installs dependencies, invokes a package manager, mounts
 host Node, or builds Next.
@@ -63,6 +62,7 @@ release assets before declaring the release complete:
 
 ```bash
 python3 apps/design-studio/service/import_opendesign_oci.py \
+  --source-repository /path/to/open-design-v0.16.1/.git \
   --signing-key /secure/path/opendesign-provenance-key.pem
 python3 apps/design-studio/service/materialize_opendesign.py
 python3 apps/design-studio/service/bootstrap_opendesign_generation.py \
@@ -153,17 +153,20 @@ After the `303`, the OpenDesign UI and all of its API requests stay same-origin
 on the opaque sidecar host. The wrapper exposes accessible loading/degraded/
 error recovery and reload/fullscreen controls. Maverick shell navigation
 accepts bounded scalar `od_project_id`/`od_run_id` values. Project deep links
-bootstrap the real OpenDesign `/projects/<id>` route; later sidebar selections
-use a minimal versioned navigation message and the sidecar performs a
-same-origin route navigation. Native OpenDesign navigation emits the selected
-project back to the shell so the sidebar and floating Chat remain contextual.
+bootstrap the real OpenDesign `/projects/<id>` route. Without a deep link, the
+backend chooses the newest `createdAt`; with no projects the wrapper keeps
+OpenDesign Home unmounted and shows only `Nuovo progetto`. Sidebar selections
+and creation update shell-owned app params/history, so the sidebar and floating
+Chat always share the same project context.
 
 The shell theme is forwarded as a sanitized dark/light message. The patched
 OpenDesign export maps its backgrounds, surfaces, borders, text, focus, dialog,
-popover and scrollbar colors to Maverick tokens. The same patch removes the
-native `ChatPane`, resize rail, side-chat entry points, home composer and recent
-project strip, leaving the file workspace full width and the shell sidebar as
-the only project catalog. Every incoming shell/sidecar message requires both
+popover and scrollbar colors to Maverick tokens. The React patch uses a hosted
+project view that never mounts `ProjectView`, `ChatPane`, resize/divider rails,
+side-chat tabs, Home or the native workspace tabs. The file workspace remains
+full width and the shell sidebar is the only project catalog. Its footer opens
+the native `SettingsDialog` through a typed command, including in the empty
+state. Every incoming shell/sidecar message requires both
 the expected `event.origin` and `event.source`.
 
 ## Maverick Chat Integration
@@ -182,14 +185,10 @@ user/assistant messages, run records and result packages. Legacy correlations
 are migrated by choosing the newest valid session for future turns without
 rewriting or deleting historical runtime threads.
 
-The composer exposes one OpenDesign tools button. Chat, Plan and Design modes,
-Storage attachments, app/project references, project files, design-system
-context, Skills, the Maverick agent/model selector, stop and retry are wired to
-governed surfaces. Plugin mutation, persistent MCP, Connectors, Library, Figma
-import, host folder/working-directory access, external search/media generation,
-terminal/deploy, design-system mutation and native visual annotations are shown
-disabled with their sandbox reason; the route allowlist is not widened for
-them.
+The composer exposes one generic source-app tools button. Only the actionable
+Chat, Plan and Design modes are listed; informational capabilities without an
+end-to-end action are not advertised. Submit, cancel and retry still use the
+source app owner and its persisted runtime-session binding.
 
 ## SDK Flow
 

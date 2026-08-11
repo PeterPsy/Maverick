@@ -56,6 +56,7 @@ class OpenDesignSupplyChainTests(unittest.TestCase):
                 "apps/daemon/src/server.ts",
                 "apps/daemon/tests/api-token-guard.test.ts",
                 "apps/web/app/layout.tsx",
+                "apps/web/src/App.tsx",
                 "apps/web/next.config.ts",
                 "apps/web/src/index.css",
                 "package.json",

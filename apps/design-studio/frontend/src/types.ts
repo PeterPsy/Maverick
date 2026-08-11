@@ -19,6 +19,12 @@ export type SidecarDiagnostic = {
   status: number;
 };
 
+export type OpenDesignLaunchTarget = {
+  target: "project" | "empty";
+  od_project_id: string;
+  project: Record<string, unknown> | null;
+};
+
 export type OpenDesignNavigateMessage = {
   type: "maverick.opendesign.navigate";
   version: 1;
@@ -30,4 +36,9 @@ export type OpenDesignThemeMessage = {
   type: "maverick.opendesign.theme";
   version: 1;
   theme: "dark" | "light";
+};
+
+export type OpenDesignOpenSettingsMessage = {
+  type: "maverick.opendesign.open-settings";
+  version: 1;
 };

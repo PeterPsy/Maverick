@@ -30,6 +30,41 @@ class DesignStudioRuntimeBridgeTests(unittest.TestCase):
             "data_root": str(root),
         }
 
+    def test_launch_target_prefers_deep_link_then_latest_creation_and_has_real_empty_state(self) -> None:
+        projects = [
+            {
+                "id": "od_created_first",
+                "name": "Updated most recently",
+                "createdAt": "2026-08-01T10:00:00Z",
+                "updatedAt": "2026-08-11T10:00:00Z",
+            },
+            {
+                "id": "od_created_last",
+                "name": "Created most recently",
+                "createdAt": "2026-08-10T10:00:00Z",
+                "updatedAt": "2026-08-10T10:00:00Z",
+            },
+        ]
+        payload = self._payload(Path("/tmp/design-studio-launch-test"))
+        with patch.object(service, "list_opendesign_projects", return_value={"projects": projects}):
+            automatic = service.resolve_launch_target(payload, {})
+            deep_link = service.resolve_launch_target(payload, {"od_project_id": "od_created_first"})
+        with patch.object(service, "list_opendesign_projects", return_value={"projects": []}):
+            empty = service.resolve_launch_target(payload, {})
+
+        self.assertEqual(automatic["od_project_id"], "od_created_last")
+        self.assertEqual(deep_link["od_project_id"], "od_created_first")
+        self.assertEqual(empty, {"target": "empty", "od_project_id": "", "project": None})
+
+    def test_chat_capabilities_expose_only_actionable_modes_and_mounted_owner(self) -> None:
+        payload = self._payload(Path("/tmp/design-studio-capability-test"))
+        payload["app_id"] = "mounted-design-studio"
+        capabilities = service.chat_capabilities(payload)
+        self.assertEqual(capabilities["source_app_id"], "mounted-design-studio")
+        self.assertEqual(capabilities["modes"], ["chat", "plan", "design"])
+        self.assertNotIn("supported", capabilities)
+        self.assertNotIn("unavailable", capabilities)
+
     def test_active_generation_verification_is_reused_within_one_backend_payload(self) -> None:
         with TemporaryDirectory() as temp_dir:
             root = Path(temp_dir)

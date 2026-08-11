@@ -56,7 +56,7 @@ export async function sendSourceAppTurn({
         attachments: attachments.map(({ objectUrl: _objectUrl, ...attachment }) => attachment),
         client_message_id: clientMessageId,
         input_text: inputText,
-        od_project_id: projectId,
+        project_id: projectId,
         runtime_session_id: runtimeSessionId || undefined,
         session_mode: mode,
       },

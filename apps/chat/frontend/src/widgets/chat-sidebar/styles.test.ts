@@ -34,10 +34,15 @@ describe("chat sidebar search", () => {
     );
   });
 
-  it("keeps the source filter buttons on blurred glass surfaces", () => {
+  it("keeps the source filters on one horizontally scrollable row with compact pills", () => {
     const styles = readStyle("styles.css");
 
-    expect(styles).toMatch(/\.bs-chat-sidebar-source-filter\s*{[\s\S]*grid-template-columns:\s*repeat\(4, minmax\(0, 1fr\)\);/);
+    expect(styles).toMatch(/\.bs-chat-sidebar-source-filter\s*{[\s\S]*display:\s*flex;/);
+    expect(styles).toMatch(/\.bs-chat-sidebar-source-filter\s*{[\s\S]*flex-wrap:\s*nowrap;/);
+    expect(styles).toMatch(/\.bs-chat-sidebar-source-filter\s*{[\s\S]*overflow-x:\s*auto;/);
+    expect(styles).toMatch(/\.bs-chat-sidebar-source-filter__button\s*{[\s\S]*flex:\s*0 0 auto;/);
+    expect(styles).toMatch(/\.bs-chat-sidebar-source-filter__button\s*{[\s\S]*width:\s*max-content;/);
+    expect(styles).toMatch(/\.bs-chat-sidebar-source-filter__button\s*{[\s\S]*max-width:\s*var\(--chat-sidebar-source-filter-max-width\);/);
     expect(styles).toMatch(/\.bs-chat-sidebar-source-filter__button\s*{[\s\S]*background:\s*var\(--chat-sidebar-glass-surface\);/);
     expect(styles).toMatch(/\.bs-chat-sidebar-source-filter__button\s*{[\s\S]*backdrop-filter:\s*blur\(26px\);/);
     expect(styles).toMatch(/\.bs-chat-sidebar-source-filter__button\s*{[\s\S]*-webkit-backdrop-filter:\s*blur\(26px\);/);

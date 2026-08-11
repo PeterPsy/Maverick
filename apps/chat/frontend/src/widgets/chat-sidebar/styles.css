@@ -147,6 +147,7 @@ input {
   --chat-sidebar-scroll-under-top: 3.12rem;
   --chat-sidebar-search-height: 2.65rem;
   --chat-sidebar-source-filter-height: 2.1rem;
+  --chat-sidebar-source-filter-max-width: 9rem;
   --chat-sidebar-source-filter-top: calc(var(--chat-sidebar-scroll-under-top) + var(--chat-sidebar-search-height) + 0.44rem);
   position: relative;
   display: block;
@@ -223,21 +224,37 @@ input {
   left: 0;
   right: 0;
   z-index: 3;
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  display: flex;
+  align-items: center;
+  flex-wrap: nowrap;
   gap: 0.38rem;
   height: var(--chat-sidebar-source-filter-height);
   min-height: var(--chat-sidebar-source-filter-height);
+  overflow-x: auto;
+  overflow-y: hidden;
+  overscroll-behavior-inline: contain;
+  scrollbar-width: none;
+  touch-action: pan-x;
+  -webkit-overflow-scrolling: touch;
+}
+
+.bs-chat-sidebar-source-filter::-webkit-scrollbar {
+  display: none;
+  width: 0;
+  height: 0;
 }
 
 .bs-chat-sidebar-source-filter__button {
   display: inline-flex;
   align-items: center;
   justify-content: center;
+  flex: 0 0 auto;
   gap: 0.26rem;
+  width: max-content;
+  max-width: var(--chat-sidebar-source-filter-max-width);
   min-width: 0;
   height: var(--chat-sidebar-source-filter-height);
-  padding: 0 0.38rem;
+  padding: 0 0.52rem;
   border: 1px solid transparent;
   border-radius: var(--chat-sidebar-control-radius);
   background: var(--chat-sidebar-glass-surface);
@@ -247,6 +264,7 @@ input {
   color: var(--maverick-text-muted);
   font-size: 0.72rem;
   line-height: 1;
+  overflow: hidden;
   transition:
     background 140ms ease,
     border-color 140ms ease,

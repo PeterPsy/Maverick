@@ -53,8 +53,33 @@ def load_generation_control(
     return control
 
 
+def load_runtime_generation_control(
+    root: Path,
+    *,
+    verified_artifacts: Mapping[str, str],
+) -> GenerationControl:
+    """Load launch metadata while requiring full verification of the active artifact.
+
+    Retained rollback artifacts are metadata until selected by a rollback. Their
+    data directories, journal and snapshot are still validated on every launch;
+    the executable closure is fully verified by the rollback operation before it
+    can become active.
+    """
+    root = _validated_root(root)
+    control = load_generation_control_metadata(root)
+    _verify_artifact(control.active, verified_artifacts, label="active")
+    resolve_generation_data_dir(root, control.active)
+    if control.previous is not None:
+        resolve_generation_data_dir(root, control.previous)
+    if control.migration_id is not None:
+        journal = load_migration_journal_metadata(root, control.migration_id)
+        _validate_journal_paths(root, journal)
+        reconcile_migration_control(control, journal)
+    return control
+
+
 def load_generation_control_metadata(root: Path) -> GenerationControl:
-    """Read strict data-control metadata; executable runtime must use load_generation_control."""
+    """Read strict metadata only; executable callers must use a validated loader."""
     root = _validated_root(root)
     return GenerationControl.from_dict(_read_strict_json_file(root / CONTROL_FILE_NAME))
 
@@ -94,6 +119,19 @@ def load_migration_journal(
     if journal.migration_id != migration_id:
         raise GenerationControlError("migration journal id does not match its file")
     _validate_journal_references(root, journal, verified_artifacts=verified_artifacts)
+    return journal
+
+
+def load_migration_journal_metadata(root: Path, migration_id: str) -> MigrationJournal:
+    """Read strict journal metadata without asserting executable artifact trust."""
+    root = _validated_root(root)
+    if not _MIGRATION_RE.fullmatch(migration_id):
+        raise GenerationControlError("migration_id is invalid")
+    migrations_root = _validated_child_directory(root, "migrations")
+    journal_path = migrations_root / f"{migration_id}.json"
+    journal = MigrationJournal.from_dict(_read_strict_json_file(journal_path))
+    if journal.migration_id != migration_id:
+        raise GenerationControlError("migration journal id does not match its file")
     return journal
 
 
@@ -197,6 +235,11 @@ def _validate_journal_references(
 ) -> None:
     for label, triple in (("source", journal.source), ("target", journal.target)):
         _verify_artifact(triple, verified_artifacts, label=f"migration {label}")
+    _validate_journal_paths(root, journal)
+
+
+def _validate_journal_paths(root: Path, journal: MigrationJournal) -> None:
+    for triple in (journal.source, journal.target):
         resolve_generation_data_dir(root, triple)
     snapshot = root / PurePosixPath(journal.source_snapshot)
     try:

@@ -106,9 +106,23 @@ def materialize_archive(
     )
 
 
-def discover_verified_bundles(registry_root: Path) -> dict[str, MaterializedBundle]:
-    """Return every immutable digest directory after full file verification."""
+def discover_verified_bundles(
+    registry_root: Path,
+    *,
+    required_digests: set[str] | None = None,
+) -> dict[str, MaterializedBundle]:
+    """Return requested immutable bundles after full file verification.
+
+    Normal launchers should pass the exact digests that can execute during that
+    launch. Historical rollback bundles remain immutable registry entries, but
+    their complete closures are reverified only when an operation selects them.
+    Callers that omit ``required_digests`` retain the exhaustive audit behavior.
+    """
     registry_root = _require_real_directory(Path(registry_root), label="OpenDesign bundle registry")
+    requested = None if required_digests is None else set(required_digests)
+    if requested is not None:
+        if not requested or any(not is_sha256(digest) for digest in requested):
+            raise ArtifactError("Requested OpenDesign bundle digests are invalid")
     bundles: dict[str, MaterializedBundle] = {}
     for candidate in sorted(registry_root.iterdir(), key=lambda item: item.name):
         if candidate.name.startswith("."):
@@ -116,6 +130,8 @@ def discover_verified_bundles(registry_root: Path) -> dict[str, MaterializedBund
         if not is_sha256(candidate.name):
             raise ArtifactError(f"Unexpected OpenDesign bundle registry entry: {candidate.name}")
         _require_real_directory(candidate, label="OpenDesign bundle registry entry")
+        if requested is not None and candidate.name not in requested:
+            continue
         marker = read_materialized_marker(candidate)
         if marker["artifact_sha256"] != candidate.name:
             raise ArtifactError("OpenDesign bundle registry directory does not match its marker")
@@ -132,6 +148,8 @@ def discover_verified_bundles(registry_root: Path) -> dict[str, MaterializedBund
             marker["upstream_commit"],
             candidate,
         )
+    if requested is not None and set(bundles) != requested:
+        raise ArtifactError("A requested OpenDesign artifact is not materialized")
     if not bundles:
         raise ArtifactError("OpenDesign bundle registry contains no verified artifacts")
     return bundles

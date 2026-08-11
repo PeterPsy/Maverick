@@ -38,6 +38,7 @@ class FakeRuntime:
         self.events: list[object] = []
         self.uploads: list[dict[str, object]] = []
         self.fail_create = False
+        self.fail_health = False
 
     def freeze_mutations(self) -> None:
         self.events.append("freeze")
@@ -59,6 +60,8 @@ class FakeRuntime:
 
     def health_check(self) -> None:
         self.events.append("health")
+        if self.fail_health:
+            raise ValueError("injected staging health failure")
 
     def verify_database(self) -> None:
         self.events.append("db-verify")
@@ -244,6 +247,60 @@ class OpenDesignMigrationTests(unittest.TestCase):
         self.assertFalse((self.root / "instances" / "gen_new").exists())
         self.assertFalse((self.root / "backups" / "migration_fixture_001").exists())
         self.assertEqual(self.runtime.events[-1], "unfreeze")
+
+    def test_bundle_upgrade_clones_validates_and_retains_an_atomic_rollback_pair(self) -> None:
+        outcome = self.module.upgrade_controlled_copy(
+            self.root,
+            target=self.new,
+            migration_id="migration_bundle_upgrade_001",
+            verified_artifacts=VERIFIED,
+            runtime=self.runtime,
+            now=self._now,
+            minimum_free_bytes=0,
+        )
+
+        self.assertEqual(outcome.control.active, self.new)
+        self.assertEqual(outcome.control.previous, self.old)
+        self.assertEqual(outcome.project_count, 1)
+        self.assertEqual(
+            (self.root / "instances/gen_new/data/legacy.db").read_bytes(),
+            b"old generation bytes",
+        )
+        journal = self.control_module.load_migration_journal(
+            self.root,
+            "migration_bundle_upgrade_001",
+            verified_artifacts=VERIFIED,
+        )
+        self.assertEqual(journal.state, "cutover_committed")
+        self.assertEqual(journal.checks["upgrade_kind"], "bundle_controlled_copy")
+        self.assertEqual(journal.checks["pre_cutover_health"], "pass")
+        self.assertTrue((self.root / "backups/migration_bundle_upgrade_001/data/legacy.db").is_file())
+        self.assertFalse((self.root / "legacy-project-map.json").exists())
+        self.assertIn(("start", "gen_new", "data", True), self.runtime.events)
+        self.assertIn(("start", "gen_new", "data", False), self.runtime.events)
+
+    def test_bundle_upgrade_staging_failure_preserves_source_and_removes_partial_copies(self) -> None:
+        self.runtime.fail_health = True
+
+        with self.assertRaisesRegex(self.runtime_module.MigrationError, "ValueError"):
+            self.module.upgrade_controlled_copy(
+                self.root,
+                target=self.new,
+                migration_id="migration_bundle_upgrade_failure",
+                verified_artifacts=VERIFIED,
+                runtime=self.runtime,
+                now=self._now,
+                minimum_free_bytes=0,
+            )
+
+        control = self.control_module.load_generation_control(self.root, verified_artifacts=VERIFIED)
+        self.assertEqual(control.active, self.old)
+        self.assertFalse((self.root / "instances/gen_new").exists())
+        self.assertFalse((self.root / "backups/migration_bundle_upgrade_failure").exists())
+        self.assertEqual(
+            (self.root / "instances/gen_old/data/legacy.db").read_bytes(),
+            b"old generation bytes",
+        )
 
     def test_recovery_finishes_journal_after_crash_between_cutover_and_commit(self) -> None:
         original_write = self.module.write_migration_journal

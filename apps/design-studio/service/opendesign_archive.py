@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from concurrent.futures import ThreadPoolExecutor
 import gzip
 import hashlib
 import json
@@ -29,6 +30,7 @@ MATERIALIZED_MARKER_SCHEMA_VERSION = "2"
 def create_file_manifest(root: Path, *, exclude: set[str] | None = None) -> dict[str, Any]:
     excluded = set(exclude or set())
     entries: list[dict[str, Any]] = []
+    regular_files: list[tuple[Path, str, int]] = []
     for path in artifact_paths(root):
         relative = path.relative_to(root).as_posix()
         if relative in excluded:
@@ -49,18 +51,26 @@ def create_file_manifest(root: Path, *, exclude: set[str] | None = None) -> dict
         elif path.is_dir():
             continue
         elif path.is_file():
-            entries.append(
-                {
-                    "path": relative,
-                    "kind": "file",
-                    "mode": f"{mode:04o}",
-                    "size_bytes": path.stat().st_size,
-                    "sha256": sha256_file(path),
-                }
-            )
+            regular_files.append((path, relative, mode))
         else:
             raise ArtifactError(f"Unsupported artifact filesystem object: {relative}")
+    if regular_files:
+        worker_count = min(4, len(regular_files))
+        with ThreadPoolExecutor(max_workers=worker_count, thread_name_prefix="od-verify") as executor:
+            entries.extend(executor.map(_regular_file_manifest_entry, regular_files))
+    entries.sort(key=lambda entry: str(entry["path"]))
     return {"schema_version": "1", "self_excluded": sorted(excluded), "files": entries}
+
+
+def _regular_file_manifest_entry(item: tuple[Path, str, int]) -> dict[str, Any]:
+    path, relative, mode = item
+    return {
+        "path": relative,
+        "kind": "file",
+        "mode": f"{mode:04o}",
+        "size_bytes": path.stat().st_size,
+        "sha256": sha256_file(path),
+    }
 
 
 def write_deterministic_archive(root: Path, output: Path) -> None:

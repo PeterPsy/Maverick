@@ -53,7 +53,10 @@ pinned in the committed canonical manifest. `materialize_opendesign.py`
 verifies every asset and the provenance signature before atomically installing
 the closure in its digest-named registry directory. An existing digest
 directory is immutable and is never overwritten after a verification failure.
-The launcher revalidates every materialized file before each start.
+The launcher revalidates every file in the exact bundle selected for execution
+before each start. Retained rollback bundles are revalidated in full when a
+controlled operation selects them; unrelated registry entries are never placed
+on the execution path.
 
 Fresh checkouts will not include the materialized OCI bundle. Import the pinned
 release assets before declaring the release complete:

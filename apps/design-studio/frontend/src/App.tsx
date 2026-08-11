@@ -8,6 +8,7 @@ import {
   navigationMessage,
   requestOpenDesignLaunch,
   SidecarLaunchError,
+  themeMessage,
 } from "./api";
 import type { OpenDesignNavigation, SidecarDiagnostic, SidecarHostPhase, SidecarLaunch } from "./types";
 import "./styles/main.css";
@@ -21,7 +22,8 @@ export function App() {
   const submittedFrameRef = useRef<HTMLIFrameElement | null>(null);
   const sidecarOriginRef = useRef("");
   const navigationRef = useRef<OpenDesignNavigation>(initialNavigation());
-  const [navigation, setNavigation] = useState(navigationRef.current);
+  const themeRef = useRef<"dark" | "light">(initialTheme());
+  const [, setNavigation] = useState(navigationRef.current);
   const [phase, setPhase] = useState<SidecarHostPhase>("launching");
   const [diagnostic, setDiagnostic] = useState<SidecarDiagnostic | null>(null);
   const [launchRevision, setLaunchRevision] = useState(0);
@@ -35,6 +37,14 @@ export function App() {
     frameWindow.postMessage(navigationMessage(navigationRef.current), origin);
   }, []);
 
+  const postTheme = useCallback(() => {
+    const frameWindow = frameRef.current?.contentWindow;
+    const origin = sidecarOriginRef.current;
+    if (frameWindow && origin) {
+      frameWindow.postMessage(themeMessage(themeRef.current), origin);
+    }
+  }, []);
+
   useEffect(() => {
     window.parent?.postMessage({ type: "maverick.app.ready", app_id: appId }, window.location.origin);
   }, [appId]);
@@ -42,6 +52,15 @@ export function App() {
   useEffect(() => {
     function handleMessage(event: MessageEvent) {
       if (event.origin === window.location.origin && event.source === window.parent && isRecord(event.data)) {
+        if (event.data.type === "maverick.shell.theme-changed") {
+          const shellTheme = isRecord(event.data.theme) ? event.data.theme.effective : "";
+          if (shellTheme === "dark" || shellTheme === "light") {
+            themeRef.current = shellTheme;
+            document.documentElement.dataset.theme = shellTheme;
+            postTheme();
+          }
+          return;
+        }
         if (event.data.type !== "maverick.app.navigate") {
           return;
         }
@@ -57,7 +76,7 @@ export function App() {
         }
         navigationRef.current = next;
         setNavigation(next);
-        setLaunchRevision((value) => value + 1);
+        postNavigation();
         return;
       }
       const frameWindow = frameRef.current?.contentWindow || null;
@@ -67,12 +86,31 @@ export function App() {
       if (event.data.type === "maverick.opendesign.ready" && event.data.version === 1) {
         setDiagnostic(null);
         setPhase("ready");
+        postNavigation();
+        postTheme();
+        return;
+      }
+      if (event.data.type === "maverick.opendesign.navigation-changed" && event.data.version === 1) {
+        const next = navigationFromParams({ od_project_id: typeof event.data.od_project_id === "string" ? event.data.od_project_id : "" });
+        if (!next.od_project_id || next.od_project_id === navigationRef.current.od_project_id) {
+          return;
+        }
+        navigationRef.current = next;
+        setNavigation(next);
+        window.parent?.postMessage(
+          {
+            type: "maverick.app.selection-changed",
+            owner_app_id: appId,
+            selection: { od_project_id: next.od_project_id },
+          },
+          window.location.origin,
+        );
       }
     }
 
     window.addEventListener("message", handleMessage);
     return () => window.removeEventListener("message", handleMessage);
-  }, [appId]);
+  }, [appId, postNavigation, postTheme]);
 
   useEffect(() => {
     let canceled = false;
@@ -83,7 +121,7 @@ export function App() {
     setDiagnostic(null);
     setPhase("launching");
 
-    void requestOpenDesignLaunch(appId, navigation)
+    void requestOpenDesignLaunch(appId, navigationRef.current)
       .then((launch) => {
         if (canceled || !frame) {
           return;
@@ -117,7 +155,7 @@ export function App() {
       canceled = true;
       window.clearTimeout(degradedTimer);
     };
-  }, [appId, launchRevision, navigation]);
+  }, [appId, launchRevision]);
 
   function handleFrameLoad() {
     if (submittedFrameRef.current !== frameRef.current) {
@@ -126,6 +164,7 @@ export function App() {
     setDiagnostic(null);
     setPhase("ready");
     postNavigation();
+    postTheme();
   }
 
   function handleFrameError() {
@@ -205,6 +244,11 @@ export function App() {
       ) : null}
     </main>
   );
+}
+
+function initialTheme(): "dark" | "light" {
+  const value = new URLSearchParams(window.location.search).get("maverick_theme");
+  return value === "light" ? "light" : "dark";
 }
 
 function submitBootstrapForm(frame: HTMLIFrameElement, launch: SidecarLaunch) {

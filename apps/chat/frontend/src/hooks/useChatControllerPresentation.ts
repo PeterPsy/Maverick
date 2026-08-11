@@ -11,6 +11,7 @@ import type {
   ProviderItem,
   RuntimeEvent,
   RuntimeTurn,
+  SourceAppChatMode,
 } from "../api/client";
 import type { ChatSurfaceProps } from "../components/ChatSurface";
 import type { ExecutionMode } from "../components/ChatComposer";
@@ -81,6 +82,10 @@ type UseChatControllerPresentationParams = {
   onLoadOlderHistory: () => void;
   onRevealOlderMessages: () => void;
   selectedAgentTypeId: string;
+  sourceAppChatMode: SourceAppChatMode;
+  sourceAppId: string;
+  sourceAppProjectId: string;
+  setSourceAppChatMode: (mode: SourceAppChatMode) => void;
   setMultiAgentMode: (mode: MultiAgentComposerMode) => void;
   setComposer: (value: string) => void;
   speechMaxTextChars: number;
@@ -151,6 +156,10 @@ export function useChatControllerPresentation({
   onLoadOlderHistory,
   onRevealOlderMessages,
   selectedAgentTypeId,
+  sourceAppChatMode,
+  sourceAppId,
+  sourceAppProjectId,
+  setSourceAppChatMode,
   setMultiAgentMode,
   setComposer,
   speechMaxTextChars,
@@ -242,6 +251,10 @@ export function useChatControllerPresentation({
       queuedCount: queuedMessages.length,
       queuedPreview: queuedMessages[0]?.content || null,
       selectedAgentTypeId: composerSelectedAgentTypeId,
+      sourceAppChatMode,
+      sourceAppId,
+      sourceAppProjectId,
+      onSelectSourceAppChatMode: setSourceAppChatMode,
       transcriptionChunkedDictationSupported,
       transcriptionContentTypes,
       transcriptionMaxAudioBytes,

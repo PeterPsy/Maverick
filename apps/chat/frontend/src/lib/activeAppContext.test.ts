@@ -41,6 +41,22 @@ describe("active app context helpers", () => {
     ).toBeNull();
   });
 
+  it("preserves scalar active app params for contextual source-app chat", () => {
+    expect(
+      activeAppContextFromWidgetContext({
+        content: {
+          payload: {
+            active_app: {
+              app_id: "design-studio",
+              name: "Design Studio",
+              params: { od_project_id: "od_project_1", nested: { blocked: true } },
+            },
+          },
+        },
+      }),
+    ).toMatchObject({ app_id: "design-studio", params: { od_project_id: "od_project_1" } });
+  });
+
   it("adds active app context to prompts once", () => {
     const prompted = promptWithActiveAppContext("Base prompt", activeApp);
 

@@ -69,6 +69,15 @@ function SidebarSectionsProbe({ onTitles }: { onTitles: (titles: string[]) => vo
   );
 }
 
+function SidebarOpenDesignFilterProbe() {
+  const sidebar = useChatSidebarState();
+  return (
+    <button data-filter={sidebar.threadFilter} onClick={() => sidebar.setThreadFilter("opendesign")} type="button">
+      {sidebar.sections.flatMap((section) => section.items.map((item) => item.title)).join(",")}
+    </button>
+  );
+}
+
 describe("useChatSidebarState search persistence", () => {
   let container: HTMLDivElement;
   let root: Root;
@@ -189,6 +198,36 @@ describe("useChatSidebarState search persistence", () => {
 
     expect(mocks.listRuntimeThreads).toHaveBeenCalledWith(expect.objectContaining({ cursor: "thread-recent", limit: 50 }));
     expect(onTitles.mock.calls.some(([titles]) => titles.includes("Older conversation"))).toBe(true);
+  });
+
+  it("accepts the OpenDesign filter and shows only Design Studio threads", async () => {
+    const chatThread = thread({ thread_id: "thread-chat", runtime_session_id: "session-chat", title: "General chat" });
+    const designThread = thread({
+      thread_id: "thread-design",
+      runtime_session_id: "session-design",
+      source_app_id: "design-studio",
+      title: "OpenDesign chat",
+    });
+    mocks.useRuntimeThreads.mockImplementation(({ setThreads }: { setThreads: (threads: ChatThread[]) => void }) => {
+      useEffect(() => {
+        setThreads([chatThread, designThread]);
+      }, []);
+    });
+
+    await act(async () => {
+      root.render(<SidebarOpenDesignFilterProbe />);
+    });
+
+    const button = container.querySelector("button");
+    expect(button?.textContent).toContain("General chat");
+    expect(button?.textContent).toContain("OpenDesign chat");
+
+    await act(async () => {
+      button?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+
+    expect(button?.dataset.filter).toBe("opendesign");
+    expect(button?.textContent).toBe("OpenDesign chat");
   });
 });
 

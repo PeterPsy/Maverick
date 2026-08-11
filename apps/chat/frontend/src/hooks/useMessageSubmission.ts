@@ -8,6 +8,8 @@ import {
   RuntimeSession,
   RuntimeTurn,
   RuntimeTurnSubmitResponse,
+  SourceAppChatMode,
+  cancelSourceAppTurn,
   createInterAgentOrchestration,
   createRuntimeSession,
   createRuntimeSessionWithTurn,
@@ -18,6 +20,7 @@ import {
   recordRuntimeTurnClientMetrics,
   sendInterAgentDirective,
   sendRuntimeTurn,
+  sendSourceAppTurn,
 } from "../api/client";
 import type { ComposerAttachment } from "../lib/attachments";
 import type { RuntimeSessionOptions, RuntimeTurnClientMetrics } from "../api/client";
@@ -77,6 +80,7 @@ type UseMessageSubmissionParams = {
   notifyActiveThreadChanged: (activeThreadId: string) => void;
   onInterAgentRunChanged?: (detail: InterAgentRunDetail) => void;
   selectedAgentRuntimeConfig: (activeApp: ActiveAppContext | null) => Promise<AgentRuntimeConfig | null>;
+  sourceAppChatMode: SourceAppChatMode;
   setActiveSession: Dispatch<SetStateAction<RuntimeSession | null>>;
   setActiveThread: Dispatch<SetStateAction<ChatThread | null>>;
   setActiveTurn: Dispatch<SetStateAction<RuntimeTurn | null>>;
@@ -329,6 +333,7 @@ export function useMessageSubmission({
   notifyActiveThreadChanged,
   onInterAgentRunChanged,
   selectedAgentRuntimeConfig,
+  sourceAppChatMode,
   setActiveSession,
   setActiveThread,
   setActiveTurn,
@@ -388,7 +393,7 @@ export function useMessageSubmission({
   }, [activeAppContext, activeConversationKey, activeInterAgentRun, activeThread, draftChat, threads]);
 
   useEffect(() => {
-    if (!canPreloadRuntime) {
+    if (!canPreloadRuntime || sourceAppOwner(activeThread, activeAppContext)) {
       return;
     }
     const abortController = new AbortController();
@@ -396,7 +401,7 @@ export function useMessageSubmission({
     return () => {
       abortController.abort();
     };
-  }, [activeAppContext, activeThread?.thread_id, canPreloadRuntime, draftChat, selectedAgentRuntimeConfig, threads]);
+  }, [activeAppContext, activeThread, canPreloadRuntime, draftChat, selectedAgentRuntimeConfig, threads]);
 
   useEffect(
     () => () => {
@@ -1131,7 +1136,11 @@ export function useMessageSubmission({
       return true;
     }
     try {
-      const response = await interruptRuntimeTurn(turnId);
+      const sourceAppId = activeThreadRef.current?.source_app_id || "";
+      const runtimeSessionId = activeThreadRef.current?.runtime_session_id || "";
+      const response = sourceAppId === "design-studio" && runtimeSessionId
+        ? await cancelSourceAppTurn({ runtimeSessionId, sourceAppId, turnId })
+        : await interruptRuntimeTurn(turnId);
       if (isConversationStillActive(conversationKey)) {
         setActiveTurn(response.turn);
         if (response.event) {
@@ -1165,7 +1174,26 @@ export function useMessageSubmission({
       let systemPrompt = targetDraftChat?.systemPrompt || "";
       let response: RuntimeTurnSubmitResponse | null = null;
       const clientMetrics: RuntimeTurnClientMetrics = { ...(message.clientSubmissionMetrics || {}) };
-      if (!thread) {
+      const sourceAppId = sourceAppOwner(thread, target.activeAppContext);
+      if (sourceAppId) {
+        const projectId = sourceAppProjectId(thread, target.activeAppContext);
+        if (!projectId) {
+          throw new Error("Open a Design Studio project before starting an OpenDesign chat.");
+        }
+        response = await submitWithPostMetric(clientMetrics, () =>
+          sendSourceAppTurn({
+            appReferences: message.appReferences,
+            attachments: message.attachments,
+            clientMessageId: message.clientMessageId,
+            inputText: message.content,
+            mode: sourceAppChatMode,
+            projectId,
+            runtimeSessionId: thread?.runtime_session_id || undefined,
+            signal: abortController.signal,
+            sourceAppId,
+          }),
+        );
+      } else if (!thread) {
         const runtimeOptions = await buildRuntimeSessionOptions(target, abortController.signal);
         agentRuntimeConfig = runtimeOptions.agentRuntimeConfig;
         systemPrompt = runtimeOptions.systemPrompt;
@@ -1606,4 +1634,18 @@ export function interAgentComposerBudgetLabel(mode: MultiAgentComposerMode): str
     return "Dynamic group · quality gated";
   }
   return "Dynamic plan · quality gated";
+}
+
+function sourceAppOwner(thread: ChatThread | null, activeAppContext: ActiveAppContext | null): string {
+  const sourceAppId = thread?.source_app_id || (!thread ? activeAppContext?.app_id || "" : "");
+  return sourceAppId === "design-studio" ? sourceAppId : "";
+}
+
+function sourceAppProjectId(thread: ChatThread | null, activeAppContext: ActiveAppContext | null): string {
+  if (thread?.project_id) {
+    return thread.project_id;
+  }
+  const params = activeAppContext?.params || {};
+  const projectId = params.od_project_id || params.project_id;
+  return typeof projectId === "string" ? projectId : "";
 }

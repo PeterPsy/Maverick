@@ -59,7 +59,7 @@ class DerivationResult:
     artifact_size_bytes: int
     file_manifest_sha256: str
     rootfs_inventory_sha256: str
-    patch_evidence: dict[str, str]
+    patch_evidence: dict[str, Any]
 
 
 def import_reproducible_artifact(
@@ -146,8 +146,9 @@ def derive_once(
     sbom = cyclonedx_sbom(packages, version=manifest["upstream"]["release_version"])
     licenses = license_inventory(packages, upstream=manifest["upstream"])
     notice = notice_text(licenses) + (
-        "\nMaverick derived boundary notice:\n"
+        "\nMaverick derived patch notice:\n"
         f"- {patch_evidence['path']} was modified to require the technical bearer on loopback.\n"
+        f"- {patch_evidence['ui_patch']['path']} was modified to remove the native chat/home catalog, apply Maverick themes, and bridge project navigation.\n"
     )
     write_canonical_json(metadata_root / "sbom.cdx.json", sbom)
     write_canonical_json(metadata_root / "licenses.json", licenses)

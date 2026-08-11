@@ -49,7 +49,7 @@ const TRANSCRIPT_SEARCH_EVENT_LIMIT = 500;
 const TRANSCRIPT_SEARCH_MAX_CONCURRENT = 4;
 const THREAD_PAGE_LIMIT = 50;
 const THREAD_BACKFILL_IDLE_DELAY_MS = 320;
-const THREAD_FILTERS: ThreadFilter[] = ["all", "senses", "multi_agent", "unread"];
+const THREAD_FILTERS: ThreadFilter[] = ["all", "opendesign", "senses", "multi_agent", "unread"];
 
 export function useChatSidebarState() {
   const [projects, setProjects] = useState<ChatProject[]>([]);
@@ -99,6 +99,7 @@ export function useChatSidebarState() {
   const threadFilterCounts = useMemo(
     () => ({
       all: threads.length,
+      opendesign: filterThreads(threads, "opendesign").length,
       senses: filterThreads(threads, "senses").length,
       multi_agent: filterThreads(threads, "multi_agent", multiAgentThreadIds).length,
       unread: filterThreads(threads, "unread").length,

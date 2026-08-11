@@ -59,6 +59,13 @@ class MigrationOutcome:
 
 
 @dataclass(frozen=True)
+class BundleUpgradeOutcome:
+    migration_id: str
+    control: GenerationControl
+    project_count: int
+
+
+@dataclass(frozen=True)
 class RecoveryOutcome:
     control: GenerationControl
     reconciliations: tuple[str, ...]

@@ -44,6 +44,7 @@ from opendesign_migration_legacy import (
     seal_legacy_state,
 )
 from opendesign_migration_runtime import (
+    BundleUpgradeOutcome,
     MigrationError,
     MigrationOutcome,
     MigrationRuntime,
@@ -173,6 +174,104 @@ def migrate_controlled_copy(
             elif prepared is None:
                 clean_unjournaled_failure(root, created_generation, created_snapshot, mapping_path)
             raise MigrationError(f"controlled OpenDesign migration failed: {type(exc).__name__}") from exc
+        finally:
+            runtime.unfreeze_mutations()
+
+
+def upgrade_controlled_copy(
+    root: Path,
+    *,
+    target: GenerationTriple,
+    migration_id: str,
+    verified_artifacts: Mapping[str, str],
+    runtime: MigrationRuntime,
+    now: Callable[[], str] | None = None,
+    minimum_free_bytes: int = 64 * 1024 * 1024,
+) -> BundleUpgradeOutcome:
+    """Clone and validate an existing generation before an atomic bundle cutover."""
+    root = controlled_root(root)
+    validate_identifier(migration_id, MIGRATION_ID, "migration_id")
+    timestamp = now or _utc_now
+    with migration_lock(root):
+        runtime.freeze_mutations()
+        prepared: MigrationJournal | None = None
+        control_switched = False
+        created_snapshot: Path | None = None
+        created_generation: Path | None = None
+        try:
+            runtime.drain_or_cancel_runs()
+            control = load_generation_control(root, verified_artifacts=verified_artifacts)
+            source = control.active
+            if control.previous is not None or control.migration_id is not None:
+                raise MigrationError("bundle upgrade requires resolved retention metadata")
+            if target == source or target.data_generation == source.data_generation:
+                raise MigrationError("bundle upgrade target must use a new bundle/data triple")
+            _verify_target_artifact(target, verified_artifacts)
+            source_data = resolve_generation_data_dir(root, source)
+            runtime.stop_sidecar()
+            runtime.prove_sidecar_stopped(source_data)
+            verify_free_space(root, source_data, minimum_free_bytes=minimum_free_bytes)
+
+            created_snapshot = create_snapshot(
+                root,
+                migration_id,
+                source_data,
+                None,
+                maximum_legacy_state_bytes=MAX_LEGACY_STATE_BYTES,
+            )
+            target_data = clone_generation(root, source_data, target.data_generation)
+            created_generation = target_data.parent
+            runtime.start_sidecar(target, target_data, staging=True)
+            staging_checks = _validate_staging(runtime)
+            checks = _prefixed_checks("pre_cutover", staging_checks)
+            project_count = int(staging_checks["staging_project_count"])
+            runtime.stop_sidecar()
+            runtime.prove_sidecar_stopped(target_data)
+
+            prepared = MigrationJournal(
+                migration_id=migration_id,
+                state="prepared",
+                source=source,
+                target=target,
+                source_snapshot=f"backups/{migration_id}",
+                checks={
+                    **checks,
+                    "source_snapshot_sha256": tree_sha256(created_snapshot),
+                    "upgrade_kind": "bundle_controlled_copy",
+                },
+                created_at=timestamp(),
+                updated_at=timestamp(),
+            )
+            write_migration_journal(root, prepared, verified_artifacts=verified_artifacts)
+            cutover = GenerationControl(
+                active=target,
+                previous=source,
+                migration_id=migration_id,
+                updated_at=timestamp(),
+            )
+            write_generation_control(root, cutover, verified_artifacts=verified_artifacts)
+            control_switched = True
+            write_migration_journal(
+                root,
+                _journal_with_state(prepared, "cutover_committed", updated_at=timestamp()),
+                verified_artifacts=verified_artifacts,
+            )
+            runtime.start_sidecar(target, target_data, staging=False)
+            _validate_staging(runtime)
+            return BundleUpgradeOutcome(migration_id, cutover, project_count)
+        except (MigrationError, GenerationControlError, OSError, ValueError) as exc:
+            _stop_after_failure(runtime)
+            if prepared is not None and not control_switched:
+                aborted = _journal_with_state(
+                    prepared,
+                    "aborted",
+                    updated_at=timestamp(),
+                    checks={**prepared.checks, "error_code": type(exc).__name__},
+                )
+                write_migration_journal(root, aborted, verified_artifacts=verified_artifacts)
+            elif prepared is None:
+                clean_unjournaled_failure(root, created_generation, created_snapshot, None)
+            raise MigrationError(f"controlled OpenDesign bundle upgrade failed: {type(exc).__name__}") from exc
         finally:
             runtime.unfreeze_mutations()
 

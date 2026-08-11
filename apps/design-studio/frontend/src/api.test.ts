@@ -9,6 +9,7 @@ import {
   SidecarLaunchError,
   validateSidecarLaunch,
 } from "./api";
+import { mobileLayoutFromWidgetMessage, projectIdFromWidgetMessage } from "./backendApi";
 
 const VALID_LAUNCH = {
   origin: "https://sc-proof.sidecars.example",
@@ -90,5 +91,24 @@ describe("sidecar postMessage boundary", () => {
       VALID_LAUNCH.origin,
       frameWindow,
     )).toBe(false);
+  });
+});
+
+describe("sidebar widget context", () => {
+  it("uses shell-owned active project and mobile layout values", () => {
+    const message = {
+      type: "maverick.widget.context-changed",
+      context: {
+        content: {
+          payload: {
+            active_app_params: { od_project_id: "od_project_sidebar" },
+            is_mobile_layout: false,
+          },
+        },
+      },
+    };
+    expect(projectIdFromWidgetMessage(message)).toBe("od_project_sidebar");
+    expect(mobileLayoutFromWidgetMessage(message)).toBe(false);
+    expect(mobileLayoutFromWidgetMessage({ ...message, type: "untrusted" })).toBeUndefined();
   });
 });

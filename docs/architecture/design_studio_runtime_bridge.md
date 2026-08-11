@@ -21,6 +21,11 @@ path, or reusable runtime token. It must not write OpenDesign SQLite directly.
 The correlation record described here is transport metadata, not a second
 writable project or run catalog.
 
+The floating Maverick Chat is the only composer for this integration. The
+native OpenDesign Chat pane is removed from the verified web export, but
+OpenDesign remains authoritative for conversations, messages, runs, files and
+terminal result packages.
+
 ## Decision
 
 The mandatory A-ACP-first spike proved that upstream ACP is a capable transport,
@@ -39,6 +44,33 @@ Option B has two strictly separated parts:
 
 Core source and schemas must not contain `design-studio`, `opendesign`, an
 OpenDesign route, an OpenDesign event name, or an OpenDesign persistence type.
+
+## Conversation/session binding
+
+Run correlation remains per turn. In addition, Design Studio owns a durable
+metadata-only binding keyed by OpenDesign project and conversation:
+
+```text
+OpenDesign project + conversation
+  -> one canonical Maverick runtime session/thread
+     -> one correlation and runtime turn per submitted message
+```
+
+The first floating-Chat or native-protocol submission creates the canonical
+runtime session and persists the binding. Later submissions pass that
+`runtime_session_id` back through the generic core request, so they create new
+turns in the same user-visible thread. On upgrade, existing correlations are
+grouped by project/conversation and the newest valid session becomes canonical
+for future turns; historical sessions are retained as legacy threads and their
+events are never merged.
+
+Chat recognizes ownership only from the core-stamped `source_app_id`. For a
+Design Studio thread it delegates submit, cancel and retry to the app backend.
+That backend validates/creates the canonical OpenDesign conversation, writes
+the corresponding OpenDesign messages and run, invokes the generic runtime
+stream, and projects the terminal result back into OpenDesign. Direct generic
+Chat submission for such a thread would skip those invariants and is therefore
+not used.
 
 ## A-ACP spike
 

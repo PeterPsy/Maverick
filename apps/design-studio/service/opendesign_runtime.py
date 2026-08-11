@@ -7,7 +7,11 @@ from pathlib import Path
 from typing import Any
 
 from opendesign_artifact import ArtifactError, selected_asset, validate_bundle_manifest
-from opendesign_generation_control import load_generation_control, resolve_generation_data_dir
+from opendesign_generation_control import (
+    load_generation_control_metadata,
+    load_runtime_generation_control,
+    resolve_generation_data_dir,
+)
 from opendesign_generation_model import (
     GenerationControl,
     GenerationControlError,
@@ -36,8 +40,16 @@ def resolve_runtime_binding(
     """Select only the exact active triple from strict control metadata."""
     validate_bundle_manifest(manifest, require_artifact_digest=True)
     current_asset = selected_asset(manifest, require_artifact_digest=True)
-    bundles = discover_verified_bundles(registry_root)
     current_digest = current_asset["sha256"]
+    try:
+        preliminary_control = load_generation_control_metadata(generation_root)
+    except GenerationControlError as exc:
+        raise ArtifactError(f"OpenDesign generation control is invalid: {exc}") from exc
+    required_digests = {current_digest, preliminary_control.active.bundle_artifact_sha256}
+    bundles = discover_verified_bundles(
+        registry_root,
+        required_digests=required_digests,
+    )
     current = bundles.get(current_digest)
     if current is None:
         raise ArtifactError("Pinned OpenDesign artifact is not materialized")
@@ -54,7 +66,7 @@ def resolve_runtime_binding(
         for digest, bundle in bundles.items()
     }
     try:
-        control = load_generation_control(
+        control = load_runtime_generation_control(
             generation_root,
             verified_artifacts=verified_artifacts,
         )

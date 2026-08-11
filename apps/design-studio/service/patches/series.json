@@ -27,6 +27,23 @@
           "post_sha256": "fd1e49c72bc51d635f3b8736b0f8caa352a805c8424fac86cda9c8ff93b07069"
         }
       ]
+    },
+    {
+      "path": "0002-maverick-native-shell.patch",
+      "sha256": "e7e7457129f8c4c5f3ed8812812d971e93948d68922050377ffb28a5078151e9",
+      "reason": "Delegate OpenDesign navigation and chat surfaces to Maverick, synchronize the isolated sidecar with shell navigation and theme messages, remove native chat and home project affordances, and map the web UI to Maverick dark and light palette tokens.",
+      "files": [
+        {
+          "path": "apps/web/app/layout.tsx",
+          "pre_sha256": "41bdd320b85971c770175f6afbcefcd436e50f34bf89e45f825407b2de10fcc4",
+          "post_sha256": "9885e8d4c7476aae83496c998a65a54ddd07aff41670b8640637cf13c26907c1"
+        },
+        {
+          "path": "apps/web/src/index.css",
+          "pre_sha256": "eb6d72ef653365c66dccc65ae7b7d66a4b92b9a190472b621a63c73e1058d80c",
+          "post_sha256": "9f918f94d0a7c4073e3f0c542c08c0d02ff43dfdc5527ce4531cd92a9f294b87"
+        }
+      ]
     }
   ]
 }

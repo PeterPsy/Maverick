@@ -6,6 +6,7 @@ import json
 from pathlib import Path
 import sys
 from tempfile import TemporaryDirectory
+from types import SimpleNamespace
 import unittest
 from unittest.mock import patch
 
@@ -28,6 +29,59 @@ class DesignStudioRuntimeBridgeTests(unittest.TestCase):
             "user_id": "user:admin",
             "data_root": str(root),
         }
+
+    def test_active_generation_verification_is_reused_within_one_backend_payload(self) -> None:
+        with TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            (root / "opendesign").mkdir()
+            active = root / "active"
+            active.mkdir()
+            payload = self._payload(root)
+            with patch.object(runtime_bridge, "read_bundle_manifest", return_value={}), patch.object(
+                runtime_bridge,
+                "resolve_runtime_binding",
+                return_value=SimpleNamespace(data_dir=active),
+            ) as resolve:
+                first = runtime_bridge.active_data_directory(payload)
+                second = runtime_bridge.active_data_directory(payload)
+
+            self.assertEqual(first, active)
+            self.assertEqual(second, active)
+            resolve.assert_called_once()
+
+    def test_core_runtime_surfaces_reuse_strict_generation_control_without_rehashing_bundle(self) -> None:
+        with TemporaryDirectory() as temp_dir:
+            active = Path(temp_dir) / "active"
+            active.mkdir()
+            payload = self._payload(Path(temp_dir))
+            payload["surface"] = "runtime_stream_translation"
+            with patch.object(runtime_bridge, "cleanup_data_directory", return_value=active) as resolve_control, patch.object(
+                runtime_bridge,
+                "active_data_directory",
+                side_effect=AssertionError("trusted runtime callbacks must not rehash the bundle"),
+            ):
+                runtime_bridge.store_for_payload(payload)
+                runtime_bridge.binding_store_for_payload(payload)
+
+            self.assertEqual(resolve_control.call_count, 2)
+
+    def test_core_sidecar_run_metadata_can_be_marked_trusted_only_after_routing(self) -> None:
+        with TemporaryDirectory() as temp_dir:
+            active = Path(temp_dir) / "active"
+            active.mkdir()
+            payload = self._payload(Path(temp_dir))
+            payload["surface"] = "sidecar_core_handler"
+            trusted = runtime_bridge.trusted_sidecar_runtime_metadata_payload(payload)
+            with patch.object(runtime_bridge, "cleanup_data_directory", return_value=active), patch.object(
+                runtime_bridge,
+                "active_data_directory",
+                side_effect=AssertionError("routed sidecar run polling must not rehash the bundle"),
+            ):
+                runtime_bridge.store_for_payload(trusted)
+
+            payload["surface"] = "backend"
+            with self.assertRaisesRegex(runtime_bridge.RuntimeBridgeError, "Core sidecar surface"):
+                runtime_bridge.trusted_sidecar_runtime_metadata_payload(payload)
 
     def test_correlation_is_idempotent_redaction_safe_and_replayable(self) -> None:
         with TemporaryDirectory() as temp_dir:
@@ -353,10 +407,10 @@ class DesignStudioRuntimeBridgeTests(unittest.TestCase):
                     service,
                     "_opendesign_json_request",
                     return_value={"files": [{"name": "index.html"}]},
-                ) as opendesign_request:
+                ) as opendesign_request, patch.object(service, "_opendesign_put", return_value={"message": {}}) as message_update:
                     first = service.runtime_bridge_terminal(
                         payload,
-                        arguments,
+                        {**arguments, "output_text": "Finished design"},
                         event_type="runtime.turn.completed",
                     )
                     replayed = service.runtime_bridge_terminal(
@@ -368,6 +422,8 @@ class DesignStudioRuntimeBridgeTests(unittest.TestCase):
                 persisted = runtime_bridge.store_for_payload(payload).get(record["od_run_id"])
 
             opendesign_request.assert_called_once()
+            message_update.assert_called_once()
+            self.assertEqual(message_update.call_args.args[2]["content"], "Finished design")
             self.assertEqual(replayed, first)
             self.assertEqual(persisted["terminal_runtime_event_id"], "runtime-event-replay")
 
@@ -420,6 +476,7 @@ class DesignStudioRuntimeBridgeTests(unittest.TestCase):
                 {
                     "cleaned_runtime_session_ids": ["session-deleted", "session-missing"],
                     "deleted_runtime_correlations": 1,
+                    "deleted_conversation_bindings": 1,
                 },
             )
             self.assertEqual([record["od_run_id"] for record in remaining], [records["retained"]["od_run_id"]])
@@ -430,6 +487,161 @@ class DesignStudioRuntimeBridgeTests(unittest.TestCase):
                     self._payload(root),
                     {"runtime_session_ids": ["session-retained"]},
                 )
+
+    def test_conversation_binding_migrates_latest_session_and_is_reused(self) -> None:
+        with TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            active = root / "active"
+            active.mkdir()
+            payload = self._payload(root)
+            with patch.object(runtime_bridge, "active_data_directory", return_value=active):
+                older, _ = runtime_bridge.reserve_run(
+                    payload,
+                    project_id="od_project_bound",
+                    conversation_id="od_conversation_bound",
+                    assistant_message_id="od_message_old",
+                    client_request_id="client-old",
+                    agent_id="maverick",
+                )
+                runtime_bridge.record_submission(
+                    payload,
+                    {
+                        "od_run_id": older["od_run_id"],
+                        "runtime_request_status": "submitted",
+                        "runtime_session_id": "session-old",
+                        "turn_id": "turn-old",
+                        "stream_id": "stream-old",
+                    },
+                )
+                binding_path = active / runtime_bridge.BRIDGE_DIRECTORY / runtime_bridge.BINDINGS_FILE
+                binding_path.unlink()
+                newer, _ = runtime_bridge.reserve_run(
+                    payload,
+                    project_id="od_project_bound",
+                    conversation_id="od_conversation_bound",
+                    assistant_message_id="od_message_new",
+                    client_request_id="client-new",
+                    agent_id="maverick",
+                )
+                runtime_bridge.store_for_payload(payload).update(
+                    newer["od_run_id"],
+                    lambda record: {
+                        **record,
+                        "runtime_session_id": "session-new",
+                        "turn_id": "turn-new",
+                        "stream_id": "stream-new",
+                        "updated_at": "2099-01-01T00:00:00+00:00",
+                    },
+                )
+                migrated = runtime_bridge.binding_store_for_payload(payload).get(
+                    "default", "od_project_bound", "od_conversation_bound"
+                )
+
+            self.assertIsNotNone(migrated)
+            self.assertEqual(migrated["runtime_session_id"], "session-new")
+            self.assertEqual(migrated["thread_id"], "session-new")
+
+    def test_second_run_for_conversation_reuses_maverick_runtime_session(self) -> None:
+        with TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            active = root / "active"
+            active.mkdir()
+            (root / "project").mkdir()
+            payload = self._payload(root)
+
+            def opendesign_response(_payload, path):
+                if path.endswith("/conversations"):
+                    return {"conversations": [{"id": "od_conversation_reuse"}]}
+                return {"project": {"id": "od_project_reuse", "name": "Reuse"}}
+
+            with patch.object(runtime_bridge, "active_data_directory", return_value=active), patch.object(
+                service, "_opendesign_request", side_effect=opendesign_response
+            ), patch.object(service, "project_root_relative_to_app_data", return_value="opendesign/project"):
+                first = service._create_runtime_bridge_run(
+                    payload,
+                    {
+                        "projectId": "od_project_reuse",
+                        "conversationId": "od_conversation_reuse",
+                        "assistantMessageId": "od_message_first",
+                        "clientRequestId": "client-first",
+                        "message": "First turn",
+                    },
+                )
+                first_request = first["runtime_session_requests"][0]
+                self.assertNotIn("runtime_session_id", first_request)
+                runtime_bridge.record_submission(
+                    payload,
+                    {
+                        "od_run_id": first["json"]["runId"],
+                        "runtime_request_status": "submitted",
+                        "runtime_session_id": "session-reused",
+                        "turn_id": "turn-first",
+                        "stream_id": "stream-first",
+                    },
+                )
+                second = service._create_runtime_bridge_run(
+                    payload,
+                    {
+                        "projectId": "od_project_reuse",
+                        "conversationId": "od_conversation_reuse",
+                        "assistantMessageId": "od_message_second",
+                        "clientRequestId": "client-second",
+                        "message": "Second turn",
+                    },
+                )
+
+            self.assertEqual(second["runtime_session_requests"][0]["runtime_session_id"], "session-reused")
+            self.assertEqual(second["runtime_session_requests"][0]["result_visibility"], "internal")
+
+    def test_floating_chat_submit_writes_canonical_messages_and_requests_public_runtime_result(self) -> None:
+        with TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            active = root / "active"
+            active.mkdir()
+            payload = self._payload(root)
+            messages = []
+
+            def opendesign_response(_payload, path):
+                if path.endswith("/conversations"):
+                    return {"conversations": [{"id": "od_conversation_chat"}]}
+                return {"project": {"id": "od_project_chat", "name": "Chat project"}}
+
+            def upsert(_payload, project_id, conversation_id, message_id, body):
+                messages.append((project_id, conversation_id, message_id, body))
+                return {"message": body}
+
+            with patch.object(runtime_bridge, "active_data_directory", return_value=active), patch.object(
+                service, "_opendesign_request", side_effect=opendesign_response
+            ), patch.object(service, "_upsert_opendesign_message", side_effect=upsert), patch.object(
+                service, "project_root_relative_to_app_data", return_value="opendesign/project"
+            ):
+                result = service.chat_submit_turn(
+                    payload,
+                    {
+                        "od_project_id": "od_project_chat",
+                        "od_conversation_id": "od_conversation_chat",
+                        "input_text": "Build the hero",
+                        "client_message_id": "client-floating-chat",
+                        "session_mode": "plan",
+                        "attachments": [
+                            {
+                                "workspace_relative_path": "storage/uploaded/reference.png",
+                                "name": "reference.png",
+                                "size_bytes": 42,
+                                "content_type": "image/png",
+                            }
+                        ],
+                    },
+                )
+
+            self.assertEqual([item[3]["role"] for item in messages], ["user", "assistant"])
+            self.assertEqual(messages[0][3]["content"], "Build the hero")
+            request = result["runtime_session_requests"][0]
+            self.assertEqual(request["result_visibility"], "public")
+            self.assertEqual(request["attachments"][0]["workspace_relative_path"], "storage/uploaded/reference.png")
+            self.assertIn("session mode is plan", request["system_prompt"])
+            self.assertEqual(result["json"]["source_app_id"], "design-studio")
+            self.assertEqual(result["json"]["od_conversation_id"], "od_conversation_chat")
 
     def test_translator_rejects_foreign_stream_and_unknown_event(self) -> None:
         with TemporaryDirectory() as temp_dir:

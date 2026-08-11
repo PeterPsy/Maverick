@@ -44,14 +44,16 @@ output must match byte-for-byte before publication. The launcher invokes only
 that imported loader and Node binary; the app contract deliberately declares no
 package manager and core therefore does not mount a host Node runtime.
 
-The launcher revalidates the materialized files on every new process. This is
-part of the artifact trust boundary and can dominate a cold start when the OS
-page cache is cold. Design Studio therefore declares a 120-second startup
-health budget for `/api/ready`. Core keeps serving its own `/health` endpoint
-during that wait, retries the authenticated Unix-relay probe, and tears down the
-whole confined process group if readiness still fails. A later browser launch
-must start a new process cleanly; no half-started relay or browser session is
-reused.
+The launcher revalidates every file in the exact executable bundle on each new
+process, using a bounded four-worker hashing pass. Retained rollback bundles are
+fully revalidated when selected by a controlled operation, rather than on every
+ordinary launch. This remains part of the artifact trust boundary and can
+dominate a cold start when the OS page cache is cold. Design Studio therefore
+declares a 120-second startup health budget for `/api/ready`. Core keeps serving
+its own `/health` endpoint during that wait, retries the authenticated Unix-relay
+probe, and tears down the whole confined process group if readiness still fails.
+A later browser launch must start a new process cleanly; no half-started relay or
+browser session is reused.
 
 The source-build recipe remains under `fallback_build` only as a separately
 reviewed fallback. It is not part of the primary import or runtime path and must
@@ -218,7 +220,16 @@ coordinates freeze, drain, staging, cutover, rollback and recovery;
 `opendesign_migration_files.py` owns bounded copies, locks and cleanup;
 `opendesign_migration_legacy.py` moves legacy projects and imports only through
 the governed runtime API. It refuses any root without the explicit
-fixture/controlled-copy marker and does not authorize real workspace migration.
+fixture/controlled-copy marker. The marker is a filesystem safety boundary, not
+blanket authorization to alter a workspace: a real workspace upgrade still
+requires an explicit operator or user request and exact paths.
+
+`upgrade_opendesign_bundle.py` is the corresponding non-legacy bundle cutover.
+It requires an exact controlled data root, verified registry, migration id and
+new generation id. It snapshots and clones the active data, starts the pinned
+bundle on the clone, verifies readiness, SQLite integrity and project access,
+then journals and atomically switches the bundle/data pair. The source pair is
+retained for rollback, and unresolved prior retention metadata fails closed.
 
 Run the G4 filesystem and crash proof with:
 

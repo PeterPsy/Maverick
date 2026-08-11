@@ -4,6 +4,7 @@ import copy
 import importlib.util
 import json
 from pathlib import Path
+import shutil
 import sys
 import tarfile
 import tempfile
@@ -80,6 +81,27 @@ class OpenDesignMaterializationTests(unittest.TestCase):
         self.assertEqual(cli.read_text(encoding="utf-8"), "tampered\n")
         self.assertEqual([path.name for path in registry.iterdir()], [self.archive_sha256])
 
+    def test_targeted_discovery_fully_verifies_only_requested_executable_bundles(self) -> None:
+        registry = self.root / "registry"
+        installed = self._materialize(registry)
+        retained_digest = "d" * 64
+        retained = registry / retained_digest
+        shutil.copytree(installed.path, retained)
+        marker_path = retained / self.archive.MATERIALIZED_MARKER_PATH
+        marker = json.loads(marker_path.read_text(encoding="utf-8"))
+        marker["artifact_sha256"] = retained_digest
+        self.artifact.write_canonical_json(marker_path, marker)
+        (retained / "app/apps/web/out/index.html").write_text("tampered", encoding="utf-8")
+
+        requested = self.materialization.discover_verified_bundles(
+            registry,
+            required_digests={self.archive_sha256},
+        )
+
+        self.assertEqual(set(requested), {self.archive_sha256})
+        with self.assertRaisesRegex(self.artifact.ArtifactError, "manifest mismatch"):
+            self.materialization.discover_verified_bundles(registry)
+
     def test_traversal_archive_is_rejected_and_owned_stage_is_removed(self) -> None:
         malicious = self.root / "malicious.tar.gz"
         with tarfile.open(malicious, mode="w:gz") as bundle:
@@ -117,11 +139,16 @@ class OpenDesignMaterializationTests(unittest.TestCase):
             now=lambda: "2026-08-04T00:00:00Z",
         )
 
-        binding = self.runtime.resolve_runtime_binding(
-            registry_root=registry,
-            generation_root=generation_root,
-            manifest=self._pinned_manifest(),
-        )
+        with patch.object(
+            self.runtime,
+            "discover_verified_bundles",
+            wraps=self.materialization.discover_verified_bundles,
+        ) as discovery:
+            binding = self.runtime.resolve_runtime_binding(
+                registry_root=registry,
+                generation_root=generation_root,
+                manifest=self._pinned_manifest(),
+            )
         plan = self.launcher._resolve_launch_plan(binding, self._pinned_manifest())
         daemon_env = self.launcher._daemon_env(
             data_dir=binding.data_dir,
@@ -139,6 +166,10 @@ class OpenDesignMaterializationTests(unittest.TestCase):
         self.assertEqual(daemon_env["OD_REQUIRE_API_TOKEN_ON_LOOPBACK"], "1")
         self.assertEqual(daemon_env["DO_NOT_TRACK"], "1")
         self.assertEqual(daemon_env["NEXT_TELEMETRY_DISABLED"], "1")
+        self.assertEqual(
+            discovery.call_args.kwargs["required_digests"],
+            {self.archive_sha256},
+        )
 
     def test_runtime_binding_rejects_uncontrolled_or_tampered_state(self) -> None:
         registry = self.root / "registry"
@@ -163,7 +194,7 @@ class OpenDesignMaterializationTests(unittest.TestCase):
             ),
             encoding="utf-8",
         )
-        with self.assertRaisesRegex(self.artifact.ArtifactError, "not verified"):
+        with self.assertRaisesRegex(self.artifact.ArtifactError, "not materialized|not verified"):
             self.runtime.resolve_runtime_binding(
                 registry_root=registry,
                 generation_root=generation_root,

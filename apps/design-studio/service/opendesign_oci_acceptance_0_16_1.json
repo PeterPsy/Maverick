@@ -1,21 +1,21 @@
 {
   "artifact": {
-    "file_manifest_sha256": "3b99a4c85884d50e22f29561973f8db1f9a6ad3f00b67c22bee1fd54b25bbc2b",
+    "file_manifest_sha256": "ba8fe2df10714e31468d0cf376e7f572bb9d0fe118a504b6579c21a7ba80e610",
     "license_inventory_sha256": "1b717abf64b5bf6b7faac15b941acf5e95ceebc66dcdf14bc107279cb7b36750",
-    "notice_sha256": "b5619a7efe5f6c40f12a04c9392fdc0b7a0d057a275c3d3ade2ea1b6bfd0d2bb",
-    "provenance_sha256": "5009ea7a6d1adbd670dbc1d3a5305994cffc2975d8fe8c398bc16b1c6c970a4b",
-    "public_key_sha256": "9c52c6d33e40ba6101efd8a8051415d57b9ad39412b43ace75db0c1c6483b4d8",
+    "notice_sha256": "60295de119303d18290ddc8fade9c81fc57a0532ffc6cc09fbeee45ddb6d3246",
+    "provenance_sha256": "8c948bcab15d240eebb8ecaf7bd1685021af0f820ff96ac9fa1379044933dfb3",
+    "public_key_sha256": "418381a4da415837dd5d07b9585fbb958ef20f5c89de35f89b038c3a85f09b1b",
     "sbom_sha256": "a1a28df1527e9208153fd036d0005364ec062c10078af6f5708b3bc9c1c1ded5",
-    "sha256": "b91ce140e6fc8302dc4d4b83dac197d4735533c0f141a44100ff1eeff8904e70",
-    "signature_sha256": "0b66182b1952f8feaf817e072ec89ee224d028495d65ad48a9098fe68cd8f50a",
-    "size_bytes": 185823243
+    "sha256": "bfc7705a104e147110bccfadaf284085f739c99c0704bbc5eadb047f31834afc",
+    "signature_sha256": "9ce37aec22707b7fc3bec18d44665c79db180418cc10f2ebcd4cb4cc29dc23e9",
+    "size_bytes": 185821239
   },
   "boundary_patch": {
     "path": "app/apps/daemon/dist/server.js",
     "post_sha256": "ca107003e03b55d8fa3291e39a51810ce361e09e61e68d2122e05795e1431e1d",
     "pre_sha256": "61c966b4a3a99e7098e37a943436e8b5d52563d1bace24a0e398b200ac0135e8"
   },
-  "executed_at": "2026-08-05",
+  "executed_at": "2026-08-10",
   "import": {
     "independent_derivations": 2,
     "reproducible": true,
@@ -51,5 +51,10 @@
     "static_web": 200
   },
   "schema_version": "1",
+  "ui_patch": {
+    "path": "app/apps/web/out/index.html",
+    "post_sha256": "970dc7a4986cc68968b4defba8b2b6a0d28529356b69f6e471b03f2d04c45880",
+    "pre_sha256": "c17994dfe25730e8dc293cd1dc8221e7e918b63ff6a3756f732c0132d2b2c694"
+  },
   "workspace_data_migrated": false
 }

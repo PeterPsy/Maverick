@@ -11,11 +11,11 @@ export type FolderSection = {
   emptyLabel: string;
 };
 
-export type ThreadFilter = "all" | "senses" | "multi_agent" | "unread";
+export type ThreadFilter = "all" | "opendesign" | "senses" | "multi_agent" | "unread";
 
 export type ThreadSourceBadge = {
   icon: string;
-  kind: "multi_agent" | "senses";
+  kind: "multi_agent" | "opendesign" | "senses";
   label: string;
 };
 
@@ -93,6 +93,9 @@ export function filterThreads(
   if (threadFilter === "senses") {
     return threads.filter(isSensesThread);
   }
+  if (threadFilter === "opendesign") {
+    return threads.filter(isOpenDesignThread);
+  }
   if (threadFilter === "multi_agent") {
     return threads.filter((thread) => isMultiAgentThread(thread, multiAgentThreadIds));
   }
@@ -118,6 +121,10 @@ export function isSensesThread(thread: ChatThread): boolean {
   return thread.source_app_id === "senses";
 }
 
+export function isOpenDesignThread(thread: ChatThread): boolean {
+  return thread.source_app_id === "design-studio";
+}
+
 export function isMultiAgentThread(thread: ChatThread, multiAgentThreadIds: ReadonlySet<string>): boolean {
   return multiAgentThreadIds.has(thread.thread_id) || multiAgentThreadIds.has(thread.runtime_session_id);
 }
@@ -126,6 +133,9 @@ export function threadSourceBadges(thread: ChatThread, multiAgentThreadIds: Read
   const badges: ThreadSourceBadge[] = [];
   if (isSensesThread(thread)) {
     badges.push({ icon: "sensors", kind: "senses", label: "Senses" });
+  }
+  if (isOpenDesignThread(thread)) {
+    badges.push({ icon: "design_services", kind: "opendesign", label: "OpenDesign" });
   }
   if (isMultiAgentThread(thread, multiAgentThreadIds)) {
     badges.push({ icon: "account_tree", kind: "multi_agent", label: "Multi-chat" });

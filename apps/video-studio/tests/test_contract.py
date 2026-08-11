@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+import sys
 import unittest
 
 from core.app_sdk.service import validate_app_source
@@ -11,9 +12,32 @@ from core.apps.contracts import parse_app_contract_file
 
 
 APP_ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(APP_ROOT / "backend"))
+
+from foundation.service import APP_VERSION  # noqa: E402
 
 
 class VideoStudioContractTest(unittest.TestCase):
+    def test_app_version_is_consistent_across_owned_metadata(self) -> None:
+        parsed = parse_app_contract_file(APP_ROOT)
+        package = json.loads((APP_ROOT / "package.json").read_text(encoding="utf-8"))
+        lock = json.loads((APP_ROOT / "package-lock.json").read_text(encoding="utf-8"))
+        sbom = json.loads(
+            (APP_ROOT / "compliance" / "sbom.cdx.json").read_text(encoding="utf-8")
+        )
+
+        self.assertEqual(
+            {
+                parsed.version,
+                package["version"],
+                lock["version"],
+                lock["packages"][""]["version"],
+                sbom["metadata"]["component"]["version"],
+                APP_VERSION,
+            },
+            {"0.2.0"},
+        )
+
     def test_contract_parses_as_installation_level_source(self) -> None:
         parsed = parse_app_contract_file(APP_ROOT)
 

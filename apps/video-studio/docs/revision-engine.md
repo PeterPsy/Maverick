@@ -97,3 +97,25 @@ indexes. It updates both SQLite `user_version` (through the migration runner)
 and app metadata to 2. Migration `0003_revision_integrity.sql` adds immutable
 revision and same-project reference triggers and advances both versions to 3.
 Migrations 0001 and 0002 and their checksums remain byte-identical.
+
+## Upgrade contract: 0.1.0 / schema 1 to 0.2.0 / schema 3
+
+Video Studio 0.2.0 is the first app source that declares data schema 3. The
+built-in source record is version-derived, so normal bootstrap registers a new
+`platform:video-studio:0.2.0` source when a workspace is still bound to
+0.1.0. Bootstrap invokes the generic install lifecycle for that new source;
+the install hook applies every pending migration before Core saves the new
+binding and writes the schema marker.
+
+The supported procedure is to deploy the complete 0.2.0 app source and rerun
+built-in bootstrap. A successful run preserves schema 1 rows, verifies the
+stored checksum for 0001, applies and records 0002 and 0003, advances both
+`PRAGMA user_version` and `app_metadata.schema_version` to 3, then publishes
+the 0.2.0 binding and schema 3 marker. A second run detects the current source
+and binding and does not reapply migrations.
+
+If a pending migration fails, its SQLite transaction is rolled back. Because
+the install hook fails before binding and marker publication, the workspace
+continues to advertise the previous 0.1.0 / schema 1 state. Do not manually
+advance the marker, the metadata row, or `PRAGMA user_version`; correct the
+source and retry bootstrap.

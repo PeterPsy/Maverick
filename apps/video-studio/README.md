@@ -25,8 +25,9 @@ uses only governed Storage identity and provider provenance.
 
 ## Contract Notes
 
-`app_contract.json` declares schema version 3, the single `video-studio` CLI
-command, 16 implemented MCP tools, and data-change resources for `projects`,
+`app_contract.json` declares app version 0.2.0 and schema version 3, the single
+`video-studio` CLI command, 16 implemented MCP tools, and data-change resources
+for `projects`,
 `project-metadata`, and `revisions`. Native project interchange is a domain
 surface; it is not the generic whole-app lifecycle export/import protocol, so
 the lifecycle export/import flags remain disabled. The app remains
@@ -160,6 +161,24 @@ Connections enforce foreign keys and prefer WAL with a verified delete-journal
 fallback. Opening the service reapplies only pending migrations; revision head,
 navigation, autosaves, idempotency results, and pending outbox events recover
 directly from SQLite after restart.
+
+### Built-in upgrade from 0.1.0 / schema 1
+
+The schema 3 release is app version 0.2.0. Built-in source identity includes
+the app version, so bootstrap registers `platform:video-studio:0.2.0` rather
+than treating the installed 0.1.0 source as current. The generic install
+lifecycle then runs the idempotent install hook, which verifies migration 0001
+and applies pending migrations 0002 and 0003 before publishing the 0.2.0
+binding or the schema 3 data marker.
+
+Operators should deploy the complete 0.2.0 source and run the normal built-in
+bootstrap; they must not edit `.maverick-app.json` or `PRAGMA user_version`
+manually. On success, the binding reports 0.2.0, the marker and SQLite report
+schema 3, and `schema_migrations` contains all three immutable checksums. A
+migration failure leaves the previous 0.1.0 binding and schema 1 marker in
+place; the failing migration is rolled back and bootstrap may be retried after
+the source is corrected. Re-running bootstrap after success is a no-op for the
+database migration history.
 
 The app prepares only documented app-owned cache/index/job directories next to
 the database. Project IR itself is stored in immutable revision rows; native

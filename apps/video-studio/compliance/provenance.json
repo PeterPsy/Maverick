@@ -16,8 +16,8 @@
     "https://ffmpeg.org/legal.html"
   ],
   "input_sha256": {
-    "package.json": "b020560dad0cf4ebc7fe19f7c332219f37063f937eb69d3946b3ce892a33178d",
-    "package-lock.json": "2a4525b58c45d673e8d8a5b3760ab3f77810cc12c9e92dbb538b226762dc6cf3",
+    "package.json": "e28ca6393533bd2db112a69620f88efa75ae08281bae9952ad8b531b9d99aafb",
+    "package-lock.json": "cf708c4d2dae2d99e3334a544b9bbb4f5d73cfb15d8c342a33425c05c4cc5d2c",
     "compliance/supply-chain-policy.json": "232c77528d042149cf797b726cfad69319c59b8e141141eabde46ae64dfd229e",
     "compliance/remotion-compositor-inventory.json": "d8ca38c1e878aff9f7b8b9b33409f21e1df21bc5d94e295ac4ab6c90fcaa769d",
     "compliance/ffmpeg-host-manifest.json": "766784952bd0edd8a0c8d55ad81b3bed44ba4089ce993cc4b68c0f1643845877",
@@ -33,7 +33,7 @@
     "../../docs/adr/0008-video-studio-ffmpeg-build-and-distribution.md": "cae6fece43c86f4880fad9f03e05063c2c4165be12fe0a830182894c2f491f30"
   },
   "output_sha256": {
-    "compliance/sbom.cdx.json": "26203f9c1c1c7672c986c7082504472d95a8dc568c028773fd712da460d0fe66",
+    "compliance/sbom.cdx.json": "d71f50b8596985891090d2fee76070b3bd5f5c4ea07dc0296d5b3138713f6b10",
     "compliance/THIRD-PARTY-NOTICES.md": "d5b45648f9f57fad6dcf62a78695f8807b091576e5016b5bf70421e8b8953edf"
   },
   "package_count": 278,

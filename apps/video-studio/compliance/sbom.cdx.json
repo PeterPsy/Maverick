@@ -13,10 +13,10 @@
     ],
     "component": {
       "type": "application",
-      "bom-ref": "pkg:npm/video-studio@0.1.0",
+      "bom-ref": "pkg:npm/video-studio@0.2.0",
       "name": "video-studio",
-      "version": "0.1.0",
-      "purl": "pkg:npm/video-studio@0.1.0"
+      "version": "0.2.0",
+      "purl": "pkg:npm/video-studio@0.2.0"
     },
     "properties": [
       {

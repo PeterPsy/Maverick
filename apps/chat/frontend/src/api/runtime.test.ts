@@ -168,6 +168,7 @@ describe("runtime API client", () => {
     vi.mocked(fetch).mockClear();
     await sendRuntimeTurn("session-1", "next", "client-1", [], [], {
       clientSubmissionStartedAt: "2026-07-12T10:00:01.000Z",
+      expectedRuntimeTurnId: "turn-active",
       clientMetrics: {
         prepared_session_ready_before_submit: true,
         prepared_session_wait_on_submit_ms: 0,
@@ -178,6 +179,8 @@ describe("runtime API client", () => {
     expect(requestBody()).toMatchObject({
       input_text: "next",
       client_message_id: "client-1",
+      delivery_policy: "steer_or_queue",
+      expected_runtime_turn_id: "turn-active",
       client_submission_started_at: "2026-07-12T10:00:01.000Z",
       client_submission_metrics: {
         prepared_session_ready_before_submit: true,

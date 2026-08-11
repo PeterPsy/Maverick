@@ -8,6 +8,7 @@ from pathlib import Path
 
 from core.observability.service import append_platform_log, record_platform_audit, record_platform_event
 from core.runtime.client_message_claims import RuntimeClientMessageClaim
+from core.runtime.message_admission import runtime_message_admission_handoff
 from core.runtime.routing import build_runtime_routing
 from core.runtime.runtime_session import RuntimeSessionRecord, RuntimeSessionStatus
 from core.runtime.runtime_turns import RuntimeTurnRecord
@@ -153,6 +154,26 @@ def queue_runtime_turn(
     now: datetime | None = None,
 ) -> RuntimeTurnRecord:
     """Create one queued runtime turn."""
+    with runtime_message_admission_handoff(session_id):
+        return _queue_runtime_turn_locked(
+            store,
+            turn_id=turn_id,
+            session_id=session_id,
+            input_text=input_text,
+            client_message_id=client_message_id,
+            now=now,
+        )
+
+
+def _queue_runtime_turn_locked(
+    store: RuntimeStore,
+    *,
+    turn_id: str,
+    session_id: str,
+    input_text: str | None = None,
+    client_message_id: str | None = None,
+    now: datetime | None = None,
+) -> RuntimeTurnRecord:
     timestamp = now or utcnow()
     session = store.get_session(session_id)
     record = store.save_turn(
@@ -186,6 +207,28 @@ def queue_runtime_turn_if_client_message_absent(
     now: datetime | None = None,
 ) -> tuple[RuntimeTurnRecord, bool]:
     """Create one queued runtime turn unless the client message was already queued."""
+    with runtime_message_admission_handoff(session_id):
+        return _queue_runtime_turn_if_client_message_absent_locked(
+            store,
+            turn_id=turn_id,
+            session_id=session_id,
+            input_text=input_text,
+            client_message_id=client_message_id,
+            client_message_claim=client_message_claim,
+            now=now,
+        )
+
+
+def _queue_runtime_turn_if_client_message_absent_locked(
+    store: RuntimeStore,
+    *,
+    turn_id: str,
+    session_id: str,
+    input_text: str | None = None,
+    client_message_id: str | None = None,
+    client_message_claim: RuntimeClientMessageClaim | None = None,
+    now: datetime | None = None,
+) -> tuple[RuntimeTurnRecord, bool]:
     timestamp = now or utcnow()
     session = store.get_session(session_id)
     record = RuntimeTurnRecord(

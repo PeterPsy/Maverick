@@ -87,6 +87,7 @@ def build_codex_definition(
             supports_remote_execution=False,
             supports_api_key_auth=False,
             supports_local_binary=True,
+            supports_same_turn_input=True,
         ),
         default_model_family=default_model_id or _default_model_id(options),
         requires_credentials=False,
@@ -451,8 +452,6 @@ class CodexLaunchMixin:
         from core.providers.codex_app_server import close_codex_app_server_runtime
 
         return close_codex_app_server_runtime(session_id)
-
-
 
     def interrupt_turn(self, session_id: str) -> bool:
         """Interrupt the active Codex app-server turn for one session."""

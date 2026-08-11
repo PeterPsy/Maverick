@@ -31,7 +31,7 @@ class CodexAppServerRuntimeProcessTestCase(unittest.TestCase):
             runtime_thread._handle_reader_loop_exit(runtime, reason="stdout_closed", error=None)
 
         response = waiter.get_nowait()
-        self.assertEqual(response["error"]["message"], "Codex app-server stream ended before request completion.")
+        self.assertEqual(response["_transport_error"], "Codex app-server stream ended before request completion.")
         self.assertEqual(runtime.response_waiters, {})
 
     def test_initialize_failure_terminates_and_forgets_the_runtime(self) -> None:

@@ -19,6 +19,9 @@ class _CodexAppServerRuntime:
     runtime_root: str
     process: subprocess.Popen
     request_lock: threading.Lock = field(default_factory=threading.Lock)
+    write_lock: threading.Lock = field(default_factory=threading.Lock)
+    steering_lock: threading.Lock = field(default_factory=threading.Lock)
+    active_turn_lock: threading.Lock = field(default_factory=threading.Lock)
     event_lock: threading.Lock = field(default_factory=threading.Lock)
     provider_thread_lock: threading.Lock = field(default_factory=threading.Lock)
     generated_system_skills_lock: threading.Lock = field(default_factory=threading.Lock)

@@ -45,6 +45,109 @@ describe("runtime event transcript projection", () => {
     expect(messages).toMatchObject([{ id: "client-message-1", role: "human", content: "hello", status: "complete" }]);
   });
 
+  it("projects steered messages inside the active turn without merging assistant segments", () => {
+    const messages = eventsToMessages([
+      event({
+        event_id: "queued-1",
+        event_type: "runtime.turn.queued",
+        payload: { input_text: "start", client_message_id: "client-message-1" },
+      }),
+      event({
+        event_id: "delta-before-steer",
+        event_type: "runtime.output.delta",
+        payload: { text: "Working on the first request." },
+      }),
+      event({
+        event_id: "steered-1",
+        event_type: "runtime.message.steered",
+        payload: { input_text: "also verify the tests", client_message_id: "client-message-2" },
+      }),
+      event({
+        event_id: "delta-after-steer",
+        event_type: "runtime.output.delta",
+        payload: { text: "Now including the tests." },
+      }),
+    ]);
+
+    expect(messages.map(({ id, role, content }) => ({ id, role, content }))).toEqual([
+      { id: "client-message-1", role: "human", content: "start" },
+      { id: "turn-1:agent:stream:0", role: "agent", content: "Working on the first request." },
+      { id: "client-message-2", role: "human", content: "also verify the tests" },
+      { id: "turn-1:agent:stream:1", role: "agent", content: "Now including the tests." },
+    ]);
+  });
+
+  it("keeps steered-message ordering when the provider also emits complete final text", () => {
+    const messages = eventsToMessages([
+      event({
+        event_id: "queued-final-order",
+        event_type: "runtime.turn.queued",
+        payload: { input_text: "start", client_message_id: "client-final-order-1" },
+      }),
+      event({
+        event_id: "delta-final-order-before",
+        event_type: "runtime.output.delta",
+        payload: { text: "First segment. " },
+      }),
+      event({
+        event_id: "steered-final-order",
+        event_type: "runtime.message.steered",
+        payload: { input_text: "add tests", client_message_id: "client-final-order-2" },
+      }),
+      event({
+        event_id: "delta-final-order-after",
+        event_type: "runtime.output.delta",
+        payload: { text: "Second segment." },
+      }),
+      event({
+        event_id: "final-final-order",
+        event_type: "runtime.output.final",
+        payload: { complete_text: "First segment. Second segment." },
+      }),
+    ]);
+
+    expect(messages.map(({ role, content }) => ({ role, content }))).toEqual([
+      { role: "human", content: "start" },
+      { role: "agent", content: "First segment. " },
+      { role: "human", content: "add tests" },
+      { role: "agent", content: "Second segment." },
+    ]);
+  });
+
+  it("projects attachment-only steered messages", () => {
+    const messages = eventsToMessages([
+      event({
+        event_id: "steered-attachment",
+        event_type: "runtime.message.steered",
+        payload: {
+          client_message_id: "client-attachment",
+          attachments: [{ id: "file-1", name: "report.pdf", workspace_relative_path: "storage/uploaded/report.pdf" }],
+        },
+      }),
+    ]);
+
+    expect(messages).toMatchObject([
+      { id: "client-attachment", role: "human", content: "", attachments: [{ id: "file-1", name: "report.pdf" }] },
+    ]);
+  });
+
+  it("deduplicates a retried steered message by client message id", () => {
+    const messages = eventsToMessages([
+      event({
+        event_id: "steered-1",
+        event_type: "runtime.message.steered",
+        payload: { input_text: "one direction", client_message_id: "client-message-steer" },
+      }),
+      event({
+        event_id: "steered-duplicate",
+        event_type: "runtime.message.steered",
+        payload: { input_text: "one direction", client_message_id: "client-message-steer" },
+      }),
+    ]);
+
+    expect(messages.filter((message) => message.role === "human")).toHaveLength(1);
+  });
+
   it("preserves structured app references on human messages", () => {
     const messages = eventsToMessages([
       event({

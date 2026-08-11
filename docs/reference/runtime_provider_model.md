@@ -18,6 +18,7 @@ The provider adapter owns:
 - provider process launch
 - provider session or thread linking
 - provider-specific protocol translation
+- optional same-turn message admission when the provider declares `supports_same_turn_input`
 
 ## Current Provider Reality
 
@@ -36,6 +37,10 @@ Important implications:
 Chat may create hidden `prepare_only` runtime sessions before the first message. The create response waits for provider prewarm for at most two seconds and reports `prewarm_status`, `prewarm_completed`, and `provider_thread_ready`. A client must treat the session as ready only when prewarm completed and the provider thread is ready; a session record existing is not sufficient. Plain hosted chat reports prewarm as `not_required` and ready because it has no local provider process or thread to warm.
 
 Codex turn startup emits separate runtime events for `ensure_runtime`, generated-system-skill cleanup, `ensure_thread`, event-sink reset, and the `turn/start` write boundary. Each start/completed pair is persisted under `runtime.provider.*`, while `runtime.provider.turn_start_sent` remains the write-complete marker and provider acceptance carries `turn_start_request_ack_ms`. This keeps cold-process, cleanup, cold-thread, local reset, request-write, and provider-ack latency distinguishable. Generated `.system` skills are removed on runtime initialization/prewarm and only checked again when that runtime home may need cleanup; a warm turn does not recursively remove an already-clean tree.
+
+Codex declares same-turn text input and maps the generic adapter operation to app-server `turn/steer`. Maverick supplies `threadId`, the provider turn id persisted by `runtime.provider.accepted`, a text input item, and the stable `clientUserMessageId`. The adapter serializes steering writes, retries only explicit app-server backpressure rejections with a small bound, and refuses a changed provider-turn correlation. Explicit no-active-turn, non-steerable-turn, mismatch, overload, or other rejection is safe for the Core to queue as the next runtime turn. A transport write failure or acknowledgement timeout is delivery-uncertain and is never retried or queued automatically.
+
+Same-turn admission is distinct from realtime media input and barge-in. Providers that do not declare `supports_same_turn_input`, including the current plain hosted chat bridge, use the same Core API but receive the normal server-side queued-turn fallback.
 
 The latency report also exposes an overlapping `prepared_ready` cohort for turns whose client observed a fully prewarmed prepared session before submit. Session-scoped prewarm and app-reference preparation events are associated with a turn only when they precede its queue marker by at most 30 seconds, preventing stale session history from inflating a later turn's metrics. Legacy turn-scoped `prewarm_total_ms` values above that window are discarded unless the event marks the value as the corrected completion duration, so genuinely slow prewarms remain visible.
 

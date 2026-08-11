@@ -368,6 +368,14 @@ class RuntimeStore(Protocol):
     ) -> tuple[RuntimeClientMessageClaim, bool]:
         ...
 
+    def get_client_message_claim(
+        self,
+        *,
+        workspace_id: str,
+        client_message_id: str,
+    ) -> RuntimeClientMessageClaim | None:
+        ...
+
     def release_client_message_claim(
         self,
         *,
@@ -385,6 +393,18 @@ class RuntimeStore(Protocol):
         client_message_id: str,
         session_id: str,
         turn_id: str,
+        now: datetime | None = None,
+    ) -> RuntimeClientMessageClaim | None:
+        ...
+
+    def mark_client_message_claim_status(
+        self,
+        *,
+        workspace_id: str,
+        client_message_id: str,
+        session_id: str,
+        turn_id: str,
+        status: str,
         now: datetime | None = None,
     ) -> RuntimeClientMessageClaim | None:
         ...
@@ -1152,6 +1172,21 @@ class RuntimeDocumentStore:
             replaced = _client_message_claim_from_document(replaced_document)
             return replaced, replaced.session_id == session_id and replaced.turn_id == turn_id
 
+    def get_client_message_claim(
+        self,
+        *,
+        workspace_id: str,
+        client_message_id: str,
+    ) -> RuntimeClientMessageClaim | None:
+        normalized_client_message_id = client_message_id.strip()
+        collection = self.collections.client_messages
+        if collection is None or not workspace_id or not normalized_client_message_id:
+            return None
+        document = collection.find_one(
+            {"workspace_id": workspace_id, "client_message_id": normalized_client_message_id}
+        )
+        return _client_message_claim_from_document(document) if document is not None else None
+
     def release_client_message_claim(
         self,
         *,
@@ -1184,7 +1219,29 @@ class RuntimeDocumentStore:
         turn_id: str,
         now: datetime | None = None,
     ) -> RuntimeClientMessageClaim | None:
+        return self.mark_client_message_claim_status(
+            workspace_id=workspace_id,
+            client_message_id=client_message_id,
+            session_id=session_id,
+            turn_id=turn_id,
+            status="queued",
+            now=now,
+        )
+
+    def mark_client_message_claim_status(
+        self,
+        *,
+        workspace_id: str,
+        client_message_id: str,
+        session_id: str,
+        turn_id: str,
+        status: str,
+        now: datetime | None = None,
+    ) -> RuntimeClientMessageClaim | None:
         normalized_client_message_id = client_message_id.strip()
+        normalized_status = status.strip()
+        if normalized_status not in {"queued", "steered", "delivery_uncertain"}:
+            raise ValueError(f"Unsupported runtime client message claim status `{normalized_status}`.")
         collection = self.collections.client_messages
         if collection is None or not workspace_id or not normalized_client_message_id:
             return None
@@ -1197,7 +1254,7 @@ class RuntimeDocumentStore:
         }
         collection.update_one(
             query,
-            {"$set": {"status": "queued", "lease_expires_at": None, "updated_at": timestamp}},
+            {"$set": {"status": normalized_status, "lease_expires_at": None, "updated_at": timestamp}},
             upsert=False,
         )
         document = collection.find_one(query)
@@ -1370,6 +1427,8 @@ class RuntimeDocumentStore:
         ][:bounded_limit]
 
     def _claim_has_persisted_turn(self, claim: RuntimeClientMessageClaim) -> bool:
+        if claim.status in {"steered", "delivery_uncertain"}:
+            return True
         return (
             self.collections.turns.find_one(
                 {
@@ -1870,7 +1929,7 @@ def _client_message_claim_from_document(document: dict[str, Any]) -> RuntimeClie
 
 
 def _client_message_claim_is_expired(claim: RuntimeClientMessageClaim, now: datetime) -> bool:
-    if claim.status == "queued":
+    if claim.status in {"queued", "steered", "delivery_uncertain"}:
         return False
     if claim.lease_expires_at is None:
         return True

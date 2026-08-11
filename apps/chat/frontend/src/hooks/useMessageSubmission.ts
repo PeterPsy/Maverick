@@ -66,6 +66,7 @@ type UseMessageSubmissionParams = {
   activeInterAgentRun: InterAgentRunDetail | null;
   activeAppContext: ActiveAppContext | null;
   activeThread: ChatThread | null;
+  activeTurn: RuntimeTurn | null;
   attachments: ComposerAttachment[];
   clearAttachments: () => void;
   composer: string;
@@ -106,6 +107,7 @@ type SubmissionTarget = {
   activeAppContext: ActiveAppContext | null;
   conversationKey: string;
   draftChat: DraftChat | null;
+  expectedRuntimeTurnId?: string;
   thread: ChatThread | null;
   threadIds: Set<string>;
 };
@@ -319,6 +321,7 @@ export function useMessageSubmission({
   activeInterAgentRun,
   activeAppContext,
   activeThread,
+  activeTurn,
   attachments,
   clearAttachments,
   composer,
@@ -350,6 +353,7 @@ export function useMessageSubmission({
   const activeConversationKeyRef = useRef(activeConversationKey);
   const activeAppContextRef = useRef(activeAppContext);
   const activeThreadRef = useRef(activeThread);
+  const activeTurnRef = useRef(activeTurn);
   const activeInterAgentRunRef = useRef(activeInterAgentRun);
   const draftChatRef = useRef(draftChat);
   const threadsRef = useRef(threads);
@@ -366,7 +370,6 @@ export function useMessageSubmission({
   const [queuedMessagesByConversationKey, setQueuedMessagesByConversationKey] = useState<ConversationItems<QueuedMessage>>({});
   const [sendingByConversationKey, setSendingByConversationKey] = useState<Record<string, true>>({});
   const [submittedTurnByConversationKey, setSubmittedTurnByConversationKey] = useState<Record<string, string>>({});
-  const isRuntimeBusyRef = useRef(isRuntimeBusy);
   const sendingByConversationKeyRef = useRef(sendingByConversationKey);
   const pendingUserMessages = itemsForConversation(pendingUserMessagesByConversationKey, activeConversationKey);
   const failedUserMessages = itemsForConversation(failedUserMessagesByConversationKey, activeConversationKey);
@@ -375,9 +378,8 @@ export function useMessageSubmission({
   const activeSubmissionTurnId = activeConversationKey ? submittedTurnByConversationKey[activeConversationKey] || "" : "";
 
   useEffect(() => {
-    isRuntimeBusyRef.current = isRuntimeBusy;
     sendingByConversationKeyRef.current = sendingByConversationKey;
-  }, [isRuntimeBusy, sendingByConversationKey]);
+  }, [sendingByConversationKey]);
 
   useEffect(() => {
     canPreloadRuntimeRef.current = canPreloadRuntime;
@@ -388,9 +390,10 @@ export function useMessageSubmission({
     activeInterAgentRunRef.current = activeInterAgentRun;
     activeAppContextRef.current = activeAppContext;
     activeThreadRef.current = activeThread;
+    activeTurnRef.current = activeTurn;
     draftChatRef.current = draftChat;
     threadsRef.current = threads;
-  }, [activeAppContext, activeConversationKey, activeInterAgentRun, activeThread, draftChat, threads]);
+  }, [activeAppContext, activeConversationKey, activeInterAgentRun, activeThread, activeTurn, draftChat, threads]);
 
   useEffect(() => {
     if (!canPreloadRuntime || sourceAppOwner(activeThread, activeAppContext)) {
@@ -452,6 +455,7 @@ export function useMessageSubmission({
       activeAppContext,
       conversationKey: activeConversationKey,
       draftChat,
+      expectedRuntimeTurnId: expectedRuntimeTurnId(activeTurn, activeThread),
       thread: null,
       threadIds: new Set(threads.map((item) => item.thread_id)),
     };
@@ -536,6 +540,12 @@ export function useMessageSubmission({
   }, []);
 
   function setConversationSending(conversationKey: string, isConversationSending: boolean) {
+    if (isConversationSending) {
+      sendingByConversationKeyRef.current = { ...sendingByConversationKeyRef.current, [conversationKey]: true };
+    } else {
+      const { [conversationKey]: _removed, ...remaining } = sendingByConversationKeyRef.current;
+      sendingByConversationKeyRef.current = remaining;
+    }
     setSendingByConversationKey((current) => {
       if (!conversationKey) {
         return current;
@@ -643,6 +653,7 @@ export function useMessageSubmission({
       activeAppContext: activeAppContextRef.current,
       conversationKey: NEW_CHAT_PRELOAD_CONVERSATION_KEY,
       draftChat: activeThreadRef.current ? null : draftChatRef.current,
+      expectedRuntimeTurnId: undefined,
       thread: null,
       threadIds: new Set(threadsRef.current.map((item) => item.thread_id)),
     };
@@ -982,6 +993,7 @@ export function useMessageSubmission({
       activeAppContext: activeAppContextRef.current,
       conversationKey,
       draftChat: targetDraftChat,
+      expectedRuntimeTurnId: expectedRuntimeTurnId(activeTurnRef.current, targetThread),
       thread: targetThread,
       threadIds: new Set(threadsRef.current.map((item) => item.thread_id)),
     };
@@ -1121,7 +1133,10 @@ export function useMessageSubmission({
   async function stopActiveSubmission(): Promise<boolean> {
     const conversationKey = activeConversationKeyRef.current;
     const inFlightSubmission = inFlightSubmissionsRef.current[conversationKey];
-    const turnId = (conversationKey && submittedTurnByConversationKey[conversationKey]) || inFlightSubmission?.turnId || "";
+    const activeRuntimeTurnId = busyRuntimeTurnId(activeTurnRef.current, activeThreadRef.current);
+    const turnId = (conversationKey && submittedTurnByConversationKey[conversationKey])
+      || inFlightSubmission?.turnId
+      || activeRuntimeTurnId;
     if (!conversationKey || (!inFlightSubmission && !turnId)) {
       return false;
     }
@@ -1136,12 +1151,14 @@ export function useMessageSubmission({
       return true;
     }
     try {
-      const sourceAppId = activeThreadRef.current?.source_app_id || "";
+      const sourceAppId = sourceAppOwner(activeThreadRef.current, null);
       const runtimeSessionId = activeThreadRef.current?.runtime_session_id || "";
-      const response = sourceAppId === "design-studio" && runtimeSessionId
+      const response = sourceAppId && runtimeSessionId
         ? await cancelSourceAppTurn({ runtimeSessionId, sourceAppId, turnId })
         : await interruptRuntimeTurn(turnId);
+      inFlightSubmission?.abortController.abort();
       if (isConversationStillActive(conversationKey)) {
+        activeTurnRef.current = response.turn;
         setActiveTurn(response.turn);
         if (response.event) {
           setEvents((current) => mergeRuntimeEvents(current, [response.event as RuntimeEvent]));
@@ -1178,7 +1195,7 @@ export function useMessageSubmission({
       if (sourceAppId) {
         const projectId = sourceAppProjectId(thread, target.activeAppContext);
         if (!projectId) {
-          throw new Error("Open a Design Studio project before starting an OpenDesign chat.");
+          throw new Error("Open a source-app project before starting this chat.");
         }
         response = await submitWithPostMetric(clientMetrics, () =>
           sendSourceAppTurn({
@@ -1283,6 +1300,7 @@ export function useMessageSubmission({
               signal: abortController.signal,
               clientMetrics,
               clientSubmissionStartedAt: message.clientSubmissionStartedAt,
+              expectedRuntimeTurnId: target.expectedRuntimeTurnId,
             },
           ),
         );
@@ -1350,7 +1368,12 @@ export function useMessageSubmission({
       if (!baseThread) {
         throw new Error("Runtime thread was not created.");
       }
-      const userMessageAt = response.turn.created_at || new Date().toISOString();
+      const steeredEvent = response.events?.find((event) => event.event_type === "runtime.message.steered");
+      const userMessageAt =
+        steeredEvent?.created_at
+        || responseThread?.last_user_message_at
+        || response.turn.created_at
+        || new Date().toISOString();
       const optimisticThread = {
         ...baseThread,
         ...(responseThread || {}),
@@ -1367,8 +1390,18 @@ export function useMessageSubmission({
         turnId: response.turn.turn_id,
       };
       setSubmittedTurnForConversation(threadKey, response.turn.turn_id);
-      setThreads((current) => upsertOrderedThread(current, optimisticThread));
+      setThreads((current) => {
+        const next = upsertOrderedThread(current, optimisticThread);
+        threadsRef.current = next;
+        return next;
+      });
       if (isConversationStillActive(conversationKey)) {
+        activeConversationKeyRef.current = threadKey;
+        activeThreadRef.current = optimisticThread;
+        activeTurnRef.current = response.turn;
+        if (!thread) {
+          draftChatRef.current = null;
+        }
         setActiveSession(response.session);
         setActiveTurn(response.turn);
         setEvents((current) => mergeRuntimeEvents(current, response.events || []));
@@ -1389,10 +1422,20 @@ export function useMessageSubmission({
       );
       if (canSteerLinkedRun && linkedRun) {
         try {
-          await sendInterAgentDirective(linkedRun.run.run_id, {
-            source_runtime_turn_id: response.turn.turn_id,
-            idempotency_key: `chat-generalist-directive:${response.turn.turn_id}`,
-          });
+          const isSameTurnSteer = response.delivery === "steered"
+            && linkedRun.run.source_runtime_turn_id === response.turn.turn_id;
+          await sendInterAgentDirective(
+            linkedRun.run.run_id,
+            isSameTurnSteer
+              ? {
+                  text: interAgentSteeredMessageText(message),
+                  idempotency_key: `chat-user-directive:${message.clientMessageId}`,
+                }
+              : {
+                  source_runtime_turn_id: response.turn.turn_id,
+                  idempotency_key: `chat-generalist-directive:${response.turn.turn_id}`,
+                },
+          );
         } catch (orchestrationError) {
           if (!isAbortError(orchestrationError) && isConversationStillActive(conversationKey)) {
             setError(
@@ -1438,7 +1481,6 @@ export function useMessageSubmission({
         addFailedMessage(conversationKey, message);
         if (isConversationStillActive(conversationKey)) {
           setError(sendError instanceof Error ? sendError.message : "Unable to send message.");
-          setActiveTurn(null);
           setComposer(message.content);
           setSelectedReferences(message.appReferences);
         }
@@ -1477,7 +1519,7 @@ export function useMessageSubmission({
       appReferences,
       multiAgentMode,
     };
-    const shouldQueue = isRuntimeBusy || Boolean(sendingByConversationKey[target.conversationKey]);
+    const shouldQueue = Boolean(sendingByConversationKeyRef.current[target.conversationKey]);
     setComposerError(null);
     setComposer("");
     setSelectedReferences([]);
@@ -1517,7 +1559,7 @@ export function useMessageSubmission({
         multiAgentMode,
       };
       const immediateTarget = currentSubmissionTarget(queueConversationKey);
-      if (immediateTarget && !isRuntimeBusyRef.current && !sendingByConversationKeyRef.current[queueConversationKey]) {
+      if (immediateTarget && !sendingByConversationKeyRef.current[queueConversationKey]) {
         const abortController = startSubmission(immediateTarget, queuedMessage);
         void submitMessage(queuedMessage, immediateTarget, abortController);
         return;
@@ -1563,7 +1605,7 @@ export function useMessageSubmission({
   }
 
   useEffect(() => {
-    if (isBootstrapping || isHistoryLoading || isRuntimeBusy || isSending || queuedMessages.length === 0 || !activeConversationKey) {
+    if (isBootstrapping || isHistoryLoading || isSending || queuedMessages.length === 0 || !activeConversationKey) {
       return;
     }
     const target = currentSubmissionTarget(activeConversationKey);
@@ -1574,7 +1616,7 @@ export function useMessageSubmission({
     setQueuedMessages(remainingMessages);
     const abortController = startSubmission(target, nextMessage);
     void submitMessage(nextMessage, target, abortController);
-  }, [activeConversationKey, isBootstrapping, isHistoryLoading, isRuntimeBusy, isSending, queuedMessages]);
+  }, [activeConversationKey, isBootstrapping, isHistoryLoading, isSending, queuedMessages]);
 
   useEffect(() => {
     if (!activeConversationKey || isRuntimeBusy) {
@@ -1636,9 +1678,17 @@ export function interAgentComposerBudgetLabel(mode: MultiAgentComposerMode): str
   return "Dynamic plan · quality gated";
 }
 
+function interAgentSteeredMessageText(message: QueuedMessage): string {
+  const attachmentLabels = message.attachments
+    .map((attachment) => attachment.name || attachment.relativePath || "attachment")
+    .filter(Boolean);
+  const attachmentContext = attachmentLabels.length ? `Attachments: ${attachmentLabels.join(", ")}` : "";
+  return [message.content.trim(), attachmentContext].filter(Boolean).join("\n").slice(0, 6000) || "Additional user input.";
+}
+
 function sourceAppOwner(thread: ChatThread | null, activeAppContext: ActiveAppContext | null): string {
   const sourceAppId = thread?.source_app_id || (!thread ? activeAppContext?.app_id || "" : "");
-  return sourceAppId === "design-studio" ? sourceAppId : "";
+  return sourceAppId && sourceAppId !== "chat" ? sourceAppId : "";
 }
 
 function sourceAppProjectId(thread: ChatThread | null, activeAppContext: ActiveAppContext | null): string {
@@ -1648,4 +1698,18 @@ function sourceAppProjectId(thread: ChatThread | null, activeAppContext: ActiveA
   const params = activeAppContext?.params || {};
   const projectId = params.od_project_id || params.project_id;
   return typeof projectId === "string" ? projectId : "";
+}
+
+function expectedRuntimeTurnId(activeTurn: RuntimeTurn | null, thread: ChatThread | null): string | undefined {
+  if (!activeTurn || activeTurn.status !== "active" || activeTurn.session_id !== thread?.runtime_session_id) {
+    return undefined;
+  }
+  return activeTurn.turn_id || undefined;
+}
+
+function busyRuntimeTurnId(activeTurn: RuntimeTurn | null, thread: ChatThread | null): string {
+  if (!activeTurn || !["queued", "active"].includes(activeTurn.status) || activeTurn.session_id !== thread?.runtime_session_id) {
+    return "";
+  }
+  return activeTurn.turn_id || "";
 }

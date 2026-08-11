@@ -11,6 +11,7 @@ from typing import Any, Callable
 
 from core.providers.models import RuntimeBackendLaunchSpec
 from core.providers.codex_app_server_runtime_state import _CodexAppServerRuntime, _RUNTIMES, _RUNTIMES_LOCK
+from core.providers.codex_app_server_runtime_transport import _send_request
 from core.providers.provider_codex import remove_codex_system_skills
 from core.runtime.process_control import (
     configure_runtime_process_oom_score,
@@ -151,46 +152,6 @@ def _turn_sandbox_policy(launch_spec: RuntimeBackendLaunchSpec) -> dict[str, Any
     return policy
 
 
-def _send_request(
-    runtime: _CodexAppServerRuntime,
-    method: str,
-    params: dict[str, Any],
-    *,
-    timeout: float,
-    on_sent: Callable[[dict[str, object]], None] | None = None,
-) -> dict[str, Any]:
-    with runtime.request_lock:
-        request_id = runtime.next_request_id
-        runtime.next_request_id += 1
-        waiter: queue.Queue = queue.Queue(maxsize=1)
-        runtime.response_waiters[request_id] = waiter
-    payload = {"jsonrpc": "2.0", "id": request_id, "method": method, "params": params}
-    try:
-        if runtime.process.stdin is None:
-            raise RuntimeError("Codex app-server stdin is unavailable.")
-        runtime.process.stdin.write(json.dumps(payload) + "\n")
-        runtime.process.stdin.flush()
-        if on_sent is not None:
-            on_sent({"request_id": request_id})
-    except Exception as error:
-        with runtime.request_lock:
-            runtime.response_waiters.pop(request_id, None)
-        raise RuntimeError(f"Failed to send `{method}` to Codex app-server: {error}") from error
-
-    try:
-        response = waiter.get(timeout=timeout)
-    except queue.Empty as error:
-        with runtime.request_lock:
-            runtime.response_waiters.pop(request_id, None)
-        raise RuntimeError(f"`{method}` timed out against Codex app-server.") from error
-    if isinstance(response, dict) and "error" in response:
-        detail = response.get("error")
-        message = detail.get("message") if isinstance(detail, dict) else str(detail)
-        raise RuntimeError(f"`{method}` failed against Codex app-server: {message}")
-    result = response.get("result") if isinstance(response, dict) else None
-    return result if isinstance(result, dict) else {}
-
-
 def _reader_loop(runtime: _CodexAppServerRuntime) -> None:
     exit_reason = "stdout_closed"
     exit_error: str | None = None
@@ -231,6 +192,8 @@ def _handle_reader_loop_exit(runtime: _CodexAppServerRuntime, *, reason: str, er
         failed_before_completion = had_active_turn and not completion_received
         if failed_before_completion and not runtime.current_error_text:
             runtime.current_error_text = message if error is None else f"{message} {error}"
+    with runtime.active_turn_lock:
+        provider_turn_id = runtime.current_provider_turn_id
     _debug_log(
         runtime,
         "Codex app-server debug: reader loop exited",
@@ -241,7 +204,7 @@ def _handle_reader_loop_exit(runtime: _CodexAppServerRuntime, *, reason: str, er
             "had_active_turn": had_active_turn,
             "completion_received": completion_received,
             "completion_pending": completion_pending,
-            "provider_turn_id": runtime.current_provider_turn_id,
+            "provider_turn_id": provider_turn_id,
             "process_pid": runtime.process.pid,
             "process_returncode": runtime.process.poll(),
         },
@@ -253,7 +216,7 @@ def _handle_reader_loop_exit(runtime: _CodexAppServerRuntime, *, reason: str, er
         runtime.response_waiters.clear()
     for waiter in pending_waiters:
         try:
-            waiter.put_nowait({"error": {"message": request_message}})
+            waiter.put_nowait({"_transport_error": request_message})
         except queue.Full:
             continue
 
@@ -287,7 +250,8 @@ def _respond_to_server_request(runtime: _CodexAppServerRuntime, payload: dict[st
     response = {"jsonrpc": "2.0", "id": payload.get("id"), "result": result}
     try:
         if runtime.process.stdin is not None:
-            runtime.process.stdin.write(json.dumps(response) + "\n")
-            runtime.process.stdin.flush()
+            with runtime.write_lock:
+                runtime.process.stdin.write(json.dumps(response) + "\n")
+                runtime.process.stdin.flush()
     except Exception:
         return

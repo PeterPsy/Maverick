@@ -261,7 +261,7 @@ export function ChatComposer({
             <div className="chatapp-composer__toolbar">
               <div className="chatapp-composer__tools">
                 <AttachmentMenu attachments={attachments} disabled={disabled} onAddAttachments={onAddAttachments} onCapturePageArea={onCapturePageArea} />
-                {sourceAppId === "design-studio" && onSelectSourceAppChatMode ? (
+                {sourceAppId && onSelectSourceAppChatMode ? (
                   <SourceAppChatTools
                     disabled={disabled || isSending}
                     mode={sourceAppChatMode}
@@ -329,7 +329,6 @@ export function ChatComposer({
                     supportedContentTypes={transcriptionContentTypes}
                   />
                 }
-                isSending={isSending}
                 onStopTurn={onStopTurn}
                 onSubmit={onSubmit}
               />

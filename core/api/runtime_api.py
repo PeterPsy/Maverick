@@ -65,8 +65,10 @@ from core.runtime.turn_terminalization import (
 )
 from core.runtime.turn_submission import (
     RuntimeSessionPrewarmResult,
+    attempt_runtime_message_steer,
     interrupt_runtime_provider_turn,
     prewarm_runtime_session_async,
+    runtime_message_admission_handoff,
     release_idle_runtime_processes,
     runtime_session_prewarm_status,
     submit_runtime_turn,
@@ -557,6 +559,7 @@ def _runtime_turn_response_payload(
     session: RuntimeSessionRecord,
     turn: RuntimeTurnRecord,
     events: list[RuntimeEventRecord],
+    delivery: str | None = None,
 ) -> dict[str, object]:
     thread = find_runtime_thread_by_session(
         state.runtime_store,
@@ -568,6 +571,8 @@ def _runtime_turn_response_payload(
         "turn": _turn_payload(turn),
         "events": [_event_payload(event) for event in events],
     }
+    if delivery:
+        payload["delivery"] = delivery
     if thread is not None:
         payload["thread"] = _thread_detail_payload_with_runtime(state, thread, viewer_user_id=context.user.user_id)
     return payload
@@ -1590,6 +1595,10 @@ def _submit_runtime_turn_response(
     submission_timing: RuntimeTurnSubmissionTiming | None = None,
     release_claim_on_failure: RuntimeClientMessageClaim | None = None,
 ):
+    delivery_policy = str(body.get("delivery_policy") or "queue_next").strip()
+    if delivery_policy not in {"queue_next", "steer_or_queue"}:
+        _release_client_message_claim(state, release_claim_on_failure)
+        return json_response(start_response, {"error": "unsupported_delivery_policy"}, status="400 Bad Request")
     timing = submission_timing or runtime_turn_submission_timing(received_perf_counter)
     draft, validation_response = _prepare_runtime_turn_submission(
         state,
@@ -1606,16 +1615,100 @@ def _submit_runtime_turn_response(
     if draft is None:
         _release_client_message_claim(state, release_claim_on_failure)
         return json_response(start_response, {"error": "empty_runtime_input"}, status="400 Bad Request")
-    return _queue_runtime_turn_response(
+    with runtime_message_admission_handoff(session.session_id):
+        if delivery_policy == "steer_or_queue":
+            steer_response = _runtime_message_steer_response(
+                state,
+                context,
+                session,
+                draft,
+                body,
+                start_response,
+                start_path=start_path,
+            )
+            if steer_response is not None:
+                return steer_response
+        return _queue_runtime_turn_response(
+            state,
+            context,
+            session,
+            draft,
+            start_response,
+            start_path=start_path,
+            reserved_turn_id=reserved_turn_id,
+            received_perf_counter=received_perf_counter,
+            release_claim_on_failure=release_claim_on_failure,
+        )
+
+
+def _runtime_message_steer_response(
+    state: PlatformState,
+    context: RequestSession,
+    session: RuntimeSessionRecord,
+    draft: RuntimeTurnSubmissionDraft,
+    body: dict,
+    start_response: StartResponse,
+    *,
+    start_path,
+) -> list[bytes] | None:
+    try:
+        materialized_references = (
+            materialize_runtime_app_references_with_metrics(
+                state,
+                context=context,
+                references=draft.app_reference_items,
+                start_path=start_path,
+                reference_context=draft.app_reference_context,
+                session_id=session.session_id,
+            ).references
+            if draft.app_reference_items
+            else []
+        )
+    except Exception:
+        return None
+    attempt = attempt_runtime_message_steer(
         state,
-        context,
-        session,
-        draft,
+        session=session,
+        input_text=draft.input_text,
+        client_message_id=draft.client_message_id,
+        attachments=draft.attachment_items,
+        app_references=draft.app_reference_items,
+        materialized_app_references=materialized_references,
+        expected_runtime_turn_id=str(body.get("expected_runtime_turn_id") or "").strip() or None,
+    )
+    if attempt.status == "fallback":
+        return None
+    if attempt.status == "pending" and attempt.claim is not None:
+        return _pending_client_message_claim_response(state, context, attempt.claim, start_response)
+    if attempt.status == "delivery_uncertain":
+        payload: dict[str, object] = {
+            "error": "runtime_message_delivery_uncertain",
+            "detail": "Message delivery could not be confirmed and was not queued again to avoid duplication.",
+            "delivery": "delivery_uncertain",
+            "reason": attempt.reason or "provider_acknowledgement_missing",
+        }
+        if attempt.claim is not None:
+            payload["idempotency"] = {
+                "status": "delivery_uncertain",
+                "client_message_id": attempt.claim.client_message_id,
+                "session_id": attempt.claim.session_id,
+                "turn_id": attempt.claim.turn_id,
+            }
+        return json_response(start_response, payload, status="409 Conflict")
+    if attempt.turn is None:
+        return None
+    response_session = state.runtime_store.get_session(session.session_id)
+    return json_response(
         start_response,
-        start_path=start_path,
-        reserved_turn_id=reserved_turn_id,
-        received_perf_counter=received_perf_counter,
-        release_claim_on_failure=release_claim_on_failure,
+        _runtime_turn_response_payload(
+            state,
+            context,
+            session=response_session,
+            turn=attempt.turn,
+            events=list(attempt.events),
+            delivery="steered",
+        ),
+        status="202 Accepted",
     )
 
 
@@ -1797,6 +1890,7 @@ def _queue_runtime_turn_response(
             session=response_session,
             turn=turn,
             events=events,
+            delivery="queued",
         ),
         status=status,
     )

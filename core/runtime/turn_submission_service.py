@@ -11,6 +11,7 @@ from core.runtime.turn_submission_service_output_text import *  # noqa: F401,F40
 from core.runtime.turn_submission_service_references import *  # noqa: F401,F403
 from core.runtime.turn_submission_service_runtime import *  # noqa: F401,F403
 from core.runtime.turn_submission_service_submit import *  # noqa: F401,F403
+from core.runtime.message_steering import *  # noqa: F401,F403
 from core.runtime import app_references as _app_references
 from core.runtime import turn_submission_service_events as _turn_submission_service_events
 from core.runtime import turn_submission_service_fence as _turn_submission_service_fence
@@ -20,6 +21,7 @@ from core.runtime import turn_submission_service_output_text as _turn_submission
 from core.runtime import turn_submission_service_references as _turn_submission_service_references
 from core.runtime import turn_submission_service_runtime as _turn_submission_service_runtime
 from core.runtime import turn_submission_service_submit as _turn_submission_service_submit
+from core.runtime import message_steering as _message_steering
 
 _modules = (
     _app_references,
@@ -31,6 +33,7 @@ _modules = (
     _turn_submission_service_references,
     _turn_submission_service_runtime,
     _turn_submission_service_submit,
+    _message_steering,
 )
 for _module in _modules:
     globals().update({name: value for name, value in _module.__dict__.items() if not name.startswith("__")})

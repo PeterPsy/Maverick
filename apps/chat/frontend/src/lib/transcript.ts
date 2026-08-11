@@ -262,7 +262,7 @@ function projectEventsToMessages(events: RuntimeEvent[]): ChatMessage[] {
 
   const orderedMessages: OrderedMessage[] = [];
   let messageSequence = 0;
-  const seenUserTurns = new Set<string>();
+  const seenUserMessages = new Set<string>();
   const finalTurnIds = new Set(events.filter((event) => event.event_type === "runtime.output.final").map(messageTurnId));
   const outputSegmentsByTurn = new Map<
     string,
@@ -381,19 +381,31 @@ function projectEventsToMessages(events: RuntimeEvent[]): ChatMessage[] {
   for (const [eventIndex, event] of events.entries()) {
     const turnId = messageTurnId(event);
     const sourceFields = sourceFieldsForEvent(event);
-    if (event.event_type === "runtime.turn.queued" && !seenUserTurns.has(turnId)) {
+    if (event.event_type === "runtime.turn.queued" || event.event_type === "runtime.message.steered") {
       const input = event.payload.input_text;
       const clientMessageId = event.payload.client_message_id;
+      const userMessageId =
+        typeof clientMessageId === "string" && clientMessageId
+          ? clientMessageId
+          : event.event_type === "runtime.turn.queued"
+            ? `${turnId}:human`
+            : `${turnId}:human:${event.event_id}`;
       const attachments = Array.isArray(event.payload.attachments)
         ? (event.payload.attachments.filter((item) => item && typeof item === "object") as ChatMessageAttachment[])
         : [];
       const appReferences = appReferencesPayload(event.payload.app_references);
-      if (typeof input === "string" && input.trim()) {
-        seenUserTurns.add(turnId);
+      const hasDisplayContent =
+        (typeof input === "string" && Boolean(input.trim())) || attachments.length > 0 || appReferences.length > 0;
+      if (hasDisplayContent && !seenUserMessages.has(userMessageId)) {
+        if (event.event_type === "runtime.message.steered") {
+          flushToolSegment(turnId, true);
+          flushOutputSegment(turnId, true);
+        }
+        seenUserMessages.add(userMessageId);
         pushMessage({
-          id: typeof clientMessageId === "string" && clientMessageId ? clientMessageId : `${turnId}:human`,
+          id: userMessageId,
           role: "human",
-          content: input,
+          content: typeof input === "string" ? input : "",
           createdAt: event.created_at,
           status: "complete",
           attachments,

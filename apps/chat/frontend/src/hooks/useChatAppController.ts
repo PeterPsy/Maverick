@@ -420,6 +420,7 @@ export function useChatAppController({
     activeInterAgentRun,
     activeAppContext,
     activeThread,
+    activeTurn,
     attachments,
     canPreloadRuntime: initialDependenciesReady,
     clearAttachments,

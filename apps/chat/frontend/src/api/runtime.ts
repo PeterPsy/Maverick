@@ -224,7 +224,12 @@ export function sendRuntimeTurn(
   clientMessageId?: string,
   attachments: ChatMessageAttachment[] = [],
   appReferences: AppReference[] = [],
-  requestOptions: { signal?: AbortSignal; clientMetrics?: RuntimeTurnClientMetrics; clientSubmissionStartedAt?: string } = {},
+  requestOptions: {
+    signal?: AbortSignal;
+    clientMetrics?: RuntimeTurnClientMetrics;
+    clientSubmissionStartedAt?: string;
+    expectedRuntimeTurnId?: string;
+  } = {},
 ): Promise<RuntimeTurnSubmitResponse> {
   const body: Record<string, unknown> = {
     input_text: inputText,
@@ -232,6 +237,8 @@ export function sendRuntimeTurn(
     client_submission_started_at: requestOptions.clientSubmissionStartedAt || undefined,
     attachments: serializableMessageAttachments(attachments),
     async: true,
+    delivery_policy: "steer_or_queue",
+    expected_runtime_turn_id: requestOptions.expectedRuntimeTurnId || undefined,
   };
   const serializedClientMetrics = serializableClientMetrics(requestOptions.clientMetrics, { includeSubmitPostMs: false });
   if (serializedClientMetrics) {

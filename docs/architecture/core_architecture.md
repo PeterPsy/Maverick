@@ -558,6 +558,7 @@ The Codex adapter should own the provider-specific protocol:
 - create a persistent Codex thread with `thread/start` when no provider thread exists
 - resume the existing Codex thread with `thread/resume` when a runtime session already has a provider thread id
 - submit each user turn with `turn/start` against the same provider thread id
+- admit later user messages into a regular active turn with `turn/steer`, including a stable client message id, only when the adapter declares same-turn input support and the Maverick turn is still correlated to the expected provider turn id
 - interrupt active work with the provider's turn interrupt method
 - keep the provider thread id as provider-runtime state, not as chat-app state
 - keep the local provider process warm for a short idle TTL after a terminal turn, then terminate it if the runtime session still has no queued or active turns, while keeping the provider thread id so a later turn can restart the backend and resume the same conversation
@@ -577,7 +578,7 @@ Those two ids are intentionally different but must be linked by the core runtime
 
 The core also owns the workspace chat thread catalog that points at runtime sessions.
 
-A chat thread is the user-visible runtime conversation record. It stores the thread id, linked `runtime_session_id`, title, availability, source app metadata, optional project id, and `last_user_message_at` timestamp. Apps such as `chat` may render or update that record through core runtime APIs, but they must not persist a second app-owned thread catalog or delete runtime sessions themselves. The core runtime owns availability transitions: queued user turns mark the linked thread as `queued`, started turns mark it as `active`, and terminal turn outcomes or interrupts mark it as `free`. Thread catalog reads reconcile both availability and `last_user_message_at` from the linked runtime turns so existing sessions without a stored recency timestamp still sort by their latest user turn.
+A chat thread is the user-visible runtime conversation record. It stores the thread id, linked `runtime_session_id`, title, availability, source app metadata, optional project id, and `last_user_message_at` timestamp. Apps such as `chat` may render or update that record through core runtime APIs, but they must not persist a second app-owned thread catalog or delete runtime sessions themselves. The core runtime owns availability transitions: queued user turns mark the linked thread as `queued`, started turns mark it as `active`, and terminal turn outcomes or interrupts mark it as `free`. A user message admitted into the active turn updates recency without changing that turn's active availability. Thread catalog reads reconcile availability from runtime turns while accepted message events preserve the newer same-turn user-message timestamp.
 
 The runtime thread catalog is a bounded transport contract. `GET /api/runtime/threads` and the initial `runtime.thread.snapshot` WebSocket frame return the first recency-sorted page, currently limited to 50 user-visible threads, with `threads_page` metadata for limit, cursor, query, and `has_more`. The REST list accepts a bounded metadata query so shell search surfaces can backfill matching older threads without loading the full catalog. Mutating thread APIs return only the changed thread or removed ids plus a page hint; they must not reattach a full thread catalog to create, rename, read-receipt, delete, or clear responses.
 
@@ -1311,6 +1312,8 @@ Current first-use endpoints include:
 - `WS /ws/runtime/sessions/<session_id>`
 - `WS /ws/runtime/threads`
 
+Turn submission accepts `delivery_policy=queue_next` by default. Interactive Chat surfaces use `steer_or_queue`: the core serializes the decision per runtime session, attempts same-turn admission only for a capable provider and an active, provider-accepted turn, and never steers past an already queued message; every explicit rejection or turn race falls back to a normal queued runtime turn. A successful admission returns `delivery=steered` and persists `runtime.message.steered` on the existing turn. A write or acknowledgement timeout returns `runtime_message_delivery_uncertain` and must not be converted into an automatic queued retry because the provider may already have accepted the message.
+
 Inter-agent F2 runtime operations are exposed through the core-owned inter-agent
 surface, not through raw hidden runtime routes:
 
@@ -1576,9 +1579,10 @@ The canonical Codex runtime flow is:
 3. adapter sends `initialize`
 4. adapter sends `thread/start` or `thread/resume`
 5. runtime turn submission sends `turn/start` with the provider thread id
-6. provider app-server emits structured turn, item, tool, and output events
-7. runtime normalization persists provider events as Maverick runtime events
-8. WebSocket transport streams the persisted Maverick runtime events
+6. while that regular turn is active, later admitted messages may send `turn/steer` with the expected provider turn id and `clientUserMessageId`
+7. provider app-server emits structured turn, item, tool, and output events
+8. runtime normalization persists provider events and accepted same-turn user messages as Maverick runtime events
+9. WebSocket transport streams the persisted Maverick runtime events
 
 Conversation memory for the active provider session comes from the provider thread.
 
@@ -1836,7 +1840,7 @@ The credential binding says which secret or operator-managed credential is attac
 
 The runtime backend selection flow decides which backend the runtime should use for one execution context.
 
-Generic runtime turn submission, execution, user interrupts, app-requested interrupts, and cleanup must depend on the selected runtime backend adapter, not on Codex-specific branches. The runtime domain may coalesce and persist provider-neutral events, but backend launch specs, subprocess/protocol execution, provider thread binding, turn interruption, and provider runtime cleanup belong to the adapter registered for the selected provider.
+Generic runtime turn submission, same-turn message admission, execution, user interrupts, app-requested interrupts, and cleanup must depend on the selected runtime backend adapter, not on Codex-specific branches. The runtime domain may coalesce and persist provider-neutral events, but backend launch specs, subprocess/protocol execution, provider thread binding, same-turn input, turn interruption, and provider runtime cleanup belong to the adapter registered for the selected provider.
 
 Raw secret values must not appear in domain models or ordinary runtime records.
 
@@ -1859,7 +1863,7 @@ The current implementation ships:
 - a provider registry owned by `core/providers`
 - provider definition records separated from credential bindings and workspace selection records
 - a workspace-aware provider selection flow in the core
-- a runtime backend adapter contract that owns launch-spec construction, skill materialization, turn execution, turn interruption, and provider runtime cleanup
+- a runtime backend adapter contract that owns launch-spec construction, skill materialization, turn execution, optional same-turn input, turn interruption, and provider runtime cleanup
 - one concrete runtime backend adapter: `Codex`
 
 `Codex` is therefore the first installed backend, not the architectural identity of the provider layer.

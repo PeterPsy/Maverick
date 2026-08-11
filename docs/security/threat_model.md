@@ -215,6 +215,7 @@ participant snapshot are committed under that lock, preventing a newly claimed
 task from escaping cancellation. Runtime turn queueing is guarded by the same
 status-and-generation transition: if pause wins, no turn is persisted or sent;
 if queueing wins, interrupt observes and cancels that turn and its hidden session.
+Same-turn message admission uses the same runtime-session `turn_submit` authorization as ordinary turn queueing. It requires a workspace-scoped client message id, a currently active Maverick turn, a persisted provider-acceptance correlation, and an adapter capability declaration before provider input is sent. The client never supplies a provider thread or turn id. Steer-or-queue decisions are serialized per session and refuse to overtake already queued turns. Admission state is persisted before crossing the provider boundary; explicit rejection releases it for safe next-turn queueing, while transport uncertainty remains terminal so browser retries cannot duplicate an input that may already have reached the provider.
 
 ### Workspace escape
 

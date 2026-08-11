@@ -82,14 +82,20 @@ class RuntimeExecutionCommandTest(unittest.TestCase):
             [
                 "ensure_runtime_started",
                 "ensure_runtime_completed",
+                "remove_generated_skills_started",
+                "remove_generated_skills_completed",
                 "ensure_thread_started",
                 "ensure_thread_completed",
+                "event_sink_reset_started",
+                "event_sink_reset_completed",
                 "turn_start_write_started",
                 "turn_start_write_sent",
             ],
         )
         self.assertGreaterEqual(startup_events[1][1]["ensure_runtime_ms"], 0)
-        self.assertGreaterEqual(startup_events[3][1]["ensure_provider_thread_ms"], 0)
+        self.assertGreaterEqual(startup_events[3][1]["remove_generated_skills_ms"], 0)
+        self.assertGreaterEqual(startup_events[5][1]["ensure_provider_thread_ms"], 0)
+        self.assertGreaterEqual(startup_events[7][1]["event_sink_reset_ms"], 0)
 
     def test_codex_execution_removes_provider_generated_system_skills_before_thread_start(self) -> None:
         temp_dir = tempfile.TemporaryDirectory()

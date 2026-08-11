@@ -15,6 +15,7 @@ from core.providers.provider_codex_config import CodexRuntimeConfigMixin
 from core.providers.provider_codex_launch import CodexLaunchMixin
 from core.providers.provider_codex_models import CodexModelMixin
 from core.providers.provider_codex_runtime_home import CodexRuntimeHomeMixin
+from core.providers.provider_codex_steering import CodexSteeringMixin
 from core.providers.provider_codex_wrappers import refresh_workspace_maverick_wrappers
 
 if TYPE_CHECKING:
@@ -93,6 +94,7 @@ def build_codex_definition(
             output_modalities=["text", "events"],
             supports_streaming_output=True,
             supports_tool_calling=True,
+            supports_same_turn_input=True,
             latency_class="interactive_runtime",
         ),
         default_model_family=default_model_id or _default_model_id(options),
@@ -151,6 +153,7 @@ class CodexProviderAdapter(
     CodexRuntimeHomeMixin,
     CodexRuntimeConfigMixin,
     CodexCommandPathMixin,
+    CodexSteeringMixin,
 ):
     def __init__(
         self,

@@ -357,6 +357,7 @@ export type RuntimeTurnSubmitResponse = {
   turn?: RuntimeTurn;
   events?: RuntimeEvent[];
   idempotency?: RuntimeTurnIdempotency;
+  delivery?: "steered" | "queued" | "delivery_uncertain" | string;
 };
 
 export type RuntimeTurnClientMetrics = {

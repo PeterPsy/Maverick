@@ -230,7 +230,7 @@ export function useChatControllerPresentation({
       disabled: isThreadLoading,
       error: composerError,
       executionMode,
-      isSending: isRuntimeBusy || isSending,
+      isSending,
       mentionItems: composerMentionItems,
       multiAgentBudgetLabel,
       multiAgentMode,

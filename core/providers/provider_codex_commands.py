@@ -78,6 +78,7 @@ def build_codex_definition(
             supports_remote_execution=False,
             supports_api_key_auth=False,
             supports_local_binary=True,
+            supports_same_turn_input=True,
         ),
         default_model_family=default_model_id or _default_model_id(options),
         requires_credentials=False,

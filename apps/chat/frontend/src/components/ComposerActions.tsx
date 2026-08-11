@@ -4,14 +4,12 @@ export function ComposerActions({
   canSend,
   canStopTurn,
   dictationControl,
-  isSending,
   onStopTurn,
   onSubmit,
 }: {
   canSend: boolean;
   canStopTurn: boolean;
   dictationControl?: ReactNode;
-  isSending: boolean;
   onStopTurn: () => void;
   onSubmit: () => void;
 }) {
@@ -27,11 +25,11 @@ export function ComposerActions({
       ) : null}
       {dictationControl}
       <button
-        aria-label={isSending ? "Queue message" : "Send message"}
+        aria-label="Send message"
         className="chatapp-composer__icon-action is-send"
         disabled={!canSend}
         onClick={onSubmit}
-        title={isSending ? "Queue" : "Send"}
+        title="Send"
         type="button"
       >
         <span aria-hidden="true" className="material-symbols-rounded">

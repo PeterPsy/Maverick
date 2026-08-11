@@ -6,7 +6,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any, Callable, Protocol
 
 from core.providers.errors import ProviderNotFoundError
-from core.providers.models import ProviderDefinition, RuntimeBackendLaunchSpec
+from core.providers.models import ProviderDefinition, RuntimeBackendLaunchSpec, RuntimeSteerResult
 from core.runtime.runtime_session import RuntimeSessionRecord
 
 if TYPE_CHECKING:
@@ -63,6 +63,16 @@ class RuntimeBackendAdapter(Protocol):
         ...
 
     def interrupt_turn(self, session_id: str) -> bool:
+        ...
+
+    def steer_turn(
+        self,
+        session_id: str,
+        *,
+        input_text: str,
+        client_message_id: str | None = None,
+        expected_provider_turn_id: str | None = None,
+    ) -> RuntimeSteerResult:
         ...
 
     def build_recovery_command(

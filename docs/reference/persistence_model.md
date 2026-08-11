@@ -52,6 +52,8 @@ This includes:
 - logs
 - runtime session, thread, process, event, turn, and state records
 
+Runtime client message ids are also persisted as workspace-scoped admission records. They cover both ordinary queued turns and messages steered into an existing active turn. A steered message persists `runtime.message.steered` with its client message id and terminal admission status. Before the provider call, the admission is durably marked delivery-uncertain; an explicit provider rejection removes that reservation before the message is queued normally, while a missing acknowledgement remains terminal so a retry cannot duplicate a message that may already have crossed the provider boundary.
+
 ## JSON
 
 The default hosted control-plane persistence path uses JSON collections stored outside `.maverick`:

@@ -20,6 +20,14 @@ ProviderBlockedReason = Literal["no_provider_configured", "provider_unavailable"
 ProviderSecretBindingScope = Literal["provider", "app", "provider_or_app"]
 ProviderSecretResolutionStage = Literal["execution_only"]
 ProviderRoutingProfile = Literal["fast_model", "plain_hosted_chat", "heavy_runtime"]
+RuntimeSteerStatus = Literal[
+    "steered",
+    "not_active",
+    "not_supported",
+    "overloaded",
+    "delivery_uncertain",
+    "failed",
+]
 
 
 @dataclass(frozen=True)
@@ -68,9 +76,19 @@ class ProviderCapabilitySet:
     supports_structured_output: bool = False
     supports_turn_detection: bool = False
     supports_barge_in: bool = False
+    supports_same_turn_input: bool = False
     latency_class: str | None = None
     future_only_supports_local_execution: bool = False
     future_only_supports_offline_mode: bool = False
+
+
+@dataclass(frozen=True)
+class RuntimeSteerResult:
+    """Outcome of asking a runtime provider to admit input into its active turn."""
+
+    status: RuntimeSteerStatus
+    provider_turn_id: str | None = None
+    reason: str | None = None
 
 
 @dataclass(frozen=True)

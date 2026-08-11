@@ -23,6 +23,7 @@ class CodexAppServerTurnResult:
     exit_code: int
     provider_thread_id: str
 
+
 def prewarm_codex_app_server_runtime(
     *,
     session: RuntimeSessionRecord,
@@ -149,15 +150,17 @@ def execute_codex_app_server_turn(
     turn_start_request_ack_ms = (
         time.perf_counter() - (turn_start_sent_at or turn_start_request_started_at)
     ) * 1000
+    provider_turn_id = ""
     if isinstance(turn, dict):
         provider_turn_id = str(turn.get("id") or "").strip()
         if provider_turn_id:
-            runtime.current_provider_turn_id = provider_turn_id
+            with runtime.active_turn_lock:
+                runtime.current_provider_turn_id = provider_turn_id
     if on_provider_accepted is not None:
         on_provider_accepted(
             {
                 "provider_thread_id": provider_thread_id,
-                "provider_turn_id": runtime.current_provider_turn_id or "",
+                "provider_turn_id": provider_turn_id,
                 "ensure_runtime_ms": ensure_runtime_ms,
                 "ensure_provider_thread_ms": ensure_provider_thread_ms,
                 "event_sink_reset_ms": event_sink_reset_ms,
@@ -171,7 +174,7 @@ def execute_codex_app_server_turn(
         {
             "phase": "turn_start_acknowledged",
             "provider_thread_id": provider_thread_id,
-            "provider_turn_id": runtime.current_provider_turn_id,
+            "provider_turn_id": provider_turn_id,
             "process_pid": runtime.process.pid,
             "process_returncode": runtime.process.poll(),
         },
@@ -195,6 +198,7 @@ def execute_codex_app_server_turn(
                 with runtime.event_lock:
                     chunk_count = len(runtime.current_chunks)
                     pending_json_item_count = len(runtime.pending_agent_json_chunks)
+                with runtime.active_turn_lock:
                     provider_turn_id = runtime.current_provider_turn_id
                 process_returncode = runtime.process.poll()
                 if process_returncode is not None:
@@ -227,6 +231,9 @@ def execute_codex_app_server_turn(
             runtime.emitted_structured_keys = set()
             runtime.current_error_text = None
             runtime.current_completion_received = False
+        with runtime.active_turn_lock:
+            if runtime.current_provider_turn_id == provider_turn_id:
+                runtime.current_provider_turn_id = None
 
     status = str(completion.get("status") or "completed").strip().lower() if isinstance(completion, dict) else "completed"
     output = "".join(chunks).strip()
@@ -239,7 +246,7 @@ def execute_codex_app_server_turn(
             "status": status,
             "elapsed_seconds": round(time.monotonic() - wait_started_at, 3),
             "provider_thread_id": provider_thread_id,
-            "provider_turn_id": runtime.current_provider_turn_id,
+            "provider_turn_id": provider_turn_id,
             "streamed_chunk_count": len(chunks),
             "has_error_text": bool(error_text),
             "output_text_length": len(output),
@@ -261,13 +268,16 @@ def interrupt_codex_app_server_turn(session_id: str) -> bool:
         runtime = _RUNTIMES.get(session_id)
     if runtime is None or runtime.process.poll() is not None:
         return False
-    if not runtime.provider_thread_id or not runtime.current_provider_turn_id:
+    with runtime.active_turn_lock:
+        provider_thread_id = runtime.provider_thread_id
+        provider_turn_id = runtime.current_provider_turn_id
+    if not provider_thread_id or not provider_turn_id:
         return False
     try:
         _send_request(
             runtime,
             "turn/interrupt",
-            {"threadId": runtime.provider_thread_id, "turnId": runtime.current_provider_turn_id},
+            {"threadId": provider_thread_id, "turnId": provider_turn_id},
             timeout=5.0,
         )
         return True

@@ -302,6 +302,54 @@ class OpenDesignMigrationTests(unittest.TestCase):
             b"old generation bytes",
         )
 
+    def test_bundle_upgrade_requires_explicit_committed_retention_replacement(self) -> None:
+        first = self.module.upgrade_controlled_copy(
+            self.root,
+            target=self.new,
+            migration_id="migration_bundle_upgrade_first",
+            verified_artifacts=VERIFIED,
+            runtime=self.runtime,
+            now=self._now,
+            minimum_free_bytes=0,
+        )
+        next_digest = "c" * 64
+        next_target = self.model.GenerationTriple(next_digest, "0.16.1", "gen_next")
+        verified = {**VERIFIED, next_digest: "0.16.1"}
+
+        with self.assertRaisesRegex(self.runtime_module.MigrationError, "controlled OpenDesign bundle upgrade failed"):
+            self.module.upgrade_controlled_copy(
+                self.root,
+                target=next_target,
+                migration_id="migration_bundle_upgrade_second",
+                verified_artifacts=verified,
+                runtime=self.runtime,
+                now=self._now,
+                minimum_free_bytes=0,
+            )
+
+        retained = self.control_module.load_generation_control(self.root, verified_artifacts=verified)
+        self.assertEqual(retained, first.control)
+        second = self.module.upgrade_controlled_copy(
+            self.root,
+            target=next_target,
+            migration_id="migration_bundle_upgrade_second",
+            verified_artifacts=verified,
+            runtime=self.runtime,
+            now=self._now,
+            minimum_free_bytes=0,
+            replace_retained_previous=True,
+        )
+
+        self.assertEqual(second.control.active, next_target)
+        self.assertEqual(second.control.previous, self.new)
+        self.assertTrue((self.root / "instances/gen_old/data/legacy.db").is_file())
+        journal = self.control_module.load_migration_journal(
+            self.root,
+            "migration_bundle_upgrade_second",
+            verified_artifacts=verified,
+        )
+        self.assertTrue(journal.checks["replaced_retained_previous"])
+
     def test_recovery_finishes_journal_after_crash_between_cutover_and_commit(self) -> None:
         original_write = self.module.write_migration_journal
         calls = 0

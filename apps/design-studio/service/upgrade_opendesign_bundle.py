@@ -23,6 +23,7 @@ def main() -> None:
     parser.add_argument("--migration-id", required=True)
     parser.add_argument("--target-generation", required=True)
     parser.add_argument("--minimum-free-bytes", type=int, default=64 * 1024 * 1024)
+    parser.add_argument("--replace-retained-previous", action="store_true")
     args = parser.parse_args()
 
     manifest = read_bundle_manifest(SERVICE_ROOT / "opendesign_bundle.json")
@@ -46,6 +47,7 @@ def main() -> None:
             verified_artifacts=runtime.verified_artifacts,
             runtime=runtime,
             minimum_free_bytes=args.minimum_free_bytes,
+            replace_retained_previous=args.replace_retained_previous,
         )
         evidence = runtime.evidence()
     finally:

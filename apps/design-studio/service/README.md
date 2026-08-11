@@ -237,6 +237,10 @@ new generation id. It snapshots and clones the active data, starts the pinned
 bundle on the clone, verifies readiness, SQLite integrity and project access,
 then journals and atomically switches the bundle/data pair. The source pair is
 retained for rollback, and unresolved prior retention metadata fails closed.
+For a later upgrade, `--replace-retained-previous` is required explicitly and
+is accepted only when the prior journal is already `cutover_committed`; the old
+generation remains untouched while the formerly active pair becomes the new
+rollback target.
 
 Run the G4 filesystem and crash proof with:
 

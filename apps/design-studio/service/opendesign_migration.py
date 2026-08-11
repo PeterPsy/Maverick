@@ -187,6 +187,7 @@ def upgrade_controlled_copy(
     runtime: MigrationRuntime,
     now: Callable[[], str] | None = None,
     minimum_free_bytes: int = 64 * 1024 * 1024,
+    replace_retained_previous: bool = False,
 ) -> BundleUpgradeOutcome:
     """Clone and validate an existing generation before an atomic bundle cutover."""
     root = controlled_root(root)
@@ -202,8 +203,20 @@ def upgrade_controlled_copy(
             runtime.drain_or_cancel_runs()
             control = load_generation_control(root, verified_artifacts=verified_artifacts)
             source = control.active
+            replaced_retained_previous = False
             if control.previous is not None or control.migration_id is not None:
-                raise MigrationError("bundle upgrade requires resolved retention metadata")
+                if not replace_retained_previous:
+                    raise MigrationError("bundle upgrade requires resolved retention metadata")
+                if control.previous is None or control.migration_id is None:
+                    raise MigrationError("bundle upgrade retention metadata is incomplete")
+                retained_journal = load_migration_journal(
+                    root,
+                    control.migration_id,
+                    verified_artifacts=verified_artifacts,
+                )
+                if retained_journal.state != "cutover_committed":
+                    raise MigrationError("bundle upgrade cannot replace uncommitted retention metadata")
+                replaced_retained_previous = True
             if target == source or target.data_generation == source.data_generation:
                 raise MigrationError("bundle upgrade target must use a new bundle/data triple")
             _verify_target_artifact(target, verified_artifacts)
@@ -238,6 +251,7 @@ def upgrade_controlled_copy(
                     **checks,
                     "source_snapshot_sha256": tree_sha256(created_snapshot),
                     "upgrade_kind": "bundle_controlled_copy",
+                    "replaced_retained_previous": replaced_retained_previous,
                 },
                 created_at=timestamp(),
                 updated_at=timestamp(),
